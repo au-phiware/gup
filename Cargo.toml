@@ -1,0 +1,10 @@
+[package]
+name = "gup"
+version = "0.1.0"
+authors = ["Corin Lawson <corin@phiware.com.au>"]
+edition = "2024"
+description = "GPU-Accelerated Data Visualization Library"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/au-phiware/gup"
+
+[dependencies]
