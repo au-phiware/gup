@@ -144,3 +144,11 @@ Show dependency tree
 ```bash
 cargo tree
 ```
+
+## bench
+
+Run performance benchmarks
+
+```bash
+cargo bench
+```
