@@ -1,6 +1,6 @@
 //! Integration tests for the Mixable trait and composition system.
 
-use gup::{CompositionMode, GupError, GupResult, Mixable, MixableExt, RenderContext};
+use gup::{CompositionMode, CrossFadeComposition, CustomCompositionBehavior, GupError, GupResult, Mixable, MixableExt, RenderContext};
 
 /// Mock scatter plot implementation for testing
 #[derive(Debug, Clone)]
@@ -177,7 +177,8 @@ fn test_composition_modes_with_different_types() {
     let beside = scatter.clone().beside(heatmap.clone());
     assert_eq!(beside.composition_mode(), CompositionMode::SideBySide);
 
-    let custom = scatter.custom(heatmap);
+    let custom_behavior = CustomCompositionBehavior::CrossFade(CrossFadeComposition { fade_factor: 0.5 });
+    let custom = scatter.custom_compose(heatmap, custom_behavior);
     assert_eq!(custom.composition_mode(), CompositionMode::Custom);
 
     // All should be valid

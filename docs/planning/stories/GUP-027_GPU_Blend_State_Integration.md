@@ -1,0 +1,315 @@
+# GUP-027: GPU Blend State Integration
+
+## Story Overview
+
+**Title**: Integrate BlendMode with WebGPU Render Pipeline State  
+**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API  
+**Priority**: High  
+**Story Points**: 3  
+
+## Context
+
+GUP-021 introduced the `BlendMode` enum and placeholder methods on `RenderContext`, but these are not connected to actual GPU blend state. This story implements the integration with WebGPU's blend state system to enable proper alpha blending and composition effects.
+
+## User Story
+
+**As a** visualization developer  
+**I want** overlay composition modes to use proper GPU blending  
+**So that** I get correct visual results when composing semi-transparent visualizations  
+
+## Acceptance Criteria
+
+### Core Blend State Management
+
+- [ ] **WebGPU Integration**: `RenderContext::set_blend_mode()` configures actual GPU blend state
+- [ ] **Render Pipeline State**: Blend modes modify render pipeline blend configuration
+- [ ] **State Restoration**: Original blend state is properly restored after composition
+- [ ] **Performance**: Blend state changes add minimal overhead
+
+### Supported Blend Modes
+
+- [ ] **None**: No blending (replace existing pixels)
+- [ ] **AlphaBlending**: Standard alpha compositing (`src_alpha * src + (1 - src_alpha) * dst`)
+- [ ] **Additive**: Additive blending (`src + dst`)
+- [ ] **Multiply**: Multiplicative blending (`src * dst`)
+
+### API Integration
+
+- [ ] **Overlay Mode**: Automatically uses AlphaBlending for proper layering
+- [ ] **Custom Behaviors**: Can specify blend modes for advanced effects
+- [ ] **Global Alpha**: Support for global alpha values in cross-fade compositions
+- [ ] **Error Handling**: Clear errors for unsupported blend configurations
+
+## Technical Design
+
+### Enhanced RenderContext Implementation
+
+```rust
+impl RenderContext {
+    /// Set blend mode for rendering operations
+    pub fn set_blend_mode(&mut self, mode: BlendMode) -> GupResult<()> {
+        // Store current blend mode for restoration
+        self.current_blend_mode = mode;
+        
+        // Create new render pipeline with updated blend state
+        let blend_state = match mode {
+            BlendMode::None => None,
+            BlendMode::AlphaBlending => Some(BlendState::ALPHA_BLENDING),
+            BlendMode::Additive => Some(BlendState {
+                color: BlendComponent {
+                    src_factor: BlendFactor::One,
+                    dst_factor: BlendFactor::One,
+                    operation: BlendOperation::Add,
+                },
+                alpha: BlendComponent::default(),
+            }),
+            BlendMode::Multiply => Some(BlendState {
+                color: BlendComponent {
+                    src_factor: BlendFactor::Dst,
+                    dst_factor: BlendFactor::Zero,
+                    operation: BlendOperation::Add,
+                },
+                alpha: BlendComponent::default(),
+            }),
+        };
+        
+        // Update active render pipeline
+        self.update_blend_state(blend_state)?;
+        
+        Ok(())
+    }
+    
+    /// Set global alpha for rendering operations
+    pub fn set_global_alpha(&mut self, alpha: f32) -> GupResult<()> {
+        // Update uniform buffer with global alpha value
+        let alpha_uniform = GlobalAlphaUniform { alpha };
+        self.queue.write_buffer(
+            &self.alpha_uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[alpha_uniform])
+        );
+        
+        Ok(())
+    }
+    
+    /// Push current blend state onto stack for nested compositions
+    pub fn push_blend_state(&mut self) -> GupResult<()> {
+        self.blend_state_stack.push(self.current_blend_mode);
+        Ok(())
+    }
+    
+    /// Restore previous blend state from stack
+    pub fn pop_blend_state(&mut self) -> GupResult<()> {
+        if let Some(previous_mode) = self.blend_state_stack.pop() {
+            self.set_blend_mode(previous_mode)?;
+        }
+        Ok(())
+    }
+}
+```
+
+### Blend State Stack for Nested Compositions
+
+```rust
+pub struct RenderContext {
+    // ... existing fields ...
+    current_blend_mode: BlendMode,
+    blend_state_stack: Vec<BlendMode>,
+    alpha_uniform_buffer: Buffer,
+    global_alpha: f32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct GlobalAlphaUniform {
+    alpha: f32,
+    _padding: [f32; 3], // Ensure 16-byte alignment
+}
+```
+
+### Enhanced Composition Rendering
+
+```rust
+impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
+    fn render_overlay(&mut self, context: &mut RenderContext) -> GupResult<()> {
+        // Push current blend state
+        context.push_blend_state()?;
+        
+        // Render first component (background layer)
+        self.first.render(context)?;
+        
+        // Configure blending for overlay
+        context.set_blend_mode(BlendMode::AlphaBlending)?;
+        
+        // Render second component (foreground layer)
+        self.second.render(context)?;
+        
+        // Restore original blend state
+        context.pop_blend_state()?;
+        
+        Ok(())
+    }
+}
+```
+
+### Shader Integration
+
+```wgsl
+// Enhanced fragment shader with global alpha support
+struct GlobalAlpha {
+    alpha: f32,
+}
+
+@group(1) @binding(0)
+var<uniform> global_alpha: GlobalAlpha;
+
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    var color = in.color;
+    color.a *= global_alpha.alpha;
+    return color;
+}
+```
+
+## Dependencies
+
+### Prerequisite Stories
+
+- GUP-020: WebGPU Integration for RenderContext (provides GPU pipeline infrastructure)
+- GUP-021: Advanced Composition Mode Implementation (provides BlendMode enum)
+
+### Enables Stories
+
+- Advanced visual effects with proper GPU blending
+- Performance optimizations for blend state management
+- More sophisticated composition behaviors
+
+## Testing Strategy
+
+### Blend State Tests
+
+```rust
+#[tokio::test]
+async fn test_blend_mode_pipeline_integration() {
+    let mut context = RenderContext::new().await.unwrap();
+    
+    // Test that blend mode changes affect pipeline state
+    context.set_blend_mode(BlendMode::AlphaBlending).unwrap();
+    assert_eq!(context.current_blend_mode(), BlendMode::AlphaBlending);
+    
+    context.set_blend_mode(BlendMode::Additive).unwrap();
+    assert_eq!(context.current_blend_mode(), BlendMode::Additive);
+}
+
+#[tokio::test]
+async fn test_blend_state_stack() {
+    let mut context = RenderContext::new().await.unwrap();
+    
+    // Initial state
+    context.set_blend_mode(BlendMode::None).unwrap();
+    
+    // Push and change
+    context.push_blend_state().unwrap();
+    context.set_blend_mode(BlendMode::AlphaBlending).unwrap();
+    
+    // Nested push and change
+    context.push_blend_state().unwrap();
+    context.set_blend_mode(BlendMode::Additive).unwrap();
+    
+    // Pop should restore previous state
+    context.pop_blend_state().unwrap();
+    assert_eq!(context.current_blend_mode(), BlendMode::AlphaBlending);
+    
+    context.pop_blend_state().unwrap();
+    assert_eq!(context.current_blend_mode(), BlendMode::None);
+}
+
+#[tokio::test]
+async fn test_global_alpha_uniform() {
+    let mut context = RenderContext::new().await.unwrap();
+    
+    context.set_global_alpha(0.5).unwrap();
+    // Verify uniform buffer was updated
+    // (Would need additional context methods to inspect buffer contents)
+}
+```
+
+### Visual Validation Tests
+
+```rust
+#[tokio::test]
+async fn test_overlay_visual_blending() {
+    let mut context = RenderContext::new().await.unwrap();
+    
+    // Create semi-transparent visualizations
+    let background = create_test_quad([1.0, 0.0, 0.0, 0.5]); // Red, 50% alpha
+    let foreground = create_test_quad([0.0, 1.0, 0.0, 0.5]); // Green, 50% alpha
+    
+    let mut overlay = background.overlay(foreground);
+    overlay.render(&mut context).unwrap();
+    
+    // Verify blended result (would need pixel readback for full validation)
+}
+```
+
+## Implementation Phases
+
+### Phase 1: Basic Blend State Integration
+
+- Implement `set_blend_mode()` with WebGPU pipeline updates
+- Support None and AlphaBlending modes
+- Basic state restoration
+
+### Phase 2: Advanced Blend Modes
+
+- Implement Additive and Multiply blend modes
+- Global alpha uniform buffer integration
+- Shader updates for alpha modulation
+
+### Phase 3: State Management
+
+- Blend state stack for nested compositions
+- Performance optimizations for state changes
+- Comprehensive error handling
+
+## Performance Considerations
+
+### Pipeline Caching
+
+- Cache render pipelines by blend state to avoid recreation
+- Limit number of cached pipelines to prevent memory bloat
+
+### State Change Optimization
+
+```rust
+impl RenderContext {
+    fn set_blend_mode(&mut self, mode: BlendMode) -> GupResult<()> {
+        // Early return if mode hasn't changed
+        if self.current_blend_mode == mode {
+            return Ok(());
+        }
+        
+        // ... actual state change logic
+    }
+}
+```
+
+## Success Metrics
+
+- [ ] **Visual Correctness**: Overlay compositions show proper alpha blending
+- [ ] **Performance**: Blend state changes add <0.1ms overhead
+- [ ] **State Integrity**: Nested compositions properly restore blend state
+- [ ] **Pipeline Efficiency**: Render pipeline recreation minimized through caching
+
+## Definition of Done
+
+- [ ] `RenderContext::set_blend_mode()` integrates with WebGPU pipeline state
+- [ ] All four blend modes (None, AlphaBlending, Additive, Multiply) implemented
+- [ ] Global alpha support for cross-fade effects
+- [ ] Blend state stack for nested composition state management
+- [ ] Shader updates to support global alpha modulation
+- [ ] Comprehensive tests for blend state integration
+- [ ] Performance benchmarks confirm minimal overhead
+- [ ] Visual validation tests confirm correct blending behavior
+- [ ] Documentation updated with blend mode usage examples
+- [ ] Integration with overlay composition mode working correctly

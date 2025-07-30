@@ -75,12 +75,14 @@ gup::plot()
 ## Technical Tasks
 
 ### 1. Core Chart Builder Infrastructure
+
 - [ ] Design base `ChartBuilder` trait and implementation
 - [ ] Create fluent API framework with method chaining
 - [ ] Implement data binding system for automatic type inference
 - [ ] Add chart configuration and option management
 
 ### 2. Individual Chart Type Implementations  
+
 - [ ] Implement `ScatterPlotBuilder` with Observable Plot compatibility
 - [ ] Create `LineChartBuilder` with time series optimization
 - [ ] Build `BarChartBuilder` with categorical data handling
@@ -88,12 +90,14 @@ gup::plot()
 - [ ] Implement `HeatmapBuilder` with 2D data mapping
 
 ### 3. Data Mapping and Scales Integration
+
 - [ ] Create automatic scale inference from data types
 - [ ] Implement accessor function system for data field mapping
 - [ ] Add automatic domain/range calculation
 - [ ] Integrate with Phase 1 shader function system
 
 ### 4. Builder-to-Selection Bridge
+
 - [ ] Create seamless conversion from builders to low-level selections
 - [ ] Implement builder state preservation during conversion
 - [ ] Add incremental compilation for performance
@@ -479,6 +483,7 @@ macro_rules! plot {
 ## Dependencies
 
 ### Prerequisite Stories
+
 - GUP-001: Build Mixable Trait (composability foundation)
 - GUP-002: Core Selection Type (underlying selection system)
 - GUP-005: Shader Function Trait (data transformation system)
@@ -486,6 +491,7 @@ macro_rules! plot {
 - GUP-010: Basic Mark Implementations (Circle, Rectangle, Line)
 
 ### Enables Stories
+
 - GUP-019: Automatic Scale and Axis System (scales integration)
 - GUP-020: Color Systems and Themes (color integration)
 - All subsequent Phase 2 stories
@@ -493,6 +499,7 @@ macro_rules! plot {
 ## Testing Strategy
 
 ### API Usability Tests
+
 ```rust
 #[test]
 fn test_observable_plot_compatibility() {
@@ -554,6 +561,7 @@ fn test_type_safety() {
 ```
 
 ### Performance Tests
+
 ```rust
 #[test]
 fn test_large_dataset_performance() {
@@ -604,6 +612,7 @@ fn test_memory_efficiency() {
 ```
 
 ### Builder Integration Tests
+
 ```rust
 #[test]
 fn test_builder_to_selection_conversion() {
@@ -653,6 +662,7 @@ fn test_mixed_api_usage() {
 ```
 
 ### Observable Plot Migration Tests
+
 ```rust
 #[test]
 fn test_observable_plot_migration_examples() {
@@ -690,18 +700,21 @@ fn test_observable_plot_migration_examples() {
 ## Success Metrics
 
 ### API Usability Requirements
+
 - [ ] **One-Line Creation**: 90% of common charts creatable with single fluent call
 - [ ] **Observable Plot Parity**: Support for 80% of Observable Plot's most common use cases
 - [ ] **Type Safety**: 100% of type mismatches caught at compile time
 - [ ] **IDE Support**: Full autocomplete and documentation in popular IDEs
 
 ### Performance Requirements
+
 - [ ] **Large Dataset Performance**: 100K points render in <16ms (60 FPS)
 - [ ] **Creation Speed**: Chart builders create charts in <10ms for typical datasets
 - [ ] **Memory Efficiency**: <20% memory overhead vs direct Selection usage
 - [ ] **Compilation Time**: Builder APIs add <500ms to compile time
 
 ### Developer Experience Requirements
+
 - [ ] **Learning Curve**: Developers familiar with Observable Plot can use API immediately
 - [ ] **Error Messages**: Clear, actionable errors with suggestions for common mistakes
 - [ ] **Documentation**: Complete examples for every chart type and configuration option
@@ -710,11 +723,13 @@ fn test_observable_plot_migration_examples() {
 ## Risk Assessment
 
 ### Technical Risks
+
 - **High**: Builder complexity could impact compile times and error message quality
 - **Medium**: Performance overhead from high-level abstractions
 - **Medium**: Type inference complexity could make error messages confusing
 
 ### Mitigation Strategies
+
 - **Incremental Implementation**: Start with simple builders, add complexity gradually
 - **Performance Monitoring**: Continuous benchmarking of builder overhead
 - **User Testing**: Regular feedback from developers migrating from Observable Plot
@@ -722,18 +737,21 @@ fn test_observable_plot_migration_examples() {
 ## Implementation Notes
 
 ### Design Decisions
+
 - Use zero-cost abstractions where possible to maintain GPU performance
 - Implement builders as thin layers over Phase 1 Selection system
 - Support both closure-based and string-based field accessors for flexibility
 - Prioritize Observable Plot compatibility over novel API design
 
 ### Performance Strategy
+
 - Lazy evaluation of builder configuration until render time
 - Direct compilation to Phase 1 primitives without intermediate representations
 - Automatic optimization of common patterns (e.g., identical accessor functions)
 - Streaming-aware builders for real-time data updates
 
 ### Observable Plot Compatibility Strategy
+
 - Maintain 1:1 mapping for common Observable Plot chart types
 - Use similar method names and parameter patterns
 - Support Observable Plot's data accessor patterns

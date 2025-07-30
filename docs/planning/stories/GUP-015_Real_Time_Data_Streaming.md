@@ -63,24 +63,28 @@ pub enum StreamUpdate<T> {
 ## Technical Tasks
 
 ### 1. Core Streaming Infrastructure
+
 - [ ] Implement ring buffer for high-throughput data ingestion
 - [ ] Create double-buffered GPU buffer system for lock-free updates
 - [ ] Add asynchronous update queue with priority handling
 - [ ] Implement memory-bounded streaming with configurable limits
 
 ### 2. Incremental Update System
+
 - [ ] Design efficient incremental GPU buffer updates
 - [ ] Implement dirty region tracking for minimal transfers
 - [ ] Create batch update optimization for rapid changes
 - [ ] Add update conflict resolution and ordering
 
 ### 3. Integration with Selection System
+
 - [ ] Extend Selection<T, M> to support streaming data sources
 - [ ] Implement automatic buffer resize and reallocation
 - [ ] Add streaming-aware rendering pipeline
 - [ ] Create stream state synchronization with interactions
 
 ### 4. Performance Optimization
+
 - [ ] Implement update coalescing for high-frequency changes
 - [ ] Add adaptive batching based on system performance
 - [ ] Create streaming performance profiler and metrics
@@ -288,11 +292,13 @@ impl<T, M: Mark> Selection<T, M> {
 ## Dependencies
 
 ### Prerequisite Stories
+
 - GUP-002: Core Selection Type (selection system to extend)
 - GUP-003: GPU Buffer Management (buffer infrastructure)
 - GUP-004: Basic Render Context (rendering context)
 
 ### Enables Stories
+
 - All real-time visualization use cases
 - Phase 2 high-level streaming APIs
 - Live dashboard and monitoring applications
@@ -300,6 +306,7 @@ impl<T, M: Mark> Selection<T, M> {
 ## Testing Strategy
 
 ### Unit Tests
+
 ```rust
 #[test]
 async fn test_stream_basic_operations() {
@@ -356,6 +363,7 @@ async fn test_batch_update_performance() {
 ```
 
 ### Performance Tests
+
 ```rust
 #[bench]
 async fn bench_streaming_throughput(b: &mut Bencher) {
@@ -388,6 +396,7 @@ async fn bench_streaming_with_rendering(b: &mut Bencher) {
 ```
 
 ### Integration Tests
+
 ```rust
 #[test]
 async fn test_streaming_with_interactions() {
@@ -425,18 +434,21 @@ async fn test_streaming_with_interactions() {
 ## Success Metrics
 
 ### Performance Requirements
+
 - [ ] **Update Latency**: P99 <1ms from data arrival to GPU buffer update
 - [ ] **Throughput**: Handle 100K+ updates per second sustained
 - [ ] **Rendering Performance**: Maintain 60 FPS during continuous streaming
 - [ ] **Memory Efficiency**: Bounded memory growth with configurable limits
 
 ### Functionality Requirements
+
 - [ ] **Data Integrity**: No data loss or corruption during high-throughput streaming
 - [ ] **Interaction Compatibility**: All interactions work correctly with streaming data
 - [ ] **Error Recovery**: Graceful handling of memory pressure and update failures
 - [ ] **Cross-Platform**: Identical streaming performance on all supported platforms
 
 ### Integration Requirements
+
 - [ ] **Selection Integration**: Seamless integration with Selection<T, M> system
 - [ ] **Event System**: Streaming updates trigger appropriate events
 - [ ] **Shader Functions**: Streaming data works with all shader function compositions
@@ -445,11 +457,13 @@ async fn test_streaming_with_interactions() {
 ## Risk Assessment
 
 ### Technical Risks
+
 - **High**: GPU-CPU synchronization complexity could introduce latency spikes
 - **High**: Memory management for unbounded streams could cause out-of-memory errors
 - **Medium**: Update coalescing might introduce data consistency issues
 
 ### Mitigation Strategies
+
 - **Comprehensive Testing**: Stress testing with realistic data rates and patterns
 - **Memory Monitoring**: Built-in memory usage tracking and automatic eviction
 - **Fallback Mechanisms**: Graceful degradation when streaming targets can't be met
@@ -457,18 +471,21 @@ async fn test_streaming_with_interactions() {
 ## Implementation Notes
 
 ### Design Decisions
+
 - Use double-buffering to avoid GPU stalls during updates
 - Implement ring buffer for bounded memory usage
 - Prioritize update latency over absolute throughput
 - Support both individual and batch updates for flexibility
 
 ### Memory Management Strategy
+
 - Ring buffer automatically evicts old data when capacity is reached
 - Configurable memory limits with user-defined eviction policies
 - Lazy GPU buffer allocation to minimize memory usage
 - Automatic buffer compaction during low-activity periods
 
 ### Performance Optimization Strategy
+
 - Batch small updates automatically for efficiency
 - Use compute shaders for large batch operations
 - Implement adaptive update scheduling based on system performance
