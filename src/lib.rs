@@ -27,6 +27,16 @@
 //! - **Interactive Visualizations**: Built-in support for user interactions and animations
 //! - **Extensible Architecture**: Modular design allowing custom marks and interactions
 
+pub mod error;
+pub mod examples;
+pub mod mixable;
+pub mod render;
+
+pub use error::*;
+pub use examples::*;
+pub use mixable::*;
+pub use render::*;
+
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 

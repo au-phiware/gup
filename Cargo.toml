@@ -15,10 +15,12 @@ name = "gup"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-wgpu = "26.0"
+wgpu = { version = "26.0", features = ["wgsl"] }
 winit = "0.30"
 bytemuck = { version = "1.23", features = ["derive"] }
 pollster = "0.3"
+raw-window-handle = "0.6"
+tokio = { version = "1.0", features = ["rt", "macros"] }
 
 [dependencies.web-sys]
 version = "0.3"
@@ -40,3 +42,11 @@ log = "0.4"
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports"] }
+tokio-test = "0.4"
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[[bench]]
+name = "mixable_benchmarks"
+harness = false
