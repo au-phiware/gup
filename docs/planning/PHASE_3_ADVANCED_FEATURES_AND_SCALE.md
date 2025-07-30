@@ -2,7 +2,10 @@
 
 ## Overview
 
-Phase 3 pushes Gup to its ultimate performance potential and adds advanced features that establish it as the definitive solution for extreme-scale data visualization. This phase targets billion-point datasets, complex layout algorithms, and 3D capabilities.
+Phase 3 pushes Gup to its ultimate performance potential and adds advanced
+features that establish it as the definitive solution for extreme-scale data
+visualization. This phase targets billion-point datasets, complex layout
+algorithms, and 3D capabilities.
 
 ## Goals
 
@@ -13,14 +16,19 @@ Phase 3 pushes Gup to its ultimate performance potential and adds advanced featu
 
 ## Initiative 1: Billion-Point Architecture
 
-**Strategic Importance**: Billion-point visualization is Gup's ultimate differentiator. No other declarative visualization library can handle datasets at this scale with interactive performance.
+**Strategic Importance**: Billion-point visualization is Gup's ultimate
+differentiator. No other declarative visualization library can handle datasets
+at this scale with interactive performance.
 
-### Objectives
+### Initiative 1: Objectives
 
-1. **Hierarchical Level-of-Detail**: Automatic LOD system that maintains visual fidelity
-2. **Adaptive Rendering**: Dynamic quality adjustment based on performance and viewport
+1. **Hierarchical Level-of-Detail**: Automatic LOD system that maintains visual
+   fidelity
+2. **Adaptive Rendering**: Dynamic quality adjustment based on performance and
+   viewport
 3. **Streaming Data Management**: Handle datasets larger than GPU memory
-4. **Spatial Indexing**: GPU-accelerated spatial data structures for efficient querying
+4. **Spatial Indexing**: GPU-accelerated spatial data structures for efficient
+   querying
 
 ### Technical Approach
 
@@ -30,13 +38,13 @@ Phase 3 pushes Gup to its ultimate performance potential and adds advanced featu
 pub struct BillionPointRenderer {
     // Hierarchical data structure with multiple resolution levels
     lod_pyramid: Vec<GpuBuffer<VertexData>>,
-    
+
     // Adaptive rendering engine
     adaptive_renderer: AdaptiveRenderer,
-    
+
     // Streaming data management for datasets larger than GPU memory
     streaming_manager: StreamingDataManager,
-    
+
     // Spatial indexing for efficient queries
     spatial_index: GpuSpatialIndex,
 }
@@ -45,18 +53,19 @@ pub struct BillionPointRenderer {
 #### Adaptive Quality System
 
 - **Level 0**: Full-resolution data for close zooms (1-10K visible points)
-- **Level 1**: 10:1 reduction for medium zooms (10K-100K visible points)  
+- **Level 1**: 10:1 reduction for medium zooms (10K-100K visible points)
 - **Level 2**: 100:1 reduction for far zooms (100K-1M visible points)
 - **Level 3**: 1000:1 reduction for overview (1M+ visible points)
 
 #### Streaming Architecture
 
 - **Viewport-Based Loading**: Only load data visible in current view
-- **Predictive Prefetching**: Anticipate user navigation and preload adjacent regions
+- **Predictive Prefetching**: Anticipate user navigation and preload adjacent
+  regions
 - **Memory Management**: Automatic eviction of unused data regions
 - **Progressive Enhancement**: Start with low-res, stream high-res as available
 
-### Performance Targets
+### Initiative 1: Performance Targets
 
 - 1 billion points at 30+ FPS with adaptive LOD
 - <100ms response time for pan/zoom operations
@@ -65,9 +74,10 @@ pub struct BillionPointRenderer {
 
 ## Initiative 2: GPU-Accelerated Layout Algorithms
 
-**Strategic Importance**: Layout algorithms (force-directed graphs, treemaps, etc.) are computationally expensive and perfect candidates for GPU acceleration.
+**Strategic Importance**: Layout algorithms (force-directed graphs, treemaps,
+etc.) are computationally expensive and perfect candidates for GPU acceleration.
 
-### Objectives
+### Initiative 2: Objectives
 
 1. **Force-Directed Layouts**: GPU-parallel simulation for large graphs
 2. **Hierarchical Layouts**: Treemaps, circle packing, and dendrograms
@@ -84,7 +94,7 @@ pub struct ForceDirectedLayout {
     node_force_pipeline: ComputePipeline,
     edge_force_pipeline: ComputePipeline,
     collision_pipeline: ComputePipeline,
-    
+
     // GPU buffers for parallel computation
     node_buffer: GpuBuffer<Node>,
     edge_buffer: GpuBuffer<Edge>,
@@ -97,7 +107,7 @@ impl ForceDirectedLayout {
         self.compute_node_forces().await;
         self.compute_edge_forces().await;
         self.resolve_collisions().await;
-        
+
         // Update positions based on accumulated forces
         self.integrate_positions().await;
     }
@@ -118,7 +128,7 @@ impl ForceDirectedLayout {
 - **Hexagonal Binning**: Efficient spatial aggregation for point clouds
 - **Multi-Scale Analysis**: Cluster analysis at multiple zoom levels
 
-### Performance Targets
+### Initiative 2: Performance Targets
 
 - 100K+ nodes force-directed layout at 60 FPS
 - Real-time treemap updates for hierarchical data
@@ -127,11 +137,14 @@ impl ForceDirectedLayout {
 
 ## Initiative 3: 3D Visualization and Spatial Data
 
-**Strategic Importance**: 3D visualization opens new use cases (volumetric data, geographic visualization, scientific modeling) while leveraging existing GPU infrastructure.
+**Strategic Importance**: 3D visualization opens new use cases (volumetric data,
+geographic visualization, scientific modeling) while leveraging existing GPU
+infrastructure.
 
-### Objectives
+### Initiative 3: Objectives
 
-1. **3D Mark System**: Extend mark system to 3D primitives (spheres, cubes, meshes)
+1. **3D Mark System**: Extend mark system to 3D primitives (spheres, cubes,
+   meshes)
 2. **Spatial Transformations**: 3D projections, rotations, and camera systems
 3. **Lighting and Materials**: Professional-quality 3D rendering
 4. **Mixed 2D/3D**: Seamless integration of 2D charts in 3D space
@@ -152,7 +165,7 @@ pub struct Camera3D {
     position: Vec3,
     target: Vec3,
     up: Vec3,
-    
+
     // Projection parameters
     fov: f32,
     aspect_ratio: f32,
@@ -164,7 +177,7 @@ impl Camera3D {
     pub fn view_projection_matrix(&self) -> Mat4 {
         // Generate view-projection matrix for 3D rendering
     }
-    
+
     pub fn update_from_interaction(&mut self, interaction: CameraInteraction) {
         // Handle orbit, pan, and zoom interactions
     }
@@ -187,9 +200,10 @@ impl Camera3D {
 
 ## Initiative 4: Professional Chart Components
 
-**Strategic Importance**: Professional applications require publication-quality components: axes, legends, annotations, and export capabilities.
+**Strategic Importance**: Professional applications require publication-quality
+components: axes, legends, annotations, and export capabilities.
 
-### Objectives
+### Initiative 4: Objectives
 
 1. **Advanced Axis System**: Multi-axis support with custom positioning
 2. **Dynamic Legends**: Interactive legends with filtering and highlighting
@@ -245,12 +259,15 @@ pub enum AnnotationContent {
 
 ## Initiative 5: Performance Optimization and Monitoring
 
-**Strategic Importance**: At billion-point scale, performance optimization becomes critical. The system needs comprehensive monitoring and automatic optimization.
+**Strategic Importance**: At billion-point scale, performance optimization
+becomes critical. The system needs comprehensive monitoring and automatic
+optimization.
 
-### Objectives
+### Initiative 5: Objectives
 
 1. **Performance Monitoring**: Built-in telemetry and profiling tools
-2. **Automatic Optimization**: Dynamic optimization based on hardware capabilities
+2. **Automatic Optimization**: Dynamic optimization based on hardware
+   capabilities
 3. **Memory Management**: Advanced GPU memory management for large datasets
 4. **Bottleneck Detection**: Automatic identification of performance bottlenecks
 
@@ -273,12 +290,13 @@ impl PerformanceTelemetry {
 }
 ```
 
-#### Adaptive Quality System
+#### Optimization Adaptive Quality System
 
 - **Dynamic LOD**: Automatic level-of-detail adjustment based on performance
 - **Quality Scaling**: Reduce shader complexity when frame rate drops
 - **Memory Pressure**: Automatic data eviction when memory is constrained
-- **Device Capability**: Optimize rendering pipeline for specific GPU capabilities
+- **Device Capability**: Optimize rendering pipeline for specific GPU
+  capabilities
 
 ## Success Criteria
 
@@ -291,14 +309,17 @@ impl PerformanceTelemetry {
 
 ### Feature Completeness
 
-- [ ] **Advanced Layouts**: Force-directed, treemap, and geographic clustering working
+- [ ] **Advanced Layouts**: Force-directed, treemap, and geographic clustering
+      working
 - [ ] **3D Visualization**: Complete 3D mark system with lighting and materials
-- [ ] **Professional Components**: Publication-quality axes, legends, and annotations
+- [ ] **Professional Components**: Publication-quality axes, legends, and
+      annotations
 - [ ] **Export Capabilities**: High-quality export to all major formats
 
 ### Real-World Validation
 
-- [ ] **Scientific Datasets**: Working with real billion-point scientific datasets
+- [ ] **Scientific Datasets**: Working with real billion-point scientific
+      datasets
 - [ ] **Interactive Performance**: Smooth interaction with extreme-scale data
 - [ ] **Production Usage**: 10+ production deployments using Phase 3 features
 - [ ] **Community Validation**: External validation of performance claims
@@ -307,11 +328,17 @@ impl PerformanceTelemetry {
 
 Before Phase 3 completion:
 
-1. **Performance Benchmarks**: Automated testing confirming all performance targets
-2. **Real Dataset Validation**: Testing with actual billion-point datasets from partners
-3. **Cross-Platform Verification**: Identical performance on all supported platforms
+1. **Performance Benchmarks**: Automated testing confirming all performance
+   targets
+2. **Real Dataset Validation**: Testing with actual billion-point datasets from
+   partners
+3. **Cross-Platform Verification**: Identical performance on all supported
+   platforms
 4. **Professional Quality**: Design review confirming publication-ready output
 
 ---
 
-**Phase 3 establishes Gup as the definitive solution for extreme-scale data visualization. The billion-point performance targets and advanced features position Gup far ahead of any existing competition while maintaining the ease-of-use established in earlier phases.**
+**Phase 3 establishes Gup as the definitive solution for extreme-scale data
+visualization. The billion-point performance targets and advanced features
+position Gup far ahead of any existing competition while maintaining the
+ease-of-use established in earlier phases.**

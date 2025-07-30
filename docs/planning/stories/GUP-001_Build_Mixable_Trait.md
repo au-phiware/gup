@@ -2,17 +2,16 @@
 
 ## Story Overview
 
-**Title**: Build the Universal Mixable Trait for Composability
-**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API
-**Priority**: Critical
+**Title**: Build the Universal Mixable Trait for Composability **Epic**: Phase 1
+Initiative 1 - Core GPU Primitives and Selection API **Priority**: Critical
 **Story Points**: 8
 
 ## Context
 
 The `Mixable` trait is the foundation of Gup's universal composability system.
 Everything in Gup must be able to compose naturally with everything else,
-following D3.js's proven design philosophy. This trait enables the core
-promise: "Everything composes naturally like D3's primitives."
+following D3.js's proven design philosophy. This trait enables the core promise:
+"Everything composes naturally like D3's primitives."
 
 ## User Story
 
@@ -22,16 +21,16 @@ visualizations by combining simple primitives without architectural limitations
 
 ## Acceptance Criteria
 
-### Core Trait Definition
+### AC1: Core Trait Definition
 
 - [ ] **Universal Composability**: `Mixable` trait supports composition between
-  any two implementing types
+      any two implementing types
 - [ ] **Type-Safe Composition**: Rust's type system validates compositions at
-  compile time
+      compile time
 - [ ] **Performance Preservation**: Composition adds <1% runtime overhead
 - [ ] **Natural API**: Composition feels as intuitive as D3.js method chaining
 
-### Technical Requirements
+### AC2: Technical Requirements
 
 ```rust
 // The fundamental composable unit - everything can be combined
@@ -52,18 +51,18 @@ pub struct ComposedVisualization<A: Mixable, B: Mixable> {
 }
 ```
 
-### Behavior Specifications
+### AC3: Behavior Specifications
 
 - [ ] **Associative Composition**: `(a.mix(b)).mix(c)` produces same result as
-  `a.mix(b.mix(c))`
+      `a.mix(b.mix(c))`
 - [ ] **Identity Preservation**: Each component maintains its identity within
-  compositions
+      compositions
 - [ ] **Lazy Evaluation**: Compositions are not executed until render() is
-  called
+      called
 - [ ] **Error Propagation**: Composition errors are caught at compile time when
-  possible
+      possible
 
-### Composition Modes
+### AC4: Composition Modes
 
 - [ ] **Overlay**: Render second component on top of first
 - [ ] **Merge**: Combine data sources and render as unified visualization

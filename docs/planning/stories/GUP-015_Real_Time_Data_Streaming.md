@@ -2,45 +2,53 @@
 
 ## Story Overview
 
-**Title**: Implement Real-Time Data Streaming Infrastructure  
-**Epic**: Phase 1 Initiative 4 - Interaction System and Performance  
-**Priority**: Critical  
-**Story Points**: 13  
+**Title**: Implement Real-Time Data Streaming Infrastructure **Epic**: Phase 1
+Initiative 4 - Interaction System and Performance **Priority**: Critical **Story
+Points**: 13
 
 ## Context
 
-Gup's mission promises "<1ms data update latency for real-time streams" which requires sophisticated streaming infrastructure. The system must handle continuous data updates without full buffer regeneration, support incremental updates to massive datasets, and maintain 60 FPS rendering performance during live data streaming. This is essential for real-time monitoring dashboards, financial trading, IoT data streams, and live analytics.
+Gup's mission promises "<1ms data update latency for real-time streams" which
+requires sophisticated streaming infrastructure. The system must handle
+continuous data updates without full buffer regeneration, support incremental
+updates to massive datasets, and maintain 60 FPS rendering performance during
+live data streaming. This is essential for real-time monitoring dashboards,
+financial trading, IoT data streams, and live analytics.
 
 ## User Story
 
-**As a** visualization developer  
-**I want** real-time data streaming with sub-millisecond update latency  
-**So that** I can build live dashboards and monitoring systems that update smoothly with millions of data points without performance degradation  
+**As a** visualization developer **I want** real-time data streaming with
+sub-millisecond update latency **So that** I can build live dashboards and
+monitoring systems that update smoothly with millions of data points without
+performance degradation
 
 ## Acceptance Criteria
 
-### Core Streaming Features
+### AC1: Core Streaming Features
 
-- [ ] **Sub-Millisecond Updates**: <1ms latency from data arrival to GPU buffer update
-- [ ] **Incremental Updates**: Add/remove/modify individual data points without full buffer rebuild
-- [ ] **High Throughput**: Handle 100K+ updates per second while maintaining 60 FPS
+- [ ] **Sub-Millisecond Updates**: <1ms latency from data arrival to GPU buffer
+      update
+- [ ] **Incremental Updates**: Add/remove/modify individual data points without
+      full buffer rebuild
+- [ ] **High Throughput**: Handle 100K+ updates per second while maintaining 60
+      FPS
 - [ ] **Memory Efficiency**: Bounded memory usage regardless of stream duration
 
-### Streaming Architecture
+### AC2: Streaming Architecture
 
 ```rust
 pub struct DataStream<T> {
     // Ring buffer for incoming data
     ring_buffer: RingBuffer<T>,
-    
+
     // GPU buffer management
     active_buffer: GpuBuffer<T>,
     staging_buffer: GpuBuffer<T>,
-    
+
     // Update tracking
     dirty_regions: Vec<BufferRegion>,
     update_queue: AsyncQueue<StreamUpdate<T>>,
-    
+
     // Performance monitoring
     latency_tracker: LatencyTracker,
 }
@@ -53,11 +61,12 @@ pub enum StreamUpdate<T> {
 }
 ```
 
-### Performance Requirements
+### AC3: Performance Requirements
 
 - [ ] **Update Latency**: 99th percentile <1ms from stream update to GPU buffer
 - [ ] **Rendering Performance**: Maintain 60 FPS during continuous streaming
-- [ ] **Memory Bounds**: Configurable maximum memory usage with automatic eviction
+- [ ] **Memory Bounds**: Configurable maximum memory usage with automatic
+      eviction
 - [ ] **Batch Optimization**: Automatic batching of rapid updates for efficiency
 
 ## Technical Tasks
@@ -106,44 +115,44 @@ impl<T: Clone + Send + 'static> DataStream<T> {
             latency_tracker: LatencyTracker::new(),
         }
     }
-    
+
     pub async fn push(&mut self, data: T) -> Result<(), StreamError> {
         let timestamp = Instant::now();
-        let update = StreamUpdate::Insert { 
-            index: self.ring_buffer.next_index(), 
-            data 
+        let update = StreamUpdate::Insert {
+            index: self.ring_buffer.next_index(),
+            data
         };
-        
+
         self.update_queue.push(update).await?;
         self.latency_tracker.record_push(timestamp);
         Ok(())
     }
-    
+
     pub async fn push_batch(&mut self, data: Vec<T>) -> Result<(), StreamError> {
         let timestamp = Instant::now();
         let updates = data.into_iter().enumerate()
-            .map(|(i, d)| StreamUpdate::Insert { 
-                index: self.ring_buffer.next_index() + i, 
-                data: d 
+            .map(|(i, d)| StreamUpdate::Insert {
+                index: self.ring_buffer.next_index() + i,
+                data: d
             })
             .collect();
-        
+
         let batch_update = StreamUpdate::Batch { updates };
         self.update_queue.push(batch_update).await?;
         self.latency_tracker.record_batch_push(timestamp);
         Ok(())
     }
-    
+
     pub async fn update_at(&mut self, index: usize, data: T) -> Result<(), StreamError> {
         if index >= self.ring_buffer.len() {
             return Err(StreamError::IndexOutOfBounds);
         }
-        
+
         let update = StreamUpdate::Update { index, data };
         self.update_queue.push(update).await?;
         Ok(())
     }
-    
+
     pub async fn remove_at(&mut self, index: usize) -> Result<(), StreamError> {
         let update = StreamUpdate::Remove { index };
         self.update_queue.push(update).await?;
@@ -159,11 +168,11 @@ pub struct StreamingBufferManager<T> {
     // Double buffering for lock-free updates
     buffers: [GpuBuffer<T>; 2],
     active_buffer_index: AtomicUsize,
-    
+
     // Update tracking
     pending_updates: Vec<BufferUpdate>,
     update_batch_size: usize,
-    
+
     // Memory management
     memory_limit: usize,
     eviction_policy: EvictionPolicy,
@@ -172,14 +181,14 @@ pub struct StreamingBufferManager<T> {
 impl<T> StreamingBufferManager<T> {
     pub async fn apply_updates(&mut self, updates: Vec<StreamUpdate<T>>) -> Result<(), StreamError> {
         let start_time = Instant::now();
-        
+
         // Batch updates for efficiency
         let batched_updates = self.batch_updates(updates);
-        
+
         // Apply to staging buffer
         let staging_index = 1 - self.active_buffer_index.load(Ordering::Acquire);
         let staging_buffer = &mut self.buffers[staging_index];
-        
+
         for update in batched_updates {
             match update {
                 StreamUpdate::Insert { index, data } => {
@@ -196,26 +205,26 @@ impl<T> StreamingBufferManager<T> {
                 }
             }
         }
-        
+
         // Atomic buffer swap
         self.active_buffer_index.store(staging_index, Ordering::Release);
-        
+
         let latency = start_time.elapsed();
         if latency > Duration::from_millis(1) {
             log::warn!("Stream update latency exceeded target: {:?}", latency);
         }
-        
+
         Ok(())
     }
-    
+
     fn batch_updates(&self, updates: Vec<StreamUpdate<T>>) -> Vec<StreamUpdate<T>> {
         // Coalesce rapid updates to the same index
         let mut update_map: HashMap<usize, T> = HashMap::new();
         let mut removes: HashSet<usize> = HashSet::new();
-        
+
         for update in updates {
             match update {
-                StreamUpdate::Insert { index, data } | 
+                StreamUpdate::Insert { index, data } |
                 StreamUpdate::Update { index, data } => {
                     update_map.insert(index, data);
                     removes.remove(&index);
@@ -229,7 +238,7 @@ impl<T> StreamingBufferManager<T> {
                 }
             }
         }
-        
+
         let mut result = Vec::new();
         for (index, data) in update_map {
             result.push(StreamUpdate::Update { index, data });
@@ -237,7 +246,7 @@ impl<T> StreamingBufferManager<T> {
         for index in removes {
             result.push(StreamUpdate::Remove { index });
         }
-        
+
         result
     }
 }
@@ -253,17 +262,17 @@ impl<T, M: Mark> Selection<T, M> {
         selection.enable_streaming_mode();
         selection
     }
-    
+
     pub fn set_stream_capacity(&mut self, capacity: usize) {
         if let Some(stream) = &mut self.data_stream {
             stream.set_capacity(capacity);
         }
     }
-    
+
     pub async fn push_data(&mut self, data: T) -> Result<(), GupError> {
         if let Some(stream) = &mut self.data_stream {
             stream.push(data).await.map_err(GupError::StreamError)?;
-            
+
             // Trigger incremental render update
             self.mark_streaming_dirty();
             Ok(())
@@ -271,7 +280,7 @@ impl<T, M: Mark> Selection<T, M> {
             Err(GupError::NoStreamingSource)
         }
     }
-    
+
     pub async fn push_batch(&mut self, data: Vec<T>) -> Result<(), GupError> {
         if let Some(stream) = &mut self.data_stream {
             stream.push_batch(data).await.map_err(GupError::StreamError)?;
@@ -281,7 +290,7 @@ impl<T, M: Mark> Selection<T, M> {
             Err(GupError::NoStreamingSource)
         }
     }
-    
+
     fn enable_streaming_mode(&mut self) {
         self.rendering_mode = RenderingMode::Streaming;
         self.buffer_update_strategy = BufferUpdateStrategy::Incremental;
@@ -311,15 +320,15 @@ impl<T, M: Mark> Selection<T, M> {
 #[test]
 async fn test_stream_basic_operations() {
     let mut stream = DataStream::<f32>::new(1000, 10_000_000);
-    
+
     // Test basic push
     stream.push(1.0).await.unwrap();
     stream.push(2.0).await.unwrap();
     assert_eq!(stream.len(), 2);
-    
+
     // Test update
     stream.update_at(0, 1.5).await.unwrap();
-    
+
     // Test remove
     stream.remove_at(1).await.unwrap();
     assert_eq!(stream.len(), 1);
@@ -329,20 +338,20 @@ async fn test_stream_basic_operations() {
 async fn test_streaming_latency() {
     let mut stream = DataStream::<TestData>::new(100_000, 100_000_000);
     let mut latencies = Vec::new();
-    
+
     for i in 0..1000 {
         let start = Instant::now();
         stream.push(TestData::new(i)).await.unwrap();
-        
+
         // Wait for GPU buffer update
         stream.flush_updates().await.unwrap();
-        
+
         let latency = start.elapsed();
         latencies.push(latency);
     }
-    
+
     let p99_latency = percentile(&latencies, 0.99);
-    assert!(p99_latency < Duration::from_millis(1), 
+    assert!(p99_latency < Duration::from_millis(1),
             "P99 latency too high: {:?}", p99_latency);
 }
 
@@ -350,14 +359,14 @@ async fn test_streaming_latency() {
 async fn test_batch_update_performance() {
     let mut stream = DataStream::<TestData>::new(1_000_000, 1_000_000_000);
     let batch_data: Vec<TestData> = (0..10_000).map(TestData::new).collect();
-    
+
     let start = Instant::now();
     stream.push_batch(batch_data).await.unwrap();
     stream.flush_updates().await.unwrap();
     let batch_time = start.elapsed();
-    
+
     // Should be much faster than individual pushes
-    assert!(batch_time < Duration::from_millis(10), 
+    assert!(batch_time < Duration::from_millis(10),
             "Batch update too slow: {:?}", batch_time);
 }
 ```
@@ -369,7 +378,7 @@ async fn test_batch_update_performance() {
 async fn bench_streaming_throughput(b: &mut Bencher) {
     let mut stream = DataStream::<TestData>::new(1_000_000, 1_000_000_000);
     let test_data = TestData::random();
-    
+
     b.iter(|| async {
         stream.push(test_data.clone()).await.unwrap();
     });
@@ -382,14 +391,14 @@ async fn bench_streaming_with_rendering(b: &mut Bencher) {
         DataStream::new(100_000, 100_000_000),
         create_context(&device)
     );
-    
+
     let test_data = TestData::random();
-    
+
     b.iter(|| async {
         selection.push_data(test_data.clone()).await.unwrap();
         selection.render().unwrap();
     });
-    
+
     // Should maintain 60+ FPS (16.67ms per frame)
     assert!(b.elapsed() < Duration::from_millis(16));
 }
@@ -402,22 +411,22 @@ async fn bench_streaming_with_rendering(b: &mut Bencher) {
 async fn test_streaming_with_interactions() {
     let device = create_test_device();
     let mut selection = create_streaming_selection(&device);
-    
+
     // Add initial data
     for i in 0..1000 {
         selection.push_data(TestData::new(i)).await.unwrap();
     }
-    
+
     // Test that interactions work during streaming
     let mut interaction_count = 0;
     selection.on("click", |_event, _data| {
         interaction_count += 1;
     });
-    
+
     // Continue streaming while testing interactions
     for i in 1000..2000 {
         selection.push_data(TestData::new(i)).await.unwrap();
-        
+
         if i % 100 == 0 {
             // Test interaction every 100 updates
             let hits = selection.query_at_position(Vec2::new(50.0, 50.0));
@@ -426,7 +435,7 @@ async fn test_streaming_with_interactions() {
             }
         }
     }
-    
+
     assert!(interaction_count > 0, "Interactions should work during streaming");
 }
 ```
@@ -442,31 +451,41 @@ async fn test_streaming_with_interactions() {
 
 ### Functionality Requirements
 
-- [ ] **Data Integrity**: No data loss or corruption during high-throughput streaming
-- [ ] **Interaction Compatibility**: All interactions work correctly with streaming data
-- [ ] **Error Recovery**: Graceful handling of memory pressure and update failures
-- [ ] **Cross-Platform**: Identical streaming performance on all supported platforms
+- [ ] **Data Integrity**: No data loss or corruption during high-throughput
+      streaming
+- [ ] **Interaction Compatibility**: All interactions work correctly with
+      streaming data
+- [ ] **Error Recovery**: Graceful handling of memory pressure and update
+      failures
+- [ ] **Cross-Platform**: Identical streaming performance on all supported
+      platforms
 
 ### Integration Requirements
 
-- [ ] **Selection Integration**: Seamless integration with Selection<T, M> system
+- [ ] **Selection Integration**: Seamless integration with Selection<T, M>
+      system
 - [ ] **Event System**: Streaming updates trigger appropriate events
-- [ ] **Shader Functions**: Streaming data works with all shader function compositions
-- [ ] **Performance Monitoring**: Built-in metrics and profiling for streaming operations
+- [ ] **Shader Functions**: Streaming data works with all shader function
+      compositions
+- [ ] **Performance Monitoring**: Built-in metrics and profiling for streaming
+      operations
 
 ## Risk Assessment
 
 ### Technical Risks
 
 - **High**: GPU-CPU synchronization complexity could introduce latency spikes
-- **High**: Memory management for unbounded streams could cause out-of-memory errors
+- **High**: Memory management for unbounded streams could cause out-of-memory
+  errors
 - **Medium**: Update coalescing might introduce data consistency issues
 
 ### Mitigation Strategies
 
-- **Comprehensive Testing**: Stress testing with realistic data rates and patterns
+- **Comprehensive Testing**: Stress testing with realistic data rates and
+  patterns
 - **Memory Monitoring**: Built-in memory usage tracking and automatic eviction
-- **Fallback Mechanisms**: Graceful degradation when streaming targets can't be met
+- **Fallback Mechanisms**: Graceful degradation when streaming targets can't be
+  met
 
 ## Implementation Notes
 

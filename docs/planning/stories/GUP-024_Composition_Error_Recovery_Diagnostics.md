@@ -2,43 +2,56 @@
 
 ## Story Overview
 
-**Title**: Advanced Error Handling and Diagnostic Tools for Composition System  
-**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API  
-**Priority**: Medium  
-**Story Points**: 4  
+**Title**: Advanced Error Handling and Diagnostic Tools for Composition System
+**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API
+**Priority**: Medium **Story Points**: 4
 
 ## Context
 
-The current Mixable trait system provides basic error propagation but lacks sophisticated error recovery, debugging tools, and performance diagnostics. This story enhances the composition system with comprehensive error handling, visual debugging tools, and runtime diagnostics to improve developer experience and system reliability.
+The current Mixable trait system provides basic error propagation but lacks
+sophisticated error recovery, debugging tools, and performance diagnostics. This
+story enhances the composition system with comprehensive error handling, visual
+debugging tools, and runtime diagnostics to improve developer experience and
+system reliability.
 
 ## User Story
 
-**As a** developer building complex visualizations with composition  
-**I want** comprehensive error handling and debugging tools  
-**So that** I can quickly identify and resolve composition issues and optimize performance bottlenecks  
+**As a** developer building complex visualizations with composition **I want**
+comprehensive error handling and debugging tools **So that** I can quickly
+identify and resolve composition issues and optimize performance bottlenecks
 
 ## Acceptance Criteria
 
 ### Error Recovery
 
-- [ ] **Graceful Degradation**: Compositions continue rendering when individual components fail
-- [ ] **Fallback Strategies**: Configurable fallback rendering for failed components
-- [ ] **Error Isolation**: Component failures don't crash entire composition chains
-- [ ] **Recovery Policies**: Customizable error handling policies for different scenarios
+- [ ] **Graceful Degradation**: Compositions continue rendering when individual
+      components fail
+- [ ] **Fallback Strategies**: Configurable fallback rendering for failed
+      components
+- [ ] **Error Isolation**: Component failures don't crash entire composition
+      chains
+- [ ] **Recovery Policies**: Customizable error handling policies for different
+      scenarios
 
 ### Debugging and Diagnostics
 
-- [ ] **Visual Debugging**: Tools to visualize composition structure and render order
+- [ ] **Visual Debugging**: Tools to visualize composition structure and render
+      order
 - [ ] **Performance Profiling**: Detailed timing and resource usage analysis
 - [ ] **Error Tracing**: Comprehensive error context and stack traces
-- [ ] **Runtime Validation**: Optional runtime checks for composition correctness
+- [ ] **Runtime Validation**: Optional runtime checks for composition
+      correctness
 
 ### Developer Experience
 
-- [ ] **Clear Error Messages**: Human-readable error descriptions with actionable guidance
-- [ ] **Interactive Debugging**: Tools for stepping through composition execution
-- [ ] **Performance Recommendations**: Suggestions for optimizing slow compositions
-- [ ] **Health Monitoring**: Runtime health checks and alerts for composition issues
+- [ ] **Clear Error Messages**: Human-readable error descriptions with
+      actionable guidance
+- [ ] **Interactive Debugging**: Tools for stepping through composition
+      execution
+- [ ] **Performance Recommendations**: Suggestions for optimizing slow
+      compositions
+- [ ] **Health Monitoring**: Runtime health checks and alerts for composition
+      issues
 
 ## Technical Tasks
 
@@ -206,7 +219,7 @@ impl RobustCompositionExecutor {
         self.error_context.begin_execution();
 
         let result = self.execute_with_recovery(composition, context);
-        
+
         let execution_time = start_time.elapsed();
         self.performance_monitor.record_execution(execution_time);
 
@@ -225,10 +238,10 @@ impl RobustCompositionExecutor {
         context: &mut RenderContext,
     ) -> GupResult<()> {
         let component_id = self.generate_component_id();
-        
+
         // Record component attempt
         self.health_tracker.record_attempt(component_id);
-        
+
         match composition.render(context) {
             Ok(()) => {
                 self.health_tracker.record_success(component_id);
@@ -337,7 +350,7 @@ impl RobustCompositionExecutor {
     ) -> GupResult<()> {
         for attempt in 1..=max_attempts {
             std::thread::sleep(backoff * attempt);
-            
+
             match component.render(context) {
                 Ok(()) => {
                     self.health_tracker.record_recovery(component_id, attempt);
@@ -352,7 +365,7 @@ impl RobustCompositionExecutor {
                 }
             }
         }
-        
+
         unreachable!()
     }
 
@@ -457,10 +470,10 @@ impl PerformanceMonitor {
     fn analyze_bottlenecks(&mut self) {
         // Analyze component timings and identify bottlenecks
         self.metrics.bottlenecks.clear();
-        
+
         for (&component_id, &duration) in &self.metrics.component_times {
             let percentage = duration.as_nanos() as f32 / self.metrics.total_execution_time.as_nanos() as f32;
-            
+
             if percentage > 0.1 { // More than 10% of total time
                 self.metrics.bottlenecks.push(PerformanceBottleneck {
                     component_id,
@@ -475,15 +488,15 @@ impl PerformanceMonitor {
 
     fn generate_recommendations(&self, duration: Duration, percentage: f32) -> Vec<String> {
         let mut recommendations = Vec::new();
-        
+
         if percentage > 0.5 {
             recommendations.push("Consider caching this component's render result".to_string());
         }
-        
+
         if duration > Duration::from_millis(16) {
             recommendations.push("This component exceeds 60fps budget - consider optimization".to_string());
         }
-        
+
         recommendations
     }
 
@@ -538,11 +551,11 @@ impl ComponentHealthTracker {
             last_failure: None,
             consecutive_failures: 0,
         });
-        
+
         health.success_count += 1;
         health.last_success = Some(Instant::now());
         health.consecutive_failures = 0;
-        
+
         self.update_global_health();
     }
 
@@ -554,11 +567,11 @@ impl ComponentHealthTracker {
             last_failure: None,
             consecutive_failures: 0,
         });
-        
+
         health.failure_count += 1;
         health.last_failure = Some(Instant::now());
         health.consecutive_failures += 1;
-        
+
         self.update_global_health();
     }
 
@@ -584,7 +597,7 @@ impl ComponentHealthTracker {
             .count() as f32;
 
         self.global_health.overall_health = healthy_components / total_components;
-        
+
         self.global_health.unhealthy_components = self.component_health.iter()
             .filter(|(_, health)| health.consecutive_failures >= 3)
             .map(|(&id, _)| id)
@@ -622,9 +635,9 @@ pub mod debug {
             let indent = "  ".repeat(depth);
             let description = component.description();
             let valid = if component.is_valid() { "✓" } else { "✗" };
-            
+
             output.push_str(&format!("{}[{}] {} {}\n", indent, depth, valid, description));
-            
+
             // If this is a composed visualization, recurse into children
             // Implementation would depend on runtime type checking
         }
@@ -633,9 +646,9 @@ pub mod debug {
         pub fn to_dot_graph<T: Mixable>(composition: &T) -> String {
             let mut dot = String::from("digraph composition {\n");
             dot.push_str("  node [shape=box];\n");
-            
+
             Self::add_dot_nodes(composition, &mut dot, 0);
-            
+
             dot.push_str("}\n");
             dot
         }
@@ -643,12 +656,12 @@ pub mod debug {
         fn add_dot_nodes<T: Mixable>(component: &T, dot: &mut String, node_id: u32) {
             let description = component.description();
             let color = if component.is_valid() { "green" } else { "red" };
-            
+
             dot.push_str(&format!(
                 "  {} [label=\"{}\" color={}];\n",
                 node_id, description, color
             ));
-            
+
             // Add edges to child components
             // Implementation would depend on composition structure analysis
         }
@@ -710,18 +723,18 @@ pub mod debug {
 
         pub fn generate_report(&self) -> String {
             let mut report = String::from("Performance Report:\n");
-            
+
             for (operation, timings) in &self.timings {
                 let avg_time = timings.iter().sum::<Duration>() / timings.len() as u32;
                 let max_time = timings.iter().max().unwrap_or(&Duration::ZERO);
                 let min_time = timings.iter().min().unwrap_or(&Duration::ZERO);
-                
+
                 report.push_str(&format!(
                     "  {}: avg={:?}, min={:?}, max={:?}, calls={}\n",
                     operation, avg_time, min_time, max_time, timings.len()
                 ));
             }
-            
+
             report
         }
     }
@@ -748,17 +761,17 @@ pub mod debug {
 #[tokio::test]
 async fn test_error_recovery_skip_strategy() {
     let mut context = RenderContext::new().await.unwrap();
-    
+
     let good_component = create_working_component();
     let bad_component = create_failing_component();
     let composition = good_component.mix(bad_component);
-    
+
     let mut policy = ErrorHandlingPolicy::default();
     policy.default_recovery = RecoveryStrategy::Skip;
-    
+
     let mut executor = RobustCompositionExecutor::new(policy);
     let result = executor.execute_robust(&composition, &mut context);
-    
+
     assert!(result.success); // Should succeed despite failed component
     assert!(!result.errors.is_empty()); // Should record the error
 }
@@ -767,15 +780,15 @@ async fn test_error_recovery_skip_strategy() {
 async fn test_fallback_rendering() {
     let mut context = RenderContext::new().await.unwrap();
     let failing_component = create_failing_component();
-    
+
     let mut policy = ErrorHandlingPolicy::default();
     policy.default_recovery = RecoveryStrategy::Fallback(FallbackType::Placeholder(
         "Component failed".to_string()
     ));
-    
+
     let mut executor = RobustCompositionExecutor::new(policy);
     let result = executor.execute_robust(&failing_component, &mut context);
-    
+
     assert!(result.success); // Should succeed with fallback
 }
 ```
@@ -788,9 +801,9 @@ fn test_composition_visualization() {
     let component1 = create_test_component("Component1");
     let component2 = create_test_component("Component2");
     let composition = component1.mix(component2);
-    
+
     let visualization = CompositionVisualizer::visualize(&composition);
-    
+
     assert!(visualization.contains("Component1"));
     assert!(visualization.contains("Component2"));
     assert!(visualization.contains("✓")); // Valid components
@@ -799,11 +812,11 @@ fn test_composition_visualization() {
 #[test]
 fn test_performance_profiling() {
     let mut profiler = CompositionProfiler::new();
-    
+
     profiler.start_timing("test_operation");
     std::thread::sleep(Duration::from_millis(10));
     profiler.end_timing(Duration::from_millis(10));
-    
+
     let report = profiler.generate_report();
     assert!(report.contains("test_operation"));
     assert!(report.contains("avg="));
@@ -814,16 +827,20 @@ fn test_performance_profiling() {
 
 ### Error Handling
 
-- [ ] **Recovery Success Rate**: >95% of recoverable errors are handled gracefully
+- [ ] **Recovery Success Rate**: >95% of recoverable errors are handled
+      gracefully
 - [ ] **Error Context Quality**: Error messages provide actionable information
 - [ ] **Fallback Effectiveness**: Fallback strategies maintain visual quality
-- [ ] **Performance Impact**: Error handling adds <5% overhead to normal execution
+- [ ] **Performance Impact**: Error handling adds <5% overhead to normal
+      execution
 
 ### Diagnostics
 
-- [ ] **Debugging Effectiveness**: Visual tools help identify issues in <50% of time compared to manual debugging
+- [ ] **Debugging Effectiveness**: Visual tools help identify issues in <50% of
+      time compared to manual debugging
 - [ ] **Performance Insights**: Profiling identifies bottlenecks accurately
-- [ ] **Health Monitoring**: System health accurately reflects composition reliability
+- [ ] **Health Monitoring**: System health accurately reflects composition
+      reliability
 
 ## Risk Assessment
 
@@ -836,7 +853,8 @@ fn test_performance_profiling() {
 ### Mitigation Strategies
 
 - **Extensive Testing**: Test error recovery with various failure scenarios
-- **Performance Budgets**: Ensure diagnostic tools stay within performance limits
+- **Performance Budgets**: Ensure diagnostic tools stay within performance
+  limits
 - **Optional Features**: Make advanced diagnostics opt-in to avoid overhead
 
 ## Implementation Notes
@@ -844,8 +862,10 @@ fn test_performance_profiling() {
 ### Design Decisions
 
 - Use configurable error handling policies rather than hard-coded strategies
-- Implement visual debugging tools as separate utilities to avoid runtime overhead
-- Design health monitoring to provide actionable insights rather than just statistics
+- Implement visual debugging tools as separate utilities to avoid runtime
+  overhead
+- Design health monitoring to provide actionable insights rather than just
+  statistics
 - Focus on developer experience and actionable error messages
 
 ## Definition of Done

@@ -43,7 +43,7 @@
 
 - Integration layer between Plotters and egui immediate-mode GUI
 - Bridges two different rendering paradigms
-- Performance limitations: "limited to data size of 512*100 and 30fps"
+- Performance limitations: "limited to data size of 512\*100 and 30fps"
 
 **egui_plot**:
 
@@ -71,7 +71,8 @@
 #### Performance Benefits
 
 - **Zero-cost Abstractions**: High-level APIs without runtime overhead
-- **Memory Safety**: Eliminates entire classes of bugs common in visualization code
+- **Memory Safety**: Eliminates entire classes of bugs common in visualization
+  code
 - **Parallelism**: Built-in support for parallel data processing
 - **WebAssembly**: Superior web performance compared to JavaScript alternatives
 
@@ -79,7 +80,8 @@
 
 - **Compile-time Correctness**: Catch visualization errors at compile time
 - **Generic Programming**: Highly flexible APIs without runtime cost
-- **Trait System**: Elegant abstraction over different data types and rendering backends
+- **Trait System**: Elegant abstraction over different data types and rendering
+  backends
 - **Ownership Model**: Clear resource management for graphics resources
 
 #### Cross-platform Strengths
@@ -92,7 +94,8 @@
 
 #### Ecosystem Maturity
 
-- **Limited Libraries**: Far fewer options compared to Python/JavaScript ecosystems
+- **Limited Libraries**: Far fewer options compared to Python/JavaScript
+  ecosystems
 - **Documentation Gaps**: Many libraries lack comprehensive examples
 - **Community Size**: Smaller community means fewer resources and plugins
 
@@ -101,8 +104,7 @@
 - **GUI Framework Fragmentation**: Multiple competing immediate-mode and
   retained-mode frameworks
 - **Backend Complexity**: Different rendering backends have incompatible APIs
-- **Web Integration**: WebAssembly deployment still more complex than
-  JavaScript
+- **Web Integration**: WebAssembly deployment still more complex than JavaScript
 
 #### Design Philosophy Conflicts
 
@@ -170,13 +172,14 @@
 - **Direct wgpu Integration**: Leverage Rust's excellent WebGPU ecosystem
 - **Shader-based Rendering**: Custom shaders for complex visualizations
 - **Compute Shaders**: GPU-accelerated data processing
-- **Cross-platform GPU**: Same code works on native and web with hardware acceleration
+- **Cross-platform GPU**: Same code works on native and web with hardware
+  acceleration
 
 #### Type-driven Visualization
 
 - **Schema-aware Charts**: Leverage Rust's type system for data validation
-- **Compile-time Optimization**: Generate optimized rendering code based on
-  data types
+- **Compile-time Optimization**: Generate optimized rendering code based on data
+  types
 - **Generic Data Binding**: Highly flexible data input without runtime overhead
 
 #### Real-time and Interactive
@@ -234,12 +237,13 @@ data-intensive applications.
 
 #### Static Assumptions
 
-Most libraries assume static chart generation rather than dynamic, real-time updates.
+Most libraries assume static chart generation rather than dynamic, real-time
+updates.
 
 #### Platform Inconsistency
 
-Backend implementations often have different capabilities and limitations
-across platforms.
+Backend implementations often have different capabilities and limitations across
+platforms.
 
 #### Integration Complexity
 
@@ -256,17 +260,20 @@ Limited examples for advanced use cases and cross-platform deployment.
 1. **GPU-first Architecture**: Design around wgpu primitives from the ground up
 2. **Real-time Focus**: Optimize for dynamic, frequently-updating visualizations
 3. **Cross-platform Consistency**: Same API and behavior on native and web
-4. **Type-driven Design**: Leverage Rust's type system for safety and performance
+4. **Type-driven Design**: Leverage Rust's type system for safety and
+   performance
 
 ### Avoid Common Pitfalls
 
 1. **Don't Abstract GPU Away**: Expose GPU capabilities rather than hiding them
-2. **Avoid Backend Proliferation**: Focus on wgpu as the single, excellent backend
+2. **Avoid Backend Proliferation**: Focus on wgpu as the single, excellent
+   backend
 3. **Design for Dynamic**: Assume data will change frequently
-4. **Prioritize Integration**: Make it easy to embed in existing Rust applications
+4. **Prioritize Integration**: Make it easy to embed in existing Rust
+   applications
 
 ### Unique Value Proposition
 
 Gup should position itself as the **high-performance, GPU-accelerated
-visualization library for real-time Rust applications**, filling the gap
-between simple plotting libraries and complex game engines.
+visualization library for real-time Rust applications**, filling the gap between
+simple plotting libraries and complex game engines.

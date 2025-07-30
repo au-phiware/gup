@@ -2,24 +2,26 @@
 
 ## Story Overview
 
-**Title**: Implement Core Selection<T, M> Type  
-**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API  
-**Priority**: Critical  
-**Story Points**: 13  
+**Title**: Implement Core Selection<T, M> Type **Epic**: Phase 1 Initiative 1 -
+Core GPU Primitives and Selection API **Priority**: Critical **Story Points**:
+13
 
 ## Context
 
-The `Selection<T, M>` type is the heart of Gup's composability system, directly inspired by D3.js selections. It represents a collection of data bound to visual marks with GPU-accelerated attribute mappings. This type must provide all the power of D3 selections while leveraging GPU parallel processing.
+The `Selection<T, M>` type is the heart of Gup's composability system, directly
+inspired by D3.js selections. It represents a collection of data bound to visual
+marks with GPU-accelerated attribute mappings. This type must provide all the
+power of D3 selections while leveraging GPU parallel processing.
 
 ## User Story
 
-**As a** visualization developer  
-**I want** a Selection type that binds data to visual marks with GPU acceleration  
-**So that** I can create complex, performant visualizations using familiar D3-style patterns  
+**As a** visualization developer **I want** a Selection type that binds data to
+visual marks with GPU acceleration **So that** I can create complex, performant
+visualizations using familiar D3-style patterns
 
 ## Acceptance Criteria
 
-### Core Type Definition
+### AC1: Core Type Definition
 
 ```rust
 pub struct Selection<T, M: Mark> {
@@ -40,31 +42,32 @@ pub struct Selection<T, M: Mark> {
 }
 ```
 
-### API Requirements
+### AC2: API Requirements
 
 - [ ] **Data Binding**: Seamlessly bind any Rust data type to visual marks
-- [ ] **Attribute Mapping**: Map data fields to visual attributes using shader functions
+- [ ] **Attribute Mapping**: Map data fields to visual attributes using shader
+      functions
 - [ ] **GPU Acceleration**: All data transformations happen on GPU in parallel
 - [ ] **Type Safety**: Compile-time validation of data-to-attribute mappings
 
-### Core Methods
+### AC3: Core Methods
 
 ```rust
 impl<T, M: Mark> Selection<T, M> {
     // Create new selection with data
     pub fn new(data: Vec<T>, context: Arc<GupContext>) -> Self;
-    
+
     // Bind shader functions to visual attributes
     pub fn attr<F>(&mut self, name: &str, shader_func: F) -> &mut Self
     where
         F: ShaderFunction + 'static,
         F::Input: Compatible<T>,
         F::Output: Compatible<M::AttributeValue>;
-    
+
     // Event handling
     pub fn on<H>(&mut self, event: &str, handler: H) -> &mut Self
     where H: Fn(InteractionEvent, &T) + Send + Sync + 'static;
-    
+
     // Render selection to current render target
     pub fn render(&self) -> Result<(), GupError>;
 }
@@ -104,17 +107,21 @@ impl<T, M: Mark> Selection<T, M> {
 
 ### Data Handling
 
-- [ ] **Immutable Data**: Original data never modified, only transformed in shaders
+- [ ] **Immutable Data**: Original data never modified, only transformed in
+      shaders
 - [ ] **Incremental Updates**: Support adding/removing data points efficiently
-- [ ] **Type Preservation**: Data type information maintained through GPU pipeline
+- [ ] **Type Preservation**: Data type information maintained through GPU
+      pipeline
 - [ ] **Memory Safety**: No data races or memory leaks in GPU buffer management
 
 ### Attribute Binding
 
-- [ ] **Shader Function Integration**: Attributes map to shader functions, not CPU closures
+- [ ] **Shader Function Integration**: Attributes map to shader functions, not
+      CPU closures
 - [ ] **Type Validation**: Invalid attribute mappings caught at compile time
 - [ ] **Performance**: Attribute updates trigger GPU pipeline regeneration
-- [ ] **Composability**: Attribute shader functions compose with other shader functions
+- [ ] **Composability**: Attribute shader functions compose with other shader
+      functions
 
 ### Rendering Pipeline
 
@@ -155,7 +162,7 @@ fn test_attribute_binding() {
     let mut selection = create_test_selection();
     selection.attr("position", position_shader_func);
     selection.attr("color", color_shader_func);
-    
+
     assert!(selection.has_attribute("position"));
     assert!(selection.has_attribute("color"));
 }
@@ -163,10 +170,10 @@ fn test_attribute_binding() {
 #[test]
 fn test_type_safety() {
     let mut selection = create_test_selection();
-    
+
     // This should compile
     selection.attr("position", valid_position_func);
-    
+
     // This should NOT compile (type mismatch)
     // selection.attr("position", color_func);
 }
@@ -205,7 +212,8 @@ fn bench_selection_render_10k_points(b: &mut Bencher) {
 - [ ] **Test Coverage**: >90% test coverage for all public methods
 - [ ] **Documentation**: Complete rustdoc with usage examples
 - [ ] **Error Handling**: All error conditions have clear, actionable messages
-- [ ] **Cross-Platform**: Identical behavior on Windows, macOS, Linux, and WebAssembly
+- [ ] **Cross-Platform**: Identical behavior on Windows, macOS, Linux, and
+      WebAssembly
 
 ## Risk Assessment
 
@@ -219,14 +227,15 @@ fn bench_selection_render_10k_points(b: &mut Bencher) {
 
 - **Automated Testing**: Comprehensive memory leak detection in CI
 - **Performance Monitoring**: Continuous benchmarking of shader generation
-- **Incremental Implementation**: Start with simple cases, add complexity gradually
+- **Incremental Implementation**: Start with simple cases, add complexity
+  gradually
 
 ## Implementation Notes
 
 ### Design Decisions
 
 - Use `Arc<GupContext>` for shared rendering context across selections
-- Store original data in Vec<T> on CPU for easy access and updates
+- Store original data in `Vec<T>` on CPU for easy access and updates
 - Implement lazy shader pipeline generation for performance
 - Use phantom data for mark type to maintain type information
 

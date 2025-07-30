@@ -2,38 +2,46 @@
 
 ## Story Overview
 
-**Title**: Implement Advanced Composition Modes for Mixable Visualizations  
-**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API  
-**Priority**: High  
-**Story Points**: 6  
+**Title**: Implement Advanced Composition Modes for Mixable Visualizations
+**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API
+**Priority**: High **Story Points**: 6
 
 ## Context
 
-The current Mixable trait implementation treats all composition modes (Overlay, Merge, SideBySide, Custom) identically with placeholder implementations. This story implements the distinct behaviors for each composition mode, enabling rich composition semantics that provide meaningful value to visualization developers.
+The current Mixable trait implementation treats all composition modes (Overlay,
+Merge, SideBySide, Custom) identically with placeholder implementations. This
+story implements the distinct behaviors for each composition mode, enabling rich
+composition semantics that provide meaningful value to visualization developers.
 
 ## User Story
 
-**As a** visualization developer  
-**I want** different composition modes to have distinct behaviors  
-**So that** I can combine visualizations in semantically meaningful ways (overlaying, merging data, side-by-side layout, custom composition)  
+**As a** visualization developer **I want** different composition modes to have
+distinct behaviors **So that** I can combine visualizations in semantically
+meaningful ways (overlaying, merging data, side-by-side layout, custom
+composition)
 
 ## Acceptance Criteria
 
-### Core Composition Mode Behaviors
+### AC1: Core Composition Mode Behaviors
 
-- [ ] **Overlay Mode**: Renders second component on top of first with proper depth/blending
-- [ ] **Merge Mode**: Combines data sources and renders as unified visualization  
-- [ ] **SideBySide Mode**: Automatically partitions viewport to position components adjacently
+- [ ] **Overlay Mode**: Renders second component on top of first with proper
+      depth/blending
+- [ ] **Merge Mode**: Combines data sources and renders as unified visualization
+- [ ] **SideBySide Mode**: Automatically partitions viewport to position
+      components adjacently
 - [ ] **Custom Mode**: Provides framework for user-defined composition behaviors
 
-### Technical Requirements
+### AC2: Technical Requirements
 
-- [ ] **Render State Management**: Each mode manages GPU render state appropriately
-- [ ] **Viewport Management**: SideBySide mode handles viewport partitioning correctly
+- [ ] **Render State Management**: Each mode manages GPU render state
+      appropriately
+- [ ] **Viewport Management**: SideBySide mode handles viewport partitioning
+      correctly
 - [ ] **Data Integration**: Merge mode combines datasets without data loss
-- [ ] **Performance**: Mode-specific optimizations maintain rendering performance
+- [ ] **Performance**: Mode-specific optimizations maintain rendering
+      performance
 
-### API Consistency
+### AC3: API Consistency
 
 - [ ] **Uniform Interface**: All modes work through same Mixable trait interface
 - [ ] **Mode Switching**: Compositions can change modes without reconstruction
@@ -244,19 +252,19 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
     fn render_overlay(&self, context: &mut RenderContext) -> GupResult<()> {
         // Enable depth testing and alpha blending for proper layering
         let original_viewport = context.viewport();
-        
+
         // Render first component (background layer)
         self.first.render(context)?;
-        
+
         // Configure blending for overlay
         context.set_blend_mode(BlendMode::AlphaBlending)?;
-        
+
         // Render second component (foreground layer)
         self.second.render(context)?;
-        
+
         // Restore original blend mode
         context.set_blend_mode(BlendMode::default())?;
-        
+
         Ok(())
     }
 
@@ -264,7 +272,7 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
     fn render_merge(&self, context: &mut RenderContext) -> GupResult<()> {
         // For merge mode, we need to extract and combine the underlying data
         // This is a simplified implementation - real merge would depend on data types
-        
+
         // Check if components can be merged (same data types, compatible formats)
         if !self.can_merge_components() {
             return Err(GupError::CompositionError(
@@ -274,33 +282,33 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
 
         // Extract data from both components (this would be component-specific)
         let merged_data = self.extract_and_merge_data()?;
-        
+
         // Create a temporary merged visualization
         let merged_viz = self.create_merged_visualization(merged_data)?;
-        
+
         // Render the merged visualization
         merged_viz.render(context)?;
-        
+
         Ok(())
     }
 
     /// Render in side-by-side mode with viewport partitioning
     fn render_side_by_side(&self, context: &mut RenderContext) -> GupResult<()> {
         let original_viewport = context.viewport();
-        
+
         let (first_viewport, second_viewport) = self.calculate_split_viewports(original_viewport);
-        
+
         // Render first component in its viewport
         context.set_viewport(first_viewport)?;
         self.first.render(context)?;
-        
-        // Render second component in its viewport  
+
+        // Render second component in its viewport
         context.set_viewport(second_viewport)?;
         self.second.render(context)?;
-        
+
         // Restore original viewport
         context.set_viewport(original_viewport)?;
-        
+
         Ok(())
     }
 
@@ -309,11 +317,11 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
         if let Some(custom_behavior) = &self.custom_behavior {
             if !custom_behavior.can_compose(&self.first, &self.second) {
                 return Err(GupError::CompositionError(
-                    format!("Custom behavior '{}' cannot compose these component types", 
+                    format!("Custom behavior '{}' cannot compose these component types",
                            custom_behavior.description())
                 ));
             }
-            
+
             custom_behavior.compose(&self.first, &self.second, context)
         } else {
             Err(GupError::CompositionError(
@@ -351,37 +359,37 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
             LayoutDirection::Horizontal => {
                 let split_x = (original.width as f32 * self.side_by_side_config.split_ratio) as u32;
                 let padding = self.side_by_side_config.padding as u32;
-                
+
                 let first_viewport = Viewport {
                     width: split_x.saturating_sub(padding / 2),
                     height: original.height,
                     scale_factor: original.scale_factor,
                 };
-                
+
                 let second_viewport = Viewport {
                     width: original.width.saturating_sub(split_x).saturating_sub(padding / 2),
                     height: original.height,
                     scale_factor: original.scale_factor,
                 };
-                
+
                 (first_viewport, second_viewport)
             }
             LayoutDirection::Vertical => {
                 let split_y = (original.height as f32 * self.side_by_side_config.split_ratio) as u32;
                 let padding = self.side_by_side_config.padding as u32;
-                
+
                 let first_viewport = Viewport {
                     width: original.width,
                     height: split_y.saturating_sub(padding / 2),
                     scale_factor: original.scale_factor,
                 };
-                
+
                 let second_viewport = Viewport {
                     width: original.width,
                     height: original.height.saturating_sub(split_y).saturating_sub(padding / 2),
                     scale_factor: original.scale_factor,
                 };
-                
+
                 (first_viewport, second_viewport)
             }
         }
@@ -449,14 +457,14 @@ impl CustomCompositionBehavior for CrossFadeComposition {
         // Render first component with (1.0 - fade_factor) alpha
         context.set_global_alpha(1.0 - self.fade_factor)?;
         first.render(context)?;
-        
+
         // Render second component with fade_factor alpha
         context.set_global_alpha(self.fade_factor)?;
         second.render(context)?;
-        
+
         // Restore alpha
         context.set_global_alpha(1.0)?;
-        
+
         Ok(())
     }
 
@@ -486,10 +494,10 @@ impl CustomCompositionBehavior for GridLayoutComposition {
         context: &mut RenderContext,
     ) -> GupResult<()> {
         let original_viewport = context.viewport();
-        
+
         let cell_width = original_viewport.width / self.cols;
         let cell_height = original_viewport.height / self.rows;
-        
+
         // Render first component in its grid cell
         let first_viewport = Viewport {
             width: cell_width,
@@ -498,7 +506,7 @@ impl CustomCompositionBehavior for GridLayoutComposition {
         };
         context.set_viewport(first_viewport)?;
         first.render(context)?;
-        
+
         // Render second component in its grid cell
         let second_viewport = Viewport {
             width: cell_width,
@@ -507,10 +515,10 @@ impl CustomCompositionBehavior for GridLayoutComposition {
         };
         context.set_viewport(second_viewport)?;
         second.render(context)?;
-        
+
         // Restore original viewport
         context.set_viewport(original_viewport)?;
-        
+
         Ok(())
     }
 
@@ -521,7 +529,7 @@ impl CustomCompositionBehavior for GridLayoutComposition {
     }
 
     fn description(&self) -> String {
-        format!("GridLayout({}x{}, cells: {:?}, {:?})", 
+        format!("GridLayout({}x{}, cells: {:?}, {:?})",
                 self.rows, self.cols, self.cell_index_first, self.cell_index_second)
     }
 }
@@ -578,7 +586,8 @@ pub trait MixableExt: Mixable + Sized {
 ### Prerequisite Stories
 
 - GUP-001: Build Mixable Trait (provides basic composition framework)
-- GUP-020: WebGPU Integration for RenderContext (provides GPU rendering capabilities)
+- GUP-020: WebGPU Integration for RenderContext (provides GPU rendering
+  capabilities)
 
 ### Enables Stories
 
@@ -593,13 +602,13 @@ pub trait MixableExt: Mixable + Sized {
 #[tokio::test]
 async fn test_overlay_composition() {
     let mut context = RenderContext::new().await.unwrap();
-    
+
     let background = create_test_visualization("background", [1.0, 0.0, 0.0, 0.5]);
     let foreground = create_test_visualization("foreground", [0.0, 1.0, 0.0, 0.7]);
-    
+
     let composed = background.overlay(foreground);
     let result = composed.render(&mut context);
-    
+
     assert!(result.is_ok());
     // Additional assertions would verify proper layering
 }
@@ -607,19 +616,19 @@ async fn test_overlay_composition() {
 #[tokio::test]
 async fn test_side_by_side_composition() {
     let mut context = RenderContext::new().await.unwrap();
-    
+
     let left = create_test_visualization("left", [1.0, 0.0, 0.0, 1.0]);
     let right = create_test_visualization("right", [0.0, 1.0, 0.0, 1.0]);
-    
+
     let config = SideBySideConfig {
         direction: LayoutDirection::Horizontal,
         split_ratio: 0.3,
         padding: 20.0,
     };
-    
+
     let composed = left.beside_with_config(right, config);
     let result = composed.render(&mut context);
-    
+
     assert!(result.is_ok());
     // Additional assertions would verify viewport splitting
 }
@@ -627,13 +636,13 @@ async fn test_side_by_side_composition() {
 #[tokio::test]
 async fn test_custom_composition() {
     let mut context = RenderContext::new().await.unwrap();
-    
+
     let viz1 = create_test_visualization("viz1", [1.0, 0.0, 0.0, 1.0]);
     let viz2 = create_test_visualization("viz2", [0.0, 1.0, 0.0, 1.0]);
-    
+
     let composed = viz1.cross_fade(viz2, 0.3);
     let result = composed.render(&mut context);
-    
+
     assert!(result.is_ok());
 }
 
@@ -654,21 +663,21 @@ fn test_viewport_splitting() {
         height: 600,
         scale_factor: 1.0,
     };
-    
+
     let config = SideBySideConfig {
         direction: LayoutDirection::Horizontal,
         split_ratio: 0.6,
         padding: 10.0,
     };
-    
+
     let composition = ComposedVisualization::side_by_side(
         create_mock_component(),
         create_mock_component(),
         config,
     );
-    
+
     let (first_vp, second_vp) = composition.calculate_split_viewports(original);
-    
+
     assert_eq!(first_vp.width, 475);  // 800 * 0.6 - 5 (half padding)
     assert_eq!(second_vp.width, 315); // 800 * 0.4 - 5 (half padding)
     assert_eq!(first_vp.height, 600);
@@ -680,16 +689,21 @@ fn test_viewport_splitting() {
 
 ### Functional Requirements
 
-- [ ] **Mode Differentiation**: Each composition mode produces visually distinct results
+- [ ] **Mode Differentiation**: Each composition mode produces visually distinct
+      results
 - [ ] **Viewport Management**: SideBySide mode correctly partitions screen space
-- [ ] **Data Integration**: Merge mode successfully combines compatible data sources
+- [ ] **Data Integration**: Merge mode successfully combines compatible data
+      sources
 - [ ] **Custom Framework**: Custom composition behaviors work as expected
 
 ### Performance Requirements
 
-- [ ] **Rendering Performance**: Mode-specific rendering maintains 60fps for typical scenarios
-- [ ] **Memory Efficiency**: Composition modes don't duplicate data unnecessarily
-- [ ] **Mode Switching**: Changing composition modes has minimal performance impact
+- [ ] **Rendering Performance**: Mode-specific rendering maintains 60fps for
+      typical scenarios
+- [ ] **Memory Efficiency**: Composition modes don't duplicate data
+      unnecessarily
+- [ ] **Mode Switching**: Changing composition modes has minimal performance
+      impact
 
 ### Quality Requirements
 
@@ -707,8 +721,10 @@ fn test_viewport_splitting() {
 
 ### Mitigation Strategies
 
-- **Incremental Implementation**: Start with simpler modes (Overlay, SideBySide) before tackling Merge
-- **Clear Abstractions**: Design clear interfaces between composition logic and rendering
+- **Incremental Implementation**: Start with simpler modes (Overlay, SideBySide)
+  before tackling Merge
+- **Clear Abstractions**: Design clear interfaces between composition logic and
+  rendering
 - **Extensive Testing**: Test all modes with various component combinations
 
 ## Implementation Notes
@@ -729,11 +745,14 @@ fn test_viewport_splitting() {
 
 ## Definition of Done
 
-- [ ] All four composition modes (Overlay, Merge, SideBySide, Custom) implemented with distinct behaviors
-- [ ] Viewport partitioning works correctly for SideBySide mode with configurable layouts
+- [ ] All four composition modes (Overlay, Merge, SideBySide, Custom)
+      implemented with distinct behaviors
+- [ ] Viewport partitioning works correctly for SideBySide mode with
+      configurable layouts
 - [ ] Custom composition framework supports user-defined behaviors
 - [ ] Overlay mode implements proper depth testing and alpha blending
-- [ ] Merge mode provides basic data combination capabilities (implementation may be limited)
+- [ ] Merge mode provides basic data combination capabilities (implementation
+      may be limited)
 - [ ] API provides convenient methods for common composition patterns
 - [ ] Comprehensive tests validate each composition mode's behavior
 - [ ] Error handling provides clear diagnostics for invalid compositions

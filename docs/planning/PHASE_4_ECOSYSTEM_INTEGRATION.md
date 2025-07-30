@@ -2,7 +2,10 @@
 
 ## Overview
 
-Phase 4 transforms Gup from a standalone library into a comprehensive ecosystem solution. This phase focuses on framework integrations, production tooling, and establishing Gup as the standard for high-performance data visualization across the Rust ecosystem and beyond.
+Phase 4 transforms Gup from a standalone library into a comprehensive ecosystem
+solution. This phase focuses on framework integrations, production tooling, and
+establishing Gup as the standard for high-performance data visualization across
+the Rust ecosystem and beyond.
 
 ## Goals
 
@@ -13,13 +16,18 @@ Phase 4 transforms Gup from a standalone library into a comprehensive ecosystem 
 
 ## Initiative 1: Framework Integrations
 
-**Strategic Importance**: Framework integrations are essential for widespread adoption. Gup must work seamlessly with the entire Rust GUI ecosystem and selected non-Rust frameworks.
+**Strategic Importance**: Framework integrations are essential for widespread
+adoption. Gup must work seamlessly with the entire Rust GUI ecosystem and
+selected non-Rust frameworks.
 
-### Objectives
+### Initiative 1: Objectives
 
-1. **Rust GUI Framework Integration**: First-class support for major Rust frameworks
-2. **Cross-Language Bindings**: Enable use from Python, JavaScript, and other languages
-3. **Web Framework Integration**: Seamless integration with web development workflows
+1. **Rust GUI Framework Integration**: First-class support for major Rust
+   frameworks
+2. **Cross-Language Bindings**: Enable use from Python, JavaScript, and other
+   languages
+3. **Web Framework Integration**: Seamless integration with web development
+   workflows
 4. **Native Platform Integration**: OS-specific optimizations and integrations
 
 ### Framework Targets
@@ -66,16 +74,16 @@ pub struct GupWidget {
 impl Widget for GupWidget {
     fn ui(self, ui: &mut Ui) -> Response {
         let rect = ui.allocate_response(self.size, Sense::drag());
-        
+
         // Handle egui interactions
         if rect.hovered() {
             self.chart.handle_hover(rect.hover_pos());
         }
-        
+
         // Render chart to texture and display in egui
         let texture = self.chart.render_to_texture(self.size);
         ui.painter().image(texture.id(), rect.rect, Color32::WHITE);
-        
+
         rect
     }
 }
@@ -91,7 +99,7 @@ async fn create_chart(data: Vec<DataPoint>) -> Result<ChartId, String> {
         .data(data)
         .scatter(x("x"), y("y"))
         .build()?;
-    
+
     Ok(CHART_MANAGER.add_chart(chart))
 }
 
@@ -117,11 +125,11 @@ impl GupRenderer {
     pub fn render_frame(&mut self) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        
+
         for chart in &mut self.charts {
             chart.render_to_surface(&self.device, &self.queue, &view)?;
         }
-        
+
         output.present();
         Ok(())
     }
@@ -150,15 +158,15 @@ chart.save('chart.html')  # Export for sharing
 #### JavaScript/WebAssembly
 
 ```javascript
-import init, { GupChart } from './pkg/gup_wasm.js';
+import init, { GupChart } from "./pkg/gup_wasm.js";
 
 await init();
 
 const chart = new GupChart()
-    .data(salesData)
-    .scatter({x: 'revenue', y: 'profit'})
-    .color('region')
-    .build();
+  .data(salesData)
+  .scatter({ x: "revenue", y: "profit" })
+  .color("region")
+  .build();
 
 chart.render(canvas);
 ```
@@ -172,9 +180,10 @@ chart.render(canvas);
 
 ## Initiative 2: Export and Production Systems
 
-**Strategic Importance**: Professional deployment requires high-quality export, sharing, and production deployment capabilities.
+**Strategic Importance**: Professional deployment requires high-quality export,
+sharing, and production deployment capabilities.
 
-### Objectives
+### Initiative 2: Objectives
 
 1. **Multi-Format Export**: Support all major output formats with high quality
 2. **Interactive Export**: Create shareable interactive visualizations
@@ -199,7 +208,7 @@ impl VectorExporter {
         let svg_document = self.svg_renderer.create_document(paths, options);
         svg_document.to_bytes()
     }
-    
+
     pub async fn export_pdf(&self, chart: &Chart, options: PdfExportOptions) -> Vec<u8> {
         // High-quality PDF with embedded fonts and metadata
         let pdf_document = self.pdf_renderer.create_document(chart, options);
@@ -220,7 +229,7 @@ impl WebExporter {
     pub async fn export_interactive_html(&self, chart: &Chart) -> InteractiveExport {
         let wasm_module = self.wasm_bundler.bundle_chart(chart);
         let html_page = self.template_engine.render_template("interactive.html", &wasm_module);
-        
+
         InteractiveExport {
             html: html_page,
             assets: wasm_module.assets(),
@@ -241,7 +250,7 @@ pub struct BatchProcessor {
 impl BatchProcessor {
     pub async fn process_chart_batch(&mut self, jobs: Vec<ChartJob>) -> Vec<ExportResult> {
         let mut results = Vec::new();
-        
+
         for job in jobs {
             let chart = self.build_chart_from_spec(&job.chart_spec);
             let output = match job.output_format {
@@ -251,7 +260,7 @@ impl BatchProcessor {
             };
             results.push(output);
         }
-        
+
         results
     }
 }
@@ -282,11 +291,13 @@ impl BatchProcessor {
 
 ## Initiative 3: Developer Tooling and Testing
 
-**Strategic Importance**: Professional adoption requires comprehensive developer tooling, testing frameworks, and debugging capabilities.
+**Strategic Importance**: Professional adoption requires comprehensive developer
+tooling, testing frameworks, and debugging capabilities.
 
-### Objectives
+### Initiative 3: Objectives
 
-1. **Comprehensive Test Suite**: Unit, integration, performance, and visual testing
+1. **Comprehensive Test Suite**: Unit, integration, performance, and visual
+   testing
 2. **Developer Tools**: Debugging, profiling, and development utilities
 3. **CI/CD Integration**: Automated testing and deployment pipelines
 4. **Documentation Tooling**: Automated documentation generation and examples
@@ -305,20 +316,20 @@ pub struct VisualTestSuite {
 impl VisualTestSuite {
     pub async fn run_visual_tests(&mut self) -> VisualTestResults {
         let mut results = VisualTestResults::new();
-        
+
         for test_case in &self.test_cases {
             let rendered_image = self.render_test_case(test_case).await;
             let reference_image = self.load_reference_image(test_case);
-            
+
             let comparison = self.comparison_engine.compare_images(
-                &rendered_image, 
+                &rendered_image,
                 &reference_image,
                 test_case.tolerance
             );
-            
+
             results.add_result(test_case.name.clone(), comparison);
         }
-        
+
         results
     }
 }
@@ -335,17 +346,17 @@ pub struct PerformanceBenchmark {
 impl PerformanceBenchmark {
     pub async fn run_benchmarks(&self) -> BenchmarkResults {
         let mut results = BenchmarkResults::new();
-        
+
         for scenario in &self.test_scenarios {
             let timing = self.measure_scenario_performance(scenario).await;
             let regression = self.detect_regression(&timing, &self.baseline_results);
-            
+
             results.add_timing(scenario.name.clone(), timing);
             if let Some(reg) = regression {
                 results.add_regression(reg);
             }
         }
-        
+
         results
     }
 }
@@ -370,7 +381,7 @@ impl ChartInspector {
             gpu_memory_usage: self.chart.get_memory_usage(),
         }
     }
-    
+
     pub fn export_debug_info(&self) -> DebugExport {
         DebugExport {
             shader_source: self.chart.export_shader_source(),
@@ -396,12 +407,12 @@ impl GupProfiler {
         self.cpu_profiler.start_timing();
         self.memory_tracker.snapshot();
     }
-    
+
     pub fn end_profiling(&mut self) -> ProfileReport {
         let gpu_timing = self.gpu_profiler.end_frame();
         let cpu_timing = self.cpu_profiler.end_timing();
         let memory_delta = self.memory_tracker.delta();
-        
+
         ProfileReport {
             frame_time: gpu_timing.total_time,
             cpu_time: cpu_timing,
@@ -431,28 +442,30 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-      
+
       - name: Run Unit Tests
         run: cargo test --all-features
-      
+
       - name: Run Performance Benchmarks
         run: cargo bench -- --baseline
-      
+
       - name: Run Visual Regression Tests
         run: cargo test --test visual_regression
-      
+
       - name: Generate Documentation
         run: cargo doc --all-features --no-deps
 ```
 
 ## Initiative 4: Community and Ecosystem Development
 
-**Strategic Importance**: Long-term success requires a thriving community of contributors, plugin developers, and users.
+**Strategic Importance**: Long-term success requires a thriving community of
+contributors, plugin developers, and users.
 
-### Objectives
+### Initiative 4: Objectives
 
 1. **Plugin Architecture**: Enable community extensions and custom functionality
-2. **Community Infrastructure**: Forums, documentation, and contribution guidelines
+2. **Community Infrastructure**: Forums, documentation, and contribution
+   guidelines
 3. **Educational Content**: Tutorials, examples, and best practices
 4. **Commercial Ecosystem**: Consulting, training, and enterprise support
 
@@ -464,11 +477,11 @@ jobs:
 pub trait GupPlugin: Send + Sync {
     fn name(&self) -> &str;
     fn version(&self) -> Version;
-    
+
     fn register_shader_functions(&self) -> Vec<Box<dyn ShaderFunction>>;
     fn register_marks(&self) -> Vec<Box<dyn Mark>>;
     fn register_interactions(&self) -> Vec<Box<dyn InteractionHandler>>;
-    
+
     fn initialize(&mut self, context: &mut GupContext) -> Result<(), PluginError>;
 }
 
@@ -508,15 +521,15 @@ pub struct DocumentationGenerator {
 impl DocumentationGenerator {
     pub fn generate_interactive_docs(&self, api_spec: &ApiSpec) -> InteractiveDocs {
         let mut docs = InteractiveDocs::new();
-        
+
         for example in &api_spec.examples {
             let runnable_example = self.example_runner.create_runnable(example);
             let formatted_code = self.code_formatter.format(example.code);
             let diagram = self.diagram_generator.create_diagram(example);
-            
+
             docs.add_example(runnable_example, formatted_code, diagram);
         }
-        
+
         docs
     }
 }
@@ -534,40 +547,54 @@ impl DocumentationGenerator {
 ### Integration Completeness
 
 - [ ] **Framework Support**: Working integrations for Bevy, egui, Tauri, winit
-- [ ] **Cross-Language Bindings**: Python and JavaScript bindings with full feature parity
+- [ ] **Cross-Language Bindings**: Python and JavaScript bindings with full
+      feature parity
 - [ ] **Export Quality**: Publication-quality output in all major formats
 - [ ] **Production Readiness**: Successful deployment in production environments
 
 ### Developer Experience
 
-- [ ] **Testing Coverage**: >95% test coverage with visual and performance regression tests
-- [ ] **Documentation Quality**: Comprehensive documentation with interactive examples
-- [ ] **Developer Tools**: Profiling and debugging tools for performance optimization
+- [ ] **Testing Coverage**: >95% test coverage with visual and performance
+      regression tests
+- [ ] **Documentation Quality**: Comprehensive documentation with interactive
+      examples
+- [ ] **Developer Tools**: Profiling and debugging tools for performance
+      optimization
 - [ ] **CI/CD Integration**: Seamless integration with major CI/CD platforms
 
 ### Community Growth
 
 - [ ] **Plugin Ecosystem**: 10+ community plugins extending core functionality
 - [ ] **Community Size**: 1000+ active community members across platforms
-- [ ] **Educational Content**: Comprehensive tutorial series and best practices guides
-- [ ] **Commercial Adoption**: Professional services and enterprise support available
+- [ ] **Educational Content**: Comprehensive tutorial series and best practices
+      guides
+- [ ] **Commercial Adoption**: Professional services and enterprise support
+      available
 
 ### Ecosystem Impact
 
-- [ ] **Industry Recognition**: Conference presentations and industry partnerships
-- [ ] **Academic Adoption**: Use in research institutions and educational programs
+- [ ] **Industry Recognition**: Conference presentations and industry
+      partnerships
+- [ ] **Academic Adoption**: Use in research institutions and educational
+      programs
 - [ ] **Open Source Health**: Active contribution from external developers
-- [ ] **Standard Integration**: Included in major Rust distributions and frameworks
+- [ ] **Standard Integration**: Included in major Rust distributions and
+      frameworks
 
 ## Long-Term Vision
 
-Phase 4 establishes Gup as more than a library - it becomes a complete ecosystem for high-performance data visualization:
+Phase 4 establishes Gup as more than a library - it becomes a complete ecosystem
+for high-performance data visualization:
 
 - **Default Choice**: The standard visualization library for Rust applications
 - **Cross-Language Standard**: Widely adopted beyond the Rust ecosystem
 - **Educational Platform**: Used in universities and training programs
-- **Commercial Ecosystem**: Thriving market for consulting, plugins, and services
+- **Commercial Ecosystem**: Thriving market for consulting, plugins, and
+  services
 
 ---
 
-**Phase 4 transforms Gup from a powerful library into an industry-standard ecosystem. Success in this phase means Gup becomes the default choice for data visualization across multiple programming languages and platforms, with a thriving community and commercial ecosystem supporting long-term growth.**
+**Phase 4 transforms Gup from a powerful library into an industry-standard
+ecosystem. Success in this phase means Gup becomes the default choice for data
+visualization across multiple programming languages and platforms, with a
+thriving community and commercial ecosystem supporting long-term growth.**

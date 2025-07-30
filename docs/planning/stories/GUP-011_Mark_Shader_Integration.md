@@ -2,36 +2,43 @@
 
 ## Story Overview
 
-**Title**: Integrate Mark System with Shader Functions  
-**Epic**: Phase 1 Initiative 3 - Mark System and Type Integration  
-**Priority**: Critical  
-**Story Points**: 8  
+**Title**: Integrate Mark System with Shader Functions **Epic**: Phase 1
+Initiative 3 - Mark System and Type Integration **Priority**: Critical **Story
+Points**: 8
 
 ## Context
 
-The mark-shader integration bridges visual primitives with the shader function system, enabling marks to use composed shader functions for attribute mapping. This integration must seamlessly handle both hand-optimized mark shaders and dynamically generated shaders while preserving type safety and performance.
+The mark-shader integration bridges visual primitives with the shader function
+system, enabling marks to use composed shader functions for attribute mapping.
+This integration must seamlessly handle both hand-optimized mark shaders and
+dynamically generated shaders while preserving type safety and performance.
 
 ## User Story
 
-**As a** visualization developer  
-**I want** marks to seamlessly integrate with shader functions  
-**So that** I can apply complex data transformations (scales, projections, color mappings) to visual primitives with type safety and GPU performance  
+**As a** visualization developer **I want** marks to seamlessly integrate with
+shader functions **So that** I can apply complex data transformations (scales,
+projections, color mappings) to visual primitives with type safety and GPU
+performance
 
 ## Acceptance Criteria
 
-### Integration Features
+### AC1: Integration Features
 
-- [ ] **Automatic Shader Generation**: Marks can generate shaders that integrate shader functions
-- [ ] **Manual Shader Optimization**: Hand-written mark shaders can still use shader functions
-- [ ] **Type-Safe Binding**: Shader function outputs validated against mark attribute requirements
-- [ ] **Performance Preservation**: Integration adds <5% overhead vs direct mark rendering
+- [ ] **Automatic Shader Generation**: Marks can generate shaders that integrate
+      shader functions
+- [ ] **Manual Shader Optimization**: Hand-written mark shaders can still use
+      shader functions
+- [ ] **Type-Safe Binding**: Shader function outputs validated against mark
+      attribute requirements
+- [ ] **Performance Preservation**: Integration adds <5% overhead vs direct mark
+      rendering
 
-### Shader Composition
+### AC2: Shader Composition
 
 ```rust
 // Marks can use shader functions for attribute transformation
 selection.select_all::<Circle>()
-    .attr("position", 
+    .attr("position",
         geographic_projection           // Data -> Vec2
             .compose(screen_transform)  // Vec2 -> Vec2
     )
@@ -41,12 +48,14 @@ selection.select_all::<Circle>()
     );
 ```
 
-### Generated Shader Quality
+### AC3: Generated Shader Quality
 
-- [ ] **Optimization**: Generated shaders perform within 10% of hand-optimized equivalents
+- [ ] **Optimization**: Generated shaders perform within 10% of hand-optimized
+      equivalents
 - [ ] **Correctness**: Generated shaders produce identical visual output
 - [ ] **Debuggability**: Generated shaders are readable and debuggable
-- [ ] **Compatibility**: Works with all mark types and shader function combinations
+- [ ] **Compatibility**: Works with all mark types and shader function
+      combinations
 
 ## Technical Tasks
 
@@ -91,35 +100,35 @@ impl Mark for Circle {
             radius: f32,
             color: vec4<f32>,
         }}
-        
+
         @group(0) @binding(0) var<storage, read> data_buffer: array<{data_type}>;
         @group(0) @binding(1) var<storage, read> instance_buffer: array<CircleInstance>;
         {uniform_bindings}
-        
+
         {function_definitions}
-        
+
         @vertex
         fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {{
             let data = data_buffer[vertex_index];
             let base_instance = instance_buffer[vertex_index];
-            
+
             // Apply shader functions to transform data
             let position = {position_function}(data, position_uniforms);
             let color = {color_function}(data, color_uniforms);
             let size = {size_function}(data, size_uniforms);
-            
+
             // Create final instance with transformed attributes
             let world_pos = base_instance.center + position;
             let final_color = base_instance.color * color;
             let final_radius = base_instance.radius * size;
-            
+
             return VertexOutput {{
                 @builtin(position) clip_position: vec4<f32>(world_pos * final_radius, 0.0, 1.0),
                 @location(0) color: final_color,
             }};
         }}
         "#;
-        
+
         pipeline.apply_template(template, &self.get_template_context())
     }
 }
@@ -135,8 +144,8 @@ pub struct AttributeBinding<T, M: Mark> {
 }
 
 impl<T, M: Mark> AttributeBinding<T, M> {
-    pub fn new<F>(name: &str, function: F) -> Self 
-    where 
+    pub fn new<F>(name: &str, function: F) -> Self
+    where
         F: ShaderFunction<Input=T, Output=M::AttributeValue> + 'static
     {
         Self {
@@ -145,15 +154,15 @@ impl<T, M: Mark> AttributeBinding<T, M> {
             uniform_buffer: None,
         }
     }
-    
+
     pub fn create_uniform_buffer(&mut self, device: &wgpu::Device) {
         if let Some(uniforms) = self.shader_function.create_uniforms() {
             self.uniform_buffer = Some(GpuBuffer::from_data(device, &[uniforms]));
         }
     }
-    
+
     pub fn get_wgsl_function_call(&self) -> String {
-        format!("{}(data, {}_uniforms)", 
+        format!("{}(data, {}_uniforms)",
                 self.shader_function.function_name(),
                 self.attribute_name)
     }
@@ -173,17 +182,17 @@ impl<T, M: Mark> Selection<T, M> {
         // Validate that shader function output matches expected mark attribute type
         let binding = AttributeBinding::new(name, shader_func);
         self.attribute_bindings.insert(name.to_string(), binding);
-        
+
         // Mark pipeline as dirty to trigger regeneration
         self.mark_pipeline_dirty();
-        
+
         self
     }
-    
+
     fn validate_attribute_type<F: ShaderFunction>(&self, name: &str) -> Result<(), AttributeError> {
         let expected_type = M::get_attribute_type(name)?;
         let actual_type = F::Output::wgsl_type_name();
-        
+
         if !M::is_attribute_compatible(name, actual_type) {
             return Err(AttributeError::TypeMismatch {
                 attribute: name.to_string(),
@@ -191,7 +200,7 @@ impl<T, M: Mark> Selection<T, M> {
                 actual: actual_type.to_string(),
             });
         }
-        
+
         Ok(())
     }
 }
@@ -219,20 +228,20 @@ impl MarkPipelineManager {
         selection: &Selection<T, M>
     ) -> &wgpu::RenderPipeline {
         let key = PipelineKey::from_selection(selection);
-        
+
         self.pipelines.entry(key).or_insert_with(|| {
             let vertex_shader = self.generate_vertex_shader(selection);
             let fragment_shader = M::FRAGMENT_SHADER.unwrap_or_else(|| {
                 self.generate_fragment_shader(selection)
             });
-            
+
             self.create_render_pipeline(device, &vertex_shader, &fragment_shader)
         })
     }
-    
+
     fn generate_vertex_shader<T, M: Mark>(&mut self, selection: &Selection<T, M>) -> String {
         let shader_key = ShaderKey::from_selection(selection);
-        
+
         self.shader_cache.entry(shader_key).or_insert_with(|| {
             let pipeline = ShaderPipeline::from_selection(selection);
             M::generate_vertex_shader(&pipeline)
@@ -263,11 +272,11 @@ impl MarkPipelineManager {
 #[test]
 fn test_mark_shader_integration() {
     let mut selection = Selection::<TestData, Circle>::new(test_data, context);
-    
+
     // Test that shader functions can be bound to mark attributes
     selection.attr("position", LinearScale::new(0.0, 100.0, 0.0, 1.0));
     selection.attr("color", ColorScale::new(color_palette));
-    
+
     assert!(selection.has_attribute("position"));
     assert!(selection.has_attribute("color"));
 }
@@ -275,10 +284,10 @@ fn test_mark_shader_integration() {
 #[test]
 fn test_type_safe_attribute_binding() {
     let mut selection = Selection::<TestData, Circle>::new(test_data, context);
-    
+
     // Valid binding should work
     selection.attr("radius", RadiusScale::new(1.0, 10.0)); // f32 -> f32
-    
+
     // Invalid binding should fail at compile time
     // selection.attr("radius", ColorScale::new(palette)); // f32 -> Vec4 ❌
 }
@@ -288,9 +297,9 @@ fn test_shader_generation() {
     let mut selection = Selection::<TestData, Circle>::new(test_data, context);
     selection.attr("position", PositionTransform::new());
     selection.attr("color", ColorMapping::new());
-    
+
     let generated_shader = selection.generate_vertex_shader();
-    
+
     assert!(generated_shader.contains("position_transform"));
     assert!(generated_shader.contains("color_mapping"));
     assert!(generated_shader.contains("@vertex"));
@@ -304,16 +313,16 @@ fn test_shader_generation() {
 async fn test_complete_mark_shader_pipeline() {
     let device = create_test_device();
     let mut selection = Selection::<WeatherData, Circle>::new(weather_data, context);
-    
+
     selection
         .attr("position", geographic_projection.compose(screen_transform))
         .attr("color", temperature_scale.compose(color_interpolation))
         .attr("size", humidity_scale);
-    
+
     // Test that complete pipeline can be created and used
     let render_pipeline = selection.create_render_pipeline(&device);
     let result = selection.render_with_pipeline(&device, &render_pipeline).await;
-    
+
     assert!(result.is_ok());
 }
 
@@ -321,22 +330,22 @@ async fn test_complete_mark_shader_pipeline() {
 async fn test_shader_compilation() {
     let device = create_test_device();
     let test_functions = create_all_test_shader_functions();
-    
+
     for mark_type in [Circle, Rectangle, Line] {
         for function_set in &test_functions {
             let mut selection = create_selection_with_mark(mark_type);
             for (attr_name, function) in function_set {
                 selection.attr(attr_name, function.clone());
             }
-            
+
             let vertex_shader = selection.generate_vertex_shader();
-            
+
             // Test that generated shader compiles successfully
             let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("integration_test"),
                 source: wgpu::ShaderSource::Wgsl(vertex_shader.into()),
             });
-            
+
             // If this doesn't panic, compilation succeeded
         }
     }
@@ -349,7 +358,7 @@ async fn test_shader_compilation() {
 #[bench]
 fn bench_shader_generation(b: &mut Bencher) {
     let mut selection = create_complex_selection(); // Multiple shader functions
-    
+
     b.iter(|| {
         let _shader = selection.generate_vertex_shader();
     });
@@ -360,10 +369,10 @@ fn bench_pipeline_caching(b: &mut Bencher) {
     let device = create_bench_device();
     let mut manager = MarkPipelineManager::new();
     let selection = create_test_selection();
-    
+
     // First creation should be slow
     let _pipeline1 = manager.get_or_create_pipeline(&device, &selection);
-    
+
     // Subsequent accesses should be fast (cached)
     b.iter(|| {
         let _pipeline = manager.get_or_create_pipeline(&device, &selection);
@@ -373,7 +382,7 @@ fn bench_pipeline_caching(b: &mut Bencher) {
 #[bench]
 fn bench_integrated_rendering(b: &mut Bencher) {
     let selection = create_selection_with_shader_functions(10_000);
-    
+
     b.iter(|| {
         selection.render().unwrap();
     });
@@ -387,10 +396,10 @@ fn bench_integrated_rendering(b: &mut Bencher) {
 async fn test_visual_output_correctness() {
     // Compare output of integrated mark-shader system vs reference implementation
     let device = create_test_device();
-    
+
     let integrated_output = render_with_integration(&device, test_data).await;
     let reference_output = render_reference_implementation(&device, test_data).await;
-    
+
     assert!(images_are_equivalent(&integrated_output, &reference_output, 0.01));
 }
 ```
@@ -407,14 +416,18 @@ async fn test_visual_output_correctness() {
 ### Quality Requirements
 
 - [ ] **Type Safety**: 100% of invalid attribute bindings caught at compile time
-- [ ] **Visual Accuracy**: Generated shaders produce identical output to manual implementations
-- [ ] **Error Messages**: Clear, actionable error messages for integration failures
+- [ ] **Visual Accuracy**: Generated shaders produce identical output to manual
+      implementations
+- [ ] **Error Messages**: Clear, actionable error messages for integration
+      failures
 - [ ] **Cross-Platform**: Identical behavior across all supported platforms
 
 ### Functionality Requirements
 
-- [ ] **Shader Function Coverage**: All shader functions work with all mark types
-- [ ] **Attribute Completeness**: All mark attributes can be driven by shader functions
+- [ ] **Shader Function Coverage**: All shader functions work with all mark
+      types
+- [ ] **Attribute Completeness**: All mark attributes can be driven by shader
+      functions
 - [ ] **Composition Depth**: Support 5+ levels of shader function composition
 - [ ] **Real-Time Updates**: Smooth attribute updates during interaction
 
@@ -422,7 +435,8 @@ async fn test_visual_output_correctness() {
 
 ### Technical Risks
 
-- **High**: Shader generation complexity could produce invalid or inefficient shaders
+- **High**: Shader generation complexity could produce invalid or inefficient
+  shaders
 - **Medium**: Type system integration might be overly complex for users
 - **Medium**: Performance overhead from dynamic shader generation
 
@@ -430,7 +444,8 @@ async fn test_visual_output_correctness() {
 
 - **Comprehensive Testing**: Test all mark-shader function combinations
 - **Performance Monitoring**: Continuous benchmarking of integration overhead
-- **Reference Validation**: Compare generated output against known-good implementations
+- **Reference Validation**: Compare generated output against known-good
+  implementations
 
 ## Implementation Notes
 
@@ -450,14 +465,16 @@ async fn test_visual_output_correctness() {
 
 ### Caching Strategy
 
-- Cache at multiple levels: shader source, compiled shaders, and render pipelines
+- Cache at multiple levels: shader source, compiled shaders, and render
+  pipelines
 - Use content-based hashing for cache keys to detect changes
 - Implement LRU eviction for memory management
 - Share cached resources between similar selections
 
 ## Definition of Done
 
-- [ ] Mark-shader integration working for all basic marks (Circle, Rectangle, Line)
+- [ ] Mark-shader integration working for all basic marks (Circle, Rectangle,
+      Line)
 - [ ] Type-safe attribute binding preventing invalid compositions
 - [ ] Generated shaders compiling and producing correct visual output
 - [ ] Performance benchmarks meeting <10% overhead target

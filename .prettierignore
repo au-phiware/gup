@@ -1,0 +1,23 @@
+# Build outputs
+target/
+*.wasm
+pkg/
+
+# Dependencies
+node_modules/
+
+# Generated files
+*.lock
+Cargo.lock
+
+# Temporary files
+*.tmp
+*.temp
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

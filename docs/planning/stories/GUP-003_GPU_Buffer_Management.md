@@ -2,24 +2,26 @@
 
 ## Story Overview
 
-**Title**: Implement GPU Buffer Management System  
-**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API  
-**Priority**: Critical  
-**Story Points**: 8  
+**Title**: Implement GPU Buffer Management System **Epic**: Phase 1 Initiative
+1 - Core GPU Primitives and Selection API **Priority**: Critical **Story
+Points**: 8
 
 ## Context
 
-GPU buffer management is fundamental to Gup's performance. The system must efficiently handle vertex data, instance data, uniform buffers, and storage buffers while providing safe abstractions over raw wgpu resources. This forms the foundation for all GPU-accelerated data transformations.
+GPU buffer management is fundamental to Gup's performance. The system must
+efficiently handle vertex data, instance data, uniform buffers, and storage
+buffers while providing safe abstractions over raw wgpu resources. This forms
+the foundation for all GPU-accelerated data transformations.
 
 ## User Story
 
-**As a** Gup library developer  
-**I want** a robust GPU buffer management system  
-**So that** I can safely and efficiently manage GPU memory for visualization data  
+**As a** Gup library developer **I want** a robust GPU buffer management system
+**So that** I can safely and efficiently manage GPU memory for visualization
+data
 
 ## Acceptance Criteria
 
-### Core Buffer Types
+### AC1: Core Buffer Types
 
 ```rust
 pub struct GpuBuffer<T> {
@@ -38,14 +40,16 @@ pub enum BufferType {
 }
 ```
 
-### Buffer Management Features
+### AC2: Buffer Management Features
 
 - [ ] **Type Safety**: Buffers are parameterized by data type to prevent misuse
-- [ ] **Automatic Resizing**: Buffers grow automatically when data exceeds capacity
+- [ ] **Automatic Resizing**: Buffers grow automatically when data exceeds
+      capacity
 - [ ] **Memory Pool**: Reuse buffers to reduce allocation overhead
-- [ ] **Lifecycle Management**: Automatic cleanup when buffers are no longer needed
+- [ ] **Lifecycle Management**: Automatic cleanup when buffers are no longer
+      needed
 
-### Performance Requirements
+### AC3: Performance Requirements
 
 - [ ] **Efficient Uploads**: Minimize CPU-to-GPU transfer overhead
 - [ ] **Batch Operations**: Support batching multiple buffer updates
@@ -56,7 +60,7 @@ pub enum BufferType {
 
 ### 1. Core Buffer Implementation
 
-- [ ] Define GpuBuffer<T> struct with type safety
+- [ ] Define `GpuBuffer<T>` struct with type safety
 - [ ] Implement buffer creation with appropriate usage flags
 - [ ] Add automatic capacity management and resizing
 - [ ] Create buffer upload and download methods
@@ -84,25 +88,25 @@ pub enum BufferType {
 
 ## Detailed Requirements
 
-### GpuBuffer<T> API
+### `GpuBuffer<T>` API
 
 ```rust
 impl<T: bytemuck::Pod + bytemuck::Zeroable> GpuBuffer<T> {
     // Create new buffer with initial capacity
     pub fn new(device: &wgpu::Device, buffer_type: BufferType, capacity: usize) -> Self;
-    
+
     // Upload data to GPU, resizing if necessary
     pub fn upload(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, data: &[T]);
-    
+
     // Upload data at specific offset
     pub fn upload_range(&mut self, queue: &wgpu::Queue, data: &[T], offset: usize);
-    
+
     // Download data from GPU (for debugging/validation)
     pub async fn download(&self, device: &wgpu::Device) -> Vec<T>;
-    
+
     // Get raw wgpu buffer for shader binding
     pub fn raw_buffer(&self) -> &wgpu::Buffer;
-    
+
     // Buffer information
     pub fn len(&self) -> usize;
     pub fn capacity(&self) -> usize;
@@ -129,10 +133,12 @@ impl BufferPool {
 
 ### Memory Management Strategies
 
-- [ ] **Size Classes**: Pool buffers in exponential size classes (1KB, 2KB, 4KB, etc.)
+- [ ] **Size Classes**: Pool buffers in exponential size classes (1KB, 2KB, 4KB,
+      etc.)
 - [ ] **Usage Tracking**: Track buffer usage patterns for optimization
 - [ ] **Automatic Cleanup**: Periodically clean up unused buffers
-- [ ] **Memory Limits**: Respect GPU memory limits and provide graceful degradation
+- [ ] **Memory Limits**: Respect GPU memory limits and provide graceful
+      degradation
 
 ## Dependencies
 
@@ -164,10 +170,10 @@ fn test_buffer_creation() {
 fn test_buffer_upload() {
     let (device, queue) = create_test_device_and_queue();
     let mut buffer = GpuBuffer::new(&device, BufferType::Vertex, 100);
-    
+
     let data = vec![1.0f32, 2.0, 3.0, 4.0];
     buffer.upload(&device, &queue, &data);
-    
+
     assert_eq!(buffer.len(), 4);
 }
 
@@ -175,10 +181,10 @@ fn test_buffer_upload() {
 fn test_buffer_resize() {
     let (device, queue) = create_test_device_and_queue();
     let mut buffer = GpuBuffer::new(&device, BufferType::Vertex, 10);
-    
+
     let large_data = vec![0.0f32; 100];
     buffer.upload(&device, &queue, &large_data);
-    
+
     assert!(buffer.capacity() >= 100);
     assert_eq!(buffer.len(), 100);
 }
@@ -199,7 +205,7 @@ fn bench_buffer_upload_10k_floats(b: &mut Bencher) {
     let (device, queue) = create_bench_device();
     let mut buffer = GpuBuffer::new(&device, BufferType::Storage, 10_000);
     let data = vec![1.0f32; 10_000];
-    
+
     b.iter(|| {
         buffer.upload(&device, &queue, &data);
     });
@@ -241,7 +247,8 @@ fn bench_buffer_upload_10k_floats(b: &mut Bencher) {
 
 - **Comprehensive Testing**: Extensive memory leak testing in CI/CD
 - **Usage Monitoring**: Track real-world buffer usage patterns
-- **Conservative Defaults**: Start with simple strategies, optimize based on data
+- **Conservative Defaults**: Start with simple strategies, optimize based on
+  data
 
 ## Implementation Notes
 

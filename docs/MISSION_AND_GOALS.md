@@ -156,15 +156,13 @@ performance
 - **Framework Integration**: First-class support for major Rust GUI frameworks
 - **Migration Tools**: Smooth transition paths from existing libraries
 - **Educational Content**: Tutorials, examples, and best practices
-- **Community Contributions**: Plugin architecture enabling community
-  extensions
+- **Community Contributions**: Plugin architecture enabling community extensions
 
 ## Core Principles
 
 ### 1. Engineering Excellence First
 
-Build it right from the beginning - no shortcuts that compromise the
-foundation.
+Build it right from the beginning - no shortcuts that compromise the foundation.
 
 ### 2. Universal Composability
 
@@ -225,15 +223,13 @@ vision and motor control.
 1. **Sustainable Development**: Avoid burnout, maintain quality over speed
 2. **Open Development**: Transparent progress, community input, collaborative
    decisions
-3. **Resource Management**: Secure funding/sponsorship for long-term
-   development
+3. **Resource Management**: Secure funding/sponsorship for long-term development
 4. **Knowledge Transfer**: Documentation and training enable community
    contributions
 
 ---
 
 **Gup's mission is ambitious but achievable. By combining proven design
-principles (D3's composability) with cutting-edge technology (GPU computing)
-and modern engineering practices (Rust's type safety), we can create a
-visualization library that fundamentally changes what's possible in data
-visualization.**
+principles (D3's composability) with cutting-edge technology (GPU computing) and
+modern engineering practices (Rust's type safety), we can create a visualization
+library that fundamentally changes what's possible in data visualization.**

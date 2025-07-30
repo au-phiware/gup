@@ -1,3 +1,5 @@
 all
+exclude_rule 'MD056'
+exclude_rule 'MD007'
 rule 'MD013', :tables => false, :ignore_code_blocks => true
 rule 'MD029', :style => :ordered

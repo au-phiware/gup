@@ -2,24 +2,27 @@
 
 ## Story Overview
 
-**Title**: Implement Core ShaderFunction Trait  
-**Epic**: Phase 1 Initiative 2 - Unified Shader Function System  
-**Priority**: Critical  
-**Story Points**: 13  
+**Title**: Implement Core ShaderFunction Trait **Epic**: Phase 1 Initiative 2 -
+Unified Shader Function System **Priority**: Critical **Story Points**: 13
 
 ## Context
 
-The `ShaderFunction` trait is Gup's core innovation - it treats all data transformations as composable WGSL functions that run on the GPU. This trait enables scales, color mappings, coordinate transforms, and custom processing to compose naturally through a unified abstraction. Success here determines the viability of the entire project.
+The `ShaderFunction` trait is Gup's core innovation - it treats all data
+transformations as composable WGSL functions that run on the GPU. This trait
+enables scales, color mappings, coordinate transforms, and custom processing to
+compose naturally through a unified abstraction. Success here determines the
+viability of the entire project.
 
 ## User Story
 
-**As a** visualization developer  
-**I want** all data transformations to be composable GPU functions  
-**So that** I can build complex visualizations by naturally combining simple transformations with guaranteed type safety and GPU performance  
+**As a** visualization developer **I want** all data transformations to be
+composable GPU functions **So that** I can build complex visualizations by
+naturally combining simple transformations with guaranteed type safety and GPU
+performance
 
 ## Acceptance Criteria
 
-### Core Trait Definition
+### AC1: Core Trait Definition
 
 ```rust
 pub trait ShaderFunction {
@@ -38,14 +41,16 @@ pub trait ShaderFunction {
 }
 ```
 
-### Trait Requirements
+### AC2: Trait Requirements
 
-- [ ] **Universal Composability**: Any shader function can compose with any other when types align
-- [ ] **Type Safety**: Rust's type system validates all compositions at compile time
+- [ ] **Universal Composability**: Any shader function can compose with any
+      other when types align
+- [ ] **Type Safety**: Rust's type system validates all compositions at compile
+      time
 - [ ] **Performance**: Zero runtime overhead for composition validation
 - [ ] **WGSL Integration**: Generated WGSL code integrates seamlessly with wgpu
 
-### Composition System
+### AC3: Composition System
 
 - [ ] **Automatic Chaining**: Functions compose when Input/Output types match
 - [ ] **Type Validation**: Invalid compositions caught at compile time
@@ -90,13 +95,13 @@ pub trait ShaderFunction {
 pub trait ShaderType: Clone + Send + Sync + 'static {
     // WGSL type name (e.g., "f32", "vec2<f32>", "mat4x4<f32>")
     fn wgsl_type_name() -> &'static str;
-    
+
     // WGSL struct definition for complex types
     fn wgsl_type_definition() -> Option<&'static str> { None }
-    
+
     // Size in bytes for uniform buffer layout
     fn size_bytes() -> usize;
-    
+
     // Alignment requirements for GPU
     fn alignment() -> usize;
 }
@@ -118,8 +123,8 @@ impl ShaderType for Vec2 {
 ### Function Composition
 
 ```rust
-pub struct FunctionChain<A: ShaderFunction, B: ShaderFunction> 
-where 
+pub struct FunctionChain<A: ShaderFunction, B: ShaderFunction>
+where
     A::Output: Compatible<B::Input>
 {
     first: A,
@@ -128,7 +133,7 @@ where
 }
 
 impl<A: ShaderFunction, B: ShaderFunction> ShaderFunction for FunctionChain<A, B>
-where 
+where
     A::Output: Compatible<B::Input>
 {
     type Input = A::Input;
@@ -142,7 +147,7 @@ where
                 let intermediate = {}(input, first_uniforms);
                 return {}(intermediate, second_uniforms);
             }}
-        ", 
+        ",
             Self::function_name(),
             A::Input::wgsl_type_name(),
             B::Output::wgsl_type_name(),
@@ -214,7 +219,7 @@ impl ShaderFunction for LinearScale {
 fn test_shader_function_trait() {
     let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
     let uniforms = scale.create_uniforms().unwrap();
-    
+
     assert_eq!(LinearScale::function_name(), "linear_scale");
     assert!(LinearScale::wgsl_function().contains("linear_scale"));
 }
@@ -223,7 +228,7 @@ fn test_shader_function_trait() {
 fn test_function_composition() {
     let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
     let color_map = ColorMap::new(color_palette);
-    
+
     // This should compile (f32 -> f32 -> vec4<f32>)
     let composed = scale.compose(color_map);
     assert_eq!(composed.input_type(), "f32");
@@ -234,7 +239,7 @@ fn test_function_composition() {
 fn test_type_safety() {
     let position_func = PositionTransform::new();  // f32 -> vec2<f32>
     let color_func = ColorMap::new();              // f32 -> vec4<f32>
-    
+
     // This should NOT compile (vec2<f32> ≠ f32)
     // let invalid = position_func.compose(color_func);
 }
@@ -252,14 +257,14 @@ fn test_type_safety() {
 ```rust
 #[quickcheck]
 fn test_composition_associativity(
-    a: LinearScale, 
-    b: ColorMap, 
+    a: LinearScale,
+    b: ColorMap,
     c: PositionTransform
 ) -> bool {
     // Test that (a.compose(b)).compose(c) == a.compose(b.compose(c))
     let left_assoc = (a.compose(b.clone())).compose(c.clone());
     let right_assoc = a.compose(b.compose(c));
-    
+
     generated_wgsl_equivalent(&left_assoc, &right_assoc)
 }
 ```
@@ -270,7 +275,8 @@ fn test_composition_associativity(
 
 - [ ] **Type Safety**: 100% of invalid compositions caught at compile time
 - [ ] **Performance**: Zero runtime overhead for type validation
-- [ ] **WGSL Quality**: Generated WGSL compiles without errors on all target platforms
+- [ ] **WGSL Quality**: Generated WGSL compiles without errors on all target
+      platforms
 - [ ] **Composability**: Complex 5+ function chains work correctly
 
 ### Quality Requirements
@@ -291,14 +297,17 @@ fn test_composition_associativity(
 ### Mitigation Strategies
 
 - **Prototype First**: Build minimal working version to validate approach
-- **Incremental Complexity**: Start with simple compositions, add complexity gradually
-- **Performance Testing**: Benchmark every design decision against hand-written shaders
+- **Incremental Complexity**: Start with simple compositions, add complexity
+  gradually
+- **Performance Testing**: Benchmark every design decision against hand-written
+  shaders
 
 ## Implementation Notes
 
 ### Design Decisions
 
-- Use associated types rather than generic parameters for cleaner composition APIs
+- Use associated types rather than generic parameters for cleaner composition
+  APIs
 - Generate WGSL strings at compile time for better performance
 - Implement uniform buffer packing automatically based on WGSL std430 layout
 - Use trait bounds to enforce type compatibility rather than runtime checks
@@ -307,7 +316,8 @@ fn test_composition_associativity(
 
 - Leverage Rust's type system for composition validation
 - Use phantom types to carry type information without runtime cost
-- Implement automatic type coercion for compatible types (e.g., f32 -> vec2<f32>)
+- Implement automatic type coercion for compatible types (e.g., f32 ->
+  `vec2<f32>`)
 - Create clear error messages for incompatible type combinations
 
 ### WGSL Generation Strategy

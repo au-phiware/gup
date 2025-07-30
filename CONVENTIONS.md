@@ -1,14 +1,17 @@
 # Gup Development Conventions
 
-This document captures key learnings, patterns, and conventions discovered during the development of the Gup visualization library.
+This document captures key learnings, patterns, and conventions discovered
+during the development of the Gup visualization library.
 
 ## Rust Design Patterns
 
 ### Prefer Enums Over Trait Objects for Known Sets
 
-**Learning**: When implementing extensible behavior with a finite, known set of variants, prefer enums over trait objects (`Box<dyn Trait>`).
+**Learning**: When implementing extensible behavior with a finite, known set of
+variants, prefer enums over trait objects (`Box<dyn Trait>`).
 
 **Example**: In GUP-021, we initially tried:
+
 ```rust
 // ❌ Problematic - trait not object-safe due to generic methods
 trait CustomCompositionBehavior {
@@ -18,6 +21,7 @@ custom_behavior: Option<Box<dyn CustomCompositionBehavior>>,
 ```
 
 **Solution**:
+
 ```rust
 // ✅ Better - enum-based approach
 #[derive(Debug, Clone)]
@@ -28,18 +32,22 @@ enum CustomCompositionBehavior {
 ```
 
 **Benefits**:
+
 - Compile-time type safety
 - Better performance (no vtable indirection)
 - Easier to serialize/deserialize
 - Pattern matching exhaustiveness checking
 
-**When to use trait objects**: When you need true open extensibility where external crates can add implementations.
+**When to use trait objects**: When you need true open extensibility where
+external crates can add implementations.
 
 ### Generic Method Limitations
 
-**Learning**: Traits with generic methods cannot be made into trait objects due to Rust's object safety rules.
+**Learning**: Traits with generic methods cannot be made into trait objects due
+to Rust's object safety rules.
 
 **Guideline**: If you need both trait objects and generic methods, consider:
+
 1. Separate the generic methods into a different trait
 2. Use an enum-based approach for known variants
 3. Use associated types instead of generic parameters where possible
@@ -48,9 +56,11 @@ enum CustomCompositionBehavior {
 
 ### Fluent APIs with Backward Compatibility
 
-**Learning**: When extending existing APIs, maintain backward compatibility while providing new convenience methods.
+**Learning**: When extending existing APIs, maintain backward compatibility
+while providing new convenience methods.
 
 **Pattern**:
+
 ```rust
 // Existing API continues to work
 let composed = chart1.mix(chart2);
@@ -61,15 +71,18 @@ let beside = chart1.beside_with_config(chart2, config);
 ```
 
 **Guidelines**:
+
 - Use extension traits for new convenience methods
 - Keep core trait minimal and stable
 - Provide both simple defaults and configurable variants
 
 ### Configuration Structs with Defaults
 
-**Learning**: Complex configuration is best handled with dedicated structs that implement `Default`.
+**Learning**: Complex configuration is best handled with dedicated structs that
+implement `Default`.
 
 **Pattern**:
+
 ```rust
 #[derive(Debug, Clone)]
 pub struct SideBySideConfig {
@@ -90,6 +103,7 @@ impl Default for SideBySideConfig {
 ```
 
 **Benefits**:
+
 - Easy to extend without breaking changes
 - Clear documentation of options
 - Sensible defaults reduce API complexity
@@ -98,40 +112,46 @@ impl Default for SideBySideConfig {
 
 ### Viewport State Management
 
-**Learning**: Rendering operations that modify global state (like viewport) must restore original state.
+**Learning**: Rendering operations that modify global state (like viewport) must
+restore original state.
 
 **Pattern**:
+
 ```rust
 fn render_with_viewport(&mut self, context: &mut RenderContext) -> GupResult<()> {
     let original_viewport = context.viewport();
-    
+
     // Modify viewport for this operation
     context.set_viewport(new_viewport)?;
-    
+
     // Do rendering work
     self.component.render(context)?;
-    
+
     // Always restore original state
     context.set_viewport(original_viewport)?;
-    
+
     Ok(())
 }
 ```
 
 **Guidelines**:
+
 - Always capture original state before modifications
 - Use RAII patterns where possible (consider viewport guards)
 - Document state modifications clearly
 
 ### Coordinate System Conventions
 
-**Learning**: Be explicit about coordinate system conventions and document them clearly.
+**Learning**: Be explicit about coordinate system conventions and document them
+clearly.
 
 **Convention**: Grid layouts use `(row, col)` indexing where:
+
 - Rows: 0 to `num_rows - 1` (top to bottom)
 - Columns: 0 to `num_cols - 1` (left to right)
 
 **Pattern**:
+
 ```rust
 pub struct GridPosition {
     pub row: u32,    // 0-based row index
@@ -148,9 +168,11 @@ fn is_valid_position(&self, pos: GridPosition) -> bool {
 
 ### Comprehensive Composition Testing
 
-**Learning**: When implementing composition systems, test all combinations and edge cases.
+**Learning**: When implementing composition systems, test all combinations and
+edge cases.
 
 **Test Categories**:
+
 1. **Basic functionality** - Each mode works independently
 2. **Configuration validation** - Invalid configs are rejected
 3. **State management** - Viewport/state restoration works
@@ -159,15 +181,16 @@ fn is_valid_position(&self, pos: GridPosition) -> bool {
 6. **Edge cases** - Boundary conditions and limits
 
 **Pattern**:
+
 ```rust
 #[tokio::test]
 async fn test_viewport_restoration() {
     let mut context = RenderContext::new().await.unwrap();
     let original_viewport = context.viewport();
-    
+
     let mut composition = create_side_by_side_composition();
     composition.render(&mut context).unwrap();
-    
+
     // Verify viewport was restored
     assert_eq!(context.viewport(), original_viewport);
 }
@@ -175,9 +198,11 @@ async fn test_viewport_restoration() {
 
 ### Performance Regression Testing
 
-**Learning**: When adding abstraction layers, benchmark to ensure performance overhead stays minimal.
+**Learning**: When adding abstraction layers, benchmark to ensure performance
+overhead stays minimal.
 
 **Guidelines**:
+
 - Benchmark direct operations vs. composed operations
 - Target <1% overhead for composition layers
 - Use `cargo bench` with consistent test data
@@ -187,21 +212,24 @@ async fn test_viewport_restoration() {
 
 ### Context-Rich Error Messages
 
-**Learning**: Composition errors should provide context about which component failed and why.
+**Learning**: Composition errors should provide context about which component
+failed and why.
 
 **Pattern**:
+
 ```rust
 // ❌ Not helpful
 Err(GupError::RenderError("Component invalid".to_string()))
 
 // ✅ Better - includes context
 Err(GupError::CompositionError(format!(
-    "First component is invalid: {}", 
+    "First component is invalid: {}",
     self.first.description()
 )))
 ```
 
 **Guidelines**:
+
 - Include component descriptions in error messages
 - Specify which part of a composition failed
 - Provide actionable information where possible
@@ -210,18 +238,20 @@ Err(GupError::CompositionError(format!(
 
 ### Code Examples in Documentation
 
-**Learning**: Complex APIs benefit from comprehensive examples showing common usage patterns.
+**Learning**: Complex APIs benefit from comprehensive examples showing common
+usage patterns.
 
 **Pattern**:
-```rust
+
+````rust
 /// Example: Creating compositions with different modes
-/// 
+///
 /// ```rust
 /// use gup::*;
-/// 
+///
 /// // Basic overlay
 /// let overlay = chart1.overlay(chart2);
-/// 
+///
 /// // Configured side-by-side
 /// let config = SideBySideConfig {
 ///     direction: LayoutDirection::Horizontal,
@@ -230,9 +260,10 @@ Err(GupError::CompositionError(format!(
 /// };
 /// let beside = chart1.beside_with_config(chart2, config);
 /// ```
-```
+````
 
 **Guidelines**:
+
 - Provide runnable examples in doc comments
 - Show both simple and advanced usage
 - Include common configuration patterns
@@ -242,9 +273,11 @@ Err(GupError::CompositionError(format!(
 
 ### Lazy Evaluation Patterns
 
-**Learning**: Composition systems benefit from lazy evaluation - defer expensive operations until render time.
+**Learning**: Composition systems benefit from lazy evaluation - defer expensive
+operations until render time.
 
 **Pattern**:
+
 ```rust
 // ✅ Composition is cheap - just stores components
 let composition = chart1.mix(chart2).mix(chart3);
@@ -255,9 +288,11 @@ composition.render(&mut context)?;
 
 ### Viewport Calculation Caching
 
-**Learning**: Repeated viewport calculations can be expensive - consider caching when viewport doesn't change.
+**Learning**: Repeated viewport calculations can be expensive - consider caching
+when viewport doesn't change.
 
 **Future Optimization**:
+
 ```rust
 struct CachedViewportCalculation {
     original_viewport: Viewport,
@@ -270,9 +305,11 @@ struct CachedViewportCalculation {
 
 ### Composition Over Inheritance
 
-**Learning**: Rust's trait system encourages composition patterns over inheritance hierarchies.
+**Learning**: Rust's trait system encourages composition patterns over
+inheritance hierarchies.
 
 **Pattern**: The `Mixable` trait enables universal composability:
+
 ```rust
 // Any two Mixable types can be composed
 let result = anything.mix(anything_else);
@@ -286,24 +323,26 @@ let complex = a.mix(b).mix(c.mix(d));
 **Learning**: Well-designed types serve as documentation and prevent errors.
 
 **Example**:
+
 ```rust
 // ✅ Intent is clear from types
 pub fn beside_with_config(
-    self, 
-    other: T, 
+    self,
+    other: T,
     config: SideBySideConfig
 ) -> ComposedVisualization<Self, T>
 
 // ❌ Less clear
 pub fn beside_with_config(
-    self, 
-    other: T, 
+    self,
+    other: T,
     direction: u8,
-    ratio: f32, 
+    ratio: f32,
     padding: f32
 ) -> ComposedVisualization<Self, T>
 ```
 
 ---
 
-*This document is a living record of learnings. Update it as new patterns and conventions are discovered.*
+_This document is a living record of learnings. Update it as new patterns and
+conventions are discovered._

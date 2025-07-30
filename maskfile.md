@@ -26,10 +26,26 @@ cargo test
 
 ## lint
 
-Run clippy linter
+Run linters
 
 ```bash
-cargo clippy --allow-no-vcs --fix --all-targets --all-features -- -D warnings
+concurrently --group --names clippy,statix,mdl \
+   'cargo clippy --allow-no-vcs --fix --all-targets --all-features -- -D warnings' \
+   'statix fix flake.nix' \
+   'mdl --git-recurse .'
+```
+
+The `mdl` tool has no automatic fixer.
+
+## lint-check
+
+Run clippy linter without writing fixes
+
+```bash
+concurrently --group --names clippy,statix,mdl \
+   'cargo clippy --all-targets --all-features -- -D warnings' \
+   'statix check flake.nix' \
+   'mdl --git-recurse .'
 ```
 
 ## fmt
@@ -37,15 +53,10 @@ cargo clippy --allow-no-vcs --fix --all-targets --all-features -- -D warnings
 Format all code
 
 ```bash
-cargo fmt --all
-```
-
-## lint-check
-
-Run clippy linter without writing fixes
-
-```bash
-cargo clippy --all-targets --all-features -- -D warnings
+concurrently --group --names rs,nix,md \
+   'cargo fmt --all' \
+   'nixfmt flake.nix' \
+   'prettier --cache --log-level warn --write "**/*.md"'
 ```
 
 ## fmt-check
@@ -53,7 +64,32 @@ cargo clippy --all-targets --all-features -- -D warnings
 Check if code is formatted
 
 ```bash
-cargo fmt --all -- --check
+concurrently --group --names rs,nix,md \
+   'cargo fmt --all -- --check' \
+   'nixfmt --check flake.nix' \
+   'prettier --cache --log-level warn --check "**/*.md"'
+```
+
+## all-fix
+
+Run Rust check, linters and formatters' checks.
+
+```bash
+concurrently --group --names rs,nix,md \
+   'cargo fmt --all && cargo clippy --allow-no-vcs --fix --all-targets --all-features -- -D warnings && cargo check' \
+   'nixfmt flake.nix && statix fix flake.nix' \
+   'prettier --cache --log-level warn --write "**/*.md" && mdl --git-recurse .'
+```
+
+## all-check
+
+Run Rust check, linters and formatters' checks.
+
+```bash
+concurrently --group --names rs,nix,md \
+   'cargo check && cargo fmt --all -- --check && cargo clippy --allow-no-vcs --fix --all-targets --all-features -- -D warnings' \
+   'nixfmt --check flake.nix && statix check flake.nix' \
+   'prettier --cache --log-level warn --check "**/*.md" && mdl --git-recurse .' \
 ```
 
 ## clean
@@ -103,9 +139,9 @@ Serve a project on port 8080
 OPTIONS
 
 - port
-   - flags: -p --port
-   - type: string
-   - desc: Port to serve on (default: 8080)
+  - flags: -p --port
+  - type: string
+  - desc: Port to serve on (default: 8080)
 
 ```bash
 miniserve --index index.html --port ${port:-8080} --spa ${project}
@@ -118,9 +154,9 @@ Serve a project on port 8080
 OPTIONS
 
 - port
-   - flags: -p --port
-   - type: string
-   - desc: Port to serve on (default: 8080)
+  - flags: -p --port
+  - type: string
+  - desc: Port to serve on (default: 8080)
 
 ```bash
 mprocs --names '📦 pack,🌐 serve,🚀 launch' \

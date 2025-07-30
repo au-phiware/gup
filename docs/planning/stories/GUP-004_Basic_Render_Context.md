@@ -2,52 +2,54 @@
 
 ## Story Overview
 
-**Title**: Implement Basic Render Context System  
-**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API  
-**Priority**: Critical  
-**Story Points**: 5  
+**Title**: Implement Basic Render Context System **Epic**: Phase 1 Initiative
+1 - Core GPU Primitives and Selection API **Priority**: Critical **Story
+Points**: 5
 
 ## Context
 
-The render context (`GupContext`) provides the foundation for all GPU operations in Gup. It encapsulates wgpu device, queue, surface management, and provides a unified interface for rendering operations. This context must be shareable across selections and support both native and WebAssembly environments.
+The render context (`GupContext`) provides the foundation for all GPU operations
+in Gup. It encapsulates wgpu device, queue, surface management, and provides a
+unified interface for rendering operations. This context must be shareable
+across selections and support both native and WebAssembly environments.
 
 ## User Story
 
-**As a** Gup library developer  
-**I want** a unified render context that manages GPU resources  
-**So that** I can provide consistent rendering capabilities across all Gup components  
+**As a** Gup library developer **I want** a unified render context that manages
+GPU resources **So that** I can provide consistent rendering capabilities across
+all Gup components
 
 ## Acceptance Criteria
 
-### Core Context Structure
+### AC1: Core Context Structure
 
 ```rust
 pub struct GupContext {
     // Core wgpu resources
     pub device: Arc<wgpu::Device>,
     pub queue: Arc<wgpu::Queue>,
-    
+
     // Rendering targets
     surface: Option<wgpu::Surface>,
     surface_config: Option<wgpu::SurfaceConfiguration>,
-    
+
     // Resource management
     buffer_pool: BufferPool,
     texture_pool: TexturePool,
-    
+
     // Performance monitoring
     frame_stats: FrameStats,
 }
 ```
 
-### Context Capabilities
+### AC2: Context Capabilities
 
 - [ ] **Device Management**: Initialize and manage wgpu device and queue
 - [ ] **Surface Handling**: Support both windowed and headless rendering
 - [ ] **Resource Sharing**: Enable sharing of GPU resources across components
 - [ ] **Cross-Platform**: Work identically on native desktop and WebAssembly
 
-### Initialization Support
+### AC3: Initialization Support
 
 - [ ] **Automatic Setup**: Simple initialization for common use cases
 - [ ] **Custom Configuration**: Advanced configuration for specialized needs
@@ -92,13 +94,13 @@ pub struct GupContext {
 impl GupContext {
     // Simple initialization for common cases
     pub async fn new() -> Result<Arc<Self>, GupError>;
-    
+
     // Initialize with specific window/surface
     pub async fn with_surface(window: Arc<Window>) -> Result<Arc<Self>, GupError>;
-    
+
     // Headless initialization for server-side rendering
     pub async fn headless() -> Result<Arc<Self>, GupError>;
-    
+
     // Custom initialization with advanced options
     pub async fn with_options(options: GupOptions) -> Result<Arc<Self>, GupError>;
 }
@@ -117,13 +119,13 @@ pub struct GupOptions {
 impl GupContext {
     // Begin frame rendering
     pub fn begin_frame(&mut self) -> Result<RenderFrame, GupError>;
-    
+
     // Get current render target
     pub fn current_render_target(&self) -> Option<&wgpu::TextureView>;
-    
+
     // Submit commands to GPU
     pub fn submit<I: IntoIterator<Item = wgpu::CommandBuffer>>(&self, commands: I);
-    
+
     // Present frame (if using surface)
     pub fn present(&mut self) -> Result<(), GupError>;
 }
@@ -142,11 +144,11 @@ impl GupContext {
     // Access resource pools
     pub fn buffer_pool(&mut self) -> &mut BufferPool;
     pub fn texture_pool(&mut self) -> &mut TexturePool;
-    
+
     // Resource creation shortcuts
     pub fn create_buffer<T>(&mut self, buffer_type: BufferType, capacity: usize) -> GpuBuffer<T>;
     pub fn create_texture(&mut self, descriptor: &wgpu::TextureDescriptor) -> wgpu::Texture;
-    
+
     // Performance monitoring
     pub fn frame_stats(&self) -> &FrameStats;
     pub fn reset_stats(&mut self);
@@ -175,7 +177,7 @@ impl GupContext {
 async fn test_context_creation() {
     let context = GupContext::headless().await;
     assert!(context.is_ok());
-    
+
     let ctx = context.unwrap();
     assert!(ctx.device.features().contains(wgpu::Features::default()));
 }
@@ -184,7 +186,7 @@ async fn test_context_creation() {
 async fn test_context_sharing() {
     let context = GupContext::headless().await.unwrap();
     let context_clone = Arc::clone(&context);
-    
+
     // Verify both references point to same underlying resources
     assert!(Arc::ptr_eq(&context.device, &context_clone.device));
 }
@@ -192,7 +194,7 @@ async fn test_context_sharing() {
 #[test]
 async fn test_frame_lifecycle() {
     let mut context = GupContext::headless().await.unwrap();
-    
+
     let frame = context.begin_frame().unwrap();
     // Perform rendering operations
     frame.finish().unwrap();
@@ -230,7 +232,7 @@ async fn test_native_context_creation() {
 #[bench]
 fn bench_frame_begin_end(b: &mut Bencher) {
     let mut context = create_bench_context();
-    
+
     b.iter(|| {
         let frame = context.begin_frame().unwrap();
         frame.finish().unwrap();
@@ -242,7 +244,8 @@ fn bench_frame_begin_end(b: &mut Bencher) {
 
 ### Functional Requirements
 
-- [ ] **Cross-Platform**: Identical API behavior on Windows, macOS, Linux, WebAssembly
+- [ ] **Cross-Platform**: Identical API behavior on Windows, macOS, Linux,
+      WebAssembly
 - [ ] **Resource Management**: Efficient GPU resource allocation and cleanup
 - [ ] **Error Handling**: Clear, actionable error messages for all failure modes
 - [ ] **Performance**: <1ms overhead for frame begin/end cycle

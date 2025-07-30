@@ -14,9 +14,9 @@ composes naturally through a single, powerful abstraction.
 ```javascript
 // D3: Each transformation happens on CPU, serially
 data.forEach(d => {
-    d.x = xScale(d.value);           // CPU
-    d.y = yScale(d.other);           // CPU
-    d.color = colorScale(d.category); // CPU
+  d.x = xScale(d.value); // CPU
+  d.y = yScale(d.other); // CPU
+  d.color = colorScale(d.category); // CPU
 });
 // Then upload transformed data to GPU for rendering
 ```
@@ -25,10 +25,15 @@ data.forEach(d => {
 
 ```javascript
 // Three.js: Rendering on GPU, but data transforms still on CPU
-vertices = data.map(d => new THREE.Vector3(
-    xScale(d.x), yScale(d.y), 0    // CPU transformations
-));
-geometry.setFromPoints(vertices);  // Upload to GPU
+vertices = data.map(
+  d =>
+    new THREE.Vector3(
+      xScale(d.x),
+      yScale(d.y),
+      0 // CPU transformations
+    )
+);
+geometry.setFromPoints(vertices); // Upload to GPU
 ```
 
 ### Gup's Unified Approach
@@ -294,7 +299,7 @@ impl ShaderType for SalesData {
 ### Parallel Processing Benefits
 
 | Data Points | CPU Serial Time | GPU Parallel Time | Speedup |
-|-------------|-----------------|-------------------|---------|
+| ----------- | --------------- | ----------------- | ------- |
 | 1,000       | 0.1ms           | 0.01ms            | 10x     |
 | 10,000      | 1.0ms           | 0.02ms            | 50x     |
 | 100,000     | 10ms            | 0.05ms            | 200x    |
@@ -432,6 +437,6 @@ complexity.
 Custom shader functions integrate seamlessly with built-in functions, enabling
 unlimited flexibility.
 
-This unified shader function architecture is Gup's core innovation - it
-provides the composability of D3.js with the performance of custom GPU
-implementations, while maintaining type safety and developer ergonomics.
+This unified shader function architecture is Gup's core innovation - it provides
+the composability of D3.js with the performance of custom GPU implementations,
+while maintaining type safety and developer ergonomics.

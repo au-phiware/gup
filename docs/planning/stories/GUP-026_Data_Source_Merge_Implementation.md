@@ -2,43 +2,51 @@
 
 ## Story Overview
 
-**Title**: Implement Data Source Combination for Merge Composition Mode  
-**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API  
-**Priority**: Medium  
-**Story Points**: 5  
+**Title**: Implement Data Source Combination for Merge Composition Mode
+**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API
+**Priority**: Medium **Story Points**: 5
 
 ## Context
 
-Currently, the Merge composition mode in GUP-021 uses a placeholder implementation that simply renders both components sequentially. This story implements actual data source combination for compatible visualization types, enabling true data merging semantics.
+Currently, the Merge composition mode in GUP-021 uses a placeholder
+implementation that simply renders both components sequentially. This story
+implements actual data source combination for compatible visualization types,
+enabling true data merging semantics.
 
 ## User Story
 
-**As a** data visualization developer  
-**I want** the merge composition mode to actually combine data sources  
-**So that** I can create unified visualizations from multiple datasets with proper data integration  
+**As a** data visualization developer **I want** the merge composition mode to
+actually combine data sources **So that** I can create unified visualizations
+from multiple datasets with proper data integration
 
 ## Acceptance Criteria
 
-### Core Data Merging
+### AC1: Core Data Merging
 
-- [ ] **Type Compatibility**: System detects when two visualizations can be merged based on data types
+- [ ] **Type Compatibility**: System detects when two visualizations can be
+      merged based on data types
 - [ ] **Data Extraction**: Framework for extracting data from Mixable components
-- [ ] **Data Combination**: Algorithms for combining compatible datasets (union, intersection, etc.)
+- [ ] **Data Combination**: Algorithms for combining compatible datasets (union,
+      intersection, etc.)
 - [ ] **Unified Rendering**: Create single visualization from merged data
 
-### Technical Requirements
+### AC2: Technical Requirements
 
-- [ ] **Data Type Registry**: System for registering and matching compatible data types
-- [ ] **Merge Strategies**: Multiple merge strategies (append, deduplicate, interpolate)
+- [ ] **Data Type Registry**: System for registering and matching compatible
+      data types
+- [ ] **Merge Strategies**: Multiple merge strategies (append, deduplicate,
+      interpolate)
 - [ ] **Memory Efficiency**: Avoid unnecessary data duplication during merge
 - [ ] **Error Handling**: Clear errors when components cannot be merged
 
-### API Design
+### AC3: API Design
 
-- [ ] **Mergeable Trait**: Trait for components that can expose their data for merging
+- [ ] **Mergeable Trait**: Trait for components that can expose their data for
+      merging
 - [ ] **Merge Strategy Config**: Configuration for different merge behaviors
 - [ ] **Type Safety**: Compile-time validation where possible
-- [ ] **Performance**: Merging adds <5% overhead compared to individual rendering
+- [ ] **Performance**: Merging adds <5% overhead compared to individual
+      rendering
 
 ## Technical Design
 
@@ -49,10 +57,10 @@ Currently, the Merge composition mode in GUP-021 uses a placeholder implementati
 pub trait Mergeable<T> {
     /// Get the underlying data for merging
     fn extract_data(&self) -> &[T];
-    
+
     /// Create a new visualization from merged data
     fn from_merged_data(data: Vec<T>) -> Self;
-    
+
     /// Check if this visualization can merge with another data type
     fn can_merge_with<U>(&self, _other_type: std::marker::PhantomData<U>) -> bool {
         std::any::TypeId::of::<T>() == std::any::TypeId::of::<U>()
@@ -87,18 +95,18 @@ impl<A: Mixable + Mergeable<T>, B: Mixable + Mergeable<T>> ComposedVisualization
                 "Components have incompatible data types for merging".to_string()
             ));
         }
-        
+
         // Extract data from both components
         let data1 = self.first.extract_data();
         let data2 = self.second.extract_data();
-        
+
         // Apply merge strategy
         let merged_data = self.merge_strategy.apply(data1, data2)?;
-        
+
         // Create and render unified visualization
         let unified_viz = A::from_merged_data(merged_data);
         unified_viz.render(context)?;
-        
+
         Ok(())
     }
 }
@@ -125,13 +133,13 @@ impl<A: Mixable + Mergeable<T>, B: Mixable + Mergeable<T>> ComposedVisualization
 async fn test_compatible_data_merge() {
     let data1 = vec![(1.0, 2.0), (3.0, 4.0)];
     let data2 = vec![(5.0, 6.0), (7.0, 8.0)];
-    
+
     let plot1 = ScatterPlot::new(data1);
     let plot2 = ScatterPlot::new(data2);
-    
+
     let mut merged = plot1.merge(plot2);
     let mut context = RenderContext::new().await.unwrap();
-    
+
     assert!(merged.render(&mut context).is_ok());
     // Verify merged visualization contains all 4 data points
 }
@@ -140,13 +148,13 @@ async fn test_compatible_data_merge() {
 async fn test_incompatible_merge_error() {
     let scatter_data = vec![(1.0, 2.0)];
     let heatmap_data = Grid::new(10, 10);
-    
+
     let scatter = ScatterPlot::new(scatter_data);
     let heatmap = HeatMap::new(heatmap_data);
-    
+
     let mut merged = scatter.merge(heatmap);
     let mut context = RenderContext::new().await.unwrap();
-    
+
     assert!(merged.render(&mut context).is_err());
 }
 ```
@@ -158,7 +166,7 @@ async fn test_incompatible_merge_error() {
 fn bench_merge_vs_individual_rendering(b: &mut Bencher) {
     let plot1 = create_large_scatter_plot(10000);
     let plot2 = create_large_scatter_plot(10000);
-    
+
     b.iter(|| {
         let merged = plot1.clone().merge(plot2.clone());
         black_box(merged.render(&mut context)).unwrap();
@@ -190,7 +198,8 @@ fn bench_merge_vs_individual_rendering(b: &mut Bencher) {
 
 - [ ] **Functionality**: Compatible visualizations can be merged successfully
 - [ ] **Performance**: Merge overhead <5% compared to individual components
-- [ ] **Type Safety**: Incompatible merges detected at compile time where possible
+- [ ] **Type Safety**: Incompatible merges detected at compile time where
+      possible
 - [ ] **Memory Usage**: No significant memory overhead from merge operations
 - [ ] **Developer Experience**: Clear API and helpful error messages
 

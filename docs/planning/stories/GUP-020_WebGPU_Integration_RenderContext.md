@@ -2,43 +2,54 @@
 
 ## Story Overview
 
-**Title**: Implement Full WebGPU Integration for RenderContext and Mixable Rendering  
-**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API  
-**Priority**: Critical  
-**Story Points**: 8  
+**Title**: Implement Full WebGPU Integration for RenderContext and Mixable
+Rendering **Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API
+**Priority**: Critical **Story Points**: 8
 
 ## Context
 
-The current RenderContext contains placeholder WebGPU resources (`Option<wgpu::Device>`) that are never initialized, making the Mixable trait's `render()` methods essentially non-functional. This story implements full WebGPU integration to enable actual GPU-accelerated rendering of composed visualizations, providing the foundation for all subsequent Phase 1 development.
+The current RenderContext contains placeholder WebGPU resources
+(`Option<wgpu::Device>`) that are never initialized, making the Mixable trait's
+`render()` methods essentially non-functional. This story implements full WebGPU
+integration to enable actual GPU-accelerated rendering of composed
+visualizations, providing the foundation for all subsequent Phase 1 development.
 
 ## User Story
 
-**As a** visualization developer using Gup  
-**I want** the RenderContext to provide fully functional WebGPU resources  
-**So that** I can create Mixable visualizations that perform actual GPU rendering and composition  
+**As a** visualization developer using Gup **I want** the RenderContext to
+provide fully functional WebGPU resources **So that** I can create Mixable
+visualizations that perform actual GPU rendering and composition
 
 ## Acceptance Criteria
 
-### Core WebGPU Integration
+### AC1: Core WebGPU Integration
 
-- [ ] **Device Initialization**: RenderContext successfully initializes WebGPU device and queue
-- [ ] **Surface Management**: Support for both native window surfaces and offscreen rendering
-- [ ] **Cross-Platform Support**: Works on Windows, macOS, Linux, and WebAssembly
-- [ ] **Error Handling**: Comprehensive error handling for GPU resource creation and management
+- [ ] **Device Initialization**: RenderContext successfully initializes WebGPU
+      device and queue
+- [ ] **Surface Management**: Support for both native window surfaces and
+      offscreen rendering
+- [ ] **Cross-Platform Support**: Works on Windows, macOS, Linux, and
+      WebAssembly
+- [ ] **Error Handling**: Comprehensive error handling for GPU resource creation
+      and management
 
-### Render Context Functionality
+### AC2: Render Context Functionality
 
 - [ ] **Command Encoding**: Efficient command encoder lifecycle management
 - [ ] **Resource Management**: GPU buffer and texture creation and cleanup
 - [ ] **Synchronization**: Proper queue submission and device polling
 - [ ] **Multi-Frame Support**: Frame-to-frame resource management and recycling
 
-### Mixable Integration
+### AC3: Mixable Integration
 
-- [ ] **Real GPU Rendering**: Mixable trait implementations perform actual GPU operations
-- [ ] **Composition Support**: Composed visualizations render correctly to same render target
-- [ ] **Resource Sharing**: Multiple Mixable components share GPU resources efficiently
-- [ ] **Error Propagation**: GPU errors propagate properly through composition chain
+- [ ] **Real GPU Rendering**: Mixable trait implementations perform actual GPU
+      operations
+- [ ] **Composition Support**: Composed visualizations render correctly to same
+      render target
+- [ ] **Resource Sharing**: Multiple Mixable components share GPU resources
+      efficiently
+- [ ] **Error Propagation**: GPU errors propagate properly through composition
+      chain
 
 ## Technical Tasks
 
@@ -555,10 +566,12 @@ impl Mixable for GpuScatterPlot {
 
 ### Enables Stories
 
-- GUP-019: Meaningful Mixable Performance Validation (needs real GPU work to benchmark)
+- GUP-019: Meaningful Mixable Performance Validation (needs real GPU work to
+  benchmark)
 - GUP-002: Core Selection Type (needs RenderContext for GPU operations)
 - GUP-003: GPU Buffer Management (builds on WebGPU infrastructure)
-- GUP-004: Basic Render Context (this story IS the render context implementation)
+- GUP-004: Basic Render Context (this story IS the render context
+  implementation)
 
 ## Testing Strategy
 
@@ -569,7 +582,7 @@ impl Mixable for GpuScatterPlot {
 async fn test_render_context_initialization() {
     let context = RenderContext::new().await;
     assert!(context.is_ok());
-    
+
     let context = context.unwrap();
     assert!(context.device().limits().max_texture_dimension_2d > 0);
 }
@@ -586,12 +599,12 @@ async fn test_surface_initialization() {
 #[tokio::test]
 async fn test_basic_gpu_rendering() {
     let mut context = RenderContext::new().await.unwrap();
-    
+
     let scatter_plot = GpuScatterPlot::new(
         vec![(0.0, 0.0), (0.5, 0.5), (-0.5, -0.5)],
         [1.0, 0.0, 0.0, 1.0],
     );
-    
+
     let result = scatter_plot.render(&mut context);
     assert!(result.is_ok());
 }
@@ -621,13 +634,13 @@ async fn test_native_webgpu() {
 #[tokio::test]
 async fn test_composed_gpu_rendering() {
     let mut context = RenderContext::new().await.unwrap();
-    
+
     let plot1 = GpuScatterPlot::new(vec![(0.0, 0.0)], [1.0, 0.0, 0.0, 1.0]);
     let plot2 = GpuScatterPlot::new(vec![(0.5, 0.5)], [0.0, 1.0, 0.0, 1.0]);
-    
+
     let composed = plot1.mix(plot2);
     let result = composed.render(&mut context);
-    
+
     assert!(result.is_ok());
 }
 ```
@@ -636,14 +649,16 @@ async fn test_composed_gpu_rendering() {
 
 ### Functional Requirements
 
-- [ ] **Cross-Platform Initialization**: WebGPU initializes successfully on all target platforms
+- [ ] **Cross-Platform Initialization**: WebGPU initializes successfully on all
+      target platforms
 - [ ] **Real GPU Rendering**: Mixable components perform actual GPU operations
 - [ ] **Composition Compatibility**: Composed visualizations render correctly
 - [ ] **Resource Management**: No GPU resource leaks or crashes
 
 ### Performance Requirements
 
-- [ ] **Initialization Time**: Context creation completes within 100ms on target hardware
+- [ ] **Initialization Time**: Context creation completes within 100ms on target
+      hardware
 - [ ] **Frame Rate**: Maintains 60fps for basic rendering scenarios
 - [ ] **Memory Usage**: GPU memory usage scales linearly with data size
 - [ ] **Error Recovery**: Graceful handling of GPU device loss and recovery

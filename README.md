@@ -5,8 +5,8 @@
 
 Gup (GPU Update Pattern) is a high-performance data visualization library for
 Rust that combines the declarative elegance of D3.js with the raw power of GPU
-computing. Designed for real-time visualization of massive datasets, Gup
-enables smooth 60+ FPS interactions with millions to billions of data points.
+computing. Designed for real-time visualization of massive datasets, Gup enables
+smooth 60+ FPS interactions with millions to billions of data points.
 
 ## Motivation
 
@@ -200,10 +200,10 @@ gup/
 ## License
 
 This project is licensed under the GNU General Public License v3.0 or later
-(GPL-3.0-or-later).  See [COPYING](COPYING) for details.
+(GPL-3.0-or-later). See [COPYING](COPYING) for details.
 
 ---
 
 **Gup is transforming data visualization by bringing GPU performance to
-declarative, composable APIs. Join us in building the future of
-high-performance data visualization.**
+declarative, composable APIs. Join us in building the future of high-performance
+data visualization.**

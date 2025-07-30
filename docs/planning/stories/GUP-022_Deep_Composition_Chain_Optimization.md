@@ -2,42 +2,54 @@
 
 ## Story Overview
 
-**Title**: Optimize Performance and Memory Usage for Deep Composition Chains  
-**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API  
-**Priority**: Medium  
-**Story Points**: 5  
+**Title**: Optimize Performance and Memory Usage for Deep Composition Chains
+**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API
+**Priority**: Medium **Story Points**: 5
 
 ## Context
 
-While the basic Mixable trait supports composition chaining (e.g., `a.mix(b).mix(c).mix(d)`), deep composition chains may suffer from performance and memory inefficiencies due to nested render calls and redundant GPU state changes. This story implements optimizations to ensure composition chains scale efficiently.
+While the basic Mixable trait supports composition chaining (e.g.,
+`a.mix(b).mix(c).mix(d)`), deep composition chains may suffer from performance
+and memory inefficiencies due to nested render calls and redundant GPU state
+changes. This story implements optimizations to ensure composition chains scale
+efficiently.
 
 ## User Story
 
-**As a** developer building complex visualizations  
-**I want** deep composition chains to maintain good performance  
-**So that** I can compose many visualization components without worrying about performance degradation  
+**As a** developer building complex visualizations **I want** deep composition
+chains to maintain good performance **So that** I can compose many visualization
+components without worrying about performance degradation
 
 ## Acceptance Criteria
 
-### Performance Requirements
+### AC1: Performance Requirements
 
-- [ ] **Linear Scaling**: Composition overhead scales linearly with chain depth, not exponentially
-- [ ] **Batch Rendering**: Deep chains batch render operations to minimize GPU state changes
-- [ ] **Memory Efficiency**: Memory usage doesn't grow excessively with composition depth
-- [ ] **Render Optimization**: Redundant render operations are eliminated or merged
+- [ ] **Linear Scaling**: Composition overhead scales linearly with chain depth,
+      not exponentially
+- [ ] **Batch Rendering**: Deep chains batch render operations to minimize GPU
+      state changes
+- [ ] **Memory Efficiency**: Memory usage doesn't grow excessively with
+      composition depth
+- [ ] **Render Optimization**: Redundant render operations are eliminated or
+      merged
 
-### Technical Requirements
+### AC2: Technical Requirements
 
-- [ ] **Composition Flattening**: Deep nested compositions are flattened into efficient structures
-- [ ] **Render Batching**: Similar components are batched together for efficient GPU usage
+- [ ] **Composition Flattening**: Deep nested compositions are flattened into
+      efficient structures
+- [ ] **Render Batching**: Similar components are batched together for efficient
+      GPU usage
 - [ ] **Resource Pooling**: GPU resources are reused across composition chains
 - [ ] **Smart Caching**: Intermediate render results are cached when beneficial
 
-### API Compatibility
+### AC3: API Compatibility
 
-- [ ] **Transparent Optimization**: Optimizations don't change the Mixable trait API
-- [ ] **Correctness Preservation**: Optimized rendering produces identical visual results
-- [ ] **Memory Safety**: Optimizations don't introduce memory leaks or unsafe operations
+- [ ] **Transparent Optimization**: Optimizations don't change the Mixable trait
+      API
+- [ ] **Correctness Preservation**: Optimized rendering produces identical
+      visual results
+- [ ] **Memory Safety**: Optimizations don't introduce memory leaks or unsafe
+      operations
 
 ## Technical Tasks
 
@@ -237,7 +249,7 @@ impl CompositionExecutor {
     fn create_batches(&mut self) -> GupResult<()> {
         // Group operations by type and compatibility
         let mut type_groups: HashMap<TypeId, Vec<&RenderOperation>> = HashMap::new();
-        
+
         for operation in &self.operations {
             type_groups.entry(operation.component_type)
                       .or_default()
@@ -252,7 +264,7 @@ impl CompositionExecutor {
 
             for operation in operations {
                 let state = self.get_render_state(operation)?;
-                
+
                 if let Some(ref current) = current_state {
                     if self.can_batch_with_state(current, &state) {
                         current_batch.push(operation.id);
@@ -454,7 +466,7 @@ impl RenderCache {
         if let Some((key, _)) = self.entries.iter()
             .min_by_key(|(_, entry)| entry.timestamp)
             .map(|(k, v)| (k.clone(), v.size)) {
-            
+
             if let Some(entry) = self.entries.remove(&key) {
                 self.current_size -= entry.size;
             }
@@ -538,7 +550,8 @@ impl CompositionExecutor {
 ### Prerequisite Stories
 
 - GUP-001: Build Mixable Trait (provides composition framework)
-- GUP-020: WebGPU Integration for RenderContext (provides GPU resource management)
+- GUP-020: WebGPU Integration for RenderContext (provides GPU resource
+  management)
 
 ### Enables Stories
 
@@ -553,7 +566,7 @@ impl CompositionExecutor {
 #[tokio::test]
 async fn test_deep_composition_performance() {
     let mut context = RenderContext::new().await.unwrap();
-    
+
     // Create a deep composition chain
     let mut composition = create_base_visualization();
     for i in 0..20 {
@@ -567,14 +580,14 @@ async fn test_deep_composition_performance() {
     let optimized_time = start.elapsed();
 
     assert!(result.is_ok());
-    
+
     // Measure performance without optimization
     let start = std::time::Instant::now();
     let result = composition.render(&mut context);
     let direct_time = start.elapsed();
 
     assert!(result.is_ok());
-    
+
     // Optimization should provide measurable benefit for deep chains
     assert!(optimized_time < direct_time * 0.8); // At least 20% improvement
 }
@@ -582,15 +595,15 @@ async fn test_deep_composition_performance() {
 #[test]
 fn test_composition_flattening() {
     let mut executor = CompositionExecutor::new();
-    
+
     // Create nested composition
     let a = create_test_component("a");
     let b = create_test_component("b");
     let c = create_test_component("c");
     let composition = a.mix(b).mix(c);
-    
+
     executor.flatten_composition(&composition).unwrap();
-    
+
     let metrics = executor.metrics();
     assert_eq!(metrics.operation_count, 3); // Should flatten to 3 operations
     assert!(metrics.batch_count > 0);
@@ -603,23 +616,23 @@ fn test_composition_flattening() {
 #[tokio::test]
 async fn test_memory_efficiency() {
     let mut context = RenderContext::new().await.unwrap();
-    
+
     // Create many similar visualizations
     let visualizations: Vec<_> = (0..100)
         .map(|i| create_similar_visualization(i))
         .collect();
-    
+
     // Compose them all together
     let mut composition = visualizations.into_iter()
         .reduce(|acc, viz| acc.mix(viz))
         .unwrap();
-    
+
     let memory_before = get_memory_usage();
     composition.render_optimized(&mut context).unwrap();
     let memory_after = get_memory_usage();
-    
+
     let memory_used = memory_after - memory_before;
-    
+
     // Should use significantly less memory than naive approach
     assert!(memory_used < expected_naive_memory_usage() * 0.5);
 }
@@ -630,15 +643,19 @@ async fn test_memory_efficiency() {
 ### Performance Requirements
 
 - [ ] **Linear Scaling**: Deep composition chains scale linearly with depth
-- [ ] **Batch Efficiency**: Similar components are batched together (>80% batching rate)
+- [ ] **Batch Efficiency**: Similar components are batched together (>80%
+      batching rate)
 - [ ] **Memory Usage**: Memory growth is linear, not exponential with depth
-- [ ] **Cache Effectiveness**: Render cache provides measurable performance benefit
+- [ ] **Cache Effectiveness**: Render cache provides measurable performance
+      benefit
 
 ### Quality Requirements
 
-- [ ] **Visual Correctness**: Optimized rendering produces identical results to direct rendering
+- [ ] **Visual Correctness**: Optimized rendering produces identical results to
+      direct rendering
 - [ ] **API Transparency**: Optimizations don't change external API behavior
-- [ ] **Error Handling**: Optimization failures fall back gracefully to direct rendering
+- [ ] **Error Handling**: Optimization failures fall back gracefully to direct
+      rendering
 
 ## Risk Assessment
 
@@ -650,9 +667,11 @@ async fn test_memory_efficiency() {
 
 ### Mitigation Strategies
 
-- **Thorough Testing**: Extensive visual regression testing for optimization correctness
+- **Thorough Testing**: Extensive visual regression testing for optimization
+  correctness
 - **Conservative Batching**: Only batch components with proven compatibility
-- **Adaptive Optimization**: Fall back to direct rendering when optimization fails
+- **Adaptive Optimization**: Fall back to direct rendering when optimization
+  fails
 
 ## Implementation Notes
 
@@ -683,4 +702,5 @@ async fn test_memory_efficiency() {
 - [ ] Performance monitoring provides insights into optimization effectiveness
 - [ ] Fallback mechanisms handle optimization failures gracefully
 - [ ] Code review completed and approved
-- [ ] Documentation updated with optimization guidelines and performance characteristics
+- [ ] Documentation updated with optimization guidelines and performance
+      characteristics

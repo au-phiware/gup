@@ -2,31 +2,35 @@
 
 ## Story Overview
 
-**Title**: Implement High-Level Event Handling System  
-**Epic**: Phase 1 Initiative 4 - Interaction System and Performance  
-**Priority**: High  
-**Story Points**: 8  
+**Title**: Implement High-Level Event Handling System **Epic**: Phase 1
+Initiative 4 - Interaction System and Performance **Priority**: High **Story
+Points**: 8
 
 ## Context
 
-The event handling system provides the high-level interface for developers to respond to user interactions. It must connect GPU interaction results with familiar event handling patterns, support event propagation and bubbling, and provide a clean API that feels natural to developers coming from web or desktop UI frameworks.
+The event handling system provides the high-level interface for developers to
+respond to user interactions. It must connect GPU interaction results with
+familiar event handling patterns, support event propagation and bubbling, and
+provide a clean API that feels natural to developers coming from web or desktop
+UI frameworks.
 
 ## User Story
 
-**As a** visualization developer  
-**I want** a familiar, powerful event handling system  
-**So that** I can easily create interactive visualizations with hover effects, click handlers, drag operations, and complex interaction patterns  
+**As a** visualization developer **I want** a familiar, powerful event handling
+system **So that** I can easily create interactive visualizations with hover
+effects, click handlers, drag operations, and complex interaction patterns
 
 ## Acceptance Criteria
 
-### Event System Features
+### AC1: Event System Features
 
-- [ ] **Familiar API**: Event handling that feels like DOM events or modern UI frameworks
+- [ ] **Familiar API**: Event handling that feels like DOM events or modern UI
+      frameworks
 - [ ] **Event Types**: Support for mouse, touch, keyboard, and custom events
 - [ ] **Event Propagation**: Bubbling, capturing, and cancellation mechanisms
 - [ ] **Event Filtering**: Ability to filter events by conditions and priorities
 
-### Developer Experience
+### AC2: Developer Experience
 
 ```rust
 // Familiar event handling API
@@ -42,12 +46,14 @@ chart.select_all::<Circle>()
     });
 ```
 
-### Event Performance
+### AC3: Event Performance
 
 - [ ] **Low Latency**: <16ms from user input to event handler execution
-- [ ] **High Throughput**: Handle 1000+ events per second without performance degradation
+- [ ] **High Throughput**: Handle 1000+ events per second without performance
+      degradation
 - [ ] **Memory Efficiency**: Minimal memory overhead for event handler storage
-- [ ] **Async Support**: Support for both synchronous and asynchronous event handlers
+- [ ] **Async Support**: Support for both synchronous and asynchronous event
+      handlers
 
 ## Technical Tasks
 
@@ -92,17 +98,17 @@ pub enum EventType {
     MouseUp(Vec2, MouseButton),
     MouseEnter(Vec2),
     MouseLeave(Vec2),
-    
+
     // Touch events
     TouchStart(Vec<TouchPoint>),
     TouchMove(Vec<TouchPoint>),
     TouchEnd(Vec<TouchPoint>),
-    
+
     // Gesture events
     Pinch(PinchGesture),
     Zoom(ZoomGesture),
     Rotate(RotateGesture),
-    
+
     // Custom events
     Custom(String, Box<dyn Any + Send + Sync>),
 }
@@ -145,10 +151,10 @@ pub struct EventManager {
 }
 
 impl EventManager {
-    pub fn register_handler<F, T>(&mut self, 
+    pub fn register_handler<F, T>(&mut self,
         event_type: EventType,
         handler: F,
-    ) where 
+    ) where
         F: Fn(&InteractionEvent, &T) -> EventResult + Send + Sync + 'static,
         T: 'static,
     {
@@ -159,31 +165,31 @@ impl EventManager {
                 EventResult::Continue
             }
         };
-        
+
         self.handlers.entry(event_type)
             .or_default()
             .push(HandlerEntry::new(Box::new(wrapped_handler)));
     }
-    
+
     pub async fn process_event(&mut self, event: InteractionEvent) {
         // Find affected elements through GPU interaction system
         let hits = self.interaction_system.query_event(&event).await;
-        
+
         // Process event for each hit element
         for hit in hits {
             let mut event_with_hit = event.clone();
             event_with_hit.hit = Some(hit.clone());
-            
+
             // Get data for hit element
             if let Some(data) = self.get_data_for_hit(&hit) {
                 self.execute_handlers(&event_with_hit, data).await;
             }
-            
+
             if event_with_hit.propagation_stopped {
                 break;
             }
         }
-        
+
         // Process global handlers
         self.execute_global_handlers(&event).await;
     }
@@ -199,7 +205,7 @@ impl<T, M: Mark> Selection<T, M> {
     {
         let selection_id = self.id();
         let event_type = event_type.parse().unwrap_or(EventType::Custom(event_type.to_string(), Box::new(())));
-        
+
         // Create handler that only fires for this selection's elements
         let filtered_handler = move |event: &InteractionEvent, data: &dyn Any| {
             if let Some(hit) = &event.hit {
@@ -212,42 +218,42 @@ impl<T, M: Mark> Selection<T, M> {
             }
             EventResult::Continue
         };
-        
+
         self.event_manager.register_handler(event_type, filtered_handler);
         self
     }
-    
+
     pub fn on_hover<F>(&mut self, handler: F) -> &mut Self
     where F: Fn(&T) + Send + Sync + 'static
     {
         self.on("mouseenter", move |_event, data| handler(data))
     }
-    
-    pub fn on_click<F>(&mut self, handler: F) -> &mut Self  
+
+    pub fn on_click<F>(&mut self, handler: F) -> &mut Self
     where F: Fn(&T) + Send + Sync + 'static
     {
         self.on("click", move |_event, data| handler(data))
     }
-    
+
     pub fn on_drag<F>(&mut self, handler: F) -> &mut Self
     where F: Fn(&T, Vec2, Vec2) + Send + Sync + 'static
     {
         let mut drag_start = None;
-        
+
         self.on("mousedown", move |event, _data| {
             drag_start = Some(event.position);
         });
-        
+
         self.on("mousemove", move |event, data| {
             if let Some(start_pos) = drag_start {
                 handler(data, start_pos, event.position);
             }
         });
-        
+
         self.on("mouseup", move |_event, _data| {
             drag_start = None;
         });
-        
+
         self
     }
 }
@@ -282,7 +288,7 @@ impl Gesture for PinchGesture {
                 let distance = (touches[0].position - touches[1].position).length();
                 self.current_distance = distance;
                 self.center_point = (touches[0].position + touches[1].position) * 0.5;
-                
+
                 if (self.current_distance - self.initial_distance).abs() > self.threshold {
                     GestureState::Active
                 } else {
@@ -292,7 +298,7 @@ impl Gesture for PinchGesture {
             _ => GestureState::Failed
         }
     }
-    
+
     fn complete(&self) -> Option<EventType> {
         Some(EventType::Pinch(PinchGestureData {
             scale: self.current_distance / self.initial_distance,
@@ -323,15 +329,15 @@ impl Gesture for PinchGesture {
 fn test_event_handler_registration() {
     let mut manager = EventManager::new();
     let mut handler_called = false;
-    
+
     manager.register_handler(EventType::MouseDown, |_event, _data: &TestData| {
         handler_called = true;
         EventResult::Handled
     });
-    
+
     let event = create_test_mouse_event();
     manager.process_event(event).await;
-    
+
     assert!(handler_called);
 }
 
@@ -339,26 +345,26 @@ fn test_event_handler_registration() {
 fn test_event_propagation() {
     let mut manager = EventManager::new();
     let mut call_order = Vec::new();
-    
+
     // Register multiple handlers with different priorities
     manager.register_handler_with_priority(
-        EventType::MouseDown, 
+        EventType::MouseDown,
         EventPriority::High,
         |_event, _data: &TestData| {
             call_order.push("high");
             EventResult::Continue
         }
     );
-    
+
     manager.register_handler_with_priority(
         EventType::MouseDown,
-        EventPriority::Normal, 
+        EventPriority::Normal,
         |_event, _data: &TestData| {
             call_order.push("normal");
             EventResult::StopPropagation
         }
     );
-    
+
     manager.register_handler_with_priority(
         EventType::MouseDown,
         EventPriority::Low,
@@ -367,10 +373,10 @@ fn test_event_propagation() {
             EventResult::Continue
         }
     );
-    
+
     let event = create_test_mouse_event();
     manager.process_event(event).await;
-    
+
     assert_eq!(call_order, vec!["high", "normal"]);
     // "low" should not be called due to StopPropagation
 }
@@ -379,22 +385,22 @@ fn test_event_propagation() {
 fn test_selection_event_filtering() {
     let mut selection1 = create_test_selection::<TestData, Circle>(1);
     let mut selection2 = create_test_selection::<TestData, Rectangle>(2);
-    
+
     let mut selection1_clicked = false;
     let mut selection2_clicked = false;
-    
+
     selection1.on("click", |_event, _data| {
         selection1_clicked = true;
     });
-    
+
     selection2.on("click", |_event, _data| {
         selection2_clicked = true;
     });
-    
+
     // Simulate click on selection1 element
     let event = create_click_event_for_selection(1, 0);
     process_event(event).await;
-    
+
     assert!(selection1_clicked);
     assert!(!selection2_clicked);
 }
@@ -407,10 +413,10 @@ fn test_selection_event_filtering() {
 async fn test_complete_interaction_flow() {
     let device = create_test_device();
     let mut chart = Chart::new(&device);
-    
+
     let mut tooltip_data = None;
     let mut click_count = 0;
-    
+
     chart.select_all::<Circle>()
         .data(test_data)
         .on("hover", |_event, data| {
@@ -419,18 +425,18 @@ async fn test_complete_interaction_flow() {
         .on("click", |_event, _data| {
             click_count += 1;
         });
-    
+
     // Simulate mouse hover
     let hover_event = MouseEvent::Move(Vec2::new(50.0, 50.0));
     chart.process_input_event(hover_event).await;
-    
+
     assert!(tooltip_data.is_some());
     assert_eq!(click_count, 0);
-    
+
     // Simulate mouse click
     let click_event = MouseEvent::Down(Vec2::new(50.0, 50.0), MouseButton::Left);
     chart.process_input_event(click_event).await;
-    
+
     assert_eq!(click_count, 1);
 }
 
@@ -438,25 +444,25 @@ async fn test_complete_interaction_flow() {
 async fn test_gesture_recognition() {
     let mut recognizer = GestureRecognizer::new();
     let mut pinch_detected = false;
-    
+
     recognizer.register_gesture_handler("pinch", |gesture_data| {
         pinch_detected = true;
     });
-    
+
     // Simulate pinch gesture
     let touch1_start = TouchEvent::Start(TouchPoint { id: 1, position: Vec2::new(100.0, 100.0) });
     let touch2_start = TouchEvent::Start(TouchPoint { id: 2, position: Vec2::new(200.0, 200.0) });
-    
+
     recognizer.process_input(touch1_start).await;
     recognizer.process_input(touch2_start).await;
-    
+
     // Move touches closer together
     let touch1_move = TouchEvent::Move(TouchPoint { id: 1, position: Vec2::new(120.0, 120.0) });
     let touch2_move = TouchEvent::Move(TouchPoint { id: 2, position: Vec2::new(180.0, 180.0) });
-    
+
     recognizer.process_input(touch1_move).await;
     recognizer.process_input(touch2_move).await;
-    
+
     assert!(pinch_detected);
 }
 ```
@@ -468,7 +474,7 @@ async fn test_gesture_recognition() {
 async fn bench_event_processing_throughput(b: &mut Bencher) {
     let manager = create_event_manager_with_handlers(1000);
     let events = create_test_events(1000);
-    
+
     b.iter(|| async {
         for event in &events {
             manager.process_event(event.clone()).await;
@@ -480,7 +486,7 @@ async fn bench_event_processing_throughput(b: &mut Bencher) {
 async fn bench_event_handler_latency(b: &mut Bencher) {
     let manager = create_event_manager();
     let event = create_test_event();
-    
+
     b.iter(|| async {
         let start = Instant::now();
         manager.process_event(event.clone()).await;
@@ -502,14 +508,16 @@ async fn bench_event_handler_latency(b: &mut Bencher) {
 ### API Usability Requirements
 
 - [ ] **Intuitive API**: Event handling feels familiar to web/desktop developers
-- [ ] **Type Safety**: Invalid event handler registrations caught at compile time
+- [ ] **Type Safety**: Invalid event handler registrations caught at compile
+      time
 - [ ] **Error Handling**: Clear error messages for event handling failures
 - [ ] **Documentation**: Complete examples for all common interaction patterns
 
 ### Feature Completeness Requirements
 
 - [ ] **Event Types**: Support all common mouse, touch, and gesture events
-- [ ] **Event Propagation**: Bubbling, capturing, and cancellation working correctly
+- [ ] **Event Propagation**: Bubbling, capturing, and cancellation working
+      correctly
 - [ ] **Gesture Recognition**: Basic gestures (pinch, zoom, rotate) working
 - [ ] **Custom Events**: Support for user-defined event types
 
@@ -517,14 +525,17 @@ async fn bench_event_handler_latency(b: &mut Bencher) {
 
 ### Technical Risks
 
-- **Medium**: Event handler performance could degrade with large numbers of handlers
+- **Medium**: Event handler performance could degrade with large numbers of
+  handlers
 - **Medium**: Event propagation complexity could introduce bugs
 - **Low**: Platform differences in input handling could cause inconsistencies
 
 ### Mitigation Strategies
 
-- **Performance Testing**: Continuous benchmarking of event processing performance
-- **Reference Implementation**: Compare against established event systems for correctness
+- **Performance Testing**: Continuous benchmarking of event processing
+  performance
+- **Reference Implementation**: Compare against established event systems for
+  correctness
 - **Platform Testing**: Test on all supported platforms for consistency
 
 ## Implementation Notes

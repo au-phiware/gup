@@ -2,24 +2,28 @@
 
 ## Story Overview
 
-**Title**: Implement #[wgsl_function] Procedural Macro  
-**Epic**: Phase 1 Initiative 2 - Unified Shader Function System  
-**Priority**: Critical  
-**Story Points**: 13  
+**Title**: Implement `#[wgsl_function]` Procedural Macro **Epic**: Phase 1
+Initiative 2 - Unified Shader Function System **Priority**: Critical **Story
+Points**: 13
 
 ## Context
 
-The `#[wgsl_function]` macro is the key developer experience feature that makes Gup accessible. It allows developers to write shader functions in WGSL syntax and automatically generates the corresponding Rust `ShaderFunction` trait implementation. This macro must be reliable, produce high-quality code, and provide clear error messages.
+The `#[wgsl_function]` macro is the key developer experience feature that makes
+Gup accessible. It allows developers to write shader functions in WGSL syntax
+and automatically generates the corresponding Rust `ShaderFunction` trait
+implementation. This macro must be reliable, produce high-quality code, and
+provide clear error messages.
 
 ## User Story
 
-**As a** visualization developer  
-**I want** to write WGSL functions that automatically generate Rust trait implementations  
-**So that** I can create custom GPU transformations without manually implementing complex trait boilerplate  
+**As a** visualization developer **I want** to write WGSL functions that
+automatically generate Rust trait implementations **So that** I can create
+custom GPU transformations without manually implementing complex trait
+boilerplate
 
 ## Acceptance Criteria
 
-### Macro Usage Pattern
+### AC1: Macro Usage Pattern
 
 ```rust
 // Write WGSL, get Rust traits automatically
@@ -36,14 +40,14 @@ fn linear_scale(value: f32, scale: LinearScaleUniforms) -> f32 {
 // - Automatic type inference and validation
 ```
 
-### Macro Features
+### AC2: Macro Features
 
 - [ ] **WGSL Parsing**: Parse valid WGSL function syntax
 - [ ] **Type Inference**: Automatically infer Input/Output types
 - [ ] **Uniform Generation**: Generate uniform structs from function parameters
 - [ ] **Error Handling**: Clear error messages for invalid WGSL syntax
 
-### Generated Code Quality
+### AC3: Generated Code Quality
 
 - [ ] **Idiomatic Rust**: Generated code follows Rust best practices
 - [ ] **Type Safety**: Generated implementations preserve WGSL type safety
@@ -166,7 +170,7 @@ impl LinearScale {
 
 ```rust
 #[wgsl_function]
-fn vector_scale<T>(value: T, scale: f32) -> T 
+fn vector_scale<T>(value: T, scale: f32) -> T
 where T: VectorType
 {
     return value * scale;
@@ -218,7 +222,7 @@ fn test_macro_basic_function() {
     fn test_scale(value: f32, scale: f32) -> f32 {
         return value * scale;
     }
-    
+
     let scale_func = TestScale::new(2.0);
     assert_eq!(TestScale::function_name(), "test_scale");
     assert!(TestScale::wgsl_function().contains("test_scale"));
@@ -231,7 +235,7 @@ fn test_macro_with_uniforms() {
         let scaled = input * params.scale;
         return vec4<f32>(scaled.x, scaled.y, params.z_value, 1.0);
     }
-    
+
     let transform = ComplexTransform::new(2.0, 5.0);
     let uniforms = transform.create_uniforms().unwrap();
     assert_eq!(uniforms.scale, 2.0);
@@ -248,7 +252,7 @@ fn test_macro_generates_valid_wgsl() {
     fn position_transform(value: f32, scale: f32) -> vec2<f32> {
         return vec2<f32>(value * scale, value * scale * 0.5);
     }
-    
+
     // Test that generated WGSL compiles on actual GPU
     let device = create_test_device();
     let shader_source = PositionTransform::wgsl_function();
@@ -272,7 +276,7 @@ fn test_macro_error_handling() {
             return x.invalid_field;
         }
     };
-    
+
     let result = parse_macro(invalid_syntax);
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("unknown_type"));
@@ -287,7 +291,7 @@ fn test_generated_code_compiles(func_name: String, param_types: Vec<String>) -> 
     if !is_valid_wgsl_function(&func_name, &param_types) {
         return true; // Skip invalid inputs
     }
-    
+
     let generated = generate_macro_output(&func_name, &param_types);
     rust_code_compiles(&generated)
 }
@@ -307,7 +311,8 @@ fn test_generated_code_compiles(func_name: String, param_types: Vec<String>) -> 
 - [ ] **IDE Support**: Generated code provides full autocomplete and type hints
 - [ ] **Documentation**: Automatic rustdoc generation for all generated types
 - [ ] **Debugging**: Generated code is debuggable with clear stack traces
-- [ ] **Error Recovery**: Partial compilation continues despite some macro errors
+- [ ] **Error Recovery**: Partial compilation continues despite some macro
+      errors
 
 ## Risk Assessment
 
@@ -319,9 +324,11 @@ fn test_generated_code_compiles(func_name: String, param_types: Vec<String>) -> 
 
 ### Mitigation Strategies
 
-- **Incremental Implementation**: Start with simple cases, add complexity gradually
+- **Incremental Implementation**: Start with simple cases, add complexity
+  gradually
 - **Comprehensive Testing**: Test all common WGSL patterns and edge cases
-- **Error Message Focus**: Prioritize clear, helpful error messages over feature completeness
+- **Error Message Focus**: Prioritize clear, helpful error messages over feature
+  completeness
 
 ## Implementation Notes
 

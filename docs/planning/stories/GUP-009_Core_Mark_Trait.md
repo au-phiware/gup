@@ -2,24 +2,26 @@
 
 ## Story Overview
 
-**Title**: Implement Core Mark Trait and System  
-**Epic**: Phase 1 Initiative 3 - Mark System and Type Integration  
-**Priority**: Critical  
-**Story Points**: 8  
+**Title**: Implement Core Mark Trait and System **Epic**: Phase 1 Initiative 3 -
+Mark System and Type Integration **Priority**: Critical **Story Points**: 8
 
 ## Context
 
-The Mark trait defines the interface that all visual primitives implement. It bridges high-level visualization concepts (circles, rectangles, lines) with low-level GPU rendering. The trait must support both hand-optimized shaders for performance and generated shaders for flexibility, while integrating seamlessly with the shader function system.
+The Mark trait defines the interface that all visual primitives implement. It
+bridges high-level visualization concepts (circles, rectangles, lines) with
+low-level GPU rendering. The trait must support both hand-optimized shaders for
+performance and generated shaders for flexibility, while integrating seamlessly
+with the shader function system.
 
 ## User Story
 
-**As a** visualization developer  
-**I want** a unified interface for all visual primitives  
-**So that** I can use circles, rectangles, lines, and custom marks interchangeably with consistent performance and behavior  
+**As a** visualization developer **I want** a unified interface for all visual
+primitives **So that** I can use circles, rectangles, lines, and custom marks
+interchangeably with consistent performance and behavior
 
 ## Acceptance Criteria
 
-### Core Mark Trait Definition
+### AC1: Core Mark Trait Definition
 
 ```rust
 pub trait Mark: Clone + Send + Sync + 'static {
@@ -42,26 +44,29 @@ pub trait Mark: Clone + Send + Sync + 'static {
     // Geometry generation
     fn vertex_count() -> usize;
     fn index_count() -> Option<usize> { None }
-    
+
     // Vertex buffer generation
     fn generate_vertices() -> Vec<Self::Vertex>;
     fn generate_indices() -> Option<Vec<u32>> { None }
 }
 ```
 
-### Mark Capabilities
+### AC2: Mark Capabilities
 
 - [ ] **Flexible Rendering**: Support both manual and generated shaders
 - [ ] **Type Safety**: Vertex and attribute types validated at compile time
 - [ ] **Performance Options**: Hand-optimized shaders for maximum performance
 - [ ] **Extensibility**: Easy to implement custom marks with the trait
 
-### Integration Requirements
+### AC3: Integration Requirements
 
-- [ ] **Shader Function Compatibility**: Works seamlessly with shader function system
+- [ ] **Shader Function Compatibility**: Works seamlessly with shader function
+      system
 - [ ] **Selection Integration**: Compatible with Selection<T, M> type system
-- [ ] **Pipeline Integration**: Integrates with ShaderPipeline for generated shaders
-- [ ] **GPU Resource Management**: Efficient vertex buffer and pipeline management
+- [ ] **Pipeline Integration**: Integrates with ShaderPipeline for generated
+      shaders
+- [ ] **GPU Resource Management**: Efficient vertex buffer and pipeline
+      management
 
 ## Technical Tasks
 
@@ -165,7 +170,7 @@ impl MarkRegistry {
         let info = Box::new(MarkInfoImpl::<M>::new());
         self.marks.insert(type_id, info);
     }
-    
+
     pub fn get_pipeline<M: Mark>(&self, device: &wgpu::Device) -> &wgpu::RenderPipeline {
         let type_id = TypeId::of::<M>();
         self.pipelines.entry(type_id)
@@ -186,26 +191,26 @@ impl Mark for Circle {
             radius: f32,
             color: vec4<f32>,
         }
-        
+
         @vertex
         fn vs_main(
             @location(0) vertex_pos: vec2<f32>,
             @builtin(instance_index) instance_index: u32
         ) -> VertexOutput {
             let instance = instance_buffer[instance_index];
-            
+
             // Apply shader functions to instance data
             let world_pos = vertex_pos * instance.radius + instance.center;
             let final_pos = position_transform(world_pos, position_uniforms);
             let final_color = color_transform(instance.color, color_uniforms);
-            
+
             return VertexOutput {
                 @builtin(position) clip_position: vec4<f32>(final_pos, 0.0, 1.0),
                 @location(0) color: final_color,
             };
         }
         "#;
-        
+
         // Integrate with pipeline functions
         pipeline.integrate_vertex_shader(base_shader)
     }
@@ -236,10 +241,10 @@ fn test_mark_trait_implementation() {
     // Test that Circle implements Mark correctly
     assert_eq!(Circle::vertex_count(), 4);
     assert_eq!(Circle::index_count(), Some(6));
-    
+
     let vertices = Circle::generate_vertices();
     assert_eq!(vertices.len(), 4);
-    
+
     let indices = Circle::generate_indices().unwrap();
     assert_eq!(indices.len(), 6);
 }
@@ -249,7 +254,7 @@ fn test_mark_registry() {
     let mut registry = MarkRegistry::new();
     registry.register::<Circle>();
     registry.register::<Rectangle>();
-    
+
     assert!(registry.is_registered::<Circle>());
     assert!(registry.is_registered::<Rectangle>());
     assert!(!registry.is_registered::<Line>());
@@ -258,13 +263,13 @@ fn test_mark_registry() {
 #[test]
 fn test_vertex_buffer_generation() {
     let vertices = Circle::generate_vertices();
-    
+
     // Verify vertex data is valid for GPU upload
     for vertex in &vertices {
         assert!(vertex.position[0].is_finite());
         assert!(vertex.position[1].is_finite());
     }
-    
+
     // Verify bytemuck conversion works
     let bytes = bytemuck::cast_slice(&vertices);
     assert_eq!(bytes.len(), vertices.len() * std::mem::size_of::<CircleVertex>());
@@ -279,7 +284,7 @@ async fn test_mark_render_pipeline() {
     let device = create_test_device();
     let mut registry = MarkRegistry::new();
     registry.register::<Circle>();
-    
+
     let pipeline = registry.get_pipeline::<Circle>(&device);
     assert!(pipeline.is_valid());
 }
@@ -289,15 +294,15 @@ async fn test_mark_with_shader_functions() {
     let device = create_test_device();
     let mut pipeline = ShaderPipeline::new();
     pipeline.add_function(LinearScale::new(0.0, 1.0, 0.0, 1.0));
-    
+
     let vertex_shader = Circle::generate_vertex_shader(&pipeline);
-    
+
     // Test that generated shader compiles
     let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("test_circle_shader"),
         source: wgpu::ShaderSource::Wgsl(vertex_shader.into()),
     });
-    
+
     // If this doesn't panic, the shader compiled successfully
 }
 ```
@@ -310,19 +315,19 @@ fn test_custom_mark_implementation() {
     // Test implementing a custom mark
     #[derive(Debug, Clone)]
     struct Triangle;
-    
+
     #[repr(C)]
     #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
     struct TriangleVertex {
         position: [f32; 2],
     }
-    
+
     impl Mark for Triangle {
         type Vertex = TriangleVertex;
         type AttributeValue = TriangleAttributes;
-        
+
         fn vertex_count() -> usize { 3 }
-        
+
         fn generate_vertices() -> Vec<Self::Vertex> {
             vec![
                 TriangleVertex { position: [0.0, 1.0] },
@@ -331,7 +336,7 @@ fn test_custom_mark_implementation() {
             ]
         }
     }
-    
+
     // Test the custom mark works with the system
     let vertices = Triangle::generate_vertices();
     assert_eq!(vertices.len(), 3);
@@ -342,9 +347,11 @@ fn test_custom_mark_implementation() {
 
 ### Functional Requirements
 
-- [ ] **Mark Completeness**: All planned marks (Circle, Rectangle, Line) implement trait successfully
+- [ ] **Mark Completeness**: All planned marks (Circle, Rectangle, Line)
+      implement trait successfully
 - [ ] **Shader Integration**: Both manual and generated shaders work correctly
-- [ ] **Performance**: Hand-optimized shaders perform within 5% of direct GPU code
+- [ ] **Performance**: Hand-optimized shaders perform within 5% of direct GPU
+      code
 - [ ] **Extensibility**: Custom marks can be implemented with <50 lines of code
 
 ### Quality Requirements
@@ -358,14 +365,17 @@ fn test_custom_mark_implementation() {
 
 ### Technical Risks
 
-- **Medium**: Shader integration complexity could make trait difficult to implement
+- **Medium**: Shader integration complexity could make trait difficult to
+  implement
 - **Medium**: Performance overhead from trait abstraction
 - **Low**: Mark registry system could have lookup performance issues
 
 ### Mitigation Strategies
 
-- **Reference Implementation**: Create Circle mark as reference for other implementations
-- **Performance Testing**: Benchmark trait overhead against direct implementation
+- **Reference Implementation**: Create Circle mark as reference for other
+  implementations
+- **Performance Testing**: Benchmark trait overhead against direct
+  implementation
 - **Simple Design**: Keep trait interface minimal and focused
 
 ## Implementation Notes
@@ -373,7 +383,8 @@ fn test_custom_mark_implementation() {
 ### Design Decisions
 
 - Use associated types rather than generics for cleaner APIs
-- Support both manual and generated shaders for flexibility vs performance trade-offs
+- Support both manual and generated shaders for flexibility vs performance
+  trade-offs
 - Include geometry generation in trait for consistency
 - Use bytemuck for safe GPU data transfer
 

@@ -2,41 +2,51 @@
 
 ## Story Overview
 
-**Title**: Create Ecosystem Integration Tools for Mixable Trait Adoption  
-**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API  
-**Priority**: Low  
-**Story Points**: 4  
+**Title**: Create Ecosystem Integration Tools for Mixable Trait Adoption
+**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API
+**Priority**: Low **Story Points**: 4
 
 ## Context
 
-The current Mixable trait requires manual implementation for each visualization type, limiting adoption and interoperability. This story creates tools and frameworks to make Mixable trait adoption easier, including derive macros, integration helpers, and compatibility layers for external libraries.
+The current Mixable trait requires manual implementation for each visualization
+type, limiting adoption and interoperability. This story creates tools and
+frameworks to make Mixable trait adoption easier, including derive macros,
+integration helpers, and compatibility layers for external libraries.
 
 ## User Story
 
-**As a** visualization library developer or third-party integrator  
-**I want** easy tools to make my visualization types compatible with Gup's composition system  
-**So that** I can leverage Gup's composability without extensive manual implementation work  
+**As a** visualization library developer or third-party integrator **I want**
+easy tools to make my visualization types compatible with Gup's composition
+system **So that** I can leverage Gup's composability without extensive manual
+implementation work
 
 ## Acceptance Criteria
 
-### Developer Experience
+### AC1: Developer Experience
 
-- [ ] **Derive Macro**: Simple `#[derive(Mixable)]` for basic visualization types
-- [ ] **Integration Helpers**: Utilities for wrapping external visualization libraries
+- [ ] **Derive Macro**: Simple `#[derive(Mixable)]` for basic visualization
+      types
+- [ ] **Integration Helpers**: Utilities for wrapping external visualization
+      libraries
 - [ ] **Plugin System**: Framework for third-party Mixable implementations
-- [ ] **Documentation**: Comprehensive guides for implementing and integrating Mixable types
+- [ ] **Documentation**: Comprehensive guides for implementing and integrating
+      Mixable types
 
-### Interoperability
+### AC2: Interoperability
 
 - [ ] **Common Patterns**: Support for common visualization library patterns
-- [ ] **Type Conversion**: Utilities for converting between different visualization formats
-- [ ] **Bridge Interfaces**: Compatibility layers for popular visualization libraries
+- [ ] **Type Conversion**: Utilities for converting between different
+      visualization formats
+- [ ] **Bridge Interfaces**: Compatibility layers for popular visualization
+      libraries
 - [ ] **Standard Traits**: Integration with standard Rust ecosystem traits
 
-### Extensibility
+### AC3: Extensibility
 
-- [ ] **Custom Rendering**: Support for visualization types with custom rendering needs
-- [ ] **Async Support**: Integration with async visualization and data loading patterns
+- [ ] **Custom Rendering**: Support for visualization types with custom
+      rendering needs
+- [ ] **Async Support**: Integration with async visualization and data loading
+      patterns
 - [ ] **Error Handling**: Comprehensive error handling for integration scenarios
 - [ ] **Performance**: Integration tools maintain performance characteristics
 
@@ -74,7 +84,7 @@ The current Mixable trait requires manual implementation for each visualization 
 
 ### Derive Macro Implementation
 
-```rust
+````rust
 // Gup - GPU-Accelerated Data Visualization Library
 // Copyright (C) 2025 Corin Lawson <corin@phiware.com.au>
 //
@@ -85,9 +95,9 @@ use quote::quote;
 use syn::{parse_macro_input, DeriveInput, Data, Fields};
 
 /// Derive macro for Mixable trait
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```rust
 /// #[derive(Mixable)]
 /// #[mixable(render_type = "points")]
@@ -101,7 +111,7 @@ use syn::{parse_macro_input, DeriveInput, Data, Fields};
 #[proc_macro_derive(Mixable, attributes(mixable))]
 pub fn derive_mixable(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    
+
     match generate_mixable_impl(&input) {
         Ok(tokens) => tokens.into(),
         Err(error) => error.to_compile_error().into(),
@@ -111,35 +121,35 @@ pub fn derive_mixable(input: TokenStream) -> TokenStream {
 fn generate_mixable_impl(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-    
+
     // Parse mixable attributes
     let config = parse_mixable_attributes(&input.attrs)?;
-    
+
     // Analyze struct fields
     let field_analysis = analyze_fields(input)?;
-    
+
     // Generate render implementation based on configuration
     let render_impl = generate_render_implementation(&config, &field_analysis)?;
-    
+
     let expanded = quote! {
         impl #impl_generics ::gup::Mixable for #name #ty_generics #where_clause {
             type Output = ();
-            
+
             fn render(&self, context: &mut ::gup::RenderContext) -> ::gup::GupResult<()> {
                 #render_impl
             }
-            
+
             fn is_valid(&self) -> bool {
                 // Generated validation based on field analysis
                 true
             }
-            
+
             fn description(&self) -> String {
                 format!("{}(auto-derived)", stringify!(#name))
             }
         }
     };
-    
+
     Ok(expanded)
 }
 
@@ -198,14 +208,14 @@ enum VertexFormat {
 
 fn parse_mixable_attributes(attrs: &[syn::Attribute]) -> syn::Result<MixableConfig> {
     let mut config = MixableConfig::default();
-    
+
     for attr in attrs {
         if attr.path().is_ident("mixable") {
             // Parse attribute content
             // Implementation would parse various mixable configuration options
         }
     }
-    
+
     Ok(config)
 }
 
@@ -215,7 +225,7 @@ fn analyze_fields(input: &DeriveInput) -> syn::Result<FieldAnalysis> {
         uniform_fields: Vec::new(),
         texture_fields: Vec::new(),
     };
-    
+
     if let Data::Struct(data_struct) = &input.data {
         if let Fields::Named(fields) = &data_struct.fields {
             for field in &fields.named {
@@ -224,7 +234,7 @@ fn analyze_fields(input: &DeriveInput) -> syn::Result<FieldAnalysis> {
             }
         }
     }
-    
+
     Ok(analysis)
 }
 
@@ -236,7 +246,7 @@ fn analyze_field(field: &syn::Field, analysis: &mut FieldAnalysis) -> syn::Resul
             // This would determine if the field contains vertex data, uniform data, etc.
         }
     }
-    
+
     Ok(())
 }
 
@@ -257,15 +267,15 @@ fn generate_points_render(analysis: &FieldAnalysis) -> syn::Result<proc_macro2::
     // Generate point-based rendering implementation
     Ok(quote! {
         use ::gup::BasicPipeline;
-        
+
         let pipeline = BasicPipeline::points();
         let mut render_pass = context.begin_render_pass()?;
-        
+
         // Extract vertex data from fields
         let vertices = self.extract_vertex_data();
-        
+
         pipeline.render_points(&mut render_pass, &vertices, context.device())?;
-        
+
         render_pass.submit()
     })
 }
@@ -304,7 +314,7 @@ fn generate_default_render(_analysis: &FieldAnalysis) -> syn::Result<proc_macro2
         Ok(())
     })
 }
-```
+````
 
 ### Integration Helper Library
 
@@ -488,16 +498,16 @@ pub mod plugins {
     pub trait MixablePlugin: Send + Sync {
         /// Get the plugin name
         fn name(&self) -> &str;
-        
+
         /// Get the plugin version
         fn version(&self) -> &str;
-        
+
         /// Check if this plugin can handle the given type
         fn can_handle(&self, type_id: TypeId) -> bool;
-        
+
         /// Create a Mixable wrapper for the given object
         fn create_mixable(&self, object: Box<dyn Any + Send + Sync>) -> Box<dyn Mixable<Output = ()>>;
-        
+
         /// Validate plugin compatibility
         fn validate(&self) -> Result<(), String>;
     }
@@ -514,14 +524,14 @@ pub mod plugins {
         pub fn register_plugin(&mut self, plugin: Box<dyn MixablePlugin>) -> Result<(), String> {
             // Validate plugin before registration
             plugin.validate()?;
-            
+
             let name = plugin.name().to_string();
-            
+
             // Check for conflicts
             if self.plugins.contains_key(&name) {
                 return Err(format!("Plugin '{}' is already registered", name));
             }
-            
+
             self.plugins.insert(name, plugin);
             Ok(())
         }
@@ -532,7 +542,7 @@ pub mod plugins {
             object: T,
         ) -> Option<Box<dyn Mixable<Output = ()>>> {
             let type_id = TypeId::of::<T>();
-            
+
             // Find a plugin that can handle this type
             for plugin in self.plugins.values() {
                 if plugin.can_handle(type_id) {
@@ -540,7 +550,7 @@ pub mod plugins {
                     return Some(plugin.create_mixable(boxed_object));
                 }
             }
-            
+
             None
         }
 
@@ -686,7 +696,7 @@ pub mod examples {
         pub struct SimpleScatterPlot {
             #[mixable(vertex_data, format = "float32x2")]
             pub points: Vec<[f32; 2]>,
-            
+
             #[mixable(uniform_data, binding = 0)]
             pub color: [f32; 4],
         }
@@ -696,10 +706,10 @@ pub mod examples {
         pub struct SimpleLineChart {
             #[mixable(vertex_data, format = "float32x2")]
             pub line_points: Vec<[f32; 2]>,
-            
+
             #[mixable(uniform_data, binding = 0)]
             pub line_width: f32,
-            
+
             #[mixable(uniform_data, binding = 1)]
             pub color: [f32; 4],
         }
@@ -729,7 +739,8 @@ pub mod examples {
 ### Prerequisite Stories
 
 - GUP-001: Build Mixable Trait (provides the trait to integrate with)
-- GUP-020: WebGPU Integration for RenderContext (provides rendering capabilities)
+- GUP-020: WebGPU Integration for RenderContext (provides rendering
+  capabilities)
 
 ### Enables Stories
 
@@ -784,10 +795,10 @@ async fn test_external_wrapper() {
 #[test]
 fn test_plugin_registration() {
     let mut registry = MixablePluginRegistry::new();
-    
+
     let plugin = ExampleExternalLibraryPlugin;
     assert!(registry.register_plugin(Box::new(plugin)).is_ok());
-    
+
     let plugins = registry.list_plugins();
     assert_eq!(plugins.len(), 1);
     assert_eq!(plugins[0].0, "example_external_library");
@@ -800,7 +811,7 @@ fn test_plugin_registration() {
 #[test]
 fn test_standard_trait_integration() {
     // Test integration with standard Rust traits like Clone, Debug, etc.
-    
+
     #[derive(Mixable, Clone, Debug)]
     #[mixable(render_type = "points")]
     struct CloneableChart {
@@ -829,7 +840,8 @@ fn test_standard_trait_integration() {
 ### Ecosystem Adoption
 
 - [ ] **Plugin System**: Framework supports multiple third-party plugins
-- [ ] **Library Compatibility**: Integration helpers work with major visualization libraries
+- [ ] **Library Compatibility**: Integration helpers work with major
+      visualization libraries
 - [ ] **Performance**: Integration tools maintain performance characteristics
 - [ ] **Maintainability**: Generated code is readable and debuggable
 
@@ -851,8 +863,10 @@ fn test_standard_trait_integration() {
 
 ### Design Decisions
 
-- Use procedural macros for derive functionality to provide compile-time validation
-- Create separate integration helpers rather than trying to handle everything in the derive macro
+- Use procedural macros for derive functionality to provide compile-time
+  validation
+- Create separate integration helpers rather than trying to handle everything in
+  the derive macro
 - Design plugin system with security and stability in mind
 - Focus on common patterns rather than trying to support every possible use case
 
@@ -866,7 +880,8 @@ fn test_standard_trait_integration() {
 
 - [ ] Derive macro generates working Mixable implementations for common patterns
 - [ ] Integration helper library supports wrapping external visualization types
-- [ ] Plugin system allows registration and use of third-party Mixable implementations
+- [ ] Plugin system allows registration and use of third-party Mixable
+      implementations
 - [ ] Comprehensive documentation with examples for all integration approaches
 - [ ] Integration tests validate compatibility with external libraries
 - [ ] Performance tests ensure integration tools don't add significant overhead

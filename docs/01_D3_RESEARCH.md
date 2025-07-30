@@ -28,7 +28,8 @@ connection between data and graphics easy, offering complete creative control.
 
 #### 2. Enter-Update-Exit Pattern
 
-The "General Update Pattern" is D3's signature approach to handling dynamic data:
+The "General Update Pattern" is D3's signature approach to handling dynamic
+data:
 
 - **Enter**: Handle new data points that need visualization elements
 - **Update**: Modify existing elements for changed data
@@ -141,9 +142,10 @@ crucial for D3's object-oriented function paradigm.
 
 ```javascript
 var xAxis = d3.axisBottom(d3.scaleLinear().domain([0, 10]).range([20, 180]));
-var svg = d3.select("#example-1")
-    .append("g")
-    .call(d3.compose(translate, xAxis), 50);
+var svg = d3
+  .select("#example-1")
+  .append("g")
+  .call(d3.compose(translate, xAxis), 50);
 ```
 
 **Problem Solved**: Addresses the challenge of composing D3 functions while
@@ -151,7 +153,8 @@ maintaining metadata and properties during transformation.
 
 ### d3-wrap: Function Wrapping with Property Preservation
 
-**Purpose**: Enables function wrapping that preserves the original function's properties.
+**Purpose**: Enables function wrapping that preserves the original function's
+properties.
 
 **Key Innovation**:
 
@@ -162,11 +165,13 @@ maintaining metadata and properties during transformation.
 **Example Use Case**:
 
 ```javascript
-xAxis = d3.wrap(xAxis, function(selection, xAxis) {
-    return xAxis(
-        selection.append("g")
-            .attr("class", "x axis")
-            .attr("transform", "translate(0 " + height + ")"));
+xAxis = d3.wrap(xAxis, function (selection, xAxis) {
+  return xAxis(
+    selection
+      .append("g")
+      .attr("class", "x axis")
+      .attr("transform", "translate(0 " + height + ")")
+  );
 });
 ```
 

@@ -71,18 +71,18 @@ impl RenderContext {
                 force_fallback_adapter: false,
             })
             .await
-            .map_err(|e| GupError::WebGpuError(format!("Failed to find suitable GPU adapter: {e}")))?;
+            .map_err(|e| {
+                GupError::WebGpuError(format!("Failed to find suitable GPU adapter: {e}"))
+            })?;
 
         let (device, queue) = adapter
-            .request_device(
-                &DeviceDescriptor {
-                    label: Some("gup_device"),
-                    required_features: Features::empty(),
-                    required_limits: Limits::default(),
-                    memory_hints: MemoryHints::Performance,
-                    trace: Default::default(),
-                },
-            )
+            .request_device(&DeviceDescriptor {
+                label: Some("gup_device"),
+                required_features: Features::empty(),
+                required_limits: Limits::default(),
+                memory_hints: MemoryHints::Performance,
+                trace: Default::default(),
+            })
             .await
             .map_err(|e| GupError::WebGpuError(format!("Failed to create device: {e}")))?;
 
@@ -102,7 +102,11 @@ impl RenderContext {
     /// Initialize surface for window rendering
     pub fn init_surface<W>(&mut self, window: Arc<W>) -> GupResult<()>
     where
-        W: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle + Send + Sync + 'static,
+        W: raw_window_handle::HasWindowHandle
+            + raw_window_handle::HasDisplayHandle
+            + Send
+            + Sync
+            + 'static,
     {
         let surface = self
             .instance
@@ -421,8 +425,10 @@ impl BasicPipeline {
             usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        
-        context.queue().write_buffer(&vertex_buffer, 0, bytemuck::cast_slice(vertices));
+
+        context
+            .queue()
+            .write_buffer(&vertex_buffer, 0, bytemuck::cast_slice(vertices));
         Ok(vertex_buffer)
     }
 

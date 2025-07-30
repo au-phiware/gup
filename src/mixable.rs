@@ -60,18 +60,13 @@ impl Default for SideBySideConfig {
 }
 
 /// Blend modes for overlay composition
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BlendMode {
+    #[default]
     None,
     AlphaBlending,
     Additive,
     Multiply,
-}
-
-impl Default for BlendMode {
-    fn default() -> Self {
-        BlendMode::None
-    }
 }
 
 /// Custom composition behaviors supported by the system
@@ -102,12 +97,8 @@ impl CustomCompositionBehavior {
     /// Validate that this custom behavior can handle the given component types
     pub fn can_compose<A: Mixable, B: Mixable>(&self, first: &A, second: &B) -> bool {
         match self {
-            CustomCompositionBehavior::CrossFade(behavior) => {
-                behavior.can_compose(first, second)
-            }
-            CustomCompositionBehavior::GridLayout(behavior) => {
-                behavior.can_compose(first, second)
-            }
+            CustomCompositionBehavior::CrossFade(behavior) => behavior.can_compose(first, second),
+            CustomCompositionBehavior::GridLayout(behavior) => behavior.can_compose(first, second),
         }
     }
 
@@ -296,11 +287,7 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
     }
 
     /// Create a new composed visualization with custom behavior
-    pub fn custom(
-        first: A,
-        second: B,
-        behavior: CustomCompositionBehavior,
-    ) -> Self {
+    pub fn custom(first: A, second: B, behavior: CustomCompositionBehavior) -> Self {
         Self {
             first,
             second,
@@ -388,16 +375,16 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
     fn render_overlay(&mut self, context: &mut RenderContext) -> GupResult<()> {
         // Render first component (background layer)
         self.first.render(context)?;
-        
+
         // Configure blending for overlay - would be implemented in RenderContext
         // context.set_blend_mode(BlendMode::AlphaBlending)?;
-        
+
         // Render second component (foreground layer)
         self.second.render(context)?;
-        
+
         // Restore original blend mode
         // context.set_blend_mode(BlendMode::default())?;
-        
+
         Ok(())
     }
 
@@ -405,11 +392,11 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
     fn render_merge(&mut self, context: &mut RenderContext) -> GupResult<()> {
         // For merge mode, we need to extract and combine the underlying data
         // This is a simplified implementation - real merge would depend on data types
-        
+
         // Check if components can be merged (same data types, compatible formats)
         if !self.can_merge_components() {
             return Err(GupError::CompositionError(
-                "Components cannot be merged - incompatible data types".to_string()
+                "Components cannot be merged - incompatible data types".to_string(),
             ));
         }
 
@@ -417,27 +404,27 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
         // In a full implementation, this would extract, merge, and create a unified visualization
         self.first.render(context)?;
         self.second.render(context)?;
-        
+
         Ok(())
     }
 
     /// Render in side-by-side mode with viewport partitioning
     fn render_side_by_side(&mut self, context: &mut RenderContext) -> GupResult<()> {
         let original_viewport = context.viewport();
-        
+
         let (first_viewport, second_viewport) = self.calculate_split_viewports(original_viewport);
-        
+
         // Render first component in its viewport
         context.set_viewport(first_viewport)?;
         self.first.render(context)?;
-        
-        // Render second component in its viewport  
+
+        // Render second component in its viewport
         context.set_viewport(second_viewport)?;
         self.second.render(context)?;
-        
+
         // Restore original viewport
         context.set_viewport(original_viewport)?;
-        
+
         Ok(())
     }
 
@@ -445,16 +432,16 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
     fn render_custom(&mut self, context: &mut RenderContext) -> GupResult<()> {
         if let Some(custom_behavior) = &self.custom_behavior {
             if !custom_behavior.can_compose(&self.first, &self.second) {
-                return Err(GupError::CompositionError(
-                    format!("Custom behavior '{}' cannot compose these component types", 
-                           custom_behavior.description())
-                ));
+                return Err(GupError::CompositionError(format!(
+                    "Custom behavior '{}' cannot compose these component types",
+                    custom_behavior.description()
+                )));
             }
-            
+
             custom_behavior.compose(&mut self.first, &mut self.second, context)
         } else {
             Err(GupError::CompositionError(
-                "Custom composition mode requires custom behavior".to_string()
+                "Custom composition mode requires custom behavior".to_string(),
             ))
         }
     }
@@ -472,37 +459,44 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
             LayoutDirection::Horizontal => {
                 let split_x = (original.width as f32 * self.side_by_side_config.split_ratio) as u32;
                 let padding = self.side_by_side_config.padding as u32;
-                
+
                 let first_viewport = Viewport {
                     width: split_x.saturating_sub(padding / 2),
                     height: original.height,
                     scale_factor: original.scale_factor,
                 };
-                
+
                 let second_viewport = Viewport {
-                    width: original.width.saturating_sub(split_x).saturating_sub(padding / 2),
+                    width: original
+                        .width
+                        .saturating_sub(split_x)
+                        .saturating_sub(padding / 2),
                     height: original.height,
                     scale_factor: original.scale_factor,
                 };
-                
+
                 (first_viewport, second_viewport)
             }
             LayoutDirection::Vertical => {
-                let split_y = (original.height as f32 * self.side_by_side_config.split_ratio) as u32;
+                let split_y =
+                    (original.height as f32 * self.side_by_side_config.split_ratio) as u32;
                 let padding = self.side_by_side_config.padding as u32;
-                
+
                 let first_viewport = Viewport {
                     width: original.width,
                     height: split_y.saturating_sub(padding / 2),
                     scale_factor: original.scale_factor,
                 };
-                
+
                 let second_viewport = Viewport {
                     width: original.width,
-                    height: original.height.saturating_sub(split_y).saturating_sub(padding / 2),
+                    height: original
+                        .height
+                        .saturating_sub(split_y)
+                        .saturating_sub(padding / 2),
                     scale_factor: original.scale_factor,
                 };
-                
+
                 (first_viewport, second_viewport)
             }
         }
@@ -585,14 +579,14 @@ impl CrossFadeComposition {
         // Render first component with (1.0 - fade_factor) alpha
         context.set_global_alpha(1.0 - self.fade_factor)?;
         first.render(context)?;
-        
+
         // Render second component with fade_factor alpha
         context.set_global_alpha(self.fade_factor)?;
         second.render(context)?;
-        
+
         // Restore alpha
         context.set_global_alpha(1.0)?;
-        
+
         Ok(())
     }
 
@@ -623,10 +617,10 @@ impl GridLayoutComposition {
         context: &mut RenderContext,
     ) -> GupResult<()> {
         let original_viewport = context.viewport();
-        
+
         let cell_width = original_viewport.width / self.cols;
         let cell_height = original_viewport.height / self.rows;
-        
+
         // Render first component in its grid cell
         let first_viewport = Viewport {
             width: cell_width,
@@ -635,7 +629,7 @@ impl GridLayoutComposition {
         };
         context.set_viewport(first_viewport)?;
         first.render(context)?;
-        
+
         // Render second component in its grid cell
         let second_viewport = Viewport {
             width: cell_width,
@@ -644,23 +638,27 @@ impl GridLayoutComposition {
         };
         context.set_viewport(second_viewport)?;
         second.render(context)?;
-        
+
         // Restore original viewport
         context.set_viewport(original_viewport)?;
-        
+
         Ok(())
     }
 
     pub fn can_compose<A: Mixable, B: Mixable>(&self, _first: &A, _second: &B) -> bool {
         // Check that cell indices are within grid bounds
         // Indices are (row, col)
-        self.cell_index_first.0 < self.rows && self.cell_index_first.1 < self.cols &&
-        self.cell_index_second.0 < self.rows && self.cell_index_second.1 < self.cols
+        self.cell_index_first.0 < self.rows
+            && self.cell_index_first.1 < self.cols
+            && self.cell_index_second.0 < self.rows
+            && self.cell_index_second.1 < self.cols
     }
 
     pub fn description(&self) -> String {
-        format!("GridLayout({}x{}, cells: {:?}, {:?})", 
-                self.rows, self.cols, self.cell_index_first, self.cell_index_second)
+        format!(
+            "GridLayout({}x{}, cells: {:?}, {:?})",
+            self.rows, self.cols, self.cell_index_first, self.cell_index_second
+        )
     }
 }
 
@@ -792,7 +790,8 @@ mod tests {
         let beside = chart1.clone().beside(chart2.clone());
         assert_eq!(beside.composition_mode(), CompositionMode::SideBySide);
 
-        let custom_behavior = CustomCompositionBehavior::CrossFade(CrossFadeComposition { fade_factor: 0.5 });
+        let custom_behavior =
+            CustomCompositionBehavior::CrossFade(CrossFadeComposition { fade_factor: 0.5 });
         let custom = chart1.custom_compose(chart2, custom_behavior);
         assert_eq!(custom.composition_mode(), CompositionMode::Custom);
     }
@@ -863,13 +862,13 @@ mod tests {
     #[tokio::test]
     async fn test_overlay_composition() {
         let mut context = RenderContext::new().await.unwrap();
-        
+
         let background = TestVisualization::new("background");
         let foreground = TestVisualization::new("foreground");
-        
+
         let mut composed = background.overlay(foreground);
         let result = composed.render(&mut context);
-        
+
         assert!(result.is_ok());
         assert_eq!(composed.composition_mode(), CompositionMode::Overlay);
     }
@@ -877,19 +876,19 @@ mod tests {
     #[tokio::test]
     async fn test_side_by_side_composition() {
         let mut context = RenderContext::new().await.unwrap();
-        
+
         let left = TestVisualization::new("left");
         let right = TestVisualization::new("right");
-        
+
         let config = SideBySideConfig {
             direction: LayoutDirection::Horizontal,
             split_ratio: 0.3,
             padding: 20.0,
         };
-        
+
         let mut composed = left.beside_with_config(right, config);
         let result = composed.render(&mut context);
-        
+
         assert!(result.is_ok());
         assert_eq!(composed.composition_mode(), CompositionMode::SideBySide);
     }
@@ -897,13 +896,13 @@ mod tests {
     #[tokio::test]
     async fn test_custom_composition() {
         let mut context = RenderContext::new().await.unwrap();
-        
+
         let viz1 = TestVisualization::new("viz1");
         let viz2 = TestVisualization::new("viz2");
-        
+
         let mut composed = viz1.cross_fade(viz2, 0.3);
         let result = composed.render(&mut context);
-        
+
         assert!(result.is_ok());
         assert_eq!(composed.composition_mode(), CompositionMode::Custom);
     }
@@ -911,13 +910,13 @@ mod tests {
     #[tokio::test]
     async fn test_merge_composition() {
         let mut context = RenderContext::new().await.unwrap();
-        
+
         let data1 = TestVisualization::new("data1");
         let data2 = TestVisualization::new("data2");
-        
+
         let mut composed = data1.merge(data2);
         let result = composed.render(&mut context);
-        
+
         assert!(result.is_ok());
         assert_eq!(composed.composition_mode(), CompositionMode::Merge);
     }
@@ -929,20 +928,20 @@ mod tests {
             height: 600,
             scale_factor: 1.0,
         };
-        
+
         let config = SideBySideConfig {
             direction: LayoutDirection::Horizontal,
             split_ratio: 0.6,
             padding: 10.0,
         };
-        
+
         let chart1 = TestVisualization::new("chart1");
         let chart2 = TestVisualization::new("chart2");
         let composition = ComposedVisualization::side_by_side(chart1, chart2, config);
-        
+
         let (first_vp, second_vp) = composition.calculate_split_viewports(original);
-        
-        assert_eq!(first_vp.width, 475);  // 800 * 0.6 - 5 (half padding)
+
+        assert_eq!(first_vp.width, 475); // 800 * 0.6 - 5 (half padding)
         assert_eq!(second_vp.width, 315); // 800 * 0.4 - 5 (half padding)
         assert_eq!(first_vp.height, 600);
         assert_eq!(second_vp.height, 600);
@@ -955,22 +954,22 @@ mod tests {
             height: 600,
             scale_factor: 1.0,
         };
-        
+
         let config = SideBySideConfig {
             direction: LayoutDirection::Vertical,
             split_ratio: 0.4,
             padding: 20.0,
         };
-        
+
         let chart1 = TestVisualization::new("chart1");
         let chart2 = TestVisualization::new("chart2");
         let composition = ComposedVisualization::side_by_side(chart1, chart2, config);
-        
+
         let (first_vp, second_vp) = composition.calculate_split_viewports(original);
-        
+
         assert_eq!(first_vp.width, 800);
         assert_eq!(second_vp.width, 800);
-        assert_eq!(first_vp.height, 230);  // 600 * 0.4 - 10 (half padding)
+        assert_eq!(first_vp.height, 230); // 600 * 0.4 - 10 (half padding)
         assert_eq!(second_vp.height, 350); // 600 * 0.6 - 10 (half padding)
     }
 
@@ -988,34 +987,34 @@ mod tests {
             cell_index_first: (1, 0),
             cell_index_second: (2, 1),
         });
-        
+
         let viz1 = TestVisualization::new("viz1");
         let viz2 = TestVisualization::new("viz2");
-        
+
         // First cell is valid (1, 0) in 2x3 grid (row 1, col 0)
         // Second cell is invalid (2, 1) - row 2 is out of bounds for 2 rows (0-1)
         assert!(!behavior.can_compose(&viz1, &viz2));
-        
+
         let valid_behavior = CustomCompositionBehavior::GridLayout(GridLayoutComposition {
             rows: 2,
             cols: 3,
             cell_index_first: (1, 0),
             cell_index_second: (0, 2),
         });
-        
+
         assert!(valid_behavior.can_compose(&viz1, &viz2));
     }
 
     #[tokio::test]
     async fn test_custom_composition_without_behavior() {
         let mut context = RenderContext::new().await.unwrap();
-        
+
         let viz1 = TestVisualization::new("viz1");
         let viz2 = TestVisualization::new("viz2");
-        
+
         let mut composed = ComposedVisualization::with_mode(viz1, viz2, CompositionMode::Custom);
         let result = composed.render(&mut context);
-        
+
         assert!(result.is_err());
         if let Err(GupError::CompositionError(msg)) = result {
             assert!(msg.contains("Custom composition mode requires custom behavior"));

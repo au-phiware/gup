@@ -1,6 +1,9 @@
 //! Integration tests for the Mixable trait and composition system.
 
-use gup::{CompositionMode, CrossFadeComposition, CustomCompositionBehavior, GupError, GupResult, Mixable, MixableExt, RenderContext};
+use gup::{
+    CompositionMode, CrossFadeComposition, CustomCompositionBehavior, GupError, GupResult, Mixable,
+    MixableExt, RenderContext,
+};
 
 /// Mock scatter plot implementation for testing
 #[derive(Debug, Clone)]
@@ -177,7 +180,8 @@ fn test_composition_modes_with_different_types() {
     let beside = scatter.clone().beside(heatmap.clone());
     assert_eq!(beside.composition_mode(), CompositionMode::SideBySide);
 
-    let custom_behavior = CustomCompositionBehavior::CrossFade(CrossFadeComposition { fade_factor: 0.5 });
+    let custom_behavior =
+        CustomCompositionBehavior::CrossFade(CrossFadeComposition { fade_factor: 0.5 });
     let custom = scatter.custom_compose(heatmap, custom_behavior);
     assert_eq!(custom.composition_mode(), CompositionMode::Custom);
 
@@ -273,14 +277,18 @@ async fn test_render_context_interaction() {
         width: 400,
         height: 300,
         scale_factor: 1.0,
-    }).await.unwrap();
+    })
+    .await
+    .unwrap();
     assert!(composed.render(&mut small_context).is_ok());
 
     let mut large_context = RenderContext::with_viewport(gup::Viewport {
         width: 1920,
         height: 1080,
         scale_factor: 2.0,
-    }).await.unwrap();
+    })
+    .await
+    .unwrap();
     assert!(composed.render(&mut large_context).is_ok());
 }
 

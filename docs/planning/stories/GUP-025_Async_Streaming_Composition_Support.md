@@ -2,41 +2,52 @@
 
 ## Story Overview
 
-**Title**: Add Asynchronous and Streaming Data Support to Composition System  
-**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API  
-**Priority**: Low  
-**Story Points**: 6  
+**Title**: Add Asynchronous and Streaming Data Support to Composition System
+**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API
+**Priority**: Low **Story Points**: 6
 
 ## Context
 
-The current Mixable trait system operates synchronously and assumes all data is available at composition time. This story extends the composition system to support asynchronous data loading, streaming datasets, and progressive rendering, enabling visualizations that work with large or real-time data sources.
+The current Mixable trait system operates synchronously and assumes all data is
+available at composition time. This story extends the composition system to
+support asynchronous data loading, streaming datasets, and progressive
+rendering, enabling visualizations that work with large or real-time data
+sources.
 
 ## User Story
 
-**As a** developer working with large datasets or real-time data streams  
-**I want** the composition system to support async data loading and streaming updates  
-**So that** I can create responsive visualizations that handle large datasets without blocking the UI  
+**As a** developer working with large datasets or real-time data streams **I
+want** the composition system to support async data loading and streaming
+updates **So that** I can create responsive visualizations that handle large
+datasets without blocking the UI
 
 ## Acceptance Criteria
 
-### Async Composition Support
+### AC1: Async Composition Support
 
-- [ ] **Async Rendering**: Mixable components can render asynchronously without blocking
+- [ ] **Async Rendering**: Mixable components can render asynchronously without
+      blocking
 - [ ] **Progressive Loading**: Large datasets load and render progressively
 - [ ] **Cancellation Support**: Long-running operations can be cancelled cleanly
-- [ ] **Error Propagation**: Async errors propagate correctly through composition chains
+- [ ] **Error Propagation**: Async errors propagate correctly through
+      composition chains
 
-### Streaming Data Integration
+### AC2: Streaming Data Integration
 
 - [ ] **Stream Processing**: Components can consume and visualize streaming data
-- [ ] **Incremental Updates**: Visualizations update incrementally as new data arrives
-- [ ] **Backpressure Handling**: System handles data streams faster than rendering capability
-- [ ] **State Management**: Streaming components maintain consistent state across updates
+- [ ] **Incremental Updates**: Visualizations update incrementally as new data
+      arrives
+- [ ] **Backpressure Handling**: System handles data streams faster than
+      rendering capability
+- [ ] **State Management**: Streaming components maintain consistent state
+      across updates
 
-### Performance and Responsiveness
+### AC3: Performance and Responsiveness
 
-- [ ] **Non-blocking Operations**: Async operations don't block the main rendering thread
-- [ ] **Progressive Rendering**: Large visualizations render progressively to maintain responsiveness
+- [ ] **Non-blocking Operations**: Async operations don't block the main
+      rendering thread
+- [ ] **Progressive Rendering**: Large visualizations render progressively to
+      maintain responsiveness
 - [ ] **Resource Management**: Async operations manage GPU resources efficiently
 - [ ] **Timeout Handling**: Long-running operations respect timeout limits
 
@@ -759,7 +770,7 @@ pub mod async_utils {
 
         pub async fn build(self) -> GupResult<Box<dyn AsyncMixable<Output = ()>>> {
             let composition = MultiAsyncComposition::new(self.components, self.strategy);
-            
+
             if let Some(timeout) = self.timeout {
                 Ok(Box::new(TimeoutComposition::new(composition, timeout)))
             } else {
@@ -775,7 +786,8 @@ pub mod async_utils {
 ### Prerequisite Stories
 
 - GUP-001: Build Mixable Trait (provides basic composition framework)
-- GUP-020: WebGPU Integration for RenderContext (provides GPU rendering capabilities)
+- GUP-020: WebGPU Integration for RenderContext (provides GPU rendering
+  capabilities)
 
 ### Additional Dependencies
 
@@ -791,17 +803,17 @@ pub mod async_utils {
 #[tokio::test]
 async fn test_async_composition_rendering() {
     let mut context = RenderContext::new().await.unwrap();
-    
+
     let async_component1 = create_async_test_component("async1", Duration::from_millis(100));
     let async_component2 = create_async_test_component("async2", Duration::from_millis(150));
-    
+
     let composition = AsyncComposedVisualization::new(async_component1, async_component2)
         .with_strategy(AsyncRenderStrategy::Parallel);
-    
+
     let start = Instant::now();
     let result = composition.render_async(&mut context, CancellationToken::new()).await;
     let duration = start.elapsed();
-    
+
     assert!(result.is_ok());
     // Parallel execution should be faster than sequential
     assert!(duration < Duration::from_millis(200));
@@ -810,13 +822,13 @@ async fn test_async_composition_rendering() {
 #[tokio::test]
 async fn test_streaming_visualization() {
     let mut context = RenderContext::new().await.unwrap();
-    
+
     let stream = create_mock_data_stream();
     let streaming_viz = StreamingScatterPlot::new(stream, 1000);
-    
+
     // Let some data arrive
     tokio::time::sleep(Duration::from_millis(50)).await;
-    
+
     let result = streaming_viz.render_async(&mut context, CancellationToken::new()).await;
     assert!(result.is_ok());
 }
@@ -824,18 +836,18 @@ async fn test_streaming_visualization() {
 #[tokio::test]
 async fn test_cancellation() {
     let mut context = RenderContext::new().await.unwrap();
-    
+
     let slow_component = create_slow_async_component(Duration::from_secs(10));
     let cancellation_token = CancellationToken::new();
-    
+
     // Start render and cancel after 100ms
     let render_future = slow_component.render_async(&mut context, cancellation_token.clone());
-    
+
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(100)).await;
         cancellation_token.cancel();
     });
-    
+
     let result = render_future.await;
     assert!(result.is_err()); // Should be cancelled
 }
@@ -848,16 +860,16 @@ async fn test_cancellation() {
 async fn test_backpressure_handling() {
     let fast_stream = create_fast_mock_stream(); // 1000 items/sec
     let streaming_viz = StreamingScatterPlot::new(fast_stream, 100);
-    
+
     let mut context = RenderContext::new().await.unwrap();
-    
+
     // Render multiple times to test backpressure
     for _ in 0..10 {
         let result = streaming_viz.render_async(&mut context, CancellationToken::new()).await;
         assert!(result.is_ok());
         tokio::time::sleep(Duration::from_millis(16)).await; // ~60fps
     }
-    
+
     // Verify data doesn't grow beyond limits
     assert!(streaming_viz.current_data.len() <= streaming_viz.max_points);
 }
@@ -866,20 +878,20 @@ async fn test_backpressure_handling() {
 async fn test_progressive_loading() {
     let large_dataset = create_large_mock_dataset(1_000_000);
     let progressive_viz = ProgressiveVisualization::new(large_dataset, 1000);
-    
+
     let mut context = RenderContext::new().await.unwrap();
-    
+
     // Should render preview quickly
     let start = Instant::now();
     let result = progressive_viz.render_async(&mut context, CancellationToken::new()).await;
     let preview_time = start.elapsed();
-    
+
     assert!(result.is_ok());
     assert!(preview_time < Duration::from_millis(100)); // Preview should be fast
-    
+
     // Wait for more data to load
     tokio::time::sleep(Duration::from_millis(500)).await;
-    
+
     let progress = progressive_viz.progress();
     assert!(progress.is_some());
     assert!(progress.unwrap().current > 0);
@@ -890,16 +902,22 @@ async fn test_progressive_loading() {
 
 ### Performance Requirements
 
-- [ ] **Async Overhead**: Async operations add <10% overhead compared to sync equivalents
-- [ ] **Streaming Performance**: Handle >1000 items/second in streaming scenarios
+- [ ] **Async Overhead**: Async operations add <10% overhead compared to sync
+      equivalents
+- [ ] **Streaming Performance**: Handle >1000 items/second in streaming
+      scenarios
 - [ ] **Progressive Loading**: Large datasets show preview within 100ms
-- [ ] **Cancellation Speed**: Operations cancel within 50ms of cancellation request
+- [ ] **Cancellation Speed**: Operations cancel within 50ms of cancellation
+      request
 
 ### Functionality Requirements
 
-- [ ] **Data Integrity**: Streaming and async operations maintain data consistency
-- [ ] **Error Handling**: Async errors propagate correctly through composition chains
-- [ ] **Resource Management**: No memory leaks in long-running streaming scenarios
+- [ ] **Data Integrity**: Streaming and async operations maintain data
+      consistency
+- [ ] **Error Handling**: Async errors propagate correctly through composition
+      chains
+- [ ] **Resource Management**: No memory leaks in long-running streaming
+      scenarios
 - [ ] **Responsiveness**: UI remains responsive during large data operations
 
 ## Risk Assessment
@@ -921,7 +939,8 @@ async fn test_progressive_loading() {
 ### Design Decisions
 
 - Use `async-trait` for async trait support while maintaining ergonomic APIs
-- Implement cancellation using `CancellationToken` for clean cancellation semantics
+- Implement cancellation using `CancellationToken` for clean cancellation
+  semantics
 - Design streaming support with backpressure handling to prevent memory issues
 - Provide both low-level async primitives and high-level convenience APIs
 
@@ -940,8 +959,10 @@ async fn test_progressive_loading() {
 - [ ] Cancellation support allows clean termination of long-running operations
 - [ ] Timeout handling prevents indefinite blocking
 - [ ] Backpressure mechanisms prevent memory exhaustion in streaming scenarios
-- [ ] Async compositions maintain performance characteristics comparable to sync versions
-- [ ] Error handling propagates async errors correctly through composition chains
+- [ ] Async compositions maintain performance characteristics comparable to sync
+      versions
+- [ ] Error handling propagates async errors correctly through composition
+      chains
 - [ ] Resource management prevents leaks in long-running async operations
 - [ ] Comprehensive tests validate async and streaming functionality
 - [ ] Cross-platform compatibility verified for async GPU operations

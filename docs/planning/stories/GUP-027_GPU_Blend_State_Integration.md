@@ -2,42 +2,49 @@
 
 ## Story Overview
 
-**Title**: Integrate BlendMode with WebGPU Render Pipeline State  
-**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API  
-**Priority**: High  
-**Story Points**: 3  
+**Title**: Integrate BlendMode with WebGPU Render Pipeline State **Epic**: Phase
+1 Initiative 1 - Core GPU Primitives and Selection API **Priority**: High
+**Story Points**: 3
 
 ## Context
 
-GUP-021 introduced the `BlendMode` enum and placeholder methods on `RenderContext`, but these are not connected to actual GPU blend state. This story implements the integration with WebGPU's blend state system to enable proper alpha blending and composition effects.
+GUP-021 introduced the `BlendMode` enum and placeholder methods on
+`RenderContext`, but these are not connected to actual GPU blend state. This
+story implements the integration with WebGPU's blend state system to enable
+proper alpha blending and composition effects.
 
 ## User Story
 
-**As a** visualization developer  
-**I want** overlay composition modes to use proper GPU blending  
-**So that** I get correct visual results when composing semi-transparent visualizations  
+**As a** visualization developer **I want** overlay composition modes to use
+proper GPU blending **So that** I get correct visual results when composing
+semi-transparent visualizations
 
 ## Acceptance Criteria
 
-### Core Blend State Management
+### AC1: Core Blend State Management
 
-- [ ] **WebGPU Integration**: `RenderContext::set_blend_mode()` configures actual GPU blend state
-- [ ] **Render Pipeline State**: Blend modes modify render pipeline blend configuration
-- [ ] **State Restoration**: Original blend state is properly restored after composition
+- [ ] **WebGPU Integration**: `RenderContext::set_blend_mode()` configures
+      actual GPU blend state
+- [ ] **Render Pipeline State**: Blend modes modify render pipeline blend
+      configuration
+- [ ] **State Restoration**: Original blend state is properly restored after
+      composition
 - [ ] **Performance**: Blend state changes add minimal overhead
 
-### Supported Blend Modes
+### AC2: Supported Blend Modes
 
 - [ ] **None**: No blending (replace existing pixels)
-- [ ] **AlphaBlending**: Standard alpha compositing (`src_alpha * src + (1 - src_alpha) * dst`)
+- [ ] **AlphaBlending**: Standard alpha compositing
+      (`src_alpha * src + (1 - src_alpha) * dst`)
 - [ ] **Additive**: Additive blending (`src + dst`)
 - [ ] **Multiply**: Multiplicative blending (`src * dst`)
 
-### API Integration
+### AC3: API Integration
 
 - [ ] **Overlay Mode**: Automatically uses AlphaBlending for proper layering
 - [ ] **Custom Behaviors**: Can specify blend modes for advanced effects
-- [ ] **Global Alpha**: Support for global alpha values in cross-fade compositions
+- [ ] **Global Alpha**: Support for global alpha values in cross-fade
+      compositions
 - [ ] **Error Handling**: Clear errors for unsupported blend configurations
 
 ## Technical Design
@@ -50,7 +57,7 @@ impl RenderContext {
     pub fn set_blend_mode(&mut self, mode: BlendMode) -> GupResult<()> {
         // Store current blend mode for restoration
         self.current_blend_mode = mode;
-        
+
         // Create new render pipeline with updated blend state
         let blend_state = match mode {
             BlendMode::None => None,
@@ -72,13 +79,13 @@ impl RenderContext {
                 alpha: BlendComponent::default(),
             }),
         };
-        
+
         // Update active render pipeline
         self.update_blend_state(blend_state)?;
-        
+
         Ok(())
     }
-    
+
     /// Set global alpha for rendering operations
     pub fn set_global_alpha(&mut self, alpha: f32) -> GupResult<()> {
         // Update uniform buffer with global alpha value
@@ -88,16 +95,16 @@ impl RenderContext {
             0,
             bytemuck::cast_slice(&[alpha_uniform])
         );
-        
+
         Ok(())
     }
-    
+
     /// Push current blend state onto stack for nested compositions
     pub fn push_blend_state(&mut self) -> GupResult<()> {
         self.blend_state_stack.push(self.current_blend_mode);
         Ok(())
     }
-    
+
     /// Restore previous blend state from stack
     pub fn pop_blend_state(&mut self) -> GupResult<()> {
         if let Some(previous_mode) = self.blend_state_stack.pop() {
@@ -134,19 +141,19 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
     fn render_overlay(&mut self, context: &mut RenderContext) -> GupResult<()> {
         // Push current blend state
         context.push_blend_state()?;
-        
+
         // Render first component (background layer)
         self.first.render(context)?;
-        
+
         // Configure blending for overlay
         context.set_blend_mode(BlendMode::AlphaBlending)?;
-        
+
         // Render second component (foreground layer)
         self.second.render(context)?;
-        
+
         // Restore original blend state
         context.pop_blend_state()?;
-        
+
         Ok(())
     }
 }
@@ -175,7 +182,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 ### Prerequisite Stories
 
-- GUP-020: WebGPU Integration for RenderContext (provides GPU pipeline infrastructure)
+- GUP-020: WebGPU Integration for RenderContext (provides GPU pipeline
+  infrastructure)
 - GUP-021: Advanced Composition Mode Implementation (provides BlendMode enum)
 
 ### Enables Stories
@@ -192,11 +200,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 #[tokio::test]
 async fn test_blend_mode_pipeline_integration() {
     let mut context = RenderContext::new().await.unwrap();
-    
+
     // Test that blend mode changes affect pipeline state
     context.set_blend_mode(BlendMode::AlphaBlending).unwrap();
     assert_eq!(context.current_blend_mode(), BlendMode::AlphaBlending);
-    
+
     context.set_blend_mode(BlendMode::Additive).unwrap();
     assert_eq!(context.current_blend_mode(), BlendMode::Additive);
 }
@@ -204,22 +212,22 @@ async fn test_blend_mode_pipeline_integration() {
 #[tokio::test]
 async fn test_blend_state_stack() {
     let mut context = RenderContext::new().await.unwrap();
-    
+
     // Initial state
     context.set_blend_mode(BlendMode::None).unwrap();
-    
+
     // Push and change
     context.push_blend_state().unwrap();
     context.set_blend_mode(BlendMode::AlphaBlending).unwrap();
-    
+
     // Nested push and change
     context.push_blend_state().unwrap();
     context.set_blend_mode(BlendMode::Additive).unwrap();
-    
+
     // Pop should restore previous state
     context.pop_blend_state().unwrap();
     assert_eq!(context.current_blend_mode(), BlendMode::AlphaBlending);
-    
+
     context.pop_blend_state().unwrap();
     assert_eq!(context.current_blend_mode(), BlendMode::None);
 }
@@ -227,7 +235,7 @@ async fn test_blend_state_stack() {
 #[tokio::test]
 async fn test_global_alpha_uniform() {
     let mut context = RenderContext::new().await.unwrap();
-    
+
     context.set_global_alpha(0.5).unwrap();
     // Verify uniform buffer was updated
     // (Would need additional context methods to inspect buffer contents)
@@ -240,14 +248,14 @@ async fn test_global_alpha_uniform() {
 #[tokio::test]
 async fn test_overlay_visual_blending() {
     let mut context = RenderContext::new().await.unwrap();
-    
+
     // Create semi-transparent visualizations
     let background = create_test_quad([1.0, 0.0, 0.0, 0.5]); // Red, 50% alpha
     let foreground = create_test_quad([0.0, 1.0, 0.0, 0.5]); // Green, 50% alpha
-    
+
     let mut overlay = background.overlay(foreground);
     overlay.render(&mut context).unwrap();
-    
+
     // Verify blended result (would need pixel readback for full validation)
 }
 ```
@@ -288,7 +296,7 @@ impl RenderContext {
         if self.current_blend_mode == mode {
             return Ok(());
         }
-        
+
         // ... actual state change logic
     }
 }
@@ -299,7 +307,8 @@ impl RenderContext {
 - [ ] **Visual Correctness**: Overlay compositions show proper alpha blending
 - [ ] **Performance**: Blend state changes add <0.1ms overhead
 - [ ] **State Integrity**: Nested compositions properly restore blend state
-- [ ] **Pipeline Efficiency**: Render pipeline recreation minimized through caching
+- [ ] **Pipeline Efficiency**: Render pipeline recreation minimized through
+      caching
 
 ## Definition of Done
 

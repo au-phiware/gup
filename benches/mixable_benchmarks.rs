@@ -4,7 +4,9 @@
 //! compared to direct rendering as specified in the story requirements.
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use gup::{CrossFadeComposition, CustomCompositionBehavior, GupResult, Mixable, MixableExt, RenderContext};
+use gup::{
+    CrossFadeComposition, CustomCompositionBehavior, GupResult, Mixable, MixableExt, RenderContext,
+};
 use std::{hint::black_box, time::Duration};
 use tokio::runtime::Builder;
 
@@ -77,7 +79,11 @@ fn bench_two_component_composition(c: &mut Criterion) {
         // Direct rendering baseline
         group.bench_with_input(BenchmarkId::new("direct", data_size), data_size, |b, _| {
             b.iter(|| {
-                black_box(render_direct(&mut [viz1.clone(), viz2.clone()], &mut context)).unwrap();
+                black_box(render_direct(
+                    &mut [viz1.clone(), viz2.clone()],
+                    &mut context,
+                ))
+                .unwrap();
             });
         });
 
@@ -252,7 +258,8 @@ fn bench_composition_modes(c: &mut Criterion) {
     let mut overlay = viz1.clone().overlay(viz2.clone());
     let mut merge = viz1.clone().merge(viz2.clone());
     let mut beside = viz1.clone().beside(viz2.clone());
-    let custom_behavior = CustomCompositionBehavior::CrossFade(CrossFadeComposition { fade_factor: 0.5 });
+    let custom_behavior =
+        CustomCompositionBehavior::CrossFade(CrossFadeComposition { fade_factor: 0.5 });
     let mut custom = viz1.custom_compose(viz2, custom_behavior);
 
     group.bench_function("overlay", |b| {

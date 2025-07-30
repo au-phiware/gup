@@ -4,14 +4,14 @@
 
 ### "Engineering Excellence First, Composability Always"
 
-1. **Low-Level Foundation First**: Build rock-solid GPU primitives and
-   Selection API
+1. **Low-Level Foundation First**: Build rock-solid GPU primitives and Selection
+   API
 2. **Dog-food Our Own API**: Use low-level API internally to ensure it's
    powerful enough
 3. **Universal Composability**: Everything must compose naturally like D3's
    primitives
-4. **High-Level APIs Second**: Build Observable Plot-style convenience on
-   proven foundation
+4. **High-Level APIs Second**: Build Observable Plot-style convenience on proven
+   foundation
 
 ### Why This Approach
 
@@ -239,28 +239,29 @@ impl<T, M: Mark> Selection<T, M> {
   pipelines
 - **Composability Proof**: Complex visualizations built by composing simple
   functions
-- **GPU Integration**: All transformations happen on GPU with no CPU
-  bottlenecks
+- **GPU Integration**: All transformations happen on GPU with no CPU bottlenecks
 
 #### Dog-fooding Validation
 
 - **Self-hosting**: All internal features built using shader function system
-- **Macro Validation**: `#[wgsl_function]` macro works reliably for common
-  cases
+- **Macro Validation**: `#[wgsl_function]` macro works reliably for common cases
 - **Performance Scalability**: Shader composition doesn't degrade performance
 - **Type Safety**: Shader function composition catches type mismatches at
   compile time
 
 #### API Ergonomics
 
-- **Natural Composition**: Shader functions compose as naturally as D3 method chaining
+- **Natural Composition**: Shader functions compose as naturally as D3 method
+  chaining
 - **Error Messages**: Clear feedback when shader function types don't match
 - **Debug Support**: Generated shaders can be inspected and debugged
-- **Flexibility**: Both manual WGSL and macro-generated functions work seamlessly
+- **Flexibility**: Both manual WGSL and macro-generated functions work
+  seamlessly
 
 ## Phase 2: High-Level Convenience APIs - Version 0.2.0
 
-**Only after Phase 1 is rock-solid**, build convenience APIs on proven foundation:
+**Only after Phase 1 is rock-solid**, build convenience APIs on proven
+foundation:
 
 ### Observable Plot-Style API
 
@@ -330,7 +331,8 @@ chart.select_all::<Circle>()
 ### Phase 2: Deliverables
 
 - [ ] Observable Plot-equivalent convenience APIs for common chart types
-- [ ] All high-level APIs built using low-level Selection and shader function primitives
+- [ ] All high-level APIs built using low-level Selection and shader function
+      primitives
 - [ ] Migration guide from D3.js showing low-level API power
 - [ ] Performance maintained: 100K+ points with high-level APIs
 - [ ] External validation with teams using both API levels

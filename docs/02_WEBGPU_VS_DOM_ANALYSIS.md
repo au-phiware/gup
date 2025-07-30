@@ -16,21 +16,22 @@
 
 ```javascript
 // D3.js approach: bind data to DOM elements
-svg.selectAll("circle")
-    .data(dataset)
-    .enter()
-    .append("circle")
-    .attr("cx", d => xScale(d.x))
-    .attr("cy", d => yScale(d.y))
-    .attr("r", d => radiusScale(d.value));
+svg
+  .selectAll("circle")
+  .data(dataset)
+  .enter()
+  .append("circle")
+  .attr("cx", d => xScale(d.x))
+  .attr("cy", d => yScale(d.y))
+  .attr("r", d => radiusScale(d.value));
 ```
 
 #### DOM Performance Characteristics
 
 - **Scale Limitations**: "SVG charts can typically handle around 1,000
   datapoints"
-- **DOM Overhead**: "SVG cannot compete when rendering thousands of elements
-  due to DOM size issues"
+- **DOM Overhead**: "SVG cannot compete when rendering thousands of elements due
+  to DOM size issues"
 - **Update Efficiency**: Individual element updates through attribute changes
 - **Memory Usage**: Each visual element consumes DOM node memory
 
@@ -124,8 +125,7 @@ struct Vertex {
 
 - **CSS Transitions**: Declarative property animations
 - **JavaScript Tweening**: Libraries like D3 provide smooth interpolation
-- **Individual Element Animation**: Each element can have independent
-  animations
+- **Individual Element Animation**: Each element can have independent animations
 - **Browser Optimization**: Hardware acceleration for transform and opacity
   changes
 

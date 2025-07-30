@@ -2,45 +2,50 @@
 
 ## Story Overview
 
-**Title**: Implement Comprehensive Type System Integration  
-**Epic**: Phase 1 Initiative 2 - Unified Shader Function System  
-**Priority**: Critical  
-**Story Points**: 8  
+**Title**: Implement Comprehensive Type System Integration **Epic**: Phase 1
+Initiative 2 - Unified Shader Function System **Priority**: Critical **Story
+Points**: 8
 
 ## Context
 
-Type system integration ensures that Rust's compile-time type checking validates shader function composition. This prevents runtime errors and provides clear feedback when shader functions are incompatibly composed. The system must map Rust types to WGSL types and validate compositions through trait bounds.
+Type system integration ensures that Rust's compile-time type checking validates
+shader function composition. This prevents runtime errors and provides clear
+feedback when shader functions are incompatibly composed. The system must map
+Rust types to WGSL types and validate compositions through trait bounds.
 
 ## User Story
 
-**As a** visualization developer  
-**I want** Rust's type system to validate my shader function compositions  
-**So that** I catch type mismatches at compile time rather than runtime and get clear error messages for invalid compositions  
+**As a** visualization developer **I want** Rust's type system to validate my
+shader function compositions **So that** I catch type mismatches at compile time
+rather than runtime and get clear error messages for invalid compositions
 
 ## Acceptance Criteria
 
-### Type Safety Features
+### AC1: Type Safety Features
 
-- [ ] **Compile-Time Validation**: Invalid shader function compositions caught at compile time
-- [ ] **Clear Error Messages**: Helpful error messages explaining type mismatches
-- [ ] **Type Inference**: Automatic type inference for common composition patterns
+- [ ] **Compile-Time Validation**: Invalid shader function compositions caught
+      at compile time
+- [ ] **Clear Error Messages**: Helpful error messages explaining type
+      mismatches
+- [ ] **Type Inference**: Automatic type inference for common composition
+      patterns
 - [ ] **WGSL Mapping**: Accurate mapping between Rust types and WGSL types
 
-### Core Type Traits
+### AC2: Core Type Traits
 
 ```rust
 pub trait ShaderType: Clone + Send + Sync + 'static {
     // WGSL type representation
     fn wgsl_type_name() -> &'static str;
     fn wgsl_type_definition() -> Option<&'static str> { None }
-    
+
     // Memory layout information
     fn size_bytes() -> usize;
     fn alignment() -> usize;
-    
+
     // Composition compatibility
-    fn is_compatible_with<T: ShaderType>() -> bool { 
-        Self::wgsl_type_name() == T::wgsl_type_name() 
+    fn is_compatible_with<T: ShaderType>() -> bool {
+        Self::wgsl_type_name() == T::wgsl_type_name()
     }
 }
 
@@ -49,12 +54,15 @@ pub trait Compatible<T: ShaderType>: ShaderType {
 }
 ```
 
-### Type Validation
+### AC3: Type Validation
 
-- [ ] **Automatic Compatibility**: Common type conversions (f32 -> vec2<f32>) handled automatically
+- [ ] **Automatic Compatibility**: Common type conversions (`f32` ->
+      `vec2<f32>`) handled automatically
 - [ ] **Explicit Conversions**: Clear syntax for non-automatic type conversions
-- [ ] **Struct Validation**: Custom struct types validated for WGSL compatibility
-- [ ] **Array Support**: Array types with proper size and element type validation
+- [ ] **Struct Validation**: Custom struct types validated for WGSL
+      compatibility
+- [ ] **Array Support**: Array types with proper size and element type
+      validation
 
 ## Technical Tasks
 
@@ -67,7 +75,7 @@ pub trait Compatible<T: ShaderType>: ShaderType {
 
 ### 2. Primitive Type Implementations
 
-- [ ] Implement ShaderType for f32, i32, u32, bool
+- [ ] Implement ShaderType for `f32`, `i32`, `u32`, `bool`
 - [ ] Add vector types: Vec2, Vec3, Vec4
 - [ ] Implement matrix types: Mat2, Mat3, Mat4
 - [ ] Create array type support with const generics
@@ -122,13 +130,13 @@ impl Compatible<Vec4> for f32 {}  // f32 can be expanded to Vec4(x, x, x, x)
 struct WeatherData {
     #[shader_type(f32)]
     longitude: f32,
-    
+
     #[shader_type(f32)]
     latitude: f32,
-    
+
     #[shader_type(f32)]
     temperature: f32,
-    
+
     #[shader_type(vec3<f32>)]
     wind_vector: Vec3,
 }
@@ -136,7 +144,7 @@ struct WeatherData {
 // Generated implementation:
 impl ShaderType for WeatherData {
     fn wgsl_type_name() -> &'static str { "WeatherData" }
-    
+
     fn wgsl_type_definition() -> Option<&'static str> {
         Some(r#"
         struct WeatherData {
@@ -147,7 +155,7 @@ impl ShaderType for WeatherData {
         }
         "#)
     }
-    
+
     fn size_bytes() -> usize { 20 } // 4 + 4 + 4 + 12, with padding
     fn alignment() -> usize { 16 }  // vec3 alignment requirement
 }
@@ -160,7 +168,7 @@ impl ShaderType for WeatherData {
 fn valid_composition() {
     let position_func: impl ShaderFunction<Input=WeatherData, Output=Vec2> = get_position;
     let color_func: impl ShaderFunction<Input=Vec2, Output=Vec4> = map_color;
-    
+
     // This compiles successfully
     let composed = position_func.compose(color_func);
 }
@@ -169,7 +177,7 @@ fn valid_composition() {
 fn invalid_composition() {
     let position_func: impl ShaderFunction<Input=WeatherData, Output=Vec2> = get_position;
     let scale_func: impl ShaderFunction<Input=f32, Output=f32> = linear_scale;
-    
+
     // This fails to compile with clear error message:
     // "Cannot compose functions: Output type Vec2 is not compatible with Input type f32"
     let composed = position_func.compose(scale_func); // ❌ Compile error
@@ -189,11 +197,11 @@ impl<T: VectorType> ShaderFunction for VectorScale<T> {
     type Input = T;
     type Output = T;
     type Uniforms = VectorScaleUniforms;
-    
+
     fn wgsl_function() -> &'static str {
         // Generate WGSL based on T's type information
-        &format!("fn vector_scale(input: {}) -> {} {{ ... }}", 
-                T::wgsl_type_name(), 
+        &format!("fn vector_scale(input: {}) -> {} {{ ... }}",
+                T::wgsl_type_name(),
                 T::wgsl_type_name())
     }
 }
@@ -257,7 +265,7 @@ fn test_custom_type_generation() {
         x: f32,
         y: f32,
     }
-    
+
     assert_eq!(TestData::wgsl_type_name(), "TestData");
     assert!(TestData::wgsl_type_definition().is_some());
 }
@@ -281,7 +289,7 @@ fn test_struct_definition_generation() {
         color: Vec4,
         intensity: f32,
     }
-    
+
     let definition = ComplexData::wgsl_type_definition().unwrap();
     assert!(definition.contains("struct ComplexData"));
     assert!(definition.contains("position: vec3<f32>"));
@@ -301,7 +309,7 @@ fn test_clear_error_messages() {
         let color_func = ColorScale::new();           // f32 input
         let invalid = position_func.compose(color_func);
     "#);
-    
+
     assert!(error_output.contains("type mismatch"));
     assert!(error_output.contains("Vec2"));
     assert!(error_output.contains("f32"));
@@ -313,16 +321,20 @@ fn test_clear_error_messages() {
 
 ### Type Safety Requirements
 
-- [ ] **Compile-Time Validation**: 100% of type mismatches caught at compile time
-- [ ] **Error Message Quality**: Error messages include type names and suggestions
+- [ ] **Compile-Time Validation**: 100% of type mismatches caught at compile
+      time
+- [ ] **Error Message Quality**: Error messages include type names and
+      suggestions
 - [ ] **Zero Runtime Overhead**: Type validation adds no runtime cost
-- [ ] **WGSL Accuracy**: Generated WGSL types match Rust type definitions exactly
+- [ ] **WGSL Accuracy**: Generated WGSL types match Rust type definitions
+      exactly
 
 ### Developer Experience Requirements
 
 - [ ] **IDE Support**: Full autocomplete and error highlighting in IDEs
 - [ ] **Documentation**: Clear examples of type usage and conversion patterns
-- [ ] **Migration Support**: Clear guidance for converting between compatible types
+- [ ] **Migration Support**: Clear guidance for converting between compatible
+      types
 - [ ] **Performance**: Type checking adds <10% to compilation time
 
 ## Risk Assessment
@@ -336,21 +348,23 @@ fn test_clear_error_messages() {
 ### Mitigation Strategies
 
 - **Error Message Focus**: Prioritize clear, actionable error messages
-- **Incremental Implementation**: Start with simple types, add complexity gradually
+- **Incremental Implementation**: Start with simple types, add complexity
+  gradually
 - **User Testing**: Get feedback on error message clarity from developers
 
 ## Implementation Notes
 
 ### Design Decisions
 
-- Use marker traits (Compatible<T>) for type validation rather than runtime checks
+- Use marker traits (`Compatible<T>`) for type validation rather than runtime
+  checks
 - Generate WGSL struct definitions automatically from Rust struct definitions
 - Prioritize clear error messages over type system flexibility
 - Use const generics for array types to maintain size information
 
 ### WGSL Mapping Strategy
 
-- Direct mapping for primitive types (f32 -> f32, Vec3 -> vec3<f32>)
+- Direct mapping for primitive types (`f32` -> `f32`, `Vec3` -> `vec3<f32>`)
 - Automatic struct generation with proper field ordering
 - Respect WGSL alignment rules in generated structs
 - Handle WGSL reserved keywords through automatic renaming

@@ -9,7 +9,7 @@ This directory contains comprehensive documentation for the Gup project.
 Project vision, objectives, and success metrics. Start here to understand what
 Gup aims to achieve and why.
 
-### [🔧 Technical Approach](./TECHNICAL_APPROACH.md)  
+### [🔧 Technical Approach](./TECHNICAL_APPROACH.md)
 
 Deep dive into Gup's unified shader function architecture - the core innovation
 that enables GPU-accelerated composable visualizations.
@@ -58,11 +58,11 @@ understand the project vision.
 **Want technical details?** Read [Technical Approach](./TECHNICAL_APPROACH.md)
 for the unified shader architecture.
 
-**Interested in market positioning?** See [Market
-Analysis](./MARKET_ANALYSIS.md) for competitive landscape.
+**Interested in market positioning?** See
+[Market Analysis](./MARKET_ANALYSIS.md) for competitive landscape.
 
-**Planning to contribute?** Check [Implementation
-Strategy](./IMPLEMENTATION_STRATEGY.md) for development phases.
+**Planning to contribute?** Check
+[Implementation Strategy](./IMPLEMENTATION_STRATEGY.md) for development phases.
 
 ---
 

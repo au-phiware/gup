@@ -2,24 +2,25 @@
 
 ## Story Overview
 
-**Title**: Implement Shader Pipeline Builder System  
-**Epic**: Phase 1 Initiative 2 - Unified Shader Function System  
-**Priority**: Critical  
-**Story Points**: 13  
+**Title**: Implement Shader Pipeline Builder System **Epic**: Phase 1 Initiative
+2 - Unified Shader Function System **Priority**: Critical **Story Points**: 13
 
 ## Context
 
-The ShaderPipeline is responsible for taking composed shader functions and generating optimized WGSL vertex and fragment shaders for the GPU. It must handle function composition, uniform buffer management, and generate high-quality WGSL code that leverages GPU parallel processing.
+The ShaderPipeline is responsible for taking composed shader functions and
+generating optimized WGSL vertex and fragment shaders for the GPU. It must
+handle function composition, uniform buffer management, and generate
+high-quality WGSL code that leverages GPU parallel processing.
 
 ## User Story
 
-**As a** Gup library developer  
-**I want** an automatic shader pipeline generation system  
-**So that** composed shader functions are efficiently translated to optimized GPU shaders without manual WGSL coding  
+**As a** Gup library developer **I want** an automatic shader pipeline
+generation system **So that** composed shader functions are efficiently
+translated to optimized GPU shaders without manual WGSL coding
 
 ## Acceptance Criteria
 
-### Core Pipeline Structure
+### AC1: Core Pipeline Structure
 
 ```rust
 pub struct ShaderPipeline {
@@ -36,19 +37,23 @@ struct CachedShaders {
 }
 ```
 
-### Pipeline Capabilities
+### AC2: Pipeline Capabilities
 
-- [ ] **Function Composition**: Combine multiple shader functions into unified shaders
-- [ ] **Automatic WGSL Generation**: Generate complete vertex and fragment shaders
+- [ ] **Function Composition**: Combine multiple shader functions into unified
+      shaders
+- [ ] **Automatic WGSL Generation**: Generate complete vertex and fragment
+      shaders
 - [ ] **Uniform Management**: Handle uniform buffer creation and binding
 - [ ] **Pipeline Caching**: Cache generated shaders until functions change
 
-### Generated Shader Quality
+### AC3: Generated Shader Quality
 
 - [ ] **Optimization**: Generated WGSL is efficient and well-structured
-- [ ] **Correctness**: Generated shaders compile and run correctly on all platforms
+- [ ] **Correctness**: Generated shaders compile and run correctly on all
+      platforms
 - [ ] **Readability**: Generated WGSL is readable for debugging purposes
-- [ ] **Performance**: Shader generation adds <5ms overhead for typical pipelines
+- [ ] **Performance**: Shader generation adds <5ms overhead for typical
+      pipelines
 
 ## Technical Tasks
 
@@ -87,21 +92,21 @@ struct CachedShaders {
 ```rust
 impl ShaderPipeline {
     pub fn new() -> Self;
-    
+
     // Add shader function to pipeline
     pub fn add_function<F: ShaderFunction + 'static>(&mut self, function: F);
-    
+
     // Map attribute names to function outputs
     pub fn map_attribute(&mut self, attr_name: &str, function_name: &str);
-    
+
     // Generate complete shader source
     pub fn generate_vertex_shader(&self) -> String;
     pub fn generate_fragment_shader(&self) -> String;
-    
+
     // Create wgpu resources
     pub fn create_render_pipeline(&self, device: &wgpu::Device) -> wgpu::RenderPipeline;
     pub fn create_bind_group(&self, device: &wgpu::Device) -> wgpu::BindGroup;
-    
+
     // Update uniform data
     pub fn update_uniforms(&mut self, queue: &wgpu::Queue);
 }
@@ -113,36 +118,36 @@ impl ShaderPipeline {
 impl ShaderPipeline {
     pub fn generate_vertex_shader(&self) -> String {
         let mut shader = String::new();
-        
+
         // Add data type definitions
         shader.push_str(&self.generate_data_type_definitions());
-        
+
         // Add uniform buffer bindings
         shader.push_str(&self.generate_uniform_bindings());
-        
+
         // Add all function definitions
         for function in &self.functions {
             shader.push_str(function.wgsl_function());
             shader.push_str("\n\n");
         }
-        
+
         // Generate main vertex function
         shader.push_str(&self.generate_main_vertex_function());
-        
+
         shader
     }
-    
+
     fn generate_main_vertex_function(&self) -> String {
         format!(r#"
         @vertex
         fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {{
             let data = data_buffer[vertex_index];
-            
+
             // Apply attribute transformations
             let position = {}(data, position_uniforms);
             let color = {}(data, color_uniforms);
             let size = {}(data, size_uniforms);
-            
+
             return VertexOutput {{
                 @builtin(position) clip_position: vec4<f32>(position, 0.0, 1.0),
                 @location(0) color: color,
@@ -164,7 +169,7 @@ impl ShaderPipeline {
 impl ShaderPipeline {
     fn generate_uniform_bindings(&self) -> String {
         let mut bindings = String::new();
-        
+
         for (i, (name, function)) in self.functions.iter().enumerate() {
             if function.has_uniforms() {
                 bindings.push_str(&format!(
@@ -173,10 +178,10 @@ impl ShaderPipeline {
                 ));
             }
         }
-        
+
         bindings
     }
-    
+
     fn create_uniform_buffers(&self, device: &wgpu::Device) -> Vec<wgpu::Buffer> {
         self.functions.iter()
             .filter_map(|function| function.create_uniforms())
@@ -198,19 +203,19 @@ impl ShaderPipeline {
 impl ShaderPipeline {
     fn optimize_shader(&self, shader_source: &str) -> String {
         let mut optimized = shader_source.to_string();
-        
+
         // Dead code elimination
         optimized = self.remove_unused_uniforms(&optimized);
-        
+
         // Function inlining for small functions
         optimized = self.inline_small_functions(&optimized);
-        
+
         // Constant folding
         optimized = self.fold_constants(&optimized);
-        
+
         optimized
     }
-    
+
     fn remove_unused_uniforms(&self, shader: &str) -> String {
         // Parse shader and remove unused uniform declarations
         // Implementation uses WGSL AST analysis
@@ -243,7 +248,7 @@ fn test_pipeline_creation() {
     let mut pipeline = ShaderPipeline::new();
     pipeline.add_function(LinearScale::new(0.0, 100.0, 0.0, 1.0));
     pipeline.add_function(ColorMap::new(color_palette));
-    
+
     assert_eq!(pipeline.function_count(), 2);
 }
 
@@ -251,7 +256,7 @@ fn test_pipeline_creation() {
 fn test_shader_generation() {
     let mut pipeline = ShaderPipeline::new();
     pipeline.add_function(LinearScale::new(0.0, 100.0, 0.0, 1.0));
-    
+
     let vertex_shader = pipeline.generate_vertex_shader();
     assert!(vertex_shader.contains("linear_scale"));
     assert!(vertex_shader.contains("@vertex"));
@@ -263,7 +268,7 @@ fn test_uniform_management() {
     let mut pipeline = ShaderPipeline::new();
     let scale_func = LinearScale::new(0.0, 100.0, 0.0, 1.0);
     pipeline.add_function(scale_func);
-    
+
     let device = create_test_device();
     let uniforms = pipeline.create_uniform_buffers(&device);
     assert_eq!(uniforms.len(), 1);
@@ -278,16 +283,16 @@ async fn test_complete_pipeline() {
     let mut pipeline = ShaderPipeline::new();
     pipeline.add_function(PositionTransform::new());
     pipeline.add_function(ColorMapping::new());
-    
+
     let device = create_test_device();
-    
+
     // Test that generated shader compiles
     let vertex_source = pipeline.generate_vertex_shader();
     let vertex_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("test_vertex"),
         source: wgpu::ShaderSource::Wgsl(vertex_source.into()),
     });
-    
+
     // Test render pipeline creation
     let render_pipeline = pipeline.create_render_pipeline(&device);
     assert!(render_pipeline.is_valid());
@@ -300,7 +305,7 @@ async fn test_complete_pipeline() {
 #[bench]
 fn bench_shader_generation(b: &mut Bencher) {
     let mut pipeline = create_complex_pipeline(); // 10+ functions
-    
+
     b.iter(|| {
         let _shader = pipeline.generate_vertex_shader();
     });
@@ -309,10 +314,10 @@ fn bench_shader_generation(b: &mut Bencher) {
 #[bench]
 fn bench_pipeline_caching(b: &mut Bencher) {
     let mut pipeline = create_complex_pipeline();
-    
+
     // First generation should be slow
     let _first = pipeline.generate_vertex_shader();
-    
+
     // Subsequent generations should be fast (cached)
     b.iter(|| {
         let _cached = pipeline.generate_vertex_shader();
@@ -326,13 +331,13 @@ fn bench_pipeline_caching(b: &mut Bencher) {
 #[test]
 fn test_generated_wgsl_validity() {
     let test_functions = create_all_test_functions();
-    
+
     for function_set in test_functions {
         let mut pipeline = ShaderPipeline::new();
         for func in function_set {
             pipeline.add_function(func);
         }
-        
+
         let vertex_shader = pipeline.generate_vertex_shader();
         assert!(validate_wgsl_syntax(&vertex_shader));
     }
@@ -344,9 +349,11 @@ fn test_generated_wgsl_validity() {
 ### Functional Requirements
 
 - [ ] **Shader Quality**: Generated WGSL compiles on all target platforms
-- [ ] **Performance**: Shader generation <5ms for typical pipelines (5-10 functions)
+- [ ] **Performance**: Shader generation <5ms for typical pipelines (5-10
+      functions)
 - [ ] **Correctness**: Generated shaders produce expected visual output
-- [ ] **Optimization**: Generated shaders perform within 10% of hand-optimized equivalents
+- [ ] **Optimization**: Generated shaders perform within 10% of hand-optimized
+      equivalents
 
 ### Quality Requirements
 
@@ -359,15 +366,18 @@ fn test_generated_wgsl_validity() {
 
 ### Technical Risks
 
-- **High**: WGSL generation complexity could produce invalid or inefficient shaders
+- **High**: WGSL generation complexity could produce invalid or inefficient
+  shaders
 - **Medium**: Uniform buffer layout might not match WGSL requirements
 - **Medium**: Caching system could become stale or inconsistent
 
 ### Mitigation Strategies
 
 - **Validation Testing**: Comprehensive WGSL validation on multiple platforms
-- **Reference Implementation**: Compare generated output against known-good shaders
-- **Incremental Development**: Start with simple generation, add optimization gradually
+- **Reference Implementation**: Compare generated output against known-good
+  shaders
+- **Incremental Development**: Start with simple generation, add optimization
+  gradually
 
 ## Implementation Notes
 

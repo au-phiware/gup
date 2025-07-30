@@ -2,31 +2,35 @@
 
 ## Story Overview
 
-**Title**: Implement GPU-Accelerated Interaction System  
-**Epic**: Phase 1 Initiative 4 - Interaction System and Performance  
-**Priority**: Critical  
-**Story Points**: 13  
+**Title**: Implement GPU-Accelerated Interaction System **Epic**: Phase 1
+Initiative 4 - Interaction System and Performance **Priority**: Critical **Story
+Points**: 13
 
 ## Context
 
-The interaction system must handle hit testing, picking, and event handling for massive datasets using GPU acceleration. Traditional CPU-based hit testing becomes a bottleneck with 100K+ points, so the system must perform spatial queries and collision detection in parallel on the GPU while maintaining responsiveness and accuracy.
+The interaction system must handle hit testing, picking, and event handling for
+massive datasets using GPU acceleration. Traditional CPU-based hit testing
+becomes a bottleneck with 100K+ points, so the system must perform spatial
+queries and collision detection in parallel on the GPU while maintaining
+responsiveness and accuracy.
 
 ## User Story
 
-**As a** visualization developer  
-**I want** GPU-accelerated interaction handling for large datasets  
-**So that** I can provide responsive hover, click, and selection interactions even with millions of data points  
+**As a** visualization developer **I want** GPU-accelerated interaction handling
+for large datasets **So that** I can provide responsive hover, click, and
+selection interactions even with millions of data points
 
 ## Acceptance Criteria
 
-### Core Interaction Features
+### AC1: Core Interaction Features
 
 - [ ] **GPU Hit Testing**: Parallel hit detection using compute shaders
 - [ ] **Spatial Queries**: Efficient point-in-shape and region selection
-- [ ] **Event Integration**: Connect GPU interactions with high-level event handlers
+- [ ] **Event Integration**: Connect GPU interactions with high-level event
+      handlers
 - [ ] **Performance Target**: <1ms hit testing for 1M+ points
 
-### Interaction Types
+### AC2: Interaction Types
 
 ```rust
 pub enum InteractionType {
@@ -38,12 +42,14 @@ pub enum InteractionType {
 }
 ```
 
-### Query System
+### AC3: Query System
 
 - [ ] **Point Queries**: Find elements at specific screen coordinates
-- [ ] **Region Queries**: Find all elements within rectangular or polygonal regions
+- [ ] **Region Queries**: Find all elements within rectangular or polygonal
+      regions
 - [ ] **Custom Queries**: Extensible system for complex spatial queries
-- [ ] **Batch Queries**: Process multiple queries efficiently in single GPU dispatch
+- [ ] **Batch Queries**: Process multiple queries efficiently in single GPU
+      dispatch
 
 ## Technical Tasks
 
@@ -86,11 +92,11 @@ pub struct InteractionSystem {
     spatial_index_buffer: GpuBuffer<SpatialNode>,
     query_buffer: GpuBuffer<InteractionQuery>,
     result_buffer: GpuBuffer<InteractionResult>,
-    
+
     // CPU-side management
     event_handlers: HashMap<String, Vec<Box<dyn EventHandler>>>,
     active_queries: Vec<PendingQuery>,
-    
+
     // Performance monitoring
     query_stats: QueryStats,
 }
@@ -100,18 +106,18 @@ impl InteractionSystem {
         // Create GPU query
         let query = InteractionQuery::Point { position };
         let query_id = self.submit_query(query, selections).await;
-        
+
         // Collect results
         self.collect_query_results(query_id).await
     }
-    
+
     pub async fn query_region(&mut self, region: Rect, selections: &[&dyn Renderable]) -> Vec<ElementHit> {
         let query = InteractionQuery::Region { bounds: region };
         let query_id = self.submit_query(query, selections).await;
-        
+
         self.collect_query_results(query_id).await
     }
-    
+
     pub fn register_event_handler<F>(&mut self, event_type: &str, handler: F)
     where F: Fn(&InteractionEvent) + Send + Sync + 'static
     {
@@ -156,18 +162,18 @@ struct InteractionResult {
 fn hit_test_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let element_index = global_id.x;
     let query_index = global_id.y;
-    
+
     if (element_index >= arrayLength(&elements) || query_index >= arrayLength(&queries)) {
         return;
     }
-    
+
     let element = elements[element_index];
     let query = queries[query_index];
-    
+
     var result: InteractionResult;
     result.element_id = element.element_id;
     result.is_hit = 0u;
-    
+
     // Perform hit test based on mark type and query type
     switch (element.mark_type) {
         case 0u: { // Circle
@@ -183,13 +189,13 @@ fn hit_test_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             result.is_hit = 0u;
         }
     }
-    
+
     if (result.is_hit != 0u) {
         let distance = length(query.position - element.position);
         result.distance = distance;
         result.intersection_point = element.position;
     }
-    
+
     let result_index = element_index * arrayLength(&queries) + query_index;
     results[result_index] = result;
 }
@@ -197,7 +203,7 @@ fn hit_test_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 fn test_circle_hit(element: ElementData, query: InteractionQuery) -> u32 {
     let distance = length(query.position - element.position);
     let radius = element.size.x * 0.5;
-    
+
     switch (query.query_type) {
         case 0u: { // Point query
             return select(0u, 1u, distance <= radius);
@@ -225,7 +231,7 @@ impl<T, M: Mark> Selection<T, M> {
     {
         // Register mark type for hit testing
         self.interaction_system.register_mark_type::<M>();
-        
+
         // Create event handler that filters for this selection's elements
         let selection_id = self.id();
         let wrapped_handler = move |event: &InteractionEvent| {
@@ -237,11 +243,11 @@ impl<T, M: Mark> Selection<T, M> {
                 }
             }
         };
-        
+
         self.interaction_system.register_event_handler(event_type, wrapped_handler);
         self
     }
-    
+
     pub fn query_at_position(&self, position: Vec2) -> Option<(usize, &T)> {
         // Synchronous query for immediate results (uses cached spatial index)
         self.interaction_system.query_selection_sync(self.id(), position)
@@ -256,7 +262,7 @@ pub struct SpatialIndex {
     // GPU-resident spatial data structure
     nodes: GpuBuffer<SpatialNode>,
     elements: GpuBuffer<SpatialElement>,
-    
+
     // Index configuration
     grid_size: Vec2,
     cell_size: Vec2,
@@ -276,14 +282,14 @@ impl SpatialIndex {
     pub fn build_from_selection<T, M: Mark>(&mut self, selection: &Selection<T, M>) {
         // Extract spatial information from selection data
         let spatial_elements = self.extract_spatial_elements(selection);
-        
+
         // Build spatial hierarchy on CPU
         let root_node = self.build_quadtree(&spatial_elements);
-        
+
         // Upload to GPU
         self.upload_spatial_data(&root_node);
     }
-    
+
     pub async fn query_region(&self, region: Rect) -> Vec<u32> {
         // Use compute shader to traverse spatial index and find intersecting elements
         let query = SpatialQuery { region, max_results: 10000 };
@@ -316,7 +322,7 @@ impl SpatialIndex {
 fn test_interaction_system_creation() {
     let device = create_test_device();
     let interaction_system = InteractionSystem::new(&device);
-    
+
     assert!(interaction_system.is_initialized());
 }
 
@@ -324,9 +330,9 @@ fn test_interaction_system_creation() {
 async fn test_point_query() {
     let mut system = create_test_interaction_system();
     let selection = create_test_circle_selection();
-    
+
     let hits = system.query_point(Vec2::new(50.0, 50.0), &[&selection]).await;
-    
+
     // Should find circle at (50, 50) with radius 10
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].element_id, 0);
@@ -336,10 +342,10 @@ async fn test_point_query() {
 async fn test_region_query() {
     let mut system = create_test_interaction_system();
     let selection = create_test_circle_selection();
-    
+
     let region = Rect::new(Vec2::new(0.0, 0.0), Vec2::new(100.0, 100.0));
     let hits = system.query_region(region, &[&selection]).await;
-    
+
     // Should find all circles within region
     assert!(hits.len() > 0);
 }
@@ -352,7 +358,7 @@ async fn test_region_query() {
 async fn bench_gpu_hit_testing_10k_points(b: &mut Bencher) {
     let mut system = create_test_interaction_system();
     let selection = create_large_selection(10_000);
-    
+
     b.iter(|| async {
         let _hits = system.query_point(Vec2::new(500.0, 500.0), &[&selection]).await;
     });
@@ -361,13 +367,13 @@ async fn bench_gpu_hit_testing_10k_points(b: &mut Bencher) {
 #[bench]
 async fn bench_cpu_vs_gpu_hit_testing(b: &mut Bencher) {
     let data = create_test_data(100_000);
-    
+
     // Benchmark GPU approach
     let gpu_time = bench_gpu_hit_testing(&data).await;
-    
+
     // Benchmark CPU approach
     let cpu_time = bench_cpu_hit_testing(&data);
-    
+
     // GPU should be significantly faster for large datasets
     assert!(gpu_time < cpu_time / 10.0);
 }
@@ -379,17 +385,17 @@ async fn bench_cpu_vs_gpu_hit_testing(b: &mut Bencher) {
 #[test]
 async fn test_hit_testing_accuracy() {
     let mut system = create_test_interaction_system();
-    
+
     // Create selection with known element positions
     let selection = create_precise_test_selection();
-    
+
     // Test hits at exact element positions
     for (i, position) in known_positions.iter().enumerate() {
         let hits = system.query_point(*position, &[&selection]).await;
         assert_eq!(hits.len(), 1, "Should hit exactly one element at {}", position);
         assert_eq!(hits[0].element_id, i as u32, "Should hit element {}", i);
     }
-    
+
     // Test misses at positions between elements
     for position in miss_positions {
         let hits = system.query_point(position, &[&selection]).await;
@@ -400,19 +406,19 @@ async fn test_hit_testing_accuracy() {
 #[test]
 async fn test_different_mark_types() {
     let mut system = create_test_interaction_system();
-    
+
     // Test hit testing works correctly for all mark types
     let circle_selection = create_circle_selection();
     let rect_selection = create_rectangle_selection();
     let line_selection = create_line_selection();
-    
+
     let test_position = Vec2::new(50.0, 50.0);
     let hits = system.query_point(test_position, &[
         &circle_selection,
-        &rect_selection, 
+        &rect_selection,
         &line_selection
     ]).await;
-    
+
     // Verify correct marks are hit based on their geometry
     verify_mark_hit_accuracy(&hits, test_position);
 }
@@ -425,17 +431,17 @@ async fn test_different_mark_types() {
 async fn test_event_handler_integration() {
     let mut system = create_test_interaction_system();
     let mut selection = create_test_selection();
-    
+
     let mut event_fired = false;
     selection.on("click", |event, data| {
         event_fired = true;
         assert_eq!(data.id, 42); // Verify correct data is passed
     });
-    
+
     // Simulate click event
     let click_position = Vec2::new(50.0, 50.0);
     system.process_click_event(click_position).await;
-    
+
     assert!(event_fired, "Click event handler should have been called");
 }
 ```
@@ -445,7 +451,7 @@ async fn test_event_handler_integration() {
 ### Performance Requirements
 
 - [ ] **Query Speed**: <1ms for point queries on 1M+ points
-- [ ] **Region Query Speed**: <10ms for region queries on 1M+ points  
+- [ ] **Region Query Speed**: <10ms for region queries on 1M+ points
 - [ ] **Throughput**: Handle 1000+ queries per second
 - [ ] **Memory Efficiency**: <10MB GPU memory for spatial indexing 1M points
 
@@ -467,13 +473,15 @@ async fn test_event_handler_integration() {
 
 ### Technical Risks
 
-- **High**: GPU hit testing complexity could introduce bugs or performance issues
+- **High**: GPU hit testing complexity could introduce bugs or performance
+  issues
 - **Medium**: Spatial indexing overhead might not provide expected speedup
 - **Medium**: GPU-CPU synchronization could create latency bottlenecks
 
 ### Mitigation Strategies
 
-- **Reference Implementation**: Compare against CPU-based hit testing for accuracy validation
+- **Reference Implementation**: Compare against CPU-based hit testing for
+  accuracy validation
 - **Performance Profiling**: Comprehensive benchmarking at different data scales
 - **Fallback Strategy**: CPU fallback for cases where GPU approach fails
 
