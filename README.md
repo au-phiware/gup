@@ -155,9 +155,47 @@ detailed roadmap.
 
 Gup is developed in the open with community input. See:
 
-- [`MISSION_AND_GOALS.md`](./docs/MISSION_AND_GOALS.md) - Project vision and objectives
-- [`TECHNICAL_APPROACH.md`](./docs/TECHNICAL_APPROACH.md) - Architecture deep dive
+- [`MISSION_AND_GOALS.md`](./docs/MISSION_AND_GOALS.md) - Project vision and
+  objectives
+- [`TECHNICAL_APPROACH.md`](./docs/TECHNICAL_APPROACH.md) - Architecture deep
+  dive
 - [`MARKET_ANALYSIS.md`](./docs/MARKET_ANALYSIS.md) - Competitive positioning
+
+## Examples
+
+Check out the `examples/` directory for complete working examples:
+
+```bash
+# Run a basic scatter plot example
+cargo run --example basic_scatter
+
+# Interactive bar chart with user input
+cargo run --example interactive_bar
+
+# Real-time streaming data visualization
+cargo run --example real_time_stream
+```
+
+For WebAssembly builds:
+
+```bash
+# Build and serve examples in browser
+mask start
+```
+
+## Project Structure
+
+```text
+gup/
+├── src/
+│   ├── core/       # Core data structures and Selection API
+│   ├── gpu/        # GPU abstraction and WebGPU integration
+│   ├── marks/      # Visualization mark implementations
+│   └── utils/      # Utility functions and helpers
+├── examples/       # Example applications and tutorials
+├── benches/        # Performance benchmarks
+└── docs/          # Comprehensive documentation and guides
+```
 
 ## License
 

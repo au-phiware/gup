@@ -2,7 +2,7 @@
 
 ## build
 
-Build all projects in the workspace
+Build all
 
 ```bash
 cargo build
@@ -10,7 +10,7 @@ cargo build
 
 ## check
 
-Check all projects without building
+Check all without building
 
 ```bash
 cargo check
@@ -18,7 +18,7 @@ cargo check
 
 ## test
 
-Run tests for all projects
+Run tests
 
 ```bash
 cargo test
@@ -26,7 +26,7 @@ cargo test
 
 ## lint
 
-Run clippy linter on all projects
+Run clippy linter
 
 ```bash
 cargo clippy --allow-no-vcs --fix --all-targets --all-features -- -D warnings
@@ -42,7 +42,7 @@ cargo fmt --all
 
 ## lint-check
 
-Run clippy linter on all projects
+Run clippy linter without writing fixes
 
 ```bash
 cargo clippy --all-targets --all-features -- -D warnings

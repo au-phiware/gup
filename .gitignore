@@ -1,6 +1,5 @@
-/.claude/*.jsonl
 /result
 /target
 /.direnv/
 mprocs.log
-/.claude/settings.local.json
+*.local.*
