@@ -10,7 +10,7 @@ epic and status.
 | Story                                            | Title                      | Status      | Priority | Points |
 | ------------------------------------------------ | -------------------------- | ----------- | -------- | ------ |
 | [GUP-001](GUP-001_Build_Mixable_Trait.md)        | Build Mixable Trait        | ✅ Complete | High     | 3      |
-| [GUP-002](GUP-002_Core_Selection_Type.md)        | Core Selection Type        | 📋 Planned  | High     | 2      |
+| [GUP-002](GUP-002_Core_Selection_Type.md)        | Core Selection Type        | ✅ Complete | Critical | 13     |
 | [GUP-003](GUP-003_GPU_Buffer_Management.md)      | GPU Buffer Management      | 📋 Planned  | High     | 4      |
 | [GUP-004](GUP-004_Basic_Render_Context.md)       | Basic Render Context       | 📋 Planned  | High     | 3      |
 | [GUP-005](GUP-005_Shader_Function_Trait.md)      | Shader Function Trait      | 📋 Planned  | Medium   | 4      |
@@ -47,6 +47,17 @@ epic and status.
 | [GUP-026](GUP-026_Data_Source_Merge_Implementation.md)     | Data Source Merge Implementation     | 💡 New | Medium   | 5      |
 | [GUP-027](GUP-027_GPU_Blend_State_Integration.md)          | GPU Blend State Integration          | 💡 New | High     | 3      |
 | [GUP-028](GUP-028_Composition_Performance_Optimization.md) | Composition Performance Optimization | 💡 New | Medium   | 4      |
+
+### Post GUP-002 Stories - GPU and Interaction Systems (Stories 29+)
+
+| Story                                                    | Title                                    | Status | Priority | Points |
+| -------------------------------------------------------- | ---------------------------------------- | ------ | -------- | ------ |
+| [GUP-029](GUP-029_WGSL_Shader_Code_Generation.md)        | WGSL Shader Code Generation System       | 💡 New | High     | 8      |
+| [GUP-030](GUP-030_GPU_Buffer_Pool_Management.md)         | GPU Buffer Pool Management System        | 💡 New | Medium   | 5      |
+| [GUP-031](GUP-031_GPU_Interaction_Event_System.md)       | GPU-Based Interaction Event System       | 💡 New | High     | 13     |
+| [GUP-032](GUP-032_Advanced_Mark_System.md)               | Advanced Mark System with Custom Shapes  | 💡 New | Medium   | 8      |
+| [GUP-033](GUP-033_Shader_Function_Composition_Engine.md) | Shader Function Composition Engine       | 💡 New | Medium   | 10     |
+| [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md)         | GPU Memory Profiling and Debugging Tools | 💡 New | Low      | 5      |
 
 ## Story Status Legend
 

@@ -31,11 +31,13 @@ pub mod error;
 pub mod examples;
 pub mod mixable;
 pub mod render;
+pub mod selection;
 
 pub use error::*;
 pub use examples::*;
 pub use mixable::*;
 pub use render::*;
+pub use selection::*;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
