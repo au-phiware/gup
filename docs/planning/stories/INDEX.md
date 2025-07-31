@@ -12,7 +12,7 @@ epic and status.
 | [GUP-001](GUP-001_Build_Mixable_Trait.md)        | Build Mixable Trait        | ✅ Complete | High     | 3      |
 | [GUP-002](GUP-002_Core_Selection_Type.md)        | Core Selection Type        | ✅ Complete | Critical | 13     |
 | [GUP-003](GUP-003_GPU_Buffer_Management.md)      | GPU Buffer Management      | ✅ Complete | Critical | 8      |
-| [GUP-004](GUP-004_Basic_Render_Context.md)       | Basic Render Context       | 📋 Planned  | High     | 3      |
+| [GUP-004](GUP-004_Basic_Render_Context.md)       | Basic Render Context       | ✅ Complete | Critical | 5      |
 | [GUP-005](GUP-005_Shader_Function_Trait.md)      | Shader Function Trait      | 📋 Planned  | Medium   | 4      |
 | [GUP-006](GUP-006_WGSL_Function_Macro.md)        | WGSL Function Macro        | 📋 Planned  | Medium   | 3      |
 | [GUP-007](GUP-007_Shader_Pipeline_Builder.md)    | Shader Pipeline Builder    | 📋 Planned  | High     | 5      |
@@ -67,6 +67,15 @@ epic and status.
 | [GUP-036](GUP-036_Buffer_Pool_Performance_Optimization.md)  | Buffer Pool Performance Optimization  | 💡 New | Medium   | 3      |
 | [GUP-037](GUP-037_Buffer_Validation_and_Debugging_Tools.md) | Buffer Validation and Debugging Tools | 💡 New | Low      | 4      |
 
+### Post GUP-004 Stories - Context Enhancement (Stories 38+)
+
+| Story                                               | Title                         | Status | Priority | Points |
+| --------------------------------------------------- | ----------------------------- | ------ | -------- | ------ |
+| [GUP-038](GUP-038_Texture_Pool_Enhancement.md)      | Texture Pool Enhancement      | 💡 New | Medium   | 3      |
+| [GUP-039](GUP-039_Context_Window_Integration.md)    | Context Window Integration    | 💡 New | High     | 5      |
+| [GUP-040](GUP-040_Context_Performance_Profiling.md) | Context Performance Profiling | 💡 New | Low      | 3      |
+| [GUP-041](GUP-041_Context_Error_Recovery.md)        | Context Error Recovery        | 💡 New | Medium   | 4      |
+
 ## Story Status Legend
 
 - ✅ **Complete**: Story fully implemented and tested
@@ -100,8 +109,9 @@ epic and status.
 
 ### Phase 1 Foundation
 
-- **Completed**: 3/15 stories (20%)
-- **Critical Path**: GUP-001 ✅, GUP-002 ✅, GUP-003 ✅, GUP-020 ✅, GUP-021 ✅
+- **Completed**: 4/15 stories (27%)
+- **Critical Path**: GUP-001 ✅, GUP-002 ✅, GUP-003 ✅, GUP-004 ✅, GUP-020 ✅,
+  GUP-021 ✅
 
 ### Post-GUP-021 Improvements
 
@@ -115,10 +125,10 @@ epic and status.
 
 ## Story Point Summary
 
-- **Total Planned**: ~125 story points across all stories
-- **Completed**: 22 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
-  GUP-020: 5pts, GUP-021: 6pts)
-- **Progress**: ~18% of total scope
+- **Total Planned**: ~140 story points across all stories
+- **Completed**: 29 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
+  GUP-004: 5pts, GUP-020: 5pts, GUP-021: 6pts)
+- **Progress**: ~21% of total scope
 
 ## Recent Additions (Post GUP-021)
 
@@ -164,6 +174,34 @@ memory pressure management
 **Dependencies**: GUP-003, optionally GUP-035 **Impact**: Improved developer
 experience and debugging capabilities
 
+## Recent Additions (Post GUP-004)
+
+The following stories were created based on learnings from implementing GUP-004:
+
+### GUP-038: Texture Pool Enhancement
+
+**Key Learning**: Current TexturePool is placeholder - needs full implementation
+with size classes **Dependencies**: GUP-004 complete **Impact**: Efficient
+texture reuse reduces GPU memory allocation overhead
+
+### GUP-039: Context Window Integration
+
+**Key Learning**: Real applications need sophisticated window management beyond
+basic surface support **Dependencies**: GUP-004 complete **Impact**: Enables
+responsive, multi-window visualization applications
+
+### GUP-040: Context Performance Profiling
+
+**Key Learning**: Basic FrameStats needs GPU timestamp queries and detailed
+breakdown for optimization **Dependencies**: GUP-004 complete **Impact**:
+Advanced profiling helps developers identify and fix performance bottlenecks
+
+### GUP-041: Context Error Recovery
+
+**Key Learning**: GPU contexts can fail - need robust recovery mechanisms for
+production apps **Dependencies**: GUP-004 complete **Impact**: Improved
+application stability when GPU issues occur
+
 ## Development Conventions
 
 See [CONVENTIONS.md](../../CONVENTIONS.md) for key learnings and patterns
@@ -171,6 +209,6 @@ discovered during story implementation.
 
 ---
 
-_Last Updated: After completion of GUP-003_ _Next Stories: GUP-004 (Basic Render
-Context), GUP-027 (GPU Blend State Integration), GUP-035 (Advanced Buffer
-Download System)_
+_Last Updated: After completion of GUP-004_ _Next Stories: GUP-005 (Shader
+Function Trait), GUP-027 (GPU Blend State Integration), GUP-039 (Context Window
+Integration)_

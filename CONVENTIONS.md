@@ -728,6 +728,278 @@ vertex_buffer.upload(device, queue, &vertices)?;  // New simplified API
 - Reduces risk of breaking changes
 - Enables gradual adoption
 
+## Render Context Architecture Patterns (GUP-004 Learnings)
+
+### Unified Context Design
+
+**Learning**: A single, comprehensive render context provides better resource
+management and developer experience than multiple specialized contexts.
+
+**Pattern**: The `GupContext` unifies all GPU resources under one management
+system:
+
+```rust
+// ✅ Unified approach - single context manages everything
+pub struct GupContext {
+    pub device: Arc<Device>,
+    pub queue: Arc<Queue>,
+    surface: Option<Surface<'static>>,
+    buffer_pool: BufferPool,
+    texture_pool: TexturePool,
+    frame_stats: FrameStats,
+}
+
+// ✅ Simple, consistent API across all components
+let context = GupContext::headless().await?;
+let buffer = context.create_buffer(BufferType::Vertex, 1000);
+let frame = context.begin_frame()?;
+```
+
+**Benefits**:
+
+- Single point of resource management
+- Consistent API across all GPU operations
+- Easier debugging and performance monitoring
+- Simplified sharing between components
+
+### Arc-Based Resource Sharing
+
+**Learning**: Use `Arc<Device>` and `Arc<Queue>` for safe sharing of GPU
+resources across components without lifetime complications.
+
+**Pattern**: Wrap core GPU resources in Arc for sharing:
+
+```rust
+// ✅ Arc enables sharing without lifetime parameters
+pub struct GupContext {
+    pub device: Arc<Device>,
+    pub queue: Arc<Queue>,
+}
+
+// Resources can be safely shared across components
+let device_ref = Arc::clone(&context.device);
+let buffer_pool = BufferPool::new(device_ref);
+```
+
+**Guidelines**:
+
+- Use Arc for device and queue to enable sharing
+- Keep Arc clones lightweight - they only increment reference counts
+- Avoid Arc for resources that don't need sharing (textures, buffers)
+
+### Multi-Modal Initialization Strategy
+
+**Learning**: Provide multiple initialization paths to handle different use
+cases (headless, windowed, custom options) with sensible defaults.
+
+**Pattern**: Multiple constructors with clear naming:
+
+```rust
+impl GupContext {
+    // Simple default initialization
+    pub async fn new() -> GupResult<Arc<Self>>;
+
+    // Specific use cases
+    pub async fn headless() -> GupResult<Arc<Self>>;
+    pub async fn with_surface<W>(window: Arc<W>) -> GupResult<Arc<Self>>;
+
+    // Advanced customization
+    pub async fn with_options(options: GupOptions) -> GupResult<Arc<Self>>;
+}
+```
+
+**Benefits**:
+
+- Clear intent from method names
+- Sensible defaults reduce complexity
+- Advanced options available when needed
+- Consistent async patterns
+
+### Frame Lifecycle Management
+
+**Learning**: RAII (Resource Acquisition Is Initialization) patterns work well
+for GPU frame management, ensuring proper cleanup.
+
+**Pattern**: Frame objects that enforce proper lifecycle:
+
+```rust
+// ✅ Frame lifecycle enforced by type system
+pub struct RenderFrame<'a> {
+    context: &'a mut GupContext,
+    surface_texture: Option<SurfaceTexture>,
+    command_encoder: CommandEncoder,
+}
+
+impl<'a> RenderFrame<'a> {
+    pub fn finish(self) -> GupResult<()> {
+        // Automatic cleanup and presentation
+        let command_buffer = self.command_encoder.finish();
+        self.context.queue.submit(Some(command_buffer));
+        if let Some(output) = self.surface_texture {
+            output.present();
+        }
+        self.context.finish_frame(); // Update stats
+        Ok(())
+    }
+}
+```
+
+**Guidelines**:
+
+- Use consuming methods (`finish(self)`) to enforce single-use
+- Combine resource cleanup with lifecycle methods
+- Update performance statistics automatically
+- Provide both surface and offscreen rendering paths
+
+### Cross-Platform WebGPU Patterns
+
+**Learning**: WebAssembly requires different backend selection and feature
+detection than native platforms.
+
+**Pattern**: Conditional compilation for platform-specific behavior:
+
+```rust
+impl Default for GupOptions {
+    fn default() -> Self {
+        Self {
+            #[cfg(target_arch = "wasm32")]
+            backends: Backends::BROWSER_WEBGPU | Backends::GL,
+            #[cfg(not(target_arch = "wasm32"))]
+            backends: Backends::PRIMARY,
+            // ... other fields
+        }
+    }
+}
+```
+
+**Testing Strategy**: Separate test functions for different platforms:
+
+```rust
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test::wasm_bindgen_test]
+async fn test_wasm_context_creation() { /* ... */ }
+
+#[cfg(not(target_arch = "wasm32"))]
+#[tokio::test]
+async fn test_native_context_creation() { /* ... */ }
+```
+
+### Performance Monitoring Integration
+
+**Learning**: Built-in performance monitoring provides valuable insights without
+requiring external profiling tools.
+
+**Pattern**: Integrated statistics collection with moving averages:
+
+```rust
+pub struct FrameStats {
+    pub frames_rendered: u64,
+    pub avg_frame_time: f32,
+    pub current_frame_time: f32,
+    pub gpu_memory_usage: u64,
+}
+
+impl FrameStats {
+    pub fn update_frame_time(&mut self, frame_time: Duration) {
+        let frame_time_ms = frame_time.as_secs_f32() * 1000.0;
+        // Moving average: 90% old + 10% new
+        self.avg_frame_time = (self.avg_frame_time * 0.9) + (frame_time_ms * 0.1);
+        // ... update other stats
+    }
+}
+```
+
+**Benefits**:
+
+- Real-time performance feedback during development
+- Built-in FPS calculation
+- Memory usage tracking from buffer pools
+- No external dependencies required
+
+### Resource Pool Integration Strategies
+
+**Learning**: Integrating resource pools directly into the context provides
+convenience while maintaining performance.
+
+**Pattern**: Context owns pools and provides convenient access:
+
+```rust
+impl GupContext {
+    // Direct pool access for advanced use
+    pub fn buffer_pool(&mut self) -> &mut BufferPool;
+
+    // Convenience methods for common operations
+    pub fn create_buffer<T>(&mut self, buffer_type: BufferType, capacity: usize) -> GpuBuffer<T> {
+        self.buffer_pool.allocate(buffer_type, capacity)
+    }
+}
+```
+
+**Guidelines**:
+
+- Provide both direct pool access and convenience methods
+- Update performance statistics from pool metrics
+- Use pools for automatic memory management
+- Clean up unused resources periodically
+
+### Error Handling for GPU Operations
+
+**Learning**: GPU operations have unique failure modes that require specific
+error handling strategies.
+
+**Pattern**: Structured error types with context:
+
+```rust
+#[derive(Debug, Clone)]
+pub enum GupError {
+    WebGpuError(String),    // GPU/adapter failures
+    ResourceError(String),  // Resource allocation failures
+    RenderError(String),    // Rendering operation failures
+}
+
+// Provide context in error messages
+.map_err(|e| GupError::WebGpuError(format!("Failed to create device: {e}")))?;
+```
+
+**Guidelines**:
+
+- Include original error information
+- Provide actionable error messages
+- Use Result types consistently
+- Handle async errors properly
+
+### Testing Strategies for GPU Code (GUP-004)
+
+**Learning**: GPU code requires different testing approaches than pure CPU code.
+
+**Test Categories**:
+
+1. **Resource Creation**: Verify contexts and resources are created successfully
+2. **Lifecycle Management**: Test proper cleanup and state management
+3. **Performance Validation**: Ensure operations meet performance targets
+4. **Cross-Platform Compatibility**: Separate tests for native and WebAssembly
+5. **Integration Testing**: Verify interaction with existing systems
+
+**Pattern**: Context reuse and performance validation:
+
+```rust
+#[tokio::test]
+async fn test_frame_stats_tracking() {
+    let context = GupContext::headless().await.unwrap();
+    let mut ctx = Arc::try_unwrap(context).unwrap();
+
+    // Render multiple frames
+    for _ in 0..3 {
+        let frame = ctx.begin_frame().unwrap();
+        frame.finish().unwrap();
+    }
+
+    let stats = ctx.frame_stats();
+    assert_eq!(stats.frames_rendered, 3);
+    assert!(stats.avg_frame_time >= 0.0);
+}
+```
+
 ---
 
 _This document is a living record of learnings. Update it as new patterns and

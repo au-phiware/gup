@@ -251,6 +251,7 @@ impl AllocationStats {
 }
 
 /// Buffer pool for efficient resource reuse and memory management.
+#[derive(Debug)]
 pub struct BufferPool {
     pools: HashMap<(BufferType, usize), Vec<Buffer>>,
     device: Arc<Device>,

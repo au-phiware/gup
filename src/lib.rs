@@ -28,6 +28,7 @@
 //! - **Extensible Architecture**: Modular design allowing custom marks and interactions
 
 pub mod buffer;
+pub mod context;
 pub mod error;
 pub mod examples;
 pub mod mixable;
@@ -35,6 +36,7 @@ pub mod render;
 pub mod selection;
 
 pub use buffer::*;
+pub use context::*;
 pub use error::*;
 pub use examples::*;
 pub use mixable::*;
