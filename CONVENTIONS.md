@@ -375,7 +375,7 @@ where
 - Type safety across CPU-GPU boundary
 - Clear error messages for invalid shader function bindings
 
-### GPU Buffer Auto-Resizing Strategy
+### Buffer Growth Strategies (GUP-002 Pattern)
 
 **Learning**: GPU buffers should grow efficiently to handle dynamic data sizes
 without frequent reallocations.
@@ -532,6 +532,201 @@ exist in CPU-only code.
 3. **Resource Sharing**: Multiple components using same context
 4. **Resource Cleanup**: Proper disposal, memory leaks
 5. **Error Conditions**: Out of memory, invalid operations
+
+## GPU Buffer Management Patterns (GUP-003 Learnings)
+
+### Type-Safe Buffer Management with Enums
+
+**Learning**: Use enums to categorize buffer types rather than generic
+parameters, enabling type-safe buffer creation with proper wgpu usage flags.
+
+**Pattern**: Buffer type enum with associated behavior:
+
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BufferType {
+    Vertex,    // Vertex attributes and geometry
+    Instance,  // Per-instance data for instanced rendering
+    Uniform,   // Shader uniforms (small, frequently updated)
+    Storage,   // Large datasets accessed by shaders
+}
+
+impl BufferType {
+    pub fn usage_flags(self) -> BufferUsages {
+        match self {
+            BufferType::Vertex => BufferUsages::VERTEX | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+            BufferType::Instance => BufferUsages::VERTEX | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+            BufferType::Uniform => BufferUsages::UNIFORM | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+            BufferType::Storage => BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+        }
+    }
+}
+```
+
+**Benefits**:
+
+- Automatic correct usage flags for each buffer type
+- Compile-time validation of buffer operations
+- Clear categorization of buffer purposes
+- Easy to extend with new buffer types
+
+### GPU Buffer Auto-Resizing Strategy
+
+**Learning**: GPU buffers require COPY_SRC usage flags for resize operations,
+and 1.5x growth provides optimal balance.
+
+**Pattern**: Auto-resizing buffer with proper usage flags:
+
+```rust
+pub struct GpuBuffer<T> {
+    buffer: Buffer,
+    capacity: usize,
+    len: usize,
+    buffer_type: BufferType,
+    usage: BufferUsages, // Must include COPY_SRC for resize operations
+    _phantom: PhantomData<T>,
+}
+
+impl<T: bytemuck::Pod + bytemuck::Zeroable> GpuBuffer<T> {
+    pub fn upload(&mut self, device: &Device, queue: &Queue, data: &[T]) -> GupResult<()> {
+        if data.len() > self.capacity {
+            self.resize(device, queue, data.len())?;  // 1.5x growth factor
+        }
+        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(data));
+        self.len = data.len();
+        Ok(())
+    }
+}
+```
+
+**Critical Requirements**:
+
+- All buffer types need `COPY_SRC` usage for resize operations
+- Use 1.5x growth factor for optimal memory vs performance trade-off
+- Always validate capacity before operations
+- Provide both auto-resize and fixed-size options
+
+### Buffer Pool Memory Management
+
+**Learning**: Size-class based allocation with power-of-2 rounding provides
+efficient memory reuse while minimizing fragmentation.
+
+**Pattern**: Pool with size classes and statistics:
+
+```rust
+pub struct BufferPool {
+    pools: HashMap<(BufferType, usize), Vec<Buffer>>,
+    device: Arc<Device>,
+    allocation_stats: AllocationStats,
+}
+
+impl BufferPool {
+    fn calculate_size_class(&self, capacity: usize) -> usize {
+        if capacity == 0 { return 1; }
+        // Round up to next power of 2
+        let mut size_class = 1;
+        while size_class < capacity {
+            size_class *= 2;
+        }
+        size_class
+    }
+}
+```
+
+**Benefits**:
+
+- Reduces allocation overhead through reuse
+- Power-of-2 size classes minimize fragmentation
+- Statistics enable pool efficiency monitoring
+- Automatic cleanup prevents memory leaks
+
+### wgpu API Compatibility Patterns
+
+**Learning**: Different wgpu versions have different API signatures and async
+patterns that require careful handling.
+
+**Key Considerations**:
+
+- Buffer download operations are complex and may not be needed for core
+  functionality
+- Device polling APIs vary between wgpu versions
+- Always include proper usage flags from the start to avoid refactoring
+- Use staging buffers for CPU-GPU data transfers
+
+**Defensive Pattern**:
+
+```rust
+// Start with comprehensive usage flags to avoid later issues
+let usage = BufferUsages::VERTEX | BufferUsages::COPY_DST | BufferUsages::COPY_SRC;
+
+// Provide simplified download API that can be implemented later
+pub async fn download(&self, _device: &Device, _queue: &Queue) -> GupResult<Vec<T>> {
+    Err(GupError::BufferError(
+        "Buffer download not yet implemented - use for upload/rendering only".to_string()
+    ))
+}
+```
+
+### Performance Testing for GPU Code
+
+**Learning**: GPU buffer operations require different benchmarking approaches
+and realistic test scenarios.
+
+**Testing Strategy**:
+
+```rust
+#[tokio::test]
+async fn test_buffer_auto_resize_performance() {
+    let context = create_test_context().await;
+    let mut buffer = GpuBuffer::new(context.device(), BufferType::Storage, 100);
+
+    // Test with progressively larger datasets
+    for size in [1_000, 10_000, 100_000] {
+        let data: Vec<f32> = (0..size).map(|i| i as f32).collect();
+        let start = std::time::Instant::now();
+        buffer.upload(context.device(), context.queue(), &data).unwrap();
+        let duration = start.elapsed();
+
+        // GPU operations should handle large datasets efficiently
+        assert!(duration.as_millis() < 100);
+    }
+}
+```
+
+**Guidelines**:
+
+- Test with realistic dataset sizes (1K, 10K, 100K+ elements)
+- Measure both buffer creation and upload performance
+- Include resize overhead in benchmarks
+- Test pool efficiency with allocation/deallocation cycles
+
+### Integration Testing with Existing Systems
+
+**Learning**: When adding new systems, carefully refactor existing code to use
+new APIs while maintaining backward compatibility.
+
+**Pattern**: Gradual migration strategy:
+
+```rust
+// 1. Create new API alongside old
+use crate::buffer::GpuBuffer as BufferGpuBuffer;
+
+// 2. Update struct to use new type
+pub struct Selection<T, M: Mark> {
+    vertex_buffer: Option<BufferGpuBuffer<M::Vertex>>,  // New API
+    instance_buffer: Option<BufferGpuBuffer<InstanceData>>,  // New API
+}
+
+// 3. Update method calls to new API
+vertex_buffer.upload(device, queue, &vertices)?;  // New simplified API
+```
+
+**Migration Benefits**:
+
+- Maintains existing functionality during transition
+- Allows testing new system independently
+- Reduces risk of breaking changes
+- Enables gradual adoption
 
 ---
 

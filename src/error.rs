@@ -18,6 +18,8 @@ pub enum GupError {
     InvalidOperation(String),
     /// WebGPU-specific error
     WebGpuError(String),
+    /// Buffer operation failed
+    BufferError(String),
 }
 
 impl fmt::Display for GupError {
@@ -28,6 +30,7 @@ impl fmt::Display for GupError {
             GupError::ResourceError(msg) => write!(f, "Resource error: {msg}"),
             GupError::InvalidOperation(msg) => write!(f, "Invalid operation: {msg}"),
             GupError::WebGpuError(msg) => write!(f, "WebGPU error: {msg}"),
+            GupError::BufferError(msg) => write!(f, "Buffer error: {msg}"),
         }
     }
 }

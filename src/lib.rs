@@ -27,12 +27,14 @@
 //! - **Interactive Visualizations**: Built-in support for user interactions and animations
 //! - **Extensible Architecture**: Modular design allowing custom marks and interactions
 
+pub mod buffer;
 pub mod error;
 pub mod examples;
 pub mod mixable;
 pub mod render;
 pub mod selection;
 
+pub use buffer::*;
 pub use error::*;
 pub use examples::*;
 pub use mixable::*;

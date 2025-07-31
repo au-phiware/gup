@@ -6,11 +6,11 @@
 //! The Selection type represents a collection of data bound to visual marks with
 //! GPU-accelerated attribute mappings, directly inspired by D3.js selections.
 
-use crate::{GupError, GupResult, Mixable, RenderContext};
+use crate::buffer::GpuBuffer as BufferGpuBuffer;
+use crate::{BufferType, GupResult, Mixable, RenderContext};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use wgpu::{Buffer, BufferDescriptor, BufferUsages};
 
 /// Trait for shader functions that transform data into visual attributes.
 pub trait ShaderFunction: Send + Sync + 'static {
@@ -281,97 +281,6 @@ impl Mark for Circle {
     }
 }
 
-/// GPU buffer wrapper for type safety
-pub struct GpuBuffer<T> {
-    buffer: Buffer,
-    capacity: usize,
-    _phantom: PhantomData<T>,
-}
-
-impl<T> GpuBuffer<T>
-where
-    T: bytemuck::Pod + bytemuck::Zeroable,
-{
-    /// Create a new GPU buffer with specified capacity
-    pub fn new(device: &wgpu::Device, capacity: usize, usage: BufferUsages) -> Self {
-        let buffer = device.create_buffer(&BufferDescriptor {
-            label: Some("gup_gpu_buffer"),
-            size: (capacity * std::mem::size_of::<T>()) as u64,
-            usage,
-            mapped_at_creation: false,
-        });
-
-        Self {
-            buffer,
-            capacity,
-            _phantom: PhantomData,
-        }
-    }
-
-    /// Write data to the buffer, automatically resizing if needed
-    pub fn write(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        data: &[T],
-        usage: BufferUsages,
-    ) -> GupResult<()> {
-        if data.len() > self.capacity {
-            // Auto-resize buffer with growth factor of 1.5x for efficiency
-            let new_capacity = (data.len() as f64 * 1.5) as usize;
-
-            // Create new buffer with larger capacity
-            let new_buffer = device.create_buffer(&BufferDescriptor {
-                label: Some("gup_gpu_buffer_resized"),
-                size: (new_capacity * std::mem::size_of::<T>()) as u64,
-                usage,
-                mapped_at_creation: false,
-            });
-
-            // Replace the buffer reference
-            self.buffer = new_buffer;
-            self.capacity = new_capacity;
-        }
-
-        // Write data to the (possibly new) buffer
-        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(data));
-        Ok(())
-    }
-
-    /// Write data to the buffer without resizing (legacy method)
-    pub fn write_no_resize(&self, queue: &wgpu::Queue, data: &[T]) -> GupResult<()> {
-        if data.len() > self.capacity {
-            return Err(GupError::ResourceError(format!(
-                "Buffer capacity exceeded: {} items required, {} available",
-                data.len(),
-                self.capacity
-            )));
-        }
-        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(data));
-        Ok(())
-    }
-
-    /// Get the underlying buffer
-    pub fn buffer(&self) -> &Buffer {
-        &self.buffer
-    }
-
-    /// Get the capacity
-    pub fn capacity(&self) -> usize {
-        self.capacity
-    }
-
-    /// Check if the buffer can hold the specified number of items
-    pub fn can_hold(&self, item_count: usize) -> bool {
-        item_count <= self.capacity
-    }
-
-    /// Get the size in bytes of this buffer
-    pub fn byte_size(&self) -> u64 {
-        (self.capacity * std::mem::size_of::<T>()) as u64
-    }
-}
-
 /// Instance data for GPU rendering
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -486,8 +395,8 @@ pub struct Selection<T, M: Mark> {
     mark_type: PhantomData<M>,
 
     /// GPU resources
-    vertex_buffer: Option<GpuBuffer<M::Vertex>>,
-    instance_buffer: Option<GpuBuffer<InstanceData>>,
+    vertex_buffer: Option<BufferGpuBuffer<M::Vertex>>,
+    instance_buffer: Option<BufferGpuBuffer<InstanceData>>,
 
     /// Shader function pipeline for attribute mapping
     shader_pipeline: ShaderPipeline,
@@ -653,21 +562,15 @@ impl<T, M: Mark> Selection<T, M> {
 
         // Create vertex buffer if needed
         if self.vertex_buffer.is_none() {
-            let vertex_buffer = GpuBuffer::new(
-                self.context.device(),
-                data_len,
-                BufferUsages::VERTEX | BufferUsages::COPY_DST,
-            );
+            let vertex_buffer =
+                BufferGpuBuffer::new(self.context.device(), BufferType::Vertex, data_len);
             self.vertex_buffer = Some(vertex_buffer);
         }
 
         // Create instance buffer if needed
         if self.instance_buffer.is_none() {
-            let instance_buffer = GpuBuffer::new(
-                self.context.device(),
-                data_len,
-                BufferUsages::VERTEX | BufferUsages::COPY_DST,
-            );
+            let instance_buffer =
+                BufferGpuBuffer::new(self.context.device(), BufferType::Instance, data_len);
             self.instance_buffer = Some(instance_buffer);
         }
 
@@ -728,12 +631,7 @@ impl<T, M: Mark> Selection<T, M> {
 
         // Upload vertex data with auto-resizing
         if let Some(vertex_buffer) = &mut self.vertex_buffer {
-            vertex_buffer.write(
-                self.context.device(),
-                self.context.queue(),
-                &vertices,
-                BufferUsages::VERTEX | BufferUsages::COPY_DST,
-            )?;
+            vertex_buffer.upload(self.context.device(), self.context.queue(), &vertices)?;
         }
 
         // Create instance data
@@ -749,12 +647,7 @@ impl<T, M: Mark> Selection<T, M> {
 
         // Upload instance data with auto-resizing
         if let Some(instance_buffer) = &mut self.instance_buffer {
-            instance_buffer.write(
-                self.context.device(),
-                self.context.queue(),
-                &instances,
-                BufferUsages::VERTEX | BufferUsages::COPY_DST,
-            )?;
+            instance_buffer.upload(self.context.device(), self.context.queue(), &instances)?;
         }
 
         // Actual rendering would happen here with proper shader pipeline
@@ -952,44 +845,6 @@ mod tests {
 
         let result = selection.render();
         assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_gpu_buffer_auto_resize() {
-        let context = RenderContext::new().await.unwrap();
-        let device = context.device();
-        let queue = context.queue();
-
-        let mut buffer =
-            GpuBuffer::<f32>::new(device, 2, BufferUsages::VERTEX | BufferUsages::COPY_DST);
-        assert_eq!(buffer.capacity(), 2);
-
-        // Write data that exceeds capacity - should auto-resize
-        let large_data = vec![1.0, 2.0, 3.0, 4.0, 5.0]; // 5 elements > 2 capacity
-        let result = buffer.write(
-            device,
-            queue,
-            &large_data,
-            BufferUsages::VERTEX | BufferUsages::COPY_DST,
-        );
-        assert!(result.is_ok());
-        assert!(buffer.capacity() >= 5); // Should have grown
-    }
-
-    #[tokio::test]
-    async fn test_gpu_buffer_no_resize() {
-        let context = RenderContext::new().await.unwrap();
-        let device = context.device();
-        let queue = context.queue();
-
-        let buffer =
-            GpuBuffer::<f32>::new(device, 2, BufferUsages::VERTEX | BufferUsages::COPY_DST);
-
-        // Try to write data that exceeds capacity without resizing - should fail
-        let large_data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
-        let result = buffer.write_no_resize(queue, &large_data);
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), GupError::ResourceError(_)));
     }
 
     #[tokio::test]
@@ -1200,33 +1055,5 @@ mod benchmarks {
         // Performance target: <1ms for 10K points (in a GPU-accelerated implementation)
         // For now, we just verify it completes in reasonable time
         assert!(duration.as_secs() < 1);
-    }
-
-    #[tokio::test]
-    async fn bench_buffer_auto_resize() {
-        let context = RenderContext::new().await.unwrap();
-        let device = context.device();
-        let queue = context.queue();
-
-        let mut buffer =
-            GpuBuffer::<f32>::new(device, 100, BufferUsages::VERTEX | BufferUsages::COPY_DST);
-
-        // Test progressively larger datasets
-        for size in [1000, 5000, 10_000] {
-            let data: Vec<f32> = (0..size).map(|i| i as f32).collect();
-
-            let start = std::time::Instant::now();
-            let result = buffer.write(
-                device,
-                queue,
-                &data,
-                BufferUsages::VERTEX | BufferUsages::COPY_DST,
-            );
-            let duration = start.elapsed();
-
-            assert!(result.is_ok());
-            assert!(buffer.capacity() >= size);
-            println!("Buffer resize for {size} elements: {duration:?}");
-        }
     }
 }

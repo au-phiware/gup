@@ -11,7 +11,7 @@ epic and status.
 | ------------------------------------------------ | -------------------------- | ----------- | -------- | ------ |
 | [GUP-001](GUP-001_Build_Mixable_Trait.md)        | Build Mixable Trait        | ✅ Complete | High     | 3      |
 | [GUP-002](GUP-002_Core_Selection_Type.md)        | Core Selection Type        | ✅ Complete | Critical | 13     |
-| [GUP-003](GUP-003_GPU_Buffer_Management.md)      | GPU Buffer Management      | 📋 Planned  | High     | 4      |
+| [GUP-003](GUP-003_GPU_Buffer_Management.md)      | GPU Buffer Management      | ✅ Complete | Critical | 8      |
 | [GUP-004](GUP-004_Basic_Render_Context.md)       | Basic Render Context       | 📋 Planned  | High     | 3      |
 | [GUP-005](GUP-005_Shader_Function_Trait.md)      | Shader Function Trait      | 📋 Planned  | Medium   | 4      |
 | [GUP-006](GUP-006_WGSL_Function_Macro.md)        | WGSL Function Macro        | 📋 Planned  | Medium   | 3      |
@@ -59,6 +59,14 @@ epic and status.
 | [GUP-033](GUP-033_Shader_Function_Composition_Engine.md) | Shader Function Composition Engine       | 💡 New | Medium   | 10     |
 | [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md)         | GPU Memory Profiling and Debugging Tools | 💡 New | Low      | 5      |
 
+### Post GUP-003 Stories - Buffer System Enhancement (Stories 35+)
+
+| Story                                                       | Title                                 | Status | Priority | Points |
+| ----------------------------------------------------------- | ------------------------------------- | ------ | -------- | ------ |
+| [GUP-035](GUP-035_Advanced_Buffer_Download_System.md)       | Advanced Buffer Download System       | 💡 New | Medium   | 5      |
+| [GUP-036](GUP-036_Buffer_Pool_Performance_Optimization.md)  | Buffer Pool Performance Optimization  | 💡 New | Medium   | 3      |
+| [GUP-037](GUP-037_Buffer_Validation_and_Debugging_Tools.md) | Buffer Validation and Debugging Tools | 💡 New | Low      | 4      |
+
 ## Story Status Legend
 
 - ✅ **Complete**: Story fully implemented and tested
@@ -82,23 +90,35 @@ epic and status.
 - **GUP-009, GUP-010, GUP-011**: Mark system foundation
 - **GUP-007, GUP-008**: Shader system prerequisites
 
+### Buffer System Dependencies
+
+- **GUP-035**: Requires GUP-003 for buffer system foundation
+- **GUP-036**: Builds on GUP-003 buffer pool implementation
+- **GUP-037**: Depends on GUP-003 and optionally GUP-035
+
 ## Epic Progress
 
 ### Phase 1 Foundation
 
-- **Completed**: 2/15 stories (13%)
-- **Critical Path**: GUP-001 ✅, GUP-020 ✅, GUP-021 ✅
+- **Completed**: 3/15 stories (20%)
+- **Critical Path**: GUP-001 ✅, GUP-002 ✅, GUP-003 ✅, GUP-020 ✅, GUP-021 ✅
 
 ### Post-GUP-021 Improvements
 
 - **Identified**: 3 new stories based on learnings
 - **Next Priority**: GUP-027 (GPU Blend State Integration)
 
+### Post-GUP-003 Buffer Enhancements
+
+- **Identified**: 3 new stories based on buffer system learnings
+- **Focus Areas**: Download operations, pool optimization, debugging tools
+
 ## Story Point Summary
 
-- **Total Planned**: ~110 story points across all stories
-- **Completed**: 14 story points (GUP-001: 3pts, GUP-020: 5pts, GUP-021: 6pts)
-- **Progress**: ~13% of total scope
+- **Total Planned**: ~125 story points across all stories
+- **Completed**: 22 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
+  GUP-020: 5pts, GUP-021: 6pts)
+- **Progress**: ~18% of total scope
 
 ## Recent Additions (Post GUP-021)
 
@@ -122,6 +142,28 @@ for overlay compositions
 **Dependencies**: GUP-021, GUP-027 complete **Impact**: Maintains performance
 for complex nested compositions
 
+## Recent Additions (Post GUP-003)
+
+The following stories were created based on learnings from implementing GUP-003:
+
+### GUP-035: Advanced Buffer Download System
+
+**Key Learning**: Buffer download operations are complex and require proper
+async handling **Dependencies**: GUP-003 complete **Impact**: Enables GPU-to-CPU
+data transfer for debugging and validation
+
+### GUP-036: Buffer Pool Performance Optimization
+
+**Key Learning**: Buffer pool could be more intelligent with usage pattern
+learning **Dependencies**: GUP-003 complete **Impact**: Adaptive pool sizing and
+memory pressure management
+
+### GUP-037: Buffer Validation and Debugging Tools
+
+**Key Learning**: GPU buffer debugging requires specialized tooling
+**Dependencies**: GUP-003, optionally GUP-035 **Impact**: Improved developer
+experience and debugging capabilities
+
 ## Development Conventions
 
 See [CONVENTIONS.md](../../CONVENTIONS.md) for key learnings and patterns
@@ -129,5 +171,6 @@ discovered during story implementation.
 
 ---
 
-_Last Updated: After completion of GUP-021_ _Next Stories: GUP-027 (High
-Priority), GUP-026 (Medium Priority), GUP-028 (Medium Priority)_
+_Last Updated: After completion of GUP-003_ _Next Stories: GUP-004 (Basic Render
+Context), GUP-027 (GPU Blend State Integration), GUP-035 (Advanced Buffer
+Download System)_
