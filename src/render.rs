@@ -4,6 +4,8 @@
 //! Enhanced RenderContext with full WebGPU integration.
 
 use crate::error::{GupError, GupResult};
+use crate::mixable::BlendMode;
+use std::collections::HashMap;
 use std::sync::Arc;
 use wgpu::*;
 
@@ -28,6 +30,18 @@ pub struct RenderContext {
     /// Resource manager for cleanup
     #[allow(dead_code)]
     resource_manager: ResourceManager,
+    /// Current blend mode
+    current_blend_mode: BlendMode,
+    /// Blend state stack for nested compositions
+    blend_state_stack: Vec<BlendMode>,
+    /// Cached render pipelines by blend mode
+    pipeline_cache: HashMap<BlendMode, RenderPipeline>,
+    /// Global alpha uniform buffer
+    global_alpha_buffer: Option<Buffer>,
+    /// Global alpha bind group
+    global_alpha_bind_group: Option<BindGroup>,
+    /// Global alpha bind group layout
+    global_alpha_bind_group_layout: BindGroupLayout,
 }
 
 /// Viewport dimensions and properties.
@@ -86,6 +100,22 @@ impl RenderContext {
             .await
             .map_err(|e| GupError::WebGpuError(format!("Failed to create device: {e}")))?;
 
+        // Create global alpha bind group layout
+        let global_alpha_bind_group_layout =
+            device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                entries: &[BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: Some("global_alpha_bind_group_layout"),
+            });
+
         Ok(Self {
             instance,
             adapter,
@@ -96,6 +126,12 @@ impl RenderContext {
             viewport,
             encoder_pool: CommandEncoderPool::new(),
             resource_manager: ResourceManager::new(),
+            current_blend_mode: BlendMode::default(),
+            blend_state_stack: Vec::new(),
+            pipeline_cache: HashMap::new(),
+            global_alpha_buffer: None,
+            global_alpha_bind_group: None,
+            global_alpha_bind_group_layout,
         })
     }
 
@@ -217,6 +253,339 @@ impl RenderContext {
             .map(|c| c.format)
             .unwrap_or(TextureFormat::Bgra8UnormSrgb)
     }
+
+    /// Check if global alpha buffer exists (for testing)
+    pub fn has_global_alpha_buffer(&self) -> bool {
+        self.global_alpha_buffer.is_some()
+    }
+
+    /// Get pipeline cache size (for testing)
+    pub fn pipeline_cache_size(&self) -> usize {
+        self.pipeline_cache.len()
+    }
+
+    /// Set blend mode for rendering operations
+    pub fn set_blend_mode(&mut self, mode: BlendMode) -> GupResult<()> {
+        // Early return if mode hasn't changed
+        if self.current_blend_mode == mode {
+            return Ok(());
+        }
+
+        self.current_blend_mode = mode;
+        Ok(())
+    }
+
+    /// Get current blend mode
+    pub fn current_blend_mode(&self) -> BlendMode {
+        self.current_blend_mode
+    }
+
+    /// Set global alpha for rendering operations
+    pub fn set_global_alpha(&mut self, alpha: f32) -> GupResult<()> {
+        let alpha_uniform = GlobalAlphaUniform {
+            alpha,
+            _padding: [0.0; 3],
+        };
+
+        // Create or update the global alpha buffer
+        if self.global_alpha_buffer.is_none() {
+            let buffer = self.device.create_buffer(&BufferDescriptor {
+                label: Some("global_alpha_uniform"),
+                size: std::mem::size_of::<GlobalAlphaUniform>() as u64,
+                usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+
+            let bind_group = self.device.create_bind_group(&BindGroupDescriptor {
+                layout: &self.global_alpha_bind_group_layout,
+                entries: &[BindGroupEntry {
+                    binding: 0,
+                    resource: buffer.as_entire_binding(),
+                }],
+                label: Some("global_alpha_bind_group"),
+            });
+
+            self.global_alpha_buffer = Some(buffer);
+            self.global_alpha_bind_group = Some(bind_group);
+        }
+
+        // Update the buffer
+        if let Some(buffer) = &self.global_alpha_buffer {
+            self.queue
+                .write_buffer(buffer, 0, bytemuck::cast_slice(&[alpha_uniform]));
+        }
+
+        Ok(())
+    }
+
+    /// Push current blend state onto stack for nested compositions
+    pub fn push_blend_state(&mut self) -> GupResult<()> {
+        self.blend_state_stack.push(self.current_blend_mode);
+        Ok(())
+    }
+
+    /// Restore previous blend state from stack
+    pub fn pop_blend_state(&mut self) -> GupResult<()> {
+        if let Some(previous_mode) = self.blend_state_stack.pop() {
+            self.set_blend_mode(previous_mode)?;
+        }
+        Ok(())
+    }
+
+    /// Get a render pipeline with the specified blend mode
+    pub fn get_pipeline_with_blend(&mut self, blend_mode: BlendMode) -> GupResult<&RenderPipeline> {
+        // Check if we already have a cached pipeline for this blend mode
+        if !self.pipeline_cache.contains_key(&blend_mode) {
+            let pipeline = self.create_pipeline_with_blend(blend_mode)?;
+            self.pipeline_cache.insert(blend_mode, pipeline);
+        }
+
+        Ok(self.pipeline_cache.get(&blend_mode).unwrap())
+    }
+
+    /// Create a render pipeline with specific blend state
+    fn create_pipeline_with_blend(&self, blend_mode: BlendMode) -> GupResult<RenderPipeline> {
+        let shader = self.device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("blend_aware_shader"),
+            source: ShaderSource::Wgsl(include_str!("shaders/blend_aware.wgsl").into()),
+        });
+
+        let render_pipeline_layout =
+            self.device
+                .create_pipeline_layout(&PipelineLayoutDescriptor {
+                    label: Some("blend_pipeline_layout"),
+                    bind_group_layouts: &[&self.global_alpha_bind_group_layout],
+                    push_constant_ranges: &[],
+                });
+
+        let vertex_buffer_layout = VertexBufferLayout {
+            array_stride: std::mem::size_of::<Vertex>() as BufferAddress,
+            step_mode: VertexStepMode::Vertex,
+            attributes: &[
+                VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: VertexFormat::Float32x2,
+                },
+                VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 2]>() as BufferAddress,
+                    shader_location: 1,
+                    format: VertexFormat::Float32x4,
+                },
+            ],
+        };
+
+        // Convert BlendMode to wgpu BlendState
+        let blend_state = match blend_mode {
+            BlendMode::None => None,
+            BlendMode::AlphaBlending => Some(BlendState::ALPHA_BLENDING),
+            BlendMode::Additive => Some(BlendState {
+                color: BlendComponent {
+                    src_factor: BlendFactor::One,
+                    dst_factor: BlendFactor::One,
+                    operation: BlendOperation::Add,
+                },
+                alpha: BlendComponent {
+                    src_factor: BlendFactor::One,
+                    dst_factor: BlendFactor::One,
+                    operation: BlendOperation::Add,
+                },
+            }),
+            BlendMode::Multiply => Some(BlendState {
+                color: BlendComponent {
+                    src_factor: BlendFactor::Dst,
+                    dst_factor: BlendFactor::Zero,
+                    operation: BlendOperation::Add,
+                },
+                alpha: BlendComponent {
+                    src_factor: BlendFactor::One,
+                    dst_factor: BlendFactor::OneMinusSrcAlpha,
+                    operation: BlendOperation::Add,
+                },
+            }),
+        };
+
+        let render_pipeline = self
+            .device
+            .create_render_pipeline(&RenderPipelineDescriptor {
+                label: Some(&format!("blend_pipeline_{blend_mode:?}")),
+                layout: Some(&render_pipeline_layout),
+                vertex: VertexState {
+                    module: &shader,
+                    entry_point: Some("vs_main"),
+                    buffers: &[vertex_buffer_layout],
+                    compilation_options: PipelineCompilationOptions::default(),
+                },
+                fragment: Some(FragmentState {
+                    module: &shader,
+                    entry_point: Some("fs_main"),
+                    targets: &[Some(ColorTargetState {
+                        format: self.surface_format(),
+                        blend: blend_state,
+                        write_mask: ColorWrites::ALL,
+                    })],
+                    compilation_options: PipelineCompilationOptions::default(),
+                }),
+                primitive: PrimitiveState {
+                    topology: PrimitiveTopology::PointList,
+                    strip_index_format: None,
+                    front_face: FrontFace::Ccw,
+                    cull_mode: Some(Face::Back),
+                    polygon_mode: PolygonMode::Fill,
+                    unclipped_depth: false,
+                    conservative: false,
+                },
+                depth_stencil: None,
+                multisample: MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                multiview: None,
+                cache: None,
+            });
+
+        Ok(render_pipeline)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_blend_mode_pipeline_integration() {
+        let mut context = RenderContext::new().await.unwrap();
+
+        // Test that blend mode changes affect pipeline state
+        context.set_blend_mode(BlendMode::AlphaBlending).unwrap();
+        assert_eq!(context.current_blend_mode(), BlendMode::AlphaBlending);
+
+        context.set_blend_mode(BlendMode::Additive).unwrap();
+        assert_eq!(context.current_blend_mode(), BlendMode::Additive);
+    }
+
+    #[tokio::test]
+    async fn test_blend_state_stack() {
+        let mut context = RenderContext::new().await.unwrap();
+
+        // Initial state
+        context.set_blend_mode(BlendMode::None).unwrap();
+
+        // Push and change
+        context.push_blend_state().unwrap();
+        context.set_blend_mode(BlendMode::AlphaBlending).unwrap();
+
+        // Nested push and change
+        context.push_blend_state().unwrap();
+        context.set_blend_mode(BlendMode::Additive).unwrap();
+
+        // Pop should restore previous state
+        context.pop_blend_state().unwrap();
+        assert_eq!(context.current_blend_mode(), BlendMode::AlphaBlending);
+
+        context.pop_blend_state().unwrap();
+        assert_eq!(context.current_blend_mode(), BlendMode::None);
+    }
+
+    #[tokio::test]
+    async fn test_global_alpha_uniform() {
+        let mut context = RenderContext::new().await.unwrap();
+
+        // Test setting global alpha creates buffer and bind group
+        context.set_global_alpha(0.5).unwrap();
+        assert!(context.has_global_alpha_buffer());
+
+        // Test setting again doesn't recreate buffer
+        context.set_global_alpha(0.8).unwrap();
+        assert!(context.has_global_alpha_buffer());
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_caching() {
+        let mut context = RenderContext::new().await.unwrap();
+
+        // First call should create and cache pipeline
+        let _pipeline1 = context
+            .get_pipeline_with_blend(BlendMode::AlphaBlending)
+            .unwrap();
+        assert_eq!(context.pipeline_cache_size(), 1);
+
+        // Second call should reuse cached pipeline
+        let _pipeline2 = context
+            .get_pipeline_with_blend(BlendMode::AlphaBlending)
+            .unwrap();
+        assert_eq!(context.pipeline_cache_size(), 1);
+
+        // Different blend mode should create new pipeline
+        let _pipeline3 = context
+            .get_pipeline_with_blend(BlendMode::Additive)
+            .unwrap();
+        assert_eq!(context.pipeline_cache_size(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_blend_mode_performance() {
+        let mut context = RenderContext::new().await.unwrap();
+
+        let start = std::time::Instant::now();
+
+        // Test performance of blend mode changes
+        for i in 0..100 {
+            let mode = match i % 4 {
+                0 => BlendMode::None,
+                1 => BlendMode::AlphaBlending,
+                2 => BlendMode::Additive,
+                _ => BlendMode::Multiply,
+            };
+            context.set_blend_mode(mode).unwrap();
+        }
+
+        let duration = start.elapsed();
+
+        // Should complete well under 1ms for performance target
+        assert!(duration.as_millis() < 1);
+    }
+
+    #[tokio::test]
+    async fn test_all_blend_modes() {
+        let mut context = RenderContext::new().await.unwrap();
+
+        // Test that all blend modes can create pipelines without errors
+        let blend_modes = [
+            BlendMode::None,
+            BlendMode::AlphaBlending,
+            BlendMode::Additive,
+            BlendMode::Multiply,
+        ];
+
+        for mode in blend_modes {
+            let pipeline = context.get_pipeline_with_blend(mode);
+            assert!(
+                pipeline.is_ok(),
+                "Failed to create pipeline for blend mode {mode:?}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_global_alpha_uniform_alignment() {
+        // Test that GlobalAlphaUniform has correct size and alignment
+        assert_eq!(std::mem::size_of::<GlobalAlphaUniform>(), 16);
+        assert_eq!(std::mem::align_of::<GlobalAlphaUniform>(), 4);
+    }
+
+    #[tokio::test]
+    async fn test_blend_state_stack_empty_pop() {
+        let mut context = RenderContext::new().await.unwrap();
+
+        // Popping from empty stack should not panic
+        let result = context.pop_blend_state();
+        assert!(result.is_ok());
+
+        // Blend mode should remain unchanged
+        assert_eq!(context.current_blend_mode(), BlendMode::default());
+    }
 }
 
 /// Active render pass with automatic resource management
@@ -331,6 +700,14 @@ pub struct BasicPipeline {
 pub struct Vertex {
     pub position: [f32; 2],
     pub color: [f32; 4],
+}
+
+/// Global alpha uniform for blending operations
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct GlobalAlphaUniform {
+    alpha: f32,
+    _padding: [f32; 3], // Ensure 16-byte alignment
 }
 
 impl BasicPipeline {

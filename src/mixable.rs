@@ -60,7 +60,7 @@ impl Default for SideBySideConfig {
 }
 
 /// Blend modes for overlay composition
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
 pub enum BlendMode {
     #[default]
     None,
@@ -373,17 +373,20 @@ impl<A: Mixable, B: Mixable> Mixable for ComposedVisualization<A, B> {
 impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
     /// Render in overlay mode with proper depth testing and blending
     fn render_overlay(&mut self, context: &mut RenderContext) -> GupResult<()> {
+        // Push current blend state
+        context.push_blend_state()?;
+
         // Render first component (background layer)
         self.first.render(context)?;
 
-        // Configure blending for overlay - would be implemented in RenderContext
-        // context.set_blend_mode(BlendMode::AlphaBlending)?;
+        // Configure blending for overlay
+        context.set_blend_mode(BlendMode::AlphaBlending)?;
 
         // Render second component (foreground layer)
         self.second.render(context)?;
 
-        // Restore original blend mode
-        // context.set_blend_mode(BlendMode::default())?;
+        // Restore original blend state
+        context.pop_blend_state()?;
 
         Ok(())
     }
@@ -544,24 +547,7 @@ pub trait MixableExt: Mixable + Sized {
 // Blanket implementation for all Mixable types
 impl<T: Mixable> MixableExt for T {}
 
-/// Enhanced RenderContext methods for composition support
-impl RenderContext {
-    /// Set blend mode for rendering operations
-    pub fn set_blend_mode(&mut self, _mode: BlendMode) -> GupResult<()> {
-        // This would configure GPU blend state
-        // Implementation depends on the WebGPU integration from GUP-020
-        // For now, this is a placeholder that would be implemented
-        // to modify the render pipeline state
-        Ok(())
-    }
-
-    /// Set global alpha for rendering operations  
-    pub fn set_global_alpha(&mut self, _alpha: f32) -> GupResult<()> {
-        // This would configure global alpha blending
-        // Implementation would modify uniform buffers or push constants
-        Ok(())
-    }
-}
+// Enhanced RenderContext methods are now implemented in render.rs
 
 /// Example: Cross-fade composition behavior
 #[derive(Debug, Clone)]
@@ -1035,5 +1021,87 @@ mod tests {
     fn test_blend_mode_default() {
         let blend_mode = BlendMode::default();
         assert_eq!(blend_mode, BlendMode::None);
+    }
+
+    #[tokio::test]
+    async fn test_overlay_with_blend_modes() {
+        let mut context = RenderContext::new().await.unwrap();
+
+        let background = TestVisualization::new("background");
+        let foreground = TestVisualization::new("foreground");
+
+        let mut overlay = background.overlay(foreground);
+
+        // Test that overlay composition uses blend state stack
+        let initial_mode = context.current_blend_mode();
+        let result = overlay.render(&mut context);
+        assert!(result.is_ok());
+
+        // Blend mode should be restored after overlay rendering
+        assert_eq!(context.current_blend_mode(), initial_mode);
+    }
+
+    #[tokio::test]
+    async fn test_nested_overlay_blend_stack() {
+        let mut context = RenderContext::new().await.unwrap();
+
+        let a = TestVisualization::new("a");
+        let b = TestVisualization::new("b");
+        let c = TestVisualization::new("c");
+
+        // Create nested overlay: (a overlay b) overlay c
+        let mut nested_overlay = a.overlay(b).overlay(c);
+
+        // Set initial blend mode
+        context.set_blend_mode(BlendMode::Multiply).unwrap();
+        let initial_mode = context.current_blend_mode();
+
+        let result = nested_overlay.render(&mut context);
+        assert!(result.is_ok());
+
+        // Blend mode should be restored after nested rendering
+        assert_eq!(context.current_blend_mode(), initial_mode);
+    }
+
+    #[tokio::test]
+    async fn test_cross_fade_with_global_alpha() {
+        let mut context = RenderContext::new().await.unwrap();
+
+        let viz1 = TestVisualization::new("viz1");
+        let viz2 = TestVisualization::new("viz2");
+
+        let mut cross_fade = viz1.cross_fade(viz2, 0.3);
+
+        // Test that cross-fade uses global alpha
+        let result = cross_fade.render(&mut context);
+        assert!(result.is_ok());
+
+        // Global alpha buffer should be created during cross-fade
+        assert!(context.has_global_alpha_buffer());
+    }
+
+    #[tokio::test]
+    async fn test_blend_mode_integration_with_composition() {
+        let mut context = RenderContext::new().await.unwrap();
+
+        // Test all composition modes work with blend state management
+        let viz1 = TestVisualization::new("viz1");
+        let viz2 = TestVisualization::new("viz2");
+
+        // Test overlay
+        let mut overlay = viz1.clone().overlay(viz2.clone());
+        assert!(overlay.render(&mut context).is_ok());
+
+        // Test merge
+        let mut merge = viz1.clone().merge(viz2.clone());
+        assert!(merge.render(&mut context).is_ok());
+
+        // Test side-by-side
+        let mut beside = viz1.clone().beside(viz2.clone());
+        assert!(beside.render(&mut context).is_ok());
+
+        // Test custom composition
+        let mut custom = viz1.cross_fade(viz2, 0.5);
+        assert!(custom.render(&mut context).is_ok());
     }
 }

@@ -22,6 +22,7 @@ pollster = "0.3"
 raw-window-handle = "0.6"
 tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "macros"] }
 futures-intrusive = "0.5"
+env_logger = "0.10"
 
 [dependencies.web-sys]
 version = "0.3"
@@ -55,3 +56,8 @@ harness = false
 [[bench]]
 name = "buffer_benchmarks"
 harness = false
+
+[[example]]
+name = "blend_modes_showcase"
+path = "examples/blend_modes_showcase.rs"
+

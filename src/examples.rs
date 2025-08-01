@@ -176,3 +176,9 @@ pub mod composition_examples {
         top_row.beside_with_config(bottom_row, vertical_config)
     }
 }
+
+/// Blend modes demonstration (console output)
+pub mod blend_modes;
+
+/// Re-export the main showcase function for easy access
+pub use blend_modes::run_blend_modes_showcase;
