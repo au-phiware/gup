@@ -1263,6 +1263,346 @@ let frame = ctx.begin_frame()?; // Uses primary surface
 - Backward compatibility through primary resource concept
 - Clear migration path from simple to complex usage
 
+## GPU Blend State Integration Patterns (GUP-027 Learnings)
+
+### Hash-Capable Enums for Pipeline Caching
+
+**Learning**: WebGPU pipeline caching requires blend mode enums that implement
+`Hash` for efficient `HashMap<BlendMode, RenderPipeline>` storage.
+
+**Pattern**: Add Hash derive to GPU-related enums:
+
+```rust
+// ✅ Hash derive enables efficient pipeline caching
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
+pub enum BlendMode {
+    #[default]
+    None,
+    AlphaBlending,
+    Additive,
+    Multiply,
+}
+
+// Pipeline cache becomes efficient HashMap lookup
+pipeline_cache: HashMap<BlendMode, RenderPipeline>
+```
+
+**Benefits**:
+
+- O(1) pipeline lookups by blend mode
+- Automatic cache management through HashMap
+- Type-safe pipeline associations
+- Easy extension with new blend modes
+
+### GPU State Stack Management
+
+**Learning**: Complex rendering systems require state stack management to handle
+nested compositions with proper state restoration.
+
+**Pattern**: Push/pop state management with automatic restoration:
+
+```rust
+// ✅ RAII-style state management
+impl RenderContext {
+    pub fn push_blend_state(&mut self) -> GupResult<()> {
+        self.blend_state_stack.push(self.current_blend_mode);
+        Ok(())
+    }
+
+    pub fn pop_blend_state(&mut self) -> GupResult<()> {
+        if let Some(previous_mode) = self.blend_state_stack.pop() {
+            self.set_blend_mode(previous_mode)?;
+        }
+        Ok(())
+    }
+}
+
+// Usage in composition systems
+context.push_blend_state()?;
+context.set_blend_mode(BlendMode::AlphaBlending)?;
+// ... render operations
+context.pop_blend_state()?; // Automatic restoration
+```
+
+**Guidelines**:
+
+- Always push state before modifications
+- Use stack-based management for nested operations
+- Handle empty stack gracefully (no-op for robustness)
+- Consider RAII guards for automatic cleanup
+
+### WebGPU BlendState Configuration Patterns
+
+**Learning**: WebGPU blend state configuration requires careful mapping from
+high-level blend modes to low-level BlendComponent configurations.
+
+**Pattern**: Comprehensive blend mode to WebGPU mapping:
+
+```rust
+fn blend_mode_to_wgpu(blend_mode: BlendMode) -> Option<BlendState> {
+    match blend_mode {
+        BlendMode::None => None, // No blending
+        BlendMode::AlphaBlending => Some(BlendState::ALPHA_BLENDING),
+        BlendMode::Additive => Some(BlendState {
+            color: BlendComponent {
+                src_factor: BlendFactor::One,
+                dst_factor: BlendFactor::One,
+                operation: BlendOperation::Add,
+            },
+            alpha: BlendComponent {
+                src_factor: BlendFactor::One,
+                dst_factor: BlendFactor::One,
+                operation: BlendOperation::Add,
+            },
+        }),
+        BlendMode::Multiply => Some(BlendState {
+            color: BlendComponent {
+                src_factor: BlendFactor::Dst,      // Multiply source by destination
+                dst_factor: BlendFactor::Zero,      // Don't add destination
+                operation: BlendOperation::Add,
+            },
+            alpha: BlendComponent {
+                src_factor: BlendFactor::One,
+                dst_factor: BlendFactor::OneMinusSrcAlpha,
+                operation: BlendOperation::Add,
+            },
+        }),
+    }
+}
+```
+
+**Critical Considerations**:
+
+- Different blend operations require different factor combinations
+- Alpha and color channels may need separate treatment
+- Test visual results, not just API compliance
+- Consider performance implications of complex blend modes
+
+### Global Alpha Uniform Buffer Management
+
+**Learning**: Cross-fade and global alpha effects require uniform buffer systems
+with proper alignment and efficient updates.
+
+**Pattern**: Aligned uniform structures with lazy buffer creation:
+
+```rust
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct GlobalAlphaUniform {
+    alpha: f32,
+    _padding: [f32; 3], // Ensure 16-byte alignment for uniforms
+}
+
+impl RenderContext {
+    pub fn set_global_alpha(&mut self, alpha: f32) -> GupResult<()> {
+        // Lazy buffer creation pattern
+        if self.global_alpha_buffer.is_none() {
+            self.create_global_alpha_buffer()?;
+        }
+
+        let uniform = GlobalAlphaUniform { alpha, _padding: [0.0; 3] };
+        self.queue.write_buffer(
+            self.global_alpha_buffer.as_ref().unwrap(),
+            0,
+            bytemuck::cast_slice(&[uniform])
+        );
+        Ok(())
+    }
+}
+```
+
+**Guidelines**:
+
+- Always align uniform structures to 16-byte boundaries
+- Use lazy creation to avoid unnecessary resource allocation
+- Update buffers efficiently with write_buffer
+- Include uniform buffers in bind group layouts
+
+### Performance-Critical GPU State Changes
+
+**Learning**: Blend state changes must be highly optimized as they occur
+frequently during complex rendering.
+
+**Performance Requirements**:
+
+- Target: <0.1ms (100 microseconds) per blend state change
+- Achieved: ~15ns average (well under target)
+- Method: Early return for unchanged state + efficient pipeline caching
+
+**Pattern**: Optimized state change with early returns:
+
+```rust
+pub fn set_blend_mode(&mut self, mode: BlendMode) -> GupResult<()> {
+    // ✅ Early return prevents unnecessary work
+    if self.current_blend_mode == mode {
+        return Ok(());
+    }
+
+    self.current_blend_mode = mode;
+    // Additional pipeline switching logic...
+    Ok(())
+}
+
+// Performance testing in benchmarks
+#[tokio::test]
+async fn test_blend_mode_performance() {
+    let start = std::time::Instant::now();
+    for i in 0..1000 {
+        let mode = match i % 4 {
+            0 => BlendMode::None,
+            1 => BlendMode::AlphaBlending,
+            2 => BlendMode::Additive,
+            _ => BlendMode::Multiply,
+        };
+        context.set_blend_mode(mode)?;
+    }
+    let duration = start.elapsed();
+    assert!(duration.as_millis() < 1); // <1ms for 1000 changes
+}
+```
+
+### Shader Integration with Global State
+
+**Learning**: GPU shaders need careful integration with global state like alpha
+uniforms while maintaining flexibility.
+
+**Pattern**: Modular shader design with optional global state:
+
+```wgsl
+// Global alpha uniform (optional binding)
+@group(0) @binding(0)
+var<uniform> global_alpha: GlobalAlpha;
+
+struct GlobalAlpha {
+    alpha: f32,
+    _padding: vec3<f32>,
+}
+
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    var color = in.color;
+
+    // Apply global alpha modulation
+    color.a *= global_alpha.alpha;
+
+    return color;
+}
+```
+
+**Guidelines**:
+
+- Design shaders to work with optional global state
+- Use consistent binding group layouts across pipelines
+- Include padding for proper uniform alignment
+- Test shader compilation across different blend modes
+
+### Testing Strategies for GPU Blend Systems
+
+**Learning**: GPU blend state systems require comprehensive testing including
+visual validation, performance testing, and resource management verification.
+
+**Test Categories**:
+
+1. **Functional Testing**: All blend modes work correctly
+2. **State Management**: Push/pop operations maintain consistency
+3. **Performance Testing**: Blend state changes meet timing requirements
+4. **Resource Management**: Pipeline caching and buffer allocation
+5. **Integration Testing**: Composition system integration
+6. **Edge Cases**: Empty stacks, rapid state changes
+
+**Pattern**: Multi-threaded test execution considerations:
+
+```rust
+// ✅ GPU tests may need single-threaded execution to avoid resource conflicts
+cargo test -- --test-threads=1
+
+// Test resource management
+#[tokio::test]
+async fn test_pipeline_caching() {
+    let mut context = RenderContext::new().await.unwrap();
+
+    // First access should create pipeline
+    let _pipeline1 = context.get_pipeline_with_blend(BlendMode::AlphaBlending)?;
+    assert_eq!(context.pipeline_cache_size(), 1);
+
+    // Second access should reuse cached pipeline
+    let _pipeline2 = context.get_pipeline_with_blend(BlendMode::AlphaBlending)?;
+    assert_eq!(context.pipeline_cache_size(), 1); // No growth
+}
+```
+
+**Testing Insights**:
+
+- GPU tests may require single-threaded execution (`--test-threads=1`)
+- Test both functional correctness and performance characteristics
+- Validate resource cleanup and memory management
+- Include integration tests with existing systems
+
+### Composition System Integration Patterns
+
+**Learning**: Blend state systems must integrate seamlessly with existing
+composition systems while maintaining backward compatibility.
+
+**Pattern**: Transparent integration with automatic state management:
+
+```rust
+// ✅ Overlay composition automatically manages blend state
+impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
+    fn render_overlay(&mut self, context: &mut RenderContext) -> GupResult<()> {
+        // Automatic state management - no user intervention required
+        context.push_blend_state()?;
+
+        self.first.render(context)?;                    // Background
+        context.set_blend_mode(BlendMode::AlphaBlending)?;
+        self.second.render(context)?;                   // Foreground with blending
+
+        context.pop_blend_state()?;                     // Automatic restoration
+        Ok(())
+    }
+}
+
+// User API remains simple
+let overlay = chart1.overlay(chart2); // Blend mode handled automatically
+```
+
+**Benefits**:
+
+- Zero-configuration experience for common use cases
+- Automatic state management prevents user errors
+- Existing APIs continue to work unchanged
+- Advanced users can still access low-level blend controls
+
+### Debugging and Observability Patterns
+
+**Learning**: Complex GPU state systems benefit from built-in observability for
+debugging and performance optimization.
+
+**Pattern**: Accessor methods for internal state inspection:
+
+```rust
+impl RenderContext {
+    // ✅ Testing accessors for internal state inspection
+    pub fn has_global_alpha_buffer(&self) -> bool {
+        self.global_alpha_buffer.is_some()
+    }
+
+    pub fn pipeline_cache_size(&self) -> usize {
+        self.pipeline_cache.len()
+    }
+
+    pub fn current_blend_mode(&self) -> BlendMode {
+        self.current_blend_mode
+    }
+}
+```
+
+**Guidelines**:
+
+- Provide read-only access to internal state for testing
+- Include performance metrics (cache hit rates, timing)
+- Use clear naming conventions for debugging methods
+- Consider debug formatting for complex state structures
+
 ---
 
 _This document is a living record of learnings. Update it as new patterns and

@@ -1,4 +1,4 @@
-# GUP-041: Context Error Recovery
+# GUP-048: Context Error Recovery
 
 ## Story Overview
 

@@ -1,4 +1,4 @@
-# GUP-041: Surface Performance Optimization
+# GUP-049: Surface Performance Optimization
 
 ## Story Overview
 

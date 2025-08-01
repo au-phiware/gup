@@ -1,4 +1,4 @@
-# GUP-041: Visual Blend Mode Validation
+# GUP-050: Visual Blend Mode Validation
 
 ## Story Overview
 

@@ -1,4 +1,4 @@
-# GUP-040: Enhanced Surface Event Integration
+# GUP-047: Enhanced Surface Event Integration
 
 ## Story Overview
 

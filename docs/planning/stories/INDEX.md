@@ -42,11 +42,11 @@ epic and status.
 
 ### Future Improvements - Post GUP-021 (Stories 26+)
 
-| Story                                                      | Title                                | Status | Priority | Points |
-| ---------------------------------------------------------- | ------------------------------------ | ------ | -------- | ------ |
-| [GUP-026](GUP-026_Data_Source_Merge_Implementation.md)     | Data Source Merge Implementation     | 💡 New | Medium   | 5      |
-| [GUP-027](GUP-027_GPU_Blend_State_Integration.md)          | GPU Blend State Integration          | 💡 New | High     | 3      |
-| [GUP-028](GUP-028_Composition_Performance_Optimization.md) | Composition Performance Optimization | 💡 New | Medium   | 4      |
+| Story                                                      | Title                                | Status      | Priority | Points |
+| ---------------------------------------------------------- | ------------------------------------ | ----------- | -------- | ------ |
+| [GUP-026](GUP-026_Data_Source_Merge_Implementation.md)     | Data Source Merge Implementation     | 💡 New      | Medium   | 5      |
+| [GUP-027](GUP-027_GPU_Blend_State_Integration.md)          | GPU Blend State Integration          | ✅ Complete | High     | 3      |
+| [GUP-028](GUP-028_Composition_Performance_Optimization.md) | Composition Performance Optimization | 💡 New      | Medium   | 4      |
 
 ### Post GUP-002 Stories - GPU and Interaction Systems (Stories 29+)
 
@@ -73,9 +73,20 @@ epic and status.
 | ------------------------------------------------------ | -------------------------------- | ----------- | -------- | ------ |
 | [GUP-038](GUP-038_Texture_Pool_Enhancement.md)         | Texture Pool Enhancement         | 💡 New      | Medium   | 3      |
 | [GUP-039](GUP-039_Context_Window_Integration.md)       | Context Window Integration       | ✅ Complete | High     | 5      |
-| [GUP-040](GUP-040_Surface_Event_Integration.md)        | Surface Event Integration        | 💡 New      | Medium   | 3      |
-| [GUP-041](GUP-041_Surface_Performance_Optimization.md) | Surface Performance Optimization | 💡 New      | Medium   | 5      |
+| [GUP-046](GUP-046_Context_Performance_Profiling.md)    | Context Performance Profiling    | 💡 New      | Medium   | 3      |
+| [GUP-047](GUP-047_Surface_Event_Integration.md)        | Surface Event Integration        | 💡 New      | Medium   | 3      |
+| [GUP-048](GUP-048_Context_Error_Recovery.md)           | Context Error Recovery           | 💡 New      | Medium   | 4      |
+| [GUP-049](GUP-049_Surface_Performance_Optimization.md) | Surface Performance Optimization | 💡 New      | Medium   | 5      |
+| [GUP-050](GUP-050_Visual_Blend_Mode_Validation.md)     | Visual Blend Mode Validation     | 💡 New      | Low      | 3      |
 | [GUP-042](GUP-042_Cross_Platform_Surface_Features.md)  | Cross Platform Surface Features  | 💡 New      | Low      | 8      |
+
+### Post GUP-027 Stories - Blend System Enhancement (Stories 43+)
+
+| Story                                                 | Title                           | Status | Priority | Points |
+| ----------------------------------------------------- | ------------------------------- | ------ | -------- | ------ |
+| [GUP-043](GUP-043_Visual_Blend_Mode_Demonstration.md) | Visual Blend Mode Demonstration | 💡 New | High     | 3      |
+| [GUP-044](GUP-044_GPU_Test_Resource_Management.md)    | GPU Test Resource Management    | 💡 New | Medium   | 4      |
+| [GUP-045](GUP-045_RAII_State_Management_System.md)    | RAII State Management System    | 💡 New | Medium   | 2      |
 
 ## Story Status Legend
 
@@ -126,10 +137,10 @@ epic and status.
 
 ## Story Point Summary
 
-- **Total Planned**: ~140 story points across all stories
-- **Completed**: 34 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
-  GUP-004: 5pts, GUP-020: 5pts, GUP-021: 6pts, GUP-039: 5pts)
-- **Progress**: ~24% of total scope
+- **Total Planned**: ~160 story points across all stories
+- **Completed**: 37 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
+  GUP-004: 5pts, GUP-020: 5pts, GUP-021: 6pts, GUP-027: 3pts, GUP-039: 5pts)
+- **Progress**: ~23% of total scope
 
 ## Recent Additions (Post GUP-021)
 
@@ -141,11 +152,12 @@ The following stories were created based on learnings from implementing GUP-021:
 combination **Dependencies**: GUP-021 complete **Impact**: Enables true unified
 visualizations from multiple datasets
 
-### GUP-027: GPU Blend State Integration
+### GUP-027: GPU Blend State Integration ✅
 
 **Key Learning**: BlendMode enum exists but not connected to GPU state
 **Dependencies**: GUP-020, GUP-021 complete **Impact**: Proper alpha blending
-for overlay compositions
+for overlay compositions **Status**: Complete - Full WebGPU blend state
+integration with performance optimization
 
 ### GUP-028: Composition Performance Optimization
 
@@ -203,17 +215,43 @@ Advanced profiling helps developers identify and fix performance bottlenecks
 production apps **Dependencies**: GUP-004 complete **Impact**: Improved
 application stability when GPU issues occur
 
+## Recent Additions (Post GUP-027)
+
+The following stories were created based on learnings from implementing GUP-027:
+
+### GUP-043: Visual Blend Mode Demonstration
+
+**Key Learning**: Console demonstration works perfectly, but visual windowed
+example encountered technical challenges with winit API compatibility and
+`Arc<GupContext>` borrowing conflicts **Dependencies**: GUP-027 complete
+**Impact**: Visual validation of blend mode correctness and compelling user
+demonstrations
+
+### GUP-044: GPU Test Resource Management
+
+**Key Learning**: GPU tests suffer from resource contention when run in
+parallel, requiring `--test-threads=1` workaround that slows development
+**Dependencies**: GUP-027 complete (where issue was discovered) **Impact**:
+Reliable parallel test execution without special flags, faster development cycle
+
+### GUP-045: RAII State Management System
+
+**Key Learning**: Manual push/pop blend state system works but creates
+opportunities for errors in complex scenarios **Dependencies**: GUP-027 complete
+**Impact**: Automatic state management with exception safety, reduced cognitive
+load for developers
+
 ## Recent Additions (Post GUP-039)
 
 The following stories were created based on learnings from implementing GUP-039:
 
-### GUP-040: Surface Event Integration
+### GUP-047: Surface Event Integration
 
 **Key Learning**: Multi-window applications need integrated event handling for
 focus, DPI changes, and visibility **Dependencies**: GUP-039 complete
 **Impact**: Responsive applications with proper platform event handling
 
-### GUP-041: Surface Performance Optimization
+### GUP-049: Surface Performance Optimization
 
 **Key Learning**: Advanced performance optimizations needed for many concurrent
 surfaces with intelligent scheduling **Dependencies**: GUP-039 complete
@@ -227,6 +265,24 @@ integration enhance user experience **Dependencies**: GUP-039 complete
 **Impact**: Native look and feel with advanced graphics capabilities per
 platform
 
+### GUP-046: Context Performance Profiling
+
+**Key Learning**: Basic FrameStats needs GPU timestamp queries and detailed
+breakdown for optimization **Dependencies**: GUP-004 complete **Impact**:
+Advanced profiling helps developers identify and fix performance bottlenecks
+
+### GUP-048: Context Error Recovery
+
+**Key Learning**: GPU contexts can fail - need robust recovery mechanisms for
+production apps **Dependencies**: GUP-004 complete **Impact**: Improved
+application stability when GPU issues occur
+
+### GUP-050: Visual Blend Mode Validation
+
+**Key Learning**: Blend mode visual correctness needs systematic validation
+framework **Dependencies**: GUP-027 complete **Impact**: Ensures blend modes
+produce expected visual results across platforms
+
 ## Development Conventions
 
 See [CONVENTIONS.md](../../CONVENTIONS.md) for key learnings and patterns
@@ -234,6 +290,6 @@ discovered during story implementation.
 
 ---
 
-_Last Updated: After completion of GUP-039_ _Next Stories: GUP-005 (Shader
-Function Trait), GUP-027 (GPU Blend State Integration), GUP-040 (Surface Event
-Integration)_
+_Last Updated: After completion of GUP-027_ _Next Stories: GUP-005 (Shader
+Function Trait), GUP-043 (Visual Blend Mode Demonstration), GUP-047 (Surface
+Event Integration)_
