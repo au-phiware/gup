@@ -1000,6 +1000,269 @@ async fn test_frame_stats_tracking() {
 }
 ```
 
+## Multi-Window Surface Management Patterns (GUP-039 Learnings)
+
+### Unique Identifier Systems for Resources
+
+**Learning**: Multi-resource management requires robust ID systems with atomic
+generation and clear display formatting.
+
+**Pattern**: Use atomic counters with type-safe wrappers:
+
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SurfaceId(pub u64);
+
+impl SurfaceId {
+    pub fn new() -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        Self(COUNTER.fetch_add(1, Ordering::Relaxed))
+    }
+}
+
+impl std::fmt::Display for SurfaceId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Surface({})", self.0)
+    }
+}
+```
+
+**Benefits**:
+
+- Thread-safe ID generation
+- Type safety prevents ID confusion
+- Clear debugging with Display trait
+- Hash/Eq enable HashMap usage
+
+### Multi-Resource State Management
+
+**Learning**: Managing multiple similar resources requires careful state
+tracking and primary resource concepts for backward compatibility.
+
+**Pattern**: Use HashMap with optional primary selection:
+
+```rust
+pub struct ResourceManager<T> {
+    resources: HashMap<ResourceId, ManagedResource<T>>,
+    primary_id: Option<ResourceId>,
+}
+
+impl<T> ResourceManager<T> {
+    pub fn add(&mut self, id: ResourceId, resource: T) -> Result<()> {
+        // Set as primary if first resource
+        if self.primary_id.is_none() {
+            self.primary_id = Some(id);
+        }
+        self.resources.insert(id, ManagedResource::new(resource));
+    }
+
+    pub fn remove(&mut self, id: ResourceId) -> Result<()> {
+        self.resources.remove(&id);
+        // Update primary if removed
+        if self.primary_id == Some(id) {
+            self.primary_id = self.resources.keys().next().copied();
+        }
+    }
+}
+```
+
+**Guidelines**:
+
+- Provide both ID-specific and primary resource access
+- Handle primary resource updates automatically
+- Include comprehensive error messages with resource IDs
+
+### Surface Format Negotiation Strategies
+
+**Learning**: Cross-platform graphics requires robust format negotiation with
+clear preference hierarchies and fallback strategies.
+
+**Pattern**: Preference-based negotiation with fallbacks:
+
+```rust
+fn negotiate_surface_format(&self, caps: &SurfaceCapabilities) -> GupResult<TextureFormat> {
+    // Prefer sRGB formats for color accuracy
+    let preferred_formats = [
+        TextureFormat::Bgra8UnormSrgb,
+        TextureFormat::Rgba8UnormSrgb,
+        TextureFormat::Bgra8Unorm,
+        TextureFormat::Rgba8Unorm,
+    ];
+
+    for format in &preferred_formats {
+        if caps.formats.contains(format) {
+            return Ok(*format);
+        }
+    }
+
+    // Fallback to first available format
+    caps.formats.first().copied().ok_or_else(|| {
+        GupError::WebGpuError("No supported surface formats found".to_string())
+    })
+}
+```
+
+**Benefits**:
+
+- Consistent format selection across platforms
+- Clear preference ordering for quality
+- Graceful degradation with fallbacks
+- Informative error messages
+
+### Performance-Critical API Design
+
+**Learning**: Multi-window systems must meet strict performance requirements
+(<16ms resize) through efficient resource management.
+
+**Performance Requirements**:
+
+- Surface resize: <16ms for responsive UI
+- Frame rendering: Target 60+ FPS (16.67ms budget)
+- Resource lookup: O(1) through HashMap usage
+- Memory allocation: Minimize during frame rendering
+
+**Pattern**: Performance validation in tests:
+
+```rust
+#[tokio::test]
+async fn test_surface_resize_performance() {
+    let start = std::time::Instant::now();
+    ctx.resize_surface(id, PhysicalSize::new(1024, 768))?;
+    let duration = start.elapsed();
+
+    // Should complete well under 16ms for responsive UI
+    assert!(duration.as_millis() < 16);
+}
+```
+
+### Arc-Based Resource Sharing Patterns
+
+**Learning**: Multi-window applications require careful resource sharing
+patterns to avoid lifetime complications while enabling efficient access.
+
+**Problem**: Multiple windows need access to shared GPU context:
+
+```rust
+// ❌ Problematic - lifetime parameters propagate
+struct WindowManager<'a> {
+    context: &'a mut GupContext,
+    windows: HashMap<WindowId, Window>,
+}
+```
+
+**Solution**: Use Arc with take/restore pattern:
+
+```rust
+// ✅ Better - Arc enables sharing without lifetimes
+struct WindowManager {
+    context: Option<Arc<GupContext>>,
+    windows: HashMap<WindowId, WindowInfo>,
+}
+
+impl WindowManager {
+    fn operation(&mut self) -> Result<()> {
+        if let Some(context) = self.context.take() {
+            let mut ctx = Arc::try_unwrap(context)?;
+            // Perform mutable operations
+            ctx.some_operation()?;
+            self.context = Some(Arc::new(ctx));
+        }
+        Ok(())
+    }
+}
+```
+
+**Guidelines**:
+
+- Use Arc for shared GPU resources (Device, Queue)
+- Use take/restore pattern for mutable access
+- Validate Arc::try_unwrap success for exclusive access
+- Provide clear error messages for sharing violations
+
+### Comprehensive Error Context for Multi-Resource Systems
+
+**Learning**: Multi-resource systems require rich error context including
+resource IDs and operation context.
+
+**Pattern**: Structured errors with resource context:
+
+```rust
+// ✅ Rich error context with resource information
+fn resize_surface(&mut self, id: SurfaceId, size: PhysicalSize<u32>) -> GupResult<()> {
+    let surface = self.surfaces.get_mut(&id).ok_or_else(|| {
+        GupError::ResourceError(format!("Surface with ID {id} not found"))
+    })?;
+
+    surface.resize(&self.device, size.width, size.height);
+    Ok(())
+}
+```
+
+**Benefits**:
+
+- Clear identification of which resource failed
+- Actionable error messages for debugging
+- Consistent error formatting across operations
+
+### Testing Strategies for Multi-Resource Systems
+
+**Learning**: Multi-resource systems require comprehensive testing of resource
+lifecycle, error conditions, and performance requirements.
+
+**Test Categories**:
+
+1. **Resource Lifecycle**: Creation, modification, removal
+2. **Error Handling**: Invalid IDs, conflicting operations
+3. **Performance Validation**: Response time requirements
+4. **Cross-Platform Compatibility**: Format negotiation, capabilities
+5. **Concurrent Access**: Resource sharing patterns
+
+**Pattern**: Comprehensive test coverage:
+
+```rust
+#[tokio::test]
+async fn test_multi_resource_lifecycle() {
+    let mut manager = ResourceManager::new();
+
+    // Test creation
+    let id1 = ResourceId::new();
+    assert!(manager.add(id1, resource1).is_ok());
+
+    // Test error conditions
+    assert!(manager.remove(ResourceId::new()).is_err());
+
+    // Test performance
+    let start = std::time::Instant::now();
+    manager.operation(id1)?;
+    assert!(start.elapsed().as_millis() < 16);
+}
+```
+
+### Real-World Application Integration Patterns
+
+**Learning**: Graphics libraries must provide both low-level control and
+high-level convenience APIs for different use cases.
+
+**Pattern**: Multi-level API design:
+
+```rust
+// Low-level: Full control
+ctx.add_surface(surface_id, window)?;
+ctx.begin_frame_for_surface(surface_id)?;
+
+// High-level: Convenience with reasonable defaults
+let context = GupContext::with_surface(window).await?;
+let frame = ctx.begin_frame()?; // Uses primary surface
+```
+
+**Benefits**:
+
+- Experts can optimize with low-level APIs
+- Beginners can use high-level convenience methods
+- Backward compatibility through primary resource concept
+- Clear migration path from simple to complex usage
+
 ---
 
 _This document is a living record of learnings. Update it as new patterns and

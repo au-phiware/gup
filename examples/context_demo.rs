@@ -16,7 +16,7 @@
 
 //! Demonstration of GupContext usage and capabilities.
 
-use gup::{BufferType, GupContext, GupOptions};
+use gup::{BufferType, GupContext, GupOptions, PhysicalSize, SurfaceId};
 use std::sync::Arc;
 use wgpu::PowerPreference;
 
@@ -110,6 +110,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!("     - Final FPS: {:.1}", final_stats.fps());
 
+    // 8. Demonstrate new surface management APIs
+    println!("\n8. New surface management capabilities...");
+
+    // Show SurfaceId creation
+    let surface_id = SurfaceId::new();
+    println!("   Sample Surface ID: {surface_id}");
+    println!("   Raw ID value: {}", surface_id.raw());
+
+    // Show PhysicalSize usage
+    let size = PhysicalSize::new(1920u32, 1080u32);
+    println!("   Sample size: {}x{}", size.width, size.height);
+
+    // Show multi-surface support info
+    println!("   Active surfaces: {}", ctx.surface_ids().len());
+    println!("   Primary surface: {:?}", ctx.primary_surface_id());
+
+    // Show surface format info
+    println!("   Default surface format: {:?}", ctx.surface_format());
+
+    // Demonstrate error handling for non-existent surfaces
+    let test_id = SurfaceId::new();
+    println!("   Testing operations on non-existent surface...");
+    println!("     - Format query: {:?}", ctx.surface_format_for(test_id));
+    println!("     - Size query: {:?}", ctx.surface_size(test_id));
+    println!("     - Fullscreen check: {}", ctx.is_fullscreen(test_id));
+    println!(
+        "     - Scale factor: {:?}",
+        ctx.surface_scale_factor(test_id)
+    );
+
     println!("\n=== Demo completed successfully! ===");
+    println!("\nFor multi-window examples, run: cargo run --example multi_window_demo");
     Ok(())
 }

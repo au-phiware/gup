@@ -69,12 +69,13 @@ epic and status.
 
 ### Post GUP-004 Stories - Context Enhancement (Stories 38+)
 
-| Story                                               | Title                         | Status | Priority | Points |
-| --------------------------------------------------- | ----------------------------- | ------ | -------- | ------ |
-| [GUP-038](GUP-038_Texture_Pool_Enhancement.md)      | Texture Pool Enhancement      | 💡 New | Medium   | 3      |
-| [GUP-039](GUP-039_Context_Window_Integration.md)    | Context Window Integration    | 💡 New | High     | 5      |
-| [GUP-040](GUP-040_Context_Performance_Profiling.md) | Context Performance Profiling | 💡 New | Low      | 3      |
-| [GUP-041](GUP-041_Context_Error_Recovery.md)        | Context Error Recovery        | 💡 New | Medium   | 4      |
+| Story                                                  | Title                            | Status      | Priority | Points |
+| ------------------------------------------------------ | -------------------------------- | ----------- | -------- | ------ |
+| [GUP-038](GUP-038_Texture_Pool_Enhancement.md)         | Texture Pool Enhancement         | 💡 New      | Medium   | 3      |
+| [GUP-039](GUP-039_Context_Window_Integration.md)       | Context Window Integration       | ✅ Complete | High     | 5      |
+| [GUP-040](GUP-040_Surface_Event_Integration.md)        | Surface Event Integration        | 💡 New      | Medium   | 3      |
+| [GUP-041](GUP-041_Surface_Performance_Optimization.md) | Surface Performance Optimization | 💡 New      | Medium   | 5      |
+| [GUP-042](GUP-042_Cross_Platform_Surface_Features.md)  | Cross Platform Surface Features  | 💡 New      | Low      | 8      |
 
 ## Story Status Legend
 
@@ -111,7 +112,7 @@ epic and status.
 
 - **Completed**: 4/15 stories (27%)
 - **Critical Path**: GUP-001 ✅, GUP-002 ✅, GUP-003 ✅, GUP-004 ✅, GUP-020 ✅,
-  GUP-021 ✅
+  GUP-021 ✅, GUP-039 ✅
 
 ### Post-GUP-021 Improvements
 
@@ -126,9 +127,9 @@ epic and status.
 ## Story Point Summary
 
 - **Total Planned**: ~140 story points across all stories
-- **Completed**: 29 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
-  GUP-004: 5pts, GUP-020: 5pts, GUP-021: 6pts)
-- **Progress**: ~21% of total scope
+- **Completed**: 34 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
+  GUP-004: 5pts, GUP-020: 5pts, GUP-021: 6pts, GUP-039: 5pts)
+- **Progress**: ~24% of total scope
 
 ## Recent Additions (Post GUP-021)
 
@@ -202,6 +203,30 @@ Advanced profiling helps developers identify and fix performance bottlenecks
 production apps **Dependencies**: GUP-004 complete **Impact**: Improved
 application stability when GPU issues occur
 
+## Recent Additions (Post GUP-039)
+
+The following stories were created based on learnings from implementing GUP-039:
+
+### GUP-040: Surface Event Integration
+
+**Key Learning**: Multi-window applications need integrated event handling for
+focus, DPI changes, and visibility **Dependencies**: GUP-039 complete
+**Impact**: Responsive applications with proper platform event handling
+
+### GUP-041: Surface Performance Optimization
+
+**Key Learning**: Advanced performance optimizations needed for many concurrent
+surfaces with intelligent scheduling **Dependencies**: GUP-039 complete
+**Impact**: High-performance multi-window applications with battery life
+optimization
+
+### GUP-042: Cross-Platform Surface Features
+
+**Key Learning**: Platform-specific optimizations like HDR and native
+integration enhance user experience **Dependencies**: GUP-039 complete
+**Impact**: Native look and feel with advanced graphics capabilities per
+platform
+
 ## Development Conventions
 
 See [CONVENTIONS.md](../../CONVENTIONS.md) for key learnings and patterns
@@ -209,6 +234,6 @@ discovered during story implementation.
 
 ---
 
-_Last Updated: After completion of GUP-004_ _Next Stories: GUP-005 (Shader
-Function Trait), GUP-027 (GPU Blend State Integration), GUP-039 (Context Window
+_Last Updated: After completion of GUP-039_ _Next Stories: GUP-005 (Shader
+Function Trait), GUP-027 (GPU Blend State Integration), GUP-040 (Surface Event
 Integration)_
