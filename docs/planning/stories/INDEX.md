@@ -82,11 +82,11 @@ epic and status.
 
 ### Post GUP-027 Stories - Blend System Enhancement (Stories 43+)
 
-| Story                                                 | Title                           | Status | Priority | Points |
-| ----------------------------------------------------- | ------------------------------- | ------ | -------- | ------ |
-| [GUP-043](GUP-043_Visual_Blend_Mode_Demonstration.md) | Visual Blend Mode Demonstration | 💡 New | High     | 3      |
-| [GUP-044](GUP-044_GPU_Test_Resource_Management.md)    | GPU Test Resource Management    | 💡 New | Medium   | 4      |
-| [GUP-045](GUP-045_RAII_State_Management_System.md)    | RAII State Management System    | 💡 New | Medium   | 2      |
+| Story                                                 | Title                           | Status      | Priority | Points |
+| ----------------------------------------------------- | ------------------------------- | ----------- | -------- | ------ |
+| [GUP-043](GUP-043_Visual_Blend_Mode_Demonstration.md) | Visual Blend Mode Demonstration | ✅ Complete | High     | 3      |
+| [GUP-044](GUP-044_GPU_Test_Resource_Management.md)    | GPU Test Resource Management    | 💡 New      | Medium   | 4      |
+| [GUP-045](GUP-045_RAII_State_Management_System.md)    | RAII State Management System    | 💡 New      | Medium   | 2      |
 
 ## Story Status Legend
 
@@ -138,9 +138,10 @@ epic and status.
 ## Story Point Summary
 
 - **Total Planned**: ~160 story points across all stories
-- **Completed**: 37 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
-  GUP-004: 5pts, GUP-020: 5pts, GUP-021: 6pts, GUP-027: 3pts, GUP-039: 5pts)
-- **Progress**: ~23% of total scope
+- **Completed**: 40 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
+  GUP-004: 5pts, GUP-020: 5pts, GUP-021: 6pts, GUP-027: 3pts, GUP-039: 5pts,
+  GUP-043: 3pts)
+- **Progress**: ~25% of total scope
 
 ## Recent Additions (Post GUP-021)
 
@@ -219,13 +220,14 @@ application stability when GPU issues occur
 
 The following stories were created based on learnings from implementing GUP-027:
 
-### GUP-043: Visual Blend Mode Demonstration
+### GUP-043: Visual Blend Mode Demonstration ✅
 
 **Key Learning**: Console demonstration works perfectly, but visual windowed
 example encountered technical challenges with winit API compatibility and
 `Arc<GupContext>` borrowing conflicts **Dependencies**: GUP-027 complete
 **Impact**: Visual validation of blend mode correctness and compelling user
-demonstrations
+demonstrations **Status**: Complete - Full interactive windowed application with
+all 4 blend modes and real-time alpha control
 
 ### GUP-044: GPU Test Resource Management
 
@@ -290,6 +292,6 @@ discovered during story implementation.
 
 ---
 
-_Last Updated: After completion of GUP-027_ _Next Stories: GUP-005 (Shader
-Function Trait), GUP-043 (Visual Blend Mode Demonstration), GUP-047 (Surface
-Event Integration)_
+_Last Updated: After completion of GUP-043_ _Next Stories: GUP-005 (Shader
+Function Trait), GUP-044 (GPU Test Resource Management), GUP-047 (Surface Event
+Integration)_

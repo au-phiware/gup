@@ -61,3 +61,7 @@ harness = false
 name = "blend_modes_showcase"
 path = "examples/blend_modes_showcase.rs"
 
+[[example]]
+name = "visual_blend_demo"
+path = "examples/visual_blend_demo.rs"
+
