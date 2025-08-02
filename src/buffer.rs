@@ -203,7 +203,11 @@ where
                 (self.len * std::mem::size_of::<T>()) as u64,
             );
 
-            queue.submit(Some(encoder.finish()));
+            let submission_index = queue.submit(Some(encoder.finish()));
+
+            // Wait for the copy operation to complete before proceeding
+            // This prevents race conditions in benchmarks and tight loops
+            let _ = device.poll(PollType::WaitForSubmissionIndex(submission_index));
         }
 
         self.buffer = new_buffer;
