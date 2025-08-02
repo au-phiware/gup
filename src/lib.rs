@@ -35,6 +35,7 @@ pub mod mixable;
 pub mod render;
 pub mod selection;
 pub mod shader_function;
+pub mod shader_pipeline;
 
 pub use buffer::*;
 pub use context::*;
@@ -44,6 +45,7 @@ pub use mixable::*;
 pub use render::*;
 pub use selection::*;
 pub use shader_function::*;
+pub use shader_pipeline::*;
 
 // Note: Procedural macros from gup_macros must be imported directly
 // with `use gup_macros::wgsl_function;` due to Rust limitations

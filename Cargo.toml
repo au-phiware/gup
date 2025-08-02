@@ -70,3 +70,7 @@ path = "examples/blend_modes_showcase.rs"
 name = "visual_blend_demo"
 path = "examples/visual_blend_demo.rs"
 
+[[example]]
+name = "shader_pipeline_demo"
+path = "examples/shader_pipeline_demo.rs"
+
