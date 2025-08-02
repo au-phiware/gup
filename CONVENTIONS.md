@@ -2010,11 +2010,12 @@ pub use gup_macros::wgsl_function; // Conflicts with existing wgsl_function!
 
 ### WGSL Code Generation with Type-Aware Output
 
-**Learning**: Different shader functions return different types (f32, vec2, vec4) 
-that require type-aware conversion for GPU vertex attributes.
+**Learning**: Different shader functions return different types (f32, vec2,
+vec4) that require type-aware conversion for GPU vertex attributes.
 
-**Problem**: All function results were wrapped in `vec4<f32>(result, 0.0, 0.0, 1.0)`
-causing compilation errors when `result` was already a vec4.
+**Problem**: All function results were wrapped in
+`vec4<f32>(result, 0.0, 0.0, 1.0)` causing compilation errors when `result` was
+already a vec4.
 
 **Solution**: Type-aware output generation based on function semantics:
 
@@ -2046,6 +2047,7 @@ match function.name() {
 ```
 
 **Guidelines**:
+
 - Know the output types of each shader function
 - Generate type-appropriate WGSL conversion code
 - Test with actual GPU compilation to catch type errors early
@@ -2055,7 +2057,8 @@ match function.name() {
 **Learning**: GPU shaders require explicit struct definitions that match the
 uniform data layout, not just uniform variable declarations.
 
-**Problem**: Generated WGSL referenced `LinearScaleUniforms` without defining the struct:
+**Problem**: Generated WGSL referenced `LinearScaleUniforms` without defining
+the struct:
 
 ```wgsl
 // ❌ Reference without definition causes compilation error
@@ -2086,6 +2089,7 @@ bindings.push_str(&format!(
 ```
 
 **Critical Requirements**:
+
 - Define all uniform structs before using them in bindings
 - Match field names between Rust uniforms and WGSL structs
 - Use deduplicated struct definitions to avoid redefinition errors
@@ -2095,8 +2099,8 @@ bindings.push_str(&format!(
 **Learning**: Generated WGSL function calls must match the exact parameter types
 expected by shader functions, not use generic types for all functions.
 
-**Problem**: All functions were called with `f32(in.vertex_index)` even when they
-expected different parameter types like `vec2<f32>`.
+**Problem**: All functions were called with `f32(in.vertex_index)` even when
+they expected different parameter types like `vec2<f32>`.
 
 **Solution**: Type-aware parameter generation:
 
@@ -2120,14 +2124,15 @@ match function.name() {
 ```
 
 **Guidelines**:
+
 - Understand the signature of each shader function
 - Generate appropriate parameter types for function calls
 - Test generated WGSL with actual GPU compilation early and often
 
 ### Unique Function Naming for Multiple Instances
 
-**Learning**: When multiple instances of the same function are used in a pipeline,
-they must have unique names to avoid WGSL compilation conflicts.
+**Learning**: When multiple instances of the same function are used in a
+pipeline, they must have unique names to avoid WGSL compilation conflicts.
 
 **Pattern**: Append indices to create unique function names:
 
@@ -2135,12 +2140,13 @@ they must have unique names to avoid WGSL compilation conflicts.
 // ✅ Generate unique names for multiple instances
 let unique_function_name = format!("{}_{}", function.name(), i);
 function_code = function_code.replace(
-    &format!("fn {}", original_name), 
+    &format!("fn {}", original_name),
     &format!("fn {}", unique_name)
 );
 ```
 
 **Benefits**:
+
 - Enables multiple linear scales, color maps, etc. in same pipeline
 - Clear naming convention for debugging generated shaders
 - Maintains function isolation and prevents naming conflicts
@@ -2150,10 +2156,11 @@ function_code = function_code.replace(
 **Learning**: Complex shader generation systems can still meet aggressive
 performance targets through efficient implementation patterns.
 
-**Target**: <5ms shader generation time for complex pipelines
-**Achieved**: 0.141ms average (35x better than target)
+**Target**: <5ms shader generation time for complex pipelines **Achieved**:
+0.141ms average (35x better than target)
 
 **Key Optimizations**:
+
 - Lazy evaluation - defer expensive work until needed
 - String concatenation instead of complex AST manipulation
 - Efficient function lookup using name-based matching
@@ -2197,6 +2204,7 @@ let reduction_percentage = (size_reduction / vertex_shader.len() as f64) * 100.0
 ```
 
 **Optimization Categories**:
+
 - **Dead code elimination**: Remove unused uniform declarations
 - **Constant folding**: Replace `1.0 * x` with `x`, `0.0 + x` with `x`
 - **Function inlining**: Inline simple functions called few times
@@ -2221,6 +2229,7 @@ let vertex_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
 ```
 
 **Debugging Benefits**:
+
 - See exact generated WGSL that fails to compile
 - GPU errors include line numbers in generated code
 - Performance metrics show generation vs compilation time
@@ -2256,8 +2265,9 @@ impl ComposableShaderPipeline {
 ```
 
 **Cache Performance**:
+
 - Cold generation: 0.021ms
-- Cached generation: 0.001ms  
+- Cached generation: 0.001ms
 - **Speedup: 14.9x faster** for repeated shader access
 
 ### Integration Testing for GPU Systems
@@ -2303,6 +2313,7 @@ async fn test_complete_pipeline_workflow() {
 ```
 
 **Guidelines**:
+
 - Test with real GPU context, not just string generation
 - Validate complete render pipeline creation
 - Include performance timing in integration tests

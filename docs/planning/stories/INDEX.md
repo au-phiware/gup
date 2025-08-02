@@ -157,8 +157,8 @@ epic and status.
 - **Total Planned**: ~220 story points across all stories (including new
   GUP-053, GUP-054)
 - **Completed**: 79 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
-  GUP-004: 5pts, GUP-005: 13pts, GUP-006: 13pts, GUP-007: 13pts, GUP-020: 5pts, GUP-021: 6pts,
-  GUP-027: 3pts, GUP-039: 5pts, GUP-043: 3pts)
+  GUP-004: 5pts, GUP-005: 13pts, GUP-006: 13pts, GUP-007: 13pts, GUP-020: 5pts,
+  GUP-021: 6pts, GUP-027: 3pts, GUP-039: 5pts, GUP-043: 3pts)
 - **Progress**: ~36% of total scope
 
 ## Recent Additions (Post GUP-021)
@@ -333,7 +333,7 @@ renderable GPU pipelines **Dependencies**: GUP-005, GUP-051 complete
 need comprehensive library **Dependencies**: GUP-005, GUP-051 complete  
 **Impact**: Rich toolkit for complex visualization transformations
 
-### GUP-054: Shader Function Performance Optimization  
+### GUP-054: Shader Function Performance Optimization
 
 **Key Learning**: Composition performance excellent on CPU side, need GPU-side
 optimization focus **Dependencies**: GUP-005, GUP-051, GUP-052 complete  
@@ -345,17 +345,21 @@ The following stories were created based on learnings from implementing GUP-007:
 
 ### GUP-053: Shader Pipeline Performance Optimization
 
-**Key Learning**: While GUP-007 achieved excellent base performance (0.141ms vs 5ms target), 
-advanced optimizations like function inlining, LRU caching, and batch operations could provide 
-further improvements **Dependencies**: GUP-007 complete  
-**Impact**: Enhanced performance for complex shader pipelines with memory optimization
+**Key Learning**: While GUP-007 achieved excellent base performance (0.141ms vs
+5ms target), advanced optimizations like function inlining, LRU caching, and
+batch operations could provide further improvements **Dependencies**: GUP-007
+complete  
+**Impact**: Enhanced performance for complex shader pipelines with memory
+optimization
 
 ### GUP-054: Shader Function Type Safety Enhancement
 
-**Key Learning**: Multiple GPU compilation errors during GUP-007 implementation could be 
-prevented with better compile-time type validation and automatic type inference  
+**Key Learning**: Multiple GPU compilation errors during GUP-007 implementation
+could be prevented with better compile-time type validation and automatic type
+inference  
 **Dependencies**: GUP-007 complete  
-**Impact**: Compile-time error prevention and automatic WGSL generation from Rust types
+**Impact**: Compile-time error prevention and automatic WGSL generation from
+Rust types
 
 ## Recent Additions (Post GUP-006)
 
@@ -387,4 +391,5 @@ optimized for better developer experience
 ---
 
 _Last Updated: After completion of GUP-007 (Shader Pipeline Builder)_  
-_Next Stories: GUP-053 (Shader Pipeline Performance Optimization), GUP-054 (Shader Function Type Safety Enhancement)_
+_Next Stories: GUP-053 (Shader Pipeline Performance Optimization), GUP-054
+(Shader Function Type Safety Enhancement)_

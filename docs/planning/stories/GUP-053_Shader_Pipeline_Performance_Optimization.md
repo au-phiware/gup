@@ -3,15 +3,17 @@
 **Status**: Planned  
 **Epic**: Shader Pipeline System  
 **Priority**: Medium  
-**Complexity**: Medium  
+**Complexity**: Medium
 
 ## Overview
 
-Enhance the ComposableShaderPipeline system with advanced performance optimizations based on learnings from GUP-007 implementation and usage patterns.
+Enhance the ComposableShaderPipeline system with advanced performance
+optimizations based on learnings from GUP-007 implementation and usage patterns.
 
 ## Motivation
 
-While GUP-007 achieved excellent base performance (0.141ms vs 5ms target), there are opportunities for further optimization discovered during implementation:
+While GUP-007 achieved excellent base performance (0.141ms vs 5ms target), there
+are opportunities for further optimization discovered during implementation:
 
 - Function inlining could reduce GPU register pressure
 - Pipeline cache efficiency could be improved with LRU eviction
@@ -20,10 +22,12 @@ While GUP-007 achieved excellent base performance (0.141ms vs 5ms target), there
 
 ## Goals
 
-1. **Advanced Shader Optimization**: Implement function inlining and more sophisticated optimizations
-2. **Cache Efficiency**: Add LRU cache management and cache warming strategies  
+1. **Advanced Shader Optimization**: Implement function inlining and more
+   sophisticated optimizations
+2. **Cache Efficiency**: Add LRU cache management and cache warming strategies
 3. **Batch Operations**: Support for batching multiple pipeline operations
-4. **Performance Monitoring**: Built-in profiling and optimization recommendations
+4. **Performance Monitoring**: Built-in profiling and optimization
+   recommendations
 5. **Memory Optimization**: Reduce memory allocation during generation
 
 ## Non-Goals
@@ -47,7 +51,7 @@ impl ComposableShaderPipeline {
         self.inlining_optimizer = Some(optimizer);
         self
     }
-    
+
     fn inline_small_functions_advanced(&self, shader: &str) -> String {
         // AST-based inlining with proper variable renaming
         // Control flow analysis to avoid incorrect inlining
@@ -70,7 +74,7 @@ impl ComposableShaderPipeline {
         self.cache = LruPipelineCache::new(max_entries);
         self
     }
-    
+
     pub fn cache_statistics(&self) -> CacheStats {
         CacheStats {
             hit_rate: self.cache.hit_rate,
@@ -114,24 +118,28 @@ impl ComposableShaderPipeline {
 ## Implementation Plan
 
 ### Phase 1: Advanced Optimization Engine
+
 - [ ] Implement AST-based function inlining
 - [ ] Add control flow analysis for safe inlining
 - [ ] Create register pressure estimation
 - [ ] Performance testing with complex pipelines
 
 ### Phase 2: Cache Efficiency Improvements
+
 - [ ] Implement LRU cache with configurable size
 - [ ] Add cache warming strategies
 - [ ] Memory usage tracking and optimization
 - [ ] Cache statistics and monitoring
 
 ### Phase 3: Batch Operations Support
+
 - [ ] Design batch API for multiple pipelines
 - [ ] Implement parallel shader generation
 - [ ] Batch GPU compilation with error handling
 - [ ] Performance comparison vs individual operations
 
 ### Phase 4: Profiling and Monitoring
+
 - [ ] Built-in performance profiler
 - [ ] Optimization impact measurement
 - [ ] Automated performance recommendations
