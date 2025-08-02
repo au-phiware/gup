@@ -1603,6 +1603,225 @@ impl RenderContext {
 - Use clear naming conventions for debugging methods
 - Consider debug formatting for complex state structures
 
+## Shader Function System Patterns (GUP-005 Learnings)
+
+### Trait Naming Strategy for Avoiding Conflicts
+
+**Learning**: When implementing similar traits in different modules, use
+descriptive prefixes to avoid naming conflicts.
+
+**Problem**: The `ShaderFunction` trait name conflicted with an existing trait
+in the selection module.
+
+**Solution**: Use specific naming like `ComposableShaderFunction` to indicate
+the trait's purpose:
+
+```rust
+// ❌ Problematic - generic name causes conflicts
+pub trait ShaderFunction { /* ... */ }
+
+// ✅ Better - descriptive name indicates purpose
+pub trait ComposableShaderFunction { /* ... */ }
+```
+
+**Guidelines**:
+
+- Use descriptive trait names that indicate their specific purpose
+- Check for existing trait names before implementation
+- Consider module-specific prefixes when traits serve similar but distinct
+  purposes
+
+### Associated Type Defaults Stability
+
+**Learning**: Associated type defaults are still unstable in Rust and should be
+avoided in production code.
+
+**Problem**: Using `type Uniforms: ... = ();` causes compilation errors.
+
+**Solution**: Require explicit uniform types without defaults:
+
+```rust
+// ❌ Unstable feature
+pub trait ComposableShaderFunction {
+    type Uniforms: bytemuck::Pod + bytemuck::Zeroable = ();
+}
+
+// ✅ Stable - require explicit types
+pub trait ComposableShaderFunction {
+    type Uniforms: bytemuck::Pod + bytemuck::Zeroable;
+}
+```
+
+### Generic Struct Trait Derivation Limitations
+
+**Learning**: `bytemuck::Pod` and `bytemuck::Zeroable` cannot be automatically
+derived for generic structs due to padding verification requirements.
+
+**Problem**: Automatic derivation fails for `ChainUniforms<A, B>`.
+
+**Solution**: Implement traits manually with proper bounds:
+
+```rust
+// ❌ Cannot derive for generic types
+#[derive(bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ChainUniforms<A, B> { /* ... */ }
+
+// ✅ Manual implementation with proper bounds
+unsafe impl<A: bytemuck::Pod, B: bytemuck::Pod> bytemuck::Pod for ChainUniforms<A, B>
+where
+    A: bytemuck::Zeroable + Copy,
+    B: bytemuck::Zeroable + Copy {}
+
+unsafe impl<A: bytemuck::Zeroable, B: bytemuck::Zeroable> bytemuck::Zeroable for ChainUniforms<A, B>
+where
+    A: Copy,
+    B: Copy {}
+```
+
+### Type System Composition Validation
+
+**Learning**: Rust's type system can provide compile-time validation for complex
+composition scenarios through trait bounds.
+
+**Pattern**: Use marker traits for compatibility checking:
+
+```rust
+// ✅ Type-safe composition validation
+pub trait TypeCompatible<T> {
+    fn is_compatible() -> bool { true }
+}
+
+// Automatic compatibility for same types
+impl<T> TypeCompatible<T> for T {}
+
+// Composition only works with compatible types
+pub struct FunctionChain<A: ComposableShaderFunction, B: ComposableShaderFunction>
+where
+    A::Output: TypeCompatible<B::Input>,
+{
+    // Compile-time guaranteed compatibility
+}
+```
+
+**Benefits**:
+
+- Zero runtime overhead for type validation
+- Clear compiler errors for invalid compositions
+- Extensible validation system for custom compatibility rules
+
+### Phantom Type Pattern for Type Information
+
+**Learning**: Use phantom types to carry type information without runtime cost
+in complex generic structures.
+
+**Pattern**: Phantom data for type safety without storage:
+
+```rust
+pub struct FunctionChain<A: ComposableShaderFunction, B: ComposableShaderFunction>
+where
+    A::Output: TypeCompatible<B::Input>,
+{
+    first: A,
+    second: B,
+    _phantom: PhantomData<(A::Output, B::Input)>, // Carries type info without cost
+}
+```
+
+**Guidelines**:
+
+- Use phantom types to preserve type information across API boundaries
+- Name phantom fields with `_phantom` prefix for clarity
+- Include all relevant type parameters in phantom type tuples
+
+### GPU Uniform Buffer Layout Considerations
+
+**Learning**: GPU uniform buffers require careful attention to `Copy` bounds and
+alignment requirements for composed uniform structures.
+
+**Pattern**: Explicit Copy bounds for uniform composition:
+
+```rust
+// ✅ Proper bounds for GPU uniform buffers
+impl<A: ComposableShaderFunction, B: ComposableShaderFunction> ComposableShaderFunction for FunctionChain<A, B>
+where
+    A::Output: TypeCompatible<B::Input>,
+    A::Uniforms: bytemuck::Pod + bytemuck::Zeroable + Copy, // Copy required for GPU
+    B::Uniforms: bytemuck::Pod + bytemuck::Zeroable + Copy,
+{
+    type Uniforms = ChainUniforms<A::Uniforms, B::Uniforms>;
+}
+```
+
+**Critical Requirements**:
+
+- All GPU-bound uniform types must implement `Copy`
+- Ensure 16-byte alignment for complex uniform structures
+- Test uniform buffer uploads with actual GPU context
+- Validate uniform sizes match WGSL expectations
+
+### Modular Testing Strategy for Complex Systems
+
+**Learning**: Complex shader function systems benefit from layered testing: unit
+tests for individual components, integration tests with GPU operations, and
+performance validation.
+
+**Testing Categories**:
+
+1. **Unit Tests**: Individual trait and function behavior
+2. **Integration Tests**: GPU context interaction and buffer management
+3. **Performance Tests**: Composition overhead and timing validation
+4. **Compilation Tests**: WGSL generation and shader compilation
+
+**Pattern**: Separate test modules for different concerns:
+
+```rust
+// Unit tests in module
+#[cfg(test)]
+mod tests {
+    // Test individual functions and traits
+}
+
+// Integration tests in separate file
+// tests/shader_function_integration.rs
+#[tokio::test]
+async fn test_gpu_integration() {
+    let context = GupContext::headless().await?;
+    // Test with actual GPU resources
+}
+```
+
+### Performance-Critical API Design for Composition
+
+**Learning**: Function composition APIs must be zero-cost abstractions that can
+be optimized away at compile time.
+
+**Performance Requirements**:
+
+- Function composition: <100ms for 1000 compositions
+- Type validation: Zero runtime overhead
+- Uniform buffer creation: Minimal allocation overhead
+
+**Pattern**: Lazy evaluation with compile-time optimization:
+
+```rust
+// ✅ Zero-cost composition
+let composed = scale.compose(color_map).compose(position_transform);
+// No work done until actually used
+```
+
+### Cross-Module API Compatibility
+
+**Learning**: When adding new systems, carefully consider interactions with
+existing module APIs to avoid breaking changes.
+
+**Strategy**: Use unique naming and explicit imports:
+
+```rust
+// ✅ Avoid global naming conflicts
+use crate::shader_function::{ComposableShaderFunction, TypeCompatible};
+// Instead of glob imports that might conflict
+```
+
 ---
 
 _This document is a living record of learnings. Update it as new patterns and

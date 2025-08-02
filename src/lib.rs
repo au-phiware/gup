@@ -34,6 +34,7 @@ pub mod examples;
 pub mod mixable;
 pub mod render;
 pub mod selection;
+pub mod shader_function;
 
 pub use buffer::*;
 pub use context::*;
@@ -42,6 +43,7 @@ pub use examples::*;
 pub use mixable::*;
 pub use render::*;
 pub use selection::*;
+pub use shader_function::*;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
