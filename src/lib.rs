@@ -45,6 +45,9 @@ pub use render::*;
 pub use selection::*;
 pub use shader_function::*;
 
+// Note: Procedural macros from gup_macros must be imported directly
+// with `use gup_macros::wgsl_function;` due to Rust limitations
+
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 

@@ -14,7 +14,7 @@ epic and status.
 | [GUP-003](GUP-003_GPU_Buffer_Management.md)      | GPU Buffer Management      | ✅ Complete | Critical | 8      |
 | [GUP-004](GUP-004_Basic_Render_Context.md)       | Basic Render Context       | ✅ Complete | Critical | 5      |
 | [GUP-005](GUP-005_Shader_Function_Trait.md)      | Shader Function Trait      | ✅ Complete | Critical | 13     |
-| [GUP-006](GUP-006_WGSL_Function_Macro.md)        | WGSL Function Macro        | 📋 Planned  | Medium   | 3      |
+| [GUP-006](GUP-006_WGSL_Function_Macro.md)        | WGSL Function Macro        | ✅ Complete | Critical | 13     |
 | [GUP-007](GUP-007_Shader_Pipeline_Builder.md)    | Shader Pipeline Builder    | 📋 Planned  | High     | 5      |
 | [GUP-008](GUP-008_Type_System_Integration.md)    | Type System Integration    | 📋 Planned  | Medium   | 4      |
 | [GUP-009](GUP-009_Core_Mark_Trait.md)            | Core Mark Trait            | 📋 Planned  | High     | 3      |
@@ -56,6 +56,14 @@ epic and status.
 | [GUP-052](GUP-052_Shader_Pipeline_Builder.md)                  | Shader Pipeline Builder                  | 💡 New | High     | 13     |
 | [GUP-053](GUP-053_Advanced_Shader_Function_Library.md)         | Advanced Shader Function Library         | 💡 New | Medium   | 8      |
 | [GUP-054](GUP-054_Shader_Function_Performance_Optimization.md) | Shader Function Performance Optimization | 💡 New | Medium   | 5      |
+
+### Post GUP-006 Stories - WGSL Procedural Macro Enhancement (Stories 63+)
+
+| Story                                                           | Title                                     | Status | Priority | Points |
+| --------------------------------------------------------------- | ----------------------------------------- | ------ | -------- | ------ |
+| [GUP-063](GUP-063_Enhanced_WGSL_Code_Generation.md)             | Enhanced WGSL Code Generation             | 💡 New | Medium   | 5      |
+| [GUP-064](GUP-064_Advanced_Type_System_Support.md)              | Advanced Type System Support              | 💡 New | Low      | 3      |
+| [GUP-065](GUP-065_Procedural_Macro_Performance_Optimization.md) | Procedural Macro Performance Optimization | 💡 New | Low      | 2      |
 
 ### Post GUP-002 Stories - GPU and Interaction Systems (Stories 29+)
 
@@ -146,11 +154,12 @@ epic and status.
 
 ## Story Point Summary
 
-- **Total Planned**: ~194 story points across all stories
-- **Completed**: 53 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
-  GUP-004: 5pts, GUP-005: 13pts, GUP-020: 5pts, GUP-021: 6pts, GUP-027: 3pts,
-  GUP-039: 5pts, GUP-043: 3pts)
-- **Progress**: ~27% of total scope
+- **Total Planned**: ~204 story points across all stories (including new
+  GUP-063, GUP-064, GUP-065)
+- **Completed**: 66 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
+  GUP-004: 5pts, GUP-005: 13pts, GUP-006: 13pts, GUP-020: 5pts, GUP-021: 6pts,
+  GUP-027: 3pts, GUP-039: 5pts, GUP-043: 3pts)
+- **Progress**: ~32% of total scope
 
 ## Recent Additions (Post GUP-021)
 
@@ -330,7 +339,34 @@ need comprehensive library **Dependencies**: GUP-005, GUP-051 complete
 optimization focus **Dependencies**: GUP-005, GUP-051, GUP-052 complete  
 **Impact**: High-performance shader function execution at scale
 
+## Recent Additions (Post GUP-006)
+
+The following stories were created based on learnings from implementing GUP-006:
+
+### GUP-063: Enhanced WGSL Code Generation
+
+**Key Learning**: Current procedural macro generates placeholder WGSL - need
+complete struct definitions and compilable WGSL  
+**Dependencies**: GUP-006 complete  
+**Impact**: Enables actual GPU execution of generated shader functions with
+proper WGSL compilation
+
+### GUP-064: Advanced Type System Support
+
+**Key Learning**: Basic type support (f32, Vec2-4) insufficient for complex GPU
+programming scenarios  
+**Dependencies**: GUP-006 complete  
+**Impact**: Support for matrices, custom structs, textures, and advanced WGSL
+types
+
+### GUP-065: Procedural Macro Performance Optimization
+
+**Key Learning**: Macro compilation time and generated code size can be
+optimized for better developer experience  
+**Dependencies**: GUP-006 complete  
+**Impact**: Faster compilation cycles and more efficient generated code
+
 ---
 
-_Last Updated: After completion of GUP-005_ _Next Stories: GUP-051 (WGSL Code
-Generation Templates), GUP-052 (Shader Pipeline Builder)_
+_Last Updated: After completion of GUP-006_ _Next Stories: GUP-063 (Enhanced
+WGSL Code Generation), GUP-064 (Advanced Type System Support)_

@@ -1822,6 +1822,190 @@ use crate::shader_function::{ComposableShaderFunction, TypeCompatible};
 // Instead of glob imports that might conflict
 ```
 
+## Procedural Macro Development (GUP-006 Learnings)
+
+### Separate Proc-Macro Crates Required
+
+**Learning**: Procedural macros must be in separate crates with
+`proc-macro = true` and cannot be mixed with regular library code.
+
+**Problem**: Initially tried to add proc-macro to main library:
+
+```toml
+# ❌ This doesn't work - proc-macro crates can't export regular functions
+[lib]
+proc-macro = true  # Conflicts with regular library functions
+```
+
+**Solution**: Create dedicated workspace member:
+
+```toml
+# ✅ Separate gup-macros crate
+[workspace]
+members = [".", "gup-macros"]
+
+# gup-macros/Cargo.toml
+[lib]
+proc-macro = true
+```
+
+**Guidelines**:
+
+- Always use separate crates for procedural macros
+- Use workspace configuration for shared dependencies
+- Import macros explicitly: `use gup_macros::wgsl_function;`
+
+### GPU Type Compatibility Requirements
+
+**Learning**: Types used in GPU uniforms must implement
+`bytemuck::Pod + Zeroable` for safe memory transfer to GPU.
+
+**Problem**: Vec types lacked required traits:
+
+```rust
+// ❌ Missing required derives for GPU compatibility
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Vec3 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+```
+
+**Solution**: Add GPU compatibility derives and proper alignment:
+
+```rust
+// ✅ GPU-compatible with proper alignment
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Vec3 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub _padding: f32, // Ensure 16-byte alignment for GPU
+}
+```
+
+**Guidelines**:
+
+- Always use `#[repr(C)]` for GPU data structures
+- Add `bytemuck::Pod + Zeroable` derives for uniform compatibility
+- Consider GPU alignment requirements (Vec3 needs padding to 16 bytes)
+
+### Type Conversion for GPU Uniforms
+
+**Learning**: GPU uniforms often require different representations than Rust
+types (e.g., Vec2 → [f32; 2]).
+
+**Pattern**: Automatic type conversion in generated code:
+
+```rust
+// Generated uniform struct uses arrays instead of Vec types
+match ty {
+    Type::Path(type_path) if type_path.path.segments.len() == 1 => {
+        match type_path.path.segments[0].ident.to_string().as_str() {
+            "Vec2" => quote! { #name: [f32; 2] },
+            "Vec3" => quote! { #name: [f32; 3] },
+            "Vec4" => quote! { #name: [f32; 4] },
+            _ => quote! { #name: #ty },
+        }
+    }
+}
+```
+
+**Benefits**:
+
+- User-friendly Vec types in Rust code
+- GPU-compatible array types in uniforms
+- Automatic conversion handled by generated code
+
+### Comprehensive Error Handling in Macros
+
+**Learning**: Procedural macros should provide clear, actionable error messages
+with suggestions for fixes.
+
+**Pattern**: Context-aware error messages:
+
+```rust
+// ✅ Helpful error with context and suggestions
+rust_type_to_wgsl_type(ty).map_err(|e| {
+    Error::new_spanned(
+        ty,
+        format!("Unsupported uniform parameter type in parameter {}: {}. Only types that implement bytemuck::Pod + bytemuck::Zeroable are supported.", i + 2, e)
+    )
+})?;
+```
+
+**Guidelines**:
+
+- Use `Error::new_spanned()` to highlight problematic code
+- Include parameter position and context in error messages
+- Suggest concrete solutions (e.g., "Use f32, i32, u32, Vec2, Vec3, Vec4")
+- Validate early and fail fast with clear diagnostics
+
+### Testing Strategy for Procedural Macros
+
+**Learning**: Procedural macros require both unit tests (for parsing logic) and
+integration tests (for generated code functionality).
+
+**Pattern**: Multi-layer testing approach:
+
+```rust
+// Unit tests for parsing and validation logic
+#[test]
+fn test_parse_simple_function() {
+    let input = quote! {
+        fn linear_scale(value: f32, scale: f32) -> f32 {
+            return value * scale;
+        }
+    };
+    let parsed: WgslFunctionInfo = parse2(input).unwrap();
+    assert_eq!(parsed.function_name, "linear_scale");
+}
+
+// Integration tests for generated code functionality
+#[test]
+fn test_macro_generated_linear_scale() {
+    let scale_func = TestLinearScale::new(2.0, 1.0);
+    assert_eq!(scale_func.scale, 2.0);
+    let uniforms = scale_func.create_uniforms().unwrap();
+    assert_eq!(uniforms.scale, 2.0);
+}
+```
+
+**Guidelines**:
+
+- Test parsing logic separately from code generation
+- Verify generated code compiles and functions correctly
+- Test error cases with invalid input
+- Use integration tests to verify trait implementations work
+
+### Import Path Complexities
+
+**Learning**: Procedural macros cannot be easily re-exported and require
+explicit imports due to Rust's macro resolution rules.
+
+**Problem**: Attempted re-export conflicts with existing macros:
+
+```rust
+// ❌ Naming conflict with existing macro
+pub use gup_macros::wgsl_function; // Conflicts with existing wgsl_function!
+```
+
+**Solution**: Document explicit import requirements:
+
+```rust
+// ✅ Clear documentation for users
+// Note: Procedural macros from gup_macros must be imported directly
+// with `use gup_macros::wgsl_function;` due to Rust limitations
+```
+
+**Guidelines**:
+
+- Document import requirements clearly in crate documentation
+- Avoid naming conflicts between procedural and declarative macros
+- Consider using different names if conflicts arise
+
 ---
 
 _This document is a living record of learnings. Update it as new patterns and

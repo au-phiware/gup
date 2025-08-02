@@ -792,6 +792,7 @@ dependencies = [
  "criterion",
  "env_logger",
  "futures-intrusive",
+ "gup-macros",
  "log",
  "paste",
  "pollster",
@@ -804,6 +805,15 @@ dependencies = [
  "web-sys",
  "wgpu",
  "winit",
+]
+
+[[package]]
+name = "gup-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

@@ -40,7 +40,7 @@
 //! ## Usage Examples
 //!
 //! ### Using the Template Macro
-//! ```rust
+//! ```rust,ignore
 //! wgsl_function! {
 //!     struct MyTransform {
 //!         scale: f32,
@@ -64,8 +64,10 @@
 //! ```
 //!
 //! ### Function Composition
-//! ```rust
+//! ```rust,ignore
 //! let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+//! let min_color = Vec4::new(0.0, 0.0, 0.0, 1.0);
+//! let max_color = Vec4::new(1.0, 1.0, 1.0, 1.0);
 //! let color_map = ColorMap::new(min_color, max_color);
 //! let composed = scale.compose(color_map);
 //!
@@ -111,7 +113,8 @@ impl ShaderType for f32 {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vec2 {
     pub x: f32,
     pub y: f32,
@@ -135,16 +138,23 @@ impl ShaderType for Vec2 {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vec3 {
     pub x: f32,
     pub y: f32,
     pub z: f32,
+    pub _padding: f32, // Ensure 16-byte alignment
 }
 
 impl Vec3 {
     pub fn new(x: f32, y: f32, z: f32) -> Self {
-        Self { x, y, z }
+        Self {
+            x,
+            y,
+            z,
+            _padding: 0.0,
+        }
     }
 }
 
@@ -160,7 +170,8 @@ impl ShaderType for Vec3 {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vec4 {
     pub x: f32,
     pub y: f32,

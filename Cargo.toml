@@ -1,3 +1,6 @@
+[workspace]
+members = [".", "gup-macros"]
+
 [package]
 name = "gup"
 version = "0.1.0"
@@ -24,6 +27,7 @@ tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "macros"] }
 futures-intrusive = "0.5"
 env_logger = "0.10"
 paste = "1.0"
+gup-macros = { path = "gup-macros" }
 
 [dependencies.web-sys]
 version = "0.3"

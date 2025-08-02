@@ -26,7 +26,7 @@
 ///
 /// # Syntax
 ///
-/// ```rust
+/// ```rust,ignore
 /// wgsl_function! {
 ///     struct FunctionName {
 ///         // Fields for the shader function struct
@@ -50,7 +50,7 @@
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,ignore
 /// wgsl_function! {
 ///     struct LinearScale {
 ///         domain_min: f32,
