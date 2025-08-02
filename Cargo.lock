@@ -793,6 +793,7 @@ dependencies = [
  "env_logger",
  "futures-intrusive",
  "log",
+ "paste",
  "pollster",
  "raw-window-handle",
  "tokio",

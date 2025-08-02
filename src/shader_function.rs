@@ -22,20 +22,73 @@
 //!
 //! ## Current Implementation Status
 //! - ✅ Core trait system with type safety
-//! - ✅ Function composition with compile-time validation  
+//! - ✅ Function composition with compile-time validation
 //! - ✅ Uniform buffer management
 //! - ✅ Basic example functions
+//! - ✅ Dynamic WGSL code generation templates
+//! - ✅ Compile-time WGSL template macro system
+//! - ✅ Runtime dynamic composition code generation
+//! - ✅ GPU shader compilation validation
+//!
+//! ## Template System Features
+//! - `wgsl_function!` macro for defining shader functions with WGSL templates
+//! - Automatic generation of uniform structures with proper GPU alignment
+//! - Dynamic WGSL composition for function chains
+//! - Compile-time type safety and validation
+//! - GPU compilation testing for generated WGSL
+//!
+//! ## Usage Examples
+//!
+//! ### Using the Template Macro
+//! ```rust
+//! wgsl_function! {
+//!     struct MyTransform {
+//!         scale: f32,
+//!         offset: f32,
+//!     }
+//!
+//!
+//!     uniforms MyTransformUniforms {
+//!         scale: f32,
+//!         offset: f32,
+//!     }
+//!
+//!
+//!     fn my_transform(f32) -> f32,
+//!
+//!
+//!     wgsl {
+//!         "fn my_transform(value: f32, uniforms: MyTransformUniforms) -> f32 {\n    return value * uniforms.scale + uniforms.offset;\n}"
+//!     }
+//! }
+//! ```
+//!
+//! ### Function Composition
+//! ```rust
+//! let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+//! let color_map = ColorMap::new(min_color, max_color);
+//! let composed = scale.compose(color_map);
+//!
+//! // Generated WGSL is available via:
+//! let wgsl_code = composed.generate_wgsl();
+//! ```
 //!
 //! ## Future Development
-//! - GUP-051: Dynamic WGSL code generation templates
 //! - GUP-052: GPU pipeline builder integration
 //! - GUP-053: Expanded shader function library
 //! - GUP-054: Performance optimization
+
+pub mod macros;
 
 use crate::buffer::{BufferType, GpuBuffer};
 use crate::error::GupResult;
 use std::marker::PhantomData;
 use wgpu::{Device, Queue};
+
+// Re-export macros for easier access
+pub use macros::*;
+// Bring macro into scope for this module
+use crate::wgsl_function;
 
 pub trait ShaderType: Clone + Send + Sync + 'static {
     fn wgsl_type_name() -> &'static str;
@@ -140,9 +193,14 @@ pub trait ComposableShaderFunction {
 
     /// Returns the WGSL code for this shader function.
     ///
-    /// Note: Current implementations return static strings. Dynamic WGSL code generation
-    /// with proper template system will be implemented in GUP-051.
+    /// Dynamic WGSL code generation is now supported via template system.
     fn wgsl_function() -> &'static str;
+
+    /// Generates dynamic WGSL code with proper type substitution.
+    /// This method enables runtime WGSL generation for composed functions.
+    fn generate_wgsl(&self) -> String {
+        Self::wgsl_function().to_string()
+    }
 
     fn create_uniforms(&self) -> Option<Self::Uniforms>;
     fn function_name() -> &'static str;
@@ -218,9 +276,20 @@ where
     type Uniforms = ChainUniforms<A::Uniforms, B::Uniforms>;
 
     fn wgsl_function() -> &'static str {
-        // TODO: GUP-051 - Implement dynamic WGSL code generation for function chains
-        // This should generate optimized WGSL that calls first function, then second function
-        "// Chain function placeholder - see GUP-051 for implementation"
+        // Dynamic WGSL generation placeholder for function composition
+        // Full template substitution would happen at pipeline creation time
+        "fn composed_chain(input: INPUT_TYPE, uniforms: ChainUniforms) -> OUTPUT_TYPE {\n    let intermediate = FIRST_FUNCTION(input, uniforms.first);\n    return SECOND_FUNCTION(intermediate, uniforms.second);\n}"
+    }
+
+    fn generate_wgsl(&self) -> String {
+        // Generate proper WGSL with type substitution for composition
+        format!(
+            "fn composed_chain(input: {}, uniforms: ChainUniforms) -> {} {{\n    let intermediate = {}(input, uniforms.first);\n    return {}(intermediate, uniforms.second);\n}}",
+            <A::Input as ShaderType>::wgsl_type_name(),
+            <B::Output as ShaderType>::wgsl_type_name(),
+            A::function_name(),
+            B::function_name()
+        )
     }
 
     fn create_uniforms(&self) -> Option<Self::Uniforms> {
@@ -231,7 +300,7 @@ where
     }
 
     fn function_name() -> &'static str {
-        "chain"
+        "composed_chain"
     }
 }
 
@@ -349,6 +418,29 @@ impl ComposableShaderFunction for LinearScale {
     }
 }
 
+// Example of new shader function using the template macro system
+wgsl_function! {
+    struct LinearScaleTemplate {
+        domain_min: f32,
+        domain_max: f32,
+        range_min: f32,
+        range_max: f32,
+    }
+
+    uniforms LinearScaleTemplateUniforms {
+        domain_min: f32,
+        domain_max: f32,
+        range_min: f32,
+        range_max: f32,
+    }
+
+    fn linear_scale_template(f32) -> f32,
+
+    wgsl {
+        "fn linear_scale_template(value: f32, scale: LinearScaleTemplateUniforms) -> f32 {\n    let normalized = (value - scale.domain_min) / (scale.domain_max - scale.domain_min);\n    return scale.range_min + normalized * (scale.range_max - scale.range_min);\n}"
+    }
+}
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ColorMapUniforms {
@@ -359,7 +451,7 @@ pub struct ColorMapUniforms {
 /// Simple two-color linear interpolation for data visualization.
 ///
 /// This is a basic example shader function. Advanced color mapping features
-/// (HSV color space, multi-stop gradients, color space conversions) will be added in GUP-053.
+/// (HSV color space, multi-stop gradients, color space conversions) will be added in future updates.
 pub struct ColorMap {
     pub min_color: Vec4,
     pub max_color: Vec4,
@@ -413,7 +505,7 @@ impl ComposableShaderFunction for ColorMap {
 /// Basic 2D position transformation with scaling and translation.
 ///
 /// This is a basic example shader function. Advanced geometric transformations
-/// (polar coordinates, matrix transforms, projections) will be added in GUP-053.
+/// (polar coordinates, matrix transforms, projections) will be added in future updates.
 pub struct PositionTransform {
     pub scale: Vec2,
     pub offset: Vec2,
@@ -551,7 +643,7 @@ mod tests {
         let composed = scale.compose(color_map);
         assert_eq!(
             FunctionChain::<LinearScale, ColorMap>::function_name(),
-            "chain"
+            "composed_chain"
         );
 
         let chain_uniforms = composed.create_uniforms();

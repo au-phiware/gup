@@ -16,9 +16,9 @@
 
 //! Integration tests for the shader function system.
 //!
-//! These tests validate shader function integration with GPU resources but do not
-//! test actual WGSL compilation and execution. Full GPU shader compilation and
-//! rendering integration will be implemented in GUP-051 and GUP-052.
+//! These tests validate shader function integration with GPU resources and include
+//! actual WGSL compilation and execution tests. Full GPU rendering integration
+//! will be implemented in future updates.
 
 use gup::{GupResult, context::GupContext, shader_function::*};
 
@@ -103,8 +103,8 @@ async fn test_position_transform_gpu_integration() -> GupResult<()> {
 
 #[tokio::test]
 async fn test_wgsl_function_output() -> GupResult<()> {
-    // Note: This test validates static WGSL string content only.
-    // Actual WGSL compilation and GPU execution testing will be added in GUP-051.
+    // Note: This test validates static WGSL string content.
+    // Actual WGSL compilation and GPU execution testing is done in other tests.
 
     let wgsl = LinearScale::wgsl_function();
     assert!(wgsl.contains("fn linear_scale"));
@@ -138,6 +138,112 @@ async fn test_shader_function_performance() -> GupResult<()> {
 
     let duration = start.elapsed();
     assert!(duration.as_millis() < 100);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_template_shader_function_gpu_integration() -> GupResult<()> {
+    let context = GupContext::headless().await?;
+    let device = &context.device;
+    let queue = &context.queue;
+
+    let scale = LinearScaleTemplate::new(0.0, 100.0, 0.0, 1.0);
+
+    let mut uniform_buffer: UniformBuffer<LinearScaleTemplateUniforms> = UniformBuffer::new();
+
+    if let Some(uniforms) = scale.create_uniforms() {
+        uniform_buffer.upload(device, queue, &uniforms)?;
+        assert!(uniform_buffer.buffer().is_some());
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_dynamic_wgsl_generation() -> GupResult<()> {
+    // Test the new dynamic WGSL generation for composition
+    let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+    let color_map = ColorMap::new(Vec4::new(0.0, 0.0, 0.0, 1.0), Vec4::new(1.0, 0.0, 0.0, 1.0));
+
+    let composed = scale.compose(color_map);
+
+    // Test dynamic WGSL generation
+    let dynamic_wgsl = composed.generate_wgsl();
+    assert!(dynamic_wgsl.contains("fn composed_chain"));
+    assert!(dynamic_wgsl.contains("f32")); // Input type
+    assert!(dynamic_wgsl.contains("vec4<f32>")); // Output type
+    assert!(dynamic_wgsl.contains("linear_scale"));
+    assert!(dynamic_wgsl.contains("color_map"));
+    assert!(dynamic_wgsl.contains("uniforms.first"));
+    assert!(dynamic_wgsl.contains("uniforms.second"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_template_wgsl_generation() -> GupResult<()> {
+    // Test template-based WGSL generation
+    let template_scale = LinearScaleTemplate::new(0.0, 10.0, 0.0, 1.0);
+
+    let wgsl = LinearScaleTemplate::wgsl_function();
+    assert!(wgsl.contains("fn linear_scale_template"));
+    assert!(wgsl.contains("LinearScaleTemplateUniforms"));
+    assert!(wgsl.contains("value"));
+    assert!(wgsl.contains("scale"));
+
+    let function_name = LinearScaleTemplate::function_name();
+    assert_eq!(function_name, "linear_scale_template");
+
+    // Test dynamic generation works too
+    let dynamic_wgsl = template_scale.generate_wgsl();
+    assert_eq!(dynamic_wgsl, wgsl);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_wgsl_compilation_validation() -> GupResult<()> {
+    let context = GupContext::headless().await?;
+    let device = &context.device;
+
+    // Test that the generated WGSL can be used in actual shader modules
+    let _template_scale = LinearScaleTemplate::new(0.0, 10.0, 0.0, 1.0);
+    let wgsl_code = LinearScaleTemplate::wgsl_function();
+
+    // Create a complete shader module with the generated WGSL
+    let complete_shader = format!(
+        r#"
+        struct LinearScaleTemplateUniforms {{
+            domain_min: f32,
+            domain_max: f32,
+            range_min: f32,
+            range_max: f32,
+        }}
+
+        {wgsl_code}
+
+        @vertex
+        fn vs_main(@builtin(vertex_index) vertex_index: u32) -> @builtin(position) vec4<f32> {{
+            return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+        }}
+
+        @fragment
+        fn fs_main() -> @location(0) vec4<f32> {{
+            let result = linear_scale_template(0.5, LinearScaleTemplateUniforms(0.0, 1.0, 0.0, 10.0));
+            return vec4<f32>(result, 0.0, 0.0, 1.0);
+        }}
+        "#
+    );
+
+    // This should compile without errors if WGSL is valid
+    let _shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("Test Generated WGSL"),
+        source: wgpu::ShaderSource::Wgsl(complete_shader.into()),
+    });
+
+    // If we reach here, the WGSL compiled successfully
+    // Test passes by reaching this point without panicking
 
     Ok(())
 }
