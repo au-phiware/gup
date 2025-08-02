@@ -77,6 +77,7 @@
             cargo-audit
             mask
             git
+            gnused
             wasm-pack
             miniserve
             claude-code

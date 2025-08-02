@@ -382,7 +382,7 @@ impl ShaderPipeline {
 ///         DataPoint { x: 0.0, y: 0.0, value: 1.0 },
 ///         DataPoint { x: 1.0, y: 1.0, value: 2.0 },
 ///     ];
-///     
+///
 ///     let selection = Selection::<DataPoint, Circle>::new(data, context)?;
 ///     // Configure attributes and render...
 ///     Ok(())
