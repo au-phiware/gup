@@ -46,13 +46,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Add shader functions
     let data_scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
     let color_mapping = ColorMap::new(
-        Vec4::new(0.1, 0.2, 0.8, 1.0), // Blue
-        Vec4::new(0.9, 0.6, 0.1, 1.0), // Orange
+        vec4![0.1, 0.2, 0.8, 1.0], // Blue
+        vec4![0.9, 0.6, 0.1, 1.0], // Orange
     );
     let size_scale = LinearScale::new(0.0, 100.0, 0.1, 2.0);
     let position_transform = PositionTransform::new(
-        Vec2::new(0.8, 0.6), // Scale
-        Vec2::new(0.0, 0.0), // Offset
+        vec2![0.8, 0.6], // Scale
+        vec2![0.0, 0.0], // Offset
     );
 
     pipeline.add_function(data_scale);

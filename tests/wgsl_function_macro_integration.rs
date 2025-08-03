@@ -63,7 +63,7 @@ async fn test_macro_generated_linear_scale() {
 
 #[tokio::test]
 async fn test_macro_generated_vector_transform() {
-    let scale = Vec2::new(2.0, 3.0);
+    let scale = vec2![2.0, 3.0];
     let transform = TestVectorTransform::new(scale);
 
     // Test struct creation
@@ -85,7 +85,7 @@ async fn test_macro_generated_vector_transform() {
 
 #[tokio::test]
 async fn test_macro_generated_color_blend() {
-    let tint = Vec4::new(1.0, 0.5, 0.8, 1.0);
+    let tint = vec4![1.0, 0.5, 0.8, 1.0];
     let blend = TestColorBlend::new(tint, 0.75);
 
     // Test struct creation
@@ -124,7 +124,7 @@ async fn test_macro_generated_identity() {
 #[tokio::test]
 async fn test_function_composition() {
     let scale = TestLinearScale::new(2.0, 0.0);
-    let transform = TestVectorTransform::new(Vec2::new(1.0, 1.0));
+    let transform = TestVectorTransform::new(vec2![1.0, 1.0]);
 
     // Test that generated functions can be composed
     // Note: This requires that f32 is compatible with Vec2's input

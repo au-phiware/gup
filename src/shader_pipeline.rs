@@ -786,6 +786,7 @@ impl ComposableShaderPipeline {
 mod tests {
     use super::*;
     use crate::shader_function::{ColorMap, LinearScale, Vec4};
+    use crate::vec4;
 
     #[test]
     fn test_pipeline_creation() {
@@ -800,7 +801,7 @@ mod tests {
     fn test_multiple_functions() {
         let mut pipeline = ComposableShaderPipeline::new();
         let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
-        let color_map = ColorMap::new(Vec4::new(0.0, 0.0, 0.0, 1.0), Vec4::new(1.0, 1.0, 1.0, 1.0));
+        let color_map = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 1.0, 1.0]);
 
         pipeline.add_function(scale);
         pipeline.add_function(color_map);
@@ -916,7 +917,7 @@ mod tests {
     #[test]
     fn test_fragment_shader_with_color_mapping() {
         let mut pipeline = ComposableShaderPipeline::new();
-        let color_map = ColorMap::new(Vec4::new(0.0, 0.0, 0.0, 1.0), Vec4::new(1.0, 1.0, 1.0, 1.0));
+        let color_map = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 1.0, 1.0]);
         pipeline.add_function(color_map);
         pipeline.map_attribute("color", "color_map");
 
@@ -928,7 +929,7 @@ mod tests {
     fn test_vertex_shader_with_multiple_attributes() {
         let mut pipeline = ComposableShaderPipeline::new();
         let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
-        let color_map = ColorMap::new(Vec4::new(0.0, 0.0, 0.0, 1.0), Vec4::new(1.0, 1.0, 1.0, 1.0));
+        let color_map = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 1.0, 1.0]);
 
         pipeline.add_function(scale);
         pipeline.add_function(color_map);
@@ -965,7 +966,7 @@ mod tests {
 
         let hash1 = pipeline.pipeline_hash();
 
-        let color_map = ColorMap::new(Vec4::new(0.0, 0.0, 0.0, 1.0), Vec4::new(1.0, 1.0, 1.0, 1.0));
+        let color_map = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 1.0, 1.0]);
         pipeline.add_function(color_map);
 
         let hash2 = pipeline.pipeline_hash();

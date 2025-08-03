@@ -16,7 +16,7 @@ epic and status.
 | [GUP-005](GUP-005_Shader_Function_Trait.md)      | Shader Function Trait      | ✅ Complete | Critical | 13     |
 | [GUP-006](GUP-006_WGSL_Function_Macro.md)        | WGSL Function Macro        | ✅ Complete | Critical | 13     |
 | [GUP-007](GUP-007_Shader_Pipeline_Builder.md)    | Shader Pipeline Builder    | ✅ Complete | Critical | 13     |
-| [GUP-008](GUP-008_Type_System_Integration.md)    | Type System Integration    | 📋 Planned  | Medium   | 4      |
+| [GUP-008](GUP-008_Type_System_Integration.md)    | Type System Integration    | ✅ Complete | Critical | 8      |
 | [GUP-009](GUP-009_Core_Mark_Trait.md)            | Core Mark Trait            | 📋 Planned  | High     | 3      |
 | [GUP-010](GUP-010_Basic_Mark_Implementations.md) | Basic Mark Implementations | 📋 Planned  | High     | 4      |
 | [GUP-011](GUP-011_Mark_Shader_Integration.md)    | Mark Shader Integration    | 📋 Planned  | High     | 5      |
@@ -63,7 +63,9 @@ epic and status.
 | --------------------------------------------------------------- | ----------------------------------------- | ------ | -------- | ------ |
 | [GUP-063](GUP-063_Enhanced_WGSL_Code_Generation.md)             | Enhanced WGSL Code Generation             | 💡 New | Medium   | 5      |
 | [GUP-064](GUP-064_Advanced_Type_System_Support.md)              | Advanced Type System Support              | 💡 New | Low      | 3      |
+| [GUP-065](GUP-065_Documentation_Macro_First_API.md)             | Documentation for Macro-First API         | 💡 New | Medium   | 3      |
 | [GUP-065](GUP-065_Procedural_Macro_Performance_Optimization.md) | Procedural Macro Performance Optimization | 💡 New | Low      | 2      |
+| [GUP-066](GUP-066_Advanced_Type_Conversion_Patterns.md)         | Advanced Type Conversion Patterns         | 💡 New | Low      | 5      |
 
 ### Post GUP-002 Stories - GPU and Interaction Systems (Stories 29+)
 
@@ -138,9 +140,9 @@ epic and status.
 
 ### Phase 1 Foundation
 
-- **Completed**: 6/15 stories (40%)
+- **Completed**: 8/15 stories (53%)
 - **Critical Path**: GUP-001 ✅, GUP-002 ✅, GUP-003 ✅, GUP-004 ✅, GUP-005 ✅,
-  GUP-006 ✅, GUP-007 ✅, GUP-020 ✅, GUP-021 ✅, GUP-039 ✅
+  GUP-006 ✅, GUP-007 ✅, GUP-008 ✅, GUP-020 ✅, GUP-021 ✅, GUP-039 ✅
 
 ### Post-GUP-021 Improvements
 
@@ -154,12 +156,12 @@ epic and status.
 
 ## Story Point Summary
 
-- **Total Planned**: ~220 story points across all stories (including new
-  GUP-053, GUP-054)
-- **Completed**: 79 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
-  GUP-004: 5pts, GUP-005: 13pts, GUP-006: 13pts, GUP-007: 13pts, GUP-020: 5pts,
-  GUP-021: 6pts, GUP-027: 3pts, GUP-039: 5pts, GUP-043: 3pts)
-- **Progress**: ~36% of total scope
+- **Total Planned**: ~230 story points across all stories (including new
+  GUP-065, GUP-066)
+- **Completed**: 87 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
+  GUP-004: 5pts, GUP-005: 13pts, GUP-006: 13pts, GUP-007: 13pts, GUP-008: 8pts, 
+  GUP-020: 5pts, GUP-021: 6pts, GUP-027: 3pts, GUP-039: 5pts, GUP-043: 3pts)
+- **Progress**: ~38% of total scope
 
 ## Recent Additions (Post GUP-021)
 
@@ -388,8 +390,23 @@ optimized for better developer experience
 **Dependencies**: GUP-006 complete  
 **Impact**: Faster compilation cycles and more efficient generated code
 
+## Recent Additions (Post GUP-008)
+
+The following stories were created based on learnings from implementing GUP-008:
+
+### GUP-065: Documentation for Macro-First Type Construction API
+
+**Key Learning**: Complete migration to macro-based type construction requires documentation updates to show new patterns  
+**Dependencies**: GUP-008 complete  
+**Impact**: Clear guidance for developers using the new ergonomic type construction system
+
+### GUP-066: Advanced Type Conversion Patterns for GPU Compatibility
+
+**Key Learning**: Complex shader compositions could benefit from automatic type conversions (f32 → Vec3, Vec2 → Vec4) with compile-time validation  
+**Dependencies**: GUP-008 complete  
+**Impact**: More flexible shader function composition with automatic type compatibility
+
 ---
 
-_Last Updated: After completion of GUP-007 (Shader Pipeline Builder)_  
-_Next Stories: GUP-053 (Shader Pipeline Performance Optimization), GUP-054
-(Shader Function Type Safety Enhancement)_
+_Last Updated: After completion of GUP-008 (Type System Integration)_  
+_Next Stories: GUP-065 (Documentation for Macro-First API), GUP-009 (Core Mark Trait)_

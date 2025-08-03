@@ -20,7 +20,7 @@
 //! actual WGSL compilation and execution tests. Full GPU rendering integration
 //! will be implemented in future updates.
 
-use gup::{GupResult, context::GupContext, shader_function::*};
+use gup::{GupResult, context::GupContext, shader_function::*, vec2, vec4};
 
 #[tokio::test]
 async fn test_shader_function_gpu_integration() -> GupResult<()> {
@@ -46,7 +46,7 @@ async fn test_color_map_gpu_integration() -> GupResult<()> {
     let device = &context.device;
     let queue = &context.queue;
 
-    let color_map = ColorMap::new(Vec4::new(0.2, 0.1, 0.0, 1.0), Vec4::new(0.8, 0.9, 1.0, 1.0));
+    let color_map = ColorMap::new(vec4![0.2, 0.1, 0.0, 1.0], vec4![0.8, 0.9, 1.0, 1.0]);
 
     let mut uniform_buffer: UniformBuffer<ColorMapUniforms> = UniformBuffer::new();
 
@@ -67,7 +67,7 @@ async fn test_composed_function_gpu_integration() -> GupResult<()> {
     let queue = &context.queue;
 
     let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
-    let color_map = ColorMap::new(Vec4::new(0.0, 0.0, 0.0, 1.0), Vec4::new(1.0, 0.0, 0.0, 1.0));
+    let color_map = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 0.0, 0.0, 1.0]);
 
     let composed = scale.compose(color_map);
 
@@ -89,7 +89,7 @@ async fn test_position_transform_gpu_integration() -> GupResult<()> {
     let device = &context.device;
     let queue = &context.queue;
 
-    let transform = PositionTransform::new(Vec2::new(2.0, 1.5), Vec2::new(0.1, 0.2));
+    let transform = PositionTransform::new(vec2![2.0, 1.5], vec2![0.1, 0.2]);
 
     let mut uniform_buffer: UniformBuffer<PositionTransformUniforms> = UniformBuffer::new();
 
@@ -132,7 +132,7 @@ async fn test_shader_function_performance() -> GupResult<()> {
 
     for _ in 0..1000 {
         let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
-        let color_map = ColorMap::new(Vec4::new(0.0, 0.0, 0.0, 1.0), Vec4::new(1.0, 1.0, 1.0, 1.0));
+        let color_map = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 1.0, 1.0]);
         let _composed = scale.compose(color_map);
     }
 
@@ -164,7 +164,7 @@ async fn test_template_shader_function_gpu_integration() -> GupResult<()> {
 async fn test_dynamic_wgsl_generation() -> GupResult<()> {
     // Test the new dynamic WGSL generation for composition
     let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
-    let color_map = ColorMap::new(Vec4::new(0.0, 0.0, 0.0, 1.0), Vec4::new(1.0, 0.0, 0.0, 1.0));
+    let color_map = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 0.0, 0.0, 1.0]);
 
     let composed = scale.compose(color_map);
 

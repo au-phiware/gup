@@ -34,7 +34,7 @@ async fn test_complete_pipeline_workflow() {
 
     // Add multiple shader functions
     let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
-    let color_map = ColorMap::new(Vec4::new(0.0, 0.0, 0.0, 1.0), Vec4::new(1.0, 1.0, 1.0, 1.0));
+    let color_map = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 1.0, 1.0]);
 
     pipeline.add_function(scale);
     pipeline.add_function(color_map);
@@ -106,7 +106,7 @@ async fn test_uniform_buffer_creation_and_management() {
     let mut pipeline = ComposableShaderPipeline::new();
 
     let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
-    let color_map = ColorMap::new(Vec4::new(0.0, 0.0, 0.0, 1.0), Vec4::new(1.0, 1.0, 1.0, 1.0));
+    let color_map = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 1.0, 1.0]);
 
     pipeline.add_function(scale);
     pipeline.add_function(color_map);
@@ -186,8 +186,8 @@ async fn test_performance_target() {
 
     // Add multiple functions to create a complex pipeline
     let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
-    let color_map = ColorMap::new(Vec4::new(0.0, 0.0, 0.0, 1.0), Vec4::new(1.0, 1.0, 1.0, 1.0));
-    let position_transform = PositionTransform::new(Vec2::new(1.0, 1.0), Vec2::new(0.0, 0.0));
+    let color_map = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 1.0, 1.0]);
+    let position_transform = PositionTransform::new(vec2![1.0, 1.0], vec2![0.0, 0.0]);
 
     pipeline.add_function(scale);
     pipeline.add_function(color_map);
@@ -221,8 +221,8 @@ async fn test_complex_pipeline_compilation() {
     // Create a complex pipeline with multiple functions
     let scale1 = LinearScale::new(0.0, 100.0, 0.0, 1.0);
     let scale2 = LinearScale::new(0.0, 50.0, -1.0, 1.0);
-    let color_map = ColorMap::new(Vec4::new(0.2, 0.1, 0.8, 1.0), Vec4::new(0.9, 0.7, 0.2, 1.0));
-    let position_transform = PositionTransform::new(Vec2::new(2.0, 1.5), Vec2::new(-0.5, 0.2));
+    let color_map = ColorMap::new(vec4![0.2, 0.1, 0.8, 1.0], vec4![0.9, 0.7, 0.2, 1.0]);
+    let position_transform = PositionTransform::new(vec2![2.0, 1.5], vec2![-0.5, 0.2]);
 
     pipeline.add_function(scale1);
     pipeline.add_function(scale2);

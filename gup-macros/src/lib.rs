@@ -17,8 +17,8 @@
 //! Procedural macros for the Gup GPU visualization library
 
 use proc_macro::TokenStream;
-use quote::ToTokens;
-use syn::parse_macro_input;
+use quote::{ToTokens, quote};
+use syn::{Data, DeriveInput, Fields, parse_macro_input};
 
 mod wgsl_function;
 
@@ -51,4 +51,117 @@ pub fn wgsl_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut tokens = proc_macro2::TokenStream::new();
     input.to_tokens(&mut tokens);
     TokenStream::from(tokens)
+}
+
+/// Derive macro for automatically implementing the `ShaderType` trait.
+///
+/// This macro generates a `ShaderType` implementation for custom structs,
+/// including WGSL type definitions and proper memory layout calculations.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// #[derive(ShaderType)]
+/// struct WeatherData {
+///     longitude: f32,
+///     latitude: f32,
+///     temperature: f32,
+///     wind_vector: Vec3,
+/// }
+/// ```
+///
+/// This generates:
+/// - `ShaderType` trait implementation with correct WGSL type name
+/// - WGSL struct definition with proper field types
+/// - Memory layout calculations for GPU compatibility
+#[proc_macro_derive(ShaderType)]
+pub fn derive_shader_type(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    let name = &input.ident;
+    let name_str = name.to_string();
+
+    // For now, only support structs with named fields
+    let fields = match &input.data {
+        Data::Struct(data_struct) => match &data_struct.fields {
+            Fields::Named(fields_named) => &fields_named.named,
+            _ => {
+                return syn::Error::new_spanned(
+                    &input,
+                    "ShaderType can only be derived for structs with named fields",
+                )
+                .to_compile_error()
+                .into();
+            }
+        },
+        _ => {
+            return syn::Error::new_spanned(&input, "ShaderType can only be derived for structs")
+                .to_compile_error()
+                .into();
+        }
+    };
+
+    // Generate WGSL struct definition
+    let mut wgsl_definition = format!("struct {name_str} {{\n");
+    let mut size_calculation = quote! { 0 };
+    let mut max_alignment = quote! { 1 };
+
+    for field in fields {
+        let field_name = field.ident.as_ref().unwrap();
+        let field_type = &field.ty;
+
+        // Basic type mapping - this could be extended for more complex types
+        let wgsl_type = match field_type {
+            syn::Type::Path(type_path) if type_path.path.is_ident("f32") => "f32",
+            syn::Type::Path(type_path) if type_path.path.is_ident("i32") => "i32",
+            syn::Type::Path(type_path) if type_path.path.is_ident("u32") => "u32",
+            syn::Type::Path(type_path) if type_path.path.is_ident("bool") => "bool",
+            syn::Type::Path(type_path) if type_path.path.is_ident("Vec2") => "vec2<f32>",
+            syn::Type::Path(type_path) if type_path.path.is_ident("Vec3") => "vec3<f32>",
+            syn::Type::Path(type_path) if type_path.path.is_ident("Vec4") => "vec4<f32>",
+            syn::Type::Path(type_path) if type_path.path.is_ident("Mat2") => "mat2x2<f32>",
+            syn::Type::Path(type_path) if type_path.path.is_ident("Mat3") => "mat3x3<f32>",
+            syn::Type::Path(type_path) if type_path.path.is_ident("Mat4") => "mat4x4<f32>",
+            _ => {
+                return syn::Error::new_spanned(
+                    field_type,
+                    "Unsupported field type for ShaderType derivation. Supported types: f32, i32, u32, bool, Vec2, Vec3, Vec4, Mat2, Mat3, Mat4"
+                ).to_compile_error().into();
+            }
+        };
+
+        wgsl_definition.push_str(&format!("    {field_name}: {wgsl_type},\n"));
+
+        // Add to size and alignment calculations
+        size_calculation = quote! {
+            #size_calculation + <#field_type as ShaderType>::size_bytes()
+        };
+        max_alignment = quote! {
+            std::cmp::max(#max_alignment, <#field_type as ShaderType>::alignment())
+        };
+    }
+
+    wgsl_definition.push('}');
+
+    let generated = quote! {
+        impl ShaderType for #name {
+            fn wgsl_type_name() -> &'static str {
+                #name_str
+            }
+
+            fn wgsl_type_definition() -> Option<&'static str> {
+                Some(#wgsl_definition)
+            }
+
+            fn size_bytes() -> usize {
+                #size_calculation
+            }
+
+            fn alignment() -> usize {
+                #max_alignment
+            }
+        }
+    };
+
+    generated.into()
 }
