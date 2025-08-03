@@ -2393,8 +2393,8 @@ macro_rules! mat4 { [/* 16 parameters */] => { /* ... */ }; }
 
 ### Comprehensive Migration Patterns
 
-**Learning**: When replacing core APIs, update ALL usage sites systematically
-to avoid mixed old/new patterns in the codebase.
+**Learning**: When replacing core APIs, update ALL usage sites systematically to
+avoid mixed old/new patterns in the codebase.
 
 **Migration Strategy**:
 
@@ -2583,7 +2583,7 @@ compatibility) require clear error messages that guide users to solutions.
 
 ```rust
 // ✅ Clear error messages with suggested solutions
-impl<A: ComposableShaderFunction, B: ComposableShaderFunction> ComposableShaderFunction 
+impl<A: ComposableShaderFunction, B: ComposableShaderFunction> ComposableShaderFunction
 for FunctionChain<A, B>
 where
     A::Output: ShaderCompatible<B::Input>, // Clear compatibility requirement

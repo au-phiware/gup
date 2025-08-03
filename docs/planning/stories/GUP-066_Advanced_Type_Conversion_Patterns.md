@@ -3,19 +3,21 @@
 ## Story Overview
 
 **Title**: Implement Advanced Type Conversion Patterns for GPU Shader Functions
-**Epic**: Phase 1 Initiative 2 - Unified Shader Function System
-**Priority**: Low
-**Story Points**: 5
+**Epic**: Phase 1 Initiative 2 - Unified Shader Function System **Priority**:
+Low **Story Points**: 5
 
 ## Context
 
-During GUP-008 implementation, the need for more sophisticated type conversion patterns became apparent. While basic compatibility checking works for simple cases, complex shader compositions may benefit from automatic type conversions and more flexible compatibility rules.
+During GUP-008 implementation, the need for more sophisticated type conversion
+patterns became apparent. While basic compatibility checking works for simple
+cases, complex shader compositions may benefit from automatic type conversions
+and more flexible compatibility rules.
 
 ## User Story
 
-**As a** developer creating complex shader pipelines
-**I want** automatic type conversion between compatible GPU types
-**So that** I can compose shader functions without manual type casting
+**As a** developer creating complex shader pipelines **I want** automatic type
+conversion between compatible GPU types **So that** I can compose shader
+functions without manual type casting
 
 ## Acceptance Criteria
 
@@ -94,7 +96,7 @@ let composed = scale.compose(color); // f32 -> f32 -> Vec3 -> Vec4
 fn test_automatic_scalar_to_vector_conversion() {
     // Test f32 -> Vec3 conversion path
     assert!(f32::can_convert_to::<Vec3>());
-    
+
     let result: Vec3 = f32::convert(5.0);
     assert_eq!(result, vec3![5.0, 5.0, 5.0]);
 }
@@ -116,7 +118,7 @@ fn test_conversion_performance() {
         let _converted: Vec4 = f32::convert(1.0);
     }
     let duration = start.elapsed();
-    
+
     // Should be compile-time resolved (near zero runtime)
     assert!(duration.as_micros() < 100);
 }
@@ -129,7 +131,7 @@ fn test_conversion_performance() {
 fn test_conversion_wgsl_generation() {
     let pipeline = create_pipeline_with_conversions();
     let wgsl = pipeline.generate_vertex_shader();
-    
+
     // Should contain appropriate conversion functions
     assert!(wgsl.contains("vec3<f32>(scalar_value, scalar_value, scalar_value)"));
 }
@@ -142,7 +144,7 @@ fn test_conversion_wgsl_generation() {
 ```rust
 pub trait AutoConvert<T>: ShaderType {
     type Output: ShaderType;
-    
+
     fn convert(value: T) -> Self::Output;
     fn wgsl_conversion(input_expr: &str) -> String;
 }
@@ -150,11 +152,11 @@ pub trait AutoConvert<T>: ShaderType {
 // Example implementations
 impl AutoConvert<f32> for Vec3 {
     type Output = Vec3;
-    
+
     fn convert(value: f32) -> Vec3 {
         vec3![value, value, value]
     }
-    
+
     fn wgsl_conversion(input_expr: &str) -> String {
         format!("vec3<f32>({}, {}, {})", input_expr, input_expr, input_expr)
     }
@@ -170,11 +172,11 @@ pub trait ShaderCompatible<T: ShaderType>: ShaderType {
         if Self::wgsl_type_name() == T::wgsl_type_name() {
             return true;
         }
-        
+
         // Check for automatic conversions
         Self::has_conversion_from::<T>()
     }
-    
+
     fn has_conversion_from<U: ShaderType>() -> bool;
     fn conversion_wgsl<U: ShaderType>(input: &str) -> Option<String>;
 }
@@ -209,6 +211,7 @@ pub trait ShaderCompatible<T: ShaderType>: ShaderType {
 
 1. **Scalar to Vector**: f32 expands to all components (x, x, x, x)
 2. **Vector Growth**: Missing components filled with sensible defaults
+
    - Vec2 -> Vec3: z = 0.0
    - Vec2 -> Vec4: z = 0.0, w = 1.0
    - Vec3 -> Vec4: w = 1.0

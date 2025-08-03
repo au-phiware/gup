@@ -2,20 +2,22 @@
 
 ## Story Overview
 
-**Title**: Update Documentation for Macro-First Type Construction API
-**Epic**: Phase 1 Initiative 2 - Unified Shader Function System
-**Priority**: Medium
+**Title**: Update Documentation for Macro-First Type Construction API **Epic**:
+Phase 1 Initiative 2 - Unified Shader Function System **Priority**: Medium
 **Story Points**: 3
 
 ## Context
 
-Following GUP-008's implementation of the macro-based type construction system, the documentation needs to be updated to reflect the new macro-first approach. The old constructor-based examples are no longer valid and may confuse developers.
+Following GUP-008's implementation of the macro-based type construction system,
+the documentation needs to be updated to reflect the new macro-first approach.
+The old constructor-based examples are no longer valid and may confuse
+developers.
 
 ## User Story
 
-**As a** developer using Gup's type system
-**I want** clear documentation showing the macro-first construction approach
-**So that** I can quickly learn and adopt the ergonomic type construction patterns
+**As a** developer using Gup's type system **I want** clear documentation
+showing the macro-first construction approach **So that** I can quickly learn
+and adopt the ergonomic type construction patterns
 
 ## Acceptance Criteria
 
@@ -28,7 +30,8 @@ Following GUP-008's implementation of the macro-based type construction system, 
 
 ### AC2: Macro Usage Documentation
 
-- [ ] Document all available macros: `vec2!`, `vec3!`, `vec4!`, `mat2!`, `mat3!`, `mat4!`
+- [ ] Document all available macros: `vec2!`, `vec3!`, `vec4!`, `mat2!`,
+      `mat3!`, `mat4!`
 - [ ] Show correct bracket syntax for each macro
 - [ ] Explain benefits of macro approach over constructors
 - [ ] Include performance notes (compile-time validation)
@@ -85,7 +88,7 @@ fn test_documentation_examples() {
     // Test examples from README
     let position = vec3![1.0, 2.0, 3.0];
     let transform = mat4![/* ... 16 values ... */];
-    
+
     // Verify they work as documented
     assert_eq!(position.x, 1.0);
 }
@@ -118,18 +121,21 @@ fn test_documentation_examples() {
 
 ### Documentation Structure
 
-```markdown
+````markdown
 # Type Construction
 
 ## Quick Start
+
 ```rust
 use gup::*;
 
 let position = vec3![0.0, 1.0, 0.0];
 let transform = mat4![1.0, 0.0, 0.0, 0.0, /* ... */];
 ```
+````
 
 ## Available Macros
+
 - `vec2![x, y]` - 2D vector construction
 - `vec3![x, y, z]` - 3D vector with GPU padding
 - `vec4![x, y, z, w]` - 4D vector construction
@@ -138,13 +144,13 @@ let transform = mat4![1.0, 0.0, 0.0, 0.0, /* ... */];
 - `mat4![...]` - 4x4 matrix (16 parameters)
 
 ## Migration from Constructors
+
 ```rust
 // ❌ Old constructor syntax
 let v = Vec3::new(1.0, 2.0, 3.0);
 
 // ✅ New macro syntax
 let v = vec3![1.0, 2.0, 3.0];
-```
 ```
 
 ### Key Messages
