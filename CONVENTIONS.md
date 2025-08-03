@@ -2592,6 +2592,322 @@ where
 }
 ```
 
+## GPU-Compatible Trait System Design (GUP-009 Learnings)
+
+### Type-Safe Mark Trait Architecture
+
+**Learning**: GPU-compatible trait systems require careful balance between
+ergonomic APIs and strict GPU memory layout requirements.
+
+**Pattern**: Use associated types with strict GPU bounds:
+
+```rust
+// ✅ Associated types with explicit GPU compatibility requirements
+pub trait Mark: Clone + Send + Sync + 'static {
+    type Vertex: bytemuck::Pod + bytemuck::Zeroable + Send + Sync + 'static;
+    type AttributeValue: Send + Sync + 'static;
+
+    // Both manual (performance) and generated (flexibility) shader support
+    const VERTEX_SHADER: Option<&'static str> = None;
+    const FRAGMENT_SHADER: Option<&'static str> = None;
+
+    fn generate_vertex_shader(pipeline: &ComposableShaderPipeline) -> String;
+    fn generate_fragment_shader(pipeline: &ComposableShaderPipeline) -> String;
+}
+```
+
+**Benefits**:
+
+- Compile-time validation of GPU compatibility
+- Clear separation between CPU attributes and GPU vertex data
+- Flexibility to choose performance (manual shaders) vs convenience (generated
+  shaders)
+- Type-safe mark registry system
+
+### Dead Code Allowances for GPU Data Structures
+
+**Learning**: `#[allow(dead_code)]` is necessary and appropriate for several
+legitimate use cases in GPU programming.
+
+**Valid Use Cases**:
+
+1. **Test-only attribute structures** - Fields exist for trait bounds validation
+   but aren't accessed in test logic
+2. **GPU shader interface structures** - Fields used by WGSL shaders but not
+   directly accessed in Rust
+3. **Future-compatibility fields** - API stability requires defining fields for
+   upcoming features
+4. **Cross-language data layouts** - Structures that mirror GPU buffer layouts
+
+**Pattern**: Document the reason for dead code allowances:
+
+```rust
+// ✅ Documented dead code allowance with clear reasoning
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // Used for testing trait bounds, not direct field access
+struct TestAttributes {
+    value: f32,
+    color: [f32; 4],
+}
+```
+
+**Guidelines**:
+
+- Always include a comment explaining why dead code is allowed
+- Use sparingly and only when the code serves a legitimate purpose
+- Consider if the structure could be refactored to eliminate the need
+
+### GPU Memory Layout vs Rust Ergonomics
+
+**Learning**: GPU data structures require different design patterns than pure
+Rust code due to alignment and memory layout constraints.
+
+**Pattern**: Separate user-facing attributes from GPU vertex data:
+
+```rust
+// ✅ User-friendly attribute structure
+#[derive(Debug, Clone)]
+pub struct CircleAttributes {
+    pub center: Vec2,      // Ergonomic Vec2 type
+    pub radius: f32,
+    pub fill_color: Vec4,  // Ergonomic Vec4 type
+    pub stroke_width: f32,
+    pub stroke_color: Vec4,
+}
+
+// ✅ GPU-optimized vertex structure
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct CircleVertex {
+    pub position: [f32; 2], // GPU-compatible array, not Vec2
+}
+```
+
+**Benefits**:
+
+- Users work with ergonomic types (Vec2, Vec4)
+- GPU operations use optimal memory layouts ([f32; 2], [f32; 4])
+- Clear separation of concerns between API and implementation
+- Automatic conversion handled by mark implementation
+
+### Dual Shader Strategy for Performance vs Flexibility
+
+**Learning**: Supporting both hand-optimized and generated shaders enables the
+best of both worlds - performance when needed, flexibility for rapid
+development.
+
+**Pattern**: Optional constants with generation fallbacks:
+
+```rust
+// ✅ Support both manual optimization and automatic generation
+impl Mark for Circle {
+    // High-performance path: hand-optimized shaders
+    const VERTEX_SHADER: Option<&'static str> = Some(include_str!("shaders/circle.vert.wgsl"));
+    const FRAGMENT_SHADER: Option<&'static str> = Some(include_str!("shaders/circle.frag.wgsl"));
+
+    // Flexibility path: integration with shader function system
+    fn generate_vertex_shader(pipeline: &ComposableShaderPipeline) -> String {
+        let base_shader = r#"
+        // Mark-specific shader template
+        @vertex fn vs_main(...) -> VertexOutput { ... }
+        "#;
+
+        // Integrate with pipeline for dynamic attribute mapping
+        let mut shader = pipeline.generate_vertex_shader();
+        shader.push_str("\n\n");
+        shader.push_str(base_shader);
+        shader
+    }
+}
+```
+
+**Strategy**:
+
+- Use hand-optimized shaders for built-in marks (circles, rectangles)
+- Provide generated shader integration for custom marks
+- Allow marks to override generation for specific optimizations
+- Test both paths to ensure compatibility
+
+### Type-Erased Mark Registry for Runtime Management
+
+**Learning**: Runtime mark management requires type erasure while preserving
+type safety for common operations.
+
+**Pattern**: Trait objects with type-safe accessors:
+
+```rust
+// ✅ Type-erased storage with type-safe access
+pub struct MarkRegistry {
+    marks: HashMap<TypeId, Box<dyn MarkInfo>>,
+    pipelines: HashMap<TypeId, Arc<RenderPipeline>>,
+}
+
+impl MarkRegistry {
+    pub fn register<M: Mark>(&mut self) {
+        let type_id = TypeId::of::<M>();
+        let info = Box::new(MarkInfoImpl::<M>::new());
+        self.marks.insert(type_id, info);
+    }
+
+    pub fn get_mark_info<M: Mark>(&self) -> Option<&dyn MarkInfo> {
+        let type_id = TypeId::of::<M>();
+        self.marks.get(&type_id).map(|info| info.as_ref())
+    }
+}
+```
+
+**Benefits**:
+
+- Type-safe registration and lookup operations
+- Runtime introspection of mark capabilities
+- Efficient pipeline caching by mark type
+- Extensible to new mark types without registry changes
+
+### Integration Testing for GPU Compilation Validation
+
+**Learning**: Mark systems require testing that validates actual GPU shader
+compilation, not just Rust code compilation.
+
+**Pattern**: Multi-layer testing with GPU context:
+
+```rust
+// ✅ Test both Rust traits and GPU compilation
+#[tokio::test]
+async fn test_circle_mark_shader_compilation() -> GupResult<()> {
+    let context = create_test_context().await?;
+    let device = &context.device;
+
+    // Test hand-optimized shaders compile on GPU
+    if let Some(vertex_shader_source) = Circle::VERTEX_SHADER {
+        let vertex_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("test_circle_vertex"),
+            source: wgpu::ShaderSource::Wgsl(vertex_shader_source.into()),
+        });
+        // If this doesn't panic, shader compilation succeeded
+        drop(vertex_module);
+    }
+
+    Ok(())
+}
+```
+
+**Test Categories**:
+
+1. **Trait Implementation**: Rust trait methods work correctly
+2. **GPU Compilation**: Hand-optimized shaders compile on actual GPU
+3. **Generated Shaders**: Pipeline integration produces valid WGSL
+4. **Performance Validation**: Mark operations meet timing requirements
+5. **Custom Mark Support**: External developers can implement custom marks
+
+### Performance-Critical API Design for Mark Systems
+
+**Learning**: Mark trait operations are called frequently during rendering and
+must be highly optimized.
+
+**Performance Achievements**:
+
+- Vertex generation: <1ms for 1000 operations (target: <1ms) ✅
+- Registry operations: <10ms for 1000 operations (target: <10ms) ✅
+- Memory efficiency: 8 bytes per CircleVertex (optimal for GPU)
+
+**Pattern**: Benchmark mark operations with realistic loads:
+
+```rust
+#[tokio::test]
+async fn test_mark_performance_targets() -> GupResult<()> {
+    // Test vertex generation performance
+    let start = std::time::Instant::now();
+    for _ in 0..1000 {
+        let _vertices = Circle::generate_vertices();
+    }
+    let duration = start.elapsed();
+
+    assert!(
+        duration.as_millis() < 1,
+        "Vertex generation took {:?}", duration
+    );
+
+    // Test mark registry performance
+    let mut registry = MarkRegistry::new();
+    let start = std::time::Instant::now();
+    for _ in 0..1000 {
+        registry.register::<Circle>();
+        assert!(registry.is_registered::<Circle>());
+    }
+    let duration = start.elapsed();
+
+    assert!(
+        duration.as_millis() < 10,
+        "Registry operations took {:?}", duration
+    );
+
+    Ok(())
+}
+```
+
+### Documentation Testing for API Examples
+
+**Learning**: Mark trait documentation requires executable examples that
+demonstrate proper usage patterns and validate API ergonomics.
+
+**Pattern**: Comprehensive doctests with imports:
+
+````rust
+/// # Examples
+///
+/// ```rust
+/// use gup::mark::{Circle, CircleAttributes, Mark};
+/// use gup::{vec2, vec4, Vec2, Vec4};
+///
+/// // Create circle attributes
+/// let attrs = CircleAttributes {
+///     center: vec2![100.0, 200.0],
+///     radius: 15.0,
+///     fill_color: vec4![1.0, 0.0, 0.0, 1.0], // Red
+///     stroke_width: 2.0,
+///     stroke_color: vec4![0.0, 0.0, 0.0, 1.0], // Black border
+/// };
+///
+/// // Circle vertices are generated automatically
+/// let vertices = Circle::generate_vertices();
+/// assert_eq!(vertices.len(), 4); // Quad for instanced rendering
+/// ```
+````
+
+**Guidelines**:
+
+- Include complete import statements in documentation examples
+- Show realistic usage patterns, not just minimal examples
+- Test all documented examples with `cargo test --doc`
+- Validate that examples demonstrate the intended API ergonomics
+
+### Module Integration Strategies for Complex Systems
+
+**Learning**: Large trait systems must integrate carefully with existing modules
+to avoid naming conflicts and maintain clear boundaries.
+
+**Problem**: The Mark trait conflicted with existing traits in the selection
+module.
+
+**Solution**: Explicit re-exports with clear module boundaries:
+
+```rust
+// ✅ Explicit re-exports avoid naming conflicts
+pub use mark::{Mark, MarkInfo, MarkInfoImpl, MarkRegistry};
+pub use mark::circle::{Circle, CircleAttributes, CircleVertex};
+
+// Avoid glob imports that could cause conflicts
+// pub use mark::*; // ❌ Could conflict with selection::Mark
+```
+
+**Guidelines**:
+
+- Use explicit re-exports instead of glob imports for complex modules
+- Check for naming conflicts before implementing new traits
+- Consider module prefixes when traits serve similar purposes in different
+  contexts
+- Maintain clear separation between user-facing and internal APIs
+
 ---
 
 _This document is a living record of learnings. Update it as new patterns and

@@ -31,6 +31,7 @@ pub mod buffer;
 pub mod context;
 pub mod error;
 pub mod examples;
+pub mod mark;
 pub mod mixable;
 pub mod render;
 pub mod selection;
@@ -43,9 +44,15 @@ pub use error::*;
 pub use examples::*;
 pub use mixable::*;
 pub use render::*;
-pub use selection::*;
 pub use shader_function::*;
 pub use shader_pipeline::*;
+
+// Export mark system with explicit re-exports to avoid conflicts
+pub use mark::circle::{Circle, CircleAttributes, CircleVertex};
+pub use mark::{Mark, MarkInfo, MarkInfoImpl, MarkRegistry};
+
+// Export selection system
+pub use selection::*;
 
 // Note: Procedural macros from gup_macros must be imported directly
 // with `use gup_macros::wgsl_function;` due to Rust limitations

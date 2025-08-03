@@ -17,7 +17,7 @@ epic and status.
 | [GUP-006](GUP-006_WGSL_Function_Macro.md)        | WGSL Function Macro        | ✅ Complete | Critical | 13     |
 | [GUP-007](GUP-007_Shader_Pipeline_Builder.md)    | Shader Pipeline Builder    | ✅ Complete | Critical | 13     |
 | [GUP-008](GUP-008_Type_System_Integration.md)    | Type System Integration    | ✅ Complete | Critical | 8      |
-| [GUP-009](GUP-009_Core_Mark_Trait.md)            | Core Mark Trait            | 📋 Planned  | High     | 3      |
+| [GUP-009](GUP-009_Core_Mark_Trait.md)            | Core Mark Trait            | ✅ Complete | Critical | 8      |
 | [GUP-010](GUP-010_Basic_Mark_Implementations.md) | Basic Mark Implementations | 📋 Planned  | High     | 4      |
 | [GUP-011](GUP-011_Mark_Shader_Integration.md)    | Mark Shader Integration    | 📋 Planned  | High     | 5      |
 | [GUP-012](GUP-012_GPU_Interaction_System.md)     | GPU Interaction System     | 📋 Planned  | Medium   | 4      |
@@ -47,6 +47,13 @@ epic and status.
 | [GUP-026](GUP-026_Data_Source_Merge_Implementation.md)     | Data Source Merge Implementation     | 💡 New      | Medium   | 5      |
 | [GUP-027](GUP-027_GPU_Blend_State_Integration.md)          | GPU Blend State Integration          | ✅ Complete | High     | 3      |
 | [GUP-028](GUP-028_Composition_Performance_Optimization.md) | Composition Performance Optimization | 💡 New      | Medium   | 4      |
+
+### Post GUP-009 Stories - Mark System Enhancement (Stories 67+)
+
+| Story                                                     | Title                         | Status | Priority | Points |
+| --------------------------------------------------------- | ----------------------------- | ------ | -------- | ------ |
+| [GUP-067](GUP-067_Rectangle_Line_Mark_Implementations.md) | Rectangle and Line Mark Types | 💡 New | High     | 5      |
+| [GUP-068](GUP-068_Mark_Pipeline_Integration.md)           | Mark Pipeline Integration     | 💡 New | High     | 5      |
 
 ### Post GUP-005 Stories - Shader Function System Enhancement (Stories 51+)
 
@@ -140,9 +147,10 @@ epic and status.
 
 ### Phase 1 Foundation
 
-- **Completed**: 8/15 stories (53%)
+- **Completed**: 9/15 stories (60%)
 - **Critical Path**: GUP-001 ✅, GUP-002 ✅, GUP-003 ✅, GUP-004 ✅, GUP-005 ✅,
-  GUP-006 ✅, GUP-007 ✅, GUP-008 ✅, GUP-020 ✅, GUP-021 ✅, GUP-039 ✅
+  GUP-006 ✅, GUP-007 ✅, GUP-008 ✅, GUP-009 ✅, GUP-020 ✅, GUP-021 ✅,
+  GUP-039 ✅
 
 ### Post-GUP-021 Improvements
 
@@ -156,12 +164,13 @@ epic and status.
 
 ## Story Point Summary
 
-- **Total Planned**: ~230 story points across all stories (including new
-  GUP-065, GUP-066)
-- **Completed**: 87 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
+- **Total Planned**: ~240 story points across all stories (including new
+  GUP-012, GUP-013)
+- **Completed**: 95 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
   GUP-004: 5pts, GUP-005: 13pts, GUP-006: 13pts, GUP-007: 13pts, GUP-008: 8pts,
-  GUP-020: 5pts, GUP-021: 6pts, GUP-027: 3pts, GUP-039: 5pts, GUP-043: 3pts)
-- **Progress**: ~38% of total scope
+  GUP-009: 8pts, GUP-020: 5pts, GUP-021: 6pts, GUP-027: 3pts, GUP-039: 5pts,
+  GUP-043: 3pts)
+- **Progress**: ~40% of total scope
 
 ## Recent Additions (Post GUP-021)
 
@@ -410,8 +419,28 @@ conversions (f32 → Vec3, Vec2 → Vec4) with compile-time validation
 **Impact**: More flexible shader function composition with automatic type
 compatibility
 
+## Recent Additions (Post GUP-009)
+
+The following stories were created based on learnings from implementing GUP-009:
+
+### GUP-067: Rectangle and Line Mark Implementations
+
+**Key Learning**: Core Mark trait system working excellently, but only Circle
+mark implemented - need Rectangle and Line for complete basic mark set  
+**Dependencies**: GUP-009 complete  
+**Impact**: Complete fundamental mark types for essential data visualizations
+(bar charts, line plots, scatter plots)
+
+### GUP-068: Mark Pipeline Integration
+
+**Key Learning**: Mark trait framework ready but `create_render_pipeline` method
+unimplemented (marked with `todo!()`) - need complete GPU integration  
+**Dependencies**: GUP-009 complete  
+**Impact**: Marks can automatically create optimized render pipelines without
+manual GPU programming
+
 ---
 
-_Last Updated: After completion of GUP-008 (Type System Integration)_  
-_Next Stories: GUP-065 (Documentation for Macro-First API), GUP-009 (Core Mark
-Trait)_
+_Last Updated: After completion of GUP-009 (Core Mark Trait)_  
+_Next Stories: GUP-067 (Rectangle and Line Mark Implementations), GUP-068 (Mark
+Pipeline Integration)_

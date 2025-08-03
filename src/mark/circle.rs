@@ -1,0 +1,392 @@
+// Gup - GPU-Accelerated Data Visualization Library
+// Copyright (C) 2025 Corin Lawson <corin@phiware.com.au>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+//! Circle mark implementation for efficient circular visualizations.
+//!
+//! The Circle mark provides optimized rendering of circular shapes with support for
+//! instanced rendering, custom colors, stroke properties, and GPU-accelerated attribute
+//! transformations.
+
+use crate::mark::Mark;
+use crate::shader_function::{Vec2, Vec4};
+use crate::shader_pipeline::ComposableShaderPipeline;
+
+/// Circle mark for rendering circular points and shapes.
+///
+/// This mark is designed for efficient visualization of point data where each
+/// data point is represented as a circle. It supports:
+/// - Variable radius per circle
+/// - Fill and stroke colors
+/// - Instanced GPU rendering for high performance
+/// - Integration with shader function system
+///
+/// # Examples
+///
+/// ```rust
+/// use gup::mark::{Circle, CircleAttributes, Mark};
+/// use gup::{vec2, vec4, Vec2, Vec4};
+///
+/// // Create circle attributes
+/// let attrs = CircleAttributes {
+///     center: vec2![100.0, 200.0],
+///     radius: 15.0,
+///     fill_color: vec4![1.0, 0.0, 0.0, 1.0], // Red
+///     stroke_width: 2.0,
+///     stroke_color: vec4![0.0, 0.0, 0.0, 1.0], // Black border
+/// };
+///
+/// // Circle vertices are generated automatically
+/// let vertices = Circle::generate_vertices();
+/// assert_eq!(vertices.len(), 4); // Quad for instanced rendering
+/// ```
+#[derive(Debug, Clone)]
+pub struct Circle;
+
+/// GPU vertex data for circle rendering.
+///
+/// Each vertex represents a corner of the quad used for instanced circle rendering.
+/// The actual circle shape is computed in the fragment shader using distance functions.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct CircleVertex {
+    /// Local position within the unit quad (-1 to 1 in both dimensions)
+    pub position: [f32; 2],
+}
+
+/// High-level attributes for configuring circle appearance.
+///
+/// These attributes define the visual properties of each circle instance.
+/// The data is processed by shader functions to generate final GPU vertex data.
+#[derive(Debug, Clone)]
+pub struct CircleAttributes {
+    /// Center position of the circle in world coordinates
+    pub center: Vec2,
+    /// Radius of the circle in world units
+    pub radius: f32,
+    /// Fill color (RGBA values from 0.0 to 1.0)
+    pub fill_color: Vec4,
+    /// Stroke width in pixels
+    pub stroke_width: f32,
+    /// Stroke color (RGBA values from 0.0 to 1.0)
+    pub stroke_color: Vec4,
+}
+
+impl Mark for Circle {
+    type Vertex = CircleVertex;
+    type AttributeValue = CircleAttributes;
+
+    /// High-performance hand-optimized vertex shader for circles.
+    ///
+    /// This shader uses instanced rendering with a unit quad and performs
+    /// circle computations in the fragment shader for smooth edges.
+    const VERTEX_SHADER: Option<&'static str> = Some(include_str!("shaders/circle.vert.wgsl"));
+
+    /// High-performance hand-optimized fragment shader for circles.
+    ///
+    /// Uses distance field calculations for anti-aliased circles with
+    /// proper stroke rendering.
+    const FRAGMENT_SHADER: Option<&'static str> = Some(include_str!("shaders/circle.frag.wgsl"));
+
+    /// Generate vertex shader with shader function integration.
+    ///
+    /// When using generated shaders, this method creates WGSL that integrates
+    /// with the shader function pipeline for dynamic attribute mapping.
+    fn generate_vertex_shader(pipeline: &ComposableShaderPipeline) -> String {
+        let base_shader = r#"
+// Circle instance data structure
+struct CircleInstance {
+    center: vec2<f32>,
+    radius: f32,
+    fill_color: vec4<f32>,
+    stroke_width: f32,
+    stroke_color: vec4<f32>,
+}
+
+@group(1) @binding(0) var<storage, read> instances: array<CircleInstance>;
+
+struct VertexInput {
+    @location(0) position: vec2<f32>,
+    @builtin(instance_index) instance_index: u32,
+}
+
+struct VertexOutput {
+    @builtin(position) clip_position: vec4<f32>,
+    @location(0) world_position: vec2<f32>,
+    @location(1) local_position: vec2<f32>,
+    @location(2) fill_color: vec4<f32>,
+    @location(3) stroke_color: vec4<f32>,
+    @location(4) radius: f32,
+    @location(5) stroke_width: f32,
+}
+
+@vertex
+fn vs_main(input: VertexInput) -> VertexOutput {
+    let instance = instances[input.instance_index];
+    
+    // Apply shader functions to instance data
+    let transformed_center = position_transform(instance.center, position_uniforms);
+    let final_radius = size_transform(instance.radius, size_uniforms);
+    let final_fill_color = color_transform(instance.fill_color, color_uniforms);
+    
+    // Calculate world position
+    let world_pos = input.position * final_radius + transformed_center;
+    
+    var output: VertexOutput;
+    output.clip_position = vec4<f32>(world_pos, 0.0, 1.0);
+    output.world_position = world_pos;
+    output.local_position = input.position;
+    output.fill_color = final_fill_color;
+    output.stroke_color = instance.stroke_color;
+    output.radius = final_radius;
+    output.stroke_width = instance.stroke_width;
+    
+    return output;
+}
+"#;
+
+        // Integrate with pipeline functions
+        let mut shader = pipeline.generate_vertex_shader();
+        shader.push_str("\n\n");
+        shader.push_str(base_shader);
+        shader
+    }
+
+    /// Generate fragment shader with anti-aliasing support.
+    ///
+    /// Creates a fragment shader that renders smooth circles using distance
+    /// field calculations and integrates with the shader function system.
+    fn generate_fragment_shader(pipeline: &ComposableShaderPipeline) -> String {
+        let base_shader = r#"
+@fragment
+fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+    let distance_from_center = length(input.local_position);
+    
+    // Anti-aliased circle with stroke
+    let outer_radius = 1.0;
+    let inner_radius = outer_radius - (input.stroke_width / input.radius);
+    
+    // Smooth step for anti-aliasing
+    let edge_width = 0.02;
+    
+    // Calculate fill alpha
+    let fill_alpha = 1.0 - smoothstep(inner_radius - edge_width, inner_radius + edge_width, distance_from_center);
+    
+    // Calculate stroke alpha
+    let stroke_alpha = smoothstep(outer_radius - edge_width, outer_radius + edge_width, distance_from_center);
+    stroke_alpha = stroke_alpha - smoothstep(inner_radius - edge_width, inner_radius + edge_width, distance_from_center);
+    
+    // Combine fill and stroke
+    let final_color = mix(
+        input.fill_color * fill_alpha,
+        input.stroke_color,
+        stroke_alpha
+    );
+    
+    // Apply overall alpha
+    let total_alpha = max(fill_alpha, stroke_alpha);
+    return vec4<f32>(final_color.rgb, final_color.a * total_alpha);
+}
+"#;
+
+        let mut shader = pipeline.generate_fragment_shader();
+        shader.push_str("\n\n");
+        shader.push_str(base_shader);
+        shader
+    }
+
+    /// Number of vertices in the circle quad (4 vertices for instanced rendering)
+    fn vertex_count() -> usize {
+        4
+    }
+
+    /// Number of indices for the circle quad (6 indices for 2 triangles)
+    fn index_count() -> Option<usize> {
+        Some(6)
+    }
+
+    /// Generate vertices for a unit quad used in instanced circle rendering.
+    ///
+    /// The quad covers the range [-1, 1] in both dimensions, and the actual
+    /// circle shape is computed in the fragment shader.
+    fn generate_vertices() -> Vec<Self::Vertex> {
+        vec![
+            CircleVertex {
+                position: [-1.0, -1.0],
+            }, // Bottom-left
+            CircleVertex {
+                position: [1.0, -1.0],
+            }, // Bottom-right
+            CircleVertex {
+                position: [1.0, 1.0],
+            }, // Top-right
+            CircleVertex {
+                position: [-1.0, 1.0],
+            }, // Top-left
+        ]
+    }
+
+    /// Generate indices for the circle quad (two triangles).
+    ///
+    /// Uses counter-clockwise winding order for proper face culling.
+    fn generate_indices() -> Option<Vec<u32>> {
+        Some(vec![
+            0, 1, 2, // First triangle: bottom-left, bottom-right, top-right
+            0, 2, 3, // Second triangle: bottom-left, top-right, top-left
+        ])
+    }
+}
+
+impl Default for CircleAttributes {
+    /// Default circle attributes for testing and prototyping.
+    fn default() -> Self {
+        Self {
+            center: Vec2 { x: 0.0, y: 0.0 },
+            radius: 5.0,
+            fill_color: Vec4 {
+                x: 1.0,
+                y: 1.0,
+                z: 1.0,
+                w: 1.0,
+            }, // White
+            stroke_width: 1.0,
+            stroke_color: Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            }, // Black
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{vec2, vec4};
+
+    #[test]
+    fn test_circle_mark_implementation() {
+        // Test basic mark trait methods
+        assert_eq!(Circle::vertex_count(), 4);
+        assert_eq!(Circle::index_count(), Some(6));
+
+        let vertices = Circle::generate_vertices();
+        assert_eq!(vertices.len(), 4);
+
+        // Verify vertex positions
+        assert_eq!(vertices[0].position, [-1.0, -1.0]);
+        assert_eq!(vertices[1].position, [1.0, -1.0]);
+        assert_eq!(vertices[2].position, [1.0, 1.0]);
+        assert_eq!(vertices[3].position, [-1.0, 1.0]);
+
+        let indices = Circle::generate_indices().unwrap();
+        assert_eq!(indices.len(), 6);
+        assert_eq!(indices, vec![0, 1, 2, 0, 2, 3]);
+    }
+
+    #[test]
+    fn test_circle_shaders() {
+        // Verify that custom shaders are provided
+        assert!(Circle::VERTEX_SHADER.is_some());
+        assert!(Circle::FRAGMENT_SHADER.is_some());
+
+        // Shader content will be loaded from include_str! in actual implementation
+        // For now, we verify the constants exist
+    }
+
+    #[test]
+    fn test_circle_attributes() {
+        let attrs = CircleAttributes {
+            center: vec2![10.0, 20.0],
+            radius: 15.0,
+            fill_color: vec4![1.0, 0.0, 0.0, 1.0],
+            stroke_width: 2.0,
+            stroke_color: vec4![0.0, 0.0, 0.0, 1.0],
+        };
+
+        assert_eq!(attrs.center.x, 10.0);
+        assert_eq!(attrs.center.y, 20.0);
+        assert_eq!(attrs.radius, 15.0);
+        assert_eq!(attrs.fill_color.x, 1.0); // Red
+        assert_eq!(attrs.stroke_width, 2.0);
+        assert_eq!(attrs.stroke_color.w, 1.0); // Opaque
+    }
+
+    #[test]
+    fn test_circle_attributes_default() {
+        let default_attrs = CircleAttributes::default();
+        assert_eq!(default_attrs.center.x, 0.0);
+        assert_eq!(default_attrs.center.y, 0.0);
+        assert_eq!(default_attrs.radius, 5.0);
+        assert_eq!(default_attrs.fill_color.x, 1.0); // White
+        assert_eq!(default_attrs.stroke_width, 1.0);
+    }
+
+    #[test]
+    fn test_vertex_buffer_compatibility() {
+        let vertices = Circle::generate_vertices();
+
+        // Verify vertex data is valid for GPU upload
+        for vertex in &vertices {
+            assert!(vertex.position[0].is_finite());
+            assert!(vertex.position[1].is_finite());
+            assert!(vertex.position[0] >= -1.0 && vertex.position[0] <= 1.0);
+            assert!(vertex.position[1] >= -1.0 && vertex.position[1] <= 1.0);
+        }
+
+        // Verify bytemuck conversion works
+        let bytes: &[u8] = bytemuck::cast_slice(&vertices);
+        assert_eq!(
+            bytes.len(),
+            vertices.len() * std::mem::size_of::<CircleVertex>()
+        );
+    }
+
+    #[test]
+    fn test_circle_vertex_properties() {
+        // Verify vertex type implements required traits
+        let vertex = CircleVertex {
+            position: [0.5, -0.5],
+        };
+
+        // Should be able to clone and debug
+        let _cloned = vertex;
+        println!("{vertex:?}");
+
+        // Bytemuck conversion should work
+        let bytes = bytemuck::bytes_of(&vertex);
+        assert_eq!(bytes.len(), std::mem::size_of::<CircleVertex>());
+    }
+
+    #[test]
+    fn test_circle_attributes_properties() {
+        // Test that attributes can be constructed with vec macros
+        let attrs = CircleAttributes {
+            center: vec2![1.0, 2.0],
+            radius: 10.0,
+            fill_color: vec4![0.5, 0.5, 0.5, 0.8],
+            stroke_width: 1.5,
+            stroke_color: vec4![0.0, 0.0, 0.0, 1.0],
+        };
+
+        // Verify values are set correctly
+        assert_eq!(attrs.center.x, 1.0);
+        assert_eq!(attrs.center.y, 2.0);
+        assert_eq!(attrs.radius, 10.0);
+        assert_eq!(attrs.fill_color.w, 0.8); // Alpha
+        assert_eq!(attrs.stroke_width, 1.5);
+    }
+}

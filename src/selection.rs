@@ -366,7 +366,8 @@ impl ShaderPipeline {
 /// # Examples
 ///
 /// ```rust
-/// use gup::{Selection, Circle, RenderContext};
+/// use gup::selection::{Selection, Circle};
+/// use gup::RenderContext;
 /// use std::sync::Arc;
 ///
 /// #[derive(Debug, Clone)]
