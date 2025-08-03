@@ -23,8 +23,12 @@
 //! with the shader function system.
 
 pub mod circle;
+pub mod line;
+pub mod rectangle;
 
 pub use circle::{Circle, CircleAttributes, CircleVertex};
+pub use line::{Line, LineAttributes, LineStyle, LineVertex};
+pub use rectangle::{Rectangle, RectangleAttributes, RectangleVertex};
 
 use crate::error::GupResult;
 use crate::shader_pipeline::ComposableShaderPipeline;

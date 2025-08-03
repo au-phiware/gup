@@ -18,7 +18,7 @@ epic and status.
 | [GUP-007](GUP-007_Shader_Pipeline_Builder.md)    | Shader Pipeline Builder    | ✅ Complete | Critical | 13     |
 | [GUP-008](GUP-008_Type_System_Integration.md)    | Type System Integration    | ✅ Complete | Critical | 8      |
 | [GUP-009](GUP-009_Core_Mark_Trait.md)            | Core Mark Trait            | ✅ Complete | Critical | 8      |
-| [GUP-010](GUP-010_Basic_Mark_Implementations.md) | Basic Mark Implementations | 📋 Planned  | High     | 4      |
+| [GUP-010](GUP-010_Basic_Mark_Implementations.md) | Basic Mark Implementations | ✅ Complete | High     | 4      |
 | [GUP-011](GUP-011_Mark_Shader_Integration.md)    | Mark Shader Integration    | 📋 Planned  | High     | 5      |
 | [GUP-012](GUP-012_GPU_Interaction_System.md)     | GPU Interaction System     | 📋 Planned  | Medium   | 4      |
 | [GUP-013](GUP-013_Event_Handling_System.md)      | Event Handling System      | 📋 Planned  | Medium   | 3      |

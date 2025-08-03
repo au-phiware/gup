@@ -18,10 +18,10 @@ cargo check
 
 ## test
 
-Run tests
+Run tests (single-threaded to avoid GPU resource conflicts)
 
 ```bash
-cargo test
+cargo test -- --test-threads=1
 ```
 
 ## lint

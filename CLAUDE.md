@@ -37,6 +37,8 @@ This project uses a `maskfile.md` for task automation. Common commands:
 ### Testing and Quality
 
 - `mask test` - Run tests for all projects
+- `cargo test -- --test-threads=1` - Run tests with single threading (required
+  for GPU tests)
 - `mask lint-check` - Run linter
 - `mask fmt` - Format all code
 - `mask fmt-check` - Check if code is formatted
