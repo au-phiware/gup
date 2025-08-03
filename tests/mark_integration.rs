@@ -19,7 +19,7 @@
 //! These tests validate the complete mark system including GPU compilation,
 //! render pipeline creation, and integration with the shader function system.
 
-use gup::mark::{Circle, Mark, MarkRegistry};
+use gup::mark::{Circle, Line, Mark, MarkRegistry, Rectangle};
 use gup::shader_pipeline::ComposableShaderPipeline;
 use gup::{GupContext, GupResult};
 use std::sync::Arc;
@@ -56,6 +56,60 @@ async fn test_circle_mark_shader_compilation() -> GupResult<()> {
 }
 
 #[tokio::test]
+async fn test_rectangle_mark_shader_compilation() -> GupResult<()> {
+    let context = create_test_context().await?;
+    let device = &context.device;
+
+    // Test that hand-optimized rectangle shaders compile successfully
+    if let Some(vertex_shader_source) = Rectangle::VERTEX_SHADER {
+        let vertex_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("test_rectangle_vertex"),
+            source: wgpu::ShaderSource::Wgsl(vertex_shader_source.into()),
+        });
+        // If this doesn't panic, the shader compiled successfully
+        drop(vertex_module);
+    }
+
+    if let Some(fragment_shader_source) = Rectangle::FRAGMENT_SHADER {
+        let fragment_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("test_rectangle_fragment"),
+            source: wgpu::ShaderSource::Wgsl(fragment_shader_source.into()),
+        });
+        // If this doesn't panic, the shader compiled successfully
+        drop(fragment_module);
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_line_mark_shader_compilation() -> GupResult<()> {
+    let context = create_test_context().await?;
+    let device = &context.device;
+
+    // Test that hand-optimized line shaders compile successfully
+    if let Some(vertex_shader_source) = Line::VERTEX_SHADER {
+        let vertex_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("test_line_vertex"),
+            source: wgpu::ShaderSource::Wgsl(vertex_shader_source.into()),
+        });
+        // If this doesn't panic, the shader compiled successfully
+        drop(vertex_module);
+    }
+
+    if let Some(fragment_shader_source) = Line::FRAGMENT_SHADER {
+        let fragment_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("test_line_fragment"),
+            source: wgpu::ShaderSource::Wgsl(fragment_shader_source.into()),
+        });
+        // If this doesn't panic, the shader compiled successfully
+        drop(fragment_module);
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_circle_mark_generated_shaders() -> GupResult<()> {
     let _context = create_test_context().await?;
     let pipeline = ComposableShaderPipeline::new();
@@ -74,26 +128,76 @@ async fn test_circle_mark_generated_shaders() -> GupResult<()> {
 }
 
 #[tokio::test]
+async fn test_rectangle_mark_generated_shaders() -> GupResult<()> {
+    let _context = create_test_context().await?;
+    let pipeline = ComposableShaderPipeline::new();
+
+    // Test generated shader code creation
+    let vertex_shader = Rectangle::generate_vertex_shader(&pipeline);
+    let fragment_shader = Rectangle::generate_fragment_shader(&pipeline);
+
+    // Verify shaders contain expected content
+    assert!(vertex_shader.contains("vs_main"));
+    assert!(vertex_shader.contains("RectangleInstance"));
+    assert!(fragment_shader.contains("fs_main"));
+    assert!(fragment_shader.contains("distance_to_edge"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_line_mark_generated_shaders() -> GupResult<()> {
+    let _context = create_test_context().await?;
+    let pipeline = ComposableShaderPipeline::new();
+
+    // Test generated shader code creation
+    let vertex_shader = Line::generate_vertex_shader(&pipeline);
+    let fragment_shader = Line::generate_fragment_shader(&pipeline);
+
+    // Verify shaders contain expected content
+    assert!(vertex_shader.contains("vs_main"));
+    assert!(vertex_shader.contains("LineInstance"));
+    assert!(fragment_shader.contains("fs_main"));
+    assert!(fragment_shader.contains("style"));
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_mark_registry_integration() -> GupResult<()> {
     let context = create_test_context().await?;
     let _device = &context.device;
     let mut registry = MarkRegistry::new();
 
-    // Register the Circle mark
+    // Register all mark types
     registry.register::<Circle>();
+    registry.register::<Rectangle>();
+    registry.register::<Line>();
     assert!(registry.is_registered::<Circle>());
+    assert!(registry.is_registered::<Rectangle>());
+    assert!(registry.is_registered::<Line>());
 
-    // Verify mark info is available
-    let mark_info = registry.get_mark_info::<Circle>().unwrap();
-    assert_eq!(mark_info.vertex_count(), 4);
-    assert_eq!(mark_info.index_count(), Some(6));
-    assert!(mark_info.has_custom_shaders());
+    // Verify mark info is available for all marks
+    let circle_info = registry.get_mark_info::<Circle>().unwrap();
+    assert_eq!(circle_info.vertex_count(), 4);
+    assert_eq!(circle_info.index_count(), Some(6));
+    assert!(circle_info.has_custom_shaders());
 
-    // Test vertex generation
-    let vertices_bytes = mark_info.generate_vertices_boxed();
+    let rectangle_info = registry.get_mark_info::<Rectangle>().unwrap();
+    assert_eq!(rectangle_info.vertex_count(), 4);
+    assert_eq!(rectangle_info.index_count(), Some(6));
+    assert!(rectangle_info.has_custom_shaders());
+
+    let line_info = registry.get_mark_info::<Line>().unwrap();
+    assert_eq!(line_info.vertex_count(), 4);
+    assert_eq!(line_info.index_count(), Some(6));
+    assert!(line_info.has_custom_shaders());
+
+    // Test vertex generation for Circle
+    let vertices_bytes = circle_info.generate_vertices_boxed();
     assert!(!vertices_bytes.is_empty());
 
-    let indices = mark_info.generate_indices_boxed().unwrap();
+    let indices = circle_info.generate_indices_boxed().unwrap();
     assert_eq!(indices, vec![0, 1, 2, 0, 2, 3]);
 
     // Note: Pipeline creation is not yet implemented, so we skip that test
@@ -126,17 +230,65 @@ async fn test_circle_vertex_buffer_gpu_compatibility() -> GupResult<()> {
 }
 
 #[tokio::test]
+async fn test_rectangle_vertex_buffer_gpu_compatibility() -> GupResult<()> {
+    let context = create_test_context().await?;
+    let device = &context.device;
+
+    // Generate vertices
+    let vertices = Rectangle::generate_vertices();
+    let vertex_data: &[u8] = bytemuck::cast_slice(&vertices);
+
+    // Create a GPU buffer and upload the vertex data
+    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("test_rectangle_vertices"),
+        size: vertex_data.len() as u64,
+        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+
+    context.queue.write_buffer(&buffer, 0, vertex_data);
+
+    // If we reach here without panicking, the vertex data is GPU-compatible
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_line_vertex_buffer_gpu_compatibility() -> GupResult<()> {
+    let context = create_test_context().await?;
+    let device = &context.device;
+
+    // Generate vertices
+    let vertices = Line::generate_vertices();
+    let vertex_data: &[u8] = bytemuck::cast_slice(&vertices);
+
+    // Create a GPU buffer and upload the vertex data
+    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("test_line_vertices"),
+        size: vertex_data.len() as u64,
+        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+
+    context.queue.write_buffer(&buffer, 0, vertex_data);
+
+    // If we reach here without panicking, the vertex data is GPU-compatible
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_mark_performance_targets() -> GupResult<()> {
     let _context = create_test_context().await?;
 
-    // Test vertex generation performance (should be very fast)
+    // Test vertex generation performance for all marks (should be very fast)
     let start = std::time::Instant::now();
     for _ in 0..1000 {
-        let _vertices = Circle::generate_vertices();
+        let _circle_vertices = Circle::generate_vertices();
+        let _rectangle_vertices = Rectangle::generate_vertices();
+        let _line_vertices = Line::generate_vertices();
     }
     let duration = start.elapsed();
 
-    // Should generate 1000 vertex sets in < 1ms
+    // Should generate 1000 vertex sets for all marks in < 1ms
     assert!(
         duration.as_millis() < 1,
         "Vertex generation took {duration:?}"
@@ -148,7 +300,11 @@ async fn test_mark_performance_targets() -> GupResult<()> {
     let start = std::time::Instant::now();
     for _ in 0..1000 {
         registry.register::<Circle>();
+        registry.register::<Rectangle>();
+        registry.register::<Line>();
         assert!(registry.is_registered::<Circle>());
+        assert!(registry.is_registered::<Rectangle>());
+        assert!(registry.is_registered::<Line>());
     }
     let duration = start.elapsed();
 
