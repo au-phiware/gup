@@ -19,7 +19,7 @@ epic and status.
 | [GUP-008](GUP-008_Type_System_Integration.md)    | Type System Integration    | ✅ Complete | Critical | 8      |
 | [GUP-009](GUP-009_Core_Mark_Trait.md)            | Core Mark Trait            | ✅ Complete | Critical | 8      |
 | [GUP-010](GUP-010_Basic_Mark_Implementations.md) | Basic Mark Implementations | ✅ Complete | High     | 4      |
-| [GUP-011](GUP-011_Mark_Shader_Integration.md)    | Mark Shader Integration    | 📋 Planned  | High     | 5      |
+| [GUP-011](GUP-011_Mark_Shader_Integration.md)    | Mark Shader Integration    | ✅ Complete | High     | 8      |
 | [GUP-012](GUP-012_GPU_Interaction_System.md)     | GPU Interaction System     | 📋 Planned  | Medium   | 4      |
 | [GUP-013](GUP-013_Event_Handling_System.md)      | Event Handling System      | 📋 Planned  | Medium   | 3      |
 | [GUP-014](GUP-014_Performance_Validation.md)     | Performance Validation     | 📋 Planned  | High     | 3      |
@@ -147,10 +147,10 @@ epic and status.
 
 ### Phase 1 Foundation
 
-- **Completed**: 9/15 stories (60%)
+- **Completed**: 10/15 stories (67%)
 - **Critical Path**: GUP-001 ✅, GUP-002 ✅, GUP-003 ✅, GUP-004 ✅, GUP-005 ✅,
-  GUP-006 ✅, GUP-007 ✅, GUP-008 ✅, GUP-009 ✅, GUP-020 ✅, GUP-021 ✅,
-  GUP-039 ✅
+  GUP-006 ✅, GUP-007 ✅, GUP-008 ✅, GUP-009 ✅, GUP-010 ✅, GUP-011 ✅,
+  GUP-020 ✅, GUP-021 ✅, GUP-039 ✅
 
 ### Post-GUP-021 Improvements
 
@@ -164,13 +164,13 @@ epic and status.
 
 ## Story Point Summary
 
-- **Total Planned**: ~240 story points across all stories (including new
-  GUP-012, GUP-013)
-- **Completed**: 95 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
+- **Total Planned**: ~279 story points across all stories (including new
+  GUP-073, GUP-074, GUP-075)
+- **Completed**: 107 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
   GUP-004: 5pts, GUP-005: 13pts, GUP-006: 13pts, GUP-007: 13pts, GUP-008: 8pts,
-  GUP-009: 8pts, GUP-020: 5pts, GUP-021: 6pts, GUP-027: 3pts, GUP-039: 5pts,
-  GUP-043: 3pts)
-- **Progress**: ~40% of total scope
+  GUP-009: 8pts, GUP-010: 4pts, GUP-011: 8pts, GUP-020: 5pts, GUP-021: 6pts,
+  GUP-027: 3pts, GUP-039: 5pts, GUP-043: 3pts)
+- **Progress**: ~41% of total scope
 
 ## Recent Additions (Post GUP-021)
 
@@ -439,8 +439,36 @@ unimplemented (marked with `todo!()`) - need complete GPU integration
 **Impact**: Marks can automatically create optimized render pipelines without
 manual GPU programming
 
+## Recent Additions (Post GUP-011)
+
+The following stories were created based on learnings from implementing GUP-011:
+
+### GUP-073: Advanced Shader Composition
+
+**Key Learning**: GUP-011 implemented string-based WGSL composition which works
+effectively but has limitations in type safety and optimization  
+**Dependencies**: GUP-011 complete  
+**Impact**: AST-based WGSL generation for better type checking, validation, and
+advanced optimizations
+
+### GUP-074: Mark Performance Optimization
+
+**Key Learning**: Basic mark rendering works but needs GPU instancing and
+batching for large datasets (>100K points)  
+**Dependencies**: GUP-011 complete  
+**Impact**: Sub-millisecond rendering for 100K+ data points through GPU
+instancing and advanced caching
+
+### GUP-075: Interactive Mark Selection
+
+**Key Learning**: Current selection system has basic event handling but lacks
+efficient GPU-based selection for large datasets  
+**Dependencies**: GUP-011 complete  
+**Impact**: GPU-accelerated interactive selection with sub-millisecond response
+times for 100K+ marks
+
 ---
 
-_Last Updated: After completion of GUP-009 (Core Mark Trait)_  
-_Next Stories: GUP-067 (Rectangle and Line Mark Implementations), GUP-068 (Mark
-Pipeline Integration)_
+_Last Updated: After completion of GUP-011 (Mark Shader Integration)_  
+_Next Priority Stories: GUP-073 (Advanced Shader Composition), GUP-074 (Mark
+Performance Optimization), GUP-075 (Interactive Mark Selection)_

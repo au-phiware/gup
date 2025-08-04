@@ -239,6 +239,96 @@ can be composed, and compositions are themselves Mixable.
 Well-designed types serve as documentation and prevent errors. Use dedicated
 config structs instead of multiple primitive parameters.
 
+## Story Learnings and Retrospectives
+
+### GUP-011: Mark-Shader Integration (Completed 2025-08-04)
+
+**Key Technical Learnings:**
+
+#### Type-Safe Shader Function Integration
+
+- **Challenge**: Integrating composable shader functions with marks while
+  maintaining compile-time type safety
+- **Solution**: Enhanced Mark trait with
+  `generate_vertex_shader_with_functions()` and
+  `generate_fragment_shader_with_functions()` methods
+- **Pattern**: Use `HashMap<String, String>` for attribute-to-function mapping
+  with string-based WGSL injection points
+
+#### Dynamic WGSL Generation
+
+- **Approach**: Template-based shader generation with injection points (e.g.,
+  `// INJECT_POSITION_TRANSFORM`)
+- **Benefits**: Allows runtime composition of shader functions while maintaining
+  performance
+- **Implementation**: String replacement in shader templates with validation
+
+#### Pipeline Caching for Performance
+
+- **Requirement**: <5% performance overhead for shader function integration
+- **Solution**: `MarkPipelineManager` with hash-based caching of compiled
+  pipelines
+- **Pattern**: Cache key =
+  `(mark_type, shader_functions_hash, render_state_hash)`
+
+#### Compilation Error Resolution Patterns
+
+- **Missing trait imports**: Always check test module imports when adding new
+  trait bounds
+- **Clippy multiple bounds**: Consolidate trait bounds in generic parameters
+  instead of separate where clauses
+- **Trait object limitations**: Avoid generic methods in traits intended for
+  trait objects
+
+#### Testing GPU Code
+
+- **Critical**: Always run GPU tests with `cargo test -- --test-threads=1` to
+  avoid resource conflicts
+- **Pattern**: Segfaults in parallel GPU tests indicate resource contention, not
+  code bugs
+- **Best Practice**: Include performance benchmarks in test suite (10K points <
+  1ms target)
+
+**Architectural Decisions:**
+
+#### AttributeBinding System Design
+
+- **Decision**: Use concrete types instead of trait objects for attribute
+  bindings
+- **Reasoning**: Trait objects with generic methods aren't object-safe in Rust
+- **Alternative**: Could use enum-based approach for known shader function types
+
+#### Shader Function Composition
+
+- **Design**: String-based WGSL composition rather than AST manipulation
+- **Trade-off**: Simpler implementation but less type safety than full AST
+  approach
+- **Future**: Consider moving to AST-based composition for better validation
+
+#### Integration Point Selection
+
+- **Decision**: Inject shader functions at specific points in mark shaders
+- **Locations**: Vertex transform, fragment color computation, attribute mapping
+- **Flexibility**: Allows marks to control where functions apply while
+  maintaining compatibility
+
+**Development Workflow Insights:**
+
+#### Quality Gate Importance
+
+- **Essential**: Run `mask all-fix` before completion to catch formatting/lint
+  issues
+- **Testing**: Comprehensive integration tests prevent regressions during
+  refactoring
+- **Examples**: Ensure examples compile to validate public API changes
+
+#### Code Organization
+
+- **Effective**: Separate concerns into focused modules (mark.rs,
+  shader_function.rs, shader_pipeline.rs)
+- **Pattern**: Use associated types in traits for better type relationships
+- **Testing**: Co-locate tests with implementation for better maintainability
+
 For more detailed patterns, see:
 
 - `docs/graphics-programming.md` - GPU-specific programming patterns

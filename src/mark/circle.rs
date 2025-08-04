@@ -23,6 +23,7 @@
 use crate::mark::Mark;
 use crate::shader_function::{Vec2, Vec4};
 use crate::shader_pipeline::ComposableShaderPipeline;
+use std::collections::HashMap;
 
 /// Circle mark for rendering circular points and shapes.
 ///
@@ -105,62 +106,121 @@ impl Mark for Circle {
     /// When using generated shaders, this method creates WGSL that integrates
     /// with the shader function pipeline for dynamic attribute mapping.
     fn generate_vertex_shader(pipeline: &ComposableShaderPipeline) -> String {
-        let base_shader = r#"
-// Circle instance data structure
-struct CircleInstance {
-    center: vec2<f32>,
-    radius: f32,
-    fill_color: vec4<f32>,
-    stroke_width: f32,
-    stroke_color: vec4<f32>,
-}
+        Self::generate_vertex_shader_with_functions(pipeline, &HashMap::new())
+    }
 
-@group(1) @binding(0) var<storage, read> instances: array<CircleInstance>;
+    /// Generate vertex shader with specific shader function mappings.
+    ///
+    /// This implementation creates a vertex shader that applies shader functions
+    /// to transform data into circle attributes (center, radius, colors).
+    fn generate_vertex_shader_with_functions(
+        pipeline: &ComposableShaderPipeline,
+        attribute_functions: &HashMap<String, String>,
+    ) -> String {
+        // Generate data structures
+        let mut shader = String::new();
+        shader.push_str("// Generated Circle vertex shader with shader function integration\n\n");
 
-struct VertexInput {
-    @location(0) position: vec2<f32>,
-    @builtin(instance_index) instance_index: u32,
-}
+        // Data input structure
+        shader.push_str("struct DataInput {\n");
+        shader.push_str("    index: u32,\n");
+        shader.push_str("}\n\n");
 
-struct VertexOutput {
-    @builtin(position) clip_position: vec4<f32>,
-    @location(0) world_position: vec2<f32>,
-    @location(1) local_position: vec2<f32>,
-    @location(2) fill_color: vec4<f32>,
-    @location(3) stroke_color: vec4<f32>,
-    @location(4) radius: f32,
-    @location(5) stroke_width: f32,
-}
+        // Circle instance structure
+        shader.push_str("struct CircleInstance {\n");
+        shader.push_str("    center: vec2<f32>,\n");
+        shader.push_str("    radius: f32,\n");
+        shader.push_str("    fill_color: vec4<f32>,\n");
+        shader.push_str("    stroke_width: f32,\n");
+        shader.push_str("    stroke_color: vec4<f32>,\n");
+        shader.push_str("}\n\n");
 
-@vertex
-fn vs_main(input: VertexInput) -> VertexOutput {
-    let instance = instances[input.instance_index];
-    
-    // Apply shader functions to instance data
-    let transformed_center = position_transform(instance.center, position_uniforms);
-    let final_radius = size_transform(instance.radius, size_uniforms);
-    let final_fill_color = color_transform(instance.fill_color, color_uniforms);
-    
-    // Calculate world position
-    let world_pos = input.position * final_radius + transformed_center;
-    
-    var output: VertexOutput;
-    output.clip_position = vec4<f32>(world_pos, 0.0, 1.0);
-    output.world_position = world_pos;
-    output.local_position = input.position;
-    output.fill_color = final_fill_color;
-    output.stroke_color = instance.stroke_color;
-    output.radius = final_radius;
-    output.stroke_width = instance.stroke_width;
-    
-    return output;
-}
-"#;
+        // Storage buffers
+        shader
+            .push_str("@group(0) @binding(0) var<storage, read> data_buffer: array<DataInput>;\n");
+        shader.push_str(
+            "@group(1) @binding(0) var<storage, read> instances: array<CircleInstance>;\n\n",
+        );
 
-        // Integrate with pipeline functions
-        let mut shader = pipeline.generate_vertex_shader();
-        shader.push_str("\n\n");
-        shader.push_str(base_shader);
+        // Vertex input/output structures
+        shader.push_str("struct VertexInput {\n");
+        shader.push_str("    @location(0) position: vec2<f32>,\n");
+        shader.push_str("    @builtin(instance_index) instance_index: u32,\n");
+        shader.push_str("}\n\n");
+
+        shader.push_str("struct VertexOutput {\n");
+        shader.push_str("    @builtin(position) clip_position: vec4<f32>,\n");
+        shader.push_str("    @location(0) world_position: vec2<f32>,\n");
+        shader.push_str("    @location(1) local_position: vec2<f32>,\n");
+        shader.push_str("    @location(2) fill_color: vec4<f32>,\n");
+        shader.push_str("    @location(3) stroke_color: vec4<f32>,\n");
+        shader.push_str("    @location(4) radius: f32,\n");
+        shader.push_str("    @location(5) stroke_width: f32,\n");
+        shader.push_str("}\n\n");
+
+        // Add shader function definitions from pipeline
+        let pipeline_functions = pipeline.generate_vertex_shader();
+        if !pipeline_functions.is_empty() {
+            shader.push_str("// Shader function definitions\n");
+            shader.push_str(&pipeline_functions);
+            shader.push_str("\n\n");
+        }
+
+        // Main vertex function
+        shader.push_str("@vertex\n");
+        shader.push_str("fn vs_main(input: VertexInput) -> VertexOutput {\n");
+        shader.push_str("    let data = data_buffer[input.instance_index];\n");
+        shader.push_str("    let instance = instances[input.instance_index];\n\n");
+
+        // Apply shader functions to transform attributes
+        let mut transformed_center = "instance.center".to_string();
+        let mut transformed_radius = "instance.radius".to_string();
+        let mut transformed_fill_color = "instance.fill_color".to_string();
+
+        if let Some(position_fn) = attribute_functions.get("position") {
+            shader.push_str(&format!(
+                "    let transformed_center = {position_fn}(data, position_uniforms);\n"
+            ));
+            transformed_center = "transformed_center".to_string();
+        }
+
+        if let Some(size_fn) = attribute_functions.get("size") {
+            shader.push_str(&format!(
+                "    let transformed_radius = {size_fn}(data, size_uniforms);\n"
+            ));
+            transformed_radius = "transformed_radius".to_string();
+        }
+
+        if let Some(color_fn) = attribute_functions.get("color") {
+            shader.push_str(&format!(
+                "    let transformed_fill_color = {color_fn}(data, color_uniforms);\n"
+            ));
+            transformed_fill_color = "transformed_fill_color".to_string();
+        }
+
+        shader.push('\n');
+
+        // Calculate final world position
+        shader.push_str(&format!(
+            "    let world_pos = input.position * {transformed_radius} + {transformed_center};\n"
+        ));
+        shader.push('\n');
+
+        // Generate output
+        shader.push_str("    var output: VertexOutput;\n");
+        shader.push_str("    output.clip_position = vec4<f32>(world_pos, 0.0, 1.0);\n");
+        shader.push_str("    output.world_position = world_pos;\n");
+        shader.push_str("    output.local_position = input.position;\n");
+        shader.push_str(&format!(
+            "    output.fill_color = {transformed_fill_color};\n"
+        ));
+        shader.push_str("    output.stroke_color = instance.stroke_color;\n");
+        shader.push_str(&format!("    output.radius = {transformed_radius};\n"));
+        shader.push_str("    output.stroke_width = instance.stroke_width;\n");
+        shader.push('\n');
+        shader.push_str("    return output;\n");
+        shader.push_str("}\n");
+
         shader
     }
 
@@ -169,41 +229,76 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     /// Creates a fragment shader that renders smooth circles using distance
     /// field calculations and integrates with the shader function system.
     fn generate_fragment_shader(pipeline: &ComposableShaderPipeline) -> String {
-        let base_shader = r#"
-@fragment
-fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-    let distance_from_center = length(input.local_position);
-    
-    // Anti-aliased circle with stroke
-    let outer_radius = 1.0;
-    let inner_radius = outer_radius - (input.stroke_width / input.radius);
-    
-    // Smooth step for anti-aliasing
-    let edge_width = 0.02;
-    
-    // Calculate fill alpha
-    let fill_alpha = 1.0 - smoothstep(inner_radius - edge_width, inner_radius + edge_width, distance_from_center);
-    
-    // Calculate stroke alpha
-    let stroke_alpha = smoothstep(outer_radius - edge_width, outer_radius + edge_width, distance_from_center);
-    stroke_alpha = stroke_alpha - smoothstep(inner_radius - edge_width, inner_radius + edge_width, distance_from_center);
-    
-    // Combine fill and stroke
-    let final_color = mix(
-        input.fill_color * fill_alpha,
-        input.stroke_color,
-        stroke_alpha
-    );
-    
-    // Apply overall alpha
-    let total_alpha = max(fill_alpha, stroke_alpha);
-    return vec4<f32>(final_color.rgb, final_color.a * total_alpha);
-}
-"#;
+        Self::generate_fragment_shader_with_functions(pipeline, &HashMap::new())
+    }
 
-        let mut shader = pipeline.generate_fragment_shader();
-        shader.push_str("\n\n");
-        shader.push_str(base_shader);
+    /// Generate fragment shader with specific shader function mappings.
+    ///
+    /// This implementation creates an anti-aliased circle fragment shader that
+    /// uses attributes computed by shader functions in the vertex stage.
+    fn generate_fragment_shader_with_functions(
+        pipeline: &ComposableShaderPipeline,
+        _attribute_functions: &HashMap<String, String>,
+    ) -> String {
+        let mut shader = String::new();
+        shader.push_str("// Generated Circle fragment shader with anti-aliased rendering\n\n");
+
+        // Add vertex output structure (must match vertex shader)
+        shader.push_str("struct VertexOutput {\n");
+        shader.push_str("    @builtin(position) clip_position: vec4<f32>,\n");
+        shader.push_str("    @location(0) world_position: vec2<f32>,\n");
+        shader.push_str("    @location(1) local_position: vec2<f32>,\n");
+        shader.push_str("    @location(2) fill_color: vec4<f32>,\n");
+        shader.push_str("    @location(3) stroke_color: vec4<f32>,\n");
+        shader.push_str("    @location(4) radius: f32,\n");
+        shader.push_str("    @location(5) stroke_width: f32,\n");
+        shader.push_str("}\n\n");
+
+        // Add shader function definitions if needed
+        let pipeline_functions = pipeline.generate_fragment_shader();
+        if !pipeline_functions.is_empty() {
+            shader.push_str("// Shader function definitions\n");
+            shader.push_str(&pipeline_functions);
+            shader.push_str("\n\n");
+        }
+
+        // Main fragment function with anti-aliased circle rendering
+        shader.push_str("@fragment\n");
+        shader.push_str("fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {\n");
+        shader.push_str("    let distance_from_center = length(input.local_position);\n");
+        shader.push('\n');
+        shader.push_str("    // Anti-aliased circle with stroke\n");
+        shader.push_str("    let outer_radius = 1.0;\n");
+        shader.push_str("    let inner_radius = max(0.0, outer_radius - (input.stroke_width / input.radius));\n");
+        shader.push('\n');
+        shader.push_str("    // Smooth step for anti-aliasing\n");
+        shader.push_str("    let edge_width = 0.02;\n");
+        shader.push('\n');
+        shader.push_str("    // Calculate fill alpha\n");
+        shader.push_str("    let fill_alpha = 1.0 - smoothstep(inner_radius - edge_width, inner_radius + edge_width, distance_from_center);\n");
+        shader.push('\n');
+        shader.push_str("    // Calculate stroke alpha\n");
+        shader.push_str("    var stroke_alpha = 1.0 - smoothstep(outer_radius - edge_width, outer_radius + edge_width, distance_from_center);\n");
+        shader.push_str("    stroke_alpha = stroke_alpha - fill_alpha;\n");
+        shader.push('\n');
+        shader.push_str("    // Combine fill and stroke\n");
+        shader.push_str("    let final_color = mix(\n");
+        shader.push_str("        input.fill_color,\n");
+        shader.push_str("        input.stroke_color,\n");
+        shader.push_str("        stroke_alpha\n");
+        shader.push_str("    );\n");
+        shader.push('\n');
+        shader.push_str("    // Apply overall alpha\n");
+        shader.push_str("    let total_alpha = max(fill_alpha, stroke_alpha);\n");
+        shader.push_str("    \n");
+        shader.push_str("    // Discard fragments outside the circle\n");
+        shader.push_str("    if (total_alpha < 0.01) {\n");
+        shader.push_str("        discard;\n");
+        shader.push_str("    }\n");
+        shader.push('\n');
+        shader.push_str("    return vec4<f32>(final_color.rgb, final_color.a * total_alpha);\n");
+        shader.push_str("}\n");
+
         shader
     }
 
@@ -246,6 +341,26 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             0, 1, 2, // First triangle: bottom-left, bottom-right, top-right
             0, 2, 3, // Second triangle: bottom-left, top-right, top-left
         ])
+    }
+
+    /// Get the WGSL type name for a Circle attribute.
+    fn get_attribute_type(attribute_name: &str) -> crate::error::GupResult<&'static str> {
+        match attribute_name {
+            "center" | "position" => Ok("vec2<f32>"),
+            "radius" | "size" | "stroke_width" => Ok("f32"),
+            "fill_color" | "color" | "stroke_color" => Ok("vec4<f32>"),
+            _ => Err(crate::error::GupError::ValidationError(format!(
+                "Unknown Circle attribute: {attribute_name}"
+            ))),
+        }
+    }
+
+    /// Check if a shader function output type is compatible with a Circle attribute.
+    fn is_attribute_compatible(attribute_name: &str, output_type: &str) -> bool {
+        match Self::get_attribute_type(attribute_name) {
+            Ok(expected_type) => expected_type == output_type,
+            Err(_) => false,
+        }
     }
 }
 

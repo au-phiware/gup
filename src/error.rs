@@ -20,6 +20,10 @@ pub enum GupError {
     WebGpuError(String),
     /// Buffer operation failed
     BufferError(String),
+    /// Validation error (type checking, attribute validation, etc.)
+    ValidationError(String),
+    /// Shader compilation or integration error
+    ShaderError(String),
 }
 
 impl fmt::Display for GupError {
@@ -31,6 +35,8 @@ impl fmt::Display for GupError {
             GupError::InvalidOperation(msg) => write!(f, "Invalid operation: {msg}"),
             GupError::WebGpuError(msg) => write!(f, "WebGPU error: {msg}"),
             GupError::BufferError(msg) => write!(f, "Buffer error: {msg}"),
+            GupError::ValidationError(msg) => write!(f, "Validation error: {msg}"),
+            GupError::ShaderError(msg) => write!(f, "Shader error: {msg}"),
         }
     }
 }
