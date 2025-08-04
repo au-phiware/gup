@@ -25,10 +25,12 @@
 pub mod circle;
 pub mod line;
 pub mod rectangle;
+pub mod renderer;
 
 pub use circle::{Circle, CircleAttributes, CircleVertex};
 pub use line::{Line, LineAttributes, LineStyle, LineVertex};
 pub use rectangle::{Rectangle, RectangleAttributes, RectangleVertex};
+pub use renderer::MarkRenderer;
 
 use crate::error::GupResult;
 use crate::shader_pipeline::ComposableShaderPipeline;
@@ -36,7 +38,14 @@ use std::any::TypeId;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use wgpu::{Device, RenderPipeline};
+use wgpu::{
+    BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, BlendState,
+    BufferAddress, BufferBindingType, ColorTargetState, ColorWrites, Device, FragmentState,
+    FrontFace, MultisampleState, PipelineLayoutDescriptor, PolygonMode, PrimitiveState,
+    PrimitiveTopology, RenderPipeline, RenderPipelineDescriptor, ShaderModuleDescriptor,
+    ShaderSource, ShaderStages, TextureFormat, VertexAttribute, VertexBufferLayout, VertexFormat,
+    VertexState, VertexStepMode,
+};
 
 /// Core trait for all visual marks (circles, rectangles, lines, etc.).
 ///
@@ -173,6 +182,9 @@ pub trait MarkInfo: Send + Sync {
 
     /// Generate indices for this mark type (None for non-indexed)
     fn generate_indices_boxed(&self) -> Option<Vec<u32>>;
+
+    /// Downcast to Any for type-specific operations
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 /// Concrete implementation of MarkInfo for a specific mark type
@@ -190,6 +202,151 @@ impl<M: Mark> MarkInfoImpl<M> {
     pub fn new() -> Self {
         Self {
             _phantom: PhantomData,
+        }
+    }
+
+    /// Create render pipeline implementation for this mark type.
+    fn create_render_pipeline_impl(&self, device: &Device) -> GupResult<RenderPipeline> {
+        // Determine shader sources (manual vs generated)
+        let (vertex_source, fragment_source) =
+            if M::VERTEX_SHADER.is_some() && M::FRAGMENT_SHADER.is_some() {
+                // Use hand-optimized shaders
+                (
+                    M::VERTEX_SHADER.unwrap().to_string(),
+                    M::FRAGMENT_SHADER.unwrap().to_string(),
+                )
+            } else {
+                // Generate shaders using pipeline system
+                let pipeline = ComposableShaderPipeline::new();
+                let vertex_shader = M::generate_vertex_shader(&pipeline);
+                let fragment_shader = M::generate_fragment_shader(&pipeline);
+                (vertex_shader, fragment_shader)
+            };
+
+        // Create shader modules
+        let vertex_module = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some(&format!("{}_vertex", self.type_name())),
+            source: ShaderSource::Wgsl(vertex_source.into()),
+        });
+
+        let fragment_module = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some(&format!("{}_fragment", self.type_name())),
+            source: ShaderSource::Wgsl(fragment_source.into()),
+        });
+
+        // Create bind group layout
+        let bind_group_layout = self.create_bind_group_layout(device)?;
+
+        // Create pipeline layout
+        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+            label: Some(&format!("{}_pipeline_layout", self.type_name())),
+            bind_group_layouts: &[&bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+        // Create render pipeline
+        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+            label: Some(&format!("{}_pipeline", self.type_name())),
+            layout: Some(&pipeline_layout),
+            vertex: VertexState {
+                module: &vertex_module,
+                entry_point: Some("vs_main"),
+                buffers: &[self.create_vertex_buffer_layout()],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(FragmentState {
+                module: &fragment_module,
+                entry_point: Some("fs_main"),
+                targets: &[Some(ColorTargetState {
+                    format: TextureFormat::Bgra8UnormSrgb, // Standard surface format
+                    blend: Some(BlendState::ALPHA_BLENDING),
+                    write_mask: ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: PrimitiveState {
+                topology: PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: FrontFace::Ccw,
+                cull_mode: None, // Allow double-sided rendering for flexibility
+                unclipped_depth: false,
+                polygon_mode: PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: None, // 2D rendering without depth testing
+            multisample: MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+            cache: None,
+        });
+
+        Ok(pipeline)
+    }
+
+    /// Create bind group layout for this mark type.
+    fn create_bind_group_layout(&self, device: &Device) -> GupResult<BindGroupLayout> {
+        let mut entries = Vec::new();
+
+        // Instance data buffer (always present)
+        entries.push(BindGroupLayoutEntry {
+            binding: 0,
+            visibility: ShaderStages::VERTEX,
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Storage { read_only: true },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        });
+
+        // Add uniform buffers if the mark uses generated shaders
+        if !self.has_custom_shaders() {
+            // Position transform uniforms
+            entries.push(BindGroupLayoutEntry {
+                binding: 1,
+                visibility: ShaderStages::VERTEX,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            });
+
+            // Color transform uniforms
+            entries.push(BindGroupLayoutEntry {
+                binding: 2,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            });
+        }
+
+        let layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some(&format!("{}_bind_group_layout", self.type_name())),
+            entries: &entries,
+        });
+
+        Ok(layout)
+    }
+
+    /// Create vertex buffer layout for this mark type.
+    fn create_vertex_buffer_layout(&self) -> VertexBufferLayout<'static> {
+        VertexBufferLayout {
+            array_stride: std::mem::size_of::<M::Vertex>() as BufferAddress,
+            step_mode: VertexStepMode::Vertex,
+            attributes: &[VertexAttribute {
+                offset: 0,
+                shader_location: 0,
+                format: VertexFormat::Float32x2, // Assuming 2D positions
+            }],
         }
     }
 }
@@ -211,10 +368,8 @@ impl<M: Mark> MarkInfo for MarkInfoImpl<M> {
         M::VERTEX_SHADER.is_some() && M::FRAGMENT_SHADER.is_some()
     }
 
-    fn create_render_pipeline(&self, _device: &Device) -> GupResult<RenderPipeline> {
-        // TODO: Implement render pipeline creation
-        // This would use either custom shaders or generate them via the pipeline system
-        todo!("Render pipeline creation will be implemented in render integration task")
+    fn create_render_pipeline(&self, device: &Device) -> GupResult<RenderPipeline> {
+        self.create_render_pipeline_impl(device)
     }
 
     fn vertex_count(&self) -> usize {
@@ -232,6 +387,10 @@ impl<M: Mark> MarkInfo for MarkInfoImpl<M> {
 
     fn generate_indices_boxed(&self) -> Option<Vec<u32>> {
         M::generate_indices()
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
@@ -355,6 +514,76 @@ impl MarkRegistry {
     /// Get all registered mark type names for debugging
     pub fn registered_types(&self) -> Vec<&'static str> {
         self.marks.values().map(|info| info.type_name()).collect()
+    }
+
+    /// Create bind group for a specific mark type.
+    ///
+    /// This method creates a bind group that matches the layout expected by the mark's
+    /// render pipeline, with the provided instance and uniform buffers.
+    pub fn create_bind_group<M: Mark>(
+        &self,
+        device: &Device,
+        instance_buffer: &wgpu::Buffer,
+        uniform_buffers: &[&wgpu::Buffer],
+    ) -> GupResult<wgpu::BindGroup> {
+        let mark_info = self.get_mark_info::<M>().ok_or_else(|| {
+            crate::error::GupError::RenderError("Mark not registered".to_string())
+        })?;
+
+        // Get the mark info implementation to access layout creation
+        let type_id = TypeId::of::<M>();
+        let mark_info_impl = self.marks.get(&type_id).unwrap();
+
+        // Create bind group layout
+        let bind_group_layout = if let Some(mark_info_impl) =
+            mark_info_impl.as_any().downcast_ref::<MarkInfoImpl<M>>()
+        {
+            mark_info_impl.create_bind_group_layout(device)?
+        } else {
+            return Err(crate::error::GupError::RenderError(
+                "Failed to downcast mark info".to_string(),
+            ));
+        };
+
+        let mut entries = vec![wgpu::BindGroupEntry {
+            binding: 0,
+            resource: instance_buffer.as_entire_binding(),
+        }];
+
+        // Add uniform buffer entries
+        for (i, buffer) in uniform_buffers.iter().enumerate() {
+            entries.push(wgpu::BindGroupEntry {
+                binding: (i + 1) as u32,
+                resource: buffer.as_entire_binding(),
+            });
+        }
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(&format!("{}_bind_group", mark_info.type_name())),
+            layout: &bind_group_layout,
+            entries: &entries,
+        });
+
+        Ok(bind_group)
+    }
+
+    /// Get bind group layout for a specific mark type.
+    pub fn get_bind_group_layout<M: Mark>(&self, device: &Device) -> GupResult<BindGroupLayout> {
+        let type_id = TypeId::of::<M>();
+        let mark_info_impl = self.marks.get(&type_id).ok_or_else(|| {
+            crate::error::GupError::RenderError(format!(
+                "Mark type {} not registered",
+                std::any::type_name::<M>()
+            ))
+        })?;
+
+        if let Some(mark_info_impl) = mark_info_impl.as_any().downcast_ref::<MarkInfoImpl<M>>() {
+            mark_info_impl.create_bind_group_layout(device)
+        } else {
+            Err(crate::error::GupError::RenderError(
+                "Failed to downcast mark info".to_string(),
+            ))
+        }
     }
 }
 

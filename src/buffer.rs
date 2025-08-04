@@ -47,7 +47,10 @@ impl BufferType {
                 BufferUsages::VERTEX | BufferUsages::COPY_DST | BufferUsages::COPY_SRC
             }
             BufferType::Instance => {
-                BufferUsages::VERTEX | BufferUsages::COPY_DST | BufferUsages::COPY_SRC
+                BufferUsages::VERTEX
+                    | BufferUsages::STORAGE
+                    | BufferUsages::COPY_DST
+                    | BufferUsages::COPY_SRC
             }
             BufferType::Uniform => {
                 BufferUsages::UNIFORM | BufferUsages::COPY_DST | BufferUsages::COPY_SRC
@@ -156,6 +159,11 @@ where
         &self.buffer
     }
 
+    /// Get the wgpu buffer for shader binding (alias for raw_buffer).
+    pub fn buffer(&self) -> &Buffer {
+        &self.buffer
+    }
+
     /// Get the current number of elements in the buffer.
     pub fn len(&self) -> usize {
         self.len
@@ -174,6 +182,14 @@ where
     /// Get the buffer type.
     pub fn buffer_type(&self) -> BufferType {
         self.buffer_type
+    }
+
+    /// Clear the buffer contents without deallocating.
+    ///
+    /// This method resets the length to zero, effectively clearing the buffer
+    /// without deallocating the GPU memory.
+    pub fn clear(&mut self) {
+        self.len = 0;
     }
 
     /// Resize the buffer to accommodate at least the specified capacity.

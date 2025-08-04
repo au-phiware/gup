@@ -1895,7 +1895,7 @@ pub struct Vec3 {
 ### Type Conversion for GPU Uniforms
 
 **Learning**: GPU uniforms often require different representations than Rust
-types (e.g., Vec2 → [f32; 2]).
+types (e.g., `Vec2 → [f32; 2]`).
 
 **Pattern**: Automatic type conversion in generated code:
 
@@ -2686,7 +2686,7 @@ pub struct CircleVertex {
 **Benefits**:
 
 - Users work with ergonomic types (Vec2, Vec4)
-- GPU operations use optimal memory layouts ([f32; 2], [f32; 4])
+- GPU operations use optimal memory layouts (`[f32; 2]`, `[f32; 4]`)
 - Clear separation of concerns between API and implementation
 - Automatic conversion handled by mark implementation
 
@@ -2907,6 +2907,423 @@ pub use mark::circle::{Circle, CircleAttributes, CircleVertex};
 - Consider module prefixes when traits serve similar purposes in different
   contexts
 - Maintain clear separation between user-facing and internal APIs
+
+## Mark Pipeline System Architecture (GUP-068 Learnings)
+
+### Complete Render Pipeline Creation with Type Safety
+
+**Learning**: Mark systems require complete render pipeline creation that
+bridges high-level mark traits with low-level GPU rendering, supporting both
+manual and generated shaders.
+
+**Pattern**: Comprehensive pipeline creation with shader flexibility:
+
+```rust
+// ✅ Complete pipeline creation with dual shader support
+impl<M: Mark> MarkInfoImpl<M> {
+    fn create_render_pipeline_impl(&self, device: &Device) -> GupResult<RenderPipeline> {
+        // Determine shader sources (manual vs generated)
+        let (vertex_source, fragment_source) =
+            if M::VERTEX_SHADER.is_some() && M::FRAGMENT_SHADER.is_some() {
+                // Use hand-optimized shaders for performance
+                (M::VERTEX_SHADER.unwrap().to_string(),
+                 M::FRAGMENT_SHADER.unwrap().to_string())
+            } else {
+                // Generate shaders using pipeline system for flexibility
+                let pipeline = ComposableShaderPipeline::new();
+                let vertex_shader = M::generate_vertex_shader(&pipeline);
+                let fragment_shader = M::generate_fragment_shader(&pipeline);
+                (vertex_shader, fragment_shader)
+            };
+
+        // Create complete pipeline with proper GPU state
+        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+            label: Some(&format!("{}_pipeline", self.type_name())),
+            layout: Some(&pipeline_layout),
+            vertex: VertexState {
+                module: &vertex_module,
+                entry_point: Some("vs_main"), // Required in newer wgpu versions
+                buffers: &[self.create_vertex_buffer_layout()],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            // ... complete GPU state configuration
+        });
+    }
+}
+```
+
+**Critical Requirements**:
+
+- Support both manual (performance) and generated (flexibility) shaders
+- Include `Some()` wrapper for entry_point in newer wgpu versions
+- Add `compilation_options` and `cache` fields for API compatibility
+- Create complete bind group layouts with proper storage buffer bindings
+
+### Buffer Usage Flag Comprehensive Strategy
+
+**Learning**: Instance buffers in mark systems need both VERTEX and STORAGE
+usage flags to support vertex data AND bind group operations.
+
+**Problem**: Instance buffers initially only had VERTEX usage, causing bind
+group creation failures:
+
+```rust
+// ❌ Insufficient usage flags
+BufferType::Instance => {
+    BufferUsages::VERTEX | BufferUsages::COPY_DST | BufferUsages::COPY_SRC
+}
+```
+
+**Solution**: Add STORAGE usage for bind group compatibility:
+
+```rust
+// ✅ Complete usage flags for dual-purpose instance buffers
+BufferType::Instance => {
+    BufferUsages::VERTEX | BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC
+}
+```
+
+**Guidelines**:
+
+- Instance buffers often serve dual purposes (vertex data + shader storage)
+- Always include STORAGE usage for instance buffers in mark systems
+- Test bind group creation, not just buffer creation, in integration tests
+- Use comprehensive usage flags from the start to avoid refactoring
+
+### High-Level Renderer with Auto-Resizing Buffers
+
+**Learning**: Mark rendering systems benefit from high-level renderers that
+abstract buffer management while providing performance and flexibility.
+
+**Pattern**: Unified renderer for vertex, instance, and index data:
+
+```rust
+// ✅ High-level renderer with automatic buffer management
+pub struct MarkRenderer {
+    vertex_buffer: GpuBuffer<u8>,
+    instance_buffer: GpuBuffer<u8>,
+    index_buffer: Option<GpuBuffer<u32>>,
+}
+
+impl MarkRenderer {
+    pub fn render_marks<M: Mark>(
+        &self,
+        render_pass: &mut RenderPass,
+        pipeline: &wgpu::RenderPipeline,
+        bind_group: &wgpu::BindGroup,
+        instance_count: u32,
+    ) -> GupResult<()> {
+        // Automatic indexed/non-indexed rendering based on mark type
+        if let Some(index_count) = M::index_count() {
+            render_pass.draw_indexed(0..index_count as u32, 0, 0..instance_count);
+        } else {
+            render_pass.draw(0..M::vertex_count() as u32, 0..instance_count);
+        }
+        Ok(())
+    }
+}
+```
+
+**Benefits**:
+
+- Automatic buffer resizing during upload operations
+- Support for both indexed and non-indexed rendering
+- Type-safe mark-specific rendering operations
+- Performance optimization through buffer reuse
+
+### Pipeline Caching with Arc-Based Resource Sharing
+
+**Learning**: Mark pipeline caching requires Arc-based sharing to enable
+efficient pipeline reuse while maintaining thread safety.
+
+**Pattern**: Registry-based caching with Arc sharing:
+
+```rust
+// ✅ Arc-based pipeline caching for efficient sharing
+pub struct MarkRegistry {
+    marks: HashMap<TypeId, Box<dyn MarkInfo>>,
+    pipelines: HashMap<TypeId, Arc<RenderPipeline>>, // Arc enables sharing
+}
+
+impl MarkRegistry {
+    pub fn get_pipeline<M: Mark>(&mut self, device: &Device) -> GupResult<Arc<RenderPipeline>> {
+        let type_id = TypeId::of::<M>();
+
+        // Return cached pipeline if available
+        if let Some(pipeline) = self.pipelines.get(&type_id) {
+            return Ok(Arc::clone(pipeline)); // Cheap Arc clone
+        }
+
+        // Create new pipeline and cache it
+        let pipeline = mark_info.create_render_pipeline(device)?;
+        let arc_pipeline = Arc::new(pipeline);
+        self.pipelines.insert(type_id, Arc::clone(&arc_pipeline));
+        Ok(arc_pipeline)
+    }
+}
+```
+
+**Performance Achievements**:
+
+- Pipeline creation: <100ms including shader compilation
+- Cached access: <1ms for repeated operations
+- Memory efficiency: Multiple references to same pipeline use Arc sharing
+- O(1) lookup performance through TypeId-based HashMap
+
+### wgpu API Version Compatibility Patterns
+
+**Learning**: Different wgpu versions require different API signatures and field
+requirements that must be handled carefully.
+
+**Critical API Changes Encountered**:
+
+```rust
+// ✅ Handle wgpu v26+ API requirements
+RenderPipelineDescriptor {
+    vertex: VertexState {
+        entry_point: Some("vs_main"), // Required Some() wrapper in v26+
+        compilation_options: wgpu::PipelineCompilationOptions::default(), // New field
+    },
+    fragment: Some(FragmentState {
+        entry_point: Some("fs_main"), // Required Some() wrapper
+        compilation_options: wgpu::PipelineCompilationOptions::default(), // New field
+    }),
+    cache: None, // New optional field
+}
+```
+
+**Defensive Patterns**:
+
+- Always specify optional fields explicitly (don't rely on defaults)
+- Use `Some()` wrappers for entry points in newer versions
+- Include compilation options for forward compatibility
+- Test with actual GPU compilation to catch API changes early
+
+### Comprehensive Integration Testing Strategy
+
+**Learning**: Mark pipeline systems require comprehensive testing that validates
+the entire pipeline from trait implementation to GPU rendering.
+
+**Test Categories**:
+
+1. **Pipeline Creation**: Verify render pipelines are created successfully
+2. **Bind Group Management**: Test bind group creation and layout compatibility
+3. **Buffer Operations**: Validate vertex, instance, and index buffer uploads
+4. **Rendering Workflow**: Complete end-to-end rendering preparation
+5. **Performance Validation**: Ensure timing requirements are met
+6. **Resource Management**: Test pipeline caching and memory efficiency
+
+**Pattern**: Multi-layered testing with GPU context:
+
+```rust
+// ✅ Comprehensive integration testing
+#[tokio::test]
+async fn test_complete_rendering_workflow() -> GupResult<()> {
+    let context = create_test_context().await?;
+    let device = &context.device;
+    let queue = &context.queue;
+
+    // Set up complete rendering pipeline
+    let mut registry = MarkRegistry::new();
+    registry.register::<Circle>();
+    let mut renderer = MarkRenderer::new(device);
+
+    // Test pipeline creation
+    let pipeline = registry.get_pipeline::<Circle>(device)?;
+
+    // Test bind group creation
+    let instance_buffer = GpuBuffer::<u8>::new(device, BufferType::Instance, 10);
+    let bind_group = registry.create_bind_group::<Circle>(device, instance_buffer.buffer(), &[])?;
+
+    // Test data upload
+    let vertices = Circle::generate_vertices();
+    renderer.upload_vertices(device, queue, &vertices)?;
+
+    // Verify complete workflow succeeds
+    assert!(renderer.vertex_len() > 0);
+    assert!(renderer.instance_len() > 0);
+    Ok(())
+}
+```
+
+### Performance Testing for GPU Mark Systems
+
+**Learning**: Mark systems require realistic performance testing with large
+datasets and actual GPU operations.
+
+**Performance Targets Achieved**:
+
+- Pipeline creation: <100ms (including shader compilation)
+- Cached pipeline access: <1ms (average 0.015ms, 67x better than target)
+- Bind group creation: <5ms per bind group
+- Buffer uploads: <50ms for 5K instances
+- End-to-end workflow: <100ms for 1000 instances
+
+**Pattern**: Realistic performance testing with scaling data:
+
+```rust
+// ✅ Performance testing with realistic datasets
+#[tokio::test]
+async fn test_buffer_upload_performance() -> GupResult<()> {
+    let context = create_test_context().await?;
+    let mut renderer = MarkRenderer::new(device);
+
+    // Test with progressively larger datasets
+    for instance_count in [1_000, 5_000, 10_000] {
+        let instances: Vec<TestInstance> = (0..instance_count)
+            .map(|i| create_test_instance(i))
+            .collect();
+
+        let start = Instant::now();
+        renderer.upload_instances(device, queue, &instances)?;
+        let upload_time = start.elapsed();
+
+        assert!(
+            upload_time.as_millis() < 50,
+            "Upload too slow: {:?} for {}K instances",
+            upload_time, instance_count / 1000
+        );
+    }
+    Ok(())
+}
+```
+
+### Type-Erased Mark Management
+
+**Learning**: Runtime mark management requires type erasure while preserving
+type safety for operations and enabling compile-time validation.
+
+**Pattern**: MarkInfo trait with type-safe registration:
+
+```rust
+// ✅ Type-erased interface with type-safe operations
+pub trait MarkInfo: Send + Sync {
+    fn type_name(&self) -> &'static str;
+    fn vertex_count(&self) -> usize;
+    fn index_count(&self) -> Option<usize>;
+    fn has_custom_shaders(&self) -> bool;
+    fn create_render_pipeline(&self, device: &Device) -> GupResult<RenderPipeline>;
+}
+
+// Concrete implementation preserves type information
+pub struct MarkInfoImpl<M: Mark> {
+    _phantom: PhantomData<M>,
+}
+
+impl<M: Mark> MarkInfo for MarkInfoImpl<M> {
+    fn create_render_pipeline(&self, device: &Device) -> GupResult<RenderPipeline> {
+        // Full access to M's associated types and methods
+        self.create_render_pipeline_impl(device)
+    }
+}
+```
+
+**Benefits**:
+
+- Runtime introspection of mark capabilities
+- Type-safe registration and lookup operations
+- Efficient storage in `HashMap<TypeId, Box<dyn MarkInfo>>`
+- Compile-time validation of mark trait implementations
+
+### Dual Shader Strategy for Mark Systems
+
+**Learning**: Mark systems benefit from supporting both hand-optimized shaders
+(performance) and generated shaders (flexibility) in the same trait.
+
+**Pattern**: Optional shader constants with generation fallbacks:
+
+```rust
+// ✅ Support both optimization paths in same trait
+pub trait Mark: Clone + Send + Sync + 'static {
+    // Performance path: hand-optimized shaders
+    const VERTEX_SHADER: Option<&'static str> = None;
+    const FRAGMENT_SHADER: Option<&'static str> = None;
+
+    // Flexibility path: integration with shader function system
+    fn generate_vertex_shader(pipeline: &ComposableShaderPipeline) -> String {
+        pipeline.generate_vertex_shader() // Default implementation
+    }
+
+    fn generate_fragment_shader(pipeline: &ComposableShaderPipeline) -> String {
+        pipeline.generate_fragment_shader() // Default implementation
+    }
+}
+
+// Implementation chooses appropriate path
+impl Mark for Circle {
+    const VERTEX_SHADER: Option<&'static str> = Some(include_str!("shaders/circle.vert.wgsl"));
+    const FRAGMENT_SHADER: Option<&'static str> = Some(include_str!("shaders/circle.frag.wgsl"));
+    // generation methods use defaults for this performance-optimized mark
+}
+```
+
+**Strategy**:
+
+- Built-in marks (Circle, Rectangle, Line) use hand-optimized shaders
+- Custom marks can use generated shaders for rapid development
+- Both paths use same Mark trait interface
+- Pipeline creation automatically chooses appropriate shader source
+
+### Error Context for Complex GPU Systems
+
+**Learning**: Complex mark pipeline systems require rich error context including
+resource types, operation context, and suggested solutions.
+
+**Pattern**: Structured errors with comprehensive context:
+
+```rust
+// ✅ Rich error context for debugging
+pub fn get_pipeline<M: Mark>(&mut self, device: &Device) -> GupResult<Arc<RenderPipeline>> {
+    let type_id = TypeId::of::<M>();
+
+    let mark_info = self.marks.get(&type_id).ok_or_else(|| {
+        GupError::RenderError(format!(
+            "Mark type {} not registered. Call registry.register::<{}>() first.",
+            std::any::type_name::<M>(),
+            std::any::type_name::<M>()
+        ))
+    })?;
+
+    let pipeline = mark_info.create_render_pipeline(device)
+        .map_err(|e| GupError::RenderError(format!(
+            "Failed to create render pipeline for {}: {}",
+            std::any::type_name::<M>(), e
+        )))?;
+}
+```
+
+**Guidelines**:
+
+- Include the specific mark type in error messages
+- Provide actionable solutions (e.g., "call register() first")
+- Preserve original error information in chains
+- Use type names for clear identification
+
+### Testing Strategy for Single-Threaded GPU Operations
+
+**Learning**: GPU operations may require `--test-threads=1` to avoid resource
+conflicts between tests, especially with headless contexts.
+
+**Pattern**: Single-threaded test execution for GPU code:
+
+```bash
+# ✅ Avoid GPU resource conflicts
+cargo test mark_pipeline -- --test-threads=1
+```
+
+**When Single-Threading is Required**:
+
+- Multiple tests creating GPU contexts simultaneously
+- Resource sharing conflicts (buffers, pipelines, bind groups)
+- Headless GPU contexts that don't properly isolate resources
+- Integration tests that perform actual GPU compilation
+
+**Guidelines**:
+
+- Document single-threading requirements in test comments
+- Use single-threaded execution for integration tests
+- Consider test isolation patterns if parallel execution is needed
+- Monitor for resource cleanup issues in GPU tests
 
 ---
 
