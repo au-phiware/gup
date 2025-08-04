@@ -114,3 +114,132 @@ let surface = instance.create_surface(&window)?; // Creates Surface<'window>
 
 - Do not downgrade wgpu. The project relies on features of the latest version
   (v26).
+
+## Development Patterns and Conventions
+
+### Rust Design Patterns
+
+#### Prefer Enums Over Trait Objects for Known Sets
+
+When implementing extensible behavior with a finite, known set of variants,
+prefer enums over trait objects (`Box<dyn Trait>`).
+
+```rust
+// ✅ Better - enum-based approach
+#[derive(Debug, Clone)]
+enum CustomCompositionBehavior {
+    CrossFade(CrossFadeComposition),
+    GridLayout(GridLayoutComposition),
+}
+
+// ❌ Avoid - trait not object-safe due to generic methods
+trait CustomCompositionBehavior {
+    fn compose<A: Mixable, B: Mixable>(...) -> GupResult<()>;
+}
+```
+
+Benefits: Compile-time type safety, better performance, easier serialization,
+pattern matching exhaustiveness.
+
+#### Generic Method Limitations
+
+Traits with generic methods cannot be made into trait objects due to Rust's
+object safety rules. Consider:
+
+1. Separate generic methods into different traits
+2. Use enum-based approach for known variants
+3. Use associated types instead of generic parameters
+
+### API Design Patterns
+
+#### Fluent APIs with Backward Compatibility
+
+When extending APIs, maintain backward compatibility while providing new
+convenience methods:
+
+```rust
+// Existing API continues to work
+let composed = chart1.mix(chart2);
+
+// New convenience methods added via extension traits
+let overlay = chart1.overlay(chart2);
+let beside = chart1.beside_with_config(chart2, config);
+```
+
+Guidelines:
+
+- Use extension traits for new convenience methods
+- Keep core trait minimal and stable
+- Provide both simple defaults and configurable variants
+
+#### Configuration Structs with Defaults
+
+Complex configuration is best handled with dedicated structs that implement
+`Default`:
+
+```rust
+#[derive(Debug, Clone)]
+pub struct SideBySideConfig {
+    pub direction: LayoutDirection,
+    pub split_ratio: f32,
+    pub padding: f32,
+}
+
+impl Default for SideBySideConfig {
+    fn default() -> Self {
+        Self {
+            direction: LayoutDirection::Horizontal,
+            split_ratio: 0.5,
+            padding: 10.0,
+        }
+    }
+}
+```
+
+### Error Handling Patterns
+
+Provide context-rich error messages that include component descriptions and
+specify which part of a composition failed:
+
+```rust
+// ✅ Better - includes context
+Err(GupError::CompositionError(format!(
+    "First component is invalid: {}",
+    self.first.description()
+)))
+
+// ❌ Not helpful
+Err(GupError::RenderError("Component invalid".to_string()))
+```
+
+### Performance Patterns
+
+#### Lazy Evaluation
+
+Composition systems benefit from lazy evaluation - defer expensive operations
+until render time:
+
+```rust
+// ✅ Composition is cheap - just stores components
+let composition = chart1.mix(chart2).mix(chart3);
+
+// ✅ Expensive work happens only at render time
+composition.render(&mut context)?;
+```
+
+### Architecture Principles
+
+#### Composition Over Inheritance
+
+The `Mixable` trait enables universal composability where any two Mixable types
+can be composed, and compositions are themselves Mixable.
+
+#### Type System as Documentation
+
+Well-designed types serve as documentation and prevent errors. Use dedicated
+config structs instead of multiple primitive parameters.
+
+For more detailed patterns, see:
+
+- `docs/graphics-programming.md` - GPU-specific programming patterns
+- `docs/patterns/` - Story-specific learnings and specialized patterns
