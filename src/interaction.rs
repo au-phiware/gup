@@ -228,24 +228,24 @@ impl InteractionEvent {
 pub struct GpuInteractionQuery {
     /// 0 = point, 1 = region, 2 = custom
     pub query_type: u32,
-    /// Query position or region center
+    /// Maximum number of results to return
+    pub max_results: u32,
+    /// Query position or region center (aligned to 8-byte boundary)
     pub position: [f32; 2],
     /// For region queries: width and height
     pub region_size: [f32; 2],
-    /// Maximum number of results to return
-    pub max_results: u32,
     /// Padding for 16-byte alignment
-    pub _padding: [u32; 3],
+    pub _padding: [u32; 2],
 }
 
 impl GpuInteractionQuery {
     pub fn point(position: Vec2, max_results: u32) -> Self {
         Self {
             query_type: 0,
+            max_results,
             position: position.into(),
             region_size: [0.0, 0.0],
-            max_results,
-            _padding: [0; 3],
+            _padding: [0; 2],
         }
     }
 
@@ -253,10 +253,10 @@ impl GpuInteractionQuery {
         let center = rect.center();
         Self {
             query_type: 1,
+            max_results,
             position: center.into(),
             region_size: [rect.width(), rect.height()],
-            max_results,
-            _padding: [0; 3],
+            _padding: [0; 2],
         }
     }
 }
@@ -289,12 +289,12 @@ pub struct InteractionResult {
     pub selection_id: u32,
     /// Distance from query point to element
     pub distance: f32,
-    /// Intersection point
-    pub intersection_point: [f32; 2],
     /// 1 if hit, 0 if miss
     pub is_hit: u32,
+    /// Intersection point (moved to 16-byte boundary)
+    pub intersection_point: [f32; 2],
     /// Padding for 16-byte alignment
-    pub _padding: u32,
+    pub _padding: [u32; 2],
 }
 
 /// Performance statistics for interaction queries
@@ -393,7 +393,7 @@ impl InteractionSystem {
         let element_buffer = device.create_buffer(&BufferDescriptor {
             label: Some("interaction_elements"),
             size: (max_elements * std::mem::size_of::<ElementData>()) as u64,
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
 
@@ -900,11 +900,57 @@ mod tests {
             element_id: 42,
             selection_id: 1,
             distance: 15.5,
-            intersection_point: [10.0, 20.0],
             is_hit: 1,
-            _padding: 0,
+            intersection_point: [10.0, 20.0],
+            _padding: [0, 0],
         };
         let bytes = bytemuck::bytes_of(&result);
         assert_eq!(bytes.len(), std::mem::size_of::<InteractionResult>());
+
+        // Debug: Print struct sizes and layouts
+        println!(
+            "GpuInteractionQuery size: {}",
+            std::mem::size_of::<GpuInteractionQuery>()
+        );
+        println!("ElementData size: {}", std::mem::size_of::<ElementData>());
+        println!(
+            "InteractionResult size: {}",
+            std::mem::size_of::<InteractionResult>()
+        );
+
+        // Debug: Print struct field offsets
+        use std::mem::offset_of;
+        println!("GpuInteractionQuery field offsets:");
+        println!(
+            "  query_type: {}",
+            offset_of!(GpuInteractionQuery, query_type)
+        );
+        println!(
+            "  max_results: {}",
+            offset_of!(GpuInteractionQuery, max_results)
+        );
+        println!("  position: {}", offset_of!(GpuInteractionQuery, position));
+        println!(
+            "  region_size: {}",
+            offset_of!(GpuInteractionQuery, region_size)
+        );
+        println!("  _padding: {}", offset_of!(GpuInteractionQuery, _padding));
+
+        println!("InteractionResult field offsets:");
+        println!(
+            "  element_id: {}",
+            offset_of!(InteractionResult, element_id)
+        );
+        println!(
+            "  selection_id: {}",
+            offset_of!(InteractionResult, selection_id)
+        );
+        println!("  distance: {}", offset_of!(InteractionResult, distance));
+        println!("  is_hit: {}", offset_of!(InteractionResult, is_hit));
+        println!(
+            "  intersection_point: {}",
+            offset_of!(InteractionResult, intersection_point)
+        );
+        println!("  _padding: {}", offset_of!(InteractionResult, _padding));
     }
 }

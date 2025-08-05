@@ -6,12 +6,11 @@
 
 struct InteractionQuery {
     query_type: u32,      // 0 = point, 1 = region, 2 = custom
-    position: vec2<f32>,  // Query position or region center
-    region_size: vec2<f32>, // For region queries: width, height
     max_results: u32,
+    position: vec2<f32>,  // Query position or region center (8-byte aligned)
+    region_size: vec2<f32>, // For region queries: width, height
     _padding0: u32,       // Explicit padding for alignment
     _padding1: u32,
-    _padding2: u32,
 }
 
 struct ElementData {
@@ -27,9 +26,10 @@ struct InteractionResult {
     element_id: u32,
     selection_id: u32,
     distance: f32,
-    intersection_point: vec2<f32>,
     is_hit: u32,
-    _padding: u32,        // Explicit padding for alignment
+    intersection_point: vec2<f32>,
+    _padding0: u32,        // Explicit padding for alignment
+    _padding1: u32,
 }
 
 @group(0) @binding(0) var<storage, read> elements: array<ElementData>;
@@ -61,10 +61,11 @@ fn hit_test_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var result: InteractionResult;
     result.element_id = element.element_id;
     result.selection_id = element.selection_id;
-    result.is_hit = 0u;
     result.distance = 0.0;
+    result.is_hit = 0u;
     result.intersection_point = element.position;
-    result._padding = 0u;
+    result._padding0 = 0u;
+    result._padding1 = 0u;
 
     // Perform hit test based on mark type and query type
     switch (element.mark_type) {

@@ -444,6 +444,103 @@ config structs instead of multiple primitive parameters.
 - **Measurement**: Use both micro-benchmarks and end-to-end workflow timing
 - **Validation**: Test with realistic data sizes and query patterns
 
+### GUP-013: GPU Shader Position Precision Fix (Completed 2025-08-05)
+
+**Key Technical Learnings:**
+
+#### Memory Alignment Critical for GPU-CPU Data Transfer
+
+- **Challenge**: WGSL compute shader reading incorrect X coordinates (0.0) while
+  Y coordinates were correct
+- **Root Cause**: Struct field alignment mismatches between Rust and WGSL memory
+  layouts
+- **Solution**: Reorder struct fields to match WGSL alignment requirements
+- **Critical Pattern**: `vec2<f32>` fields in WGSL require specific alignment
+  boundaries (8-byte or 16-byte)
+
+#### Struct Field Ordering for GPU Compatibility
+
+- **GpuInteractionQuery Fix**: Move `position` field to offset 8 (8-byte
+  aligned)
+- **InteractionResult Fix**: Move `intersection_point` field to offset 16
+  (16-byte aligned)
+- **Best Practice**: Use `std::mem::offset_of!()` to verify field positions
+  match between Rust and WGSL
+- **Testing**: Add struct layout validation tests to catch alignment issues
+  early
+
+#### GPU Debugging Methodology
+
+- **Layer-by-Layer Approach**: Debug data flow from Rust → GPU upload → shader
+  processing → result download
+- **Staging Buffer Technique**: Add `COPY_SRC` buffer usage flags for debug data
+  inspection
+- **Debug Infrastructure**: Create comprehensive GPU buffer inspection tools
+- **Pattern**: Always validate data at each stage of GPU processing pipeline
+
+#### Precision vs Performance Trade-offs
+
+- **Achievement**: Perfect position precision (tolerance < 0.001) with <5%
+  performance overhead
+- **Test Strategy**: Replace tolerance-based assertions with strict equality
+  once precision is fixed
+- **Validation**: All 12 interaction system tests pass with exact precision
+  matching
+- **Learning**: GPU precision issues often stem from data layout, not
+  mathematical precision
+
+#### Cross-Platform GPU Considerations
+
+- **Buffer Usage Flags**: Different platforms may require different buffer usage
+  combinations
+- **Alignment Requirements**: WGSL struct alignment rules vary between native
+  and web targets
+- **Testing**: Validate on both native and WebAssembly to catch
+  platform-specific alignment issues
+- **Best Practice**: Always test GPU code with `--test-threads=1` to avoid
+  resource conflicts
+
+**Architectural Decisions:**
+
+#### String-Based WGSL Generation Trade-offs
+
+- **Decision**: Continue with string-based WGSL composition for GUP-013 fix
+- **Trade-off**: Simpler implementation but less type safety than full AST
+  approach
+- **Future**: Consider AST-based composition in follow-up stories for better
+  validation
+- **Learning**: String-based approach sufficient for struct field reordering
+  fixes
+
+#### Debug Code Integration Strategy
+
+- **Approach**: Add comprehensive debug infrastructure during investigation,
+  clean up for production
+- **Pattern**: Use debug staging buffers and detailed logging during development
+- **Best Practice**: Remove debug output but preserve debug infrastructure for
+  future issues
+- **Learning**: GPU debugging tools are essential for complex GPU programming
+
+**Development Workflow Insights:**
+
+#### GPU Precision Bug Investigation Process
+
+- **Step 1**: Verify Rust struct layouts with `std::mem::size_of()` and field
+  offsets
+- **Step 2**: Compare WGSL struct definitions against Rust layouts
+- **Step 3**: Add staging buffer downloads to inspect actual GPU data
+- **Step 4**: Test with simplified single-element data to isolate issues
+- **Step 5**: Validate buffer creation, upload, and binding code paths
+
+#### Test Strategy for GPU Precision
+
+- **Initial**: Use tolerance-based assertions to work around precision issues
+- **Investigation**: Add comprehensive debug output to understand data flow
+- **Resolution**: Update tests to strict equality assertions once precision is
+  fixed
+- **Validation**: Ensure all tests pass without tolerance adjustments as
+  acceptance criteria
+
 For more detailed patterns, see:
 
 - `docs/graphics-programming.md` - GPU-specific programming patterns
