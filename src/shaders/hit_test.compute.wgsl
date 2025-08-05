@@ -36,19 +36,38 @@ struct InteractionResult {
 @group(0) @binding(1) var<storage, read> queries: array<InteractionQuery>;
 @group(0) @binding(2) var<storage, read_write> results: array<InteractionResult>;
 
-// Workgroup size optimized for GPU parallelism
+// Shared memory for query caching to reduce global memory accesses
+var<workgroup> shared_queries: array<InteractionQuery, 8>;
+
+// Workgroup size optimized for GPU compatibility 
+// 256 threads per workgroup for maximum GPU compatibility
 @compute @workgroup_size(256)
-fn hit_test_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+fn hit_test_main(@builtin(global_invocation_id) global_id: vec3<u32>, @builtin(local_invocation_id) local_id: vec3<u32>) {
     let element_index = global_id.x;
     let query_index = global_id.y;
+    let local_thread_id = local_id.x;
 
     // Bounds checking
     if (element_index >= arrayLength(&elements) || query_index >= arrayLength(&queries)) {
         return;
     }
 
+    // Cache frequently accessed queries in shared memory
+    // Each workgroup loads up to 8 queries into shared memory
+    if (local_thread_id < 8u && query_index + local_thread_id < arrayLength(&queries)) {
+        shared_queries[local_thread_id] = queries[query_index + local_thread_id];
+    }
+    workgroupBarrier();
+
     let element = elements[element_index];
-    let query = queries[query_index];
+    
+    // Use conditional access instead of select for structs
+    var query: InteractionQuery;
+    if (query_index < 8u) {
+        query = shared_queries[query_index % 8u];
+    } else {
+        query = queries[query_index];
+    }
 
     // Calculate result index for this element-query pair
     let result_index = element_index * arrayLength(&queries) + query_index;
