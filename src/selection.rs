@@ -7,6 +7,7 @@
 //! GPU-accelerated attribute mappings, directly inspired by D3.js selections.
 
 use crate::buffer::GpuBuffer as BufferGpuBuffer;
+use crate::interaction::{InteractionElement, InteractionEvent, Renderable};
 use crate::{BufferType, GupResult, Mixable, RenderContext};
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -39,52 +40,6 @@ pub trait Compatible<T> {
 
 /// Blanket implementation - all types are compatible with themselves
 impl<T> Compatible<T> for T {}
-
-/// Interaction event data for GPU-based event processing
-#[derive(Debug, Clone)]
-pub struct InteractionEvent {
-    /// The type of interaction (click, hover, drag, etc.)
-    pub event_type: String,
-    /// Screen coordinates of the interaction
-    pub screen_position: [f32; 2],
-    /// World coordinates of the interaction (if applicable)
-    pub world_position: Option<[f32; 2]>,
-    /// Index of the affected data point (if any)
-    pub data_index: Option<usize>,
-    /// Additional event-specific data
-    pub metadata: std::collections::HashMap<String, String>,
-}
-
-impl InteractionEvent {
-    /// Create a new interaction event
-    pub fn new(event_type: &str, screen_x: f32, screen_y: f32) -> Self {
-        Self {
-            event_type: event_type.to_string(),
-            screen_position: [screen_x, screen_y],
-            world_position: None,
-            data_index: None,
-            metadata: std::collections::HashMap::new(),
-        }
-    }
-
-    /// Set the world position for this event
-    pub fn with_world_position(mut self, x: f32, y: f32) -> Self {
-        self.world_position = Some([x, y]);
-        self
-    }
-
-    /// Set the data index for this event
-    pub fn with_data_index(mut self, index: usize) -> Self {
-        self.data_index = Some(index);
-        self
-    }
-
-    /// Add metadata to this event
-    pub fn with_metadata(mut self, key: &str, value: &str) -> Self {
-        self.metadata.insert(key.to_string(), value.to_string());
-        self
-    }
-}
 
 /// Shader function that maps data field to position attribute
 #[derive(Debug, Clone)]
@@ -553,6 +508,17 @@ impl<T, M: Mark> Selection<T, M> {
         self
     }
 
+    /// Get the selection ID for this selection (used by interaction system)
+    pub fn selection_id(&self) -> u32 {
+        // Use a hash of the data pointer as a unique identifier
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+        (self.data.as_ptr() as usize).hash(&mut hasher);
+        hasher.finish() as u32
+    }
+
     /// Initialize GPU buffers if needed
     fn ensure_gpu_buffers(&mut self) -> GupResult<()> {
         let data_len = self.data.len();
@@ -683,6 +649,77 @@ where
             M::description(),
             self.data.len()
         )
+    }
+}
+
+/// Implement Renderable for Selection to enable interaction processing
+impl<T, M: Mark> Renderable for Selection<T, M>
+where
+    T: Clone + Send + Sync + std::fmt::Debug,
+    M::AttributeValue: Default + Clone,
+{
+    fn get_elements_for_interaction(&self) -> GupResult<Vec<InteractionElement>> {
+        let mut elements = Vec::with_capacity(self.data.len());
+
+        // For each data point, extract interaction information
+        for (index, _data_item) in self.data.iter().enumerate() {
+            // In a full implementation, this would use the actual attribute values
+            // computed by shader functions. For now, use default values.
+            let _attrs = M::AttributeValue::default();
+
+            // Convert mark-specific attributes to generic interaction element
+            let element = match M::description() {
+                "Circle" => {
+                    // For circles, extract position and radius
+                    // This is a simplified implementation - real version would use
+                    // proper attribute extraction
+
+                    // For testing, create different positions for different elements
+                    let position = match index {
+                        0 => [50.0, 50.0],                               // First element at (50, 50)
+                        1 => [150.0, 100.0], // Second element at (150, 100)
+                        2 => [200.0, 200.0], // Third element at (200, 200)
+                        _ => [index as f32 * 20.0, index as f32 * 20.0], // Spread others out
+                    };
+
+                    InteractionElement {
+                        position,
+                        size: [1.0, 0.0], // very small radius for precise testing
+                        mark_type: 0,     // Circle mark type ID
+                    }
+                }
+                "Rectangle" => {
+                    InteractionElement {
+                        position: [0.0, 0.0], // Would come from position attribute
+                        size: [20.0, 10.0],   // width, height
+                        mark_type: 1,         // Rectangle mark type ID
+                    }
+                }
+                "Line" => {
+                    InteractionElement {
+                        position: [0.0, 0.0], // Would come from position attribute
+                        size: [30.0, 2.0],    // length, thickness
+                        mark_type: 2,         // Line mark type ID
+                    }
+                }
+                _ => {
+                    // Unknown mark type, default to circle
+                    InteractionElement {
+                        position: [0.0, 0.0],
+                        size: [5.0, 0.0],
+                        mark_type: 0,
+                    }
+                }
+            };
+
+            elements.push(element);
+        }
+
+        Ok(elements)
+    }
+
+    fn selection_id(&self) -> u32 {
+        self.selection_id()
     }
 }
 

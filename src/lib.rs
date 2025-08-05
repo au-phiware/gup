@@ -31,6 +31,7 @@ pub mod buffer;
 pub mod context;
 pub mod error;
 pub mod examples;
+pub mod interaction;
 pub mod mark;
 pub mod mixable;
 pub mod render;
@@ -42,6 +43,12 @@ pub use buffer::*;
 pub use context::*;
 pub use error::*;
 pub use examples::*;
+// Export interaction system components (excluding ambiguous types)
+pub use interaction::{
+    CustomInteractionQuery, ElementData, ElementHit, EventHandler, GpuInteractionQuery,
+    InteractionElement, InteractionEvent, InteractionResult, InteractionSystem, InteractionType,
+    QueryStats, Rect, Renderable,
+};
 pub use mixable::*;
 pub use render::*;
 pub use shader_function::*;

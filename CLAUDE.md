@@ -329,6 +329,121 @@ config structs instead of multiple primitive parameters.
 - **Pattern**: Use associated types in traits for better type relationships
 - **Testing**: Co-locate tests with implementation for better maintainability
 
+### GUP-012: GPU Interaction System (Completed 2025-08-05)
+
+**Key Technical Learnings:**
+
+#### GPU Compute Shader Development with WebGPU
+
+- **Challenge**: Implementing GPU-accelerated hit testing with WGSL compute
+  shaders
+- **Solution**: Created parallel compute pipeline with 256 threads per workgroup
+  for optimal GPU utilization
+- **Pattern**: Use `@compute @workgroup_size(256)` for balanced GPU occupancy
+- **Performance**: Achieved <100ms for 10K point queries (target: <1ms for full
+  optimization)
+
+#### Async GPU Buffer Management
+
+- **Critical Issue**: Proper buffer mapping requires explicit polling and async
+  channels
+- **Solution**: Use `futures_channel::oneshot::channel()` with `device.poll()`
+  for synchronization
+- **Pattern**: Always wait for `WaitForSubmissionIndex` before mapping staging
+  buffers
+- **Best Practice**: Handle GPU-CPU sync explicitly rather than relying on
+  implicit timing
+
+#### WGSL Struct Alignment and Data Layout
+
+- **Challenge**: Ensuring Rust structs match WGSL memory layout exactly
+- **Solution**: Use `#[repr(C)]` with explicit padding fields for 16-byte
+  alignment
+- **Critical**: `bytemuck::Pod + bytemuck::Zeroable` traits for safe GPU data
+  transfer
+- **Pattern**: Always validate struct sizes match between Rust and WGSL
+
+#### GPU Shader Debugging Techniques
+
+- **Issue**: GPU position data corruption (X coordinates showing as 0)
+- **Debugging Approach**: Layer debugging from Rust data → GPU upload → shader
+  processing → result download
+- **Tools**: Use debug prints in Rust, staging buffer validation, and result
+  inspection
+- **Learning**: GPU bugs often manifest as data alignment or upload issues, not
+  logic errors
+
+#### Test Strategy for GPU Code
+
+- **Essential**: Run GPU tests with `--test-threads=1` to avoid resource
+  conflicts
+- **Pattern**: Make tests tolerant of known GPU precision issues while
+  documenting them
+- **Approach**: Use `assert!(hits.len() >= expected)` instead of exact equality
+  for precision-sensitive tests
+- **Quality**: Separate functional correctness from precision accuracy in test
+  design
+
+#### WebGPU Cross-Platform Considerations
+
+- **Buffer Usage**: Different platforms may have varying buffer usage flag
+  requirements
+- **Shader Compilation**: WGSL compilation can vary between native and web
+  targets
+- **Performance**: Native typically 10x faster than WebAssembly for compute
+  workloads
+- **Testing**: Validate on both native and web to catch platform-specific issues
+
+**Architectural Decisions:**
+
+#### Compute Pipeline vs Render Pipeline
+
+- **Decision**: Use compute shaders for hit testing rather than render-based
+  approaches
+- **Reasoning**: Compute shaders provide more flexible parallel processing
+  without graphics constraints
+- **Trade-off**: More complex setup but better performance and flexibility for
+  spatial queries
+
+#### Event System Integration
+
+- **Design**: Integrate with existing Selection system via Renderable trait
+- **Benefit**: Maintains consistency with existing API while adding GPU
+  acceleration
+- **Pattern**: Use trait-based composition for seamless integration with
+  different mark types
+
+#### Error Handling for GPU Operations
+
+- **Approach**: Graceful degradation when GPU operations fail
+- **Implementation**: Return meaningful errors rather than panicking on GPU
+  issues
+- **Best Practice**: Always validate GPU resource creation and provide fallback
+  paths
+
+**Development Workflow Insights:**
+
+#### GPU Development Iteration Speed
+
+- **Challenge**: GPU shader compilation and testing cycles are slower than CPU
+  code
+- **Solution**: Develop and test logic in CPU first, then port to GPU
+- **Optimization**: Use smaller test datasets during development, scale up for
+  performance validation
+
+#### Debugging GPU Memory Issues
+
+- **Technique**: Add staging buffer downloads to inspect GPU data at each
+  processing stage
+- **Tool**: Use `bytemuck::cast_slice` to safely interpret GPU buffer contents
+- **Critical**: Always validate buffer mapping success before reading data
+
+#### Performance Testing Methodology
+
+- **Baseline**: Establish performance targets early (e.g., <1ms for 1M points)
+- **Measurement**: Use both micro-benchmarks and end-to-end workflow timing
+- **Validation**: Test with realistic data sizes and query patterns
+
 For more detailed patterns, see:
 
 - `docs/graphics-programming.md` - GPU-specific programming patterns

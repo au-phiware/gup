@@ -1,0 +1,213 @@
+// Copyright (C) 2024 Corin Lawson
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// GPU hit testing compute shader for parallel collision detection
+// Supports point queries, region queries, and multiple mark types
+
+struct InteractionQuery {
+    query_type: u32,      // 0 = point, 1 = region, 2 = custom
+    position: vec2<f32>,  // Query position or region center
+    region_size: vec2<f32>, // For region queries: width, height
+    max_results: u32,
+    _padding0: u32,       // Explicit padding for alignment
+    _padding1: u32,
+    _padding2: u32,
+}
+
+struct ElementData {
+    position: vec2<f32>,  // Center position of element
+    size: vec2<f32>,      // Size (width, height) or (radius, 0) for circles
+    mark_type: u32,       // 0 = circle, 1 = rectangle, 2 = line
+    element_id: u32,      // Element ID within selection
+    selection_id: u32,    // Selection ID this element belongs to
+    _padding: u32,        // Explicit padding for alignment
+}
+
+struct InteractionResult {
+    element_id: u32,
+    selection_id: u32,
+    distance: f32,
+    intersection_point: vec2<f32>,
+    is_hit: u32,
+    _padding: u32,        // Explicit padding for alignment
+}
+
+@group(0) @binding(0) var<storage, read> elements: array<ElementData>;
+@group(0) @binding(1) var<storage, read> queries: array<InteractionQuery>;
+@group(0) @binding(2) var<storage, read_write> results: array<InteractionResult>;
+
+// Workgroup size optimized for GPU parallelism
+@compute @workgroup_size(256)
+fn hit_test_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let element_index = global_id.x;
+    let query_index = global_id.y;
+
+    // Bounds checking
+    if (element_index >= arrayLength(&elements) || query_index >= arrayLength(&queries)) {
+        return;
+    }
+
+    let element = elements[element_index];
+    let query = queries[query_index];
+
+    // Calculate result index for this element-query pair
+    let result_index = element_index * arrayLength(&queries) + query_index;
+    
+    // Bounds check for results array
+    if (result_index >= arrayLength(&results)) {
+        return;
+    }
+
+    var result: InteractionResult;
+    result.element_id = element.element_id;
+    result.selection_id = element.selection_id;
+    result.is_hit = 0u;
+    result.distance = 0.0;
+    result.intersection_point = element.position;
+    result._padding = 0u;
+
+    // Perform hit test based on mark type and query type
+    switch (element.mark_type) {
+        case 0u: { // Circle
+            result.is_hit = test_circle_hit(element, query, &result);
+        }
+        case 1u: { // Rectangle
+            result.is_hit = test_rectangle_hit(element, query, &result);
+        }
+        case 2u: { // Line
+            result.is_hit = test_line_hit(element, query, &result);
+        }
+        default: {
+            result.is_hit = 0u;
+        }
+    }
+
+    // Store result
+    results[result_index] = result;
+}
+
+// Circle hit testing
+fn test_circle_hit(element: ElementData, query: InteractionQuery, result: ptr<function, InteractionResult>) -> u32 {
+    let center = element.position;
+    let radius = element.size.x; // Radius stored in size.x for circles
+
+    switch (query.query_type) {
+        case 0u: { // Point query
+            let distance = length(query.position - center);
+            (*result).distance = distance;
+            
+            if (distance <= radius) {
+                // Find intersection point (closest point on circle to query)
+                if (distance > 0.0) {
+                    let direction = normalize(query.position - center);
+                    (*result).intersection_point = center + direction * radius;
+                } else {
+                    (*result).intersection_point = center;
+                }
+                return 1u;
+            }
+            return 0u;
+        }
+        case 1u: { // Region query
+            let region_min = query.position - query.region_size * 0.5;
+            let region_max = query.position + query.region_size * 0.5;
+            
+            // Check if circle intersects with rectangle
+            let closest_point = clamp_vec2(center, region_min, region_max);
+            let distance = length(center - closest_point);
+            (*result).distance = distance;
+            
+            if (distance <= radius) {
+                (*result).intersection_point = closest_point;
+                return 1u;
+            }
+            return 0u;
+        }
+        default: {
+            return 0u;
+        }
+    }
+}
+
+// Rectangle hit testing
+fn test_rectangle_hit(element: ElementData, query: InteractionQuery, result: ptr<function, InteractionResult>) -> u32 {
+    let center = element.position;
+    let half_size = element.size * 0.5;
+    let rect_min = center - half_size;
+    let rect_max = center + half_size;
+
+    switch (query.query_type) {
+        case 0u: { // Point query
+            if (query.position.x >= rect_min.x && query.position.x <= rect_max.x &&
+                query.position.y >= rect_min.y && query.position.y <= rect_max.y) {
+                
+                // Point is inside rectangle
+                (*result).distance = 0.0;
+                (*result).intersection_point = query.position;
+                return 1u;
+            } else {
+                // Find closest point on rectangle
+                let closest_point = clamp_vec2(query.position, rect_min, rect_max);
+                let distance = length(query.position - closest_point);
+                (*result).distance = distance;
+                (*result).intersection_point = closest_point;
+                return 0u; // Point is outside
+            }
+        }
+        case 1u: { // Region query
+            let query_min = query.position - query.region_size * 0.5;
+            let query_max = query.position + query.region_size * 0.5;
+            
+            // Check if rectangles intersect
+            if (rect_max.x >= query_min.x && rect_min.x <= query_max.x &&
+                rect_max.y >= query_min.y && rect_min.y <= query_max.y) {
+                
+                // Calculate overlap center as intersection point
+                let overlap_min = max(rect_min, query_min);
+                let overlap_max = min(rect_max, query_max);
+                (*result).intersection_point = (overlap_min + overlap_max) * 0.5;
+                (*result).distance = 0.0;
+                return 1u;
+            }
+            
+            // No intersection
+            let distance = distance_rect_to_rect(rect_min, rect_max, query_min, query_max);
+            (*result).distance = distance;
+            return 0u;
+        }
+        default: {
+            return 0u;
+        }
+    }
+}
+
+// Line hit testing (simplified - treats line as thick line segment)
+fn test_line_hit(element: ElementData, query: InteractionQuery, result: ptr<function, InteractionResult>) -> u32 {
+    // For simplicity, treat line as rectangle with very small height
+    // In a full implementation, this would do proper line segment intersection
+    let line_thickness = 2.0; // Default line thickness in pixels
+    
+    var modified_element = element;
+    if (element.size.y < line_thickness) {
+        modified_element.size.y = line_thickness;
+    }
+    
+    // Use rectangle hit testing for lines
+    return test_rectangle_hit(modified_element, query, result);
+}
+
+// Helper function: distance between two rectangles
+fn distance_rect_to_rect(rect1_min: vec2<f32>, rect1_max: vec2<f32>, 
+                        rect2_min: vec2<f32>, rect2_max: vec2<f32>) -> f32 {
+    let dx = max(0.0, max(rect1_min.x - rect2_max.x, rect2_min.x - rect1_max.x));
+    let dy = max(0.0, max(rect1_min.y - rect2_max.y, rect2_min.y - rect1_max.y));
+    return sqrt(dx * dx + dy * dy);
+}
+
+// Helper function: clamp vector to bounds
+fn clamp_vec2(value: vec2<f32>, min_val: vec2<f32>, max_val: vec2<f32>) -> vec2<f32> {
+    return vec2<f32>(
+        clamp(value.x, min_val.x, max_val.x),
+        clamp(value.y, min_val.y, max_val.y)
+    );
+}

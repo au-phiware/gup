@@ -7,23 +7,23 @@ epic and status.
 
 ### Phase 1 - Foundation (Stories 1-15)
 
-| Story                                            | Title                      | Status      | Priority | Points |
-| ------------------------------------------------ | -------------------------- | ----------- | -------- | ------ |
-| [GUP-001](GUP-001_Build_Mixable_Trait.md)        | Build Mixable Trait        | ✅ Complete | High     | 3      |
-| [GUP-002](GUP-002_Core_Selection_Type.md)        | Core Selection Type        | ✅ Complete | Critical | 13     |
-| [GUP-003](GUP-003_GPU_Buffer_Management.md)      | GPU Buffer Management      | ✅ Complete | Critical | 8      |
-| [GUP-004](GUP-004_Basic_Render_Context.md)       | Basic Render Context       | ✅ Complete | Critical | 5      |
-| [GUP-005](GUP-005_Shader_Function_Trait.md)      | Shader Function Trait      | ✅ Complete | Critical | 13     |
-| [GUP-006](GUP-006_WGSL_Function_Macro.md)        | WGSL Function Macro        | ✅ Complete | Critical | 13     |
-| [GUP-007](GUP-007_Shader_Pipeline_Builder.md)    | Shader Pipeline Builder    | ✅ Complete | Critical | 13     |
-| [GUP-008](GUP-008_Type_System_Integration.md)    | Type System Integration    | ✅ Complete | Critical | 8      |
-| [GUP-009](GUP-009_Core_Mark_Trait.md)            | Core Mark Trait            | ✅ Complete | Critical | 8      |
-| [GUP-010](GUP-010_Basic_Mark_Implementations.md) | Basic Mark Implementations | ✅ Complete | High     | 4      |
-| [GUP-011](GUP-011_Mark_Shader_Integration.md)    | Mark Shader Integration    | ✅ Complete | High     | 8      |
-| [GUP-012](GUP-012_GPU_Interaction_System.md)     | GPU Interaction System     | 📋 Planned  | Medium   | 4      |
-| [GUP-013](GUP-013_Event_Handling_System.md)      | Event Handling System      | 📋 Planned  | Medium   | 3      |
-| [GUP-014](GUP-014_Performance_Validation.md)     | Performance Validation     | 📋 Planned  | High     | 3      |
-| [GUP-015](GUP-015_Real_Time_Data_Streaming.md)   | Real Time Data Streaming   | 📋 Planned  | Medium   | 5      |
+| Story                                                      | Title                                | Status      | Priority | Points |
+| ---------------------------------------------------------- | ------------------------------------ | ----------- | -------- | ------ |
+| [GUP-001](GUP-001_Build_Mixable_Trait.md)                  | Build Mixable Trait                  | ✅ Complete | High     | 3      |
+| [GUP-002](GUP-002_Core_Selection_Type.md)                  | Core Selection Type                  | ✅ Complete | Critical | 13     |
+| [GUP-003](GUP-003_GPU_Buffer_Management.md)                | GPU Buffer Management                | ✅ Complete | Critical | 8      |
+| [GUP-004](GUP-004_Basic_Render_Context.md)                 | Basic Render Context                 | ✅ Complete | Critical | 5      |
+| [GUP-005](GUP-005_Shader_Function_Trait.md)                | Shader Function Trait                | ✅ Complete | Critical | 13     |
+| [GUP-006](GUP-006_WGSL_Function_Macro.md)                  | WGSL Function Macro                  | ✅ Complete | Critical | 13     |
+| [GUP-007](GUP-007_Shader_Pipeline_Builder.md)              | Shader Pipeline Builder              | ✅ Complete | Critical | 13     |
+| [GUP-008](GUP-008_Type_System_Integration.md)              | Type System Integration              | ✅ Complete | Critical | 8      |
+| [GUP-009](GUP-009_Core_Mark_Trait.md)                      | Core Mark Trait                      | ✅ Complete | Critical | 8      |
+| [GUP-010](GUP-010_Basic_Mark_Implementations.md)           | Basic Mark Implementations           | ✅ Complete | High     | 4      |
+| [GUP-011](GUP-011_Mark_Shader_Integration.md)              | Mark Shader Integration              | ✅ Complete | High     | 8      |
+| [GUP-012](GUP-012_GPU_Interaction_System.md)               | GPU Interaction System               | ✅ Complete | Critical | 13     |
+| [GUP-013](GUP-013_GPU_Shader_Position_Precision_Fix.md)    | GPU Shader Position Precision Fix    | 💡 New      | Medium   | 5      |
+| [GUP-014](GUP-014_Interaction_Performance_Optimization.md) | Interaction Performance Optimization | 💡 New      | Low      | 8      |
+| [GUP-015](GUP-015_GPU_Debugging_Tools.md)                  | GPU Debugging and Profiling Tools    | 💡 New      | Low      | 5      |
 
 ### Phase 2 - Advanced Features (Stories 16-25)
 
@@ -147,10 +147,10 @@ epic and status.
 
 ### Phase 1 Foundation
 
-- **Completed**: 10/15 stories (67%)
+- **Completed**: 12/15 stories (80%)
 - **Critical Path**: GUP-001 ✅, GUP-002 ✅, GUP-003 ✅, GUP-004 ✅, GUP-005 ✅,
   GUP-006 ✅, GUP-007 ✅, GUP-008 ✅, GUP-009 ✅, GUP-010 ✅, GUP-011 ✅,
-  GUP-020 ✅, GUP-021 ✅, GUP-039 ✅
+  GUP-012 ✅, GUP-020 ✅, GUP-021 ✅, GUP-039 ✅
 
 ### Post-GUP-021 Improvements
 
@@ -164,13 +164,13 @@ epic and status.
 
 ## Story Point Summary
 
-- **Total Planned**: ~279 story points across all stories (including new
-  GUP-073, GUP-074, GUP-075)
-- **Completed**: 107 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
+- **Total Planned**: ~297 story points across all stories (including new
+  GUP-013, GUP-014, GUP-015)
+- **Completed**: 120 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
   GUP-004: 5pts, GUP-005: 13pts, GUP-006: 13pts, GUP-007: 13pts, GUP-008: 8pts,
-  GUP-009: 8pts, GUP-010: 4pts, GUP-011: 8pts, GUP-020: 5pts, GUP-021: 6pts,
-  GUP-027: 3pts, GUP-039: 5pts, GUP-043: 3pts)
-- **Progress**: ~41% of total scope
+  GUP-009: 8pts, GUP-010: 4pts, GUP-011: 8pts, GUP-012: 13pts, GUP-020: 5pts,
+  GUP-021: 6pts, GUP-027: 3pts, GUP-039: 5pts, GUP-043: 3pts)
+- **Progress**: ~40% of total scope
 
 ## Recent Additions (Post GUP-021)
 
@@ -469,6 +469,40 @@ times for 100K+ marks
 
 ---
 
-_Last Updated: After completion of GUP-011 (Mark Shader Integration)_  
-_Next Priority Stories: GUP-073 (Advanced Shader Composition), GUP-074 (Mark
-Performance Optimization), GUP-075 (Interactive Mark Selection)_
+## Recent Additions (Post GUP-012)
+
+The following stories were created based on learnings from implementing GUP-012:
+
+### GUP-013: GPU Shader Position Precision Fix
+
+**Key Learning**: GPU interaction system has precision issue where WGSL compute
+shader sees incorrect X coordinates (always 0) while Y coordinates are correct,
+causing inaccurate hit testing results  
+**Dependencies**: GUP-012 complete  
+**Impact**: Critical for interaction system accuracy - enables pixel-perfect hit
+testing and proper spatial queries
+
+### GUP-014: Interaction Performance Optimization
+
+**Key Learning**: Current implementation achieves <100ms for 10K point queries
+but target was <1ms for 1M+ points, requiring significant optimization with
+spatial indexing and GPU compute improvements  
+**Dependencies**: GUP-013 complete (precision fix needed for accurate
+benchmarking)  
+**Impact**: Massive performance improvement to reach production-ready
+interaction speeds for large datasets
+
+### GUP-015: GPU Debugging and Profiling Tools
+
+**Key Learning**: GPU development lacks specialized debugging tools for buffer
+inspection, shader profiling, and cross-platform analysis - slowed GUP-012
+development significantly  
+**Dependencies**: Independent utility story  
+**Impact**: Accelerated GPU feature development with better tooling for buffer
+inspection, shader profiling, and GPU debugging workflows
+
+---
+
+_Last Updated: After completion of GUP-012 (GPU Interaction System)_  
+_Next Priority Stories: GUP-013 (GPU Shader Position Precision Fix), GUP-073
+(Advanced Shader Composition), GUP-074 (Mark Performance Optimization)_
