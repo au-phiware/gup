@@ -166,14 +166,14 @@ Gup is developed in the open with community input. See:
 Check out the `examples/` directory for complete working examples:
 
 ```bash
-# Run a basic scatter plot example
-cargo run --example basic_scatter
+# Run an interactive scatter plot demo with window
+cargo run --example scatter_plot_demo
 
-# Interactive bar chart with user input
-cargo run --example interactive_bar
+# Interactive visual blend mode demonstration
+cargo run --example visual_blend_demo
 
-# Real-time streaming data visualization
-cargo run --example real_time_stream
+# GPU buffer management demonstration
+cargo run --example buffer_demo
 ```
 
 For WebAssembly builds:
