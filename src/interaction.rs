@@ -814,7 +814,7 @@ impl InteractionSystem {
     /// Upload element data to GPU
     fn upload_element_data(&self, elements: &[ElementData]) -> GupResult<()> {
         if elements.len() > self.max_elements {
-            return Err(GupError::RenderError(format!(
+            return Err(GupError::render_error(format!(
                 "Too many elements: {} > {}",
                 elements.len(),
                 self.max_elements
@@ -830,7 +830,7 @@ impl InteractionSystem {
     /// Upload query data to GPU
     fn upload_query_data(&self, queries: &[GpuInteractionQuery]) -> GupResult<()> {
         if queries.len() > self.max_queries {
-            return Err(GupError::RenderError(format!(
+            return Err(GupError::render_error(format!(
                 "Too many queries: {} > {}",
                 queries.len(),
                 self.max_queries
@@ -954,9 +954,9 @@ impl InteractionSystem {
         receiver
             .await
             .map_err(|_| {
-                GupError::RenderError("Failed to receive buffer mapping result".to_string())
+                GupError::render_error("Failed to receive buffer mapping result".to_string())
             })?
-            .map_err(|e| GupError::RenderError(format!("Buffer mapping failed: {e:?}")))?;
+            .map_err(|e| GupError::render_error(format!("Buffer mapping failed: {e:?}")))?;
 
         let data = buffer_slice.get_mapped_range();
         let results: &[InteractionResult] = bytemuck::cast_slice(&data);

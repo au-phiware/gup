@@ -125,7 +125,7 @@ impl Mixable for Heatmap {
 
     fn render(&mut self, _context: &mut RenderContext) -> GupResult<()> {
         if self.should_fail {
-            return Err(GupError::RenderError("Heatmap render failure".to_string()));
+            return Err(GupError::render_error("Heatmap render failure".to_string()));
         }
         println!("Rendering heatmap {}x{}", self.width, self.height);
         Ok(())
@@ -243,9 +243,9 @@ async fn test_composition_error_messages() {
     let mut context = RenderContext::new().await.unwrap();
 
     match composed.render(&mut context) {
-        Err(GupError::CompositionError(msg)) => {
-            assert!(msg.contains("Second component is invalid"));
-            assert!(msg.contains("Heatmap"));
+        Err(GupError::CompositionError { message }) => {
+            assert!(message.contains("Second component is invalid"));
+            assert!(message.contains("Heatmap"));
         }
         _ => panic!("Expected CompositionError with descriptive message"),
     }

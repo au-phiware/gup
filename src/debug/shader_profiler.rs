@@ -151,7 +151,7 @@ impl ShaderProfiler {
     /// Start a profiling session for continuous monitoring
     pub fn start_profiling_session(&mut self, session_name: &str) -> GupResult<()> {
         if self.current_session.is_some() {
-            return Err(GupError::InvalidOperation(
+            return Err(GupError::invalid_operation(
                 "Profiling session already active".to_string(),
             ));
         }
@@ -169,10 +169,9 @@ impl ShaderProfiler {
 
     /// End the current profiling session and return results
     pub fn end_profiling_session(&mut self) -> GupResult<ProfilingSessionResults> {
-        let session = self
-            .current_session
-            .take()
-            .ok_or_else(|| GupError::InvalidOperation("No active profiling session".to_string()))?;
+        let session = self.current_session.take().ok_or_else(|| {
+            GupError::invalid_operation("No active profiling session".to_string())
+        })?;
 
         let total_duration = session.start_time.elapsed();
 
@@ -197,10 +196,9 @@ impl ShaderProfiler {
 
     /// Record execution stats in current profiling session
     pub fn record_execution(&mut self, stats: ShaderExecutionStats) -> GupResult<()> {
-        let session = self
-            .current_session
-            .as_mut()
-            .ok_or_else(|| GupError::InvalidOperation("No active profiling session".to_string()))?;
+        let session = self.current_session.as_mut().ok_or_else(|| {
+            GupError::invalid_operation("No active profiling session".to_string())
+        })?;
 
         session.total_gpu_time += stats.duration;
         session.executions.push(stats);

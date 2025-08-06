@@ -121,7 +121,7 @@ where
     /// Upload data to a specific range in the buffer.
     pub fn upload_range(&mut self, queue: &Queue, data: &[T], offset: usize) -> GupResult<()> {
         if offset + data.len() > self.capacity {
-            return Err(GupError::BufferError(format!(
+            return Err(GupError::buffer_error(format!(
                 "Range upload exceeds buffer capacity: offset={}, data_len={}, capacity={}",
                 offset,
                 data.len(),
@@ -149,7 +149,7 @@ where
         // 3. Map the staging buffer for reading
         // 4. Read the data and return it
 
-        Err(GupError::BufferError(
+        Err(GupError::buffer_error(
             "Buffer download not yet implemented - use for upload/rendering only".to_string(),
         ))
     }

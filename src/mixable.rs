@@ -335,13 +335,13 @@ impl<A: Mixable, B: Mixable> Mixable for ComposedVisualization<A, B> {
     fn render(&mut self, context: &mut RenderContext) -> GupResult<()> {
         // Validate both components before rendering
         if !self.first.is_valid() {
-            return Err(GupError::CompositionError(format!(
+            return Err(GupError::composition_error(format!(
                 "First component is invalid: {}",
                 self.first.description()
             )));
         }
         if !self.second.is_valid() {
-            return Err(GupError::CompositionError(format!(
+            return Err(GupError::composition_error(format!(
                 "Second component is invalid: {}",
                 self.second.description()
             )));
@@ -398,7 +398,7 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
 
         // Check if components can be merged (same data types, compatible formats)
         if !self.can_merge_components() {
-            return Err(GupError::CompositionError(
+            return Err(GupError::composition_error(
                 "Components cannot be merged - incompatible data types".to_string(),
             ));
         }
@@ -435,7 +435,7 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
     fn render_custom(&mut self, context: &mut RenderContext) -> GupResult<()> {
         if let Some(custom_behavior) = &self.custom_behavior {
             if !custom_behavior.can_compose(&self.first, &self.second) {
-                return Err(GupError::CompositionError(format!(
+                return Err(GupError::composition_error(format!(
                     "Custom behavior '{}' cannot compose these component types",
                     custom_behavior.description()
                 )));
@@ -443,7 +443,7 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
 
             custom_behavior.compose(&mut self.first, &mut self.second, context)
         } else {
-            Err(GupError::CompositionError(
+            Err(GupError::composition_error(
                 "Custom composition mode requires custom behavior".to_string(),
             ))
         }
@@ -734,7 +734,7 @@ mod tests {
 
         fn render(&mut self, _context: &mut RenderContext) -> GupResult<()> {
             if self.should_fail {
-                Err(GupError::RenderError(format!(
+                Err(GupError::render_error(format!(
                     "Intentional failure from {}",
                     self.name
                 )))
@@ -815,8 +815,8 @@ mod tests {
         let result = composed.render(&mut context);
 
         assert!(result.is_err());
-        if let Err(GupError::CompositionError(msg)) = result {
-            assert!(msg.contains("Second component is invalid"));
+        if let Err(GupError::CompositionError { message }) = result {
+            assert!(message.contains("Second component is invalid"));
         } else {
             panic!("Expected CompositionError");
         }
@@ -1002,8 +1002,8 @@ mod tests {
         let result = composed.render(&mut context);
 
         assert!(result.is_err());
-        if let Err(GupError::CompositionError(msg)) = result {
-            assert!(msg.contains("Custom composition mode requires custom behavior"));
+        if let Err(GupError::CompositionError { message }) = result {
+            assert!(message.contains("Custom composition mode requires custom behavior"));
         } else {
             panic!("Expected CompositionError for custom mode without behavior");
         }

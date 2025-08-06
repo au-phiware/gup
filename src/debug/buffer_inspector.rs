@@ -42,11 +42,11 @@ impl GpuBufferInspector {
     {
         let data = self.read_buffer::<T>(buffer).await?;
         let json = serde_json::to_string_pretty(&data).map_err(|e| {
-            GupError::ValidationError(format!("Failed to serialize buffer data: {e}"))
+            GupError::validation_error(format!("Failed to serialize buffer data: {e}"))
         })?;
 
         std::fs::write(output_path, json)
-            .map_err(|e| GupError::ResourceError(format!("Failed to write buffer dump: {e}")))?;
+            .map_err(|e| GupError::resource_error(format!("Failed to write buffer dump: {e}")))?;
 
         Ok(())
     }
@@ -59,17 +59,17 @@ impl GpuBufferInspector {
         let data = self.read_buffer::<T>(buffer).await?;
 
         let mut writer = csv::Writer::from_path(output_path)
-            .map_err(|e| GupError::ResourceError(format!("Failed to create CSV writer: {e}")))?;
+            .map_err(|e| GupError::resource_error(format!("Failed to create CSV writer: {e}")))?;
 
         for item in &data {
             writer
                 .serialize(item)
-                .map_err(|e| GupError::ValidationError(format!("Failed to write CSV row: {e}")))?;
+                .map_err(|e| GupError::validation_error(format!("Failed to write CSV row: {e}")))?;
         }
 
         writer
             .flush()
-            .map_err(|e| GupError::ResourceError(format!("Failed to flush CSV writer: {e}")))?;
+            .map_err(|e| GupError::resource_error(format!("Failed to flush CSV writer: {e}")))?;
 
         Ok(())
     }
@@ -83,7 +83,7 @@ impl GpuBufferInspector {
         let element_size = std::mem::size_of::<T>() as u64;
 
         if buffer_size % element_size != 0 {
-            return Err(GupError::ValidationError(format!(
+            return Err(GupError::validation_error(format!(
                 "Buffer size {buffer_size} is not a multiple of element size {element_size}"
             )));
         }
@@ -135,9 +135,9 @@ impl GpuBufferInspector {
         receiver
             .await
             .map_err(|_| {
-                GupError::ResourceError("Failed to receive buffer mapping result".to_string())
+                GupError::resource_error("Failed to receive buffer mapping result".to_string())
             })?
-            .map_err(|e| GupError::ResourceError(format!("Buffer mapping failed: {e:?}")))?;
+            .map_err(|e| GupError::resource_error(format!("Buffer mapping failed: {e:?}")))?;
 
         let data = buffer_slice.get_mapped_range();
         let typed_data: &[T] = bytemuck::cast_slice(&data);
@@ -147,7 +147,7 @@ impl GpuBufferInspector {
         staging_buffer.unmap();
 
         if result.len() != element_count {
-            return Err(GupError::ValidationError(format!(
+            return Err(GupError::validation_error(format!(
                 "Read {} elements, expected {}",
                 result.len(),
                 element_count

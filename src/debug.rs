@@ -273,11 +273,11 @@ impl GpuDebugContext {
         };
 
         let json = serde_json::to_string_pretty(&report).map_err(|e| {
-            GupError::ValidationError(format!("Failed to serialize debug report: {e}"))
+            GupError::validation_error(format!("Failed to serialize debug report: {e}"))
         })?;
 
         std::fs::write(output_path, json)
-            .map_err(|e| GupError::ResourceError(format!("Failed to write debug report: {e}")))?;
+            .map_err(|e| GupError::resource_error(format!("Failed to write debug report: {e}")))?;
 
         Ok(())
     }

@@ -86,7 +86,7 @@ impl RenderContext {
             })
             .await
             .map_err(|e| {
-                GupError::WebGpuError(format!("Failed to find suitable GPU adapter: {e}"))
+                GupError::webgpu_error(format!("Failed to find suitable GPU adapter: {e}"))
             })?;
 
         let (device, queue) = adapter
@@ -98,7 +98,7 @@ impl RenderContext {
                 trace: Default::default(),
             })
             .await
-            .map_err(|e| GupError::WebGpuError(format!("Failed to create device: {e}")))?;
+            .map_err(|e| GupError::webgpu_error(format!("Failed to create device: {e}")))?;
 
         // Create global alpha bind group layout
         let global_alpha_bind_group_layout =
@@ -147,7 +147,7 @@ impl RenderContext {
         let surface = self
             .instance
             .create_surface(window)
-            .map_err(|e| GupError::WebGpuError(format!("Failed to create surface: {e}")))?;
+            .map_err(|e| GupError::webgpu_error(format!("Failed to create surface: {e}")))?;
 
         let surface_caps = surface.get_capabilities(&self.adapter);
         let surface_format = surface_caps
@@ -210,7 +210,7 @@ impl RenderContext {
 
         let (view, present_after) = if let Some(surface) = &self.surface {
             let output = surface.get_current_texture().map_err(|e| {
-                GupError::WebGpuError(format!("Failed to acquire surface texture: {e}"))
+                GupError::webgpu_error(format!("Failed to acquire surface texture: {e}"))
             })?;
             let view = output
                 .texture

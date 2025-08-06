@@ -183,7 +183,7 @@ pub trait Mark: Clone + Send + Sync + 'static {
             "position" => Ok("vec2<f32>"),
             "color" => Ok("vec4<f32>"),
             "size" | "radius" => Ok("f32"),
-            _ => Err(crate::error::GupError::ValidationError(format!(
+            _ => Err(crate::error::GupError::validation_error(format!(
                 "Unknown attribute: {attribute_name}"
             ))),
         }
@@ -545,7 +545,7 @@ impl MarkRegistry {
 
         // Create new pipeline
         let mark_info = self.marks.get(&type_id).ok_or_else(|| {
-            crate::error::GupError::RenderError(format!(
+            crate::error::GupError::render_error(format!(
                 "Mark type {} not registered",
                 std::any::type_name::<M>()
             ))
@@ -593,7 +593,7 @@ impl MarkRegistry {
         uniform_buffers: &[&wgpu::Buffer],
     ) -> GupResult<wgpu::BindGroup> {
         let mark_info = self.get_mark_info::<M>().ok_or_else(|| {
-            crate::error::GupError::RenderError("Mark not registered".to_string())
+            crate::error::GupError::render_error("Mark not registered".to_string())
         })?;
 
         // Get the mark info implementation to access layout creation
@@ -606,7 +606,7 @@ impl MarkRegistry {
         {
             mark_info_impl.create_bind_group_layout(device)?
         } else {
-            return Err(crate::error::GupError::RenderError(
+            return Err(crate::error::GupError::render_error(
                 "Failed to downcast mark info".to_string(),
             ));
         };
@@ -637,7 +637,7 @@ impl MarkRegistry {
     pub fn get_bind_group_layout<M: Mark>(&self, device: &Device) -> GupResult<BindGroupLayout> {
         let type_id = TypeId::of::<M>();
         let mark_info_impl = self.marks.get(&type_id).ok_or_else(|| {
-            crate::error::GupError::RenderError(format!(
+            crate::error::GupError::render_error(format!(
                 "Mark type {} not registered",
                 std::any::type_name::<M>()
             ))
@@ -646,7 +646,7 @@ impl MarkRegistry {
         if let Some(mark_info_impl) = mark_info_impl.as_any().downcast_ref::<MarkInfoImpl<M>>() {
             mark_info_impl.create_bind_group_layout(device)
         } else {
-            Err(crate::error::GupError::RenderError(
+            Err(crate::error::GupError::render_error(
                 "Failed to downcast mark info".to_string(),
             ))
         }

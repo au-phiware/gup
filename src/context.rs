@@ -239,7 +239,7 @@ impl GupContext {
     {
         let mut context = Self::new().await?;
         Arc::get_mut(&mut context)
-            .ok_or_else(|| GupError::ResourceError("Context already shared".to_string()))?
+            .ok_or_else(|| GupError::resource_error("Context already shared".to_string()))?
             .init_surface(window)?;
         Ok(context)
     }
@@ -264,7 +264,7 @@ impl GupContext {
             })
             .await
             .map_err(|e| {
-                GupError::WebGpuError(format!("Failed to find suitable GPU adapter: {e}"))
+                GupError::webgpu_error(format!("Failed to find suitable GPU adapter: {e}"))
             })?;
 
         let (device, queue) = adapter
@@ -276,7 +276,7 @@ impl GupContext {
                 trace: Default::default(),
             })
             .await
-            .map_err(|e| GupError::WebGpuError(format!("Failed to create device: {e}")))?;
+            .map_err(|e| GupError::webgpu_error(format!("Failed to create device: {e}")))?;
 
         let device = Arc::new(device);
         let queue = Arc::new(queue);
@@ -310,7 +310,7 @@ impl GupContext {
         let surface = self
             ._instance
             .create_surface(window)
-            .map_err(|e| GupError::WebGpuError(format!("Failed to create surface: {e}")))?;
+            .map_err(|e| GupError::webgpu_error(format!("Failed to create surface: {e}")))?;
 
         let surface_caps = surface.get_capabilities(&self._adapter);
         let surface_format = surface_caps
@@ -351,7 +351,7 @@ impl GupContext {
             + 'static,
     {
         if self.surfaces.contains_key(&id) {
-            return Err(GupError::ResourceError(format!(
+            return Err(GupError::resource_error(format!(
                 "Surface with ID {id} already exists"
             )));
         }
@@ -359,7 +359,7 @@ impl GupContext {
         let surface = self
             ._instance
             .create_surface(window)
-            .map_err(|e| GupError::WebGpuError(format!("Failed to create surface: {e}")))?;
+            .map_err(|e| GupError::webgpu_error(format!("Failed to create surface: {e}")))?;
 
         let surface_caps = surface.get_capabilities(&self._adapter);
         let surface_format = self.negotiate_surface_format(&surface_caps)?;
@@ -391,7 +391,7 @@ impl GupContext {
     /// Remove a surface from the context.
     pub fn remove_surface(&mut self, id: SurfaceId) -> GupResult<()> {
         if !self.surfaces.contains_key(&id) {
-            return Err(GupError::ResourceError(format!(
+            return Err(GupError::resource_error(format!(
                 "Surface with ID {id} does not exist"
             )));
         }
@@ -411,7 +411,7 @@ impl GupContext {
         let surface = self
             .surfaces
             .get_mut(&id)
-            .ok_or_else(|| GupError::ResourceError(format!("Surface with ID {id} not found")))?;
+            .ok_or_else(|| GupError::resource_error(format!("Surface with ID {id} not found")))?;
 
         surface.resize(&self.device, size.width, size.height);
         Ok(())
@@ -422,7 +422,7 @@ impl GupContext {
         let surface = self
             .surfaces
             .get_mut(&id)
-            .ok_or_else(|| GupError::ResourceError(format!("Surface with ID {id} not found")))?;
+            .ok_or_else(|| GupError::resource_error(format!("Surface with ID {id} not found")))?;
 
         surface.set_fullscreen(&self.device, fullscreen);
         Ok(())
@@ -437,7 +437,7 @@ impl GupContext {
         let surface = self
             .surfaces
             .get_mut(&id)
-            .ok_or_else(|| GupError::ResourceError(format!("Surface with ID {id} not found")))?;
+            .ok_or_else(|| GupError::resource_error(format!("Surface with ID {id} not found")))?;
 
         surface.update_scale_factor(&self.device, scale_factor);
         Ok(())
@@ -463,7 +463,7 @@ impl GupContext {
         caps.formats
             .first()
             .copied()
-            .ok_or_else(|| GupError::WebGpuError("No supported surface formats found".to_string()))
+            .ok_or_else(|| GupError::webgpu_error("No supported surface formats found".to_string()))
     }
 
     /// Select appropriate present mode.
@@ -495,10 +495,10 @@ impl GupContext {
         let surface = self
             .surfaces
             .get(&id)
-            .ok_or_else(|| GupError::ResourceError(format!("Surface with ID {id} not found")))?;
+            .ok_or_else(|| GupError::resource_error(format!("Surface with ID {id} not found")))?;
 
         let output = surface.surface.get_current_texture().map_err(|e| {
-            GupError::WebGpuError(format!("Failed to acquire surface texture: {e}"))
+            GupError::webgpu_error(format!("Failed to acquire surface texture: {e}"))
         })?;
         let view = output
             .texture
@@ -527,9 +527,9 @@ impl GupContext {
             let surface = self
                 .surfaces
                 .get(&primary_id)
-                .ok_or_else(|| GupError::ResourceError("Primary surface not found".to_string()))?;
+                .ok_or_else(|| GupError::resource_error("Primary surface not found".to_string()))?;
             let output = surface.surface.get_current_texture().map_err(|e| {
-                GupError::WebGpuError(format!("Failed to acquire surface texture: {e}"))
+                GupError::webgpu_error(format!("Failed to acquire surface texture: {e}"))
             })?;
             let view = output
                 .texture
@@ -635,7 +635,7 @@ impl GupContext {
     /// Set primary surface ID.
     pub fn set_primary_surface(&mut self, id: SurfaceId) -> GupResult<()> {
         if !self.surfaces.contains_key(&id) {
-            return Err(GupError::ResourceError(format!(
+            return Err(GupError::resource_error(format!(
                 "Surface with ID {id} does not exist"
             )));
         }

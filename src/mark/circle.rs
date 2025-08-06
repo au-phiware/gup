@@ -349,7 +349,7 @@ impl Mark for Circle {
             "center" | "position" => Ok("vec2<f32>"),
             "radius" | "size" | "stroke_width" => Ok("f32"),
             "fill_color" | "color" | "stroke_color" => Ok("vec4<f32>"),
-            _ => Err(crate::error::GupError::ValidationError(format!(
+            _ => Err(crate::error::GupError::validation_error(format!(
                 "Unknown Circle attribute: {attribute_name}"
             ))),
         }

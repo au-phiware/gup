@@ -132,7 +132,7 @@ impl MarkRenderer {
         if let Some(ref mut index_buffer) = self.index_buffer {
             index_buffer.upload(device, queue, indices)
         } else {
-            Err(crate::error::GupError::RenderError(
+            Err(crate::error::GupError::render_error(
                 "Index buffer not available".to_string(),
             ))
         }
@@ -165,7 +165,7 @@ impl MarkRenderer {
                     .set_index_buffer(index_buffer.buffer().slice(..), wgpu::IndexFormat::Uint32);
                 render_pass.draw_indexed(0..index_count as u32, 0, 0..instance_count);
             } else {
-                return Err(crate::error::GupError::RenderError(
+                return Err(crate::error::GupError::render_error(
                     "Mark requires indexed rendering but no index buffer available".to_string(),
                 ));
             }
