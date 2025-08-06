@@ -29,6 +29,7 @@
 
 pub mod buffer;
 pub mod context;
+pub mod debug;
 pub mod error;
 pub mod examples;
 pub mod interaction;
@@ -41,6 +42,7 @@ pub mod shader_pipeline;
 
 pub use buffer::*;
 pub use context::*;
+pub use debug::*;
 pub use error::*;
 pub use examples::*;
 // Export interaction system components (excluding ambiguous types)

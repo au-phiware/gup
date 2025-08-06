@@ -23,7 +23,7 @@ epic and status.
 | [GUP-012](GUP-012_GPU_Interaction_System.md)               | GPU Interaction System               | ✅ Complete | Critical | 13     |
 | [GUP-013](GUP-013_GPU_Shader_Position_Precision_Fix.md)    | GPU Shader Position Precision Fix    | ✅ Complete | Medium   | 5      |
 | [GUP-014](GUP-014_Interaction_Performance_Optimization.md) | Interaction Performance Optimization | ✅ Complete | Low      | 8      |
-| [GUP-015](GUP-015_GPU_Debugging_Tools.md)                  | GPU Debugging and Profiling Tools    | 💡 New      | Low      | 5      |
+| [GUP-015](GUP-015_GPU_Debugging_Tools.md)                  | GPU Debugging and Profiling Tools    | ✅ Complete | Low      | 5      |
 
 ### Phase 2 - Advanced Features (Stories 16-25)
 
@@ -84,6 +84,14 @@ epic and status.
 | [GUP-032](GUP-032_Advanced_Mark_System.md)               | Advanced Mark System with Custom Shapes  | 💡 New | Medium   | 8      |
 | [GUP-033](GUP-033_Shader_Function_Composition_Engine.md) | Shader Function Composition Engine       | 💡 New | Medium   | 10     |
 | [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md)         | GPU Memory Profiling and Debugging Tools | 💡 New | Low      | 5      |
+
+### Post GUP-015 Stories - Advanced Debug Infrastructure (Stories 80+)
+
+| Story                                                    | Title                              | Status | Priority | Points |
+| -------------------------------------------------------- | ---------------------------------- | ------ | -------- | ------ |
+| [GUP-080](GUP-080_WebGPU_Timestamp_Query_Integration.md) | WebGPU Timestamp Query Integration | 💡 New | Medium   | 4      |
+| [GUP-081](GUP-081_Advanced_Debug_Data_Visualization.md)  | Advanced Debug Data Visualization  | 💡 New | Low      | 5      |
+| [GUP-082](GUP-082_Debug_Tool_Integration_CI_CD.md)       | Debug Tool Integration with CI/CD  | 💡 New | Medium   | 3      |
 
 ### Post GUP-003 Stories - Buffer System Enhancement (Stories 35+)
 
@@ -147,10 +155,11 @@ epic and status.
 
 ### Phase 1 Foundation
 
-- **Completed**: 14/15 stories (93%)
+- **Completed**: 15/15 stories (100%)
 - **Critical Path**: GUP-001 ✅, GUP-002 ✅, GUP-003 ✅, GUP-004 ✅, GUP-005 ✅,
   GUP-006 ✅, GUP-007 ✅, GUP-008 ✅, GUP-009 ✅, GUP-010 ✅, GUP-011 ✅,
-  GUP-012 ✅, GUP-013 ✅, GUP-014 ✅, GUP-020 ✅, GUP-021 ✅, GUP-039 ✅
+  GUP-012 ✅, GUP-013 ✅, GUP-014 ✅, GUP-015 ✅, GUP-020 ✅, GUP-021 ✅,
+  GUP-039 ✅
 
 ### Post-GUP-021 Improvements
 
@@ -164,14 +173,14 @@ epic and status.
 
 ## Story Point Summary
 
-- **Total Planned**: ~318 story points across all stories (including new GUP-014
+- **Total Planned**: ~335 story points across all stories (including new GUP-015
   follow-up stories)
-- **Completed**: 133 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
+- **Completed**: 138 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
   GUP-004: 5pts, GUP-005: 13pts, GUP-006: 13pts, GUP-007: 13pts, GUP-008: 8pts,
   GUP-009: 8pts, GUP-010: 4pts, GUP-011: 8pts, GUP-012: 13pts, GUP-013: 5pts,
-  GUP-014: 8pts, GUP-020: 5pts, GUP-021: 6pts, GUP-027: 3pts, GUP-039: 5pts,
-  GUP-043: 3pts)
-- **Progress**: ~42% of total scope
+  GUP-014: 8pts, GUP-015: 5pts, GUP-020: 5pts, GUP-021: 6pts, GUP-027: 3pts,
+  GUP-039: 5pts, GUP-043: 3pts)
+- **Progress**: ~41% of total scope
 
 ## Recent Additions (Post GUP-021)
 
@@ -544,7 +553,37 @@ and reduce allocation overhead
 
 ---
 
-_Last Updated: After completion of GUP-014 (Interaction Performance
-Optimization) - 2025-08-05_  
+## Recent Additions (Post GUP-015)
+
+The following stories were created based on learnings from implementing GUP-015:
+
+### GUP-080: WebGPU Timestamp Query Integration
+
+**Key Learning**: Current shader profiling uses CPU timing with
+`Instant::now()` - WebGPU timestamp queries would provide accurate GPU execution
+timing when supported  
+**Dependencies**: GUP-015 complete (debug infrastructure)  
+**Impact**: Hardware-accurate GPU profiling with microsecond precision instead
+of CPU timing approximations
+
+### GUP-081: Advanced Debug Data Visualization
+
+**Key Learning**: JSON/CSV export works well but interactive visualization of
+GPU buffer contents would accelerate debugging  
+**Dependencies**: GUP-015 complete (export functionality)  
+**Impact**: Real-time visualization of GPU buffer contents, memory layout
+issues, and performance trends
+
+### GUP-082: Debug Tool Integration with CI/CD Pipeline
+
+**Key Learning**: Performance regression detection implemented but not
+integrated with automated testing infrastructure  
+**Dependencies**: GUP-015 complete (regression detection)  
+**Impact**: Automated performance regression detection in CI/CD with performance
+trend tracking
+
+---
+
+_Last Updated: After completion of GUP-015 (GPU Debugging Tools) - 2025-08-06_  
 _Next Priority Stories: GUP-076 (Spatial Index Bind Group Layout Fix), GUP-073
 (Advanced Shader Composition), GUP-074 (Mark Performance Optimization)_

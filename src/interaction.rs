@@ -263,7 +263,7 @@ impl GpuInteractionQuery {
 
 /// Element data for GPU hit testing
 #[repr(C)]
-#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable, serde::Serialize)]
 pub struct ElementData {
     /// Center position of the element
     pub position: [f32; 2],

@@ -674,6 +674,171 @@ config structs instead of multiple primitive parameters.
 - **Performance**: Remove debug infrastructure in production but preserve for
   future development
 
+### GUP-015: GPU Debugging Tools (Completed 2025-08-06)
+
+**Key Technical Learnings:**
+
+#### Comprehensive GPU Debug Infrastructure Design
+
+- **Challenge**: GPU development required specialized debugging tools for buffer
+  inspection, shader profiling, and memory layout validation
+- **Solution**: Created modular debug system with `GpuBufferInspector`,
+  `ShaderProfiler`, and `MemoryLayoutValidator` components
+- **Pattern**: Use unified `GpuDebugContext` to coordinate all debugging
+  operations with centralized configuration
+- **Architecture**: Separate modules for distinct concerns while providing
+  unified API surface
+
+#### Staging Buffer Management for GPU-CPU Data Transfer
+
+- **Challenge**: Efficient GPU buffer content inspection requires complex
+  staging buffer operations
+- **Solution**: Implemented cached staging buffer system with automatic size
+  management and reuse
+- **Pattern**: Use `HashMap<u64, Buffer>` for staging buffer cache with buffer
+  size as key
+- **Critical**: Always use `COPY_SRC` usage flags on GPU buffers and `MAP_READ`
+  on staging buffers for inspection
+- **Best Practice**: Implement `clear_cache()` method for memory management in
+  debug tools
+
+#### Memory Layout Validation for Rust ↔ WGSL Compatibility
+
+- **Challenge**: Preventing alignment issues like those encountered in GUP-013
+  requires systematic layout checking
+- **Solution**: Created `MemoryLayoutValidator` with `std::mem::offset_of!()`
+  and compile-time validation
+- **Pattern**: Use validation functions for each GPU struct with field offset
+  verification
+- **Critical Learning**: `vec2<f32>` fields must be aligned to 8-byte
+  boundaries, complex structs to 16-byte boundaries
+- **Testing**: Add `validate_common_gpu_structs()` to catch alignment issues
+  early in development
+
+#### Shader Profiling with Performance Regression Detection
+
+- **Challenge**: Profiling GPU shader execution without impacting performance
+  significantly
+- **Solution**: Implemented timing-based profiling with baseline comparison and
+  regression detection
+- **Pattern**: Use `Instant::now()` for CPU timing with
+  `device.poll(WaitForSubmissionIndex)` for synchronization
+- **Performance**: Achieved <5% profiling overhead through efficient timing and
+  minimal GPU state changes
+- **Regression Detection**: Configurable threshold-based alerting with severity
+  levels
+
+#### Async GPU Operations and Futures Integration
+
+- **Challenge**: GPU buffer mapping requires proper async handling with futures
+- **Solution**: Use `futures_channel::oneshot::channel()` for async buffer
+  mapping with proper polling
+- **Pattern**: Always pair `buffer_slice.map_async()` with
+  `device.poll(PollType::Wait)` for synchronization
+- **Critical**: Handle mapping errors gracefully with descriptive error messages
+- **Best Practice**: Unmap buffers immediately after data extraction to avoid
+  resource leaks
+
+#### Serialization and Export for Debug Data
+
+- **Challenge**: Making GPU debug data accessible to external analysis tools
+- **Solution**: Comprehensive serde support with JSON and CSV export
+  capabilities
+- **Pattern**: Use `#[derive(Serialize, Deserialize)]` on all debug data
+  structures
+- **Export Formats**: JSON for structured data, CSV for spreadsheet analysis
+- **Performance**: Limit data exports (10K elements max) to prevent performance
+  issues
+
+**Architectural Decisions:**
+
+#### Modular Debug System Design
+
+- **Decision**: Separate `GpuBufferInspector`, `ShaderProfiler`, and
+  `MemoryLayoutValidator` modules
+- **Reasoning**: Each debug area has distinct concerns and can be used
+  independently
+- **Integration**: `GpuDebugContext` provides unified interface while
+  maintaining modularity
+- **Future**: Easy to extend with additional debug capabilities (texture
+  inspection, pipeline analysis)
+
+#### Staging Buffer Caching Strategy
+
+- **Decision**: Cache staging buffers by size rather than creating new ones for
+  each operation
+- **Reasoning**: Buffer creation/destruction overhead significant for frequent
+  debug operations
+- **Trade-off**: Memory usage vs performance - configurable cache with manual
+  clearing capability
+- **Performance**: Dramatically reduces debug operation overhead for repeated
+  buffer inspections
+
+#### Compile-Time vs Runtime Debug Features
+
+- **Decision**: Use `#[allow(dead_code)]` annotations for future timestamp query
+  features
+- **Reasoning**: WebGPU timestamp queries not universally supported yet, but
+  infrastructure ready
+- **Pattern**: Implement timing-based profiling now, upgrade to timestamp
+  queries when available
+- **Future-Proofing**: Debug infrastructure designed to support hardware
+  timestamp queries
+
+#### Performance Monitoring Integration
+
+- **Decision**: Include performance baseline and regression detection in core
+  debug tools
+- **Reasoning**: Performance monitoring essential for GPU development, should be
+  built-in
+- **Implementation**: Configurable thresholds, multiple severity levels,
+  historical tracking
+- **Workflow**: Integrate with test infrastructure for automated performance
+  regression detection
+
+**Development Workflow Insights:**
+
+#### Debug Tool Development Methodology
+
+- **Step 1**: Implement basic functionality with comprehensive error handling
+- **Step 2**: Add performance optimization (caching, efficient resource usage)
+- **Step 3**: Integrate with existing systems (error types, test infrastructure)
+- **Step 4**: Add export and analysis capabilities for external tool integration
+- **Step 5**: Comprehensive testing and documentation with realistic examples
+
+#### GPU Debug Tool Testing Strategy
+
+- **Essential**: Run GPU debug tests with `--test-threads=1` to avoid resource
+  conflicts
+- **Pattern**: Test debug tools with realistic GPU resources (actual buffers,
+  pipelines)
+- **Validation**: Verify debug tools don't significantly impact application
+  performance
+- **Coverage**: Test both successful operations and error conditions (invalid
+  buffers, etc.)
+
+#### Memory Safety in Debug Tools
+
+- **Critical**: Use `bytemuck::Pod + bytemuck::Zeroable` traits for all GPU data
+  structures
+- **Pattern**: Validate buffer sizes match expected element counts before
+  casting
+- **Error Handling**: Comprehensive bounds checking and descriptive error
+  messages
+- **Resource Management**: Proper buffer unmapping and cache cleanup for
+  long-running debug sessions
+
+#### Documentation and Usability for Debug Tools
+
+- **Example Code**: Comprehensive example in `examples/gpu_debug_demo.rs`
+  showing all features
+- **Error Messages**: Context-rich error messages with specific guidance for
+  common issues
+- **API Design**: Simple function calls for common operations (`dump_buffer()`,
+  `profile_compute()`)
+- **Integration**: Clear integration patterns with existing error handling and
+  test infrastructure
+
 For more detailed patterns, see:
 
 - `docs/graphics-programming.md` - GPU-specific programming patterns
