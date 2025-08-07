@@ -7,31 +7,30 @@ epic and status.
 
 ### Phase 1 - Foundation (Stories 1-15)
 
-| Story                                                      | Title                                   | Status      | Priority | Points |
-| ---------------------------------------------------------- | --------------------------------------- | ----------- | -------- | ------ |
-| [GUP-001](GUP-001_Build_Mixable_Trait.md)                  | Build Mixable Trait                     | ✅ Complete | High     | 3      |
-| [GUP-002](GUP-002_Core_Selection_Type.md)                  | Core Selection Type                     | ✅ Complete | Critical | 13     |
-| [GUP-003](GUP-003_GPU_Buffer_Management.md)                | GPU Buffer Management                   | ✅ Complete | Critical | 8      |
-| [GUP-004](GUP-004_Basic_Render_Context.md)                 | Basic Render Context                    | ✅ Complete | Critical | 5      |
-| [GUP-005](GUP-005_Shader_Function_Trait.md)                | Shader Function Trait                   | ✅ Complete | Critical | 13     |
-| [GUP-006](GUP-006_WGSL_Function_Macro.md)                  | WGSL Function Macro                     | ✅ Complete | Critical | 13     |
-| [GUP-007](GUP-007_Shader_Pipeline_Builder.md)              | Shader Pipeline Builder                 | ✅ Complete | Critical | 13     |
-| [GUP-008](GUP-008_Type_System_Integration.md)              | Type System Integration                 | ✅ Complete | Critical | 8      |
-| [GUP-009](GUP-009_Core_Mark_Trait.md)                      | Core Mark Trait                         | ✅ Complete | Critical | 8      |
-| [GUP-010](GUP-010_Basic_Mark_Implementations.md)           | Basic Mark Implementations              | ✅ Complete | High     | 4      |
-| [GUP-011](GUP-011_Mark_Shader_Integration.md)              | Mark Shader Integration                 | ✅ Complete | High     | 8      |
-| [GUP-012](GUP-012_GPU_Interaction_System.md)               | GPU Interaction System                  | ✅ Complete | Critical | 13     |
-| [GUP-013](GUP-013_GPU_Shader_Position_Precision_Fix.md)    | GPU Shader Position Precision Fix       | ✅ Complete | Medium   | 5      |
-| [GUP-014](GUP-014_Interaction_Performance_Optimization.md) | Interaction Performance Optimization    | ✅ Complete | Low      | 8      |
-| [GUP-015](GUP-015_GPU_Debugging_Tools.md)                  | GPU Debugging and Profiling Tools       | ✅ Complete | Low      | 5      |
-| [GUP-017](GUP-017_Error_Handling_Framework.md)             | Error Handling and Resilience Framework | ✅ Complete | Critical | 8      |
+| Story                                                      | Title                                | Status      | Priority | Points |
+| ---------------------------------------------------------- | ------------------------------------ | ----------- | -------- | ------ |
+| [GUP-001](GUP-001_Build_Mixable_Trait.md)                  | Build Mixable Trait                  | ✅ Complete | High     | 3      |
+| [GUP-002](GUP-002_Core_Selection_Type.md)                  | Core Selection Type                  | ✅ Complete | Critical | 13     |
+| [GUP-003](GUP-003_GPU_Buffer_Management.md)                | GPU Buffer Management                | ✅ Complete | Critical | 8      |
+| [GUP-004](GUP-004_Basic_Render_Context.md)                 | Basic Render Context                 | ✅ Complete | Critical | 5      |
+| [GUP-005](GUP-005_Shader_Function_Trait.md)                | Shader Function Trait                | ✅ Complete | Critical | 13     |
+| [GUP-006](GUP-006_WGSL_Function_Macro.md)                  | WGSL Function Macro                  | ✅ Complete | Critical | 13     |
+| [GUP-007](GUP-007_Shader_Pipeline_Builder.md)              | Shader Pipeline Builder              | ✅ Complete | Critical | 13     |
+| [GUP-008](GUP-008_Type_System_Integration.md)              | Type System Integration              | ✅ Complete | Critical | 8      |
+| [GUP-009](GUP-009_Core_Mark_Trait.md)                      | Core Mark Trait                      | ✅ Complete | Critical | 8      |
+| [GUP-010](GUP-010_Basic_Mark_Implementations.md)           | Basic Mark Implementations           | ✅ Complete | High     | 4      |
+| [GUP-011](GUP-011_Mark_Shader_Integration.md)              | Mark Shader Integration              | ✅ Complete | High     | 8      |
+| [GUP-012](GUP-012_GPU_Interaction_System.md)               | GPU Interaction System               | ✅ Complete | Critical | 13     |
+| [GUP-013](GUP-013_GPU_Shader_Position_Precision_Fix.md)    | GPU Shader Position Precision Fix    | ✅ Complete | Medium   | 5      |
+| [GUP-014](GUP-014_Interaction_Performance_Optimization.md) | Interaction Performance Optimization | ✅ Complete | Low      | 8      |
+| [GUP-015](GUP-015_GPU_Debugging_Tools.md)                  | GPU Debugging and Profiling Tools    | ✅ Complete | Low      | 5      |
 
 ### Phase 2 - Advanced Features (Stories 16-25)
 
 | Story                                                          | Title                                    | Status      | Priority | Points |
 | -------------------------------------------------------------- | ---------------------------------------- | ----------- | -------- | ------ |
 | [GUP-016](GUP-016_Core_Accessibility_System.md)                | Core Accessibility System                | 📋 Planned  | High     | 4      |
-| [GUP-017](GUP-017_Error_Handling_Framework.md)                 | Error Handling Framework                 | 📋 Planned  | High     | 3      |
+| [GUP-017](GUP-017_Error_Handling_Framework.md)                 | Error Handling and Resilience Framework  | ✅ Complete | Critical | 8      |
 | [GUP-018](GUP-018_Observable_Plot_Chart_Builders.md)           | Observable Plot Chart Builders           | 📋 Planned  | Medium   | 6      |
 | [GUP-019](GUP-019_Mixable_Performance_Validation.md)           | Mixable Performance Validation           | 📋 Planned  | High     | 3      |
 | [GUP-020](GUP-020_WebGPU_Integration_RenderContext.md)         | WebGPU Integration RenderContext         | ✅ Complete | High     | 5      |
