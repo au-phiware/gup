@@ -7,23 +7,24 @@ epic and status.
 
 ### Phase 1 - Foundation (Stories 1-15)
 
-| Story                                                      | Title                                | Status      | Priority | Points |
-| ---------------------------------------------------------- | ------------------------------------ | ----------- | -------- | ------ |
-| [GUP-001](GUP-001_Build_Mixable_Trait.md)                  | Build Mixable Trait                  | ✅ Complete | High     | 3      |
-| [GUP-002](GUP-002_Core_Selection_Type.md)                  | Core Selection Type                  | ✅ Complete | Critical | 13     |
-| [GUP-003](GUP-003_GPU_Buffer_Management.md)                | GPU Buffer Management                | ✅ Complete | Critical | 8      |
-| [GUP-004](GUP-004_Basic_Render_Context.md)                 | Basic Render Context                 | ✅ Complete | Critical | 5      |
-| [GUP-005](GUP-005_Shader_Function_Trait.md)                | Shader Function Trait                | ✅ Complete | Critical | 13     |
-| [GUP-006](GUP-006_WGSL_Function_Macro.md)                  | WGSL Function Macro                  | ✅ Complete | Critical | 13     |
-| [GUP-007](GUP-007_Shader_Pipeline_Builder.md)              | Shader Pipeline Builder              | ✅ Complete | Critical | 13     |
-| [GUP-008](GUP-008_Type_System_Integration.md)              | Type System Integration              | ✅ Complete | Critical | 8      |
-| [GUP-009](GUP-009_Core_Mark_Trait.md)                      | Core Mark Trait                      | ✅ Complete | Critical | 8      |
-| [GUP-010](GUP-010_Basic_Mark_Implementations.md)           | Basic Mark Implementations           | ✅ Complete | High     | 4      |
-| [GUP-011](GUP-011_Mark_Shader_Integration.md)              | Mark Shader Integration              | ✅ Complete | High     | 8      |
-| [GUP-012](GUP-012_GPU_Interaction_System.md)               | GPU Interaction System               | ✅ Complete | Critical | 13     |
-| [GUP-013](GUP-013_GPU_Shader_Position_Precision_Fix.md)    | GPU Shader Position Precision Fix    | ✅ Complete | Medium   | 5      |
-| [GUP-014](GUP-014_Interaction_Performance_Optimization.md) | Interaction Performance Optimization | ✅ Complete | Low      | 8      |
-| [GUP-015](GUP-015_GPU_Debugging_Tools.md)                  | GPU Debugging and Profiling Tools    | ✅ Complete | Low      | 5      |
+| Story                                                      | Title                                   | Status      | Priority | Points |
+| ---------------------------------------------------------- | --------------------------------------- | ----------- | -------- | ------ |
+| [GUP-001](GUP-001_Build_Mixable_Trait.md)                  | Build Mixable Trait                     | ✅ Complete | High     | 3      |
+| [GUP-002](GUP-002_Core_Selection_Type.md)                  | Core Selection Type                     | ✅ Complete | Critical | 13     |
+| [GUP-003](GUP-003_GPU_Buffer_Management.md)                | GPU Buffer Management                   | ✅ Complete | Critical | 8      |
+| [GUP-004](GUP-004_Basic_Render_Context.md)                 | Basic Render Context                    | ✅ Complete | Critical | 5      |
+| [GUP-005](GUP-005_Shader_Function_Trait.md)                | Shader Function Trait                   | ✅ Complete | Critical | 13     |
+| [GUP-006](GUP-006_WGSL_Function_Macro.md)                  | WGSL Function Macro                     | ✅ Complete | Critical | 13     |
+| [GUP-007](GUP-007_Shader_Pipeline_Builder.md)              | Shader Pipeline Builder                 | ✅ Complete | Critical | 13     |
+| [GUP-008](GUP-008_Type_System_Integration.md)              | Type System Integration                 | ✅ Complete | Critical | 8      |
+| [GUP-009](GUP-009_Core_Mark_Trait.md)                      | Core Mark Trait                         | ✅ Complete | Critical | 8      |
+| [GUP-010](GUP-010_Basic_Mark_Implementations.md)           | Basic Mark Implementations              | ✅ Complete | High     | 4      |
+| [GUP-011](GUP-011_Mark_Shader_Integration.md)              | Mark Shader Integration                 | ✅ Complete | High     | 8      |
+| [GUP-012](GUP-012_GPU_Interaction_System.md)               | GPU Interaction System                  | ✅ Complete | Critical | 13     |
+| [GUP-013](GUP-013_GPU_Shader_Position_Precision_Fix.md)    | GPU Shader Position Precision Fix       | ✅ Complete | Medium   | 5      |
+| [GUP-014](GUP-014_Interaction_Performance_Optimization.md) | Interaction Performance Optimization    | ✅ Complete | Low      | 8      |
+| [GUP-015](GUP-015_GPU_Debugging_Tools.md)                  | GPU Debugging and Profiling Tools       | ✅ Complete | Low      | 5      |
+| [GUP-017](GUP-017_Error_Handling_Framework.md)             | Error Handling and Resilience Framework | ✅ Complete | Critical | 8      |
 
 ### Phase 2 - Advanced Features (Stories 16-25)
 
@@ -93,6 +94,13 @@ epic and status.
 | [GUP-081](GUP-081_Advanced_Debug_Data_Visualization.md)  | Advanced Debug Data Visualization  | 💡 New | Low      | 5      |
 | [GUP-082](GUP-082_Debug_Tool_Integration_CI_CD.md)       | Debug Tool Integration with CI/CD  | 💡 New | Medium   | 3      |
 
+### Post GUP-017 Stories - Error Handling Optimization (Stories 83+)
+
+| Story                                                         | Title                                   | Status | Priority | Points |
+| ------------------------------------------------------------- | --------------------------------------- | ------ | -------- | ------ |
+| [GUP-083](GUP-083_Debug_Tool_Type_Complexity_Refactor.md)     | Debug Tool Type Complexity Refactor     | 💡 New | Low      | 1      |
+| [GUP-084](GUP-084_Error_Handling_Performance_Optimization.md) | Error Handling Performance Optimization | 💡 New | Medium   | 8      |
+
 ### Post GUP-003 Stories - Buffer System Enhancement (Stories 35+)
 
 | Story                                                       | Title                                 | Status | Priority | Points |
@@ -155,11 +163,11 @@ epic and status.
 
 ### Phase 1 Foundation
 
-- **Completed**: 15/15 stories (100%)
+- **Completed**: 16/16 stories (100%)
 - **Critical Path**: GUP-001 ✅, GUP-002 ✅, GUP-003 ✅, GUP-004 ✅, GUP-005 ✅,
   GUP-006 ✅, GUP-007 ✅, GUP-008 ✅, GUP-009 ✅, GUP-010 ✅, GUP-011 ✅,
-  GUP-012 ✅, GUP-013 ✅, GUP-014 ✅, GUP-015 ✅, GUP-020 ✅, GUP-021 ✅,
-  GUP-039 ✅
+  GUP-012 ✅, GUP-013 ✅, GUP-014 ✅, GUP-015 ✅, GUP-017 ✅, GUP-020 ✅,
+  GUP-021 ✅, GUP-039 ✅
 
 ### Post-GUP-021 Improvements
 
@@ -173,14 +181,14 @@ epic and status.
 
 ## Story Point Summary
 
-- **Total Planned**: ~335 story points across all stories (including new GUP-015
+- **Total Planned**: ~344 story points across all stories (including new GUP-017
   follow-up stories)
-- **Completed**: 138 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
+- **Completed**: 146 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
   GUP-004: 5pts, GUP-005: 13pts, GUP-006: 13pts, GUP-007: 13pts, GUP-008: 8pts,
   GUP-009: 8pts, GUP-010: 4pts, GUP-011: 8pts, GUP-012: 13pts, GUP-013: 5pts,
-  GUP-014: 8pts, GUP-015: 5pts, GUP-020: 5pts, GUP-021: 6pts, GUP-027: 3pts,
-  GUP-039: 5pts, GUP-043: 3pts)
-- **Progress**: ~41% of total scope
+  GUP-014: 8pts, GUP-015: 5pts, GUP-017: 8pts, GUP-020: 5pts, GUP-021: 6pts,
+  GUP-027: 3pts, GUP-039: 5pts, GUP-043: 3pts)
+- **Progress**: ~42% of total scope
 
 ## Recent Additions (Post GUP-021)
 
@@ -582,8 +590,30 @@ integrated with automated testing infrastructure
 **Impact**: Automated performance regression detection in CI/CD with performance
 trend tracking
 
+## Recent Additions (Post GUP-017)
+
+The following stories were created based on learnings from implementing GUP-017:
+
+### GUP-083: Debug Tool Type Complexity Refactor
+
+**Key Learning**: Clippy identified type complexity warning in debug layout
+validator that impacts maintainability  
+**Dependencies**: GUP-015 complete (debug infrastructure)  
+**Impact**: Cleaner, more maintainable debug tool codebase with simplified type
+definitions
+
+### GUP-084: Error Handling Performance Optimization
+
+**Key Learning**: Current error handling achieves <5% overhead but further
+optimizations possible through lazy evaluation and caching  
+**Dependencies**: GUP-017 complete (error handling framework)  
+**Impact**: Reduces error handling overhead to <2% through lazy context
+creation, caching, and memory pooling
+
 ---
 
-_Last Updated: After completion of GUP-015 (GPU Debugging Tools) - 2025-08-06_  
-_Next Priority Stories: GUP-076 (Spatial Index Bind Group Layout Fix), GUP-073
-(Advanced Shader Composition), GUP-074 (Mark Performance Optimization)_
+_Last Updated: After completion of GUP-017 (Error Handling Framework) -
+2025-08-07_  
+_Next Priority Stories: GUP-084 (Error Handling Performance Optimization),
+GUP-076 (Spatial Index Bind Group Layout Fix), GUP-073 (Advanced Shader
+Composition)_
