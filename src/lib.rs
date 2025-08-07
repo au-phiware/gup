@@ -28,6 +28,7 @@
 //! - **Extensible Architecture**: Modular design allowing custom marks and interactions
 
 pub mod buffer;
+pub mod chart_builder;
 pub mod context;
 pub mod debug;
 pub mod error;
@@ -35,6 +36,7 @@ pub mod examples;
 pub mod interaction;
 pub mod mark;
 pub mod mixable;
+pub mod prelude;
 pub mod render;
 pub mod selection;
 pub mod shader_function;
@@ -64,6 +66,9 @@ pub use mark::{Mark, MarkInfo, MarkInfoImpl, MarkRegistry};
 
 // Export selection system
 pub use selection::*;
+
+// Export chart builder system (Observable Plot-style API)
+pub use chart_builder::*;
 
 // Note: Procedural macros from gup_macros must be imported directly
 // with `use gup_macros::wgsl_function;` due to Rust limitations

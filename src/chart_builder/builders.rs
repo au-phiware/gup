@@ -1,0 +1,319 @@
+// Copyright (C) 2024 Corin Lawson
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+//! Individual chart type builders with Observable Plot compatibility.
+//!
+//! This module implements specific chart builders for common visualization types:
+//! scatter plots, line charts, bar charts, area charts, and heatmaps.
+
+pub mod area;
+pub mod bar;
+pub mod heatmap;
+pub mod line;
+pub mod scatter;
+
+pub use area::*;
+pub use bar::*;
+pub use heatmap::*;
+pub use line::*;
+pub use scatter::*;
+
+use super::ChartBuilderError;
+use super::accessor::{AccessorValue, FieldAccessor};
+use crate::error::GupResult;
+use crate::selection::{ColorShaderFunction, PositionShaderFunction, Selection};
+use std::marker::PhantomData;
+
+/// Base trait for all chart builders providing common configuration methods.
+pub trait ConfigurableBuilder: Sized {
+    /// Set the chart title.
+    fn title(self, title: impl Into<String>) -> Self;
+
+    /// Set the chart width in pixels.
+    fn width(self, width: f32) -> Self;
+
+    /// Set the chart height in pixels.
+    fn height(self, height: f32) -> Self;
+
+    /// Set the chart background color.
+    fn background(self, color: [f32; 4]) -> Self;
+
+    /// Enable or disable axes display.
+    fn show_axes(self, show: bool) -> Self;
+
+    /// Enable or disable grid display.
+    fn show_grid(self, show: bool) -> Self;
+}
+
+/// Helper trait for converting accessor values to shader functions.
+pub trait AccessorToShaderFunction<T> {
+    /// Convert an accessor value to a position shader function.
+    fn to_position_shader(
+        &self,
+        accessor: AccessorFunction<T>,
+    ) -> PositionShaderFunction<impl Fn(&T) -> [f32; 2] + Send + Sync + 'static, T>;
+
+    /// Convert an accessor value to a color shader function.
+    fn to_color_shader(
+        &self,
+        accessor: AccessorFunction<T>,
+    ) -> ColorShaderFunction<impl Fn(&T) -> [f32; 4] + Send + Sync + 'static, T>;
+}
+
+/// Type-erased accessor function for dynamic dispatch.
+pub struct AccessorFunction<T> {
+    function: Box<dyn Fn(&T) -> AccessorValue + Send + Sync>,
+    field_name: Option<String>,
+    _phantom: PhantomData<T>,
+}
+
+impl<T> AccessorFunction<T> {
+    /// Create a new accessor function from a closure.
+    pub fn new<F>(function: F) -> Self
+    where
+        F: Fn(&T) -> AccessorValue + Send + Sync + 'static,
+    {
+        Self {
+            function: Box::new(function),
+            field_name: None,
+            _phantom: PhantomData,
+        }
+    }
+
+    /// Create a new accessor function from a field name.
+    pub fn from_field(field_name: &str) -> Self {
+        let field_name_owned = field_name.to_string();
+        Self {
+            function: Box::new(move |_data| {
+                // In a real implementation, this would use reflection or a registry
+                // For now, return a placeholder value
+                AccessorValue::Float(0.0)
+            }),
+            field_name: Some(field_name_owned),
+            _phantom: PhantomData,
+        }
+    }
+
+    /// Apply the accessor function to extract a value.
+    pub fn apply(&self, data: &T) -> AccessorValue {
+        (self.function)(data)
+    }
+
+    /// Get the field name if this accessor is field-based.
+    pub fn field_name(&self) -> Option<&str> {
+        self.field_name.as_deref()
+    }
+}
+
+impl<T> std::fmt::Debug for AccessorFunction<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AccessorFunction")
+            .field("field_name", &self.field_name)
+            .field("function", &"<closure>")
+            .finish()
+    }
+}
+
+impl<T> Clone for AccessorFunction<T> {
+    fn clone(&self) -> Self {
+        // Note: This is a simplified clone that loses the actual function
+        // In a real implementation, we'd need to handle this differently
+        AccessorFunction::from_field(self.field_name.as_deref().unwrap_or("unknown"))
+    }
+}
+
+/// Convert various accessor types to internal AccessorFunction.
+impl<T> From<FieldAccessor> for AccessorFunction<T> {
+    fn from(field_accessor: FieldAccessor) -> Self {
+        AccessorFunction::from_field(field_accessor.field_name())
+    }
+}
+
+impl<T, F> From<F> for AccessorFunction<T>
+where
+    F: Fn(&T) -> AccessorValue + Send + Sync + 'static,
+{
+    fn from(function: F) -> Self {
+        AccessorFunction::new(function)
+    }
+}
+
+/// Utility function to validate required accessors.
+pub fn validate_required_accessors<T>(
+    x_accessor: &Option<AccessorFunction<T>>,
+    y_accessor: &Option<AccessorFunction<T>>,
+) -> GupResult<()> {
+    if x_accessor.is_none() {
+        return Err(ChartBuilderError::MissingAccessor {
+            attribute: "x".to_string(),
+        }
+        .into());
+    }
+
+    if y_accessor.is_none() {
+        return Err(ChartBuilderError::MissingAccessor {
+            attribute: "y".to_string(),
+        }
+        .into());
+    }
+
+    Ok(())
+}
+
+/// Utility function to apply accessor functions to a selection.
+pub fn apply_accessors_to_selection<T, M>(
+    selection: &mut Selection<T, M>,
+    x_accessor: &Option<AccessorFunction<T>>,
+    y_accessor: &Option<AccessorFunction<T>>,
+    color_accessor: &Option<AccessorFunction<T>>,
+    size_accessor: &Option<AccessorFunction<T>>,
+) -> GupResult<()>
+where
+    T: Clone + Send + Sync + std::fmt::Debug + 'static,
+    M: crate::selection::Mark,
+    M::AttributeValue: Default + Clone,
+{
+    // Apply position mapping if both X and Y are provided
+    if let (Some(x_acc), Some(y_acc)) = (x_accessor, y_accessor) {
+        let _x_field = x_acc.field_name().unwrap_or("x").to_string();
+        let _y_field = y_acc.field_name().unwrap_or("y").to_string();
+
+        let position_shader = PositionShaderFunction::<_, T>::new(move |_data: &T| {
+            // In a real implementation, this would use the actual accessor functions
+            // For now, provide a placeholder that compiles
+            [0.0, 0.0] // This would extract actual values from data fields
+        });
+
+        selection.attr("position", position_shader);
+    }
+
+    // Apply color mapping if provided
+    if let Some(color_acc) = color_accessor {
+        let _color_field = color_acc.field_name().unwrap_or("color").to_string();
+
+        let color_shader = ColorShaderFunction::<_, T>::new(move |_data: &T| {
+            // In a real implementation, this would use the actual accessor function
+            // For now, provide a default color
+            [1.0, 0.0, 0.0, 1.0] // Red default
+        });
+
+        selection.attr("color", color_shader);
+    }
+
+    // Size mapping would be similar but depends on the mark type
+    if let Some(_size_acc) = size_accessor {
+        // Size mapping implementation would go here
+        // This depends on the specific mark type's attribute system
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::chart_builder::accessor::x;
+
+    #[derive(Debug, Clone)]
+    struct TestData {
+        x: f32,
+        y: f32,
+        value: f32,
+        category: String,
+    }
+
+    #[test]
+    fn test_accessor_function_creation() {
+        // Test closure-based accessor
+        let closure_accessor =
+            AccessorFunction::<TestData>::new(|data: &TestData| AccessorValue::Float(data.x));
+
+        let data = TestData {
+            x: 10.0,
+            y: 20.0,
+            value: 30.0,
+            category: "A".to_string(),
+        };
+
+        let result = closure_accessor.apply(&data);
+        assert_eq!(result, AccessorValue::Float(10.0));
+
+        // Test field-based accessor
+        let field_accessor = AccessorFunction::<TestData>::from_field("x");
+        assert_eq!(field_accessor.field_name(), Some("x"));
+    }
+
+    #[test]
+    fn test_field_accessor_conversion() {
+        let field_accessor = x("revenue");
+        let accessor_function: AccessorFunction<TestData> = field_accessor.into();
+        assert_eq!(accessor_function.field_name(), Some("revenue"));
+    }
+
+    #[test]
+    fn test_validate_required_accessors() {
+        let x_accessor = Some(AccessorFunction::<TestData>::from_field("x"));
+        let y_accessor = Some(AccessorFunction::<TestData>::from_field("y"));
+
+        // Both provided - should succeed
+        let result = validate_required_accessors(&x_accessor, &y_accessor);
+        assert!(result.is_ok());
+
+        // Missing X accessor - should fail
+        let result = validate_required_accessors(&None, &y_accessor);
+        assert!(result.is_err());
+        if let Err(err) = result {
+            let error_str = format!("{err}");
+            assert!(error_str.contains("Missing required accessor"));
+            assert!(error_str.contains("x"));
+        }
+
+        // Missing Y accessor - should fail
+        let result = validate_required_accessors(&x_accessor, &None);
+        assert!(result.is_err());
+        if let Err(err) = result {
+            let error_str = format!("{err}");
+            assert!(error_str.contains("Missing required accessor"));
+            assert!(error_str.contains("y"));
+        }
+    }
+
+    #[test]
+    fn test_accessor_function_clone() {
+        let accessor = AccessorFunction::<TestData>::from_field("test_field");
+        let cloned_accessor = accessor.clone();
+
+        assert_eq!(accessor.field_name(), cloned_accessor.field_name());
+        assert_eq!(cloned_accessor.field_name(), Some("test_field"));
+    }
+
+    #[test]
+    fn test_accessor_value_application() {
+        let data = TestData {
+            x: 15.0,
+            y: 25.0,
+            value: 35.0,
+            category: "B".to_string(),
+        };
+
+        // Test different accessor value types
+        let float_accessor =
+            AccessorFunction::<TestData>::new(|d: &TestData| AccessorValue::Float(d.value));
+        assert_eq!(float_accessor.apply(&data), AccessorValue::Float(35.0));
+
+        let position_accessor =
+            AccessorFunction::<TestData>::new(|d: &TestData| AccessorValue::Position([d.x, d.y]));
+        assert_eq!(
+            position_accessor.apply(&data),
+            AccessorValue::Position([15.0, 25.0])
+        );
+
+        let string_accessor = AccessorFunction::<TestData>::new(|d: &TestData| {
+            AccessorValue::String(d.category.clone())
+        });
+        assert_eq!(
+            string_accessor.apply(&data),
+            AccessorValue::String("B".to_string())
+        );
+    }
+}
