@@ -10,6 +10,9 @@ use crate::error::GupResult;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Type alias for validation functions to simplify complex type signatures
+type ValidationFunction = fn(&mut LayoutValidationResult);
+
 /// Memory layout validator for Rust ↔ WGSL compatibility
 #[derive(Debug)]
 pub struct MemoryLayoutValidator {
@@ -67,7 +70,7 @@ impl MemoryLayoutValidator {
     /// Validate multiple structs and return a summary report
     pub fn validate_multiple(
         &mut self,
-        structs: Vec<(&str, fn(&mut LayoutValidationResult))>,
+        structs: Vec<(&str, ValidationFunction)>,
     ) -> ValidationSummary {
         let mut results = Vec::new();
         let mut total_errors = 0;
@@ -264,17 +267,14 @@ pub fn validate_common_gpu_structs(
     validator: &mut MemoryLayoutValidator,
 ) -> GupResult<ValidationSummary> {
     let structs = vec![
-        (
-            "ElementData",
-            validate_element_data as fn(&mut LayoutValidationResult),
-        ),
+        ("ElementData", validate_element_data as ValidationFunction),
         (
             "GpuInteractionQuery",
-            validate_gpu_interaction_query as fn(&mut LayoutValidationResult),
+            validate_gpu_interaction_query as ValidationFunction,
         ),
         (
             "InteractionResult",
-            validate_interaction_result as fn(&mut LayoutValidationResult),
+            validate_interaction_result as ValidationFunction,
         ),
     ];
 
