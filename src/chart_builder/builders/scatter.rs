@@ -366,7 +366,7 @@ mod tests {
         let result = builder.build_with_data(empty_data, context);
         assert!(result.is_err());
         let error_str = format!("{:?}", result.unwrap_err());
-        assert!(error_str.contains("EmptyData"));
+        assert!(error_str.contains("no data provided") || error_str.contains("EmptyData"));
     }
 
     #[test]

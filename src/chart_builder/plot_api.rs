@@ -366,6 +366,7 @@ mod tests {
     use crate::chart_builder::accessor::{x, y};
 
     #[derive(Debug, Clone)]
+    #[allow(dead_code)]
     struct TestData {
         x: f32,
         y: f32,

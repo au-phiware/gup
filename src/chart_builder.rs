@@ -332,6 +332,7 @@ mod tests {
     use crate::RenderContext;
 
     #[derive(Debug, Clone)]
+    #[allow(dead_code)]
     struct TestData {
         x: f32,
         y: f32,
