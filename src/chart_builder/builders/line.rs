@@ -36,20 +36,31 @@ pub enum LineInterpolation {
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,no_run
 /// use gup::prelude::*;
+/// use gup::chart_builder::accessor::AccessorValue;
+/// use gup::chart_builder::builders::AccessorFunction;
 ///
+/// #[derive(Debug, Clone)]
+/// struct DataPoint {
+///     date: f32,
+///     value: f32,
+///     series: String,
+/// }
+///
+/// # async fn example() -> GupResult<()> {
+/// # let context = std::sync::Arc::new(RenderContext::new().await?);
 /// let time_series = vec![
 ///     DataPoint { date: 0.0, value: 10.0, series: "A".to_string() },
 ///     DataPoint { date: 1.0, value: 15.0, series: "A".to_string() },
 /// ];
 ///
 /// let chart = line()
-///     .data(time_series)
-///     .x(|d| d.date)
-///     .y(|d| d.value)
-///     .stroke("series")
-///     .render()?;
+///     .x(AccessorFunction::new(|d: &DataPoint| AccessorValue::Float(d.date)))
+///     .y(AccessorFunction::new(|d: &DataPoint| AccessorValue::Float(d.value)))
+///     .build_with_data(time_series, context)?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone)]
 pub struct LineChartBuilder<T> {

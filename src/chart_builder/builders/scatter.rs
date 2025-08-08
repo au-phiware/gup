@@ -22,22 +22,32 @@ use std::sync::Arc;
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,no_run
 /// use gup::prelude::*;
+/// use gup::chart_builder::accessor::AccessorValue;
+/// use gup::chart_builder::builders::AccessorFunction;
 ///
+/// #[derive(Debug, Clone)]
+/// struct SalesPoint {
+///     revenue: f32,
+///     profit: f32,
+///     region: String,
+/// }
+///
+/// # async fn example() -> GupResult<()> {
+/// # let context = std::sync::Arc::new(RenderContext::new().await?);
 /// let sales_data = vec![
 ///     SalesPoint { revenue: 100.0, profit: 20.0, region: "North".to_string() },
 ///     SalesPoint { revenue: 200.0, profit: 45.0, region: "South".to_string() },
 /// ];
 ///
-/// // Observable Plot-style API
+/// // Observable Plot-style API  
 /// let chart = scatter()
-///     .data(sales_data)
-///     .x(|d| d.revenue)
-///     .y(|d| d.profit)
-///     .color(|d| if d.region == "North" { [1.0, 0.0, 0.0, 1.0] } else { [0.0, 0.0, 1.0, 1.0] })
-///     .size(5.0)
-///     .render()?;
+///     .x(AccessorFunction::new(|d: &SalesPoint| AccessorValue::Float(d.revenue)))
+///     .y(AccessorFunction::new(|d: &SalesPoint| AccessorValue::Float(d.profit)))
+///     .build_with_data(sales_data, context)?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone)]
 pub struct ScatterPlotBuilder<T> {
@@ -233,14 +243,23 @@ where
 ///
 /// # Examples
 ///
-/// ```rust
-/// use gup::scatter;
+/// ```rust,no_run
+/// use gup::prelude::*;
+/// use gup::chart_builder::accessor::AccessorValue;
+/// use gup::chart_builder::builders::AccessorFunction;
 ///
+/// #[derive(Debug, Clone)]
+/// struct DataPoint { x: f32, y: f32 }
+///
+/// # async fn example() -> GupResult<()> {
+/// # let context = std::sync::Arc::new(RenderContext::new().await?);
+/// # let data = vec![DataPoint { x: 1.0, y: 2.0 }];
 /// let chart = scatter()
-///     .x(|d| d.x)
-///     .y(|d| d.y)
-///     .color("red")
-///     .build()?;
+///     .x(AccessorFunction::new(|d: &DataPoint| AccessorValue::Float(d.x)))
+///     .y(AccessorFunction::new(|d: &DataPoint| AccessorValue::Float(d.y)))
+///     .build_with_data(data, context)?;
+/// # Ok(())
+/// # }
 /// ```
 pub fn scatter<T>() -> ScatterPlotBuilder<T> {
     ScatterPlotBuilder::new()

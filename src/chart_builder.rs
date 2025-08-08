@@ -16,9 +16,17 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,no_run
 //! use gup::prelude::*;
 //!
+//! #[derive(Debug, Clone)]
+//! struct SalesPoint {
+//!     revenue: f32,
+//!     profit: f32,
+//!     region: String,
+//! }
+//!
+//! # async fn example() -> GupResult<()> {
 //! let sales_data = vec![
 //!     SalesPoint { revenue: 100.0, profit: 20.0, region: "North".to_string() },
 //!     SalesPoint { revenue: 200.0, profit: 45.0, region: "South".to_string() },
@@ -28,8 +36,9 @@
 //! let chart = gup::plot()
 //!     .data(sales_data)
 //!     .scatter(x("revenue"), y("profit"))
-//!     .color("region")
-//!     .render()?;
+//!     .color(color("region"));
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod accessor;

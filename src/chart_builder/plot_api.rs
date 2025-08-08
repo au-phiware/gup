@@ -23,21 +23,28 @@ use std::sync::Arc;
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,no_run
 /// use gup::prelude::*;
 ///
+/// #[derive(Debug, Clone)]
+/// struct SalesPoint {
+///     revenue: f32,
+///     profit: f32,
+///     region: String,
+/// }
+///
+/// # async fn example() -> GupResult<()> {
 /// let sales_data = vec![
 ///     SalesPoint { revenue: 100.0, profit: 20.0, region: "North".to_string() },
 ///     SalesPoint { revenue: 200.0, profit: 45.0, region: "South".to_string() },
 /// ];
 ///
 /// // Observable Plot-style scatter plot
-/// let chart = gup::plot()
+/// let bound_builder = gup::plot()
 ///     .data(sales_data)
-///     .scatter(x("revenue"), y("profit"))
-///     .color("region")
-///     .size("employees")
-///     .render()?;
+///     .scatter(x("revenue"), y("profit"));
+/// # Ok(())
+/// # }
 /// ```
 pub struct PlotBuilder {
     context: Option<Arc<RenderContext>>,
@@ -97,9 +104,11 @@ where
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// use gup::prelude::*;
     ///
+    /// # #[derive(Debug, Clone)] struct Point { revenue: f32, profit: f32 }
+    /// # let points = vec![Point { revenue: 100.0, profit: 20.0 }];
     /// let chart = plot()
     ///     .data(points)
     ///     .scatter(x("revenue"), y("profit"));
@@ -118,9 +127,11 @@ where
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// use gup::prelude::*;
     ///
+    /// # #[derive(Debug, Clone)] struct TimePoint { date: f32, value: f32 }
+    /// # let time_series = vec![TimePoint { date: 1.0, value: 10.0 }];
     /// let chart = plot()
     ///     .data(time_series)
     ///     .line(x("date"), y("value"));
@@ -139,9 +150,11 @@ where
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// use gup::prelude::*;
     ///
+    /// # #[derive(Debug, Clone)] struct Category { category: String, count: f32 }
+    /// # let categories = vec![Category { category: "A".to_string(), count: 10.0 }];
     /// let chart = plot()
     ///     .data(categories)
     ///     .bar(x("category"), y("count"));
@@ -347,14 +360,14 @@ impl_configured_chart!(ConfiguredHeatmap, HeatmapBuilder<T>);
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,no_run
 /// use gup::prelude::*;
 ///
+/// # #[derive(Debug, Clone)] struct SalesData { revenue: f32, profit: f32, region: String }
+/// # let sales_data = vec![SalesData { revenue: 100.0, profit: 20.0, region: "North".to_string() }];
 /// let chart = plot()
 ///     .data(sales_data)
-///     .scatter(x("revenue"), y("profit"))
-///     .color("region")
-///     .render();
+///     .scatter(x("revenue"), y("profit"));
 /// ```
 pub fn plot() -> PlotBuilder {
     PlotBuilder::new()
