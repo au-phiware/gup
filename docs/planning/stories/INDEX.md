@@ -31,7 +31,7 @@ epic and status.
 | -------------------------------------------------------------- | ---------------------------------------- | ----------- | -------- | ------ |
 | [GUP-016](GUP-016_Core_Accessibility_System.md)                | Core Accessibility System                | 📋 Planned  | High     | 4      |
 | [GUP-017](GUP-017_Error_Handling_Framework.md)                 | Error Handling and Resilience Framework  | ✅ Complete | Critical | 8      |
-| [GUP-018](GUP-018_Observable_Plot_Chart_Builders.md)           | Observable Plot Chart Builders           | 📋 Planned  | Medium   | 6      |
+| [GUP-018](GUP-018_Observable_Plot_Chart_Builders.md)           | Observable Plot Chart Builders           | ✅ Complete | Medium   | 6      |
 | [GUP-019](GUP-019_Mixable_Performance_Validation.md)           | Mixable Performance Validation           | 📋 Planned  | High     | 3      |
 | [GUP-020](GUP-020_WebGPU_Integration_RenderContext.md)         | WebGPU Integration RenderContext         | ✅ Complete | High     | 5      |
 | [GUP-021](GUP-021_Advanced_Composition_Mode_Implementation.md) | Advanced Composition Mode Implementation | ✅ Complete | High     | 6      |
@@ -42,11 +42,14 @@ epic and status.
 
 ### Future Improvements - Post GUP-021 (Stories 26+)
 
-| Story                                                      | Title                                | Status      | Priority | Points |
-| ---------------------------------------------------------- | ------------------------------------ | ----------- | -------- | ------ |
-| [GUP-026](GUP-026_Data_Source_Merge_Implementation.md)     | Data Source Merge Implementation     | 💡 New      | Medium   | 5      |
-| [GUP-027](GUP-027_GPU_Blend_State_Integration.md)          | GPU Blend State Integration          | ✅ Complete | High     | 3      |
-| [GUP-028](GUP-028_Composition_Performance_Optimization.md) | Composition Performance Optimization | 💡 New      | Medium   | 4      |
+| Story                                                        | Title                                  | Status      | Priority | Points |
+| ------------------------------------------------------------ | -------------------------------------- | ----------- | -------- | ------ |
+| [GUP-026](GUP-026_Data_Source_Merge_Implementation.md)       | Data Source Merge Implementation       | 💡 New      | Medium   | 5      |
+| [GUP-027](GUP-027_GPU_Blend_State_Integration.md)            | GPU Blend State Integration            | ✅ Complete | High     | 3      |
+| [GUP-028](GUP-028_Composition_Performance_Optimization.md)   | Composition Performance Optimization   | 💡 New      | Medium   | 4      |
+| [GUP-085](GUP-085_Line_Rectangle_Mark_Implementation.md)     | Line and Rectangle Mark Implementation | 💡 New      | High     | 5      |
+| [GUP-086](GUP-086_Observable_Plot_Migration_Guide.md)        | Observable Plot Migration Guide        | 💡 New      | Low      | 2      |
+| [GUP-087](GUP-087_Chart_Builder_Performance_Optimization.md) | Chart Builder Performance Optimization | 💡 New      | Medium   | 3      |
 
 ### Post GUP-009 Stories - Mark System Enhancement (Stories 67+)
 
@@ -180,13 +183,13 @@ epic and status.
 
 ## Story Point Summary
 
-- **Total Planned**: ~344 story points across all stories (including new GUP-017
+- **Total Planned**: ~354 story points across all stories (including new GUP-018
   follow-up stories)
-- **Completed**: 146 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
+- **Completed**: 152 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
   GUP-004: 5pts, GUP-005: 13pts, GUP-006: 13pts, GUP-007: 13pts, GUP-008: 8pts,
   GUP-009: 8pts, GUP-010: 4pts, GUP-011: 8pts, GUP-012: 13pts, GUP-013: 5pts,
-  GUP-014: 8pts, GUP-015: 5pts, GUP-017: 8pts, GUP-020: 5pts, GUP-021: 6pts,
-  GUP-027: 3pts, GUP-039: 5pts, GUP-043: 3pts)
+  GUP-014: 8pts, GUP-015: 5pts, GUP-017: 8pts, GUP-018: 6pts, GUP-020: 5pts,
+  GUP-021: 6pts, GUP-027: 3pts, GUP-039: 5pts, GUP-043: 3pts)
 - **Progress**: ~42% of total scope
 
 ## Recent Additions (Post GUP-021)
@@ -611,8 +614,40 @@ creation, caching, and memory pooling
 
 ---
 
-_Last Updated: After completion of GUP-017 (Error Handling Framework) -
-2025-08-07_  
-_Next Priority Stories: GUP-084 (Error Handling Performance Optimization),
-GUP-076 (Spatial Index Bind Group Layout Fix), GUP-073 (Advanced Shader
-Composition)_
+## Recent Additions (Post GUP-018)
+
+The following stories were created based on learnings from implementing GUP-018:
+
+### GUP-085: Line and Rectangle Mark Implementation
+
+**Key Learning**: Chart builders currently use Circle marks as placeholder -
+need proper Line and Rectangle mark implementations for line charts and bar
+charts **Dependencies**: GUP-018 complete  
+**Impact**: Enables proper rendering of line charts and bar charts with
+GPU-optimized mark types instead of Circle placeholder
+
+### GUP-086: Observable Plot Migration Guide
+
+**Key Learning**: API compatibility testing showed excellent Observable Plot
+alignment, but users need migration guidance and feature comparison
+documentation  
+**Dependencies**: GUP-018 complete  
+**Impact**: Smooth adoption path for Observable Plot users with clear migration
+examples and feature parity documentation
+
+### GUP-087: Chart Builder Performance Optimization
+
+**Key Learning**: Zero-cost abstractions validated but further optimizations
+possible through compile-time accessor resolution and GPU shader
+specialization  
+**Dependencies**: GUP-018 complete  
+**Impact**: Enhanced performance for complex chart compositions with optimized
+accessor function compilation
+
+---
+
+_Last Updated: After completion of GUP-018 (Observable Plot Chart Builders) -
+2025-08-08_  
+_Next Priority Stories: GUP-085 (Line and Rectangle Mark Implementation),
+GUP-084 (Error Handling Performance Optimization), GUP-076 (Spatial Index Bind
+Group Layout Fix)_
