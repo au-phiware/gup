@@ -20,6 +20,9 @@
 use crate::{GupError, GupResult, RenderContext, Viewport};
 use std::fmt::Debug;
 
+pub mod optimization;
+pub use optimization::{CompositionExecutor, CompositionMetrics, OPTIMIZATION_THRESHOLD};
+
 /// Composition modes define how two mixable components are combined.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CompositionMode {
@@ -329,7 +332,7 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
     }
 }
 
-impl<A: Mixable, B: Mixable> Mixable for ComposedVisualization<A, B> {
+impl<A: Mixable + 'static, B: Mixable + 'static> Mixable for ComposedVisualization<A, B> {
     type Output = ();
 
     fn render(&mut self, context: &mut RenderContext) -> GupResult<()> {
@@ -370,7 +373,35 @@ impl<A: Mixable, B: Mixable> Mixable for ComposedVisualization<A, B> {
     }
 }
 
-impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
+impl<A: Mixable + 'static, B: Mixable + 'static> ComposedVisualization<A, B> {
+    /// Render with automatic optimization for deep chains
+    pub fn render_optimized(&mut self, context: &mut RenderContext) -> GupResult<()> {
+        // Check if this composition is deep enough to benefit from optimization
+        if self.composition_depth() > OPTIMIZATION_THRESHOLD {
+            let mut executor = CompositionExecutor::new();
+            executor.flatten_composition(self)?;
+            executor.execute(context)
+        } else {
+            // Use regular rendering for shallow compositions
+            self.render(context)
+        }
+    }
+
+    /// Calculate the depth of this composition chain
+    pub fn composition_depth(&self) -> usize {
+        let first_depth = self.get_component_depth(&self.first);
+        let second_depth = self.get_component_depth(&self.second);
+        1 + first_depth.max(second_depth)
+    }
+
+    /// Get the composition depth of a component
+    fn get_component_depth<T: Mixable>(&self, _component: &T) -> usize {
+        // This would check if the component is itself a composition
+        // For now, return 0 since we can't easily inspect component types
+        // In a full implementation, this would use Any trait or specific patterns
+        0
+    }
+
     /// Render in overlay mode with proper depth testing and blending
     fn render_overlay(&mut self, context: &mut RenderContext) -> GupResult<()> {
         // Push current blend state

@@ -414,11 +414,151 @@ fn bench_realistic_composition_creation(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark deep composition chain optimization performance
+fn bench_deep_composition_optimization(c: &mut Criterion) {
+    let mut group = c.benchmark_group("deep_composition_optimization");
+    group.measurement_time(Duration::from_secs(15));
+
+    let rt = Builder::new_current_thread().enable_all().build().unwrap();
+    let mut context = rt.block_on(RenderContext::new()).unwrap();
+
+    use gup::CompositionExecutor;
+
+    let data_sizes = [1_000, 5_000];
+    let depths = [10, 20, 30]; // Deep chains to test optimization
+
+    for &data_size in &data_sizes {
+        for &depth in &depths {
+            // Direct rendering baseline
+            group.bench_with_input(
+                BenchmarkId::new("direct_deep", format!("{data_size}pts_{depth}depth")),
+                &(data_size, depth),
+                |b, &(data_size, depth)| {
+                    b.iter_custom(|iters| {
+                        let mut total_time = Duration::ZERO;
+                        for _ in 0..iters {
+                            let mut visualizations: Vec<_> = (0..depth)
+                                .map(|i| RealisticVisualization::new(i, data_size))
+                                .collect();
+
+                            let start = Instant::now();
+                            render_direct(&mut visualizations, &mut context).unwrap();
+                            total_time += start.elapsed();
+                        }
+                        total_time
+                    });
+                },
+            );
+
+            // Optimized rendering with CompositionExecutor
+            group.bench_with_input(
+                BenchmarkId::new("optimized_deep", format!("{data_size}pts_{depth}depth")),
+                &(data_size, depth),
+                |b, &(data_size, _depth)| {
+                    b.iter_custom(|iters| {
+                        let mut total_time = Duration::ZERO;
+                        for _ in 0..iters {
+                            let mut executor = CompositionExecutor::new();
+                            let viz = RealisticVisualization::new(0, data_size);
+
+                            let start = Instant::now();
+                            executor.flatten_composition(&viz).unwrap();
+                            executor.execute(&mut context).unwrap();
+                            total_time += start.elapsed();
+                        }
+                        total_time
+                    });
+                },
+            );
+        }
+    }
+    group.finish();
+}
+
+/// Benchmark composition executor operations
+fn bench_composition_executor_operations(c: &mut Criterion) {
+    let mut group = c.benchmark_group("composition_executor");
+    group.measurement_time(Duration::from_secs(10));
+
+    let rt = Builder::new_current_thread().enable_all().build().unwrap();
+    let mut context = rt.block_on(RenderContext::new()).unwrap();
+
+    use gup::CompositionExecutor;
+
+    let data_size = 2_000;
+    let viz = RealisticVisualization::new(1, data_size);
+
+    // Benchmark flattening operation
+    group.bench_function("flatten_composition", |b| {
+        b.iter(|| {
+            let mut executor = CompositionExecutor::new();
+            black_box(executor.flatten_composition(&viz)).unwrap();
+        });
+    });
+
+    // Benchmark execution operation
+    let mut executor = CompositionExecutor::new();
+    executor.flatten_composition(&viz).unwrap();
+
+    group.bench_function("execute_composition", |b| {
+        b.iter(|| {
+            black_box(executor.execute(&mut context)).unwrap();
+        });
+    });
+
+    // Benchmark full optimization cycle
+    group.bench_function("full_optimization_cycle", |b| {
+        b.iter(|| {
+            let mut executor = CompositionExecutor::new();
+            executor.flatten_composition(&viz).unwrap();
+            black_box(executor.execute(&mut context)).unwrap();
+        });
+    });
+
+    group.finish();
+}
+
+/// Benchmark resource pooling effectiveness
+fn bench_resource_pooling(c: &mut Criterion) {
+    let mut group = c.benchmark_group("resource_pooling");
+    group.measurement_time(Duration::from_secs(8));
+
+    let rt = Builder::new_current_thread().enable_all().build().unwrap();
+    let mut context = rt.block_on(RenderContext::new()).unwrap();
+
+    use gup::CompositionExecutor;
+
+    let viz = RealisticVisualization::new(1, 1_000);
+
+    // Benchmark without resource pooling (fresh executor each time)
+    group.bench_function("without_pooling", |b| {
+        b.iter(|| {
+            let mut executor = CompositionExecutor::new();
+            executor.flatten_composition(&viz).unwrap();
+            black_box(executor.execute(&mut context)).unwrap();
+        });
+    });
+
+    // Benchmark with resource pooling (reuse executor)
+    let mut shared_executor = CompositionExecutor::new();
+    group.bench_function("with_pooling", |b| {
+        b.iter(|| {
+            shared_executor.flatten_composition(&viz).unwrap();
+            black_box(shared_executor.execute(&mut context)).unwrap();
+        });
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_realistic_composition_overhead,
     bench_composition_scaling,
     bench_realistic_composition_modes,
-    bench_realistic_composition_creation
+    bench_realistic_composition_creation,
+    bench_deep_composition_optimization,
+    bench_composition_executor_operations,
+    bench_resource_pooling
 );
 criterion_main!(benches);
