@@ -20,7 +20,14 @@
 use crate::{GupError, GupResult, RenderContext, Viewport};
 use std::fmt::Debug;
 
+pub mod composition_recovery;
 pub mod optimization;
+
+pub use composition_recovery::{
+    CompositionFallbackType, CompositionPerformanceMetrics, CompositionResult, ErrorHandlingPolicy,
+    HealthStatus, MixableErrorRecovery, PerformanceBottleneck, RecoveryStrategy,
+    RobustCompositionExecutor, debug,
+};
 pub use optimization::{CompositionExecutor, CompositionMetrics, OPTIMIZATION_THRESHOLD};
 
 /// Composition modes define how two mixable components are combined.
