@@ -105,6 +105,10 @@ pub struct ExternalVisualizationWrapper<T> {
     renderer: Box<dyn ExternalRenderer<T>>,
 }
 
+// Note: Clone is not automatically derivable due to the boxed trait object
+// Users needing Clone should use the constructor with a cloned inner value
+// and a new instance of the renderer
+
 /// Trait for rendering external visualization types within the Gup framework.
 ///
 /// Implement this trait to define how your external visualization type should be

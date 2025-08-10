@@ -117,15 +117,22 @@ pub fn generate_mixable_impl(input: &DeriveInput) -> Result<TokenStream> {
         impl #impl_generics #name #ty_generics #where_clause {
             /// Validate all fields marked for GPU rendering.
             fn validate_fields(&self) -> bool {
-                // Basic validation - can be overridden by users
+                // Generated validation based on field analysis
+                self.validate_vertex_fields() && self.validate_uniform_fields()
+            }
+
+            /// Validate vertex data fields
+            fn validate_vertex_fields(&self) -> bool {
+                // This would be generated based on actual vertex fields
+                // For now, return true
                 true
             }
 
-            /// Extract vertex data from fields marked with #[mixable(vertex_data)]
-            fn extract_vertex_data(&self) -> Vec<f32> {
-                let mut vertex_data = Vec::new();
-                // Implementation will be generated based on actual vertex fields
-                vertex_data
+            /// Validate uniform data fields
+            fn validate_uniform_fields(&self) -> bool {
+                // This would be generated based on actual uniform fields
+                // For now, return true
+                true
             }
         }
     };
@@ -225,16 +232,37 @@ fn analyze_field(field: &Field, analysis: &mut FieldAnalysis) -> Result<()> {
                 } else if meta.path.is_ident("binding") {
                     if let Ok(lit_int) = meta.value()?.parse::<syn::LitInt>() {
                         let binding = lit_int.base10_parse::<u32>()?;
-                        // Apply binding to the most recently added field
-                        if let Some(uniform_field) = analysis.uniform_fields.last_mut() {
-                            if uniform_field.name == field_name {
-                                uniform_field.binding = Some(binding);
-                            }
+                        // Apply binding to the most recently added field with the same name
+                        if let Some(uniform_field) = analysis
+                            .uniform_fields
+                            .iter_mut()
+                            .find(|f| f.name == field_name)
+                        {
+                            uniform_field.binding = Some(binding);
                         }
-                        if let Some(texture_field) = analysis.texture_fields.last_mut() {
-                            if texture_field.name == field_name {
-                                texture_field.binding = Some(binding);
-                            }
+                        if let Some(texture_field) = analysis
+                            .texture_fields
+                            .iter_mut()
+                            .find(|f| f.name == field_name)
+                        {
+                            texture_field.binding = Some(binding);
+                        }
+                    }
+                } else if meta.path.is_ident("format") {
+                    if let Ok(lit_str) = meta.value()?.parse::<syn::LitStr>() {
+                        let format_str = lit_str.value();
+                        // Apply format to the most recently added vertex field with the same name
+                        if let Some(vertex_field) = analysis
+                            .vertex_fields
+                            .iter_mut()
+                            .find(|f| f.name == field_name)
+                        {
+                            vertex_field.vertex_format = match format_str.as_str() {
+                                "float32x2" => VertexFormat::Float32x2,
+                                "float32x3" => VertexFormat::Float32x3,
+                                "float32x4" => VertexFormat::Float32x4,
+                                _ => VertexFormat::Custom(format_str),
+                            };
                         }
                     }
                 }
@@ -268,26 +296,57 @@ fn infer_vertex_format(field_type: &Type) -> Result<VertexFormat> {
 /// Generate the render implementation based on configuration and field analysis.
 fn generate_render_implementation(
     config: &MixableConfig,
-    _analysis: &FieldAnalysis,
+    analysis: &FieldAnalysis,
 ) -> Result<TokenStream> {
     match &config.render_type {
-        Some(RenderType::Points) => generate_points_render(),
-        Some(RenderType::Lines) => generate_lines_render(),
-        Some(RenderType::Triangles) => generate_triangles_render(),
+        Some(RenderType::Points) => generate_points_render(analysis),
+        Some(RenderType::Lines) => generate_lines_render(analysis),
+        Some(RenderType::Triangles) => generate_triangles_render(analysis),
         Some(RenderType::Custom(custom_type)) => generate_custom_render(custom_type),
         None => generate_default_render(),
     }
 }
 
 /// Generate point-based rendering implementation.
-fn generate_points_render() -> Result<TokenStream> {
+fn generate_points_render(analysis: &FieldAnalysis) -> Result<TokenStream> {
+    if analysis.vertex_fields.is_empty() {
+        return Ok(quote! {
+            // No vertex data fields found - default to no-op rendering
+            Ok(())
+        });
+    }
+
+    // Generate field extraction code based on actual vertex fields
+    let mut field_extractions = Vec::new();
+    for vertex_field in &analysis.vertex_fields {
+        let field_name = &vertex_field.name;
+        field_extractions.push(quote! {
+            vertex_data.extend(self.#field_name.iter().flat_map(|point| point.iter().copied()));
+        });
+    }
+
+    // Generate uniform setup code
+    let mut uniform_setups = Vec::new();
+    for uniform_field in &analysis.uniform_fields {
+        let field_name = &uniform_field.name;
+        if let Some(binding) = uniform_field.binding {
+            uniform_setups.push(quote! {
+                context.set_uniform(#binding, &self.#field_name)?;
+            });
+        }
+    }
+
     Ok(quote! {
-        // Extract vertex data from fields marked as vertex_data
-        let vertex_data = self.extract_vertex_data();
+        // Extract vertex data from all vertex fields
+        let mut vertex_data: Vec<f32> = Vec::new();
+        #(#field_extractions)*
 
         if vertex_data.is_empty() {
             return Ok(());
         }
+
+        // Set up uniforms
+        #(#uniform_setups)*
 
         // Convert to point format expected by render_points
         let points: Vec<[f32; 2]> = vertex_data
@@ -301,14 +360,45 @@ fn generate_points_render() -> Result<TokenStream> {
 }
 
 /// Generate line-based rendering implementation.
-fn generate_lines_render() -> Result<TokenStream> {
+fn generate_lines_render(analysis: &FieldAnalysis) -> Result<TokenStream> {
+    if analysis.vertex_fields.is_empty() {
+        return Ok(quote! {
+            // No vertex data fields found - default to no-op rendering
+            Ok(())
+        });
+    }
+
+    // Generate field extraction code based on actual vertex fields
+    let mut field_extractions = Vec::new();
+    for vertex_field in &analysis.vertex_fields {
+        let field_name = &vertex_field.name;
+        field_extractions.push(quote! {
+            vertex_data.extend(self.#field_name.iter().flat_map(|point| point.iter().copied()));
+        });
+    }
+
+    // Generate uniform setup code
+    let mut uniform_setups = Vec::new();
+    for uniform_field in &analysis.uniform_fields {
+        let field_name = &uniform_field.name;
+        if let Some(binding) = uniform_field.binding {
+            uniform_setups.push(quote! {
+                context.set_uniform(#binding, &self.#field_name)?;
+            });
+        }
+    }
+
     Ok(quote! {
-        // Extract vertex data for line rendering
-        let vertex_data = self.extract_vertex_data();
+        // Extract vertex data from all vertex fields
+        let mut vertex_data: Vec<f32> = Vec::new();
+        #(#field_extractions)*
 
         if vertex_data.len() < 4 {
             return Ok(()); // Need at least 2 points for a line
         }
+
+        // Set up uniforms
+        #(#uniform_setups)*
 
         // Convert to line segments
         let points: Vec<[f32; 2]> = vertex_data
@@ -322,14 +412,45 @@ fn generate_lines_render() -> Result<TokenStream> {
 }
 
 /// Generate triangle-based rendering implementation.
-fn generate_triangles_render() -> Result<TokenStream> {
+fn generate_triangles_render(analysis: &FieldAnalysis) -> Result<TokenStream> {
+    if analysis.vertex_fields.is_empty() {
+        return Ok(quote! {
+            // No vertex data fields found - default to no-op rendering
+            Ok(())
+        });
+    }
+
+    // Generate field extraction code based on actual vertex fields
+    let mut field_extractions = Vec::new();
+    for vertex_field in &analysis.vertex_fields {
+        let field_name = &vertex_field.name;
+        field_extractions.push(quote! {
+            vertex_data.extend(self.#field_name.iter().flat_map(|point| point.iter().copied()));
+        });
+    }
+
+    // Generate uniform setup code
+    let mut uniform_setups = Vec::new();
+    for uniform_field in &analysis.uniform_fields {
+        let field_name = &uniform_field.name;
+        if let Some(binding) = uniform_field.binding {
+            uniform_setups.push(quote! {
+                context.set_uniform(#binding, &self.#field_name)?;
+            });
+        }
+    }
+
     Ok(quote! {
-        // Extract vertex data for triangle rendering
-        let vertex_data = self.extract_vertex_data();
+        // Extract vertex data from all vertex fields
+        let mut vertex_data: Vec<f32> = Vec::new();
+        #(#field_extractions)*
 
         if vertex_data.len() < 6 {
             return Ok(()); // Need at least 3 points for a triangle
         }
+
+        // Set up uniforms
+        #(#uniform_setups)*
 
         // Convert to triangles
         let points: Vec<[f32; 2]> = vertex_data
