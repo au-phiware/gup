@@ -9,19 +9,26 @@
 
 ## Context
 
-External visualization libraries and custom data types need seamless integration with Gup's Mixable trait ecosystem. This story implements comprehensive integration utilities including wrapper types, helper functions, plugin system, and comprehensive test coverage to enable third-party library adoption.
+External visualization libraries and custom data types need seamless integration
+with Gup's Mixable trait ecosystem. This story implements comprehensive
+integration utilities including wrapper types, helper functions, plugin system,
+and comprehensive test coverage to enable third-party library adoption.
 
 ## User Story
 
-**As a** developer using external visualization libraries **I want** easy tools to make external types compatible with Gup's composition system **So that** I can leverage Gup's GPU-accelerated composability without extensive manual implementation work
+**As a** developer using external visualization libraries **I want** easy tools
+to make external types compatible with Gup's composition system **So that** I
+can leverage Gup's GPU-accelerated composability without extensive manual
+implementation work
 
 ## Acceptance Criteria
 
 ### AC1: Integration Helper Library ✅
 
 - ✅ **Wrapper Types**: `ExternalVisualizationWrapper<T>` for external types
-- ✅ **Builder Pattern**: Fluent API with `ExternalVisualizationBuilder`  
-- ✅ **Point-Based Rendering**: Support for point-based visualizations via extractors
+- ✅ **Builder Pattern**: Fluent API with `ExternalVisualizationBuilder`
+- ✅ **Point-Based Rendering**: Support for point-based visualizations via
+  extractors
 - ✅ **Custom Rendering**: Support for custom render functions
 
 ### AC2: Plugin System Framework ✅
@@ -58,6 +65,7 @@ pub trait ExternalRenderer<T>: Send + Sync + Debug {
 ```
 
 **Key Features:**
+
 - Zero-cost abstractions over external types
 - Builder pattern with fluent API
 - Point-based and custom rendering support
@@ -84,6 +92,7 @@ pub trait MixablePlugin: Send + Sync + Debug {
 ```
 
 **Key Features:**
+
 - Thread-safe global registry with mutex management
 - TypeId-based type resolution
 - Plugin validation and error handling
@@ -101,7 +110,7 @@ pub trait MixablePlugin: Send + Sync + Debug {
 ### Comprehensive Test Coverage ✅
 
 - **26 Integration Tests**: All functionality covered with realistic scenarios
-- **Mock External Types**: `MockExternalChart`, `MockTimeSeriesPlugin` 
+- **Mock External Types**: `MockExternalChart`, `MockTimeSeriesPlugin`
 - **Thread Safety**: Validated concurrent plugin access
 - **Performance**: Confirmed <5% integration overhead
 - **Error Handling**: All error paths tested
@@ -111,7 +120,7 @@ pub trait MixablePlugin: Send + Sync + Debug {
 ```rust
 tests/integration_ecosystem_tests.rs
 ├── External wrapper functionality
-├── Plugin system operations  
+├── Plugin system operations
 ├── Thread safety validation
 ├── Performance characteristics
 ├── Error handling scenarios
@@ -122,10 +131,12 @@ tests/integration_ecosystem_tests.rs
 
 ### Architecture Patterns
 
-1. **Trait-Based Design**: `ExternalRenderer<T>` enables type-safe external integration
-2. **Builder Pattern**: Fluent API provides ergonomic integration experience  
+1. **Trait-Based Design**: `ExternalRenderer<T>` enables type-safe external
+   integration
+2. **Builder Pattern**: Fluent API provides ergonomic integration experience
 3. **Plugin System**: Ecosystem-wide registration enables discovery and reuse
-4. **Zero-Cost Abstractions**: Performance equivalent to direct Mixable implementations
+4. **Zero-Cost Abstractions**: Performance equivalent to direct Mixable
+   implementations
 
 ### Error Handling Strategy
 
@@ -159,7 +170,8 @@ tests/integration_ecosystem_tests.rs
 
 ### Integration Patterns Supported
 
-1. **Point-Based Visualization**: Common pattern for scatter plots, geographic data
+1. **Point-Based Visualization**: Common pattern for scatter plots, geographic
+   data
 2. **Custom Rendering**: Full control over GPU pipeline for specialized needs
 3. **Plugin Ecosystem**: Third-party library integration with discovery
 4. **Adapter Patterns**: Support for common external library architectures
@@ -176,9 +188,11 @@ tests/integration_ecosystem_tests.rs
 ### Ecosystem Impact
 
 - ✅ **Plugin Framework**: Foundation for third-party ecosystem growth
-- ✅ **Library Compatibility**: Patterns support major visualization library architectures
+- ✅ **Library Compatibility**: Patterns support major visualization library
+  architectures
 - ✅ **Performance**: No regression in core Mixable trait performance
-- ✅ **Maintainability**: Clean, well-tested code with clear separation of concerns
+- ✅ **Maintainability**: Clean, well-tested code with clear separation of
+  concerns
 
 ## Integration Examples
 
@@ -219,12 +233,15 @@ if let Some(mixable) = try_make_mixable(timeseries) {
 ## Dependencies
 
 ### Prerequisite Stories
+
 - GUP-001: Build Mixable Trait ✅ (provides the trait to integrate with)
-- GUP-020: WebGPU Integration for RenderContext ✅ (provides rendering capabilities)
+- GUP-020: WebGPU Integration for RenderContext ✅ (provides rendering
+  capabilities)
 
 ### Enables Stories
+
 - Easier adoption of Gup by third-party developers
-- Integration with existing visualization libraries  
+- Integration with existing visualization libraries
 - Broader ecosystem participation
 - Foundation for derive macro system (future GUP-023)
 
@@ -232,15 +249,19 @@ if let Some(mixable) = try_make_mixable(timeseries) {
 
 ### Design Decisions Made
 
-- **String-Based Registry Keys**: Plugin names as registry keys for human-readable organization
-- **TypeId Resolution**: Efficient type-based plugin lookup without string matching
-- **Arc-Based Plugin Storage**: Shared ownership enables plugin reuse across registries
-- **Mutex Global Registry**: Simple thread-safe access pattern with explicit lock management
+- **String-Based Registry Keys**: Plugin names as registry keys for
+  human-readable organization
+- **TypeId Resolution**: Efficient type-based plugin lookup without string
+  matching
+- **Arc-Based Plugin Storage**: Shared ownership enables plugin reuse across
+  registries
+- **Mutex Global Registry**: Simple thread-safe access pattern with explicit
+  lock management
 
 ### Quality Standards Maintained
 
 - All code includes copyright headers
-- Comprehensive test coverage with realistic scenarios  
+- Comprehensive test coverage with realistic scenarios
 - Zero clippy warnings and compilation errors
 - Documentation with working examples for all public APIs
 - Error handling with actionable error messages
@@ -254,10 +275,12 @@ if let Some(mixable) = try_make_mixable(timeseries) {
 - ✅ **Documentation**: All public APIs documented with examples
 - ✅ **Performance Validation**: <5% overhead confirmed
 - ✅ **Production Quality**: Zero warnings, errors, comprehensive coverage
-- ✅ **Code Review**: Implementation follows established patterns and conventions
+- ✅ **Code Review**: Implementation follows established patterns and
+  conventions
 
 ---
 
 **Completion Date**: 2025-08-10  
 **Final Status**: ✅ Complete and Production-Ready  
-**Next Steps**: Foundation ready for derive macro system (GUP-023) and ecosystem adoption
+**Next Steps**: Foundation ready for derive macro system (GUP-023) and ecosystem
+adoption
