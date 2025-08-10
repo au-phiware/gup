@@ -33,9 +33,11 @@ pub mod context;
 pub mod debug;
 pub mod error;
 pub mod examples;
+pub mod integration;
 pub mod interaction;
 pub mod mark;
 pub mod mixable;
+pub mod plugins;
 pub mod prelude;
 pub mod render;
 pub mod selection;
@@ -47,6 +49,7 @@ pub use context::*;
 pub use debug::*;
 pub use error::*;
 pub use examples::*;
+pub use integration::*;
 // Export interaction system components (excluding ambiguous types)
 pub use interaction::{
     CustomInteractionQuery, ElementData, ElementHit, EventHandler, GpuInteractionQuery,
@@ -54,6 +57,7 @@ pub use interaction::{
     QueryStats, Rect, Renderable,
 };
 pub use mixable::*;
+pub use plugins::*;
 pub use render::*;
 pub use shader_function::*;
 pub use shader_pipeline::*;
@@ -70,8 +74,10 @@ pub use selection::*;
 // Export chart builder system (Observable Plot-style API)
 pub use chart_builder::*;
 
-// Note: Procedural macros from gup_macros must be imported directly
-// with `use gup_macros::wgsl_function;` due to Rust limitations
+// Note: Procedural macros from gup_macros must be imported directly due to Rust limitations
+// Available macros:
+// - `use gup_macros::wgsl_function;` - WGSL shader function generation
+// - `use gup_macros::Mixable;` - Automatic Mixable trait derivation
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;

@@ -35,3 +35,12 @@ pub use crate::{ColorShaderFunction, PositionShaderFunction, ShaderFunction};
 
 // Interaction system
 pub use crate::interaction::{InteractionEvent, InteractionSystem, InteractionType, Renderable};
+
+// Integration and plugin system
+pub use crate::integration::{
+    ExternalRenderer, ExternalVisualizationBuilder, ExternalVisualizationWrapper, wrap_point_data,
+    wrap_with_custom_render,
+};
+pub use crate::plugins::{
+    MixablePlugin, MixablePluginRegistry, PluginMetadata, global_registry, try_make_mixable,
+};

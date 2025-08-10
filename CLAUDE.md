@@ -1,18 +1,8 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with
-code in this repository.
-
 ## Development Environment
 
-This project uses **Nix flakes** for reproducible development environments. The
-`flake.nix` provides:
-
-### Getting Started with Nix
-
-- `nix develop` - Enter the development shell with all dependencies
-- The flake provides a complete Rust toolchain with rust-analyzer and rust-src
-- Includes all necessary graphics libraries (Vulkan, OpenGL, Wayland, X11)
+This project uses **Nix flakes** for reproducible development environments.
 
 ### Development Tools Included
 
@@ -31,7 +21,6 @@ This project uses a `maskfile.md` for task automation. Common commands:
 
 - `mask build` - Build all workspace projects
 - `mask check` - Check all projects without building
-- `mask run hello-wgpu` - Run the hello-wgpu project
 - `mask clean` - Clean build artifacts
 
 ### Testing and Quality
@@ -39,15 +28,6 @@ This project uses a `maskfile.md` for task automation. Common commands:
 - `mask test` - Run tests for all projects
 - `cargo test -- --test-threads=1` - Run tests with single threading (required
   for GPU tests)
-- `mask lint-check` - Run linter
-- `mask fmt` - Format all code
-- `mask fmt-check` - Check if code is formatted
-
-### Development Workflow
-
-- `mask watch` - Watch for changes and rebuild
-- `mask audit` - Check dependencies for security vulnerabilities
-- `mask deps` - Update dependencies
 
 ### WebAssembly
 
