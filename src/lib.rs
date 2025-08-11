@@ -27,6 +27,7 @@
 //! - **Interactive Visualizations**: Built-in support for user interactions and animations
 //! - **Extensible Architecture**: Modular design allowing custom marks and interactions
 
+pub mod async_mixable;
 pub mod buffer;
 pub mod chart_builder;
 pub mod context;
@@ -44,6 +45,19 @@ pub mod selection;
 pub mod shader_function;
 pub mod shader_pipeline;
 
+// Export async components selectively to avoid conflicts
+pub use async_mixable::{
+    AsyncComposedVisualization, AsyncMixable, AsyncMixableExt, AsyncRenderStrategy, RenderProgress,
+    SyncAdapter, TimeoutComposition,
+    progressive::{
+        ProgressiveConfig, ProgressiveDataLoader, ProgressiveVisualization, QualityLevel,
+    },
+    streaming::{Point2D, StreamStats, StreamingDataSource, StreamingScatterPlot},
+    utils::{
+        AsyncCompositionBuilder, AsyncPerformanceMonitor, ComponentStats, MultiAsyncComposition,
+        compose,
+    },
+};
 pub use buffer::*;
 pub use context::*;
 pub use debug::*;

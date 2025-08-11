@@ -23,9 +23,12 @@ winit = "0.30"
 bytemuck = { version = "1.23", features = ["derive"] }
 pollster = "0.3"
 raw-window-handle = "0.6"
-tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "macros"] }
+tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "macros", "time"] }
 futures-intrusive = "0.5"
 futures-channel = "0.3"
+futures = "0.3"
+async-trait = "0.1"
+tokio-util = { version = "0.7" }
 env_logger = "0.10"
 paste = "1.0"
 gup-macros = { path = "gup-macros" }
@@ -86,5 +89,9 @@ path = "examples/shader_pipeline_demo.rs"
 [[example]]
 name = "gpu_debug_demo"
 path = "examples/gpu_debug_demo.rs"
+
+[[example]]
+name = "async_streaming_demo"
+path = "examples/async_streaming_demo.rs"
 
 
