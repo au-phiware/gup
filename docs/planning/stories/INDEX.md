@@ -56,7 +56,7 @@ epic and status.
 
 | Story                                                     | Title                         | Status | Priority | Points |
 | --------------------------------------------------------- | ----------------------------- | ------ | -------- | ------ |
-| [GUP-067](GUP-067_Rectangle_Line_Mark_Implementations.md) | Rectangle and Line Mark Types | 💡 New | High     | 5      |
+| [GUP-067](GUP-067_Rectangle_Line_Mark_Implementations.md) | Rectangle and Line Mark Types | ✅ Complete | High     | 5      |
 | [GUP-068](GUP-068_Mark_Pipeline_Integration.md)           | Mark Pipeline Integration     | 💡 New | High     | 5      |
 
 ### Post GUP-005 Stories - Shader Function System Enhancement (Stories 51+)

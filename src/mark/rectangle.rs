@@ -23,6 +23,7 @@
 use crate::mark::Mark;
 use crate::shader_function::{Vec2, Vec4};
 use crate::shader_pipeline::ComposableShaderPipeline;
+use std::collections::HashMap;
 
 /// Rectangle mark for rendering rectangular shapes and bars.
 ///
@@ -109,65 +110,125 @@ impl Mark for Rectangle {
     /// When using generated shaders, this method creates WGSL that integrates
     /// with the shader function pipeline for dynamic attribute mapping.
     fn generate_vertex_shader(pipeline: &ComposableShaderPipeline) -> String {
-        let base_shader = r#"
-// Rectangle instance data structure
-struct RectangleInstance {
-    center: vec2<f32>,
-    size: vec2<f32>,
-    fill_color: vec4<f32>,
-    stroke_width: f32,
-    stroke_color: vec4<f32>,
-    corner_radius: f32,
-}
+        Self::generate_vertex_shader_with_functions(pipeline, &HashMap::new())
+    }
 
-@group(1) @binding(0) var<storage, read> instances: array<RectangleInstance>;
+    /// Generate vertex shader with specific shader function mappings.
+    ///
+    /// This implementation creates a vertex shader that applies shader functions
+    /// to transform data into rectangle attributes (center, size, colors).
+    fn generate_vertex_shader_with_functions(
+        pipeline: &ComposableShaderPipeline,
+        attribute_functions: &HashMap<String, String>,
+    ) -> String {
+        // Generate data structures
+        let mut shader = String::new();
+        shader
+            .push_str("// Generated Rectangle vertex shader with shader function integration\n\n");
 
-struct VertexInput {
-    @location(0) position: vec2<f32>,
-    @builtin(instance_index) instance_index: u32,
-}
+        // Data input structure
+        shader.push_str("struct DataInput {\n");
+        shader.push_str("    index: u32,\n");
+        shader.push_str("}\n\n");
 
-struct VertexOutput {
-    @builtin(position) clip_position: vec4<f32>,
-    @location(0) world_position: vec2<f32>,
-    @location(1) local_position: vec2<f32>,
-    @location(2) fill_color: vec4<f32>,
-    @location(3) stroke_color: vec4<f32>,
-    @location(4) size: vec2<f32>,
-    @location(5) stroke_width: f32,
-    @location(6) corner_radius: f32,
-}
+        // Rectangle instance structure
+        shader.push_str("struct RectangleInstance {\n");
+        shader.push_str("    center: vec2<f32>,\n");
+        shader.push_str("    size: vec2<f32>,\n");
+        shader.push_str("    fill_color: vec4<f32>,\n");
+        shader.push_str("    stroke_width: f32,\n");
+        shader.push_str("    stroke_color: vec4<f32>,\n");
+        shader.push_str("    corner_radius: f32,\n");
+        shader.push_str("}\n\n");
 
-@vertex
-fn vs_main(input: VertexInput) -> VertexOutput {
-    let instance = instances[input.instance_index];
-    
-    // Apply shader functions to instance data
-    let transformed_center = position_transform(instance.center, position_uniforms);
-    let final_size = size_transform(instance.size, size_uniforms);
-    let final_fill_color = color_transform(instance.fill_color, color_uniforms);
-    
-    // Calculate world position
-    let world_pos = input.position * final_size + transformed_center;
-    
-    var output: VertexOutput;
-    output.clip_position = vec4<f32>(world_pos, 0.0, 1.0);
-    output.world_position = world_pos;
-    output.local_position = input.position;
-    output.fill_color = final_fill_color;
-    output.stroke_color = instance.stroke_color;
-    output.size = final_size;
-    output.stroke_width = instance.stroke_width;
-    output.corner_radius = instance.corner_radius;
-    
-    return output;
-}
-"#;
+        // Storage buffers
+        shader
+            .push_str("@group(0) @binding(0) var<storage, read> data_buffer: array<DataInput>;\n");
+        shader.push_str(
+            "@group(1) @binding(0) var<storage, read> instances: array<RectangleInstance>;\n\n",
+        );
 
-        // Integrate with pipeline functions
-        let mut shader = pipeline.generate_vertex_shader();
-        shader.push_str("\n\n");
-        shader.push_str(base_shader);
+        // Vertex input/output structures
+        shader.push_str("struct VertexInput {\n");
+        shader.push_str("    @location(0) position: vec2<f32>,\n");
+        shader.push_str("    @builtin(instance_index) instance_index: u32,\n");
+        shader.push_str("}\n\n");
+
+        shader.push_str("struct VertexOutput {\n");
+        shader.push_str("    @builtin(position) clip_position: vec4<f32>,\n");
+        shader.push_str("    @location(0) world_position: vec2<f32>,\n");
+        shader.push_str("    @location(1) local_position: vec2<f32>,\n");
+        shader.push_str("    @location(2) fill_color: vec4<f32>,\n");
+        shader.push_str("    @location(3) stroke_color: vec4<f32>,\n");
+        shader.push_str("    @location(4) size: vec2<f32>,\n");
+        shader.push_str("    @location(5) stroke_width: f32,\n");
+        shader.push_str("    @location(6) corner_radius: f32,\n");
+        shader.push_str("}\n\n");
+
+        // Add shader function definitions from pipeline
+        let pipeline_functions = pipeline.generate_vertex_shader();
+        if !pipeline_functions.is_empty() {
+            shader.push_str("// Shader function definitions\n");
+            shader.push_str(&pipeline_functions);
+            shader.push_str("\n\n");
+        }
+
+        // Main vertex function
+        shader.push_str("@vertex\n");
+        shader.push_str("fn vs_main(input: VertexInput) -> VertexOutput {\n");
+        shader.push_str("    let data = data_buffer[input.instance_index];\n");
+        shader.push_str("    let instance = instances[input.instance_index];\n\n");
+
+        // Apply shader functions to transform attributes
+        let mut transformed_center = "instance.center".to_string();
+        let mut transformed_size = "instance.size".to_string();
+        let mut transformed_fill_color = "instance.fill_color".to_string();
+
+        if let Some(position_fn) = attribute_functions.get("position") {
+            shader.push_str(&format!(
+                "    let transformed_center = {position_fn}(data, position_uniforms);\n"
+            ));
+            transformed_center = "transformed_center".to_string();
+        }
+
+        if let Some(size_fn) = attribute_functions.get("size") {
+            shader.push_str(&format!(
+                "    let transformed_size = {size_fn}(data, size_uniforms);\n"
+            ));
+            transformed_size = "transformed_size".to_string();
+        }
+
+        if let Some(color_fn) = attribute_functions.get("color") {
+            shader.push_str(&format!(
+                "    let transformed_fill_color = {color_fn}(data, color_uniforms);\n"
+            ));
+            transformed_fill_color = "transformed_fill_color".to_string();
+        }
+
+        shader.push('\n');
+
+        // Calculate final world position
+        shader.push_str(&format!(
+            "    let world_pos = input.position * {transformed_size} + {transformed_center};\n"
+        ));
+        shader.push('\n');
+
+        // Generate output
+        shader.push_str("    var output: VertexOutput;\n");
+        shader.push_str("    output.clip_position = vec4<f32>(world_pos, 0.0, 1.0);\n");
+        shader.push_str("    output.world_position = world_pos;\n");
+        shader.push_str("    output.local_position = input.position;\n");
+        shader.push_str(&format!(
+            "    output.fill_color = {transformed_fill_color};\n"
+        ));
+        shader.push_str("    output.stroke_color = instance.stroke_color;\n");
+        shader.push_str(&format!("    output.size = {transformed_size};\n"));
+        shader.push_str("    output.stroke_width = instance.stroke_width;\n");
+        shader.push_str("    output.corner_radius = instance.corner_radius;\n");
+        shader.push('\n');
+        shader.push_str("    return output;\n");
+        shader.push_str("}\n");
+
         shader
     }
 
@@ -176,50 +237,95 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     /// Creates a fragment shader that renders smooth rectangles using distance
     /// field calculations and integrates with the shader function system.
     fn generate_fragment_shader(pipeline: &ComposableShaderPipeline) -> String {
-        let base_shader = r#"
-@fragment
-fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-    // Convert to rectangle coordinate system
-    let half_size = input.size * 0.5;
-    let pos = abs(input.local_position * half_size);
-    
-    // Calculate distance to rounded rectangle
-    let corner_offset = max(pos - (half_size - input.corner_radius), vec2<f32>(0.0));
-    let distance_to_corner = length(corner_offset);
-    let distance_to_edge = max(
-        max(pos.x - half_size.x, pos.y - half_size.y),
-        distance_to_corner - input.corner_radius
-    );
-    
-    // Calculate stroke boundaries
-    let outer_distance = distance_to_edge;
-    let inner_distance = distance_to_edge + input.stroke_width;
-    
-    // Anti-aliasing edge width
-    let edge_width = 0.5;
-    
-    // Calculate alpha values with smooth transitions
-    let outer_alpha = 1.0 - smoothstep(-edge_width, edge_width, outer_distance);
-    
-    // Handle stroke rendering
-    if (input.stroke_width > 0.0) {
-        let inner_alpha = smoothstep(-edge_width, edge_width, inner_distance);
-        let stroke_alpha = outer_alpha * (1.0 - inner_alpha);
-        let fill_alpha = outer_alpha * inner_alpha;
-        
-        // Blend stroke and fill colors
-        let final_color = input.stroke_color * stroke_alpha + input.fill_color * fill_alpha;
-        return vec4<f32>(final_color.rgb, max(stroke_alpha, fill_alpha));
-    } else {
-        // No stroke - just fill
-        return vec4<f32>(input.fill_color.rgb, input.fill_color.a * outer_alpha);
+        Self::generate_fragment_shader_with_functions(pipeline, &HashMap::new())
     }
-}
-"#;
 
-        let mut shader = pipeline.generate_fragment_shader();
-        shader.push_str("\n\n");
-        shader.push_str(base_shader);
+    /// Generate fragment shader with specific shader function mappings.
+    ///
+    /// This implementation creates an anti-aliased rectangle fragment shader that
+    /// uses attributes computed by shader functions in the vertex stage.
+    fn generate_fragment_shader_with_functions(
+        pipeline: &ComposableShaderPipeline,
+        _attribute_functions: &HashMap<String, String>,
+    ) -> String {
+        let mut shader = String::new();
+        shader.push_str("// Generated Rectangle fragment shader with anti-aliased rendering\n\n");
+
+        // Add vertex output structure (must match vertex shader)
+        shader.push_str("struct VertexOutput {\n");
+        shader.push_str("    @builtin(position) clip_position: vec4<f32>,\n");
+        shader.push_str("    @location(0) world_position: vec2<f32>,\n");
+        shader.push_str("    @location(1) local_position: vec2<f32>,\n");
+        shader.push_str("    @location(2) fill_color: vec4<f32>,\n");
+        shader.push_str("    @location(3) stroke_color: vec4<f32>,\n");
+        shader.push_str("    @location(4) size: vec2<f32>,\n");
+        shader.push_str("    @location(5) stroke_width: f32,\n");
+        shader.push_str("    @location(6) corner_radius: f32,\n");
+        shader.push_str("}\n\n");
+
+        // Add shader function definitions if needed
+        let pipeline_functions = pipeline.generate_fragment_shader();
+        if !pipeline_functions.is_empty() {
+            shader.push_str("// Shader function definitions\n");
+            shader.push_str(&pipeline_functions);
+            shader.push_str("\n\n");
+        }
+
+        // SDF function for rounded rectangles
+        shader.push_str("// Signed distance function for rounded rectangle\n");
+        shader.push_str("fn sdf_rounded_rectangle(pos: vec2<f32>, size: vec2<f32>, corner_radius: f32) -> f32 {\n");
+        shader.push_str("    let half_size = size * 0.5;\n");
+        shader.push_str("    let corner_offset = max(abs(pos) - (half_size - corner_radius), vec2<f32>(0.0));\n");
+        shader.push_str("    let distance_to_corner = length(corner_offset);\n");
+        shader.push_str("    let distance_to_edge = max(\n");
+        shader.push_str("        max(abs(pos).x - half_size.x, abs(pos).y - half_size.y),\n");
+        shader.push_str("        distance_to_corner - corner_radius\n");
+        shader.push_str("    );\n");
+        shader.push_str("    return distance_to_edge;\n");
+        shader.push_str("}\n\n");
+
+        // Main fragment function with anti-aliased rectangle rendering
+        shader.push_str("@fragment\n");
+        shader.push_str("fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {\n");
+        shader.push_str("    // Calculate position in rectangle coordinate system\n");
+        shader.push_str("    let pos = input.local_position * input.size;\n");
+        shader.push('\n');
+        shader.push_str("    // Calculate distance to rectangle edge using SDF\n");
+        shader.push_str("    let distance_to_edge = sdf_rounded_rectangle(pos, input.size, input.corner_radius);\n");
+        shader.push('\n');
+        shader.push_str("    // Calculate stroke boundaries\n");
+        shader.push_str("    let outer_distance = distance_to_edge;\n");
+        shader.push_str("    let inner_distance = distance_to_edge + input.stroke_width;\n");
+        shader.push('\n');
+        shader.push_str("    // Anti-aliasing edge width\n");
+        shader.push_str("    let edge_width = 0.5;\n");
+        shader.push('\n');
+        shader.push_str("    // Calculate alpha values with smooth transitions\n");
+        shader.push_str(
+            "    let outer_alpha = 1.0 - smoothstep(-edge_width, edge_width, outer_distance);\n",
+        );
+        shader.push('\n');
+        shader.push_str("    // Handle stroke rendering\n");
+        shader.push_str("    if (input.stroke_width > 0.0) {\n");
+        shader.push_str(
+            "        let inner_alpha = smoothstep(-edge_width, edge_width, inner_distance);\n",
+        );
+        shader.push_str("        let stroke_alpha = outer_alpha * (1.0 - inner_alpha);\n");
+        shader.push_str("        let fill_alpha = outer_alpha * inner_alpha;\n");
+        shader.push('\n');
+        shader.push_str("        // Blend stroke and fill colors\n");
+        shader.push_str("        let final_color = input.stroke_color * stroke_alpha + input.fill_color * fill_alpha;\n");
+        shader.push_str(
+            "        return vec4<f32>(final_color.rgb, max(stroke_alpha, fill_alpha));\n",
+        );
+        shader.push_str("    } else {\n");
+        shader.push_str("        // No stroke - just fill\n");
+        shader.push_str(
+            "        return vec4<f32>(input.fill_color.rgb, input.fill_color.a * outer_alpha);\n",
+        );
+        shader.push_str("    }\n");
+        shader.push_str("}\n");
+
         shader
     }
 
@@ -262,6 +368,27 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             0, 1, 2, // First triangle: bottom-left, bottom-right, top-right
             0, 2, 3, // Second triangle: bottom-left, top-right, top-left
         ])
+    }
+
+    /// Get the WGSL type name for a Rectangle attribute.
+    fn get_attribute_type(attribute_name: &str) -> crate::error::GupResult<&'static str> {
+        match attribute_name {
+            "center" | "position" => Ok("vec2<f32>"),
+            "size" | "width" | "height" => Ok("vec2<f32>"),
+            "fill_color" | "color" | "stroke_color" => Ok("vec4<f32>"),
+            "stroke_width" | "corner_radius" => Ok("f32"),
+            _ => Err(crate::error::GupError::validation_error(format!(
+                "Unknown Rectangle attribute: {attribute_name}"
+            ))),
+        }
+    }
+
+    /// Check if a shader function output type is compatible with a Rectangle attribute.
+    fn is_attribute_compatible(attribute_name: &str, output_type: &str) -> bool {
+        match Self::get_attribute_type(attribute_name) {
+            Ok(expected_type) => expected_type == output_type,
+            Err(_) => false,
+        }
     }
 }
 
@@ -410,5 +537,129 @@ mod tests {
         assert_eq!(attrs.fill_color.w, 0.8); // Alpha
         assert_eq!(attrs.stroke_width, 1.5);
         assert_eq!(attrs.corner_radius, 3.0);
+    }
+
+    #[test]
+    fn test_rectangle_attribute_type_validation() {
+        // Test that Rectangle provides correct attribute types
+        assert_eq!(
+            Rectangle::get_attribute_type("center").unwrap(),
+            "vec2<f32>"
+        );
+        assert_eq!(
+            Rectangle::get_attribute_type("position").unwrap(),
+            "vec2<f32>"
+        );
+        assert_eq!(Rectangle::get_attribute_type("size").unwrap(), "vec2<f32>");
+        assert_eq!(Rectangle::get_attribute_type("width").unwrap(), "vec2<f32>");
+        assert_eq!(
+            Rectangle::get_attribute_type("height").unwrap(),
+            "vec2<f32>"
+        );
+        assert_eq!(
+            Rectangle::get_attribute_type("fill_color").unwrap(),
+            "vec4<f32>"
+        );
+        assert_eq!(Rectangle::get_attribute_type("color").unwrap(), "vec4<f32>");
+        assert_eq!(
+            Rectangle::get_attribute_type("stroke_color").unwrap(),
+            "vec4<f32>"
+        );
+        assert_eq!(
+            Rectangle::get_attribute_type("stroke_width").unwrap(),
+            "f32"
+        );
+        assert_eq!(
+            Rectangle::get_attribute_type("corner_radius").unwrap(),
+            "f32"
+        );
+
+        // Test unknown attribute
+        assert!(Rectangle::get_attribute_type("unknown").is_err());
+    }
+
+    #[test]
+    fn test_rectangle_attribute_compatibility() {
+        // Test compatible attribute types
+        assert!(Rectangle::is_attribute_compatible("center", "vec2<f32>"));
+        assert!(Rectangle::is_attribute_compatible("position", "vec2<f32>"));
+        assert!(Rectangle::is_attribute_compatible("size", "vec2<f32>"));
+        assert!(Rectangle::is_attribute_compatible(
+            "fill_color",
+            "vec4<f32>"
+        ));
+        assert!(Rectangle::is_attribute_compatible("color", "vec4<f32>"));
+        assert!(Rectangle::is_attribute_compatible(
+            "stroke_color",
+            "vec4<f32>"
+        ));
+        assert!(Rectangle::is_attribute_compatible("stroke_width", "f32"));
+        assert!(Rectangle::is_attribute_compatible("corner_radius", "f32"));
+
+        // Test incompatible types
+        assert!(!Rectangle::is_attribute_compatible("center", "f32"));
+        assert!(!Rectangle::is_attribute_compatible("size", "vec4<f32>"));
+        assert!(!Rectangle::is_attribute_compatible(
+            "fill_color",
+            "vec2<f32>"
+        ));
+        assert!(!Rectangle::is_attribute_compatible(
+            "stroke_width",
+            "vec4<f32>"
+        ));
+
+        // Test unknown attribute
+        assert!(!Rectangle::is_attribute_compatible("unknown", "f32"));
+    }
+
+    #[test]
+    fn test_rectangle_shader_generation() {
+        use crate::shader_pipeline::ComposableShaderPipeline;
+        use std::collections::HashMap;
+
+        let pipeline = ComposableShaderPipeline::new();
+        let mut attribute_functions = HashMap::new();
+        attribute_functions.insert("position".to_string(), "position_transform".to_string());
+        attribute_functions.insert("color".to_string(), "color_mapping".to_string());
+        attribute_functions.insert("size".to_string(), "size_transform".to_string());
+
+        // Test vertex shader generation
+        let vertex_shader =
+            Rectangle::generate_vertex_shader_with_functions(&pipeline, &attribute_functions);
+        assert!(vertex_shader.contains("vs_main"));
+        assert!(vertex_shader.contains("RectangleInstance"));
+        assert!(vertex_shader.contains("VertexOutput"));
+        assert!(vertex_shader.contains("position_transform"));
+        assert!(vertex_shader.contains("color_mapping"));
+        assert!(vertex_shader.contains("size_transform"));
+        assert!(vertex_shader.contains("corner_radius"));
+
+        // Test fragment shader generation
+        let fragment_shader =
+            Rectangle::generate_fragment_shader_with_functions(&pipeline, &attribute_functions);
+        assert!(fragment_shader.contains("fs_main"));
+        assert!(fragment_shader.contains("sdf_rounded_rectangle"));
+        assert!(fragment_shader.contains("smoothstep"));
+        assert!(fragment_shader.contains("anti-aliased"));
+    }
+
+    #[test]
+    fn test_rectangle_shader_generation_without_functions() {
+        use crate::shader_pipeline::ComposableShaderPipeline;
+        use std::collections::HashMap;
+
+        let pipeline = ComposableShaderPipeline::new();
+        let attribute_functions = HashMap::new(); // No shader functions
+
+        // Test that shaders are still generated correctly without shader functions
+        let vertex_shader =
+            Rectangle::generate_vertex_shader_with_functions(&pipeline, &attribute_functions);
+        assert!(vertex_shader.contains("vs_main"));
+        assert!(vertex_shader.contains("instance.center")); // Uses default instance data
+
+        let fragment_shader =
+            Rectangle::generate_fragment_shader_with_functions(&pipeline, &attribute_functions);
+        assert!(fragment_shader.contains("fs_main"));
+        assert!(fragment_shader.contains("sdf_rounded_rectangle"));
     }
 }

@@ -23,6 +23,7 @@
 use crate::mark::Mark;
 use crate::shader_function::{Vec2, Vec4};
 use crate::shader_pipeline::ComposableShaderPipeline;
+use std::collections::HashMap;
 
 /// Line mark for rendering line segments and connections.
 ///
@@ -122,72 +123,139 @@ impl Mark for Line {
     /// When using generated shaders, this method creates WGSL that integrates
     /// with the shader function pipeline for dynamic attribute mapping.
     fn generate_vertex_shader(pipeline: &ComposableShaderPipeline) -> String {
-        let base_shader = r#"
-// Line instance data structure
-struct LineInstance {
-    start: vec2<f32>,
-    end: vec2<f32>,
-    color: vec4<f32>,
-    width: f32,
-    style: u32,
-}
+        Self::generate_vertex_shader_with_functions(pipeline, &HashMap::new())
+    }
 
-@group(1) @binding(0) var<storage, read> instances: array<LineInstance>;
+    /// Generate vertex shader with specific shader function mappings.
+    ///
+    /// This implementation creates a vertex shader that applies shader functions
+    /// to transform data into line attributes (start, end, colors, width).
+    fn generate_vertex_shader_with_functions(
+        pipeline: &ComposableShaderPipeline,
+        attribute_functions: &HashMap<String, String>,
+    ) -> String {
+        // Generate data structures
+        let mut shader = String::new();
+        shader.push_str("// Generated Line vertex shader with shader function integration\n\n");
 
-struct VertexInput {
-    @location(0) position: vec2<f32>,
-    @location(1) normal: vec2<f32>,
-    @builtin(instance_index) instance_index: u32,
-}
+        // Data input structure
+        shader.push_str("struct DataInput {\n");
+        shader.push_str("    index: u32,\n");
+        shader.push_str("}\n\n");
 
-struct VertexOutput {
-    @builtin(position) clip_position: vec4<f32>,
-    @location(0) world_position: vec2<f32>,
-    @location(1) local_position: vec2<f32>,
-    @location(2) color: vec4<f32>,
-    @location(3) width: f32,
-    @location(4) style: u32,
-    @location(5) line_length: f32,
-}
+        // Line instance structure
+        shader.push_str("struct LineInstance {\n");
+        shader.push_str("    start: vec2<f32>,\n");
+        shader.push_str("    end: vec2<f32>,\n");
+        shader.push_str("    color: vec4<f32>,\n");
+        shader.push_str("    width: f32,\n");
+        shader.push_str("    style: u32,\n");
+        shader.push_str("}\n\n");
 
-@vertex
-fn vs_main(input: VertexInput) -> VertexOutput {
-    let instance = instances[input.instance_index];
-    
-    // Apply shader functions to instance data
-    let transformed_start = position_transform(instance.start, position_uniforms);
-    let transformed_end = position_transform(instance.end, position_uniforms);
-    let final_color = color_transform(instance.color, color_uniforms);
-    let final_width = width_transform(instance.width, width_uniforms);
-    
-    // Calculate line direction and length
-    let line_vec = transformed_end - transformed_start;
-    let line_length = length(line_vec);
-    let line_dir = normalize(line_vec);
-    let line_normal = vec2<f32>(-line_dir.y, line_dir.x);
-    
-    // Calculate world position along the line
-    let along_line = transformed_start + line_dir * (input.position.x * line_length);
-    let across_line = line_normal * (input.normal.y * final_width * 0.5);
-    let world_pos = along_line + across_line;
-    
-    var output: VertexOutput;
-    output.clip_position = vec4<f32>(world_pos, 0.0, 1.0);
-    output.world_position = world_pos;
-    output.local_position = input.position;
-    output.color = final_color;
-    output.width = final_width;
-    output.style = instance.style;
-    output.line_length = line_length;
-    
-    return output;
-}
-"#;
+        // Storage buffers
+        shader
+            .push_str("@group(0) @binding(0) var<storage, read> data_buffer: array<DataInput>;\n");
+        shader.push_str(
+            "@group(1) @binding(0) var<storage, read> instances: array<LineInstance>;\n\n",
+        );
 
-        // Integrate with pipeline functions
-        let mut shader = pipeline.generate_vertex_shader();
-        shader.push_str("\n\n");
-        shader.push_str(base_shader);
+        // Vertex input/output structures
+        shader.push_str("struct VertexInput {\n");
+        shader.push_str("    @location(0) position: vec2<f32>,\n");
+        shader.push_str("    @location(1) normal: vec2<f32>,\n");
+        shader.push_str("    @builtin(instance_index) instance_index: u32,\n");
+        shader.push_str("}\n\n");
+
+        shader.push_str("struct VertexOutput {\n");
+        shader.push_str("    @builtin(position) clip_position: vec4<f32>,\n");
+        shader.push_str("    @location(0) world_position: vec2<f32>,\n");
+        shader.push_str("    @location(1) local_position: vec2<f32>,\n");
+        shader.push_str("    @location(2) color: vec4<f32>,\n");
+        shader.push_str("    @location(3) width: f32,\n");
+        shader.push_str("    @location(4) style: u32,\n");
+        shader.push_str("    @location(5) line_length: f32,\n");
+        shader.push_str("}\n\n");
+
+        // Add shader function definitions from pipeline
+        let pipeline_functions = pipeline.generate_vertex_shader();
+        if !pipeline_functions.is_empty() {
+            shader.push_str("// Shader function definitions\n");
+            shader.push_str(&pipeline_functions);
+            shader.push_str("\n\n");
+        }
+
+        // Main vertex function
+        shader.push_str("@vertex\n");
+        shader.push_str("fn vs_main(input: VertexInput) -> VertexOutput {\n");
+        shader.push_str("    let data = data_buffer[input.instance_index];\n");
+        shader.push_str("    let instance = instances[input.instance_index];\n\n");
+
+        // Apply shader functions to transform attributes
+        let mut transformed_start = "instance.start".to_string();
+        let mut transformed_end = "instance.end".to_string();
+        let mut transformed_color = "instance.color".to_string();
+        let mut transformed_width = "instance.width".to_string();
+
+        if let Some(start_fn) = attribute_functions.get("start") {
+            shader.push_str(&format!(
+                "    let transformed_start = {start_fn}(data, start_uniforms);\n"
+            ));
+            transformed_start = "transformed_start".to_string();
+        }
+
+        if let Some(end_fn) = attribute_functions.get("end") {
+            shader.push_str(&format!(
+                "    let transformed_end = {end_fn}(data, end_uniforms);\n"
+            ));
+            transformed_end = "transformed_end".to_string();
+        }
+
+        if let Some(color_fn) = attribute_functions.get("color") {
+            shader.push_str(&format!(
+                "    let transformed_color = {color_fn}(data, color_uniforms);\n"
+            ));
+            transformed_color = "transformed_color".to_string();
+        }
+
+        if let Some(width_fn) = attribute_functions.get("width") {
+            shader.push_str(&format!(
+                "    let transformed_width = {width_fn}(data, width_uniforms);\n"
+            ));
+            transformed_width = "transformed_width".to_string();
+        }
+
+        shader.push('\n');
+
+        // Calculate line direction and length
+        shader.push_str(&format!(
+            "    let line_vec = {transformed_end} - {transformed_start};\n"
+        ));
+        shader.push_str("    let line_length = length(line_vec);\n");
+        shader.push_str("    let line_dir = normalize(line_vec);\n");
+        shader.push_str("    let line_normal = vec2<f32>(-line_dir.y, line_dir.x);\n\n");
+
+        // Calculate world position along the line
+        shader.push_str(&format!(
+            "    let along_line = {transformed_start} + line_dir * (input.position.x * line_length);\n"
+        ));
+        shader.push_str(&format!(
+            "    let across_line = line_normal * (input.normal.y * {transformed_width} * 0.5);\n"
+        ));
+        shader.push_str("    let world_pos = along_line + across_line;\n\n");
+
+        // Generate output
+        shader.push_str("    var output: VertexOutput;\n");
+        shader.push_str("    output.clip_position = vec4<f32>(world_pos, 0.0, 1.0);\n");
+        shader.push_str("    output.world_position = world_pos;\n");
+        shader.push_str("    output.local_position = input.position;\n");
+        shader.push_str(&format!("    output.color = {transformed_color};\n"));
+        shader.push_str(&format!("    output.width = {transformed_width};\n"));
+        shader.push_str("    output.style = instance.style;\n");
+        shader.push_str("    output.line_length = line_length;\n");
+        shader.push('\n');
+        shader.push_str("    return output;\n");
+        shader.push_str("}\n");
+
         shader
     }
 
@@ -196,37 +264,88 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     /// Creates a fragment shader that renders smooth lines using distance
     /// field calculations and integrates with the shader function system.
     fn generate_fragment_shader(pipeline: &ComposableShaderPipeline) -> String {
-        let base_shader = r#"
-@fragment
-fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-    // Calculate distance from line center
-    let distance_from_center = abs(input.local_position.y);
-    
-    // Calculate base alpha for line width
-    let half_width = 0.5;
-    let edge_width = 0.02;
-    let base_alpha = 1.0 - smoothstep(half_width - edge_width, half_width + edge_width, distance_from_center);
-    
-    // Apply line style
-    var style_alpha = 1.0;
-    if (input.style == 1u) { // Dashed
-        let dash_pattern = sin(input.local_position.x * input.line_length * 0.1) > 0.0;
-        style_alpha = select(0.0, 1.0, dash_pattern);
-    } else if (input.style == 2u) { // Dotted
-        let dot_pattern = fract(input.local_position.x * input.line_length * 0.05) < 0.3;
-        style_alpha = select(0.0, 1.0, dot_pattern);
+        Self::generate_fragment_shader_with_functions(pipeline, &HashMap::new())
     }
-    
-    // Combine alpha values
-    let final_alpha = base_alpha * style_alpha;
-    
-    return vec4<f32>(input.color.rgb, input.color.a * final_alpha);
-}
-"#;
 
-        let mut shader = pipeline.generate_fragment_shader();
-        shader.push_str("\n\n");
-        shader.push_str(base_shader);
+    /// Generate fragment shader with specific shader function mappings.
+    ///
+    /// This implementation creates an anti-aliased line fragment shader that
+    /// uses attributes computed by shader functions in the vertex stage.
+    fn generate_fragment_shader_with_functions(
+        pipeline: &ComposableShaderPipeline,
+        _attribute_functions: &HashMap<String, String>,
+    ) -> String {
+        let mut shader = String::new();
+        shader.push_str("// Generated Line fragment shader with anti-aliased rendering\n\n");
+
+        // Add vertex output structure (must match vertex shader)
+        shader.push_str("struct VertexOutput {\n");
+        shader.push_str("    @builtin(position) clip_position: vec4<f32>,\n");
+        shader.push_str("    @location(0) world_position: vec2<f32>,\n");
+        shader.push_str("    @location(1) local_position: vec2<f32>,\n");
+        shader.push_str("    @location(2) color: vec4<f32>,\n");
+        shader.push_str("    @location(3) width: f32,\n");
+        shader.push_str("    @location(4) style: u32,\n");
+        shader.push_str("    @location(5) line_length: f32,\n");
+        shader.push_str("}\n\n");
+
+        // Add shader function definitions if needed
+        let pipeline_functions = pipeline.generate_fragment_shader();
+        if !pipeline_functions.is_empty() {
+            shader.push_str("// Shader function definitions\n");
+            shader.push_str(&pipeline_functions);
+            shader.push_str("\n\n");
+        }
+
+        // Main fragment function with anti-aliased line rendering
+        shader.push_str("@fragment\n");
+        shader.push_str("fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {\n");
+        shader.push_str("    // Calculate distance from line center\n");
+        shader.push_str("    let distance_from_center = abs(input.local_position.y);\n");
+        shader.push('\n');
+        shader.push_str("    // Calculate base alpha for line width with anti-aliasing\n");
+        shader.push_str("    let half_width = 0.5;\n");
+        shader.push_str("    let edge_width = 0.02;\n");
+        shader.push_str("    let base_alpha = 1.0 - smoothstep(half_width - edge_width, half_width + edge_width, distance_from_center);\n");
+        shader.push('\n');
+        shader.push_str("    // Apply line style patterns\n");
+        shader.push_str("    var style_alpha = 1.0;\n");
+        shader.push_str("    let pattern_coord = input.local_position.x * input.line_length;\n");
+        shader.push('\n');
+        shader.push_str("    if (input.style == 1u) { // Dashed\n");
+        shader.push_str("        let dash_size = 10.0;\n");
+        shader.push_str("        let gap_size = 5.0;\n");
+        shader.push_str("        let cycle = dash_size + gap_size;\n");
+        shader.push_str("        let position_in_cycle = fract(pattern_coord / cycle) * cycle;\n");
+        shader.push_str("        style_alpha = select(0.0, 1.0, position_in_cycle < dash_size);\n");
+        shader.push('\n');
+        shader.push_str("        // Smooth dash transitions\n");
+        shader.push_str("        let transition_width = 1.0;\n");
+        shader.push_str("        if (position_in_cycle < transition_width) {\n");
+        shader.push_str(
+            "            style_alpha *= smoothstep(0.0, transition_width, position_in_cycle);\n",
+        );
+        shader.push_str("        } else if (position_in_cycle > dash_size - transition_width) {\n");
+        shader.push_str("            style_alpha *= smoothstep(dash_size, dash_size - transition_width, position_in_cycle);\n");
+        shader.push_str("        }\n");
+        shader.push_str("    } else if (input.style == 2u) { // Dotted\n");
+        shader.push_str("        let dot_spacing = 8.0;\n");
+        shader.push_str("        let dot_size = 3.0;\n");
+        shader.push_str(
+            "        let position_in_cycle = fract(pattern_coord / dot_spacing) * dot_spacing;\n",
+        );
+        shader.push_str(
+            "        let distance_from_dot_center = abs(position_in_cycle - dot_spacing * 0.5);\n",
+        );
+        shader.push_str("        style_alpha = 1.0 - smoothstep(dot_size * 0.5 - 0.5, dot_size * 0.5 + 0.5, distance_from_dot_center);\n");
+        shader.push_str("    }\n");
+        shader.push('\n');
+        shader.push_str("    // Combine alpha values\n");
+        shader.push_str("    let final_alpha = base_alpha * style_alpha;\n");
+        shader.push('\n');
+        shader.push_str("    return vec4<f32>(input.color.rgb, input.color.a * final_alpha);\n");
+        shader.push_str("}\n");
+
         shader
     }
 
@@ -273,6 +392,27 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             0, 1, 2, // First triangle: start-bottom, end-bottom, end-top
             0, 2, 3, // Second triangle: start-bottom, end-top, start-top
         ])
+    }
+
+    /// Get the WGSL type name for a Line attribute.
+    fn get_attribute_type(attribute_name: &str) -> crate::error::GupResult<&'static str> {
+        match attribute_name {
+            "start" | "end" | "position" => Ok("vec2<f32>"),
+            "color" => Ok("vec4<f32>"),
+            "width" | "size" => Ok("f32"),
+            "style" => Ok("u32"),
+            _ => Err(crate::error::GupError::validation_error(format!(
+                "Unknown Line attribute: {attribute_name}"
+            ))),
+        }
+    }
+
+    /// Check if a shader function output type is compatible with a Line attribute.
+    fn is_attribute_compatible(attribute_name: &str, output_type: &str) -> bool {
+        match Self::get_attribute_type(attribute_name) {
+            Ok(expected_type) => expected_type == output_type,
+            Err(_) => false,
+        }
     }
 }
 
@@ -438,5 +578,100 @@ mod tests {
         assert_eq!(attrs.color.w, 0.8); // Alpha
         assert_eq!(attrs.width, 2.5);
         assert_eq!(attrs.style, LineStyle::Dotted);
+    }
+
+    #[test]
+    fn test_line_attribute_type_validation() {
+        // Test that Line provides correct attribute types
+        assert_eq!(Line::get_attribute_type("start").unwrap(), "vec2<f32>");
+        assert_eq!(Line::get_attribute_type("end").unwrap(), "vec2<f32>");
+        assert_eq!(Line::get_attribute_type("position").unwrap(), "vec2<f32>");
+        assert_eq!(Line::get_attribute_type("color").unwrap(), "vec4<f32>");
+        assert_eq!(Line::get_attribute_type("width").unwrap(), "f32");
+        assert_eq!(Line::get_attribute_type("size").unwrap(), "f32");
+        assert_eq!(Line::get_attribute_type("style").unwrap(), "u32");
+
+        // Test unknown attribute
+        assert!(Line::get_attribute_type("unknown").is_err());
+    }
+
+    #[test]
+    fn test_line_attribute_compatibility() {
+        // Test compatible attribute types
+        assert!(Line::is_attribute_compatible("start", "vec2<f32>"));
+        assert!(Line::is_attribute_compatible("end", "vec2<f32>"));
+        assert!(Line::is_attribute_compatible("position", "vec2<f32>"));
+        assert!(Line::is_attribute_compatible("color", "vec4<f32>"));
+        assert!(Line::is_attribute_compatible("width", "f32"));
+        assert!(Line::is_attribute_compatible("size", "f32"));
+        assert!(Line::is_attribute_compatible("style", "u32"));
+
+        // Test incompatible types
+        assert!(!Line::is_attribute_compatible("start", "f32"));
+        assert!(!Line::is_attribute_compatible("end", "vec4<f32>"));
+        assert!(!Line::is_attribute_compatible("color", "vec2<f32>"));
+        assert!(!Line::is_attribute_compatible("width", "vec4<f32>"));
+        assert!(!Line::is_attribute_compatible("style", "f32"));
+
+        // Test unknown attribute
+        assert!(!Line::is_attribute_compatible("unknown", "f32"));
+    }
+
+    #[test]
+    fn test_line_shader_generation() {
+        use crate::shader_pipeline::ComposableShaderPipeline;
+        use std::collections::HashMap;
+
+        let pipeline = ComposableShaderPipeline::new();
+        let mut attribute_functions = HashMap::new();
+        attribute_functions.insert("start".to_string(), "start_transform".to_string());
+        attribute_functions.insert("end".to_string(), "end_transform".to_string());
+        attribute_functions.insert("color".to_string(), "color_mapping".to_string());
+        attribute_functions.insert("width".to_string(), "width_transform".to_string());
+
+        // Test vertex shader generation
+        let vertex_shader =
+            Line::generate_vertex_shader_with_functions(&pipeline, &attribute_functions);
+        assert!(vertex_shader.contains("vs_main"));
+        assert!(vertex_shader.contains("LineInstance"));
+        assert!(vertex_shader.contains("VertexOutput"));
+        assert!(vertex_shader.contains("start_transform"));
+        assert!(vertex_shader.contains("end_transform"));
+        assert!(vertex_shader.contains("color_mapping"));
+        assert!(vertex_shader.contains("width_transform"));
+        assert!(vertex_shader.contains("line_length"));
+
+        // Test fragment shader generation
+        let fragment_shader =
+            Line::generate_fragment_shader_with_functions(&pipeline, &attribute_functions);
+        assert!(fragment_shader.contains("fs_main"));
+        assert!(fragment_shader.contains("distance_from_center"));
+        assert!(fragment_shader.contains("smoothstep"));
+        assert!(fragment_shader.contains("style_alpha"));
+        assert!(fragment_shader.contains("Dashed"));
+        assert!(fragment_shader.contains("Dotted"));
+    }
+
+    #[test]
+    fn test_line_shader_generation_without_functions() {
+        use crate::shader_pipeline::ComposableShaderPipeline;
+        use std::collections::HashMap;
+
+        let pipeline = ComposableShaderPipeline::new();
+        let attribute_functions = HashMap::new(); // No shader functions
+
+        // Test that shaders are still generated correctly without shader functions
+        let vertex_shader =
+            Line::generate_vertex_shader_with_functions(&pipeline, &attribute_functions);
+        assert!(vertex_shader.contains("vs_main"));
+        assert!(vertex_shader.contains("instance.start")); // Uses default instance data
+        assert!(vertex_shader.contains("instance.end"));
+
+        let fragment_shader =
+            Line::generate_fragment_shader_with_functions(&pipeline, &attribute_functions);
+        assert!(fragment_shader.contains("fs_main"));
+        assert!(fragment_shader.contains("anti-aliased"));
+        assert!(fragment_shader.contains("style == 1u")); // Dashed style check
+        assert!(fragment_shader.contains("style == 2u")); // Dotted style check
     }
 }
