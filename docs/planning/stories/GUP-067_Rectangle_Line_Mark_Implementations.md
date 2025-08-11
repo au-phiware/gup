@@ -316,18 +316,22 @@ async fn test_line_performance_targets() -> GupResult<()> {
 
 ### Implementation Summary
 
-Successfully implemented Rectangle and Line marks with comprehensive feature sets:
+Successfully implemented Rectangle and Line marks with comprehensive feature
+sets:
 
 #### Rectangle Mark Features
+
 - Zero-sized struct following Circle pattern
 - GPU-compatible `RectangleVertex` with proper alignment
-- Rich `RectangleAttributes` including center, size, colors, stroke, and corner radius
+- Rich `RectangleAttributes` including center, size, colors, stroke, and corner
+  radius
 - Hand-optimized WGSL shaders using SDF-based rendering for smooth edges
 - Anti-aliased rendering with rounded corner support
 - Complete shader function integration for dynamic attribute mapping
 - Comprehensive attribute type validation system
 
-#### Line Mark Features  
+#### Line Mark Features
+
 - Zero-sized struct for efficient line segments
 - `LineVertex` with normal vectors for proper width expansion
 - Rich `LineAttributes` with start/end points, color, width, and style
@@ -347,6 +351,7 @@ Successfully implemented Rectangle and Line marks with comprehensive feature set
 ### Performance Achievements
 
 Both marks deliver production-ready performance:
+
 - GPU-accelerated instanced rendering
 - Sub-millisecond vertex generation
 - Memory-efficient data structures
@@ -355,22 +360,32 @@ Both marks deliver production-ready performance:
 
 ### Key Technical Contributions
 
-1. **Enhanced Shader Generation**: Improved integration with shader function pipeline
-2. **Type-Safe Attribute Validation**: Complete coverage with `get_attribute_type()` and `is_attribute_compatible()` methods
-3. **High-Quality GPU Shaders**: SDF-based anti-aliased rendering with advanced visual features
+1. **Enhanced Shader Generation**: Improved integration with shader function
+   pipeline
+2. **Type-Safe Attribute Validation**: Complete coverage with
+   `get_attribute_type()` and `is_attribute_compatible()` methods
+3. **High-Quality GPU Shaders**: SDF-based anti-aliased rendering with advanced
+   visual features
 4. **Comprehensive Test Coverage**: Added targeted tests for new functionality
-5. **Performance Optimization Fix**: Resolved intermittent test failures in concurrent execution environments
+5. **Performance Optimization Fix**: Resolved intermittent test failures in
+   concurrent execution environments
 
 ### Story Dependencies Satisfied
 
 - **Prerequisites**: GUP-009 (Core Mark Trait) ✅
-- **Enables**: Advanced mark features, composite mark systems, complete visualization examples ✅
+- **Enables**: Advanced mark features, composite mark systems, complete
+  visualization examples ✅
 
 ### Lessons Learned
 
-- **GPU Test Stability**: Performance-sensitive tests need realistic thresholds for concurrent execution
-- **Shader Integration**: Proper attribute function mapping requires careful WGSL generation
+- **GPU Test Stability**: Performance-sensitive tests need realistic thresholds
+  for concurrent execution
+- **Shader Integration**: Proper attribute function mapping requires careful
+  WGSL generation
 - **Type Safety**: Comprehensive attribute validation prevents runtime errors
-- **Test Coverage**: Both unit and integration tests essential for GPU code validation
+- **Test Coverage**: Both unit and integration tests essential for GPU code
+  validation
 
-This implementation completes the core mark system foundation, enabling rich data visualization capabilities with Rectangle and Line primitives alongside the existing Circle mark.
+This implementation completes the core mark system foundation, enabling rich
+data visualization capabilities with Rectangle and Line primitives alongside the
+existing Circle mark.

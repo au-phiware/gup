@@ -47,17 +47,17 @@ epic and status.
 | [GUP-026](GUP-026_Data_Source_Merge_Implementation.md)       | Data Source Merge Implementation       | 💡 New      | Medium   | 5      |
 | [GUP-027](GUP-027_GPU_Blend_State_Integration.md)            | GPU Blend State Integration            | ✅ Complete | High     | 3      |
 | [GUP-028](GUP-028_Composition_Performance_Optimization.md)   | Composition Performance Optimization   | 💡 New      | Medium   | 4      |
-| [GUP-085](GUP-085_Line_Rectangle_Mark_Implementation.md)     | Line and Rectangle Mark Implementation | 💡 New      | High     | 5      |
+| ~~[GUP-085](GUP-085_Line_Rectangle_Mark_Implementation.md)~~ | ~~Line and Rectangle Mark Impl.~~      | ⿻ Copy     | High     | 5      |
 | [GUP-086](GUP-086_Observable_Plot_Migration_Guide.md)        | Observable Plot Migration Guide        | 💡 New      | Low      | 2      |
 | [GUP-087](GUP-087_Chart_Builder_Performance_Optimization.md) | Chart Builder Performance Optimization | 💡 New      | Medium   | 3      |
 | [GUP-088](GUP-088_External_Library_Integration_System.md)    | External Library Integration System    | ✅ Complete | High     | 5      |
 
 ### Post GUP-009 Stories - Mark System Enhancement (Stories 67+)
 
-| Story                                                     | Title                         | Status | Priority | Points |
-| --------------------------------------------------------- | ----------------------------- | ------ | -------- | ------ |
+| Story                                                     | Title                         | Status      | Priority | Points |
+| --------------------------------------------------------- | ----------------------------- | ----------- | -------- | ------ |
 | [GUP-067](GUP-067_Rectangle_Line_Mark_Implementations.md) | Rectangle and Line Mark Types | ✅ Complete | High     | 5      |
-| [GUP-068](GUP-068_Mark_Pipeline_Integration.md)           | Mark Pipeline Integration     | 💡 New | High     | 5      |
+| [GUP-068](GUP-068_Mark_Pipeline_Integration.md)           | Mark Pipeline Integration     | ✅ Complete | High     | 5      |
 
 ### Post GUP-005 Stories - Shader Function System Enhancement (Stories 51+)
 
@@ -166,12 +166,12 @@ epic and status.
 
 ### Phase 1 Foundation
 
-- **Completed**: 17/17 stories (100%)
+- **Completed**: 18/18 stories (100%)
 - **Critical Path**: GUP-001 ✅, GUP-002 ✅, GUP-003 ✅, GUP-004 ✅, GUP-005 ✅,
   GUP-006 ✅, GUP-007 ✅, GUP-008 ✅, GUP-009 ✅, GUP-010 ✅, GUP-011 ✅,
   GUP-012 ✅, GUP-013 ✅, GUP-014 ✅, GUP-015 ✅, GUP-017 ✅, GUP-018 ✅,
   GUP-019 ✅, GUP-020 ✅, GUP-021 ✅, GUP-022 ✅, GUP-023 ✅, GUP-025 ✅,
-  GUP-027 ✅, GUP-039 ✅, GUP-043 ✅, GUP-088 ✅
+  GUP-027 ✅, GUP-039 ✅, GUP-043 ✅, GUP-067 ✅, GUP-068 ✅, GUP-088 ✅
 
 ### Phase 2 Advanced Features
 
@@ -190,15 +190,16 @@ epic and status.
 
 ## Story Point Summary
 
-- **Total Planned**: ~359 story points across all stories (including new GUP-018
+- **Total Planned**: ~364 story points across all stories (including new GUP-018
   follow-up stories)
-- **Completed**: 169 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
+- **Completed**: 174 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
   GUP-004: 5pts, GUP-005: 13pts, GUP-006: 13pts, GUP-007: 13pts, GUP-008: 8pts,
   GUP-009: 8pts, GUP-010: 4pts, GUP-011: 8pts, GUP-012: 13pts, GUP-013: 5pts,
   GUP-014: 8pts, GUP-015: 5pts, GUP-017: 8pts, GUP-018: 6pts, GUP-019: 3pts,
   GUP-020: 5pts, GUP-021: 6pts, GUP-022: 4pts, GUP-023: 4pts, GUP-025: 5pts,
-  GUP-027: 3pts, GUP-039: 5pts, GUP-043: 3pts, GUP-088: 5pts)
-- **Progress**: ~47% of total scope
+  GUP-027: 3pts, GUP-039: 5pts, GUP-043: 3pts, GUP-067: 5pts, GUP-068: 5pts,
+  GUP-088: 5pts)
+- **Progress**: ~48% of total scope
 
 ## Recent Additions (Post GUP-021)
 
@@ -459,13 +460,17 @@ mark implemented - need Rectangle and Line for complete basic mark set
 **Impact**: Complete fundamental mark types for essential data visualizations
 (bar charts, line plots, scatter plots)
 
-### GUP-068: Mark Pipeline Integration
+### GUP-068: Mark Pipeline Integration ✅
 
 **Key Learning**: Mark trait framework ready but `create_render_pipeline` method
 unimplemented (marked with `todo!()`) - need complete GPU integration  
 **Dependencies**: GUP-009 complete  
 **Impact**: Marks can automatically create optimized render pipelines without
-manual GPU programming
+manual GPU programming  
+**Status**: Complete - Full render pipeline creation, bind group management,
+Arc-based pipeline caching, and high-level MarkRenderer with auto-resizing
+buffers. Performance targets exceeded by 2-67x margins with comprehensive test
+coverage (19 tests).
 
 ## Recent Additions (Post GUP-011)
 
@@ -688,8 +693,8 @@ cancellation support, and timeout handling
 
 ---
 
-_Last Updated: After completion of GUP-025 (Async Streaming Composition
-Support) - 2025-08-11_  
+_Last Updated: After completion of GUP-068 (Mark Pipeline Integration) -
+2025-08-11_  
 _Next Priority Stories: GUP-016 (Core Accessibility System), GUP-085 (Line and
 Rectangle Mark Implementation), GUP-084 (Error Handling Performance
 Optimization)_
