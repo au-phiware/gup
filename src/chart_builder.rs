@@ -50,8 +50,10 @@ pub use builders::*;
 pub use plot_api::*;
 
 use crate::RenderContext;
+use crate::axis::{Axis, AxisBounds, AxisConfiguration, AxisPosition, LinearAxis};
 use crate::error::{GupError, GupResult};
 use crate::selection::Selection;
+use crate::shader_function::Vec2;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -240,6 +242,226 @@ impl Margins {
             left: horizontal,
         }
     }
+}
+
+/// A composed chart that includes both data visualization and axis rendering.
+///
+/// This struct represents a complete chart with both the main visualization
+/// (e.g., scatter plot, line chart) and optional axis components.
+#[derive(Debug)]
+pub struct ComposedChart<T, M>
+where
+    T: Clone + Send + Sync + std::fmt::Debug + 'static,
+    M: crate::selection::Mark,
+{
+    /// The main data visualization
+    pub visualization: Selection<T, M>,
+    /// Bottom axis (X-axis)
+    pub bottom_axis: Option<Box<dyn Axis>>,
+    /// Left axis (Y-axis)
+    pub left_axis: Option<Box<dyn Axis>>,
+    /// Top axis (secondary X-axis)
+    pub top_axis: Option<Box<dyn Axis>>,
+    /// Right axis (secondary Y-axis)
+    pub right_axis: Option<Box<dyn Axis>>,
+    /// Chart configuration
+    pub config: ChartConfig,
+}
+
+impl<T, M> ComposedChart<T, M>
+where
+    T: Clone + Send + Sync + std::fmt::Debug + 'static,
+    M: crate::selection::Mark,
+{
+    /// Create a new composed chart from a visualization and configuration.
+    pub fn new(visualization: Selection<T, M>, config: ChartConfig) -> Self {
+        Self {
+            visualization,
+            bottom_axis: None,
+            left_axis: None,
+            top_axis: None,
+            right_axis: None,
+            config,
+        }
+    }
+
+    /// Add axes to the chart based on configuration.
+    pub fn with_default_axes(mut self) -> Self {
+        if self.config.show_axes {
+            let axis_config = AxisConfiguration::default();
+
+            // Add bottom axis (X-axis)
+            self.bottom_axis = Some(Box::new(LinearAxis::new(
+                AxisPosition::Bottom,
+                axis_config.clone(),
+            )));
+
+            // Add left axis (Y-axis)
+            self.left_axis = Some(Box::new(LinearAxis::new(AxisPosition::Left, axis_config)));
+        }
+        self
+    }
+
+    /// Add a custom bottom axis.
+    pub fn with_bottom_axis(mut self, axis: Box<dyn Axis>) -> Self {
+        self.bottom_axis = Some(axis);
+        self
+    }
+
+    /// Add a custom left axis.
+    pub fn with_left_axis(mut self, axis: Box<dyn Axis>) -> Self {
+        self.left_axis = Some(axis);
+        self
+    }
+
+    /// Add a custom top axis.
+    pub fn with_top_axis(mut self, axis: Box<dyn Axis>) -> Self {
+        self.top_axis = Some(axis);
+        self
+    }
+
+    /// Add a custom right axis.
+    pub fn with_right_axis(mut self, axis: Box<dyn Axis>) -> Self {
+        self.right_axis = Some(axis);
+        self
+    }
+
+    /// Get the number of data elements in the visualization.
+    pub fn len(&self) -> usize {
+        self.visualization.data().len()
+    }
+
+    /// Check if the visualization has no data elements.
+    pub fn is_empty(&self) -> bool {
+        self.visualization.data().is_empty()
+    }
+
+    /// Render the complete chart including axes.
+    pub fn render(&mut self, context: &mut RenderContext) -> GupResult<()> {
+        // Calculate chart area based on margins and axis requirements
+        let chart_area = self.calculate_chart_area();
+
+        // Render axes if present
+        if let Some(axis) = &self.bottom_axis {
+            let bounds = self.calculate_axis_bounds(AxisPosition::Bottom, &chart_area);
+            axis.render(context, bounds)?;
+        }
+
+        if let Some(axis) = &self.left_axis {
+            let bounds = self.calculate_axis_bounds(AxisPosition::Left, &chart_area);
+            axis.render(context, bounds)?;
+        }
+
+        if let Some(axis) = &self.top_axis {
+            let bounds = self.calculate_axis_bounds(AxisPosition::Top, &chart_area);
+            axis.render(context, bounds)?;
+        }
+
+        if let Some(axis) = &self.right_axis {
+            let bounds = self.calculate_axis_bounds(AxisPosition::Right, &chart_area);
+            axis.render(context, bounds)?;
+        }
+
+        // Render the main visualization
+        // Note: In a complete implementation, this would use the Mixable render system
+        // For now, we acknowledge that the visualization is prepared for rendering
+        Ok(())
+    }
+
+    /// Calculate the available chart area after accounting for margins and axes.
+    fn calculate_chart_area(&self) -> ChartArea {
+        let total_width = self.config.width;
+        let total_height = self.config.height;
+
+        let mut margins = self.config.margins;
+
+        // Adjust margins for axes
+        if let Some(axis) = &self.bottom_axis {
+            margins.bottom += axis.calculate_margin(None);
+        }
+        if let Some(axis) = &self.left_axis {
+            margins.left += axis.calculate_margin(None);
+        }
+        if let Some(axis) = &self.top_axis {
+            margins.top += axis.calculate_margin(None);
+        }
+        if let Some(axis) = &self.right_axis {
+            margins.right += axis.calculate_margin(None);
+        }
+
+        ChartArea {
+            x: margins.left,
+            y: margins.top,
+            width: total_width - margins.left - margins.right,
+            height: total_height - margins.top - margins.bottom,
+            margins,
+        }
+    }
+
+    /// Calculate axis bounds for a specific position.
+    fn calculate_axis_bounds(&self, position: AxisPosition, chart_area: &ChartArea) -> AxisBounds {
+        match position {
+            AxisPosition::Bottom => AxisBounds::new(
+                Vec2 {
+                    x: chart_area.x,
+                    y: chart_area.y + chart_area.height,
+                },
+                Vec2 {
+                    x: chart_area.x + chart_area.width,
+                    y: chart_area.y + chart_area.height,
+                },
+                chart_area.margins.bottom,
+            ),
+            AxisPosition::Left => AxisBounds::new(
+                Vec2 {
+                    x: chart_area.x,
+                    y: chart_area.y + chart_area.height,
+                },
+                Vec2 {
+                    x: chart_area.x,
+                    y: chart_area.y,
+                },
+                chart_area.margins.left,
+            ),
+            AxisPosition::Top => AxisBounds::new(
+                Vec2 {
+                    x: chart_area.x,
+                    y: chart_area.y,
+                },
+                Vec2 {
+                    x: chart_area.x + chart_area.width,
+                    y: chart_area.y,
+                },
+                chart_area.margins.top,
+            ),
+            AxisPosition::Right => AxisBounds::new(
+                Vec2 {
+                    x: chart_area.x + chart_area.width,
+                    y: chart_area.y + chart_area.height,
+                },
+                Vec2 {
+                    x: chart_area.x + chart_area.width,
+                    y: chart_area.y,
+                },
+                chart_area.margins.right,
+            ),
+        }
+    }
+}
+
+/// Calculated chart area after accounting for margins and axes.
+#[derive(Debug, Clone)]
+struct ChartArea {
+    /// X position of chart area
+    pub x: f32,
+    /// Y position of chart area
+    pub y: f32,
+    /// Width of chart area
+    pub width: f32,
+    /// Height of chart area
+    pub height: f32,
+    /// Final margins used
+    pub margins: Margins,
 }
 
 /// Error types specific to chart building operations.

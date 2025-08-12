@@ -28,6 +28,7 @@
 //! - **Extensible Architecture**: Modular design allowing custom marks and interactions
 
 pub mod async_mixable;
+pub mod axis;
 pub mod buffer;
 pub mod chart_builder;
 pub mod context;
@@ -58,6 +59,7 @@ pub use async_mixable::{
         compose,
     },
 };
+pub use axis::*;
 pub use buffer::*;
 pub use context::*;
 pub use debug::*;

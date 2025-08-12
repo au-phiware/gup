@@ -11,7 +11,7 @@ use super::{
     validate_required_accessors,
 };
 use crate::RenderContext;
-use crate::chart_builder::{ChartBuilder, ChartBuilderError, ChartConfig};
+use crate::chart_builder::{ChartBuilder, ChartBuilderError, ChartConfig, ComposedChart};
 use crate::error::GupResult;
 use crate::selection::Circle;
 use crate::selection::Selection;
@@ -204,7 +204,7 @@ impl<T> ChartBuilder<T> for ScatterPlotBuilder<T>
 where
     T: Clone + Send + Sync + std::fmt::Debug + 'static,
 {
-    type Output = Selection<T, Circle>;
+    type Output = ComposedChart<T, Circle>;
 
     fn build_with_data(self, data: Vec<T>, context: Arc<RenderContext>) -> GupResult<Self::Output> {
         // Validate required accessors
@@ -232,10 +232,10 @@ where
             // For now, this is noted as a future feature
         }
 
-        // Chart configuration (title, margins, etc.) would be applied here
-        // in a full implementation, this would create axes, legends, etc.
+        // Create composed chart with axes based on configuration
+        let composed_chart = ComposedChart::new(selection, self.config).with_default_axes();
 
-        Ok(selection)
+        Ok(composed_chart)
     }
 }
 
