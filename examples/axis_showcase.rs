@@ -286,7 +286,7 @@ impl AxisRenderer {
 
         // Generate ticks
         if config.show_major_ticks {
-            let tick_positions = axis.get_tick_positions(None);
+            let tick_positions = axis.get_tick_positions(None, 800.0);
             let tick_length = config.major_tick_length / 500.0; // Scale to screen coordinates
 
             for &t in &tick_positions {

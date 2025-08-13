@@ -34,6 +34,7 @@
 use crate::error::GupResult;
 use crate::render::RenderContext;
 use crate::shader_function::Vec2;
+use crate::tick_generator::{LinearTickGenerator, Scale, TickGenerator};
 
 /// Position of an axis relative to the chart area.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -130,6 +131,10 @@ pub struct AxisConfiguration {
     pub line_color: [f32; 4],
     /// Width of axis lines in pixels
     pub line_width: f32,
+    /// Target number of major ticks (None for automatic)
+    pub target_tick_count: Option<usize>,
+    /// Number of minor tick subdivisions between major ticks
+    pub minor_tick_subdivisions: usize,
 }
 
 impl Default for AxisConfiguration {
@@ -142,6 +147,8 @@ impl Default for AxisConfiguration {
             minor_tick_length: 3.0,
             line_color: [0.2, 0.2, 0.2, 1.0], // Dark gray
             line_width: 1.0,
+            target_tick_count: None,    // Automatic tick count
+            minor_tick_subdivisions: 5, // 5 subdivisions between major ticks
         }
     }
 }
@@ -184,6 +191,18 @@ impl AxisConfiguration {
         self.show_line = false;
         self
     }
+
+    /// Set target number of major ticks.
+    pub fn with_tick_count(mut self, count: usize) -> Self {
+        self.target_tick_count = Some(count);
+        self
+    }
+
+    /// Set number of minor tick subdivisions.
+    pub fn with_minor_subdivisions(mut self, subdivisions: usize) -> Self {
+        self.minor_tick_subdivisions = subdivisions;
+        self
+    }
 }
 
 /// Core trait for axis implementations.
@@ -204,23 +223,75 @@ pub trait Axis: Send + Sync + std::fmt::Debug + 'static {
     /// Calculate the margin space needed for this axis.
     ///
     /// This includes space for tick marks and labels. The scale parameter
-    /// will be used in future stories for automatic tick generation.
-    fn calculate_margin(&self, _scale: Option<&dyn std::any::Any>) -> f32 {
-        // For now, return a reasonable default based on configuration
-        match self.position() {
-            AxisPosition::Left | AxisPosition::Right => 60.0,
+    /// is used for automatic tick generation to determine space requirements.
+    fn calculate_margin(&self, scale: Option<&dyn Scale>) -> f32 {
+        let config = self.configuration();
+
+        // Calculate required margin space based on configuration
+        let tick_margin = if config.show_major_ticks {
+            config.major_tick_length + 2.0 // Extra space for padding
+        } else {
+            0.0
+        };
+
+        let base_margin = match self.position() {
+            AxisPosition::Left | AxisPosition::Right => 60.0, // Space for labels
             AxisPosition::Top | AxisPosition::Bottom => 40.0,
-        }
+        };
+
+        // Future: adjust margin based on scale range and label formatting
+        let _ = scale; // Acknowledge parameter for future use
+
+        base_margin + tick_margin
     }
 
     /// Get tick positions for integration with grid system.
     ///
     /// Returns normalized positions (0.0 to 1.0) along the axis where
-    /// ticks should be placed. The scale parameter will be used in
-    /// future stories for automatic tick generation.
-    fn get_tick_positions(&self, _scale: Option<&dyn std::any::Any>) -> Vec<f32> {
-        // For now, return basic tick positions
-        vec![0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+    /// ticks should be placed. Uses automatic tick generation when scale is provided.
+    fn get_tick_positions(&self, scale: Option<&dyn Scale>, pixel_range: f32) -> Vec<f32> {
+        if let Some(scale) = scale {
+            // Use automatic tick generation
+            let generator = LinearTickGenerator::default();
+            let config = self.configuration();
+
+            let major_ticks =
+                generator.generate_major_ticks(scale, pixel_range, config.target_tick_count);
+
+            // Convert domain values to normalized positions
+            major_ticks
+                .iter()
+                .map(|&tick| scale.normalize(tick) as f32)
+                .collect()
+        } else {
+            // Fallback to basic tick positions
+            vec![0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+        }
+    }
+
+    /// Get minor tick positions for integration with grid system.
+    ///
+    /// Returns normalized positions (0.0 to 1.0) along the axis where
+    /// minor ticks should be placed.
+    fn get_minor_tick_positions(&self, scale: Option<&dyn Scale>, pixel_range: f32) -> Vec<f32> {
+        if let Some(scale) = scale {
+            let generator = LinearTickGenerator::default();
+            let config = self.configuration();
+
+            let major_ticks =
+                generator.generate_major_ticks(scale, pixel_range, config.target_tick_count);
+
+            let minor_ticks =
+                generator.generate_minor_ticks(scale, &major_ticks, config.minor_tick_subdivisions);
+
+            // Convert domain values to normalized positions
+            minor_ticks
+                .iter()
+                .map(|&tick| scale.normalize(tick) as f32)
+                .collect()
+        } else {
+            Vec::new()
+        }
     }
 
     /// Get the axis configuration for appearance settings.
@@ -252,12 +323,34 @@ impl LinearAxis {
         Self::new(position, AxisConfiguration::default())
     }
 
-    /// Calculate tick positions based on axis bounds.
+    /// Calculate tick positions based on axis bounds and optional scale.
     ///
-    /// For now, this generates evenly spaced ticks. Future stories
-    /// will implement automatic tick generation algorithms.
-    fn calculate_tick_positions(&self, bounds: &AxisBounds) -> Vec<Vec2> {
-        let tick_positions = self.get_tick_positions(None);
+    /// Uses automatic tick generation algorithms for professional-quality
+    /// tick spacing when a scale is provided.
+    fn calculate_tick_positions(
+        &self,
+        bounds: &AxisBounds,
+        scale: Option<&dyn Scale>,
+    ) -> Vec<Vec2> {
+        let tick_positions = self.get_tick_positions(scale, bounds.length());
+        let direction = bounds.direction();
+
+        tick_positions
+            .iter()
+            .map(|&t| Vec2 {
+                x: bounds.start.x + direction.x * bounds.length() * t,
+                y: bounds.start.y + direction.y * bounds.length() * t,
+            })
+            .collect()
+    }
+
+    /// Calculate minor tick positions based on axis bounds and optional scale.
+    fn calculate_minor_tick_positions(
+        &self,
+        bounds: &AxisBounds,
+        scale: Option<&dyn Scale>,
+    ) -> Vec<Vec2> {
+        let tick_positions = self.get_minor_tick_positions(scale, bounds.length());
         let direction = bounds.direction();
 
         tick_positions
@@ -276,38 +369,15 @@ impl Axis for LinearAxis {
     }
 
     fn render(&self, context: &mut RenderContext, bounds: AxisBounds) -> GupResult<()> {
-        // Render main axis line if configured
-        if self.config.show_line {
-            // Use AxisRenderer to create Line marks for the axis line
-            let _renderer = AxisRenderer::new();
-            _renderer.render_axis_line(context, &bounds, &self.config)?;
-        }
-
-        // Render tick marks if configured
-        if self.config.show_major_ticks || self.config.show_minor_ticks {
-            let _renderer = AxisRenderer::new();
-            let tick_positions = self.calculate_tick_positions(&bounds);
-
-            if self.config.show_major_ticks {
-                _renderer.render_ticks(
-                    context,
-                    &bounds,
-                    &tick_positions,
-                    self.config.major_tick_length,
-                    &self.config,
-                )?;
-            }
-
-            // Minor ticks would be implemented here in future iterations
-        }
-
-        Ok(())
+        self.render_with_scale(context, bounds, None)
     }
 
-    fn calculate_margin(&self, _scale: Option<&dyn std::any::Any>) -> f32 {
+    fn calculate_margin(&self, scale: Option<&dyn Scale>) -> f32 {
+        let config = self.configuration();
+
         // Calculate required margin space based on configuration
-        let tick_margin = if self.config.show_major_ticks {
-            self.config.major_tick_length + 2.0 // Extra space for padding
+        let tick_margin = if config.show_major_ticks {
+            config.major_tick_length + 2.0 // Extra space for padding
         } else {
             0.0
         };
@@ -317,13 +387,51 @@ impl Axis for LinearAxis {
             AxisPosition::Top | AxisPosition::Bottom => 40.0,
         };
 
+        // Future: adjust margin based on scale range and label formatting
+        let _ = scale; // Acknowledge parameter for future use
+
         base_margin + tick_margin
     }
 
-    fn get_tick_positions(&self, _scale: Option<&dyn std::any::Any>) -> Vec<f32> {
-        // Generate basic tick positions for demonstration
-        // Future stories will implement proper scale integration
-        vec![0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+    fn get_tick_positions(&self, scale: Option<&dyn Scale>, pixel_range: f32) -> Vec<f32> {
+        if let Some(scale) = scale {
+            // Use automatic tick generation
+            let generator = LinearTickGenerator::default();
+            let config = self.configuration();
+
+            let major_ticks =
+                generator.generate_major_ticks(scale, pixel_range, config.target_tick_count);
+
+            // Convert domain values to normalized positions
+            major_ticks
+                .iter()
+                .map(|&tick| scale.normalize(tick) as f32)
+                .collect()
+        } else {
+            // Fallback to basic tick positions
+            vec![0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+        }
+    }
+
+    fn get_minor_tick_positions(&self, scale: Option<&dyn Scale>, pixel_range: f32) -> Vec<f32> {
+        if let Some(scale) = scale {
+            let generator = LinearTickGenerator::default();
+            let config = self.configuration();
+
+            let major_ticks =
+                generator.generate_major_ticks(scale, pixel_range, config.target_tick_count);
+
+            let minor_ticks =
+                generator.generate_minor_ticks(scale, &major_ticks, config.minor_tick_subdivisions);
+
+            // Convert domain values to normalized positions
+            minor_ticks
+                .iter()
+                .map(|&tick| scale.normalize(tick) as f32)
+                .collect()
+        } else {
+            Vec::new()
+        }
     }
 
     fn configuration(&self) -> &AxisConfiguration {
@@ -332,6 +440,53 @@ impl Axis for LinearAxis {
 
     fn set_configuration(&mut self, config: AxisConfiguration) {
         self.config = config;
+    }
+}
+
+impl LinearAxis {
+    /// Render the axis with an optional scale for automatic tick generation.
+    pub fn render_with_scale(
+        &self,
+        context: &mut RenderContext,
+        bounds: AxisBounds,
+        scale: Option<&dyn Scale>,
+    ) -> GupResult<()> {
+        // Render main axis line if configured
+        if self.config.show_line {
+            // Use AxisRenderer to create Line marks for the axis line
+            let _renderer = AxisRenderer::new();
+            _renderer.render_axis_line(context, &bounds, &self.config)?;
+        }
+
+        // Render tick marks if configured
+        if self.config.show_major_ticks {
+            let _renderer = AxisRenderer::new();
+            let tick_positions = self.calculate_tick_positions(&bounds, scale);
+
+            _renderer.render_ticks(
+                context,
+                &bounds,
+                &tick_positions,
+                self.config.major_tick_length,
+                &self.config,
+            )?;
+        }
+
+        // Render minor ticks if configured
+        if self.config.show_minor_ticks {
+            let _renderer = AxisRenderer::new();
+            let minor_tick_positions = self.calculate_minor_tick_positions(&bounds, scale);
+
+            _renderer.render_ticks(
+                context,
+                &bounds,
+                &minor_tick_positions,
+                self.config.minor_tick_length,
+                &self.config,
+            )?;
+        }
+
+        Ok(())
     }
 }
 
@@ -478,6 +633,8 @@ mod tests {
         assert_eq!(config.minor_tick_length, 3.0);
         assert_eq!(config.line_color, [0.2, 0.2, 0.2, 1.0]);
         assert_eq!(config.line_width, 1.0);
+        assert_eq!(config.target_tick_count, None);
+        assert_eq!(config.minor_tick_subdivisions, 5);
     }
 
     #[test]
@@ -514,7 +671,7 @@ mod tests {
     #[test]
     fn test_linear_axis_tick_positions() {
         let axis = LinearAxis::with_position(AxisPosition::Bottom);
-        let positions = axis.get_tick_positions(None);
+        let positions = axis.get_tick_positions(None, 800.0);
 
         // Should have basic tick positions
         assert_eq!(positions.len(), 6);
@@ -538,7 +695,7 @@ mod tests {
         let end = Vec2 { x: 200.0, y: 100.0 };
         let bounds = AxisBounds::new(start, end, 50.0);
 
-        let tick_positions = axis.calculate_tick_positions(&bounds);
+        let tick_positions = axis.calculate_tick_positions(&bounds, None);
 
         // Should have 6 tick positions along the axis
         assert_eq!(tick_positions.len(), 6);

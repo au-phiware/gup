@@ -133,7 +133,7 @@ async fn test_linear_axis_margin_calculation() {
 #[tokio::test]
 async fn test_linear_axis_tick_positions() {
     let axis = LinearAxis::with_position(AxisPosition::Bottom);
-    let positions = axis.get_tick_positions(None);
+    let positions = axis.get_tick_positions(None, 800.0);
 
     // Should have basic tick positions from 0 to 1
     assert_eq!(positions.len(), 6);
@@ -459,7 +459,7 @@ async fn test_axis_performance_with_large_tick_count() {
 
     // This test ensures tick position calculation is efficient
     let start = std::time::Instant::now();
-    let positions = axis.get_tick_positions(None);
+    let positions = axis.get_tick_positions(None, 800.0);
     let duration = start.elapsed();
 
     // Should complete quickly even with multiple calls

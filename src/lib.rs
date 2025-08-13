@@ -45,6 +45,7 @@ pub mod render;
 pub mod selection;
 pub mod shader_function;
 pub mod shader_pipeline;
+pub mod tick_generator;
 
 // Export async components selectively to avoid conflicts
 pub use async_mixable::{
@@ -77,6 +78,19 @@ pub use plugins::*;
 pub use render::*;
 pub use shader_function::*;
 pub use shader_pipeline::*;
+// Export tick generator with explicit types to avoid conflicts
+pub use tick_generator::{
+    LinearScale as TickLinearScale, // Renamed to avoid conflict with shader_function::LinearScale
+    LinearTickGenerator,
+    LogarithmicScale,
+    LogarithmicTickGenerator,
+    Scale,
+    TickGenerator,
+    TimeInterval,
+    TimeScale,
+    TimeTickGenerator,
+    TimeUnit,
+};
 
 // Export mark system with explicit re-exports to avoid conflicts
 pub use mark::circle::{Circle, CircleAttributes, CircleVertex};
