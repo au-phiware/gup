@@ -100,6 +100,58 @@ All public APIs must include:
 - Document performance measurements and benchmarks
 - Identify follow-up stories for discovered work
 
+### Story Implementation Learnings (from GUP-091)
+
+#### Infrastructure vs Visual Implementation Separation
+
+- **Infrastructure stories** should focus on core systems, data structures, and
+  APIs
+- **Visual implementation stories** should handle actual rendering pipeline
+  integration
+- This separation allows for iterative development and reduces scope creep
+- Example: Grid system infrastructure (GUP-091) vs future visual rendering
+  integration
+
+#### Demo and Example Strategy
+
+- **Console demos** are valuable for infrastructure validation and API
+  demonstration
+- **Visual demos** require full rendering pipeline integration - defer to
+  follow-up stories
+- Focus on comprehensive unit tests over complex visual examples during
+  infrastructure phase
+- Window framework demos can validate GPU context setup without full rendering
+
+#### Performance Target Setting
+
+- Set **architectural performance targets** early (e.g., <0.05ms for 20 grid
+  lines)
+- Design systems to **meet targets through efficient algorithms**, not just
+  implementation
+- Document **performance measurement approach** in acceptance criteria
+- Use performance targets to **guide architectural decisions** during
+  implementation
+
+#### Testing Strategy for GPU Systems
+
+- **Unit tests are critical** for infrastructure validation - aim for 15+
+  comprehensive tests
+- **GPU resource management** requires single-threaded testing
+  (`--test-threads=1`)
+- **Test data structures and algorithms** thoroughly before visual integration
+- **Lint compliance** must be achieved before completion - use `mask all-fix`
+  proactively
+
+#### API Design for Complex Systems
+
+- Use **builder patterns with fluent APIs** for complex configuration
+  (GridCapableBuilder)
+- Provide **sensible defaults** that work out-of-box with customization options
+- **Static methods** can resolve borrowing issues in complex renderer
+  architectures
+- **Trait-based extension** allows adding capabilities to existing systems
+  without breaking changes
+
 ## Documentation Structure
 
 For detailed development patterns and examples, see:
