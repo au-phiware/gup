@@ -52,6 +52,7 @@ pub use plot_api::*;
 use crate::RenderContext;
 use crate::axis::{Axis, AxisBounds, AxisConfiguration, AxisPosition, LinearAxis};
 use crate::error::{GupError, GupResult};
+use crate::grid::GridConfiguration;
 use crate::selection::Selection;
 use crate::shader_function::Vec2;
 use std::marker::PhantomData;
@@ -186,6 +187,9 @@ pub struct ChartConfig {
 
     /// Whether to show grid lines
     pub show_grid: bool,
+
+    /// Grid system configuration
+    pub grid_config: GridConfiguration,
 }
 
 /// Chart margin specification.
@@ -207,6 +211,7 @@ impl Default for ChartConfig {
             background_color: None,
             show_axes: true,
             show_grid: false,
+            grid_config: GridConfiguration::default(),
         }
     }
 }

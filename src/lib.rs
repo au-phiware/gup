@@ -35,6 +35,7 @@ pub mod context;
 pub mod debug;
 pub mod error;
 pub mod examples;
+pub mod grid;
 pub mod integration;
 pub mod interaction;
 pub mod mark;
@@ -66,6 +67,7 @@ pub use context::*;
 pub use debug::*;
 pub use error::*;
 pub use examples::*;
+pub use grid::*;
 pub use integration::*;
 // Export interaction system components (excluding ambiguous types)
 pub use interaction::{

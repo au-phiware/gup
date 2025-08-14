@@ -21,6 +21,7 @@ pub use scatter::*;
 use super::ChartBuilderError;
 use super::accessor::{AccessorValue, FieldAccessor};
 use crate::error::GupResult;
+use crate::grid::{GridConfiguration, GridLineConfig};
 use crate::selection::{ColorShaderFunction, PositionShaderFunction, Selection};
 use std::marker::PhantomData;
 
@@ -43,6 +44,129 @@ pub trait ConfigurableBuilder: Sized {
 
     /// Enable or disable grid display.
     fn show_grid(self, show: bool) -> Self;
+}
+
+/// Extended trait for chart builders that support advanced grid configuration.
+///
+/// GridCapableBuilder provides fine-grained control over grid line appearance
+/// and behavior, extending beyond the basic show/hide functionality.
+pub trait GridCapableBuilder: ConfigurableBuilder {
+    /// Configure major grid line appearance.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    /// use gup::GridLineConfig;
+    ///
+    /// # #[derive(Debug, Clone)]
+    /// # struct DataPoint { x: f32, y: f32 }
+    /// let chart = scatter::<DataPoint>()
+    ///     .major_grid_style(
+    ///         GridLineConfig::default()
+    ///             .with_color([0.7, 0.7, 0.7, 1.0])
+    ///             .with_line_width(1.0)
+    ///     );
+    /// ```
+    fn major_grid_style(self, config: GridLineConfig) -> Self;
+
+    /// Configure minor grid line appearance.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    /// use gup::GridLineConfig;
+    ///
+    /// # #[derive(Debug, Clone)]
+    /// # struct DataPoint { x: f32, y: f32 }
+    /// let chart = scatter::<DataPoint>()
+    ///     .minor_grid_style(
+    ///         GridLineConfig::default()
+    ///             .with_color([0.9, 0.9, 0.9, 1.0])
+    ///             .with_line_width(0.25)
+    ///             .with_opacity(0.3)
+    ///     );
+    /// ```
+    fn minor_grid_style(self, config: GridLineConfig) -> Self;
+
+    /// Show only horizontal grid lines.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    ///
+    /// # #[derive(Debug, Clone)]
+    /// # struct DataPoint { x: f32, y: f32 }
+    /// let chart = scatter::<DataPoint>()
+    ///     .horizontal_grid_only();
+    /// ```
+    fn horizontal_grid_only(self) -> Self;
+
+    /// Show only vertical grid lines.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    ///
+    /// # #[derive(Debug, Clone)]
+    /// # struct DataPoint { x: f32, y: f32 }
+    /// let chart = scatter::<DataPoint>()
+    ///     .vertical_grid_only();
+    /// ```
+    fn vertical_grid_only(self) -> Self;
+
+    /// Enable minor grid lines with default styling.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    ///
+    /// # #[derive(Debug, Clone)]
+    /// # struct DataPoint { x: f32, y: f32 }
+    /// let chart = scatter::<DataPoint>()
+    ///     .with_minor_grid();
+    /// ```
+    fn with_minor_grid(self) -> Self;
+
+    /// Disable minor grid lines.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    ///
+    /// # #[derive(Debug, Clone)]
+    /// # struct DataPoint { x: f32, y: f32 }
+    /// let chart = scatter::<DataPoint>()
+    ///     .without_minor_grid();
+    /// ```
+    fn without_minor_grid(self) -> Self;
+
+    /// Set complete grid configuration.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    /// use gup::GridConfiguration;
+    ///
+    /// # #[derive(Debug, Clone)]
+    /// # struct DataPoint { x: f32, y: f32 }
+    /// let chart = scatter::<DataPoint>()
+    ///     .grid_configuration(GridConfiguration::horizontal_only());
+    /// ```
+    fn grid_configuration(self, config: GridConfiguration) -> Self;
 }
 
 /// Helper trait for converting accessor values to shader functions.

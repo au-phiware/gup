@@ -7,12 +7,13 @@
 //! automatic scale inference and shader function integration.
 
 use super::{
-    AccessorFunction, ConfigurableBuilder, apply_accessors_to_selection,
+    AccessorFunction, ConfigurableBuilder, GridCapableBuilder, apply_accessors_to_selection,
     validate_required_accessors,
 };
 use crate::RenderContext;
 use crate::chart_builder::{ChartBuilder, ChartBuilderError, ChartConfig, ComposedChart};
 use crate::error::GupResult;
+use crate::grid::{GridConfiguration, GridLineConfig};
 use crate::selection::Circle;
 use crate::selection::Selection;
 use std::marker::PhantomData;
@@ -196,6 +197,48 @@ impl<T> ConfigurableBuilder for ScatterPlotBuilder<T> {
 
     fn show_grid(mut self, show: bool) -> Self {
         self.config.show_grid = show;
+        self
+    }
+}
+
+// Implement advanced grid configuration methods
+impl<T> GridCapableBuilder for ScatterPlotBuilder<T> {
+    fn major_grid_style(mut self, config: GridLineConfig) -> Self {
+        self.config.grid_config.major_grid = config;
+        self
+    }
+
+    fn minor_grid_style(mut self, config: GridLineConfig) -> Self {
+        self.config.grid_config.minor_grid = config;
+        self
+    }
+
+    fn horizontal_grid_only(mut self) -> Self {
+        self.config.grid_config.show_horizontal = true;
+        self.config.grid_config.show_vertical = false;
+        self.config.show_grid = true; // Enable grid display
+        self
+    }
+
+    fn vertical_grid_only(mut self) -> Self {
+        self.config.grid_config.show_horizontal = false;
+        self.config.grid_config.show_vertical = true;
+        self.config.show_grid = true; // Enable grid display
+        self
+    }
+
+    fn with_minor_grid(mut self) -> Self {
+        self.config.grid_config.minor_grid.enabled = true;
+        self
+    }
+
+    fn without_minor_grid(mut self) -> Self {
+        self.config.grid_config.minor_grid.enabled = false;
+        self
+    }
+
+    fn grid_configuration(mut self, config: GridConfiguration) -> Self {
+        self.config.grid_config = config;
         self
     }
 }
