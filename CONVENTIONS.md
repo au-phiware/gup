@@ -152,6 +152,71 @@ All public APIs must include:
 - **Trait-based extension** allows adding capabilities to existing systems
   without breaking changes
 
+### Story Implementation Learnings (from GUP-092)
+
+#### Visual Demo Development Strategy
+
+- **Incremental visual complexity** - Start with basic rendering, add features
+  iteratively
+- **Infrastructure first, visuals second** - Core label formatting/positioning
+  systems should be complete before complex rendering
+- **GPU validation error prevention** - Complex multi-pass rendering can cause
+  command encoder validation errors
+- **Simplified visual feedback** - Basic background colors and console output
+  can effectively demonstrate functionality
+- **Resource management criticality** - GPU buffer updates require careful
+  lifecycle management
+
+#### Text Rendering System Design
+
+- **SDF (Signed Distance Field) approach** - Selected for scalability and GPU
+  compatibility
+- **Modular text pipeline** - Separate font loading, atlas generation, layout,
+  and rendering concerns
+- **Thread-safe font management** - Use LazyLock and Mutex for global font atlas
+  access
+- **Platform compatibility** - fontdue crate provides reliable cross-platform
+  font loading
+- **Performance targets** - Text rendering should add <5% overhead to
+  visualization performance
+
+#### Label Formatting Architecture
+
+- **Trait-based formatter system** - LabelFormatter trait with specialized
+  implementations
+- **Locale awareness** - Support system locale detection and custom locale
+  configuration
+- **Format variety** - Currency, percentage, scientific notation, SI units, and
+  date/time formatting
+- **Type safety** - Compile-time validation of accessor functions prevents
+  runtime field access errors
+- **Observable Plot compatibility** - API design mirrors familiar data
+  visualization patterns
+
+#### GPU Resource Management for Complex Demos
+
+- **Single render pass strategy** - Avoid multiple render passes to prevent
+  validation errors
+- **Instance buffer recreation** - Reset buffers when data changes to prevent
+  stale resource usage
+- **Command encoder lifecycle** - Careful management of GPU resource borrowing
+  and lifetimes
+- **Error-prone patterns** - Multiple pipeline switches and render pass creation
+  can cause GPU validation failures
+- **Simplified demonstration** - Console output + basic visual elements can
+  effectively show functionality
+
+#### Visual Example Requirements Evolution
+
+- **User expectation management** - "Visual demo" implies actual charts with
+  data points, axes, and labels
+- **Incremental delivery approach** - Background colors → data points →
+  simplified labels → full text rendering
+- **Platform stability priorities** - Stable basic functionality is better than
+  unstable advanced features
+- **Foundation for extension** - Well-structured infrastructure enables future
+  visual enhancements
+
 ## Documentation Structure
 
 For detailed development patterns and examples, see:

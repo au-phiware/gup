@@ -42,21 +42,21 @@ epic and status.
 
 ### Future Improvements - Post GUP-021 (Stories 26+)
 
-| Story                                                        | Title                                  | Status      | Priority | Points |
-| ------------------------------------------------------------ | -------------------------------------- | ----------- | -------- | ------ |
-| [GUP-026](GUP-026_Data_Source_Merge_Implementation.md)       | Data Source Merge Implementation       | 💡 New      | Medium   | 5      |
-| [GUP-027](GUP-027_GPU_Blend_State_Integration.md)            | GPU Blend State Integration            | ✅ Complete | High     | 3      |
-| [GUP-028](GUP-028_Composition_Performance_Optimization.md)   | Composition Performance Optimization   | 💡 New      | Medium   | 4      |
-| ~~[GUP-085](GUP-085_Line_Rectangle_Mark_Implementation.md)~~ | ~~Line and Rectangle Mark Impl.~~      | ⿻ Copy     | High     | 5      |
-| [GUP-086](GUP-086_Observable_Plot_Migration_Guide.md)        | Observable Plot Migration Guide        | 💡 New      | Low      | 2      |
-| [GUP-087](GUP-087_Chart_Builder_Performance_Optimization.md) | Chart Builder Performance Optimization | 💡 New      | Medium   | 3      |
-| [GUP-088](GUP-088_External_Library_Integration_System.md)    | External Library Integration System    | ✅ Complete | High     | 5      |
-| [GUP-092](GUP-092_Label_Formatting_and_Positioning.md)       | Label Formatting and Positioning       | ✅ Complete | High     | 8      |
-| [GUP-099](GUP-099_GPU_Text_Rendering_Pipeline_Implementation.md) | GPU Text Rendering Pipeline Implementation | 📋 Planned | High | 8 |
-| [GUP-100](GUP-100_Visual_Chart_Axis_Integration.md)          | Visual Chart Axis Integration          | 📋 Planned  | Medium   | 8      |
-| [GUP-101](GUP-101_Label_Collision_Detection_Enhancement.md)  | Label Collision Detection Enhancement  | 📋 Planned  | Medium   | 5      |
-| [GUP-102](GUP-102_Demo_GPU_Resource_Management_Fixes.md)     | Demo GPU Resource Management Fixes    | 📋 Planned  | High     | 3      |
-| [GUP-103](GUP-103_Comprehensive_Chart_Examples_Suite.md)     | Comprehensive Chart Examples Suite    | 📋 Planned  | Medium   | 8      |
+| Story                                                            | Title                                      | Status      | Priority | Points |
+| ---------------------------------------------------------------- | ------------------------------------------ | ----------- | -------- | ------ |
+| [GUP-026](GUP-026_Data_Source_Merge_Implementation.md)           | Data Source Merge Implementation           | 💡 New      | Medium   | 5      |
+| [GUP-027](GUP-027_GPU_Blend_State_Integration.md)                | GPU Blend State Integration                | ✅ Complete | High     | 3      |
+| [GUP-028](GUP-028_Composition_Performance_Optimization.md)       | Composition Performance Optimization       | 💡 New      | Medium   | 4      |
+| ~~[GUP-085](GUP-085_Line_Rectangle_Mark_Implementation.md)~~     | ~~Line and Rectangle Mark Impl.~~          | ⿻ Copy     | High     | 5      |
+| [GUP-086](GUP-086_Observable_Plot_Migration_Guide.md)            | Observable Plot Migration Guide            | 💡 New      | Low      | 2      |
+| [GUP-087](GUP-087_Chart_Builder_Performance_Optimization.md)     | Chart Builder Performance Optimization     | 💡 New      | Medium   | 3      |
+| [GUP-088](GUP-088_External_Library_Integration_System.md)        | External Library Integration System        | ✅ Complete | High     | 5      |
+| [GUP-092](GUP-092_Label_Formatting_and_Positioning.md)           | Label Formatting and Positioning           | ✅ Complete | High     | 8      |
+| [GUP-099](GUP-099_GPU_Text_Rendering_Pipeline_Implementation.md) | GPU Text Rendering Pipeline Implementation | 📋 Planned  | High     | 8      |
+| [GUP-100](GUP-100_Visual_Chart_Axis_Integration.md)              | Visual Chart Axis Integration              | 📋 Planned  | Medium   | 8      |
+| [GUP-101](GUP-101_Label_Collision_Detection_Enhancement.md)      | Label Collision Detection Enhancement      | 📋 Planned  | Medium   | 5      |
+| [GUP-102](GUP-102_Demo_GPU_Resource_Management_Fixes.md)         | Demo GPU Resource Management Fixes         | 📋 Planned  | High     | 3      |
+| [GUP-103](GUP-103_Comprehensive_Chart_Examples_Suite.md)         | Comprehensive Chart Examples Suite         | 📋 Planned  | Medium   | 8      |
 
 ### Post GUP-009 Stories - Mark System Enhancement (Stories 67+)
 
@@ -684,30 +684,30 @@ zero-cost abstractions, plugin registry, and production-ready quality
 
 The following stories were created based on learnings from implementing GUP-092:
 
-| Story                                                           | Title                                           | Status      | Priority | Points |
-| --------------------------------------------------------------- | ----------------------------------------------- | ----------- | -------- | ------ |
-| [GUP-099](GUP-099_GPU_Text_Rendering_Pipeline_Implementation.md) | GPU Text Rendering Pipeline Implementation       | 📋 Planned  | High     | 8      |
-| [GUP-100](GUP-100_Visual_Chart_Axis_Integration.md)             | Visual Chart Axis Integration                   | 📋 Planned  | Medium   | 8      |
-| [GUP-101](GUP-101_Label_Collision_Detection_Enhancement.md)     | Label Collision Detection Enhancement           | 📋 Planned  | Medium   | 5      |
-| [GUP-102](GUP-102_Demo_GPU_Resource_Management_Fixes.md)        | Demo GPU Resource Management Fixes             | 📋 Planned  | High     | 3      |
-| [GUP-103](GUP-103_Comprehensive_Chart_Examples_Suite.md)        | Comprehensive Chart Examples Suite             | 📋 Planned  | Medium   | 8      |
+| Story                                                            | Title                                      | Status     | Priority | Points |
+| ---------------------------------------------------------------- | ------------------------------------------ | ---------- | -------- | ------ |
+| [GUP-099](GUP-099_GPU_Text_Rendering_Pipeline_Implementation.md) | GPU Text Rendering Pipeline Implementation | 📋 Planned | High     | 8      |
+| [GUP-100](GUP-100_Visual_Chart_Axis_Integration.md)              | Visual Chart Axis Integration              | 📋 Planned | Medium   | 8      |
+| [GUP-101](GUP-101_Label_Collision_Detection_Enhancement.md)      | Label Collision Detection Enhancement      | 📋 Planned | Medium   | 5      |
+| [GUP-102](GUP-102_Demo_GPU_Resource_Management_Fixes.md)         | Demo GPU Resource Management Fixes         | 📋 Planned | High     | 3      |
+| [GUP-103](GUP-103_Comprehensive_Chart_Examples_Suite.md)         | Comprehensive Chart Examples Suite         | 📋 Planned | Medium   | 8      |
 
 ### GUP-099: GPU Text Rendering Pipeline Implementation
 
 **Key Learning**: Current text rendering infrastructure exists but lacks proper
-GPU integration for production-quality text rendering with SDF fonts and
-shader pipeline integration  
+GPU integration for production-quality text rendering with SDF fonts and shader
+pipeline integration  
 **Dependencies**: GUP-092 complete (label formatting foundation)  
 **Impact**: Production-ready text rendering system enabling professional-quality
-label displays and typography  
+label displays and typography
 
 ### GUP-100: Visual Chart Axis Integration
 
 **Key Learning**: Label formatting demo shows data points but lacks essential
 visual axes that provide data context and scale interpretation  
 **Dependencies**: GUP-092, GUP-099 complete  
-**Impact**: Complete chart visualization with professional axes, tick marks,
-and axis labels  
+**Impact**: Complete chart visualization with professional axes, tick marks, and
+axis labels
 
 ### GUP-101: Label Collision Detection Enhancement
 
@@ -716,7 +716,7 @@ sophisticated algorithms for rotation, intelligent spacing, and priority-based
 selection  
 **Dependencies**: GUP-092, GUP-099 complete  
 **Impact**: Advanced label positioning with automatic rotation and smart
-collision avoidance  
+collision avoidance
 
 ### GUP-102: Demo GPU Resource Management Fixes
 
@@ -725,16 +725,16 @@ GUP-092 implementation indicate fundamental GPU resource lifecycle management
 issues  
 **Dependencies**: GUP-092 complete  
 **Impact**: Stable demo applications with proper GPU resource management and
-error prevention  
+error prevention
 
 ### GUP-103: Comprehensive Chart Examples Suite
 
-**Key Learning**: Individual feature demos exist but comprehensive example
-suite needed to demonstrate full library capabilities and serve as user
+**Key Learning**: Individual feature demos exist but comprehensive example suite
+needed to demonstrate full library capabilities and serve as user
 documentation  
 **Dependencies**: GUP-099, GUP-100, GUP-102 complete  
 **Impact**: Complete learning resource and integration testing through
-professional-quality chart examples  
+professional-quality chart examples
 
 ---
 

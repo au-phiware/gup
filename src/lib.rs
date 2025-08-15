@@ -38,6 +38,7 @@ pub mod examples;
 pub mod grid;
 pub mod integration;
 pub mod interaction;
+pub mod label;
 pub mod mark;
 pub mod mixable;
 pub mod plugins;
@@ -46,6 +47,7 @@ pub mod render;
 pub mod selection;
 pub mod shader_function;
 pub mod shader_pipeline;
+pub mod text;
 pub mod tick_generator;
 
 // Export async components selectively to avoid conflicts
@@ -69,6 +71,7 @@ pub use error::*;
 pub use examples::*;
 pub use grid::*;
 pub use integration::*;
+pub use label::*;
 // Export interaction system components (excluding ambiguous types)
 pub use interaction::{
     CustomInteractionQuery, ElementData, ElementHit, EventHandler, GpuInteractionQuery,
@@ -80,6 +83,7 @@ pub use plugins::*;
 pub use render::*;
 pub use shader_function::*;
 pub use shader_pipeline::*;
+pub use text::*;
 // Export tick generator with explicit types to avoid conflicts
 pub use tick_generator::{
     LinearScale as TickLinearScale, // Renamed to avoid conflict with shader_function::LinearScale
@@ -104,7 +108,11 @@ pub use mark::{Mark, MarkInfo, MarkInfoImpl, MarkRegistry};
 pub use selection::*;
 
 // Export chart builder system (Observable Plot-style API)
-pub use chart_builder::*;
+// Re-export selectively to avoid conflicts with label::Margins
+pub use chart_builder::{
+    AreaChartBuilder, AxisLabelConfig, BarChartBuilder, ChartBuilder, ChartConfig, ComposedChart,
+    HeatmapBuilder, LabelCapableBuilder, LabeledChart, LineChartBuilder, ScatterPlotBuilder, plot,
+};
 
 // Note: Procedural macros from gup_macros must be imported directly due to Rust limitations
 // Available macros:

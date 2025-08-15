@@ -7,19 +7,32 @@
 **Priority**: Medium  
 **Story Points**: 8  
 **Status**: 📋 Planned  
-**Dependencies**: GUP-099 (GPU Text Rendering), GUP-100 (Visual Chart Axis Integration), GUP-102 (Demo GPU Resource Management)
+**Dependencies**: GUP-099 (GPU Text Rendering), GUP-100 (Visual Chart Axis
+Integration), GUP-102 (Demo GPU Resource Management)
 
 ## Problem Statement
 
-Currently, the library has individual demos for specific features (scatter_plot_demo, label_formatting_demo) but lacks a comprehensive suite of examples that demonstrates the full capabilities of the visualization system. Users need to see complete, professional-quality chart examples that showcase how all the components work together to create publication-ready visualizations. Without comprehensive examples, users cannot understand the full potential of the library or learn how to create complex visualizations.
+Currently, the library has individual demos for specific features
+(scatter_plot_demo, label_formatting_demo) but lacks a comprehensive suite of
+examples that demonstrates the full capabilities of the visualization system.
+Users need to see complete, professional-quality chart examples that showcase
+how all the components work together to create publication-ready visualizations.
+Without comprehensive examples, users cannot understand the full potential of
+the library or learn how to create complex visualizations.
 
 ## Business Context
 
-Professional data visualization libraries provide extensive example galleries that serve as both documentation and inspiration for users. Libraries like D3.js, Plotly, and Matplotlib are successful partly because of their comprehensive example collections. Users often learn by copying and modifying examples, making a rich example suite critical for user adoption and success. This also serves as integration testing for the entire system.
+Professional data visualization libraries provide extensive example galleries
+that serve as both documentation and inspiration for users. Libraries like
+D3.js, Plotly, and Matplotlib are successful partly because of their
+comprehensive example collections. Users often learn by copying and modifying
+examples, making a rich example suite critical for user adoption and success.
+This also serves as integration testing for the entire system.
 
 ## Success Criteria
 
 1. **Comprehensive Chart Types**
+
    - Scatter plots with various styling and labeling options
    - Line charts with multiple series and formatting
    - Bar charts with categorical data and proper labels
@@ -28,6 +41,7 @@ Professional data visualization libraries provide extensive example galleries th
    - Combined chart types showing composition capabilities
 
 2. **Professional Visual Quality**
+
    - Publication-ready chart appearance
    - Proper axes with formatted labels
    - Legends and titles where appropriate
@@ -35,6 +49,7 @@ Professional data visualization libraries provide extensive example galleries th
    - Anti-aliased rendering and smooth animations
 
 3. **Educational Value**
+
    - Progressive complexity from simple to advanced examples
    - Clear code structure and extensive comments
    - Best practices demonstration
@@ -51,7 +66,8 @@ Professional data visualization libraries provide extensive example galleries th
 ### Example Suite Architecture
 
 1. **Structured Example Hierarchy**
-   ```
+
+   ```text
    examples/
    ├── basic/
    │   ├── simple_scatter.rs       # Basic scatter plot
@@ -72,13 +88,14 @@ Professional data visualization libraries provide extensive example galleries th
    ```
 
 2. **Common Example Framework**
+
    ```rust
    pub struct ExampleFramework {
        window: Window,
        context: GupContext,
        render_context: RenderContext,
    }
-   
+
    impl ExampleFramework {
        pub fn new(title: &str) -> Self;
        pub fn run<F>(&mut self, chart_builder: F) -> GupResult<()>
@@ -95,18 +112,21 @@ Professional data visualization libraries provide extensive example galleries th
 ### Example Categories
 
 1. **Basic Examples (Getting Started)**
+
    - Simple scatter plot with basic data
    - Line chart with time series data
    - Bar chart with categorical data
    - Clear, minimal code with extensive comments
 
 2. **Intermediate Examples (Feature Showcase)**
+
    - Multiple data series and styling
    - Custom formatters and label positioning
    - Interactive features and user input
    - Color schemes and theming
 
 3. **Advanced Examples (Integration)**
+
    - Combined chart types in single visualization
    - Large dataset handling and performance
    - Custom marks and advanced rendering
@@ -121,24 +141,28 @@ Professional data visualization libraries provide extensive example galleries th
 ## Implementation Plan
 
 ### Phase 1: Foundation Examples
+
 - Create basic scatter, line, and bar chart examples
 - Implement common example framework
 - Establish coding standards and documentation patterns
 - Set up automated example testing
 
 ### Phase 2: Feature Integration
+
 - Add intermediate examples showcasing advanced features
 - Demonstrate label formatting and positioning
 - Show axis integration and styling options
 - Include performance optimization examples
 
 ### Phase 3: Advanced Demonstrations
+
 - Create combined chart examples
 - Add interactive and real-time examples
 - Implement showcase examples with real-world data
 - Performance validation and optimization
 
 ### Phase 4: Documentation and Polish
+
 - Comprehensive documentation for each example
 - Example gallery with screenshots
 - Best practices documentation
@@ -183,11 +207,13 @@ Professional data visualization libraries provide extensive example galleries th
 ## Dependencies and Integration
 
 ### Required Components
+
 - GUP-099: GPU text rendering for label display
 - GUP-100: Visual axis integration for complete charts
 - GUP-102: Stable GPU resource management for reliable examples
 
 ### Integration Points
+
 - Chart builder APIs for easy example creation
 - Label formatting system for professional appearance
 - Mark system for various chart types
@@ -196,12 +222,14 @@ Professional data visualization libraries provide extensive example galleries th
 ## Testing Strategy
 
 ### Automated Testing
+
 - Compilation testing for all examples
 - Basic functionality validation
 - Performance regression testing
 - Cross-platform compatibility validation
 
 ### Manual Testing
+
 - Visual quality assessment
 - User experience evaluation
 - Educational value review
@@ -217,4 +245,6 @@ Professional data visualization libraries provide extensive example galleries th
 - [ ] Performance requirements met for all examples
 - [ ] User feedback incorporated and addressed
 
-This story creates a comprehensive learning and demonstration resource that showcases the full capabilities of the visualization library while serving as both documentation and integration testing for the entire system.
+This story creates a comprehensive learning and demonstration resource that
+showcases the full capabilities of the visualization library while serving as
+both documentation and integration testing for the entire system.

@@ -11,27 +11,41 @@
 
 ## Problem Statement
 
-The current label positioning system in GUP-092 includes basic collision detection infrastructure, but lacks sophisticated algorithms for handling complex label overlap scenarios. When multiple labels are positioned near each other, the system needs smarter strategies beyond simple hiding to maintain readability while preserving data context. Users need automatic label rotation, intelligent spacing adjustments, and priority-based label selection to create professional-quality visualizations.
+The current label positioning system in GUP-092 includes basic collision
+detection infrastructure, but lacks sophisticated algorithms for handling
+complex label overlap scenarios. When multiple labels are positioned near each
+other, the system needs smarter strategies beyond simple hiding to maintain
+readability while preserving data context. Users need automatic label rotation,
+intelligent spacing adjustments, and priority-based label selection to create
+professional-quality visualizations.
 
 ## Business Context
 
-Professional data visualization tools like Tableau, Excel, and D3.js employ sophisticated label collision avoidance that goes beyond simple overlap detection. They use label rotation, smart positioning, hierarchical hiding, and dynamic spacing to maximize information density while maintaining readability. Users expect these intelligent behaviors to work automatically without manual intervention.
+Professional data visualization tools like Tableau, Excel, and D3.js employ
+sophisticated label collision avoidance that goes beyond simple overlap
+detection. They use label rotation, smart positioning, hierarchical hiding, and
+dynamic spacing to maximize information density while maintaining readability.
+Users expect these intelligent behaviors to work automatically without manual
+intervention.
 
 ## Success Criteria
 
 1. **Advanced Collision Detection**
+
    - Accurate bounding box calculations for rotated text
    - Multi-level spatial indexing for efficient collision queries
    - Support for different label anchor points and orientations
    - Real-time collision detection during interactive operations
 
 2. **Intelligent Positioning Strategies**
+
    - Automatic label rotation to fit available space
    - Dynamic label offset adjustment
    - Priority-based label selection and hiding
    - Adaptive label density based on zoom level
 
 3. **Performance Optimization**
+
    - Spatial grid optimization for large numbers of labels
    - Efficient algorithms for real-time collision detection
    - Minimal impact on rendering performance
@@ -47,13 +61,14 @@ Professional data visualization tools like Tableau, Excel, and D3.js employ soph
 ### Enhanced Collision Detection Architecture
 
 1. **Spatial Indexing Improvements**
+
    ```rust
    pub struct SpatialGrid {
        cells: HashMap<(i32, i32), Vec<LabelBounds>>,
        cell_size: f32,
        bounds: Rect,
    }
-   
+
    impl SpatialGrid {
        fn efficient_collision_query(&self, bounds: &LabelBounds) -> Vec<&LabelBounds>;
        fn update_label_position(&mut self, old_bounds: &LabelBounds, new_bounds: LabelBounds);
@@ -61,6 +76,7 @@ Professional data visualization tools like Tableau, Excel, and D3.js employ soph
    ```
 
 2. **Advanced Positioning Strategies**
+
    ```rust
    pub enum LabelPositioningStrategy {
        Rotate { max_angle: f32, step: f32 },
@@ -80,12 +96,14 @@ Professional data visualization tools like Tableau, Excel, and D3.js employ soph
 ### Implementation Components
 
 1. **Enhanced LabelPositioner**
+
    - Improved spatial grid with better performance characteristics
    - Support for rotated bounding boxes
    - Multiple positioning strategy execution
    - Configurable collision resolution preferences
 
 2. **Rotation and Offset Algorithms**
+
    - Automatic rotation angle calculation
    - Smart offset direction selection
    - Boundary constraint checking
@@ -101,10 +119,12 @@ Professional data visualization tools like Tableau, Excel, and D3.js employ soph
 
 ### Functional Requirements
 
-- [ ] **Accurate Collision Detection**: Works correctly with rotated and offset labels
+- [ ] **Accurate Collision Detection**: Works correctly with rotated and offset
+      labels
 - [ ] **Automatic Rotation**: Labels rotate intelligently to avoid overlaps
 - [ ] **Smart Positioning**: Multiple positioning strategies attempted in order
-- [ ] **Priority-Based Selection**: Important labels preserved when space is limited
+- [ ] **Priority-Based Selection**: Important labels preserved when space is
+      limited
 
 ### Performance Requirements
 
@@ -122,7 +142,8 @@ Professional data visualization tools like Tableau, Excel, and D3.js employ soph
 
 ### Integration Requirements
 
-- [ ] **Backward Compatibility**: Existing label positioning APIs continue to work
+- [ ] **Backward Compatibility**: Existing label positioning APIs continue to
+      work
 - [ ] **Configuration Options**: Users can adjust collision detection behavior
 - [ ] **Demo Enhancement**: Enhanced examples showing sophisticated positioning
 - [ ] **Chart Builder Integration**: Works seamlessly with chart builder APIs
@@ -130,21 +151,25 @@ Professional data visualization tools like Tableau, Excel, and D3.js employ soph
 ## Technical Implementation Details
 
 ### Phase 1: Spatial Index Optimization
+
 - Improve spatial grid performance and memory usage
 - Add support for rotated bounding boxes
 - Implement efficient batch collision queries
 
 ### Phase 2: Positioning Strategies
+
 - Implement automatic rotation algorithm
 - Add intelligent offset positioning
 - Create priority-based label selection system
 
 ### Phase 3: Algorithm Refinement
+
 - Performance optimization for large label sets
 - Aesthetic improvement algorithms
 - Configuration and customization options
 
 ### Phase 4: Integration and Testing
+
 - Integration with enhanced demo applications
 - Comprehensive performance testing
 - Visual quality validation
@@ -152,18 +177,21 @@ Professional data visualization tools like Tableau, Excel, and D3.js employ soph
 ## Testing Strategy
 
 ### Unit Tests
+
 - Spatial grid performance and correctness
 - Collision detection algorithm accuracy
 - Positioning strategy effectiveness
 - Priority system functionality
 
 ### Integration Tests
+
 - End-to-end label positioning workflows
 - Performance testing with large datasets
 - Visual quality regression testing
 - Chart builder integration validation
 
 ### Performance Tests
+
 - Collision detection performance benchmarks
 - Memory usage profiling
 - Real-time positioning performance validation
@@ -185,4 +213,6 @@ Professional data visualization tools like Tableau, Excel, and D3.js employ soph
 **Effort**: Medium - Builds on existing infrastructure  
 **Value/Effort**: Medium - Incremental improvement with moderate complexity
 
-This story enhances the label positioning system to provide professional-quality automatic label arrangement, improving the visual quality and usability of data visualizations.
+This story enhances the label positioning system to provide professional-quality
+automatic label arrangement, improving the visual quality and usability of data
+visualizations.

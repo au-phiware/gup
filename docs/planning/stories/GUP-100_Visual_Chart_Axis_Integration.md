@@ -7,31 +7,45 @@
 **Priority**: Medium  
 **Story Points**: 8  
 **Status**: 📋 Planned  
-**Dependencies**: GUP-089 (Core Axis System), GUP-092 (Label Formatting), GUP-099 (GPU Text Rendering)
+**Dependencies**: GUP-089 (Core Axis System), GUP-092 (Label Formatting),
+GUP-099 (GPU Text Rendering)
 
 ## Problem Statement
 
-While the label formatting demo shows data points with background colors, users expect complete chart visualizations with proper axes, tick marks, and axis labels. The current demo lacks the visual axis lines, tick marks, and axis titles that are fundamental to professional data visualization. Users cannot interpret the data properly without visible axes that show the scale and context of the plotted data points.
+While the label formatting demo shows data points with background colors, users
+expect complete chart visualizations with proper axes, tick marks, and axis
+labels. The current demo lacks the visual axis lines, tick marks, and axis
+titles that are fundamental to professional data visualization. Users cannot
+interpret the data properly without visible axes that show the scale and context
+of the plotted data points.
 
 ## Business Context
 
-Professional data visualizations require visible axes with tick marks and labels to provide context for data interpretation. Users expect to see X and Y axes with appropriate scales, tick marks at regular intervals, and formatted labels showing the data range. Tools like Excel, Tableau, and D3.js always include visible axes as a fundamental chart component. Without visible axes, even well-formatted data points appear as arbitrary colored dots.
+Professional data visualizations require visible axes with tick marks and labels
+to provide context for data interpretation. Users expect to see X and Y axes
+with appropriate scales, tick marks at regular intervals, and formatted labels
+showing the data range. Tools like Excel, Tableau, and D3.js always include
+visible axes as a fundamental chart component. Without visible axes, even
+well-formatted data points appear as arbitrary colored dots.
 
 ## Success Criteria
 
 1. **Visual Axis Rendering**
+
    - Horizontal and vertical axis lines rendered as GPU primitives
    - Tick marks at appropriate intervals along axes
    - Major and minor tick mark support
    - Proper axis positioning relative to chart area
 
 2. **Axis Label Integration**
+
    - Formatted labels positioned at tick marks
    - Integration with GUP-092 label formatting system
    - Proper label rotation for space optimization
    - Collision detection and intelligent spacing
 
 3. **Chart Builder Integration**
+
    - Seamless integration with existing chart builder APIs
    - Automatic axis generation for scatter plots, line charts, etc.
    - Configurable axis properties (position, style, labels)
@@ -48,18 +62,21 @@ Professional data visualizations require visible axes with tick marks and labels
 ### Axis Rendering Architecture
 
 1. **GPU Axis Primitives**
+
    - Line mark implementation for axis lines
    - Rectangle mark for tick marks
    - Efficient instance rendering for multiple ticks
    - Configurable axis styling (color, width, opacity)
 
 2. **Tick Generation Integration**
+
    - Use existing GUP-090 tick generation algorithms
    - Dynamic tick spacing based on data range and axis length
    - Major/minor tick differentiation
    - Adaptive tick density for different zoom levels
 
 3. **Label Positioning System**
+
    - Extend GUP-092 label positioning for axis-specific requirements
    - Automatic label rotation for long text
    - Smart spacing to prevent label overlap
@@ -74,6 +91,7 @@ Professional data visualizations require visible axes with tick marks and labels
 ### Implementation Components
 
 1. **AxisRenderer Component**
+
    ```rust
    pub struct AxisRenderer {
        position: AxisPosition,
@@ -84,6 +102,7 @@ Professional data visualizations require visible axes with tick marks and labels
    ```
 
 2. **Axis Integration with Charts**
+
    - Add axis rendering to scatter plot demo
    - X-axis showing data value range (revenue, time, etc.)
    - Y-axis showing appropriate data dimension
@@ -102,7 +121,8 @@ Professional data visualizations require visible axes with tick marks and labels
 - [ ] **Axis Lines**: Horizontal and vertical axes visible in demo
 - [ ] **Tick Marks**: Regular tick marks at appropriate intervals
 - [ ] **Axis Labels**: Formatted numbers/text at tick positions
-- [ ] **Professional Appearance**: Chart looks like production visualization tool output
+- [ ] **Professional Appearance**: Chart looks like production visualization
+      tool output
 
 ### Functional Requirements
 
@@ -126,21 +146,25 @@ Professional data visualizations require visible axes with tick marks and labels
 ## Technical Implementation Details
 
 ### Phase 1: Basic Axis Rendering
+
 - Implement AxisRenderer with line and tick mark rendering
 - Basic horizontal and vertical axis support
 - Simple label positioning without advanced features
 
 ### Phase 2: Label Integration
+
 - Integrate with GUP-092 label formatting system
 - Add formatted labels at tick positions
 - Implement label rotation and spacing logic
 
 ### Phase 3: Chart Builder Integration
+
 - Add axis configuration to chart builders
 - Automatic axis generation with sensible defaults
 - Integration with demo applications
 
 ### Phase 4: Enhancement and Polish
+
 - Advanced styling options
 - Performance optimization
 - Visual refinement and testing
@@ -157,8 +181,11 @@ Professional data visualizations require visible axes with tick marks and labels
 
 ## Business Value
 
-**Impact**: High - Transforms demo from abstract data points to professional charts  
+**Impact**: High - Transforms demo from abstract data points to professional
+charts  
 **Effort**: Medium - Builds on existing infrastructure  
 **Value/Effort**: High - Major visual improvement with manageable complexity
 
-This story completes the chart visualization experience by adding the essential visual context that axes provide, making the label formatting system truly useful in a complete data visualization context.
+This story completes the chart visualization experience by adding the essential
+visual context that axes provide, making the label formatting system truly
+useful in a complete data visualization context.

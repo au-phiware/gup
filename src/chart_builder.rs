@@ -43,10 +43,12 @@
 
 pub mod accessor;
 pub mod builders;
+pub mod labels;
 pub mod plot_api;
 
 pub use accessor::*;
 pub use builders::*;
+pub use labels::*;
 pub use plot_api::*;
 
 use crate::RenderContext;
