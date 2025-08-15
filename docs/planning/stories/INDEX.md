@@ -51,6 +51,12 @@ epic and status.
 | [GUP-086](GUP-086_Observable_Plot_Migration_Guide.md)        | Observable Plot Migration Guide        | 💡 New      | Low      | 2      |
 | [GUP-087](GUP-087_Chart_Builder_Performance_Optimization.md) | Chart Builder Performance Optimization | 💡 New      | Medium   | 3      |
 | [GUP-088](GUP-088_External_Library_Integration_System.md)    | External Library Integration System    | ✅ Complete | High     | 5      |
+| [GUP-092](GUP-092_Label_Formatting_and_Positioning.md)       | Label Formatting and Positioning       | ✅ Complete | High     | 8      |
+| [GUP-099](GUP-099_GPU_Text_Rendering_Pipeline_Implementation.md) | GPU Text Rendering Pipeline Implementation | 📋 Planned | High | 8 |
+| [GUP-100](GUP-100_Visual_Chart_Axis_Integration.md)          | Visual Chart Axis Integration          | 📋 Planned  | Medium   | 8      |
+| [GUP-101](GUP-101_Label_Collision_Detection_Enhancement.md)  | Label Collision Detection Enhancement  | 📋 Planned  | Medium   | 5      |
+| [GUP-102](GUP-102_Demo_GPU_Resource_Management_Fixes.md)     | Demo GPU Resource Management Fixes    | 📋 Planned  | High     | 3      |
+| [GUP-103](GUP-103_Comprehensive_Chart_Examples_Suite.md)     | Comprehensive Chart Examples Suite    | 📋 Planned  | Medium   | 8      |
 
 ### Post GUP-009 Stories - Mark System Enhancement (Stories 67+)
 
@@ -190,16 +196,16 @@ epic and status.
 
 ## Story Point Summary
 
-- **Total Planned**: ~364 story points across all stories (including new GUP-018
+- **Total Planned**: ~396 story points across all stories (including new GUP-092
   follow-up stories)
-- **Completed**: 174 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
+- **Completed**: 182 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
   GUP-004: 5pts, GUP-005: 13pts, GUP-006: 13pts, GUP-007: 13pts, GUP-008: 8pts,
   GUP-009: 8pts, GUP-010: 4pts, GUP-011: 8pts, GUP-012: 13pts, GUP-013: 5pts,
   GUP-014: 8pts, GUP-015: 5pts, GUP-017: 8pts, GUP-018: 6pts, GUP-019: 3pts,
   GUP-020: 5pts, GUP-021: 6pts, GUP-022: 4pts, GUP-023: 4pts, GUP-025: 5pts,
   GUP-027: 3pts, GUP-039: 5pts, GUP-043: 3pts, GUP-067: 5pts, GUP-068: 5pts,
-  GUP-088: 5pts)
-- **Progress**: ~48% of total scope
+  GUP-088: 5pts, GUP-092: 8pts)
+- **Progress**: ~46% of total scope
 
 ## Recent Additions (Post GUP-021)
 
@@ -674,6 +680,64 @@ zero-cost abstractions, plugin registry, and production-ready quality
 
 ---
 
+## Recent Additions (Post GUP-092)
+
+The following stories were created based on learnings from implementing GUP-092:
+
+| Story                                                           | Title                                           | Status      | Priority | Points |
+| --------------------------------------------------------------- | ----------------------------------------------- | ----------- | -------- | ------ |
+| [GUP-099](GUP-099_GPU_Text_Rendering_Pipeline_Implementation.md) | GPU Text Rendering Pipeline Implementation       | 📋 Planned  | High     | 8      |
+| [GUP-100](GUP-100_Visual_Chart_Axis_Integration.md)             | Visual Chart Axis Integration                   | 📋 Planned  | Medium   | 8      |
+| [GUP-101](GUP-101_Label_Collision_Detection_Enhancement.md)     | Label Collision Detection Enhancement           | 📋 Planned  | Medium   | 5      |
+| [GUP-102](GUP-102_Demo_GPU_Resource_Management_Fixes.md)        | Demo GPU Resource Management Fixes             | 📋 Planned  | High     | 3      |
+| [GUP-103](GUP-103_Comprehensive_Chart_Examples_Suite.md)        | Comprehensive Chart Examples Suite             | 📋 Planned  | Medium   | 8      |
+
+### GUP-099: GPU Text Rendering Pipeline Implementation
+
+**Key Learning**: Current text rendering infrastructure exists but lacks proper
+GPU integration for production-quality text rendering with SDF fonts and
+shader pipeline integration  
+**Dependencies**: GUP-092 complete (label formatting foundation)  
+**Impact**: Production-ready text rendering system enabling professional-quality
+label displays and typography  
+
+### GUP-100: Visual Chart Axis Integration
+
+**Key Learning**: Label formatting demo shows data points but lacks essential
+visual axes that provide data context and scale interpretation  
+**Dependencies**: GUP-092, GUP-099 complete  
+**Impact**: Complete chart visualization with professional axes, tick marks,
+and axis labels  
+
+### GUP-101: Label Collision Detection Enhancement
+
+**Key Learning**: Basic collision detection infrastructure works but needs
+sophisticated algorithms for rotation, intelligent spacing, and priority-based
+selection  
+**Dependencies**: GUP-092, GUP-099 complete  
+**Impact**: Advanced label positioning with automatic rotation and smart
+collision avoidance  
+
+### GUP-102: Demo GPU Resource Management Fixes
+
+**Key Learning**: GPU command encoder validation errors encountered during
+GUP-092 implementation indicate fundamental GPU resource lifecycle management
+issues  
+**Dependencies**: GUP-092 complete  
+**Impact**: Stable demo applications with proper GPU resource management and
+error prevention  
+
+### GUP-103: Comprehensive Chart Examples Suite
+
+**Key Learning**: Individual feature demos exist but comprehensive example
+suite needed to demonstrate full library capabilities and serve as user
+documentation  
+**Dependencies**: GUP-099, GUP-100, GUP-102 complete  
+**Impact**: Complete learning resource and integration testing through
+professional-quality chart examples  
+
+---
+
 ## Recent Additions (Post GUP-025)
 
 The following story was completed as async streaming composition support:
@@ -693,8 +757,7 @@ cancellation support, and timeout handling
 
 ---
 
-_Last Updated: After completion of GUP-068 (Mark Pipeline Integration) -
-2025-08-11_  
-_Next Priority Stories: GUP-016 (Core Accessibility System), GUP-085 (Line and
-Rectangle Mark Implementation), GUP-084 (Error Handling Performance
-Optimization)_
+_Last Updated: After completion of GUP-092 (Label Formatting and Positioning) -
+2025-08-15_  
+_Next Priority Stories: GUP-099 (GPU Text Rendering Pipeline), GUP-102 (Demo GPU
+Resource Management Fixes), GUP-016 (Core Accessibility System)_
