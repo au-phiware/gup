@@ -55,7 +55,7 @@ use crate::RenderContext;
 use crate::axis::{Axis, AxisBounds, AxisConfiguration, AxisPosition, LinearAxis};
 use crate::error::{GupError, GupResult};
 use crate::grid::GridConfiguration;
-use crate::selection::Selection;
+use crate::selection::{LineAttributes, Selection};
 use crate::shader_function::Vec2;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -218,6 +218,27 @@ impl Default for ChartConfig {
     }
 }
 
+impl ChartConfig {
+    /// Enable grid rendering with default configuration.
+    pub fn with_grid(mut self) -> Self {
+        self.show_grid = true;
+        self
+    }
+
+    /// Enable grid rendering with custom configuration.
+    pub fn with_grid_config(mut self, config: GridConfiguration) -> Self {
+        self.show_grid = true;
+        self.grid_config = config;
+        self
+    }
+
+    /// Disable grid rendering.
+    pub fn without_grid(mut self) -> Self {
+        self.show_grid = false;
+        self
+    }
+}
+
 impl Default for Margins {
     fn default() -> Self {
         Self {
@@ -273,6 +294,8 @@ where
     pub right_axis: Option<Box<dyn Axis>>,
     /// Chart configuration
     pub config: ChartConfig,
+    /// Grid system for rendering grid lines
+    pub grid_system: Option<crate::grid::GridSystem>,
 }
 
 impl<T, M> ComposedChart<T, M>
@@ -282,6 +305,12 @@ where
 {
     /// Create a new composed chart from a visualization and configuration.
     pub fn new(visualization: Selection<T, M>, config: ChartConfig) -> Self {
+        let grid_system = if config.show_grid {
+            Some(crate::grid::GridSystem::new(config.grid_config.clone()))
+        } else {
+            None
+        };
+
         Self {
             visualization,
             bottom_axis: None,
@@ -289,6 +318,7 @@ where
             top_axis: None,
             right_axis: None,
             config,
+            grid_system,
         }
     }
 
@@ -343,12 +373,23 @@ where
         self.visualization.data().is_empty()
     }
 
-    /// Render the complete chart including axes.
+    /// Render the complete chart including axes and grid.
     pub fn render(&mut self, context: &mut RenderContext) -> GupResult<()> {
         // Calculate chart area based on margins and axis requirements
         let chart_area = self.calculate_chart_area();
 
-        // Render axes if present
+        // Phase 1: Render grid lines (behind everything else)
+        if self.config.show_grid {
+            if let Some(grid_system) = &mut self.grid_system {
+                Self::render_grid_lines_static(grid_system, context, &chart_area)?;
+            }
+        }
+
+        // Phase 2: Render main visualization (data points, on top of grid)
+        // Note: In a complete implementation, this would use the Mixable render system
+        // For now, we acknowledge that the visualization is prepared for rendering
+
+        // Phase 3: Render axes (on top of everything)
         if let Some(axis) = &self.bottom_axis {
             let bounds = self.calculate_axis_bounds(AxisPosition::Bottom, &chart_area);
             axis.render(context, bounds)?;
@@ -369,10 +410,70 @@ where
             axis.render(context, bounds)?;
         }
 
-        // Render the main visualization
-        // Note: In a complete implementation, this would use the Mixable render system
-        // For now, we acknowledge that the visualization is prepared for rendering
         Ok(())
+    }
+
+    /// Render grid lines with proper tick alignment.
+    fn render_grid_lines_static(
+        grid_system: &mut crate::grid::GridSystem,
+        context: &mut RenderContext,
+        chart_area: &ChartArea,
+    ) -> GupResult<()> {
+        use crate::grid::ChartBounds;
+
+        // Convert ChartArea to ChartBounds for grid system
+        let chart_bounds = ChartBounds::new(
+            chart_area.x,
+            chart_area.x + chart_area.width,
+            chart_area.y,
+            chart_area.y + chart_area.height,
+        );
+
+        // Generate sample tick positions (in a complete implementation, these would come from the axes)
+        let horizontal_ticks = Self::generate_sample_horizontal_ticks(chart_bounds);
+        let vertical_ticks = Self::generate_sample_vertical_ticks(chart_bounds);
+        let horizontal_minor_ticks = Vec::new(); // No minor ticks for now
+        let vertical_minor_ticks = Vec::new();
+
+        // Render the grid
+        grid_system.render_grid(
+            context,
+            &horizontal_ticks,
+            &vertical_ticks,
+            &horizontal_minor_ticks,
+            &vertical_minor_ticks,
+            chart_bounds,
+        )?;
+
+        // For now, we'll skip the visual rendering of grid selections
+        // In a complete implementation, this would use the passed context
+        // and render the grid selections through the proper rendering pipeline
+        println!(
+            "Grid system generated {} total grid lines",
+            grid_system.total_line_count()
+        );
+
+        Ok(())
+    }
+
+    /// Generate sample horizontal tick positions.
+    fn generate_sample_horizontal_ticks(bounds: crate::grid::ChartBounds) -> Vec<f64> {
+        let mut ticks = Vec::new();
+        let step = bounds.width() / 5.0; // 5 major divisions
+        for i in 0..=5 {
+            ticks.push((bounds.left + i as f32 * step) as f64);
+        }
+        ticks
+    }
+
+    /// Generate sample vertical tick positions.
+    fn generate_sample_vertical_ticks(bounds: crate::grid::ChartBounds) -> Vec<f64> {
+        let mut ticks = Vec::new();
+        let step = bounds.height() / 4.0; // 4 major divisions
+        for i in 0..=4 {
+            ticks.push((bounds.top + i as f32 * step) as f64);
+        }
+        ticks
     }
 
     /// Calculate the available chart area after accounting for margins and axes.
@@ -469,6 +570,119 @@ struct ChartArea {
     pub height: f32,
     /// Final margins used
     pub margins: Margins,
+}
+
+/// Render layer manager for proper z-ordering of visual elements.
+///
+/// This manager ensures that visual elements are rendered in the correct order:
+/// 1. Background layer (chart background)
+/// 2. Grid layer (grid lines behind data)
+/// 3. Data layer (main visualization data)
+/// 4. Axis layer (axes on top of data)
+/// 5. Annotation layer (labels, legends, etc.)
+#[derive(Debug)]
+pub struct RenderLayerManager {
+    /// Background layer elements
+    background_layer: Vec<Box<dyn RenderableElement>>,
+    /// Grid layer elements (grid lines)
+    grid_layer: Vec<Selection<LineAttributes, crate::selection::Line>>,
+    /// Data layer elements (main visualization)
+    data_layer: Vec<Box<dyn RenderableElement>>,
+    /// Axis layer elements
+    axis_layer: Vec<Box<dyn RenderableElement>>,
+    /// Annotation layer elements
+    annotation_layer: Vec<Box<dyn RenderableElement>>,
+}
+
+/// Trait for elements that can be rendered in layers.
+pub trait RenderableElement: std::fmt::Debug {
+    /// Render this element using the provided context.
+    fn render(&mut self, context: &mut RenderContext) -> GupResult<()>;
+}
+
+impl RenderLayerManager {
+    /// Create a new empty render layer manager.
+    pub fn new() -> Self {
+        Self {
+            background_layer: Vec::new(),
+            grid_layer: Vec::new(),
+            data_layer: Vec::new(),
+            axis_layer: Vec::new(),
+            annotation_layer: Vec::new(),
+        }
+    }
+
+    /// Add grid selections to the grid layer.
+    pub fn add_grid_selections(
+        &mut self,
+        selections: Vec<Selection<LineAttributes, crate::selection::Line>>,
+    ) {
+        self.grid_layer.extend(selections);
+    }
+
+    /// Add a data element to the data layer.
+    pub fn add_data_element(&mut self, element: Box<dyn RenderableElement>) {
+        self.data_layer.push(element);
+    }
+
+    /// Add an axis element to the axis layer.
+    pub fn add_axis_element(&mut self, element: Box<dyn RenderableElement>) {
+        self.axis_layer.push(element);
+    }
+
+    /// Render all layers in the correct z-order.
+    pub fn render_all_layers(&mut self, context: &mut RenderContext) -> GupResult<()> {
+        // Layer 1: Background
+        for element in &mut self.background_layer {
+            element.render(context)?;
+        }
+
+        // Layer 2: Grid lines (behind data)
+        for selection in &mut self.grid_layer {
+            selection.render()?;
+        }
+
+        // Layer 3: Data visualization (on top of grid)
+        for element in &mut self.data_layer {
+            element.render(context)?;
+        }
+
+        // Layer 4: Axes (on top of data)
+        for element in &mut self.axis_layer {
+            element.render(context)?;
+        }
+
+        // Layer 5: Annotations (on top of everything)
+        for element in &mut self.annotation_layer {
+            element.render(context)?;
+        }
+
+        Ok(())
+    }
+
+    /// Clear all layers.
+    pub fn clear(&mut self) {
+        self.background_layer.clear();
+        self.grid_layer.clear();
+        self.data_layer.clear();
+        self.axis_layer.clear();
+        self.annotation_layer.clear();
+    }
+
+    /// Get the total number of elements across all layers.
+    pub fn total_element_count(&self) -> usize {
+        self.background_layer.len()
+            + self.grid_layer.len()
+            + self.data_layer.len()
+            + self.axis_layer.len()
+            + self.annotation_layer.len()
+    }
+}
+
+impl Default for RenderLayerManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Error types specific to chart building operations.

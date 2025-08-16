@@ -32,10 +32,11 @@
 
 use crate::axis::{Axis, AxisPosition};
 use crate::error::GupResult;
-use crate::mark::{LineAttributes, LineStyle};
 use crate::render::RenderContext;
+use crate::selection::LineAttributes;
 use crate::shader_function::{Vec2, Vec4};
 use crate::tick_generator::Scale;
+use std::sync::Arc;
 
 /// Position and coordinate bounds for chart rendering area.
 ///
@@ -359,18 +360,11 @@ impl GridRenderer {
                     w: config.color[3] * config.opacity,
                 };
 
-                let line_style = if config.dash_pattern.is_some() {
-                    LineStyle::Dashed
-                } else {
-                    LineStyle::Solid
-                };
-
                 let line_attrs = LineAttributes {
-                    start: Vec2 { x: bounds.left, y },
-                    end: Vec2 { x: bounds.right, y },
-                    color: line_color,
+                    start: [bounds.left, y],
+                    end: [bounds.right, y],
+                    color: [line_color.x, line_color.y, line_color.z, line_color.w],
                     width: config.line_width,
-                    style: line_style,
                 };
 
                 output_lines.push(line_attrs);
@@ -401,21 +395,11 @@ impl GridRenderer {
                     w: config.color[3] * config.opacity,
                 };
 
-                let line_style = if config.dash_pattern.is_some() {
-                    LineStyle::Dashed
-                } else {
-                    LineStyle::Solid
-                };
-
                 let line_attrs = LineAttributes {
-                    start: Vec2 { x, y: bounds.top },
-                    end: Vec2 {
-                        x,
-                        y: bounds.bottom,
-                    },
-                    color: line_color,
+                    start: [x, bounds.top],
+                    end: [x, bounds.bottom],
+                    color: [line_color.x, line_color.y, line_color.z, line_color.w],
                     width: config.line_width,
-                    style: line_style,
                 };
 
                 output_lines.push(line_attrs);
@@ -430,15 +414,6 @@ impl GridRenderer {
     /// This method efficiently renders all grid line types using the
     /// existing Line mark system for optimal GPU performance.
     fn render_all_lines(&self, _context: &mut RenderContext) -> GupResult<()> {
-        // In a complete implementation, this would:
-        // 1. Create a Selection<LineAttributes, Line> for each line type
-        // 2. Use batched rendering to draw all lines efficiently
-        // 3. Apply proper z-ordering (behind data, above background)
-
-        // For now, this is a placeholder for the render pipeline integration
-        // The actual rendering will be integrated when connecting to the
-        // chart builder system and Selection rendering pipeline
-
         // Count total lines for performance tracking
         let total_lines = self.major_horizontal_lines.len()
             + self.major_vertical_lines.len()
@@ -450,7 +425,53 @@ impl GridRenderer {
             eprintln!("Warning: Rendering {total_lines} grid lines may impact performance");
         }
 
+        // For now, just track that grid lines are ready for rendering
+        // The actual rendering will be done via create_grid_selections()
+        // when called from the chart builder integration
+        if total_lines > 0 {
+            println!("Grid system ready: {total_lines} total grid lines generated");
+        }
+
         Ok(())
+    }
+
+    /// Convert grid line attributes to Selection instances for rendering.
+    ///
+    /// This method creates Selection<LineAttributes, Line> instances for each
+    /// grid line type, enabling integration with the existing rendering pipeline.
+    pub fn create_grid_selections(
+        &self,
+        context: Arc<RenderContext>,
+    ) -> GupResult<Vec<crate::selection::Selection<LineAttributes, crate::selection::Line>>> {
+        use crate::selection::Selection;
+
+        let mut selections = Vec::new();
+
+        // Create selection for major horizontal lines
+        if !self.major_horizontal_lines.is_empty() {
+            let selection = Selection::new(self.major_horizontal_lines.clone(), context.clone())?;
+            selections.push(selection);
+        }
+
+        // Create selection for major vertical lines
+        if !self.major_vertical_lines.is_empty() {
+            let selection = Selection::new(self.major_vertical_lines.clone(), context.clone())?;
+            selections.push(selection);
+        }
+
+        // Create selection for minor horizontal lines
+        if !self.minor_horizontal_lines.is_empty() {
+            let selection = Selection::new(self.minor_horizontal_lines.clone(), context.clone())?;
+            selections.push(selection);
+        }
+
+        // Create selection for minor vertical lines
+        if !self.minor_vertical_lines.is_empty() {
+            let selection = Selection::new(self.minor_vertical_lines.clone(), context)?;
+            selections.push(selection);
+        }
+
+        Ok(selections)
     }
 
     /// Clear all generated grid lines.
@@ -559,6 +580,17 @@ impl GridSystem {
     pub fn is_grid_enabled(&self) -> bool {
         (self.config.major_grid.enabled || self.config.minor_grid.enabled)
             && (self.config.show_horizontal || self.config.show_vertical)
+    }
+
+    /// Create grid line selections for visual rendering.
+    ///
+    /// This method creates Selection instances for all generated grid lines,
+    /// enabling integration with the chart builder and rendering pipeline.
+    pub fn create_grid_selections(
+        &self,
+        context: Arc<RenderContext>,
+    ) -> GupResult<Vec<crate::selection::Selection<LineAttributes, crate::selection::Line>>> {
+        self.renderer.create_grid_selections(context)
     }
 }
 
@@ -911,10 +943,10 @@ mod tests {
         assert_eq!(horizontal_lines.len(), 3);
 
         // Check first horizontal line
-        assert_eq!(horizontal_lines[0].start.x, bounds.left);
-        assert_eq!(horizontal_lines[0].end.x, bounds.right);
-        assert_eq!(horizontal_lines[0].start.y, 25.0);
-        assert_eq!(horizontal_lines[0].end.y, 25.0);
+        assert_eq!(horizontal_lines[0].start[0], bounds.left);
+        assert_eq!(horizontal_lines[0].end[0], bounds.right);
+        assert_eq!(horizontal_lines[0].start[1], 25.0);
+        assert_eq!(horizontal_lines[0].end[1], 25.0);
 
         // Test vertical line generation
         let x_ticks = vec![20.0, 40.0, 60.0, 80.0];
@@ -930,10 +962,10 @@ mod tests {
         assert_eq!(vertical_lines.len(), 4);
 
         // Check first vertical line
-        assert_eq!(vertical_lines[0].start.y, bounds.top);
-        assert_eq!(vertical_lines[0].end.y, bounds.bottom);
-        assert_eq!(vertical_lines[0].start.x, 20.0);
-        assert_eq!(vertical_lines[0].end.x, 20.0);
+        assert_eq!(vertical_lines[0].start[1], bounds.top);
+        assert_eq!(vertical_lines[0].end[1], bounds.bottom);
+        assert_eq!(vertical_lines[0].start[0], 20.0);
+        assert_eq!(vertical_lines[0].end[0], 20.0);
     }
 
     #[test]
@@ -1038,9 +1070,9 @@ mod tests {
         let line = &horizontal_lines[0];
 
         // Check that color includes opacity
-        assert_eq!(line.color.x, 1.0); // Red
-        assert_eq!(line.color.y, 0.5); // Green
-        assert_eq!(line.color.z, 0.0); // Blue
-        assert_eq!(line.color.w, 0.7); // Alpha = color alpha * config opacity
+        assert_eq!(line.color[0], 1.0); // Red
+        assert_eq!(line.color[1], 0.5); // Green
+        assert_eq!(line.color[2], 0.0); // Blue
+        assert_eq!(line.color[3], 0.7); // Alpha = color alpha * config opacity
     }
 }

@@ -196,6 +196,10 @@ pub trait Mark: Send + Sync + 'static {
 #[derive(Debug, Clone)]
 pub struct Circle;
 
+/// Basic line mark implementation for grid and line visualizations
+#[derive(Debug, Clone)]
+pub struct Line;
+
 /// Vertex data for circle rendering
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -233,6 +237,49 @@ impl Mark for Circle {
 
     fn description() -> &'static str {
         "Circle"
+    }
+}
+
+/// Vertex data for line rendering
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct LineVertex {
+    pub start: [f32; 2],
+    pub end: [f32; 2],
+    pub color: [f32; 4],
+    pub width: f32,
+    _padding: [f32; 3], // Ensure 16-byte alignment
+}
+
+/// Attribute values for line marks
+#[derive(Debug, Clone, Default)]
+pub struct LineAttributes {
+    pub start: [f32; 2],
+    pub end: [f32; 2],
+    pub color: [f32; 4],
+    pub width: f32,
+}
+
+impl Mark for Line {
+    type Vertex = LineVertex;
+    type AttributeValue = LineAttributes;
+
+    fn create_vertex(attr: &Self::AttributeValue) -> Self::Vertex {
+        LineVertex {
+            start: attr.start,
+            end: attr.end,
+            color: attr.color,
+            width: attr.width,
+            _padding: [0.0; 3],
+        }
+    }
+
+    fn primitive_topology() -> wgpu::PrimitiveTopology {
+        wgpu::PrimitiveTopology::LineList
+    }
+
+    fn description() -> &'static str {
+        "Line"
     }
 }
 
