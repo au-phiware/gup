@@ -519,4 +519,128 @@ mod tests {
         // but should compile and not panic
         assert!(builder.x_accessor.is_none()); // Basic sanity check
     }
+
+    // Tests for enhanced grid API (GUP-097)
+    #[test]
+    fn test_scatter_plot_enhanced_grid_api() {
+        // Test simple grid enabling
+        let builder = scatter::<TestPoint>().grid();
+        assert!(builder.config.show_grid);
+
+        // Test theme presets
+        let light_builder = scatter::<TestPoint>().light_grid();
+        assert!(light_builder.config.show_grid);
+        assert_eq!(light_builder.config.grid_config.major_grid.color[0], 0.0); // Light theme black
+
+        let dark_builder = scatter::<TestPoint>().dark_grid();
+        assert!(dark_builder.config.show_grid);
+        assert_eq!(dark_builder.config.grid_config.major_grid.color[0], 1.0); // Dark theme white
+
+        let scientific_builder = scatter::<TestPoint>().scientific_grid();
+        assert!(scientific_builder.config.show_grid);
+        assert!(scientific_builder.config.grid_config.minor_grid.enabled); // Scientific has minor grids
+
+        let business_builder = scatter::<TestPoint>().business_grid();
+        assert!(business_builder.config.show_grid);
+        assert!(!business_builder.config.grid_config.show_vertical); // Business typically horizontal only
+
+        let minimal_builder = scatter::<TestPoint>().minimal_grid();
+        assert!(minimal_builder.config.show_grid);
+        assert_eq!(
+            minimal_builder.config.grid_config.major_grid.line_width,
+            0.25
+        ); // Thin lines
+
+        let high_contrast_builder = scatter::<TestPoint>().high_contrast_grid();
+        assert!(high_contrast_builder.config.show_grid);
+        assert_eq!(
+            high_contrast_builder
+                .config
+                .grid_config
+                .major_grid
+                .line_width,
+            1.0
+        ); // Thick lines
+    }
+
+    #[test]
+    fn test_scatter_plot_grid_styling_shortcuts() {
+        use crate::grid::Color;
+
+        // Test grid color with hex string
+        let builder = scatter::<TestPoint>().grid_color("#ff6b6b");
+        assert!(builder.config.show_grid);
+        let red_component = builder.config.grid_config.major_grid.color[0];
+        assert!((red_component - 1.0).abs() < 0.01); // Should be close to 1.0 (red)
+
+        // Test grid color with Color struct
+        let color = Color::new(0.3, 0.6, 0.9, 1.0);
+        let builder = scatter::<TestPoint>().grid_color(color);
+        assert_eq!(builder.config.grid_config.major_grid.color[0], 0.3);
+        assert_eq!(builder.config.grid_config.major_grid.color[1], 0.6);
+        assert_eq!(builder.config.grid_config.major_grid.color[2], 0.9);
+
+        // Test grid opacity
+        let builder = scatter::<TestPoint>().grid_opacity(0.5);
+        assert!(builder.config.show_grid);
+        assert_eq!(builder.config.grid_config.major_grid.opacity, 0.5);
+
+        // Test grid width
+        let builder = scatter::<TestPoint>().grid_width(2.0);
+        assert!(builder.config.show_grid);
+        assert_eq!(builder.config.grid_config.major_grid.line_width, 2.0);
+    }
+
+    #[test]
+    fn test_scatter_plot_directional_grid_shortcuts() {
+        // Test horizontal grid
+        let builder = scatter::<TestPoint>().horizontal_grid();
+        assert!(builder.config.show_grid);
+        assert!(builder.config.grid_config.show_horizontal);
+        assert!(!builder.config.grid_config.show_vertical);
+
+        // Test vertical grid
+        let builder = scatter::<TestPoint>().vertical_grid();
+        assert!(builder.config.show_grid);
+        assert!(!builder.config.grid_config.show_horizontal);
+        assert!(builder.config.grid_config.show_vertical);
+    }
+
+    #[test]
+    fn test_scatter_plot_grid_api_chaining() {
+        // Test that enhanced API methods can be chained
+        let builder = scatter::<TestPoint>()
+            .x(AccessorFunction::new(|d: &TestPoint| {
+                AccessorValue::Float(d.x_val)
+            }))
+            .y(AccessorFunction::new(|d: &TestPoint| {
+                AccessorValue::Float(d.y_val)
+            }))
+            .light_grid()
+            .point_size(10.0);
+
+        assert!(builder.x_accessor.is_some());
+        assert!(builder.y_accessor.is_some());
+        assert!(builder.size_accessor.is_some());
+        assert!(builder.config.show_grid);
+
+        // Test individual color setting separately to avoid chaining overrides
+        let color_builder = scatter::<TestPoint>().grid_color("#336699");
+        let blue_component = color_builder.config.grid_config.major_grid.color[2];
+        assert!((blue_component - 0.6).abs() < 0.01); // Should be close to 0.6 (blue from #336699)
+    }
+
+    #[test]
+    fn test_scatter_plot_grid_backwards_compatibility() {
+        // Test that existing grid methods still work
+        let builder = scatter::<TestPoint>()
+            .show_grid(true)
+            .horizontal_grid_only()
+            .with_minor_grid();
+
+        assert!(builder.config.show_grid);
+        assert!(builder.config.grid_config.show_horizontal);
+        assert!(!builder.config.grid_config.show_vertical);
+        assert!(builder.config.grid_config.minor_grid.enabled);
+    }
 }

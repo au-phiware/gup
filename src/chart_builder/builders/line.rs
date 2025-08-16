@@ -7,12 +7,13 @@
 //! automatic sorting and interpolation options.
 
 use super::{
-    AccessorFunction, ConfigurableBuilder, apply_accessors_to_selection,
+    AccessorFunction, ConfigurableBuilder, GridCapableBuilder, apply_accessors_to_selection,
     validate_required_accessors,
 };
 use crate::RenderContext;
 use crate::chart_builder::{ChartBuilder, ChartBuilderError, ChartConfig};
 use crate::error::GupResult;
+use crate::grid::{GridConfiguration, GridLineConfig};
 use crate::selection::Circle; // TODO: Replace with Line mark when available
 use crate::selection::Selection;
 use std::marker::PhantomData;
@@ -241,6 +242,48 @@ impl<T> ConfigurableBuilder for LineChartBuilder<T> {
     }
 }
 
+// Implement advanced grid configuration methods
+impl<T> GridCapableBuilder for LineChartBuilder<T> {
+    fn major_grid_style(mut self, config: GridLineConfig) -> Self {
+        self.config.grid_config.major_grid = config;
+        self
+    }
+
+    fn minor_grid_style(mut self, config: GridLineConfig) -> Self {
+        self.config.grid_config.minor_grid = config;
+        self
+    }
+
+    fn horizontal_grid_only(mut self) -> Self {
+        self.config.grid_config.show_horizontal = true;
+        self.config.grid_config.show_vertical = false;
+        self.config.show_grid = true; // Enable grid display
+        self
+    }
+
+    fn vertical_grid_only(mut self) -> Self {
+        self.config.grid_config.show_horizontal = false;
+        self.config.grid_config.show_vertical = true;
+        self.config.show_grid = true; // Enable grid display
+        self
+    }
+
+    fn with_minor_grid(mut self) -> Self {
+        self.config.grid_config.minor_grid.enabled = true;
+        self
+    }
+
+    fn without_minor_grid(mut self) -> Self {
+        self.config.grid_config.minor_grid.enabled = false;
+        self
+    }
+
+    fn grid_configuration(mut self, config: GridConfiguration) -> Self {
+        self.config.grid_config = config;
+        self
+    }
+}
+
 impl<T> ChartBuilder<T> for LineChartBuilder<T>
 where
     T: Clone + Send + Sync + std::fmt::Debug + 'static,
@@ -457,5 +500,58 @@ mod tests {
         assert_eq!(builder.interpolation, LineInterpolation::Linear);
         assert!(builder.sort_by_x);
         assert!(!builder.connect_nulls);
+    }
+
+    // Tests for enhanced grid API (GUP-097) on line charts
+    #[test]
+    fn test_line_chart_enhanced_grid_api() {
+        // Test simple grid enabling
+        let builder = line::<TimePoint>().grid();
+        assert!(builder.config.show_grid);
+
+        // Test theme presets work for line charts too
+        let scientific_builder = line::<TimePoint>().scientific_grid();
+        assert!(scientific_builder.config.show_grid);
+        assert!(scientific_builder.config.grid_config.minor_grid.enabled);
+
+        let business_builder = line::<TimePoint>().business_grid();
+        assert!(business_builder.config.show_grid);
+        assert!(!business_builder.config.grid_config.show_vertical); // Business typically horizontal
+    }
+
+    #[test]
+    fn test_line_chart_grid_styling_shortcuts() {
+        // Test grid styling methods work with line charts individually
+        let color_builder = line::<TimePoint>().grid_color("#00ff00");
+        assert!(color_builder.config.show_grid);
+        let green_component = color_builder.config.grid_config.major_grid.color[1];
+        assert!((green_component - 1.0).abs() < 0.01); // Should be close to 1.0 (green)
+
+        let opacity_builder = line::<TimePoint>().grid_opacity(0.7);
+        assert!(opacity_builder.config.show_grid);
+        assert_eq!(opacity_builder.config.grid_config.major_grid.opacity, 0.7);
+
+        let width_builder = line::<TimePoint>().grid_width(1.5);
+        assert!(width_builder.config.show_grid);
+        assert_eq!(width_builder.config.grid_config.major_grid.line_width, 1.5);
+    }
+
+    #[test]
+    fn test_line_chart_grid_with_line_features() {
+        // Test that grid API works well with line-specific features
+        let builder = line::<TimePoint>()
+            .smooth()
+            .stroke_color([1.0, 0.0, 0.0, 1.0])
+            .horizontal_grid(); // This should set horizontal only
+
+        assert_eq!(builder.interpolation, LineInterpolation::Curve);
+        assert!(builder.stroke_accessor.is_some());
+        assert!(builder.config.show_grid);
+        assert!(builder.config.grid_config.show_horizontal);
+        assert!(!builder.config.grid_config.show_vertical);
+
+        // Test opacity separately to avoid chaining issues
+        let opacity_builder = line::<TimePoint>().grid_opacity(0.3);
+        assert_eq!(opacity_builder.config.grid_config.major_grid.opacity, 0.3);
     }
 }

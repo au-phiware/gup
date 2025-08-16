@@ -21,7 +21,7 @@ pub use scatter::*;
 use super::ChartBuilderError;
 use super::accessor::{AccessorValue, FieldAccessor};
 use crate::error::GupResult;
-use crate::grid::{GridConfiguration, GridLineConfig};
+use crate::grid::{Color, GridConfiguration, GridLineConfig};
 use crate::selection::{ColorShaderFunction, PositionShaderFunction, Selection};
 use std::marker::PhantomData;
 
@@ -167,6 +167,228 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
     ///     .grid_configuration(GridConfiguration::horizontal_only());
     /// ```
     fn grid_configuration(self, config: GridConfiguration) -> Self;
+
+    // Enhanced convenience methods from GUP-097
+
+    /// Enable grid rendering with professional defaults.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    ///
+    /// # #[derive(Debug, Clone)]
+    /// # struct DataPoint { x: f32, y: f32 }
+    /// let chart = scatter::<DataPoint>()
+    ///     .grid(); // Simple one-line grid enabling
+    /// ```
+    fn grid(self) -> Self {
+        self.grid_configuration(GridConfiguration::default())
+            .show_grid(true)
+    }
+
+    /// Show only horizontal grid lines (convenience method).
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    ///
+    /// # #[derive(Debug, Clone)]
+    /// # struct DataPoint { x: f32, y: f32 }
+    /// let chart = scatter::<DataPoint>()
+    ///     .horizontal_grid();
+    /// ```
+    fn horizontal_grid(self) -> Self {
+        self.grid_configuration(GridConfiguration::horizontal_only())
+            .show_grid(true)
+    }
+
+    /// Show only vertical grid lines (convenience method).
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    ///
+    /// # #[derive(Debug, Clone)]
+    /// # struct DataPoint { x: f32, y: f32 }
+    /// let chart = scatter::<DataPoint>()
+    ///     .vertical_grid();
+    /// ```
+    fn vertical_grid(self) -> Self {
+        self.grid_configuration(GridConfiguration::vertical_only())
+            .show_grid(true)
+    }
+
+    /// Set grid line color.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    ///
+    /// # #[derive(Debug, Clone)]
+    /// # struct DataPoint { x: f32, y: f32 }
+    /// let chart = scatter::<DataPoint>()
+    ///     .grid_color("#cccccc"); // Hex color
+    /// ```
+    fn grid_color(self, color: impl Into<Color>) -> Self {
+        let color: Color = color.into();
+        let config = GridConfiguration::default()
+            .with_major_grid(GridLineConfig::default().with_color(color.to_rgba()));
+        self.grid_configuration(config).show_grid(true)
+    }
+
+    /// Set grid line opacity.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    ///
+    /// # #[derive(Debug, Clone)]
+    /// # struct DataPoint { x: f32, y: f32 }
+    /// let chart = scatter::<DataPoint>()
+    ///     .grid_opacity(0.5); // Semi-transparent
+    /// ```
+    fn grid_opacity(self, opacity: f32) -> Self {
+        let config = GridConfiguration::default()
+            .with_major_grid(GridLineConfig::default().with_opacity(opacity));
+        self.grid_configuration(config).show_grid(true)
+    }
+
+    /// Set grid line width.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    ///
+    /// # #[derive(Debug, Clone)]
+    /// # struct DataPoint { x: f32, y: f32 }
+    /// let chart = scatter::<DataPoint>()
+    ///     .grid_width(1.0); // Thicker lines
+    /// ```
+    fn grid_width(self, width: f32) -> Self {
+        let config = GridConfiguration::default()
+            .with_major_grid(GridLineConfig::default().with_line_width(width));
+        self.grid_configuration(config).show_grid(true)
+    }
+
+    /// Apply light theme grid.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    ///
+    /// # #[derive(Debug, Clone)]
+    /// # struct DataPoint { x: f32, y: f32 }
+    /// let chart = scatter::<DataPoint>()
+    ///     .light_grid(); // Professional light theme
+    /// ```
+    fn light_grid(self) -> Self {
+        self.grid_configuration(GridConfiguration::light_theme())
+            .show_grid(true)
+    }
+
+    /// Apply dark theme grid.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    ///
+    /// # #[derive(Debug, Clone)]
+    /// # struct DataPoint { x: f32, y: f32 }
+    /// let chart = scatter::<DataPoint>()
+    ///     .dark_grid(); // Professional dark theme
+    /// ```
+    fn dark_grid(self) -> Self {
+        self.grid_configuration(GridConfiguration::dark_theme())
+            .show_grid(true)
+    }
+
+    /// Apply scientific/technical grid theme.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    ///
+    /// # #[derive(Debug, Clone)]
+    /// # struct DataPoint { x: f32, y: f32 }
+    /// let chart = scatter::<DataPoint>()
+    ///     .scientific_grid(); // Scientific visualization grid
+    /// ```
+    fn scientific_grid(self) -> Self {
+        self.grid_configuration(GridConfiguration::scientific())
+            .show_grid(true)
+    }
+
+    /// Apply business/dashboard grid theme.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    ///
+    /// # #[derive(Debug, Clone)]
+    /// # struct DataPoint { x: f32, y: f32 }
+    /// let chart = scatter::<DataPoint>()
+    ///     .business_grid(); // Clean business chart grid
+    /// ```
+    fn business_grid(self) -> Self {
+        self.grid_configuration(GridConfiguration::business())
+            .show_grid(true)
+    }
+
+    /// Apply minimal grid theme.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    ///
+    /// # #[derive(Debug, Clone)]
+    /// # struct DataPoint { x: f32, y: f32 }
+    /// let chart = scatter::<DataPoint>()
+    ///     .minimal_grid(); // Very subtle grid
+    /// ```
+    fn minimal_grid(self) -> Self {
+        self.grid_configuration(GridConfiguration::minimal())
+            .show_grid(true)
+    }
+
+    /// Apply high contrast grid theme.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    ///
+    /// # #[derive(Debug, Clone)]
+    /// # struct DataPoint { x: f32, y: f32 }
+    /// let chart = scatter::<DataPoint>()
+    ///     .high_contrast_grid(); // Accessible high contrast
+    /// ```
+    fn high_contrast_grid(self) -> Self {
+        self.grid_configuration(GridConfiguration::high_contrast())
+            .show_grid(true)
+    }
 }
 
 /// Helper trait for converting accessor values to shader functions.

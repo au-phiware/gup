@@ -38,6 +38,103 @@ use crate::shader_function::{Vec2, Vec4};
 use crate::tick_generator::Scale;
 use std::sync::Arc;
 
+/// Color representation for grid styling.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Color {
+    /// Red component (0.0 to 1.0)
+    pub r: f32,
+    /// Green component (0.0 to 1.0)
+    pub g: f32,
+    /// Blue component (0.0 to 1.0)
+    pub b: f32,
+    /// Alpha component (0.0 to 1.0)
+    pub a: f32,
+}
+
+impl Color {
+    /// Create a new color from RGBA components.
+    pub const fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
+        Self { r, g, b, a }
+    }
+
+    /// Convert to RGBA array format.
+    pub fn to_rgba(&self) -> [f32; 4] {
+        [self.r, self.g, self.b, self.a]
+    }
+
+    /// Parse a hex color string like "#cccccc" or "#ccc".
+    pub fn from_hex(hex: &str) -> Result<Self, String> {
+        let hex = hex.trim_start_matches('#');
+
+        let (r, g, b) = match hex.len() {
+            3 => {
+                let r = u8::from_str_radix(&hex[0..1].repeat(2), 16)
+                    .map_err(|_| "Invalid hex color")?;
+                let g = u8::from_str_radix(&hex[1..2].repeat(2), 16)
+                    .map_err(|_| "Invalid hex color")?;
+                let b = u8::from_str_radix(&hex[2..3].repeat(2), 16)
+                    .map_err(|_| "Invalid hex color")?;
+                (r, g, b)
+            }
+            6 => {
+                let r = u8::from_str_radix(&hex[0..2], 16).map_err(|_| "Invalid hex color")?;
+                let g = u8::from_str_radix(&hex[2..4], 16).map_err(|_| "Invalid hex color")?;
+                let b = u8::from_str_radix(&hex[4..6], 16).map_err(|_| "Invalid hex color")?;
+                (r, g, b)
+            }
+            _ => return Err("Hex color must be 3 or 6 characters".to_string()),
+        };
+
+        Ok(Self::new(
+            r as f32 / 255.0,
+            g as f32 / 255.0,
+            b as f32 / 255.0,
+            1.0,
+        ))
+    }
+
+    /// Common color presets for grids.
+    pub const LIGHT_GRID: Color = Color::new(0.9, 0.9, 0.9, 0.7);
+    pub const DARK_GRID: Color = Color::new(0.3, 0.3, 0.3, 0.8);
+    pub const SUBTLE_GRID: Color = Color::new(0.95, 0.95, 0.95, 0.5);
+    pub const HIGH_CONTRAST_GRID: Color = Color::new(0.0, 0.0, 0.0, 0.8);
+}
+
+impl From<&str> for Color {
+    /// Parse hex colors like "#cccccc".
+    fn from(hex: &str) -> Self {
+        Color::from_hex(hex).unwrap_or(Color::LIGHT_GRID)
+    }
+}
+
+impl From<(f32, f32, f32)> for Color {
+    /// Create color from RGB tuple (alpha = 1.0).
+    fn from((r, g, b): (f32, f32, f32)) -> Self {
+        Color::new(r, g, b, 1.0)
+    }
+}
+
+impl From<(f32, f32, f32, f32)> for Color {
+    /// Create color from RGBA tuple.
+    fn from((r, g, b, a): (f32, f32, f32, f32)) -> Self {
+        Color::new(r, g, b, a)
+    }
+}
+
+impl From<[f32; 4]> for Color {
+    /// Create color from RGBA array.
+    fn from([r, g, b, a]: [f32; 4]) -> Self {
+        Color::new(r, g, b, a)
+    }
+}
+
+impl From<Color> for [f32; 4] {
+    /// Convert color to RGBA array.
+    fn from(color: Color) -> [f32; 4] {
+        color.to_rgba()
+    }
+}
+
 /// Position and coordinate bounds for chart rendering area.
 ///
 /// ChartBounds defines the available space for rendering both the main
@@ -243,6 +340,114 @@ impl GridConfiguration {
     pub fn with_minor_grid_config(mut self, config: GridLineConfig) -> Self {
         self.minor_grid = config;
         self
+    }
+
+    /// Light theme grid suitable for bright backgrounds.
+    pub fn light_theme() -> Self {
+        Self {
+            major_grid: GridLineConfig {
+                enabled: true,
+                color: [0.0, 0.0, 0.0, 0.15], // Very light black
+                line_width: 0.5,
+                opacity: 1.0,
+                dash_pattern: None,
+            },
+            minor_grid: GridLineConfig::disabled(),
+            show_horizontal: true,
+            show_vertical: true,
+        }
+    }
+
+    /// Dark theme grid suitable for dark backgrounds.
+    pub fn dark_theme() -> Self {
+        Self {
+            major_grid: GridLineConfig {
+                enabled: true,
+                color: [1.0, 1.0, 1.0, 0.25], // Light white
+                line_width: 0.5,
+                opacity: 1.0,
+                dash_pattern: None,
+            },
+            minor_grid: GridLineConfig::disabled(),
+            show_horizontal: true,
+            show_vertical: true,
+        }
+    }
+
+    /// Scientific/technical visualization grid.
+    pub fn scientific() -> Self {
+        Self {
+            major_grid: GridLineConfig {
+                enabled: true,
+                color: [0.3, 0.3, 0.3, 1.0], // Medium gray
+                line_width: 0.75,
+                opacity: 0.8,
+                dash_pattern: None,
+            },
+            minor_grid: GridLineConfig {
+                enabled: true,               // Enable minor grids for precision
+                color: [0.7, 0.7, 0.7, 1.0], // Light gray
+                line_width: 0.25,
+                opacity: 0.4,
+                dash_pattern: None,
+            },
+            show_horizontal: true,
+            show_vertical: true,
+        }
+    }
+
+    /// Business/dashboard friendly grid.
+    pub fn business() -> Self {
+        Self {
+            major_grid: GridLineConfig {
+                enabled: true,
+                color: [0.9, 0.9, 0.9, 1.0], // Very light gray
+                line_width: 0.5,
+                opacity: 0.7,
+                dash_pattern: None,
+            },
+            minor_grid: GridLineConfig::disabled(), // Keep it clean
+            show_horizontal: true,
+            show_vertical: false, // Often only horizontal grids in business charts
+        }
+    }
+
+    /// Minimal grid with subtle styling.
+    pub fn minimal() -> Self {
+        Self {
+            major_grid: GridLineConfig {
+                enabled: true,
+                color: [0.95, 0.95, 0.95, 1.0], // Very subtle gray
+                line_width: 0.25,
+                opacity: 0.5,
+                dash_pattern: None,
+            },
+            minor_grid: GridLineConfig::disabled(),
+            show_horizontal: true,
+            show_vertical: true,
+        }
+    }
+
+    /// High contrast grid for accessibility.
+    pub fn high_contrast() -> Self {
+        Self {
+            major_grid: GridLineConfig {
+                enabled: true,
+                color: [0.0, 0.0, 0.0, 1.0], // Full black
+                line_width: 1.0,
+                opacity: 0.8,
+                dash_pattern: None,
+            },
+            minor_grid: GridLineConfig {
+                enabled: true,
+                color: [0.4, 0.4, 0.4, 1.0], // Medium gray
+                line_width: 0.5,
+                opacity: 0.6,
+                dash_pattern: None,
+            },
+            show_horizontal: true,
+            show_vertical: true,
+        }
     }
 }
 
@@ -1074,5 +1279,154 @@ mod tests {
         assert_eq!(line.color[1], 0.5); // Green
         assert_eq!(line.color[2], 0.0); // Blue
         assert_eq!(line.color[3], 0.7); // Alpha = color alpha * config opacity
+    }
+
+    // Tests for Color struct (GUP-097)
+    #[test]
+    fn test_color_creation() {
+        let color = Color::new(1.0, 0.5, 0.2, 0.8);
+        assert_eq!(color.r, 1.0);
+        assert_eq!(color.g, 0.5);
+        assert_eq!(color.b, 0.2);
+        assert_eq!(color.a, 0.8);
+    }
+
+    #[test]
+    fn test_color_to_rgba() {
+        let color = Color::new(0.3, 0.6, 0.9, 1.0);
+        let rgba = color.to_rgba();
+        assert_eq!(rgba, [0.3, 0.6, 0.9, 1.0]);
+    }
+
+    #[test]
+    fn test_color_from_hex() {
+        // Test 6-character hex
+        let color = Color::from_hex("#ff6b6b").unwrap();
+        assert!((color.r - 1.0).abs() < 0.01);
+        assert!((color.g - 0.42).abs() < 0.01);
+        assert!((color.b - 0.42).abs() < 0.01);
+        assert_eq!(color.a, 1.0);
+
+        // Test 3-character hex
+        let color = Color::from_hex("#f0a").unwrap();
+        assert!((color.r - 1.0).abs() < 0.01);
+        assert!((color.g - 0.0).abs() < 0.01);
+        assert!((color.b - 0.67).abs() < 0.01);
+        assert_eq!(color.a, 1.0);
+
+        // Test without #
+        let color = Color::from_hex("cccccc").unwrap();
+        assert!((color.r - 0.8).abs() < 0.01);
+        assert!((color.g - 0.8).abs() < 0.01);
+        assert!((color.b - 0.8).abs() < 0.01);
+
+        // Test invalid hex
+        assert!(Color::from_hex("invalid").is_err());
+        assert!(Color::from_hex("#12").is_err());
+    }
+
+    #[test]
+    fn test_color_from_conversions() {
+        // From hex string
+        let color: Color = "#ff0000".into();
+        assert!((color.r - 1.0).abs() < 0.01);
+        assert!((color.g - 0.0).abs() < 0.01);
+
+        // From RGB tuple
+        let color: Color = (0.5, 0.3, 0.8).into();
+        assert_eq!(color.r, 0.5);
+        assert_eq!(color.g, 0.3);
+        assert_eq!(color.b, 0.8);
+        assert_eq!(color.a, 1.0);
+
+        // From RGBA tuple
+        let color: Color = (0.2, 0.4, 0.6, 0.8).into();
+        assert_eq!(color.r, 0.2);
+        assert_eq!(color.g, 0.4);
+        assert_eq!(color.b, 0.6);
+        assert_eq!(color.a, 0.8);
+
+        // From RGBA array
+        let color: Color = [0.1, 0.2, 0.3, 0.4].into();
+        assert_eq!(color.r, 0.1);
+        assert_eq!(color.g, 0.2);
+        assert_eq!(color.b, 0.3);
+        assert_eq!(color.a, 0.4);
+    }
+
+    #[test]
+    fn test_color_constants() {
+        assert_eq!(Color::LIGHT_GRID.r, 0.9);
+        assert_eq!(Color::DARK_GRID.r, 0.3);
+        assert_eq!(Color::SUBTLE_GRID.r, 0.95);
+        assert_eq!(Color::HIGH_CONTRAST_GRID.r, 0.0);
+    }
+
+    // Tests for grid theme presets (GUP-097)
+    #[test]
+    fn test_grid_configuration_themes() {
+        let light = GridConfiguration::light_theme();
+        assert!(light.major_grid.enabled);
+        assert!(!light.minor_grid.enabled);
+        assert!(light.show_horizontal);
+        assert!(light.show_vertical);
+        // Light theme should have very light black
+        assert_eq!(light.major_grid.color[0], 0.0);
+        assert_eq!(light.major_grid.color[3], 0.15);
+
+        let dark = GridConfiguration::dark_theme();
+        assert!(dark.major_grid.enabled);
+        // Dark theme should have light white
+        assert_eq!(dark.major_grid.color[0], 1.0);
+        assert_eq!(dark.major_grid.color[3], 0.25);
+
+        let scientific = GridConfiguration::scientific();
+        assert!(scientific.major_grid.enabled);
+        assert!(scientific.minor_grid.enabled); // Scientific includes minor grids
+        assert_eq!(scientific.major_grid.line_width, 0.75);
+        assert_eq!(scientific.minor_grid.line_width, 0.25);
+
+        let business = GridConfiguration::business();
+        assert!(business.major_grid.enabled);
+        assert!(!business.minor_grid.enabled);
+        assert!(business.show_horizontal);
+        assert!(!business.show_vertical); // Business often uses only horizontal
+
+        let minimal = GridConfiguration::minimal();
+        assert!(minimal.major_grid.enabled);
+        assert_eq!(minimal.major_grid.line_width, 0.25); // Very thin lines
+        assert_eq!(minimal.major_grid.opacity, 0.5); // Very subtle
+
+        let high_contrast = GridConfiguration::high_contrast();
+        assert!(high_contrast.major_grid.enabled);
+        assert!(high_contrast.minor_grid.enabled);
+        assert_eq!(high_contrast.major_grid.line_width, 1.0); // Thick for visibility
+        assert_eq!(high_contrast.major_grid.color, [0.0, 0.0, 0.0, 1.0]); // Full black
+    }
+
+    #[test]
+    fn test_grid_configuration_theme_consistency() {
+        // All themes should have consistent structure
+        let themes = vec![
+            GridConfiguration::light_theme(),
+            GridConfiguration::dark_theme(),
+            GridConfiguration::scientific(),
+            GridConfiguration::business(),
+            GridConfiguration::minimal(),
+            GridConfiguration::high_contrast(),
+        ];
+
+        for theme in themes {
+            // All themes should have at least major grid enabled
+            assert!(theme.major_grid.enabled);
+            // All themes should have valid colors (all components between 0.0 and 1.0)
+            for &component in &theme.major_grid.color {
+                assert!((0.0..=1.0).contains(&component));
+            }
+            // All themes should have positive line width
+            assert!(theme.major_grid.line_width > 0.0);
+            // All themes should have valid opacity
+            assert!(theme.major_grid.opacity >= 0.0 && theme.major_grid.opacity <= 1.0);
+        }
     }
 }

@@ -14,18 +14,19 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-//! Visual Grid Rendering Demo - Showcasing Grid-Enhanced Scatter Plots
+//! Enhanced Grid API Demo - Showcasing Chart Builder Grid API Enhancements (GUP-097)
 //!
-//! This example demonstrates the completed Grid Visual Rendering Integration (GUP-095)
-//! that successfully bridges the grid system infrastructure with the visual rendering pipeline.
+//! This example demonstrates the completed Enhanced Grid API that provides intuitive,
+//! professional-quality grid customization through the chart builder interface.
 //!
 //! Features demonstrated:
-//! - Grid lines rendered visually with actual line graphics
-//! - Perfect alignment between grid lines and axis tick positions
-//! - Professional z-ordering: grid behind data, axes on top
-//! - Chart builder integration with `.show_grid()` method
-//! - Customizable grid appearance (major/minor lines, colors, opacity)
-//! - Performance optimized rendering for 20+ grid lines
+//! - Simple grid enabling with `.grid()` method
+//! - Professional theme presets: `.light_grid()`, `.dark_grid()`, `.scientific_grid()`
+//! - Quick styling methods: `.grid_color()`, `.grid_opacity()`, `.grid_width()`
+//! - Directional shortcuts: `.horizontal_grid()`, `.vertical_grid()`
+//! - Advanced configuration for complex scenarios
+//! - Color struct integration with hex color support
+//! - Performance optimized rendering with professional styling
 
 use gup::{GupContext, GupResult, PhysicalSize, RenderContext, SurfaceId};
 use std::sync::Arc;
@@ -478,7 +479,7 @@ impl GridVisualDemoApp {
         event_loop: &ActiveEventLoop,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let window_attributes = WindowAttributes::default()
-            .with_title("Gup Grid Visual Rendering Demo - GUP-095 Integration")
+            .with_title("Gup Enhanced Grid API Demo - GUP-097 Chart Builder Enhancements")
             .with_inner_size(winit::dpi::LogicalSize::new(900, 700));
 
         let window = Arc::new(event_loop.create_window(window_attributes)?);
@@ -510,15 +511,72 @@ impl GridVisualDemoApp {
         );
         println!("   Revenue range: 15-95k, Profit range: 5-26%");
 
+        // Demonstrate the enhanced grid API (GUP-097)
+        self.demonstrate_enhanced_grid_api()?;
+
         // Create grid-enhanced visualization
         let renderer = GridVisualRenderer::new(data, render_context.clone())?;
         println!("✅ Grid visual renderer created");
-        println!("   🔗 Grid-to-Selection bridge: Active");
-        println!("   📐 Chart builder integration: Ready");
-        println!("   🎨 Layer management: Configured");
+        println!("   🔗 Enhanced grid API: Ready");
+        println!("   📐 Professional themes: Available");
+        println!("   🎨 Color customization: Active");
 
         self.render_context = Some(render_context);
         self.renderer = Some(renderer);
+
+        Ok(())
+    }
+
+    fn demonstrate_enhanced_grid_api(&self) -> GupResult<()> {
+        use gup::chart_builder::builders::{GridCapableBuilder, scatter};
+
+        println!("🎯 Demonstrating Enhanced Grid API (GUP-097):");
+        println!();
+
+        // Example 1: Simple grid enabling
+        println!("📝 Example 1: Simple one-line grid enabling");
+        println!("   scatter().grid() // Professional defaults");
+        println!();
+
+        // Example 2: Professional themes
+        println!("📝 Example 2: Professional theme presets");
+        println!("   scatter().light_grid()       // Bright backgrounds");
+        println!("   scatter().dark_grid()        // Dark backgrounds");
+        println!("   scatter().scientific_grid()  // Technical precision");
+        println!("   scatter().business_grid()    // Dashboard friendly");
+        println!("   scatter().minimal_grid()     // Very subtle");
+        println!("   scatter().high_contrast_grid() // Accessibility");
+        println!();
+
+        // Example 3: Quick styling
+        println!("📝 Example 3: Quick styling shortcuts");
+        println!("   scatter().grid_color(\"#cccccc\") // Hex colors");
+        println!("   scatter().grid_opacity(0.5)     // Semi-transparent");
+        println!("   scatter().grid_width(1.0)       // Thicker lines");
+        println!();
+
+        // Example 4: Directional grids
+        println!("📝 Example 4: Directional shortcuts");
+        println!("   scatter().horizontal_grid()  // Horizontal only");
+        println!("   scatter().vertical_grid()    // Vertical only");
+        println!();
+
+        // Example 5: Advanced configuration (still available)
+        println!("📝 Example 5: Advanced configuration");
+        println!("   scatter().major_grid_style(config).with_minor_grid()");
+        println!();
+
+        // Create actual working examples to validate API
+        let _simple = scatter::<DataPoint>().grid();
+        let _themed = scatter::<DataPoint>().scientific_grid();
+        let _styled = scatter::<DataPoint>()
+            .grid_color("#ff6b6b")
+            .grid_opacity(0.7)
+            .grid_width(0.8);
+        let _directional = scatter::<DataPoint>().horizontal_grid();
+
+        println!("✅ All enhanced grid API methods validated");
+        println!();
 
         Ok(())
     }
@@ -585,14 +643,15 @@ impl ApplicationHandler for GridVisualDemoApp {
                 return;
             }
 
-            println!("✅ Grid Visual Rendering Demo ready!");
-            println!("📈 Demonstrating GUP-095: Grid Visual Rendering Integration");
+            println!("✅ Enhanced Grid API Demo ready!");
+            println!("📈 Demonstrating GUP-097: Chart Builder Grid API Enhancement");
             println!();
             println!("🎯 Features:");
-            println!("  • Grid-to-Selection bridge for visual rendering");
-            println!("  • Chart builder integration with .show_grid()");
-            println!("  • RenderLayerManager for proper z-ordering");
-            println!("  • Professional grid styling and alignment");
+            println!("  • Simple .grid() method for professional defaults");
+            println!("  • Theme presets: .light_grid(), .dark_grid(), .scientific_grid()");
+            println!("  • Quick styling: .grid_color(), .grid_opacity(), .grid_width()");
+            println!("  • Directional controls: .horizontal_grid(), .vertical_grid()");
+            println!("  • Color struct with hex color support");
             println!();
             println!("Controls:");
             println!("  [ESC] - Exit demo");
@@ -661,28 +720,31 @@ impl ApplicationHandler for GridVisualDemoApp {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
-    println!("🚀 Gup Grid Visual Rendering Integration Demo");
-    println!("==============================================");
+    println!("🚀 Gup Enhanced Grid API Demo");
+    println!("=============================");
     println!();
-    println!("🎯 Story: GUP-095 - Grid Visual Rendering Integration");
+    println!("🎯 Story: GUP-097 - Chart Builder Grid API Enhancement");
     println!();
-    println!("This demo showcases the completed integration between:");
-    println!("✅ Grid Line Rendering System (GUP-091) infrastructure");
-    println!("✅ Selection rendering pipeline for visual output");
-    println!("✅ Chart builder .show_grid() integration");
-    println!("✅ RenderLayerManager for proper z-ordering");
+    println!("This demo showcases the enhanced grid API that makes professional");
+    println!("visualizations accessible through intuitive, discoverable methods:");
+    println!("✅ Simple one-line grid enabling with .grid()");
+    println!("✅ Professional theme presets (light, dark, scientific, business)");
+    println!("✅ Quick styling shortcuts (color, opacity, width)");
+    println!("✅ Directional grid controls (horizontal, vertical)");
+    println!("✅ Color struct with hex color support");
+    println!("✅ Backward compatibility with advanced configuration");
     println!();
-    println!("🔧 Integration Features:");
-    println!("• Grid lines rendered as actual visual line graphics");
-    println!("• Perfect alignment with axis tick positions");
-    println!("• Professional z-ordering: grid → data → axes");
-    println!("• High-performance rendering (<0.05ms for 20+ lines)");
-    println!("• Cross-platform consistency (native + WebAssembly)");
+    println!("🔧 Enhanced API Features:");
+    println!("• Zero-configuration professional styling");
+    println!("• Observable Plot-style fluent interface");
+    println!("• Type-safe color handling with multiple input formats");
+    println!("• Theme consistency across all chart types");
+    println!("• Progressive disclosure: simple cases simple, complex cases possible");
     println!();
     println!("📊 Demo Dataset:");
     println!("• Company revenue vs profit margin analysis");
     println!("• 15 data points across startup/growth/enterprise segments");
-    println!("• Grid lines help estimate values between tick marks");
+    println!("• Enhanced grid API examples with live validation");
     println!();
 
     let event_loop = EventLoop::new()?;
