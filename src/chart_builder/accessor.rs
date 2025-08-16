@@ -182,6 +182,10 @@ pub enum AccessorValue {
     String(String),
     Position([f32; 2]),
     Bool(bool),
+    // Additional variants for scale analysis
+    Numeric(f64),
+    Temporal(chrono::DateTime<chrono::Utc>),
+    Categorical(String),
 }
 
 impl AccessorValue {
@@ -199,6 +203,9 @@ impl AccessorValue {
                     0.0
                 }
             }
+            AccessorValue::Numeric(n) => *n as f32,
+            AccessorValue::Temporal(dt) => dt.timestamp() as f32,
+            AccessorValue::Categorical(s) => s.len() as f32,
         }
     }
 
@@ -216,6 +223,12 @@ impl AccessorValue {
                     [0.0, 0.0, 0.0, 1.0]
                 }
             }
+            AccessorValue::Numeric(n) => {
+                let val = *n as f32;
+                [val, val, val, 1.0]
+            }
+            AccessorValue::Temporal(_) => [0.6, 0.8, 1.0, 1.0], // Light blue for temporal
+            AccessorValue::Categorical(_) => [0.7, 0.7, 0.7, 1.0], // Gray for categorical
         }
     }
 
@@ -233,6 +246,12 @@ impl AccessorValue {
                     [0.0, 0.0]
                 }
             }
+            AccessorValue::Numeric(n) => {
+                let val = *n as f32;
+                [val, val]
+            }
+            AccessorValue::Temporal(dt) => [dt.timestamp() as f32, 0.0],
+            AccessorValue::Categorical(s) => [s.len() as f32, 0.0],
         }
     }
 
@@ -244,6 +263,9 @@ impl AccessorValue {
             AccessorValue::String(_) => "string",
             AccessorValue::Position(_) => "vec2<f32>",
             AccessorValue::Bool(_) => "bool",
+            AccessorValue::Numeric(_) => "f64",
+            AccessorValue::Temporal(_) => "datetime",
+            AccessorValue::Categorical(_) => "categorical",
         }
     }
 }
@@ -281,6 +303,18 @@ impl From<[f32; 2]> for AccessorValue {
 impl From<bool> for AccessorValue {
     fn from(value: bool) -> Self {
         AccessorValue::Bool(value)
+    }
+}
+
+impl From<f64> for AccessorValue {
+    fn from(value: f64) -> Self {
+        AccessorValue::Numeric(value)
+    }
+}
+
+impl From<chrono::DateTime<chrono::Utc>> for AccessorValue {
+    fn from(value: chrono::DateTime<chrono::Utc>) -> Self {
+        AccessorValue::Temporal(value)
     }
 }
 
@@ -451,8 +485,11 @@ mod tests {
 
     #[test]
     fn test_accessor_value_from_conversions() {
-        let float_val: AccessorValue = 5.0.into();
+        let float_val: AccessorValue = 5.0f32.into();
         assert_eq!(float_val, AccessorValue::Float(5.0));
+
+        let numeric_val: AccessorValue = 5.0f64.into();
+        assert_eq!(numeric_val, AccessorValue::Numeric(5.0));
 
         let color_val: AccessorValue = [1.0, 0.0, 0.0, 1.0].into();
         assert_eq!(color_val, AccessorValue::Color([1.0, 0.0, 0.0, 1.0]));

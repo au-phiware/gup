@@ -164,8 +164,11 @@ impl ShaderFunction for PerformanceDataToCircleAttributes {
 /// Label data for rendering text
 #[derive(Debug, Clone)]
 struct LabelData {
+    #[allow(dead_code)]
     position: Vec2,
+    #[allow(dead_code)]
     text: String,
+    #[allow(dead_code)]
     color: [f32; 4],
 }
 

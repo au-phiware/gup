@@ -29,6 +29,7 @@
 
 pub mod async_mixable;
 pub mod axis;
+pub mod axis_system;
 pub mod buffer;
 pub mod chart_builder;
 pub mod context;
@@ -44,6 +45,7 @@ pub mod mixable;
 pub mod plugins;
 pub mod prelude;
 pub mod render;
+pub mod scale;
 pub mod selection;
 pub mod shader_function;
 pub mod shader_pipeline;
@@ -64,6 +66,9 @@ pub use async_mixable::{
     },
 };
 pub use axis::*;
+pub use axis_system::{
+    AxisLayout, AxisMappings, AxisMargins, AxisSystem, ChartArea, ScaleConfiguration,
+};
 pub use buffer::*;
 pub use context::*;
 pub use debug::*;
@@ -72,6 +77,7 @@ pub use examples::*;
 pub use grid::*;
 pub use integration::*;
 pub use label::*;
+pub use scale::*;
 // Export interaction system components (excluding ambiguous types)
 pub use interaction::{
     CustomInteractionQuery, ElementData, ElementHit, EventHandler, GpuInteractionQuery,
