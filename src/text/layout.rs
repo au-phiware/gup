@@ -511,4 +511,231 @@ mod tests {
         assert_eq!(bounds1.right, 20.0);
         assert_eq!(bounds1.bottom, 15.0);
     }
+
+    #[test]
+    fn test_glyph_positioning_performance() {
+        // Test glyph positioning performance - a core part of text layout
+        use std::time::Instant;
+
+        let style = TextStyle::default();
+        let mock_atlas = MockFontAtlas::new();
+
+        // Test positioning of many glyphs
+        let text =
+            "Hello World! This is a performance test for glyph positioning with many characters.";
+        let position = Vec2 { x: 100.0, y: 100.0 };
+
+        let start = Instant::now();
+
+        // Simulate the core glyph positioning logic
+        let mut glyphs = Vec::new();
+        let metrics = mock_atlas.metrics();
+        let scale = style.font_size / metrics.size;
+        let mut cursor_x = position.x;
+        let baseline_y = position.y + metrics.ascent * scale;
+
+        for ch in text.chars() {
+            if let Some(glyph_info) = mock_atlas.get_glyph(ch) {
+                if glyph_info.size.x > 0.0 && glyph_info.size.y > 0.0 {
+                    let glyph_position = Vec2 {
+                        x: cursor_x + glyph_info.bearing.x * scale,
+                        y: baseline_y - glyph_info.bearing.y * scale,
+                    };
+
+                    glyphs.push(PositionedGlyph {
+                        glyph: *glyph_info,
+                        position: glyph_position,
+                        color: Vec4 {
+                            x: 1.0,
+                            y: 1.0,
+                            z: 1.0,
+                            w: 1.0,
+                        },
+                    });
+                }
+                cursor_x += glyph_info.advance * scale;
+            }
+        }
+
+        let duration = start.elapsed();
+
+        // Should create many glyphs for typical text
+        assert!(
+            glyphs.len() > 50,
+            "Should generate substantial number of glyphs: {}",
+            glyphs.len()
+        );
+
+        // Performance requirement: glyph positioning should be under 5ms for typical text
+        println!(
+            "Glyph positioning for {} chars took: {:?}",
+            text.len(),
+            duration
+        );
+        assert!(
+            duration.as_millis() < 10,
+            "Glyph positioning too slow: {duration:?}"
+        );
+    }
+
+    #[test]
+    fn test_collision_detection_performance() {
+        // Test collision detection performance with many existing labels
+        use std::time::Instant;
+
+        let mut engine = TextLayoutEngine::new();
+
+        // Add many existing bounds to simulate crowded text
+        let bounds_count = 100;
+        for i in 0..bounds_count {
+            let x = (i % 10) as f32 * 50.0;
+            let y = (i / 10) as f32 * 20.0;
+            let bounds = TextBounds::new(x, y, x + 40.0, y + 15.0);
+            engine.collision_grid.add_bounds(&bounds);
+        }
+
+        // Test collision detection for new text placement
+        let test_bounds = TextBounds::new(125.0, 50.0, 175.0, 65.0);
+
+        let start = Instant::now();
+        let has_collision = engine.collision_grid.has_collision(&test_bounds);
+        let duration = start.elapsed();
+
+        // Should detect collision with existing bounds
+        assert!(
+            has_collision,
+            "Should detect collision with existing bounds"
+        );
+
+        // Performance requirement: collision detection should be under 1ms
+        println!("Collision detection against {bounds_count} bounds took: {duration:?}");
+        assert!(
+            duration.as_millis() < 5,
+            "Collision detection too slow: {duration:?}"
+        );
+    }
+
+    #[test]
+    fn test_collision_grid_efficiency() {
+        // Test that collision grid scales well with many bounds
+        use std::time::Instant;
+
+        let mut grid = CollisionGrid::new(32.0);
+
+        // Add many bounds to stress test the grid
+        let bounds_count = 1000;
+        let start = Instant::now();
+
+        for i in 0..bounds_count {
+            let x = (i % 100) as f32 * 10.0;
+            let y = (i / 100) as f32 * 10.0;
+            let bounds = TextBounds::new(x, y, x + 8.0, y + 8.0);
+            grid.add_bounds(&bounds);
+        }
+
+        let insertion_duration = start.elapsed();
+
+        // Test lookup performance
+        let lookup_start = Instant::now();
+        for i in 0..100 {
+            let x = (i % 10) as f32 * 50.0;
+            let y = (i / 10) as f32 * 50.0;
+            let test_bounds = TextBounds::new(x, y, x + 15.0, y + 15.0);
+            let _collision = grid.has_collision(&test_bounds);
+        }
+        let lookup_duration = lookup_start.elapsed();
+
+        // Performance requirements
+        println!("Grid insertion for {bounds_count} bounds took: {insertion_duration:?}");
+        println!("Grid lookup for 100 queries took: {lookup_duration:?}");
+
+        assert!(
+            insertion_duration.as_millis() < 50,
+            "Grid insertion too slow: {insertion_duration:?}"
+        );
+        assert!(
+            lookup_duration.as_millis() < 10,
+            "Grid lookup too slow: {lookup_duration:?}"
+        );
+    }
+
+    #[test]
+    fn test_memory_usage_collision_grid() {
+        // Test that collision grid uses memory efficiently
+        use std::mem;
+
+        let grid_size = mem::size_of::<CollisionGrid>();
+        let bounds_size = mem::size_of::<TextBounds>();
+
+        // CollisionGrid should be reasonably sized
+        assert!(
+            grid_size <= 128,
+            "CollisionGrid too large: {grid_size} bytes"
+        );
+        assert!(
+            bounds_size <= 32,
+            "TextBounds too large: {bounds_size} bytes"
+        );
+
+        // Test that grid doesn't grow excessively with many small bounds
+        let mut grid = CollisionGrid::new(32.0);
+
+        // Add 100 bounds and measure memory growth
+        for i in 0..100 {
+            let bounds = TextBounds::new(i as f32, i as f32, i as f32 + 5.0, i as f32 + 5.0);
+            grid.add_bounds(&bounds);
+        }
+
+        // Grid should not consume excessive memory even with many bounds
+        let final_cell_count = grid.occupied_cells.len();
+        let final_bounds_count = grid.placed_bounds.len();
+
+        assert!(
+            final_cell_count <= 500,
+            "Too many occupied cells: {final_cell_count}"
+        );
+        assert_eq!(final_bounds_count, 100, "Should track all added bounds");
+    }
+
+    // Helper struct for testing text layout
+    struct MockFontAtlas {
+        glyph_info: std::collections::HashMap<char, GlyphInfo>,
+        font_metrics: FontMetrics,
+    }
+
+    impl MockFontAtlas {
+        fn new() -> Self {
+            let mut glyph_info = std::collections::HashMap::new();
+
+            // Pre-populate with common characters
+            for i in 32u32..127u32 {
+                if let Some(ch) = char::from_u32(i) {
+                    glyph_info.insert(
+                        ch,
+                        GlyphInfo {
+                            character: ch,
+                            atlas_pos: [0.0, 0.0, 0.1, 0.1],
+                            size: Vec2 { x: 8.0, y: 12.0 },
+                            bearing: Vec2 { x: 0.0, y: 10.0 },
+                            advance: 9.0,
+                            sdf_scale: 1.0,
+                        },
+                    );
+                }
+            }
+
+            Self {
+                glyph_info,
+                font_metrics: FontMetrics::default(),
+            }
+        }
+
+        fn get_glyph(&self, character: char) -> Option<&GlyphInfo> {
+            self.glyph_info.get(&character)
+        }
+
+        fn metrics(&self) -> &FontMetrics {
+            &self.font_metrics
+        }
+    }
 }

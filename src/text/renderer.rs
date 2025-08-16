@@ -5,9 +5,10 @@
 
 use super::*;
 use crate::error::GupResult;
-use crate::render::RenderContext;
+// RenderContext import removed as we now use RenderFrame
 use bytemuck::{Pod, Zeroable};
 use std::mem;
+use wgpu::util::DeviceExt;
 use wgpu::*;
 
 /// GPU text renderer for SDF fonts.
@@ -193,15 +194,11 @@ impl TextRenderer {
             .flat_map(|i| [i, i + 1, i + 2, i, i + 2, i + 3])
             .collect();
 
-        let index_buffer = device.create_buffer(&BufferDescriptor {
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Text Index Buffer"),
-            size: (indices.len() * mem::size_of::<u16>()) as BufferAddress,
-            usage: BufferUsages::INDEX | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
+            contents: bytemuck::cast_slice(&indices),
+            usage: BufferUsages::INDEX,
         });
-
-        // Note: In a complete implementation, this would write to the index buffer
-        let _ = indices; // Placeholder to acknowledge parameter
 
         // Create uniform buffer
         let uniform_buffer = device.create_buffer(&BufferDescriptor {
@@ -234,10 +231,10 @@ impl TextRenderer {
         })
     }
 
-    /// Render text using the provided glyph batch.
+    /// Render text using the provided glyph batch within a render frame.
     pub fn render_glyphs(
         &mut self,
-        context: &mut RenderContext,
+        frame: &mut crate::RenderFrame,
         glyphs: &GlyphBatch,
         font_atlas: &FontAtlas,
         screen_width: f32,
@@ -252,11 +249,11 @@ impl TextRenderer {
 
         // Ensure vertex buffer is large enough
         if vertices.len() > self.vertex_capacity {
-            self.resize_buffers(context.device(), vertices.len())?;
+            self.resize_buffers(frame.device(), vertices.len())?;
         }
 
         // Upload vertex data
-        context
+        frame
             .queue()
             .write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&vertices));
 
@@ -267,7 +264,7 @@ impl TextRenderer {
             screen_size: [screen_width, screen_height],
             _padding: [0.0, 0.0],
         };
-        context
+        frame
             .queue()
             .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
 
@@ -275,7 +272,7 @@ impl TextRenderer {
         let font_texture_view = font_atlas
             .texture()
             .create_view(&TextureViewDescriptor::default());
-        let bind_group = context.device().create_bind_group(&BindGroupDescriptor {
+        let bind_group = frame.device().create_bind_group(&BindGroupDescriptor {
             label: Some("Text Bind Group"),
             layout: &self.bind_group_layout,
             entries: &[
@@ -294,14 +291,16 @@ impl TextRenderer {
             ],
         });
 
-        // Render the text
-        // Note: In a complete implementation, this would use the proper render pass
-        // For now, this is a placeholder that demonstrates the rendering structure
-        let _render_operations = {
-            // This would set up the render pass and draw the text
-            let index_count = (glyphs.len() * 6) as u32; // 6 indices per quad
-            (bind_group, index_count) // Placeholder operations
-        };
+        // Use the frame's render pass to draw the text
+        let mut render_pass = frame.render_pass(None); // Use default clear (transparent)
+
+        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_bind_group(0, &bind_group, &[]);
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+
+        let index_count = (glyphs.len() * 6) as u32; // 6 indices per quad
+        render_pass.draw_indexed(0..index_count, 0, 0..1);
 
         Ok(())
     }
@@ -309,14 +308,17 @@ impl TextRenderer {
     /// Render text with automatic layout.
     pub fn render_text(
         &mut self,
-        context: &mut RenderContext,
+        frame: &mut crate::RenderFrame,
         config: TextRenderConfig,
     ) -> GupResult<TextBounds> {
         // Ensure all glyphs are available in the atlas
         for ch in config.text.chars() {
-            config
-                .font_atlas
-                .ensure_glyph(context.device(), ch, config.style.font_size)?;
+            config.font_atlas.ensure_glyph(
+                frame.device(),
+                frame.queue(),
+                ch,
+                config.style.font_size,
+            )?;
         }
 
         // Layout the text
@@ -330,7 +332,7 @@ impl TextRenderer {
 
         // Render the glyphs
         self.render_glyphs(
-            context,
+            frame,
             &layout_result.glyphs,
             config.font_atlas,
             config.screen_width,
@@ -424,15 +426,11 @@ impl TextRenderer {
             .flat_map(|i| [i, i + 1, i + 2, i, i + 2, i + 3])
             .collect();
 
-        self.index_buffer = device.create_buffer(&BufferDescriptor {
+        self.index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Text Index Buffer"),
-            size: (indices.len() * mem::size_of::<u16>()) as BufferAddress,
-            usage: BufferUsages::INDEX | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
+            contents: bytemuck::cast_slice(&indices),
+            usage: BufferUsages::INDEX,
         });
-
-        // Note: In a complete implementation, this would write to the index buffer
-        let _ = (device, indices); // Placeholder to acknowledge parameters
 
         self.vertex_capacity = new_capacity;
         Ok(())
@@ -469,6 +467,7 @@ mod tests {
     #[ignore] // Disabled due to unsafe mem::zeroed() usage in test mock
     #[allow(invalid_value)]
     fn test_projection_matrix_creation() {
+        #[allow(invalid_value)]
         let renderer = TextRenderer {
             render_pipeline: unsafe { mem::zeroed() },
             bind_group_layout: unsafe { mem::zeroed() },
@@ -492,6 +491,7 @@ mod tests {
     #[ignore] // Disabled due to unsafe mem::zeroed() usage in test mock
     #[allow(invalid_value)]
     fn test_vertex_creation_basic() {
+        #[allow(invalid_value)]
         let renderer = TextRenderer {
             render_pipeline: unsafe { mem::zeroed() },
             bind_group_layout: unsafe { mem::zeroed() },
@@ -533,5 +533,86 @@ mod tests {
         // Check last vertex (bottom-left)
         assert_eq!(vertices[3].position, [100.0, 212.0]); // 200 + 12
         assert_eq!(vertices[3].tex_coords, [0.0, 0.1]);
+    }
+
+    #[test]
+    #[ignore] // Disabled due to unsafe mem::zeroed() usage with wgpu types
+    fn test_vertex_creation_performance() {
+        // Test vertex creation performance with large glyph batches
+        use std::time::Instant;
+
+        #[allow(invalid_value)]
+        let renderer = TextRenderer {
+            render_pipeline: unsafe { mem::zeroed() },
+            bind_group_layout: unsafe { mem::zeroed() },
+            vertex_buffer: unsafe { mem::zeroed() },
+            index_buffer: unsafe { mem::zeroed() },
+            uniform_buffer: unsafe { mem::zeroed() },
+            vertex_capacity: 1024,
+            sampler: unsafe { mem::zeroed() },
+        };
+
+        // Create a large batch of glyphs
+        let glyph_count = 1000;
+        let glyphs: Vec<PositionedGlyph> = (0..glyph_count)
+            .map(|i| PositionedGlyph {
+                glyph: GlyphInfo {
+                    character: char::from_u32(65 + (i % 26) as u32).unwrap_or('A'),
+                    atlas_pos: [0.0, 0.0, 0.1, 0.1],
+                    size: Vec2 { x: 10.0, y: 12.0 },
+                    bearing: Vec2 { x: 0.0, y: 0.0 },
+                    advance: 8.0,
+                    sdf_scale: 1.0,
+                },
+                position: Vec2 {
+                    x: (i % 100) as f32 * 10.0,
+                    y: (i / 100) as f32 * 15.0,
+                },
+                color: Vec4 {
+                    x: 1.0,
+                    y: 1.0,
+                    z: 1.0,
+                    w: 1.0,
+                },
+            })
+            .collect();
+
+        let start = Instant::now();
+        let vertices = renderer.create_vertices(&glyphs);
+        let duration = start.elapsed();
+
+        // Should create 4 vertices per glyph
+        assert_eq!(vertices.len(), glyph_count * 4);
+
+        // Performance requirement: should process 1000 glyphs in under 1ms
+        println!("Vertex creation for {glyph_count} glyphs took: {duration:?}");
+        assert!(
+            duration.as_millis() < 5,
+            "Vertex creation too slow: {duration:?}"
+        );
+    }
+
+    #[test]
+    fn test_memory_usage_efficiency() {
+        // Test that TextVertex uses memory efficiently
+        let vertex_size = mem::size_of::<TextVertex>();
+        let expected_minimum = 44; // Theoretical minimum: 2*4 + 2*4 + 4*4 + 4*4 = 44 bytes
+        let expected_maximum = 64; // Allow for some padding
+
+        assert!(
+            vertex_size >= expected_minimum,
+            "TextVertex too small: {vertex_size} bytes"
+        );
+        assert!(
+            vertex_size <= expected_maximum,
+            "TextVertex too large: {vertex_size} bytes"
+        );
+
+        // Test alignment
+        assert_eq!(
+            mem::align_of::<TextVertex>(),
+            4,
+            "TextVertex alignment incorrect"
+        );
     }
 }

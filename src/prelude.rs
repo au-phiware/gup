@@ -33,6 +33,12 @@ pub use crate::mixable::Mixable;
 // Shader functions
 pub use crate::{ColorShaderFunction, PositionShaderFunction, ShaderFunction};
 
+// Text rendering system
+pub use crate::text::{
+    FontAtlas, GlyphBatch, PositionedGlyph, TextAnchor, TextBounds, TextLayoutEngine, TextRenderer,
+    TextStyle,
+};
+
 // Interaction system
 pub use crate::interaction::{InteractionEvent, InteractionSystem, InteractionType, Renderable};
 

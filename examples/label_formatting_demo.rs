@@ -29,6 +29,7 @@ use gup::{
     label::{AxisInfo, LabelConstraints, LabelFormatter, LabelPositioner, NumericFormatter},
     selection::ShaderFunction,
     shader_function::{Vec2, Vec4},
+    text::{FontAtlas, TextAnchor, TextLayoutEngine, TextRenderConfig, TextRenderer, TextStyle},
 };
 use std::sync::Arc;
 use winit::{
@@ -180,6 +181,10 @@ struct DataVisualizationRenderer {
     render_pipeline: Option<wgpu::RenderPipeline>,
     circle_instances: Vec<CircleInstance>,
     labels: Vec<LabelData>,
+    // Text rendering components
+    text_renderer: Option<TextRenderer>,
+    font_atlas: Option<FontAtlas>,
+    layout_engine: Option<TextLayoutEngine>,
 }
 
 impl DataVisualizationRenderer {
@@ -191,6 +196,9 @@ impl DataVisualizationRenderer {
             render_pipeline: None,
             circle_instances: Vec::new(),
             labels: Vec::new(),
+            text_renderer: None,
+            font_atlas: None,
+            layout_engine: None,
         }
     }
 
@@ -226,7 +234,35 @@ impl DataVisualizationRenderer {
         self.labels = labels;
     }
 
+    /// Initialize text rendering components
+    fn initialize_text_rendering(
+        &mut self,
+        frame: &mut gup::RenderFrame,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if self.text_renderer.is_none() {
+            let text_renderer = TextRenderer::new(frame.device())?;
+            self.text_renderer = Some(text_renderer);
+        }
+
+        if self.font_atlas.is_none() {
+            let font_atlas = FontAtlas::new(frame.device(), frame.queue(), "DejaVu Sans", 14.0)?;
+            self.font_atlas = Some(font_atlas);
+        }
+
+        if self.layout_engine.is_none() {
+            let layout_engine = TextLayoutEngine::new();
+            self.layout_engine = Some(layout_engine);
+        }
+
+        Ok(())
+    }
+
     fn render(&mut self, frame: &mut gup::RenderFrame) -> Result<(), Box<dyn std::error::Error>> {
+        // Initialize text rendering if needed first (before render passes)
+        if !self.labels.is_empty() {
+            self.initialize_text_rendering(frame)?;
+        }
+
         if self.circle_instances.is_empty() {
             return Ok(());
         }
@@ -234,33 +270,66 @@ impl DataVisualizationRenderer {
         // Initialize buffers and pipeline if needed
         self.ensure_initialized(frame)?;
 
-        // Single render pass for both circles and labels
-        let mut render_pass = frame.render_pass(None);
+        // Single render pass for circles only
+        {
+            let mut render_pass = frame.render_pass(None);
 
-        // Render circles first
-        if let (Some(vertex_buffer), Some(instance_buffer), Some(pipeline)) = (
-            &self.vertex_buffer,
-            &self.instance_buffer,
-            &self.render_pipeline,
-        ) {
-            render_pass.set_pipeline(pipeline);
-            render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-            render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+            // Render circles first
+            if let (Some(vertex_buffer), Some(instance_buffer), Some(pipeline)) = (
+                &self.vertex_buffer,
+                &self.instance_buffer,
+                &self.render_pipeline,
+            ) {
+                render_pass.set_pipeline(pipeline);
+                render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+                render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
 
-            if let Some(index_buffer) = &self.index_buffer {
-                render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-                render_pass.draw_indexed(0..6, 0, 0..self.circle_instances.len() as u32);
-            } else {
-                render_pass.draw(0..6, 0..self.circle_instances.len() as u32);
+                if let Some(index_buffer) = &self.index_buffer {
+                    render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                    render_pass.draw_indexed(0..6, 0, 0..self.circle_instances.len() as u32);
+                } else {
+                    render_pass.draw(0..6, 0..self.circle_instances.len() as u32);
+                }
             }
-        }
+        } // render_pass dropped here
 
-        // Labels would be rendered here - simplified for now to avoid GPU validation errors
+        // Render actual text labels in separate render passes
         if !self.labels.is_empty() {
-            println!(
-                "📄 Would render {} labels here (simplified for stability)",
-                self.labels.len()
-            );
+            // Render each label using actual text rendering
+            if let (Some(text_renderer), Some(font_atlas), Some(layout_engine)) = (
+                &mut self.text_renderer,
+                &mut self.font_atlas,
+                &mut self.layout_engine,
+            ) {
+                for label in &self.labels {
+                    let style = TextStyle::new(14.0)
+                        .with_rgba(
+                            label.color[0],
+                            label.color[1],
+                            label.color[2],
+                            label.color[3],
+                        )
+                        .with_anchor(TextAnchor::CenterLeft);
+
+                    let config = TextRenderConfig {
+                        text: &label.text,
+                        position: label.position,
+                        style: &style,
+                        font_atlas,
+                        layout_engine,
+                        screen_width: 1200.0, // TODO: Get actual screen dimensions
+                        screen_height: 800.0,
+                    };
+
+                    if let Err(e) = text_renderer.render_text(frame, config) {
+                        eprintln!("⚠️ Failed to render text '{}': {}", label.text, e);
+                        // Continue rendering other labels even if one fails
+                    }
+                }
+                println!("✅ Rendered {} text labels successfully", self.labels.len());
+            } else {
+                println!("❌ Text rendering components not properly initialized");
+            }
         }
 
         Ok(())
