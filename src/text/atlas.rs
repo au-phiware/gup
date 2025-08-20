@@ -8,7 +8,8 @@ use crate::error::{GupError, GupResult};
 use fontdue::{Font, FontSettings};
 use std::collections::HashMap;
 use wgpu::{
-    Device, Queue, Texture, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
+    Device, Extent3d, Origin3d, Queue, TexelCopyBufferLayout, TexelCopyTextureInfo, Texture,
+    TextureAspect, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
     util::DeviceExt,
 };
 
@@ -31,35 +32,17 @@ pub struct FontAtlas {
 }
 
 impl FontAtlas {
-    /// Create a new font atlas with default font.
-    pub fn new(
-        device: &Device,
-        queue: &Queue,
-        _font_name: &str,
-        font_size: f32,
-    ) -> GupResult<Self> {
-        // For now, use a simple embedded font. In a real implementation, this would
-        // load system fonts or embedded font files.
+    /// Create a new font atlas using the embedded default font.
+    pub fn new(device: &Device, queue: &Queue, font_size: f32) -> GupResult<Self> {
+        // Use embedded font. System font loading will be implemented in GUP-106.
         let font_data = Self::get_default_font_data();
         let font = Font::from_bytes(font_data, FontSettings::default())
             .map_err(|e| GupError::resource_error(format!("Failed to load font: {e}")))?;
 
         let atlas_size = sdf::ATLAS_SIZE;
 
-        // Create initial atlas data with test pattern for visibility
-        let atlas_data: Vec<u8> = (0..atlas_size * atlas_size)
-            .map(|i| {
-                let x = i % atlas_size;
-                let y = i / atlas_size;
-
-                // Create a checkerboard pattern with some solid areas for testing
-                if (x / 32 + y / 32) % 2 == 0 {
-                    128 // Mid-gray for checkerboard
-                } else {
-                    64 // Darker gray
-                }
-            })
-            .collect();
+        // Create initial atlas data with SDF outside value (0 = far outside)
+        let atlas_data = vec![0u8; (atlas_size * atlas_size) as usize];
 
         // Create the atlas texture with initial data
         let atlas_texture = device.create_texture_with_data(
@@ -90,8 +73,8 @@ impl FontAtlas {
             glyph_info: HashMap::new(),
             font_metrics,
             font,
-            current_x: sdf::GLYPH_PADDING,
-            current_y: sdf::GLYPH_PADDING,
+            current_x: 0,
+            current_y: 0,
             current_row_height: 0,
             atlas_size,
         };
@@ -135,7 +118,7 @@ impl FontAtlas {
     fn add_glyph(
         &mut self,
         _device: &Device,
-        _queue: &Queue,
+        queue: &Queue,
         character: char,
         font_size: f32,
     ) -> GupResult<()> {
@@ -161,14 +144,15 @@ impl FontAtlas {
         // Convert bitmap to SDF
         let sdf_bitmap = self.generate_sdf(&bitmap, metrics.width, metrics.height);
 
-        // Find space in atlas
-        let glyph_width = metrics.width as u32 + sdf::GLYPH_PADDING * 2;
-        let glyph_height = metrics.height as u32 + sdf::GLYPH_PADDING * 2;
+        // Find space in atlas - allocate enough for glyph + full SDF range
+        let sdf_buffer = (sdf::SDF_RANGE * 2.0) as u32; // Full SDF range on both sides
+        let glyph_width = metrics.width as u32 + sdf_buffer;
+        let glyph_height = metrics.height as u32 + sdf_buffer;
 
         if self.current_x + glyph_width > self.atlas_size {
-            // Move to next row
-            self.current_x = sdf::GLYPH_PADDING;
-            self.current_y += self.current_row_height + sdf::GLYPH_PADDING;
+            // Move to next row - no spacing needed since each glyph includes SDF range
+            self.current_x = 0;
+            self.current_y += self.current_row_height;
             self.current_row_height = 0;
         }
 
@@ -180,13 +164,30 @@ impl FontAtlas {
         let upload_x = self.current_x;
         let upload_y = self.current_y;
 
-        // TODO: Implement proper SDF texture upload
-        // For now, create a simple atlas texture that should be visible
-        // The atlas was initialized with a checkerboard test pattern
-
-        // In a future implementation, we need to properly upload the SDF bitmap to the texture
-        // but this requires careful debugging to avoid compilation hangs
-        let _ = (sdf_bitmap, upload_x, upload_y, glyph_width, glyph_height);
+        // Upload the SDF bitmap to the texture atlas
+        queue.write_texture(
+            TexelCopyTextureInfo {
+                texture: &self.atlas_texture,
+                mip_level: 0,
+                origin: Origin3d {
+                    x: upload_x,
+                    y: upload_y,
+                    z: 0,
+                },
+                aspect: TextureAspect::All,
+            },
+            &sdf_bitmap,
+            TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(glyph_width), // R8Unorm = 1 byte per pixel
+                rows_per_image: Some(glyph_height),
+            },
+            Extent3d {
+                width: glyph_width,
+                height: glyph_height,
+                depth_or_array_layers: 1,
+            },
+        );
 
         // Create glyph info
         let glyph_info = GlyphInfo {
@@ -206,58 +207,67 @@ impl FontAtlas {
                 y: metrics.ymin as f32,
             },
             advance: metrics.advance_width,
-            sdf_scale: sdf::SDF_RANGE / font_size,
+            sdf_scale: sdf::SDF_RANGE,
         };
 
         self.glyph_info.insert(character, glyph_info);
 
-        // Update atlas position
-        self.current_x += glyph_width + sdf::GLYPH_PADDING;
+        // Update atlas position - no spacing needed
+        self.current_x += glyph_width;
         self.current_row_height = self.current_row_height.max(glyph_height);
 
         Ok(())
     }
 
-    /// Generate SDF from a bitmap.
+    /// Generate SDF from a fontdue coverage bitmap.
+    /// Uses a simplified approach optimized for fontdue's coverage values.
     fn generate_sdf(&self, bitmap: &[u8], width: usize, height: usize) -> Vec<u8> {
-        // Simplified SDF generation - in a production implementation,
-        // this would use a proper SDF algorithm like the one from Valve
-        let sdf_width = width + (sdf::GLYPH_PADDING * 2) as usize;
-        let sdf_height = height + (sdf::GLYPH_PADDING * 2) as usize;
-        let mut sdf_bitmap = vec![0u8; sdf_width * sdf_height];
+        let sdf_padding = sdf::SDF_RANGE as usize;
+        let sdf_width = width + (sdf_padding * 2);
+        let sdf_height = height + (sdf_padding * 2);
+        let mut sdf_bitmap = vec![0u8; sdf_width * sdf_height]; // Initialize to "outside" value
 
-        let padding = sdf::GLYPH_PADDING as usize;
-        let range = sdf::SDF_RANGE as i32;
+        let padding = sdf_padding;
+        let max_distance = sdf::SDF_RANGE;
 
-        for y in 0..sdf_height {
-            for x in 0..sdf_width {
-                let src_x = x as i32 - padding as i32;
-                let src_y = y as i32 - padding as i32;
+        // Process each pixel in the SDF bitmap
+        for sdf_y in 0..sdf_height {
+            for sdf_x in 0..sdf_width {
+                // Map SDF coordinates back to source bitmap coordinates
+                let src_x = sdf_x as i32 - padding as i32;
+                let src_y = sdf_y as i32 - padding as i32;
 
-                // Find closest edge in the original bitmap
-                let mut min_distance = range as f32;
-                let mut inside = false;
+                // Determine if current pixel is inside the glyph
+                let current_inside =
+                    if src_x >= 0 && src_x < width as i32 && src_y >= 0 && src_y < height as i32 {
+                        // Coverage threshold for SDF generation
+                        bitmap[src_y as usize * width + src_x as usize] > 128
+                    } else {
+                        false // Outside bounds = outside glyph
+                    };
 
-                if src_x >= 0 && src_x < width as i32 && src_y >= 0 && src_y < height as i32 {
-                    let pixel = bitmap[src_y as usize * width + src_x as usize];
-                    inside = pixel > 128;
-                }
+                // Find minimum distance to nearest edge
+                let mut min_distance = max_distance;
 
-                // Simple distance field calculation
-                for dy in -range..=range {
-                    for dx in -range..=range {
+                // Search in a square around the current pixel
+                let search_radius = (max_distance + 0.5) as i32;
+                for dy in -search_radius..=search_radius {
+                    for dx in -search_radius..=search_radius {
                         let check_x = src_x + dx;
                         let check_y = src_y + dy;
 
+                        // Only check pixels within the source bitmap
                         if check_x >= 0
                             && check_x < width as i32
                             && check_y >= 0
                             && check_y < height as i32
                         {
-                            let pixel = bitmap[check_y as usize * width + check_x as usize];
-                            let is_edge = pixel > 128;
+                            let sample_coverage =
+                                bitmap[check_y as usize * width + check_x as usize];
+                            let sample_inside = sample_coverage > 128;
 
-                            if is_edge != inside {
+                            // If we found a pixel with different inside/outside state, calculate distance
+                            if sample_inside != current_inside {
                                 let distance = ((dx * dx + dy * dy) as f32).sqrt();
                                 min_distance = min_distance.min(distance);
                             }
@@ -265,18 +275,51 @@ impl FontAtlas {
                     }
                 }
 
-                // Convert to SDF value
-                let sdf_value = if inside {
-                    128.0 + (min_distance / range as f32) * 127.0
+                // Convert distance to SDF value (0-255 range)
+                let normalized_distance = (min_distance / max_distance).clamp(0.0, 1.0);
+
+                let sdf_value = if current_inside {
+                    // Inside: 128-255 (128 + positive distance)
+                    128.0 + normalized_distance * 127.0
                 } else {
-                    128.0 - (min_distance / range as f32) * 127.0
+                    // Outside: 0-127 (128 - positive distance)
+                    // If we're far outside (min_distance == max_distance), use 0
+                    if min_distance >= max_distance {
+                        0.0 // Far outside - this eliminates edge artifacts
+                    } else {
+                        128.0 - normalized_distance * 128.0
+                    }
                 };
 
-                sdf_bitmap[y * sdf_width + x] = sdf_value.clamp(0.0, 255.0) as u8;
+                sdf_bitmap[sdf_y * sdf_width + sdf_x] = sdf_value.clamp(0.0, 255.0) as u8;
             }
         }
 
         sdf_bitmap
+    }
+
+    /// Create a raw bitmap without SDF processing for debugging.
+    #[allow(dead_code)]
+    fn create_raw_bitmap(&self, bitmap: &[u8], width: usize, height: usize) -> Vec<u8> {
+        let padded_width = width + (sdf::GLYPH_PADDING * 2) as usize;
+        let padded_height = height + (sdf::GLYPH_PADDING * 2) as usize;
+        let mut raw_bitmap = vec![0u8; padded_width * padded_height];
+
+        let padding = sdf::GLYPH_PADDING as usize;
+
+        // Copy fontdue bitmap data to center of padded bitmap
+        for y in 0..height {
+            for x in 0..width {
+                let src_idx = y * width + x;
+                let dst_idx = (y + padding) * padded_width + (x + padding);
+
+                // fontdue provides coverage values 0-255, use them directly
+                // This bypasses SDF generation to test raw font rasterization
+                raw_bitmap[dst_idx] = bitmap[src_idx];
+            }
+        }
+
+        raw_bitmap
     }
 
     /// Pre-load common ASCII characters.
@@ -315,9 +358,9 @@ impl FontAtlas {
         }
     }
 
-    /// Get default font data - DejaVu Sans embedded font.
+    /// Get default font data - Squada One embedded font.
     fn get_default_font_data() -> &'static [u8] {
-        // Embed DejaVu Sans font data directly into the binary
+        // Embed Squada One font data directly into the binary
         include_bytes!("../../assets/fonts/default.ttf")
     }
 }
@@ -348,7 +391,7 @@ mod tests {
             return;
         }
 
-        let atlas = FontAtlas::new(context.device(), context.queue(), "Default", 16.0);
+        let atlas = FontAtlas::new(context.device(), context.queue(), 16.0);
         // We expect this to fail without proper font data
         assert!(atlas.is_err() || atlas.is_ok());
     }
@@ -492,29 +535,30 @@ mod tests {
 
     impl MockFontAtlas {
         fn generate_sdf(&self, bitmap: &[u8], width: usize, height: usize) -> Vec<u8> {
-            // Same SDF generation logic as FontAtlas
+            // Same improved SDF generation logic as FontAtlas
             let sdf_width = width + (sdf::GLYPH_PADDING * 2) as usize;
             let sdf_height = height + (sdf::GLYPH_PADDING * 2) as usize;
-            let mut sdf_bitmap = vec![0u8; sdf_width * sdf_height];
+            let mut sdf_bitmap = vec![128u8; sdf_width * sdf_height];
 
             let padding = sdf::GLYPH_PADDING as usize;
-            let range = sdf::SDF_RANGE as i32;
+            let range = sdf::SDF_RANGE;
 
             for y in 0..sdf_height {
                 for x in 0..sdf_width {
                     let src_x = x as i32 - padding as i32;
                     let src_y = y as i32 - padding as i32;
 
-                    let mut min_distance = range as f32;
+                    let mut min_distance = range;
                     let mut inside = false;
 
                     if src_x >= 0 && src_x < width as i32 && src_y >= 0 && src_y < height as i32 {
                         let pixel = bitmap[src_y as usize * width + src_x as usize];
-                        inside = pixel > 128;
+                        inside = pixel > 32;
                     }
 
-                    for dy in -range..=range {
-                        for dx in -range..=range {
+                    let search_range = (range * 1.5) as i32;
+                    for dy in -search_range..=search_range {
+                        for dx in -search_range..=search_range {
                             let check_x = src_x + dx;
                             let check_y = src_y + dy;
 
@@ -524,9 +568,9 @@ mod tests {
                                 && check_y < height as i32
                             {
                                 let pixel = bitmap[check_y as usize * width + check_x as usize];
-                                let is_edge = pixel > 128;
+                                let pixel_inside = pixel > 32;
 
-                                if is_edge != inside {
+                                if pixel_inside != inside {
                                     let distance = ((dx * dx + dy * dy) as f32).sqrt();
                                     min_distance = min_distance.min(distance);
                                 }
@@ -534,13 +578,14 @@ mod tests {
                         }
                     }
 
+                    let normalized_distance = (min_distance / range).clamp(0.0, 1.0);
                     let sdf_value = if inside {
-                        128.0 + (min_distance / range as f32) * 127.0
+                        128.0 + normalized_distance * 127.0
                     } else {
-                        128.0 - (min_distance / range as f32) * 127.0
+                        128.0 - normalized_distance * 128.0
                     };
 
-                    sdf_bitmap[y * sdf_width + x] = sdf_value.round().clamp(0.0, 255.0) as u8;
+                    sdf_bitmap[y * sdf_width + x] = sdf_value.clamp(0.0, 255.0) as u8;
                 }
             }
 

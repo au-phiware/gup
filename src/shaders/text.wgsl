@@ -50,32 +50,45 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Extract SDF parameters
     let sdf_scale = in.sdf_params.x;
     let edge_threshold = in.sdf_params.y;
-    let outline_width = in.sdf_params.z;
+    let debug_quad = in.sdf_params.w;
     
-    // Calculate distance in world space
-    let distance = (sdf_value - 0.5) * sdf_scale;
+    // Convert SDF value to distance
+    // SDF values: 0-127 = outside (negative distance), 128-255 = inside (positive distance)
+    // 128 represents the edge (distance = 0)
+    let normalized_sdf = sdf_value; // Already 0-1 from R8Unorm texture
+    let distance = (normalized_sdf - 0.5) * sdf_scale;
     
-    // Anti-aliased edge
-    let edge_width = length(vec2<f32>(dpdx(distance), dpdy(distance)));
-    let alpha = smoothstep(-edge_width, edge_width, distance - edge_threshold);
+    // Improved antialiasing with adaptive edge width
+    let edge_width = max(length(vec2<f32>(dpdx(distance), dpdy(distance))), 0.15);
+    let smoothing = edge_width * 2.0; // More aggressive smoothing for better antialiasing
+    let alpha = smoothstep(-smoothing, smoothing, distance - edge_threshold);
     
     // Apply color and alpha
     var final_color = in.color;
     final_color.a *= alpha;
     
-    // Optional outline effect
-    if (outline_width > 0.0) {
-        let outline_alpha = smoothstep(-edge_width, edge_width, distance + outline_width);
-        let outline_factor = outline_alpha - alpha;
+    // Force debug outline visibility (when debug_quad > 0.5)
+    if (debug_quad > 0.5) {
+        let uv = in.tex_coords;
+        let line_width = 0.2; // Even thicker outline
         
-        if (outline_factor > 0.0) {
-            // Mix with outline color (black)
-            final_color = mix(final_color, vec4<f32>(0.0, 0.0, 0.0, outline_alpha), outline_factor);
+        // Check if we're near any edge of the quad
+        let near_left = uv.x < line_width;
+        let near_right = uv.x > (1.0 - line_width);
+        let near_top = uv.y < line_width;
+        let near_bottom = uv.y > (1.0 - line_width);
+        
+        // ALWAYS show outline if near edge, ignore alpha
+        if (near_left || near_right || near_top || near_bottom) {
+            return vec4<f32>(1.0, 0.0, 0.0, 1.0); // Force bright red outline
         }
+        
+        // For interior, show the character color to verify it's working
+        return vec4<f32>(in.color.rgb, 1.0); // Force character color with full alpha
     }
     
-    // Discard fully transparent pixels
-    if (final_color.a < 0.001) {
+    // Discard fully transparent pixels (but not if we're drawing debug outline)
+    if (final_color.a < 0.001 && debug_quad <= 0.5) {
         discard;
     }
     

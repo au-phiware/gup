@@ -245,7 +245,7 @@ impl DataVisualizationRenderer {
         }
 
         if self.font_atlas.is_none() {
-            let font_atlas = FontAtlas::new(frame.device(), frame.queue(), "DejaVu Sans", 14.0)?;
+            let font_atlas = FontAtlas::new(frame.device(), frame.queue(), 14.0)?;
             self.font_atlas = Some(font_atlas);
         }
 
@@ -270,7 +270,11 @@ impl DataVisualizationRenderer {
         // Initialize buffers and pipeline if needed
         self.ensure_initialized(frame)?;
 
-        // Single render pass for circles only
+        // Get Arc references to device and queue before creating render pass
+        let device = frame.device_arc();
+        let queue = frame.queue_arc();
+
+        // Single render pass for circles and text
         {
             let mut render_pass = frame.render_pass(None);
 
@@ -291,46 +295,46 @@ impl DataVisualizationRenderer {
                     render_pass.draw(0..6, 0..self.circle_instances.len() as u32);
                 }
             }
-        } // render_pass dropped here
 
-        // Render actual text labels in separate render passes
-        if !self.labels.is_empty() {
-            // Render each label using actual text rendering
-            if let (Some(text_renderer), Some(font_atlas), Some(layout_engine)) = (
-                &mut self.text_renderer,
-                &mut self.font_atlas,
-                &mut self.layout_engine,
-            ) {
-                for label in &self.labels {
-                    let style = TextStyle::new(14.0)
-                        .with_rgba(
-                            label.color[0],
-                            label.color[1],
-                            label.color[2],
-                            label.color[3],
-                        )
-                        .with_anchor(TextAnchor::CenterLeft);
+            // Render text labels using convenience method
+            if !self.labels.is_empty() {
+                if let (Some(text_renderer), Some(font_atlas), Some(layout_engine)) = (
+                    &mut self.text_renderer,
+                    &mut self.font_atlas,
+                    &mut self.layout_engine,
+                ) {
+                    for label in &self.labels {
+                        let style = TextStyle::new(42.0)
+                            .with_rgba(
+                                label.color[0],
+                                label.color[1],
+                                label.color[2],
+                                label.color[3],
+                            )
+                            .with_anchor(TextAnchor::CenterLeft);
 
-                    let config = TextRenderConfig {
-                        text: &label.text,
-                        position: label.position,
-                        style: &style,
-                        font_atlas,
-                        layout_engine,
-                        screen_width: 1200.0, // TODO: Get actual screen dimensions
-                        screen_height: 800.0,
-                    };
+                        let config = TextRenderConfig {
+                            text: &label.text,
+                            position: label.position,
+                            style: &style,
+                            font_atlas,
+                            layout_engine,
+                            screen_width: 1200.0,
+                            screen_height: 800.0,
+                        };
 
-                    if let Err(e) = text_renderer.render_text(frame, config) {
-                        eprintln!("⚠️ Failed to render text '{}': {}", label.text, e);
-                        // Continue rendering other labels even if one fails
+                        if let Err(e) =
+                            text_renderer.render_text(&mut render_pass, &device, &queue, config)
+                        {
+                            eprintln!("⚠️ Failed to render text '{}': {}", label.text, e);
+                        }
                     }
+                    println!("✅ Rendered {} text labels successfully", self.labels.len());
+                } else {
+                    println!("❌ Text rendering components not properly initialized");
                 }
-                println!("✅ Rendered {} text labels successfully", self.labels.len());
-            } else {
-                println!("❌ Text rendering components not properly initialized");
             }
-        }
+        } // render_pass dropped here
 
         Ok(())
     }

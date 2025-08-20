@@ -22,7 +22,7 @@
 //! // Example showing text rendering API (actual implementation requires window setup)
 //! async fn example() {
 //!     // Initialize text rendering components
-//!     // let mut font_atlas = FontAtlas::new(device, queue, "Arial", 16.0)?;
+//!     // let mut font_atlas = FontAtlas::new(device, queue, 16.0)?;
 //!     // let mut renderer = TextRenderer::new(device)?;
 //!     // let mut layout_engine = TextLayoutEngine::new();
 //!

@@ -14,7 +14,6 @@ use wgpu::*;
 /// GPU text renderer for SDF fonts.
 pub struct TextRenderer {
     /// Render pipeline for SDF text
-    #[allow(dead_code)] // Will be used in complete implementation
     render_pipeline: RenderPipeline,
     /// Bind group layout for text resources
     bind_group_layout: BindGroupLayout,
@@ -231,31 +230,37 @@ impl TextRenderer {
         })
     }
 
-    /// Render text using the provided glyph batch within a render frame.
-    pub fn render_glyphs(
+    /// Render text using the provided glyph batch within an existing render pass.
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_glyphs<'a>(
         &mut self,
-        frame: &mut crate::RenderFrame,
+        render_pass: &mut RenderPass<'a>,
+        device: &Device,
+        queue: &Queue,
         glyphs: &GlyphBatch,
         font_atlas: &FontAtlas,
         screen_width: f32,
         screen_height: f32,
     ) -> GupResult<()> {
+        // Debug output disabled - text rendering now working
+
         if glyphs.is_empty() {
+            println!("RENDER_GLYPHS: Empty glyph batch, returning");
             return Ok(());
         }
 
         // Create vertices for all glyphs
         let vertices = self.create_vertices(glyphs);
 
+        // Remove excessive vertex debugging
+
         // Ensure vertex buffer is large enough
         if vertices.len() > self.vertex_capacity {
-            self.resize_buffers(frame.device(), vertices.len())?;
+            self.resize_buffers(device, vertices.len())?;
         }
 
         // Upload vertex data
-        frame
-            .queue()
-            .write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&vertices));
+        queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&vertices));
 
         // Update uniform buffer
         let projection = self.create_projection_matrix(screen_width, screen_height);
@@ -264,15 +269,16 @@ impl TextRenderer {
             screen_size: [screen_width, screen_height],
             _padding: [0.0, 0.0],
         };
-        frame
-            .queue()
-            .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
+
+        // Debug output disabled
+
+        queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
 
         // Create bind group
         let font_texture_view = font_atlas
             .texture()
             .create_view(&TextureViewDescriptor::default());
-        let bind_group = frame.device().create_bind_group(&BindGroupDescriptor {
+        let bind_group = device.create_bind_group(&BindGroupDescriptor {
             label: Some("Text Bind Group"),
             layout: &self.bind_group_layout,
             entries: &[
@@ -291,26 +297,28 @@ impl TextRenderer {
             ],
         });
 
-        // Use the frame's render pass to draw the text
-        let mut render_pass = frame.render_pass(None); // Use default clear (transparent)
-
+        // Use the provided render pass to draw the text
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, &bind_group, &[]);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
         let index_count = (glyphs.len() * 6) as u32; // 6 indices per quad
+
+        // Remove excessive draw call debugging
+
         render_pass.draw_indexed(0..index_count, 0, 0..1);
 
         Ok(())
     }
 
-    /// Render text with automatic layout.
-    pub fn render_text(
+    /// Prepare text for rendering. This handles glyph loading and layout.
+    /// Must be called before creating the render pass.
+    pub fn prepare_text(
         &mut self,
-        frame: &mut crate::RenderFrame,
-        config: TextRenderConfig,
-    ) -> GupResult<TextBounds> {
+        frame: &crate::RenderFrame,
+        config: &mut TextRenderConfig,
+    ) -> GupResult<(GlyphBatch, TextBounds)> {
         // Ensure all glyphs are available in the atlas
         for ch in config.text.chars() {
             config.font_atlas.ensure_glyph(
@@ -327,12 +335,69 @@ impl TextRenderer {
             config.position,
             config.style,
             config.font_atlas,
-            None, // No collision constraints for now
+            None, // TODO: Collision constraints will be added in a future text layout story
         )?;
 
-        // Render the glyphs
+        Ok((layout_result.glyphs, layout_result.bounds))
+    }
+
+    /// Render pre-prepared glyphs within an existing render pass.
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_prepared_glyphs<'a>(
+        &mut self,
+        render_pass: &mut RenderPass<'a>,
+        device: &Device,
+        queue: &Queue,
+        glyphs: &GlyphBatch,
+        font_atlas: &FontAtlas,
+        screen_width: f32,
+        screen_height: f32,
+    ) -> GupResult<()> {
         self.render_glyphs(
-            frame,
+            render_pass,
+            device,
+            queue,
+            glyphs,
+            font_atlas,
+            screen_width,
+            screen_height,
+        )
+    }
+
+    /// Convenience method for rendering text within an existing render pass.
+    /// This handles both glyph preparation and rendering in one call.
+    ///
+    /// Note: This method requires device and queue access, which should be obtained
+    /// before creating the render pass to avoid borrowing conflicts.
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_text<'a>(
+        &mut self,
+        render_pass: &mut RenderPass<'a>,
+        device: &Device,
+        queue: &Queue,
+        config: TextRenderConfig,
+    ) -> GupResult<TextBounds> {
+        // Prepare the text (this may upload to GPU atlas)
+        for ch in config.text.chars() {
+            config
+                .font_atlas
+                .ensure_glyph(device, queue, ch, config.style.font_size)?;
+        }
+
+        // Layout the text
+        let layout_result = config.layout_engine.layout_text(
+            config.text,
+            config.position,
+            config.style,
+            config.font_atlas,
+            None, // TODO: Collision constraints will be added in a future text layout story
+        )?;
+
+        // Render the prepared glyphs
+        self.render_prepared_glyphs(
+            render_pass,
+            device,
+            queue,
             &layout_result.glyphs,
             config.font_atlas,
             config.screen_width,
@@ -354,11 +419,13 @@ impl TextRenderer {
 
             let uv = glyph.glyph.atlas_pos;
 
+            // Remove excessive vertex creation debugging
+
             let sdf_params = [
                 glyph.glyph.sdf_scale,
-                0.5, // SDF edge threshold
+                0.0, // SDF edge threshold (0.0 for normal rendering at distance field edge)
                 0.0, // Outline width
-                0.0, // Padding
+                0.0, // Debug quad outline (0.0 = disabled, show actual text)
             ];
 
             // Create quad vertices (2 triangles)
@@ -400,11 +467,12 @@ impl TextRenderer {
     /// Create projection matrix for screen coordinates.
     fn create_projection_matrix(&self, width: f32, height: f32) -> [[f32; 4]; 4] {
         // Orthographic projection matrix for screen coordinates
+        // Maps [0, width] to [-1, 1] for X and [0, height] to [1, -1] for Y
         [
-            [2.0 / width, 0.0, 0.0, -1.0],
-            [0.0, -2.0 / height, 0.0, 1.0],
+            [2.0 / width, 0.0, 0.0, 0.0],
+            [0.0, -2.0 / height, 0.0, 0.0],
             [0.0, 0.0, -1.0, 0.0],
-            [0.0, 0.0, 0.0, 1.0],
+            [-1.0, 1.0, 0.0, 1.0],
         ]
     }
 

@@ -40,8 +40,8 @@ impl Default for TextStyle {
             anchor: TextAnchor::TopLeft,
             rotation: 0.0,
             antialiased: true,
-            weight: 0.5, // Normal weight
-            letter_spacing: 1.0,
+            weight: 0.5,         // Normal weight
+            letter_spacing: 0.8, // Reduce spacing
             line_spacing: 1.0,
         }
     }
@@ -157,44 +157,44 @@ impl TextStyle {
 impl TextStyle {
     /// Large title style.
     pub fn title() -> Self {
-        Self::new(24.0).bold()
+        Self::new(72.0).bold()
     }
 
     /// Medium heading style.
     pub fn heading() -> Self {
-        Self::new(20.0).with_weight(0.7)
+        Self::new(60.0).with_weight(0.7)
     }
 
     /// Normal body text style.
     pub fn body() -> Self {
-        Self::new(16.0)
+        Self::new(48.0)
     }
 
     /// Small caption style.
     pub fn caption() -> Self {
-        Self::new(12.0).with_rgba(0.5, 0.5, 0.5, 1.0)
+        Self::new(36.0).with_rgba(0.5, 0.5, 0.5, 1.0)
     }
 
     /// Axis label style.
     pub fn axis_label() -> Self {
-        Self::new(14.0).with_rgba(0.2, 0.2, 0.2, 1.0)
+        Self::new(42.0).with_rgba(0.2, 0.2, 0.2, 1.0)
     }
 
     /// Axis title style.
     pub fn axis_title() -> Self {
-        Self::new(16.0)
+        Self::new(48.0)
             .with_weight(0.6)
             .with_rgba(0.1, 0.1, 0.1, 1.0)
     }
 
     /// Error text style.
     pub fn error() -> Self {
-        Self::new(16.0).with_rgba(0.8, 0.2, 0.2, 1.0)
+        Self::new(48.0).with_rgba(0.8, 0.2, 0.2, 1.0)
     }
 
     /// Success text style.
     pub fn success() -> Self {
-        Self::new(16.0).with_rgba(0.2, 0.7, 0.2, 1.0)
+        Self::new(48.0).with_rgba(0.2, 0.7, 0.2, 1.0)
     }
 }
 
@@ -210,7 +210,7 @@ mod tests {
         assert_eq!(style.rotation, 0.0);
         assert!(style.antialiased);
         assert_eq!(style.weight, 0.5);
-        assert_eq!(style.letter_spacing, 1.0);
+        assert_eq!(style.letter_spacing, 0.8);
         assert_eq!(style.line_spacing, 1.0);
     }
 
@@ -263,15 +263,15 @@ mod tests {
     #[test]
     fn test_predefined_styles() {
         let title = TextStyle::title();
-        assert_eq!(title.font_size, 24.0);
+        assert_eq!(title.font_size, 72.0);
         assert_eq!(title.weight, 1.0);
 
         let caption = TextStyle::caption();
-        assert_eq!(caption.font_size, 12.0);
+        assert_eq!(caption.font_size, 36.0);
         assert_eq!(caption.color.x, 0.5); // Gray color
 
         let axis_label = TextStyle::axis_label();
-        assert_eq!(axis_label.font_size, 14.0);
+        assert_eq!(axis_label.font_size, 42.0);
     }
 
     #[test]

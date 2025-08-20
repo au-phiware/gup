@@ -8,6 +8,132 @@ use crate::error::GupResult;
 use std::collections::HashSet;
 use unicode_normalization::UnicodeNormalization;
 
+/// Viewport boundaries for text clipping detection.
+#[derive(Debug, Clone)]
+pub struct ViewportBounds {
+    /// Visible area coordinates
+    pub viewport_rect: TextBounds,
+    /// Container-specific bounds (optional)
+    pub container_bounds: Option<TextBounds>,
+    /// Margin requirements for text padding
+    pub text_margins: TextMargins,
+}
+
+/// Text margin requirements around container boundaries.
+#[derive(Debug, Clone)]
+pub struct TextMargins {
+    pub top: f32,
+    pub right: f32,
+    pub bottom: f32,
+    pub left: f32,
+}
+
+/// Result of clipping detection analysis.
+#[derive(Debug, Clone)]
+pub enum ClippingResult {
+    NoClipping,
+    PartialClipping {
+        clipped_edges: Vec<ClippedEdge>,
+        visible_percentage: f32, // 0.0-1.0
+    },
+    CompletelyClipped,
+}
+
+/// Specific edge where text is clipped.
+#[derive(Debug, Clone)]
+pub enum ClippedEdge {
+    Top { overflow_pixels: f32 },
+    Right { overflow_pixels: f32 },
+    Bottom { overflow_pixels: f32 },
+    Left { overflow_pixels: f32 },
+}
+
+/// Configuration for different text clipping strategies.
+#[derive(Debug, Clone)]
+pub struct ClippingStrategyConfig {
+    pub primary_strategy: ClippingStrategy,
+    pub fallback_strategies: Vec<ClippingStrategy>,
+    pub minimum_visible_percentage: f32, // Don't render if less than X% visible
+    pub enable_hover_reveal: bool,
+}
+
+/// Available strategies for handling clipped text.
+#[derive(Debug, Clone)]
+pub enum ClippingStrategy {
+    /// Truncate text with ellipsis
+    TruncateWithEllipsis {
+        ellipsis_text: String, // Default: "..."
+        preserve_words: bool,  // Try to break at word boundaries
+    },
+    /// Reduce font size to fit
+    DynamicFontScaling {
+        min_font_size: f32,
+        scale_factor: f32, // How aggressively to scale (0.1 = 10% reduction per step)
+    },
+    /// Move text to stay within bounds
+    RepositionText {
+        prefer_directions: Vec<Vec2>, // Preferred offset directions
+        max_offset_distance: f32,
+    },
+    /// Hide text completely if it doesn't fit
+    HideIfClipped {
+        min_visible_threshold: f32, // Hide if less than X% visible
+    },
+}
+
+impl Default for TextMargins {
+    fn default() -> Self {
+        Self {
+            top: 4.0,
+            right: 4.0,
+            bottom: 4.0,
+            left: 4.0,
+        }
+    }
+}
+
+impl Default for ClippingStrategyConfig {
+    fn default() -> Self {
+        Self {
+            primary_strategy: ClippingStrategy::TruncateWithEllipsis {
+                ellipsis_text: "...".to_string(),
+                preserve_words: true,
+            },
+            fallback_strategies: vec![
+                ClippingStrategy::DynamicFontScaling {
+                    min_font_size: 8.0,
+                    scale_factor: 0.1,
+                },
+                ClippingStrategy::HideIfClipped {
+                    min_visible_threshold: 0.3,
+                },
+            ],
+            minimum_visible_percentage: 0.5,
+            enable_hover_reveal: false,
+        }
+    }
+}
+
+impl ViewportBounds {
+    /// Create viewport bounds from screen dimensions.
+    pub fn from_screen(width: f32, height: f32) -> Self {
+        Self {
+            viewport_rect: TextBounds::new(0.0, 0.0, width, height),
+            container_bounds: None,
+            text_margins: TextMargins::default(),
+        }
+    }
+
+    /// Create viewport bounds with a specific container.
+    pub fn from_container(container: TextBounds) -> Self {
+        Self {
+            viewport_rect: container,
+            container_bounds: Some(container),
+            text_margins: TextMargins::default(),
+        }
+    }
+}
+
 /// Text layout engine for positioning and collision detection.
 pub struct TextLayoutEngine {
     /// Collision detection grid for performance
@@ -78,13 +204,13 @@ impl TextLayoutEngine {
         // Calculate final bounds
         let final_bounds = self.calculate_glyph_bounds(&glyphs);
 
-        // Add to collision grid for future collision detection
+        // Add to collision grid for collision detection (functionality will be enhanced in future text layout stories)
         self.collision_grid.add_bounds(&final_bounds);
 
         Ok(LayoutResult {
             glyphs,
             bounds: final_bounds,
-            clipped: false, // TODO: Implement clipping detection
+            clipped: false, // TODO: Clipping detection will be added in a future text layout story
         })
     }
 
@@ -207,7 +333,7 @@ impl TextLayoutEngine {
                 if glyph_info.size.x > 0.0 && glyph_info.size.y > 0.0 {
                     let glyph_position = Vec2 {
                         x: cursor_x + glyph_info.bearing.x * scale,
-                        y: baseline_y - glyph_info.bearing.y * scale,
+                        y: baseline_y - (glyph_info.size.y * scale + glyph_info.bearing.y * scale),
                     };
 
                     // Apply rotation if needed
@@ -225,8 +351,24 @@ impl TextLayoutEngine {
                         glyph_position
                     };
 
+                    // Create scaled glyph info
+                    let scaled_glyph = GlyphInfo {
+                        character: glyph_info.character,
+                        atlas_pos: glyph_info.atlas_pos,
+                        size: Vec2 {
+                            x: glyph_info.size.x * scale,
+                            y: glyph_info.size.y * scale,
+                        },
+                        bearing: Vec2 {
+                            x: glyph_info.bearing.x * scale,
+                            y: glyph_info.bearing.y * scale,
+                        },
+                        advance: glyph_info.advance * scale,
+                        sdf_scale: glyph_info.sdf_scale,
+                    };
+
                     glyphs.push(PositionedGlyph {
-                        glyph: *glyph_info,
+                        glyph: scaled_glyph,
                         position: final_position,
                         color: style.color,
                     });
@@ -429,7 +571,7 @@ mod tests {
     }
 
     // Note: Tests requiring FontAtlas are disabled since FontAtlas fields are private
-    // In a full implementation, we would add public testing methods or constructors
+    // Future text layout stories may add public testing methods or constructors if needed
 
     #[test]
     fn test_anchor_positioning() {

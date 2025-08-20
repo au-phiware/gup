@@ -740,6 +740,16 @@ impl<'a> RenderFrame<'a> {
         &self.context.queue
     }
 
+    /// Get device Arc reference for sharing.
+    pub fn device_arc(&self) -> Arc<Device> {
+        Arc::clone(&self.context.device)
+    }
+
+    /// Get queue Arc reference for sharing.
+    pub fn queue_arc(&self) -> Arc<Queue> {
+        Arc::clone(&self.context.queue)
+    }
+
     /// Get the surface ID for this frame (if rendering to a surface).
     pub fn surface_id(&self) -> Option<SurfaceId> {
         self.surface_id
