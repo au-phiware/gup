@@ -75,12 +75,14 @@ impl TextRenderingApp {
 
     fn generate_demo_texts() -> Vec<TextDemo> {
         vec![
+            /*
             // ONLY ONE SIMPLE TEST STRING
             TextDemo {
                 position: Vec2 { x: 100.0, y: 100.0 },
-                text: "HELLO WORLD TESTING 123".to_string(),
+                text: "Hello, World. Testing 123".to_string(),
                 style: TextStyle::new(72.0).with_rgba(1.0, 0.0, 0.0, 1.0),
             },
+            */
         ]
     }
 
@@ -201,6 +203,10 @@ impl TextRenderingApp {
                             &mut self.font_atlas,
                             &mut self.layout_engine,
                         ) {
+                            // Reset text renderer state for new frame
+                            text_renderer.begin_frame();
+
+                            let mut render_count = 0;
                             for text_demo in &self.demo_texts {
                                 let config = TextRenderConfig {
                                     text: &text_demo.text,
@@ -217,19 +223,30 @@ impl TextRenderingApp {
                                     .is_err()
                                 {
                                     eprintln!("⚠️ Failed to render text '{}'", text_demo.text);
+                                } else {
+                                    render_count += 1;
                                 }
                             }
 
-                            // Generate additional performance test texts
-                            for i in 0..20 {
-                                let x = 120.0 + (i % 10) as f32 * 100.0;
-                                let y = 630.0 + (i / 10) as f32 * 30.0;
-                                let text = format!("Item {}", i + 1);
+                            // Generate additional performance test texts - SIMPLE HORIZONTAL LINE
+                            let test_texts = ["1", "10", "22", "ABC"];
+                            for (i, text) in test_texts.iter().enumerate() {
+                                let x = 50.0 + i as f32 * 150.0; // Simple horizontal spacing
+                                let y = 300.0; // All at same height
+                                println!("🧪 Testing text '{text}' at ({x:.1}, {y:.1})");
 
-                                let style = TextStyle::new(36.0).with_rgba(0.3, 0.3, 0.3, 1.0);
+                                // Different colors to distinguish them
+                                let color = match i {
+                                    0 => [1.0, 0.0, 0.0, 1.0], // Red
+                                    1 => [0.0, 1.0, 0.0, 1.0], // Green
+                                    2 => [0.0, 0.0, 1.0, 1.0], // Blue
+                                    _ => [1.0, 1.0, 0.0, 1.0], // Yellow
+                                };
+                                let style = TextStyle::new(48.0)
+                                    .with_rgba(color[0], color[1], color[2], color[3]);
 
                                 let config = TextRenderConfig {
-                                    text: &text,
+                                    text, // Changed from &text since text is already &str
                                     position: Vec2 { x, y },
                                     style: &style,
                                     font_atlas,
@@ -238,12 +255,25 @@ impl TextRenderingApp {
                                     screen_height,
                                 };
 
-                                text_renderer.render_text(
-                                    &mut render_pass,
-                                    &device,
-                                    &queue,
-                                    config,
-                                )?;
+                                if text_renderer
+                                    .render_text(&mut render_pass, &device, &queue, config)
+                                    .is_ok()
+                                {
+                                    render_count += 1;
+                                } else {
+                                    eprintln!("⚠️ Failed to render test text '{text}'");
+                                }
+                            }
+
+                            // Debug: Report how many texts were rendered this frame
+                            use std::sync::atomic::{AtomicU32, Ordering};
+                            static FRAME_COUNT: AtomicU32 = AtomicU32::new(0);
+                            let frame = FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
+                            if frame % 60 == 0 {
+                                // Report every 60 frames
+                                println!(
+                                    "📊 Frame {frame}: Successfully rendered {render_count} texts"
+                                );
                             }
                         }
 

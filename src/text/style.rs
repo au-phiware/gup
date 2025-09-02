@@ -40,8 +40,8 @@ impl Default for TextStyle {
             anchor: TextAnchor::TopLeft,
             rotation: 0.0,
             antialiased: true,
-            weight: 0.5,         // Normal weight
-            letter_spacing: 0.8, // Reduce spacing
+            weight: 0.5, // Normal weight
+            letter_spacing: 1.0,
             line_spacing: 1.0,
         }
     }
@@ -210,7 +210,7 @@ mod tests {
         assert_eq!(style.rotation, 0.0);
         assert!(style.antialiased);
         assert_eq!(style.weight, 0.5);
-        assert_eq!(style.letter_spacing, 0.8);
+        assert_eq!(style.letter_spacing, 1.0);
         assert_eq!(style.line_spacing, 1.0);
     }
 

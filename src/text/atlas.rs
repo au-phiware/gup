@@ -193,10 +193,10 @@ impl FontAtlas {
         let glyph_info = GlyphInfo {
             character,
             atlas_pos: [
-                upload_x as f32 / self.atlas_size as f32,
-                upload_y as f32 / self.atlas_size as f32,
-                (upload_x + glyph_width) as f32 / self.atlas_size as f32,
-                (upload_y + glyph_height) as f32 / self.atlas_size as f32,
+                (upload_x as f32 + sdf::SDF_RANGE) / self.atlas_size as f32,
+                (upload_y as f32 + sdf::SDF_RANGE) / self.atlas_size as f32,
+                (upload_x as f32 + metrics.width as f32 + sdf::SDF_RANGE) / self.atlas_size as f32,
+                (upload_y as f32 + metrics.height as f32 + sdf::SDF_RANGE) / self.atlas_size as f32,
             ],
             size: Vec2 {
                 x: metrics.width as f32,

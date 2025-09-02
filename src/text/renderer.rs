@@ -4,7 +4,7 @@
 //! GPU text renderer using SDF fonts.
 
 use super::*;
-use crate::error::GupResult;
+use crate::error::{GupError, GupResult};
 // RenderContext import removed as we now use RenderFrame
 use bytemuck::{Pod, Zeroable};
 use std::mem;
@@ -25,8 +25,25 @@ pub struct TextRenderer {
     uniform_buffer: Buffer,
     /// Current vertex buffer capacity
     vertex_capacity: usize,
+    /// Current vertex count in buffer
+    vertex_count: usize,
+    /// Accumulated vertices for the current frame
+    frame_vertices: Vec<TextVertex>,
+    /// Render batches for the current frame
+    render_batches: Vec<RenderBatch>,
     /// Sampler for font texture
     sampler: Sampler,
+}
+
+/// Information about a rendered batch of glyphs
+#[derive(Debug, Clone)]
+struct RenderBatch {
+    /// Starting vertex index in buffer
+    vertex_start: usize,
+    /// Number of vertices in this batch
+    vertex_count: usize,
+    /// Number of indices to draw
+    index_count: usize,
 }
 
 /// Vertex data for text rendering.
@@ -226,8 +243,18 @@ impl TextRenderer {
             index_buffer,
             uniform_buffer,
             vertex_capacity,
+            vertex_count: 0,
+            frame_vertices: Vec::new(),
+            render_batches: Vec::new(),
             sampler,
         })
+    }
+
+    /// Reset buffer state for a new frame. Call this before rendering any text in a frame.
+    pub fn begin_frame(&mut self) {
+        self.frame_vertices.clear();
+        self.render_batches.clear();
+        self.vertex_count = 0;
     }
 
     /// Render text using the provided glyph batch within an existing render pass.
@@ -242,8 +269,6 @@ impl TextRenderer {
         screen_width: f32,
         screen_height: f32,
     ) -> GupResult<()> {
-        // Debug output disabled - text rendering now working
-
         if glyphs.is_empty() {
             println!("RENDER_GLYPHS: Empty glyph batch, returning");
             return Ok(());
@@ -252,15 +277,47 @@ impl TextRenderer {
         // Create vertices for all glyphs
         let vertices = self.create_vertices(glyphs);
 
-        // Remove excessive vertex debugging
-
-        // Ensure vertex buffer is large enough
-        if vertices.len() > self.vertex_capacity {
-            self.resize_buffers(device, vertices.len())?;
+        // Skip empty batches to prevent buffer slice panics
+        if vertices.is_empty() {
+            println!("⚠️ SKIPPING empty vertex batch");
+            return Ok(());
         }
 
-        // Upload vertex data
-        queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&vertices));
+        // Ensure vertex buffer has enough remaining capacity
+        let required_capacity = self.vertex_count + vertices.len();
+        if required_capacity > self.vertex_capacity {
+            let new_capacity = required_capacity.max(self.vertex_capacity * 2);
+            // Cap to prevent u16 overflow in indices, but also ensure we can fit the current batch
+            let capped_capacity = new_capacity.min(65535);
+            if required_capacity > capped_capacity {
+                return Err(GupError::render_error(
+                    "Too many text vertices - exceeds u16 index limit",
+                ));
+            }
+            self.resize_buffers(device, capped_capacity)?;
+        }
+
+        // Calculate buffer offset for this batch
+        let vertex_offset = self.vertex_count * std::mem::size_of::<TextVertex>();
+        let vertex_start = self.vertex_count;
+
+        // Upload vertex data at the correct offset (NOT at 0!)
+        queue.write_buffer(
+            &self.vertex_buffer,
+            vertex_offset as u64,
+            bytemuck::cast_slice(&vertices),
+        );
+
+        // Record this batch for rendering
+        let batch = RenderBatch {
+            vertex_start,
+            vertex_count: vertices.len(),
+            index_count: glyphs.len() * 6, // 6 indices per quad
+        };
+        self.render_batches.push(batch.clone());
+
+        // Update vertex count
+        self.vertex_count += vertices.len();
 
         // Update uniform buffer
         let projection = self.create_projection_matrix(screen_width, screen_height);
@@ -269,8 +326,6 @@ impl TextRenderer {
             screen_size: [screen_width, screen_height],
             _padding: [0.0, 0.0],
         };
-
-        // Debug output disabled
 
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
 
@@ -297,17 +352,153 @@ impl TextRenderer {
             ],
         });
 
-        // Use the provided render pass to draw the text
+        // Set up render state
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, &bind_group, &[]);
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+
+        // Skip rendering if batch is empty (should not happen due to earlier check, but safety first)
+        if batch.vertex_count == 0 {
+            println!("⚠️ SKIPPING render of empty batch");
+            return Ok(());
+        }
+
+        // Calculate buffer slice for this batch
+        let vertex_start_bytes = (batch.vertex_start * std::mem::size_of::<TextVertex>()) as u64;
+        let vertex_end_bytes =
+            ((batch.vertex_start + batch.vertex_count) * std::mem::size_of::<TextVertex>()) as u64;
+
+        // Additional safety check
+        if vertex_start_bytes >= vertex_end_bytes {
+            println!(
+                "⚠️ SKIPPING invalid batch (start >= end: {vertex_start_bytes} >= {vertex_end_bytes})"
+            );
+            return Ok(());
+        }
+
+        // Check if we have any data to render
+        if batch.index_count == 0 {
+            println!("⚠️ SKIPPING batch with zero indices");
+            return Ok(());
+        }
+
+        // Calculate buffer slices for this specific batch
+        let vertex_start_bytes = (batch.vertex_start * std::mem::size_of::<TextVertex>()) as u64;
+        let vertex_end_bytes =
+            ((batch.vertex_start + batch.vertex_count) * std::mem::size_of::<TextVertex>()) as u64;
+
+        // Each glyph has 4 vertices and 6 indices, so index start = vertex_start / 4 * 6
+        let indices_per_glyph = 6;
+        let vertices_per_glyph = 4;
+        let glyph_start = batch.vertex_start / vertices_per_glyph;
+        let index_start = glyph_start * indices_per_glyph;
+        let index_start_bytes = (index_start * std::mem::size_of::<u16>()) as u64;
+        let index_end_bytes =
+            ((index_start + batch.index_count) * std::mem::size_of::<u16>()) as u64;
+
+        render_pass.set_vertex_buffer(
+            0,
+            self.vertex_buffer
+                .slice(vertex_start_bytes..vertex_end_bytes),
+        );
+        render_pass.set_index_buffer(
+            self.index_buffer.slice(index_start_bytes..index_end_bytes),
+            wgpu::IndexFormat::Uint16,
+        );
+
+        // Draw the batch with correct vertex offset
+        let vertex_offset = batch.vertex_start as i32;
+        let index_range = 0..(batch.index_count as u32);
+        render_pass.draw_indexed(index_range, vertex_offset, 0..1);
+
+        Ok(())
+    }
+
+    /// Render all accumulated batches. Call this at the end of frame after all text is prepared.
+    pub fn render_all_batches<'a>(
+        &self,
+        render_pass: &mut RenderPass<'a>,
+        device: &Device,
+        queue: &Queue,
+        font_atlas: &FontAtlas,
+        screen_width: f32,
+        screen_height: f32,
+    ) -> GupResult<()> {
+        if self.render_batches.is_empty() {
+            return Ok(());
+        }
+
+        // Update uniform buffer (shared by all batches)
+        let projection = self.create_projection_matrix(screen_width, screen_height);
+        let uniforms = TextUniforms {
+            projection,
+            screen_size: [screen_width, screen_height],
+            _padding: [0.0, 0.0],
+        };
+        queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
+
+        // Create bind group (shared by all batches)
+        let font_texture_view = font_atlas
+            .texture()
+            .create_view(&TextureViewDescriptor::default());
+        let bind_group = device.create_bind_group(&BindGroupDescriptor {
+            label: Some("Text Bind Group"),
+            layout: &self.bind_group_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: self.uniform_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::TextureView(&font_texture_view),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: BindingResource::Sampler(&self.sampler),
+                },
+            ],
+        });
+
+        // Set up render state once (pipeline and bind group)
+        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_bind_group(0, &bind_group, &[]);
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
-        let index_count = (glyphs.len() * 6) as u32; // 6 indices per quad
+        // Draw all batches with individual vertex buffer slices
+        for (i, batch) in self.render_batches.iter().enumerate() {
+            // Skip empty batches
+            if batch.vertex_count == 0 {
+                println!("⚠️ SKIPPING empty batch {i}");
+                continue;
+            }
 
-        // Remove excessive draw call debugging
+            // Calculate buffer slice for this batch
+            let vertex_start_bytes =
+                (batch.vertex_start * std::mem::size_of::<TextVertex>()) as u64;
+            let vertex_end_bytes = ((batch.vertex_start + batch.vertex_count)
+                * std::mem::size_of::<TextVertex>()) as u64;
 
-        render_pass.draw_indexed(0..index_count, 0, 0..1);
+            // Additional safety check
+            if vertex_start_bytes >= vertex_end_bytes {
+                println!(
+                    "⚠️ SKIPPING invalid batch {i} (start >= end: {vertex_start_bytes} >= {vertex_end_bytes})"
+                );
+                continue;
+            }
+
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+
+            let vertex_offset = batch.vertex_start as i32;
+            let index_range = 0..(batch.index_count as u32);
+            render_pass.draw_indexed(index_range, vertex_offset, 0..1);
+            println!(
+                "🎨 RENDERED BATCH {}: vertices {}-{}, {} indices",
+                i,
+                batch.vertex_start,
+                batch.vertex_start + batch.vertex_count - 1,
+                batch.index_count
+            );
+        }
 
         Ok(())
     }
@@ -419,8 +610,6 @@ impl TextRenderer {
 
             let uv = glyph.glyph.atlas_pos;
 
-            // Remove excessive vertex creation debugging
-
             let sdf_params = [
                 glyph.glyph.sdf_scale,
                 0.0, // SDF edge threshold (0.0 for normal rendering at distance field edge)
@@ -480,6 +669,9 @@ impl TextRenderer {
     fn resize_buffers(&mut self, device: &Device, required_vertices: usize) -> GupResult<()> {
         let new_capacity = (required_vertices * 2).max(self.vertex_capacity * 2);
 
+        // Cap the capacity to stay within u16 index limits (65535 vertices max)
+        let new_capacity = new_capacity.min(65535);
+
         // Create new vertex buffer
         self.vertex_buffer = device.create_buffer(&BufferDescriptor {
             label: Some("Text Vertex Buffer"),
@@ -509,6 +701,8 @@ impl std::fmt::Debug for TextRenderer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TextRenderer")
             .field("vertex_capacity", &self.vertex_capacity)
+            .field("vertex_count", &self.vertex_count)
+            .field("render_batches", &self.render_batches.len())
             .finish()
     }
 }
@@ -543,6 +737,9 @@ mod tests {
             index_buffer: unsafe { mem::zeroed() },
             uniform_buffer: unsafe { mem::zeroed() },
             vertex_capacity: 1024,
+            vertex_count: 0,
+            frame_vertices: Vec::new(),
+            render_batches: Vec::new(),
             sampler: unsafe { mem::zeroed() },
         };
 
@@ -567,6 +764,9 @@ mod tests {
             index_buffer: unsafe { mem::zeroed() },
             uniform_buffer: unsafe { mem::zeroed() },
             vertex_capacity: 1024,
+            vertex_count: 0,
+            frame_vertices: Vec::new(),
+            render_batches: Vec::new(),
             sampler: unsafe { mem::zeroed() },
         };
 
@@ -617,6 +817,9 @@ mod tests {
             index_buffer: unsafe { mem::zeroed() },
             uniform_buffer: unsafe { mem::zeroed() },
             vertex_capacity: 1024,
+            vertex_count: 0,
+            frame_vertices: Vec::new(),
+            render_batches: Vec::new(),
             sampler: unsafe { mem::zeroed() },
         };
 

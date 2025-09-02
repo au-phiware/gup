@@ -333,7 +333,7 @@ impl TextLayoutEngine {
                 if glyph_info.size.x > 0.0 && glyph_info.size.y > 0.0 {
                     let glyph_position = Vec2 {
                         x: cursor_x + glyph_info.bearing.x * scale,
-                        y: baseline_y - (glyph_info.size.y * scale + glyph_info.bearing.y * scale),
+                        y: baseline_y - (glyph_info.size.y + glyph_info.bearing.y) * scale,
                     };
 
                     // Apply rotation if needed
@@ -681,7 +681,7 @@ mod tests {
                 if glyph_info.size.x > 0.0 && glyph_info.size.y > 0.0 {
                     let glyph_position = Vec2 {
                         x: cursor_x + glyph_info.bearing.x * scale,
-                        y: baseline_y - glyph_info.bearing.y * scale,
+                        y: baseline_y - (glyph_info.size.y + glyph_info.bearing.y) * scale,
                     };
 
                     glyphs.push(PositionedGlyph {
