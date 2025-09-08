@@ -25,25 +25,10 @@ pub struct TextRenderer {
     uniform_buffer: Buffer,
     /// Current vertex buffer capacity
     vertex_capacity: usize,
-    /// Current vertex count in buffer
-    vertex_count: usize,
-    /// Accumulated vertices for the current frame
-    frame_vertices: Vec<TextVertex>,
-    /// Render batches for the current frame
-    render_batches: Vec<RenderBatch>,
+    /// Queued text vertices awaiting rendering
+    render_queue: Vec<TextVertex>,
     /// Sampler for font texture
     sampler: Sampler,
-}
-
-/// Information about a rendered batch of glyphs
-#[derive(Debug, Clone)]
-struct RenderBatch {
-    /// Starting vertex index in buffer
-    vertex_start: usize,
-    /// Number of vertices in this batch
-    vertex_count: usize,
-    /// Number of indices to draw
-    index_count: usize,
 }
 
 /// Vertex data for text rendering.
@@ -96,6 +81,7 @@ impl TextRenderer {
         let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             label: Some("Text Bind Group Layout"),
             entries: &[
+                // Binding 0: Uniform buffer (projection matrix + screen size)
                 BindGroupLayoutEntry {
                     binding: 0,
                     visibility: ShaderStages::VERTEX,
@@ -106,6 +92,7 @@ impl TextRenderer {
                     },
                     count: None,
                 },
+                // Binding 1: Font atlas texture (SDF data)
                 BindGroupLayoutEntry {
                     binding: 1,
                     visibility: ShaderStages::FRAGMENT,
@@ -116,6 +103,7 @@ impl TextRenderer {
                     },
                     count: None,
                 },
+                // Binding 2: Texture sampler (linear filtering)
                 BindGroupLayoutEntry {
                     binding: 2,
                     visibility: ShaderStages::FRAGMENT,
@@ -243,81 +231,47 @@ impl TextRenderer {
             index_buffer,
             uniform_buffer,
             vertex_capacity,
-            vertex_count: 0,
-            frame_vertices: Vec::new(),
-            render_batches: Vec::new(),
+            render_queue: Vec::new(),
             sampler,
         })
     }
 
     /// Reset buffer state for a new frame. Call this before rendering any text in a frame.
     pub fn begin_frame(&mut self) {
-        self.frame_vertices.clear();
-        self.render_batches.clear();
-        self.vertex_count = 0;
+        self.render_queue.clear();
     }
 
-    /// Render text using the provided glyph batch within an existing render pass.
-    #[allow(clippy::too_many_arguments)]
-    pub fn render_glyphs<'a>(
+    /// Render all queued text with a single draw call.
+    pub fn render_queued_text<'a>(
         &mut self,
         render_pass: &mut RenderPass<'a>,
         device: &Device,
         queue: &Queue,
-        glyphs: &GlyphBatch,
         font_atlas: &FontAtlas,
         screen_width: f32,
         screen_height: f32,
     ) -> GupResult<()> {
-        if glyphs.is_empty() {
-            println!("RENDER_GLYPHS: Empty glyph batch, returning");
+        if self.render_queue.is_empty() {
             return Ok(());
         }
 
-        // Create vertices for all glyphs
-        let vertices = self.create_vertices(glyphs);
-
-        // Skip empty batches to prevent buffer slice panics
-        if vertices.is_empty() {
-            println!("⚠️ SKIPPING empty vertex batch");
-            return Ok(());
-        }
-
-        // Ensure vertex buffer has enough remaining capacity
-        let required_capacity = self.vertex_count + vertices.len();
+        // Ensure vertex buffer capacity and upload all vertices
+        let required_capacity = self.render_queue.len();
         if required_capacity > self.vertex_capacity {
             let new_capacity = required_capacity.max(self.vertex_capacity * 2);
-            // Cap to prevent u16 overflow in indices, but also ensure we can fit the current batch
             let capped_capacity = new_capacity.min(65535);
             if required_capacity > capped_capacity {
-                return Err(GupError::render_error(
-                    "Too many text vertices - exceeds u16 index limit",
-                ));
+                return Err(GupError::render_error("Too many text vertices"));
             }
             self.resize_buffers(device, capped_capacity)?;
         }
 
-        // Calculate buffer offset for this batch
-        let vertex_offset = self.vertex_count * std::mem::size_of::<TextVertex>();
-        let vertex_start = self.vertex_count;
-
-        // Upload vertex data at the correct offset (NOT at 0!)
+        // Upload ALL queued vertices at once
         queue.write_buffer(
             &self.vertex_buffer,
-            vertex_offset as u64,
-            bytemuck::cast_slice(&vertices),
+            0,
+            bytemuck::cast_slice(&self.render_queue),
         );
-
-        // Record this batch for rendering
-        let batch = RenderBatch {
-            vertex_start,
-            vertex_count: vertices.len(),
-            index_count: glyphs.len() * 6, // 6 indices per quad
-        };
-        self.render_batches.push(batch.clone());
-
-        // Update vertex count
-        self.vertex_count += vertices.len();
 
         // Update uniform buffer
         let projection = self.create_projection_matrix(screen_width, screen_height);
@@ -326,7 +280,6 @@ impl TextRenderer {
             screen_size: [screen_width, screen_height],
             _padding: [0.0, 0.0],
         };
-
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
 
         // Create bind group
@@ -355,161 +308,23 @@ impl TextRenderer {
         // Set up render state
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, &bind_group, &[]);
-
-        // Skip rendering if batch is empty (should not happen due to earlier check, but safety first)
-        if batch.vertex_count == 0 {
-            println!("⚠️ SKIPPING render of empty batch");
-            return Ok(());
-        }
-
-        // Calculate buffer slice for this batch
-        let vertex_start_bytes = (batch.vertex_start * std::mem::size_of::<TextVertex>()) as u64;
-        let vertex_end_bytes =
-            ((batch.vertex_start + batch.vertex_count) * std::mem::size_of::<TextVertex>()) as u64;
-
-        // Additional safety check
-        if vertex_start_bytes >= vertex_end_bytes {
-            println!(
-                "⚠️ SKIPPING invalid batch (start >= end: {vertex_start_bytes} >= {vertex_end_bytes})"
-            );
-            return Ok(());
-        }
-
-        // Check if we have any data to render
-        if batch.index_count == 0 {
-            println!("⚠️ SKIPPING batch with zero indices");
-            return Ok(());
-        }
-
-        // Calculate buffer slices for this specific batch
-        let vertex_start_bytes = (batch.vertex_start * std::mem::size_of::<TextVertex>()) as u64;
-        let vertex_end_bytes =
-            ((batch.vertex_start + batch.vertex_count) * std::mem::size_of::<TextVertex>()) as u64;
-
-        // Each glyph has 4 vertices and 6 indices, so index start = vertex_start / 4 * 6
-        let indices_per_glyph = 6;
-        let vertices_per_glyph = 4;
-        let glyph_start = batch.vertex_start / vertices_per_glyph;
-        let index_start = glyph_start * indices_per_glyph;
-        let index_start_bytes = (index_start * std::mem::size_of::<u16>()) as u64;
-        let index_end_bytes =
-            ((index_start + batch.index_count) * std::mem::size_of::<u16>()) as u64;
-
-        render_pass.set_vertex_buffer(
-            0,
-            self.vertex_buffer
-                .slice(vertex_start_bytes..vertex_end_bytes),
-        );
-        render_pass.set_index_buffer(
-            self.index_buffer.slice(index_start_bytes..index_end_bytes),
-            wgpu::IndexFormat::Uint16,
-        );
-
-        // Draw the batch with correct vertex offset
-        let vertex_offset = batch.vertex_start as i32;
-        let index_range = 0..(batch.index_count as u32);
-        render_pass.draw_indexed(index_range, vertex_offset, 0..1);
-
-        Ok(())
-    }
-
-    /// Render all accumulated batches. Call this at the end of frame after all text is prepared.
-    pub fn render_all_batches<'a>(
-        &self,
-        render_pass: &mut RenderPass<'a>,
-        device: &Device,
-        queue: &Queue,
-        font_atlas: &FontAtlas,
-        screen_width: f32,
-        screen_height: f32,
-    ) -> GupResult<()> {
-        if self.render_batches.is_empty() {
-            return Ok(());
-        }
-
-        // Update uniform buffer (shared by all batches)
-        let projection = self.create_projection_matrix(screen_width, screen_height);
-        let uniforms = TextUniforms {
-            projection,
-            screen_size: [screen_width, screen_height],
-            _padding: [0.0, 0.0],
-        };
-        queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
-
-        // Create bind group (shared by all batches)
-        let font_texture_view = font_atlas
-            .texture()
-            .create_view(&TextureViewDescriptor::default());
-        let bind_group = device.create_bind_group(&BindGroupDescriptor {
-            label: Some("Text Bind Group"),
-            layout: &self.bind_group_layout,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: self.uniform_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: BindingResource::TextureView(&font_texture_view),
-                },
-                BindGroupEntry {
-                    binding: 2,
-                    resource: BindingResource::Sampler(&self.sampler),
-                },
-            ],
-        });
-
-        // Set up render state once (pipeline and bind group)
-        render_pass.set_pipeline(&self.render_pipeline);
-        render_pass.set_bind_group(0, &bind_group, &[]);
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
-        // Draw all batches with individual vertex buffer slices
-        for (i, batch) in self.render_batches.iter().enumerate() {
-            // Skip empty batches
-            if batch.vertex_count == 0 {
-                println!("⚠️ SKIPPING empty batch {i}");
-                continue;
-            }
-
-            // Calculate buffer slice for this batch
-            let vertex_start_bytes =
-                (batch.vertex_start * std::mem::size_of::<TextVertex>()) as u64;
-            let vertex_end_bytes = ((batch.vertex_start + batch.vertex_count)
-                * std::mem::size_of::<TextVertex>()) as u64;
-
-            // Additional safety check
-            if vertex_start_bytes >= vertex_end_bytes {
-                println!(
-                    "⚠️ SKIPPING invalid batch {i} (start >= end: {vertex_start_bytes} >= {vertex_end_bytes})"
-                );
-                continue;
-            }
-
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-
-            let vertex_offset = batch.vertex_start as i32;
-            let index_range = 0..(batch.index_count as u32);
-            render_pass.draw_indexed(index_range, vertex_offset, 0..1);
-            println!(
-                "🎨 RENDERED BATCH {}: vertices {}-{}, {} indices",
-                i,
-                batch.vertex_start,
-                batch.vertex_start + batch.vertex_count - 1,
-                batch.index_count
-            );
-        }
+        // SINGLE draw call for ALL queued text!
+        let total_indices = (self.render_queue.len() / 4) * 6; // 6 indices per quad (4 vertices per quad)
+        render_pass.draw_indexed(0..total_indices as u32, 0, 0..1);
 
         Ok(())
     }
 
-    /// Prepare text for rendering. This handles glyph loading and layout.
+    /// Queue text for batched rendering. This handles glyph loading, layout, and accumulation.
     /// Must be called before creating the render pass.
-    pub fn prepare_text(
+    pub fn queue_text(
         &mut self,
         frame: &crate::RenderFrame,
         config: &mut TextRenderConfig,
-    ) -> GupResult<(GlyphBatch, TextBounds)> {
+    ) -> GupResult<TextBounds> {
         // Ensure all glyphs are available in the atlas
         for ch in config.text.chars() {
             config.font_atlas.ensure_glyph(
@@ -529,38 +344,30 @@ impl TextRenderer {
             None, // TODO: Collision constraints will be added in a future text layout story
         )?;
 
-        Ok((layout_result.glyphs, layout_result.bounds))
+        // Add to internal batches for later rendering
+        self.add_glyph_batch(&layout_result.glyphs)?;
+
+        Ok(layout_result.bounds)
     }
 
-    /// Render pre-prepared glyphs within an existing render pass.
-    #[allow(clippy::too_many_arguments)]
-    pub fn render_prepared_glyphs<'a>(
-        &mut self,
-        render_pass: &mut RenderPass<'a>,
-        device: &Device,
-        queue: &Queue,
-        glyphs: &GlyphBatch,
-        font_atlas: &FontAtlas,
-        screen_width: f32,
-        screen_height: f32,
-    ) -> GupResult<()> {
-        self.render_glyphs(
-            render_pass,
-            device,
-            queue,
-            glyphs,
-            font_atlas,
-            screen_width,
-            screen_height,
-        )
+    /// Add a glyph batch to the internal rendering queue.
+    /// This is a low-level method for building batched text rendering.
+    fn add_glyph_batch(&mut self, glyphs: &GlyphBatch) -> GupResult<()> {
+        if glyphs.is_empty() {
+            return Ok(());
+        }
+
+        let vertices = self.create_vertices(glyphs);
+        if !vertices.is_empty() {
+            self.render_queue.extend_from_slice(&vertices);
+        }
+
+        Ok(())
     }
 
-    /// Convenience method for rendering text within an existing render pass.
-    /// This handles both glyph preparation and rendering in one call.
-    ///
-    /// Note: This method requires device and queue access, which should be obtained
-    /// before creating the render pass to avoid borrowing conflicts.
-    #[allow(clippy::too_many_arguments)]
+    /// Convenience method for immediate text rendering within an existing render pass.
+    /// This handles glyph preparation, layout, and rendering in one call.
+    /// For better performance with multiple texts, use queue_text() + render_queued_text().
     pub fn render_text<'a>(
         &mut self,
         render_pass: &mut RenderPass<'a>,
@@ -584,16 +391,71 @@ impl TextRenderer {
             None, // TODO: Collision constraints will be added in a future text layout story
         )?;
 
-        // Render the prepared glyphs
-        self.render_prepared_glyphs(
-            render_pass,
-            device,
-            queue,
-            &layout_result.glyphs,
-            config.font_atlas,
-            config.screen_width,
-            config.screen_height,
-        )?;
+        if layout_result.glyphs.is_empty() {
+            return Ok(layout_result.bounds);
+        }
+
+        // Create vertices for immediate rendering
+        let vertices = self.create_vertices(&layout_result.glyphs);
+        if vertices.is_empty() {
+            return Ok(layout_result.bounds);
+        }
+
+        // Ensure vertex buffer capacity
+        if vertices.len() > self.vertex_capacity {
+            let new_capacity = vertices.len().max(self.vertex_capacity * 2);
+            let capped_capacity = new_capacity.min(65535);
+            if vertices.len() > capped_capacity {
+                return Err(GupError::render_error("Too many text vertices"));
+            }
+            self.resize_buffers(device, capped_capacity)?;
+        }
+
+        // Upload vertices for immediate rendering
+        queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(&vertices));
+
+        // Update uniform buffer
+        let projection = self.create_projection_matrix(config.screen_width, config.screen_height);
+        let uniforms = TextUniforms {
+            projection,
+            screen_size: [config.screen_width, config.screen_height],
+            _padding: [0.0, 0.0],
+        };
+        queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
+
+        // Create bind group
+        let font_texture_view = config
+            .font_atlas
+            .texture()
+            .create_view(&TextureViewDescriptor::default());
+        let bind_group = device.create_bind_group(&BindGroupDescriptor {
+            label: Some("Text Bind Group"),
+            layout: &self.bind_group_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: self.uniform_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::TextureView(&font_texture_view),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: BindingResource::Sampler(&self.sampler),
+                },
+            ],
+        });
+
+        // Set up render state and draw
+        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_bind_group(0, &bind_group, &[]);
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+
+        // Single draw call for this text
+        let total_indices = (vertices.len() / 4) * 6; // 6 indices per quad (4 vertices per quad)
+        render_pass.draw_indexed(0..total_indices as u32, 0, 0..1);
 
         Ok(layout_result.bounds)
     }
@@ -701,8 +563,7 @@ impl std::fmt::Debug for TextRenderer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TextRenderer")
             .field("vertex_capacity", &self.vertex_capacity)
-            .field("vertex_count", &self.vertex_count)
-            .field("render_batches", &self.render_batches.len())
+            .field("queued_vertices", &self.render_queue.len())
             .finish()
     }
 }
@@ -737,9 +598,7 @@ mod tests {
             index_buffer: unsafe { mem::zeroed() },
             uniform_buffer: unsafe { mem::zeroed() },
             vertex_capacity: 1024,
-            vertex_count: 0,
-            frame_vertices: Vec::new(),
-            render_batches: Vec::new(),
+            render_queue: Vec::new(),
             sampler: unsafe { mem::zeroed() },
         };
 
@@ -764,9 +623,7 @@ mod tests {
             index_buffer: unsafe { mem::zeroed() },
             uniform_buffer: unsafe { mem::zeroed() },
             vertex_capacity: 1024,
-            vertex_count: 0,
-            frame_vertices: Vec::new(),
-            render_batches: Vec::new(),
+            render_queue: Vec::new(),
             sampler: unsafe { mem::zeroed() },
         };
 
@@ -817,9 +674,7 @@ mod tests {
             index_buffer: unsafe { mem::zeroed() },
             uniform_buffer: unsafe { mem::zeroed() },
             vertex_capacity: 1024,
-            vertex_count: 0,
-            frame_vertices: Vec::new(),
-            render_batches: Vec::new(),
+            render_queue: Vec::new(),
             sampler: unsafe { mem::zeroed() },
         };
 

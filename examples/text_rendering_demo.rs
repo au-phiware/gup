@@ -74,16 +74,11 @@ impl TextRenderingApp {
     }
 
     fn generate_demo_texts() -> Vec<TextDemo> {
-        vec![
-            /*
-            // ONLY ONE SIMPLE TEST STRING
-            TextDemo {
-                position: Vec2 { x: 100.0, y: 100.0 },
-                text: "Hello, World. Testing 123".to_string(),
-                style: TextStyle::new(72.0).with_rgba(1.0, 0.0, 0.0, 1.0),
-            },
-            */
-        ]
+        vec![TextDemo {
+            position: Vec2 { x: 100.0, y: 100.0 },
+            text: "Hello, World. Testing 123".to_string(),
+            style: TextStyle::new(72.0).with_rgba(1.0, 0.0, 0.0, 1.0),
+        }]
     }
 
     async fn create_context(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -194,10 +189,7 @@ impl TextRenderingApp {
                         let (screen_width, screen_height) =
                             actual_surface_size.unwrap_or((1200.0, 800.0));
 
-                        // Create a single render pass and do all rendering within it
-                        let mut render_pass = frame.render_pass(Some(clear_color));
-
-                        // Render all demo texts
+                        // Queue all text BEFORE creating render pass (to avoid borrowing conflicts)
                         if let (Some(text_renderer), Some(font_atlas), Some(layout_engine)) = (
                             &mut self.text_renderer,
                             &mut self.font_atlas,
@@ -206,9 +198,9 @@ impl TextRenderingApp {
                             // Reset text renderer state for new frame
                             text_renderer.begin_frame();
 
-                            let mut render_count = 0;
+                            // Queue demo texts
                             for text_demo in &self.demo_texts {
-                                let config = TextRenderConfig {
+                                let mut config = TextRenderConfig {
                                     text: &text_demo.text,
                                     position: text_demo.position,
                                     style: &text_demo.style,
@@ -218,22 +210,16 @@ impl TextRenderingApp {
                                     screen_height,
                                 };
 
-                                if text_renderer
-                                    .render_text(&mut render_pass, &device, &queue, config)
-                                    .is_err()
-                                {
-                                    eprintln!("⚠️ Failed to render text '{}'", text_demo.text);
-                                } else {
-                                    render_count += 1;
+                                if text_renderer.queue_text(&frame, &mut config).is_err() {
+                                    eprintln!("⚠️ Failed to queue text '{}'", text_demo.text);
                                 }
                             }
 
-                            // Generate additional performance test texts - SIMPLE HORIZONTAL LINE
+                            // Queue additional performance test texts - SIMPLE HORIZONTAL LINE
                             let test_texts = ["1", "10", "22", "ABC"];
                             for (i, text) in test_texts.iter().enumerate() {
                                 let x = 50.0 + i as f32 * 150.0; // Simple horizontal spacing
                                 let y = 300.0; // All at same height
-                                println!("🧪 Testing text '{text}' at ({x:.1}, {y:.1})");
 
                                 // Different colors to distinguish them
                                 let color = match i {
@@ -245,8 +231,8 @@ impl TextRenderingApp {
                                 let style = TextStyle::new(48.0)
                                     .with_rgba(color[0], color[1], color[2], color[3]);
 
-                                let config = TextRenderConfig {
-                                    text, // Changed from &text since text is already &str
+                                let mut config = TextRenderConfig {
+                                    text,
                                     position: Vec2 { x, y },
                                     style: &style,
                                     font_atlas,
@@ -255,25 +241,33 @@ impl TextRenderingApp {
                                     screen_height,
                                 };
 
-                                if text_renderer
-                                    .render_text(&mut render_pass, &device, &queue, config)
-                                    .is_ok()
-                                {
-                                    render_count += 1;
-                                } else {
-                                    eprintln!("⚠️ Failed to render test text '{text}'");
+                                if text_renderer.queue_text(&frame, &mut config).is_err() {
+                                    eprintln!("⚠️ Failed to queue test text '{text}'");
                                 }
                             }
+                        }
 
-                            // Debug: Report how many texts were rendered this frame
-                            use std::sync::atomic::{AtomicU32, Ordering};
-                            static FRAME_COUNT: AtomicU32 = AtomicU32::new(0);
-                            let frame = FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
-                            if frame % 60 == 0 {
-                                // Report every 60 frames
-                                println!(
-                                    "📊 Frame {frame}: Successfully rendered {render_count} texts"
-                                );
+                        // Create render pass and render all queued text
+                        let mut render_pass = frame.render_pass(Some(clear_color));
+
+                        if let (Some(text_renderer), Some(font_atlas), _layout_engine) = (
+                            &mut self.text_renderer,
+                            &mut self.font_atlas,
+                            &mut self.layout_engine,
+                        ) {
+                            // Render ALL queued text with a single draw call!
+                            if text_renderer
+                                .render_queued_text(
+                                    &mut render_pass,
+                                    &device,
+                                    &queue,
+                                    font_atlas,
+                                    screen_width,
+                                    screen_height,
+                                )
+                                .is_err()
+                            {
+                                eprintln!("⚠️ Failed to render queued text");
                             }
                         }
 
@@ -469,6 +463,23 @@ mod tests {
         let demo_texts = TextRenderingApp::generate_demo_texts();
 
         // Should have variety in font sizes
+        let mut font_sizes: Vec<f32> = demo_texts.iter().map(|t| t.style.font_size).collect();
+        font_sizes.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        font_sizes.dedup();
+
+        assert!(
+            font_sizes.len() >= 5,
+            "Should have at least 5 different font sizes"
+        );
+
+        // Should have different anchors
+        let anchors: Vec<_> = demo_texts.iter().map(|t| t.style.anchor).collect();
+        let unique_anchors: std::collections::HashSet<_> = anchors.into_iter().collect();
+
+        assert!(
+            unique_anchors.len() >= 3,
+            "Should have at least 3 different text anchors"
+        );
         let mut font_sizes: Vec<f32> = demo_texts.iter().map(|t| t.style.font_size).collect();
         font_sizes.sort_by(|a, b| a.partial_cmp(b).unwrap());
         font_sizes.dedup();
