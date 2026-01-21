@@ -41,14 +41,12 @@ testing results.
 ## Investigation Tasks
 
 1. **Data Flow Validation**
-
    - [x] Verify Rust `ElementData` struct layout with `std::mem::size_of` and
          alignment
    - [x] Validate WGSL `ElementData` struct matches Rust layout exactly
    - [x] Add debug staging buffer downloads to inspect uploaded GPU data
 
 2. **Buffer Management Analysis**
-
    - [x] Review buffer creation, upload, and binding code paths
    - [x] Test with simplified single-element data to isolate the issue
    - [x] Validate buffer usage flags and alignment requirements

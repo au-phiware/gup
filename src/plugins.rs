@@ -265,11 +265,11 @@ impl MixablePluginRegistry {
         let type_id = TypeId::of::<T>();
 
         // Check if we have a cached mapping for this type
-        if let Some(plugin_name) = self.type_mappings.get(&type_id) {
-            if let Some(plugin) = self.plugins.get(plugin_name) {
-                let boxed_object = Box::new(object);
-                return Some(plugin.create_mixable(boxed_object));
-            }
+        if let Some(plugin_name) = self.type_mappings.get(&type_id)
+            && let Some(plugin) = self.plugins.get(plugin_name)
+        {
+            let boxed_object = Box::new(object);
+            return Some(plugin.create_mixable(boxed_object));
         }
 
         // Search through all plugins for one that can handle this type
@@ -302,10 +302,10 @@ impl MixablePluginRegistry {
         type_id: TypeId,
     ) -> Option<Box<dyn Mixable<Output = ()>>> {
         // Check if we have a cached mapping for this type
-        if let Some(plugin_name) = self.type_mappings.get(&type_id) {
-            if let Some(plugin) = self.plugins.get(plugin_name) {
-                return Some(plugin.create_mixable(object));
-            }
+        if let Some(plugin_name) = self.type_mappings.get(&type_id)
+            && let Some(plugin) = self.plugins.get(plugin_name)
+        {
+            return Some(plugin.create_mixable(object));
         }
 
         // Search through all plugins for one that can handle this type

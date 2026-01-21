@@ -35,19 +35,16 @@ Moving to AST-based composition would provide:
 ### Functional Requirements
 
 1. **AST-Based WGSL Generation**
-
    - Replace string-based shader composition with proper AST manipulation
    - Parse existing WGSL templates into AST representation
    - Generate WGSL from AST with proper formatting
 
 2. **Type-Safe Function Composition**
-
    - Validate input/output types between composed functions at composition time
    - Provide clear error messages for type mismatches
    - Support automatic type conversion where appropriate
 
 3. **Advanced Optimizations**
-
    - Dead code elimination for unused shader functions
    - Constant folding across function boundaries
    - Loop unrolling for small constant iterations
@@ -69,7 +66,6 @@ Moving to AST-based composition would provide:
 ## Acceptance Criteria
 
 1. **AST Implementation**
-
    - [ ] WGSL AST types for all relevant constructs (functions, types,
          expressions)
    - [ ] Parser to convert WGSL text to AST
@@ -77,19 +73,16 @@ Moving to AST-based composition would provide:
    - [ ] Round-trip tests: WGSL → AST → WGSL preserves semantics
 
 2. **Type System**
-
    - [ ] Type checking for function input/output compatibility
    - [ ] Automatic type promotion (e.g., f32 → vec3\<f32\> with zero padding)
    - [ ] Clear error messages for type mismatches
 
 3. **Optimization Passes**
-
    - [ ] Dead code elimination removes unused functions
    - [ ] Constant folding simplifies expressions
    - [ ] Function inlining for small functions (\<10 instructions)
 
 4. **Error Handling**
-
    - [ ] Syntax errors report line/column information
    - [ ] Type errors include expected vs actual types
    - [ ] Composition errors suggest valid alternatives
@@ -179,12 +172,10 @@ pub struct FunctionInlining { max_instructions: usize };
 ## Risks and Mitigations
 
 1. **Risk**: AST parsing complexity for full WGSL syntax
-
    - **Mitigation**: Start with subset needed for shader functions, expand
      incrementally
 
 2. **Risk**: Performance regression compared to string approach
-
    - **Mitigation**: Implement caching and lazy evaluation, benchmark
      continuously
 

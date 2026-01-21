@@ -244,10 +244,11 @@ impl ErrorReporter {
         self.aggregator.add_error(context.clone());
 
         // Send to error sink if telemetry is enabled
-        if self.config.enable_telemetry && self.error_sink.is_available() {
-            if let Err(sink_error) = self.error_sink.send_error(&context) {
-                log::error!("Failed to report error: {sink_error}");
-            }
+        if self.config.enable_telemetry
+            && self.error_sink.is_available()
+            && let Err(sink_error) = self.error_sink.send_error(&context)
+        {
+            log::error!("Failed to report error: {sink_error}");
         }
 
         // Log locally based on severity

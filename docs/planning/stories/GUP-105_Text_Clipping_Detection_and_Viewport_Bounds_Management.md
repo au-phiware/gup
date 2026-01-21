@@ -256,7 +256,6 @@ impl TextLayoutEngine {
 #### Phase 1: Core Clipping Detection (3 days)
 
 1. **Boundary Detection Infrastructure**
-
    - Implement ViewportBounds and TextMargins structures
    - Create ClippingDetector with accurate boundary checking algorithms
    - Add clipping result types and edge detection logic
@@ -271,14 +270,12 @@ impl TextLayoutEngine {
 #### Phase 2: Clipping Strategy Implementation (3 days)
 
 1. **Truncation with Ellipsis**
-
    - Implement intelligent text truncation algorithms
    - Word boundary preservation logic
    - Configurable ellipsis styling and positioning
    - Support for different text directions and anchors
 
 2. **Dynamic Font Scaling**
-
    - Binary search algorithm for optimal font size
    - Minimum font size constraints and validation
    - Integration with existing TextStyle font size system
@@ -293,7 +290,6 @@ impl TextLayoutEngine {
 #### Phase 3: Advanced Features (2 days)
 
 1. **Text Wrapping Implementation**
-
    - Multi-line text layout algorithms
    - Line height and spacing calculations
    - Word wrapping with hyphenation considerations

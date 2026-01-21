@@ -36,19 +36,16 @@ Key performance bottlenecks identified:
 ### Functional Requirements
 
 1. **GPU Instancing**
-
    - Implement instanced rendering for marks with identical geometry
    - Support per-instance attributes (position, color, size)
    - Batch multiple mark types in single draw call where possible
 
 2. **Advanced Caching**
-
    - Cache compiled shader pipelines across frames
    - Implement geometry caching for complex marks
    - Add attribute buffer pooling to reduce allocations
 
 3. **Culling and LOD**
-
    - Frustum culling to skip off-screen marks
    - Level-of-detail based on screen space size
    - Occlusion culling for overlapped marks
@@ -61,7 +58,6 @@ Key performance bottlenecks identified:
 ### Non-Functional Requirements
 
 1. **Performance Targets**:
-
    - 100K points: \<1ms render time
    - 1M points: \<10ms render time
    - Memory usage: \<50MB for 1M points
@@ -74,28 +70,24 @@ Key performance bottlenecks identified:
 ## Acceptance Criteria
 
 1. **Instancing Implementation**
-
    - [ ] GPU instancing for Circle, Rectangle, and Line marks
    - [ ] Per-instance attribute buffers (position, color, size, rotation)
    - [ ] Batch rendering of up to 10K instances per draw call
    - [ ] Benchmark shows 10x performance improvement for repeated geometry
 
 2. **Caching System**
-
    - [ ] Pipeline cache with LRU eviction policy
    - [ ] Geometry buffer pooling with automatic resizing
    - [ ] Attribute buffer reuse across frames
    - [ ] Cache hit rate >90% for typical use cases
 
 3. **Culling and LOD**
-
    - [ ] Frustum culling reduces processed marks by 50-80% for typical views
    - [ ] LOD system with 3 levels (full, simplified, point)
    - [ ] Automatic LOD selection based on screen space size
    - [ ] Occlusion culling for dense point clouds
 
 4. **Performance Benchmarks**
-
    - [ ] 100K circles render in \<1ms (instanced)
    - [ ] 1M points with mixed marks render in \<10ms
    - [ ] Memory usage scales linearly with data size
@@ -200,12 +192,10 @@ impl CullingManager {
 ## Risks and Mitigations
 
 1. **Risk**: GPU memory limits for large instance buffers
-
    - **Mitigation**: Implement streaming for datasets >1M points, compress
      instance data
 
 2. **Risk**: Complexity of batching different mark types
-
    - **Mitigation**: Start with single mark type batching, expand incrementally
 
 3. **Risk**: LOD affecting visual quality

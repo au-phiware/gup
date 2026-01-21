@@ -205,7 +205,7 @@ impl RenderContext {
     }
 
     /// Begin a new render pass with automatic surface handling
-    pub fn begin_render_pass(&mut self) -> GupResult<ActiveRenderPass> {
+    pub fn begin_render_pass(&mut self) -> GupResult<ActiveRenderPass<'_>> {
         let encoder = self.encoder_pool.get(&self.device)?;
 
         let (view, present_after) = if let Some(surface) = &self.surface {
@@ -600,7 +600,7 @@ pub struct ActiveRenderPass<'a> {
 
 impl<'a> ActiveRenderPass<'a> {
     /// Create a render pass targeting the render target
-    pub fn render_pass(&mut self, clear_color: Option<Color>) -> RenderPass {
+    pub fn render_pass(&mut self, clear_color: Option<Color>) -> RenderPass<'_> {
         let clear_value = clear_color.unwrap_or(Color {
             r: 0.0,
             g: 0.0,

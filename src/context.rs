@@ -489,7 +489,7 @@ impl GupContext {
     }
 
     /// Begin frame rendering for a specific surface.
-    pub fn begin_frame_for_surface(&mut self, id: SurfaceId) -> GupResult<RenderFrame> {
+    pub fn begin_frame_for_surface(&mut self, id: SurfaceId) -> GupResult<RenderFrame<'_>> {
         self.frame_start_time = Some(Instant::now());
 
         let surface = self
@@ -520,7 +520,7 @@ impl GupContext {
     }
 
     /// Begin frame rendering.
-    pub fn begin_frame(&mut self) -> GupResult<RenderFrame> {
+    pub fn begin_frame(&mut self) -> GupResult<RenderFrame<'_>> {
         self.frame_start_time = Some(Instant::now());
 
         let (surface_texture, render_target) = if let Some(primary_id) = self.primary_surface_id {
@@ -699,7 +699,7 @@ pub struct RenderFrame<'a> {
 
 impl<'a> RenderFrame<'a> {
     /// Create a render pass targeting the render target.
-    pub fn render_pass(&mut self, clear_color: Option<Color>) -> RenderPass {
+    pub fn render_pass(&mut self, clear_color: Option<Color>) -> RenderPass<'_> {
         let clear_value = clear_color.unwrap_or(Color {
             r: 0.0,
             g: 0.0,

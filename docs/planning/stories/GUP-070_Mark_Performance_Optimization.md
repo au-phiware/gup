@@ -41,19 +41,16 @@ benchmarking revealed several optimization opportunities:
 ### Performance Targets
 
 1. **GPU Memory Layout Optimization**
-
    - Improve GPU cache hit rates for mark vertex data
    - Target: 15-25% improvement in vertex processing performance
    - Optimize struct alignment and padding for GPU efficiency
 
 2. **Batch Rendering Optimization**
-
    - Reduce per-instance overhead for large datasets
    - Target: 10K+ instances in <30ms (current: ~50ms)
    - Implement efficient batching strategies for mark groups
 
 3. **Pipeline State Caching Enhancement**
-
    - Cache pipeline variations for blend mode combinations
    - Target: <0.1ms for blend state + mark type combinations
    - Reduce pipeline creation overhead for complex compositions
@@ -249,14 +246,12 @@ impl MarkBufferPool {
 ## Success Criteria
 
 1. **Performance Improvements**
-
    - 15-25% improvement in vertex processing performance
    - 10K+ instances render in <30ms (improvement from ~50ms)
    - Pipeline state transitions in <0.1ms
    - 50% reduction in allocation overhead with pooling
 
 2. **Scalability Achievements**
-
    - Support 100K+ instances with linear performance scaling
    - Memory usage growth <1.5x for 10x instance increase
    - No performance cliffs or sudden degradation at scale

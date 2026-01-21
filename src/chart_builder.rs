@@ -379,10 +379,10 @@ where
         let chart_area = self.calculate_chart_area();
 
         // Phase 1: Render grid lines (behind everything else)
-        if self.config.show_grid {
-            if let Some(grid_system) = &mut self.grid_system {
-                Self::render_grid_lines_static(grid_system, context, &chart_area)?;
-            }
+        if self.config.show_grid
+            && let Some(grid_system) = &mut self.grid_system
+        {
+            Self::render_grid_lines_static(grid_system, context, &chart_area)?;
         }
 
         // Phase 2: Render main visualization (data points, on top of grid)

@@ -153,10 +153,10 @@ impl RecoveryManager {
     pub fn recover(&mut self, context: &ErrorContext) -> GupResult<RecoveryResult> {
         let start_time = Instant::now();
 
-        if let Some(suggestion) = context.primary_recovery_suggestion() {
-            if let Some(action) = &suggestion.action {
-                return self.execute_recovery_action(context, action, start_time);
-            }
+        if let Some(suggestion) = context.primary_recovery_suggestion()
+            && let Some(action) = &suggestion.action
+        {
+            return self.execute_recovery_action(context, action, start_time);
         }
 
         // Try automatic recovery based on error type

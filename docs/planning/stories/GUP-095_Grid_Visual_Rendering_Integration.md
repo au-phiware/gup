@@ -355,20 +355,17 @@ This story enhances:
 ### Key Deliverables Implemented
 
 1. **Grid-to-Selection Bridge** (`src/grid.rs:444-469`)
-
    - `GridRenderer.create_grid_selections()` method converts grid data to
      Selection instances
    - Supports major/minor horizontal and vertical grid lines
    - Seamless integration with existing rendering pipeline
 
 2. **Line Mark Implementation** (`src/selection.rs:124-145`)
-
    - Complete Line mark with LineAttributes structure
    - GPU-compatible vertex layout with proper alignment
    - wgpu LineList topology for efficient line rendering
 
 3. **Chart Builder Integration** (`src/chart_builder.rs`)
-
    - Enhanced ComposedChart with grid_system field
    - RenderLayerManager for proper z-ordering
    - Grid rendering phases: grid → data → axes

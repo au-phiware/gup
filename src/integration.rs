@@ -479,7 +479,7 @@ pub mod conversion {
     /// Panics if the input vector has an odd number of elements.
     pub fn flat_coords_to_points(coords: &[f32]) -> Vec<[f32; 2]> {
         assert!(
-            coords.len() % 2 == 0,
+            coords.len().is_multiple_of(2),
             "Coordinate vector must have an even number of elements"
         );
 

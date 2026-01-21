@@ -35,19 +35,16 @@ response times.
 ### Functional Requirements
 
 1. **GPU-Based Hit Testing**
-
    - Render marks to off-screen selection buffer with unique IDs
    - Use mouse coordinates to query selection buffer for clicked mark
    - Support sub-pixel accuracy for small marks
 
 2. **Selection State Management**
-
    - Track selected/unselected state for each mark
    - Support single-selection and multi-selection modes
    - Implement selection persistence across data updates
 
 3. **Visual Selection Feedback**
-
    - Highlight selected marks with configurable styling
    - Hover effects that activate on mouse movement
    - Selection indicators (outlines, color changes, size scaling)
@@ -68,28 +65,24 @@ response times.
 ## Acceptance Criteria
 
 1. **Hit Testing Implementation**
-
    - [ ] Off-screen selection buffer rendering with unique mark IDs
    - [ ] Mouse coordinate to mark ID mapping in \<1ms
    - [ ] Sub-pixel accuracy for marks smaller than 1px screen space
    - [ ] Correct hit testing with marks of different shapes/sizes
 
 2. **Selection State System**
-
    - [ ] Efficient selection state storage (bitset for 1M+ marks)
    - [ ] Selection persistence during data updates/filtering
    - [ ] Undo/redo support for selection operations
    - [ ] Selection state serialization for save/load
 
 3. **Visual Feedback**
-
    - [ ] Configurable selection highlighting (color, outline, scale)
    - [ ] Smooth hover animations (\<16ms transition time)
    - [ ] Selection indicators don't interfere with mark rendering
    - [ ] Support for multiple selection visual styles
 
 4. **Interactive Tools**
-
    - [ ] Rectangle selection with real-time visual feedback
    - [ ] Lasso selection using mouse path
    - [ ] Keyboard modifiers (Ctrl, Shift) for selection modes
@@ -230,11 +223,9 @@ pub struct MarkStyle {
 ## Risks and Mitigations
 
 1. **Risk**: Selection buffer readback latency on some GPUs
-
    - **Mitigation**: Implement async readback with frame delay, add CPU fallback
 
 2. **Risk**: Complex interaction between selection and other systems
-
    - **Mitigation**: Design clean interfaces, comprehensive integration tests
 
 3. **Risk**: Touch selection accuracy on mobile devices

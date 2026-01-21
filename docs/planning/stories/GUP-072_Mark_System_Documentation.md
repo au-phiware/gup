@@ -34,21 +34,18 @@ Key documentation needs identified:
 ### Documentation Categories
 
 1. **Architecture Documentation**
-
    - Mark system design principles and patterns
    - Integration with GPU rendering pipeline
    - Relationship to shader system and buffer management
    - Performance characteristics and design decisions
 
 2. **API Reference Documentation**
-
    - Complete API reference for Mark trait and related types
    - MarkRegistry and MarkRenderer documentation
    - Integration APIs for advanced features
    - Error handling and troubleshooting reference
 
 3. **Developer Guides**
-
    - Getting started with mark rendering
    - Implementing custom marks (simple to advanced)
    - Performance optimization for mark-based applications
@@ -309,14 +306,12 @@ to complex multi-pass rendering effects.
 ## Success Criteria
 
 1. **Completeness**
-
    - Complete API coverage for all mark-related functionality
    - Clear progression from beginner to advanced topics
    - Comprehensive error handling and troubleshooting guidance
    - Performance characteristics documented with benchmarks
 
 2. **Usability**
-
    - Developers can implement basic custom marks in <30 minutes
    - Advanced features accessible through guided examples
    - Clear migration paths between different complexity levels

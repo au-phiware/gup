@@ -128,7 +128,7 @@ impl MemoryLayoutValidator {
         let alignment = std::mem::align_of::<T>();
 
         // WGSL alignment rules
-        if size % 16 != 0 && size > 16 {
+        if !size.is_multiple_of(16) && size > 16 {
             result.warnings.push(format!(
                 "Struct size {size} is not 16-byte aligned. WGSL prefers 16-byte alignment for larger structs."
             ));
@@ -330,7 +330,7 @@ fn validate_element_data(result: &mut LayoutValidationResult) {
     ];
 
     // Validate alignment requirements for WGSL compatibility
-    if result.rust_size % 16 == 0 {
+    if result.rust_size.is_multiple_of(16) {
         result
             .recommendations
             .push("✓ Struct is 16-byte aligned for optimal GPU performance".to_string());

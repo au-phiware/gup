@@ -179,20 +179,20 @@ impl MultiWindowApp {
     }
 
     fn print_stats(&mut self) {
-        if let Some(context) = self.context.take() {
-            if let Ok(ctx) = Arc::try_unwrap(context) {
-                let stats = ctx.frame_stats();
-                println!("\n=== Performance Statistics ===");
-                println!("Frames rendered: {}", stats.frames_rendered);
-                println!("Average frame time: {:.2}ms", stats.avg_frame_time);
-                println!("Current FPS: {:.1}", stats.fps());
-                println!("GPU memory usage: {} bytes", stats.gpu_memory_usage);
-                println!("Active windows: {}", self.windows.len());
-                println!("Total frames rendered by app: {}", self.frame_count);
+        if let Some(context) = self.context.take()
+            && let Ok(ctx) = Arc::try_unwrap(context)
+        {
+            let stats = ctx.frame_stats();
+            println!("\n=== Performance Statistics ===");
+            println!("Frames rendered: {}", stats.frames_rendered);
+            println!("Average frame time: {:.2}ms", stats.avg_frame_time);
+            println!("Current FPS: {:.1}", stats.fps());
+            println!("GPU memory usage: {} bytes", stats.gpu_memory_usage);
+            println!("Active windows: {}", self.windows.len());
+            println!("Total frames rendered by app: {}", self.frame_count);
 
-                // Restore context
-                self.context = Some(Arc::new(ctx));
-            }
+            // Restore context
+            self.context = Some(Arc::new(ctx));
         }
     }
 }

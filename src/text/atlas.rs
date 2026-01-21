@@ -5,7 +5,6 @@
 
 use super::*;
 use crate::error::{GupError, GupResult};
-use fontdue::{Font, FontSettings};
 use std::collections::HashMap;
 use wgpu::{
     Device, Extent3d, Origin3d, Queue, TexelCopyBufferLayout, TexelCopyTextureInfo, Texture,
@@ -15,14 +14,19 @@ use wgpu::{
 
 /// SDF font atlas for GPU text rendering.
 pub struct FontAtlas {
-    /// GPU texture containing SDF glyph data
+    /// GPU texture containing MSDF glyph data (RGBA for 3-channel MSDF)
     atlas_texture: Texture,
     /// Glyph metadata (positions, sizes, metrics)
     glyph_info: HashMap<char, GlyphInfo>,
     /// Font metrics (line height, baseline, etc.)
     font_metrics: FontMetrics,
-    /// Fontdue font instance
-    font: Font,
+    /// Font data for ttf_parser (kept for potential future use)
+    #[allow(dead_code)]
+    font_data: Vec<u8>,
+    /// ttf_parser face instance
+    font: ttf_parser::Face<'static>,
+    /// MSDF generator
+    msdf_generator: MsdfGenerator,
     /// Current atlas position for glyph packing
     current_x: u32,
     current_y: u32,
@@ -36,19 +40,23 @@ impl FontAtlas {
     pub fn new(device: &Device, queue: &Queue, font_size: f32) -> GupResult<Self> {
         // Use embedded font. System font loading will be implemented in GUP-106.
         let font_data = Self::get_default_font_data();
-        let font = Font::from_bytes(font_data, FontSettings::default())
-            .map_err(|e| GupError::resource_error(format!("Failed to load font: {e}")))?;
+        let font = ttf_parser::Face::parse(font_data, 0)
+            .map_err(|e| GupError::resource_error(format!("Failed to parse font: {e:?}")))?;
 
         let atlas_size = sdf::ATLAS_SIZE;
 
-        // Create initial atlas data with SDF outside value (0 = far outside)
-        let atlas_data = vec![0u8; (atlas_size * atlas_size) as usize];
+        // Create MSDF generator with default config
+        let msdf_config = MsdfConfig::default();
+        let msdf_generator = MsdfGenerator::new(font_data.to_vec(), msdf_config)?;
 
-        // Create the atlas texture with initial data
+        // Create initial atlas data with MSDF outside value (RGBA: 0,0,0,255 = far outside)
+        let atlas_data = vec![0u8; (atlas_size * atlas_size * 4) as usize]; // RGBA format
+
+        // Create the atlas texture with initial data (RGBA for MSDF)
         let atlas_texture = device.create_texture_with_data(
             queue,
             &TextureDescriptor {
-                label: Some("Font Atlas"),
+                label: Some("MSDF Font Atlas"),
                 size: wgpu::Extent3d {
                     width: atlas_size,
                     height: atlas_size,
@@ -57,7 +65,7 @@ impl FontAtlas {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: TextureDimension::D2,
-                format: TextureFormat::R8Unorm, // Single channel for SDF
+                format: TextureFormat::Rgba8Unorm, // RGBA for 3-channel MSDF + alpha
                 usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
                 view_formats: &[],
             },
@@ -65,14 +73,16 @@ impl FontAtlas {
             &atlas_data,
         );
 
-        // Calculate font metrics
+        // Calculate font metrics from ttf_parser
         let font_metrics = Self::calculate_font_metrics(&font, font_size);
 
         let mut atlas = Self {
             atlas_texture,
             glyph_info: HashMap::new(),
             font_metrics,
+            font_data: font_data.to_vec(),
             font,
+            msdf_generator,
             current_x: 0,
             current_y: 0,
             current_row_height: 0,
@@ -122,35 +132,39 @@ impl FontAtlas {
         character: char,
         font_size: f32,
     ) -> GupResult<()> {
-        let (metrics, bitmap) = self.font.rasterize(character, font_size);
+        // Get glyph ID from character
+        let glyph_id = self.font.glyph_index(character).ok_or_else(|| {
+            GupError::resource_error(format!("Glyph not found for character: {character}"))
+        })?;
 
-        if metrics.width == 0 || metrics.height == 0 {
-            // Handle whitespace and non-renderable characters
+        // Check if glyph has outline - try to get bounding box as a proxy
+        let has_outline = self.font.glyph_bounding_box(glyph_id).is_some();
+
+        if !has_outline {
+            // Handle non-outline glyphs (whitespace, etc.)
+            let advance = self.font.glyph_hor_advance(glyph_id).unwrap_or(0) as f32;
+            let scale = font_size / self.font.units_per_em() as f32;
+
             let glyph_info = GlyphInfo {
                 character,
                 atlas_pos: [0.0, 0.0, 0.0, 0.0], // Empty region
                 size: Vec2 { x: 0.0, y: 0.0 },
-                bearing: Vec2 {
-                    x: metrics.xmin as f32,
-                    y: metrics.ymin as f32,
-                },
-                advance: metrics.advance_width,
+                bearing: Vec2 { x: 0.0, y: 0.0 },
+                advance: advance * scale,
                 sdf_scale: 1.0,
             };
             self.glyph_info.insert(character, glyph_info);
             return Ok(());
         }
 
-        // Convert bitmap to SDF
-        let sdf_bitmap = self.generate_sdf(&bitmap, metrics.width, metrics.height);
+        // Generate MSDF for the glyph
+        let msdf_bitmap = self.msdf_generator.generate_msdf(glyph_id)?;
+        let glyph_width = msdf_bitmap.width as u32;
+        let glyph_height = msdf_bitmap.height as u32;
 
-        // Find space in atlas - allocate enough for glyph + full SDF range
-        let sdf_buffer = (sdf::SDF_RANGE * 2.0) as u32; // Full SDF range on both sides
-        let glyph_width = metrics.width as u32 + sdf_buffer;
-        let glyph_height = metrics.height as u32 + sdf_buffer;
-
+        // Find space in atlas
         if self.current_x + glyph_width > self.atlas_size {
-            // Move to next row - no spacing needed since each glyph includes SDF range
+            // Move to next row
             self.current_x = 0;
             self.current_y += self.current_row_height;
             self.current_row_height = 0;
@@ -160,11 +174,13 @@ impl FontAtlas {
             return Err(GupError::resource_error("Font atlas is full".to_string()));
         }
 
-        // Upload SDF data to texture
+        // Convert MSDF bitmap to RGBA pixel data
+        let rgba_pixels = msdf_bitmap.to_rgba_pixels();
+
+        // Upload MSDF data to texture (RGBA format)
         let upload_x = self.current_x;
         let upload_y = self.current_y;
 
-        // Upload the SDF bitmap to the texture atlas
         queue.write_texture(
             TexelCopyTextureInfo {
                 texture: &self.atlas_texture,
@@ -176,10 +192,10 @@ impl FontAtlas {
                 },
                 aspect: TextureAspect::All,
             },
-            &sdf_bitmap,
+            &rgba_pixels,
             TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(glyph_width), // R8Unorm = 1 byte per pixel
+                bytes_per_row: Some(glyph_width * 4), // RGBA = 4 bytes per pixel
                 rows_per_image: Some(glyph_height),
             },
             Extent3d {
@@ -189,113 +205,50 @@ impl FontAtlas {
             },
         );
 
+        // Get glyph metrics from ttf_parser
+        let advance = self.font.glyph_hor_advance(glyph_id).unwrap_or(0) as f32;
+        let scale = font_size / self.font.units_per_em() as f32;
+
+        // Get glyph bounding box
+        let bbox = self.font.glyph_bounding_box(glyph_id);
+        let (width, height, bearing_x, bearing_y) = if let Some(bbox) = bbox {
+            let width = (bbox.x_max - bbox.x_min) as f32 * scale;
+            let height = (bbox.y_max - bbox.y_min) as f32 * scale;
+            let bearing_x = bbox.x_min as f32 * scale;
+            let bearing_y = bbox.y_min as f32 * scale;
+            (width, height, bearing_x, bearing_y)
+        } else {
+            (font_size * 0.6, font_size, 0.0, 0.0) // Fallback
+        };
+
         // Create glyph info
         let glyph_info = GlyphInfo {
             character,
             atlas_pos: [
-                (upload_x as f32 + sdf::SDF_RANGE) / self.atlas_size as f32,
-                (upload_y as f32 + sdf::SDF_RANGE) / self.atlas_size as f32,
-                (upload_x as f32 + metrics.width as f32 + sdf::SDF_RANGE) / self.atlas_size as f32,
-                (upload_y as f32 + metrics.height as f32 + sdf::SDF_RANGE) / self.atlas_size as f32,
+                upload_x as f32 / self.atlas_size as f32,
+                upload_y as f32 / self.atlas_size as f32,
+                (upload_x + glyph_width) as f32 / self.atlas_size as f32,
+                (upload_y + glyph_height) as f32 / self.atlas_size as f32,
             ],
             size: Vec2 {
-                x: metrics.width as f32,
-                y: metrics.height as f32,
+                x: width,
+                y: height,
             },
             bearing: Vec2 {
-                x: metrics.xmin as f32,
-                y: metrics.ymin as f32,
+                x: bearing_x,
+                y: bearing_y,
             },
-            advance: metrics.advance_width,
-            sdf_scale: sdf::SDF_RANGE,
+            advance: advance * scale,
+            sdf_scale: 1.0, // MSDF scale is handled in the shader
         };
 
         self.glyph_info.insert(character, glyph_info);
 
-        // Update atlas position - no spacing needed
+        // Update atlas position
         self.current_x += glyph_width;
         self.current_row_height = self.current_row_height.max(glyph_height);
 
         Ok(())
-    }
-
-    /// Generate SDF from a fontdue coverage bitmap.
-    /// Uses a simplified approach optimized for fontdue's coverage values.
-    fn generate_sdf(&self, bitmap: &[u8], width: usize, height: usize) -> Vec<u8> {
-        let sdf_padding = sdf::SDF_RANGE as usize;
-        let sdf_width = width + (sdf_padding * 2);
-        let sdf_height = height + (sdf_padding * 2);
-        let mut sdf_bitmap = vec![0u8; sdf_width * sdf_height]; // Initialize to "outside" value
-
-        let padding = sdf_padding;
-        let max_distance = sdf::SDF_RANGE;
-
-        // Process each pixel in the SDF bitmap
-        for sdf_y in 0..sdf_height {
-            for sdf_x in 0..sdf_width {
-                // Map SDF coordinates back to source bitmap coordinates
-                let src_x = sdf_x as i32 - padding as i32;
-                let src_y = sdf_y as i32 - padding as i32;
-
-                // Determine if current pixel is inside the glyph
-                let current_inside =
-                    if src_x >= 0 && src_x < width as i32 && src_y >= 0 && src_y < height as i32 {
-                        // Coverage threshold for SDF generation
-                        bitmap[src_y as usize * width + src_x as usize] > 128
-                    } else {
-                        false // Outside bounds = outside glyph
-                    };
-
-                // Find minimum distance to nearest edge
-                let mut min_distance = max_distance;
-
-                // Search in a square around the current pixel
-                let search_radius = (max_distance + 0.5) as i32;
-                for dy in -search_radius..=search_radius {
-                    for dx in -search_radius..=search_radius {
-                        let check_x = src_x + dx;
-                        let check_y = src_y + dy;
-
-                        // Only check pixels within the source bitmap
-                        if check_x >= 0
-                            && check_x < width as i32
-                            && check_y >= 0
-                            && check_y < height as i32
-                        {
-                            let sample_coverage =
-                                bitmap[check_y as usize * width + check_x as usize];
-                            let sample_inside = sample_coverage > 128;
-
-                            // If we found a pixel with different inside/outside state, calculate distance
-                            if sample_inside != current_inside {
-                                let distance = ((dx * dx + dy * dy) as f32).sqrt();
-                                min_distance = min_distance.min(distance);
-                            }
-                        }
-                    }
-                }
-
-                // Convert distance to SDF value (0-255 range)
-                let normalized_distance = (min_distance / max_distance).clamp(0.0, 1.0);
-
-                let sdf_value = if current_inside {
-                    // Inside: 128-255 (128 + positive distance)
-                    128.0 + normalized_distance * 127.0
-                } else {
-                    // Outside: 0-127 (128 - positive distance)
-                    // If we're far outside (min_distance == max_distance), use 0
-                    if min_distance >= max_distance {
-                        0.0 // Far outside - this eliminates edge artifacts
-                    } else {
-                        128.0 - normalized_distance * 128.0
-                    }
-                };
-
-                sdf_bitmap[sdf_y * sdf_width + sdf_x] = sdf_value.clamp(0.0, 255.0) as u8;
-            }
-        }
-
-        sdf_bitmap
     }
 
     /// Create a raw bitmap without SDF processing for debugging.
@@ -329,32 +282,52 @@ impl FontAtlas {
         queue: &Queue,
         font_size: f32,
     ) -> GupResult<()> {
-        // Load printable ASCII characters
+        // Load printable ASCII characters that exist in the font
         for ch in 32u8..=126u8 {
             let character = ch as char;
-            self.add_glyph(device, queue, character, font_size)?;
+            // Only try to load characters that exist in the font
+            if self.font.glyph_index(character).is_some() {
+                self.add_glyph(device, queue, character, font_size)?;
+            }
         }
         Ok(())
     }
 
-    /// Calculate font metrics from fontdue Font.
-    fn calculate_font_metrics(font: &Font, font_size: f32) -> FontMetrics {
-        let line_metrics = font.horizontal_line_metrics(font_size).unwrap_or({
-            // Provide default line metrics if not available
-            fontdue::LineMetrics {
-                ascent: font_size * 0.8,
-                descent: font_size * 0.2,
-                line_gap: font_size * 0.1,
-                new_line_size: font_size * 1.2,
-            }
-        });
+    /// Calculate font metrics from ttf_parser Face.
+    fn calculate_font_metrics(font: &ttf_parser::Face, font_size: f32) -> FontMetrics {
+        // Get font units per em
+        let units_per_em = font.units_per_em() as f32;
+
+        // Scale factor from font units to pixels
+        let scale = font_size / units_per_em;
+
+        // Get OS/2 table for additional metrics
+        let ascent = if let Some(os2) = font.tables().os2 {
+            os2.typographic_ascender() as f32 * scale
+        } else {
+            font_size * 0.8 // Fallback
+        };
+
+        let descent = if let Some(os2) = font.tables().os2 {
+            -(os2.typographic_descender() as f32) * scale // Note: descent is usually negative
+        } else {
+            font_size * 0.2 // Fallback
+        };
+
+        let line_gap = if let Some(os2) = font.tables().os2 {
+            os2.typographic_line_gap() as f32 * scale
+        } else {
+            font_size * 0.1 // Fallback
+        };
+
+        let line_height = ascent + descent + line_gap;
 
         FontMetrics {
             size: font_size,
-            line_height: line_metrics.new_line_size,
-            ascent: line_metrics.ascent,
-            descent: line_metrics.descent,
-            line_gap: line_metrics.line_gap,
+            line_height,
+            ascent,
+            descent,
+            line_gap,
         }
     }
 
@@ -405,18 +378,24 @@ mod tests {
         let height = 1;
 
         #[allow(invalid_value)]
-        let atlas = FontAtlas {
+        let _atlas = FontAtlas {
             atlas_texture: unsafe { std::mem::zeroed() }, // Placeholder
             glyph_info: HashMap::new(),
             font_metrics: FontMetrics::default(),
-            font: unsafe { std::mem::zeroed() }, // Placeholder
+            font_data: Vec::new(),                         // Placeholder
+            font: unsafe { std::mem::zeroed() },           // Placeholder
+            msdf_generator: unsafe { std::mem::zeroed() }, // Placeholder
             current_x: 0,
             current_y: 0,
             current_row_height: 0,
             atlas_size: 1024,
         };
 
-        let sdf = atlas.generate_sdf(&bitmap, width, height);
+        // Use MockFontAtlas for SDF generation testing
+        let font_data = include_bytes!("../../assets/fonts/default.ttf");
+        let font = ttf_parser::Face::parse(&font_data[..], 0).unwrap();
+        let mock_atlas = MockFontAtlas { font };
+        let sdf = mock_atlas.generate_sdf(&bitmap, width, height);
 
         // SDF should be larger than original due to padding
         let expected_size =
@@ -448,7 +427,7 @@ mod tests {
 
         // Create a mock atlas to test the SDF generation function
         let font_data = include_bytes!("../../assets/fonts/default.ttf");
-        let font = Font::from_bytes(&font_data[..], FontSettings::default()).unwrap();
+        let font = ttf_parser::Face::parse(&font_data[..], 0).unwrap();
         let mock_atlas = MockFontAtlas { font };
 
         // Create a moderate-sized glyph bitmap (typical for readable font size)
@@ -530,7 +509,7 @@ mod tests {
     // Helper struct for testing SDF generation
     struct MockFontAtlas {
         #[allow(dead_code)]
-        font: Font,
+        font: ttf_parser::Face<'static>,
     }
 
     impl MockFontAtlas {

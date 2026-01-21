@@ -1,17 +1,21 @@
 # GUP-108: Correct SDF Font Atlas Generation
 
-**Status**: Open  
-**Priority**: High  
-**Component**: Font Atlas / Text Rendering  
-**Depends On**: None  
+**Status**: Completed
+**Priority**: High
+**Component**: Font Atlas / Text Rendering
+**Depends On**: None
 **Blocks**: GUP-107 (may be related to character positioning issues)
+**Completed**: 2025-12-31
 
 ## Summary
 
-The current font atlas generation incorrectly uses fontdue's coverage data
-directly as signed distance field (SDF) values instead of computing proper
-distance fields. This results in poor text rendering quality and may contribute
-to character positioning bugs.
+The current font atlas generation uses fontdue's coverage data incorrectly as
+signed distance field (SDF) values instead of computing proper multi-channel
+signed distance fields (MSDF). This results in poor text rendering quality, lack
+of sharp corner preservation, and suboptimal scalability. We will replace the
+existing approach with a new implementation that uses `ttf_parser` crate
+(v0.21.1) to extract glyph vector outlines and generate true 3-channel MSDF
+atlas textures.
 
 ## Problem Statement
 
@@ -24,170 +28,298 @@ let sample_coverage = bitmap[check_y as usize * width + check_x as usize];
 let sample_inside = sample_coverage > 128;
 ```
 
-This approach does not generate true signed distance fields, which are essential
-for high-quality SDF text rendering with proper antialiasing, scalability, and
-visual fidelity.
+This approach does not generate proper MSDF data, which are essential for:
+
+- Sharp corner preservation at all scales
+- High-quality antialiasing
+- True distance-based rendering effects (glows, outlines, shadows)
+- Optimal memory usage with 3-channel representation
 
 ## Background
 
-Signed Distance Fields (SDFs) store the distance from each texel to the nearest
-edge of the glyph outline. Proper SDF generation requires:
+Multi-channel Signed Distance Fields (MSDFs) store the distance to the nearest
+edge in three color channels, each representing a different direction. Proper
+MSDF generation requires:
 
-1. **Distance calculation**: Each texel stores the distance to the nearest
-   opposite-state texel
-2. **Sign information**: Inside vs outside the glyph boundary
-3. **High precision**: Accurate distance measurements for smooth antialiasing
-4. **Edge detection**: Proper boundary identification for distance calculations
+1. **Vector outline extraction**: Using `ttf_parser` to get precise glyph
+   contours
+2. **Distance calculation**: Computing signed distances to glyph boundaries
+3. **Channel separation**: Distributing distance information across RGB channels
+4. **High precision**: Accurate geometric calculations for smooth rendering
+5. **Edge detection**: Proper boundary identification and contour following
 
-Coverage data from font rasterization is fundamentally different from distance
-field data and cannot be used directly.
+Traditional coverage-based approaches cannot achieve the same quality and
+efficiency as true MSDF generation.
 
-## Proposed Solutions
+## Proposed Solution
 
-### Option 1: TTF Parser Outline-Based SDF Generation
+### MSDF Generation using ttf_parser
 
-Use glyph outline data from the underlying `ttf_parser` crate to calculate exact
-distances:
+Implement proper MSDF generation by extracting glyph vector data from font files
+using the `ttf_parser` crate:
 
-- **Approach**: Extract vector outline data from font files
-- **Method**: Calculate distance from each texel to nearest curve segment
-- **Precision**: Mathematically exact distance calculations
-- **Complexity**: Requires bezier curve distance algorithms
-- **Performance**: More computationally expensive but higher quality
+- **Vector extraction**: Use `ttf_parser` v0.21.1 to parse glyph outlines from
+  TTF/OTF files
+- **Geometric processing**: Convert Bézier curves to distance field
+  representation
+- **3-channel output**: Generate RGB MSDF textures with distance information
+- **Precision**: Mathematically exact distance calculations from vector data
+- **Performance**: Optimized algorithms for real-time atlas generation
 
-### Option 2: High-Resolution Brute-Force Method
-
-Implement the approach described in Valve's SIGGRAPH 2007 paper "Improved
-Alpha-Tested Magnification for Vector Textures and Special Effects":
-
-- **Approach**: Rasterize glyphs at high resolution, then downsample with
-  distance calculation
-- **Method**: For each output texel, search local neighborhood for nearest
-  opposite-state texel
-- **Precision**: Quality depends on oversampling ratio
-- **Complexity**: Simpler algorithm, well-documented approach
-- **Performance**: "Negligible execution time" according to paper due to limited
-  search radius
-
-## Detailed Implementation: Option 2 (Recommended)
-
-Based on the Valve paper's brute-force approach:
+### Implementation Architecture
 
 ```rust
-// Pseudocode for proper SDF generation
-fn generate_proper_sdf(glyph_char: char, target_size: u32) -> Vec<u8> {
-    let oversample_factor = 8; // Render at 8x resolution
-    let high_res_size = target_size * oversample_factor;
+// New MSDF generation pipeline
+struct MsdfGenerator {
+    font_data: Vec<u8>,
+    font: ttf_parser::Font<'static>,
+    config: MsdfConfig,
+}
 
-    // 1. Rasterize glyph at high resolution
-    let (metrics, high_res_bitmap) = font.rasterize(glyph_char, font_size * oversample_factor);
+impl MsdfGenerator {
+    fn generate_msdf(&self, glyph_id: GlyphId, size: f32) -> Result<MsdfBitmap, Error> {
+        // 1. Extract glyph outline using ttf_parser
+        let outline = self.extract_glyph_outline(glyph_id)?;
 
-    // 2. For each output texel, compute distance to nearest edge
-    let mut sdf_bitmap = vec![0u8; (target_size * target_size) as usize];
+        // 2. Generate distance field for each channel
+        let red_channel = self.compute_distance_field(&outline, Direction::Right)?;
+        let green_channel = self.compute_distance_field(&outline, Direction::Up)?;
+        let blue_channel = self.compute_distance_field(&outline, Direction::Diagonal)?;
 
-    for out_y in 0..target_size {
-        for out_x in 0..target_size {
-            // Map output texel to high-res coordinates
-            let center_x = (out_x as f32 + 0.5) * oversample_factor as f32;
-            let center_y = (out_y as f32 + 0.5) * oversample_factor as f32;
+        // 3. Combine channels into MSDF bitmap
+        Ok(MsdfBitmap::combine_channels(red_channel, green_channel, blue_channel))
+    }
+}
+```
 
-            // Determine if center point is inside or outside
-            let is_inside = sample_high_res_bitmap(center_x, center_y, &high_res_bitmap);
+## Detailed Implementation
 
-            // Search neighborhood for nearest opposite-state texel
-            let distance = find_nearest_edge_distance(
-                center_x, center_y,
-                &high_res_bitmap,
-                is_inside,
-                max_search_radius
-            );
+### Vector Data Extraction with ttf_parser
 
-            // Convert to 8-bit SDF value
-            let normalized_distance = (distance / max_distance).clamp(0.0, 1.0);
-            let sdf_value = if is_inside {
-                128.0 + normalized_distance * 127.0  // 128-255: inside
-            } else {
-                128.0 - normalized_distance * 128.0  // 0-127: outside
-            };
+```rust
+use ttf_parser::{Font, GlyphId, OutlineBuilder};
 
-            sdf_bitmap[(out_y * target_size + out_x) as usize] = sdf_value as u8;
+struct GlyphOutlineBuilder {
+    contours: Vec<Contour>,
+}
+
+impl OutlineBuilder for GlyphOutlineBuilder {
+    fn move_to(&mut self, x: f32, y: f32) {
+        self.contours.push(Contour::new());
+        self.contours.last_mut().unwrap().push_point(Point::new(x, y));
+    }
+
+    fn line_to(&mut self, x: f32, y: f32) {
+        self.contours.last_mut().unwrap().push_point(Point::new(x, y));
+    }
+
+    fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
+        // Convert quadratic Bézier to distance field representation
+        self.contours.last_mut().unwrap().push_quad_curve(x1, y1, x, y);
+    }
+
+    fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
+        // Convert cubic Bézier to distance field representation
+        self.contours.last_mut().unwrap().push_cubic_curve(x1, y1, x2, y2, x, y);
+    }
+
+    fn close(&mut self) {
+        self.contours.last_mut().unwrap().close();
+    }
+}
+```
+
+### MSDF Distance Field Computation
+
+```rust
+fn compute_distance_field(&self, outline: &GlyphOutline, direction: Direction) -> DistanceField {
+    let mut distance_field = DistanceField::new(self.config.atlas_size);
+
+    for y in 0..self.config.atlas_size {
+        for x in 0..self.config.atlas_size {
+            let point = Vec2::new(x as f32, y as f32);
+            let distance = self.compute_signed_distance(&outline, point, direction);
+            let normalized_distance = self.normalize_distance(distance);
+
+            distance_field.set(x, y, normalized_distance);
         }
     }
 
-    sdf_bitmap
+    distance_field
+}
+
+fn compute_signed_distance(&self, outline: &GlyphOutline, point: Vec2, direction: Direction) -> f32 {
+    let mut min_distance = f32::INFINITY;
+    let mut sign = 1.0;
+
+    // Check distance to all contours
+    for contour in &outline.contours {
+        for edge in &contour.edges {
+            let distance = edge.distance_to_point(point);
+            if distance.abs() < min_distance.abs() {
+                min_distance = distance;
+                sign = if contour.contains_point(point) { 1.0 } else { -1.0 };
+            }
+        }
+    }
+
+    min_distance * sign
 }
 ```
 
 ## Success Criteria
 
-- [ ] **Proper SDF Generation**: Distance fields accurately represent glyph
-      boundaries
-- [ ] **Visual Quality**: Text rendering shows smooth antialiasing at all scales
-- [ ] **Performance**: Atlas generation time remains acceptable (<100ms for
+- [ ] **Proper MSDF Generation**: 3-channel distance fields accurately represent
+      glyph boundaries
+- [ ] **Sharp Corner Preservation**: Corners remain sharp at all rendering
+      scales
+- [ ] **High-Quality Antialiasing**: Smooth text rendering without artifacts
+- [ ] **Performance**: Atlas generation time remains acceptable (<200ms for
       ASCII charset)
-- [ ] **Compatibility**: Existing SDF shader continues to work with new atlas
+- [ ] **Memory Efficiency**: 3-channel MSDF uses RGB textures optimally
+- [ ] **Compatibility**: Existing text rendering pipeline works with new MSDF
       data
-- [ ] **Validation**: SDF values can be verified against known test glyphs
-- [ ] **Memory Efficiency**: Atlas size and memory usage remain reasonable
+- [ ] **Validation**: MSDF values can be verified against known geometric shapes
 
 ## Technical Requirements
 
 ### Implementation Details
 
 1. **Replace existing `generate_sdf()` method** in `src/text/atlas.rs`
-2. **Add proper distance field algorithms** (brute-force neighborhood search)
-3. **Implement high-resolution rasterization** with configurable oversample
-   factor
-4. **Add SDF validation tools** for debugging and quality assurance
-5. **Update SDF parameters** (range, scale) based on new generation method
+2. **Add ttf_parser integration** for glyph outline extraction
+3. **Implement MSDF algorithms** (distance field computation, channel
+   separation)
+4. **Add Bézier curve processing** for accurate outline representation
+5. **Update texture format** from R8Unorm to Rgba8Unorm for 3-channel MSDF
+6. **Create MSDF validation tools** for debugging and quality assurance
+7. **Update shader code** to handle 3-channel MSDF rendering
 
 ### Configuration Options
 
 ```rust
-pub struct SdfConfig {
-    pub oversample_factor: u32,    // Default: 8x
-    pub max_distance: f32,         // SDF range in pixels
-    pub search_radius: u32,        // Brute-force search limit
-    pub edge_threshold: u8,        // Coverage threshold for edge detection
+pub struct MsdfConfig {
+    pub atlas_size: u32,                    // Size of atlas texture
+    pub glyph_size: f32,                    // Size of individual glyphs in pixels
+    pub distance_range: f32,                // MSDF distance range in pixels
+    pub angle_threshold: f32,               // Threshold for sharp corner detection
+    pub edge_coloring_angle_threshold: f32, // Threshold for edge coloring
+    pub padding: u32,                       // Padding around glyphs
 }
 ```
 
 ### Testing Strategy
 
-- **Unit tests**: Verify SDF values for simple geometric shapes (circle, square)
+- **Unit tests**: Verify MSDF values for simple geometric shapes (circle,
+  square, triangle)
 - **Visual tests**: Compare rendering quality before/after implementation
 - **Performance tests**: Ensure atlas generation time meets requirements
 - **Integration tests**: Verify compatibility with existing text rendering
   pipeline
+- **Geometric validation**: Test distance field accuracy against known shapes
 
 ## Impact Assessment
 
 ### Benefits
 
-- **Improved text quality**: Proper antialiasing and scalability
-- **Better visual fidelity**: Smooth text rendering at all sizes
-- **Standard compliance**: Correct SDF implementation following established
+- **Superior text quality**: Perfect sharp corners and smooth antialiasing at
+  all scales
+- **Better visual fidelity**: True distance-based rendering effects
+- **Standard compliance**: Correct MSDF implementation following established
   methods
-- **Potential bug fixes**: May resolve character positioning issues in GUP-107
+- **Memory efficiency**: 3-channel representation more efficient than
+  single-channel alternatives
+- **Future-proof**: Foundation for advanced text effects and rendering
+  techniques
 
 ### Risks
 
-- **Performance impact**: More expensive atlas generation
-- **Implementation complexity**: Proper distance field algorithms required
-- **Compatibility**: May require shader parameter adjustments
-- **Testing effort**: Extensive validation needed for quality assurance
+- **Implementation complexity**: MSDF algorithms and Bézier processing required
+- **Performance impact**: More computationally expensive atlas generation
+- **Shader updates**: Text rendering shader needs MSDF support
+- **Dependency addition**: New dependency on ttf_parser crate
+- **Testing effort**: Extensive validation needed for geometric accuracy
 
-## References
+### Dependencies
 
-- [Valve SIGGRAPH 2007: Improved Alpha-Tested Magnification for Vector Textures](https://steamcdn-a.akamaihd.net/apps/valve/2007/SIGGRAPH2007_AlphaTestedMagnification.pdf)
-- [fontdue crate documentation](https://docs.rs/fontdue/)
-- [ttf_parser crate documentation](https://docs.rs/ttf-parser/)
+- `ttf_parser` crate v0.21.1 for font parsing and glyph outline extraction
+- Updated shader code for 3-channel MSDF rendering
+- Potential updates to texture format and GPU resource management
 
 ## Implementation Priority
 
-**Priority**: High - Fundamental text rendering quality issue that affects all
-text display
+**Priority**: High - Fundamental text rendering quality improvement that affects
+all text display
 
-**Effort Estimate**: 2-3 days implementation + 1 day testing and validation
+**Effort Estimate**: 3-4 days implementation + 2 days testing and validation
 
-**Dependencies**: None - can be implemented independently
+**Dependencies**: ttf_parser v0.21.1, shader updates, texture format changes
+
+## References
+
+- [MSDF paper: Multi-channel signed distance fields](https://github.com/Chlumsky/msdfgen/files/3050967/thesis.pdf)
+- [ttf_parser crate documentation](https://docs.rs/ttf_parser/)
+- [MSDF-Atlas-Gen repository](https://github.com/Chlumsky/msdf-atlas-gen)
+- [MSDF-Gen repository](https://github.com/Chlumsky/msdfgen)
+- [Valve SDF paper](https://steamcdn-a.akamaihd.net/apps/valve/2007/SIGGRAPH2007_AlphaTestedMagnification.pdf)
+
+## Implementation Notes (Completed 2025-12-31)
+
+### What Was Implemented
+
+The MSDF implementation followed the algorithm described in Viktor Chlumsky's
+thesis "Shape Decomposition for Multi-channel Distance Fields".
+
+#### Core Components
+
+1. **Proper Bezier Curve Distance Calculations** (`src/text/msdf.rs`)
+   - Line segment distance: Analytical solution with perpendicular projection
+   - Quadratic Bezier distance: Solved using cubic equation roots
+   - Cubic Bezier distance: Iterative subdivision + Newton-Raphson refinement
+
+2. **Edge Coloring Algorithm**
+   - Implemented cycling between Yellow (RG), Cyan (GB), and Magenta (RB) colors
+   - Adjacent edges at sharp corners receive different colors
+   - Corner detection based on direction change angle threshold
+
+3. **True MSDF Generation**
+   - Each color channel stores pseudo-distance to the nearest edge of that color
+   - Pseudo-distance extends beyond endpoints along tangent directions
+   - Proper signed distance with inside/outside determination using cross product
+
+4. **Shader Update** (`src/shaders/text.wgsl`)
+   - Changed from single-channel (`.r`) to three-channel sampling (`.rgb`)
+   - Implemented median-of-three reconstruction for sharp corner preservation
+   - Formula: `median(r, g, b) = max(min(a, b), min(max(a, b), c))`
+
+5. **Atlas Integration** (`src/text/atlas.rs`)
+   - Updated texture format from R8Unorm to Rgba8Unorm for 3-channel MSDF
+   - Integrated MsdfGenerator with glyph caching system
+   - Proper coordinate transformation between glyph space and pixel space
+
+### Key Technical Insights
+
+- **Edge Coloring Limitation**: For closed contours with n corners and only 3
+  colors, perfect coloring is impossible when n is not divisible by 3. A square
+  (4 corners) will have one pair of adjacent edges with the same color.
+
+- **Pseudo-distance vs True Distance**: MSDF uses pseudo-distance (perpendicular
+  projection along edge tangent) at endpoints rather than true Euclidean
+  distance. This prevents artifacts at sharp corners.
+
+- **Median Reconstruction**: The key insight is that at corners where edge
+  colors differ, taking the median of the three channels selects the correct
+  distance value, preserving sharpness.
+
+### Files Modified
+
+- `src/text/msdf.rs` - Complete rewrite with proper MSDF algorithm
+- `src/shaders/text.wgsl` - Updated to use median-of-three sampling
+- `src/text/atlas.rs` - Updated to use RGBA format and new MsdfGenerator
+
+### Tests Added
+
+- `test_contour_edge_coloring` - Verifies triangle edge coloring (3 corners,
+  3 colors)
+- `test_contour_edge_coloring_square` - Verifies square edge coloring handles
+  color wrap-around
+- Existing tests updated and passing: 67 text-related tests

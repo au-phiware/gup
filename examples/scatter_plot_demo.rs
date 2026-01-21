@@ -596,38 +596,37 @@ impl ScatterPlotApp {
             }
         }
 
-        if let Some(surface_id) = self.surface_id {
-            if let Some(context) = self.context.take() {
-                let mut ctx =
-                    Arc::try_unwrap(context).map_err(|_| "Failed to get mutable context")?;
+        if let Some(surface_id) = self.surface_id
+            && let Some(context) = self.context.take()
+        {
+            let mut ctx = Arc::try_unwrap(context).map_err(|_| "Failed to get mutable context")?;
 
-                match ctx.begin_frame_for_surface(surface_id) {
-                    Ok(mut frame) => {
-                        // Render using the library's Circle mark system
-                        if let Some(renderer) = &mut self.renderer {
-                            if let Err(e) = renderer.render(&mut frame) {
-                                eprintln!("❌ Failed to render scatter plot: {e}");
-                            }
-                        } else {
-                            // Fallback: just clear the background
-                            let clear_color = wgpu::Color {
-                                r: 0.95,
-                                g: 0.95,
-                                b: 0.95,
-                                a: 1.0,
-                            };
-                            let _render_pass = frame.render_pass(Some(clear_color));
+            match ctx.begin_frame_for_surface(surface_id) {
+                Ok(mut frame) => {
+                    // Render using the library's Circle mark system
+                    if let Some(renderer) = &mut self.renderer {
+                        if let Err(e) = renderer.render(&mut frame) {
+                            eprintln!("❌ Failed to render scatter plot: {e}");
                         }
+                    } else {
+                        // Fallback: just clear the background
+                        let clear_color = wgpu::Color {
+                            r: 0.95,
+                            g: 0.95,
+                            b: 0.95,
+                            a: 1.0,
+                        };
+                        let _render_pass = frame.render_pass(Some(clear_color));
+                    }
 
-                        frame.finish()?;
-                    }
-                    Err(e) => {
-                        eprintln!("❌ Failed to render frame: {e}");
-                    }
+                    frame.finish()?;
                 }
-
-                self.context = Some(Arc::new(ctx));
+                Err(e) => {
+                    eprintln!("❌ Failed to render frame: {e}");
+                }
             }
+
+            self.context = Some(Arc::new(ctx));
         }
         Ok(())
     }
@@ -667,23 +666,23 @@ impl ApplicationHandler for ScatterPlotApp {
                 event_loop.exit();
             }
             WindowEvent::Resized(size) => {
-                if let Some(surface_id) = self.surface_id {
-                    if let Some(ctx) = self.context.take() {
-                        let mut context_mut = Arc::try_unwrap(ctx).unwrap_or_else(|arc| {
-                            panic!(
-                                "Failed to get mutable context: {} references",
-                                Arc::strong_count(&arc)
-                            )
-                        });
+                if let Some(surface_id) = self.surface_id
+                    && let Some(ctx) = self.context.take()
+                {
+                    let mut context_mut = Arc::try_unwrap(ctx).unwrap_or_else(|arc| {
+                        panic!(
+                            "Failed to get mutable context: {} references",
+                            Arc::strong_count(&arc)
+                        )
+                    });
 
-                        if let Err(e) = context_mut
-                            .resize_surface(surface_id, PhysicalSize::new(size.width, size.height))
-                        {
-                            eprintln!("❌ Failed to resize surface: {e}");
-                        }
-
-                        self.context = Some(Arc::new(context_mut));
+                    if let Err(e) = context_mut
+                        .resize_surface(surface_id, PhysicalSize::new(size.width, size.height))
+                    {
+                        eprintln!("❌ Failed to resize surface: {e}");
                     }
+
+                    self.context = Some(Arc::new(context_mut));
                 }
             }
             WindowEvent::KeyboardInput {

@@ -31,20 +31,17 @@ discovered that would benefit from dedicated implementation:
 ### Core Features
 
 1. **Multi-Pass Mark Rendering**
-
    - Support marks that require multiple render passes (base + outline, base +
      shadow, etc.)
    - Enable pass-specific shader variants and GPU state
    - Optimize performance for multi-pass scenarios
 
 2. **Dynamic Attribute Mapping**
-
    - Runtime modification of attribute mappings without pipeline recreation
    - Support for conditional attribute assignments
    - Enable data-driven mark customization
 
 3. **Advanced Blend Mode Integration**
-
    - Integration with existing blend mode system (GUP-027)
    - Mark-specific blend mode overrides
    - Composition-aware blending strategies

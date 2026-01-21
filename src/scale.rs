@@ -454,10 +454,10 @@ impl DataAnalyzer {
                     if characteristics.categories.is_none() {
                         characteristics.categories = Some(Vec::new());
                     }
-                    if let Some(ref mut categories) = characteristics.categories {
-                        if !categories.contains(&category) {
-                            categories.push(category);
-                        }
+                    if let Some(ref mut categories) = characteristics.categories
+                        && !categories.contains(&category)
+                    {
+                        categories.push(category);
                     }
                 }
                 AccessorValue::Float(value) => {
@@ -477,10 +477,10 @@ impl DataAnalyzer {
                     if characteristics.categories.is_none() {
                         characteristics.categories = Some(Vec::new());
                     }
-                    if let Some(ref mut categories) = characteristics.categories {
-                        if !categories.contains(&s) {
-                            categories.push(s);
-                        }
+                    if let Some(ref mut categories) = characteristics.categories
+                        && !categories.contains(&s)
+                    {
+                        categories.push(s);
                     }
                 }
                 AccessorValue::Color(_) | AccessorValue::Position(_) | AccessorValue::Bool(_) => {

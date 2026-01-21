@@ -211,19 +211,19 @@ impl ResourceManager {
         self.gpu_resources.insert(resource_id, resource);
 
         // Check for memory pressure after allocation
-        if let Some(pressure) = self.check_resource_pressure() {
-            if pressure.pressure_type >= PressureType::High {
-                log::warn!(
-                    "High memory pressure detected after allocation: {}%",
-                    pressure.usage_percentage
-                );
+        if let Some(pressure) = self.check_resource_pressure()
+            && pressure.pressure_type >= PressureType::High
+        {
+            log::warn!(
+                "High memory pressure detected after allocation: {}%",
+                pressure.usage_percentage
+            );
 
-                // Trigger automatic cleanup if needed
-                if pressure.pressure_type >= PressureType::Emergency {
-                    log::warn!(
-                        "Emergency memory pressure detected - consider calling emergency_cleanup()"
-                    );
-                }
+            // Trigger automatic cleanup if needed
+            if pressure.pressure_type >= PressureType::Emergency {
+                log::warn!(
+                    "Emergency memory pressure detected - consider calling emergency_cleanup()"
+                );
             }
         }
 

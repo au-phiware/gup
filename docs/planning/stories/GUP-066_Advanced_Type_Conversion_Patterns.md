@@ -211,7 +211,6 @@ pub trait ShaderCompatible<T: ShaderType>: ShaderType {
 
 1. **Scalar to Vector**: f32 expands to all components (x, x, x, x)
 2. **Vector Growth**: Missing components filled with sensible defaults
-
    - Vec2 -> Vec3: z = 0.0
    - Vec2 -> Vec4: z = 0.0, w = 1.0
    - Vec3 -> Vec4: w = 1.0

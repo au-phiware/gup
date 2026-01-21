@@ -115,10 +115,10 @@ impl ResourcePool {
     /// Get a vertex buffer from the pool or create a new one
     #[allow(dead_code)] // Used in future optimization phases
     fn get_vertex_buffer(&mut self, device: &wgpu::Device, size: usize) -> wgpu::Buffer {
-        if let Some(buffers) = self.vertex_buffers.get_mut(&size) {
-            if let Some(buffer) = buffers.pop() {
-                return buffer;
-            }
+        if let Some(buffers) = self.vertex_buffers.get_mut(&size)
+            && let Some(buffer) = buffers.pop()
+        {
+            return buffer;
         }
 
         // Create new buffer if none available
@@ -237,10 +237,10 @@ impl RenderCache {
             .collect();
 
         // Find the oldest entry
-        if let Some((oldest_key, _)) = entries.into_iter().min_by_key(|(_, timestamp)| *timestamp) {
-            if let Some(entry) = self.entries.remove(&oldest_key) {
-                self.current_size -= entry.size;
-            }
+        if let Some((oldest_key, _)) = entries.into_iter().min_by_key(|(_, timestamp)| *timestamp)
+            && let Some(entry) = self.entries.remove(&oldest_key)
+        {
+            self.current_size -= entry.size;
         }
     }
 
@@ -416,13 +416,13 @@ impl CompositionExecutor {
             }
 
             // Finalize last batch
-            if !current_batch.is_empty() {
-                if let Some(state) = current_state {
-                    batches.push(BatchedOperation {
-                        operations: current_batch,
-                        shared_state: state,
-                    });
-                }
+            if !current_batch.is_empty()
+                && let Some(state) = current_state
+            {
+                batches.push(BatchedOperation {
+                    operations: current_batch,
+                    shared_state: state,
+                });
             }
 
             self.batches.insert(type_id, batches);

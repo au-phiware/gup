@@ -75,20 +75,15 @@ impl RenderProgress {
 }
 
 /// Render strategy for async compositions.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AsyncRenderStrategy {
     /// Render components sequentially
     Sequential,
     /// Render components in parallel where possible
     Parallel,
     /// Adaptive strategy based on component characteristics
+    #[default]
     Adaptive,
-}
-
-impl Default for AsyncRenderStrategy {
-    fn default() -> Self {
-        Self::Adaptive
-    }
 }
 
 /// Asynchronous extension of the Mixable trait.
@@ -351,10 +346,10 @@ where
 
     fn progress(&self) -> Option<RenderProgress> {
         // Try to get cached progress first (for performance during active rendering)
-        if let Ok(guard) = self.progress_tracker.try_read() {
-            if let Some(cached) = guard.clone() {
-                return Some(cached);
-            }
+        if let Ok(guard) = self.progress_tracker.try_read()
+            && let Some(cached) = guard.clone()
+        {
+            return Some(cached);
         }
 
         // If no cached progress, calculate on-demand from components

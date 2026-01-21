@@ -31,21 +31,18 @@ aims to democratize custom mark development through:
 ### Core Developer Tools
 
 1. **Mark Trait Derive Macro**
-
    - Automatic Mark trait implementation for simple custom marks
    - Support for common patterns (geometric shapes, data visualizations)
    - Customizable vertex generation and shader integration
    - Error messages with actionable suggestions
 
 2. **Mark Validation Framework**
-
    - Automated testing suite for custom mark implementations
    - GPU compilation validation for generated shaders
    - Performance regression testing against benchmarks
    - Memory layout validation for GPU compatibility
 
 3. **Performance Profiling Utilities**
-
    - Built-in profiling for mark rendering operations
    - Comparative analysis against built-in marks
    - Bottleneck identification and optimization suggestions
@@ -275,14 +272,12 @@ impl MarkTemplate {
 ## Success Criteria
 
 1. **Developer Productivity**
-
    - Simple marks can be created with <10 lines of derive macro code
    - Validation framework catches 95%+ of common implementation issues
    - Performance profiling identifies optimization opportunities automatically
    - Complete custom mark implementation possible in <1 hour with templates
 
 2. **Code Quality**
-
    - Derived implementations meet performance baselines of built-in marks
    - Generated code passes all validation tests
    - Custom implementations follow established best practices

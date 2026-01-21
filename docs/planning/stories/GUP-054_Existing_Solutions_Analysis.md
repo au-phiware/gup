@@ -98,20 +98,17 @@ to GPU targets. We need to understand:
 ### Key Research Questions
 
 1. **Architecture Decisions**
-
    - Should we target SPIR-V as intermediate representation or generate WGSL
      directly?
    - What level of Rust language support is practical vs. theoretical?
    - How do we handle Rust's ownership model in a GPU context?
 
 2. **Performance Considerations**
-
    - What are the compilation time vs. runtime performance trade-offs?
    - How do different approaches handle optimization?
    - What are the memory layout and data structure implications?
 
 3. **Developer Experience**
-
    - What makes GPU programming approachable vs. expert-only?
    - How important is debugging and profiling tool integration?
    - What level of error messages and diagnostics are needed?

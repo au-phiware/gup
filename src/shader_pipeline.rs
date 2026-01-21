@@ -490,19 +490,19 @@ impl ComposableShaderPipeline {
     /// Update uniform data for all functions.
     pub fn update_uniforms(&mut self, device: &Device, queue: &Queue) -> GupResult<()> {
         for function in self.functions.iter() {
-            if let Some(uniform_data) = &function.uniform_buffer {
-                if let Some(buffer) = self.uniform_buffers.get_mut(function.name()) {
-                    // This is a simplified approach - in a real implementation,
-                    // we'd need proper type erasure and serialization
-                    let data_slice = unsafe {
-                        std::slice::from_raw_parts(
-                            uniform_data.as_ref() as *const _ as *const u8,
-                            function.uniform_size(),
-                        )
-                    };
+            if let Some(uniform_data) = &function.uniform_buffer
+                && let Some(buffer) = self.uniform_buffers.get_mut(function.name())
+            {
+                // This is a simplified approach - in a real implementation,
+                // we'd need proper type erasure and serialization
+                let data_slice = unsafe {
+                    std::slice::from_raw_parts(
+                        uniform_data.as_ref() as *const _ as *const u8,
+                        function.uniform_size(),
+                    )
+                };
 
-                    buffer.upload(device, queue, data_slice)?;
-                }
+                buffer.upload(device, queue, data_slice)?;
             }
         }
 
@@ -543,14 +543,14 @@ impl ComposableShaderPipeline {
         let mut binding_index = 0;
 
         for function in self.functions.iter() {
-            if function.has_uniforms() {
-                if let Some(buffer) = self.uniform_buffers.get(function.name()) {
-                    entries.push(BindGroupEntry {
-                        binding: binding_index,
-                        resource: buffer.raw_buffer().as_entire_binding(),
-                    });
-                    binding_index += 1;
-                }
+            if function.has_uniforms()
+                && let Some(buffer) = self.uniform_buffers.get(function.name())
+            {
+                entries.push(BindGroupEntry {
+                    binding: binding_index,
+                    resource: buffer.raw_buffer().as_entire_binding(),
+                });
+                binding_index += 1;
             }
         }
 

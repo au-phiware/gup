@@ -234,7 +234,6 @@ fn compare_sdf_quality(
    ```
 
 2. **Geometric Distance Algorithms**
-
    - Point-to-line distance
    - Point-to-quadratic-bezier distance
    - Point-to-cubic-bezier distance (optional, may defer complex cases)
@@ -254,14 +253,12 @@ fn compare_sdf_quality(
 ### Benchmark Infrastructure
 
 1. **Performance Testing**
-
    - Single character generation timing
    - Full ASCII atlas generation timing
    - Memory usage profiling
    - CPU utilization analysis
 
 2. **Quality Assessment**
-
    - Visual comparison tools
    - Quantitative image quality metrics
    - Edge sharpness analysis
@@ -307,13 +304,11 @@ fn compare_sdf_quality(
 ### Performance Hypotheses
 
 1. **Outline-based advantages**:
-
    - Better mathematical precision
    - No memory overhead from high-resolution intermediates
    - Resolution independence
 
 2. **Brute-force advantages**:
-
    - Simpler implementation
    - More predictable performance characteristics
    - Easier debugging and validation

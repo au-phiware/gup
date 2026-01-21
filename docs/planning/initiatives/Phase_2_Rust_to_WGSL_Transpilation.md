@@ -76,25 +76,21 @@ wgsl_function! {
 ### Core Components
 
 1. **Rust AST Parser**
-
    - Parse function bodies into abstract syntax trees
    - Extract type information and dependencies
    - Handle Rust-specific constructs (borrowing, pattern matching)
 
 2. **Type System Mapper**
-
    - Map Rust primitives to WGSL types
    - Handle vector/matrix type conversions
    - Manage struct layout and alignment
 
 3. **Expression Transpiler**
-
    - Convert Rust expressions to WGSL syntax
    - Handle operator precedence and semantics
    - Map built-in functions and methods
 
 4. **Control Flow Translator**
-
    - Transpile loops, conditionals, and branches
    - Handle early returns and control flow
    - Optimize for GPU execution patterns

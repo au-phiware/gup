@@ -119,21 +119,21 @@ impl TextRenderingApp {
     }
 
     async fn initialize_text_rendering(&mut self) -> GupResult<()> {
-        if let Some(context) = &self.context {
-            if self.text_renderer.is_none() {
-                let device = &context.device; // Access device from context
-                let queue = &context.queue; // Access queue from context
+        if let Some(context) = &self.context
+            && self.text_renderer.is_none()
+        {
+            let device = &context.device; // Access device from context
+            let queue = &context.queue; // Access queue from context
 
-                let text_renderer = TextRenderer::new(device)?;
-                let font_atlas = FontAtlas::new(device, queue, 64.0)?;
-                let layout_engine = TextLayoutEngine::new();
+            let text_renderer = TextRenderer::new(device)?;
+            let font_atlas = FontAtlas::new(device, queue, 64.0)?;
+            let layout_engine = TextLayoutEngine::new();
 
-                self.text_renderer = Some(text_renderer);
-                self.font_atlas = Some(font_atlas);
-                self.layout_engine = Some(layout_engine);
+            self.text_renderer = Some(text_renderer);
+            self.font_atlas = Some(font_atlas);
+            self.layout_engine = Some(layout_engine);
 
-                println!("✅ Text rendering initialized successfully");
-            }
+            println!("✅ Text rendering initialized successfully");
         }
         Ok(())
     }
@@ -336,23 +336,23 @@ impl ApplicationHandler for TextRenderingApp {
                 event_loop.exit();
             }
             WindowEvent::Resized(size) => {
-                if let Some(surface_id) = self.surface_id {
-                    if let Some(ctx) = self.context.take() {
-                        let mut context_mut = Arc::try_unwrap(ctx).unwrap_or_else(|arc| {
-                            panic!(
-                                "Failed to get mutable context: {} references",
-                                Arc::strong_count(&arc)
-                            )
-                        });
+                if let Some(surface_id) = self.surface_id
+                    && let Some(ctx) = self.context.take()
+                {
+                    let mut context_mut = Arc::try_unwrap(ctx).unwrap_or_else(|arc| {
+                        panic!(
+                            "Failed to get mutable context: {} references",
+                            Arc::strong_count(&arc)
+                        )
+                    });
 
-                        if let Err(e) = context_mut
-                            .resize_surface(surface_id, PhysicalSize::new(size.width, size.height))
-                        {
-                            eprintln!("❌ Failed to resize surface: {e}");
-                        }
-
-                        self.context = Some(Arc::new(context_mut));
+                    if let Err(e) = context_mut
+                        .resize_surface(surface_id, PhysicalSize::new(size.width, size.height))
+                    {
+                        eprintln!("❌ Failed to resize surface: {e}");
                     }
+
+                    self.context = Some(Arc::new(context_mut));
                 }
                 println!("📐 Window resized to {}x{}", size.width, size.height);
             }

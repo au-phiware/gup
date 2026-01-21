@@ -31,21 +31,18 @@ well-formatted data points appear as arbitrary colored dots.
 ## Success Criteria
 
 1. **Visual Axis Rendering**
-
    - Horizontal and vertical axis lines rendered as GPU primitives
    - Tick marks at appropriate intervals along axes
    - Major and minor tick mark support
    - Proper axis positioning relative to chart area
 
 2. **Axis Label Integration**
-
    - Formatted labels positioned at tick marks
    - Integration with GUP-092 label formatting system
    - Proper label rotation for space optimization
    - Collision detection and intelligent spacing
 
 3. **Chart Builder Integration**
-
    - Seamless integration with existing chart builder APIs
    - Automatic axis generation for scatter plots, line charts, etc.
    - Configurable axis properties (position, style, labels)
@@ -62,21 +59,18 @@ well-formatted data points appear as arbitrary colored dots.
 ### Axis Rendering Architecture
 
 1. **GPU Axis Primitives**
-
    - Line mark implementation for axis lines
    - Rectangle mark for tick marks
    - Efficient instance rendering for multiple ticks
    - Configurable axis styling (color, width, opacity)
 
 2. **Tick Generation Integration**
-
    - Use existing GUP-090 tick generation algorithms
    - Dynamic tick spacing based on data range and axis length
    - Major/minor tick differentiation
    - Adaptive tick density for different zoom levels
 
 3. **Label Positioning System**
-
    - Extend GUP-092 label positioning for axis-specific requirements
    - Automatic label rotation for long text
    - Smart spacing to prevent label overlap
@@ -102,7 +96,6 @@ well-formatted data points appear as arbitrary colored dots.
    ```
 
 2. **Axis Integration with Charts**
-
    - Add axis rendering to scatter plot demo
    - X-axis showing data value range (revenue, time, etc.)
    - Y-axis showing appropriate data dimension

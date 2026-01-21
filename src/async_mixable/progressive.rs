@@ -475,10 +475,10 @@ where
         self.cancellation_token.cancel();
 
         // Wait for background task to complete
-        if let Ok(mut task_guard) = self.background_task.try_lock() {
-            if let Some(task) = task_guard.take() {
-                let _ = task.await; // Ignore join errors
-            }
+        if let Ok(mut task_guard) = self.background_task.try_lock()
+            && let Some(task) = task_guard.take()
+        {
+            let _ = task.await; // Ignore join errors
         }
 
         // Clear data and caches

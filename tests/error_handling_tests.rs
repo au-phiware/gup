@@ -82,7 +82,7 @@ impl ErrorInjector {
             return false;
         };
 
-        self.call_count % interval == 0
+        self.call_count.is_multiple_of(interval)
     }
 
     fn generate_error(&self) -> GupError {

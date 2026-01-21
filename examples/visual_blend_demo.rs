@@ -490,31 +490,27 @@ impl BlendDemoApp {
     }
 
     fn render_frame(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(surface_id) = self.surface_id {
-            if let Some(context) = self.context.take() {
-                let mut ctx =
-                    Arc::try_unwrap(context).map_err(|_| "Failed to get mutable context")?;
+        if let Some(surface_id) = self.surface_id
+            && let Some(context) = self.context.take()
+        {
+            let mut ctx = Arc::try_unwrap(context).map_err(|_| "Failed to get mutable context")?;
 
-                match ctx.begin_frame_for_surface(surface_id) {
-                    Ok(mut frame) => {
-                        // Render the demo content using the frame
-                        self.demo_renderer.render(
-                            &mut frame,
-                            self.current_mode,
-                            self.global_alpha,
-                        )?;
+            match ctx.begin_frame_for_surface(surface_id) {
+                Ok(mut frame) => {
+                    // Render the demo content using the frame
+                    self.demo_renderer
+                        .render(&mut frame, self.current_mode, self.global_alpha)?;
 
-                        frame.finish()?;
-                        self.frame_count += 1;
-                        self.update_fps();
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to render frame: {e}");
-                    }
+                    frame.finish()?;
+                    self.frame_count += 1;
+                    self.update_fps();
                 }
-
-                self.context = Some(Arc::new(ctx));
+                Err(e) => {
+                    eprintln!("Failed to render frame: {e}");
+                }
             }
+
+            self.context = Some(Arc::new(ctx));
         }
         Ok(())
     }
@@ -523,25 +519,24 @@ impl BlendDemoApp {
         &mut self,
         size: winit::dpi::PhysicalSize<u32>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(surface_id) = self.surface_id {
-            if let Some(ctx) = self.context.take() {
-                let mut context_mut =
-                    Arc::try_unwrap(ctx).map_err(|_| "Failed to get mutable context")?;
+        if let Some(surface_id) = self.surface_id
+            && let Some(ctx) = self.context.take()
+        {
+            let mut context_mut =
+                Arc::try_unwrap(ctx).map_err(|_| "Failed to get mutable context")?;
 
-                let start = std::time::Instant::now();
-                context_mut
-                    .resize_surface(surface_id, PhysicalSize::new(size.width, size.height))?;
-                let duration = start.elapsed();
+            let start = std::time::Instant::now();
+            context_mut.resize_surface(surface_id, PhysicalSize::new(size.width, size.height))?;
+            let duration = start.elapsed();
 
-                if duration.as_millis() > 16 {
-                    println!(
-                        "Warning: Resize took {:.2}ms (>16ms target)",
-                        duration.as_secs_f64() * 1000.0
-                    );
-                }
-
-                self.context = Some(Arc::new(context_mut));
+            if duration.as_millis() > 16 {
+                println!(
+                    "Warning: Resize took {:.2}ms (>16ms target)",
+                    duration.as_secs_f64() * 1000.0
+                );
             }
+
+            self.context = Some(Arc::new(context_mut));
         }
         Ok(())
     }

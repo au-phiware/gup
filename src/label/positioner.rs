@@ -155,10 +155,10 @@ impl LabelPositioner {
             });
 
             // Apply max labels limit
-            if let Some(max_labels) = constraints.max_labels {
-                if positions.len() >= max_labels {
-                    break;
-                }
+            if let Some(max_labels) = constraints.max_labels
+                && positions.len() >= max_labels
+            {
+                break;
             }
         }
 

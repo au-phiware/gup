@@ -293,11 +293,11 @@ impl DataAggregator {
 
             // Render CSV data
             for csv in &aggregator.csv_data {
-                if let Ok(points) = csv.to_points() {
-                    if !points.is_empty() {
-                        // TODO: Render CSV points using GPU pipeline
-                        let _ = points; // Suppress unused warning
-                    }
+                if let Ok(points) = csv.to_points()
+                    && !points.is_empty()
+                {
+                    // TODO: Render CSV points using GPU pipeline
+                    let _ = points; // Suppress unused warning
                 }
             }
 

@@ -82,7 +82,7 @@ impl GpuBufferInspector {
         let buffer_size = buffer.size();
         let element_size = std::mem::size_of::<T>() as u64;
 
-        if buffer_size % element_size != 0 {
+        if !buffer_size.is_multiple_of(element_size) {
             return Err(GupError::validation_error(format!(
                 "Buffer size {buffer_size} is not a multiple of element size {element_size}"
             )));

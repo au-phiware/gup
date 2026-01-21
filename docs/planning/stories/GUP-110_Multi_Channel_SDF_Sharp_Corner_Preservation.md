@@ -368,21 +368,18 @@ mod special_case_tests {
 ### Core Components
 
 1. **Edge System Classification**
-
    - Intersection graph construction
    - Connected component analysis
    - Special case pattern detection
    - Channel assignment algorithms
 
 2. **Multi-Channel Generation**
-
    - Separate SDF computation per edge system
    - Texture format support (RGBA8, RGBA16F)
    - Memory-efficient channel processing
    - Fallback compatibility mode
 
 3. **Shader Integration**
-
    - Multi-channel combination functions
    - Configurable blending modes
    - Performance optimization for GPU

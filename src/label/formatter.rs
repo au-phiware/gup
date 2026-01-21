@@ -184,7 +184,7 @@ impl NumericFormatter {
         };
 
         for (i, &ch) in chars[start_idx..].iter().enumerate() {
-            if i > 0 && (chars.len() - start_idx - i) % 3 == 0 {
+            if i > 0 && (chars.len() - start_idx - i).is_multiple_of(3) {
                 result.push(',');
             }
             result.push(ch);
@@ -205,20 +205,19 @@ impl LabelFormatter for NumericFormatter {
         let scaled_value = value * self.scale_factor;
 
         // Check if we should use scientific notation
-        if let Some(threshold) = self.scientific_threshold {
-            if scaled_value.abs() >= threshold || (threshold == 0.0) {
-                let formatted =
-                    format!("{:.precision$e}", scaled_value, precision = self.precision);
-                return if let Some(ref suffix) = self.suffix {
-                    if suffix == "$" || suffix == "€" || suffix == "£" || suffix == "¥" {
-                        format!("{suffix}{formatted}")
-                    } else {
-                        format!("{formatted}{suffix}")
-                    }
+        if let Some(threshold) = self.scientific_threshold
+            && (scaled_value.abs() >= threshold || (threshold == 0.0))
+        {
+            let formatted = format!("{:.precision$e}", scaled_value, precision = self.precision);
+            return if let Some(ref suffix) = self.suffix {
+                if suffix == "$" || suffix == "€" || suffix == "£" || suffix == "¥" {
+                    format!("{suffix}{formatted}")
                 } else {
-                    formatted
-                };
-            }
+                    format!("{formatted}{suffix}")
+                }
+            } else {
+                formatted
+            };
         }
 
         // Check if we should use SI units

@@ -48,11 +48,13 @@
 
 pub mod atlas;
 pub mod layout;
+pub mod msdf;
 pub mod renderer;
 pub mod style;
 
 pub use atlas::*;
 pub use layout::*;
+pub use msdf::*;
 pub use renderer::*;
 pub use style::*;
 

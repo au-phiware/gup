@@ -143,7 +143,7 @@ impl Locale {
         };
 
         for (i, &ch) in chars[start_idx..].iter().enumerate() {
-            if i > 0 && (chars.len() - start_idx - i) % 3 == 0 {
+            if i > 0 && (chars.len() - start_idx - i).is_multiple_of(3) {
                 result.push(self.thousands_separator);
             }
             result.push(ch);

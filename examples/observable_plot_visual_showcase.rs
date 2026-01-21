@@ -649,11 +649,11 @@ impl ApplicationHandler for ShowcaseApp {
             },
             WindowEvent::RedrawRequested => {
                 // Initialize context if not done yet
-                if !self.context_initialized {
-                    if let Err(e) = pollster::block_on(self.initialize_context()) {
-                        eprintln!("❌ Failed to initialize GPU context: {e}");
-                        return;
-                    }
+                if !self.context_initialized
+                    && let Err(e) = pollster::block_on(self.initialize_context())
+                {
+                    eprintln!("❌ Failed to initialize GPU context: {e}");
+                    return;
                 }
 
                 // Render the current chart

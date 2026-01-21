@@ -293,7 +293,6 @@ fn bench_buffer_upload_10k_floats(b: &mut Bencher) {
 ### Key Deliverables Implemented
 
 1. **Type-Safe Buffer System**
-
    - `BufferType` enum with Vertex, Instance, Uniform, Storage variants
    - `GpuBuffer<T>` with compile-time type safety using
      `bytemuck::Pod + Zeroable`
@@ -301,7 +300,6 @@ fn bench_buffer_upload_10k_floats(b: &mut Bencher) {
    - Proper memory alignment handling for all buffer types
 
 2. **Auto-Resizing Buffer Management**
-
    - 1.5x growth factor for optimal memory vs performance balance
    - Automatic buffer resizing during upload operations
    - Range-based upload operations with capacity validation
@@ -309,7 +307,6 @@ fn bench_buffer_upload_10k_floats(b: &mut Bencher) {
      operations
 
 3. **Buffer Pool System**
-
    - Size-class based allocation using power-of-2 rounding
    - Comprehensive allocation statistics tracking
    - Automatic cleanup with configurable pool size limits

@@ -1033,6 +1033,7 @@ dependencies = [
  "tokio",
  "tokio-test",
  "tokio-util",
+ "ttf-parser 0.21.1",
  "unicode-normalization",
  "uuid",
  "wasm-bindgen",

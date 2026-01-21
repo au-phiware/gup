@@ -890,28 +890,24 @@ fn test_performance_profiling() {
 
 1. **RobustCompositionExecutor** - Advanced error handling with configurable
    recovery strategies:
-
    - Skip strategy for non-critical failures
    - Retry strategy with exponential backoff
    - Fallback strategies (Empty, Placeholder, SimpleGeometry, LastKnownGood)
    - Component-specific error policies
 
 2. **ComponentHealthTracker** - Monitors component reliability:
-
    - Tracks success/failure rates per component
    - Identifies unhealthy components after 3+ consecutive failures
    - Calculates overall system health metrics
 
 3. **CompositionPerformanceMonitor** - Performance analysis and bottleneck
    detection:
-
    - Per-component timing analysis
    - Bottleneck identification (>10% of execution time)
    - Performance recommendations
    - Execution time tracking
 
 4. **Visual Debugging Tools**:
-
    - **CompositionVisualizer** - ASCII tree visualization of composition
      structure
    - **DOT graph generation** for Graphviz rendering

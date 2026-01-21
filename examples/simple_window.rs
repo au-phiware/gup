@@ -138,7 +138,7 @@ impl SimpleWindowApp {
                     self.frame_count += 1;
 
                     // Print stats every 60 frames
-                    if self.frame_count % 60 == 0 {
+                    if self.frame_count.is_multiple_of(60) {
                         let stats = ctx.frame_stats();
                         println!(
                             "Frame {}: {:.1} FPS, {:.2}ms avg",
@@ -159,18 +159,18 @@ impl SimpleWindowApp {
     }
 
     fn print_final_stats(&mut self) {
-        if let Some(context) = self.context.take() {
-            if let Ok(ctx) = Arc::try_unwrap(context) {
-                let stats = ctx.frame_stats();
-                println!("\n=== Final Statistics ===");
-                println!("Total frames rendered: {}", stats.frames_rendered);
-                println!("Average frame time: {:.2}ms", stats.avg_frame_time);
-                println!("Final FPS: {:.1}", stats.fps());
-                println!("Min frame time: {:.2}ms", stats.min_frame_time);
-                println!("Max frame time: {:.2}ms", stats.max_frame_time);
-                println!("GPU memory usage: {} bytes", stats.gpu_memory_usage);
-                println!("App frame count: {}", self.frame_count);
-            }
+        if let Some(context) = self.context.take()
+            && let Ok(ctx) = Arc::try_unwrap(context)
+        {
+            let stats = ctx.frame_stats();
+            println!("\n=== Final Statistics ===");
+            println!("Total frames rendered: {}", stats.frames_rendered);
+            println!("Average frame time: {:.2}ms", stats.avg_frame_time);
+            println!("Final FPS: {:.1}", stats.fps());
+            println!("Min frame time: {:.2}ms", stats.min_frame_time);
+            println!("Max frame time: {:.2}ms", stats.max_frame_time);
+            println!("GPU memory usage: {} bytes", stats.gpu_memory_usage);
+            println!("App frame count: {}", self.frame_count);
         }
     }
 }
@@ -206,23 +206,23 @@ impl ApplicationHandler for SimpleWindowApp {
 
             WindowEvent::Resized(size) => {
                 println!("Window resized to: {}x{}", size.width, size.height);
-                if let Some(context) = self.context.take() {
-                    if let Ok(mut ctx) = Arc::try_unwrap(context) {
-                        let start = std::time::Instant::now();
-                        if let Err(e) = ctx.resize_surface(
-                            ctx.primary_surface_id().unwrap(),
-                            gup::PhysicalSize::new(size.width, size.height),
-                        ) {
-                            eprintln!("Failed to resize surface: {e}");
-                        } else {
-                            let duration = start.elapsed();
-                            println!(
-                                "Surface resize completed in {:.2}ms",
-                                duration.as_secs_f64() * 1000.0
-                            );
-                        }
-                        self.context = Some(Arc::new(ctx));
+                if let Some(context) = self.context.take()
+                    && let Ok(mut ctx) = Arc::try_unwrap(context)
+                {
+                    let start = std::time::Instant::now();
+                    if let Err(e) = ctx.resize_surface(
+                        ctx.primary_surface_id().unwrap(),
+                        gup::PhysicalSize::new(size.width, size.height),
+                    ) {
+                        eprintln!("Failed to resize surface: {e}");
+                    } else {
+                        let duration = start.elapsed();
+                        println!(
+                            "Surface resize completed in {:.2}ms",
+                            duration.as_secs_f64() * 1000.0
+                        );
                     }
+                    self.context = Some(Arc::new(ctx));
                 }
             }
 
