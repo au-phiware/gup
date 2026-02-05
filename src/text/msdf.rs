@@ -820,15 +820,16 @@ impl GlyphOutline {
         }
 
         // Compute pseudo_distance ONLY for the 3 closest edges (one per channel)
+        // If no edge found for a channel, return negative infinity (very far outside)
         let r = red_closest
             .map(|(edge, _)| edge.pseudo_distance(point).distance)
-            .unwrap_or(f32::INFINITY);
+            .unwrap_or(f32::NEG_INFINITY);
         let g = green_closest
             .map(|(edge, _)| edge.pseudo_distance(point).distance)
-            .unwrap_or(f32::INFINITY);
+            .unwrap_or(f32::NEG_INFINITY);
         let b = blue_closest
             .map(|(edge, _)| edge.pseudo_distance(point).distance)
-            .unwrap_or(f32::INFINITY);
+            .unwrap_or(f32::NEG_INFINITY);
 
         [r, g, b]
     }

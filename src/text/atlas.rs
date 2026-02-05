@@ -164,9 +164,9 @@ impl FontAtlas {
 
         // Find space in atlas
         if self.current_x + glyph_width > self.atlas_size {
-            // Move to next row
+            // Move to next row (add 1 pixel gap to prevent texture bleeding)
             self.current_x = 0;
-            self.current_y += self.current_row_height;
+            self.current_y += self.current_row_height + 1;
             self.current_row_height = 0;
         }
 
@@ -244,8 +244,8 @@ impl FontAtlas {
 
         self.glyph_info.insert(character, glyph_info);
 
-        // Update atlas position
-        self.current_x += glyph_width;
+        // Update atlas position (add 1 pixel gap to prevent texture bleeding)
+        self.current_x += glyph_width + 1;
         self.current_row_height = self.current_row_height.max(glyph_height);
 
         Ok(())
