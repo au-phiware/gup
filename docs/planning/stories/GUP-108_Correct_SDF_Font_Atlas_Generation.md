@@ -1,11 +1,8 @@
 # GUP-108: Correct SDF Font Atlas Generation
 
-**Status**: Completed
-**Priority**: High
-**Component**: Font Atlas / Text Rendering
-**Depends On**: None
-**Blocks**: GUP-107 (may be related to character positioning issues)
-**Completed**: 2025-12-31
+**Status**: Completed **Priority**: High **Component**: Font Atlas / Text
+Rendering **Depends On**: None **Blocks**: GUP-107 (may be related to character
+positioning issues) **Completed**: 2025-12-31
 
 ## Summary
 
@@ -284,7 +281,8 @@ thesis "Shape Decomposition for Multi-channel Distance Fields".
 3. **True MSDF Generation**
    - Each color channel stores pseudo-distance to the nearest edge of that color
    - Pseudo-distance extends beyond endpoints along tangent directions
-   - Proper signed distance with inside/outside determination using cross product
+   - Proper signed distance with inside/outside determination using cross
+     product
 
 4. **Shader Update** (`src/shaders/text.wgsl`)
    - Changed from single-channel (`.r`) to three-channel sampling (`.rgb`)
@@ -318,8 +316,41 @@ thesis "Shape Decomposition for Multi-channel Distance Fields".
 
 ### Tests Added
 
-- `test_contour_edge_coloring` - Verifies triangle edge coloring (3 corners,
-  3 colors)
+- `test_contour_edge_coloring` - Verifies triangle edge coloring (3 corners, 3
+  colors)
 - `test_contour_edge_coloring_square` - Verifies square edge coloring handles
   color wrap-around
 - Existing tests updated and passing: 67 text-related tests
+
+### Bug Fix: Orthogonality-Based Edge Comparison (2026-02-06)
+
+A visual artifact bug was discovered where unwanted pixels extended beyond glyph
+corners (e.g., 'l' and 'v' glyphs had visible artifacts at their sharp corners).
+
+**Root Cause**: The `msdf_at()` function compared edges using only
+`abs(distance)` to determine which edge was "closest" for each color channel.
+However, according to Chlumsky's thesis (Algorithm 7, Section 2.4), edge
+comparison must also use **orthogonality** as a tie-breaker when distances are
+equal.
+
+At corner points, two adjacent edges have equal distances to points along the
+corner bisector. Without orthogonality, the wrong edge could be selected for a
+color channel, causing the median operation to produce incorrect inside/outside
+determinations.
+
+**Fix**: Added `orthogonality` field to `SignedDistance` struct and implemented
+`is_closer_than()` method that:
+
+1. Primarily compares by absolute distance
+2. Uses orthogonality as tie-breaker when distances are within 1e-6
+
+Orthogonality is computed as the cross product of the normalized tangent
+direction and the normalized direction to the query point. Higher orthogonality
+means the point is more "directly facing" the edge, making it the preferred edge
+when distances are equal.
+
+**Files Modified**:
+
+- `src/text/msdf.rs` - Added orthogonality to SignedDistance and all distance
+  functions
+- `examples/msdf_debug.rs` - Added visual debugging tool for MSDF investigation

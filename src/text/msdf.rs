@@ -151,18 +151,40 @@ impl Point {
     }
 }
 
-/// Signed distance result including orthogonality for tie-breaking
+/// Signed distance result including parameter t for pseudo-distance calculation
+/// and orthogonality for proper edge comparison at corners
 #[derive(Debug, Clone, Copy)]
-struct SignedDistance {
+pub struct SignedDistance {
     /// The signed distance value
-    distance: f32,
+    pub distance: f32,
     /// Parameter t at which the minimum distance occurs (for pseudo-distance)
-    t: f32,
+    pub t: f32,
+    /// Orthogonality: cross product of tangent direction and direction to point
+    /// Used as tie-breaker when distances are equal (at corner bisectors)
+    pub orthogonality: f32,
 }
 
 impl SignedDistance {
-    fn new(distance: f32, t: f32) -> Self {
-        Self { distance, t }
+    fn new(distance: f32, t: f32, orthogonality: f32) -> Self {
+        Self {
+            distance,
+            t,
+            orthogonality,
+        }
+    }
+
+    /// Compare two signed distances according to Chlumsky's algorithm:
+    /// Primary: smaller absolute distance wins
+    /// Tie-breaker: higher orthogonality wins (point is more perpendicular to edge)
+    pub fn is_closer_than(&self, other: &SignedDistance) -> bool {
+        let abs_self = self.distance.abs();
+        let abs_other = other.distance.abs();
+        if (abs_self - abs_other).abs() < 1e-6 {
+            // Distances are equal, use orthogonality as tie-breaker
+            self.orthogonality.abs() > other.orthogonality.abs()
+        } else {
+            abs_self < abs_other
+        }
     }
 }
 
@@ -282,8 +304,8 @@ impl EdgeSegment {
         }
     }
 
-    /// Compute signed distance from a point to this edge segment
-    fn signed_distance(&self, point: &Point) -> SignedDistance {
+    /// Compute true signed distance from a point to this edge segment
+    pub fn signed_distance(&self, point: &Point) -> SignedDistance {
         match &self.edge_type {
             EdgeType::Line { start, end } => self.line_signed_distance(point, start, end),
             EdgeType::QuadCurve { p0, p1, p2 } => self.quad_signed_distance(point, p0, p1, p2),
@@ -299,7 +321,7 @@ impl EdgeSegment {
 
         let edge_length_sq = edge_vec.length_squared();
         if edge_length_sq < 1e-10 {
-            return SignedDistance::new(point.distance_to(start), 0.0);
+            return SignedDistance::new(point.distance_to(start), 0.0, 0.0);
         }
 
         // Project point onto line, get parameter t
@@ -314,10 +336,25 @@ impl EdgeSegment {
         let distance = point.distance_to(&closest);
 
         // Determine sign using cross product
+        // MSDF convention: inside glyph = positive (> 0.5), outside = negative (< 0.5)
+        // TrueType uses CW winding for outer contours: cross > 0 means LEFT = outside
         let cross = edge_vec.cross(&point_vec);
         let signed_dist = if cross >= 0.0 { -distance } else { distance };
 
-        SignedDistance::new(signed_dist, t_clamped)
+        // Compute orthogonality: cross product of normalized tangent and normalized direction to point
+        // This is used as tie-breaker when distances are equal
+        let to_point = point.sub(&closest);
+        let to_point_len = to_point.length();
+        let edge_len = edge_length_sq.sqrt();
+        let orthogonality = if to_point_len > 1e-10 && edge_len > 1e-10 {
+            let tangent_norm = Point::new(edge_vec.x / edge_len, edge_vec.y / edge_len);
+            let to_point_norm = Point::new(to_point.x / to_point_len, to_point.y / to_point_len);
+            tangent_norm.cross(&to_point_norm)
+        } else {
+            0.0
+        };
+
+        SignedDistance::new(signed_dist, t_clamped, orthogonality)
     }
 
     fn quad_signed_distance(
@@ -372,11 +409,24 @@ impl EdgeSegment {
 
         let distance = best_dist_sq.sqrt();
         let dir = self.direction_at(best_t);
-        let to_point = point.sub(&self.point_at(best_t));
+        let closest = self.point_at(best_t);
+        let to_point = point.sub(&closest);
+        // TrueType CW winding: cross > 0 = outside (negative), cross < 0 = inside (positive)
         let cross = dir.cross(&to_point);
         let signed_dist = if cross >= 0.0 { -distance } else { distance };
 
-        SignedDistance::new(signed_dist, best_t)
+        // Compute orthogonality
+        let to_point_len = to_point.length();
+        let dir_len = dir.length();
+        let orthogonality = if to_point_len > 1e-10 && dir_len > 1e-10 {
+            let dir_norm = Point::new(dir.x / dir_len, dir.y / dir_len);
+            let to_point_norm = Point::new(to_point.x / to_point_len, to_point.y / to_point_len);
+            dir_norm.cross(&to_point_norm)
+        } else {
+            0.0
+        };
+
+        SignedDistance::new(signed_dist, best_t, orthogonality)
     }
 
     fn cubic_signed_distance(
@@ -421,10 +471,22 @@ impl EdgeSegment {
 
         let dir = self.direction_at(best_t);
         let to_point = point.sub(&closest);
+        // TrueType CW winding: cross > 0 = outside (negative), cross < 0 = inside (positive)
         let cross = dir.cross(&to_point);
         let signed_dist = if cross >= 0.0 { -distance } else { distance };
 
-        SignedDistance::new(signed_dist, best_t)
+        // Compute orthogonality
+        let to_point_len = to_point.length();
+        let dir_len = dir.length();
+        let orthogonality = if to_point_len > 1e-10 && dir_len > 1e-10 {
+            let dir_norm = Point::new(dir.x / dir_len, dir.y / dir_len);
+            let to_point_norm = Point::new(to_point.x / to_point_len, to_point.y / to_point_len);
+            dir_norm.cross(&to_point_norm)
+        } else {
+            0.0
+        };
+
+        SignedDistance::new(signed_dist, best_t, orthogonality)
     }
 
     fn refine_closest_point(
@@ -462,7 +524,7 @@ impl EdgeSegment {
     }
 
     /// Compute pseudo-distance (extends beyond endpoints along tangent directions)
-    fn pseudo_distance(&self, point: &Point) -> SignedDistance {
+    pub fn pseudo_distance(&self, point: &Point) -> SignedDistance {
         let sd = self.signed_distance(point);
 
         // If the closest point is at an endpoint, use pseudo-distance
@@ -484,7 +546,18 @@ impl EdgeSegment {
             // Sign from the main signed distance
             let sign = if sd.distance >= 0.0 { 1.0 } else { -1.0 };
 
-            SignedDistance::new(sign * perp_dist, sd.t)
+            // Orthogonality for pseudo-distance: use the cross product directly
+            // (it's already the cross of normalized tangent with direction to point)
+            let to_point_len = to_point.length();
+            let orthogonality = if to_point_len > 1e-10 {
+                let to_point_norm =
+                    Point::new(to_point.x / to_point_len, to_point.y / to_point_len);
+                dir_norm.cross(&to_point_norm)
+            } else {
+                0.0
+            };
+
+            SignedDistance::new(sign * perp_dist, sd.t, orthogonality)
         } else {
             sd
         }
@@ -708,6 +781,9 @@ impl GlyphOutline {
     /// This computes signed_distance ONCE per edge segment, then uses that result
     /// for all three channel comparisons. pseudo_distance is only called at the
     /// end for the 3 closest edges (one per channel).
+    ///
+    /// Edge comparison uses both absolute distance AND orthogonality as a tie-breaker,
+    /// which correctly partitions the plane at corners.
     pub fn msdf_at(&self, point: &Point) -> [f32; 3] {
         // Track closest edge per channel: (signed_distance for comparison, edge reference)
         let mut red_closest: Option<(&EdgeSegment, SignedDistance)> = None;
@@ -722,24 +798,21 @@ impl GlyphOutline {
 
                 // Update red channel if this edge has red component
                 if edge.color.has_red()
-                    && (red_closest.is_none()
-                        || sd.distance.abs() < red_closest.unwrap().1.distance.abs())
+                    && (red_closest.is_none() || sd.is_closer_than(&red_closest.unwrap().1))
                 {
                     red_closest = Some((edge, sd));
                 }
 
                 // Update green channel if this edge has green component
                 if edge.color.has_green()
-                    && (green_closest.is_none()
-                        || sd.distance.abs() < green_closest.unwrap().1.distance.abs())
+                    && (green_closest.is_none() || sd.is_closer_than(&green_closest.unwrap().1))
                 {
                     green_closest = Some((edge, sd));
                 }
 
                 // Update blue channel if this edge has blue component
                 if edge.color.has_blue()
-                    && (blue_closest.is_none()
-                        || sd.distance.abs() < blue_closest.unwrap().1.distance.abs())
+                    && (blue_closest.is_none() || sd.is_closer_than(&blue_closest.unwrap().1))
                 {
                     blue_closest = Some((edge, sd));
                 }
@@ -950,6 +1023,15 @@ impl MsdfGenerator {
         let _ = font.outline_glyph(glyph_id, &mut builder);
         Ok(builder.build())
     }
+
+    /// Generate outline for a character (for debugging)
+    pub fn generate_outline(&self, c: char) -> GupResult<GlyphOutline> {
+        let font = self.get_font()?;
+        let glyph_id = font
+            .glyph_index(c)
+            .ok_or_else(|| GupError::resource_error(format!("Glyph not found for '{c}'")))?;
+        self.extract_glyph_outline(glyph_id, &font)
+    }
 }
 
 /// Builder for glyph outlines using ttf_parser OutlineBuilder trait
@@ -1131,15 +1213,15 @@ mod tests {
             color: EdgeColor::WHITE,
         };
 
-        // Point above the line
+        // Point above the line (TrueType CW winding: above = outside = negative)
         let sd = edge.signed_distance(&Point::new(5.0, 3.0));
         assert!((sd.distance.abs() - 3.0).abs() < 0.001);
-        assert!(sd.distance > 0.0); // Above the line (positive)
+        assert!(sd.distance < 0.0); // Above the line = outside = negative
 
-        // Point below the line
+        // Point below the line (TrueType CW winding: below = inside = positive)
         let sd = edge.signed_distance(&Point::new(5.0, -3.0));
         assert!((sd.distance.abs() - 3.0).abs() < 0.001);
-        assert!(sd.distance < 0.0); // Below the line (negative)
+        assert!(sd.distance > 0.0); // Below the line = inside = positive
     }
 
     #[test]
