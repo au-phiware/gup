@@ -875,16 +875,22 @@ pub struct MsdfBitmap {
     pub red_channel: DistanceField,
     pub green_channel: DistanceField,
     pub blue_channel: DistanceField,
+    /// Scale factor used to generate this MSDF (font units to pixels)
+    pub scale: f32,
+    /// Padding in pixels around the glyph
+    pub padding: u32,
 }
 
 impl MsdfBitmap {
-    pub fn new(width: usize, height: usize) -> Self {
+    pub fn new(width: usize, height: usize, scale: f32, padding: u32) -> Self {
         Self {
             width,
             height,
             red_channel: DistanceField::new(width, height),
             green_channel: DistanceField::new(width, height),
             blue_channel: DistanceField::new(width, height),
+            scale,
+            padding,
         }
     }
 
@@ -986,7 +992,12 @@ impl MsdfGenerator {
         };
 
         // Generate MSDF bitmap
-        let mut msdf = MsdfBitmap::new(glyph_width.max(1), glyph_height.max(1));
+        let mut msdf = MsdfBitmap::new(
+            glyph_width.max(1),
+            glyph_height.max(1),
+            scale,
+            self.config.padding,
+        );
         let distance_range = self.config.distance_range;
         let padding = self.config.padding as f32;
 
@@ -1249,10 +1260,12 @@ mod tests {
 
     #[test]
     fn test_msdf_bitmap_creation() {
-        let msdf = MsdfBitmap::new(32, 32);
+        let msdf = MsdfBitmap::new(32, 32, 1.0, 4);
         assert_eq!(msdf.width, 32);
         assert_eq!(msdf.height, 32);
         assert_eq!(msdf.red_channel.data.len(), 32 * 32);
+        assert_eq!(msdf.scale, 1.0);
+        assert_eq!(msdf.padding, 4);
     }
 
     #[test]

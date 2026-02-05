@@ -207,18 +207,32 @@ impl FontAtlas {
 
         // Get glyph metrics from ttf_parser
         let advance = self.font.glyph_hor_advance(glyph_id).unwrap_or(0) as f32;
-        let scale = font_size / self.font.units_per_em() as f32;
+        let units_per_em = self.font.units_per_em() as f32;
+        let atlas_scale = font_size / units_per_em;
 
-        // Get glyph bounding box
+        // Get MSDF scale and padding - the MSDF bitmap was generated at this scale
+        let msdf_scale = msdf_bitmap.scale;
+        let msdf_padding = msdf_bitmap.padding as f32;
+
+        // The ratio converts MSDF pixels to screen pixels at font_size
+        let scale_ratio = atlas_scale / msdf_scale;
+
+        // Calculate quad size from MSDF bitmap dimensions (which include padding)
+        // The quad needs to be sized to match the MSDF bitmap content
+        let width = glyph_width as f32 * scale_ratio;
+        let height = glyph_height as f32 * scale_ratio;
+
+        // Get glyph bounding box for bearing calculation
         let bbox = self.font.glyph_bounding_box(glyph_id);
-        let (width, height, bearing_x, bearing_y) = if let Some(bbox) = bbox {
-            let width = (bbox.x_max - bbox.x_min) as f32 * scale;
-            let height = (bbox.y_max - bbox.y_min) as f32 * scale;
-            let bearing_x = bbox.x_min as f32 * scale;
-            let bearing_y = bbox.y_min as f32 * scale;
-            (width, height, bearing_x, bearing_y)
+        let (bearing_x, bearing_y) = if let Some(bbox) = bbox {
+            // The bearing needs to account for the MSDF padding
+            // The padding in MSDF pixels becomes padding * scale_ratio in screen pixels
+            let padding_screen = msdf_padding * scale_ratio;
+            let bearing_x = bbox.x_min as f32 * atlas_scale - padding_screen;
+            let bearing_y = bbox.y_min as f32 * atlas_scale - padding_screen;
+            (bearing_x, bearing_y)
         } else {
-            (font_size * 0.6, font_size, 0.0, 0.0) // Fallback
+            (0.0, 0.0) // Fallback
         };
 
         // Create glyph info
@@ -238,8 +252,8 @@ impl FontAtlas {
                 x: bearing_x,
                 y: bearing_y,
             },
-            advance: advance * scale,
-            sdf_scale: 1.0, // MSDF scale is handled in the shader
+            advance: advance * atlas_scale,
+            sdf_scale: scale_ratio, // Store the scale ratio for shader use
         };
 
         self.glyph_info.insert(character, glyph_info);
