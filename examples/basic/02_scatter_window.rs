@@ -250,16 +250,16 @@ impl ScatterRenderer {
         }
 
         // Create index buffer
-        if self.index_buffer.is_none() {
-            if let Some(indices) = Circle::generate_indices() {
-                self.index_buffer = Some(frame.device().create_buffer_init(
-                    &wgpu::util::BufferInitDescriptor {
-                        label: Some("Scatter Index Buffer"),
-                        contents: bytemuck::cast_slice(&indices),
-                        usage: wgpu::BufferUsages::INDEX,
-                    },
-                ));
-            }
+        if self.index_buffer.is_none()
+            && let Some(indices) = Circle::generate_indices()
+        {
+            self.index_buffer = Some(frame.device().create_buffer_init(
+                &wgpu::util::BufferInitDescriptor {
+                    label: Some("Scatter Index Buffer"),
+                    contents: bytemuck::cast_slice(&indices),
+                    usage: wgpu::BufferUsages::INDEX,
+                },
+            ));
         }
 
         // Create render pipeline
@@ -535,12 +535,12 @@ impl ApplicationHandler for ScatterApp {
                 event_loop.exit();
             }
             WindowEvent::Resized(size) => {
-                if let (Some(surface_id), Some(ctx)) = (self.surface_id, self.context.take()) {
-                    if let Ok(mut c) = Arc::try_unwrap(ctx) {
-                        let _ = c
-                            .resize_surface(surface_id, PhysicalSize::new(size.width, size.height));
-                        self.context = Some(Arc::new(c));
-                    }
+                if let (Some(surface_id), Some(ctx)) = (self.surface_id, self.context.take())
+                    && let Ok(mut c) = Arc::try_unwrap(ctx)
+                {
+                    let _ =
+                        c.resize_surface(surface_id, PhysicalSize::new(size.width, size.height));
+                    self.context = Some(Arc::new(c));
                 }
             }
             WindowEvent::KeyboardInput {

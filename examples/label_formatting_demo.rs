@@ -299,58 +299,57 @@ impl DataVisualizationRenderer {
             let mut render_pass = frame.render_pass(Some(clear_color));
 
             // Render circles first
-            if !self.circle_instances.is_empty() {
-                if let (Some(vertex_buffer), Some(instance_buffer), Some(pipeline)) = (
+            if !self.circle_instances.is_empty()
+                && let (Some(vertex_buffer), Some(instance_buffer), Some(pipeline)) = (
                     &self.vertex_buffer,
                     &self.instance_buffer,
                     &self.render_pipeline,
-                ) {
-                    render_pass.set_pipeline(pipeline);
-                    render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-                    render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                )
+            {
+                render_pass.set_pipeline(pipeline);
+                render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+                render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
 
-                    if let Some(index_buffer) = &self.index_buffer {
-                        render_pass
-                            .set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-                        render_pass.draw_indexed(0..6, 0, 0..self.circle_instances.len() as u32);
-                    } else {
-                        render_pass.draw(0..6, 0..self.circle_instances.len() as u32);
-                    }
+                if let Some(index_buffer) = &self.index_buffer {
+                    render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                    render_pass.draw_indexed(0..6, 0, 0..self.circle_instances.len() as u32);
+                } else {
+                    render_pass.draw(0..6, 0..self.circle_instances.len() as u32);
                 }
             }
 
             // Render text labels using convenience method
-            if !self.labels.is_empty() {
-                if let (Some(text_renderer), Some(font_atlas), Some(layout_engine)) = (
+            if !self.labels.is_empty()
+                && let (Some(text_renderer), Some(font_atlas), Some(layout_engine)) = (
                     &mut self.text_renderer,
                     &mut self.font_atlas,
                     &mut self.layout_engine,
-                ) {
-                    for label in &self.labels {
-                        let style = TextStyle::new(42.0)
-                            .with_rgba(
-                                label.color[0],
-                                label.color[1],
-                                label.color[2],
-                                label.color[3],
-                            )
-                            .with_anchor(TextAnchor::CenterLeft);
+                )
+            {
+                for label in &self.labels {
+                    let style = TextStyle::new(42.0)
+                        .with_rgba(
+                            label.color[0],
+                            label.color[1],
+                            label.color[2],
+                            label.color[3],
+                        )
+                        .with_anchor(TextAnchor::CenterLeft);
 
-                        let config = TextRenderConfig {
-                            text: &label.text,
-                            position: label.position,
-                            style: &style,
-                            font_atlas,
-                            layout_engine,
-                            screen_width: 1200.0,
-                            screen_height: 800.0,
-                        };
+                    let config = TextRenderConfig {
+                        text: &label.text,
+                        position: label.position,
+                        style: &style,
+                        font_atlas,
+                        layout_engine,
+                        screen_width: 1200.0,
+                        screen_height: 800.0,
+                    };
 
-                        if let Err(e) =
-                            text_renderer.render_text(&mut render_pass, &device, &queue, config)
-                        {
-                            eprintln!("⚠️ Failed to render text '{}': {}", label.text, e);
-                        }
+                    if let Err(e) =
+                        text_renderer.render_text(&mut render_pass, &device, &queue, config)
+                    {
+                        eprintln!("⚠️ Failed to render text '{}': {}", label.text, e);
                     }
                 }
             }
