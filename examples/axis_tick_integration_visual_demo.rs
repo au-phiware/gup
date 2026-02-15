@@ -603,7 +603,7 @@ impl AxisTickIntegrationRenderer {
                         vertex: wgpu::VertexState {
                             module: &shader,
                             entry_point: Some("vs_main"),
-                            buffers: &[vertex_buffer_layout.clone()],
+                            buffers: std::slice::from_ref(&vertex_buffer_layout),
                             compilation_options: Default::default(),
                         },
                         fragment: Some(wgpu::FragmentState {

@@ -870,6 +870,7 @@ impl AxisRenderer {
     /// - Top axis: ticks go upward (+Y)
     /// - Left axis: ticks go leftward (-X)
     /// - Right axis: ticks go rightward (+X)
+    #[allow(clippy::too_many_arguments)]
     fn append_tick_vertices(
         &self,
         vertices: &mut Vec<Vertex>,

@@ -272,7 +272,7 @@ async fn demonstrate_performance_monitoring(
     debug_context: &mut GpuDebugContext,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Record several performance snapshots
-    let snapshots = vec![
+    let snapshots = [
         PerformanceSnapshot::new(16.67, 1024 * 1024)
             .with_gpu_utilization(85.5)
             .with_query_time(500.0)

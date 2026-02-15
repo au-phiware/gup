@@ -752,7 +752,7 @@ impl BasicPipeline {
             vertex: VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
-                buffers: &[vertex_buffer_layout.clone()],
+                buffers: std::slice::from_ref(&vertex_buffer_layout),
                 compilation_options: PipelineCompilationOptions::default(),
             },
             fragment: Some(FragmentState {

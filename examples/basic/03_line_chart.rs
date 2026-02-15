@@ -45,6 +45,7 @@ struct TimePoint {
     /// Measurement value
     value: f32,
     /// Optional series identifier
+    #[allow(dead_code)]
     series: String,
 }
 
