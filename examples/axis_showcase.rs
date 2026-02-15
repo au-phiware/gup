@@ -7,13 +7,19 @@
 //! - Automatic axis generation for scatter plots
 //! - Custom axis configuration and styling
 //! - Multiple axis positions (top, bottom, left, right)
+//! - Formatted numeric labels at each tick mark
+//! - Text rendering integrated in a single GPU render pass
 //! - Real-time interactive axis rendering
 
 use gup::{
     GupContext, PhysicalSize, SurfaceId,
-    axis::{Axis, AxisBounds, AxisConfiguration, AxisPosition, LinearAxis},
+    axis::{
+        Axis, AxisBounds, AxisConfiguration, AxisPosition, AxisRenderer as GupAxisRenderer,
+        LinearAxis,
+    },
     render::Vertex,
     shader_function::Vec2,
+    text::{FontAtlas, TextAnchor, TextLayoutEngine, TextRenderConfig, TextRenderer, TextStyle},
 };
 use std::sync::Arc;
 use wgpu::{Color, util::DeviceExt};
@@ -41,6 +47,11 @@ struct AxisRenderer {
     #[allow(dead_code)] // Reserved for future use in coordinate transformations
     chart_bounds: AxisBounds,
     background_color: [f32; 4],
+    gpu_renderer: GupAxisRenderer,
+    // Text rendering components for axis labels
+    text_renderer: Option<TextRenderer>,
+    font_atlas: Option<FontAtlas>,
+    layout_engine: Option<TextLayoutEngine>,
 }
 
 impl AxisRenderer {
@@ -98,10 +109,16 @@ impl AxisRenderer {
             axes,
             chart_bounds,
             background_color: [0.95, 0.95, 0.95, 1.0], // Light gray
+            gpu_renderer: GupAxisRenderer::new(),
+            text_renderer: None,
+            font_atlas: None,
+            layout_engine: None,
         }
     }
 
-    fn render(&self, frame: &mut gup::RenderFrame) -> Result<(), Box<dyn std::error::Error>> {
+    fn render(&mut self, frame: &mut gup::RenderFrame) -> Result<(), Box<dyn std::error::Error>> {
+        let viewport_size = (900.0_f32, 700.0_f32);
+
         // Clear background
         let clear_color = Color {
             r: self.background_color[0] as f64,
@@ -110,22 +127,108 @@ impl AxisRenderer {
             a: self.background_color[3] as f64,
         };
 
+        // Initialize text rendering components if needed
+        if self.text_renderer.is_none() {
+            self.text_renderer = Some(TextRenderer::new(frame.device())?);
+        }
+        if self.font_atlas.is_none() {
+            self.font_atlas = Some(FontAtlas::new(frame.device(), frame.queue(), 14.0)?);
+        }
+        if self.layout_engine.is_none() {
+            self.layout_engine = Some(TextLayoutEngine::new());
+        }
+
         // Create vertices for axis lines and ticks
         let mut vertices = Vec::new();
-
-        // For each axis, generate the appropriate line and tick vertices
         for axis in &self.axes {
             let axis_vertices = self.generate_axis_vertices(axis.as_ref())?;
             vertices.extend(axis_vertices);
         }
 
+        // Collect label data and axis colors (only needs &self, no mutable borrows)
+        struct LabelInfo {
+            text: String,
+            screen_position: Vec2,
+            anchor: TextAnchor,
+            color: [f32; 4],
+        }
+
+        let mut all_labels = Vec::new();
+        for axis in &self.axes {
+            let config = axis.configuration();
+            let position = axis.position();
+            let bounds = Self::axis_bounds_for_position(position);
+
+            let labels = self.gpu_renderer.generate_label_data(
+                &bounds,
+                config,
+                position,
+                None,
+                viewport_size,
+                None,
+            );
+
+            for label in labels {
+                all_labels.push(LabelInfo {
+                    text: label.text,
+                    screen_position: label.screen_position,
+                    anchor: label.anchor,
+                    color: config.line_color,
+                });
+            }
+        }
+
+        // --- Phase 1: Queue text labels BEFORE creating the render pass ---
+        let text_renderer = self.text_renderer.as_mut().unwrap();
+        text_renderer.begin_frame();
+
+        let font_atlas = self.font_atlas.as_mut().unwrap();
+        let layout_engine = self.layout_engine.as_mut().unwrap();
+
+        for label in &all_labels {
+            let style = TextStyle::new(14.0)
+                .with_rgba(
+                    label.color[0],
+                    label.color[1],
+                    label.color[2],
+                    label.color[3],
+                )
+                .with_anchor(label.anchor);
+
+            let mut text_config = TextRenderConfig {
+                text: &label.text,
+                position: label.screen_position,
+                style: &style,
+                font_atlas,
+                layout_engine,
+                screen_width: viewport_size.0,
+                screen_height: viewport_size.1,
+            };
+
+            if let Err(e) = text_renderer.queue_text(frame, &mut text_config) {
+                eprintln!("Failed to queue label '{}': {}", label.text, e);
+            }
+        }
+
         if vertices.is_empty() {
-            // Just clear the screen
-            let _render_pass = frame.render_pass(Some(clear_color));
+            // Just clear the screen and render any queued text
+            let device = frame.device_arc();
+            let queue = frame.queue_arc();
+            let font_atlas = self.font_atlas.as_ref().unwrap();
+            let text_renderer = self.text_renderer.as_mut().unwrap();
+            let mut render_pass = frame.render_pass(Some(clear_color));
+            let _ = text_renderer.render_queued_text(
+                &mut render_pass,
+                &device,
+                &queue,
+                font_atlas,
+                viewport_size.0,
+                viewport_size.1,
+            );
             return Ok(());
         }
 
-        // Create vertex buffer
+        // Create vertex buffer for axis lines/ticks
         let vertex_buffer = frame
             .device()
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -134,7 +237,7 @@ impl AxisRenderer {
                 usage: wgpu::BufferUsages::VERTEX,
             });
 
-        // Create simple shader for axis rendering
+        // Create simple shader for axis line rendering
         let shader = frame
             .device()
             .create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -166,7 +269,7 @@ impl AxisRenderer {
                 ),
             });
 
-        // Create render pipeline
+        // Create render pipeline for LineList topology
         let render_pipeline_layout =
             frame
                 .device()
@@ -232,120 +335,63 @@ impl AxisRenderer {
                     cache: None,
                 });
 
-        // Render the axes
+        // --- Phase 2: Single render pass for lines + ticks + text labels ---
+        let device = frame.device_arc();
+        let queue = frame.queue_arc();
+        let font_atlas = self.font_atlas.as_ref().unwrap();
+        let text_renderer = self.text_renderer.as_mut().unwrap();
         {
             let mut render_pass = frame.render_pass(Some(clear_color));
+
+            // Draw axis lines and ticks
             render_pass.set_pipeline(&render_pipeline);
             render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
             render_pass.draw(0..vertices.len() as u32, 0..1);
+
+            // Draw queued text labels in the same render pass
+            if let Err(e) = text_renderer.render_queued_text(
+                &mut render_pass,
+                &device,
+                &queue,
+                font_atlas,
+                viewport_size.0,
+                viewport_size.1,
+            ) {
+                eprintln!("Failed to render axis labels: {}", e);
+            }
         }
 
         Ok(())
     }
 
-    /// Generate vertices for a single axis (line and ticks)
+    /// Compute axis bounds for a given position (shared by vertex and label generation).
+    fn axis_bounds_for_position(position: AxisPosition) -> AxisBounds {
+        let (start, end) = match position {
+            AxisPosition::Bottom => (Vec2 { x: -0.6, y: -0.6 }, Vec2 { x: 0.6, y: -0.6 }),
+            AxisPosition::Top => (Vec2 { x: -0.6, y: 0.6 }, Vec2 { x: 0.6, y: 0.6 }),
+            AxisPosition::Left => (Vec2 { x: -0.6, y: -0.6 }, Vec2 { x: -0.6, y: 0.6 }),
+            AxisPosition::Right => (Vec2 { x: 0.6, y: -0.6 }, Vec2 { x: 0.6, y: 0.6 }),
+        };
+        AxisBounds::new(start, end, 50.0)
+    }
+
+    /// Generate vertices for a single axis (line and ticks) using the library's AxisRenderer.
     fn generate_axis_vertices(
         &self,
         axis: &dyn Axis,
     ) -> Result<Vec<Vertex>, Box<dyn std::error::Error>> {
-        let mut vertices = Vec::new();
         let config = axis.configuration();
         let position = axis.position();
+        let bounds = Self::axis_bounds_for_position(position);
 
-        // Define axis line endpoints based on position
-        let (start, end) = match position {
-            AxisPosition::Bottom => (
-                Vec2 { x: -0.6, y: -0.6 }, // Bottom-left
-                Vec2 { x: 0.6, y: -0.6 },  // Bottom-right
-            ),
-            AxisPosition::Top => (
-                Vec2 { x: -0.6, y: 0.6 }, // Top-left
-                Vec2 { x: 0.6, y: 0.6 },  // Top-right
-            ),
-            AxisPosition::Left => (
-                Vec2 { x: -0.6, y: -0.6 }, // Bottom-left
-                Vec2 { x: -0.6, y: 0.6 },  // Top-left
-            ),
-            AxisPosition::Right => (
-                Vec2 { x: 0.6, y: -0.6 }, // Bottom-right
-                Vec2 { x: 0.6, y: 0.6 },  // Top-right
-            ),
-        };
-
-        // Main axis line
-        if config.show_line {
-            vertices.push(Vertex {
-                position: [start.x, start.y],
-                color: config.line_color,
-            });
-            vertices.push(Vertex {
-                position: [end.x, end.y],
-                color: config.line_color,
-            });
-        }
-
-        // Generate ticks
-        if config.show_major_ticks {
-            let tick_positions = axis.get_tick_positions(None, 800.0);
-            let tick_length = config.major_tick_length / 500.0; // Scale to screen coordinates
-
-            for &t in &tick_positions {
-                if (0.0..=1.0).contains(&t) {
-                    // Only show ticks within [0,1] range
-                    let (tick_start, tick_end) = match position {
-                        AxisPosition::Bottom => {
-                            let x = start.x + t * (end.x - start.x);
-                            (
-                                Vec2 { x, y: start.y },
-                                Vec2 {
-                                    x,
-                                    y: start.y - tick_length,
-                                },
-                            )
-                        }
-                        AxisPosition::Top => {
-                            let x = start.x + t * (end.x - start.x);
-                            (
-                                Vec2 { x, y: start.y },
-                                Vec2 {
-                                    x,
-                                    y: start.y + tick_length,
-                                },
-                            )
-                        }
-                        AxisPosition::Left => {
-                            let y = start.y + t * (end.y - start.y);
-                            (
-                                Vec2 { x: start.x, y },
-                                Vec2 {
-                                    x: start.x - tick_length,
-                                    y,
-                                },
-                            )
-                        }
-                        AxisPosition::Right => {
-                            let y = start.y + t * (end.y - start.y);
-                            (
-                                Vec2 { x: start.x, y },
-                                Vec2 {
-                                    x: start.x + tick_length,
-                                    y,
-                                },
-                            )
-                        }
-                    };
-
-                    vertices.push(Vertex {
-                        position: [tick_start.x, tick_start.y],
-                        color: config.line_color,
-                    });
-                    vertices.push(Vertex {
-                        position: [tick_end.x, tick_end.y],
-                        color: config.line_color,
-                    });
-                }
-            }
-        }
+        // Delegate to the library's AxisRenderer for vertex generation
+        let vertices = self.gpu_renderer.generate_axis_vertices(
+            &bounds,
+            config,
+            position,
+            None,           // No scale — uses default tick positions
+            (900.0, 700.0), // Match the window size
+        );
 
         Ok(vertices)
     }
@@ -425,7 +471,7 @@ impl AxisShowcaseApp {
 
             match ctx.begin_frame_for_surface(surface_id) {
                 Ok(mut frame) => {
-                    if let Some(renderer) = &self.renderer
+                    if let Some(renderer) = &mut self.renderer
                         && let Err(e) = renderer.render(&mut frame)
                     {
                         eprintln!("❌ Failed to render axes: {e}");
@@ -462,10 +508,11 @@ impl ApplicationHandler for AxisShowcaseApp {
             println!("🎨 Demonstrating axis system capabilities...");
             println!();
             println!("Visible Features:");
-            println!("• Bottom axis (X): Blue, 2px line, major ticks");
-            println!("• Left axis (Y): Red, 2px line, major ticks");
-            println!("• Top axis: Green, 1.5px line, no minor ticks");
-            println!("• Right axis: Purple, 1.5px line, no minor ticks");
+            println!("• Bottom axis (X): Blue, 2px line, major ticks + labels");
+            println!("• Left axis (Y): Red, 2px line, major ticks + labels");
+            println!("• Top axis: Green, 1.5px line, ticks + labels (no minor ticks)");
+            println!("• Right axis: Purple, 1.5px line, ticks + labels (no minor ticks)");
+            println!("• Formatted numeric labels positioned at each tick mark");
             println!();
             println!("Controls:");
             println!("  [ESC] - Exit");
@@ -555,13 +602,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("• GPU-accelerated axis line rendering using Line marks");
     println!("• Multiple axis positions with custom styling");
     println!("• Configurable tick marks and line properties");
+    println!("• Formatted numeric labels at tick positions");
+    println!("• Text rendering integrated in the same render pass");
     println!("• Real-time axis rendering performance");
     println!();
     println!("The demo shows four axes with different configurations:");
-    println!("• Bottom (Blue): Primary X-axis with major ticks");
-    println!("• Left (Red): Primary Y-axis with major ticks");
-    println!("• Top (Green): Secondary X-axis without minor ticks");
-    println!("• Right (Purple): Secondary Y-axis without minor ticks");
+    println!("• Bottom (Blue): Primary X-axis with major ticks and labels");
+    println!("• Left (Red): Primary Y-axis with major ticks and labels");
+    println!("• Top (Green): Secondary X-axis with ticks and labels (no minor ticks)");
+    println!("• Right (Purple): Secondary Y-axis with ticks and labels (no minor ticks)");
     println!();
     println!("Controls:");
     println!("• ESC - Exit the showcase");
@@ -586,6 +635,21 @@ mod tests {
         let renderer = AxisRenderer::new();
         assert_eq!(renderer.axes.len(), 4); // Should have 4 axes (top, bottom, left, right)
         assert_eq!(renderer.background_color, [0.95, 0.95, 0.95, 1.0]);
+        // Text rendering components are lazily initialized on first render
+        assert!(renderer.text_renderer.is_none());
+        assert!(renderer.font_atlas.is_none());
+        assert!(renderer.layout_engine.is_none());
+    }
+
+    #[test]
+    fn test_axis_bounds_for_position() {
+        let bottom = AxisRenderer::axis_bounds_for_position(AxisPosition::Bottom);
+        assert_eq!(bottom.start.y, -0.6);
+        assert_eq!(bottom.end.y, -0.6);
+
+        let left = AxisRenderer::axis_bounds_for_position(AxisPosition::Left);
+        assert_eq!(left.start.x, -0.6);
+        assert_eq!(left.end.x, -0.6);
     }
 
     #[test]

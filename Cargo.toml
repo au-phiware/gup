@@ -97,4 +97,19 @@ path = "examples/gpu_debug_demo.rs"
 name = "async_streaming_demo"
 path = "examples/async_streaming_demo.rs"
 
+# Basic examples - learning path
+[[example]]
+name = "01_hello_chart"
+path = "examples/basic/01_hello_chart.rs"
 
+[[example]]
+name = "02_scatter_window"
+path = "examples/basic/02_scatter_window.rs"
+
+[[example]]
+name = "03_line_chart"
+path = "examples/basic/03_line_chart.rs"
+
+[[example]]
+name = "04_bar_chart"
+path = "examples/basic/04_bar_chart.rs"

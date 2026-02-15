@@ -52,9 +52,12 @@ pub use labels::*;
 pub use plot_api::*;
 
 use crate::RenderContext;
-use crate::axis::{Axis, AxisBounds, AxisConfiguration, AxisPosition, LinearAxis};
+use crate::axis::{
+    Axis, AxisBounds, AxisConfiguration, AxisLabel, AxisPosition, AxisRenderer, LinearAxis,
+};
 use crate::error::{GupError, GupResult};
 use crate::grid::GridConfiguration;
+use crate::render::Vertex;
 use crate::selection::{LineAttributes, Selection};
 use crate::shader_function::Vec2;
 use std::marker::PhantomData;
@@ -506,7 +509,7 @@ where
         }
     }
 
-    /// Calculate axis bounds for a specific position.
+    /// Calculate axis bounds for a specific position (in pixel coordinates).
     fn calculate_axis_bounds(&self, position: AxisPosition, chart_area: &ChartArea) -> AxisBounds {
         match position {
             AxisPosition::Bottom => AxisBounds::new(
@@ -554,6 +557,108 @@ where
                 chart_area.margins.right,
             ),
         }
+    }
+
+    /// Convert pixel-space [`AxisBounds`] to NDC (clip space, -1.0 to 1.0).
+    ///
+    /// Uses the chart's configured `width` and `height` as the viewport
+    /// dimensions for the conversion:
+    /// - `ndc_x = (pixel_x / width) * 2.0 - 1.0`
+    /// - `ndc_y = 1.0 - (pixel_y / height) * 2.0`
+    fn pixel_bounds_to_ndc(&self, bounds: &AxisBounds) -> AxisBounds {
+        let w = self.config.width;
+        let h = self.config.height;
+        AxisBounds::new(
+            Vec2 {
+                x: (bounds.start.x / w) * 2.0 - 1.0,
+                y: 1.0 - (bounds.start.y / h) * 2.0,
+            },
+            Vec2 {
+                x: (bounds.end.x / w) * 2.0 - 1.0,
+                y: 1.0 - (bounds.end.y / h) * 2.0,
+            },
+            bounds.available_margin,
+        )
+    }
+
+    /// Generate axis geometry (vertices and labels) for all configured axes.
+    ///
+    /// Returns a tuple of `(vertices, labels)` where:
+    /// - `vertices`: `Vec<Vertex>` suitable for drawing with a `LineList`
+    ///   pipeline. Each pair of consecutive vertices forms one line segment
+    ///   (axis lines and tick marks).
+    /// - `labels`: `Vec<AxisLabel>` with formatted text, screen position, and
+    ///   recommended anchor for each tick label, ready for
+    ///   [`TextRenderer`](crate::text::TextRenderer).
+    ///
+    /// The method converts the chart's pixel-space layout (from
+    /// [`ChartConfig`] margins and dimensions) into NDC coordinates before
+    /// delegating to [`AxisRenderer`].
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::ComposedChart;
+    /// use gup::axis::{LinearAxis, AxisPosition, AxisConfiguration};
+    /// use std::sync::Arc;
+    ///
+    /// # async fn example() -> gup::error::GupResult<()> {
+    /// # let context = Arc::new(gup::RenderContext::new().await?);
+    /// # #[derive(Debug, Clone)]
+    /// # struct D { x: f32, y: f32 }
+    /// # let sel = gup::selection::Selection::<D, gup::selection::Dot>::new(vec![], context)?;
+    /// # let config = gup::chart_builder::ChartConfig::default();
+    /// let chart = ComposedChart::new(sel, config).with_default_axes();
+    /// let (vertices, labels) = chart.generate_axis_geometry();
+    ///
+    /// // Draw `vertices` with a LineList pipeline, render `labels` with TextRenderer
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn generate_axis_geometry(&self) -> (Vec<Vertex>, Vec<AxisLabel>) {
+        let chart_area = self.calculate_chart_area();
+        let viewport_size = (self.config.width, self.config.height);
+        let renderer = AxisRenderer::new();
+
+        let mut all_vertices = Vec::new();
+        let mut all_labels = Vec::new();
+
+        let axes: [(AxisPosition, &Option<Box<dyn Axis>>); 4] = [
+            (AxisPosition::Bottom, &self.bottom_axis),
+            (AxisPosition::Left, &self.left_axis),
+            (AxisPosition::Top, &self.top_axis),
+            (AxisPosition::Right, &self.right_axis),
+        ];
+
+        for (position, axis_opt) in &axes {
+            if let Some(axis) = axis_opt {
+                let pixel_bounds = self.calculate_axis_bounds(*position, &chart_area);
+                let ndc_bounds = self.pixel_bounds_to_ndc(&pixel_bounds);
+                let config = axis.configuration();
+
+                let vertices = renderer.generate_axis_vertices(
+                    &ndc_bounds,
+                    config,
+                    *position,
+                    None, // TODO: pass scale when available from axis
+                    viewport_size,
+                );
+                all_vertices.extend(vertices);
+
+                let labels = renderer.generate_label_data(
+                    &ndc_bounds,
+                    config,
+                    *position,
+                    None, // TODO: pass scale when available from axis
+                    viewport_size,
+                    None, // default NumericFormatter
+                );
+                all_labels.extend(labels);
+            }
+        }
+
+        (all_vertices, all_labels)
     }
 }
 
@@ -898,5 +1003,171 @@ mod tests {
         let string_accessor: Box<dyn Fn(&TestData) -> String + Send + Sync> =
             (|d: &TestData| d.category.clone()).into_accessor_fn();
         assert_eq!(string_accessor(&data), "Test");
+    }
+
+    // ---- Tests for pixel_bounds_to_ndc ----
+
+    #[tokio::test]
+    async fn test_pixel_bounds_to_ndc_center() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let sel =
+            crate::selection::Selection::<TestData, crate::selection::Circle>::new(vec![], context)
+                .unwrap();
+        let config = ChartConfig {
+            width: 800.0,
+            height: 600.0,
+            ..ChartConfig::default()
+        };
+        let chart = ComposedChart::new(sel, config);
+
+        // Center of an 800x600 viewport is pixel (400, 300) -> NDC (0, 0)
+        let pixel_bounds = AxisBounds::new(
+            Vec2 { x: 400.0, y: 300.0 },
+            Vec2 { x: 400.0, y: 300.0 },
+            50.0,
+        );
+        let ndc = chart.pixel_bounds_to_ndc(&pixel_bounds);
+        assert!((ndc.start.x - 0.0).abs() < 0.001);
+        assert!((ndc.start.y - 0.0).abs() < 0.001);
+    }
+
+    #[tokio::test]
+    async fn test_pixel_bounds_to_ndc_corners() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let sel =
+            crate::selection::Selection::<TestData, crate::selection::Circle>::new(vec![], context)
+                .unwrap();
+        let config = ChartConfig {
+            width: 800.0,
+            height: 600.0,
+            ..ChartConfig::default()
+        };
+        let chart = ComposedChart::new(sel, config);
+
+        // Top-left pixel (0,0) -> NDC (-1, 1)
+        let bounds = AxisBounds::new(Vec2 { x: 0.0, y: 0.0 }, Vec2 { x: 800.0, y: 600.0 }, 10.0);
+        let ndc = chart.pixel_bounds_to_ndc(&bounds);
+        assert!((ndc.start.x - (-1.0)).abs() < 0.001);
+        assert!((ndc.start.y - 1.0).abs() < 0.001);
+        // Bottom-right pixel (800,600) -> NDC (1, -1)
+        assert!((ndc.end.x - 1.0).abs() < 0.001);
+        assert!((ndc.end.y - (-1.0)).abs() < 0.001);
+    }
+
+    // ---- Tests for generate_axis_geometry ----
+
+    #[tokio::test]
+    async fn test_generate_axis_geometry_no_axes() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let sel =
+            crate::selection::Selection::<TestData, crate::selection::Circle>::new(vec![], context)
+                .unwrap();
+        let config = ChartConfig {
+            show_axes: false,
+            ..ChartConfig::default()
+        };
+        let chart = ComposedChart::new(sel, config);
+
+        let (vertices, labels) = chart.generate_axis_geometry();
+        assert!(vertices.is_empty(), "No axes configured means no vertices");
+        assert!(labels.is_empty(), "No axes configured means no labels");
+    }
+
+    #[tokio::test]
+    async fn test_generate_axis_geometry_default_axes() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let sel =
+            crate::selection::Selection::<TestData, crate::selection::Circle>::new(vec![], context)
+                .unwrap();
+        let chart = ComposedChart::new(sel, ChartConfig::default()).with_default_axes();
+
+        let (vertices, labels) = chart.generate_axis_geometry();
+
+        // Default axes: bottom + left, each with line (2 verts) + 6 major ticks (12 verts) = 14 each
+        // Total = 28 vertices
+        assert_eq!(vertices.len(), 28, "Bottom + left axes: 14 vertices each");
+
+        // 6 labels per axis = 12 total
+        assert_eq!(labels.len(), 12, "6 labels per axis x 2 axes");
+    }
+
+    #[tokio::test]
+    async fn test_generate_axis_geometry_vertices_in_ndc_range() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let sel =
+            crate::selection::Selection::<TestData, crate::selection::Circle>::new(vec![], context)
+                .unwrap();
+        let chart = ComposedChart::new(sel, ChartConfig::default()).with_default_axes();
+
+        let (vertices, _) = chart.generate_axis_geometry();
+
+        for v in &vertices {
+            assert!(
+                v.position[0] >= -1.1 && v.position[0] <= 1.1,
+                "X vertex should be near NDC range: got {}",
+                v.position[0],
+            );
+            assert!(
+                v.position[1] >= -1.1 && v.position[1] <= 1.1,
+                "Y vertex should be near NDC range: got {}",
+                v.position[1],
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_generate_axis_geometry_labels_in_screen_range() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let sel =
+            crate::selection::Selection::<TestData, crate::selection::Circle>::new(vec![], context)
+                .unwrap();
+        let config = ChartConfig::default(); // 800x600
+        let chart = ComposedChart::new(sel, config).with_default_axes();
+
+        let (_, labels) = chart.generate_axis_geometry();
+
+        for label in &labels {
+            assert!(
+                label.screen_position.x >= -50.0 && label.screen_position.x <= 850.0,
+                "Label X should be near viewport: got {}",
+                label.screen_position.x,
+            );
+            assert!(
+                label.screen_position.y >= -50.0 && label.screen_position.y <= 650.0,
+                "Label Y should be near viewport: got {}",
+                label.screen_position.y,
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_generate_axis_geometry_all_four_axes() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let sel =
+            crate::selection::Selection::<TestData, crate::selection::Circle>::new(vec![], context)
+                .unwrap();
+        let config = ChartConfig::default();
+        let axis_config = AxisConfiguration::default();
+        let chart = ComposedChart::new(sel, config)
+            .with_bottom_axis(Box::new(LinearAxis::new(
+                AxisPosition::Bottom,
+                axis_config.clone(),
+            )))
+            .with_left_axis(Box::new(LinearAxis::new(
+                AxisPosition::Left,
+                axis_config.clone(),
+            )))
+            .with_top_axis(Box::new(LinearAxis::new(
+                AxisPosition::Top,
+                axis_config.clone(),
+            )))
+            .with_right_axis(Box::new(LinearAxis::new(AxisPosition::Right, axis_config)));
+
+        let (vertices, labels) = chart.generate_axis_geometry();
+
+        // 4 axes * 14 verts each = 56
+        assert_eq!(vertices.len(), 56, "4 axes: 14 vertices each");
+        // 4 axes * 6 labels each = 24
+        assert_eq!(labels.len(), 24, "4 axes: 6 labels each");
     }
 }

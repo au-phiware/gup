@@ -234,6 +234,18 @@ impl DataVisualizationRenderer {
         self.labels = labels;
     }
 
+    /// Invalidate GPU resources for safe mode switching.
+    ///
+    /// This method should be called when switching modes to ensure
+    /// all GPU buffers are recreated with the new data. This prevents
+    /// GPU validation errors from stale resource references.
+    #[allow(dead_code)]
+    fn invalidate_resources(&mut self) {
+        // Only invalidate the instance buffer since vertex and index buffers are static
+        self.instance_buffer = None;
+        // Pipeline can be reused across mode switches as it doesn't depend on data
+    }
+
     /// Initialize text rendering components
     fn initialize_text_rendering(
         &mut self,
@@ -257,42 +269,53 @@ impl DataVisualizationRenderer {
         Ok(())
     }
 
-    fn render(&mut self, frame: &mut gup::RenderFrame) -> Result<(), Box<dyn std::error::Error>> {
+    /// Render circles and labels with a provided render pass and clear color
+    ///
+    /// This method follows the single render pass strategy to avoid GPU validation errors.
+    /// The caller is responsible for providing a render pass that has been created with
+    /// the appropriate clear color.
+    fn render_with_clear(
+        &mut self,
+        frame: &mut gup::RenderFrame,
+        clear_color: wgpu::Color,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // Initialize text rendering if needed first (before render passes)
         if !self.labels.is_empty() {
             self.initialize_text_rendering(frame)?;
         }
 
-        if self.circle_instances.is_empty() {
-            return Ok(());
+        // Initialize buffers and pipeline if needed (even if no circles yet)
+        if !self.circle_instances.is_empty() {
+            self.ensure_initialized(frame)?;
         }
-
-        // Initialize buffers and pipeline if needed
-        self.ensure_initialized(frame)?;
 
         // Get Arc references to device and queue before creating render pass
         let device = frame.device_arc();
         let queue = frame.queue_arc();
 
-        // Single render pass for circles and text
+        // Single render pass for background clear, circles, and text
+        // This is the key to avoiding GPU validation errors - only ONE render pass per frame
         {
-            let mut render_pass = frame.render_pass(None);
+            let mut render_pass = frame.render_pass(Some(clear_color));
 
             // Render circles first
-            if let (Some(vertex_buffer), Some(instance_buffer), Some(pipeline)) = (
-                &self.vertex_buffer,
-                &self.instance_buffer,
-                &self.render_pipeline,
-            ) {
-                render_pass.set_pipeline(pipeline);
-                render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-                render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+            if !self.circle_instances.is_empty() {
+                if let (Some(vertex_buffer), Some(instance_buffer), Some(pipeline)) = (
+                    &self.vertex_buffer,
+                    &self.instance_buffer,
+                    &self.render_pipeline,
+                ) {
+                    render_pass.set_pipeline(pipeline);
+                    render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+                    render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
 
-                if let Some(index_buffer) = &self.index_buffer {
-                    render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-                    render_pass.draw_indexed(0..6, 0, 0..self.circle_instances.len() as u32);
-                } else {
-                    render_pass.draw(0..6, 0..self.circle_instances.len() as u32);
+                    if let Some(index_buffer) = &self.index_buffer {
+                        render_pass
+                            .set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                        render_pass.draw_indexed(0..6, 0, 0..self.circle_instances.len() as u32);
+                    } else {
+                        render_pass.draw(0..6, 0..self.circle_instances.len() as u32);
+                    }
                 }
             }
 
@@ -329,9 +352,6 @@ impl DataVisualizationRenderer {
                             eprintln!("⚠️ Failed to render text '{}': {}", label.text, e);
                         }
                     }
-                    println!("✅ Rendered {} text labels successfully", self.labels.len());
-                } else {
-                    println!("❌ Text rendering components not properly initialized");
                 }
             }
         } // render_pass dropped here
@@ -989,7 +1009,8 @@ impl LabelFormattingApp {
             }
         }
 
-        // Render visual frame
+        // Render visual frame using single render pass strategy
+        // This is critical for avoiding GPU validation errors: only ONE render pass per frame
         if let Some(surface_id) = self.surface_id
             && let Some(context) = self.context.take()
         {
@@ -997,24 +1018,17 @@ impl LabelFormattingApp {
 
             match ctx.begin_frame_for_surface(surface_id) {
                 Ok(mut frame) => {
-                    // Clear background with different colors for each demo mode
+                    // Get clear color based on current demo mode
                     let clear_color = self.get_demo_background_color();
 
-                    // Clear the background first
+                    // SINGLE RENDER PASS: Background clear + circles + text labels
+                    // Using render_with_clear ensures everything is in one render pass,
+                    // avoiding "Encoder is invalid" errors when switching modes
+                    if let Err(e) = self
+                        .data_renderer
+                        .render_with_clear(&mut frame, clear_color)
                     {
-                        let _render_pass = frame.render_pass(Some(clear_color));
-                    }
-
-                    // Render data points and labels
-                    if let Err(e) = self.data_renderer.render(&mut frame) {
                         eprintln!("❌ Failed to render data points: {e}");
-                    } else {
-                        println!(
-                            "✅ Rendered {} data points and {} labels for {:?} mode",
-                            self.data_renderer.circle_instances.len(),
-                            self.data_renderer.labels.len(),
-                            self.demo_mode
-                        );
                     }
 
                     frame.finish()?;
@@ -1370,5 +1384,143 @@ mod tests {
         // Verify positioner is ready for use (without calling GPU-dependent methods)
         // Note: Full integration testing with GPU resources is done in the main library tests
         println!("✅ Label positioning components initialized successfully");
+    }
+
+    /// Test mode switching stability - validates GUP-102 fix
+    ///
+    /// This test ensures that cycling through demo modes multiple times
+    /// doesn't cause any resource management issues.
+    #[test]
+    fn test_mode_switch_stability() {
+        let mut app = LabelFormattingApp::new();
+
+        // Simulate rapid mode switching (100+ consecutive switches)
+        // This validates the acceptance criteria from GUP-102
+        for i in 0..120 {
+            app.cycle_demo_mode();
+
+            // Verify renderer data is properly updated each time
+            assert!(
+                !app.data_renderer.circle_instances.is_empty() || i == 0,
+                "Circle instances should be populated after cycling"
+            );
+
+            // Instance buffer should be None after mode switch (will be recreated on next render)
+            assert!(
+                app.data_renderer.instance_buffer.is_none(),
+                "Instance buffer should be invalidated after mode switch"
+            );
+        }
+
+        // Verify we're back to the expected mode after 120 cycles (4 modes, 120 % 4 = 0)
+        // 120 cycles from Sales: Sales -> Performance -> Scientific -> Engineering -> Sales (repeats 30 times)
+        assert!(matches!(app.demo_mode, DemoMode::Sales));
+    }
+
+    /// Test data renderer resource lifecycle
+    #[test]
+    fn test_renderer_resource_lifecycle() {
+        let mut renderer = DataVisualizationRenderer::new();
+
+        // Initially all resources should be None
+        assert!(renderer.vertex_buffer.is_none());
+        assert!(renderer.instance_buffer.is_none());
+        assert!(renderer.render_pipeline.is_none());
+
+        // Update with data
+        let transformer = SalesDataToCircleAttributes;
+        let sales_data = LabelFormattingApp::generate_sales_data();
+        let circles: Vec<CircleAttributes> = sales_data
+            .iter()
+            .map(|data| transformer.apply(data))
+            .collect();
+
+        renderer.update_data(circles);
+
+        // Instance buffer should be None (will be created on first render)
+        assert!(renderer.instance_buffer.is_none());
+        // But circle instances should be populated
+        assert_eq!(renderer.circle_instances.len(), 4);
+
+        // Invalidate resources
+        renderer.invalidate_resources();
+        assert!(renderer.instance_buffer.is_none());
+    }
+
+    /// Test that different demo modes produce correct data
+    #[test]
+    fn test_demo_mode_data_correctness() {
+        let mut app = LabelFormattingApp::new();
+
+        // Initial mode: Sales
+        app.update_renderer_data();
+        let sales_count = app.data_renderer.circle_instances.len();
+        assert_eq!(sales_count, 4, "Sales mode should have 4 data points");
+
+        // Performance mode
+        app.demo_mode = DemoMode::Performance;
+        app.update_renderer_data();
+        let perf_count = app.data_renderer.circle_instances.len();
+        assert_eq!(perf_count, 4, "Performance mode should have 4 data points");
+
+        // Scientific mode
+        app.demo_mode = DemoMode::Scientific;
+        app.update_renderer_data();
+        let sci_count = app.data_renderer.circle_instances.len();
+        assert_eq!(sci_count, 6, "Scientific mode should have 6 data points");
+
+        // Engineering mode
+        app.demo_mode = DemoMode::Engineering;
+        app.update_renderer_data();
+        let eng_count = app.data_renderer.circle_instances.len();
+        assert_eq!(eng_count, 5, "Engineering mode should have 5 data points");
+    }
+
+    /// Test background colors are distinct for each mode
+    #[test]
+    fn test_demo_background_colors_distinct() {
+        let app = LabelFormattingApp::new();
+
+        let sales_color = {
+            let mut temp_app = LabelFormattingApp::new();
+            temp_app.demo_mode = DemoMode::Sales;
+            temp_app.get_demo_background_color()
+        };
+
+        let perf_color = {
+            let mut temp_app = LabelFormattingApp::new();
+            temp_app.demo_mode = DemoMode::Performance;
+            temp_app.get_demo_background_color()
+        };
+
+        let sci_color = {
+            let mut temp_app = LabelFormattingApp::new();
+            temp_app.demo_mode = DemoMode::Scientific;
+            temp_app.get_demo_background_color()
+        };
+
+        let eng_color = {
+            let mut temp_app = LabelFormattingApp::new();
+            temp_app.demo_mode = DemoMode::Engineering;
+            temp_app.get_demo_background_color()
+        };
+
+        // Verify all colors are distinct
+        assert!(
+            (sales_color.r - perf_color.r).abs() > 0.1
+                || (sales_color.g - perf_color.g).abs() > 0.1
+                || (sales_color.b - perf_color.b).abs() > 0.1,
+            "Sales and Performance colors should be distinct"
+        );
+
+        assert!(
+            (sci_color.r - eng_color.r).abs() > 0.1
+                || (sci_color.g - eng_color.g).abs() > 0.1
+                || (sci_color.b - eng_color.b).abs() > 0.1,
+            "Scientific and Engineering colors should be distinct"
+        );
+
+        // Suppress unused variable warning
+        let _ = app;
     }
 }

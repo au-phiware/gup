@@ -32,8 +32,10 @@
 //! ```
 
 use crate::error::GupResult;
-use crate::render::RenderContext;
+use crate::label::{LabelFormatter, NumericFormatter};
+use crate::render::{RenderContext, Vertex};
 use crate::shader_function::Vec2;
+use crate::text::TextAnchor;
 use crate::tick_generator::{LinearTickGenerator, Scale, TickGenerator};
 
 /// Position of an axis relative to the chart area.
@@ -490,10 +492,73 @@ impl LinearAxis {
     }
 }
 
-/// GPU-accelerated axis renderer using the Line mark system.
+/// Data for a single axis tick label, ready for rendering with [`TextRenderer`](crate::text::TextRenderer).
 ///
-/// AxisRenderer provides efficient rendering of axis components by
-/// leveraging the existing Line mark implementation for GPU acceleration.
+/// Screen positions follow the convention expected by `TextRenderConfig`:
+/// origin at top-left, X increases right, Y increases down.
+#[derive(Debug, Clone)]
+pub struct AxisLabel {
+    /// Formatted label text (e.g. "0.00", "$1,234", "50%").
+    pub text: String,
+    /// Position in screen/pixel coordinates (for `TextRenderConfig::position`).
+    ///
+    /// Includes a small offset away from the axis line so labels don't
+    /// overlap the tick marks.
+    pub screen_position: Vec2,
+    /// Position in clip space (NDC: -1.0 to 1.0) on the axis line,
+    /// before the label offset is applied. Useful for alignment with
+    /// other chart elements that work in NDC.
+    pub ndc_position: Vec2,
+    /// Recommended text anchor based on the axis position.
+    ///
+    /// - Bottom axis: [`TextAnchor::TopCenter`] (label hangs below tick)
+    /// - Top axis: [`TextAnchor::BottomCenter`] (label sits above tick)
+    /// - Left axis: [`TextAnchor::CenterRight`] (label to the left of tick)
+    /// - Right axis: [`TextAnchor::CenterLeft`] (label to the right of tick)
+    pub anchor: TextAnchor,
+    /// The underlying data value that was formatted to produce [`text`](Self::text).
+    pub value: f64,
+}
+
+/// Axis renderer that generates vertex data for GPU rendering.
+///
+/// `AxisRenderer` produces `Vec<Vertex>` data (using `LineList` topology)
+/// for axis lines and tick marks. Callers are responsible for creating
+/// their own render pipeline and drawing the vertices within their
+/// render pass. This composable approach lets axes be rendered alongside
+/// other chart elements in a single render pass.
+///
+/// # Coordinate System
+///
+/// All generated vertices are in clip space (NDC: -1.0 to 1.0).
+/// Tick lengths in the [`AxisConfiguration`] are specified in pixels and
+/// are converted to NDC using the provided `viewport_size` parameter.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use gup::axis::{AxisRenderer, AxisBounds, AxisConfiguration, AxisPosition};
+/// use gup::shader_function::Vec2;
+///
+/// let renderer = AxisRenderer::new();
+/// let bounds = AxisBounds::new(
+///     Vec2 { x: -0.8, y: -0.8 },
+///     Vec2 { x: 0.8, y: -0.8 },
+///     50.0,
+/// );
+/// let config = AxisConfiguration::default();
+///
+/// // Generate vertices for a bottom axis (viewport 800x600)
+/// let vertices = renderer.generate_axis_vertices(
+///     &bounds,
+///     &config,
+///     AxisPosition::Bottom,
+///     None,
+///     (800.0, 600.0),
+/// );
+///
+/// // Draw `vertices` with a LineList pipeline in your render pass
+/// ```
 pub struct AxisRenderer {
     // Future: cache render pipelines and resources here
 }
@@ -504,84 +569,438 @@ impl AxisRenderer {
         Self {}
     }
 
+    /// Generate all vertices for an axis (line + major ticks + minor ticks).
+    ///
+    /// Returns a `Vec<Vertex>` suitable for drawing with `LineList` primitive
+    /// topology. Each pair of consecutive vertices forms one line segment.
+    ///
+    /// # Parameters
+    ///
+    /// * `bounds` - The start and end points of the axis line in clip space.
+    /// * `config` - Appearance settings (colors, tick lengths, visibility flags).
+    /// * `position` - Where the axis sits relative to the chart area. This
+    ///   determines the direction ticks extend (e.g. bottom-axis ticks point
+    ///   downward, left-axis ticks point leftward).
+    /// * `scale` - Optional scale for automatic tick generation. When `None`,
+    ///   fallback tick positions at 0%, 20%, 40%, 60%, 80%, 100% are used.
+    /// * `viewport_size` - `(width, height)` in pixels, used to convert
+    ///   pixel-based tick lengths to NDC units.
+    pub fn generate_axis_vertices(
+        &self,
+        bounds: &AxisBounds,
+        config: &AxisConfiguration,
+        position: AxisPosition,
+        scale: Option<&dyn Scale>,
+        viewport_size: (f32, f32),
+    ) -> Vec<Vertex> {
+        let mut vertices = Vec::new();
+
+        // Axis line
+        if config.show_line {
+            self.append_line_vertices(&mut vertices, bounds, config);
+        }
+
+        // Major ticks
+        if config.show_major_ticks {
+            let tick_positions =
+                Self::compute_tick_positions(bounds, scale, config.target_tick_count, false, 0);
+
+            self.append_tick_vertices(
+                &mut vertices,
+                bounds,
+                &tick_positions,
+                config.major_tick_length,
+                config,
+                position,
+                viewport_size,
+            );
+        }
+
+        // Minor ticks
+        if config.show_minor_ticks {
+            let tick_positions = Self::compute_tick_positions(
+                bounds,
+                scale,
+                config.target_tick_count,
+                true,
+                config.minor_tick_subdivisions,
+            );
+
+            self.append_tick_vertices(
+                &mut vertices,
+                bounds,
+                &tick_positions,
+                config.minor_tick_length,
+                config,
+                position,
+                viewport_size,
+            );
+        }
+
+        vertices
+    }
+
+    /// Generate only the axis line vertices (no ticks).
+    pub fn generate_line_vertices(
+        &self,
+        bounds: &AxisBounds,
+        config: &AxisConfiguration,
+    ) -> Vec<Vertex> {
+        let mut vertices = Vec::new();
+        if config.show_line {
+            self.append_line_vertices(&mut vertices, bounds, config);
+        }
+        vertices
+    }
+
+    /// Generate only tick vertices (major and/or minor, no axis line).
+    pub fn generate_tick_vertices(
+        &self,
+        bounds: &AxisBounds,
+        config: &AxisConfiguration,
+        position: AxisPosition,
+        scale: Option<&dyn Scale>,
+        viewport_size: (f32, f32),
+    ) -> Vec<Vertex> {
+        let mut vertices = Vec::new();
+
+        if config.show_major_ticks {
+            let tick_positions =
+                Self::compute_tick_positions(bounds, scale, config.target_tick_count, false, 0);
+
+            self.append_tick_vertices(
+                &mut vertices,
+                bounds,
+                &tick_positions,
+                config.major_tick_length,
+                config,
+                position,
+                viewport_size,
+            );
+        }
+
+        if config.show_minor_ticks {
+            let tick_positions = Self::compute_tick_positions(
+                bounds,
+                scale,
+                config.target_tick_count,
+                true,
+                config.minor_tick_subdivisions,
+            );
+
+            self.append_tick_vertices(
+                &mut vertices,
+                bounds,
+                &tick_positions,
+                config.minor_tick_length,
+                config,
+                position,
+                viewport_size,
+            );
+        }
+
+        vertices
+    }
+
+    /// Generate label data for axis tick labels.
+    ///
+    /// Returns an [`AxisLabel`] for each major tick position, containing the
+    /// formatted text, screen-space position, NDC position, and recommended
+    /// text anchor. The caller feeds these into
+    /// [`TextRenderer::render_text()`](crate::text::TextRenderer::render_text)
+    /// or [`TextRenderer::queue_text()`](crate::text::TextRenderer::queue_text).
+    ///
+    /// # Parameters
+    ///
+    /// * `bounds` - The start and end points of the axis line in clip space.
+    /// * `config` - Appearance settings (used for tick length to calculate
+    ///   label offset).
+    /// * `position` - Where the axis sits relative to the chart area.
+    /// * `scale` - Optional scale for automatic tick generation and value
+    ///   mapping. When `None`, fallback positions at 0%, 20%, …, 100% are
+    ///   used with values equal to the normalized positions.
+    /// * `viewport_size` - `(width, height)` in pixels.
+    /// * `formatter` - Optional label formatter. When `None`, a default
+    ///   [`NumericFormatter`] is used.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::axis::{AxisRenderer, AxisBounds, AxisConfiguration, AxisPosition};
+    /// use gup::shader_function::Vec2;
+    ///
+    /// let renderer = AxisRenderer::new();
+    /// let bounds = AxisBounds::new(
+    ///     Vec2 { x: -0.8, y: -0.8 },
+    ///     Vec2 { x: 0.8, y: -0.8 },
+    ///     50.0,
+    /// );
+    /// let config = AxisConfiguration::default();
+    ///
+    /// let labels = renderer.generate_label_data(
+    ///     &bounds,
+    ///     &config,
+    ///     AxisPosition::Bottom,
+    ///     None,
+    ///     (800.0, 600.0),
+    ///     None,
+    /// );
+    ///
+    /// // Each label has text, screen position, and anchor ready for TextRenderer
+    /// for label in &labels {
+    ///     println!("{} at ({}, {})", label.text, label.screen_position.x, label.screen_position.y);
+    /// }
+    /// ```
+    pub fn generate_label_data(
+        &self,
+        bounds: &AxisBounds,
+        config: &AxisConfiguration,
+        position: AxisPosition,
+        scale: Option<&dyn Scale>,
+        viewport_size: (f32, f32),
+        formatter: Option<&dyn LabelFormatter>,
+    ) -> Vec<AxisLabel> {
+        let default_formatter = NumericFormatter::default();
+        let formatter: &dyn LabelFormatter = formatter.unwrap_or(&default_formatter);
+
+        // Get normalized tick positions (0.0..1.0)
+        let normalized_positions =
+            Self::compute_tick_positions(bounds, scale, config.target_tick_count, false, 0);
+
+        // Compute the label offset in screen pixels.
+        // Labels are placed beyond the tick end, with a small gap.
+        let label_gap_px = 4.0;
+        let tick_px = config.major_tick_length;
+        let offset_px = tick_px + label_gap_px;
+
+        let direction = bounds.direction();
+        let axis_length = bounds.length();
+
+        // Determine text anchor based on axis position
+        let anchor = match position {
+            AxisPosition::Bottom => TextAnchor::TopCenter,
+            AxisPosition::Top => TextAnchor::BottomCenter,
+            AxisPosition::Left => TextAnchor::CenterRight,
+            AxisPosition::Right => TextAnchor::CenterLeft,
+        };
+
+        let (vw, vh) = viewport_size;
+
+        normalized_positions
+            .iter()
+            .filter(|&&t| (0.0..=1.0).contains(&t))
+            .map(|&t| {
+                // NDC position on the axis line
+                let ndc = Vec2 {
+                    x: bounds.start.x + direction.x * axis_length * t,
+                    y: bounds.start.y + direction.y * axis_length * t,
+                };
+
+                // Convert NDC to screen coordinates (origin top-left, Y down)
+                let screen_on_axis = Vec2 {
+                    x: (ndc.x + 1.0) * 0.5 * vw,
+                    y: (1.0 - ndc.y) * 0.5 * vh,
+                };
+
+                // Apply label offset in screen space (away from chart area)
+                let screen_position = match position {
+                    AxisPosition::Bottom => Vec2 {
+                        x: screen_on_axis.x,
+                        y: screen_on_axis.y + offset_px, // below axis
+                    },
+                    AxisPosition::Top => Vec2 {
+                        x: screen_on_axis.x,
+                        y: screen_on_axis.y - offset_px, // above axis
+                    },
+                    AxisPosition::Left => Vec2 {
+                        x: screen_on_axis.x - offset_px, // left of axis
+                        y: screen_on_axis.y,
+                    },
+                    AxisPosition::Right => Vec2 {
+                        x: screen_on_axis.x + offset_px, // right of axis
+                        y: screen_on_axis.y,
+                    },
+                };
+
+                // Determine the data value for formatting.
+                // If a scale is provided, map the normalized position back to
+                // a domain value. Otherwise, use the normalized position itself.
+                let value = if let Some(scale) = scale {
+                    scale.denormalize(t as f64)
+                } else {
+                    t as f64
+                };
+
+                let text = formatter.format_value(value);
+
+                AxisLabel {
+                    text,
+                    screen_position,
+                    ndc_position: ndc,
+                    anchor,
+                    value,
+                }
+            })
+            .collect()
+    }
+
+    // ---- internal helpers ----
+
+    /// Append the axis line as two vertices.
+    fn append_line_vertices(
+        &self,
+        vertices: &mut Vec<Vertex>,
+        bounds: &AxisBounds,
+        config: &AxisConfiguration,
+    ) {
+        vertices.push(Vertex {
+            position: [bounds.start.x, bounds.start.y],
+            color: config.line_color,
+        });
+        vertices.push(Vertex {
+            position: [bounds.end.x, bounds.end.y],
+            color: config.line_color,
+        });
+    }
+
+    /// Append tick mark vertices. Each tick is a pair of vertices (LineList).
+    ///
+    /// Ticks extend outward from the chart area:
+    /// - Bottom axis: ticks go downward (-Y)
+    /// - Top axis: ticks go upward (+Y)
+    /// - Left axis: ticks go leftward (-X)
+    /// - Right axis: ticks go rightward (+X)
+    fn append_tick_vertices(
+        &self,
+        vertices: &mut Vec<Vertex>,
+        bounds: &AxisBounds,
+        normalized_positions: &[f32],
+        tick_length_px: f32,
+        config: &AxisConfiguration,
+        position: AxisPosition,
+        viewport_size: (f32, f32),
+    ) {
+        // Convert pixel tick length to NDC.
+        // NDC range is 2.0 across each axis dimension.
+        let tick_length_ndc = match position {
+            AxisPosition::Top | AxisPosition::Bottom => tick_length_px * 2.0 / viewport_size.1,
+            AxisPosition::Left | AxisPosition::Right => tick_length_px * 2.0 / viewport_size.0,
+        };
+
+        let direction = bounds.direction();
+        let axis_length = bounds.length();
+
+        for &t in normalized_positions {
+            if !(0.0..=1.0).contains(&t) {
+                continue;
+            }
+
+            // Position along the axis line
+            let on_axis = Vec2 {
+                x: bounds.start.x + direction.x * axis_length * t,
+                y: bounds.start.y + direction.y * axis_length * t,
+            };
+
+            // Tick extends outward from the chart area
+            let tick_end = match position {
+                AxisPosition::Bottom => Vec2 {
+                    x: on_axis.x,
+                    y: on_axis.y - tick_length_ndc,
+                },
+                AxisPosition::Top => Vec2 {
+                    x: on_axis.x,
+                    y: on_axis.y + tick_length_ndc,
+                },
+                AxisPosition::Left => Vec2 {
+                    x: on_axis.x - tick_length_ndc,
+                    y: on_axis.y,
+                },
+                AxisPosition::Right => Vec2 {
+                    x: on_axis.x + tick_length_ndc,
+                    y: on_axis.y,
+                },
+            };
+
+            vertices.push(Vertex {
+                position: [on_axis.x, on_axis.y],
+                color: config.line_color,
+            });
+            vertices.push(Vertex {
+                position: [tick_end.x, tick_end.y],
+                color: config.line_color,
+            });
+        }
+    }
+
+    /// Compute normalized tick positions (0.0..1.0) along an axis.
+    ///
+    /// When `minor` is true, returns minor tick positions (between major ticks).
+    /// When `minor` is false, returns major tick positions.
+    fn compute_tick_positions(
+        bounds: &AxisBounds,
+        scale: Option<&dyn Scale>,
+        target_tick_count: Option<usize>,
+        minor: bool,
+        minor_subdivisions: usize,
+    ) -> Vec<f32> {
+        let pixel_range = bounds.length();
+
+        if let Some(scale) = scale {
+            let generator = LinearTickGenerator::default();
+            let major_ticks = generator.generate_major_ticks(scale, pixel_range, target_tick_count);
+
+            if minor {
+                let minor_ticks =
+                    generator.generate_minor_ticks(scale, &major_ticks, minor_subdivisions);
+                minor_ticks
+                    .iter()
+                    .map(|&v| scale.normalize(v) as f32)
+                    .collect()
+            } else {
+                major_ticks
+                    .iter()
+                    .map(|&v| scale.normalize(v) as f32)
+                    .collect()
+            }
+        } else if minor {
+            Vec::new()
+        } else {
+            // Fallback: evenly spaced ticks
+            vec![0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+        }
+    }
+
+    // ---- Legacy placeholder methods (kept for backward compatibility) ----
+
     /// Render the main axis line using GPU-accelerated Line marks.
+    ///
+    /// **Note:** This is a legacy placeholder that does not actually render
+    /// anything. Use [`generate_axis_vertices`](Self::generate_axis_vertices)
+    /// instead to get vertex data you can draw in your own render pass.
     pub fn render_axis_line(
         &self,
         _context: &mut RenderContext,
-        bounds: &AxisBounds,
-        config: &AxisConfiguration,
+        _bounds: &AxisBounds,
+        _config: &AxisConfiguration,
     ) -> GupResult<()> {
-        // Create line attributes for the axis line
-        use crate::mark::{LineAttributes, LineStyle};
-        use crate::shader_function::Vec4;
-
-        let _line_attrs = LineAttributes {
-            start: bounds.start,
-            end: bounds.end,
-            color: Vec4 {
-                x: config.line_color[0],
-                y: config.line_color[1],
-                z: config.line_color[2],
-                w: config.line_color[3],
-            },
-            width: config.line_width,
-            style: LineStyle::Solid,
-        };
-
-        // For now, we'll prepare the line data structure
-        // Future integration will use the Selection system to render
-        // the line using the existing GPU pipeline
-
-        // This is a placeholder - actual rendering will be integrated
-        // when connecting to the chart builder system
+        // Legacy placeholder - use generate_axis_vertices() instead
         Ok(())
     }
 
     /// Render tick marks at specified positions.
+    ///
+    /// **Note:** This is a legacy placeholder that does not actually render
+    /// anything. Use [`generate_axis_vertices`](Self::generate_axis_vertices)
+    /// instead to get vertex data you can draw in your own render pass.
     pub fn render_ticks(
         &self,
         _context: &mut RenderContext,
-        bounds: &AxisBounds,
-        tick_positions: &[Vec2],
-        tick_length: f32,
-        config: &AxisConfiguration,
+        _bounds: &AxisBounds,
+        _tick_positions: &[Vec2],
+        _tick_length: f32,
+        _config: &AxisConfiguration,
     ) -> GupResult<()> {
-        use crate::mark::{LineAttributes, LineStyle};
-        use crate::shader_function::Vec4;
-
-        let normal = bounds.normal();
-        let tick_color = Vec4 {
-            x: config.line_color[0],
-            y: config.line_color[1],
-            z: config.line_color[2],
-            w: config.line_color[3],
-        };
-
-        // Generate tick line attributes
-        let _tick_lines: Vec<LineAttributes> = tick_positions
-            .iter()
-            .map(|&pos| {
-                let tick_start = Vec2 {
-                    x: pos.x - normal.x * tick_length * 0.5,
-                    y: pos.y - normal.y * tick_length * 0.5,
-                };
-                let tick_end = Vec2 {
-                    x: pos.x + normal.x * tick_length * 0.5,
-                    y: pos.y + normal.y * tick_length * 0.5,
-                };
-
-                LineAttributes {
-                    start: tick_start,
-                    end: tick_end,
-                    color: tick_color,
-                    width: config.line_width,
-                    style: LineStyle::Solid,
-                }
-            })
-            .collect();
-
-        // For now, this is a placeholder
-        // Future integration will batch render all tick lines efficiently
+        // Legacy placeholder - use generate_axis_vertices() instead
         Ok(())
     }
 }
@@ -745,5 +1164,529 @@ mod tests {
 
         axis.set_configuration(new_config);
         assert_eq!(axis.configuration().line_color, [0.0, 1.0, 0.0, 1.0]);
+    }
+
+    // ---- Tests for new vertex generation methods ----
+
+    #[test]
+    fn test_generate_axis_vertices_line_only() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let config = AxisConfiguration::default().without_ticks();
+
+        let vertices = renderer.generate_axis_vertices(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+        );
+
+        // Line only: 2 vertices (one line segment)
+        assert_eq!(vertices.len(), 2);
+        assert_eq!(vertices[0].position, [-0.8, -0.8]);
+        assert_eq!(vertices[1].position, [0.8, -0.8]);
+        assert_eq!(vertices[0].color, config.line_color);
+    }
+
+    #[test]
+    fn test_generate_axis_vertices_with_ticks() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let config = AxisConfiguration::default(); // show_line + show_major_ticks
+
+        let vertices = renderer.generate_axis_vertices(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+        );
+
+        // 2 (line) + 6 * 2 (6 default major ticks, each 2 vertices) = 14
+        assert_eq!(vertices.len(), 14);
+    }
+
+    #[test]
+    fn test_bottom_axis_ticks_extend_downward() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.5 }, Vec2 { x: 0.8, y: -0.5 }, 50.0);
+        let config = AxisConfiguration::default()
+            .without_line()
+            .with_tick_lengths(10.0, 5.0);
+
+        let vertices = renderer.generate_axis_vertices(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+        );
+
+        // 6 ticks * 2 verts = 12
+        assert_eq!(vertices.len(), 12);
+
+        // Each tick: start on axis, end below (smaller Y)
+        for pair in vertices.chunks(2) {
+            let on_axis = pair[0];
+            let tick_end = pair[1];
+            assert!(
+                (on_axis.position[1] - (-0.5)).abs() < 0.001,
+                "Tick start should be on axis line"
+            );
+            assert!(
+                tick_end.position[1] < on_axis.position[1],
+                "Bottom axis tick should extend downward (Y decreases)"
+            );
+        }
+    }
+
+    #[test]
+    fn test_top_axis_ticks_extend_upward() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: 0.5 }, Vec2 { x: 0.8, y: 0.5 }, 50.0);
+        let config = AxisConfiguration::default().without_line();
+
+        let vertices = renderer.generate_axis_vertices(
+            &bounds,
+            &config,
+            AxisPosition::Top,
+            None,
+            (800.0, 600.0),
+        );
+
+        for pair in vertices.chunks(2) {
+            let on_axis = pair[0];
+            let tick_end = pair[1];
+            assert!(
+                (on_axis.position[1] - 0.5).abs() < 0.001,
+                "Tick start should be on axis line"
+            );
+            assert!(
+                tick_end.position[1] > on_axis.position[1],
+                "Top axis tick should extend upward (Y increases)"
+            );
+        }
+    }
+
+    #[test]
+    fn test_left_axis_ticks_extend_leftward() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.5, y: -0.8 }, Vec2 { x: -0.5, y: 0.8 }, 50.0);
+        let config = AxisConfiguration::default().without_line();
+
+        let vertices = renderer.generate_axis_vertices(
+            &bounds,
+            &config,
+            AxisPosition::Left,
+            None,
+            (800.0, 600.0),
+        );
+
+        for pair in vertices.chunks(2) {
+            let on_axis = pair[0];
+            let tick_end = pair[1];
+            assert!(
+                (on_axis.position[0] - (-0.5)).abs() < 0.001,
+                "Tick start should be on axis line"
+            );
+            assert!(
+                tick_end.position[0] < on_axis.position[0],
+                "Left axis tick should extend leftward (X decreases)"
+            );
+        }
+    }
+
+    #[test]
+    fn test_right_axis_ticks_extend_rightward() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: 0.5, y: -0.8 }, Vec2 { x: 0.5, y: 0.8 }, 50.0);
+        let config = AxisConfiguration::default().without_line();
+
+        let vertices = renderer.generate_axis_vertices(
+            &bounds,
+            &config,
+            AxisPosition::Right,
+            None,
+            (800.0, 600.0),
+        );
+
+        for pair in vertices.chunks(2) {
+            let on_axis = pair[0];
+            let tick_end = pair[1];
+            assert!(
+                (on_axis.position[0] - 0.5).abs() < 0.001,
+                "Tick start should be on axis line"
+            );
+            assert!(
+                tick_end.position[0] > on_axis.position[0],
+                "Right axis tick should extend rightward (X increases)"
+            );
+        }
+    }
+
+    #[test]
+    fn test_generate_no_vertices_when_all_hidden() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let config = AxisConfiguration::default().without_line().without_ticks();
+
+        let vertices = renderer.generate_axis_vertices(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+        );
+
+        assert!(vertices.is_empty());
+    }
+
+    #[test]
+    fn test_generate_line_vertices_only() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.5, y: 0.0 }, Vec2 { x: 0.5, y: 0.0 }, 50.0);
+        let config = AxisConfiguration::default().with_color([1.0, 0.0, 0.0, 1.0]);
+
+        let vertices = renderer.generate_line_vertices(&bounds, &config);
+
+        assert_eq!(vertices.len(), 2);
+        assert_eq!(vertices[0].position, [-0.5, 0.0]);
+        assert_eq!(vertices[1].position, [0.5, 0.0]);
+        assert_eq!(vertices[0].color, [1.0, 0.0, 0.0, 1.0]);
+    }
+
+    #[test]
+    fn test_generate_tick_vertices_only() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let config = AxisConfiguration::default(); // major ticks on, minor off
+
+        let vertices = renderer.generate_tick_vertices(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+        );
+
+        // 6 default ticks * 2 verts = 12
+        assert_eq!(vertices.len(), 12);
+    }
+
+    #[test]
+    fn test_tick_length_scales_with_viewport() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: 0.0 }, Vec2 { x: 0.8, y: 0.0 }, 50.0);
+        let config = AxisConfiguration::default()
+            .without_line()
+            .with_tick_lengths(10.0, 5.0);
+
+        // Larger viewport = smaller NDC tick length for the same pixel size
+        let verts_small = renderer.generate_axis_vertices(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (400.0, 300.0),
+        );
+        let verts_large = renderer.generate_axis_vertices(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+        );
+
+        // Both should have same number of vertices
+        assert_eq!(verts_small.len(), verts_large.len());
+
+        // Tick length in NDC should be larger for smaller viewport
+        let tick_ndc_small = (verts_small[0].position[1] - verts_small[1].position[1]).abs();
+        let tick_ndc_large = (verts_large[0].position[1] - verts_large[1].position[1]).abs();
+        assert!(
+            tick_ndc_small > tick_ndc_large,
+            "Smaller viewport should produce larger NDC tick length"
+        );
+    }
+
+    #[test]
+    fn test_vertex_colors_match_config() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let color = [0.3, 0.6, 0.9, 1.0];
+        let config = AxisConfiguration::default().with_color(color);
+
+        let vertices = renderer.generate_axis_vertices(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+        );
+
+        for v in &vertices {
+            assert_eq!(
+                v.color, color,
+                "All vertices should use the configured color"
+            );
+        }
+    }
+
+    // ---- Tests for label generation ----
+
+    #[test]
+    fn test_generate_label_data_default_formatter() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let config = AxisConfiguration::default();
+
+        let labels = renderer.generate_label_data(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+            None,
+        );
+
+        // 6 default tick positions (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
+        assert_eq!(labels.len(), 6);
+
+        // Each label should have non-empty text
+        for label in &labels {
+            assert!(!label.text.is_empty(), "Label text should not be empty");
+        }
+
+        // Values should match the normalized positions
+        assert!((labels[0].value - 0.0).abs() < 0.001);
+        assert!((labels[5].value - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_label_anchors_per_position() {
+        let renderer = AxisRenderer::new();
+        let config = AxisConfiguration::default();
+        let vp = (800.0, 600.0);
+
+        let h_bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let v_bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: -0.8, y: 0.8 }, 50.0);
+
+        let bottom =
+            renderer.generate_label_data(&h_bounds, &config, AxisPosition::Bottom, None, vp, None);
+        let top =
+            renderer.generate_label_data(&h_bounds, &config, AxisPosition::Top, None, vp, None);
+        let left =
+            renderer.generate_label_data(&v_bounds, &config, AxisPosition::Left, None, vp, None);
+        let right =
+            renderer.generate_label_data(&v_bounds, &config, AxisPosition::Right, None, vp, None);
+
+        assert_eq!(bottom[0].anchor, TextAnchor::TopCenter);
+        assert_eq!(top[0].anchor, TextAnchor::BottomCenter);
+        assert_eq!(left[0].anchor, TextAnchor::CenterRight);
+        assert_eq!(right[0].anchor, TextAnchor::CenterLeft);
+    }
+
+    #[test]
+    fn test_label_ndc_positions_on_axis() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.5 }, Vec2 { x: 0.8, y: -0.5 }, 50.0);
+        let config = AxisConfiguration::default();
+
+        let labels = renderer.generate_label_data(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+            None,
+        );
+
+        // First label NDC should be at axis start
+        assert!((labels[0].ndc_position.x - (-0.8)).abs() < 0.001);
+        assert!((labels[0].ndc_position.y - (-0.5)).abs() < 0.001);
+
+        // Last label NDC should be at axis end
+        assert!((labels[5].ndc_position.x - 0.8).abs() < 0.001);
+        assert!((labels[5].ndc_position.y - (-0.5)).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_label_screen_position_ndc_conversion() {
+        let renderer = AxisRenderer::new();
+        // Place axis at NDC origin for easy math
+        let bounds = AxisBounds::new(Vec2 { x: 0.0, y: 0.0 }, Vec2 { x: 0.0, y: 0.0 }, 50.0);
+        let config = AxisConfiguration::default().with_tick_lengths(0.0, 0.0);
+
+        let labels = renderer.generate_label_data(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+            None,
+        );
+
+        // NDC (0,0) maps to screen center: (400, 300).
+        // With tick_length=0 and gap=4px, bottom offset = 4px.
+        for label in &labels {
+            assert!(
+                (label.screen_position.x - 400.0).abs() < 0.01,
+                "screen_x should be viewport center"
+            );
+            assert!(
+                (label.screen_position.y - 304.0).abs() < 0.01,
+                "screen_y should be center + 4px gap: got {}",
+                label.screen_position.y,
+            );
+        }
+    }
+
+    #[test]
+    fn test_label_bottom_offset_below_axis() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.5 }, Vec2 { x: 0.8, y: -0.5 }, 50.0);
+        let config = AxisConfiguration::default().with_tick_lengths(6.0, 3.0);
+
+        let labels = renderer.generate_label_data(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+            None,
+        );
+
+        // Screen Y for NDC y=-0.5: (1.0 - (-0.5)) * 0.5 * 600 = 450
+        let axis_screen_y = (1.0 - (-0.5)) * 0.5 * 600.0;
+        for label in &labels {
+            assert!(
+                label.screen_position.y > axis_screen_y,
+                "Bottom axis labels should be below the axis line"
+            );
+        }
+    }
+
+    #[test]
+    fn test_label_top_offset_above_axis() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: 0.5 }, Vec2 { x: 0.8, y: 0.5 }, 50.0);
+        let config = AxisConfiguration::default();
+
+        let labels = renderer.generate_label_data(
+            &bounds,
+            &config,
+            AxisPosition::Top,
+            None,
+            (800.0, 600.0),
+            None,
+        );
+
+        let axis_screen_y = (1.0 - 0.5) * 0.5 * 600.0; // 150
+        for label in &labels {
+            assert!(
+                label.screen_position.y < axis_screen_y,
+                "Top axis labels should be above the axis line"
+            );
+        }
+    }
+
+    #[test]
+    fn test_label_left_offset_left_of_axis() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.5, y: -0.8 }, Vec2 { x: -0.5, y: 0.8 }, 50.0);
+        let config = AxisConfiguration::default();
+
+        let labels = renderer.generate_label_data(
+            &bounds,
+            &config,
+            AxisPosition::Left,
+            None,
+            (800.0, 600.0),
+            None,
+        );
+
+        let axis_screen_x = ((-0.5) + 1.0) * 0.5 * 800.0; // 200
+        for label in &labels {
+            assert!(
+                label.screen_position.x < axis_screen_x,
+                "Left axis labels should be to the left of the axis line"
+            );
+        }
+    }
+
+    #[test]
+    fn test_label_right_offset_right_of_axis() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: 0.5, y: -0.8 }, Vec2 { x: 0.5, y: 0.8 }, 50.0);
+        let config = AxisConfiguration::default();
+
+        let labels = renderer.generate_label_data(
+            &bounds,
+            &config,
+            AxisPosition::Right,
+            None,
+            (800.0, 600.0),
+            None,
+        );
+
+        let axis_screen_x = (0.5 + 1.0) * 0.5 * 800.0; // 600
+        for label in &labels {
+            assert!(
+                label.screen_position.x > axis_screen_x,
+                "Right axis labels should be to the right of the axis line"
+            );
+        }
+    }
+
+    #[test]
+    fn test_label_custom_formatter() {
+        use crate::label::NumericFormatter;
+
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let config = AxisConfiguration::default();
+        let pct_formatter = NumericFormatter::percentage(1, true);
+
+        let labels = renderer.generate_label_data(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+            Some(&pct_formatter),
+        );
+
+        assert_eq!(labels.len(), 6);
+        // First tick value is 0.0 -> 0% (multiplied by 100, 1 decimal)
+        assert!(
+            labels[0].text.contains('0'),
+            "0.0 formatted as percentage should contain '0': got '{}'",
+            labels[0].text,
+        );
+        // Last tick value is 1.0 -> 100%
+        assert!(
+            labels[5].text.contains("100"),
+            "1.0 formatted as percentage should contain '100': got '{}'",
+            labels[5].text,
+        );
+    }
+
+    #[test]
+    fn test_label_count_without_scale() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let config = AxisConfiguration::default().with_tick_count(3);
+
+        // Without a scale, tick count config is ignored (falls back to 6)
+        let labels = renderer.generate_label_data(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+            None,
+        );
+        assert_eq!(labels.len(), 6);
     }
 }
