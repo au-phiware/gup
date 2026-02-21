@@ -57,6 +57,11 @@ pub use crate::shader_function::{
 
     PowerScale,
 
+    // Parallel composition (GUP-136)
+    ParallelComposable,
+    ParallelComposition,
+    ParallelOutput,
+
     ShaderCompatible,
 
     ShaderType,
