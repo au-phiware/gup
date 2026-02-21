@@ -279,8 +279,8 @@ impl TickVisualizationRenderer {
 
         // Main axis line (horizontal, center of screen)
         let axis_y = 0.0;
-        let axis_start = Vec2 { x: -0.8, y: axis_y };
-        let axis_end = Vec2 { x: 0.8, y: axis_y };
+        let axis_start = Vec2::new(-0.8, axis_y);
+        let axis_end = Vec2::new(0.8, axis_y);
         let axis_color = Vec4 {
             x: 0.8,
             y: 0.8,

@@ -101,9 +101,9 @@ impl AxisRenderer {
 
         // Define chart area bounds (centered in the screen with margins)
         let chart_bounds = AxisBounds::new(
-            Vec2 { x: -0.6, y: -0.6 }, // Bottom-left of chart area
-            Vec2 { x: 0.6, y: 0.6 },   // Top-right of chart area
-            50.0,                      // Margin for axis labels and ticks
+            Vec2::new(-0.6, -0.6), // Bottom-left of chart area
+            Vec2::new(0.6, 0.6),   // Top-right of chart area
+            50.0,                  // Margin for axis labels and ticks
         );
 
         Self {
@@ -385,10 +385,10 @@ impl AxisRenderer {
     /// Compute axis bounds for a given position (shared by vertex and label generation).
     fn axis_bounds_for_position(position: AxisPosition) -> AxisBounds {
         let (start, end) = match position {
-            AxisPosition::Bottom => (Vec2 { x: -0.6, y: -0.6 }, Vec2 { x: 0.6, y: -0.6 }),
-            AxisPosition::Top => (Vec2 { x: -0.6, y: 0.6 }, Vec2 { x: 0.6, y: 0.6 }),
-            AxisPosition::Left => (Vec2 { x: -0.6, y: -0.6 }, Vec2 { x: -0.6, y: 0.6 }),
-            AxisPosition::Right => (Vec2 { x: 0.6, y: -0.6 }, Vec2 { x: 0.6, y: 0.6 }),
+            AxisPosition::Bottom => (Vec2::new(-0.6, -0.6), Vec2::new(0.6, -0.6)),
+            AxisPosition::Top => (Vec2::new(-0.6, 0.6), Vec2::new(0.6, 0.6)),
+            AxisPosition::Left => (Vec2::new(-0.6, -0.6), Vec2::new(-0.6, 0.6)),
+            AxisPosition::Right => (Vec2::new(0.6, -0.6), Vec2::new(0.6, 0.6)),
         };
         AxisBounds::new(start, end, 50.0)
     }
