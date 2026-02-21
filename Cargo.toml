@@ -43,6 +43,7 @@ log = "0.4"
 fontdue = "0.9"
 unicode-normalization = "0.1"
 ttf-parser = "0.21.1"
+lru = "0.12"
 
 [dependencies.web-sys]
 version = "0.3"

@@ -501,12 +501,16 @@ impl ToTokens for WgslFunctionInfo {
             (struct_def, impl_uniform)
         } else {
             // Build field names and types for ShaderUniform impl
-            let field_infos: Vec<_> = self.uniform_params.iter().map(|param| {
-                let name = &param.name;
-                let name_str = name.to_string();
-                let ty = &param.rust_type;
-                (name_str, ty.clone())
-            }).collect();
+            let field_infos: Vec<_> = self
+                .uniform_params
+                .iter()
+                .map(|param| {
+                    let name = &param.name;
+                    let name_str = name.to_string();
+                    let ty = &param.rust_type;
+                    (name_str, ty.clone())
+                })
+                .collect();
 
             let wgsl_fields = field_infos.iter().map(|(name, ty)| {
                 let wgsl_type = if let Type::Path(type_path) = ty {

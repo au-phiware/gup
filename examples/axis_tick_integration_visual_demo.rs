@@ -13,8 +13,8 @@
 use gup::{
     CircleAttributes, GupContext, PhysicalSize, SurfaceId,
     axis::{Axis, AxisBounds, AxisConfiguration, AxisPosition, LinearAxis},
-    render::Vertex,
     prelude::ShaderFunction,
+    render::Vertex,
     shader_function::{Vec2, Vec4},
     tick_generator::{LinearScale, LinearTickGenerator, Scale, TickGenerator},
 };

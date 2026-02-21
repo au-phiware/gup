@@ -6,9 +6,9 @@
 //! These tests validate the performance, accuracy, and integration requirements
 //! specified in GUP-012: GPU Interaction System.
 
+use gup::Circle;
 use gup::RenderContext;
 use gup::interaction::{InteractionEvent, InteractionSystem, Rect, Renderable, Vec2};
-use gup::{Circle};
 use gup::selection::Selection;
 use std::sync::Arc;
 
