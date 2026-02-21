@@ -93,7 +93,7 @@ epic and status.
 | [GUP-031](GUP-031_GPU_Interaction_Event_System.md)       | GPU-Based Interaction Event System       | ⚠️ Partial     | High     | 13     |
 | [GUP-032](GUP-032_Advanced_Mark_System.md)               | Advanced Mark System with Custom Shapes  | ✅ Complete    | Medium   | 8      |
 | [GUP-033](GUP-033_Shader_Function_Composition_Engine.md) | Shader Function Composition Engine       | ✅ Complete    | Medium   | 10     |
-| [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md)         | GPU Memory Profiling and Debugging Tools | 🚧 In Progress | Low      | 5      |
+| [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md)         | GPU Memory Profiling and Debugging Tools | ✅ Complete    | Low      | 5      |
 | [GUP-131](GUP-131_Shader_Type_Constructors.md)           | Add Constructor Methods to Shader Types  | ✅ Complete    | Low      | 1      |
 | [GUP-132](GUP-132_GPU_Path_Tessellation.md)              | GPU Tessellation for Path Mark           | 💡 New         | Medium   | 8      |
 | [GUP-134](GUP-134_Storage_Buffer_ColorGradient.md)       | Storage Buffer-Based ColorGradient       | 📋 Planned     | Low      | 3      |
@@ -110,6 +110,8 @@ epic and status.
 | [GUP-080](GUP-080_WebGPU_Timestamp_Query_Integration.md) | WebGPU Timestamp Query Integration | 💡 New | Medium   | 4      |
 | [GUP-081](GUP-081_Advanced_Debug_Data_Visualization.md)  | Advanced Debug Data Visualization  | 💡 New | Low      | 5      |
 | [GUP-082](GUP-082_Debug_Tool_Integration_CI_CD.md)       | Debug Tool Integration with CI/CD  | 💡 New | Medium   | 3      |
+| [GUP-085](GUP-085_GPU_Resource_Dependency_Graph.md)      | GPU Resource Dependency Graph      | 💡 New | Low      | 5      |
+| [GUP-086](GUP-086_Web_Profiling_Dashboard.md)            | Web-Based Profiling Dashboard      | 💡 New | Low      | 8      |
 
 ### Post GUP-017 Stories - Error Handling Optimization (Stories 83+)
 
