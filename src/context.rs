@@ -71,6 +71,79 @@ impl std::fmt::Display for SurfaceId {
     }
 }
 
+/// Surface visibility and state tracking.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SurfaceVisibility {
+    /// Surface is visible and actively rendered
+    Visible,
+    /// Surface is minimized/hidden
+    Hidden,
+    /// Surface is occluded by other windows
+    Occluded,
+}
+
+/// Surface focus state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SurfaceFocus {
+    /// Surface has input focus
+    Focused,
+    /// Surface does not have focus
+    Unfocused,
+}
+
+/// Surface event information for event handlers.
+#[derive(Debug, Clone, Copy)]
+pub enum SurfaceEvent {
+    /// DPI/scale factor changed
+    DpiChanged {
+        surface_id: SurfaceId,
+        scale_factor: f64,
+    },
+    /// Window focus changed
+    FocusChanged {
+        surface_id: SurfaceId,
+        focused: bool,
+    },
+    /// Window visibility changed
+    VisibilityChanged {
+        surface_id: SurfaceId,
+        visible: bool,
+    },
+    /// Surface was resized
+    Resized {
+        surface_id: SurfaceId,
+        width: u32,
+        height: u32,
+    },
+}
+
+/// Trait for handling surface events.
+pub trait SurfaceEventHandler: Send + Sync {
+    /// Called when DPI/scale factor changes.
+    fn on_dpi_changed(&mut self, surface_id: SurfaceId, scale_factor: f64) -> GupResult<()> {
+        let _ = (surface_id, scale_factor);
+        Ok(())
+    }
+
+    /// Called when window focus changes.
+    fn on_focus_changed(&mut self, surface_id: SurfaceId, focused: bool) -> GupResult<()> {
+        let _ = (surface_id, focused);
+        Ok(())
+    }
+
+    /// Called when window visibility changes.
+    fn on_visibility_changed(&mut self, surface_id: SurfaceId, visible: bool) -> GupResult<()> {
+        let _ = (surface_id, visible);
+        Ok(())
+    }
+
+    /// Called when surface is resized.
+    fn on_resized(&mut self, surface_id: SurfaceId, width: u32, height: u32) -> GupResult<()> {
+        let _ = (surface_id, width, height);
+        Ok(())
+    }
+}
+
 /// Surface information and configuration.
 #[derive(Debug)]
 struct ManagedSurface {
@@ -78,6 +151,8 @@ struct ManagedSurface {
     config: SurfaceConfiguration,
     scale_factor: f64,
     is_fullscreen: bool,
+    visibility: SurfaceVisibility,
+    focus: SurfaceFocus,
 }
 
 impl ManagedSurface {
@@ -87,6 +162,8 @@ impl ManagedSurface {
             config,
             scale_factor,
             is_fullscreen: false,
+            visibility: SurfaceVisibility::Visible,
+            focus: SurfaceFocus::Unfocused,
         }
     }
 
@@ -104,6 +181,14 @@ impl ManagedSurface {
     fn update_scale_factor(&mut self, device: &Device, scale_factor: f64) {
         self.scale_factor = scale_factor;
         self.surface.configure(device, &self.config);
+    }
+
+    fn set_visibility(&mut self, visibility: SurfaceVisibility) {
+        self.visibility = visibility;
+    }
+
+    fn set_focus(&mut self, focus: SurfaceFocus) {
+        self.focus = focus;
     }
 }
 
@@ -475,7 +560,6 @@ impl TexturePool {
 }
 
 /// Unified render context that manages GPU resources and provides rendering capabilities.
-#[derive(Debug)]
 pub struct GupContext {
     /// Core wgpu resources
     pub device: Arc<Device>,
@@ -496,9 +580,40 @@ pub struct GupContext {
     /// Advanced performance profiler (optional)
     performance_profiler: Option<PerformanceProfiler>,
 
+    /// Surface event handlers
+    event_handlers: Vec<Box<dyn SurfaceEventHandler>>,
+
+    /// Background rendering throttling enabled
+    background_throttling_enabled: bool,
+
     /// WebGPU instance and adapter (kept for potential reconfiguration)
     _instance: Instance,
     _adapter: Adapter,
+}
+
+// Manual Debug implementation to handle non-Debug trait objects
+impl std::fmt::Debug for GupContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GupContext")
+            .field("device", &self.device)
+            .field("queue", &self.queue)
+            .field("surfaces", &self.surfaces)
+            .field("primary_surface_id", &self.primary_surface_id)
+            .field("buffer_pool", &self.buffer_pool)
+            .field("texture_pool", &self.texture_pool)
+            .field("frame_stats", &self.frame_stats)
+            .field("frame_start_time", &self.frame_start_time)
+            .field("performance_profiler", &self.performance_profiler)
+            .field(
+                "event_handlers",
+                &format!("{} handlers", self.event_handlers.len()),
+            )
+            .field(
+                "background_throttling_enabled",
+                &self.background_throttling_enabled,
+            )
+            .finish()
+    }
 }
 
 impl GupContext {
@@ -573,6 +688,8 @@ impl GupContext {
             frame_stats: FrameStats::default(),
             frame_start_time: None,
             performance_profiler: None,
+            event_handlers: Vec::new(),
+            background_throttling_enabled: false,
             _instance: instance,
             _adapter: adapter,
         }))
@@ -694,6 +811,14 @@ impl GupContext {
             .ok_or_else(|| GupError::resource_error(format!("Surface with ID {id} not found")))?;
 
         surface.resize(&self.device, size.width, size.height);
+
+        // Fire resize event
+        self.fire_event(SurfaceEvent::Resized {
+            surface_id: id,
+            width: size.width,
+            height: size.height,
+        })?;
+
         Ok(())
     }
 
@@ -720,6 +845,124 @@ impl GupContext {
             .ok_or_else(|| GupError::resource_error(format!("Surface with ID {id} not found")))?;
 
         surface.update_scale_factor(&self.device, scale_factor);
+
+        // Fire DPI change event
+        self.fire_event(SurfaceEvent::DpiChanged {
+            surface_id: id,
+            scale_factor,
+        })?;
+
+        Ok(())
+    }
+
+    /// Update surface visibility state.
+    pub fn set_surface_visibility(&mut self, id: SurfaceId, visible: bool) -> GupResult<()> {
+        let surface = self
+            .surfaces
+            .get_mut(&id)
+            .ok_or_else(|| GupError::resource_error(format!("Surface with ID {id} not found")))?;
+
+        let visibility = if visible {
+            SurfaceVisibility::Visible
+        } else {
+            SurfaceVisibility::Hidden
+        };
+
+        surface.set_visibility(visibility);
+
+        // Fire visibility change event
+        self.fire_event(SurfaceEvent::VisibilityChanged {
+            surface_id: id,
+            visible,
+        })?;
+
+        Ok(())
+    }
+
+    /// Update surface focus state.
+    pub fn set_surface_focus(&mut self, id: SurfaceId, focused: bool) -> GupResult<()> {
+        let surface = self
+            .surfaces
+            .get_mut(&id)
+            .ok_or_else(|| GupError::resource_error(format!("Surface with ID {id} not found")))?;
+
+        let focus = if focused {
+            SurfaceFocus::Focused
+        } else {
+            SurfaceFocus::Unfocused
+        };
+
+        surface.set_focus(focus);
+
+        // Fire focus change event
+        self.fire_event(SurfaceEvent::FocusChanged {
+            surface_id: id,
+            focused,
+        })?;
+
+        Ok(())
+    }
+
+    /// Get surface visibility state.
+    pub fn get_surface_visibility(&self, id: SurfaceId) -> Option<SurfaceVisibility> {
+        self.surfaces.get(&id).map(|surface| surface.visibility)
+    }
+
+    /// Get surface focus state.
+    pub fn get_surface_focus(&self, id: SurfaceId) -> Option<SurfaceFocus> {
+        self.surfaces.get(&id).map(|surface| surface.focus)
+    }
+
+    /// Register an event handler for surface events.
+    pub fn register_event_handler(&mut self, handler: Box<dyn SurfaceEventHandler>) {
+        self.event_handlers.push(handler);
+    }
+
+    /// Enable or disable background rendering throttling.
+    pub fn set_background_throttling(&mut self, enabled: bool) {
+        self.background_throttling_enabled = enabled;
+    }
+
+    /// Check if background throttling is enabled.
+    pub fn is_background_throttling_enabled(&self) -> bool {
+        self.background_throttling_enabled
+    }
+
+    /// Fire a surface event to all registered handlers.
+    fn fire_event(&mut self, event: SurfaceEvent) -> GupResult<()> {
+        let mut errors = Vec::new();
+
+        for handler in &mut self.event_handlers {
+            let result = match event {
+                SurfaceEvent::DpiChanged {
+                    surface_id,
+                    scale_factor,
+                } => handler.on_dpi_changed(surface_id, scale_factor),
+                SurfaceEvent::FocusChanged {
+                    surface_id,
+                    focused,
+                } => handler.on_focus_changed(surface_id, focused),
+                SurfaceEvent::VisibilityChanged {
+                    surface_id,
+                    visible,
+                } => handler.on_visibility_changed(surface_id, visible),
+                SurfaceEvent::Resized {
+                    surface_id,
+                    width,
+                    height,
+                } => handler.on_resized(surface_id, width, height),
+            };
+
+            if let Err(e) = result {
+                errors.push(e);
+            }
+        }
+
+        // Return first error if any occurred
+        if let Some(error) = errors.into_iter().next() {
+            return Err(error);
+        }
+
         Ok(())
     }
 
@@ -1805,5 +2048,144 @@ mod tests {
             stats.pool_misses, 2,
             "Different usage flags should prevent reuse"
         );
+    }
+
+    #[tokio::test]
+    async fn test_surface_event_handler_registration() {
+        let context = GupContext::headless().await.unwrap();
+        let mut ctx = Arc::try_unwrap(context).unwrap();
+
+        struct TestHandler {
+            dpi_called: std::sync::Arc<std::sync::Mutex<bool>>,
+        }
+
+        impl SurfaceEventHandler for TestHandler {
+            fn on_dpi_changed(
+                &mut self,
+                _surface_id: SurfaceId,
+                _scale_factor: f64,
+            ) -> GupResult<()> {
+                *self.dpi_called.lock().unwrap() = true;
+                Ok(())
+            }
+        }
+
+        let dpi_called = std::sync::Arc::new(std::sync::Mutex::new(false));
+        let handler = TestHandler {
+            dpi_called: dpi_called.clone(),
+        };
+
+        ctx.register_event_handler(Box::new(handler));
+
+        // Verify handler was registered
+        assert_eq!(ctx.event_handlers.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_background_throttling_config() {
+        let context = GupContext::headless().await.unwrap();
+        let mut ctx = Arc::try_unwrap(context).unwrap();
+
+        assert!(!ctx.is_background_throttling_enabled());
+
+        ctx.set_background_throttling(true);
+        assert!(ctx.is_background_throttling_enabled());
+
+        ctx.set_background_throttling(false);
+        assert!(!ctx.is_background_throttling_enabled());
+    }
+
+    #[tokio::test]
+    async fn test_surface_visibility_tracking() {
+        let context = GupContext::headless().await.unwrap();
+        let mut ctx = Arc::try_unwrap(context).unwrap();
+
+        // Create a mock surface ID (in real usage, this would come from add_surface)
+        let id = SurfaceId::new();
+
+        // Attempting to set visibility on non-existent surface should error
+        assert!(ctx.set_surface_visibility(id, false).is_err());
+        assert!(ctx.get_surface_visibility(id).is_none());
+    }
+
+    #[tokio::test]
+    async fn test_surface_focus_tracking() {
+        let context = GupContext::headless().await.unwrap();
+        let mut ctx = Arc::try_unwrap(context).unwrap();
+
+        // Create a mock surface ID
+        let id = SurfaceId::new();
+
+        // Attempting to set focus on non-existent surface should error
+        assert!(ctx.set_surface_focus(id, true).is_err());
+        assert!(ctx.get_surface_focus(id).is_none());
+    }
+
+    #[tokio::test]
+    async fn test_event_firing_with_error_handling() {
+        let context = GupContext::headless().await.unwrap();
+        let mut ctx = Arc::try_unwrap(context).unwrap();
+
+        struct ErrorHandler;
+        impl SurfaceEventHandler for ErrorHandler {
+            fn on_focus_changed(
+                &mut self,
+                _surface_id: SurfaceId,
+                _focused: bool,
+            ) -> GupResult<()> {
+                Err(GupError::resource_error("Test error".to_string()))
+            }
+        }
+
+        ctx.register_event_handler(Box::new(ErrorHandler));
+
+        // Fire an event that will trigger the error handler
+        let id = SurfaceId::new();
+        let result = ctx.fire_event(SurfaceEvent::FocusChanged {
+            surface_id: id,
+            focused: true,
+        });
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_surface_event_types() {
+        // Test that all event types can be created
+        let id = SurfaceId::new();
+
+        let _dpi_event = SurfaceEvent::DpiChanged {
+            surface_id: id,
+            scale_factor: 2.0,
+        };
+
+        let _focus_event = SurfaceEvent::FocusChanged {
+            surface_id: id,
+            focused: true,
+        };
+
+        let _visibility_event = SurfaceEvent::VisibilityChanged {
+            surface_id: id,
+            visible: false,
+        };
+
+        let _resize_event = SurfaceEvent::Resized {
+            surface_id: id,
+            width: 1920,
+            height: 1080,
+        };
+    }
+
+    #[tokio::test]
+    async fn test_surface_visibility_enum() {
+        assert_eq!(SurfaceVisibility::Visible, SurfaceVisibility::Visible);
+        assert_ne!(SurfaceVisibility::Visible, SurfaceVisibility::Hidden);
+        assert_ne!(SurfaceVisibility::Hidden, SurfaceVisibility::Occluded);
+    }
+
+    #[tokio::test]
+    async fn test_surface_focus_enum() {
+        assert_eq!(SurfaceFocus::Focused, SurfaceFocus::Focused);
+        assert_ne!(SurfaceFocus::Focused, SurfaceFocus::Unfocused);
     }
 }
