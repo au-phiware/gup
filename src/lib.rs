@@ -43,6 +43,7 @@ pub mod interaction;
 pub mod label;
 pub mod mark;
 pub mod mixable;
+pub mod performance;
 pub mod plugins;
 pub mod prelude;
 pub mod render;

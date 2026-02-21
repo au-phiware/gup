@@ -22,6 +22,7 @@
 
 use crate::buffer::{BufferPool, BufferType, GpuBuffer};
 use crate::error::{GupError, GupResult};
+use crate::performance::PerformanceProfiler;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -492,6 +493,9 @@ pub struct GupContext {
     frame_stats: FrameStats,
     frame_start_time: Option<Instant>,
 
+    /// Advanced performance profiler (optional)
+    performance_profiler: Option<PerformanceProfiler>,
+
     /// WebGPU instance and adapter (kept for potential reconfiguration)
     _instance: Instance,
     _adapter: Adapter,
@@ -568,6 +572,7 @@ impl GupContext {
             texture_pool,
             frame_stats: FrameStats::default(),
             frame_start_time: None,
+            performance_profiler: None,
             _instance: instance,
             _adapter: adapter,
         }))
@@ -910,6 +915,45 @@ impl GupContext {
     /// Reset performance statistics.
     pub fn reset_stats(&mut self) {
         self.frame_stats = FrameStats::default();
+    }
+
+    /// Enable advanced performance profiling.
+    ///
+    /// This enables detailed frame statistics, GPU timestamps (if supported),
+    /// and performance regression detection.
+    pub fn enable_profiling(
+        &mut self,
+        config: crate::performance::ProfilingConfig,
+    ) -> GupResult<()> {
+        if self.performance_profiler.is_some() {
+            return Err(GupError::invalid_operation(
+                "Profiling already enabled".to_string(),
+            ));
+        }
+
+        let profiler = PerformanceProfiler::new(&self.device, config)?;
+        self.performance_profiler = Some(profiler);
+        Ok(())
+    }
+
+    /// Disable advanced performance profiling.
+    pub fn disable_profiling(&mut self) {
+        self.performance_profiler = None;
+    }
+
+    /// Check if advanced profiling is enabled.
+    pub fn is_profiling_enabled(&self) -> bool {
+        self.performance_profiler.is_some()
+    }
+
+    /// Get the performance profiler (if enabled).
+    pub fn profiler(&self) -> Option<&PerformanceProfiler> {
+        self.performance_profiler.as_ref()
+    }
+
+    /// Get mutable access to the performance profiler (if enabled).
+    pub fn profiler_mut(&mut self) -> Option<&mut PerformanceProfiler> {
+        self.performance_profiler.as_mut()
     }
 
     /// Get all active surface IDs.
