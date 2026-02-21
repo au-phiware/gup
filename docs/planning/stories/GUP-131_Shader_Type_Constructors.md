@@ -91,19 +91,23 @@ implementation._
 
 ### What Was Implemented
 
-Added standard constructor methods to all shader types in `src/shader_function.rs`:
+Added standard constructor methods to all shader types in
+`src/shader_function.rs`:
 
 **Vector Types:**
+
 - `Vec2::new(x, y)`, `Vec2::zero()`, `Vec2::one()`
 - `Vec3::new(x, y, z)`, `Vec3::zero()`, `Vec3::one()`
 - `Vec4::new(x, y, z, w)`, `Vec4::zero()`, `Vec4::one()`
 
 **Matrix Types:**
+
 - `Mat2::new(m00, m01, m10, m11)`, `Mat2::identity()`
 - `Mat3::new(m00..m22)`, `Mat3::identity()`
 - `Mat4::new(m00..m33)`, `Mat4::identity()`
 
 All constructors are:
+
 - Marked `const` where possible for compile-time evaluation
 - Marked `inline` for zero runtime overhead
 - Fully documented with rustdoc examples
@@ -111,7 +115,8 @@ All constructors are:
 
 ### Files Changed
 
-- **src/shader_function.rs** - Added 6 impl blocks with constructors and 1 comprehensive test
+- **src/shader_function.rs** - Added 6 impl blocks with constructors and 1
+  comprehensive test
 - **examples/axis_showcase.rs** - Updated to use Vec2::new()
 - **examples/tick_generation_visual_demo.rs** - Updated to use Vec2::new()
 
@@ -132,38 +137,54 @@ Zero - all constructors are inline and const where possible.
 ### Key Technical Learnings
 
 #### Const Constructors
+
 - **Challenge**: Making constructors `const` to enable compile-time evaluation
-- **Solution**: All constructors marked `const` except `identity()` methods which use macros
-- **Pattern**: Use `const fn new(...)` for simple struct construction with padding
-- **Benefit**: Enables const initialization: `const ORIGIN: Vec2 = Vec2::zero();`
+- **Solution**: All constructors marked `const` except `identity()` methods
+  which use macros
+- **Pattern**: Use `const fn new(...)` for simple struct construction with
+  padding
+- **Benefit**: Enables const initialization:
+  `const ORIGIN: Vec2 = Vec2::zero();`
 
 #### GPU Alignment and Padding
+
 - **Context**: Vec3 requires 16-byte alignment (vec4 alignment in WGSL)
 - **Solution**: Constructor handles `_padding: 0.0` automatically
-- **Pattern**: All padding fields initialized in constructors to ensure predictable memory layout
-- **Learning**: Constructors must always set padding to 0.0 for consistent GPU memory layout
+- **Pattern**: All padding fields initialized in constructors to ensure
+  predictable memory layout
+- **Learning**: Constructors must always set padding to 0.0 for consistent GPU
+  memory layout
 
 #### Clippy Linting
+
 - **Challenge**: Mat3::new() has 9 parameters, Mat4::new() has 16 parameters
-- **Solution**: Added `#[allow(clippy::too_many_arguments)]` to Mat3 and Mat4 constructors
-- **Reasoning**: Matrix constructors inherently need many parameters; no better alternative than passing all elements
+- **Solution**: Added `#[allow(clippy::too_many_arguments)]` to Mat3 and Mat4
+  constructors
+- **Reasoning**: Matrix constructors inherently need many parameters; no better
+  alternative than passing all elements
 - **Trade-off**: Slightly verbose API, but explicit and type-safe
 
 ### Architectural Decisions
 
 #### Constructor Naming Convention
+
 - **Decision**: Use `new()`, `zero()`, `one()`, `identity()` naming
 - **Reasoning**: Follows Rust std library conventions (Option::None, Vec::new)
-- **Comparison**: Could have used from_xyz() or builder pattern, but new() is most idiomatic
-- **Future**: Additional convenience constructors (from_angle(), etc.) can be added as needed
+- **Comparison**: Could have used from_xyz() or builder pattern, but new() is
+  most idiomatic
+- **Future**: Additional convenience constructors (from_angle(), etc.) can be
+  added as needed
 
 #### Inline Everything
+
 - **Decision**: Mark all constructors `#[inline]`
 - **Reasoning**: Trivial functions that should always be inlined
 - **Performance**: Zero-cost abstraction - same assembly as struct literals
-- **Validation**: Compiler will inline these without hints, but explicit is better
+- **Validation**: Compiler will inline these without hints, but explicit is
+  better
 
 #### Documentation with Examples
+
 - **Decision**: Add rustdoc examples to every constructor
 - **Reasoning**: Makes API discoverable and testable via doc tests
 - **Pattern**: Show typical usage with assert_eq! to verify behavior
@@ -172,21 +193,26 @@ Zero - all constructors are inline and const where possible.
 ### Development Workflow Insights
 
 **What Went Well:**
+
 - Clear scope from GUP-032 retrospective made implementation straightforward
-- Existing macros (vec2!, mat3!, etc.) remain available for those who prefer them
+- Existing macros (vec2!, mat3!, etc.) remain available for those who prefer
+  them
 - Test-first approach caught padding issues early
 - Small story (1 point) completed in single session
 
 **What Was Challenging:**
+
 - Disk space issues in environment required multiple cargo clean cycles
 - Pre-commit hook failures from unrelated markdown linting issues
 - Had to use --no-verify to commit due to environment limitations
 
 **Time Sinks:**
+
 - Fighting disk space issues (should have cleaned target/ at start)
 - Markdown linting errors in files we didn't touch
 
 **Process Improvement:**
+
 - For small stories like this, consider batching with related work
 - Environment disk space should be checked before starting
 - Could disable markdown linting for unrelated files
@@ -194,20 +220,24 @@ Zero - all constructors are inline and const where possible.
 ### Impact Assessment
 
 **Immediate Benefits:**
+
 - Cleaner, more idiomatic API for shader type construction
 - Better discoverability through rustdoc
 - Consistent API across all vector and matrix types
 
 **Long-term Value:**
+
 - Foundation for additional convenience constructors
 - Sets pattern for future shader type additions
 - Reduces cognitive load for developers familiar with Rust conventions
 
 **Migration Path:**
+
 - Non-breaking change - macros still work
 - Examples show new preferred approach
 - Gradual migration can happen organically
 
 ### Follow-up Stories
 
-No new stories identified. This was a pure API enhancement with no broader implications.
+No new stories identified. This was a pure API enhancement with no broader
+implications.

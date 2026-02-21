@@ -113,8 +113,8 @@ Fixed 5 examples that had incorrect `ShaderFunction` trait usage:
 
 - Removed `ShaderFunction` / `ComposableShaderFunction` trait implementations
   from CPU-side data transformers
-- Replaced trait methods (`apply()`, `wgsl_code()`, `function_id()`) with
-  simple `transform()` methods
+- Replaced trait methods (`apply()`, `wgsl_code()`, `function_id()`) with simple
+  `transform()` methods
 - Fixed import statements to remove unused `ShaderFunction` imports
 - All examples now compile cleanly: `cargo check --examples` passes
 
@@ -148,8 +148,8 @@ _Created from GUP-032 retrospective - identified during testing._
 
 - **Challenge**: Examples were implementing `ShaderFunction` trait for CPU-side
   data transformations
-- **Solution**: Removed trait implementations entirely - used simple structs with
-  `transform()` methods
+- **Solution**: Removed trait implementations entirely - used simple structs
+  with `transform()` methods
 - **Pattern**: `ComposableShaderFunction` is for GPU shader generation, not
   CPU-side transformations. When you need to transform Rust data structures,
   just use plain methods.

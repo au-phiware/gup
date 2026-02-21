@@ -38,8 +38,8 @@ After GUP-032 (8 points) and GUP-135 (3 points), a 1-point story keeps momentum:
 
 ### 4. **Identified During GUP-032**
 
-The GUP-032 retrospective specifically called out the need for constructors. It's
-fresh in mind and a logical cleanup task.
+The GUP-032 retrospective specifically called out the need for constructors.
+It's fresh in mind and a logical cleanup task.
 
 ## Alternative Considerations
 
@@ -88,7 +88,7 @@ with constructors makes sense:
 
 ## Recommended Sequence
 
-1. **Now**: GUP-131 (Shader Constructors) - 1 point ← *Start here*
+1. **Now**: GUP-131 (Shader Constructors) - 1 point ← _Start here_
 2. **Next**: GUP-031 (GPU Interaction) - 13 points (complete the partial work)
 3. **Then**: GUP-033 (Shader Composition) - 10 points (core Phase 1 feature)
 

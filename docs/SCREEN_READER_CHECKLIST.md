@@ -256,15 +256,16 @@ Test in these combinations (in order of priority):
 
 After testing, complete this summary:
 
-**Date**: ******\_****** **Tester**: ******\_****** **Screen Reader**:
-******\_****** Version: ******\_****** **Browser**: ******\_****** Version:
-******\_****** **OS**: ******\_****** Version: ******\_******
+**Date**: **\*\***\_**\*\*** **Tester**: **\*\***\_**\*\*** **Screen Reader**:
+**\*\***\_**\*\*** Version: **\*\***\_**\*\*** **Browser**: **\*\***\_**\*\***
+Version: **\*\***\_**\*\*** **OS**: **\*\***\_**\*\*** Version:
+**\*\***\_**\*\***
 
 **Overall Result**: ☐ Pass ☐ Pass with minor issues ☐ Fail
 
 **Scenarios Passed**: \_\_\_/7
 
-**Critical Issues Found**: **_ **Major Issues Found**: _** **Minor Issues
+**Critical Issues Found**: **\_ **Major Issues Found**: \_** **Minor Issues
 Found**: \_\_\_
 
 **Would you recommend this for production use?**: ☐ Yes ☐ With fixes ☐ No

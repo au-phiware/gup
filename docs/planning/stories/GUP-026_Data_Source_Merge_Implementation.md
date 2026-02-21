@@ -12,7 +12,8 @@
 
 ## Implementation Summary
 
-Successfully implemented data merging capabilities for the Mixable composition system:
+Successfully implemented data merging capabilities for the Mixable composition
+system:
 
 ### Key Deliverables
 
@@ -29,7 +30,8 @@ Successfully implemented data merging capabilities for the Mixable composition s
 
 3. **ComposedVisualization Integration**
    - Added `merge_strategy` field
-   - Methods: `with_merge_strategy()`, `merge_strategy()`, `set_merge_strategy()`
+   - Methods: `with_merge_strategy()`, `merge_strategy()`,
+     `set_merge_strategy()`
    - Documented limitations in `render_merge()` with workaround examples
 
 4. **Example Implementation**
@@ -54,7 +56,9 @@ Successfully implemented data merging capabilities for the Mixable composition s
 
 ### Technical Notes
 
-The implementation uses a pragmatic approach: rather than attempting to generically merge arbitrary Mixable types (which runs into Rust's type system limitations), we provide:
+The implementation uses a pragmatic approach: rather than attempting to
+generically merge arbitrary Mixable types (which runs into Rust's type system
+limitations), we provide:
 
 1. A `Mergeable` trait that types can implement to expose their data
 2. Merge strategies that work on concrete data types
@@ -277,76 +281,119 @@ fn bench_merge_vs_individual_rendering(b: &mut Bencher) {
 
 #### Type System Constraints with Generic Data Merging
 
-- **Challenge**: Implementing generic data merging between arbitrary `Mixable` types is fundamentally limited by Rust's type system. The `Mixable` trait doesn't encode information about the underlying data type, and `ComposedVisualization<A, B>` doesn't know what data types A and B contain.
-- **Solution**: Introduced the `Mergeable<T>` trait as a separate concern from `Mixable`. Types that want to participate in data merging explicitly implement both traits. This provides opt-in data exposure without forcing all Mixable types to expose their internal structure.
-- **Pattern**: The pattern of "create merged data externally, then build visualization from it" (as shown in `merge_example()`) is more practical than trying to merge within the composition system.
-- **Trade-off**: This approach means `ComposedVisualization.merge()` doesn't actually merge data in the general case - it just renders both components. True merging requires the consuming code to use the Mergeable trait directly.
+- **Challenge**: Implementing generic data merging between arbitrary `Mixable`
+  types is fundamentally limited by Rust's type system. The `Mixable` trait
+  doesn't encode information about the underlying data type, and
+  `ComposedVisualization<A, B>` doesn't know what data types A and B contain.
+- **Solution**: Introduced the `Mergeable<T>` trait as a separate concern from
+  `Mixable`. Types that want to participate in data merging explicitly implement
+  both traits. This provides opt-in data exposure without forcing all Mixable
+  types to expose their internal structure.
+- **Pattern**: The pattern of "create merged data externally, then build
+  visualization from it" (as shown in `merge_example()`) is more practical than
+  trying to merge within the composition system.
+- **Trade-off**: This approach means `ComposedVisualization.merge()` doesn't
+  actually merge data in the general case - it just renders both components.
+  True merging requires the consuming code to use the Mergeable trait directly.
 
 #### TypeId Requires 'static Bound
 
-- **Challenge**: Initial implementation of `Mergeable<T>` failed to compile because `TypeId::of::<T>()` requires `T: 'static`.
-- **Solution**: Added `'static` bound to the trait: `pub trait Mergeable<T: 'static>`.
-- **Pattern**: When implementing traits that need runtime type checking via TypeId, always include `'static` bound from the start.
-- **Learning**: The error message was clear and helpful ("the parameter type `T` may not live long enough").
+- **Challenge**: Initial implementation of `Mergeable<T>` failed to compile
+  because `TypeId::of::<T>()` requires `T: 'static`.
+- **Solution**: Added `'static` bound to the trait:
+  `pub trait Mergeable<T: 'static>`.
+- **Pattern**: When implementing traits that need runtime type checking via
+  TypeId, always include `'static` bound from the start.
+- **Learning**: The error message was clear and helpful ("the parameter type `T`
+  may not live long enough").
 
 #### Struct Equality for Deduplication
 
-- **Challenge**: `MergeStrategy::Deduplicate` requires data types to implement `PartialEq`. The `Vertex` struct didn't have this.
+- **Challenge**: `MergeStrategy::Deduplicate` requires data types to implement
+  `PartialEq`. The `Vertex` struct didn't have this.
 - **Solution**: Added `PartialEq` derive to `Vertex` alongside existing derives.
-- **Pattern**: When designing types that may be used in collections or comparisons, include `PartialEq` in the initial derives. It's a zero-cost abstraction for simple structs.
-- **Future Consideration**: For floating-point heavy types, may want custom PartialEq that handles epsilon comparisons.
+- **Pattern**: When designing types that may be used in collections or
+  comparisons, include `PartialEq` in the initial derives. It's a zero-cost
+  abstraction for simple structs.
+- **Future Consideration**: For floating-point heavy types, may want custom
+  PartialEq that handles epsilon comparisons.
 
 ### Architectural Decisions
 
 #### Separate Mergeable Trait from Mixable
 
-- **Decision**: Created `Mergeable<T>` as a separate trait rather than adding data-extraction methods to `Mixable`.
-- **Reasoning**: 
+- **Decision**: Created `Mergeable<T>` as a separate trait rather than adding
+  data-extraction methods to `Mixable`.
+- **Reasoning**:
   - Mixable is about rendering composition, not data manipulation
   - Not all visualizations need or want to expose their data
   - Allows fine-grained control over which types support merging
-  - Keeps concerns separated: Mixable = "how to compose renders", Mergeable = "how to access data"
+  - Keeps concerns separated: Mixable = "how to compose renders", Mergeable =
+    "how to access data"
 - **Trade-off**: Adds one more trait to learn and implement
-- **Future**: This separation enables potential for other data-manipulation traits (Filterable, Transformable, etc.)
+- **Future**: This separation enables potential for other data-manipulation
+  traits (Filterable, Transformable, etc.)
 
 #### Enum-Based Merge Strategies
 
-- **Decision**: Used enum with variants rather than trait objects for merge strategies.
+- **Decision**: Used enum with variants rather than trait objects for merge
+  strategies.
 - **Reasoning**:
-  - Consistent with existing pattern in mixable.rs (CustomCompositionBehavior is also an enum)
+  - Consistent with existing pattern in mixable.rs (CustomCompositionBehavior is
+    also an enum)
   - Avoids object safety issues with generic methods
   - Makes strategies easily serializable in future (if needed)
   - Enables exhaustive match checking
-- **Trade-off**: Can't easily extend with external strategies without modifying the enum
-- **Future**: Could add a function pointer variant if needed: `Custom(fn(&[T], &[T]) -> Vec<T>)`
+- **Trade-off**: Can't easily extend with external strategies without modifying
+  the enum
+- **Future**: Could add a function pointer variant if needed:
+  `Custom(fn(&[T], &[T]) -> Vec<T>)`
 
 #### Placeholder render_merge Implementation
 
-- **Decision**: Documented limitations of generic merge in `render_merge()` rather than implementing complex runtime type checking.
+- **Decision**: Documented limitations of generic merge in `render_merge()`
+  rather than implementing complex runtime type checking.
 - **Reasoning**:
-  - Attempting runtime downcast to `Mergeable` trait objects has object-safety issues
-  - The simpler pattern (merge externally, render result) is more explicit and easier to understand
+  - Attempting runtime downcast to `Mergeable` trait objects has object-safety
+    issues
+  - The simpler pattern (merge externally, render result) is more explicit and
+    easier to understand
   - Avoids complexity that would likely be error-prone
-- **Trade-off**: `ComposedVisualization::merge()` doesn't "just work" as users might expect
-- **Future**: Could explore specialization when it stabilizes, or macro-based solutions
+- **Trade-off**: `ComposedVisualization::merge()` doesn't "just work" as users
+  might expect
+- **Future**: Could explore specialization when it stabilizes, or macro-based
+  solutions
 
 ### Development Workflow Insights
 
-- **Disk Space Management**: Hit disk space limits multiple times during compilation. Running `cargo clean` and clearing `~/.cache` was necessary. Consider adding a pre-build disk check to the maskfile.
-- **Test-Driven Development**: Writing tests for MergeStrategy first made implementation straightforward. The test cases (especially edge cases like all duplicates, no duplicates) were valuable for ensuring correctness.
-- **Incremental Commits**: Single logical commit with comprehensive message worked well for this story. All pieces (trait, strategies, example) were interconnected.
-- **Documentation First**: Writing doc comments as part of initial implementation clarified API design decisions early.
+- **Disk Space Management**: Hit disk space limits multiple times during
+  compilation. Running `cargo clean` and clearing `~/.cache` was necessary.
+  Consider adding a pre-build disk check to the maskfile.
+- **Test-Driven Development**: Writing tests for MergeStrategy first made
+  implementation straightforward. The test cases (especially edge cases like all
+  duplicates, no duplicates) were valuable for ensuring correctness.
+- **Incremental Commits**: Single logical commit with comprehensive message
+  worked well for this story. All pieces (trait, strategies, example) were
+  interconnected.
+- **Documentation First**: Writing doc comments as part of initial
+  implementation clarified API design decisions early.
 
 ### Follow-up Stories
 
-None identified. The story is complete as designed. Future enhancements would be:
+None identified. The story is complete as designed. Future enhancements would
+be:
 
-- **GUP-027** (already exists): GPU Blend State Integration - enhances overlay rendering
+- **GUP-027** (already exists): GPU Blend State Integration - enhances overlay
+  rendering
 - **GUP-028** (already exists): Composition Performance Optimization
 
 Potential future stories if demand arises:
-1. **Advanced Merge Strategies**: Implement Interpolate and Custom variants with examples
-2. **Selection Mergeable Support**: Make Selection<T, M> implement Mergeable when T and M meet certain constraints
+
+1. **Advanced Merge Strategies**: Implement Interpolate and Custom variants with
+   examples
+2. **Selection Mergeable Support**: Make Selection<T, M> implement Mergeable
+   when T and M meet certain constraints
 3. **Macro for Automatic Mergeable**: Create a derive macro for common cases
 
-No immediate follow-ups are needed. The implementation provides the foundation for data merging while acknowledging practical limitations.
+No immediate follow-ups are needed. The implementation provides the foundation
+for data merging while acknowledging practical limitations.

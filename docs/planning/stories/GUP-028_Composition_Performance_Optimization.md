@@ -1,5 +1,7 @@
 # GUP-028: Composition Performance Optimization
 
+**Status**: 🚧 In Progress
+
 ## Story Overview
 
 **Title**: Optimize Composition Performance with Caching and State Management
