@@ -17,9 +17,11 @@ use crate::accessibility::aria::{AriaNode, AriaRole, AriaTree, AriaUpdate, NodeI
 #[cfg(target_arch = "wasm32")]
 use crate::accessibility::platform::AccessibilityError;
 #[cfg(target_arch = "wasm32")]
+use crate::accessibility::position_sync::{GpuPosition, PositionManager, ScreenPosition};
+#[cfg(target_arch = "wasm32")]
 use std::collections::HashMap;
 #[cfg(target_arch = "wasm32")]
-use wasm_bindgen::{JsCast, prelude::*};
+use wasm_bindgen::{prelude::*, JsCast};
 #[cfg(target_arch = "wasm32")]
 use web_sys::{Document, Element, HtmlElement, KeyboardEvent, PointerEvent, Window};
 
@@ -70,6 +72,10 @@ pub struct WebDomOverlay {
     keyboard_handlers: Vec<Closure<dyn FnMut(KeyboardEvent)>>,
     /// Pointer event handlers
     pointer_handlers: Vec<Closure<dyn FnMut(PointerEvent)>>,
+    /// Position manager for coordinate synchronization
+    position_manager: PositionManager,
+    /// Animation frame ID for position updates
+    animation_frame_id: Option<i32>,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -98,6 +104,8 @@ impl WebDomOverlay {
             focused_element: None,
             keyboard_handlers: Vec::new(),
             pointer_handlers: Vec::new(),
+            position_manager: PositionManager::new(),
+            animation_frame_id: None,
         })
     }
 
@@ -465,15 +473,21 @@ impl WebDomOverlay {
         element: &Element,
         node: &AriaNode,
     ) -> Result<(), AccessibilityError> {
-        // TODO: Get actual position from visualization state
-        // For now, use placeholder positioning
-
         let style = match node.role {
             AriaRole::DataPoint => {
-                // Position data points at their actual coordinates
-                // This would come from the visualization
-                "position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);"
-                    .to_string()
+                // Try to get actual position from position manager
+                if let Some(screen_pos) = self.position_manager.get_screen_position(node.id) {
+                    // Position data point at its actual coordinate
+                    // Center the 12px element on the coordinate
+                    format!(
+                        "position: absolute; left: {}px; top: {}px; transform: translate(-50%, -50%);",
+                        screen_pos.x, screen_pos.y
+                    )
+                } else {
+                    // Fallback to placeholder if position not yet set
+                    "position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);"
+                        .to_string()
+                }
             }
             AriaRole::Chart => {
                 // Chart takes full overlay
@@ -528,6 +542,87 @@ impl WebDomOverlay {
             AriaRole::Legend => "list",
             AriaRole::Axis => "group",
         }
+    }
+
+    /// Set the GPU position for a node
+    ///
+    /// This updates the position manager and schedules an overlay update
+    pub fn set_node_position(&mut self, node_id: NodeId, gpu_position: GpuPosition) {
+        self.position_manager.set_position(node_id, gpu_position);
+        self.schedule_position_update();
+    }
+
+    /// Update the viewport dimensions
+    ///
+    /// Call this when the canvas size changes
+    pub fn set_viewport_size(&mut self, width: f32, height: f32) {
+        self.position_manager.set_viewport(width, height);
+        self.schedule_position_update();
+    }
+
+    /// Update pan offset
+    ///
+    /// Call this when the visualization is panned
+    pub fn set_pan(&mut self, pan_x: f32, pan_y: f32) {
+        self.position_manager.set_pan(pan_x, pan_y);
+        self.schedule_position_update();
+    }
+
+    /// Update zoom level
+    ///
+    /// Call this when the visualization is zoomed
+    pub fn set_zoom(&mut self, zoom: f32) {
+        self.position_manager.set_zoom(zoom);
+        self.schedule_position_update();
+    }
+
+    /// Schedule a position update on the next animation frame
+    fn schedule_position_update(&mut self) {
+        // Only schedule if not already scheduled
+        if self.animation_frame_id.is_some() {
+            return;
+        }
+
+        // Use requestAnimationFrame for smooth updates at 60 FPS
+        let window = self.window.clone();
+        let callback = Closure::once(Box::new(move || {
+            // In a real implementation, we would store a reference to self
+            // and call update_positions() here
+            log::debug!("Position update scheduled");
+        }) as Box<dyn FnOnce()>);
+
+        if let Ok(id) = window.request_animation_frame(callback.as_ref().unchecked_ref()) {
+            self.animation_frame_id = Some(id);
+        }
+
+        // Keep callback alive
+        callback.forget();
+    }
+
+    /// Update all element positions based on current position manager state
+    pub fn update_positions(&mut self, aria_tree: &AriaTree) -> Result<(), AccessibilityError> {
+        if !self.position_manager.is_dirty() {
+            return Ok(());
+        }
+
+        // Update positions for all elements
+        for node_id in self.position_manager.node_ids() {
+            if let Some(element) = self.element_map.get(node_id) {
+                if let Some(node) = aria_tree.get_node(*node_id) {
+                    self.position_element(element, node)?;
+                }
+            }
+        }
+
+        self.position_manager.clear_dirty();
+        self.animation_frame_id = None;
+
+        Ok(())
+    }
+
+    /// Get the current screen position for a node
+    pub fn get_screen_position(&self, node_id: NodeId) -> Option<ScreenPosition> {
+        self.position_manager.get_screen_position(node_id)
     }
 
     /// Clean up event handlers

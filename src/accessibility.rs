@@ -29,6 +29,7 @@ pub mod focus;
 pub mod high_contrast;
 pub mod keyboard;
 pub mod platform;
+pub mod position_sync;
 pub mod sonification;
 pub mod web_overlay;
 
@@ -38,6 +39,7 @@ pub use aria::*;
 pub use focus::*;
 pub use high_contrast::*;
 pub use platform::*;
+pub use position_sync::*;
 pub use sonification::*;
 pub use web_overlay::*;
 
