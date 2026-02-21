@@ -224,16 +224,16 @@ config structs instead of multiple primitive parameters.
 Detailed retrospectives are appended to each story document in
 `docs/planning/stories/`. Key cross-cutting learnings:
 
-| Story   | Topic                              | Key Takeaway                                                           |
-| ------- | ---------------------------------- | ---------------------------------------------------------------------- |
-| GUP-011 | Mark-Shader Integration            | String-based WGSL injection; pipeline caching with hash keys           |
-| GUP-012 | GPU Interaction System             | Compute shaders for hit testing; `--test-threads=1` for GPU tests      |
-| GUP-013 | GPU Position Precision             | Rust↔WGSL struct alignment; `std::mem::offset_of!()` validation       |
-| GUP-014 | Interaction Performance            | Workgroup size 256; grid spatial indexing; batch/stream query APIs      |
-| GUP-015 | GPU Debugging Tools                | Staging buffer caching; memory layout validator; <5% profiling overhead |
-| GUP-017 | Error Handling Framework           | 25+ thiserror types; multi-tier fallback; chaos engineering testing     |
-| GUP-018 | Chart Builders                     | Fluent API; zero-cost abstraction over Selection; generic builders      |
-| GUP-102 | Demo GPU Resource Mgmt             | Single render pass per frame; separate static vs dynamic resources     |
+| Story   | Topic                    | Key Takeaway                                                            |
+| ------- | ------------------------ | ----------------------------------------------------------------------- |
+| GUP-011 | Mark-Shader Integration  | String-based WGSL injection; pipeline caching with hash keys            |
+| GUP-012 | GPU Interaction System   | Compute shaders for hit testing; `--test-threads=1` for GPU tests       |
+| GUP-013 | GPU Position Precision   | Rust↔WGSL struct alignment; `std::mem::offset_of!()` validation        |
+| GUP-014 | Interaction Performance  | Workgroup size 256; grid spatial indexing; batch/stream query APIs      |
+| GUP-015 | GPU Debugging Tools      | Staging buffer caching; memory layout validator; <5% profiling overhead |
+| GUP-017 | Error Handling Framework | 25+ thiserror types; multi-tier fallback; chaos engineering testing     |
+| GUP-018 | Chart Builders           | Fluent API; zero-cost abstraction over Selection; generic builders      |
+| GUP-102 | Demo GPU Resource Mgmt   | Single render pass per frame; separate static vs dynamic resources      |
 
 ### Recurring Patterns
 

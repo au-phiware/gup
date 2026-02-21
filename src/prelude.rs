@@ -40,6 +40,12 @@ pub use crate::text::{
     TextStyle,
 };
 
+// Label positioning and collision detection
+pub use crate::label::{
+    AxisInfo, LabelConstraints, LabelLayout, LabelPosition, LabelPositioner,
+    LabelPositioningStrategy,
+};
+
 // Interaction system
 pub use crate::interaction::{InteractionEvent, InteractionSystem, InteractionType, Renderable};
 

@@ -57,6 +57,7 @@ use crate::axis::{
 };
 use crate::error::{GupError, GupResult};
 use crate::grid::GridConfiguration;
+use crate::label::{AxisInfo, LabelConstraints, LabelLayout, LabelPosition, LabelPositioner};
 use crate::render::Vertex;
 use crate::selection::{LineAttributes, Selection};
 use crate::shader_function::Vec2;
@@ -607,7 +608,7 @@ where
     /// # let context = Arc::new(gup::RenderContext::new().await?);
     /// # #[derive(Debug, Clone)]
     /// # struct D { x: f32, y: f32 }
-    /// # let sel = gup::selection::Selection::<D, gup::selection::Dot>::new(vec![], context)?;
+    /// # let sel = gup::selection::Selection::<D, gup::selection::Circle>::new(vec![], context)?;
     /// # let config = gup::chart_builder::ChartConfig::default();
     /// let chart = ComposedChart::new(sel, config).with_default_axes();
     /// let (vertices, labels) = chart.generate_axis_geometry();
@@ -659,6 +660,119 @@ where
         }
 
         (all_vertices, all_labels)
+    }
+
+    /// Generate axis geometry with label collision resolution.
+    ///
+    /// Like [`generate_axis_geometry`](Self::generate_axis_geometry), but runs
+    /// each axis's labels through the given [`LabelPositioner`] to resolve
+    /// overlaps.  Labels that cannot be placed without collisions may be
+    /// offset, rotated, or hidden depending on the positioner's strategy
+    /// pipeline.
+    ///
+    /// The positioner accumulates state across axes, so labels from one axis
+    /// will not overlap labels already placed by a previous axis.
+    ///
+    /// Returns `(vertices, layout)` where `layout` contains the resolved
+    /// [`LabelPosition`] entries and a list of hidden label indices.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::ComposedChart;
+    /// use gup::axis::{LinearAxis, AxisPosition, AxisConfiguration};
+    /// use gup::label::{LabelPositioner, LabelConstraints};
+    /// use std::sync::Arc;
+    ///
+    /// # async fn example() -> gup::error::GupResult<()> {
+    /// # let context = Arc::new(gup::RenderContext::new().await?);
+    /// # #[derive(Debug, Clone)]
+    /// # struct D { x: f32, y: f32 }
+    /// # let sel = gup::selection::Selection::<D, gup::selection::Circle>::new(vec![], context)?;
+    /// # let config = gup::chart_builder::ChartConfig::default();
+    /// let chart = ComposedChart::new(sel, config).with_default_axes();
+    /// let mut positioner = LabelPositioner::new();
+    /// let constraints = LabelConstraints::axis_labels();
+    /// let (vertices, layout) = chart.generate_axis_geometry_resolved(
+    ///     &mut positioner,
+    ///     &constraints,
+    /// )?;
+    ///
+    /// // `layout.positions` contains collision-free label placements
+    /// // `layout.hidden_labels` lists indices that were hidden
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn generate_axis_geometry_resolved(
+        &self,
+        positioner: &mut LabelPositioner,
+        constraints: &LabelConstraints,
+    ) -> GupResult<(Vec<Vertex>, LabelLayout)> {
+        let chart_area = self.calculate_chart_area();
+        let viewport_size = (self.config.width, self.config.height);
+        let renderer = AxisRenderer::new();
+
+        let mut all_vertices = Vec::new();
+        let mut all_positions: Vec<LabelPosition> = Vec::new();
+        let mut all_hidden: Vec<usize> = Vec::new();
+        let mut offset = 0usize;
+        let mut any_rotated = false;
+
+        let axes: [(AxisPosition, &Option<Box<dyn Axis>>); 4] = [
+            (AxisPosition::Bottom, &self.bottom_axis),
+            (AxisPosition::Left, &self.left_axis),
+            (AxisPosition::Top, &self.top_axis),
+            (AxisPosition::Right, &self.right_axis),
+        ];
+
+        for (position, axis_opt) in &axes {
+            if let Some(axis) = axis_opt {
+                let pixel_bounds = self.calculate_axis_bounds(*position, &chart_area);
+                let ndc_bounds = self.pixel_bounds_to_ndc(&pixel_bounds);
+                let config = axis.configuration();
+
+                let vertices = renderer.generate_axis_vertices(
+                    &ndc_bounds,
+                    config,
+                    *position,
+                    None,
+                    viewport_size,
+                );
+                all_vertices.extend(vertices);
+
+                let labels = renderer.generate_label_data(
+                    &ndc_bounds,
+                    config,
+                    *position,
+                    None,
+                    viewport_size,
+                    None,
+                );
+
+                // Build AxisInfo from pixel-space bounds for this axis
+                let axis_info = AxisInfo::from_bounds(&pixel_bounds, *position);
+
+                let layout = positioner.resolve_labels(&labels, &axis_info, constraints)?;
+
+                // Remap hidden indices relative to the combined list
+                for &idx in &layout.hidden_labels {
+                    all_hidden.push(offset + idx);
+                }
+                any_rotated |= layout.rotated;
+                offset += labels.len();
+                all_positions.extend(layout.positions);
+            }
+        }
+
+        let combined = LabelLayout {
+            positions: all_positions,
+            hidden_labels: all_hidden,
+            margin_requirements: crate::label::Margins::default(),
+            rotated: any_rotated,
+        };
+
+        Ok((all_vertices, combined))
     }
 }
 

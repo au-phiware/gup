@@ -17,6 +17,7 @@ use gup::{
         Axis, AxisBounds, AxisConfiguration, AxisPosition, AxisRenderer as GupAxisRenderer,
         LinearAxis,
     },
+    label::{AxisInfo, LabelConstraints, LabelPositioner},
     render::Vertex,
     shader_function::Vec2,
     text::{FontAtlas, TextAnchor, TextLayoutEngine, TextRenderConfig, TextRenderer, TextStyle},
@@ -145,7 +146,7 @@ impl AxisRenderer {
             vertices.extend(axis_vertices);
         }
 
-        // Collect label data and axis colors (only needs &self, no mutable borrows)
+        // Collect label data per axis and resolve collisions
         struct LabelInfo {
             text: String,
             screen_position: Vec2,
@@ -154,6 +155,9 @@ impl AxisRenderer {
         }
 
         let mut all_labels = Vec::new();
+        let mut positioner = LabelPositioner::new();
+        let constraints = LabelConstraints::axis_labels();
+
         for axis in &self.axes {
             let config = axis.configuration();
             let position = axis.position();
@@ -168,11 +172,25 @@ impl AxisRenderer {
                 None,
             );
 
-            for label in labels {
+            // Run collision resolution for this axis's labels
+            let axis_info = AxisInfo::from_bounds(&bounds, position);
+            let layout = positioner
+                .resolve_labels(&labels, &axis_info, &constraints)
+                .unwrap_or_else(|e| {
+                    eprintln!("Label collision resolution failed: {e}");
+                    gup::label::LabelLayout {
+                        positions: Vec::new(),
+                        hidden_labels: Vec::new(),
+                        margin_requirements: gup::label::Margins::default(),
+                        rotated: false,
+                    }
+                });
+
+            for lp in layout.positions {
                 all_labels.push(LabelInfo {
-                    text: label.text,
-                    screen_position: label.screen_position,
-                    anchor: label.anchor,
+                    text: lp.text,
+                    screen_position: lp.position,
+                    anchor: lp.anchor,
                     color: config.line_color,
                 });
             }

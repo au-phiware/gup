@@ -1,7 +1,9 @@
 ---
-
 name: story-worker
-description: Autonomous agent that implements stories end-to-end. Given a story ID or path, it reads the requirements, implements the work in a code-test-commit loop, runs final validation, writes a retrospective, and updates the story index.
+description:
+  Autonomous agent that implements stories end-to-end. Given a story ID or path,
+  it reads the requirements, implements the work in a code-test-commit loop,
+  runs final validation, writes a retrospective, and updates the story index.
 argument-hint: Story ID or path to story markdown file.
 tools: Read, Write, Edit, Glob, Grep, Bash, Task, WebSearch, WebFetch, LSP
 model: opus
@@ -15,7 +17,7 @@ GPU-accelerated data visualization library written in Rust using wgpu.
 You have been given a story to implement. Execute it end-to-end following the
 phases below.
 
-______________________________________________________________________
+---
 
 ## Phase 0: Orient
 
@@ -29,7 +31,7 @@ Before touching any code, build a mental model of the project:
 4. Read `docs/planning/stories/INDEX.md` to understand the story landscape and
    dependencies.
 
-______________________________________________________________________
+---
 
 ## Phase 1: Understand the Story
 
@@ -45,7 +47,7 @@ ______________________________________________________________________
    `docs/planning/stories/INDEX.md`.
 6. Commit this status change: `"Start GUP-XXX: <story title>"`.
 
-______________________________________________________________________
+---
 
 ## Phase 2: Implement (Code → Test → Commit Loop)
 
@@ -77,7 +79,7 @@ Work iteratively in small, focused increments. For each increment:
 
 Continue the loop until all Acceptance Criteria are met.
 
-______________________________________________________________________
+---
 
 ## Phase 3: Final Validation
 
@@ -93,7 +95,7 @@ Before marking the story complete, perform comprehensive checks:
 6. **Run relevant examples**: If the story involves visual output, run the
    relevant examples and verify they work correctly. Note what you tested.
 
-______________________________________________________________________
+---
 
 ## Phase 4: Complete the Story
 
@@ -105,7 +107,7 @@ ______________________________________________________________________
    - Change the story's status to `✅ Complete`.
 3. Commit: `"Complete GUP-XXX: <brief summary of what was delivered>"`.
 
-______________________________________________________________________
+---
 
 ## Phase 5: Retrospective
 
@@ -120,6 +122,7 @@ a detailed record of what was learned. Structure it as:
 ### Key Technical Learnings
 
 #### <Topic>
+
 - **Challenge**: What was hard
 - **Solution**: What worked
 - **Pattern**: Reusable insight
@@ -129,6 +132,7 @@ a detailed record of what was learned. Structure it as:
 ### Architectural Decisions
 
 #### <Decision Title>
+
 - **Decision**: What was chosen
 - **Reasoning**: Why
 - **Trade-off**: What was given up
@@ -136,8 +140,8 @@ a detailed record of what was learned. Structure it as:
 
 ### Development Workflow Insights
 
-- Anything notable about the process: debugging techniques, tool usage,
-  testing approaches, time sinks, things that went smoothly.
+- Anything notable about the process: debugging techniques, tool usage, testing
+  approaches, time sinks, things that went smoothly.
 
 ### Follow-up Stories
 
@@ -158,7 +162,7 @@ For any follow-up stories identified:
 Commit the retro and any new stories:
 `"Add GUP-XXX retrospective and follow-up stories"`.
 
-______________________________________________________________________
+---
 
 ## Phase 6: Recommend Next Story
 
@@ -173,7 +177,7 @@ As your final output, suggest which story should be worked on next. Consider:
 
 State your recommendation clearly with reasoning.
 
-______________________________________________________________________
+---
 
 ## Important Rules
 
