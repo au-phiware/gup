@@ -808,9 +808,44 @@ crosshatch) as color-independent visual encoding
 **Impact**: Full accessibility for colorblind users through texture-based visual
 differentiation
 
+### GUP-114: macOS NSAccessibility Integration
+
+**Status**: 💡 New  
+**Priority**: Medium  
+**Story Points**: 8  
+**Key Need**: Complete macOS NSAccessibility implementation with objc2 bindings for VoiceOver support  
+**Dependencies**: GUP-112 ✅  
+**Impact**: Production-ready macOS accessibility with native VoiceOver integration
+
+### GUP-115: Windows UI Automation Integration
+
+**Status**: 💡 New  
+**Priority**: Medium  
+**Story Points**: 8  
+**Key Need**: Complete Windows UI Automation implementation with windows-rs bindings for NVDA/JAWS support  
+**Dependencies**: GUP-112 ✅  
+**Impact**: Production-ready Windows accessibility with native screen reader support
+
+### GUP-116: Linux AT-SPI2 Integration
+
+**Status**: 💡 New  
+**Priority**: Medium  
+**Story Points**: 8  
+**Key Need**: Complete Linux AT-SPI2 implementation with D-Bus bindings for Orca support  
+**Dependencies**: GUP-112 ✅  
+**Impact**: Production-ready Linux accessibility with native screen reader support
+
+### GUP-117: Web Accessibility DOM Overlay
+
+**Status**: 💡 New  
+**Priority**: High  
+**Story Points**: 5  
+**Key Need**: DOM overlay with keyboard navigation, touch support, and focus management for web platform  
+**Dependencies**: GUP-112 ✅  
+**Impact**: Production-ready web accessibility with WCAG 2.1 AAA compliance
+
 ---
 
-_Last Updated: After completion of GUP-016 (Core Accessibility System) -
-2025-01-24_  
-_Next Priority Stories: GUP-112 (Platform Accessibility Integration), GUP-111
+_Last Updated: After completion of GUP-112 (Platform-Specific Accessibility Integration) - 2025-01-24_  
+_Next Priority Stories: GUP-117 (Web DOM Overlay), GUP-111 (Automatic ARIA Generation), GUP-113 (Pattern Rendering)_
 (Automatic ARIA Generation)_
