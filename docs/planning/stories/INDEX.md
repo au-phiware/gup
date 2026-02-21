@@ -94,7 +94,7 @@ epic and status.
 | [GUP-032](GUP-032_Advanced_Mark_System.md)               | Advanced Mark System with Custom Shapes  | ✅ Complete    | Medium   | 8      |
 | [GUP-033](GUP-033_Shader_Function_Composition_Engine.md) | Shader Function Composition Engine       | 💡 New         | Medium   | 10     |
 | [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md)         | GPU Memory Profiling and Debugging Tools | 💡 New         | Low      | 5      |
-| [GUP-131](GUP-131_Shader_Type_Constructors.md)           | Add Constructor Methods to Shader Types  | 🚧 In Progress | Low      | 1      |
+| [GUP-131](GUP-131_Shader_Type_Constructors.md)           | Add Constructor Methods to Shader Types  | ✅ Complete    | Low      | 1      |
 | [GUP-132](GUP-132_GPU_Path_Tessellation.md)              | GPU Tessellation for Path Mark           | 💡 New         | Medium   | 8      |
 | [GUP-135](GUP-135_Fix_Examples_Compilation.md)           | Fix Example Compilation Errors           | 🚧 In Progress | High     | 3      |
 
