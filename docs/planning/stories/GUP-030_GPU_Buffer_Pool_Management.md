@@ -163,3 +163,63 @@ GUP-030 enhanced it with:
 ---
 
 _Created from GUP-002 retrospective learnings about GPU buffer auto-resizing._
+
+## Retrospective
+
+**Completed**: 2025-01-21
+
+### Key Technical Learnings
+
+#### LRU Implementation with VecDeque
+
+- **Challenge**: Needed efficient FIFO operations for LRU eviction
+- **Solution**: Used `VecDeque` for O(1) push_back and pop_front operations
+- **Pattern**: Newest buffers at back, oldest at front; allocate from front, deallocate to back
+- **Reusable**: This pattern works well for any LRU cache in Rust
+
+#### Memory Pressure Handling
+
+- **Challenge**: How to prevent unbounded memory growth while maintaining performance
+- **Solution**: Two-pronged approach: time-based and memory-based eviction
+- **Trade-off**: More complex logic, but provides both predictable cleanup and emergency pressure relief
+- **Future**: Could add predictive eviction based on usage patterns
+
+#### Testing Buffer Pool Behavior
+
+- **Challenge**: Initial tests failed because buffers were being reused (feature working correctly!)
+- **Solution**: Allocate all buffers first, then deallocate them to see pooling behavior
+- **Learning**: When testing resource pools, need to hold resources simultaneously to observe pool state
+
+### Architectural Decisions
+
+#### Configuration-Driven Behavior
+
+- **Decision**: Created `BufferPoolConfig` struct for all configurable parameters
+- **Reasoning**: Allows different use cases (dev/prod, memory-constrained/abundant) without code changes
+- **Trade-off**: More API surface, but much more flexible
+- **Future**: Could add profiles like `Development`, `Production`, `MemoryConstrained`
+
+#### Two-Phase Cleanup Strategy
+
+- **Decision**: Separate timeout-based and size-based eviction in `cleanup_unused()`
+- **Reasoning**: Different use cases need different behaviors
+- **Trade-off**: Slightly more complex, but more predictable behavior
+- **Future**: Could make this pluggable with custom eviction strategies
+
+#### Integration via Context
+
+- **Decision**: Keep `GpuBuffer::new()` for low-level use, pool access via `Context`
+- **Reasoning**: Maintains layered architecture - low-level primitives stay simple
+- **Trade-off**: Users must remember to use `Context::create_buffer()` for pooling
+- **Future**: Could add lint rules to discourage direct `GpuBuffer::new()` in application code
+
+### Development Workflow Insights
+
+- **Building on existing work**: GUP-003 provided a solid foundation. This story was enhancement rather than from-scratch implementation.
+- **Test-first design**: Writing tests revealed the actual buffer reuse behavior, leading to better test design.
+- **Incremental commits**: Breaking the work into LRU implementation, then testing, then documentation made it easy to track progress.
+- **Clippy warnings**: The collapsible-if warning led to cleaner code with let-chains.
+
+### Follow-up Stories
+
+No new stories needed. Buffer sharing between selections was marked as future enhancement but isn't critical for current use cases.
