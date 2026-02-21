@@ -26,6 +26,8 @@
 
 pub mod aria;
 pub mod focus;
+pub mod focus_elements;
+pub mod focus_ring;
 pub mod high_contrast;
 pub mod keyboard;
 pub mod mark_positions;
@@ -38,6 +40,8 @@ use std::collections::HashMap;
 
 pub use aria::*;
 pub use focus::*;
+pub use focus_elements::*;
+pub use focus_ring::*;
 pub use high_contrast::*;
 pub use mark_positions::*;
 pub use platform::*;
