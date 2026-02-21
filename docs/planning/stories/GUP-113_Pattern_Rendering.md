@@ -10,9 +10,13 @@
 
 ## Context
 
-GUP-016 implemented the pattern library infrastructure and `ContrastMode::Pattern`, but the actual rendering of patterns was deferred. Users who cannot distinguish colors (colorblind or low vision) would benefit from texture-based visual encoding as an alternative to color.
+GUP-016 implemented the pattern library infrastructure and
+`ContrastMode::Pattern`, but the actual rendering of patterns was deferred.
+Users who cannot distinguish colors (colorblind or low vision) would benefit
+from texture-based visual encoding as an alternative to color.
 
-Patterns (dots, lines, crosshatch, etc.) provide a color-independent way to distinguish between data categories or groups.
+Patterns (dots, lines, crosshatch, etc.) provide a color-independent way to
+distinguish between data categories or groups.
 
 ## User Story
 
@@ -23,6 +27,7 @@ Patterns (dots, lines, crosshatch, etc.) provide a color-independent way to dist
 ## Acceptance Criteria
 
 ### AC1: Pattern Rendering
+
 - [ ] Dots pattern renders correctly
 - [ ] Lines pattern with configurable angle
 - [ ] Crosshatch pattern
@@ -30,12 +35,14 @@ Patterns (dots, lines, crosshatch, etc.) provide a color-independent way to dist
 - [ ] Custom pattern support
 
 ### AC2: Pattern Application
+
 - [ ] Patterns applied to mark fills
 - [ ] Patterns work with all mark types
 - [ ] Pattern color/background configurable
 - [ ] Pattern scaling for different mark sizes
 
 ### AC3: Integration
+
 - [ ] `ContrastMode::Pattern` fully functional
 - [ ] Pattern renderer uses GPU for performance
 - [ ] Patterns blend with other accessibility features
@@ -43,6 +50,7 @@ Patterns (dots, lines, crosshatch, etc.) provide a color-independent way to dist
 ## Dependencies
 
 ### Prerequisite Stories
+
 - GUP-016: Core Accessibility System ✅
 
 ## Technical Tasks
@@ -68,5 +76,4 @@ Patterns (dots, lines, crosshatch, etc.) provide a color-independent way to dist
 - [ ] Tests for all pattern types
 - [ ] Example with pattern-based visualization
 - [ ] Performance benchmarks pass
-- [ ] User testing with colorblind users
-EOF
+- [ ] User testing with colorblind users EOF

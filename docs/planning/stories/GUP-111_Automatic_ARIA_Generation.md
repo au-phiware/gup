@@ -10,9 +10,15 @@
 
 ## Context
 
-GUP-016 implemented the core accessibility infrastructure including ARIA tree structures. However, developers currently need to manually construct ARIA trees for their visualizations. This creates friction and may lead to inconsistent or incomplete accessibility implementations.
+GUP-016 implemented the core accessibility infrastructure including ARIA tree
+structures. However, developers currently need to manually construct ARIA trees
+for their visualizations. This creates friction and may lead to inconsistent or
+incomplete accessibility implementations.
 
-Selections already contain rich metadata about data, marks, and visual encodings. This information can be automatically transformed into semantic ARIA descriptions, eliminating manual ARIA tree construction and ensuring consistent accessibility across all visualizations.
+Selections already contain rich metadata about data, marks, and visual
+encodings. This information can be automatically transformed into semantic ARIA
+descriptions, eliminating manual ARIA tree construction and ensuring consistent
+accessibility across all visualizations.
 
 ## User Story
 
@@ -23,18 +29,21 @@ Selections already contain rich metadata about data, marks, and visual encodings
 ## Acceptance Criteria
 
 ### AC1: Automatic ARIA Generation
+
 - [ ] `Selection<T, M>` generates ARIA nodes automatically
 - [ ] Chart-level node created with data statistics
 - [ ] Series nodes created for grouped data
 - [ ] Data point nodes with accessible descriptions
 
 ### AC2: Mark-Specific Descriptions
+
 - [ ] Circle marks generate appropriate ARIA descriptions
 - [ ] Line marks describe trends and patterns
 - [ ] Rectangle marks (bars) include comparative descriptions
 - [ ] Custom marks can implement accessibility traits
 
 ### AC3: Integration with Accessibility System
+
 - [ ] Selections automatically register with `AccessibilitySystem`
 - [ ] ARIA updates triggered on data changes
 - [ ] Focus elements created for interactive marks
@@ -42,10 +51,12 @@ Selections already contain rich metadata about data, marks, and visual encodings
 ## Dependencies
 
 ### Prerequisite Stories
+
 - GUP-002: Core Selection Type ✅
 - GUP-016: Core Accessibility System ✅
 
 ### Enables Stories
+
 - Better accessibility for all chart examples
 - Simplified developer experience for accessible visualizations
 
@@ -72,5 +83,4 @@ Selections already contain rich metadata about data, marks, and visual encodings
 - [ ] Tests validate ARIA tree structure
 - [ ] Examples demonstrate automatic accessibility
 - [ ] Documentation explains ARIA customization
-- [ ] Performance benchmarks show <5ms overhead
-EOF
+- [ ] Performance benchmarks show <5ms overhead EOF

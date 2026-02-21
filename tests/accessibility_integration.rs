@@ -21,10 +21,7 @@ fn test_accessibility_system_integration() {
 
     // Test configuration changes
     system.set_contrast_mode(ContrastMode::HighContrast);
-    assert!(matches!(
-        system.contrast_mode(),
-        ContrastMode::HighContrast
-    ));
+    assert!(matches!(system.contrast_mode(), ContrastMode::HighContrast));
 }
 
 #[test]
@@ -83,7 +80,7 @@ fn test_keyboard_focus_navigation() {
 
 #[test]
 fn test_high_contrast_mode() {
-    use gup::{calculate_contrast_ratio, AccessibilityColor, HighContrastRenderer};
+    use gup::{HighContrastRenderer, calculate_contrast_ratio};
 
     let renderer = HighContrastRenderer::new(ContrastMode::HighContrast);
 
@@ -197,7 +194,7 @@ fn test_focus_history() {
 
 #[test]
 fn test_wcag_compliance_standards() {
-    use gup::{calculate_contrast_ratio, AccessibilityColor};
+    use gup::{AccessibilityColor, calculate_contrast_ratio};
 
     // Test various color combinations for WCAG compliance
     let white = AccessibilityColor::WHITE;
@@ -205,7 +202,11 @@ fn test_wcag_compliance_standards() {
 
     // Black on white should have maximum contrast
     let ratio = calculate_contrast_ratio(white, black);
-    assert!(ratio > 20.0, "Black on white contrast should be near maximum (got {})", ratio);
+    assert!(
+        ratio > 20.0,
+        "Black on white contrast should be near maximum (got {})",
+        ratio
+    );
 
     // Test WCAG AA minimum (4.5:1)
     let dark_gray = AccessibilityColor::new(0.18, 0.18, 0.18, 1.0);
@@ -215,7 +216,11 @@ fn test_wcag_compliance_standards() {
     // Test WCAG AAA minimum (7:1)
     let darker_gray = AccessibilityColor::new(0.05, 0.05, 0.05, 1.0);
     let ratio_aaa = calculate_contrast_ratio(white, darker_gray);
-    assert!(ratio_aaa >= 7.0, "WCAG AAA ratio {} does not meet 7:1", ratio_aaa);
+    assert!(
+        ratio_aaa >= 7.0,
+        "WCAG AAA ratio {} does not meet 7:1",
+        ratio_aaa
+    );
 }
 
 #[test]

@@ -6,19 +6,24 @@
 **Epic**: Phase 1 Initiative 4 - Interaction System and Performance  
 **Priority**: High  
 **Story Points**: 5  
-**Status**: 💡 New
+**Status**: 🚧 In Progress
 
 ## Context
 
-GUP-016 implemented platform-agnostic accessibility infrastructure (ARIA trees, keyboard navigation, contrast modes). However, to provide native accessibility experiences, we need to integrate with each platform's native accessibility APIs.
+GUP-016 implemented platform-agnostic accessibility infrastructure (ARIA trees,
+keyboard navigation, contrast modes). However, to provide native accessibility
+experiences, we need to integrate with each platform's native accessibility
+APIs.
 
 Different platforms have different accessibility frameworks:
+
 - **macOS**: NSAccessibility
 - **Windows**: UI Automation API
 - **Linux**: ATK (Accessibility Toolkit)
 - **Web**: ARIA attributes in DOM
 
-This story adds platform-specific bridges that translate Gup's accessibility system into native platform APIs.
+This story adds platform-specific bridges that translate Gup's accessibility
+system into native platform APIs.
 
 ## User Story
 
@@ -29,21 +34,25 @@ This story adds platform-specific bridges that translate Gup's accessibility sys
 ## Acceptance Criteria
 
 ### AC1: macOS Accessibility
+
 - [ ] NSAccessibility integration for Cocoa windows
 - [ ] Screen reader announcements via VoiceOver
 - [ ] Native focus management
 
 ### AC2: Windows Accessibility
+
 - [ ] UI Automation API integration
 - [ ] NVDA and JAWS screen reader support
 - [ ] Native keyboard navigation
 
 ### AC3: Linux Accessibility
+
 - [ ] ATK/AT-SPI2 integration
 - [ ] Orca screen reader support
 - [ ] Accessibility bus communication
 
 ### AC4: Web Accessibility
+
 - [ ] ARIA attributes in WebGL canvas overlay
 - [ ] Live region updates
 - [ ] Keyboard event forwarding
@@ -51,9 +60,11 @@ This story adds platform-specific bridges that translate Gup's accessibility sys
 ## Dependencies
 
 ### Prerequisite Stories
+
 - GUP-016: Core Accessibility System ✅
 
 ### Enables Stories
+
 - Production-ready accessibility for all platforms
 - Native assistive technology compatibility
 
@@ -80,5 +91,4 @@ This story adds platform-specific bridges that translate Gup's accessibility sys
 - [ ] Screen readers tested on each platform
 - [ ] Automated tests for each platform
 - [ ] Documentation covers platform-specific setup
-- [ ] Examples work on all platforms
-EOF
+- [ ] Examples work on all platforms EOF
