@@ -1,5 +1,7 @@
 # GUP-046: Context Performance Profiling
 
+**Status**: 🚧 In Progress **Started**: 2025-02-22
+
 ## Story Overview
 
 **Title**: Advanced Performance Profiling and GPU Timing **Epic**: Phase 1

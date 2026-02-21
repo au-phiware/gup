@@ -290,14 +290,15 @@ impl TexturePool {
 
         // Try to get from pool
         if let Some(pool) = self.pools.get_mut(&key)
-            && let Some(entry) = pool.pop() {
-                self.stats.pooled_textures -= 1;
-                self.stats.pooled_memory -= entry.size;
-                self.stats.pool_hits += 1;
-                self.stats.active_textures += 1;
-                self.stats.total_allocated += 1;
-                return entry.texture;
-            }
+            && let Some(entry) = pool.pop()
+        {
+            self.stats.pooled_textures -= 1;
+            self.stats.pooled_memory -= entry.size;
+            self.stats.pool_hits += 1;
+            self.stats.active_textures += 1;
+            self.stats.total_allocated += 1;
+            return entry.texture;
+        }
 
         // Create new texture if none available
         self.stats.pool_misses += 1;
@@ -390,9 +391,10 @@ impl TexturePool {
     /// Check memory pressure and evict textures if necessary.
     fn check_memory_pressure(&mut self) {
         if let Some(max_memory) = self.config.max_total_memory
-            && self.stats.pooled_memory > max_memory {
-                self.evict_lru_textures(self.stats.pooled_memory - max_memory);
-            }
+            && self.stats.pooled_memory > max_memory
+        {
+            self.evict_lru_textures(self.stats.pooled_memory - max_memory);
+        }
 
         // Also check per-pool limits
         for pool in self.pools.values_mut() {
@@ -433,11 +435,12 @@ impl TexturePool {
             }
 
             if let Some(pool) = self.pools.get_mut(&key)
-                && let Some(entry) = pool.pop() {
-                    freed += entry.size;
-                    self.stats.pooled_textures -= 1;
-                    self.stats.pooled_memory -= entry.size;
-                }
+                && let Some(entry) = pool.pop()
+            {
+                freed += entry.size;
+                self.stats.pooled_textures -= 1;
+                self.stats.pooled_memory -= entry.size;
+            }
         }
 
         // Remove empty pools

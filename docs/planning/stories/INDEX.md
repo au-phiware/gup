@@ -132,9 +132,9 @@ epic and status.
 
 | Story                                                  | Title                            | Status         | Priority | Points |
 | ------------------------------------------------------ | -------------------------------- | -------------- | -------- | ------ |
-| [GUP-038](GUP-038_Texture_Pool_Enhancement.md)         | Texture Pool Enhancement         | ✅ Complete | Medium   | 3      |
+| [GUP-038](GUP-038_Texture_Pool_Enhancement.md)         | Texture Pool Enhancement         | ✅ Complete    | Medium   | 3      |
 | [GUP-039](GUP-039_Context_Window_Integration.md)       | Context Window Integration       | ✅ Complete    | High     | 5      |
-| [GUP-046](GUP-046_Context_Performance_Profiling.md)    | Context Performance Profiling    | 💡 New         | Medium   | 3      |
+| [GUP-046](GUP-046_Context_Performance_Profiling.md)    | Context Performance Profiling    | 🚧 In Progress | Medium   | 3      |
 | [GUP-047](GUP-047_Surface_Event_Integration.md)        | Surface Event Integration        | 💡 New         | Medium   | 3      |
 | [GUP-048](GUP-048_Context_Error_Recovery.md)           | Context Error Recovery           | 💡 New         | Medium   | 4      |
 | [GUP-049](GUP-049_Surface_Performance_Optimization.md) | Surface Performance Optimization | 💡 New         | Medium   | 5      |
