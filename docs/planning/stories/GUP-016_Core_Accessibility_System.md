@@ -1,5 +1,8 @@
 # GUP-016: Core Accessibility System
 
+**Status**: 🚧 In Progress  
+**Started**: 2025-01-24
+
 ## Story Overview
 
 **Title**: Implement Core Accessibility Foundation **Epic**: Phase 1 Initiative

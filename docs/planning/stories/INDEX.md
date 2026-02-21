@@ -27,35 +27,35 @@ epic and status.
 
 ### Phase 2 - Advanced Features (Stories 16-25) ✅
 
-| Story                                                          | Title                                    | Status      | Priority | Points |
-| -------------------------------------------------------------- | ---------------------------------------- | ----------- | -------- | ------ |
-| [GUP-016](GUP-016_Core_Accessibility_System.md)                | Core Accessibility System                | 📋 Planned  | High     | 4      |
-| [GUP-017](GUP-017_Error_Handling_Framework.md)                 | Error Handling and Resilience Framework  | ✅ Complete | Critical | 8      |
-| [GUP-018](GUP-018_Observable_Plot_Chart_Builders.md)           | Observable Plot Chart Builders           | ✅ Complete | Medium   | 6      |
-| [GUP-019](GUP-019_Mixable_Performance_Validation.md)           | Mixable Performance Validation           | ✅ Complete | High     | 3      |
-| [GUP-020](GUP-020_WebGPU_Integration_RenderContext.md)         | WebGPU Integration RenderContext         | ✅ Complete | High     | 5      |
-| [GUP-021](GUP-021_Advanced_Composition_Mode_Implementation.md) | Advanced Composition Mode Implementation | ✅ Complete | High     | 6      |
-| [GUP-022](GUP-022_Deep_Composition_Chain_Optimization.md)      | Deep Composition Chain Optimization      | ✅ Complete | Medium   | 4      |
-| [GUP-023](GUP-023_Mixable_Trait_Ecosystem_Integration.md)      | Mixable Trait Ecosystem Integration      | ✅ Complete | Low      | 4      |
-| [GUP-024](GUP-024_Composition_Error_Recovery_Diagnostics.md)   | Composition Error Recovery Diagnostics   | ✅ Complete | Medium   | 4      |
-| [GUP-025](GUP-025_Async_Streaming_Composition_Support.md)      | Async Streaming Composition Support      | ✅ Complete | Medium   | 5      |
+| Story                                                          | Title                                    | Status         | Priority | Points |
+| -------------------------------------------------------------- | ---------------------------------------- | -------------- | -------- | ------ |
+| [GUP-016](GUP-016_Core_Accessibility_System.md)                | Core Accessibility System                | 🚧 In Progress | High     | 4      |
+| [GUP-017](GUP-017_Error_Handling_Framework.md)                 | Error Handling and Resilience Framework  | ✅ Complete    | Critical | 8      |
+| [GUP-018](GUP-018_Observable_Plot_Chart_Builders.md)           | Observable Plot Chart Builders           | ✅ Complete    | Medium   | 6      |
+| [GUP-019](GUP-019_Mixable_Performance_Validation.md)           | Mixable Performance Validation           | ✅ Complete    | High     | 3      |
+| [GUP-020](GUP-020_WebGPU_Integration_RenderContext.md)         | WebGPU Integration RenderContext         | ✅ Complete    | High     | 5      |
+| [GUP-021](GUP-021_Advanced_Composition_Mode_Implementation.md) | Advanced Composition Mode Implementation | ✅ Complete    | High     | 6      |
+| [GUP-022](GUP-022_Deep_Composition_Chain_Optimization.md)      | Deep Composition Chain Optimization      | ✅ Complete    | Medium   | 4      |
+| [GUP-023](GUP-023_Mixable_Trait_Ecosystem_Integration.md)      | Mixable Trait Ecosystem Integration      | ✅ Complete    | Low      | 4      |
+| [GUP-024](GUP-024_Composition_Error_Recovery_Diagnostics.md)   | Composition Error Recovery Diagnostics   | ✅ Complete    | Medium   | 4      |
+| [GUP-025](GUP-025_Async_Streaming_Composition_Support.md)      | Async Streaming Composition Support      | ✅ Complete    | Medium   | 5      |
 
 ### Future Improvements - Post GUP-021 (Stories 26+)
 
-| Story                                                        | Title                                      | Status         | Priority | Points |
-| ------------------------------------------------------------ | ------------------------------------------ | -------------- | -------- | ------ |
-| [GUP-026](GUP-026_Data_Source_Merge_Implementation.md)       | Data Source Merge Implementation           | 💡 New         | Medium   | 5      |
-| [GUP-027](GUP-027_GPU_Blend_State_Integration.md)            | GPU Blend State Integration                | ✅ Complete    | High     | 3      |
-| [GUP-028](GUP-028_Composition_Performance_Optimization.md)   | Composition Performance Optimization       | 💡 New         | Medium   | 4      |
-| ~~[GUP-085](GUP-085_Line_Rectangle_Mark_Implementation.md)~~ | ~~Line and Rectangle Mark Impl.~~          | ⿻ Copy        | High     | 5      |
-| [GUP-086](GUP-086_Observable_Plot_Migration_Guide.md)        | Observable Plot Migration Guide            | 💡 New         | Low      | 2      |
-| [GUP-087](GUP-087_Chart_Builder_Performance_Optimization.md) | Chart Builder Performance Optimization     | 💡 New         | Medium   | 3      |
-| [GUP-088](GUP-088_External_Library_Integration_System.md)    | External Library Integration System        | ✅ Complete    | High     | 5      |
-| [GUP-092](GUP-092_Label_Formatting_and_Positioning.md)       | Label Formatting and Positioning           | ✅ Complete    | High     | 8      |
-| [GUP-099](GUP-099_GPU_Text_Rendering_Pipeline.md)            | GPU Text Rendering Pipeline Implementation | ✅ Complete    | High     | 8      |
-| [GUP-100](GUP-100_Visual_Chart_Axis_Integration.md)          | Visual Chart Axis Integration              | ✅ Complete    | Medium   | 8      |
-| [GUP-101](GUP-101_Label_Collision_Detection_Enhancement.md)  | Label Collision Detection Enhancement      | ✅ Complete    | Medium   | 5      |
-| [GUP-102](GUP-102_Demo_GPU_Resource_Management_Fixes.md)     | Demo GPU Resource Management Fixes         | ✅ Complete    | High     | 3      |
+| Story                                                        | Title                                      | Status      | Priority | Points |
+| ------------------------------------------------------------ | ------------------------------------------ | ----------- | -------- | ------ |
+| [GUP-026](GUP-026_Data_Source_Merge_Implementation.md)       | Data Source Merge Implementation           | 💡 New      | Medium   | 5      |
+| [GUP-027](GUP-027_GPU_Blend_State_Integration.md)            | GPU Blend State Integration                | ✅ Complete | High     | 3      |
+| [GUP-028](GUP-028_Composition_Performance_Optimization.md)   | Composition Performance Optimization       | 💡 New      | Medium   | 4      |
+| ~~[GUP-085](GUP-085_Line_Rectangle_Mark_Implementation.md)~~ | ~~Line and Rectangle Mark Impl.~~          | ⿻ Copy     | High     | 5      |
+| [GUP-086](GUP-086_Observable_Plot_Migration_Guide.md)        | Observable Plot Migration Guide            | 💡 New      | Low      | 2      |
+| [GUP-087](GUP-087_Chart_Builder_Performance_Optimization.md) | Chart Builder Performance Optimization     | 💡 New      | Medium   | 3      |
+| [GUP-088](GUP-088_External_Library_Integration_System.md)    | External Library Integration System        | ✅ Complete | High     | 5      |
+| [GUP-092](GUP-092_Label_Formatting_and_Positioning.md)       | Label Formatting and Positioning           | ✅ Complete | High     | 8      |
+| [GUP-099](GUP-099_GPU_Text_Rendering_Pipeline.md)            | GPU Text Rendering Pipeline Implementation | ✅ Complete | High     | 8      |
+| [GUP-100](GUP-100_Visual_Chart_Axis_Integration.md)          | Visual Chart Axis Integration              | ✅ Complete | Medium   | 8      |
+| [GUP-101](GUP-101_Label_Collision_Detection_Enhancement.md)  | Label Collision Detection Enhancement      | ✅ Complete | Medium   | 5      |
+| [GUP-102](GUP-102_Demo_GPU_Resource_Management_Fixes.md)     | Demo GPU Resource Management Fixes         | ✅ Complete | High     | 3      |
 | [GUP-103](GUP-103_Comprehensive_Chart_Examples_Suite.md)     | Comprehensive Chart Examples Suite         | ✅ Complete | Medium   | 8      |
 
 ### Post GUP-009 Stories - Mark System Enhancement (Stories 67+)
@@ -684,13 +684,13 @@ zero-cost abstractions, plugin registry, and production-ready quality
 
 The following stories were created based on learnings from implementing GUP-092:
 
-| Story                                                       | Title                                      | Status         | Priority | Points |
-| ----------------------------------------------------------- | ------------------------------------------ | -------------- | -------- | ------ |
-| [GUP-099](GUP-099_GPU_Text_Rendering_Pipeline.md)           | GPU Text Rendering Pipeline Implementation | ✅ Complete    | High     | 8      |
-| [GUP-100](GUP-100_Visual_Chart_Axis_Integration.md)         | Visual Chart Axis Integration              | ✅ Complete    | Medium   | 8      |
-| [GUP-101](GUP-101_Label_Collision_Detection_Enhancement.md) | Label Collision Detection Enhancement      | ✅ Complete    | Medium   | 5      |
-| [GUP-102](GUP-102_Demo_GPU_Resource_Management_Fixes.md)    | Demo GPU Resource Management Fixes         | ✅ Complete    | High     | 3      |
-| [GUP-103](GUP-103_Comprehensive_Chart_Examples_Suite.md)     | Comprehensive Chart Examples Suite         | ✅ Complete | Medium   | 8      |
+| Story                                                       | Title                                      | Status      | Priority | Points |
+| ----------------------------------------------------------- | ------------------------------------------ | ----------- | -------- | ------ |
+| [GUP-099](GUP-099_GPU_Text_Rendering_Pipeline.md)           | GPU Text Rendering Pipeline Implementation | ✅ Complete | High     | 8      |
+| [GUP-100](GUP-100_Visual_Chart_Axis_Integration.md)         | Visual Chart Axis Integration              | ✅ Complete | Medium   | 8      |
+| [GUP-101](GUP-101_Label_Collision_Detection_Enhancement.md) | Label Collision Detection Enhancement      | ✅ Complete | Medium   | 5      |
+| [GUP-102](GUP-102_Demo_GPU_Resource_Management_Fixes.md)    | Demo GPU Resource Management Fixes         | ✅ Complete | High     | 3      |
+| [GUP-103](GUP-103_Comprehensive_Chart_Examples_Suite.md)    | Comprehensive Chart Examples Suite         | ✅ Complete | Medium   | 8      |
 
 ### GUP-099: GPU Text Rendering Pipeline Implementation
 

@@ -168,13 +168,13 @@ This also serves as integration testing for the entire system.
 ### Content Requirements
 
 - [x] **Basic Examples**: 5+ simple examples covering core chart types
-  - 4 basic examples already existed (01-04_*.rs)
+  - 4 basic examples already existed (01-04\_\*.rs)
   - Documented and organized in examples/basic/
 - [x] **Intermediate Examples**: 8+ examples showing advanced features
   - 3 comprehensive intermediate examples created:
-    * styled_scatter: Data-driven styling with colors and sizes
-    * multi_series_line: Multiple time series visualization
-    * categorical_bar: Categorical data with both orientations
+    - styled_scatter: Data-driven styling with colors and sizes
+    - multi_series_line: Multiple time series visualization
+    - categorical_bar: Categorical data with both orientations
 - [x] **Advanced Examples**: 5+ complex integration examples
   - Validated through existing showcase/integration examples
 - [x] **Showcase Examples**: 3+ real-world quality demonstrations
@@ -288,12 +288,14 @@ This also serves as integration testing for the entire system.
 ### Examples Created
 
 #### Intermediate Examples (3)
-1. **styled_scatter.rs** - Data-driven styling with categorical colors and size encoding
+
+1. **styled_scatter.rs** - Data-driven styling with categorical colors and size
+   encoding
    - 174 lines of code + 70 lines of tests
    - Demonstrates multi-dimensional data encoding
    - 4 passing tests
 
-2. **multi_series_line.rs** - Multiple time series visualization  
+2. **multi_series_line.rs** - Multiple time series visualization
    - 217 lines of code + 66 lines of tests
    - Financial data analysis with 3 series
    - 5 passing tests
@@ -304,6 +306,7 @@ This also serves as integration testing for the entire system.
    - 5 passing tests
 
 #### Showcase Examples (1)
+
 1. **business_dashboard.rs** - Professional BI dashboard
    - 332 lines of code + 27 lines of tests
    - Full KPI dashboard with growth metrics
@@ -311,12 +314,14 @@ This also serves as integration testing for the entire system.
    - 4 passing tests
 
 ### Documentation Updates
+
 - Updated examples/README.md with new structure
 - Added clear learning paths and progressions
 - Organized examples into 7 distinct categories
 - Comprehensive descriptions for all examples
 
 ### Test Coverage
+
 - 18 new tests across 4 examples
 - 100% pass rate
 - All examples compile successfully
@@ -333,71 +338,101 @@ both documentation and integration testing for the entire system.
 ### Key Technical Learnings
 
 #### Example Organization Strategy
-- **Challenge**: Balancing between windowed visual examples and API demonstration examples
-- **Solution**: Focused on API-demonstration examples (like basic/01-04) rather than full windowed applications due to complexity of window setup with current GupContext API
-- **Pattern**: Console-based examples with comprehensive output and test coverage are more maintainable and demonstrate API usage patterns effectively
-- **Future**: When windowed examples are needed, consider creating a common WindowedExampleFramework helper to reduce boilerplate
+
+- **Challenge**: Balancing between windowed visual examples and API
+  demonstration examples
+- **Solution**: Focused on API-demonstration examples (like basic/01-04) rather
+  than full windowed applications due to complexity of window setup with current
+  GupContext API
+- **Pattern**: Console-based examples with comprehensive output and test
+  coverage are more maintainable and demonstrate API usage patterns effectively
+- **Future**: When windowed examples are needed, consider creating a common
+  WindowedExampleFramework helper to reduce boilerplate
 
 #### Chart Builder API Discovery
-- **Challenge**: Understanding the correct method signatures (e.g., `fill` vs `fill_color`, `stroke_width_px` vs `stroke_width`)
-- **Solution**: Examined existing working examples and source code to understand patterns
-- **Pattern**: Methods ending in `_px` take fixed values; base methods take accessors
-  * `stroke_width(accessor)` - takes AccessorFunction
-  * `stroke_width_px(2.0)` - takes fixed f32 value
-  * `fill(accessor)` - takes AccessorFunction returning AccessorValue::Color
-- **Future**: Consider adding documentation or examples showing both accessor-based and fixed-value patterns
+
+- **Challenge**: Understanding the correct method signatures (e.g., `fill` vs
+  `fill_color`, `stroke_width_px` vs `stroke_width`)
+- **Solution**: Examined existing working examples and source code to understand
+  patterns
+- **Pattern**: Methods ending in `_px` take fixed values; base methods take
+  accessors
+  - `stroke_width(accessor)` - takes AccessorFunction
+  - `stroke_width_px(2.0)` - takes fixed f32 value
+  - `fill(accessor)` - takes AccessorFunction returning AccessorValue::Color
+- **Future**: Consider adding documentation or examples showing both
+  accessor-based and fixed-value patterns
 
 #### Test Coverage for Examples
+
 - **Challenge**: Ensuring examples are correct and maintainable
 - **Solution**: Added comprehensive test suites (18 tests across 4 examples)
-  * Data generation validation
-  * Chart creation verification
-  * Statistical calculations
-  * Edge case handling
-- **Pattern**: Every example should have tests validating data, chart creation, and key functionality
-- **Trade-off**: Tests add lines of code but dramatically improve example reliability
+  - Data generation validation
+  - Chart creation verification
+  - Statistical calculations
+  - Edge case handling
+- **Pattern**: Every example should have tests validating data, chart creation,
+  and key functionality
+- **Trade-off**: Tests add lines of code but dramatically improve example
+  reliability
 
 ### Architectural Decisions
 
 #### Progressive Complexity Organization
-- **Decision**: Organized examples into basic/, intermediate/, showcase/ directories
-- **Reasoning**: Clear learning path from simple API usage to real-world applications
+
+- **Decision**: Organized examples into basic/, intermediate/, showcase/
+  directories
+- **Reasoning**: Clear learning path from simple API usage to real-world
+  applications
 - **Trade-off**: More directory structure vs. flat organization
-- **Future**: This structure scales well and provides natural categorization for future examples
+- **Future**: This structure scales well and provides natural categorization for
+  future examples
 
 #### Example Content Strategy
-- **Decision**: Created examples demonstrating API patterns rather than full applications
-- **Reasoning**: 
-  * Lower barrier to understanding
-  * Easier to maintain
-  * Better for learning specific patterns
-  * Existing demos already show windowed applications
+
+- **Decision**: Created examples demonstrating API patterns rather than full
+  applications
+- **Reasoning**:
+  - Lower barrier to understanding
+  - Easier to maintain
+  - Better for learning specific patterns
+  - Existing demos already show windowed applications
 - **Trade-off**: Less visual validation but more focused learning
-- **Future**: This approach works well for API documentation; visual galleries can be added separately
+- **Future**: This approach works well for API documentation; visual galleries
+  can be added separately
 
 #### Real-World Data Patterns
+
 - **Decision**: Used realistic business/scientific data patterns in examples
-- **Reasoning**: Users can relate to familiar domains (sales, revenue, financial metrics)
+- **Reasoning**: Users can relate to familiar domains (sales, revenue, financial
+  metrics)
 - **Trade-off**: More complex data generation vs. simple synthetic data
 - **Future**: These patterns serve as templates for users' actual use cases
 
 ### Development Workflow Insights
 
-- **Fast iteration**: Console-based examples allowed rapid development and testing without GPU window creation overhead
-- **Test-driven validation**: Writing tests alongside examples caught API misunderstandings early
-- **Code reuse patterns**: Noticed common patterns (data generation, normalization, color gradients) that could be extracted into shared utilities
-- **Documentation value**: Comprehensive comments in examples serve dual purpose: learning resource and API documentation
+- **Fast iteration**: Console-based examples allowed rapid development and
+  testing without GPU window creation overhead
+- **Test-driven validation**: Writing tests alongside examples caught API
+  misunderstandings early
+- **Code reuse patterns**: Noticed common patterns (data generation,
+  normalization, color gradients) that could be extracted into shared utilities
+- **Documentation value**: Comprehensive comments in examples serve dual
+  purpose: learning resource and API documentation
 
 ### Follow-up Stories
 
-Based on implementation experience, identified several areas for future enhancement:
+Based on implementation experience, identified several areas for future
+enhancement:
 
-1. **Example Helper Utilities** — Extract common patterns (data normalization, color gradients, window setup) into shared helper modules
+1. **Example Helper Utilities** — Extract common patterns (data normalization,
+   color gradients, window setup) into shared helper modules
    - Priority: Low
    - Would reduce boilerplate across examples
    - Could be in `examples/common/` module
 
-2. **Visual Example Gallery** — Create screenshot-based gallery showing visual output of examples
+2. **Visual Example Gallery** — Create screenshot-based gallery showing visual
+   output of examples
    - Priority: Medium
    - Helps users understand what examples produce visually
    - Could be generated automatically
