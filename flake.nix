@@ -35,6 +35,11 @@
           exec chromium --enable-features=WebGPU,Vulkan --enable-unsafe-webgpu --disable-dawn-features=disallow_unsafe_apis "$@"
         '';
 
+        # Nix stdenv bash is compiled without readline, which breaks
+        # tools that rely on interactive bash sessions (e.g. GitHub
+        # Copilot CLI). Include bashInteractive so it appears first
+        # in PATH.
+
         # rely on PATH (or devShell) to avoid store change issues
         pre-commit = pkgs.writeScript "gup-pre-commit" ''
           mask all-check
@@ -43,6 +48,7 @@
       {
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
+            bashInteractive
             rustToolchain
             pkg-config
 
