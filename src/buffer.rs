@@ -595,12 +595,7 @@ impl UsagePatternTracker {
 
     /// Get allocation statistics for the last N events.
     fn recent_stats(&self, last_n: usize) -> (usize, usize) {
-        let events: Vec<_> = self
-            .allocation_history
-            .iter()
-            .rev()
-            .take(last_n)
-            .collect();
+        let events: Vec<_> = self.allocation_history.iter().rev().take(last_n).collect();
 
         let hits = events
             .iter()
@@ -764,7 +759,7 @@ impl BufferPool {
     /// Intelligent cleanup based on memory pressure level and usage patterns.
     fn intelligent_cleanup(&mut self, pressure_level: PressureLevel) {
         match pressure_level {
-            PressureLevel::Normal => return,
+            PressureLevel::Normal => (),
             PressureLevel::Warning => self.gentle_cleanup(),
             PressureLevel::Critical => self.aggressive_cleanup(),
             PressureLevel::Emergency => self.emergency_cleanup(),
@@ -1573,7 +1568,7 @@ mod tests {
 
         // Use a reasonable memory limit
         let config = BufferPoolConfig {
-            max_total_memory: Some(5000), // 5KB limit
+            max_total_memory: Some(5000),  // 5KB limit
             enable_adaptive_sizing: false, // Disable to test pressure calculation directly
             ..Default::default()
         };
@@ -1638,7 +1633,10 @@ mod tests {
 
         // Since buffers were just used, gentle cleanup shouldn't remove much
         let after_gentle = pool.get_stats().pooled_buffers;
-        assert!(after_gentle > 0, "Gentle cleanup should keep recent buffers");
+        assert!(
+            after_gentle > 0,
+            "Gentle cleanup should keep recent buffers"
+        );
     }
 
     #[tokio::test]

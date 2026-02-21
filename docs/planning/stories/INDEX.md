@@ -122,24 +122,24 @@ epic and status.
 
 ### Post GUP-003 Stories - Buffer System Enhancement (Stories 35+)
 
-| Story                                                       | Title                                 | Status         | Priority | Points |
-| ----------------------------------------------------------- | ------------------------------------- | -------------- | -------- | ------ |
-| [GUP-035](GUP-035_Advanced_Buffer_Download_System.md)       | Advanced Buffer Download System       | ✅ Complete    | Medium   | 5      |
-| [GUP-036](GUP-036_Buffer_Pool_Performance_Optimization.md)  | Buffer Pool Performance Optimization  | ✅ Complete    | Medium   | 3      |
-| [GUP-037](GUP-037_Buffer_Validation_and_Debugging_Tools.md) | Buffer Validation and Debugging Tools | 💡 New         | Low      | 4      |
+| Story                                                       | Title                                 | Status      | Priority | Points |
+| ----------------------------------------------------------- | ------------------------------------- | ----------- | -------- | ------ |
+| [GUP-035](GUP-035_Advanced_Buffer_Download_System.md)       | Advanced Buffer Download System       | ✅ Complete | Medium   | 5      |
+| [GUP-036](GUP-036_Buffer_Pool_Performance_Optimization.md)  | Buffer Pool Performance Optimization  | ✅ Complete | Medium   | 3      |
+| [GUP-037](GUP-037_Buffer_Validation_and_Debugging_Tools.md) | Buffer Validation and Debugging Tools | 💡 New      | Low      | 4      |
 
 ### Post GUP-004 Stories - Context Enhancement (Stories 38+)
 
-| Story                                                  | Title                            | Status      | Priority | Points |
-| ------------------------------------------------------ | -------------------------------- | ----------- | -------- | ------ |
-| [GUP-038](GUP-038_Texture_Pool_Enhancement.md)         | Texture Pool Enhancement         | 💡 New      | Medium   | 3      |
-| [GUP-039](GUP-039_Context_Window_Integration.md)       | Context Window Integration       | ✅ Complete | High     | 5      |
-| [GUP-046](GUP-046_Context_Performance_Profiling.md)    | Context Performance Profiling    | 💡 New      | Medium   | 3      |
-| [GUP-047](GUP-047_Surface_Event_Integration.md)        | Surface Event Integration        | 💡 New      | Medium   | 3      |
-| [GUP-048](GUP-048_Context_Error_Recovery.md)           | Context Error Recovery           | 💡 New      | Medium   | 4      |
-| [GUP-049](GUP-049_Surface_Performance_Optimization.md) | Surface Performance Optimization | 💡 New      | Medium   | 5      |
-| [GUP-050](GUP-050_Visual_Blend_Mode_Validation.md)     | Visual Blend Mode Validation     | 💡 New      | Low      | 3      |
-| [GUP-042](GUP-042_Cross_Platform_Surface_Features.md)  | Cross Platform Surface Features  | 💡 New      | Low      | 8      |
+| Story                                                  | Title                            | Status         | Priority | Points |
+| ------------------------------------------------------ | -------------------------------- | -------------- | -------- | ------ |
+| [GUP-038](GUP-038_Texture_Pool_Enhancement.md)         | Texture Pool Enhancement         | 🚧 In Progress | Medium   | 3      |
+| [GUP-039](GUP-039_Context_Window_Integration.md)       | Context Window Integration       | ✅ Complete    | High     | 5      |
+| [GUP-046](GUP-046_Context_Performance_Profiling.md)    | Context Performance Profiling    | 💡 New         | Medium   | 3      |
+| [GUP-047](GUP-047_Surface_Event_Integration.md)        | Surface Event Integration        | 💡 New         | Medium   | 3      |
+| [GUP-048](GUP-048_Context_Error_Recovery.md)           | Context Error Recovery           | 💡 New         | Medium   | 4      |
+| [GUP-049](GUP-049_Surface_Performance_Optimization.md) | Surface Performance Optimization | 💡 New         | Medium   | 5      |
+| [GUP-050](GUP-050_Visual_Blend_Mode_Validation.md)     | Visual Blend Mode Validation     | 💡 New         | Low      | 3      |
+| [GUP-042](GUP-042_Cross_Platform_Surface_Features.md)  | Cross Platform Surface Features  | 💡 New         | Low      | 8      |
 
 ### Post GUP-027 Stories - Blend System Enhancement (Stories 43+)
 

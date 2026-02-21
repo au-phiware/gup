@@ -77,13 +77,15 @@ pub struct BufferSizeClass {
 ### 3. Performance Monitoring Dashboard
 
 - [x] Create detailed pool performance metrics (via public APIs)
-- [x] Add real-time monitoring capabilities (current_pressure_level, popular_sizes)
+- [x] Add real-time monitoring capabilities (current_pressure_level,
+      popular_sizes)
 - [ ] Implement performance regression detection (deferred - can be added later)
 - [ ] Build optimization recommendation system (deferred - future enhancement)
 
 ### 4. Advanced Pool Features
 
-- [ ] Add buffer warming (pre-allocation) strategies (deferred - not critical for MVP)
+- [ ] Add buffer warming (pre-allocation) strategies (deferred - not critical
+      for MVP)
 - [ ] Implement buffer migration between size classes (deferred - optimization)
 - [ ] Create pool defragmentation algorithms (deferred - optimization)
 - [ ] Add multi-threaded pool access optimization (deferred - not needed yet)
@@ -252,27 +254,33 @@ async fn test_usage_pattern_prediction() {
 ### Performance Targets
 
 - [x] > 95% pool hit rate in steady-state workloads (verified in tests)
-- [x] <5% memory overhead vs optimal static allocation (configurable limits enforced)
+- [x] <5% memory overhead vs optimal static allocation (configurable limits
+      enforced)
 - [x] <1ms adaptation time for usage pattern changes (instant in-memory updates)
-- [x] > 90% prediction accuracy for buffer size needs (retention scores track frequency)
+- [x] > 90% prediction accuracy for buffer size needs (retention scores track
+      > frequency)
 
 ### Intelligence Metrics
 
-- [x] Automatic memory pressure handling prevents OOM (intelligent_cleanup methods)
-- [x] Pool adapts to new usage patterns within 100 allocations (real-time tracking)
-- [x] Memory utilization stays within configured limits (PressureThresholds enforced)
-- [x] Performance improves measurably over time with usage (retention-based prioritization)
+- [x] Automatic memory pressure handling prevents OOM (intelligent_cleanup
+      methods)
+- [x] Pool adapts to new usage patterns within 100 allocations (real-time
+      tracking)
+- [x] Memory utilization stays within configured limits (PressureThresholds
+      enforced)
+- [x] Performance improves measurably over time with usage (retention-based
+      prioritization)
 
 ## Risk Assessment
 
 ### Technical Risks
 
 - **Low**: Complex adaptive algorithms might introduce performance overhead  
-  *Mitigated*: Adaptive features can be disabled via config
+  _Mitigated_: Adaptive features can be disabled via config
 - **Low**: Prediction models might not generalize to all usage patterns  
-  *Mitigated*: Fallback to simple LRU when adaptive sizing disabled
+  _Mitigated_: Fallback to simple LRU when adaptive sizing disabled
 - **Low**: Memory pressure detection might be inaccurate  
-  *Mitigated*: Configurable thresholds and multiple pressure levels
+  _Mitigated_: Configurable thresholds and multiple pressure levels
 
 ### Mitigation Strategies
 
@@ -284,9 +292,11 @@ async fn test_usage_pattern_prediction() {
 
 ### What Was Implemented
 
-The adaptive buffer pool enhancement adds intelligent memory management and usage pattern learning to the existing BufferPool system:
+The adaptive buffer pool enhancement adds intelligent memory management and
+usage pattern learning to the existing BufferPool system:
 
 **Core Structures Added:**
+
 - `PressureLevel` enum: Normal, Warning, Critical, Emergency levels
 - `PressureThresholds`: Configurable thresholds (default 80%, 90%, 95%)
 - `BufferAllocationEvent`: Tracks timestamp, buffer_type, size, and operation
@@ -294,21 +304,26 @@ The adaptive buffer pool enhancement adds intelligent memory management and usag
 - `UsagePatternTracker`: Circular buffer of events + frequency statistics
 
 **Adaptive Features:**
-- **Usage Tracking**: All allocations and deallocations recorded if `enable_adaptive_sizing` is true
+
+- **Usage Tracking**: All allocations and deallocations recorded if
+  `enable_adaptive_sizing` is true
 - **Retention Scoring**: Calculated from frequency (ln) × recency factors
-- **Memory Pressure Calculation**: Real-time pressure level based on pooled memory vs. limits
+- **Memory Pressure Calculation**: Real-time pressure level based on pooled
+  memory vs. limits
 - **Intelligent Cleanup**:
   - Gentle (warning): Remove buffers idle >30 minutes
   - Aggressive (critical): Remove buffers idle >10 minutes + LRU eviction
   - Emergency: Remove buffers idle >1 minute + clear all if still over limit
 
 **Public APIs:**
+
 - `current_pressure_level()`: Get current memory pressure
 - `popular_sizes(limit)`: Top N most-used buffer sizes
 - `recent_hit_rate(last_n)`: Hit rate for recent N allocations
 - `retention_score(type, size)`: Get retention priority score
 
 **Configuration:**
+
 - `enable_adaptive_sizing`: Toggle adaptive features (default: true)
 - `pressure_thresholds`: Customize warning/critical/emergency levels
 - `usage_history_size`: Max events to track (default: 1000)
@@ -341,7 +356,8 @@ All 42 buffer tests pass with `--test-threads=1`.
 - [x] Performance monitoring provides actionable insights
 - [x] Benchmarks show improvement over static pools (existing tests validate)
 - [x] Comprehensive test coverage including edge cases
-- [x] Documentation with configuration recommendations (inline code documentation)
+- [x] Documentation with configuration recommendations (inline code
+      documentation)
 
 ## Retrospective
 
@@ -350,60 +366,92 @@ All 42 buffer tests pass with `--test-threads=1`.
 ### Key Technical Learnings
 
 #### Incremental Enhancement Pattern
+
 - **Challenge**: Enhancing an existing, working system without breaking it
-- **Solution**: Add new fields to structs with `..Default::default()` in tests to minimize disruption
-- **Pattern**: Always provide Default implementations for config structs to enable partial specification
+- **Solution**: Add new fields to structs with `..Default::default()` in tests
+  to minimize disruption
+- **Pattern**: Always provide Default implementations for config structs to
+  enable partial specification
 
 #### Usage Pattern Tracking Design
+
 - **Challenge**: Efficiently track allocation patterns without overhead
-- **Solution**: Circular buffer (VecDeque) with configurable size + HashMap for aggregated stats
+- **Solution**: Circular buffer (VecDeque) with configurable size + HashMap for
+  aggregated stats
 - **Trade-off**: Fixed memory overhead for history vs. unbounded growth
-- **Pattern**: Separate real-time tracking (VecDeque) from statistical aggregation (HashMap)
+- **Pattern**: Separate real-time tracking (VecDeque) from statistical
+  aggregation (HashMap)
 
 #### Retention Score Algorithm
+
 - **Challenge**: Quantify "value" of keeping a buffer in the pool
 - **Solution**: `retention_score = ln(count) × (1 / (time_since_access + 1))`
-- **Reasoning**: Logarithmic frequency prevents outliers from dominating; recency factor ensures recent use is weighted
+- **Reasoning**: Logarithmic frequency prevents outliers from dominating;
+  recency factor ensures recent use is weighted
 - **Future**: Could be tuned per workload type (burst vs. steady-state)
 
 #### Three-Tier Cleanup Strategy
+
 - **Challenge**: Balance memory reclamation with pool effectiveness
-- **Solution**: Gentle (30m idle) → Aggressive (10m idle + LRU) → Emergency (1m idle + clear all)
+- **Solution**: Gentle (30m idle) → Aggressive (10m idle + LRU) → Emergency (1m
+  idle + clear all)
 - **Pattern**: Progressive escalation with increasingly aggressive thresholds
-- **Insight**: This prevents "pool thrashing" where buffers are constantly evicted and recreated
+- **Insight**: This prevents "pool thrashing" where buffers are constantly
+  evicted and recreated
 
 ### Architectural Decisions
 
 #### Configurable Adaptive Behavior
-- **Decision**: Make adaptive features opt-in/opt-out via `enable_adaptive_sizing`
-- **Reasoning**: Some workloads may not benefit; fallback to simple LRU ensures compatibility
+
+- **Decision**: Make adaptive features opt-in/opt-out via
+  `enable_adaptive_sizing`
+- **Reasoning**: Some workloads may not benefit; fallback to simple LRU ensures
+  compatibility
 - **Trade-off**: Adds config complexity vs. "magic" auto-tuning
 - **Future**: Could auto-detect workload patterns and toggle adaptivity
 
 #### Separate Pressure Levels vs. Single Threshold
-- **Decision**: Use enum with 4 levels (Normal, Warning, Critical, Emergency) instead of boolean "high pressure"
-- **Reasoning**: Enables nuanced response strategies; makes debugging easier (can log pressure transitions)
+
+- **Decision**: Use enum with 4 levels (Normal, Warning, Critical, Emergency)
+  instead of boolean "high pressure"
+- **Reasoning**: Enables nuanced response strategies; makes debugging easier
+  (can log pressure transitions)
 - **Trade-off**: More code vs. simpler logic
-- **Benefit**: Much easier to tune behavior per environment (e.g., strict vs. relaxed thresholds)
+- **Benefit**: Much easier to tune behavior per environment (e.g., strict vs.
+  relaxed thresholds)
 
 #### Event-Based Tracking vs. Polling
-- **Decision**: Record events inline during allocate/deallocate rather than periodic polling
-- **Reasoning**: Zero overhead when disabled; accurate timestamps; no background threads
+
+- **Decision**: Record events inline during allocate/deallocate rather than
+  periodic polling
+- **Reasoning**: Zero overhead when disabled; accurate timestamps; no background
+  threads
 - **Trade-off**: Tiny allocation overhead vs. polling complexity
 - **Pattern**: "Event sourcing lite" - replay history to answer queries
 
 ### Development Workflow Insights
 
-- **Test-First Validation**: Wrote tests for adaptive features before implementation details, which caught edge cases early (e.g., pressure calculation with disabled adaptive sizing)
-- **Naming Clash Discovery**: Hit ambiguous glob re-export warning for `AllocationEvent` - renamed to `BufferAllocationEvent` immediately rather than fighting the compiler
-- **Disk Space Issues**: Hit "no space left" during full test runs - resolved by running `--lib` tests only, highlighting need for cleanup CI step
-- **Documentation Debt**: Inline docs are adequate but a dedicated guide on "tuning buffer pool for your workload" would be valuable
+- **Test-First Validation**: Wrote tests for adaptive features before
+  implementation details, which caught edge cases early (e.g., pressure
+  calculation with disabled adaptive sizing)
+- **Naming Clash Discovery**: Hit ambiguous glob re-export warning for
+  `AllocationEvent` - renamed to `BufferAllocationEvent` immediately rather than
+  fighting the compiler
+- **Disk Space Issues**: Hit "no space left" during full test runs - resolved by
+  running `--lib` tests only, highlighting need for cleanup CI step
+- **Documentation Debt**: Inline docs are adequate but a dedicated guide on
+  "tuning buffer pool for your workload" would be valuable
 
 ### Follow-up Stories
 
 No new stories identified. This story delivered all core adaptive features.
 
 **Potential Future Enhancements** (not blocking):
-- **GUP-XXX: Buffer Pool Telemetry Export** — Export metrics to Prometheus/OpenTelemetry for production monitoring
-- **GUP-XXX: Workload-Specific Tuning Profiles** — Pre-configured settings for common workloads (e.g., "streaming video", "interactive chart", "batch processing")
-- **GUP-XXX: Buffer Warming Strategies** — Pre-allocate buffers based on historical patterns during idle time
+
+- **GUP-XXX: Buffer Pool Telemetry Export** — Export metrics to
+  Prometheus/OpenTelemetry for production monitoring
+- **GUP-XXX: Workload-Specific Tuning Profiles** — Pre-configured settings for
+  common workloads (e.g., "streaming video", "interactive chart", "batch
+  processing")
+- **GUP-XXX: Buffer Warming Strategies** — Pre-allocate buffers based on
+  historical patterns during idle time

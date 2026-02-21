@@ -1,5 +1,7 @@
 # GUP-038: Texture Pool Enhancement
 
+**Status**: 🚧 In Progress
+
 ## Story Overview
 
 **Title**: Enhanced Texture Pool with Size Classes and Reuse **Epic**: Phase 1
