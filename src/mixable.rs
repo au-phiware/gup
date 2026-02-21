@@ -486,20 +486,17 @@ impl<A: Mixable + 'static, B: Mixable + 'static> ComposedVisualization<A, B> {
 
     /// Render in overlay mode with proper depth testing and blending
     fn render_overlay(&mut self, context: &mut RenderContext) -> GupResult<()> {
-        // Push current blend state
-        context.push_blend_state()?;
-
-        // Render first component (background layer)
+        // Render first component (background layer) with current blend state
         self.first.render(context)?;
 
-        // Configure blending for overlay
-        context.set_blend_mode(BlendMode::AlphaBlending)?;
-
-        // Render second component (foreground layer)
-        self.second.render(context)?;
-
-        // Restore original blend state
-        context.pop_blend_state()?;
+        // Use RAII guard to render second component with alpha blending
+        {
+            let mut guard = context.with_blend_mode(BlendMode::AlphaBlending)?;
+            let context = guard.context_mut();
+            // Render second component (foreground layer) with alpha blending
+            self.second.render(context)?;
+            // State automatically restored when guard drops
+        }
 
         Ok(())
     }
