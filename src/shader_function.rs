@@ -481,10 +481,105 @@ impl ShaderType for Mat4 {
     }
 }
 
+/// Trait for uniform structures that can be automatically converted to WGSL struct definitions.
+///
+/// This trait enables automatic generation of WGSL struct definitions from Rust uniform types,
+/// eliminating manual type mapping and preventing WGSL/Rust struct mismatches.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// #[derive(ShaderUniform)]
+/// #[repr(C)]
+/// struct MyUniforms {
+///     scale: f32,
+///     offset: f32,
+/// }
+/// 
+/// // Generates WGSL:
+/// // struct MyUniforms {
+/// //     scale: f32,
+/// //     offset: f32,
+/// // }
+/// ```
+pub trait ShaderUniform: bytemuck::Pod + bytemuck::Zeroable {
+    /// Returns the WGSL struct definition for this uniform type.
+    ///
+    /// The generated WGSL should match the Rust struct layout exactly,
+    /// ensuring GPU memory alignment compatibility.
+    fn wgsl_struct_definition() -> String;
+
+    /// Returns the WGSL type name for this uniform struct.
+    ///
+    /// This is used for generating uniform buffer bindings and function signatures.
+    fn wgsl_type_name() -> &'static str;
+}
+
+// Implement ShaderUniform for basic types (they don't need struct definitions)
+impl ShaderUniform for f32 {
+    fn wgsl_struct_definition() -> String {
+        String::new() // Primitive types don't have struct definitions
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "f32"
+    }
+}
+
+impl ShaderUniform for i32 {
+    fn wgsl_struct_definition() -> String {
+        String::new()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "i32"
+    }
+}
+
+impl ShaderUniform for u32 {
+    fn wgsl_struct_definition() -> String {
+        String::new()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "u32"
+    }
+}
+
+impl ShaderUniform for [f32; 2] {
+    fn wgsl_struct_definition() -> String {
+        String::new()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "vec2<f32>"
+    }
+}
+
+impl ShaderUniform for [f32; 3] {
+    fn wgsl_struct_definition() -> String {
+        String::new()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "vec3<f32>"
+    }
+}
+
+impl ShaderUniform for [f32; 4] {
+    fn wgsl_struct_definition() -> String {
+        String::new()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "vec4<f32>"
+    }
+}
+
 pub trait ComposableShaderFunction {
     type Input: ShaderType;
     type Output: ShaderType;
-    type Uniforms: bytemuck::Pod + bytemuck::Zeroable;
+    type Uniforms: bytemuck::Pod + bytemuck::Zeroable + ShaderUniform;
 
     /// Returns the WGSL code for this shader function.
     ///
@@ -613,6 +708,24 @@ where
 {
 }
 
+impl<A, B> ShaderUniform for ChainUniforms<A, B>
+where
+    A: ShaderUniform + Copy,
+    B: ShaderUniform + Copy,
+{
+    fn wgsl_struct_definition() -> String {
+        let mut def = String::from("struct ChainUniforms {\n");
+        def.push_str(&format!("    first: {},\n", A::wgsl_type_name()));
+        def.push_str(&format!("    second: {},\n", B::wgsl_type_name()));
+        def.push_str("}");
+        def
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "ChainUniforms"
+    }
+}
+
 impl<A: ComposableShaderFunction, B: ComposableShaderFunction> ComposableShaderFunction
     for FunctionChain<A, B>
 where
@@ -731,6 +844,16 @@ pub struct LinearScaleUniforms {
     pub range_max: f32,
 }
 
+impl ShaderUniform for LinearScaleUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct LinearScaleUniforms {\n    domain_min: f32,\n    domain_max: f32,\n    range_min: f32,\n    range_max: f32,\n}".to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "LinearScaleUniforms"
+    }
+}
+
 /// Linear scaling transformation for numeric data.
 ///
 /// This is a basic example shader function. Advanced mathematical transformations
@@ -811,6 +934,16 @@ pub struct ColorMapUniforms {
     pub max_color: [f32; 4],
 }
 
+impl ShaderUniform for ColorMapUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct ColorMapUniforms {\n    min_color: vec4<f32>,\n    max_color: vec4<f32>,\n}".to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "ColorMapUniforms"
+    }
+}
+
 /// Simple two-color linear interpolation for data visualization.
 ///
 /// This is a basic example shader function. Advanced color mapping features
@@ -885,6 +1018,16 @@ impl PositionTransform {
 pub struct PositionTransformUniforms {
     pub scale: [f32; 2],
     pub offset: [f32; 2],
+}
+
+impl ShaderUniform for PositionTransformUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct PositionTransformUniforms {\n    scale: vec2<f32>,\n    offset: vec2<f32>,\n}".to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "PositionTransformUniforms"
+    }
 }
 
 impl ComposableShaderFunction for PositionTransform {
@@ -1230,5 +1373,37 @@ mod tests {
         assert!(definition.contains("position: vec2<f32>"));
         assert!(definition.contains("color: vec4<f32>"));
         assert!(definition.contains("intensity: f32"));
+    }
+
+    #[test]
+    fn test_shader_uniform_trait() {
+        // Test that LinearScaleUniforms implements ShaderUniform
+        let wgsl_def = LinearScaleUniforms::wgsl_struct_definition();
+        assert!(wgsl_def.contains("struct LinearScaleUniforms"));
+        assert!(wgsl_def.contains("domain_min: f32"));
+        assert!(wgsl_def.contains("domain_max: f32"));
+        assert_eq!(LinearScaleUniforms::wgsl_type_name(), "LinearScaleUniforms");
+
+        // Test ColorMapUniforms
+        let color_def = ColorMapUniforms::wgsl_struct_definition();
+        assert!(color_def.contains("struct ColorMapUniforms"));
+        assert!(color_def.contains("min_color: vec4<f32>"));
+        assert!(color_def.contains("max_color: vec4<f32>"));
+        assert_eq!(ColorMapUniforms::wgsl_type_name(), "ColorMapUniforms");
+
+        // Test PositionTransformUniforms
+        let pos_def = PositionTransformUniforms::wgsl_struct_definition();
+        assert!(pos_def.contains("struct PositionTransformUniforms"));
+        assert!(pos_def.contains("scale: vec2<f32>"));
+        assert!(pos_def.contains("offset: vec2<f32>"));
+        assert_eq!(PositionTransformUniforms::wgsl_type_name(), "PositionTransformUniforms");
+
+        // Test ChainUniforms
+        type TestChain = ChainUniforms<LinearScaleUniforms, ColorMapUniforms>;
+        let chain_def = TestChain::wgsl_struct_definition();
+        assert!(chain_def.contains("struct ChainUniforms"));
+        assert!(chain_def.contains("first: LinearScaleUniforms"));
+        assert!(chain_def.contains("second: ColorMapUniforms"));
+        assert_eq!(TestChain::wgsl_type_name(), "ChainUniforms");
     }
 }

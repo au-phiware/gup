@@ -104,6 +104,26 @@ macro_rules! wgsl_function {
             $(pub $uniform_field: $uniform_type),*
         }
 
+        // Implement ShaderUniform for the generated uniforms
+        impl $crate::shader_function::ShaderUniform for $uniforms_name {
+            fn wgsl_struct_definition() -> String {
+                let mut def = format!("struct {} {{\n", stringify!($uniforms_name));
+                $(
+                    def.push_str(&format!(
+                        "    {}: {},\n",
+                        stringify!($uniform_field),
+                        <$uniform_type as $crate::shader_function::ShaderType>::wgsl_type_name()
+                    ));
+                )*
+                def.push_str("}");
+                def
+            }
+
+            fn wgsl_type_name() -> &'static str {
+                stringify!($uniforms_name)
+            }
+        }
+
         // Generate the main struct
         #[derive(Debug, Clone)]
         pub struct $struct_name {
@@ -232,5 +252,16 @@ mod tests {
     #[test]
     fn test_function_name() {
         assert_eq!(TestScale::function_name(), "test_scale");
+    }
+
+    #[test]
+    fn test_macro_generates_shader_uniform() {
+        use crate::shader_function::ShaderUniform;
+        
+        let wgsl_def = TestScaleUniforms::wgsl_struct_definition();
+        assert!(wgsl_def.contains("struct TestScaleUniforms"));
+        assert!(wgsl_def.contains("min: f32"));
+        assert!(wgsl_def.contains("max: f32"));
+        assert_eq!(TestScaleUniforms::wgsl_type_name(), "TestScaleUniforms");
     }
 }
