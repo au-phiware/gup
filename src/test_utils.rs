@@ -26,9 +26,9 @@ use tokio::sync::{Semaphore, SemaphorePermit};
 
 /// Global semaphore to limit concurrent GPU context creation
 ///
-/// This prevents resource conflicts by ensuring only a limited number of
-/// GPU contexts can be created simultaneously.
-static GPU_CONTEXT_SEMAPHORE: Semaphore = Semaphore::const_new(4);
+/// This prevents resource conflicts by ensuring only ONE GPU context
+/// can be active at a time. This is conservative but ensures reliability.
+static GPU_CONTEXT_SEMAPHORE: Semaphore = Semaphore::const_new(1);
 
 /// RAII guard for GPU context access
 ///
