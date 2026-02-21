@@ -1,5 +1,8 @@
 # GUP-030: GPU Buffer Pool Management System
 
+**Status**: 🚧 In Progress  
+**Started**: 2025-01-21
+
 ## Story Overview
 
 **Title**: Implement Efficient GPU Buffer Pool with Memory Management  
