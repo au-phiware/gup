@@ -40,12 +40,14 @@
 //! ```
 
 pub mod circle;
+pub mod composite;
 pub mod line;
 pub mod path;
 pub mod rectangle;
 pub mod renderer;
 
 pub use circle::{Circle, CircleAttributes, CircleVertex};
+pub use composite::{CompositeMark, CompositeMarkAttributes, CompositeMarkVertex, SubMark, Transform};
 pub use line::{Line, LineAttributes, LineStyle, LineVertex};
 pub use path::{Path, PathAttributes, PathCommand, PathVertex};
 pub use rectangle::{Rectangle, RectangleAttributes, RectangleVertex};
