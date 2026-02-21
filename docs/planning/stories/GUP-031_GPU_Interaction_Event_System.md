@@ -11,9 +11,10 @@
 
 ## Implementation Note
 
-This story integrates the Selection API with the existing GPU interaction system from GUP-012.
-Core integration is complete with the `InteractionData` trait and `Renderable` implementation,
-but some interaction tests are failing due to GPU hit testing issues that require further investigation.
+This story integrates the Selection API with the existing GPU interaction system
+from GUP-012. Core integration is complete with the `InteractionData` trait and
+`Renderable` implementation, but some interaction tests are failing due to GPU
+hit testing issues that require further investigation.
 
 ## Context
 
@@ -34,13 +35,17 @@ large datasets
 ### AC1: GPU-Based Hit Testing
 
 - [x] Implement GPU compute shaders for spatial indexing (completed in GUP-012)
-- [x] Support point-in-circle, point-in-rectangle hit testing (completed in GUP-012)
-- [x] Handle coordinate transformations (screen to world space) (completed in GUP-012)
-- [⚠️] Optimize for datasets with 100K+ interactive elements (partial - needs debugging)
+- [x] Support point-in-circle, point-in-rectangle hit testing (completed in
+      GUP-012)
+- [x] Handle coordinate transformations (screen to world space) (completed in
+      GUP-012)
+- [⚠️] Optimize for datasets with 100K+ interactive elements (partial - needs
+  debugging)
 
 ### AC2: Event Processing Pipeline
 
-- [x] Process interaction events entirely on GPU when possible (completed in GUP-012)
+- [x] Process interaction events entirely on GPU when possible (completed in
+      GUP-012)
 - [x] Batch multiple events for efficient processing (completed in GUP-012)
 - [ ] Support event bubbling and propagation
 - [x] Integrate with existing Selection event handlers (this story)
@@ -131,12 +136,14 @@ implementation._
 ### Known Issues
 
 The following interaction tests are currently failing:
+
 - `test_point_query_accuracy` - GPU hit testing returns 0 hits (expects 1)
 - `test_multiple_queries` - Similar hit testing issue
 - `test_different_mark_types` - Similar hit testing issue
 
-**Root Cause**: The GPU hit test compute shader is not detecting elements at the expected positions.
-This suggests either:
+**Root Cause**: The GPU hit test compute shader is not detecting elements at the
+expected positions. This suggests either:
+
 1. Element data upload to GPU has an issue
 2. Query position coordinates need transformation
 3. Circle radius calculation in shader needs adjustment
@@ -151,12 +158,15 @@ This requires dedicated GPU shader debugging to resolve.
 
 #### Trait-Based Integration Pattern
 
-- **Challenge**: Need to connect generic `Selection<T, M>` with GPU interaction system
+- **Challenge**: Need to connect generic `Selection<T, M>` with GPU interaction
+  system
 - **Solution**: Created `InteractionData` trait as abstraction layer
 - **Pattern**: Data types implement `InteractionData` to provide geometry info
-- **Benefit**: Type-safe, flexible, and doesn't require Selection to know data structure
+- **Benefit**: Type-safe, flexible, and doesn't require Selection to know data
+  structure
 
 **Example:**
+
 ```rust
 pub trait InteractionData: Send + Sync {
     fn position(&self) -> [f32; 2];
@@ -172,12 +182,14 @@ impl InteractionData for TestData {
 
 #### Thread-Safe Event Handler Storage
 
-- **Challenge**: Event handlers need to be registered and triggered from multiple threads
+- **Challenge**: Event handlers need to be registered and triggered from
+  multiple threads
 - **Solution**: `Arc<Mutex<HashMap<String, Vec<EventHandlerFn<T>>>>>`
 - **Pattern**: Wrap handler storage in Arc+Mutex, use scoped lock for mutations
 - **Learning**: Must drop MutexGuard before returning `&mut self` in fluent APIs
 
 **Critical Fix:**
+
 ```rust
 pub fn on<F>(&mut self, event_type: &str, handler: F) -> &mut Self {
     {  // Scope ensures MutexGuard is dropped
@@ -195,83 +207,101 @@ pub fn on<F>(&mut self, event_type: &str, handler: F) -> &mut Self {
 - **Challenge**: Each Selection needs a unique ID for interaction tracking
 - **Solution**: Global `AtomicU32` counter with `Ordering::Relaxed`
 - **Pattern**: `static NEXT_SELECTION_ID: AtomicU32 = AtomicU32::new(0);`
-- **Reasoning**: Relaxed ordering sufficient as uniqueness is only requirement, not ordering
+- **Reasoning**: Relaxed ordering sufficient as uniqueness is only requirement,
+  not ordering
 
 #### Mark Type Identification for GPU
 
-- **Challenge**: GPU shader needs numeric ID for mark types (Circle, Rectangle, etc.)
+- **Challenge**: GPU shader needs numeric ID for mark types (Circle, Rectangle,
+  etc.)
 - **Solution**: Hash `TypeId` to generate stable-within-run numeric IDs
 - **Pattern**: Use `DefaultHasher` on `TypeId::of::<M>()`
-- **Trade-off**: IDs not stable across runs, but sufficient for single-session interaction
+- **Trade-off**: IDs not stable across runs, but sufficient for single-session
+  interaction
 
 ### Architectural Decisions
 
 #### Decision: Trait-Based vs Attribute-Based Position Extraction
 
-- **Decision**: Use `InteractionData` trait instead of extracting from `.attr()` calls
+- **Decision**: Use `InteractionData` trait instead of extracting from `.attr()`
+  calls
 - **Reasoning**:
   - Selection's attribute system is still placeholder
   - Trait provides immediate usability
   - Can be enhanced later when attribute system is complete
 - **Trade-off**: Users must implement trait, but clearer contract
-- **Future**: When attribute system is complete, can auto-generate `InteractionData` impl
+- **Future**: When attribute system is complete, can auto-generate
+  `InteractionData` impl
 
 #### Decision: Partial Story Completion
 
-- **Decision**: Mark story as "Partial Complete" rather than blocking on test fixes
+- **Decision**: Mark story as "Partial Complete" rather than blocking on test
+  fixes
 - **Reasoning**:
   - Core integration API is complete and compiles
   - Library tests (588) all pass
-  - Failing tests indicate pre-existing GPU shader issue, not integration design flaw
+  - Failing tests indicate pre-existing GPU shader issue, not integration design
+    flaw
   - GPU shader debugging is specialized work deserving dedicated story
 - **Trade-off**: Technical debt created, but bounded and documented
 - **Follow-up**: GUP-128 created for GPU hit test debugging
 
 #### Decision: Default Circle Size Convention
 
-- **Decision**: Default `InteractionData::size()` returns `[radius, 0.0]` for circles
+- **Decision**: Default `InteractionData::size()` returns `[radius, 0.0]` for
+  circles
 - **Reasoning**:
   - Hit test shader expects circles as `[radius, unused]`
   - Most common mark type is Circle
   - Matches WGSL shader convention from GUP-012
 - **Pattern**: Document in trait that first element is radius for circles
-- **Future**: May need mark-specific size conventions when more marks are interactive
+- **Future**: May need mark-specific size conventions when more marks are
+  interactive
 
 ### Development Workflow Insights
 
 #### GPU Test Debugging Complexity
 
-**Observation**: GPU compute shader issues are significantly harder to debug than CPU code
+**Observation**: GPU compute shader issues are significantly harder to debug
+than CPU code
 
 **Time Investment**:
+
 - Integration code: ~30 minutes
 - Test investigation: ~90 minutes
 - Still unresolved after 2+ hours total
 
 **Lessons**:
+
 1. GPU shader bugs manifest as "wrong results" not "compile errors"
 2. No debugger or print statements in WGSL compute shaders
-3. Must trace through: Rust data → GPU upload → Shader processing → Result download
+3. Must trace through: Rust data → GPU upload → Shader processing → Result
+   download
 4. Each GPU operation is async, making debugging non-linear
 
-**Recommendation**: Dedicate separate stories for GPU shader work with appropriate time allocation
+**Recommendation**: Dedicate separate stories for GPU shader work with
+appropriate time allocation
 
 #### Pre-existing Test Infrastructure Value
 
-**Finding**: GUP-012 created comprehensive interaction tests that immediately validated integration
+**Finding**: GUP-012 created comprehensive interaction tests that immediately
+validated integration
 
 **Value**:
+
 - Tests clearly showed what integration was missing (`Renderable` trait)
 - Test failures provided concrete acceptance criteria
 - Example usage in tests guided implementation design
 
-**Pattern**: Write integration tests *before* the integration exists to clarify requirements
+**Pattern**: Write integration tests _before_ the integration exists to clarify
+requirements
 
 #### Library vs Example Compilation
 
 **Issue**: Examples have compilation errors unrelated to this story
 
 **Learning**:
+
 - Focus on library (`cargo test --lib`) for story validation
 - Examples can be fixed in dedicated story
 - Don't let unrelated failures block progress
@@ -282,9 +312,11 @@ pub fn on<F>(&mut self, event_type: &str, handler: F) -> &mut Self {
 
 #### GUP-128: Debug GPU Hit Test Element Detection
 
-**Why Needed**: 3 interaction tests failing due to GPU hit test not finding elements
+**Why Needed**: 3 interaction tests failing due to GPU hit test not finding
+elements
 
 **Scope**:
+
 - Investigate element data upload to GPU buffers
 - Verify coordinate space transformations in queries
 - Debug WGSL compute shader hit detection logic
@@ -299,6 +331,7 @@ pub fn on<F>(&mut self, event_type: &str, handler: F) -> &mut Self {
 **Why Needed**: AC2 includes event bubbling, not yet implemented
 
 **Scope**:
+
 - Implement event propagation through visualization hierarchy
 - Support event capture and bubble phases
 - Add `stopPropagation()` and `preventDefault()` equivalents
@@ -312,6 +345,7 @@ pub fn on<F>(&mut self, event_type: &str, handler: F) -> &mut Self {
 **Why Needed**: AC3 includes multi-touch, not yet implemented
 
 **Scope**:
+
 - Add touch event tracking
 - Implement pinch, rotate, swipe gestures
 - Integrate with existing interaction system
@@ -327,16 +361,19 @@ pub fn on<F>(&mut self, event_type: &str, handler: F) -> &mut Self {
 **Observation**: GUP-031 was confused with GUP-012's GPU hit testing work
 
 **Clarification**:
-- GUP-012: Implemented GPU interaction *infrastructure*
-- GUP-031: Integrated that infrastructure with *Selection API*
 
-**Better Scoping**: Story title could have been "Integrate GPU Interaction with Selection API" to avoid confusion
+- GUP-012: Implemented GPU interaction _infrastructure_
+- GUP-031: Integrated that infrastructure with _Selection API_
+
+**Better Scoping**: Story title could have been "Integrate GPU Interaction with
+Selection API" to avoid confusion
 
 #### Lesson: GPU Work Needs Specialized Time Allocation
 
 **Finding**: GPU shader debugging took 3x longer than integration code
 
 **Recommendation**: Stories involving GPU shaders should:
+
 1. Have higher point estimates
 2. Include explicit "GPU debugging" tasks
 3. Consider pairing with someone experienced in GPU development
@@ -344,34 +381,45 @@ pub fn on<F>(&mut self, event_type: &str, handler: F) -> &mut Self {
 #### Lesson: Partial Completion is Valid When Bounded
 
 **Decision Rationale**: Marking story as "Partial Complete" is acceptable when:
+
 - Core deliverable is complete (integration API)
 - Remaining work is clearly scoped (specific failing tests)
 - Follow-up stories are created immediately
 - Technical debt is explicitly documented
 
-**Anti-pattern**: Calling story "Complete" when tests fail, or leaving it "In Progress" indefinitely
+**Anti-pattern**: Calling story "Complete" when tests fail, or leaving it "In
+Progress" indefinitely
 
-**Pattern**: "Partial Complete" + immediate follow-up story creation provides clarity and momentum
+**Pattern**: "Partial Complete" + immediate follow-up story creation provides
+clarity and momentum
 
 ### Key Takeaways
 
-1. **Trait abstraction** provides clean integration between generic and specific code
-2. **Thread-safe patterns** require careful attention to lock scopes in fluent APIs
-3. **GPU debugging** is specialized, time-intensive work that deserves dedicated stories
-4. **Test-driven integration** clarifies requirements and validates implementations
-5. **Partial completion** with clear follow-up is better than blocked "perfect" completion
+1. **Trait abstraction** provides clean integration between generic and specific
+   code
+2. **Thread-safe patterns** require careful attention to lock scopes in fluent
+   APIs
+3. **GPU debugging** is specialized, time-intensive work that deserves dedicated
+   stories
+4. **Test-driven integration** clarifies requirements and validates
+   implementations
+5. **Partial completion** with clear follow-up is better than blocked "perfect"
+   completion
 
 ### Code Quality
 
 **Strengths**:
+
 - Clean trait-based design
 - Thread-safe implementation
 - Well-documented public API
 - Follows existing project patterns
 
 **Areas for Improvement**:
+
 - GPU shader debugging tools needed (addressed in GUP-128)
 - Event bubbling not yet implemented (addressed in GUP-129)
 - Multi-touch support missing (addressed in GUP-130)
 
-**Overall Assessment**: Solid integration layer that unblocks event-driven visualizations, with clear path forward for remaining work.
+**Overall Assessment**: Solid integration layer that unblocks event-driven
+visualizations, with clear path forward for remaining work.
