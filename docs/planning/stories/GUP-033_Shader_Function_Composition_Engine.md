@@ -1,5 +1,7 @@
 # GUP-033: Shader Function Composition Engine
 
+**Status**: 🚧 In Progress (2025-01-08)
+
 ## Story Overview
 
 **Title**: Enable Complex Data Transformations Through Shader Function
