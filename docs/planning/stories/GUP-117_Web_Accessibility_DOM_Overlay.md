@@ -260,3 +260,153 @@ visible, interactive accessibility features for web-based Gup visualizations.
 1. `dabd2e6` - Implement Web DOM Overlay for accessibility
 2. `29528ac` - Add integration tests for Web DOM Overlay
 3. `ad69c32` - Add Web Accessibility Demo example
+
+## Retrospective
+
+**Completed**: 2025-01-24
+
+### Key Technical Learnings
+
+#### WASM Event Handler Lifetime Management
+
+- **Challenge**: Rust closures for JavaScript event listeners get dropped too
+  early, causing events to stop firing
+- **Solution**: Store `Closure<dyn FnMut(Event)>` in Vec fields to keep them
+  alive for object lifetime
+- **Pattern**: Create closure, add listener with `.as_ref().unchecked_ref()`,
+  store in `Vec<Closure<...>>`
+- **Trade-off**: Manual cleanup required in `Drop` impl vs automatic garbage
+  collection
+
+#### Dual-Layer Accessibility Architecture
+
+- **Challenge**: Visible overlay for keyboard nav vs hidden ARIA tree for screen
+  readers - which to use?
+- **Solution**: Maintain both - visible overlay for interactions, hidden ARIA
+  for detailed descriptions
+- **Pattern**: Visible elements have tabindex and focus styles; hidden elements
+  have full ARIA attributes
+- **Learning**: Different assistive technologies have different needs - support
+  both paths
+
+#### CSS Media Query Integration
+
+- **Challenge**: Need to respect user's system accessibility preferences (high
+  contrast, reduced motion)
+- **Solution**: Use `@media (prefers-contrast: high)` and
+  `@media (prefers-reduced-motion: reduce)`
+- **Pattern**: Inject CSS with media queries; browser automatically applies
+  based on system settings
+- **Learning**: Modern CSS provides powerful accessibility hooks - leverage them
+
+#### Web-sys Type Casting
+
+- **Challenge**: DOM Element needs to be cast to HtmlElement to call `.focus()`
+- **Solution**: Use `.dyn_ref::<web_sys::HtmlElement>()` to safely downcast
+- **Pattern**: Always check if cast succeeds with `ok_or_else()` for proper
+  error handling
+- **Learning**: web-sys mirrors DOM hierarchy - need runtime type checks
+
+### Architectural Decisions
+
+#### Configuration-Driven Overlay
+
+- **Decision**: Use `DomOverlayConfig` struct with defaults instead of hardcoded
+  values
+- **Reasoning**: Different visualizations may need different overlay settings
+  (z-index, IDs, features)
+- **Trade-off**: More complex initialization vs flexibility for diverse use
+  cases
+- **Future**: Could add builder pattern for even more ergonomic configuration
+
+#### Automatic Initialization
+
+- **Decision**: WebAccessibility platform bridge automatically creates and
+  initializes overlay
+- **Reasoning**: Zero-boilerplate for users - accessibility just works out of
+  the box
+- **Trade-off**: Less control for advanced users vs simple default behavior
+- **Future**: Could add optional manual mode if needed
+
+#### Placeholder Positioning
+
+- **Decision**: Defer actual element positioning to future integration with
+  visualization
+- **Reasoning**: Don't have access to mark coordinates yet; focus on structure
+  first
+- **Trade-off**: Elements don't have real positions vs getting core architecture
+  right
+- **Future**: GUP-118 or similar story for position synchronization
+
+#### Static Event Handlers
+
+- **Decision**: Use `move |event: Event|` closures with static methods for event
+  handling
+- **Reasoning**: Simpler than managing mutable self references across FFI
+  boundary
+- **Trade-off**: Can't easily access overlay state in handlers vs memory safety
+- **Future**: Could use `Rc<RefCell<WebDomOverlay>>` if handler state access
+  needed
+
+### Development Workflow Insights
+
+- **Iterative structure**: Built overlay structure first, then keyboard
+  handling, then CSS, then integration
+- **Test-driven validation**: Created tests alongside implementation to verify
+  each feature worked
+- **Example last**: Example came after core implementation to demonstrate actual
+  usage
+- **WASM-specific challenges**: Had to be careful about lifetimes and FFI
+  boundary crossing
+- **Documentation as design**: Writing implementation summary helped identify
+  gaps
+
+### Follow-up Stories
+
+During implementation, identified areas that need dedicated follow-up:
+
+1. **GUP-118: Visualization Position Synchronization**
+   - Integrate overlay element positions with actual mark coordinates from GPU
+   - Subscribe to visualization update events
+   - Update overlay positions on pan/zoom/data changes
+   - Priority: Medium (needed for production-quality positioning)
+
+2. **GUP-119: Interactive Event Forwarding**
+   - Forward pointer/touch events from overlay to visualization system
+   - Map DOM event coordinates to visualization coordinate space
+   - Trigger interaction system hooks (hover, click, drag)
+   - Priority: Medium (completes touch/pointer support)
+
+3. **GUP-120: Advanced Keyboard Navigation**
+   - Implement smart arrow key navigation (nearest neighbor, grid-based)
+   - Add keyboard shortcuts for zoom, pan, selection
+   - Provide customizable keyboard map
+   - Priority: Low (current basic navigation works)
+
+4. **GUP-121: Screen Reader Manual Testing**
+   - Test with NVDA on Windows
+   - Test with JAWS on Windows
+   - Test with VoiceOver on macOS/iOS
+   - Document screen reader compatibility
+   - Priority: High (needed for production validation)
+
+### Lessons Learned
+
+1. **WASM closure lifetime is tricky**: Always store closures that JavaScript
+   holds references to
+2. **Dual-layer approach works**: Visible + hidden elements satisfy different
+   accessibility needs
+3. **CSS media queries are powerful**: System preference integration comes for
+   free
+4. **Type safety across FFI**: web-sys provides safety but requires runtime
+   casts
+5. **Placeholder is OK**: Don't block on perfect - structure first, refinement
+   later
+6. **Configuration matters**: Flexibility via config pays off for diverse use
+   cases
+7. **Zero-boilerplate wins**: Auto-initialization makes accessibility feel
+   magical
+8. **Tests validate architecture**: Writing tests early caught design issues
+9. **Examples demonstrate value**: Simple example shows how pieces fit together
+10. **Documentation captures decisions**: Writing retrospective crystallized
+    learnings

@@ -851,9 +851,37 @@ management for web platform
 **Dependencies**: GUP-112 ✅  
 **Impact**: Production-ready web accessibility with WCAG 2.1 AAA compliance
 
+### GUP-118: Visualization Position Synchronization
+
+**Status**: 💡 New  
+**Priority**: Medium  
+**Story Points**: 5  
+**Key Need**: Synchronize overlay element positions with actual mark coordinates
+from GPU  
+**Dependencies**: GUP-117 ✅  
+**Impact**: Accurate keyboard navigation and touch target positioning
+
+### GUP-119: Interactive Event Forwarding
+
+**Status**: 💡 New  
+**Priority**: Medium  
+**Story Points**: 3  
+**Key Need**: Forward DOM overlay events to GPU interaction system  
+**Dependencies**: GUP-117 ✅, GUP-012 ✅  
+**Impact**: Full touch and pointer interactivity with accessibility
+
+### GUP-121: Screen Reader Manual Testing
+
+**Status**: 💡 New  
+**Priority**: High  
+**Story Points**: 3  
+**Key Need**: Validate with NVDA, JAWS, and VoiceOver screen readers  
+**Dependencies**: GUP-117 ✅  
+**Impact**: Production certification and WCAG validation
+
 ---
 
 _Last Updated: After completion of GUP-117 (Web Accessibility DOM Overlay) -
 2025-01-24_  
-_Next Priority Stories: GUP-111 (Automatic ARIA Generation), GUP-113 (Pattern
-Rendering), GUP-114 (macOS NSAccessibility)_
+_Next Priority Stories: GUP-121 (Screen Reader Testing), GUP-118 (Position
+Sync), GUP-111 (Automatic ARIA Generation)_
