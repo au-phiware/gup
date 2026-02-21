@@ -662,6 +662,29 @@ impl<T> TypeCompatible<T> for T {}
 ///
 /// This struct enforces that the output type of the first function is compatible
 /// with the input type of the second function, providing type safety at compilation time.
+///
+/// # Type Safety
+///
+/// The `FunctionChain` only compiles when `A::Output: ShaderCompatible<B::Input>`.
+/// This means type mismatches are caught at compile time rather than runtime.
+///
+/// # Examples
+///
+/// Valid composition:
+/// ```
+/// # use gup::*;
+/// let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0); // f32 -> f32
+/// let color_map = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 1.0, 1.0]); // f32 -> Vec4
+/// let composed = scale.compose(color_map); // ✓ Compiles: f32 -> f32 -> Vec4
+/// ```
+///
+/// Invalid composition (compile error):
+/// ```compile_fail
+/// # use gup::*;
+/// let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0); // f32 -> f32
+/// let position = PositionTransform::new(vec2![1.0, 1.0], vec2![0.0, 0.0]); // Vec2 -> Vec2
+/// let bad = position.compose(scale); // ✗ Compile error: Vec2 not compatible with f32
+/// ```
 pub struct FunctionChain<A: ComposableShaderFunction, B: ComposableShaderFunction>
 where
     A::Output: ShaderCompatible<B::Input>,
