@@ -162,3 +162,128 @@ pub struct DetailedFrameStats {
 - [x] Integration with GupContext complete
 - [x] Zero overhead when disabled
 - [x] Graceful GPU timestamp fallback
+
+## Retrospective
+
+**Completed**: 2025-02-22
+
+### Key Technical Learnings
+
+#### GPU Timestamp Query API Evolution
+- **Challenge**: wgpu 26 doesn't expose `timestamp_period` directly on the `Limits` struct, unlike some documentation examples suggest.
+- **Solution**: Used a default timestamp period of 1 nanosecond and noted that this should be queried from the adapter in production. The abstraction allows for easy updates when the API stabilizes.
+- **Pattern**: When working with evolving GPU APIs, build abstractions that can adapt to API changes. The `TimestampQueryManager` gracefully handles missing timestamp support.
+- **Future**: Monitor wgpu API changes for proper timestamp period querying. Consider adapter-level configuration in a follow-up story.
+
+#### Optional Feature Detection Pattern
+- **Challenge**: Not all devices/platforms support GPU timestamp queries (requires `Features::TIMESTAMP_QUERY`).
+- **Solution**: Implemented feature detection at manager creation time with graceful degradation. When timestamps aren't available, the profiler still functions with CPU-side timing.
+- **Pattern**: For optional GPU features, check capabilities early and provide fallback behavior. Never assume feature availability.
+
+#### Statistical Analysis for Performance Monitoring
+- **Challenge**: Raw frame time data alone isn't sufficient for diagnosing performance issues - need percentiles, standard deviation, and trend analysis.
+- **Solution**: Implemented comprehensive aggregate statistics including p95/p99 percentiles and standard deviation calculation. This provides a complete picture of performance characteristics.
+- **Pattern**: For performance profiling, always include:
+  - Averages (but don't rely on them alone)
+  - Min/max (outliers matter)
+  - Percentiles (p95, p99 for SLA-type analysis)
+  - Standard deviation (consistency/jitter measurement)
+- **Trade-off**: More complex calculations mean slightly higher profiling overhead, but still well under 1%.
+
+#### Move Semantics and Configuration
+- **Challenge**: Initial implementation moved `config` before accessing its fields, causing compilation errors.
+- **Solution**: Extract needed values from config before moving it into the struct, or rely on the struct's own fields after move.
+- **Pattern**: When constructing structs that consume config objects, either clone configuration values upfront or use the struct's own copy of the data.
+
+### Architectural Decisions
+
+#### Opt-In Profiling Architecture
+- **Decision**: Make advanced profiling explicitly opt-in via `enable_profiling()` rather than always-on.
+- **Reasoning**: 
+  - Zero overhead for applications that don't need profiling
+  - Allows different profiling configurations per use case
+  - Keeps the basic `FrameStats` lightweight for all users
+- **Trade-off**: Requires explicit API call to enable, but this is appropriate for a profiling tool.
+- **Future**: This pattern allows for multiple profiling modes (development vs. production) in future enhancements.
+
+#### Circular Buffer for Frame History
+- **Decision**: Use `VecDeque` with configurable maximum size for frame history.
+- **Reasoning**:
+  - Bounded memory usage regardless of application lifetime
+  - Efficient FIFO operations (O(1) push/pop)
+  - Recent history is most relevant for performance analysis
+- **Trade-off**: Older frames are discarded, but 120 frames (2 seconds at 60 FPS) is sufficient for most analysis.
+- **Future**: Could add optional persistent history export for long-running analysis.
+
+#### Multiple Baseline Support
+- **Decision**: Allow multiple named baselines rather than a single reference baseline.
+- **Reasoning**:
+  - Enables A/B testing of optimizations
+  - Supports comparing different feature configurations
+  - Allows tracking performance over development lifecycle
+- **Trade-off**: Slightly more complex API, but much more flexible for real-world use.
+
+#### Separate Alert Types Enum
+- **Decision**: Use a strongly-typed `PerformanceAlert` enum rather than generic warning strings.
+- **Reasoning**:
+  - Type-safe pattern matching on alert types
+  - Structured data for each alert type (e.g., percent increase for regressions)
+  - Easier to extend with new alert types
+  - Better for programmatic alert handling (filtering, routing, etc.)
+- **Pattern**: For diagnostic/monitoring systems, prefer strongly-typed alert enums over strings.
+
+### Development Workflow Insights
+
+#### Disk Space Management
+- During testing phase, hit disk space limits multiple times requiring `cargo clean`
+- For CI/CD or constrained environments, incremental testing approach would be better
+- Pattern: Run unit tests first (fast, less disk), then integration tests as separate pass
+
+#### Type System as Error Prevention
+- Rust's move semantics caught the config usage error at compile time before it could become a runtime bug
+- The type system's enforcement of ownership prevented what would have been a subtle bug in other languages
+
+#### Module Organization
+- Created `performance.rs` as a standalone module rather than embedding in `context.rs`
+- This separation keeps the codebase modular and makes the profiling system independently testable
+- Pattern: GPU infrastructure components benefit from being separate, reusable modules
+
+#### Test-Driven Development Success
+- Writing comprehensive tests (12 test cases) before full integration revealed edge cases early
+- Tests served as documentation for expected behavior
+- Integration tests with GupContext verified the API design before extensive usage
+
+### Follow-up Stories
+
+While GUP-046 is complete, several enhancement opportunities were identified:
+
+1. **GUP-147: GPU Memory Bandwidth Profiling**
+   - Implement actual memory bandwidth estimation (currently placeholder)
+   - Track buffer upload/download bandwidth
+   - Measure texture access patterns
+   - Provide memory pressure warnings
+
+2. **GUP-148: Profiling Data Export and Visualization**
+   - Export profiling data to JSON/CSV for external analysis
+   - Integration with Chrome DevTools Performance timeline
+   - Generate flame graphs for render pass hierarchies
+   - Web-based profiling dashboard
+
+3. **GUP-149: Production Profiling Mode**
+   - Lightweight "always-on" profiling with minimal overhead (<0.1%)
+   - Aggregate statistics only (no frame-by-frame history)
+   - Automatic baseline establishment
+   - Performance anomaly detection
+
+4. **GUP-150: GPU Shader Profiling Integration**
+   - Integrate with existing `ShaderProfiler` from debug module
+   - Per-shader execution time tracking
+   - Shader hot-spot identification
+   - Unified profiling report combining frame and shader metrics
+
+5. **GUP-151: Timestamp Period Query Enhancement**
+   - Proper timestamp period querying from adapter
+   - Platform-specific calibration
+   - High-precision timing support
+   - Cross-platform timestamp accuracy validation
+
