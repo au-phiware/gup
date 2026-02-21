@@ -159,3 +159,96 @@ accessibility across all visualizations.
 - **GUP-XXX: Automatic ARIA Registration** - Auto-register selections with AccessibilitySystem
 - **GUP-XXX: Reactive ARIA Updates** - Update ARIA when data changes
 - **GUP-XXX: Focus Element Integration** - Create focus elements for interactive marks
+
+## Retrospective
+
+**Completed**: 2025-02-22
+
+### Key Technical Learnings
+
+#### Trait-Based Accessibility Pattern
+- **Challenge**: How to provide mark-specific accessibility without hardcoding logic for each mark type
+- **Solution**: Created `AccessibleMark` trait with `describe_point()`, `describe_mark_type()`, and `describe_pattern()` methods
+- **Pattern**: Trait-based extension - any mark can implement `AccessibleMark` to provide custom descriptions
+- **Trade-off**: Requires manual implementation for each mark, but provides maximum flexibility and type safety
+
+#### Color Description Approximation
+- **Challenge**: Converting RGBA float arrays to human-readable color names for screen readers
+- **Solution**: Simple RGB threshold-based approximation (red if R>0.8, G<0.3, B<0.3, etc.)
+- **Pattern**: Pragmatic approximation over precision - 8 basic colors plus "colored" fallback
+- **Future**: Could enhance with HSL-based color naming or configurable color palettes
+
+#### Pattern Detection in Marks
+- **Challenge**: Providing high-level descriptions beyond individual point data
+- **Solution**: Added `describe_pattern()` method that analyzes spatial distribution and connectivity
+- **Pattern**: Optional pattern analysis - returns `Option<String>` so marks can opt out
+- **Examples**: Circle marks detect clustering/linear distribution, Line marks detect connected paths
+
+#### Large Dataset Handling
+- **Challenge**: ARIA trees for 10K+ points would create huge DOM structures
+- **Solution**: Limit individual point nodes to 100, add truncation note for remainder
+- **Pattern**: Performance-aware accessibility - provide enough detail without DOM bloat
+- **Trade-off**: Some data points not individually described, but pattern descriptions compensate
+
+### Architectural Decisions
+
+#### Manual vs Automatic Registration
+- **Decision**: Provided `generate_aria_tree()` method for manual registration instead of automatic
+- **Reasoning**: Gives developers control over when/how ARIA trees are created and registered
+- **Trade-off**: Requires one extra line of code, but avoids unexpected behavior and lifecycle issues
+- **Future**: Could add automatic registration via opt-in flag or builder pattern
+
+#### Cached Attributes Dependency
+- **Decision**: `generate_aria_tree()` relies on `cached_attributes` being populated
+- **Reasoning**: Attributes are the computed visual representation needed for descriptions
+- **Trade-off**: Requires `render()` or attribute update before ARIA generation
+- **Future**: Could trigger attribute computation automatically, but adds complexity
+
+#### Pattern Methods as Trait Defaults
+- **Decision**: Made `describe_pattern()` and `describe_mark_type()` have default implementations
+- **Reasoning**: Not all marks need custom implementations - sensible defaults reduce boilerplate
+- **Pattern**: Trait defaults with override capability
+- **Example**: `describe_mark_type()` defaults to `Self::description()` from `Mark` trait
+
+### Development Workflow Insights
+
+- **Test-driven approach worked well**: Wrote tests for each capability before/during implementation
+- **Spatial math is tricky**: Had to think carefully about direction analysis for lines (ascending vs descending, left vs right)
+- **Iterative refinement**: Started with basic descriptions, then added color approximation, then pattern detection
+- **Module coupling**: Tight coupling between `selection.rs` and `accessibility/aria.rs` is acceptable - they're designed to work together
+- **Performance considerations**: The 100-point limit was added after considering real-world usage (10K+ point datasets are common)
+
+### Implementation Challenges
+
+1. **Test module structure**: Initially placed new tests after benchmarks module, which caused visibility issues with `TestData`
+   - **Resolution**: Moved tests into main tests module before benchmarks
+   
+2. **Color approximation accuracy**: Simple RGB thresholds don't handle all colors well (e.g., orange, brown, pink)
+   - **Resolution**: Added "colored" fallback, documented limitation for future enhancement
+   
+3. **Pattern detection complexity**: Wanted to detect trends/correlations but kept it simple
+   - **Resolution**: Limited to spatial distribution and connectivity - good enough for MVP
+
+### Follow-up Stories
+
+#### GUP-124: Enhanced Color Description
+- **What**: Better color naming using HSL color space and perceptual color distance
+- **Why**: Current RGB approximation is too simplistic
+- **Priority**: Low - current approximation works for common cases
+
+#### GUP-125: Automatic ARIA Registration
+- **What**: Auto-register selections with AccessibilitySystem when created/rendered
+- **Why**: Reduce developer friction, ensure accessibility by default
+- **Priority**: Medium - completes AC3
+
+#### GUP-126: Reactive ARIA Updates  
+- **What**: Automatically update ARIA tree when selection data changes
+- **Why**: Keep screen reader state synchronized with visual state
+- **Priority**: Medium - required for dynamic visualizations
+- **Dependencies**: Requires broader reactive data system
+
+#### GUP-127: Focus Element for Data Points
+- **What**: Create focusable elements for each mark instance to enable keyboard navigation
+- **Why**: Complete keyboard accessibility, enable focus-driven interactions
+- **Priority**: High - core accessibility requirement
+- **Dependencies**: Integration with focus manager from GUP-016
