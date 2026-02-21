@@ -1,5 +1,8 @@
 # GUP-049: Surface Performance Optimization
 
+**Status**: 🚧 In Progress  
+**Started**: 2025-01-25
+
 ## Story Overview
 
 **Title**: Advanced Performance Optimization for Multi-Surface Rendering  
