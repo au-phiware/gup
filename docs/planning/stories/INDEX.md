@@ -44,7 +44,7 @@ epic and status.
 
 | Story                                                        | Title                                      | Status         | Priority | Points |
 | ------------------------------------------------------------ | ------------------------------------------ | -------------- | -------- | ------ |
-| [GUP-026](GUP-026_Data_Source_Merge_Implementation.md)       | Data Source Merge Implementation           | 🚧 In Progress | Medium   | 5      |
+| [GUP-026](GUP-026_Data_Source_Merge_Implementation.md)       | Data Source Merge Implementation           | ✅ Complete | Medium   | 5      |
 | [GUP-027](GUP-027_GPU_Blend_State_Integration.md)            | GPU Blend State Integration                | ✅ Complete    | High     | 3      |
 | [GUP-028](GUP-028_Composition_Performance_Optimization.md)   | Composition Performance Optimization       | 💡 New         | Medium   | 4      |
 | ~~[GUP-085](GUP-085_Line_Rectangle_Mark_Implementation.md)~~ | ~~Line and Rectangle Mark Impl.~~          | ⿻ Copy        | High     | 5      |
