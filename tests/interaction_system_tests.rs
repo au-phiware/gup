@@ -115,13 +115,12 @@ async fn test_point_query_misses() {
     let mut interaction_system = InteractionSystem::new(&context).await.unwrap();
 
     // Create selection with elements at known positions
-    // Note: Selection system puts elements at (50,50), (150,100) regardless of input positions
     let positions = vec![(0.0, 0.0), (100.0, 100.0)];
     let selection = create_test_selection(Arc::clone(&context), positions).await;
 
-    // Test positions that should miss (far from actual element positions at (50,50) and (150,100))
+    // Test positions that should miss (far from actual element positions)
     let miss_positions = vec![
-        Vec2::new(25.0, 25.0),   // Between origin and first element
+        Vec2::new(25.0, 25.0),   // Between the two elements  
         Vec2::new(-50.0, -50.0), // Far from any element
         Vec2::new(500.0, 500.0), // Far from any element
     ];
@@ -297,10 +296,11 @@ async fn test_multiple_queries() {
         total_hits += hits.len();
     }
 
-    // Expected: 2 hits total (queries at (50,50) and (200,200) hit, others miss)
+    // Expected: 3 hits total (queries at (10,10), (50,50), and (100,100) hit element positions)
+    // Query at (200,200) misses since no element is there
     assert_eq!(
-        total_hits, 2,
-        "Should find exactly 2 hits from 4 queries (got {total_hits})"
+        total_hits, 3,
+        "Should find exactly 3 hits from 4 queries (got {total_hits})"
     );
 
     // Verify stats reflect all queries

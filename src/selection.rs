@@ -227,21 +227,22 @@ where
 
 /// Get a numeric mark type identifier for a mark.
 ///
-/// This is a simple implementation that maps mark types to numeric IDs
-/// for GPU interaction processing.
+/// This maps mark types to the numeric IDs expected by the GPU hit test shader:
+/// - 0 = Circle
+/// - 1 = Rectangle
+/// - 2 = Line
 fn get_mark_type_id<M: Mark>() -> u32 {
-    // Simple hash-based ID generation from type name
-    let type_id = TypeId::of::<M>();
-    // Use the hash of the TypeId as the mark type
-    // This is stable within a single program run
-    let hash = {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-        let mut hasher = DefaultHasher::new();
-        type_id.hash(&mut hasher);
-        hasher.finish()
-    };
-    (hash % 1000) as u32 // Keep it in a reasonable range
+    let type_name = std::any::type_name::<M>();
+    
+    // Map mark types to GPU shader IDs
+    if type_name.contains("Circle") {
+        0
+    } else if type_name.contains("Rectangle") {
+        1
+    } else if type_name.contains("Line") {
+        2
+    } else {
+        // Default to circle for unknown mark types
+        0
+    }
 }
-
-use std::any::TypeId;

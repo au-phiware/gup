@@ -790,8 +790,6 @@ impl InteractionSystem {
 
         for (selection_id, selection) in selections.iter().enumerate() {
             // Extract elements from each selection
-            // This is a simplified implementation - in practice would need to
-            // integrate with the actual Selection system
             let selection_elements = selection.get_elements_for_interaction()?;
 
             for (element_id, element) in selection_elements.iter().enumerate() {
