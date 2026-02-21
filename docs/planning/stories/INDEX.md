@@ -86,14 +86,17 @@ epic and status.
 
 ### Post GUP-002 Stories - GPU and Interaction Systems (Stories 29+)
 
-| Story                                                    | Title                                    | Status      | Priority | Points |
-| -------------------------------------------------------- | ---------------------------------------- | ----------- | -------- | ------ |
-| [GUP-029](GUP-029_WGSL_Shader_Code_Generation.md)        | WGSL Shader Code Generation System       | ✅ Complete | High     | 8      |
-| [GUP-030](GUP-030_GPU_Buffer_Pool_Management.md)         | GPU Buffer Pool Management System        | ✅ Complete | Medium   | 5      |
-| [GUP-031](GUP-031_GPU_Interaction_Event_System.md)       | GPU-Based Interaction Event System       | ⚠️ Partial  | High     | 13     |
-| [GUP-032](GUP-032_Advanced_Mark_System.md)               | Advanced Mark System with Custom Shapes  | ✅ Complete | Medium   | 8      |
-| [GUP-033](GUP-033_Shader_Function_Composition_Engine.md) | Shader Function Composition Engine       | 💡 New      | Medium   | 10     |
-| [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md)         | GPU Memory Profiling and Debugging Tools | 💡 New      | Low      | 5      |
+| Story                                                    | Title                                    | Status         | Priority | Points |
+| -------------------------------------------------------- | ---------------------------------------- | -------------- | -------- | ------ |
+| [GUP-029](GUP-029_WGSL_Shader_Code_Generation.md)        | WGSL Shader Code Generation System       | ✅ Complete    | High     | 8      |
+| [GUP-030](GUP-030_GPU_Buffer_Pool_Management.md)         | GPU Buffer Pool Management System        | ✅ Complete    | Medium   | 5      |
+| [GUP-031](GUP-031_GPU_Interaction_Event_System.md)       | GPU-Based Interaction Event System       | ⚠️ Partial     | High     | 13     |
+| [GUP-032](GUP-032_Advanced_Mark_System.md)               | Advanced Mark System with Custom Shapes  | ✅ Complete    | Medium   | 8      |
+| [GUP-033](GUP-033_Shader_Function_Composition_Engine.md) | Shader Function Composition Engine       | 💡 New         | Medium   | 10     |
+| [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md)         | GPU Memory Profiling and Debugging Tools | 💡 New         | Low      | 5      |
+| [GUP-131](GUP-131_Shader_Type_Constructors.md)           | Add Constructor Methods to Shader Types  | 📋 Planned     | Low      | 1      |
+| [GUP-132](GUP-132_GPU_Path_Tessellation.md)              | GPU Tessellation for Path Mark           | 💡 New         | Medium   | 8      |
+| [GUP-135](GUP-135_Fix_Examples_Compilation.md)           | Fix Example Compilation Errors           | 🚧 In Progress | High     | 3      |
 
 ### Post GUP-015 Stories - Advanced Debug Infrastructure (Stories 80+)
 
@@ -907,8 +910,10 @@ integration tests and examples
 
 ---
 
-_Last Updated: After completion of GUP-128 (Debug GPU Hit Test Detection) - 2024-02-22_  
-_Next Priority Stories: GUP-122 (Execute Screen Reader Tests), GUP-111 (Automatic ARIA Generation)_
+_Last Updated: After completion of GUP-128 (Debug GPU Hit Test Detection) -
+2024-02-22_  
+_Next Priority Stories: GUP-122 (Execute Screen Reader Tests), GUP-111
+(Automatic ARIA Generation)_
 
 ---
 
@@ -921,7 +926,8 @@ The following stories were created based on learnings from implementing GUP-128:
 **Status**: 💡 New  
 **Priority**: Medium  
 **Story Points**: 8  
-**Key Need**: Visual debugging tool for GPU interaction data (elements, queries, results)  
+**Key Need**: Visual debugging tool for GPU interaction data (elements, queries,
+results)  
 **Dependencies**: GUP-128 ✅  
 **Impact**: Faster GPU debugging for future issues  
 **Created**: 2024-02-22 during GUP-128 retrospective
@@ -931,7 +937,8 @@ The following stories were created based on learnings from implementing GUP-128:
 **Status**: 💡 New  
 **Priority**: Low  
 **Story Points**: 5  
-**Key Need**: Replace fragile type name matching with compile-time stable mark type IDs  
+**Key Need**: Replace fragile type name matching with compile-time stable mark
+type IDs  
 **Dependencies**: GUP-128 ✅  
 **Impact**: More robust mark type ID system, resistant to refactoring  
 **Created**: 2024-02-22 during GUP-128 retrospective

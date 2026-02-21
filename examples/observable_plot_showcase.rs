@@ -17,7 +17,6 @@ use gup::chart_builder::{
     builders::{AccessorFunction, ConfigurableBuilder},
 };
 use gup::prelude::*;
-use gup::selection;
 use std::sync::Arc;
 
 /// Sample sales data structure for demonstration
@@ -313,21 +312,19 @@ async fn showcase_selection_integration(
         .y(y("profit"))
         .color(color("region"));
 
-    let bound_chart = BoundChartBuilder::new(chart_builder, data.to_vec(), context.clone());
+    let _bound_chart = BoundChartBuilder::new(chart_builder, data.to_vec(), context.clone());
 
-    // Convert to low-level Selection for advanced customization
-    let selection = bound_chart.into_selection::<selection::Circle>()?;
-    println!("   ✅ Chart builder converted to Selection<SalesData, Circle>");
-    println!("      • High-level Observable Plot API → Low-level GPU primitives");
-    println!("      • Zero-cost conversion with no data copying");
-    println!("      • Full Selection API available for advanced operations");
+    // Note: Direct conversion to Selection is not yet implemented
+    // This would allow advanced customization via the low-level Selection API
+    // For now, use the chart builder API directly
+    println!("   ✅ Chart builder created with Observable Plot syntax");
+    println!("      • High-level declarative API");
+    println!("      • Type-safe accessor functions");
+    println!("      • Zero-cost abstraction over GPU primitives");
 
-    // Selection API is now available for advanced operations
-    println!("      • Selection length: {}", selection.len());
-    println!("      • Can apply additional transformations, filtering, etc.");
-
-    // Demonstrate that we maintain all Mixable capabilities
-    // let mixed = selection.mix(another_selection); // Would work if we had another selection
+    // Demonstrate that the bound chart maintains type safety
+    println!("      • Chart type: ScatterPlot");
+    println!("      • Data type: SalesData");
 
     Ok(())
 }

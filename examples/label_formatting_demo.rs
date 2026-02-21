@@ -27,7 +27,6 @@
 use gup::{
     CircleAttributes, GupContext, GupResult, PhysicalSize, RenderContext, SurfaceId,
     label::{AxisInfo, LabelConstraints, LabelFormatter, LabelPositioner, NumericFormatter},
-    prelude::ShaderFunction,
     shader_function::{Vec2, Vec4},
     text::{FontAtlas, TextAnchor, TextLayoutEngine, TextRenderConfig, TextRenderer, TextStyle},
 };
@@ -58,14 +57,11 @@ pub struct PerformanceData {
     pub category: String, // Performance category
 }
 
-/// Shader function that transforms SalesData to CircleAttributes for visualization
+/// CPU-side transformation from SalesData to CircleAttributes for visualization
 pub struct SalesDataToCircleAttributes;
 
-impl ShaderFunction for SalesDataToCircleAttributes {
-    type Input = SalesData;
-    type Output = CircleAttributes;
-
-    fn apply(&self, input: &Self::Input) -> Self::Output {
+impl SalesDataToCircleAttributes {
+    pub fn transform(&self, input: &SalesData) -> CircleAttributes {
         // Normalize coordinates to screen space [-0.8, 0.8]
         // Quarter: 1-4 -> X axis
         // Revenue: $50k-$200k -> Y axis
@@ -105,24 +101,13 @@ impl ShaderFunction for SalesDataToCircleAttributes {
             },
         }
     }
-
-    fn wgsl_code(&self) -> String {
-        "// Sales data to circle transformation".to_string()
-    }
-
-    fn function_id(&self) -> String {
-        "sales_to_circle".to_string()
-    }
 }
 
-/// Shader function that transforms PerformanceData to CircleAttributes
+/// CPU-side transformation from PerformanceData to CircleAttributes
 pub struct PerformanceDataToCircleAttributes;
 
-impl ShaderFunction for PerformanceDataToCircleAttributes {
-    type Input = PerformanceData;
-    type Output = CircleAttributes;
-
-    fn apply(&self, input: &Self::Input) -> Self::Output {
+impl PerformanceDataToCircleAttributes {
+    pub fn transform(&self, input: &PerformanceData) -> CircleAttributes {
         // Normalize coordinates: Month (1-4) vs Efficiency (0.85-0.95)
         let screen_x = ((input.month - 1.0) / 3.0) * 1.6 - 0.8;
         let screen_y = ((input.efficiency - 0.85) / 0.10) * 1.6 - 0.8;
@@ -151,14 +136,6 @@ impl ShaderFunction for PerformanceDataToCircleAttributes {
                 w: 1.0,
             },
         }
-    }
-
-    fn wgsl_code(&self) -> String {
-        "// Performance data to circle transformation".to_string()
-    }
-
-    fn function_id(&self) -> String {
-        "performance_to_circle".to_string()
     }
 }
 
@@ -789,7 +766,7 @@ impl LabelFormattingApp {
                 let circles: Vec<CircleAttributes> = self
                     .sales_data
                     .iter()
-                    .map(|data| transformer.apply(data))
+                    .map(|data| transformer.transform(data))
                     .collect();
 
                 // Create formatted labels for sales data
@@ -798,7 +775,7 @@ impl LabelFormattingApp {
                     .sales_data
                     .iter()
                     .map(|data| {
-                        let circle = transformer.apply(data);
+                        let circle = transformer.transform(data);
                         LabelData {
                             position: Vec2 {
                                 x: circle.center.x + 0.08,
@@ -822,7 +799,7 @@ impl LabelFormattingApp {
                 let circles: Vec<CircleAttributes> = self
                     .performance_data
                     .iter()
-                    .map(|data| transformer.apply(data))
+                    .map(|data| transformer.transform(data))
                     .collect();
 
                 // Create formatted labels for performance data
@@ -831,7 +808,7 @@ impl LabelFormattingApp {
                     .performance_data
                     .iter()
                     .map(|data| {
-                        let circle = transformer.apply(data);
+                        let circle = transformer.transform(data);
                         LabelData {
                             position: Vec2 {
                                 x: circle.center.x + 0.08,
@@ -864,7 +841,7 @@ impl LabelFormattingApp {
                 let transformer = SalesDataToCircleAttributes;
                 let circles: Vec<CircleAttributes> = scientific_data
                     .iter()
-                    .map(|data| transformer.apply(data))
+                    .map(|data| transformer.transform(data))
                     .collect();
 
                 // Create formatted labels for scientific data
@@ -872,7 +849,7 @@ impl LabelFormattingApp {
                 let labels: Vec<LabelData> = scientific_data
                     .iter()
                     .map(|data| {
-                        let circle = transformer.apply(data);
+                        let circle = transformer.transform(data);
                         LabelData {
                             position: Vec2 {
                                 x: circle.center.x + 0.08,
@@ -905,7 +882,7 @@ impl LabelFormattingApp {
                 let transformer = SalesDataToCircleAttributes;
                 let circles: Vec<CircleAttributes> = engineering_data
                     .iter()
-                    .map(|data| transformer.apply(data))
+                    .map(|data| transformer.transform(data))
                     .collect();
 
                 // Create formatted labels for engineering data
@@ -913,7 +890,7 @@ impl LabelFormattingApp {
                 let labels: Vec<LabelData> = engineering_data
                     .iter()
                     .map(|data| {
-                        let circle = transformer.apply(data);
+                        let circle = transformer.transform(data);
                         LabelData {
                             position: Vec2 {
                                 x: circle.center.x + 0.08,
@@ -1431,7 +1408,7 @@ mod tests {
         let sales_data = LabelFormattingApp::generate_sales_data();
         let circles: Vec<CircleAttributes> = sales_data
             .iter()
-            .map(|data| transformer.apply(data))
+            .map(|data| transformer.transform(data))
             .collect();
 
         renderer.update_data(circles);

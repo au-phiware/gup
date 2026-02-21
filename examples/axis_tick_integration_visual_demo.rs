@@ -13,7 +13,6 @@
 use gup::{
     CircleAttributes, GupContext, PhysicalSize, SurfaceId,
     axis::{Axis, AxisBounds, AxisConfiguration, AxisPosition, LinearAxis},
-    prelude::ShaderFunction,
     render::Vertex,
     shader_function::{Vec2, Vec4},
     tick_generator::{LinearScale, LinearTickGenerator, Scale, TickGenerator},
@@ -152,7 +151,7 @@ impl DataSet {
     }
 }
 
-/// Shader function that transforms DataPoint to CircleAttributes
+/// CPU-side transformation from DataPoint to CircleAttributes
 pub struct DataPointToCircleAttributes {
     x_min: f32,
     x_max: f32,
@@ -169,13 +168,8 @@ impl DataPointToCircleAttributes {
             y_max,
         }
     }
-}
 
-impl ShaderFunction for DataPointToCircleAttributes {
-    type Input = DataPoint;
-    type Output = CircleAttributes;
-
-    fn apply(&self, input: &Self::Input) -> Self::Output {
+    pub fn transform(&self, input: &DataPoint) -> CircleAttributes {
         // Normalize coordinates to chart area [-0.6, 0.6] leaving room for axes
         let screen_x = ((input.x - self.x_min) / (self.x_max - self.x_min)) * 1.2 - 0.6;
         let screen_y = ((input.y - self.y_min) / (self.y_max - self.y_min)) * 1.2 - 0.6;
@@ -209,37 +203,6 @@ impl ShaderFunction for DataPointToCircleAttributes {
                 w: 1.0,
             },
         }
-    }
-
-    fn wgsl_code(&self) -> String {
-        format!(
-            r#"
-            fn datapoint_to_circle(data: DataPoint) -> CircleAttributes {{
-                let screen_x = ((data.x - {}) / ({} - {})) * 1.2 - 0.6;
-                let screen_y = ((data.y - {}) / ({} - {})) * 1.2 - 0.6;
-
-                let red = data.value;
-                let blue = 1.0 - data.value;
-                let green = 0.3;
-                let alpha = 0.8;
-
-                let radius = 0.02 * data.size;
-
-                var attrs: CircleAttributes;
-                attrs.center = vec2<f32>(screen_x, screen_y);
-                attrs.radius = radius;
-                attrs.fill_color = vec4<f32>(red, green, blue, alpha);
-                attrs.stroke_width = 1.0;
-                attrs.stroke_color = vec4<f32>(0.0, 0.0, 0.0, 1.0);
-                return attrs;
-            }}
-            "#,
-            self.x_min, self.x_max, self.x_min, self.y_min, self.y_max, self.y_min
-        )
-    }
-
-    fn function_id(&self) -> String {
-        "datapoint_to_circle".to_string()
     }
 }
 
@@ -296,7 +259,7 @@ impl AxisTickIntegrationRenderer {
         self.circle_attributes = self
             .data_points
             .iter()
-            .map(|point| transformer.apply(point))
+            .map(|point| transformer.transform(point))
             .collect();
     }
 
@@ -1041,7 +1004,7 @@ mod tests {
         let transformer = DataPointToCircleAttributes::new(0.0, 10.0, 0.0, 10.0);
         let point = DataPoint::new(5.0, 5.0, 0.5, 1.0, "Test");
 
-        let attrs = transformer.apply(&point);
+        let attrs = transformer.transform(&point);
 
         // Center point (5,5) in (0,10) range should map to (0,0) in screen space
         assert!((attrs.center.x - 0.0).abs() < 0.001);

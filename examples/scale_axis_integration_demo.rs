@@ -13,7 +13,6 @@ use gup::scale::AccessorFunction;
 use gup::{
     CircleAttributes, GupContext, PhysicalSize, SurfaceId,
     mark::{Circle, Mark},
-    prelude::ShaderFunction,
     shader_function::{Vec2, Vec4},
 };
 use std::sync::Arc;
@@ -100,7 +99,7 @@ impl BusinessData {
     }
 }
 
-/// Shader function to transform business data to circle attributes for the scatter plot
+/// CPU-side transformation from business data to circle attributes for the scatter plot
 pub struct BusinessDataToCircleAttributes {
     domain_x: (f64, f64),
     domain_y: (f64, f64),
@@ -126,13 +125,8 @@ impl BusinessDataToCircleAttributes {
 
         Self { domain_x, domain_y }
     }
-}
 
-impl ShaderFunction for BusinessDataToCircleAttributes {
-    type Input = BusinessData;
-    type Output = CircleAttributes;
-
-    fn apply(&self, input: &Self::Input) -> Self::Output {
+    pub fn transform(&self, input: &BusinessData) -> CircleAttributes {
         // Map revenue and profit to chart area (accounting for margins)
         // Chart area: left=80, right=720, bottom=540, top=60
         let chart_left = 80.0;
@@ -183,55 +177,6 @@ impl ShaderFunction for BusinessDataToCircleAttributes {
                 w: 1.0,
             },
         }
-    }
-
-    fn wgsl_code(&self) -> String {
-        format!(
-            r#"
-            fn business_data_to_circle(data: BusinessData) -> CircleAttributes {{
-                let chart_left = 80.0;
-                let chart_right = 720.0;
-                let chart_bottom = 540.0;
-                let chart_top = 60.0;
-
-                let domain_x_min = {};
-                let domain_x_max = {};
-                let domain_y_min = {};
-                let domain_y_max = {};
-
-                let x_norm = (data.revenue - domain_x_min) / (domain_x_max - domain_x_min);
-                let y_norm = (data.profit - domain_y_min) / (domain_y_max - domain_y_min);
-
-                let screen_x = chart_left + x_norm * (chart_right - chart_left);
-                let screen_y = chart_bottom - y_norm * (chart_bottom - chart_top);
-
-                let ndc_x = (screen_x / 400.0) - 1.0;
-                let ndc_y = 1.0 - (screen_y / 300.0);
-
-                let growth_norm = clamp(data.growth_rate, 0.0, 0.3) / 0.3;
-                let red = 1.0 - growth_norm;
-                let green = growth_norm;
-                let blue = 0.2;
-                let alpha = 0.8;
-
-                let size_norm = (f32(data.employees) - 50.0) / (100.0 - 50.0);
-                let radius = 0.02 + size_norm * 0.02;
-
-                var attrs: CircleAttributes;
-                attrs.center = vec2<f32>(ndc_x, ndc_y);
-                attrs.radius = radius;
-                attrs.fill_color = vec4<f32>(red, green, blue, alpha);
-                attrs.stroke_width = 1.0;
-                attrs.stroke_color = vec4<f32>(0.2, 0.2, 0.2, 1.0);
-                return attrs;
-            }}
-            "#,
-            self.domain_x.0, self.domain_x.1, self.domain_y.0, self.domain_y.1
-        )
-    }
-
-    fn function_id(&self) -> String {
-        "business_data_to_circle".to_string()
     }
 }
 
@@ -328,7 +273,7 @@ impl ScatterPlotRenderer {
         let transformer = BusinessDataToCircleAttributes::new(&data_points);
         let circle_attributes: Vec<CircleAttributes> = data_points
             .iter()
-            .map(|point| transformer.apply(point))
+            .map(|point| transformer.transform(point))
             .collect();
 
         let num_instances = circle_attributes.len() as u32;
@@ -885,7 +830,7 @@ mod tests {
         let transformer = BusinessDataToCircleAttributes::new(&data);
 
         for point in &data {
-            let attrs = transformer.apply(point);
+            let attrs = transformer.transform(point);
             assert!(attrs.radius > 0.0);
             assert!(attrs.fill_color.w > 0.0);
             assert!(attrs.center.x >= -1.0 && attrs.center.x <= 1.0);

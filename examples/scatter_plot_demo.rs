@@ -26,7 +26,6 @@
 use gup::{
     CircleAttributes, GupContext, GupResult, PhysicalSize, RenderContext, SurfaceId,
     mark::{Circle, Mark},
-    prelude::ShaderFunction,
     shader_function::{Vec2, Vec4},
 };
 use std::sync::Arc;
@@ -84,14 +83,11 @@ fn generate_sample_data() -> Vec<DataPoint> {
     ]
 }
 
-/// Shader function that transforms DataPoint to CircleAttributes
+/// CPU-side transformation from DataPoint to CircleAttributes
 pub struct DataPointToCircleAttributes;
 
-impl ShaderFunction for DataPointToCircleAttributes {
-    type Input = DataPoint;
-    type Output = CircleAttributes;
-
-    fn apply(&self, input: &Self::Input) -> Self::Output {
+impl DataPointToCircleAttributes {
+    pub fn transform(&self, input: &DataPoint) -> CircleAttributes {
         // Normalize coordinates to screen space [-1, 1]
         // X: $20k-$80k -> [-0.8, 0.8]
         // Y: 5.0-9.0 -> [-0.8, 0.8]
@@ -127,35 +123,6 @@ impl ShaderFunction for DataPointToCircleAttributes {
                 w: 1.0,
             }, // Black border
         }
-    }
-
-    fn wgsl_code(&self) -> String {
-        r#"
-        fn datapoint_to_circle(data: DataPoint) -> CircleAttributes {
-            let screen_x = ((data.x - 20000.0) / 60000.0) * 1.6 - 0.8;
-            let screen_y = ((data.y - 5.0) / 4.0) * 1.6 - 0.8;
-
-            let red = data.value;
-            let blue = 1.0 - data.value;
-            let green = 0.3;
-            let alpha = 0.8;
-
-            let radius = 0.03 * data.size;
-
-            var attrs: CircleAttributes;
-            attrs.center = vec2<f32>(screen_x, screen_y);
-            attrs.radius = radius;
-            attrs.fill_color = vec4<f32>(red, green, blue, alpha);
-            attrs.stroke_width = 1.0;
-            attrs.stroke_color = vec4<f32>(0.0, 0.0, 0.0, 1.0);
-            return attrs;
-        }
-        "#
-        .to_string()
-    }
-
-    fn function_id(&self) -> String {
-        "datapoint_to_circle".to_string()
     }
 }
 
@@ -195,7 +162,7 @@ impl LibraryBasedScatterRenderer {
         let transformer = DataPointToCircleAttributes;
         let circle_attributes: Vec<CircleAttributes> = data_points
             .iter()
-            .map(|point| transformer.apply(point))
+            .map(|point| transformer.transform(point))
             .collect();
 
         let num_instances = circle_attributes.len() as u32;
@@ -784,7 +751,7 @@ mod tests {
     fn test_datapoint_to_circle_transformation() {
         let point = DataPoint::new(45000.0, 7.2, 0.6, 1.1, "Test");
         let transformer = DataPointToCircleAttributes;
-        let attrs = transformer.apply(&point);
+        let attrs = transformer.transform(&point);
 
         // Check that transformation produces valid CircleAttributes
         assert!(attrs.radius > 0.0);
