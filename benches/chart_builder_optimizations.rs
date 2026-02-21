@@ -6,7 +6,7 @@
 //! Demonstrates the performance impact of compile-time accessor resolution
 //! and shader specialization optimizations.
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use gup::chart_builder::accessor::AccessorValue;
 use gup::chart_builder::optimized_accessor::{GenericAccessor, OptimizedAccessorFunction};
 use gup::chart_builder::pipeline_cache::PipelineCache;
@@ -63,10 +63,7 @@ fn bench_accessor_overhead(c: &mut Criterion) {
             Box::new(|d: &DataPoint| AccessorValue::Float(d.x + d.y));
 
         b.iter(|| {
-            let sum: f32 = data
-                .iter()
-                .map(|d| black_box(accessor(d).as_f32()))
-                .sum();
+            let sum: f32 = data.iter().map(|d| black_box(accessor(d).as_f32())).sum();
             black_box(sum);
         })
     });
@@ -76,10 +73,7 @@ fn bench_accessor_overhead(c: &mut Criterion) {
         let accessor = GenericAccessor::new(|d: &DataPoint| d.x + d.y);
 
         b.iter(|| {
-            let sum: f32 = data
-                .iter()
-                .map(|d| black_box(accessor.extract(d)))
-                .sum();
+            let sum: f32 = data.iter().map(|d| black_box(accessor.extract(d))).sum();
             black_box(sum);
         })
     });
@@ -113,10 +107,7 @@ fn bench_simple_field_access(c: &mut Criterion) {
     group.bench_function("generic_accessor_x", |b| {
         let accessor = GenericAccessor::new(|d: &DataPoint| d.x);
         b.iter(|| {
-            let sum: f32 = data
-                .iter()
-                .map(|d| black_box(accessor.extract(d)))
-                .sum();
+            let sum: f32 = data.iter().map(|d| black_box(accessor.extract(d))).sum();
             black_box(sum);
         })
     });

@@ -51,11 +51,11 @@ pub mod shader_specialization;
 
 pub use accessor::*;
 pub use builders::*;
+pub use labels::*;
 pub use optimized_accessor::*;
 pub use pipeline_cache::*;
-pub use shader_specialization::*;
-pub use labels::*;
 pub use plot_api::*;
+pub use shader_specialization::*;
 
 use crate::RenderContext;
 use crate::axis::{

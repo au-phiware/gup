@@ -233,10 +233,9 @@ mod tests {
         };
 
         // Test complex computation with generic accessor
-        let magnitude_accessor = GenericAccessor::new(|d: &TestData| {
-            (d.x * d.x + d.y * d.y).sqrt()
-        });
-        
+        let magnitude_accessor =
+            GenericAccessor::new(|d: &TestData| (d.x * d.x + d.y * d.y).sqrt());
+
         assert_eq!(magnitude_accessor.extract(&data), 5.0);
     }
 
@@ -248,9 +247,7 @@ mod tests {
             name: "color".to_string(),
         };
 
-        let color_accessor = GenericAccessor::new(|d: &TestData| {
-            [d.x, d.y, 0.0, 1.0]
-        });
+        let color_accessor = GenericAccessor::new(|d: &TestData| [d.x, d.y, 0.0, 1.0]);
 
         let color = color_accessor.extract(&data);
         assert_eq!(color, [0.5, 0.75, 0.0, 1.0]);

@@ -522,6 +522,7 @@ fn test_optimized_chart_render_performance() {
 ### Test Results
 
 All 72 chart builder tests pass, including:
+
 - 7 optimized accessor tests
 - 8 shader specialization tests
 - 8 pipeline cache tests
@@ -530,6 +531,7 @@ All 72 chart builder tests pass, including:
 ### Performance Characteristics
 
 The optimizations achieve:
+
 - **Zero-cost abstraction**: Generic accessors compile to direct field access
 - **Sub-millisecond caching**: Pipeline cache hits in <1μs
 - **Efficient specialization**: Shader generation completes in <1ms
@@ -538,14 +540,12 @@ The optimizations achieve:
 
 ### Technical Approach
 
-1. **Compile-time Resolution**: Replaced `Box<dyn Fn(&T) -> AccessorValue>` 
-   with `GenericAccessor<T, Output, F>` using generics instead of trait objects
-   
+1. **Compile-time Resolution**: Replaced `Box<dyn Fn(&T) -> AccessorValue>` with
+   `GenericAccessor<T, Output, F>` using generics instead of trait objects
 2. **Shader Specialization**: Generate specialized WGSL based on `DataLayout`,
    `AccessorType`, and `MarkType` to eliminate redundant operations
-   
-3. **Pipeline Caching**: Map specialization configurations to compiled 
-   pipelines using hash-based cache keys with LRU eviction
+3. **Pipeline Caching**: Map specialization configurations to compiled pipelines
+   using hash-based cache keys with LRU eviction
 
 ### Backward Compatibility
 
@@ -560,30 +560,46 @@ path for performance-critical code while maintaining API compatibility.
 ### Key Technical Learnings
 
 #### Generic Types for Zero-Cost Abstractions
-- **Challenge**: Original `AccessorFunction` used `Box<dyn Fn(&T) -> AccessorValue>` causing dynamic dispatch overhead
-- **Solution**: Created `GenericAccessor<T, Output, F>` where `F` is the concrete closure type
-- **Pattern**: Preserve type information through generics, allowing compiler to inline and optimize completely
-- **Impact**: Eliminates vtable lookups and enables direct field access optimization
+
+- **Challenge**: Original `AccessorFunction` used
+  `Box<dyn Fn(&T) -> AccessorValue>` causing dynamic dispatch overhead
+- **Solution**: Created `GenericAccessor<T, Output, F>` where `F` is the
+  concrete closure type
+- **Pattern**: Preserve type information through generics, allowing compiler to
+  inline and optimize completely
+- **Impact**: Eliminates vtable lookups and enables direct field access
+  optimization
 
 #### Compile-Time Macro Design
-- **Challenge**: Need convenient syntax for field access without runtime overhead
-- **Solution**: `field_accessor!(Type, field)` macro generates zero-cost closures
+
+- **Challenge**: Need convenient syntax for field access without runtime
+  overhead
+- **Solution**: `field_accessor!(Type, field)` macro generates zero-cost
+  closures
 - **Pattern**: Macros generate code at compile time, preserving type information
-- **Learning**: Simple macros can provide ergonomic APIs while maintaining performance
+- **Learning**: Simple macros can provide ergonomic APIs while maintaining
+  performance
 
 #### Hash-Based Pipeline Caching
+
 - **Challenge**: Identical chart configurations recompile shaders unnecessarily
 - **Solution**: Use `DefaultHasher` on configuration tuple for cache keys
-- **Pattern**: Hash all configuration parameters (DataLayout, AccessorType, MarkType)
-- **Critical**: Derive Hash for all configuration enums to enable cache key generation
+- **Pattern**: Hash all configuration parameters (DataLayout, AccessorType,
+  MarkType)
+- **Critical**: Derive Hash for all configuration enums to enable cache key
+  generation
 
 #### Shader Specialization Strategy
-- **Challenge**: Generic shaders include redundant operations for simple data layouts
-- **Solution**: Generate specialized WGSL based on actual data layout and accessor types
+
+- **Challenge**: Generic shaders include redundant operations for simple data
+  layouts
+- **Solution**: Generate specialized WGSL based on actual data layout and
+  accessor types
 - **Pattern**: Match on configuration enums to emit minimal required WGSL
 - **Trade-off**: More shader variants vs better GPU performance per variant
 
 #### LRU-Style Cache Eviction
+
 - **Challenge**: Unbounded pipeline cache could exhaust GPU memory
 - **Solution**: Track hit counts and prune least-used pipelines when at capacity
 - **Pattern**: Store usage statistics alongside cached items
@@ -592,24 +608,32 @@ path for performance-critical code while maintaining API compatibility.
 ### Architectural Decisions
 
 #### Parallel Type Systems (Original + Optimized)
+
 - **Decision**: Keep existing accessor system alongside new optimized version
-- **Reasoning**: Maintains backward compatibility while enabling gradual migration
+- **Reasoning**: Maintains backward compatibility while enabling gradual
+  migration
 - **Trade-off**: Code duplication vs migration risk
 - **Future**: Can deprecate original system once migration is complete
 
 #### Generic Types Over Macros for Core Abstractions
+
 - **Decision**: Use `GenericAccessor<T, Output, F>` instead of only macros
 - **Reasoning**: Generics provide better error messages and IDE support
 - **Pattern**: Macros for convenience, generics for flexibility
 - **Benefit**: Users can choose macro convenience or generic flexibility
 
 #### Hash-Based Rather Than Type-Based Cache Keys
+
 - **Decision**: Use `DefaultHasher` on configuration rather than type IDs
-- **Reasoning**: Need runtime cache keys since configurations determined dynamically
-- **Alternative Considered**: Const generics - too restrictive for dynamic configs
-- **Implementation**: Hash entire configuration tuple for collision-resistant keys
+- **Reasoning**: Need runtime cache keys since configurations determined
+  dynamically
+- **Alternative Considered**: Const generics - too restrictive for dynamic
+  configs
+- **Implementation**: Hash entire configuration tuple for collision-resistant
+  keys
 
 #### Statistics Tracking in Cache
+
 - **Decision**: Build `PipelineCacheStats` into cache from the start
 - **Reasoning**: Essential for validating >95% hit rate performance goal
 - **Pattern**: Always include observability in performance-critical systems
@@ -618,66 +642,79 @@ path for performance-critical code while maintaining API compatibility.
 ### Development Workflow Insights
 
 #### Incremental Implementation with Tests
+
 - **Approach**: Implement accessor → shader → cache in sequence
 - **Each Module**: Write implementation, write tests, verify, commit
 - **Benefit**: Clear progress markers, easy rollback points
 - **Learning**: Small commits with passing tests enable confident progress
 
 #### Benchmark-Driven Development
+
 - **Strategy**: Created comprehensive benchmarks early
 - **Validation**: Benchmarks demonstrate <5% overhead goal achievement
 - **Pattern**: Benchmark multiple scenarios (simple, complex, realistic)
 - **Critical**: Benchmarks provide objective validation of "zero-cost" claims
 
 #### Generic Type Complexity
+
 - **Challenge**: Generic accessor types have complex signatures
 - **Approach**: Start with simple examples, gradually add type parameters
 - **Learning**: Compiler error messages for generic mismatches can be cryptic
 - **Mitigation**: Clear documentation and examples for common patterns
 
 #### Test Suite Design
+
 - **Pattern**: Unit tests for correctness, benchmarks for performance
-- **Coverage**: 23 unit tests validate behavior, 6 benchmark groups measure overhead
-- **Learning**: Both test types essential - unit tests catch bugs, benchmarks validate goals
-- **Efficiency**: GPU tests require `--test-threads=1` but all accessor tests are CPU-only
+- **Coverage**: 23 unit tests validate behavior, 6 benchmark groups measure
+  overhead
+- **Learning**: Both test types essential - unit tests catch bugs, benchmarks
+  validate goals
+- **Efficiency**: GPU tests require `--test-threads=1` but all accessor tests
+  are CPU-only
 
 ### Follow-up Stories
 
 Based on learnings during implementation, future enhancements could include:
 
-1. **GUP-087A: Accessor Type Inference** - Automatically detect field types 
-   to generate optimal specialized shaders without manual configuration
-   
-2. **GUP-087B: Shader Compilation Caching** - Persist compiled pipelines 
-   to disk for instant startup performance on repeated runs
-   
-3. **GUP-087C: Adaptive Cache Size** - Dynamically adjust cache size based 
-   on available GPU memory and usage patterns
-   
-4. **GUP-087D: Migration Guide** - Document patterns for migrating from 
+1. **GUP-087A: Accessor Type Inference** - Automatically detect field types to
+   generate optimal specialized shaders without manual configuration
+2. **GUP-087B: Shader Compilation Caching** - Persist compiled pipelines to disk
+   for instant startup performance on repeated runs
+3. **GUP-087C: Adaptive Cache Size** - Dynamically adjust cache size based on
+   available GPU memory and usage patterns
+4. **GUP-087D: Migration Guide** - Document patterns for migrating from
    Box<dyn Fn> accessors to generic accessors in existing code
 
 ### Integration Notes
 
-The optimized accessor system integrates seamlessly with existing chart builders:
+The optimized accessor system integrates seamlessly with existing chart
+builders:
+
 - Existing `ScatterPlotBuilder`, `LineChartBuilder`, etc. continue working
 - New builders can use `GenericAccessor` for maximum performance
-- Mixed usage supported - can optimize hot paths while keeping simple cases simple
+- Mixed usage supported - can optimize hot paths while keeping simple cases
+  simple
 - No breaking changes to public API
 
 ### Performance Validation
 
-While comprehensive benchmarking requires GPU hardware, the architecture ensures:
+While comprehensive benchmarking requires GPU hardware, the architecture
+ensures:
+
 - **Zero dynamic dispatch**: Generic types compile to direct function calls
-- **Minimal cache overhead**: HashMap lookup vs shader compilation (milliseconds vs microseconds)
-- **Efficient specialization**: Generated shaders 2-5x smaller than generic versions
+- **Minimal cache overhead**: HashMap lookup vs shader compilation (milliseconds
+  vs microseconds)
+- **Efficient specialization**: Generated shaders 2-5x smaller than generic
+  versions
 - **Predictable caching**: LRU eviction prevents memory leaks
 
 ### Reflection on Story Scope
 
 Original 3-point estimate was accurate:
+
 - Accessor optimization: ~1 point (straightforward generic types)
 - Shader specialization: ~1 point (enum matching for WGSL generation)
 - Pipeline caching: ~1 point (HashMap with eviction logic)
 
-No significant scope creep - story delivered exactly what was specified in acceptance criteria.
+No significant scope creep - story delivered exactly what was specified in
+acceptance criteria.

@@ -146,7 +146,7 @@ impl ShaderSpecialization {
 
         // Add vertex input structure
         shader.push_str(&self.data_layout.generate_vertex_input());
-        shader.push_str("\n");
+        shader.push('\n');
 
         // Add vertex output structure
         shader.push_str("struct VertexOutput {\n");
@@ -156,11 +156,11 @@ impl ShaderSpecialization {
 
         // Add optimized accessor functions based on types
         shader.push_str(&self.generate_accessor_functions());
-        shader.push_str("\n");
+        shader.push('\n');
 
         // Add specialized vertex shader
         shader.push_str(&self.generate_vertex_shader());
-        shader.push_str("\n");
+        shader.push('\n');
 
         // Add specialized fragment shader
         shader.push_str(&self.mark_type.generate_fragment_shader());
@@ -176,10 +176,7 @@ impl ShaderSpecialization {
             match accessor_type {
                 AccessorType::DirectField => {
                     // Direct field access can be inlined in vertex shader
-                    functions.push_str(&format!(
-                        "// Accessor {} - direct field (inlined)\n",
-                        i
-                    ));
+                    functions.push_str(&format!("// Accessor {} - direct field (inlined)\n", i));
                 }
                 AccessorType::Computed => {
                     functions.push_str(&format!(
@@ -200,26 +197,24 @@ impl ShaderSpecialization {
     /// Generate specialized vertex shader.
     fn generate_vertex_shader(&self) -> String {
         match self.data_layout {
-            DataLayout::SimpleFloat2 => {
-                r#"@vertex
+            DataLayout::SimpleFloat2 => r#"@vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.position = vec4<f32>(input.position, 0.0, 1.0);
     output.color = vec4<f32>(0.5, 0.5, 0.5, 1.0); // Default color
     return output;
 }
-"#.to_string()
-            }
-            DataLayout::Float2WithColor => {
-                r#"@vertex
+"#
+            .to_string(),
+            DataLayout::Float2WithColor => r#"@vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.position = vec4<f32>(input.position, 0.0, 1.0);
     output.color = input.color;
     return output;
 }
-"#.to_string()
-            }
+"#
+            .to_string(),
             _ => {
                 // Generic version for other layouts
                 r#"@vertex
@@ -229,7 +224,8 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     output.color = vec4<f32>(0.7, 0.7, 0.7, 1.0); // Default gray
     return output;
 }
-"#.to_string()
+"#
+                .to_string()
             }
         }
     }
@@ -360,19 +356,13 @@ mod tests {
 
     #[test]
     fn test_specialized_vertex_shaders() {
-        let spec_simple = ShaderSpecialization::new(
-            DataLayout::SimpleFloat2,
-            vec![],
-            MarkType::Circle,
-        );
+        let spec_simple =
+            ShaderSpecialization::new(DataLayout::SimpleFloat2, vec![], MarkType::Circle);
         let shader_simple = spec_simple.generate_specialized_shader();
         assert!(shader_simple.contains("Default color"));
 
-        let spec_color = ShaderSpecialization::new(
-            DataLayout::Float2WithColor,
-            vec![],
-            MarkType::Circle,
-        );
+        let spec_color =
+            ShaderSpecialization::new(DataLayout::Float2WithColor, vec![], MarkType::Circle);
         let shader_color = spec_color.generate_specialized_shader();
         assert!(shader_color.contains("input.color"));
     }

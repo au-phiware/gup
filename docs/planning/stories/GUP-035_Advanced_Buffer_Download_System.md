@@ -1,5 +1,8 @@
 # GUP-035: Advanced Buffer Download System
 
+**Status**: 🚧 In Progress  
+**Started**: 2025-01-23
+
 ## Story Overview
 
 **Title**: Implement Advanced Buffer Download System **Epic**: Phase 1

@@ -133,7 +133,8 @@ impl PipelineCache {
     pub fn prune_cold_entries(&mut self, min_hits: usize) {
         let initial_count = self.pipelines.len();
 
-        self.pipelines.retain(|_, entry| entry.hit_count >= min_hits);
+        self.pipelines
+            .retain(|_, entry| entry.hit_count >= min_hits);
 
         let pruned = initial_count - self.pipelines.len();
         self.stats.pruned_count += pruned;
