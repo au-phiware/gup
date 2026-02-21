@@ -30,6 +30,7 @@ pub mod high_contrast;
 pub mod keyboard;
 pub mod platform;
 pub mod sonification;
+pub mod web_overlay;
 
 use std::collections::HashMap;
 
@@ -38,6 +39,7 @@ pub use focus::*;
 pub use high_contrast::*;
 pub use platform::*;
 pub use sonification::*;
+pub use web_overlay::*;
 
 /// Central accessibility system coordinating all accessibility features.
 pub struct AccessibilitySystem {

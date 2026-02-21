@@ -412,6 +412,7 @@ impl PlatformAccessibility for LinuxAccessibility {
 pub struct WebAccessibility {
     initialized: bool,
     aria_tree: Option<AriaTree>,
+    dom_overlay: Option<crate::accessibility::web_overlay::WebDomOverlay>,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -420,6 +421,7 @@ impl WebAccessibility {
         Self {
             initialized: false,
             aria_tree: None,
+            dom_overlay: None,
         }
     }
 
@@ -445,6 +447,12 @@ impl PlatformAccessibility for WebAccessibility {
     fn initialize(&mut self) -> Result<(), AccessibilityError> {
         // Web accessibility is always available
         self.initialized = true;
+
+        // Initialize DOM overlay
+        let mut overlay = crate::accessibility::web_overlay::WebDomOverlay::new()?;
+        overlay.initialize()?;
+        self.dom_overlay = Some(overlay);
+
         Ok(())
     }
 
@@ -460,6 +468,13 @@ impl PlatformAccessibility for WebAccessibility {
             ));
         }
 
+        // Update DOM overlay if available
+        if let Some(overlay) = &mut self.dom_overlay {
+            if let Some(aria_tree) = &self.aria_tree {
+                overlay.update_from_aria_tree(updates, aria_tree)?;
+            }
+        }
+
         let window = web_sys::window().ok_or_else(|| {
             AccessibilityError::PlatformUnavailable("No window object".to_string())
         })?;
@@ -468,7 +483,7 @@ impl PlatformAccessibility for WebAccessibility {
             AccessibilityError::PlatformUnavailable("No document object".to_string())
         })?;
 
-        // Process ARIA updates
+        // Process ARIA updates for hidden accessibility layer
         for update in updates {
             match update {
                 AriaUpdate::NodeCreated { node_id } | AriaUpdate::NodeUpdated { node_id } => {

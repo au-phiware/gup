@@ -15,9 +15,9 @@ with a stub implementation for macOS NSAccessibility. This story completes the
 macOS implementation by integrating Objective-C bindings and implementing the
 full NSAccessibility protocol.
 
-macOS provides the NSAccessibility protocol for assistive technologies. VoiceOver,
-macOS's built-in screen reader, relies on NSAccessibility to understand and
-interact with applications.
+macOS provides the NSAccessibility protocol for assistive technologies.
+VoiceOver, macOS's built-in screen reader, relies on NSAccessibility to
+understand and interact with applications.
 
 ## User Story
 
@@ -28,18 +28,21 @@ interact with applications.
 ## Acceptance Criteria
 
 ### AC1: NSAccessibility Protocol Implementation
+
 - [ ] Integrate objc2 crate for Objective-C bindings
 - [ ] Implement NSAccessibility element hierarchy
 - [ ] Support all required NSAccessibility attributes
 - [ ] Handle NSAccessibility actions
 
 ### AC2: VoiceOver Integration
+
 - [ ] Announcements via NSAccessibilityPostNotification
 - [ ] Focus management with NSAccessibilityFocusedUIElement
 - [ ] Semantic role mapping to NSAccessibility roles
 - [ ] Support for rotor navigation
 
 ### AC3: Native Cocoa Integration
+
 - [ ] Integrate with winit/raw-window-handle for NSWindow
 - [ ] Create NSAccessibility element tree for visualization
 - [ ] Update accessibility tree on data changes
@@ -48,10 +51,12 @@ interact with applications.
 ## Dependencies
 
 ### Prerequisite Stories
+
 - GUP-016: Core Accessibility System ✅
 - GUP-112: Platform-Specific Accessibility Integration ✅
 
 ### Enables Stories
+
 - Production-ready macOS accessibility
 - VoiceOver compatibility
 - macOS app store compliance

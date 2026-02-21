@@ -15,9 +15,9 @@ with a stub implementation for Windows UI Automation. This story completes the
 Windows implementation by integrating Windows API bindings and implementing the
 full UI Automation provider pattern.
 
-Windows provides the UI Automation API for assistive technologies. NVDA and JAWS,
-the most popular screen readers on Windows, rely on UI Automation for modern
-accessibility support.
+Windows provides the UI Automation API for assistive technologies. NVDA and
+JAWS, the most popular screen readers on Windows, rely on UI Automation for
+modern accessibility support.
 
 ## User Story
 
@@ -28,18 +28,21 @@ accessibility support.
 ## Acceptance Criteria
 
 ### AC1: UI Automation Provider Implementation
+
 - [ ] Integrate windows-rs crate for Windows API bindings
 - [ ] Implement IRawElementProviderSimple interface
 - [ ] Implement ITextProvider for text elements
 - [ ] Support custom control patterns for charts
 
 ### AC2: Screen Reader Support
+
 - [ ] NVDA compatibility verified
 - [ ] JAWS compatibility verified
 - [ ] Notification events for announcements
 - [ ] Focus events for navigation
 
 ### AC3: Native Windows Integration
+
 - [ ] Integrate with winit for HWND access
 - [ ] Create UIA element tree for visualization
 - [ ] Update automation tree on data changes
@@ -48,10 +51,12 @@ accessibility support.
 ## Dependencies
 
 ### Prerequisite Stories
+
 - GUP-016: Core Accessibility System ✅
 - GUP-112: Platform-Specific Accessibility Integration ✅
 
 ### Enables Stories
+
 - Production-ready Windows accessibility
 - NVDA/JAWS compatibility
 - Windows app certification compliance

@@ -197,40 +197,61 @@ priority.
 ### Key Technical Learnings
 
 #### Platform Abstraction via Traits
-- **Challenge**: Need to support 4 different platform accessibility APIs with completely different architectures
-- **Solution**: Created `PlatformAccessibility` trait with unified interface covering common operations (announce, set_focus, update_tree)
-- **Pattern**: Use trait objects with conditional compilation to select implementation at compile time
-- **Trade-off**: Trait methods must be simple enough to map to all platforms, limiting platform-specific features
+
+- **Challenge**: Need to support 4 different platform accessibility APIs with
+  completely different architectures
+- **Solution**: Created `PlatformAccessibility` trait with unified interface
+  covering common operations (announce, set_focus, update_tree)
+- **Pattern**: Use trait objects with conditional compilation to select
+  implementation at compile time
+- **Trade-off**: Trait methods must be simple enough to map to all platforms,
+  limiting platform-specific features
 
 #### Conditional Compilation Strategy
+
 - **Challenge**: Each platform needs different dependencies and implementations
-- **Solution**: Use `#[cfg(target_os)]` and `#[cfg(target_arch)]` to compile only relevant code
-- **Pattern**: Import platform-specific types only within platform-specific sections
-- **Learning**: AriaTree and NodeId only needed for Web platform - use conditional imports to avoid warnings
+- **Solution**: Use `#[cfg(target_os)]` and `#[cfg(target_arch)]` to compile
+  only relevant code
+- **Pattern**: Import platform-specific types only within platform-specific
+  sections
+- **Learning**: AriaTree and NodeId only needed for Web platform - use
+  conditional imports to avoid warnings
 
 #### Web Platform Implementation Priority
-- **Challenge**: Native platforms require external crates (objc2, windows-rs, D-Bus) that add complexity
-- **Solution**: Fully implement Web platform first using existing web-sys dependency
-- **Pattern**: Start with platforms that have minimal dependencies, add stubs for others
-- **Benefits**: Proves architecture works without blocking on external dependencies
+
+- **Challenge**: Native platforms require external crates (objc2, windows-rs,
+  D-Bus) that add complexity
+- **Solution**: Fully implement Web platform first using existing web-sys
+  dependency
+- **Pattern**: Start with platforms that have minimal dependencies, add stubs
+  for others
+- **Benefits**: Proves architecture works without blocking on external
+  dependencies
 
 ### Architectural Decisions
 
 #### Factory Function Over Trait Default
-- **Decision**: Use `create_platform_accessibility()` factory function instead of trait default implementation
+
+- **Decision**: Use `create_platform_accessibility()` factory function instead
+  of trait default implementation
 - **Reasoning**: Allows compile-time platform selection without runtime overhead
 - **Trade-off**: Cannot swap platforms at runtime, but this is never needed
 - **Future**: Factory approach makes it easy to add new platforms
 
 #### Graceful Degradation with Null Implementation
+
 - **Decision**: Provide `NullAccessibility` for unsupported platforms
-- **Reasoning**: Code compiles and runs everywhere, even without accessibility support
+- **Reasoning**: Code compiles and runs everywhere, even without accessibility
+  support
 - **Trade-off**: Silent degradation vs explicit failure
-- **Future**: Allows targeting new platforms before accessibility support is implemented
+- **Future**: Allows targeting new platforms before accessibility support is
+  implemented
 
 #### Stub vs Full Implementation
-- **Decision**: Implement architecture and stubs for macOS/Windows/Linux, full implementation for Web
-- **Reasoning**: 
+
+- **Decision**: Implement architecture and stubs for macOS/Windows/Linux, full
+  implementation for Web
+- **Reasoning**:
   - Web works immediately with existing dependencies
   - Native platforms can be completed incrementally
   - Architecture proves the abstraction works
@@ -238,17 +259,23 @@ priority.
 - **Future**: Clear path forward for completing native implementations
 
 #### Integration into AccessibilitySystem
-- **Decision**: Automatically create and initialize platform bridge in AccessibilitySystem
+
+- **Decision**: Automatically create and initialize platform bridge in
+  AccessibilitySystem
 - **Reasoning**: Zero-cost abstraction - users don't think about platforms
 - **Trade-off**: No way to customize platform bridge per instance
 - **Future**: Could add builder pattern if customization becomes necessary
 
 ### Development Workflow Insights
 
-- **Iterative development**: Built one platform at a time, starting with simplest (Null), then most complete (Web)
-- **Type system guidance**: Compiler errors when AriaUpdate variants changed helped find all usage sites
-- **Test-driven validation**: Integration tests caught platform API availability issues early
-- **Documentation as design**: Writing platform differences in story helped clarify abstraction needs
+- **Iterative development**: Built one platform at a time, starting with
+  simplest (Null), then most complete (Web)
+- **Type system guidance**: Compiler errors when AriaUpdate variants changed
+  helped find all usage sites
+- **Test-driven validation**: Integration tests caught platform API availability
+  issues early
+- **Documentation as design**: Writing platform differences in story helped
+  clarify abstraction needs
 
 ### Follow-up Stories
 
@@ -280,8 +307,13 @@ During implementation, identified areas needing dedicated follow-up:
 
 ### Lessons Learned
 
-1. **Start simple**: Null implementation proved the concept, Web implementation proved the API
-2. **Conditional compilation is powerful**: Allows supporting many platforms without code bloat
-3. **Architecture before implementation**: Stubs with clear TODOs better than no code
-4. **Web-sys is comprehensive**: ARIA support in web-sys made Web platform straightforward
-5. **Platform differences are real**: Cannot abstract away all differences - document them clearly
+1. **Start simple**: Null implementation proved the concept, Web implementation
+   proved the API
+2. **Conditional compilation is powerful**: Allows supporting many platforms
+   without code bloat
+3. **Architecture before implementation**: Stubs with clear TODOs better than no
+   code
+4. **Web-sys is comprehensive**: ARIA support in web-sys made Web platform
+   straightforward
+5. **Platform differences are real**: Cannot abstract away all differences -
+   document them clearly

@@ -15,9 +15,9 @@ with a stub implementation for Linux AT-SPI2. This story completes the Linux
 implementation by integrating D-Bus bindings and implementing the full AT-SPI2
 protocol for ATK objects.
 
-Linux desktop environments provide AT-SPI2 (Assistive Technology Service Provider
-Interface) over D-Bus for accessibility. Orca, GNOME's screen reader, uses AT-SPI2
-to access application content.
+Linux desktop environments provide AT-SPI2 (Assistive Technology Service
+Provider Interface) over D-Bus for accessibility. Orca, GNOME's screen reader,
+uses AT-SPI2 to access application content.
 
 ## User Story
 
@@ -28,18 +28,21 @@ to access application content.
 ## Acceptance Criteria
 
 ### AC1: AT-SPI2 Protocol Implementation
+
 - [ ] Integrate zbus crate for D-Bus communication
 - [ ] Implement AT-SPI2 interfaces (Accessible, Component, Text)
 - [ ] Support ATK object hierarchy
 - [ ] Handle AT-SPI2 events and signals
 
 ### AC2: Orca Screen Reader Support
+
 - [ ] Announcements via AT-SPI2 object:text-changed signal
 - [ ] Focus management via focus events
 - [ ] Semantic role mapping to ATK roles
 - [ ] Support for navigation patterns
 
 ### AC3: D-Bus Integration
+
 - [ ] Connect to AT-SPI2 accessibility bus
 - [ ] Register application with AT-SPI2 registry
 - [ ] Create D-Bus object paths for visualization elements
@@ -48,10 +51,12 @@ to access application content.
 ## Dependencies
 
 ### Prerequisite Stories
+
 - GUP-016: Core Accessibility System ✅
 - GUP-112: Platform-Specific Accessibility Integration ✅
 
 ### Enables Stories
+
 - Production-ready Linux accessibility
 - Orca compatibility
 - GNOME/KDE desktop integration
