@@ -252,41 +252,47 @@ async fn test_wgsl_compilation_validation() -> GupResult<()> {
 async fn test_shader_uniform_backward_compatibility() -> GupResult<()> {
     // Test that existing shader function APIs continue to work with ShaderUniform trait
     use gup::shader_function::ShaderUniform;
-    
+
     // Test existing functions still work
     let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
     let color_map = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 1.0, 1.0]);
-    let position = PositionTransform::new(vec2![1.0, 1.0], vec2![0.0, 0.0]);
-    
+    let _position = PositionTransform::new(vec2![1.0, 1.0], vec2![0.0, 0.0]);
+
     // Test composition still works
     let composed = scale.compose(color_map);
     let _uniforms = composed.create_uniforms();
-    
+
     // Test ShaderUniform implementations exist and work
     assert!(!LinearScaleUniforms::wgsl_struct_definition().is_empty());
     assert_eq!(LinearScaleUniforms::wgsl_type_name(), "LinearScaleUniforms");
-    
+
     assert!(!ColorMapUniforms::wgsl_struct_definition().is_empty());
     assert_eq!(ColorMapUniforms::wgsl_type_name(), "ColorMapUniforms");
-    
+
     assert!(!PositionTransformUniforms::wgsl_struct_definition().is_empty());
-    assert_eq!(PositionTransformUniforms::wgsl_type_name(), "PositionTransformUniforms");
-    
+    assert_eq!(
+        PositionTransformUniforms::wgsl_type_name(),
+        "PositionTransformUniforms"
+    );
+
     // Test that template macro also generates ShaderUniform implementations
     assert!(!LinearScaleTemplateUniforms::wgsl_struct_definition().is_empty());
-    assert_eq!(LinearScaleTemplateUniforms::wgsl_type_name(), "LinearScaleTemplateUniforms");
-    
+    assert_eq!(
+        LinearScaleTemplateUniforms::wgsl_type_name(),
+        "LinearScaleTemplateUniforms"
+    );
+
     Ok(())
 }
 
 #[tokio::test]
 async fn test_shader_uniform_generation_performance() -> GupResult<()> {
-    use std::time::Instant;
     use gup::shader_function::ShaderUniform;
-    
+    use std::time::Instant;
+
     // Benchmark uniform struct generation
     let start = Instant::now();
-    
+
     for _ in 0..10000 {
         let _def1 = LinearScaleUniforms::wgsl_struct_definition();
         let _def2 = ColorMapUniforms::wgsl_struct_definition();
@@ -295,31 +301,34 @@ async fn test_shader_uniform_generation_performance() -> GupResult<()> {
         let _name2 = ColorMapUniforms::wgsl_type_name();
         let _name3 = PositionTransformUniforms::wgsl_type_name();
     }
-    
+
     let duration = start.elapsed();
-    
+
     // Should be <5% overhead vs original - with 10k iterations this should be well under 50ms
-    assert!(duration.as_millis() < 50, 
-        "ShaderUniform generation took {}ms, expected <50ms", duration.as_millis());
-    
+    assert!(
+        duration.as_millis() < 50,
+        "ShaderUniform generation took {}ms, expected <50ms",
+        duration.as_millis()
+    );
+
     Ok(())
 }
 
 #[tokio::test]
 async fn test_type_safe_composition() -> GupResult<()> {
     // Test that type-safe composition prevents invalid combinations at compile time
-    
+
     // Valid compositions (these should compile)
     let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0); // f32 -> f32
     let color_map = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 1.0, 1.0]); // f32 -> Vec4
     let _composed = scale.compose(color_map); // f32 -> f32 -> Vec4 ✓
-    
+
     let position = PositionTransform::new(vec2![1.0, 1.0], vec2![0.0, 0.0]); // Vec2 -> Vec2
-    let _position_chain = position.compose(position.clone()); // Vec2 -> Vec2 -> Vec2 ✓
-    
+    let _position_chain = position.clone().compose(position.clone()); // Vec2 -> Vec2 -> Vec2 ✓
+
     // The following would fail to compile (uncomment to test):
     // let bad_compose = color_map.compose(position); // Vec4 -> Vec2 ✗ (not compatible)
     // let bad_compose2 = position.compose(scale); // Vec2 -> f32 ✗ (not compatible)
-    
+
     Ok(())
 }

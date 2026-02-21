@@ -495,7 +495,7 @@ impl ShaderType for Mat4 {
 ///     scale: f32,
 ///     offset: f32,
 /// }
-/// 
+///
 /// // Generates WGSL:
 /// // struct MyUniforms {
 /// //     scale: f32,
@@ -740,7 +740,7 @@ where
         let mut def = String::from("struct ChainUniforms {\n");
         def.push_str(&format!("    first: {},\n", A::wgsl_type_name()));
         def.push_str(&format!("    second: {},\n", B::wgsl_type_name()));
-        def.push_str("}");
+        def.push('}');
         def
     }
 
@@ -959,7 +959,8 @@ pub struct ColorMapUniforms {
 
 impl ShaderUniform for ColorMapUniforms {
     fn wgsl_struct_definition() -> String {
-        "struct ColorMapUniforms {\n    min_color: vec4<f32>,\n    max_color: vec4<f32>,\n}".to_string()
+        "struct ColorMapUniforms {\n    min_color: vec4<f32>,\n    max_color: vec4<f32>,\n}"
+            .to_string()
     }
 
     fn wgsl_type_name() -> &'static str {
@@ -1025,6 +1026,7 @@ impl ComposableShaderFunction for ColorMap {
 ///
 /// This is a basic example shader function. Advanced geometric transformations
 /// (polar coordinates, matrix transforms, projections) will be added in future updates.
+#[derive(Clone, Debug)]
 pub struct PositionTransform {
     pub scale: Vec2,
     pub offset: Vec2,
@@ -1045,7 +1047,8 @@ pub struct PositionTransformUniforms {
 
 impl ShaderUniform for PositionTransformUniforms {
     fn wgsl_struct_definition() -> String {
-        "struct PositionTransformUniforms {\n    scale: vec2<f32>,\n    offset: vec2<f32>,\n}".to_string()
+        "struct PositionTransformUniforms {\n    scale: vec2<f32>,\n    offset: vec2<f32>,\n}"
+            .to_string()
     }
 
     fn wgsl_type_name() -> &'static str {
@@ -1084,15 +1087,15 @@ mod tests {
 
     #[test]
     fn test_primitive_shader_types() {
-        assert_eq!(f32::wgsl_type_name(), "f32");
+        assert_eq!(<f32 as ShaderType>::wgsl_type_name(), "f32");
         assert_eq!(f32::size_bytes(), 4);
         assert_eq!(f32::alignment(), 4);
 
-        assert_eq!(i32::wgsl_type_name(), "i32");
+        assert_eq!(<i32 as ShaderType>::wgsl_type_name(), "i32");
         assert_eq!(i32::size_bytes(), 4);
         assert_eq!(i32::alignment(), 4);
 
-        assert_eq!(u32::wgsl_type_name(), "u32");
+        assert_eq!(<u32 as ShaderType>::wgsl_type_name(), "u32");
         assert_eq!(u32::size_bytes(), 4);
         assert_eq!(u32::alignment(), 4);
 
@@ -1419,7 +1422,10 @@ mod tests {
         assert!(pos_def.contains("struct PositionTransformUniforms"));
         assert!(pos_def.contains("scale: vec2<f32>"));
         assert!(pos_def.contains("offset: vec2<f32>"));
-        assert_eq!(PositionTransformUniforms::wgsl_type_name(), "PositionTransformUniforms");
+        assert_eq!(
+            PositionTransformUniforms::wgsl_type_name(),
+            "PositionTransformUniforms"
+        );
 
         // Test ChainUniforms
         type TestChain = ChainUniforms<LinearScaleUniforms, ColorMapUniforms>;

@@ -67,12 +67,12 @@ epic and status.
 
 ### Post GUP-005 Stories - Shader Function System Enhancement (Stories 51+)
 
-| Story                                                          | Title                                    | Status      | Priority | Points |
-| -------------------------------------------------------------- | ---------------------------------------- | ----------- | -------- | ------ |
-| [GUP-051](GUP-051_WGSL_Code_Generation_Templates.md)           | WGSL Code Generation Templates           | ✅ Complete | High     | 8      |
-| [GUP-052](GUP-052_Shader_Pipeline_Builder.md)                  | Shader Pipeline Builder                  | ✅ Complete | High     | 13     |
-| [GUP-053](GUP-053_Shader_Pipeline_Performance_Optimization.md) | Shader Pipeline Performance Optimization | 💡 New      | Medium   | 8      |
-| [GUP-054](GUP-054_Shader_Function_Type_Safety_Enhancement.md)  | Shader Function Type Safety Enhancement  | ✅ Complete | High     | 8      |
+| Story                                                          | Title                                    | Status         | Priority | Points |
+| -------------------------------------------------------------- | ---------------------------------------- | -------------- | -------- | ------ |
+| [GUP-051](GUP-051_WGSL_Code_Generation_Templates.md)           | WGSL Code Generation Templates           | ✅ Complete    | High     | 8      |
+| [GUP-052](GUP-052_Shader_Pipeline_Builder.md)                  | Shader Pipeline Builder                  | ✅ Complete    | High     | 13     |
+| [GUP-053](GUP-053_Shader_Pipeline_Performance_Optimization.md) | Shader Pipeline Performance Optimization | 🚧 In Progress | Medium   | 8      |
+| [GUP-054](GUP-054_Shader_Function_Type_Safety_Enhancement.md)  | Shader Function Type Safety Enhancement  | ✅ Complete    | High     | 8      |
 
 ### Post GUP-006 Stories - WGSL Procedural Macro Enhancement (Stories 63+)
 
@@ -897,10 +897,13 @@ screen reader access
 **Status**: ⚠️ Partially Complete - Blocked  
 **Priority**: High  
 **Story Points**: 5  
-**Key Need**: Enable keyboard navigation of individual data points by creating focusable elements for marks  
+**Key Need**: Enable keyboard navigation of individual data points by creating
+focusable elements for marks  
 **Dependencies**: GUP-016 ✅, GUP-111 ✅, **GUP-002 ❌ (Missing)**  
-**Impact**: Complete keyboard accessibility, WCAG 2.1 AA compliance (SC 2.1.1: Keyboard)  
-**Blocker**: Selection type from GUP-002 never implemented, preventing integration tests and examples
+**Impact**: Complete keyboard accessibility, WCAG 2.1 AA compliance (SC 2.1.1:
+Keyboard)  
+**Blocker**: Selection type from GUP-002 never implemented, preventing
+integration tests and examples
 
 ---
 

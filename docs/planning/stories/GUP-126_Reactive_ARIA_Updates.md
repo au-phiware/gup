@@ -16,8 +16,8 @@ screen readers see outdated information. This breaks accessibility for dynamic
 visualizations with live data updates.
 
 A reactive system is needed to automatically regenerate and update ARIA trees
-when selection data or attributes change, keeping screen reader state synchronized
-with the visual representation.
+when selection data or attributes change, keeping screen reader state
+synchronized with the visual representation.
 
 ## User Story
 

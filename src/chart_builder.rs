@@ -59,8 +59,7 @@ use crate::error::{GupError, GupResult};
 use crate::grid::GridConfiguration;
 use crate::label::{AxisInfo, LabelConstraints, LabelLayout, LabelPosition, LabelPositioner};
 use crate::render::Vertex;
-// TODO: Implement Selection type
-// use crate::selection::{LineAttributes, Selection};
+use crate::selection::Selection;
 use crate::shader_function::Vec2;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -142,12 +141,12 @@ where
         self.builder.render_with_data(self.data, self.context)
     }
 
-    /// Convert this builder to a low-level Selection for advanced customization.
-    ///
-    /// This enables seamless transition from high-level builder APIs to
-    /// low-level Selection operations when needed.
-    ///
-    /// TODO: Disabled until Selection type is implemented
+    // Convert this builder to a low-level Selection for advanced customization.
+    //
+    // This enables seamless transition from high-level builder APIs to
+    // low-level Selection operations when needed.
+    //
+    // TODO: Disabled until Selection type is fully implemented
     /*
     pub fn into_selection<M>(self) -> GupResult<Selection<T, M>>
     where
@@ -796,14 +795,17 @@ struct ChartArea {
     pub margins: Margins,
 }
 
-/// Render layer manager for proper z-ordering of visual elements.
-///
-/// This manager ensures that visual elements are rendered in the correct order:
-/// 1. Background layer (chart background)
-/// 2. Grid layer (grid lines behind data)
-/// 3. Data layer (main visualization data)
-/// 4. Axis layer (axes on top of data)
-/// 5. Annotation layer (labels, legends, etc.)
+// Render layer manager for proper z-ordering of visual elements.
+//
+// This manager ensures that visual elements are rendered in the correct order:
+// 1. Background layer (chart background)
+// 2. Grid layer (grid lines behind data)
+// 3. Data layer (main visualization data)
+// 4. Axis layer (axes on top of data)
+// 5. Annotation layer (labels, legends, etc.)
+//
+// TODO: This is currently a stub pending full Selection type implementation
+/*
 #[derive(Debug)]
 pub struct RenderLayerManager {
     /// Background layer elements
@@ -908,6 +910,7 @@ impl Default for RenderLayerManager {
         Self::new()
     }
 }
+*/
 
 /// Error types specific to chart building operations.
 #[derive(Debug, Clone)]

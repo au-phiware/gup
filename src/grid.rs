@@ -35,10 +35,9 @@ use crate::error::GupResult;
 use crate::render::RenderContext;
 // TODO: Implement Selection type
 // use crate::selection::LineAttributes;
-use crate::LineAttributes; // From mark::line
 use crate::shader_function::{Vec2, Vec4};
 use crate::tick_generator::Scale;
-use std::sync::Arc;
+use crate::{LineAttributes, LineStyle}; // From mark::line
 
 /// Color representation for grid styling.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -568,10 +567,16 @@ impl GridRenderer {
                 };
 
                 let line_attrs = LineAttributes {
-                    start: [bounds.left, y],
-                    end: [bounds.right, y],
-                    color: [line_color.x, line_color.y, line_color.z, line_color.w],
+                    start: Vec2 { x: bounds.left, y },
+                    end: Vec2 { x: bounds.right, y },
+                    color: Vec4 {
+                        x: line_color.x,
+                        y: line_color.y,
+                        z: line_color.z,
+                        w: line_color.w,
+                    },
                     width: config.line_width,
+                    style: LineStyle::Solid,
                 };
 
                 output_lines.push(line_attrs);
@@ -603,10 +608,19 @@ impl GridRenderer {
                 };
 
                 let line_attrs = LineAttributes {
-                    start: [x, bounds.top],
-                    end: [x, bounds.bottom],
-                    color: [line_color.x, line_color.y, line_color.z, line_color.w],
+                    start: Vec2 { x, y: bounds.top },
+                    end: Vec2 {
+                        x,
+                        y: bounds.bottom,
+                    },
+                    color: Vec4 {
+                        x: line_color.x,
+                        y: line_color.y,
+                        z: line_color.z,
+                        w: line_color.w,
+                    },
                     width: config.line_width,
+                    style: LineStyle::Solid,
                 };
 
                 output_lines.push(line_attrs);
@@ -642,12 +656,12 @@ impl GridRenderer {
         Ok(())
     }
 
-    /// Convert grid line attributes to Selection instances for rendering.
-    ///
-    /// This method creates Selection<LineAttributes, Line> instances for each
-    /// grid line type, enabling integration with the existing rendering pipeline.
-    ///
-    /// TODO: Disabled until Selection type is implemented
+    // Convert grid line attributes to Selection instances for rendering.
+    //
+    // This method creates Selection<LineAttributes, Line> instances for each
+    // grid line type, enabling integration with the existing rendering pipeline.
+    //
+    // TODO: Disabled until Selection type is fully implemented
     /*
     pub fn create_grid_selections(
         &self,
@@ -793,13 +807,13 @@ impl GridSystem {
             && (self.config.show_horizontal || self.config.show_vertical)
     }
 
+    /*
     /// Create grid line selections for visual rendering.
     ///
     /// This method creates Selection instances for all generated grid lines,
     /// enabling integration with the chart builder and rendering pipeline.
     ///
     /// TODO: Disabled until Selection type is implemented
-    /*
     pub fn create_grid_selections(
         &self,
         context: Arc<RenderContext>,
@@ -1158,10 +1172,10 @@ mod tests {
         assert_eq!(horizontal_lines.len(), 3);
 
         // Check first horizontal line
-        assert_eq!(horizontal_lines[0].start[0], bounds.left);
-        assert_eq!(horizontal_lines[0].end[0], bounds.right);
-        assert_eq!(horizontal_lines[0].start[1], 25.0);
-        assert_eq!(horizontal_lines[0].end[1], 25.0);
+        assert_eq!(horizontal_lines[0].start.x, bounds.left);
+        assert_eq!(horizontal_lines[0].end.x, bounds.right);
+        assert_eq!(horizontal_lines[0].start.y, 25.0);
+        assert_eq!(horizontal_lines[0].end.y, 25.0);
 
         // Test vertical line generation
         let x_ticks = vec![20.0, 40.0, 60.0, 80.0];
@@ -1177,10 +1191,10 @@ mod tests {
         assert_eq!(vertical_lines.len(), 4);
 
         // Check first vertical line
-        assert_eq!(vertical_lines[0].start[1], bounds.top);
-        assert_eq!(vertical_lines[0].end[1], bounds.bottom);
-        assert_eq!(vertical_lines[0].start[0], 20.0);
-        assert_eq!(vertical_lines[0].end[0], 20.0);
+        assert_eq!(vertical_lines[0].start.y, bounds.top);
+        assert_eq!(vertical_lines[0].end.y, bounds.bottom);
+        assert_eq!(vertical_lines[0].start.x, 20.0);
+        assert_eq!(vertical_lines[0].end.x, 20.0);
     }
 
     #[test]
@@ -1285,10 +1299,10 @@ mod tests {
         let line = &horizontal_lines[0];
 
         // Check that color includes opacity
-        assert_eq!(line.color[0], 1.0); // Red
-        assert_eq!(line.color[1], 0.5); // Green
-        assert_eq!(line.color[2], 0.0); // Blue
-        assert_eq!(line.color[3], 0.7); // Alpha = color alpha * config opacity
+        assert_eq!(line.color.x, 1.0); // Red
+        assert_eq!(line.color.y, 0.5); // Green
+        assert_eq!(line.color.z, 0.0); // Blue
+        assert_eq!(line.color.w, 0.7); // Alpha = color alpha * config opacity
     }
 
     // Tests for Color struct (GUP-097)

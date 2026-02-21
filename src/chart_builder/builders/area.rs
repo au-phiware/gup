@@ -7,10 +7,10 @@ use super::{
     AccessorFunction, ConfigurableBuilder, apply_accessors_to_selection,
     validate_required_accessors,
 };
+use crate::Circle; // TODO: Replace with Area mark when available
 use crate::RenderContext;
 use crate::chart_builder::{ChartBuilder, ChartBuilderError, ChartConfig};
 use crate::error::GupResult;
-use crate::selection::Circle; // TODO: Replace with Area mark when available
 use crate::selection::Selection;
 use std::marker::PhantomData;
 use std::sync::Arc;

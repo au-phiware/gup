@@ -10,14 +10,15 @@
 
 ## Context
 
-GUP-111 implemented basic color description for accessible mark descriptions using
-simple RGB threshold-based approximation (e.g., R>0.8 → "red"). While this works for
-common cases, it fails for many real-world colors like orange, brown, pink, purple,
-and subtle variations.
+GUP-111 implemented basic color description for accessible mark descriptions
+using simple RGB threshold-based approximation (e.g., R>0.8 → "red"). While this
+works for common cases, it fails for many real-world colors like orange, brown,
+pink, purple, and subtle variations.
 
 Screen reader users benefit from accurate color descriptions that match their
-intuitive understanding of colors. A more sophisticated color naming system based
-on HSL color space and perceptual color distance would provide better descriptions.
+intuitive understanding of colors. A more sophisticated color naming system
+based on HSL color space and perceptual color distance would provide better
+descriptions.
 
 ## User Story
 
@@ -32,7 +33,8 @@ on HSL color space and perceptual color distance would provide better descriptio
 - [ ] Convert RGBA to HSL color space
 - [ ] Use hue, saturation, lightness to determine base color
 - [ ] Handle edge cases (grayscale, very dark, very light)
-- [ ] Support at least 12 distinct color names (red, orange, yellow, green, cyan, blue, purple, magenta, pink, brown, white, black, gray)
+- [ ] Support at least 12 distinct color names (red, orange, yellow, green,
+      cyan, blue, purple, magenta, pink, brown, white, black, gray)
 
 ### AC2: Perceptual Accuracy
 

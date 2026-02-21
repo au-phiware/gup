@@ -10,11 +10,11 @@ use super::{
     AccessorFunction, ConfigurableBuilder, GridCapableBuilder, apply_accessors_to_selection,
     validate_required_accessors,
 };
+use crate::Circle;
 use crate::RenderContext;
 use crate::chart_builder::{ChartBuilder, ChartBuilderError, ChartConfig, ComposedChart};
 use crate::error::GupResult;
 use crate::grid::{GridConfiguration, GridLineConfig};
-use crate::selection::Circle;
 use crate::selection::Selection;
 use std::marker::PhantomData;
 use std::sync::Arc;

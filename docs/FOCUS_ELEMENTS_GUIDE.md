@@ -7,8 +7,9 @@ This document explains how to use the focus element system created for GUP-127.
 GUP-127 implements keyboard navigation for data points by providing:
 
 1. **FocusElementHelper** - Converts mark positions into focusable elements
-2. **FocusRingRenderer** - GPU-accelerated focus ring visualization  
-3. **Integration with FocusManager** - Enables keyboard navigation (Tab, Arrow keys)
+2. **FocusRingRenderer** - GPU-accelerated focus ring visualization
+3. **Integration with FocusManager** - Enables keyboard navigation (Tab, Arrow
+   keys)
 
 ## Architecture
 
@@ -66,7 +67,7 @@ println!("Registered {} focusable elements", count);
 match key_event {
     KeyEvent::Tab => {
         focus_manager.handle_key_input(KeyEvent::Tab);
-        
+
         // Get description of focused element for screen readers
         if let Some(desc) = focus_manager.describe_current_focus() {
             println!("Focused: {}", desc);
@@ -147,7 +148,7 @@ let circle_positions: Vec<(Vec2, usize, String)> = circles
     .enumerate()
     .map(|(i, circle)| {
         let pos = Vec2::new(circle.center[0], circle.center[1]);
-        let desc = format!("Circle {}: x={:.1}, y={:.1}", 
+        let desc = format!("Circle {}: x={:.1}, y={:.1}",
                           i + 1, pos.x, pos.y);
         (pos, i, desc)
     })
@@ -174,6 +175,7 @@ focus_helper.register_mark_positions(&mut focus_manager, &circle_positions);
 ### Screen Reader Support
 
 Focus element descriptions are automatically announced:
+
 - "Data point 1 of 100: Circle at position (10.00, 20.00), value 42"
 - Works with NVDA, JAWS, VoiceOver
 
@@ -192,6 +194,7 @@ let config = FocusElementConfig {
 ```
 
 The system automatically:
+
 - Limits focusable elements to prevent DOM bloat
 - Skips off-screen elements
 - Uses GPU rendering for focus rings (no DOM overhead)
@@ -204,15 +207,20 @@ The system automatically:
 
 ## Known Limitations
 
-1. **Selection Type Not Implemented**: The full integration with `Selection<T, M>` cannot be demonstrated because the Selection type from GUP-002 has not been implemented yet.
+1. **Selection Type Not Implemented**: The full integration with
+   `Selection<T, M>` cannot be demonstrated because the Selection type from
+   GUP-002 has not been implemented yet.
 
-2. **Coordinate Space**: Focus elements assume screen coordinates. For complex projections (geographic, 3D), coordinate transformation is required.
+2. **Coordinate Space**: Focus elements assume screen coordinates. For complex
+   projections (geographic, 3D), coordinate transformation is required.
 
-3. **Dynamic Data**: Currently requires manual re-registration when data changes. Reactive updates planned for future.
+3. **Dynamic Data**: Currently requires manual re-registration when data
+   changes. Reactive updates planned for future.
 
 ## Future Enhancements
 
 See follow-up stories:
+
 - **GUP-128**: Reactive focus element updates
 - **GUP-129**: Focus pooling for million-point datasets
 - **GUP-130**: Touch target expansion for mobile
@@ -220,12 +228,14 @@ See follow-up stories:
 ## Testing
 
 Unit tests are provided for:
+
 - Focus element creation
-- Focus ring styles  
+- Focus ring styles
 - Helper configuration
 - Max element limiting
 
 Run tests with:
+
 ```bash
 cargo test accessibility::focus_elements -- --test-threads=1
 cargo test accessibility::focus_ring -- --test-threads=1

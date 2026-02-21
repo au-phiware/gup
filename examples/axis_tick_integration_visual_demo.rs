@@ -14,7 +14,7 @@ use gup::{
     CircleAttributes, GupContext, PhysicalSize, SurfaceId,
     axis::{Axis, AxisBounds, AxisConfiguration, AxisPosition, LinearAxis},
     render::Vertex,
-    selection::ShaderFunction,
+    prelude::ShaderFunction,
     shader_function::{Vec2, Vec4},
     tick_generator::{LinearScale, LinearTickGenerator, Scale, TickGenerator},
 };

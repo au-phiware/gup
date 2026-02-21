@@ -162,10 +162,10 @@ fn parse_mixable_attributes(attrs: &[Attribute]) -> Result<MixableConfig> {
                     if let Ok(lit_str) = meta.value()?.parse::<syn::LitStr>() {
                         config.output_type = Some(syn::parse_str(&lit_str.value())?);
                     }
-                } else if meta.path.is_ident("custom_render") {
-                    if let Ok(lit_str) = meta.value()?.parse::<syn::LitStr>() {
-                        config.custom_render = Some(syn::parse_str(&lit_str.value())?);
-                    }
+                } else if meta.path.is_ident("custom_render")
+                    && let Ok(lit_str) = meta.value()?.parse::<syn::LitStr>()
+                {
+                    config.custom_render = Some(syn::parse_str(&lit_str.value())?);
                 }
                 Ok(())
             })?;
@@ -248,22 +248,22 @@ fn analyze_field(field: &Field, analysis: &mut FieldAnalysis) -> Result<()> {
                             texture_field.binding = Some(binding);
                         }
                     }
-                } else if meta.path.is_ident("format") {
-                    if let Ok(lit_str) = meta.value()?.parse::<syn::LitStr>() {
-                        let format_str = lit_str.value();
-                        // Apply format to the most recently added vertex field with the same name
-                        if let Some(vertex_field) = analysis
-                            .vertex_fields
-                            .iter_mut()
-                            .find(|f| f.name == field_name)
-                        {
-                            vertex_field.vertex_format = match format_str.as_str() {
-                                "float32x2" => VertexFormat::Float32x2,
-                                "float32x3" => VertexFormat::Float32x3,
-                                "float32x4" => VertexFormat::Float32x4,
-                                _ => VertexFormat::Custom(format_str),
-                            };
-                        }
+                } else if meta.path.is_ident("format")
+                    && let Ok(lit_str) = meta.value()?.parse::<syn::LitStr>()
+                {
+                    let format_str = lit_str.value();
+                    // Apply format to the most recently added vertex field with the same name
+                    if let Some(vertex_field) = analysis
+                        .vertex_fields
+                        .iter_mut()
+                        .find(|f| f.name == field_name)
+                    {
+                        vertex_field.vertex_format = match format_str.as_str() {
+                            "float32x2" => VertexFormat::Float32x2,
+                            "float32x3" => VertexFormat::Float32x3,
+                            "float32x4" => VertexFormat::Float32x4,
+                            _ => VertexFormat::Custom(format_str),
+                        };
                     }
                 }
                 Ok(())

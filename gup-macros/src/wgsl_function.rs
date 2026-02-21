@@ -249,11 +249,11 @@ fn extract_wgsl_body(function: &ItemFn) -> Result<String> {
     let mut wgsl_params = Vec::new();
 
     // First parameter is the input value
-    if let Some(FnArg::Typed(PatType { pat, ty, .. })) = inputs.first() {
-        if let Pat::Ident(pat_ident) = &**pat {
-            let wgsl_type = rust_type_to_wgsl_type(ty)?;
-            wgsl_params.push(format!("{}: {}", pat_ident.ident, wgsl_type));
-        }
+    if let Some(FnArg::Typed(PatType { pat, ty, .. })) = inputs.first()
+        && let Pat::Ident(pat_ident) = &**pat
+    {
+        let wgsl_type = rust_type_to_wgsl_type(ty)?;
+        wgsl_params.push(format!("{}: {}", pat_ident.ident, wgsl_type));
     }
 
     // Add uniforms parameter if there are uniform fields
@@ -479,21 +479,78 @@ impl ToTokens for WgslFunctionInfo {
         };
 
         // Generate uniform struct only if there are uniform parameters
-        let uniform_struct = if self.uniform_params.is_empty() {
-            quote! {
+        let (uniform_struct, shader_uniform_impl) = if self.uniform_params.is_empty() {
+            let impl_uniform = quote! {
+                // Implement ShaderUniform for unit type
+                impl crate::shader_function::ShaderUniform for #uniforms_name {
+                    fn wgsl_struct_definition() -> String {
+                        "struct ".to_string() + stringify!(#uniforms_name) + " {}"
+                    }
+
+                    fn wgsl_type_name() -> &'static str {
+                        stringify!(#uniforms_name)
+                    }
+                }
+            };
+            let struct_def = quote! {
                 // Unit type for functions with no uniforms
                 #[repr(C)]
                 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
                 pub struct #uniforms_name;
-            }
+            };
+            (struct_def, impl_uniform)
         } else {
-            quote! {
+            // Build field names and types for ShaderUniform impl
+            let field_infos: Vec<_> = self.uniform_params.iter().map(|param| {
+                let name = &param.name;
+                let name_str = name.to_string();
+                let ty = &param.rust_type;
+                (name_str, ty.clone())
+            }).collect();
+
+            let wgsl_fields = field_infos.iter().map(|(name, ty)| {
+                let wgsl_type = if let Type::Path(type_path) = ty {
+                    if type_path.path.segments.len() == 1 {
+                        match type_path.path.segments[0].ident.to_string().as_str() {
+                            "Vec2" => "vec2<f32>".to_string(),
+                            "Vec3" => "vec3<f32>".to_string(),
+                            "Vec4" => "vec4<f32>".to_string(),
+                            other => other.to_string(),
+                        }
+                    } else {
+                        ty.to_token_stream().to_string()
+                    }
+                } else {
+                    ty.to_token_stream().to_string()
+                };
+                format!("    {}: {}", name, wgsl_type)
+            });
+
+            let impl_uniform = quote! {
+                // Implement ShaderUniform for the generated uniforms
+                impl crate::shader_function::ShaderUniform for #uniforms_name {
+                    fn wgsl_struct_definition() -> String {
+                        format!(
+                            "struct {} {{\n{}\n}}",
+                            stringify!(#uniforms_name),
+                            [#(#wgsl_fields),*].join(",\n")
+                        )
+                    }
+
+                    fn wgsl_type_name() -> &'static str {
+                        stringify!(#uniforms_name)
+                    }
+                }
+            };
+
+            let struct_def = quote! {
                 #[repr(C)]
                 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
                 pub struct #uniforms_name {
                     #(#uniform_fields),*
                 }
-            }
+            };
+            (struct_def, impl_uniform)
         };
 
         // Generate constructor only if there are parameters
@@ -541,6 +598,9 @@ impl ToTokens for WgslFunctionInfo {
         let generated = quote! {
             // Generate the uniform structure
             #uniform_struct
+
+            // Implement ShaderUniform for the uniforms
+            #shader_uniform_impl
 
             // Generate the main struct
             #struct_def

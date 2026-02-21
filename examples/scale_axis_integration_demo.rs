@@ -13,7 +13,7 @@ use gup::scale::AccessorFunction;
 use gup::{
     CircleAttributes, GupContext, PhysicalSize, SurfaceId,
     mark::{Circle, Mark},
-    selection::ShaderFunction,
+    prelude::ShaderFunction,
     shader_function::{Vec2, Vec4},
 };
 use std::sync::Arc;

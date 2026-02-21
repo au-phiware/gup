@@ -14,11 +14,11 @@ use crate::interaction::{Rect, Vec2};
 pub struct FocusElementConfig {
     /// Size of the focus target (width and height in pixels)
     pub target_size: f32,
-    
+
     /// Maximum number of focus elements to create
     /// (to avoid performance issues with large datasets)
     pub max_elements: usize,
-    
+
     /// Whether to create focus elements for off-screen marks
     pub include_offscreen: bool,
 }
@@ -46,12 +46,12 @@ impl MarkFocusHelper {
             config: FocusElementConfig::default(),
         }
     }
-    
+
     /// Create a new mark focus helper with custom configuration.
     pub fn with_config(config: FocusElementConfig) -> Self {
         Self { config }
     }
-    
+
     /// Register mark positions as focusable elements.
     ///
     /// Takes a list of mark positions and descriptions, creates focusable elements,
@@ -72,24 +72,24 @@ impl MarkFocusHelper {
     ) -> usize {
         let mut registered = 0;
         let count = positions.len().min(self.config.max_elements);
-        
+
         for (pos, data_index, description) in positions.iter().take(count) {
-            let bounds = Rect::from_center_size(*pos, Vec2::new(self.config.target_size, self.config.target_size));
-            
-            let element = FocusableElement::new(
-                ElementType::DataPoint,
-                bounds,
-                description.clone(),
-            )
-            .with_data_index(*data_index);
-            
+            let bounds = Rect::from_center_size(
+                *pos,
+                Vec2::new(self.config.target_size, self.config.target_size),
+            );
+
+            let element =
+                FocusableElement::new(ElementType::DataPoint, bounds, description.clone())
+                    .with_data_index(*data_index);
+
             focus_manager.add_focusable_element(element);
             registered += 1;
         }
-        
+
         registered
     }
-    
+
     /// Create focus elements from mark centers without registering.
     ///
     /// This is useful for batch operations or custom registration logic.
@@ -105,7 +105,7 @@ impl MarkFocusHelper {
                     *pos,
                     Vec2::new(self.config.target_size, self.config.target_size),
                 );
-                
+
                 FocusableElement::new(ElementType::DataPoint, bounds, description.clone())
                     .with_data_index(*data_index)
             })
@@ -138,7 +138,7 @@ mod tests {
             (Vec2::new(100.0, 100.0), 0, "Point 1".to_string()),
             (Vec2::new(200.0, 200.0), 1, "Point 2".to_string()),
         ];
-        
+
         let elements = helper.create_focus_elements(&positions);
         assert_eq!(elements.len(), 2);
         assert_eq!(elements[0].data_index, Some(0));
@@ -152,13 +152,13 @@ mod tests {
             ..Default::default()
         };
         let helper = MarkFocusHelper::with_config(config);
-        
+
         let positions = vec![
             (Vec2::new(100.0, 100.0), 0, "Point 1".to_string()),
             (Vec2::new(200.0, 200.0), 1, "Point 2".to_string()),
             (Vec2::new(300.0, 300.0), 2, "Point 3".to_string()),
         ];
-        
+
         let elements = helper.create_focus_elements(&positions);
         assert_eq!(elements.len(), 2, "Should respect max_elements limit");
     }
@@ -167,12 +167,12 @@ mod tests {
     fn test_register_mark_positions() {
         let helper = MarkFocusHelper::new();
         let mut focus_manager = FocusManager::new();
-        
+
         let positions = vec![
             (Vec2::new(100.0, 100.0), 0, "Point 1".to_string()),
             (Vec2::new(200.0, 200.0), 1, "Point 2".to_string()),
         ];
-        
+
         let count = helper.register_mark_positions(&mut focus_manager, &positions);
         assert_eq!(count, 2);
     }

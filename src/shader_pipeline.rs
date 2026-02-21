@@ -225,14 +225,14 @@ impl ComposableShaderPipeline {
         for function in self.functions.iter() {
             if function.has_uniforms() {
                 let uniform_type_name = function.uniform_type_name();
-                
+
                 // Only add the struct definition once per type
                 if !defined_types.contains(uniform_type_name) {
                     defined_types.insert(uniform_type_name.to_string());
-                    
+
                     let struct_def = function.uniform_struct_definition();
                     if !struct_def.is_empty() {
-                        bindings.push_str(&struct_def);
+                        bindings.push_str(struct_def);
                         bindings.push_str("\n\n");
                     }
                 }

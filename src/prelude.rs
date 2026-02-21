@@ -23,8 +23,7 @@ pub use crate::chart_builder::{
 };
 
 // Selection API (low-level)
-// TODO: Implement Selection type (currently not implemented)
-// pub use crate::selection::{Mark, Selection};
+pub use crate::selection::{Mark, Selection};
 
 // Mark types
 pub use crate::{Circle, Line, Rectangle};
@@ -33,7 +32,9 @@ pub use crate::{Circle, Line, Rectangle};
 pub use crate::mixable::Mixable;
 
 // Shader functions
-pub use crate::{ColorShaderFunction, PositionShaderFunction, ShaderFunction};
+pub use crate::{
+    ColorShaderFunction, ComposableShaderFunction as ShaderFunction, PositionShaderFunction,
+};
 
 // Text rendering system
 pub use crate::text::{

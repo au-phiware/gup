@@ -27,7 +27,7 @@
 use gup::{
     CircleAttributes, GupContext, GupResult, PhysicalSize, RenderContext, SurfaceId,
     label::{AxisInfo, LabelConstraints, LabelFormatter, LabelPositioner, NumericFormatter},
-    selection::ShaderFunction,
+    prelude::ShaderFunction,
     shader_function::{Vec2, Vec4},
     text::{FontAtlas, TextAnchor, TextLayoutEngine, TextRenderConfig, TextRenderer, TextStyle},
 };

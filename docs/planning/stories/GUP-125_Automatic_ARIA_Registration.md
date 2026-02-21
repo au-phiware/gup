@@ -10,13 +10,14 @@
 
 ## Context
 
-GUP-111 implemented `generate_aria_tree()` method for Selections but requires manual
-registration with AccessibilitySystem. This adds developer friction and may lead to
-visualizations without accessible descriptions if developers forget to register.
+GUP-111 implemented `generate_aria_tree()` method for Selections but requires
+manual registration with AccessibilitySystem. This adds developer friction and
+may lead to visualizations without accessible descriptions if developers forget
+to register.
 
-Following the "accessibility by default" principle, Selections should automatically
-register their ARIA trees with the accessibility system when rendered, ensuring all
-visualizations are accessible without additional effort.
+Following the "accessibility by default" principle, Selections should
+automatically register their ARIA trees with the accessibility system when
+rendered, ensuring all visualizations are accessible without additional effort.
 
 ## User Story
 

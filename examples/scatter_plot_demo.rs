@@ -26,7 +26,7 @@
 use gup::{
     CircleAttributes, GupContext, GupResult, PhysicalSize, RenderContext, SurfaceId,
     mark::{Circle, Mark},
-    selection::ShaderFunction,
+    prelude::ShaderFunction,
     shader_function::{Vec2, Vec4},
 };
 use std::sync::Arc;

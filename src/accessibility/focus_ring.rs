@@ -15,13 +15,13 @@ use wgpu::util::DeviceExt;
 pub struct FocusRingStyle {
     /// Color of the focus ring (RGBA)
     pub color: [f32; 4],
-    
+
     /// Width of the focus ring in pixels
     pub width: f32,
-    
+
     /// Dash pattern (empty for solid line)
     pub dash_pattern: Vec<f32>,
-    
+
     /// Animation speed (0.0 = no animation)
     pub animation_speed: f32,
 }
@@ -47,7 +47,7 @@ impl FocusRingStyle {
             animation_speed: 0.0,
         }
     }
-    
+
     /// Animated focus ring style.
     pub fn animated() -> Self {
         Self {
@@ -82,7 +82,7 @@ impl FocusRingRenderer {
             animation_time: 0.0,
         }
     }
-    
+
     /// Create a new focus ring renderer with custom style.
     pub fn with_style(style: FocusRingStyle) -> Self {
         Self {
@@ -93,14 +93,14 @@ impl FocusRingRenderer {
             animation_time: 0.0,
         }
     }
-    
+
     /// Set the focus ring style.
     pub fn set_style(&mut self, style: FocusRingStyle) {
         self.style = style;
         // Force pipeline recreation on next render
         self.pipeline = None;
     }
-    
+
     /// Update animation time.
     pub fn update(&mut self, delta_time: f32) {
         if self.style.animation_speed > 0.0 {
@@ -110,7 +110,7 @@ impl FocusRingRenderer {
             }
         }
     }
-    
+
     /// Render a focus ring around the given bounds.
     ///
     /// # Arguments
@@ -126,7 +126,7 @@ impl FocusRingRenderer {
     ) -> GupResult<()> {
         self.render_focus_rings(device, render_pass, &[bounds])
     }
-    
+
     /// Render multiple focus rings (for multi-select support).
     ///
     /// # Arguments
@@ -143,7 +143,7 @@ impl FocusRingRenderer {
         if bounds_list.is_empty() {
             return Ok(());
         }
-        
+
         // Create vertex buffer for rectangle outline (8 vertices for 4 line segments)
         if self.vertex_buffer.is_none() {
             let vertices = self.create_ring_vertices();
@@ -155,26 +155,26 @@ impl FocusRingRenderer {
                 },
             ));
         }
-        
+
         // Create instance buffer with current bounds
         let instances = bounds_list
             .iter()
             .map(|bounds| self.create_ring_instance(*bounds))
             .collect::<Vec<_>>();
-        
-        self.instance_buffer = Some(device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
+
+        self.instance_buffer = Some(
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Focus Ring Instance Buffer"),
                 contents: bytemuck::cast_slice(&instances),
                 usage: wgpu::BufferUsages::VERTEX,
-            },
-        ));
-        
+            }),
+        );
+
         // Create or use existing pipeline
         if self.pipeline.is_none() {
             self.pipeline = Some(self.create_pipeline(device)?);
         }
-        
+
         // Render
         if let (Some(pipeline), Some(vertex_buffer), Some(instance_buffer)) =
             (&self.pipeline, &self.vertex_buffer, &self.instance_buffer)
@@ -184,29 +184,53 @@ impl FocusRingRenderer {
             render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
             render_pass.draw(0..8, 0..bounds_list.len() as u32);
         }
-        
+
         Ok(())
     }
-    
+
     fn create_ring_vertices(&self) -> Vec<FocusRingVertex> {
         // Create 8 vertices for 4 line segments (top, right, bottom, left)
         // Each segment is a quad with thickness
         vec![
             // Top edge
-            FocusRingVertex { position: [-1.0, 1.0], local: [0.0, 0.0] },
-            FocusRingVertex { position: [1.0, 1.0], local: [1.0, 0.0] },
+            FocusRingVertex {
+                position: [-1.0, 1.0],
+                local: [0.0, 0.0],
+            },
+            FocusRingVertex {
+                position: [1.0, 1.0],
+                local: [1.0, 0.0],
+            },
             // Right edge
-            FocusRingVertex { position: [1.0, 1.0], local: [0.0, 0.0] },
-            FocusRingVertex { position: [1.0, -1.0], local: [0.0, 1.0] },
+            FocusRingVertex {
+                position: [1.0, 1.0],
+                local: [0.0, 0.0],
+            },
+            FocusRingVertex {
+                position: [1.0, -1.0],
+                local: [0.0, 1.0],
+            },
             // Bottom edge
-            FocusRingVertex { position: [1.0, -1.0], local: [1.0, 0.0] },
-            FocusRingVertex { position: [-1.0, -1.0], local: [0.0, 0.0] },
+            FocusRingVertex {
+                position: [1.0, -1.0],
+                local: [1.0, 0.0],
+            },
+            FocusRingVertex {
+                position: [-1.0, -1.0],
+                local: [0.0, 0.0],
+            },
             // Left edge
-            FocusRingVertex { position: [-1.0, -1.0], local: [0.0, 1.0] },
-            FocusRingVertex { position: [-1.0, 1.0], local: [1.0, 0.0] },
+            FocusRingVertex {
+                position: [-1.0, -1.0],
+                local: [0.0, 1.0],
+            },
+            FocusRingVertex {
+                position: [-1.0, 1.0],
+                local: [1.0, 0.0],
+            },
         ]
     }
-    
+
     fn create_ring_instance(&self, bounds: Rect) -> FocusRingInstance {
         FocusRingInstance {
             center: [bounds.center().x, bounds.center().y],
@@ -217,19 +241,19 @@ impl FocusRingRenderer {
             _padding: [0.0; 3],
         }
     }
-    
+
     fn create_pipeline(&self, device: &wgpu::Device) -> GupResult<wgpu::RenderPipeline> {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Focus Ring Shader"),
             source: wgpu::ShaderSource::Wgsl(FOCUS_RING_SHADER.into()),
         });
-        
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Focus Ring Pipeline Layout"),
             bind_group_layouts: &[],
             push_constant_ranges: &[],
         });
-        
+
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Focus Ring Pipeline"),
             layout: Some(&pipeline_layout),
@@ -248,7 +272,8 @@ impl FocusRingRenderer {
                     },
                     // Instance buffer
                     wgpu::VertexBufferLayout {
-                        array_stride: std::mem::size_of::<FocusRingInstance>() as wgpu::BufferAddress,
+                        array_stride: std::mem::size_of::<FocusRingInstance>()
+                            as wgpu::BufferAddress,
                         step_mode: wgpu::VertexStepMode::Instance,
                         attributes: &wgpu::vertex_attr_array![
                             2 => Float32x2, // center
@@ -289,7 +314,7 @@ impl FocusRingRenderer {
             multiview: None,
             cache: None,
         });
-        
+
         Ok(pipeline)
     }
 }

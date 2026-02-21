@@ -8,7 +8,8 @@
 
 use gup::RenderContext;
 use gup::interaction::{InteractionEvent, InteractionSystem, Rect, Renderable, Vec2};
-use gup::selection::{Circle, Selection};
+use gup::{Circle};
+use gup::selection::Selection;
 use std::sync::Arc;
 
 /// Test data structure for interaction testing

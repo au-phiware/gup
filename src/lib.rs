@@ -123,8 +123,7 @@ pub use mark::rectangle::{Rectangle, RectangleAttributes, RectangleVertex};
 pub use mark::{Mark, MarkInfo, MarkInfoImpl, MarkRegistry};
 
 // Export selection system
-// TODO: Implement Selection type (currently not implemented)
-// pub use selection::*;
+pub use selection::{ColorShaderFunction, PositionShaderFunction, Selection};
 
 // Export chart builder system (Observable Plot-style API)
 // Re-export selectively to avoid conflicts with label::Margins

@@ -257,7 +257,7 @@ mod tests {
     #[test]
     fn test_macro_generates_shader_uniform() {
         use crate::shader_function::ShaderUniform;
-        
+
         let wgsl_def = TestScaleUniforms::wgsl_struct_definition();
         assert!(wgsl_def.contains("struct TestScaleUniforms"));
         assert!(wgsl_def.contains("min: f32"));
