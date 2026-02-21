@@ -1,5 +1,8 @@
 # GUP-047: Enhanced Surface Event Integration
 
+**Status**: 🚧 In Progress  
+**Started**: 2025-01-25
+
 ## Story Overview
 
 **Title**: Window Event Integration for Multi-Surface Management  
