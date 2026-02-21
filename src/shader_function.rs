@@ -1407,6 +1407,497 @@ impl ComposableShaderFunction for PositionTransform {
     }
 }
 
+// ============================================================================
+// Additional Scale Functions (AC2: Common Transformation Functions)
+// ============================================================================
+
+/// Logarithmic scale transformation.
+///
+/// Maps values from a domain to a range using logarithmic scaling.
+/// Useful for data that spans multiple orders of magnitude.
+#[derive(Clone, Debug)]
+pub struct LogScale {
+    pub domain_min: f32,
+    pub domain_max: f32,
+    pub range_min: f32,
+    pub range_max: f32,
+    pub base: f32,
+}
+
+impl LogScale {
+    /// Creates a new logarithmic scale with base 10.
+    pub fn new(domain_min: f32, domain_max: f32, range_min: f32, range_max: f32) -> Self {
+        Self {
+            domain_min,
+            domain_max,
+            range_min,
+            range_max,
+            base: 10.0,
+        }
+    }
+
+    /// Creates a new logarithmic scale with natural log (base e).
+    pub fn natural(domain_min: f32, domain_max: f32, range_min: f32, range_max: f32) -> Self {
+        Self {
+            domain_min,
+            domain_max,
+            range_min,
+            range_max,
+            base: std::f32::consts::E,
+        }
+    }
+
+    /// Creates a new logarithmic scale with custom base.
+    pub fn with_base(
+        domain_min: f32,
+        domain_max: f32,
+        range_min: f32,
+        range_max: f32,
+        base: f32,
+    ) -> Self {
+        Self {
+            domain_min,
+            domain_max,
+            range_min,
+            range_max,
+            base,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct LogScaleUniforms {
+    pub domain_min: f32,
+    pub domain_max: f32,
+    pub range_min: f32,
+    pub range_max: f32,
+    pub base: f32,
+    pub _padding: [f32; 3],
+}
+
+impl ShaderUniform for LogScaleUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct LogScaleUniforms {\n    domain_min: f32,\n    domain_max: f32,\n    range_min: f32,\n    range_max: f32,\n    base: f32,\n}".to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "LogScaleUniforms"
+    }
+}
+
+impl ComposableShaderFunction for LogScale {
+    type Input = f32;
+    type Output = f32;
+    type Uniforms = LogScaleUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn log_scale(value: f32, scale: LogScaleUniforms) -> f32 {
+            let log_min = log(scale.domain_min) / log(scale.base);
+            let log_max = log(scale.domain_max) / log(scale.base);
+            let log_value = log(max(value, 0.0001)) / log(scale.base);
+            let normalized = (log_value - log_min) / (log_max - log_min);
+            return scale.range_min + normalized * (scale.range_max - scale.range_min);
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(LogScaleUniforms {
+            domain_min: self.domain_min,
+            domain_max: self.domain_max,
+            range_min: self.range_min,
+            range_max: self.range_max,
+            base: self.base,
+            _padding: [0.0; 3],
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "log_scale"
+    }
+}
+
+/// Power scale transformation (exponential scaling).
+///
+/// Maps values using a power function: output = (normalized_input)^exponent.
+/// Exponent < 1 compresses high values, > 1 expands them.
+#[derive(Clone, Debug)]
+pub struct PowerScale {
+    pub domain_min: f32,
+    pub domain_max: f32,
+    pub range_min: f32,
+    pub range_max: f32,
+    pub exponent: f32,
+}
+
+impl PowerScale {
+    pub fn new(
+        domain_min: f32,
+        domain_max: f32,
+        range_min: f32,
+        range_max: f32,
+        exponent: f32,
+    ) -> Self {
+        Self {
+            domain_min,
+            domain_max,
+            range_min,
+            range_max,
+            exponent,
+        }
+    }
+
+    /// Creates a square root scale (exponent = 0.5).
+    pub fn sqrt(domain_min: f32, domain_max: f32, range_min: f32, range_max: f32) -> Self {
+        Self::new(domain_min, domain_max, range_min, range_max, 0.5)
+    }
+
+    /// Creates a square scale (exponent = 2.0).
+    pub fn square(domain_min: f32, domain_max: f32, range_min: f32, range_max: f32) -> Self {
+        Self::new(domain_min, domain_max, range_min, range_max, 2.0)
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct PowerScaleUniforms {
+    pub domain_min: f32,
+    pub domain_max: f32,
+    pub range_min: f32,
+    pub range_max: f32,
+    pub exponent: f32,
+    pub _padding: [f32; 3],
+}
+
+impl ShaderUniform for PowerScaleUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct PowerScaleUniforms {\n    domain_min: f32,\n    domain_max: f32,\n    range_min: f32,\n    range_max: f32,\n    exponent: f32,\n}".to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "PowerScaleUniforms"
+    }
+}
+
+impl ComposableShaderFunction for PowerScale {
+    type Input = f32;
+    type Output = f32;
+    type Uniforms = PowerScaleUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn power_scale(value: f32, scale: PowerScaleUniforms) -> f32 {
+            let normalized = (value - scale.domain_min) / (scale.domain_max - scale.domain_min);
+            let powered = pow(max(normalized, 0.0), scale.exponent);
+            return scale.range_min + powered * (scale.range_max - scale.range_min);
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(PowerScaleUniforms {
+            domain_min: self.domain_min,
+            domain_max: self.domain_max,
+            range_min: self.range_min,
+            range_max: self.range_max,
+            exponent: self.exponent,
+            _padding: [0.0; 3],
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "power_scale"
+    }
+}
+
+// ============================================================================
+// Filtering and Clamping Functions (AC2)
+// ============================================================================
+
+/// Clamps values to a specified range.
+#[derive(Clone, Debug)]
+pub struct Clamp {
+    pub min: f32,
+    pub max: f32,
+}
+
+impl Clamp {
+    pub fn new(min: f32, max: f32) -> Self {
+        Self { min, max }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ClampUniforms {
+    pub min: f32,
+    pub max: f32,
+    pub _padding: [f32; 2],
+}
+
+impl ShaderUniform for ClampUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct ClampUniforms {\n    min: f32,\n    max: f32,\n}".to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "ClampUniforms"
+    }
+}
+
+impl ComposableShaderFunction for Clamp {
+    type Input = f32;
+    type Output = f32;
+    type Uniforms = ClampUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn clamp_fn(value: f32, params: ClampUniforms) -> f32 {
+            return clamp(value, params.min, params.max);
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(ClampUniforms {
+            min: self.min,
+            max: self.max,
+            _padding: [0.0; 2],
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "clamp_fn"
+    }
+}
+
+/// Threshold function - outputs 0 or 1 based on threshold.
+#[derive(Clone, Debug)]
+pub struct Threshold {
+    pub threshold: f32,
+}
+
+impl Threshold {
+    pub fn new(threshold: f32) -> Self {
+        Self { threshold }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ThresholdUniforms {
+    pub threshold: f32,
+    pub _padding: [f32; 3],
+}
+
+impl ShaderUniform for ThresholdUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct ThresholdUniforms {\n    threshold: f32,\n}".to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "ThresholdUniforms"
+    }
+}
+
+impl ComposableShaderFunction for Threshold {
+    type Input = f32;
+    type Output = f32;
+    type Uniforms = ThresholdUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn threshold_fn(value: f32, params: ThresholdUniforms) -> f32 {
+            return select(0.0, 1.0, value >= params.threshold);
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(ThresholdUniforms {
+            threshold: self.threshold,
+            _padding: [0.0; 3],
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "threshold_fn"
+    }
+}
+
+// ============================================================================
+// Interpolation Functions (AC2)
+// ============================================================================
+
+/// Smooth step interpolation (ease-in-ease-out).
+#[derive(Clone, Debug)]
+pub struct SmoothStep {
+    pub edge0: f32,
+    pub edge1: f32,
+}
+
+impl SmoothStep {
+    pub fn new(edge0: f32, edge1: f32) -> Self {
+        Self { edge0, edge1 }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct SmoothStepUniforms {
+    pub edge0: f32,
+    pub edge1: f32,
+    pub _padding: [f32; 2],
+}
+
+impl ShaderUniform for SmoothStepUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct SmoothStepUniforms {\n    edge0: f32,\n    edge1: f32,\n}".to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "SmoothStepUniforms"
+    }
+}
+
+impl ComposableShaderFunction for SmoothStep {
+    type Input = f32;
+    type Output = f32;
+    type Uniforms = SmoothStepUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn smooth_step_fn(value: f32, params: SmoothStepUniforms) -> f32 {
+            return smoothstep(params.edge0, params.edge1, value);
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(SmoothStepUniforms {
+            edge0: self.edge0,
+            edge1: self.edge1,
+            _padding: [0.0; 2],
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "smooth_step_fn"
+    }
+}
+
+/// Multi-point color interpolation (gradient with multiple stops).
+#[derive(Clone, Debug)]
+pub struct ColorGradient {
+    pub colors: Vec<Vec4>,
+    pub stops: Vec<f32>,
+}
+
+impl ColorGradient {
+    pub fn new(colors: Vec<Vec4>, stops: Vec<f32>) -> Self {
+        assert_eq!(
+            colors.len(),
+            stops.len(),
+            "Colors and stops must have same length"
+        );
+        assert!(!colors.is_empty(), "Must have at least one color");
+        Self { colors, stops }
+    }
+
+    /// Creates a gradient with evenly spaced stops.
+    pub fn with_colors(colors: Vec<Vec4>) -> Self {
+        let count = colors.len();
+        let stops = (0..count)
+            .map(|i| i as f32 / (count - 1).max(1) as f32)
+            .collect();
+        Self { colors, stops }
+    }
+}
+
+// For now, we'll use a simplified uniform that supports up to 8 color stops
+// A more advanced implementation would use storage buffers for arbitrary length
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ColorGradientUniforms {
+    pub colors: [[f32; 4]; 8],
+    pub stops: [f32; 8],
+    pub count: u32,
+    pub _padding: [f32; 3],
+}
+
+impl ShaderUniform for ColorGradientUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct ColorGradientUniforms {\n    colors: array<vec4<f32>, 8>,\n    stops: array<f32, 8>,\n    count: u32,\n}".to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "ColorGradientUniforms"
+    }
+}
+
+impl ComposableShaderFunction for ColorGradient {
+    type Input = f32;
+    type Output = Vec4;
+    type Uniforms = ColorGradientUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn color_gradient(value: f32, gradient: ColorGradientUniforms) -> vec4<f32> {
+            let t = clamp(value, 0.0, 1.0);
+
+            // Handle single color
+            if (gradient.count == 1u) {
+                return gradient.colors[0];
+            }
+
+            // Find the two stops to interpolate between
+            var i = 0u;
+            for (i = 0u; i < gradient.count - 1u; i = i + 1u) {
+                if (t <= gradient.stops[i + 1u]) {
+                    break;
+                }
+            }
+
+            // Interpolate between the two colors
+            let t0 = gradient.stops[i];
+            let t1 = gradient.stops[i + 1u];
+            let local_t = (t - t0) / (t1 - t0);
+
+            return mix(gradient.colors[i], gradient.colors[i + 1u], local_t);
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        let count = self.colors.len().min(8);
+        let mut colors = [[0.0f32; 4]; 8];
+        let mut stops = [0.0f32; 8];
+
+        for i in 0..count {
+            colors[i] = [
+                self.colors[i].x,
+                self.colors[i].y,
+                self.colors[i].z,
+                self.colors[i].w,
+            ];
+            stops[i] = self.stops[i];
+        }
+
+        Some(ColorGradientUniforms {
+            colors,
+            stops,
+            count: count as u32,
+            _padding: [0.0; 3],
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "color_gradient"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1873,5 +2364,151 @@ mod tests {
         assert!(chain_def.contains("first: LinearScaleUniforms"));
         assert!(chain_def.contains("second: ColorMapUniforms"));
         assert_eq!(TestChain::wgsl_type_name(), "ChainUniforms");
+    }
+
+    #[test]
+    fn test_log_scale_creation() {
+        let log_scale = LogScale::new(1.0, 1000.0, 0.0, 1.0);
+        assert_eq!(log_scale.domain_min, 1.0);
+        assert_eq!(log_scale.domain_max, 1000.0);
+        assert_eq!(log_scale.range_min, 0.0);
+        assert_eq!(log_scale.range_max, 1.0);
+        assert_eq!(log_scale.base, 10.0);
+
+        let natural_log = LogScale::natural(1.0, 100.0, 0.0, 1.0);
+        assert_eq!(natural_log.base, std::f32::consts::E);
+
+        let custom_base = LogScale::with_base(1.0, 16.0, 0.0, 1.0, 2.0);
+        assert_eq!(custom_base.base, 2.0);
+    }
+
+    #[test]
+    fn test_log_scale_uniforms() {
+        let log_scale = LogScale::new(1.0, 1000.0, 0.0, 1.0);
+        let uniforms = log_scale.create_uniforms().unwrap();
+        assert_eq!(uniforms.domain_min, 1.0);
+        assert_eq!(uniforms.domain_max, 1000.0);
+        assert_eq!(uniforms.base, 10.0);
+        assert_eq!(LogScale::function_name(), "log_scale");
+    }
+
+    #[test]
+    fn test_power_scale_creation() {
+        let power_scale = PowerScale::new(0.0, 100.0, 0.0, 1.0, 2.0);
+        assert_eq!(power_scale.exponent, 2.0);
+
+        let sqrt_scale = PowerScale::sqrt(0.0, 100.0, 0.0, 1.0);
+        assert_eq!(sqrt_scale.exponent, 0.5);
+
+        let square_scale = PowerScale::square(0.0, 100.0, 0.0, 1.0);
+        assert_eq!(square_scale.exponent, 2.0);
+    }
+
+    #[test]
+    fn test_power_scale_uniforms() {
+        let power_scale = PowerScale::new(0.0, 100.0, 0.0, 1.0, 0.5);
+        let uniforms = power_scale.create_uniforms().unwrap();
+        assert_eq!(uniforms.exponent, 0.5);
+        assert_eq!(PowerScale::function_name(), "power_scale");
+    }
+
+    #[test]
+    fn test_clamp_function() {
+        let clamp = Clamp::new(0.0, 1.0);
+        assert_eq!(clamp.min, 0.0);
+        assert_eq!(clamp.max, 1.0);
+
+        let uniforms = clamp.create_uniforms().unwrap();
+        assert_eq!(uniforms.min, 0.0);
+        assert_eq!(uniforms.max, 1.0);
+        assert_eq!(Clamp::function_name(), "clamp_fn");
+    }
+
+    #[test]
+    fn test_threshold_function() {
+        let threshold = Threshold::new(0.5);
+        assert_eq!(threshold.threshold, 0.5);
+
+        let uniforms = threshold.create_uniforms().unwrap();
+        assert_eq!(uniforms.threshold, 0.5);
+        assert_eq!(Threshold::function_name(), "threshold_fn");
+    }
+
+    #[test]
+    fn test_smooth_step_function() {
+        let smooth_step = SmoothStep::new(0.0, 1.0);
+        assert_eq!(smooth_step.edge0, 0.0);
+        assert_eq!(smooth_step.edge1, 1.0);
+
+        let uniforms = smooth_step.create_uniforms().unwrap();
+        assert_eq!(uniforms.edge0, 0.0);
+        assert_eq!(uniforms.edge1, 1.0);
+        assert_eq!(SmoothStep::function_name(), "smooth_step_fn");
+    }
+
+    #[test]
+    fn test_color_gradient_creation() {
+        let colors = vec![
+            vec4![0.0, 0.0, 0.0, 1.0],
+            vec4![1.0, 0.0, 0.0, 1.0],
+            vec4![1.0, 1.0, 0.0, 1.0],
+        ];
+        let stops = vec![0.0, 0.5, 1.0];
+        let gradient = ColorGradient::new(colors.clone(), stops);
+        assert_eq!(gradient.colors.len(), 3);
+        assert_eq!(gradient.stops.len(), 3);
+
+        let even_gradient = ColorGradient::with_colors(colors);
+        assert_eq!(even_gradient.stops[0], 0.0);
+        assert_eq!(even_gradient.stops[2], 1.0);
+    }
+
+    #[test]
+    fn test_color_gradient_uniforms() {
+        let colors = vec![vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 1.0, 1.0]];
+        let stops = vec![0.0, 1.0];
+        let gradient = ColorGradient::new(colors, stops);
+        let uniforms = gradient.create_uniforms().unwrap();
+        assert_eq!(uniforms.count, 2);
+        assert_eq!(uniforms.colors[0], [0.0, 0.0, 0.0, 1.0]);
+        assert_eq!(uniforms.colors[1], [1.0, 1.0, 1.0, 1.0]);
+        assert_eq!(ColorGradient::function_name(), "color_gradient");
+    }
+
+    #[test]
+    fn test_scale_composition() {
+        // Test composing log scale with color map
+        let log_scale = LogScale::new(1.0, 1000.0, 0.0, 1.0);
+        let color_map = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 1.0, 1.0]);
+        let composed = log_scale.compose(color_map);
+
+        // Verify the composition maintains correct types
+        let uniforms = composed.create_uniforms();
+        assert!(uniforms.is_some());
+    }
+
+    #[test]
+    fn test_filter_composition() {
+        // Test composing clamp with threshold
+        let clamp = Clamp::new(0.0, 1.0);
+        let threshold = Threshold::new(0.5);
+        let composed = clamp.compose(threshold);
+
+        let uniforms = composed.create_uniforms();
+        assert!(uniforms.is_some());
+    }
+
+    #[test]
+    fn test_multi_stage_composition() {
+        // Test a 3-stage pipeline: power -> clamp -> smooth step
+        let power = PowerScale::sqrt(0.0, 100.0, 0.0, 1.5);
+        let clamp = Clamp::new(0.0, 1.0);
+        let smooth = SmoothStep::new(0.0, 1.0);
+
+        let stage1 = power.compose(clamp);
+        let stage2 = stage1.compose(smooth);
+
+        let uniforms = stage2.create_uniforms();
+        assert!(uniforms.is_some());
     }
 }

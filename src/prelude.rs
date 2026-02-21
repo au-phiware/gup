@@ -32,9 +32,42 @@ pub use crate::{Circle, Line, Rectangle};
 pub use crate::mixable::Mixable;
 
 // Shader functions
-pub use crate::{
-    ColorShaderFunction, ComposableShaderFunction as ShaderFunction, PositionShaderFunction,
+pub use crate::shader_function::{
+    // Filtering and clamping (GUP-033)
+    Clamp,
+    ColorGradient,
+
+    ColorMap,
+    ComposableFunction,
+    // Core traits
+    ComposableShaderFunction as ShaderFunction,
+    // Basic transformations
+    LinearScale,
+    // Advanced scales (GUP-033)
+    LogScale,
+    Mat2,
+    Mat3,
+    Mat4,
+    PositionTransform,
+
+    PowerScale,
+
+    ShaderCompatible,
+
+    ShaderType,
+    // Interpolation (GUP-033)
+    SmoothStep,
+    Threshold,
+
+    // Shader types
+    Vec2,
+    Vec3,
+    Vec4,
 };
+
+// Legacy aliases for compatibility
+pub use crate::shader_function::ComposableShaderFunction as ColorShaderFunction;
+pub use crate::shader_function::ComposableShaderFunction as PositionShaderFunction;
 
 // Text rendering system
 pub use crate::text::{
