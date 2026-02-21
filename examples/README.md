@@ -26,9 +26,22 @@ These examples teach fundamental concepts step-by-step:
 2. Move to `02_scatter_window` to see GPU rendering in action
 3. Explore `03_line_chart` and `04_bar_chart` to learn different chart types
 
-### 2. Intermediate Examples
+### 2. Intermediate Examples (`intermediate/`)
 
-Once you're comfortable with the basics:
+Once you're comfortable with the basics, these examples show advanced features:
+
+| Example             | Description                                    | Run Command                             |
+| ------------------- | ---------------------------------------------- | --------------------------------------- |
+| `styled_scatter`    | Data-driven styling with colors and sizes      | `cargo run --example styled_scatter`    |
+| `multi_series_line` | Multiple line series with different colors     | `cargo run --example multi_series_line` |
+| `categorical_bar`   | Bar charts with categorical data and gradients | `cargo run --example categorical_bar`   |
+
+**What You'll Learn:**
+
+- Data-driven styling and color mapping
+- Working with multiple data series
+- Category-based visualizations
+- Professional chart styling techniques
 
 | Example             | Description                               |
 | ------------------- | ----------------------------------------- |
@@ -36,9 +49,9 @@ Once you're comfortable with the basics:
 | `scatter_plot_demo` | Advanced scatter plot with custom shaders |
 | `windowed_demo`     | Multi-feature window demo                 |
 
-### 3. Advanced Examples
+### 6. Feature-Specific Deep Dives
 
-For deep dives into specific features:
+Deep dives into specific library capabilities:
 
 | Example                               | Description                     |
 | ------------------------------------- | ------------------------------- |
@@ -50,7 +63,7 @@ For deep dives into specific features:
 | `blend_modes_showcase`                | GPU blend mode demonstrations   |
 | `composition_error_recovery_showcase` | Error handling patterns         |
 
-### 4. Technical Deep Dives
+### 7. Technical Deep Dives
 
 For understanding the library internals:
 

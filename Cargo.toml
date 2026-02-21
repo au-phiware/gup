@@ -113,3 +113,21 @@ path = "examples/basic/03_line_chart.rs"
 [[example]]
 name = "04_bar_chart"
 path = "examples/basic/04_bar_chart.rs"
+
+# Intermediate Examples
+[[example]]
+name = "styled_scatter"
+path = "examples/intermediate/styled_scatter.rs"
+
+[[example]]
+name = "multi_series_line"
+path = "examples/intermediate/multi_series_line.rs"
+
+[[example]]
+name = "categorical_bar"
+path = "examples/intermediate/categorical_bar.rs"
+
+# Showcase Examples
+[[example]]
+name = "business_dashboard"
+path = "examples/showcase/business_dashboard.rs"
