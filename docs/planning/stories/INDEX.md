@@ -776,7 +776,7 @@ implementation:
 
 ### GUP-111: Automatic ARIA Generation from Selections
 
-**Status**: 💡 New  
+**Status**: 🚧 In Progress  
 **Priority**: Medium  
 **Story Points**: 3  
 **Key Need**: Eliminate manual ARIA tree construction by automatically
