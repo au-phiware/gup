@@ -181,20 +181,292 @@ impl FrameStats {
 }
 
 /// Texture pool for efficient texture resource management.
+/// Configuration for texture pooling behavior.
+#[derive(Debug, Clone)]
+pub struct TexturePoolConfig {
+    /// Maximum number of textures to keep in each pool
+    pub max_textures_per_pool: usize,
+    /// Maximum total GPU memory to use for pooled textures (in bytes)
+    pub max_total_memory: Option<u64>,
+    /// Time after which unused textures are evicted
+    pub eviction_timeout: Duration,
+    /// Whether to enable LRU eviction
+    pub enable_lru: bool,
+}
+
+impl Default for TexturePoolConfig {
+    fn default() -> Self {
+        Self {
+            max_textures_per_pool: 20,
+            max_total_memory: Some(512 * 1024 * 1024), // 512 MB default limit
+            eviction_timeout: Duration::from_secs(120), // 2 minutes
+            enable_lru: true,
+        }
+    }
+}
+
+/// Key for identifying texture pools by format and size class.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct TextureKey {
+    format: TextureFormat,
+    dimension: TextureDimension,
+    /// Power-of-2 rounded dimensions (width, height, depth_or_array_layers)
+    size_class: (u32, u32, u32),
+    usage: TextureUsages,
+}
+
+impl TextureKey {
+    fn from_descriptor(desc: &TextureDescriptor) -> Self {
+        // Round up dimensions to power-of-2 for better reuse
+        let size_class = (
+            desc.size.width.next_power_of_two(),
+            desc.size.height.next_power_of_two(),
+            desc.size.depth_or_array_layers.next_power_of_two(),
+        );
+
+        Self {
+            format: desc.format,
+            dimension: desc.dimension,
+            size_class,
+            usage: desc.usage,
+        }
+    }
+}
+
+/// Entry in the texture pool tracking usage time.
+#[derive(Debug)]
+struct PooledTextureEntry {
+    texture: Texture,
+    last_used: Instant,
+    size: u64,
+}
+
+/// Statistics for texture pool usage tracking.
+#[derive(Debug, Clone, Default)]
+pub struct TexturePoolStats {
+    /// Total textures allocated (pool hits + misses)
+    pub total_allocated: u64,
+    /// Total textures returned to pool
+    pub total_deallocated: u64,
+    /// Currently active textures (not in pool)
+    pub active_textures: u64,
+    /// Currently pooled textures (available for reuse)
+    pub pooled_textures: usize,
+    /// Number of pool hits (texture reused from pool)
+    pub pool_hits: u64,
+    /// Number of pool misses (new texture created)
+    pub pool_misses: u64,
+    /// Total memory currently in pooled textures
+    pub pooled_memory: u64,
+}
+
+/// Texture pool with size classes and reuse.
 #[derive(Debug)]
 pub struct TexturePool {
-    // Placeholder implementation - can be extended later
+    pools: HashMap<TextureKey, Vec<PooledTextureEntry>>,
     device: Arc<Device>,
+    stats: TexturePoolStats,
+    config: TexturePoolConfig,
 }
 
 impl TexturePool {
     fn new(device: Arc<Device>) -> Self {
-        Self { device }
+        Self::with_config(device, TexturePoolConfig::default())
     }
 
-    /// Create a texture with the given descriptor.
-    pub fn create_texture(&self, descriptor: &TextureDescriptor) -> Texture {
+    /// Create a new texture pool with custom configuration.
+    fn with_config(device: Arc<Device>, config: TexturePoolConfig) -> Self {
+        Self {
+            pools: HashMap::new(),
+            device,
+            stats: TexturePoolStats::default(),
+            config,
+        }
+    }
+
+    /// Create or retrieve a texture from the pool.
+    pub fn create_texture(&mut self, descriptor: &TextureDescriptor) -> Texture {
+        let key = TextureKey::from_descriptor(descriptor);
+
+        // Try to get from pool
+        if let Some(pool) = self.pools.get_mut(&key)
+            && let Some(entry) = pool.pop() {
+                self.stats.pooled_textures -= 1;
+                self.stats.pooled_memory -= entry.size;
+                self.stats.pool_hits += 1;
+                self.stats.active_textures += 1;
+                self.stats.total_allocated += 1;
+                return entry.texture;
+            }
+
+        // Create new texture if none available
+        self.stats.pool_misses += 1;
+        self.stats.active_textures += 1;
+        self.stats.total_allocated += 1;
         self.device.create_texture(descriptor)
+    }
+
+    /// Return a texture to the pool for reuse.
+    pub fn return_texture(&mut self, texture: Texture) {
+        let size = self.calculate_texture_size(&texture);
+        let key = self.make_key_from_texture(&texture);
+
+        let entry = PooledTextureEntry {
+            texture,
+            last_used: Instant::now(),
+            size,
+        };
+
+        // Add to pool
+        let pool = self.pools.entry(key).or_default();
+        pool.push(entry);
+        self.stats.pooled_textures += 1;
+        self.stats.pooled_memory += size;
+        self.stats.active_textures -= 1;
+        self.stats.total_deallocated += 1;
+
+        // Check if we need to evict
+        self.check_memory_pressure();
+    }
+
+    /// Calculate the memory size of a texture.
+    fn calculate_texture_size(&self, texture: &Texture) -> u64 {
+        let width = texture.width() as u64;
+        let height = texture.height() as u64;
+        let depth = texture.depth_or_array_layers() as u64;
+        let format = texture.format();
+
+        // Approximate bytes per pixel for common formats
+        let bytes_per_pixel = match format {
+            TextureFormat::R8Unorm
+            | TextureFormat::R8Snorm
+            | TextureFormat::R8Uint
+            | TextureFormat::R8Sint => 1,
+            TextureFormat::R16Uint | TextureFormat::R16Sint | TextureFormat::R16Float => 2,
+            TextureFormat::Rg8Unorm
+            | TextureFormat::Rg8Snorm
+            | TextureFormat::Rg8Uint
+            | TextureFormat::Rg8Sint => 2,
+            TextureFormat::R32Uint | TextureFormat::R32Sint | TextureFormat::R32Float => 4,
+            TextureFormat::Rg16Uint | TextureFormat::Rg16Sint | TextureFormat::Rg16Float => 4,
+            TextureFormat::Rgba8Unorm
+            | TextureFormat::Rgba8UnormSrgb
+            | TextureFormat::Rgba8Snorm
+            | TextureFormat::Rgba8Uint
+            | TextureFormat::Rgba8Sint
+            | TextureFormat::Bgra8Unorm
+            | TextureFormat::Bgra8UnormSrgb => 4,
+            TextureFormat::Rgb10a2Unorm => 4,
+            TextureFormat::Rg32Uint | TextureFormat::Rg32Sint | TextureFormat::Rg32Float => 8,
+            TextureFormat::Rgba16Uint | TextureFormat::Rgba16Sint | TextureFormat::Rgba16Float => 8,
+            TextureFormat::Rgba32Uint | TextureFormat::Rgba32Sint | TextureFormat::Rgba32Float => {
+                16
+            }
+            TextureFormat::Depth32Float => 4,
+            TextureFormat::Depth24Plus => 4,
+            TextureFormat::Depth24PlusStencil8 => 4,
+            _ => 4, // Default to 4 bytes for unknown formats
+        };
+
+        width * height * depth * bytes_per_pixel
+    }
+
+    /// Create a key from an existing texture.
+    fn make_key_from_texture(&self, texture: &Texture) -> TextureKey {
+        let size_class = (
+            texture.width().next_power_of_two(),
+            texture.height().next_power_of_two(),
+            texture.depth_or_array_layers().next_power_of_two(),
+        );
+
+        TextureKey {
+            format: texture.format(),
+            dimension: texture.dimension(),
+            size_class,
+            usage: texture.usage(),
+        }
+    }
+
+    /// Check memory pressure and evict textures if necessary.
+    fn check_memory_pressure(&mut self) {
+        if let Some(max_memory) = self.config.max_total_memory
+            && self.stats.pooled_memory > max_memory {
+                self.evict_lru_textures(self.stats.pooled_memory - max_memory);
+            }
+
+        // Also check per-pool limits
+        for pool in self.pools.values_mut() {
+            if pool.len() > self.config.max_textures_per_pool {
+                let to_remove = pool.len() - self.config.max_textures_per_pool;
+                for _ in 0..to_remove {
+                    if let Some(entry) = pool.pop() {
+                        self.stats.pooled_textures -= 1;
+                        self.stats.pooled_memory -= entry.size;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Evict least-recently-used textures to free up the specified amount of memory.
+    fn evict_lru_textures(&mut self, target_bytes: u64) {
+        let mut freed = 0u64;
+        let now = Instant::now();
+
+        // Collect all entries with their ages
+        let mut all_entries: Vec<(TextureKey, usize, Duration)> = Vec::new();
+        for (key, pool) in &self.pools {
+            for (idx, entry) in pool.iter().enumerate() {
+                let age = now.duration_since(entry.last_used);
+                all_entries.push((*key, idx, age));
+            }
+        }
+
+        // Sort by age (oldest first)
+        all_entries.sort_by_key(|(_, _, age)| *age);
+        all_entries.reverse();
+
+        // Remove oldest entries until we've freed enough memory
+        for (key, _, _) in all_entries {
+            if freed >= target_bytes {
+                break;
+            }
+
+            if let Some(pool) = self.pools.get_mut(&key)
+                && let Some(entry) = pool.pop() {
+                    freed += entry.size;
+                    self.stats.pooled_textures -= 1;
+                    self.stats.pooled_memory -= entry.size;
+                }
+        }
+
+        // Remove empty pools
+        self.pools.retain(|_, pool| !pool.is_empty());
+    }
+
+    /// Clean up old textures that haven't been used recently.
+    pub fn cleanup_old_textures(&mut self) {
+        let now = Instant::now();
+        let timeout = self.config.eviction_timeout;
+
+        for pool in self.pools.values_mut() {
+            pool.retain(|entry| {
+                let should_retain = now.duration_since(entry.last_used) < timeout;
+                if !should_retain {
+                    self.stats.pooled_textures -= 1;
+                    self.stats.pooled_memory -= entry.size;
+                }
+                should_retain
+            });
+        }
+
+        // Remove empty pools
+        self.pools.retain(|_, pool| !pool.is_empty());
+    }
+
+    /// Get current pool statistics.
+    pub fn stats(&self) -> &TexturePoolStats {
+        &self.stats
     }
 }
 
@@ -610,6 +882,21 @@ impl GupContext {
     /// Create texture with descriptor.
     pub fn create_texture(&mut self, descriptor: &TextureDescriptor) -> Texture {
         self.texture_pool.create_texture(descriptor)
+    }
+
+    /// Return a texture to the pool for reuse.
+    pub fn return_texture(&mut self, texture: Texture) {
+        self.texture_pool.return_texture(texture);
+    }
+
+    /// Get texture pool statistics.
+    pub fn texture_pool_stats(&self) -> &TexturePoolStats {
+        self.texture_pool.stats()
+    }
+
+    /// Clean up old textures from the pool.
+    pub fn cleanup_texture_pool(&mut self) {
+        self.texture_pool.cleanup_old_textures();
     }
 
     /// Get performance monitoring statistics.
@@ -1143,5 +1430,333 @@ mod tests {
             // Should complete well under 16ms for responsive UI
             assert!(duration.as_millis() < 16);
         }
+    }
+
+    // Texture Pool Tests
+
+    #[tokio::test]
+    async fn test_texture_pool_basic_creation() {
+        let context = GupContext::headless().await.unwrap();
+        let mut ctx = Arc::try_unwrap(context).unwrap();
+
+        let descriptor = TextureDescriptor {
+            label: Some("test_texture"),
+            size: Extent3d {
+                width: 256,
+                height: 256,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba8Unorm,
+            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        };
+
+        let texture = ctx.create_texture(&descriptor);
+        assert_eq!(texture.width(), 256);
+        assert_eq!(texture.height(), 256);
+        assert_eq!(texture.format(), TextureFormat::Rgba8Unorm);
+
+        // Check stats
+        let stats = ctx.texture_pool_stats();
+        assert_eq!(stats.total_allocated, 1);
+        assert_eq!(stats.active_textures, 1);
+        assert_eq!(stats.pool_misses, 1);
+        assert_eq!(stats.pool_hits, 0);
+    }
+
+    #[tokio::test]
+    async fn test_texture_pool_reuse() {
+        let context = GupContext::headless().await.unwrap();
+        let mut ctx = Arc::try_unwrap(context).unwrap();
+
+        let descriptor = TextureDescriptor {
+            label: Some("test_texture"),
+            size: Extent3d {
+                width: 128,
+                height: 128,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba8Unorm,
+            usage: TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        };
+
+        // Create and return texture
+        let texture1 = ctx.create_texture(&descriptor);
+        ctx.return_texture(texture1);
+
+        // Stats should show one pooled texture
+        let stats = ctx.texture_pool_stats();
+        assert_eq!(stats.pooled_textures, 1);
+        assert_eq!(stats.active_textures, 0);
+        assert_eq!(stats.total_deallocated, 1);
+
+        // Request same texture again - should hit pool
+        let _texture2 = ctx.create_texture(&descriptor);
+        let stats = ctx.texture_pool_stats();
+        assert_eq!(stats.pool_hits, 1);
+        assert_eq!(stats.pooled_textures, 0);
+        assert_eq!(stats.active_textures, 1);
+    }
+
+    #[tokio::test]
+    async fn test_texture_pool_size_classes() {
+        let context = GupContext::headless().await.unwrap();
+        let mut ctx = Arc::try_unwrap(context).unwrap();
+
+        // Create texture with non-power-of-2 size
+        let descriptor1 = TextureDescriptor {
+            label: Some("test_texture_1"),
+            size: Extent3d {
+                width: 100,  // Will round to 128
+                height: 100, // Will round to 128
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba8Unorm,
+            usage: TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        };
+
+        let texture1 = ctx.create_texture(&descriptor1);
+        ctx.return_texture(texture1);
+
+        // Request similar size - should reuse due to size class rounding
+        let descriptor2 = TextureDescriptor {
+            label: Some("test_texture_2"),
+            size: Extent3d {
+                width: 120,  // Also rounds to 128
+                height: 120, // Also rounds to 128
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba8Unorm,
+            usage: TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        };
+
+        let _texture2 = ctx.create_texture(&descriptor2);
+        let stats = ctx.texture_pool_stats();
+        assert_eq!(stats.pool_hits, 1, "Size classes should enable reuse");
+    }
+
+    #[tokio::test]
+    async fn test_texture_pool_different_formats() {
+        let context = GupContext::headless().await.unwrap();
+        let mut ctx = Arc::try_unwrap(context).unwrap();
+
+        // Create RGBA texture
+        let desc_rgba = TextureDescriptor {
+            label: Some("rgba_texture"),
+            size: Extent3d {
+                width: 256,
+                height: 256,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba8Unorm,
+            usage: TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        };
+
+        let texture_rgba = ctx.create_texture(&desc_rgba);
+        ctx.return_texture(texture_rgba);
+
+        // Request BGRA texture - should NOT reuse due to different format
+        let desc_bgra = TextureDescriptor {
+            label: Some("bgra_texture"),
+            size: Extent3d {
+                width: 256,
+                height: 256,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Bgra8Unorm,
+            usage: TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        };
+
+        let _texture_bgra = ctx.create_texture(&desc_bgra);
+        let stats = ctx.texture_pool_stats();
+        assert_eq!(stats.pool_misses, 2, "Different formats should not reuse");
+        assert_eq!(stats.pool_hits, 0);
+    }
+
+    #[tokio::test]
+    async fn test_texture_pool_memory_tracking() {
+        let context = GupContext::headless().await.unwrap();
+        let mut ctx = Arc::try_unwrap(context).unwrap();
+
+        let descriptor = TextureDescriptor {
+            label: Some("memory_test"),
+            size: Extent3d {
+                width: 512,
+                height: 512,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba8Unorm, // 4 bytes per pixel
+            usage: TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        };
+
+        let texture = ctx.create_texture(&descriptor);
+        ctx.return_texture(texture);
+
+        let stats = ctx.texture_pool_stats();
+        // 512 * 512 * 4 = 1,048,576 bytes
+        assert!(stats.pooled_memory > 0, "Should track memory usage");
+        assert_eq!(
+            stats.pooled_memory,
+            512 * 512 * 4,
+            "Should calculate RGBA8 memory correctly"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_texture_pool_cleanup() {
+        let context = GupContext::headless().await.unwrap();
+        let mut ctx = Arc::try_unwrap(context).unwrap();
+
+        // Create textures with different formats to avoid pool hits
+        let formats = [
+            TextureFormat::Rgba8Unorm,
+            TextureFormat::Bgra8Unorm,
+            TextureFormat::Rgba16Float,
+            TextureFormat::R32Float,
+            TextureFormat::Rg16Float,
+        ];
+
+        for format in formats.iter() {
+            let descriptor = TextureDescriptor {
+                label: Some("cleanup_test"),
+                size: Extent3d {
+                    width: 256,
+                    height: 256,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: TextureDimension::D2,
+                format: *format,
+                usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            };
+
+            let texture = ctx.create_texture(&descriptor);
+            ctx.return_texture(texture);
+        }
+
+        let stats_before = ctx.texture_pool_stats();
+        assert_eq!(stats_before.pooled_textures, 5);
+        assert_eq!(stats_before.total_deallocated, 5);
+        assert!(stats_before.pooled_memory > 0);
+
+        // Cleanup should work (but won't remove anything immediately due to timing)
+        ctx.cleanup_texture_pool();
+
+        // Stats should still be valid (textures haven't timed out yet)
+        let stats_after = ctx.texture_pool_stats();
+        assert!(stats_after.pooled_textures <= 5);
+    }
+
+    #[tokio::test]
+    async fn test_texture_pool_3d_textures() {
+        let context = GupContext::headless().await.unwrap();
+        let mut ctx = Arc::try_unwrap(context).unwrap();
+
+        let descriptor = TextureDescriptor {
+            label: Some("3d_texture"),
+            size: Extent3d {
+                width: 64,
+                height: 64,
+                depth_or_array_layers: 64,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D3,
+            format: TextureFormat::Rgba8Unorm,
+            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+            view_formats: &[],
+        };
+
+        let texture = ctx.create_texture(&descriptor);
+        assert_eq!(texture.dimension(), TextureDimension::D3);
+        ctx.return_texture(texture);
+
+        // Request same 3D texture
+        let texture2 = ctx.create_texture(&descriptor);
+        let stats = ctx.texture_pool_stats();
+        assert_eq!(stats.pool_hits, 1);
+
+        // Verify 3D memory calculation
+        ctx.return_texture(texture2);
+        let stats = ctx.texture_pool_stats();
+        // 64 * 64 * 64 * 4 bytes
+        assert_eq!(stats.pooled_memory, 64 * 64 * 64 * 4);
+    }
+
+    #[tokio::test]
+    async fn test_texture_pool_usage_flags() {
+        let context = GupContext::headless().await.unwrap();
+        let mut ctx = Arc::try_unwrap(context).unwrap();
+
+        // Create texture with specific usage
+        let desc1 = TextureDescriptor {
+            label: Some("render_attachment"),
+            size: Extent3d {
+                width: 256,
+                height: 256,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba8Unorm,
+            usage: TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        };
+
+        let texture1 = ctx.create_texture(&desc1);
+        ctx.return_texture(texture1);
+
+        // Request texture with different usage - should NOT reuse
+        let desc2 = TextureDescriptor {
+            label: Some("texture_binding"),
+            size: Extent3d {
+                width: 256,
+                height: 256,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba8Unorm,
+            usage: TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        };
+
+        let _texture2 = ctx.create_texture(&desc2);
+        let stats = ctx.texture_pool_stats();
+        assert_eq!(
+            stats.pool_misses, 2,
+            "Different usage flags should prevent reuse"
+        );
     }
 }
