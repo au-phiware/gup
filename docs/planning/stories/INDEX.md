@@ -93,7 +93,7 @@ epic and status.
 | [GUP-031](GUP-031_GPU_Interaction_Event_System.md)       | GPU-Based Interaction Event System       | ⚠️ Partial     | High     | 13     |
 | [GUP-032](GUP-032_Advanced_Mark_System.md)               | Advanced Mark System with Custom Shapes  | ✅ Complete    | Medium   | 8      |
 | [GUP-033](GUP-033_Shader_Function_Composition_Engine.md) | Shader Function Composition Engine       | ✅ Complete    | Medium   | 10     |
-| [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md)         | GPU Memory Profiling and Debugging Tools | 💡 New         | Low      | 5      |
+| [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md)         | GPU Memory Profiling and Debugging Tools | 🚧 In Progress | Low      | 5      |
 | [GUP-131](GUP-131_Shader_Type_Constructors.md)           | Add Constructor Methods to Shader Types  | ✅ Complete    | Low      | 1      |
 | [GUP-132](GUP-132_GPU_Path_Tessellation.md)              | GPU Tessellation for Path Mark           | 💡 New         | Medium   | 8      |
 | [GUP-134](GUP-134_Storage_Buffer_ColorGradient.md)       | Storage Buffer-Based ColorGradient       | 📋 Planned     | Low      | 3      |

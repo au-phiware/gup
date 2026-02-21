@@ -1,5 +1,8 @@
 # GUP-034: GPU Memory Profiling and Debugging Tools
 
+**Status**: 🚧 In Progress  
+**Started**: 2025-01-22
+
 ## Story Overview
 
 **Title**: Development Tools for GPU Memory Analysis and Performance Debugging  
