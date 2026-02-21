@@ -892,7 +892,5 @@ from GPU
 
 ---
 
-_Last Updated: After completion of GUP-121 (Screen Reader Testing
-Infrastructure) - 2025-01-24_  
-_Next Priority Stories: GUP-122 (Execute Screen Reader Tests), GUP-118 (Position
-Sync), GUP-111 (Automatic ARIA Generation)_
+_Last Updated: After completion of GUP-118 (Visualization Position Synchronization) - 2025-01-24_  
+_Next Priority Stories: GUP-122 (Execute Screen Reader Tests), GUP-111 (Automatic ARIA Generation), GUP-119 (Interactive Event Forwarding)_
