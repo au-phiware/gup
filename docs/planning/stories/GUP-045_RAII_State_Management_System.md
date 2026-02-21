@@ -1,5 +1,8 @@
 # GUP-045: RAII State Management System
 
+**Status**: 🚧 In Progress  
+**Started**: 2025-01-XX
+
 ## Story
 
 **As a** developer using the blend state system  
