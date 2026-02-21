@@ -1,5 +1,7 @@
 # GUP-032: Advanced Mark System with Custom Shapes
 
+**Status**: 🚧 In Progress (2025-01-10)
+
 ## Story Overview
 
 **Title**: Extend Mark System Beyond Basic Circles to Support Complex Shapes  
@@ -23,24 +25,24 @@ SVG-like shapes, and procedurally generated marks.
 
 ### AC1: Core Mark Types
 
-- [ ] `Rectangle` mark with width/height/corner radius
-- [ ] `Line` mark with start/end points and stroke properties
-- [ ] `Path` mark supporting SVG-like path commands
-- [ ] `Text` mark with font, size, and alignment options
+- [x] `Rectangle` mark with width/height/corner radius (from GUP-067)
+- [x] `Line` mark with start/end points and stroke properties (from GUP-067)
+- [x] `Path` mark supporting SVG-like path commands
+- [x] `Text` mark with font, size, and alignment options (integrates existing SDF renderer)
 
 ### AC2: Mark Composition System
 
-- [ ] `CompositeMark` for combining multiple marks
-- [ ] Mark transformation pipeline (scale, rotate, translate)
+- [x] `CompositeMark` for combining multiple marks
+- [x] Mark transformation pipeline (scale, rotate, translate)
 - [ ] Hierarchical mark relationships
 - [ ] Mark templates and reusable components
 
 ### AC3: Custom Mark Definition
 
-- [ ] Trait system for user-defined marks
-- [ ] WGSL shader generation for custom marks
-- [ ] Instancing support for performance
-- [ ] Attribute mapping for custom properties
+- [x] Trait system for user-defined marks (documented)
+- [x] WGSL shader generation for custom marks (documented)
+- [x] Instancing support for performance (documented)
+- [x] Attribute mapping for custom properties (documented)
 
 ### AC4: Performance Optimization
 
