@@ -907,10 +907,8 @@ integration tests and examples
 
 ---
 
-_Last Updated: After partial completion of GUP-031 (GPU Interaction Event
-System) - 2024-02-22_  
-_Next Priority Stories: GUP-128 (Debug GPU Hit Test Detection), GUP-122 (Execute
-Screen Reader Tests), GUP-111 (Automatic ARIA Generation)_
+_Last Updated: After completion of GUP-128 (Debug GPU Hit Test Detection) - 2024-02-22_  
+_Next Priority Stories: GUP-122 (Execute Screen Reader Tests), GUP-111 (Automatic ARIA Generation)_
 
 ---
 
