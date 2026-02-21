@@ -269,6 +269,82 @@ pub async fn demonstrate_performance() -> GupResult<()> {
     Ok(())
 }
 
+/// Demonstrates RAII automatic blend state management
+pub async fn demonstrate_raii_guards() -> GupResult<()> {
+    println!("\n\n🛡️  RAII Automatic State Management");
+    println!("===================================");
+    println!("Demonstrating automatic blend state restoration (GUP-045)");
+
+    let mut context = RenderContext::new().await?;
+    let red = ColoredQuad::red("red", [-0.2, 0.0], 0.4);
+    let blue = ColoredQuad::blue("blue", [0.2, 0.0], 0.4);
+
+    // Set initial blend mode
+    context.set_blend_mode(BlendMode::None)?;
+    println!("\n📝 Initial blend mode: {:?}", context.current_blend_mode());
+
+    println!("\n1. Using RAII guard for automatic cleanup:");
+    {
+        let mut guard = context.with_blend_mode(BlendMode::AlphaBlending)?;
+        println!("   - Inside guard scope");
+        println!("   - Blend mode: {:?}", guard.context().current_blend_mode());
+
+        let mut red_copy = red.clone();
+        red_copy.render(guard.context_mut())?;
+
+        println!("   - About to exit scope, guard will automatically restore state");
+    }
+    println!("   - After guard dropped");
+    println!("   - Blend mode: {:?} (automatically restored!)", context.current_blend_mode());
+
+    println!("\n2. Nested RAII guards:");
+    {
+        let mut outer = context.with_blend_mode(BlendMode::Multiply)?;
+        println!("   - Outer guard: {:?}", outer.context().current_blend_mode());
+
+        {
+            let mut inner = outer.context_mut().with_blend_mode(BlendMode::Additive)?;
+            println!("     - Inner guard: {:?}", inner.context().current_blend_mode());
+
+            let mut blue_copy = blue.clone();
+            blue_copy.render(inner.context_mut())?;
+
+            println!("     - Inner guard about to drop");
+        }
+        println!("   - After inner drop: {:?} (back to outer mode)", outer.context().current_blend_mode());
+    }
+    println!("   - After outer drop: {:?} (back to initial)", context.current_blend_mode());
+
+    println!("\n3. Exception safety demonstration:");
+    println!("   - Guards restore state even if rendering fails");
+    {
+        let result = (|| -> GupResult<()> {
+            let guard = context.with_blend_mode(BlendMode::AlphaBlending)?;
+            println!("   - Guard active: {:?}", guard.context().current_blend_mode());
+            // Simulate early return
+            if true {
+                println!("   - Early return triggered!");
+                return Ok(());
+            }
+            #[allow(unreachable_code)]
+            {
+                println!("   - This code is never reached");
+                Ok(())
+            }
+        })();
+        assert!(result.is_ok());
+        println!("   - After function return: {:?} (guard cleaned up automatically)", context.current_blend_mode());
+    }
+
+    println!("\n✅ RAII guards provide:");
+    println!("   • Automatic cleanup (no manual pop needed)");
+    println!("   • Exception safety (cleanup even on errors)");
+    println!("   • Compile-time correctness (borrow checker prevents misuse)");
+    println!("   • Zero runtime overhead compared to manual management");
+
+    Ok(())
+}
+
 /// Demonstrates all blend modes side by side
 pub async fn demonstrate_blend_comparison() -> GupResult<()> {
     println!("\n\n🎯 Blend Mode Comparison");
@@ -315,10 +391,11 @@ pub async fn demonstrate_blend_comparison() -> GupResult<()> {
 pub async fn run_blend_modes_showcase() -> GupResult<()> {
     println!("🚀 Gup Blend Modes Showcase");
     println!("===========================");
-    println!("Demonstrating GPU blend state integration (GUP-027)");
+    println!("Demonstrating GPU blend state integration (GUP-027 & GUP-045)");
 
     demonstrate_basic_blend_modes().await?;
     demonstrate_nested_blending().await?;
+    demonstrate_raii_guards().await?;
     demonstrate_cross_fade().await?;
     demonstrate_performance().await?;
     demonstrate_blend_comparison().await?;
@@ -328,6 +405,7 @@ pub async fn run_blend_modes_showcase() -> GupResult<()> {
     println!("Key features demonstrated:");
     println!("  ✅ WebGPU blend state integration");
     println!("  ✅ Blend state stack for nested compositions");
+    println!("  ✅ RAII automatic state management");
     println!("  ✅ Global alpha uniform system");
     println!("  ✅ Pipeline caching for performance");
     println!("  ✅ All four blend modes (None, Alpha, Additive, Multiply)");
