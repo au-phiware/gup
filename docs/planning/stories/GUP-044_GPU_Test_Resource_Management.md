@@ -190,3 +190,95 @@ test failures remain. This is because:
 
 This can be addressed in a follow-up story focused on test execution ordering
 rather than just resource creation.
+
+## Retrospective
+
+**Completed**: 2025-01-21
+
+### Key Technical Learnings
+
+#### GPU Driver Resource Limits
+- **Challenge**: GPU drivers have limited concurrent resource capacity that isn't exposed via API
+- **Solution**: Semaphore-based concurrency control at the application level
+- **Pattern**: Use RAII guards (`SemaphorePermit`) to ensure cleanup even on panic
+- **Trade-off**: Limits parallelism but prevents crashes
+
+The root cause wasn't just concurrent context *creation* - GPU drivers appear to
+have internal resource limits that can be exceeded even with properly managed
+contexts. A semaphore value of 1 still shows some flakiness, suggesting the issue
+extends to runtime GPU operations, not just initialization.
+
+#### Test Isolation vs Performance
+- **Challenge**: Complete test isolation requires serialization, losing parallel speedup
+- **Solution**: Partial serialization (limit concurrent GPU contexts) as middle ground
+- **Pattern**: Different helper functions for different use cases:
+  - `create_test_context()` for Arc<RenderContext> (shared, immutable)
+  - `create_mut_test_context()` for mutable contexts
+  - `create_shared_test_context()` for explicit Arc cloning
+- **Trade-off**: Some flakiness remains but major improvement over baseline
+
+#### RAII for Resource Management in Tests
+- **Challenge**: Tests can panic, leaving resources leaked
+- **Solution**: Return permit/guard objects that clean up on drop
+- **Pattern**: `GpuContextGuard<'a>` wraps both context and permit
+- **Benefit**: Automatic cleanup even when tests panic or fail assertions
+
+### Architectural Decisions
+
+#### Semaphore Over Mutex Pool
+- **Decision**: Used tokio Semaphore instead of Mutex<Vec<Context>>  
+- **Reasoning**: Simpler implementation, no need to track which context is in use
+- **Trade-off**: Creates new contexts instead of reusing, but cleaner API
+- **Future**: Could add pooling layer on top if context creation becomes bottleneck
+
+#### Module Placement  
+- **Decision**: Created dedicated `test_utils` module exposed at crate root
+- **Reasoning**: Makes utilities available to both unit tests and integration tests
+- **Trade-off**: Adds to public API surface but marked as test utilities
+- **Future**: Could gate behind #[cfg(test)] if needed
+
+#### Semaphore Limit of 1
+- **Decision**: Conservative limit of 1 concurrent GPU context
+- **Reasoning**: Higher limits (2, 4) still showed failures; 1 minimizes issues
+- **Trade-off**: Serializes GPU tests, loses most parallel speedup benefit
+- **Future**: Could make configurable via environment variable for different hardware
+
+### Development Workflow Insights
+
+- **Discovery**: The segfaults only occurred in parallel execution, making them hard to
+  debug initially. Running with `--test-threads=1` was the key diagnostic step.
+
+- **Testing Strategy**: Ran tests multiple times (5-10 iterations) to measure reliability.
+  This quantified the improvement: 0% success parallel → ~70-80% with semaphore.
+
+- **File Migration Challenge**: Bulk search-and-replace broke some test files due to
+  different import styles. Manual verification needed for each test file.
+
+- **Two Context Types**: Discovered `RenderContext` (in render.rs) vs `GupContext` (in
+  context.rs) are different types. Tests use `RenderContext`, not `GupContext`.
+
+- **Arc vs Mut Contexts**: Tests fall into two categories:
+  1. Tests sharing contexts across selections (need Arc)
+  2. Tests mutating context directly (need &mut, can't use Arc)
+  
+  This required two different helper functions.
+
+### Follow-up Stories
+
+While this story significantly improves the situation, complete reliability requires:
+
+1. **GUP-157: Full Test Serialization Strategy** — Investigate holding semaphore
+   permits for entire test duration, not just context creation. May need custom
+   test harness or tokio runtime configuration.
+
+2. **GUP-158: GPU Test Infrastructure Hardening** — Add retry logic for flaky
+   tests, better error messages on GPU failures, and environment-based
+   configuration for CI vs local development.
+
+3. **GUP-159: Test Suite Performance Optimization** — With serialization limiting
+   parallelism, optimize individual test performance. Profile slow tests,
+   reduce data sizes where possible, and add #[ignore] for stress tests.
+
+4. **GUP-160: Migrate Remaining Test Files** — Update all test files in the
+   project to use test_utils helpers. This story only migrated
+   interaction_system_tests.rs fully.
