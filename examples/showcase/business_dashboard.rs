@@ -296,8 +296,8 @@ mod tests {
     #[test]
     fn test_profit_calculation() {
         let metrics = MonthlyMetrics::new("Jan", 1.0, 100000.0, 70000.0, 1000.0, 0.03);
-        assert_eq!(metrics.profit(), 30000.0);
-        assert_eq!(metrics.profit_margin(), 30.0);
+        assert!((metrics.profit() - 30000.0).abs() < 0.01);
+        assert!((metrics.profit_margin() - 30.0).abs() < 0.01);
     }
 
     #[test]
