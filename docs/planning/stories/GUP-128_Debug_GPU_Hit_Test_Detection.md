@@ -1,6 +1,6 @@
 # GUP-128: Debug GPU Hit Test Element Detection
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress (2024-02-22)
 
 ## Story Overview
 
@@ -11,7 +11,10 @@
 
 ## Context
 
-During GUP-031 implementation, 3 interaction system tests started failing with GPU hit tests returning 0 hits when they should find elements. The core integration between Selection and the interaction system is complete, but the GPU compute shader is not detecting elements at expected positions.
+During GUP-031 implementation, 3 interaction system tests started failing with
+GPU hit tests returning 0 hits when they should find elements. The core
+integration between Selection and the interaction system is complete, but the
+GPU compute shader is not detecting elements at expected positions.
 
 ## User Story
 
@@ -29,7 +32,8 @@ During GUP-031 implementation, 3 interaction system tests started failing with G
 
 ### AC2: Root Cause Identified
 
-- [ ] Document whether issue is in: element upload, coordinate transform, or shader logic
+- [ ] Document whether issue is in: element upload, coordinate transform, or
+      shader logic
 - [ ] Add debug logging or validation to prevent regression
 - [ ] Update any incorrect assumptions in shader or Rust code
 
@@ -50,7 +54,7 @@ During GUP-031 implementation, 3 interaction system tests started failing with G
 ### 2. Coordinate Space Investigation
 
 - [ ] Document coordinate system expectations (screen vs world space)
-- [ ] Verify query positions match element positions  
+- [ ] Verify query positions match element positions
 - [ ] Check if coordinate transformations are needed
 
 ### 3. Shader Logic Debugging
@@ -80,8 +84,10 @@ During GUP-031 implementation, 3 interaction system tests started failing with G
 
 ## Risk Assessment
 
-**Medium Risk**: GPU shader debugging can be time-intensive without proper tooling. May need to create debug visualization tools.
+**Medium Risk**: GPU shader debugging can be time-intensive without proper
+tooling. May need to create debug visualization tools.
 
 ---
 
-_Created from GUP-031 retrospective - identified GPU hit test issues preventing full story completion._
+_Created from GUP-031 retrospective - identified GPU hit test issues preventing
+full story completion._
