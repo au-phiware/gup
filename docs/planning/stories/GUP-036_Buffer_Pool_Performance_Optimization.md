@@ -342,3 +342,68 @@ All 42 buffer tests pass with `--test-threads=1`.
 - [x] Benchmarks show improvement over static pools (existing tests validate)
 - [x] Comprehensive test coverage including edge cases
 - [x] Documentation with configuration recommendations (inline code documentation)
+
+## Retrospective
+
+**Completed**: 2025-01-20
+
+### Key Technical Learnings
+
+#### Incremental Enhancement Pattern
+- **Challenge**: Enhancing an existing, working system without breaking it
+- **Solution**: Add new fields to structs with `..Default::default()` in tests to minimize disruption
+- **Pattern**: Always provide Default implementations for config structs to enable partial specification
+
+#### Usage Pattern Tracking Design
+- **Challenge**: Efficiently track allocation patterns without overhead
+- **Solution**: Circular buffer (VecDeque) with configurable size + HashMap for aggregated stats
+- **Trade-off**: Fixed memory overhead for history vs. unbounded growth
+- **Pattern**: Separate real-time tracking (VecDeque) from statistical aggregation (HashMap)
+
+#### Retention Score Algorithm
+- **Challenge**: Quantify "value" of keeping a buffer in the pool
+- **Solution**: `retention_score = ln(count) × (1 / (time_since_access + 1))`
+- **Reasoning**: Logarithmic frequency prevents outliers from dominating; recency factor ensures recent use is weighted
+- **Future**: Could be tuned per workload type (burst vs. steady-state)
+
+#### Three-Tier Cleanup Strategy
+- **Challenge**: Balance memory reclamation with pool effectiveness
+- **Solution**: Gentle (30m idle) → Aggressive (10m idle + LRU) → Emergency (1m idle + clear all)
+- **Pattern**: Progressive escalation with increasingly aggressive thresholds
+- **Insight**: This prevents "pool thrashing" where buffers are constantly evicted and recreated
+
+### Architectural Decisions
+
+#### Configurable Adaptive Behavior
+- **Decision**: Make adaptive features opt-in/opt-out via `enable_adaptive_sizing`
+- **Reasoning**: Some workloads may not benefit; fallback to simple LRU ensures compatibility
+- **Trade-off**: Adds config complexity vs. "magic" auto-tuning
+- **Future**: Could auto-detect workload patterns and toggle adaptivity
+
+#### Separate Pressure Levels vs. Single Threshold
+- **Decision**: Use enum with 4 levels (Normal, Warning, Critical, Emergency) instead of boolean "high pressure"
+- **Reasoning**: Enables nuanced response strategies; makes debugging easier (can log pressure transitions)
+- **Trade-off**: More code vs. simpler logic
+- **Benefit**: Much easier to tune behavior per environment (e.g., strict vs. relaxed thresholds)
+
+#### Event-Based Tracking vs. Polling
+- **Decision**: Record events inline during allocate/deallocate rather than periodic polling
+- **Reasoning**: Zero overhead when disabled; accurate timestamps; no background threads
+- **Trade-off**: Tiny allocation overhead vs. polling complexity
+- **Pattern**: "Event sourcing lite" - replay history to answer queries
+
+### Development Workflow Insights
+
+- **Test-First Validation**: Wrote tests for adaptive features before implementation details, which caught edge cases early (e.g., pressure calculation with disabled adaptive sizing)
+- **Naming Clash Discovery**: Hit ambiguous glob re-export warning for `AllocationEvent` - renamed to `BufferAllocationEvent` immediately rather than fighting the compiler
+- **Disk Space Issues**: Hit "no space left" during full test runs - resolved by running `--lib` tests only, highlighting need for cleanup CI step
+- **Documentation Debt**: Inline docs are adequate but a dedicated guide on "tuning buffer pool for your workload" would be valuable
+
+### Follow-up Stories
+
+No new stories identified. This story delivered all core adaptive features.
+
+**Potential Future Enhancements** (not blocking):
+- **GUP-XXX: Buffer Pool Telemetry Export** — Export metrics to Prometheus/OpenTelemetry for production monitoring
+- **GUP-XXX: Workload-Specific Tuning Profiles** — Pre-configured settings for common workloads (e.g., "streaming video", "interactive chart", "batch processing")
+- **GUP-XXX: Buffer Warming Strategies** — Pre-allocate buffers based on historical patterns during idle time
