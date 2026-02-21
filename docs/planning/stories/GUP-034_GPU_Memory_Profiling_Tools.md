@@ -26,17 +26,17 @@ leaks, and profile performance bottlenecks.
 
 ### AC1: Memory Monitoring
 
-- [ ] Real-time GPU memory usage tracking
-- [ ] Buffer allocation/deallocation logging
-- [ ] Memory leak detection and reporting
-- [ ] Resource lifetime visualization
+- [x] Real-time GPU memory usage tracking
+- [x] Buffer allocation/deallocation logging  
+- [x] Memory leak detection and reporting
+- [x] Resource lifetime visualization (via memory history/trends)
 
 ### AC2: Performance Profiling
 
-- [ ] GPU command execution timing
-- [ ] Buffer read/write performance metrics
-- [ ] Shader compilation and execution profiling
-- [ ] Frame rate and rendering pipeline analysis
+- [x] GPU command execution timing (implemented in GUP-015)
+- [x] Shader compilation and execution profiling (implemented in GUP-015)
+- [x] Frame rate and rendering pipeline analysis (implemented in GUP-015)
+- [ ] Buffer read/write performance metrics (enhancement needed)
 
 ### AC3: Debug Visualization
 
@@ -47,10 +47,10 @@ leaks, and profile performance bottlenecks.
 
 ### AC4: Integration and Usability
 
-- [ ] Optional compilation (debug builds only)
+- [x] Optional compilation (debug builds only) - via debug_assertions
 - [ ] Web-based profiling dashboard
-- [ ] Export capabilities for performance data
-- [ ] Integration with existing logging systems
+- [x] Export capabilities for performance data (JSON export implemented)
+- [x] Integration with existing logging systems
 
 ## Technical Requirements
 

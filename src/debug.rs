@@ -49,11 +49,13 @@ pub mod buffer_inspector;
 pub mod layout_validator;
 pub mod memory_profiler;
 pub mod shader_profiler;
+pub mod visualization;
 
 pub use buffer_inspector::*;
 pub use layout_validator::*;
 pub use memory_profiler::*;
 pub use shader_profiler::*;
+pub use visualization::*;
 
 /// Debug configuration for GPU debugging tools
 #[derive(Debug, Clone, Serialize, Deserialize)]
