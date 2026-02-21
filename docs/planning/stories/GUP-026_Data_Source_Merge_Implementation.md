@@ -1,5 +1,8 @@
 # GUP-026: Data Source Merge Implementation
 
+**Status**: 🚧 In Progress  
+**Started**: 2025-01-27
+
 ## Story Overview
 
 **Title**: Implement Data Source Combination for Merge Composition Mode

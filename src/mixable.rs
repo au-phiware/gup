@@ -21,6 +21,7 @@ use crate::{GupError, GupResult, RenderContext, Viewport};
 use std::fmt::Debug;
 
 pub mod composition_recovery;
+pub mod merge;
 pub mod optimization;
 
 pub use composition_recovery::{
@@ -28,6 +29,7 @@ pub use composition_recovery::{
     HealthStatus, MixableErrorRecovery, PerformanceBottleneck, RecoveryStrategy,
     RobustCompositionExecutor, debug,
 };
+pub use merge::{MergeStrategy, Mergeable};
 pub use optimization::{CompositionExecutor, CompositionMetrics, OPTIMIZATION_THRESHOLD};
 
 /// Composition modes define how two mixable components are combined.
@@ -249,6 +251,8 @@ pub struct ComposedVisualization<A: Mixable, B: Mixable> {
     side_by_side_config: SideBySideConfig,
     /// Custom composition behavior (for Custom mode)
     custom_behavior: Option<CustomCompositionBehavior>,
+    /// Merge strategy for Merge mode
+    merge_strategy: MergeStrategy,
 }
 
 impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
@@ -265,6 +269,7 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
             composition_mode: CompositionMode::default(),
             side_by_side_config: SideBySideConfig::default(),
             custom_behavior: None,
+            merge_strategy: MergeStrategy::default(),
         }
     }
 
@@ -282,6 +287,7 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
             composition_mode: mode,
             side_by_side_config: SideBySideConfig::default(),
             custom_behavior: None,
+            merge_strategy: MergeStrategy::default(),
         }
     }
 
@@ -293,6 +299,7 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
             composition_mode: CompositionMode::SideBySide,
             side_by_side_config: config,
             custom_behavior: None,
+            merge_strategy: MergeStrategy::default(),
         }
     }
 
@@ -304,6 +311,7 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
             composition_mode: CompositionMode::Custom,
             side_by_side_config: SideBySideConfig::default(),
             custom_behavior: Some(behavior),
+            merge_strategy: MergeStrategy::default(),
         }
     }
 
@@ -311,6 +319,26 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
     pub fn with_side_by_side_config(mut self, config: SideBySideConfig) -> Self {
         self.side_by_side_config = config;
         self
+    }
+
+    /// Configure the merge strategy for Merge mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `strategy` - The merge strategy to use
+    pub fn with_merge_strategy(mut self, strategy: MergeStrategy) -> Self {
+        self.merge_strategy = strategy;
+        self
+    }
+
+    /// Get the current merge strategy.
+    pub fn merge_strategy(&self) -> &MergeStrategy {
+        &self.merge_strategy
+    }
+
+    /// Set the merge strategy.
+    pub fn set_merge_strategy(&mut self, strategy: MergeStrategy) {
+        self.merge_strategy = strategy;
     }
 
     /// Get the composition mode being used.
@@ -430,6 +458,40 @@ impl<A: Mixable + 'static, B: Mixable + 'static> ComposedVisualization<A, B> {
     }
 
     /// Render in merge mode by combining data sources
+    ///
+    /// # Current Limitations
+    ///
+    /// This implementation renders both components sequentially because Rust's
+    /// type system makes it challenging to generically extract and merge data
+    /// from arbitrary Mixable types at runtime.
+    ///
+    /// # Future Enhancement
+    ///
+    /// To fully implement data merging, components must implement the
+    /// `Mergeable<T>` trait for a common data type `T`. This would require:
+    ///
+    /// 1. Downcast support for Mergeable trait objects
+    /// 2. Type-checking at runtime to verify compatible data types
+    /// 3. Generic merge implementation for compatible Mergeable types
+    ///
+    /// # Workaround
+    ///
+    /// For types that support merging, create a custom wrapper that implements
+    /// Mixable and handles data extraction and merging internally:
+    ///
+    /// ```rust,ignore
+    /// struct MergedScatterPlots<T> {
+    ///     data: Vec<T>,
+    /// }
+    ///
+    /// impl<T: Clone + PartialEq> MergedScatterPlots<T> {
+    ///     fn merge(plot1: ScatterPlot<T>, plot2: ScatterPlot<T>) -> Self {
+    ///         let strategy = MergeStrategy::Deduplicate;
+    ///         let merged_data = strategy.apply(plot1.data(), plot2.data()).unwrap();
+    ///         Self { data: merged_data }
+    ///     }
+    /// }
+    /// ```
     fn render_merge(&mut self, context: &mut RenderContext) -> GupResult<()> {
         // For merge mode, we need to extract and combine the underlying data
         // This is a simplified implementation - real merge would depend on data types
@@ -441,8 +503,12 @@ impl<A: Mixable + 'static, B: Mixable + 'static> ComposedVisualization<A, B> {
             ));
         }
 
-        // For now, just render both components sequentially
-        // In a full implementation, this would extract, merge, and create a unified visualization
+        // Current implementation: render both components sequentially
+        // This provides visual combination without true data merging
+        //
+        // NOTE: Merge strategy is configured but not currently applied because
+        // the generic Mixable trait doesn't provide access to underlying data.
+        // See module documentation for merge strategies and Mergeable trait.
         self.first.render(context)?;
         self.second.render(context)?;
 

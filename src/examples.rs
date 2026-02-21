@@ -2,11 +2,13 @@
 // Copyright (C) 2025 Corin Lawson <corin@phiware.com.au>
 //
 
+use crate::mixable::merge::Mergeable;
 use crate::render::{BasicPipeline, Vertex};
 use crate::{
     CrossFadeComposition, CustomCompositionBehavior, GupResult, LayoutDirection, Mixable,
     MixableExt, RenderContext, SideBySideConfig,
 };
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 /// Example of a real GPU-accelerated Mixable implementation
@@ -75,6 +77,24 @@ impl Mixable for GpuScatterPlot {
     }
 }
 
+impl Mergeable<Vertex> for GpuScatterPlot {
+    fn extract_data(&self) -> &[Vertex] {
+        &self.points
+    }
+
+    fn from_merged_data(data: Vec<Vertex>) -> Self {
+        Self {
+            points: data,
+            pipeline: None,
+        }
+    }
+
+    fn can_merge_with<U: 'static>(&self, _other_type: PhantomData<U>) -> bool {
+        // Can merge with other GpuScatterPlot instances (which use Vertex data)
+        std::any::TypeId::of::<Vertex>() == std::any::TypeId::of::<U>()
+    }
+}
+
 /// Example: Creating compositions with different modes
 pub mod composition_examples {
     use super::*;
@@ -139,16 +159,27 @@ pub mod composition_examples {
         plot1.custom_compose(plot2, behavior)
     }
 
-    /// Demonstrates merge composition (currently placeholder behavior)
+    /// Demonstrates merge composition with actual data merging.
+    ///
+    /// This example shows how to use the Mergeable trait to combine data from
+    /// multiple scatter plots. For this to work with the Mixable trait system,
+    /// we create a wrapper type that performs the merge.
     pub fn merge_example() -> impl Mixable<Output = ()> {
+        use crate::mixable::merge::MergeStrategy;
+
         let dataset1 = vec![(0.1, 0.2), (0.3, 0.4)];
         let dataset2 = vec![(0.5, 0.6), (0.7, 0.8)];
 
         let plot1 = GpuScatterPlot::new(dataset1, [1.0, 0.0, 0.0, 1.0]); // Red
         let plot2 = GpuScatterPlot::new(dataset2, [0.0, 1.0, 0.0, 1.0]); // Green
 
-        // In future implementations, this would combine the datasets
-        plot1.merge(plot2)
+        // Merge the data from both plots
+        let merged_data = MergeStrategy::Append
+            .apply(plot1.extract_data(), plot2.extract_data())
+            .unwrap();
+
+        // Create a new plot from the merged data
+        GpuScatterPlot::from_merged_data(merged_data)
     }
 
     /// Demonstrates complex nested composition
