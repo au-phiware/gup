@@ -47,10 +47,12 @@ use wgpu::{Device, Queue};
 
 pub mod buffer_inspector;
 pub mod layout_validator;
+pub mod memory_profiler;
 pub mod shader_profiler;
 
 pub use buffer_inspector::*;
 pub use layout_validator::*;
+pub use memory_profiler::*;
 pub use shader_profiler::*;
 
 /// Debug configuration for GPU debugging tools
@@ -117,6 +119,8 @@ pub struct GpuDebugContext {
     pub buffer_inspector: GpuBufferInspector,
     /// Memory layout validator
     pub layout_validator: MemoryLayoutValidator,
+    /// Memory profiler for allocation tracking and leak detection
+    pub memory_profiler: GpuMemoryProfiler,
     /// Shader profiler for performance analysis
     pub shader_profiler: ShaderProfiler,
     /// Debug configuration
@@ -136,6 +140,7 @@ impl GpuDebugContext {
         Self {
             buffer_inspector: GpuBufferInspector::new(device, queue),
             layout_validator: MemoryLayoutValidator::new(),
+            memory_profiler: GpuMemoryProfiler::new(device, queue),
             shader_profiler: ShaderProfiler::new(device, queue),
             config,
             performance_history: Vec::new(),
@@ -264,12 +269,14 @@ impl GpuDebugContext {
     /// Export debug report with all collected data
     pub async fn export_debug_report(&self, output_path: &str) -> GupResult<()> {
         let summary = self.get_performance_summary();
+        let memory_report = self.memory_profiler.get_memory_report();
         let report = DebugReport {
             timestamp: chrono::Utc::now(),
             config: self.config.clone(),
             performance_summary: summary,
             performance_history: self.performance_history.clone(),
             layout_validation_results: self.layout_validator.get_validation_history(),
+            memory_report: Some(memory_report),
         };
 
         let json = serde_json::to_string_pretty(&report).map_err(|e| {
@@ -343,6 +350,7 @@ pub struct DebugReport {
     pub performance_summary: PerformanceSummary,
     pub performance_history: Vec<PerformanceSnapshot>,
     pub layout_validation_results: Vec<LayoutValidationResult>,
+    pub memory_report: Option<MemoryReport>,
 }
 
 #[cfg(test)]
@@ -398,6 +406,7 @@ mod tests {
             performance_summary: summary,
             performance_history: Vec::new(),
             layout_validation_results: Vec::new(),
+            memory_report: None,
         };
 
         let json = serde_json::to_string_pretty(&report);
