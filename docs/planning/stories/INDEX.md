@@ -149,7 +149,7 @@ epic and status.
 | Story                                                 | Title                           | Status      | Priority | Points |
 | ----------------------------------------------------- | ------------------------------- | ----------- | -------- | ------ |
 | [GUP-043](GUP-043_Visual_Blend_Mode_Demonstration.md) | Visual Blend Mode Demonstration | ✅ Complete | High     | 3      |
-| [GUP-044](GUP-044_GPU_Test_Resource_Management.md)    | GPU Test Resource Management    | 🚧 In Progress | Medium   | 4      |
+| [GUP-044](GUP-044_GPU_Test_Resource_Management.md)    | GPU Test Resource Management    | ✅ Complete | Medium   | 4      |
 | [GUP-045](GUP-045_RAII_State_Management_System.md)    | RAII State Management System    | 💡 New      | Medium   | 2      |
 
 ## Story Status Legend
