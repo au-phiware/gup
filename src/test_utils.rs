@@ -110,6 +110,33 @@ pub async fn create_shared_test_context(
     Ok((context, guard))
 }
 
+/// Create a mutable test GPU context for tests that need mutation
+///
+/// This function is for tests that need to mutate the context directly.
+/// Returns a tuple of (context, permit) where the permit ensures the semaphore
+/// is released when dropped.
+///
+/// # Example
+///
+/// ```no_run
+/// use gup::test_utils::create_mut_test_context;
+///
+/// #[tokio::test]
+/// async fn my_mut_context_test() {
+///     let (mut context, _permit) = create_mut_test_context().await.unwrap();
+///     // Use mutable context
+/// }
+/// ```
+pub async fn create_mut_test_context() -> GupResult<(RenderContext, SemaphorePermit<'static>)> {
+    // Acquire semaphore permit (blocks if too many contexts are being created)
+    let permit = GPU_CONTEXT_SEMAPHORE.acquire().await.unwrap();
+
+    // Create the GPU context
+    let context = RenderContext::new().await?;
+
+    Ok((context, permit))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
