@@ -137,3 +137,53 @@ a trait - just regular methods.
 ---
 
 _Created from GUP-032 retrospective - identified during testing._
+
+## Retrospective
+
+**Completed**: 2025-01-10
+
+### Key Technical Learnings
+
+#### Misuse of ShaderFunction Trait
+
+- **Challenge**: Examples were implementing `ShaderFunction` trait for CPU-side
+  data transformations
+- **Solution**: Removed trait implementations entirely - used simple structs with
+  `transform()` methods
+- **Pattern**: `ComposableShaderFunction` is for GPU shader generation, not
+  CPU-side transformations. When you need to transform Rust data structures,
+  just use plain methods.
+
+#### Prelude Trait Aliases Can Mislead
+
+- **Challenge**: `prelude::ShaderFunction` is an alias for
+  `ComposableShaderFunction`, which confused example authors
+- **Solution**: Removed imports and trait usage entirely
+- **Pattern**: Be careful with trait aliases in preludes - they can hide the
+  actual purpose of the trait
+
+### Architectural Decisions
+
+#### No Trait Needed for Data Transformations
+
+- **Decision**: CPU-side data transformers don't need traits
+- **Reasoning**: The transformations are one-to-one mappings from custom data
+  types to `CircleAttributes`. No polymorphism needed, no GPU codegen required.
+- **Trade-off**: Simpler code, but no enforced contract. That's fine - these are
+  example-specific transformations.
+- **Future**: If we need polymorphic CPU-side transformations, create a separate
+  trait for that purpose.
+
+### Development Workflow Insights
+
+- **Fast iteration**: Using `sed` for bulk replacements (`transformer.apply` →
+  `transformer.transform`) saved time across 5 files
+- **Compilation as validation**: `cargo check --examples` is a fast, reliable
+  way to verify all examples work
+- **Single-threaded test requirement**: The flaky performance test
+  (`test_performance_500_labels`) isn't related to example changes - it's
+  timing-dependent and occasionally fails
+
+### Follow-up Stories
+
+No new stories needed. This was a simple cleanup task.
