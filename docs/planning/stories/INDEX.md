@@ -90,7 +90,7 @@ epic and status.
 | -------------------------------------------------------- | ---------------------------------------- | -------------- | -------- | ------ |
 | [GUP-029](GUP-029_WGSL_Shader_Code_Generation.md)        | WGSL Shader Code Generation System       | ✅ Complete    | High     | 8      |
 | [GUP-030](GUP-030_GPU_Buffer_Pool_Management.md)         | GPU Buffer Pool Management System        | ✅ Complete    | Medium   | 5      |
-| [GUP-031](GUP-031_GPU_Interaction_Event_System.md)       | GPU-Based Interaction Event System       | 🚧 In Progress | High     | 13     |
+| [GUP-031](GUP-031_GPU_Interaction_Event_System.md)       | GPU-Based Interaction Event System       | ⚠️ Partial     | High     | 13     |
 | [GUP-032](GUP-032_Advanced_Mark_System.md)               | Advanced Mark System with Custom Shapes  | 💡 New         | Medium   | 8      |
 | [GUP-033](GUP-033_Shader_Function_Composition_Engine.md) | Shader Function Composition Engine       | 💡 New         | Medium   | 10     |
 | [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md)         | GPU Memory Profiling and Debugging Tools | 💡 New         | Low      | 5      |
@@ -907,7 +907,21 @@ integration tests and examples
 
 ---
 
-_Last Updated: After completion of GUP-118 (Visualization Position
-Synchronization) - 2025-01-24_  
-_Next Priority Stories: GUP-122 (Execute Screen Reader Tests), GUP-111
-(Automatic ARIA Generation), GUP-119 (Interactive Event Forwarding)_
+_Last Updated: After partial completion of GUP-031 (GPU Interaction Event System) - 2024-02-22_  
+_Next Priority Stories: GUP-128 (Debug GPU Hit Test Detection), GUP-122 (Execute Screen Reader Tests), GUP-111 (Automatic ARIA Generation)_
+
+---
+
+## Recent Additions (Post GUP-031)
+
+The following stories were created based on learnings from implementing GUP-031:
+
+### GUP-128: Debug GPU Hit Test Element Detection
+
+**Status**: 📋 Planned  
+**Priority**: High  
+**Story Points**: 5  
+**Key Need**: Fix GPU compute shader hit testing to detect elements correctly  
+**Dependencies**: GUP-031 ⚠️  
+**Impact**: Unblocks full interaction system functionality  
+**Created**: 2024-02-22 during GUP-031 retrospective
