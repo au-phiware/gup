@@ -238,3 +238,120 @@ Based on GUP-092 implementation experience, key issues identified:
 This story addresses critical stability issues that impact user experience and
 demo reliability, providing the foundation for robust GPU application
 development.
+
+## Retrospective (from CLAUDE.md)
+
+**Completed**: 2025-02-06
+
+**Key Technical Learnings:**
+
+### Single Render Pass Strategy
+
+- **Challenge**: GPU validation errors ("Encoder is invalid") during demo mode
+  switching caused by improper render pass lifecycle management
+- **Root Cause**: Multiple render passes created from the same command encoder
+  in a single frame (one for background clear, another for data rendering)
+- **Solution**: Consolidate all rendering into a single render pass that handles
+  both background clearing and data visualization
+- **Pattern**: Pass clear color to the renderer method instead of creating
+  separate render passes
+
+```rust
+// ✅ Correct: Single render pass handles everything
+fn render_with_clear(&mut self, frame: &mut RenderFrame, clear_color: Color) {
+    let mut render_pass = frame.render_pass(Some(clear_color));
+    // Render circles, text, etc. all in same pass
+}
+
+// ❌ Incorrect: Multiple render passes cause validation errors
+fn render_frame(&mut self, frame: &mut RenderFrame) {
+    { let _clear_pass = frame.render_pass(Some(clear_color)); }
+    self.renderer.render(frame); // Creates ANOTHER render pass - BAD!
+}
+```
+
+### GPU Resource Lifecycle Management
+
+- **Challenge**: Stale GPU buffer references when switching modes caused crashes
+- **Solution**: Invalidate instance buffers on data changes while preserving
+  static resources (vertex buffers, pipelines)
+- **Pattern**: Set instance buffer to `None` when data changes; recreate on next
+  render
+- **Best Practice**: Separate static resources (pipelines, vertex buffers) from
+  dynamic resources (instance buffers with per-frame data)
+
+```rust
+fn update_data(&mut self, circles: Vec<CircleAttributes>) {
+    self.circle_instances = circles.into_iter().map(...).collect();
+    // Only invalidate the dynamic buffer, not static resources
+    self.instance_buffer = None;
+    // Pipeline can be reused - no need to invalidate
+}
+```
+
+### Mode Switch Safety
+
+- **Challenge**: Rapid mode switching (100+ consecutive switches) must not cause
+  crashes
+- **Solution**: Proper resource invalidation combined with single render pass
+  strategy
+- **Testing**: Added stability tests that cycle through 120 mode switches to
+  validate robustness
+- **Validation**: Instance buffer correctly invalidated after each mode switch
+
+### Demo Application Patterns
+
+- **Pattern**: Initialize resources lazily on first render, not during mode
+  switch
+- **Pattern**: Check for empty data before rendering to avoid GPU operations
+  with no work
+- **Pattern**: Use distinct background colors per mode for clear visual feedback
+- **Best Practice**: Reduce console output during normal rendering to avoid
+  performance impact
+
+**Architectural Decisions:**
+
+### Render Pass Consolidation
+
+- **Decision**: Single render pass per frame for all rendering operations
+- **Reasoning**: wgpu command encoders should not create multiple render passes
+  for the same frame
+- **Trade-off**: Slightly more complex render methods but eliminates validation
+  errors
+- **Implementation**: `render_with_clear()` method accepts clear color as
+  parameter
+
+### Resource Caching Strategy
+
+- **Decision**: Cache static resources (vertex buffers, pipelines) across mode
+  switches
+- **Reasoning**: Pipeline creation is expensive; reusing reduces mode switch
+  latency
+- **Pattern**: Only invalidate instance buffers when data changes
+- **Performance**: Mode switches are now instant with no perceptible delay
+
+**Development Workflow Insights:**
+
+### GPU Validation Error Debugging
+
+- **Step 1**: Identify all render pass creation sites in the frame rendering
+  path
+- **Step 2**: Trace command encoder lifecycle from creation to finish
+- **Step 3**: Consolidate multiple render passes into single pass
+- **Step 4**: Test with rapid mode switching to validate stability
+
+### Stability Testing Methodology
+
+- **Essential**: Test 100+ consecutive mode switches to validate resource
+  management
+- **Pattern**: Verify instance buffer invalidation after each mode switch
+- **Validation**: All data point counts match expected values for each mode
+- **Quality Gate**: Zero GPU validation errors during extended operation
+
+### Example Code Quality Standards
+
+- **Documentation**: Clear comments explaining single render pass strategy
+- **Testing**: Comprehensive tests covering mode switching, data correctness,
+  and resource lifecycle
+- **Error Handling**: Graceful degradation when rendering fails
+- **User Experience**: Distinct visual feedback (colors, titles) for each mode

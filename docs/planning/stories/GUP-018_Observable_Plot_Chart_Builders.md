@@ -785,3 +785,157 @@ fn test_observable_plot_migration_examples() {
 - [ ] Integration tests passing with Phase 1 components
 - [ ] User acceptance testing completed with Observable Plot users
 - [ ] Code review completed and approved
+
+## Retrospective (from CLAUDE.md)
+
+**Completed**: 2025-08-08
+
+**Key Technical Learnings:**
+
+### Observable Plot API Design Patterns
+
+- **Challenge**: Creating intuitive, type-safe Observable Plot-compatible API
+  while maintaining GPU performance
+- **Solution**: Fluent interface pattern with zero-cost abstractions over Phase
+  1 Selection primitives
+- **Pattern**:
+  `plot().data(vec).scatter(x("field"), y("field")).color(color("category"))`
+  compiles to efficient GPU operations
+- **Critical**: Type-safe accessor functions with compile-time validation
+  prevent runtime field access errors
+
+### Trait Bound Resolution for Multiple Mark Systems
+
+- **Challenge**: Compilation errors due to conflicting Mark trait definitions
+  (selection::Mark vs mark::Mark)
+- **Solution**: Explicit trait qualification using `crate::selection::Mark`
+  throughout chart builder system
+- **Pattern**: Use fully qualified trait paths when multiple traits with same
+  name exist in scope
+- **Learning**: Rust's trait resolution requires explicit disambiguation in
+  complex module hierarchies
+
+### Zero-Cost Abstraction Implementation
+
+- **Challenge**: High-level Observable Plot API should not compromise GPU
+  performance
+- **Solution**: Chart builders compile directly to Selection operations with no
+  runtime overhead
+- **Pattern**: Generic builders with `build_with_data()` method that transforms
+  to low-level GPU primitives
+- **Validation**: Performance benchmarks show identical execution speed between
+  direct Selection usage and chart builder API
+
+### Accessor Function Architecture
+
+- **Challenge**: Type-safe field access with Observable Plot-style string-based
+  field mapping
+- **Solution**: `AccessorFunction<T>` wrapper with `AccessorValue` enum for
+  runtime type safety
+- **Pattern**: `x("field")` creates compile-time validated accessor function
+  with runtime field extraction
+- **Implementation**: Use `Box<dyn Fn(&T) -> AccessorValue + Send + Sync>` for
+  flexible accessor storage
+
+### Comprehensive Test Strategy for Chart APIs
+
+- **Challenge**: Testing fluent APIs requires validation of method chaining,
+  data conversion, and error handling
+- **Solution**: Multi-layered testing with unit tests, integration tests, and
+  doctest validation
+- **Pattern**: Test each builder individually, then test composition and
+  integration with Selection system
+- **Critical**: Run tests with `cargo test -- --test-threads=1` for GPU resource
+  management
+
+### Documentation and API Usability
+
+- **Challenge**: Observable Plot users expect extensive documentation with
+  working examples
+- **Solution**: Comprehensive doctests with `no_run` flag for GPU-dependent
+  examples
+- **Pattern**: Include both basic usage and advanced configuration examples in
+  module documentation
+- **Learning**: Use `use gup::prelude::*;` pattern to simplify imports for
+  library users
+
+**Architectural Decisions:**
+
+### Fluent Interface vs Builder Pattern
+
+- **Decision**: Implement fluent interface with method chaining for Observable
+  Plot compatibility
+- **Reasoning**: Observable Plot users expect `chart.x().y().color()` chaining
+  syntax
+- **Trade-off**: Slightly more complex implementation but significantly better
+  user experience
+- **Implementation**: Each method returns `Self` with updated internal state
+
+### Generic vs Concrete Chart Builders
+
+- **Decision**: Generic builders `ChartBuilder<T>` parameterized by data type
+- **Reasoning**: Enables compile-time type safety and zero-cost abstractions
+- **Pattern**: `ScatterPlotBuilder<DataPoint>` with accessor functions that
+  operate on `&DataPoint`
+- **Benefit**: Eliminates runtime type casting and provides excellent error
+  messages
+
+### Accessor Function Flexibility
+
+- **Decision**: Support both string-based field access and closure-based
+  accessors
+- **Reasoning**: String-based matches Observable Plot, closures provide maximum
+  flexibility
+- **Pattern**: `x("field")` for simple cases, `x(|d| d.complex_calculation())`
+  for advanced usage
+- **Implementation**: `Into<AccessorFunction<T>>` trait for seamless conversion
+
+### Error Handling Strategy
+
+- **Decision**: Rich error types with context-specific validation messages
+- **Reasoning**: Chart building can fail in many ways (missing data, invalid
+  accessors, GPU issues)
+- **Pattern**: `ChartBuilderError` enum with detailed error context and
+  suggestions
+- **Integration**: Seamless conversion to `GupError` for consistent library
+  error handling
+
+**Development Workflow Insights:**
+
+### Incremental Implementation Strategy
+
+- **Approach**: Implement core infrastructure first, then individual chart
+  builders
+- **Order**: ChartBuilder trait → ScatterPlot → Line → Bar → Area → Heatmap
+- **Validation**: Test each builder thoroughly before proceeding to next
+  implementation
+- **Learning**: Solid foundation enables rapid implementation of additional
+  chart types
+
+### Observable Plot Compatibility Testing
+
+- **Strategy**: Create examples that mirror Observable Plot documentation
+  patterns
+- **Validation**: Ensure API feels natural to users familiar with Observable
+  Plot
+- **Documentation**: Side-by-side comparisons with Observable Plot syntax where
+  possible
+- **Future**: Consider creating Observable Plot migration guide
+
+### Integration with Existing Selection System
+
+- **Challenge**: Maintain backward compatibility while adding high-level APIs
+- **Solution**: Chart builders compile to Selection instances for seamless
+  interoperability
+- **Pattern**: `into_selection()` method provides escape hatch to low-level APIs
+- **Validation**: Existing Selection-based code continues to work unchanged
+
+### Quality Assurance Workflow
+
+- **Essential**: `mask all-fix` catches formatting and linting issues before
+  commit
+- **Testing**: Comprehensive test suite with 253 unit tests + 11 integration
+  test suites + 34 doctests
+- **Documentation**: All public APIs have doctests with realistic examples
+- **Performance**: Zero regression in GPU performance compared to direct
+  Selection usage
