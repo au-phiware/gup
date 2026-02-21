@@ -386,6 +386,12 @@ pub struct BufferPoolConfig {
     pub eviction_timeout: Duration,
     /// Whether to enable LRU eviction
     pub enable_lru: bool,
+    /// Memory pressure thresholds
+    pub pressure_thresholds: PressureThresholds,
+    /// Maximum size of allocation history
+    pub usage_history_size: usize,
+    /// Whether to enable adaptive pool sizing
+    pub enable_adaptive_sizing: bool,
 }
 
 impl Default for BufferPoolConfig {
@@ -395,6 +401,9 @@ impl Default for BufferPoolConfig {
             max_total_memory: Some(256 * 1024 * 1024), // 256 MB default limit
             eviction_timeout: Duration::from_secs(60), // 1 minute
             enable_lru: true,
+            pressure_thresholds: PressureThresholds::default(),
+            usage_history_size: 1000,
+            enable_adaptive_sizing: true,
         }
     }
 }
@@ -407,6 +416,205 @@ struct PooledBufferEntry {
     size: u64,
 }
 
+/// Memory pressure levels for adaptive cleanup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PressureLevel {
+    /// Normal operation - no memory pressure
+    Normal,
+    /// Warning level (>80%) - gentle cleanup
+    Warning,
+    /// Critical level (>90%) - aggressive cleanup
+    Critical,
+    /// Emergency level (>95%) - emergency cleanup
+    Emergency,
+}
+
+/// Thresholds for memory pressure levels.
+#[derive(Debug, Clone)]
+pub struct PressureThresholds {
+    /// Warning level threshold (0.0 to 1.0)
+    pub warning_level: f32,
+    /// Critical level threshold (0.0 to 1.0)
+    pub critical_level: f32,
+    /// Emergency level threshold (0.0 to 1.0)
+    pub emergency_level: f32,
+}
+
+impl Default for PressureThresholds {
+    fn default() -> Self {
+        Self {
+            warning_level: 0.8,
+            critical_level: 0.9,
+            emergency_level: 0.95,
+        }
+    }
+}
+
+/// Operation type for tracking buffer pool events.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PoolOperation {
+    /// Buffer allocated from pool (hit)
+    Hit,
+    /// Buffer created because pool was empty (miss)
+    Miss,
+    /// Buffer returned to pool
+    Deallocate,
+}
+
+/// Event recorded in the allocation history.
+#[derive(Debug, Clone)]
+pub struct BufferAllocationEvent {
+    /// When the event occurred
+    pub timestamp: Instant,
+    /// Type of buffer involved
+    pub buffer_type: BufferType,
+    /// Size class of the buffer
+    pub size: usize,
+    /// Operation that occurred
+    pub operation: PoolOperation,
+}
+
+/// Statistics for tracking usage frequency of a specific size class.
+#[derive(Debug, Clone)]
+pub struct FrequencyStats {
+    /// Total number of accesses
+    pub count: u64,
+    /// When this size was last accessed
+    pub last_access: Instant,
+    /// Average interval between accesses
+    pub access_interval_avg: Duration,
+    /// Score for retention priority (higher = keep longer)
+    pub retention_score: f32,
+}
+
+impl FrequencyStats {
+    fn new() -> Self {
+        Self {
+            count: 0,
+            last_access: Instant::now(),
+            access_interval_avg: Duration::from_secs(0),
+            retention_score: 0.0,
+        }
+    }
+
+    /// Update stats with a new access.
+    fn record_access(&mut self) {
+        let now = Instant::now();
+        let interval = now.duration_since(self.last_access);
+
+        // Update moving average of access interval
+        if self.count > 0 {
+            let old_avg_secs = self.access_interval_avg.as_secs_f32();
+            let new_interval_secs = interval.as_secs_f32();
+            let new_avg_secs = (old_avg_secs * (self.count as f32) + new_interval_secs)
+                / ((self.count + 1) as f32);
+            self.access_interval_avg = Duration::from_secs_f32(new_avg_secs);
+        } else {
+            self.access_interval_avg = interval;
+        }
+
+        self.count += 1;
+        self.last_access = now;
+
+        // Update retention score based on frequency and recency
+        // Higher count and shorter interval = higher score
+        let frequency_factor = (self.count as f32).ln();
+        let recency_factor = 1.0 / (interval.as_secs_f32() + 1.0);
+        self.retention_score = frequency_factor * recency_factor;
+    }
+
+    /// Check if this size class has been idle for too long.
+    fn is_idle(&self, threshold: Duration) -> bool {
+        Instant::now().duration_since(self.last_access) > threshold
+    }
+}
+
+/// Tracks buffer usage patterns to enable adaptive pool management.
+#[derive(Debug)]
+pub struct UsagePatternTracker {
+    /// Recent allocation history (circular buffer via VecDeque)
+    allocation_history: VecDeque<BufferAllocationEvent>,
+    /// Frequency statistics per buffer type and size
+    size_frequency: HashMap<(BufferType, usize), FrequencyStats>,
+    /// Maximum history size
+    max_history_size: usize,
+}
+
+impl UsagePatternTracker {
+    fn new(max_history_size: usize) -> Self {
+        Self {
+            allocation_history: VecDeque::with_capacity(max_history_size),
+            size_frequency: HashMap::new(),
+            max_history_size,
+        }
+    }
+
+    /// Record an allocation event.
+    fn record_event(&mut self, event: BufferAllocationEvent) {
+        // Add to history
+        if self.allocation_history.len() >= self.max_history_size {
+            self.allocation_history.pop_front();
+        }
+        self.allocation_history.push_back(event.clone());
+
+        // Update frequency stats
+        let key = (event.buffer_type, event.size);
+        self.size_frequency
+            .entry(key)
+            .or_insert_with(FrequencyStats::new)
+            .record_access();
+    }
+
+    /// Get the most frequently used size classes.
+    fn popular_sizes(&self, limit: usize) -> Vec<((BufferType, usize), u64)> {
+        let mut sizes: Vec<_> = self
+            .size_frequency
+            .iter()
+            .map(|(key, stats)| (*key, stats.count))
+            .collect();
+        sizes.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
+        sizes.into_iter().take(limit).collect()
+    }
+
+    /// Get retention score for a size class.
+    fn retention_score(&self, buffer_type: BufferType, size: usize) -> f32 {
+        self.size_frequency
+            .get(&(buffer_type, size))
+            .map(|stats| stats.retention_score)
+            .unwrap_or(0.0)
+    }
+
+    /// Get sizes that haven't been used recently.
+    fn idle_sizes(&self, threshold: Duration) -> Vec<(BufferType, usize)> {
+        self.size_frequency
+            .iter()
+            .filter(|(_, stats)| stats.is_idle(threshold))
+            .map(|(key, _)| *key)
+            .collect()
+    }
+
+    /// Get allocation statistics for the last N events.
+    fn recent_stats(&self, last_n: usize) -> (usize, usize) {
+        let events: Vec<_> = self
+            .allocation_history
+            .iter()
+            .rev()
+            .take(last_n)
+            .collect();
+
+        let hits = events
+            .iter()
+            .filter(|e| e.operation == PoolOperation::Hit)
+            .count();
+        let misses = events
+            .iter()
+            .filter(|e| e.operation == PoolOperation::Miss)
+            .count();
+
+        (hits, misses)
+    }
+}
+
 /// Buffer pool for efficient resource reuse and memory management with LRU eviction.
 #[derive(Debug)]
 pub struct BufferPool {
@@ -414,6 +622,7 @@ pub struct BufferPool {
     device: Arc<Device>,
     allocation_stats: AllocationStats,
     config: BufferPoolConfig,
+    usage_tracker: UsagePatternTracker,
 }
 
 impl BufferPool {
@@ -424,10 +633,12 @@ impl BufferPool {
 
     /// Create a new buffer pool with custom configuration.
     pub fn with_config(device: Arc<Device>, config: BufferPoolConfig) -> Self {
+        let usage_tracker = UsagePatternTracker::new(config.usage_history_size);
         Self {
             pools: HashMap::new(),
             device,
             allocation_stats: AllocationStats::default(),
+            usage_tracker,
             config,
         }
     }
@@ -440,19 +651,35 @@ impl BufferPool {
         let size_class = self.calculate_size_class(capacity);
         let key = (buffer_type, size_class);
 
-        let buffer = if let Some(pool) = self.pools.get_mut(&key) {
+        let (buffer, operation) = if let Some(pool) = self.pools.get_mut(&key) {
             if let Some(entry) = pool.pop_front() {
                 self.allocation_stats.pooled_buffers -= 1;
                 self.allocation_stats.pool_hits += 1;
-                entry.buffer
+                (entry.buffer, PoolOperation::Hit)
             } else {
                 self.allocation_stats.pool_misses += 1;
-                self.create_new_buffer(buffer_type, size_class)
+                (
+                    self.create_new_buffer(buffer_type, size_class),
+                    PoolOperation::Miss,
+                )
             }
         } else {
             self.allocation_stats.pool_misses += 1;
-            self.create_new_buffer(buffer_type, size_class)
+            (
+                self.create_new_buffer(buffer_type, size_class),
+                PoolOperation::Miss,
+            )
         };
+
+        // Track allocation event for adaptive learning
+        if self.config.enable_adaptive_sizing {
+            self.usage_tracker.record_event(BufferAllocationEvent {
+                timestamp: Instant::now(),
+                buffer_type,
+                size: size_class,
+                operation,
+            });
+        }
 
         self.allocation_stats.total_allocated += 1;
         self.allocation_stats.active_buffers += 1;
@@ -473,6 +700,16 @@ impl BufferPool {
 
         // Reset buffer state
         buffer.len = 0;
+
+        // Track deallocation event for adaptive learning
+        if self.config.enable_adaptive_sizing {
+            self.usage_tracker.record_event(BufferAllocationEvent {
+                timestamp: Instant::now(),
+                buffer_type: buffer.buffer_type,
+                size: buffer.capacity,
+                operation: PoolOperation::Deallocate,
+            });
+        }
 
         let size = self.calculate_buffer_size::<T>(buffer.capacity, buffer.buffer_type);
         let entry = PooledBufferEntry {
@@ -496,11 +733,116 @@ impl BufferPool {
     fn check_memory_pressure(&mut self) {
         if let Some(max_memory) = self.config.max_total_memory {
             let current_pooled_memory = self.calculate_pooled_memory();
-            if current_pooled_memory > max_memory {
-                // Evict oldest buffers until we're under the limit
+            let pressure_level = self.calculate_pressure_level(current_pooled_memory, max_memory);
+
+            if self.config.enable_adaptive_sizing {
+                // Use adaptive cleanup based on pressure level
+                self.intelligent_cleanup(pressure_level);
+            } else if current_pooled_memory > max_memory {
+                // Fall back to simple eviction
                 self.evict_lru_buffers(current_pooled_memory - max_memory);
             }
         }
+    }
+
+    /// Calculate the current memory pressure level.
+    fn calculate_pressure_level(&self, current: u64, max: u64) -> PressureLevel {
+        let usage_ratio = current as f32 / max as f32;
+        let thresholds = &self.config.pressure_thresholds;
+
+        if usage_ratio >= thresholds.emergency_level {
+            PressureLevel::Emergency
+        } else if usage_ratio >= thresholds.critical_level {
+            PressureLevel::Critical
+        } else if usage_ratio >= thresholds.warning_level {
+            PressureLevel::Warning
+        } else {
+            PressureLevel::Normal
+        }
+    }
+
+    /// Intelligent cleanup based on memory pressure level and usage patterns.
+    fn intelligent_cleanup(&mut self, pressure_level: PressureLevel) {
+        match pressure_level {
+            PressureLevel::Normal => return,
+            PressureLevel::Warning => self.gentle_cleanup(),
+            PressureLevel::Critical => self.aggressive_cleanup(),
+            PressureLevel::Emergency => self.emergency_cleanup(),
+        }
+    }
+
+    /// Gentle cleanup - remove buffers unused for >30 minutes, keep frequently used sizes.
+    fn gentle_cleanup(&mut self) {
+        let idle_threshold = Duration::from_secs(30 * 60); // 30 minutes
+        let idle_sizes = self.usage_tracker.idle_sizes(idle_threshold);
+
+        // Remove idle buffers
+        for (buffer_type, size) in idle_sizes {
+            let key = (buffer_type, size);
+            if let Some(pool) = self.pools.get_mut(&key) {
+                let removed = pool.len();
+                pool.clear();
+                self.allocation_stats.pooled_buffers -= removed;
+            }
+        }
+
+        // Remove empty pools
+        self.pools.retain(|_, pool| !pool.is_empty());
+    }
+
+    /// Aggressive cleanup - remove buffers unused for >10 minutes.
+    fn aggressive_cleanup(&mut self) {
+        let idle_threshold = Duration::from_secs(10 * 60); // 10 minutes
+        let idle_sizes = self.usage_tracker.idle_sizes(idle_threshold);
+
+        // Remove idle buffers
+        for (buffer_type, size) in idle_sizes {
+            let key = (buffer_type, size);
+            if let Some(pool) = self.pools.get_mut(&key) {
+                let removed = pool.len();
+                pool.clear();
+                self.allocation_stats.pooled_buffers -= removed;
+            }
+        }
+
+        // Also evict some LRU buffers to ensure we free enough memory
+        if let Some(max_memory) = self.config.max_total_memory {
+            let current = self.calculate_pooled_memory();
+            if current > max_memory {
+                let target = (current - max_memory).max(max_memory / 10); // Free at least 10%
+                self.evict_lru_buffers(target);
+            }
+        }
+
+        self.pools.retain(|_, pool| !pool.is_empty());
+    }
+
+    /// Emergency cleanup - remove all buffers unused for >1 minute.
+    fn emergency_cleanup(&mut self) {
+        let idle_threshold = Duration::from_secs(60); // 1 minute
+        let now = Instant::now();
+
+        // Remove all idle buffers aggressively
+        for pool in self.pools.values_mut() {
+            let original_len = pool.len();
+            pool.retain(|entry| now.duration_since(entry.last_used) < idle_threshold);
+            let removed = original_len - pool.len();
+            self.allocation_stats.pooled_buffers -= removed;
+        }
+
+        // If still over limit, evict everything
+        if let Some(max_memory) = self.config.max_total_memory {
+            let current = self.calculate_pooled_memory();
+            if current > max_memory {
+                // Clear all pools in emergency
+                for pool in self.pools.values_mut() {
+                    self.allocation_stats.pooled_buffers -= pool.len();
+                    pool.clear();
+                }
+            }
+        }
+
+        self.pools.retain(|_, pool| !pool.is_empty());
     }
 
     /// Calculate total memory used by pooled buffers.
@@ -614,6 +956,37 @@ impl BufferPool {
         self.memory_usage_percentage()
             .map(|usage| usage > threshold_percent)
             .unwrap_or(false)
+    }
+
+    /// Get the current memory pressure level.
+    pub fn current_pressure_level(&self) -> PressureLevel {
+        if let Some(max_memory) = self.config.max_total_memory {
+            let current = self.calculate_pooled_memory();
+            self.calculate_pressure_level(current, max_memory)
+        } else {
+            PressureLevel::Normal
+        }
+    }
+
+    /// Get the most popular buffer sizes.
+    pub fn popular_sizes(&self, limit: usize) -> Vec<((BufferType, usize), u64)> {
+        self.usage_tracker.popular_sizes(limit)
+    }
+
+    /// Get recent hit/miss statistics.
+    pub fn recent_hit_rate(&self, last_n: usize) -> f32 {
+        let (hits, misses) = self.usage_tracker.recent_stats(last_n);
+        let total = hits + misses;
+        if total == 0 {
+            0.0
+        } else {
+            (hits as f32 / total as f32) * 100.0
+        }
+    }
+
+    /// Get retention score for a specific buffer size.
+    pub fn retention_score(&self, buffer_type: BufferType, size: usize) -> f32 {
+        self.usage_tracker.retention_score(buffer_type, size)
     }
 
     /// Calculate the size class for a given capacity (power of 2 rounding up).
@@ -787,6 +1160,7 @@ mod tests {
             max_total_memory: None,
             eviction_timeout: Duration::from_secs(3600), // Long timeout so buffers don't expire
             enable_lru: true,
+            ..Default::default()
         };
         let mut pool = BufferPool::with_config(device, config);
 
@@ -819,6 +1193,7 @@ mod tests {
             max_total_memory: None,
             eviction_timeout: Duration::from_millis(1), // Very short timeout
             enable_lru: true,
+            ..Default::default()
         };
         let mut pool = BufferPool::with_config(device, config);
 
@@ -854,6 +1229,7 @@ mod tests {
             max_total_memory: Some(1024), // Very small limit to trigger eviction
             eviction_timeout: Duration::from_secs(60),
             enable_lru: true,
+            ..Default::default()
         };
         let mut pool = BufferPool::with_config(device, config);
 
@@ -899,6 +1275,7 @@ mod tests {
             max_total_memory: Some(10_000),
             eviction_timeout: Duration::from_secs(60),
             enable_lru: true,
+            ..Default::default()
         };
         let mut pool = BufferPool::with_config(device, config);
 
@@ -1157,5 +1534,188 @@ mod tests {
             "Download took too long: {:?}",
             elapsed
         );
+    }
+
+    // === Adaptive Buffer Pool Tests ===
+
+    #[tokio::test]
+    async fn test_adaptive_usage_tracking() {
+        let context = create_test_context().await;
+        let device = Arc::new(context.device().clone());
+        let mut pool = BufferPool::new(device);
+
+        // Allocate and deallocate several buffers
+        let mut buffers = Vec::new();
+        for _ in 0..5 {
+            buffers.push(pool.allocate::<f32>(BufferType::Vertex, 100));
+        }
+
+        for buffer in buffers {
+            pool.deallocate(buffer);
+        }
+
+        // Check that popular sizes are tracked
+        let popular = pool.popular_sizes(5);
+        assert!(!popular.is_empty());
+
+        // The size class for 100 elements should be popular
+        let size_class = pool.calculate_size_class(100);
+        let vertex_hit = popular
+            .iter()
+            .any(|((t, s), _)| *t == BufferType::Vertex && *s == size_class);
+        assert!(vertex_hit);
+    }
+
+    #[tokio::test]
+    async fn test_pressure_level_calculation() {
+        let context = create_test_context().await;
+        let device = Arc::new(context.device().clone());
+
+        // Use a reasonable memory limit
+        let config = BufferPoolConfig {
+            max_total_memory: Some(5000), // 5KB limit
+            enable_adaptive_sizing: false, // Disable to test pressure calculation directly
+            ..Default::default()
+        };
+        let mut pool = BufferPool::with_config(device, config);
+
+        // Initially should be normal pressure
+        assert_eq!(pool.current_pressure_level(), PressureLevel::Normal);
+
+        // Allocate and deallocate buffers to fill the pool
+        // Each f32 buffer with size class 128 will be 128 * 4 = 512 bytes
+        let mut buffers = Vec::new();
+        for _ in 0..15 {
+            // This should create ~7.5KB of pooled buffers
+            buffers.push(pool.allocate::<f32>(BufferType::Vertex, 100));
+        }
+
+        // Deallocate to fill the pool
+        for buffer in buffers {
+            pool.deallocate(buffer);
+        }
+
+        // Check memory usage
+        let usage = pool.memory_usage_percentage();
+        assert!(usage.is_some());
+        let usage_pct = usage.unwrap();
+
+        // Should now have memory pressure (>80% of 5KB)
+        let pressure = pool.current_pressure_level();
+        assert!(
+            pressure != PressureLevel::Normal,
+            "Expected memory pressure at {}% usage but got Normal",
+            usage_pct
+        );
+    }
+
+    #[tokio::test]
+    async fn test_intelligent_cleanup_gentle() {
+        let context = create_test_context().await;
+        let device = Arc::new(context.device().clone());
+
+        let config = BufferPoolConfig {
+            max_total_memory: Some(10_000),
+            enable_adaptive_sizing: true,
+            ..Default::default()
+        };
+        let mut pool = BufferPool::with_config(device, config);
+
+        // Allocate and deallocate buffers to build pool
+        let mut buffers = Vec::new();
+        for _ in 0..10 {
+            buffers.push(pool.allocate::<f32>(BufferType::Vertex, 100));
+        }
+
+        for buffer in buffers {
+            pool.deallocate(buffer);
+        }
+
+        let _initial_pooled = pool.get_stats().pooled_buffers;
+
+        // Trigger gentle cleanup (warning level)
+        pool.gentle_cleanup();
+
+        // Since buffers were just used, gentle cleanup shouldn't remove much
+        let after_gentle = pool.get_stats().pooled_buffers;
+        assert!(after_gentle > 0, "Gentle cleanup should keep recent buffers");
+    }
+
+    #[tokio::test]
+    async fn test_recent_hit_rate() {
+        let context = create_test_context().await;
+        let device = Arc::new(context.device().clone());
+        let mut pool = BufferPool::new(device);
+
+        // First allocations will all miss
+        let mut buffers = Vec::new();
+        for _ in 0..5 {
+            buffers.push(pool.allocate::<f32>(BufferType::Vertex, 100));
+        }
+
+        // Deallocate them
+        for buffer in buffers {
+            pool.deallocate(buffer);
+        }
+
+        // Now allocate again - should hit
+        let mut buffers2 = Vec::new();
+        for _ in 0..5 {
+            buffers2.push(pool.allocate::<f32>(BufferType::Vertex, 100));
+        }
+
+        // Recent hit rate should be high for the last 5 allocations
+        let hit_rate = pool.recent_hit_rate(5);
+        assert!(
+            hit_rate > 80.0,
+            "Expected high hit rate but got {}%",
+            hit_rate
+        );
+    }
+
+    #[tokio::test]
+    async fn test_retention_score() {
+        let context = create_test_context().await;
+        let device = Arc::new(context.device().clone());
+        let mut pool = BufferPool::new(device);
+
+        // Allocate the same size multiple times
+        for _ in 0..10 {
+            let buffer = pool.allocate::<f32>(BufferType::Vertex, 100);
+            pool.deallocate(buffer);
+        }
+
+        // Check retention score
+        let size_class = pool.calculate_size_class(100);
+        let score = pool.retention_score(BufferType::Vertex, size_class);
+
+        // Frequently used sizes should have higher scores
+        assert!(score > 0.0, "Retention score should be positive");
+    }
+
+    #[tokio::test]
+    async fn test_adaptive_sizing_can_be_disabled() {
+        let context = create_test_context().await;
+        let device = Arc::new(context.device().clone());
+
+        let config = BufferPoolConfig {
+            enable_adaptive_sizing: false,
+            max_total_memory: Some(1000),
+            ..Default::default()
+        };
+        let mut pool = BufferPool::with_config(device, config);
+
+        // Allocate buffers to trigger memory pressure
+        let mut buffers = Vec::new();
+        for _ in 0..20 {
+            buffers.push(pool.allocate::<f32>(BufferType::Vertex, 100));
+        }
+
+        for buffer in buffers {
+            pool.deallocate(buffer);
+        }
+
+        // With adaptive sizing disabled, it should still work but use simple LRU
+        assert!(pool.get_stats().pooled_buffers > 0);
     }
 }
