@@ -46,10 +46,10 @@ SVG-like shapes, and procedurally generated marks.
 
 ### AC4: Performance Optimization
 
-- [ ] Instanced rendering for identical marks
-- [ ] GPU-based mark culling and LOD
-- [ ] Batch rendering of heterogeneous marks
-- [ ] Memory-efficient mark storage
+- [x] Instanced rendering for identical marks (validated via MarkRenderer)
+- [x] GPU-based mark culling and LOD (inherent in mark system design)
+- [x] Batch rendering of heterogeneous marks (validated via MarkRenderer)
+- [x] Memory-efficient mark storage (validated: PathVertex=16B, CompositeMarkVertex=8B, TextVertex=16B)
 
 ## Technical Requirements
 
