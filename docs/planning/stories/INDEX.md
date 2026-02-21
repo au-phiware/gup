@@ -141,7 +141,7 @@ epic and status.
 | [GUP-150](GUP-150_Recovery_Metrics_and_Analytics.md)   | Recovery Metrics and Analytics   | 💡 New      | Low      | 3      |
 | [GUP-151](GUP-151_Surface_Configuration_Caching.md)    | Surface Configuration Caching    | 💡 New      | Low      | 2      |
 | [GUP-049](GUP-049_Surface_Performance_Optimization.md) | Surface Performance Optimization | ✅ Complete | Medium   | 5      |
-| [GUP-050](GUP-050_Visual_Blend_Mode_Validation.md)     | Visual Blend Mode Validation     | 💡 New      | Low      | 3      |
+| [GUP-050](GUP-050_Visual_Blend_Mode_Validation.md)     | Visual Blend Mode Validation     | 🚧 In Progress | Low      | 3      |
 | [GUP-042](GUP-042_Cross_Platform_Surface_Features.md)  | Cross Platform Surface Features  | 💡 New      | Low      | 8      |
 
 ### Post GUP-027 Stories - Blend System Enhancement (Stories 43+)

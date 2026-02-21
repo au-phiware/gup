@@ -1,4 +1,7 @@
-# GUP-050: Visual Blend Mode Validation
+# GUP-050: Visual Blend Mode Validation 🚧
+
+**Status**: 🚧 In Progress  
+**Started**: 2025-02-22
 
 ## Story Overview
 
