@@ -766,3 +766,41 @@ _Last Updated: After completion of GUP-100 (Visual Chart Axis Integration) -
 2026-02-06_  
 _Next Priority Stories: GUP-099 (GPU Text Rendering Pipeline), GUP-102 (Demo GPU
 Resource Management Fixes), GUP-016 (Core Accessibility System)_
+
+---
+
+## Recent Additions (Post GUP-016)
+
+The following stories were identified during GUP-016 (Core Accessibility System) implementation:
+
+### GUP-111: Automatic ARIA Generation from Selections
+
+**Status**: 💡 New  
+**Priority**: Medium  
+**Story Points**: 3  
+**Key Need**: Eliminate manual ARIA tree construction by automatically generating semantic descriptions from Selection metadata  
+**Dependencies**: GUP-002 ✅, GUP-016 ✅  
+**Impact**: Simplified developer experience and consistent accessibility across all visualizations
+
+### GUP-112: Platform-Specific Accessibility Integration
+
+**Status**: 💡 New  
+**Priority**: High  
+**Story Points**: 5  
+**Key Need**: Bridge platform-agnostic accessibility system to native platform APIs (NSAccessibility, UI Automation, ATK, Web ARIA)  
+**Dependencies**: GUP-016 ✅  
+**Impact**: Native screen reader support and platform-native accessibility experience for all users
+
+### GUP-113: Pattern-Based Rendering Implementation
+
+**Status**: 💡 New  
+**Priority**: Medium  
+**Story Points**: 3  
+**Key Need**: Complete pattern rendering implementation (dots, lines, crosshatch) as color-independent visual encoding  
+**Dependencies**: GUP-016 ✅  
+**Impact**: Full accessibility for colorblind users through texture-based visual differentiation
+
+---
+
+_Last Updated: After completion of GUP-016 (Core Accessibility System) - 2025-01-24_  
+_Next Priority Stories: GUP-112 (Platform Accessibility Integration), GUP-111 (Automatic ARIA Generation)_
