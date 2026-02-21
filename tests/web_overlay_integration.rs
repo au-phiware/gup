@@ -6,8 +6,8 @@
 #[cfg(target_arch = "wasm32")]
 mod wasm_overlay_tests {
     use gup::accessibility::{
-        AccessibilitySystem, AriaNode, AriaRole, AriaTree, AriaUpdate, DomOverlayConfig,
-        NodeId, WebDomOverlay,
+        AccessibilitySystem, AriaNode, AriaRole, AriaTree, AriaUpdate, DomOverlayConfig, NodeId,
+        WebDomOverlay,
     };
     use wasm_bindgen_test::*;
 
@@ -16,7 +16,10 @@ mod wasm_overlay_tests {
     #[wasm_bindgen_test]
     fn test_dom_overlay_initialization() {
         let overlay = WebDomOverlay::new();
-        assert!(overlay.is_ok(), "WebDomOverlay should initialize successfully");
+        assert!(
+            overlay.is_ok(),
+            "WebDomOverlay should initialize successfully"
+        );
     }
 
     #[wasm_bindgen_test]
@@ -51,15 +54,18 @@ mod wasm_overlay_tests {
         });
 
         let updates = vec![AriaUpdate::NodeCreated { node_id }];
-        
+
         let result = overlay.update_from_aria_tree(&updates, &aria_tree);
-        assert!(result.is_ok(), "ARIA tree updates should be applied to overlay");
+        assert!(
+            result.is_ok(),
+            "ARIA tree updates should be applied to overlay"
+        );
     }
 
     #[wasm_bindgen_test]
     fn test_accessibility_system_with_overlay() {
         let system = AccessibilitySystem::new();
-        
+
         // System should initialize successfully with Web platform
         assert!(system.is_enabled());
         assert_eq!(system.platform_name(), "Web (ARIA)");
@@ -92,7 +98,11 @@ mod wasm_overlay_tests {
 
         if let Some(element) = container {
             let tabindex = element.get_attribute("tabindex");
-            assert_eq!(tabindex, Some("0".to_string()), "Container should be focusable");
+            assert_eq!(
+                tabindex,
+                Some("0".to_string()),
+                "Container should be focusable"
+            );
         }
     }
 
@@ -102,7 +112,7 @@ mod wasm_overlay_tests {
         overlay.initialize().expect("Failed to initialize");
 
         let mut aria_tree = AriaTree::new();
-        
+
         // Create multiple nodes
         let chart_id = aria_tree.create_node(AriaNode {
             id: NodeId::new(),
@@ -139,7 +149,7 @@ mod wasm_overlay_tests {
         overlay.initialize().expect("Failed to initialize");
 
         let mut aria_tree = AriaTree::new();
-        
+
         let node_id = aria_tree.create_node(AriaNode {
             id: NodeId::new(),
             role: AriaRole::DataPoint,
@@ -168,11 +178,17 @@ mod wasm_overlay_tests {
         // Verify that high contrast media query is in the CSS
         let window = web_sys::window().expect("No window");
         let document = window.document().expect("No document");
-        
+
         if let Some(style) = document.get_element_by_id("gup-focus-styles") {
             let content = style.text_content().unwrap_or_default();
-            assert!(content.contains("prefers-contrast: high"), "CSS should include high contrast support");
-            assert!(content.contains("prefers-reduced-motion"), "CSS should include reduced motion support");
+            assert!(
+                content.contains("prefers-contrast: high"),
+                "CSS should include high contrast support"
+            );
+            assert!(
+                content.contains("prefers-reduced-motion"),
+                "CSS should include reduced motion support"
+            );
         }
     }
 }

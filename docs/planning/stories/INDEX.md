@@ -872,7 +872,7 @@ from GPU
 
 ### GUP-121: Screen Reader Manual Testing
 
-**Status**: 💡 New  
+**Status**: 🚧 In Progress  
 **Priority**: High  
 **Story Points**: 3  
 **Key Need**: Validate with NVDA, JAWS, and VoiceOver screen readers  

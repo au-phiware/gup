@@ -23,7 +23,7 @@ use wasm_bindgen::prelude::*;
 pub fn main() {
     // Create accessibility system
     let mut accessibility = AccessibilitySystem::new();
-    
+
     // Create ARIA tree for a simple chart
     let chart_node = accessibility.aria_tree.create_node(AriaNode {
         id: NodeId::new(),
