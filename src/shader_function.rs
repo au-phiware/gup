@@ -315,7 +315,49 @@ pub struct Vec2 {
     pub y: f32,
 }
 
-impl Vec2 {}
+impl Vec2 {
+    /// Creates a new 2D vector.
+    ///
+    /// # Example
+    /// ```
+    /// use gup::shader_function::Vec2;
+    /// let v = Vec2::new(1.0, 2.0);
+    /// assert_eq!(v.x, 1.0);
+    /// assert_eq!(v.y, 2.0);
+    /// ```
+    #[inline]
+    pub const fn new(x: f32, y: f32) -> Self {
+        Self { x, y }
+    }
+
+    /// Creates a vector with both components set to zero.
+    ///
+    /// # Example
+    /// ```
+    /// use gup::shader_function::Vec2;
+    /// let v = Vec2::zero();
+    /// assert_eq!(v.x, 0.0);
+    /// assert_eq!(v.y, 0.0);
+    /// ```
+    #[inline]
+    pub const fn zero() -> Self {
+        Self { x: 0.0, y: 0.0 }
+    }
+
+    /// Creates a vector with both components set to one.
+    ///
+    /// # Example
+    /// ```
+    /// use gup::shader_function::Vec2;
+    /// let v = Vec2::one();
+    /// assert_eq!(v.x, 1.0);
+    /// assert_eq!(v.y, 1.0);
+    /// ```
+    #[inline]
+    pub const fn one() -> Self {
+        Self { x: 1.0, y: 1.0 }
+    }
+}
 
 impl ShaderType for Vec2 {
     fn wgsl_type_name() -> &'static str {
@@ -338,7 +380,67 @@ pub struct Vec3 {
     pub _padding: f32, // Ensure 16-byte alignment
 }
 
-impl Vec3 {}
+impl Vec3 {
+    /// Creates a new 3D vector.
+    ///
+    /// # Example
+    /// ```
+    /// use gup::shader_function::Vec3;
+    /// let v = Vec3::new(1.0, 2.0, 3.0);
+    /// assert_eq!(v.x, 1.0);
+    /// assert_eq!(v.y, 2.0);
+    /// assert_eq!(v.z, 3.0);
+    /// ```
+    #[inline]
+    pub const fn new(x: f32, y: f32, z: f32) -> Self {
+        Self {
+            x,
+            y,
+            z,
+            _padding: 0.0,
+        }
+    }
+
+    /// Creates a vector with all components set to zero.
+    ///
+    /// # Example
+    /// ```
+    /// use gup::shader_function::Vec3;
+    /// let v = Vec3::zero();
+    /// assert_eq!(v.x, 0.0);
+    /// assert_eq!(v.y, 0.0);
+    /// assert_eq!(v.z, 0.0);
+    /// ```
+    #[inline]
+    pub const fn zero() -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            _padding: 0.0,
+        }
+    }
+
+    /// Creates a vector with all components set to one.
+    ///
+    /// # Example
+    /// ```
+    /// use gup::shader_function::Vec3;
+    /// let v = Vec3::one();
+    /// assert_eq!(v.x, 1.0);
+    /// assert_eq!(v.y, 1.0);
+    /// assert_eq!(v.z, 1.0);
+    /// ```
+    #[inline]
+    pub const fn one() -> Self {
+        Self {
+            x: 1.0,
+            y: 1.0,
+            z: 1.0,
+            _padding: 0.0,
+        }
+    }
+}
 
 impl ShaderType for Vec3 {
     fn wgsl_type_name() -> &'static str {
@@ -361,7 +463,65 @@ pub struct Vec4 {
     pub w: f32,
 }
 
-impl Vec4 {}
+impl Vec4 {
+    /// Creates a new 4D vector.
+    ///
+    /// # Example
+    /// ```
+    /// use gup::shader_function::Vec4;
+    /// let v = Vec4::new(1.0, 2.0, 3.0, 4.0);
+    /// assert_eq!(v.x, 1.0);
+    /// assert_eq!(v.y, 2.0);
+    /// assert_eq!(v.z, 3.0);
+    /// assert_eq!(v.w, 4.0);
+    /// ```
+    #[inline]
+    pub const fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
+        Self { x, y, z, w }
+    }
+
+    /// Creates a vector with all components set to zero.
+    ///
+    /// # Example
+    /// ```
+    /// use gup::shader_function::Vec4;
+    /// let v = Vec4::zero();
+    /// assert_eq!(v.x, 0.0);
+    /// assert_eq!(v.y, 0.0);
+    /// assert_eq!(v.z, 0.0);
+    /// assert_eq!(v.w, 0.0);
+    /// ```
+    #[inline]
+    pub const fn zero() -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            w: 0.0,
+        }
+    }
+
+    /// Creates a vector with all components set to one.
+    ///
+    /// # Example
+    /// ```
+    /// use gup::shader_function::Vec4;
+    /// let v = Vec4::one();
+    /// assert_eq!(v.x, 1.0);
+    /// assert_eq!(v.y, 1.0);
+    /// assert_eq!(v.z, 1.0);
+    /// assert_eq!(v.w, 1.0);
+    /// ```
+    #[inline]
+    pub const fn one() -> Self {
+        Self {
+            x: 1.0,
+            y: 1.0,
+            z: 1.0,
+            w: 1.0,
+        }
+    }
+}
 
 impl ShaderType for Vec4 {
     fn wgsl_type_name() -> &'static str {
@@ -386,6 +546,39 @@ pub struct Mat2 {
 }
 
 impl Mat2 {
+    /// Creates a new 2x2 matrix.
+    ///
+    /// # Arguments
+    /// * `m00`, `m01` - First row
+    /// * `m10`, `m11` - Second row
+    ///
+    /// # Example
+    /// ```
+    /// use gup::shader_function::Mat2;
+    /// let m = Mat2::new(
+    ///     1.0, 0.0,
+    ///     0.0, 1.0
+    /// );
+    /// assert_eq!(m.m00, 1.0);
+    /// assert_eq!(m.m11, 1.0);
+    /// ```
+    #[inline]
+    pub const fn new(m00: f32, m01: f32, m10: f32, m11: f32) -> Self {
+        Self { m00, m01, m10, m11 }
+    }
+
+    /// Creates an identity matrix.
+    ///
+    /// # Example
+    /// ```
+    /// use gup::shader_function::Mat2;
+    /// let m = Mat2::identity();
+    /// assert_eq!(m.m00, 1.0);
+    /// assert_eq!(m.m11, 1.0);
+    /// assert_eq!(m.m01, 0.0);
+    /// assert_eq!(m.m10, 0.0);
+    /// ```
+    #[inline]
     pub fn identity() -> Self {
         mat2![1.0, 0.0, 0.0, 1.0]
     }
@@ -422,6 +615,65 @@ pub struct Mat3 {
 }
 
 impl Mat3 {
+    /// Creates a new 3x3 matrix.
+    ///
+    /// # Arguments
+    /// * `m00`, `m01`, `m02` - First row
+    /// * `m10`, `m11`, `m12` - Second row
+    /// * `m20`, `m21`, `m22` - Third row
+    ///
+    /// # Example
+    /// ```
+    /// use gup::shader_function::Mat3;
+    /// let m = Mat3::new(
+    ///     1.0, 0.0, 0.0,
+    ///     0.0, 1.0, 0.0,
+    ///     0.0, 0.0, 1.0
+    /// );
+    /// assert_eq!(m.m00, 1.0);
+    /// assert_eq!(m.m11, 1.0);
+    /// assert_eq!(m.m22, 1.0);
+    /// ```
+    #[inline]
+    #[allow(clippy::too_many_arguments)]
+    pub const fn new(
+        m00: f32,
+        m01: f32,
+        m02: f32,
+        m10: f32,
+        m11: f32,
+        m12: f32,
+        m20: f32,
+        m21: f32,
+        m22: f32,
+    ) -> Self {
+        Self {
+            m00,
+            m01,
+            m02,
+            _padding0: 0.0,
+            m10,
+            m11,
+            m12,
+            _padding1: 0.0,
+            m20,
+            m21,
+            m22,
+            _padding2: 0.0,
+        }
+    }
+
+    /// Creates an identity matrix.
+    ///
+    /// # Example
+    /// ```
+    /// use gup::shader_function::Mat3;
+    /// let m = Mat3::identity();
+    /// assert_eq!(m.m00, 1.0);
+    /// assert_eq!(m.m11, 1.0);
+    /// assert_eq!(m.m22, 1.0);
+    /// ```
+    #[inline]
     pub fn identity() -> Self {
         mat3![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
     }
@@ -462,6 +714,80 @@ pub struct Mat4 {
 }
 
 impl Mat4 {
+    /// Creates a new 4x4 matrix.
+    ///
+    /// # Arguments
+    /// * `m00`, `m01`, `m02`, `m03` - First row
+    /// * `m10`, `m11`, `m12`, `m13` - Second row
+    /// * `m20`, `m21`, `m22`, `m23` - Third row
+    /// * `m30`, `m31`, `m32`, `m33` - Fourth row
+    ///
+    /// # Example
+    /// ```
+    /// use gup::shader_function::Mat4;
+    /// let m = Mat4::new(
+    ///     1.0, 0.0, 0.0, 0.0,
+    ///     0.0, 1.0, 0.0, 0.0,
+    ///     0.0, 0.0, 1.0, 0.0,
+    ///     0.0, 0.0, 0.0, 1.0
+    /// );
+    /// assert_eq!(m.m00, 1.0);
+    /// assert_eq!(m.m11, 1.0);
+    /// assert_eq!(m.m22, 1.0);
+    /// assert_eq!(m.m33, 1.0);
+    /// ```
+    #[inline]
+    #[allow(clippy::too_many_arguments)]
+    pub const fn new(
+        m00: f32,
+        m01: f32,
+        m02: f32,
+        m03: f32,
+        m10: f32,
+        m11: f32,
+        m12: f32,
+        m13: f32,
+        m20: f32,
+        m21: f32,
+        m22: f32,
+        m23: f32,
+        m30: f32,
+        m31: f32,
+        m32: f32,
+        m33: f32,
+    ) -> Self {
+        Self {
+            m00,
+            m01,
+            m02,
+            m03,
+            m10,
+            m11,
+            m12,
+            m13,
+            m20,
+            m21,
+            m22,
+            m23,
+            m30,
+            m31,
+            m32,
+            m33,
+        }
+    }
+
+    /// Creates an identity matrix.
+    ///
+    /// # Example
+    /// ```
+    /// use gup::shader_function::Mat4;
+    /// let m = Mat4::identity();
+    /// assert_eq!(m.m00, 1.0);
+    /// assert_eq!(m.m11, 1.0);
+    /// assert_eq!(m.m22, 1.0);
+    /// assert_eq!(m.m33, 1.0);
+    /// ```
+    #[inline]
     pub fn identity() -> Self {
         mat4![
             1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0
@@ -1228,6 +1554,119 @@ mod tests {
         assert_eq!(m4.m03, 4.0);
         assert_eq!(m4.m10, 5.0);
         assert_eq!(m4.m33, 16.0);
+    }
+
+    #[test]
+    fn test_constructor_methods() {
+        // Test Vec2::new()
+        let v2 = Vec2::new(1.0, 2.0);
+        assert_eq!(v2.x, 1.0);
+        assert_eq!(v2.y, 2.0);
+
+        // Test Vec2::zero() and Vec2::one()
+        let v2_zero = Vec2::zero();
+        assert_eq!(v2_zero.x, 0.0);
+        assert_eq!(v2_zero.y, 0.0);
+
+        let v2_one = Vec2::one();
+        assert_eq!(v2_one.x, 1.0);
+        assert_eq!(v2_one.y, 1.0);
+
+        // Test Vec3::new()
+        let v3 = Vec3::new(1.0, 2.0, 3.0);
+        assert_eq!(v3.x, 1.0);
+        assert_eq!(v3.y, 2.0);
+        assert_eq!(v3.z, 3.0);
+        assert_eq!(v3._padding, 0.0);
+
+        // Test Vec3::zero() and Vec3::one()
+        let v3_zero = Vec3::zero();
+        assert_eq!(v3_zero.x, 0.0);
+        assert_eq!(v3_zero.y, 0.0);
+        assert_eq!(v3_zero.z, 0.0);
+
+        let v3_one = Vec3::one();
+        assert_eq!(v3_one.x, 1.0);
+        assert_eq!(v3_one.y, 1.0);
+        assert_eq!(v3_one.z, 1.0);
+
+        // Test Vec4::new()
+        let v4 = Vec4::new(1.0, 2.0, 3.0, 4.0);
+        assert_eq!(v4.x, 1.0);
+        assert_eq!(v4.y, 2.0);
+        assert_eq!(v4.z, 3.0);
+        assert_eq!(v4.w, 4.0);
+
+        // Test Vec4::zero() and Vec4::one()
+        let v4_zero = Vec4::zero();
+        assert_eq!(v4_zero.x, 0.0);
+        assert_eq!(v4_zero.y, 0.0);
+        assert_eq!(v4_zero.z, 0.0);
+        assert_eq!(v4_zero.w, 0.0);
+
+        let v4_one = Vec4::one();
+        assert_eq!(v4_one.x, 1.0);
+        assert_eq!(v4_one.y, 1.0);
+        assert_eq!(v4_one.z, 1.0);
+        assert_eq!(v4_one.w, 1.0);
+
+        // Test Mat2::new()
+        let m2 = Mat2::new(1.0, 2.0, 3.0, 4.0);
+        assert_eq!(m2.m00, 1.0);
+        assert_eq!(m2.m01, 2.0);
+        assert_eq!(m2.m10, 3.0);
+        assert_eq!(m2.m11, 4.0);
+
+        // Test Mat2::identity()
+        let m2_identity = Mat2::identity();
+        assert_eq!(m2_identity.m00, 1.0);
+        assert_eq!(m2_identity.m01, 0.0);
+        assert_eq!(m2_identity.m10, 0.0);
+        assert_eq!(m2_identity.m11, 1.0);
+
+        // Test Mat3::new()
+        let m3 = Mat3::new(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0);
+        assert_eq!(m3.m00, 1.0);
+        assert_eq!(m3.m01, 2.0);
+        assert_eq!(m3.m02, 3.0);
+        assert_eq!(m3.m10, 4.0);
+        assert_eq!(m3.m11, 5.0);
+        assert_eq!(m3.m12, 6.0);
+        assert_eq!(m3.m20, 7.0);
+        assert_eq!(m3.m21, 8.0);
+        assert_eq!(m3.m22, 9.0);
+        assert_eq!(m3._padding0, 0.0);
+        assert_eq!(m3._padding1, 0.0);
+        assert_eq!(m3._padding2, 0.0);
+
+        // Test Mat3::identity()
+        let m3_identity = Mat3::identity();
+        assert_eq!(m3_identity.m00, 1.0);
+        assert_eq!(m3_identity.m11, 1.0);
+        assert_eq!(m3_identity.m22, 1.0);
+        assert_eq!(m3_identity.m01, 0.0);
+        assert_eq!(m3_identity.m02, 0.0);
+
+        // Test Mat4::new()
+        let m4 = Mat4::new(
+            1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
+        );
+        assert_eq!(m4.m00, 1.0);
+        assert_eq!(m4.m01, 2.0);
+        assert_eq!(m4.m02, 3.0);
+        assert_eq!(m4.m03, 4.0);
+        assert_eq!(m4.m10, 5.0);
+        assert_eq!(m4.m11, 6.0);
+        assert_eq!(m4.m33, 16.0);
+
+        // Test Mat4::identity()
+        let m4_identity = Mat4::identity();
+        assert_eq!(m4_identity.m00, 1.0);
+        assert_eq!(m4_identity.m11, 1.0);
+        assert_eq!(m4_identity.m22, 1.0);
+        assert_eq!(m4_identity.m33, 1.0);
+        assert_eq!(m4_identity.m01, 0.0);
+        assert_eq!(m4_identity.m12, 0.0);
     }
 
     #[test]
