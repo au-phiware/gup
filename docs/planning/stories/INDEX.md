@@ -880,9 +880,19 @@ from GPU
 **Impact**: Production certification and WCAG validation  
 **Note**: Documentation and infrastructure complete; requires human testers with screen reader access
 
+### GUP-122: Manual Screen Reader Testing Execution
+
+**Status**: 📋 Planned  
+**Priority**: High  
+**Story Points**: 5  
+**Key Need**: Execute tests defined in GUP-121 with actual screen readers  
+**Dependencies**: GUP-121 ✅ (infrastructure), GUP-117 ✅  
+**Impact**: Validates accessibility implementation, certifies WCAG compliance  
+**Note**: Requires Windows (NVDA/JAWS), macOS (VoiceOver), optionally iOS
+
 ---
 
-_Last Updated: After completion of GUP-117 (Web Accessibility DOM Overlay) -
-2025-01-24_  
-_Next Priority Stories: GUP-121 (Screen Reader Testing), GUP-118 (Position
+_Last Updated: After completion of GUP-121 (Screen Reader Testing
+Infrastructure) - 2025-01-24_  
+_Next Priority Stories: GUP-122 (Execute Screen Reader Tests), GUP-118 (Position
 Sync), GUP-111 (Automatic ARIA Generation)_
