@@ -23,7 +23,7 @@
 
 use crate::buffer::{BufferType, GpuBuffer};
 use crate::error::GupResult;
-use crate::shader_function::ComposableShaderFunction;
+use crate::shader_function::{ComposableShaderFunction, ShaderUniform};
 use std::collections::HashMap;
 use std::sync::Arc;
 use wgpu::{
@@ -39,6 +39,8 @@ pub struct PipelineFunction {
     wgsl_code: String,
     uniform_buffer: Option<Box<dyn std::any::Any + Send + Sync>>,
     uniform_size: usize,
+    uniform_type_name: String,
+    uniform_struct_definition: String,
 }
 
 impl PipelineFunction {
@@ -52,12 +54,16 @@ impl PipelineFunction {
             .create_uniforms()
             .map(|u| Box::new(u) as Box<dyn std::any::Any + Send + Sync>);
         let uniform_size = std::mem::size_of::<F::Uniforms>();
+        let uniform_type_name = F::Uniforms::wgsl_type_name().to_string();
+        let uniform_struct_definition = F::Uniforms::wgsl_struct_definition();
 
         Self {
             name,
             wgsl_code,
             uniform_buffer,
             uniform_size,
+            uniform_type_name,
+            uniform_struct_definition,
         }
     }
 
@@ -75,6 +81,14 @@ impl PipelineFunction {
 
     pub fn uniform_size(&self) -> usize {
         self.uniform_size
+    }
+
+    pub fn uniform_type_name(&self) -> &str {
+        &self.uniform_type_name
+    }
+
+    pub fn uniform_struct_definition(&self) -> &str {
+        &self.uniform_struct_definition
     }
 }
 
@@ -206,67 +220,34 @@ impl ComposableShaderPipeline {
         let mut bindings = String::new();
         let mut binding_index = 0;
 
-        // First add uniform struct definitions
+        // Generate uniform struct definitions using ShaderUniform trait
         let mut defined_types = std::collections::HashSet::new();
         for function in self.functions.iter() {
             if function.has_uniforms() {
-                let uniform_type_name = match function.name() {
-                    "linear_scale" => "LinearScaleUniforms",
-                    "color_map" => "ColorMapUniforms",
-                    "position_transform" => "PositionTransformUniforms",
-                    _ => "GenericUniforms",
-                };
-
+                let uniform_type_name = function.uniform_type_name();
+                
+                // Only add the struct definition once per type
                 if !defined_types.contains(uniform_type_name) {
-                    defined_types.insert(uniform_type_name);
-
-                    match uniform_type_name {
-                        "LinearScaleUniforms" => {
-                            bindings.push_str("struct LinearScaleUniforms {\n");
-                            bindings.push_str("    domain_min: f32,\n");
-                            bindings.push_str("    domain_max: f32,\n");
-                            bindings.push_str("    range_min: f32,\n");
-                            bindings.push_str("    range_max: f32,\n");
-                            bindings.push_str("}\n\n");
-                        }
-                        "ColorMapUniforms" => {
-                            bindings.push_str("struct ColorMapUniforms {\n");
-                            bindings.push_str("    min_color: vec4<f32>,\n");
-                            bindings.push_str("    max_color: vec4<f32>,\n");
-                            bindings.push_str("}\n\n");
-                        }
-                        "PositionTransformUniforms" => {
-                            bindings.push_str("struct PositionTransformUniforms {\n");
-                            bindings.push_str("    scale: vec2<f32>,\n");
-                            bindings.push_str("    offset: vec2<f32>,\n");
-                            bindings.push_str("}\n\n");
-                        }
-                        _ => {
-                            bindings.push_str(&format!("struct {uniform_type_name} {{\n"));
-                            bindings.push_str("    data: f32,\n");
-                            bindings.push_str("}\n\n");
-                        }
+                    defined_types.insert(uniform_type_name.to_string());
+                    
+                    let struct_def = function.uniform_struct_definition();
+                    if !struct_def.is_empty() {
+                        bindings.push_str(&struct_def);
+                        bindings.push_str("\n\n");
                     }
                 }
             }
         }
 
-        // Then add uniform variable bindings
+        // Generate uniform variable bindings
         for (i, function) in self.functions.iter().enumerate() {
             if function.has_uniforms() {
-                let uniform_type_name = match function.name() {
-                    "linear_scale" => "LinearScaleUniforms",
-                    "color_map" => "ColorMapUniforms",
-                    "position_transform" => "PositionTransformUniforms",
-                    _ => "GenericUniforms",
-                };
-
                 bindings.push_str(&format!(
                     "@group(0) @binding({}) var<uniform> {}_uniforms_{}: {};\n",
                     binding_index,
                     function.name(),
                     i,
-                    uniform_type_name
+                    function.uniform_type_name()
                 ));
                 binding_index += 1;
             }

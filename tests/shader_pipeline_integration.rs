@@ -276,3 +276,44 @@ async fn test_render_pipeline_creation() {
 
     // If we reach here, the render pipeline was created successfully
 }
+
+#[tokio::test]
+async fn test_automatic_uniform_struct_generation() {
+    let context = create_test_context().await;
+    let device = &context.device;
+
+    let mut pipeline = ComposableShaderPipeline::new();
+    
+    // Add functions with different uniform types
+    let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+    let color_map = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 1.0, 1.0]);
+    let position = PositionTransform::new(vec2![1.0, 1.0], vec2![0.0, 0.0]);
+    
+    pipeline.add_function(scale);
+    pipeline.add_function(color_map);
+    pipeline.add_function(position);
+    
+    // Generate shader code
+    let vertex_shader = pipeline.generate_vertex_shader();
+    
+    // Verify that uniform structs are automatically generated (no hardcoded types)
+    assert!(vertex_shader.contains("struct LinearScaleUniforms"));
+    assert!(vertex_shader.contains("domain_min: f32"));
+    assert!(vertex_shader.contains("domain_max: f32"));
+    assert!(vertex_shader.contains("range_min: f32"));
+    assert!(vertex_shader.contains("range_max: f32"));
+    
+    assert!(vertex_shader.contains("struct ColorMapUniforms"));
+    assert!(vertex_shader.contains("min_color: vec4<f32>"));
+    assert!(vertex_shader.contains("max_color: vec4<f32>"));
+    
+    assert!(vertex_shader.contains("struct PositionTransformUniforms"));
+    assert!(vertex_shader.contains("scale: vec2<f32>"));
+    assert!(vertex_shader.contains("offset: vec2<f32>"));
+    
+    // Verify the shader compiles successfully with auto-generated uniforms
+    let _vertex_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("auto_uniform_test"),
+        source: wgpu::ShaderSource::Wgsl(vertex_shader.into()),
+    });
+}
