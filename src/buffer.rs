@@ -303,7 +303,7 @@ impl Default for BufferPoolConfig {
         Self {
             max_buffers_per_pool: 10,
             max_total_memory: Some(256 * 1024 * 1024), // 256 MB default limit
-            eviction_timeout: Duration::from_secs(60),  // 1 minute
+            eviction_timeout: Duration::from_secs(60), // 1 minute
             enable_lru: true,
         }
     }
@@ -446,14 +446,14 @@ impl BufferPool {
                 break;
             }
 
-            if let Some(pool) = self.pools.get_mut(&key) {
-                if let Some(entry) = pool.pop_front() {
-                    freed_bytes += entry.size;
-                    self.allocation_stats.pooled_buffers -= 1;
-                    
-                    if pool.is_empty() {
-                        pools_to_clean.push(key);
-                    }
+            if let Some(pool) = self.pools.get_mut(&key)
+                && let Some(entry) = pool.pop_front()
+            {
+                freed_bytes += entry.size;
+                self.allocation_stats.pooled_buffers -= 1;
+
+                if pool.is_empty() {
+                    pools_to_clean.push(key);
                 }
             }
         }
@@ -691,7 +691,7 @@ mod tests {
     async fn test_buffer_pool_max_buffers_per_pool() {
         let context = create_test_context().await;
         let device = Arc::new(context.device().clone());
-        
+
         let config = BufferPoolConfig {
             max_buffers_per_pool: 3,
             max_total_memory: None,
@@ -723,7 +723,7 @@ mod tests {
     async fn test_buffer_pool_timeout_eviction() {
         let context = create_test_context().await;
         let device = Arc::new(context.device().clone());
-        
+
         let config = BufferPoolConfig {
             max_buffers_per_pool: 10,
             max_total_memory: None,
@@ -758,7 +758,7 @@ mod tests {
     async fn test_buffer_pool_memory_pressure() {
         let context = create_test_context().await;
         let device = Arc::new(context.device().clone());
-        
+
         let config = BufferPoolConfig {
             max_buffers_per_pool: 100,
             max_total_memory: Some(1024), // Very small limit to trigger eviction
@@ -803,7 +803,7 @@ mod tests {
     async fn test_buffer_pool_memory_usage_percentage() {
         let context = create_test_context().await;
         let device = Arc::new(context.device().clone());
-        
+
         let config = BufferPoolConfig {
             max_buffers_per_pool: 10,
             max_total_memory: Some(10_000),
