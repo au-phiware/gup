@@ -45,6 +45,7 @@ pub mod line;
 pub mod path;
 pub mod rectangle;
 pub mod renderer;
+pub mod text;
 
 pub use circle::{Circle, CircleAttributes, CircleVertex};
 pub use composite::{CompositeMark, CompositeMarkAttributes, CompositeMarkVertex, SubMark, Transform};
@@ -52,6 +53,7 @@ pub use line::{Line, LineAttributes, LineStyle, LineVertex};
 pub use path::{Path, PathAttributes, PathCommand, PathVertex};
 pub use rectangle::{Rectangle, RectangleAttributes, RectangleVertex};
 pub use renderer::MarkRenderer;
+pub use text::{Text, TextMarkAttributes, TextVertex};
 
 use crate::error::GupResult;
 use crate::shader_pipeline::ComposableShaderPipeline;
