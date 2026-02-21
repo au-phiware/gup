@@ -1,5 +1,7 @@
 # GUP-048: Context Error Recovery
 
+**Status**: 🚧 In Progress
+
 ## Story Overview
 
 **Title**: Robust Error Recovery and Context Resilience **Epic**: Phase 1
