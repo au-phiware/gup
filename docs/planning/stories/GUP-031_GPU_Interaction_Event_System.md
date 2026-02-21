@@ -1,5 +1,7 @@
 # GUP-031: GPU-Based Interaction Event System
 
+**Status**: 🚧 In Progress (2024-02-22)
+
 ## Story Overview
 
 **Title**: Implement GPU-Accelerated Interaction Detection and Event Handling  

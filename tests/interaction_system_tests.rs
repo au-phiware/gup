@@ -27,6 +27,12 @@ impl TestData {
     }
 }
 
+impl gup::InteractionData for TestData {
+    fn position(&self) -> [f32; 2] {
+        [self.x, self.y]
+    }
+}
+
 /// Create test render context for GPU operations
 async fn create_test_context() -> Arc<RenderContext> {
     Arc::new(
