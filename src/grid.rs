@@ -33,7 +33,9 @@
 use crate::axis::{Axis, AxisPosition};
 use crate::error::GupResult;
 use crate::render::RenderContext;
-use crate::selection::LineAttributes;
+// TODO: Implement Selection type
+// use crate::selection::LineAttributes;
+use crate::LineAttributes; // From mark::line
 use crate::shader_function::{Vec2, Vec4};
 use crate::tick_generator::Scale;
 use std::sync::Arc;
@@ -644,6 +646,9 @@ impl GridRenderer {
     ///
     /// This method creates Selection<LineAttributes, Line> instances for each
     /// grid line type, enabling integration with the existing rendering pipeline.
+    ///
+    /// TODO: Disabled until Selection type is implemented
+    /*
     pub fn create_grid_selections(
         &self,
         context: Arc<RenderContext>,
@@ -678,6 +683,7 @@ impl GridRenderer {
 
         Ok(selections)
     }
+    */
 
     /// Clear all generated grid lines.
     fn clear_grid_lines(&mut self) {
@@ -791,12 +797,16 @@ impl GridSystem {
     ///
     /// This method creates Selection instances for all generated grid lines,
     /// enabling integration with the chart builder and rendering pipeline.
+    ///
+    /// TODO: Disabled until Selection type is implemented
+    /*
     pub fn create_grid_selections(
         &self,
         context: Arc<RenderContext>,
     ) -> GupResult<Vec<crate::selection::Selection<LineAttributes, crate::selection::Line>>> {
         self.renderer.create_grid_selections(context)
     }
+    */
 }
 
 /// Coordinator for integrating axis tick positions with grid rendering.

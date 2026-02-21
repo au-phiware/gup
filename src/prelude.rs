@@ -23,7 +23,8 @@ pub use crate::chart_builder::{
 };
 
 // Selection API (low-level)
-pub use crate::selection::{Mark, Selection};
+// TODO: Implement Selection type (currently not implemented)
+// pub use crate::selection::{Mark, Selection};
 
 // Mark types
 pub use crate::{Circle, Line, Rectangle};

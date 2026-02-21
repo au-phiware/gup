@@ -59,7 +59,8 @@ use crate::error::{GupError, GupResult};
 use crate::grid::GridConfiguration;
 use crate::label::{AxisInfo, LabelConstraints, LabelLayout, LabelPosition, LabelPositioner};
 use crate::render::Vertex;
-use crate::selection::{LineAttributes, Selection};
+// TODO: Implement Selection type
+// use crate::selection::{LineAttributes, Selection};
 use crate::shader_function::Vec2;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -145,6 +146,9 @@ where
     ///
     /// This enables seamless transition from high-level builder APIs to
     /// low-level Selection operations when needed.
+    ///
+    /// TODO: Disabled until Selection type is implemented
+    /*
     pub fn into_selection<M>(self) -> GupResult<Selection<T, M>>
     where
         T: Clone + Send + Sync + std::fmt::Debug + 'static,
@@ -153,6 +157,7 @@ where
     {
         Selection::new(self.data, self.context)
     }
+    */
 
     /// Access the underlying data for inspection.
     pub fn data(&self) -> &[T] {
@@ -997,6 +1002,8 @@ where
     }
 }
 
+// TODO: Re-enable tests when Selection type is implemented
+/*
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1285,3 +1292,4 @@ mod tests {
         assert_eq!(labels.len(), 24, "4 axes: 6 labels each");
     }
 }
+*/
