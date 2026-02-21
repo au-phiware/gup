@@ -853,7 +853,7 @@ management for web platform
 
 ### GUP-118: Visualization Position Synchronization
 
-**Status**: 💡 New  
+**Status**: 🚧 In Progress  
 **Priority**: Medium  
 **Story Points**: 5  
 **Key Need**: Synchronize overlay element positions with actual mark coordinates
