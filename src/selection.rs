@@ -233,7 +233,7 @@ where
 /// - 2 = Line
 fn get_mark_type_id<M: Mark>() -> u32 {
     let type_name = std::any::type_name::<M>();
-    
+
     // Map mark types to GPU shader IDs
     if type_name.contains("Circle") {
         0

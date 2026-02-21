@@ -287,7 +287,7 @@ mod tests {
         let line_to = PathCommand::LineTo(crate::Vec2 { x: 1.0, y: 1.0 });
         let close = PathCommand::Close;
 
-        let commands = vec![move_to, line_to, close];
+        let commands = [move_to, line_to, close];
         assert_eq!(commands.len(), 3);
     }
 
@@ -311,14 +311,8 @@ mod tests {
 
     #[test]
     fn test_path_attribute_types() {
-        assert_eq!(
-            Path::get_attribute_type("position").unwrap(),
-            "vec2<f32>"
-        );
-        assert_eq!(
-            Path::get_attribute_type("fill_color").unwrap(),
-            "vec4<f32>"
-        );
+        assert_eq!(Path::get_attribute_type("position").unwrap(), "vec2<f32>");
+        assert_eq!(Path::get_attribute_type("fill_color").unwrap(), "vec4<f32>");
         assert_eq!(
             Path::get_attribute_type("stroke_color").unwrap(),
             "vec4<f32>"

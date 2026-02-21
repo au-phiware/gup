@@ -1,6 +1,6 @@
 # GUP-131: Add Constructor Methods to Shader Types
 
-**Status**: 📋 Planned  
+**Status**: 🚧 In Progress  
 **Priority**: Low  
 **Story Points**: 1  
 **Created**: 2025-01-10 (from GUP-032 retrospective)
@@ -8,11 +8,13 @@
 ## Story Overview
 
 **Title**: Add Constructor Methods to Shader Types  
-**Epic**: Phase 1 Initiative 2 - Unified Shader Function System  
+**Epic**: Phase 1 Initiative 2 - Unified Shader Function System
 
 ## Context
 
-During GUP-032 implementation, discovered that shader types like Vec2, Vec3, Vec4, Mat2, Mat3, Mat4 lack standard `new()` constructors. This forces awkward struct literal syntax:
+During GUP-032 implementation, discovered that shader types like Vec2, Vec3,
+Vec4, Mat2, Mat3, Mat4 lack standard `new()` constructors. This forces awkward
+struct literal syntax:
 
 ```rust
 // Current (awkward)
@@ -80,4 +82,5 @@ let v = Vec2::new(1.0, 2.0);
 
 ---
 
-_Created from GUP-032 retrospective - identified during Path mark implementation._
+_Created from GUP-032 retrospective - identified during Path mark
+implementation._

@@ -215,7 +215,7 @@ fn fs_main(input: FragmentInput) -> @location(0) vec4<f32> {{
     fn get_attribute_type(attribute_name: &str) -> GupResult<&'static str> {
         match attribute_name {
             "position" => Ok("vec2<f32>"),
-            "text" => Ok("string"),  // Special type
+            "text" => Ok("string"), // Special type
             "color" => Ok("vec4<f32>"),
             "font_size" => Ok("f32"),
             _ => Err(crate::error::GupError::validation_error(format!(

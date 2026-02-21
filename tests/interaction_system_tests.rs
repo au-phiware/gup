@@ -120,7 +120,7 @@ async fn test_point_query_misses() {
 
     // Test positions that should miss (far from actual element positions)
     let miss_positions = vec![
-        Vec2::new(25.0, 25.0),   // Between the two elements  
+        Vec2::new(25.0, 25.0),   // Between the two elements
         Vec2::new(-50.0, -50.0), // Far from any element
         Vec2::new(500.0, 500.0), // Far from any element
     ];

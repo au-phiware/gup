@@ -1,10 +1,12 @@
 # Custom Mark Development Guide
 
-This guide explains how to create custom marks in Gup, from simple shapes to complex procedural marks.
+This guide explains how to create custom marks in Gup, from simple shapes to
+complex procedural marks.
 
 ## The Mark Trait
 
-All visual primitives in Gup implement the `Mark` trait. This trait bridges high-level visualization concepts with GPU rendering.
+All visual primitives in Gup implement the `Mark` trait. This trait bridges
+high-level visualization concepts with GPU rendering.
 
 ### Basic Mark Structure
 
@@ -34,17 +36,17 @@ pub struct MyCustomAttributes {
 impl Mark for MyCustomMark {
     type Vertex = MyCustomVertex;
     type AttributeValue = MyCustomAttributes;
-    
+
     // Define how many vertices per mark instance
     fn vertex_count() -> usize {
         4 // For a quad
     }
-    
+
     // Define index count if using indexed rendering
     fn index_count() -> Option<usize> {
         Some(6) // Two triangles
     }
-    
+
     // Generate the base geometry
     fn generate_vertices() -> Vec<Self::Vertex> {
         vec![
@@ -54,7 +56,7 @@ impl Mark for MyCustomMark {
             MyCustomVertex { position: [-1.0,  1.0] },
         ]
     }
-    
+
     // Generate indices for the geometry
     fn generate_indices() -> Option<Vec<u32>> {
         Some(vec![0, 1, 2, 0, 2, 3])
@@ -66,7 +68,8 @@ impl Mark for MyCustomMark {
 
 ### The `bytemuck` Traits
 
-Vertex types must implement `bytemuck::Pod` and `bytemuck::Zeroable` for safe GPU transfer:
+Vertex types must implement `bytemuck::Pod` and `bytemuck::Zeroable` for safe
+GPU transfer:
 
 ```rust
 #[repr(C)]
@@ -78,6 +81,7 @@ pub struct CustomVertex {
 ```
 
 Key requirements:
+
 - Use `#[repr(C)]` for predictable memory layout
 - Only use types that are `Pod` (Plain Old Data)
 - Align fields to GPU requirements (vec2<f32> = 8 bytes, vec4<f32> = 16 bytes)
@@ -85,6 +89,7 @@ Key requirements:
 ### Common Vertex Patterns
 
 **Simple quad for shape rendering:**
+
 ```rust
 pub struct QuadVertex {
     pub position: [f32; 2], // Corner position (-1 to 1)
@@ -92,6 +97,7 @@ pub struct QuadVertex {
 ```
 
 **Textured quad:**
+
 ```rust
 pub struct TexturedVertex {
     pub position: [f32; 2],
@@ -100,6 +106,7 @@ pub struct TexturedVertex {
 ```
 
 **Line with normals:**
+
 ```rust
 pub struct LineVertex {
     pub position: [f32; 2],
@@ -117,12 +124,12 @@ For maximum performance, provide pre-written WGSL shaders:
 impl Mark for MyCustomMark {
     type Vertex = MyCustomVertex;
     type AttributeValue = MyCustomAttributes;
-    
-    const VERTEX_SHADER: Option<&'static str> = 
+
+    const VERTEX_SHADER: Option<&'static str> =
         Some(include_str!("shaders/my_mark.vert.wgsl"));
-    const FRAGMENT_SHADER: Option<&'static str> = 
+    const FRAGMENT_SHADER: Option<&'static str> =
         Some(include_str!("shaders/my_mark.frag.wgsl"));
-    
+
     // ... rest of implementation
 }
 ```
@@ -134,7 +141,7 @@ For flexibility, generate shaders dynamically:
 ```rust
 impl Mark for MyCustomMark {
     // ... vertex and attribute types
-    
+
     fn generate_vertex_shader_with_functions(
         pipeline: &ComposableShaderPipeline,
         attribute_functions: &HashMap<String, String>,
@@ -162,18 +169,18 @@ fn vs_main(
 ) -> VertexOutput {{
     let instance = instances[instance_index];
     var output: VertexOutput;
-    
+
     // Transform vertex position
     let world_pos = instance.center + vertex_pos * instance.size;
     output.position = vec4<f32>(world_pos, 0.0, 1.0);
     output.color = instance.color;
-    
+
     return output;
 }}
 "#
         )
     }
-    
+
     fn generate_fragment_shader_with_functions(
         pipeline: &ComposableShaderPipeline,
         attribute_functions: &HashMap<String, String>,
@@ -201,7 +208,7 @@ Implement attribute type checking for compile-time safety:
 ```rust
 impl Mark for MyCustomMark {
     // ... other methods
-    
+
     fn get_attribute_type(attribute_name: &str) -> GupResult<&'static str> {
         match attribute_name {
             "center" | "position" => Ok("vec2<f32>"),
@@ -226,11 +233,11 @@ For smooth anti-aliased edges, use signed distance fields:
 fn fs_main(input: FragmentInput) -> @location(0) vec4<f32> {
     // Calculate distance from edge
     let dist = length(input.local_pos) - input.radius;
-    
+
     // Anti-aliased edge (1px smoothing)
     let smoothing = fwidth(dist);
     let alpha = 1.0 - smoothstep(-smoothing, smoothing, dist);
-    
+
     return vec4<f32>(input.color.rgb, input.color.a * alpha);
 }
 ```
@@ -261,18 +268,18 @@ impl Mark for ComplexMark {
     fn vertex_count() -> usize {
         12  // Complex shape with 12 vertices
     }
-    
+
     fn index_count() -> Option<usize> {
         Some(18)  // 6 triangles
     }
-    
+
     fn generate_vertices() -> Vec<Self::Vertex> {
         // Generate your complex geometry here
         vec![
             // ... 12 vertices
         ]
     }
-    
+
     fn generate_indices() -> Option<Vec<u32>> {
         Some(vec![
             // ... triangle indices
@@ -285,7 +292,8 @@ impl Mark for ComplexMark {
 
 ### 1. Use Instanced Rendering
 
-The mark system handles instancing automatically. Focus on defining efficient per-instance data:
+The mark system handles instancing automatically. Focus on defining efficient
+per-instance data:
 
 ```rust
 // Good: Compact instance data
@@ -325,7 +333,8 @@ fn index_count() -> Option<usize> {
 
 ### 4. Cache Shader Pipelines
 
-The mark system caches compiled shaders automatically. Avoid generating unique shaders per instance.
+The mark system caches compiled shaders automatically. Avoid generating unique
+shaders per instance.
 
 ## Testing Your Mark
 
@@ -391,21 +400,21 @@ pub struct StarAttributes {
 impl Mark for Star {
     type Vertex = StarVertex;
     type AttributeValue = StarAttributes;
-    
+
     fn vertex_count() -> usize {
         // Star with 5 points = 10 vertices (5 outer + 5 inner) + center
         11
     }
-    
+
     fn index_count() -> Option<usize> {
         Some(15)  // 5 triangles for star points
     }
-    
+
     fn generate_vertices() -> Vec<Self::Vertex> {
         // Generate star geometry...
         todo!()
     }
-    
+
     fn generate_indices() -> Option<Vec<u32>> {
         // Generate triangle indices...
         todo!()
@@ -437,21 +446,21 @@ pub struct ArrowAttributes {
 impl Mark for Arrow {
     type Vertex = ArrowVertex;
     type AttributeValue = ArrowAttributes;
-    
+
     // Arrow: shaft (4 vertices) + head (3 vertices) = 7 vertices
     fn vertex_count() -> usize {
         7
     }
-    
+
     fn index_count() -> Option<usize> {
         Some(9)  // 3 triangles
     }
-    
+
     fn generate_vertices() -> Vec<Self::Vertex> {
         // Generate arrow geometry...
         todo!()
     }
-    
+
     fn generate_indices() -> Option<Vec<u32>> {
         todo!()
     }
@@ -487,10 +496,12 @@ Creating custom marks involves:
 6. Write comprehensive tests
 
 The mark system handles:
+
 - Instanced rendering
 - GPU buffer management
 - Shader pipeline caching
 - Attribute type validation
 - Integration with the selection API
 
-Focus on defining clean, efficient mark geometries, and let the system handle the GPU complexity.
+Focus on defining clean, efficient mark geometries, and let the system handle
+the GPU complexity.

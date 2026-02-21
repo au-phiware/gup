@@ -48,7 +48,9 @@ pub mod renderer;
 pub mod text;
 
 pub use circle::{Circle, CircleAttributes, CircleVertex};
-pub use composite::{CompositeMark, CompositeMarkAttributes, CompositeMarkVertex, SubMark, Transform};
+pub use composite::{
+    CompositeMark, CompositeMarkAttributes, CompositeMarkVertex, SubMark, Transform,
+};
 pub use line::{Line, LineAttributes, LineStyle, LineVertex};
 pub use path::{Path, PathAttributes, PathCommand, PathVertex};
 pub use rectangle::{Rectangle, RectangleAttributes, RectangleVertex};

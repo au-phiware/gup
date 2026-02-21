@@ -11,13 +11,18 @@
 
 ## Context
 
-GUP-128 fixed mark type ID generation by using type name string matching (e.g., checking if type name contains "Circle"). This works but is fragile to refactoring (renaming a type breaks GPU interaction). A proc macro would provide compile-time stable IDs with better error messages.
+GUP-128 fixed mark type ID generation by using type name string matching (e.g.,
+checking if type name contains "Circle"). This works but is fragile to
+refactoring (renaming a type breaks GPU interaction). A proc macro would provide
+compile-time stable IDs with better error messages.
 
 ## User Story
 
 **As a** Gup library developer  
-**I want** mark types to automatically get stable GPU-compatible IDs at compile time  
-**So that** mark type IDs are correct by construction and resistant to refactoring
+**I want** mark types to automatically get stable GPU-compatible IDs at compile
+time  
+**So that** mark type IDs are correct by construction and resistant to
+refactoring
 
 ## Acceptance Criteria
 
@@ -96,7 +101,8 @@ GUP-128 fixed mark type ID generation by using type name string matching (e.g., 
 
 ## Risk Assessment
 
-**Low Risk**: Optional enhancement. Existing type name approach continues to work. Can be adopted incrementally.
+**Low Risk**: Optional enhancement. Existing type name approach continues to
+work. Can be adopted incrementally.
 
 ## Implementation Notes
 
@@ -153,6 +159,7 @@ fn test_mark_ids_match_shader() {
 ### Shader Documentation
 
 Add to `hit_test.compute.wgsl`:
+
 ```wgsl
 // Mark type IDs must match Rust MarkTypeId assignments:
 // 0 = Circle (gup::mark::Circle)
@@ -178,8 +185,10 @@ impl Mark for Circle {
 **Pros**: Simpler, no proc macro needed  
 **Cons**: Manual assignment, no validation, requires remembering to add ID
 
-**Decision**: Proc macro provides better error checking and automation, worth the complexity.
+**Decision**: Proc macro provides better error checking and automation, worth
+the complexity.
 
 ---
 
-_Created from GUP-128 retrospective - identified fragility in type name-based mark type IDs._
+_Created from GUP-128 retrospective - identified fragility in type name-based
+mark type IDs._

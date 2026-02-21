@@ -8,13 +8,16 @@
 ## Story Overview
 
 **Title**: GPU Tessellation for Dynamic Path Rendering  
-**Epic**: Phase 1 Initiative 3 - Advanced Mark System  
+**Epic**: Phase 1 Initiative 3 - Advanced Mark System
 
 ## Context
 
-Current Path mark implementation tessellates paths on CPU and uploads triangles to GPU. For dynamic paths (e.g., animations, user interactions), this requires CPU->GPU round-trip on every change.
+Current Path mark implementation tessellates paths on CPU and uploads triangles
+to GPU. For dynamic paths (e.g., animations, user interactions), this requires
+CPU->GPU round-trip on every change.
 
 Moving tessellation to GPU compute shader would enable:
+
 - Real-time path modifications
 - Lower latency for interactive graphics
 - Reduced bandwidth (upload path commands vs triangles)
@@ -67,7 +70,8 @@ Moving tessellation to GPU compute shader would enable:
 
 ## Risk Assessment
 
-**Medium Risk**: Compute shader complexity, potential for GPU driver compatibility issues.
+**Medium Risk**: Compute shader complexity, potential for GPU driver
+compatibility issues.
 
 **Mitigation**: Keep CPU tessellation path as fallback, test on multiple GPUs.
 

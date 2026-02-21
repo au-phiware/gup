@@ -321,7 +321,7 @@ mod tests {
     fn test_transform_to_matrix() {
         let transform = Transform::identity();
         let matrix = transform.to_matrix();
-        
+
         // Check identity matrix
         assert_eq!(matrix[0][0], 1.0);
         assert_eq!(matrix[1][1], 1.0);
