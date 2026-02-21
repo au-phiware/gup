@@ -39,6 +39,12 @@ pub struct GupOptions {
     pub required_limits: Limits,
     /// Backend selection preference
     pub backends: Backends,
+    /// Allow fallback to software rendering if hardware fails
+    pub allow_software_fallback: bool,
+    /// Reduced feature set for limited GPUs
+    pub reduced_features: Option<Features>,
+    /// Reduced limits for limited GPUs
+    pub reduced_limits: Option<Limits>,
 }
 
 /// Unique identifier for surfaces in multi-window applications.
@@ -242,6 +248,9 @@ impl Default for GupOptions {
             backends: Backends::BROWSER_WEBGPU | Backends::GL,
             #[cfg(not(target_arch = "wasm32"))]
             backends: Backends::PRIMARY,
+            allow_software_fallback: true,
+            reduced_features: Some(Features::empty()),
+            reduced_limits: Some(Limits::downlevel_defaults()),
         }
     }
 }
@@ -1316,31 +1325,108 @@ impl GupContext {
     async fn recreate_device(&mut self) -> GupResult<()> {
         log::info!("Recreating GPU device...");
 
-        // Create new adapter
+        // Try with full features first, then fall back to reduced features
+        let result = self.try_create_device_with_features(
+            self.context_options.required_features,
+            self.context_options.required_limits.clone(),
+            false,
+        ).await;
+
+        match result {
+            Ok((device, queue, adapter)) => {
+                log::info!("Device recreated successfully with full features");
+                self.apply_device_update(device, queue, adapter)?;
+                Ok(())
+            }
+            Err(full_features_err) => {
+                log::warn!("Failed to recreate device with full features: {}", full_features_err);
+
+                // Try with reduced features if available
+                if let (Some(reduced_features), Some(reduced_limits)) = 
+                    (self.context_options.reduced_features, &self.context_options.reduced_limits) 
+                {
+                    log::info!("Attempting device creation with reduced features...");
+                    match self.try_create_device_with_features(
+                        reduced_features,
+                        reduced_limits.clone(),
+                        false,
+                    ).await {
+                        Ok((device, queue, adapter)) => {
+                            log::warn!("Device recreated with reduced feature set");
+                            self.apply_device_update(device, queue, adapter)?;
+                            return Ok(());
+                        }
+                        Err(reduced_err) => {
+                            log::warn!("Failed with reduced features: {}", reduced_err);
+                        }
+                    }
+                }
+
+                // Try software fallback if enabled
+                if self.context_options.allow_software_fallback {
+                    log::info!("Attempting software fallback...");
+                    match self.try_create_device_with_features(
+                        self.context_options.reduced_features.unwrap_or(Features::empty()),
+                        self.context_options.reduced_limits.clone().unwrap_or(Limits::downlevel_defaults()),
+                        true,
+                    ).await {
+                        Ok((device, queue, adapter)) => {
+                            log::warn!("Device recreated using software rendering (degraded performance expected)");
+                            self.apply_device_update(device, queue, adapter)?;
+                            return Ok(());
+                        }
+                        Err(software_err) => {
+                            log::error!("Software fallback also failed: {}", software_err);
+                        }
+                    }
+                }
+
+                Err(GupError::webgpu_error(format!(
+                    "Failed to recreate device. Tried full features, reduced features, and software fallback. Original error: {}",
+                    full_features_err
+                )))
+            }
+        }
+    }
+
+    /// Try to create a device with specific features and limits.
+    async fn try_create_device_with_features(
+        &self,
+        features: Features,
+        limits: Limits,
+        force_fallback: bool,
+    ) -> Result<(Device, Queue, Adapter), GupError> {
         let adapter = self._instance
             .request_adapter(&RequestAdapterOptions {
-                power_preference: self.context_options.power_preference,
+                power_preference: if force_fallback {
+                    PowerPreference::LowPower
+                } else {
+                    self.context_options.power_preference
+                },
                 compatible_surface: None,
-                force_fallback_adapter: false,
+                force_fallback_adapter: force_fallback,
             })
             .await
             .map_err(|e| {
-                GupError::webgpu_error(format!("Failed to recreate adapter during recovery: {e}"))
+                GupError::webgpu_error(format!("Failed to request adapter: {}", e))
             })?;
 
-        // Create new device and queue
         let (device, queue) = adapter
             .request_device(&DeviceDescriptor {
-                label: Some("gup_device_recovered"),
-                required_features: self.context_options.required_features,
-                required_limits: self.context_options.required_limits.clone(),
+                label: Some(if force_fallback { "gup_device_software" } else { "gup_device_recovered" }),
+                required_features: features,
+                required_limits: limits,
                 memory_hints: MemoryHints::Performance,
                 trace: Default::default(),
             })
             .await
-            .map_err(|e| GupError::webgpu_error(format!("Failed to recreate device during recovery: {e}")))?;
+            .map_err(|e| GupError::webgpu_error(format!("Failed to create device: {}", e)))?;
 
-        // Update device and queue
+        Ok((device, queue, adapter))
+    }
+
+    /// Apply a successful device recreation.
+    fn apply_device_update(&mut self, device: Device, queue: Queue, adapter: Adapter) -> GupResult<()> {
         self.device = Arc::new(device);
         self.queue = Arc::new(queue);
         self._adapter = adapter;
@@ -1352,7 +1438,7 @@ impl GupContext {
         // Recreate all surfaces
         self.recreate_surfaces()?;
 
-        log::info!("Device recreation completed successfully");
+        log::info!("Device update applied successfully");
         Ok(())
     }
 

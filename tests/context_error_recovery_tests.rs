@@ -3,8 +3,9 @@
 
 //! Tests for context error recovery functionality.
 
-use gup::context::{ContextState, GupContext};
+use gup::context::{ContextState, GupContext, GupOptions};
 use std::sync::{Arc, Mutex};
+use wgpu::{Features, Limits};
 
 #[tokio::test]
 async fn test_context_initial_state() {
@@ -14,6 +15,43 @@ async fn test_context_initial_state() {
     assert!(context.check_device_status());
 }
 
+#[tokio::test]
+async fn test_graceful_degradation_options() {
+    let options = GupOptions::default();
+    
+    // Default options should allow fallback
+    assert!(options.allow_software_fallback);
+    assert!(options.reduced_features.is_some());
+    assert!(options.reduced_limits.is_some());
+}
+
+#[tokio::test]
+async fn test_context_with_reduced_features() {
+    let mut options = GupOptions::default();
+    options.reduced_features = Some(Features::empty());
+    options.reduced_limits = Some(Limits::downlevel_defaults());
+    
+    let context = GupContext::with_options(options).await.expect("Failed to create context");
+    assert_eq!(context.state(), ContextState::Active);
+}
+
+#[tokio::test]
+async fn test_recovery_with_fallback_options() {
+    let mut options = GupOptions::default();
+    options.allow_software_fallback = true;
+    options.reduced_features = Some(Features::empty());
+    options.reduced_limits = Some(Limits::downlevel_defaults());
+    
+    let mut context = GupContext::with_options(options).await.expect("Failed to create context");
+    let context_mut = Arc::get_mut(&mut context).expect("Failed to get mutable context");
+    
+    context_mut.mark_device_lost();
+    let result = context_mut.attempt_recovery().await.expect("Failed to get recovery result");
+    
+    // Recovery should succeed even with reduced options
+    assert!(result.success);
+    assert_eq!(context_mut.state(), ContextState::Active);
+}
 #[tokio::test]
 async fn test_recovery_callback() {
     let mut context = GupContext::new().await.expect("Failed to create context");
