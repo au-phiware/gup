@@ -44,7 +44,10 @@ impl SurfaceEventHandler for LoggingEventHandler {
 
     fn on_focus_changed(&mut self, surface_id: SurfaceId, focused: bool) -> GupResult<()> {
         let status = if focused { "FOCUSED" } else { "UNFOCUSED" };
-        println!("👁️  Focus Changed - Surface: {}, Status: {}", surface_id, status);
+        println!(
+            "👁️  Focus Changed - Surface: {}, Status: {}",
+            surface_id, status
+        );
         Ok(())
     }
 
@@ -103,14 +106,14 @@ impl SurfaceEventsApp {
 
         // Create context with the window
         let mut ctx = GupContext::with_surface(Arc::clone(&window)).await?;
-        
+
         // Register event handler
         let ctx_mut = Arc::get_mut(&mut ctx).expect("Failed to get mutable context");
         ctx_mut.register_event_handler(Box::new(LoggingEventHandler));
-        
+
         // Enable background throttling
         ctx_mut.set_background_throttling(true);
-        
+
         // Get the surface ID
         self.surface_id = ctx_mut.primary_surface_id();
 
@@ -167,7 +170,7 @@ impl SurfaceEventsApp {
             // Check if background throttling should prevent rendering
             if ctx.is_background_throttling_enabled()
                 && !self.is_visible
-                && self.frame_count % 60 != 0
+                && !self.frame_count.is_multiple_of(60)
             {
                 // Skip most frames when hidden
                 self.context = Some(Arc::new(ctx));
@@ -216,7 +219,6 @@ impl ApplicationHandler for SurfaceEventsApp {
             if let Err(e) = self.create_context_and_window(event_loop).await {
                 eprintln!("Failed to create context and window: {e}");
                 event_loop.exit();
-                return;
             }
         });
     }
@@ -238,10 +240,9 @@ impl ApplicationHandler for SurfaceEventsApp {
                     && let Ok(mut ctx) = Arc::try_unwrap(context)
                     && let Some(surface_id) = self.surface_id
                 {
-                    if let Err(e) = ctx.resize_surface(
-                        surface_id,
-                        PhysicalSize::new(size.width, size.height),
-                    ) {
+                    if let Err(e) =
+                        ctx.resize_surface(surface_id, PhysicalSize::new(size.width, size.height))
+                    {
                         eprintln!("Failed to resize surface: {e}");
                     }
                     self.context = Some(Arc::new(ctx));
@@ -250,7 +251,7 @@ impl ApplicationHandler for SurfaceEventsApp {
 
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 self.current_scale_factor = scale_factor;
-                
+
                 if let Some(context) = self.context.take()
                     && let Ok(mut ctx) = Arc::try_unwrap(context)
                     && let Some(surface_id) = self.surface_id
@@ -264,7 +265,7 @@ impl ApplicationHandler for SurfaceEventsApp {
 
             WindowEvent::Focused(focused) => {
                 self.is_focused = focused;
-                
+
                 if let Some(context) = self.context.take()
                     && let Ok(mut ctx) = Arc::try_unwrap(context)
                     && let Some(surface_id) = self.surface_id
@@ -278,7 +279,7 @@ impl ApplicationHandler for SurfaceEventsApp {
 
             WindowEvent::Occluded(occluded) => {
                 self.is_visible = !occluded;
-                
+
                 if let Some(context) = self.context.take()
                     && let Ok(mut ctx) = Arc::try_unwrap(context)
                     && let Some(surface_id) = self.surface_id

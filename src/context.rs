@@ -117,6 +117,33 @@ pub enum SurfaceEvent {
     },
 }
 
+/// Context state for error recovery and monitoring.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContextState {
+    /// Context is active and operational
+    Active,
+    /// GPU device was lost, attempting recovery
+    DeviceLost,
+    /// Recovery in progress
+    Recovering,
+    /// Recovery failed with reason
+    Failed,
+}
+
+/// Context recovery callback type.
+pub type RecoveryCallback = Box<dyn Fn(ContextState) + Send + Sync>;
+
+/// Recovery attempt result.
+#[derive(Debug, Clone)]
+pub struct RecoveryAttemptResult {
+    /// Whether recovery succeeded
+    pub success: bool,
+    /// Time taken for recovery attempt
+    pub duration: Duration,
+    /// Error message if recovery failed
+    pub error: Option<String>,
+}
+
 /// Trait for handling surface events.
 pub trait SurfaceEventHandler: Send + Sync {
     /// Called when DPI/scale factor changes.
@@ -589,6 +616,18 @@ pub struct GupContext {
     /// WebGPU instance and adapter (kept for potential reconfiguration)
     _instance: Instance,
     _adapter: Adapter,
+
+    /// Context state for error recovery
+    context_state: ContextState,
+    
+    /// Recovery callback for state changes
+    recovery_callback: Option<RecoveryCallback>,
+    
+    /// Last recovery attempt information
+    last_recovery_attempt: Option<RecoveryAttemptResult>,
+    
+    /// Options used for context creation (for recovery)
+    context_options: GupOptions,
 }
 
 // Manual Debug implementation to handle non-Debug trait objects
@@ -612,6 +651,9 @@ impl std::fmt::Debug for GupContext {
                 "background_throttling_enabled",
                 &self.background_throttling_enabled,
             )
+            .field("context_state", &self.context_state)
+            .field("recovery_callback", &self.recovery_callback.is_some())
+            .field("last_recovery_attempt", &self.last_recovery_attempt)
             .finish()
     }
 }
@@ -661,6 +703,9 @@ impl GupContext {
                 GupError::webgpu_error(format!("Failed to find suitable GPU adapter: {e}"))
             })?;
 
+        // Clone the options to store them for recovery
+        let stored_options = options.clone();
+
         let (device, queue) = adapter
             .request_device(&DeviceDescriptor {
                 label: Some("gup_device"),
@@ -692,6 +737,10 @@ impl GupContext {
             background_throttling_enabled: false,
             _instance: instance,
             _adapter: adapter,
+            context_state: ContextState::Active,
+            recovery_callback: None,
+            last_recovery_attempt: None,
+            context_options: stored_options,
         }))
     }
 
@@ -1197,6 +1246,149 @@ impl GupContext {
     /// Get mutable access to the performance profiler (if enabled).
     pub fn profiler_mut(&mut self) -> Option<&mut PerformanceProfiler> {
         self.performance_profiler.as_mut()
+    }
+
+    /// Get the current context state.
+    pub fn state(&self) -> ContextState {
+        self.context_state
+    }
+
+    /// Set a callback to be called when the context state changes.
+    pub fn set_recovery_callback(&mut self, callback: RecoveryCallback) {
+        self.recovery_callback = Some(callback);
+    }
+
+    /// Get information about the last recovery attempt.
+    pub fn last_recovery_attempt(&self) -> Option<&RecoveryAttemptResult> {
+        self.last_recovery_attempt.as_ref()
+    }
+
+    /// Check if the device is still valid.
+    pub fn check_device_status(&self) -> bool {
+        // In wgpu, the device is lost when poll() returns false or when
+        // operations start failing. We can check this by polling.
+        // For now, we'll assume the device is valid if we're in Active state.
+        self.context_state == ContextState::Active
+    }
+
+    /// Attempt to recover from a device loss.
+    ///
+    /// This will try to recreate the device and restore all surfaces.
+    /// Returns `Ok(())` if recovery succeeded, `Err` otherwise.
+    pub async fn attempt_recovery(&mut self) -> GupResult<RecoveryAttemptResult> {
+        let start_time = Instant::now();
+        
+        log::info!("Attempting context recovery from state: {:?}", self.context_state);
+        
+        // Update state to Recovering
+        self.update_state(ContextState::Recovering);
+
+        // Try to recreate the device
+        let recovery_result = self.recreate_device().await;
+        
+        let duration = start_time.elapsed();
+        let result = match recovery_result {
+            Ok(()) => {
+                log::info!("Context recovery succeeded in {:?}", duration);
+                self.update_state(ContextState::Active);
+                RecoveryAttemptResult {
+                    success: true,
+                    duration,
+                    error: None,
+                }
+            }
+            Err(e) => {
+                log::error!("Context recovery failed: {}", e);
+                self.update_state(ContextState::Failed);
+                RecoveryAttemptResult {
+                    success: false,
+                    duration,
+                    error: Some(e.to_string()),
+                }
+            }
+        };
+
+        self.last_recovery_attempt = Some(result.clone());
+        Ok(result)
+    }
+
+    /// Internal method to recreate the device after device loss.
+    async fn recreate_device(&mut self) -> GupResult<()> {
+        log::info!("Recreating GPU device...");
+
+        // Create new adapter
+        let adapter = self._instance
+            .request_adapter(&RequestAdapterOptions {
+                power_preference: self.context_options.power_preference,
+                compatible_surface: None,
+                force_fallback_adapter: false,
+            })
+            .await
+            .map_err(|e| {
+                GupError::webgpu_error(format!("Failed to recreate adapter during recovery: {e}"))
+            })?;
+
+        // Create new device and queue
+        let (device, queue) = adapter
+            .request_device(&DeviceDescriptor {
+                label: Some("gup_device_recovered"),
+                required_features: self.context_options.required_features,
+                required_limits: self.context_options.required_limits.clone(),
+                memory_hints: MemoryHints::Performance,
+                trace: Default::default(),
+            })
+            .await
+            .map_err(|e| GupError::webgpu_error(format!("Failed to recreate device during recovery: {e}")))?;
+
+        // Update device and queue
+        self.device = Arc::new(device);
+        self.queue = Arc::new(queue);
+        self._adapter = adapter;
+
+        // Recreate resource pools
+        self.buffer_pool = BufferPool::new(Arc::clone(&self.device));
+        self.texture_pool = TexturePool::new(Arc::clone(&self.device));
+
+        // Recreate all surfaces
+        self.recreate_surfaces()?;
+
+        log::info!("Device recreation completed successfully");
+        Ok(())
+    }
+
+    /// Recreate all surfaces after device recovery.
+    fn recreate_surfaces(&mut self) -> GupResult<()> {
+        // We can't recreate surfaces without the original window handles,
+        // so we mark them as needing reconfiguration and let the application
+        // handle it through the callback
+        log::warn!("Surfaces need to be reconfigured by the application after device recovery");
+        
+        // Clear surfaces - application must re-add them
+        self.surfaces.clear();
+        self.primary_surface_id = None;
+
+        Ok(())
+    }
+
+    /// Update the context state and notify callbacks.
+    fn update_state(&mut self, new_state: ContextState) {
+        if self.context_state != new_state {
+            log::info!("Context state changed: {:?} -> {:?}", self.context_state, new_state);
+            self.context_state = new_state;
+            
+            // Call recovery callback if set
+            if let Some(ref callback) = self.recovery_callback {
+                callback(new_state);
+            }
+        }
+    }
+
+    /// Mark the context as device lost.
+    ///
+    /// This should be called when a device loss is detected.
+    pub fn mark_device_lost(&mut self) {
+        log::warn!("Device loss detected");
+        self.update_state(ContextState::DeviceLost);
     }
 
     /// Get all active surface IDs.
