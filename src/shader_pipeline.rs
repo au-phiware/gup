@@ -319,13 +319,14 @@ impl PipelineProfiler {
 
         // Check generation time
         if let Some(&max_time) = self.generation_times.iter().max()
-            && max_time > Duration::from_millis(5) {
-                recs.push(OptimizationRecommendation {
-                    optimization_type: "Shader Generation".to_string(),
-                    reason: format!("Peak generation time is {:?}, exceeds 5ms target", max_time),
-                    estimated_impact: "Consider reducing pipeline complexity".to_string(),
-                });
-            }
+            && max_time > Duration::from_millis(5)
+        {
+            recs.push(OptimizationRecommendation {
+                optimization_type: "Shader Generation".to_string(),
+                reason: format!("Peak generation time is {:?}, exceeds 5ms target", max_time),
+                estimated_impact: "Consider reducing pipeline complexity".to_string(),
+            });
+        }
 
         recs
     }

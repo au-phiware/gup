@@ -67,12 +67,12 @@ epic and status.
 
 ### Post GUP-005 Stories - Shader Function System Enhancement (Stories 51+)
 
-| Story                                                          | Title                                    | Status         | Priority | Points |
-| -------------------------------------------------------------- | ---------------------------------------- | -------------- | -------- | ------ |
-| [GUP-051](GUP-051_WGSL_Code_Generation_Templates.md)           | WGSL Code Generation Templates           | ✅ Complete    | High     | 8      |
-| [GUP-052](GUP-052_Shader_Pipeline_Builder.md)                  | Shader Pipeline Builder                  | ✅ Complete    | High     | 13     |
+| Story                                                          | Title                                    | Status      | Priority | Points |
+| -------------------------------------------------------------- | ---------------------------------------- | ----------- | -------- | ------ |
+| [GUP-051](GUP-051_WGSL_Code_Generation_Templates.md)           | WGSL Code Generation Templates           | ✅ Complete | High     | 8      |
+| [GUP-052](GUP-052_Shader_Pipeline_Builder.md)                  | Shader Pipeline Builder                  | ✅ Complete | High     | 13     |
 | [GUP-053](GUP-053_Shader_Pipeline_Performance_Optimization.md) | Shader Pipeline Performance Optimization | ✅ Complete | Medium   | 8      |
-| [GUP-054](GUP-054_Shader_Function_Type_Safety_Enhancement.md)  | Shader Function Type Safety Enhancement  | ✅ Complete    | High     | 8      |
+| [GUP-054](GUP-054_Shader_Function_Type_Safety_Enhancement.md)  | Shader Function Type Safety Enhancement  | ✅ Complete | High     | 8      |
 
 ### Post GUP-006 Stories - WGSL Procedural Macro Enhancement (Stories 63+)
 
@@ -86,14 +86,14 @@ epic and status.
 
 ### Post GUP-002 Stories - GPU and Interaction Systems (Stories 29+)
 
-| Story                                                    | Title                                    | Status | Priority | Points |
-| -------------------------------------------------------- | ---------------------------------------- | ------ | -------- | ------ |
-| [GUP-029](GUP-029_WGSL_Shader_Code_Generation.md)        | WGSL Shader Code Generation System       | 💡 New | High     | 8      |
-| [GUP-030](GUP-030_GPU_Buffer_Pool_Management.md)         | GPU Buffer Pool Management System        | 💡 New | Medium   | 5      |
-| [GUP-031](GUP-031_GPU_Interaction_Event_System.md)       | GPU-Based Interaction Event System       | 💡 New | High     | 13     |
-| [GUP-032](GUP-032_Advanced_Mark_System.md)               | Advanced Mark System with Custom Shapes  | 💡 New | Medium   | 8      |
-| [GUP-033](GUP-033_Shader_Function_Composition_Engine.md) | Shader Function Composition Engine       | 💡 New | Medium   | 10     |
-| [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md)         | GPU Memory Profiling and Debugging Tools | 💡 New | Low      | 5      |
+| Story                                                    | Title                                    | Status      | Priority | Points |
+| -------------------------------------------------------- | ---------------------------------------- | ----------- | -------- | ------ |
+| [GUP-029](GUP-029_WGSL_Shader_Code_Generation.md)        | WGSL Shader Code Generation System       | ✅ Complete | High     | 8      |
+| [GUP-030](GUP-030_GPU_Buffer_Pool_Management.md)         | GPU Buffer Pool Management System        | 💡 New      | Medium   | 5      |
+| [GUP-031](GUP-031_GPU_Interaction_Event_System.md)       | GPU-Based Interaction Event System       | 💡 New      | High     | 13     |
+| [GUP-032](GUP-032_Advanced_Mark_System.md)               | Advanced Mark System with Custom Shapes  | 💡 New      | Medium   | 8      |
+| [GUP-033](GUP-033_Shader_Function_Composition_Engine.md) | Shader Function Composition Engine       | 💡 New      | Medium   | 10     |
+| [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md)         | GPU Memory Profiling and Debugging Tools | 💡 New      | Low      | 5      |
 
 ### Post GUP-015 Stories - Advanced Debug Infrastructure (Stories 80+)
 
