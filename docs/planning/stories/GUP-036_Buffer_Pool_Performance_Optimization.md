@@ -1,5 +1,8 @@
 # GUP-036: Buffer Pool Performance Optimization
 
+**Status**: 🚧 In Progress  
+**Started**: 2025-01-20
+
 ## Story Overview
 
 **Title**: Advanced Buffer Pool Performance Optimization and Monitoring
