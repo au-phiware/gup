@@ -138,21 +138,111 @@ where
         Ok(())
     }
 
-    /// Download data from the GPU buffer (primarily for debugging/validation).
+    /// Download data from the GPU buffer to CPU memory.
     ///
-    /// Note: This is a simplified implementation. A full implementation would
-    /// use proper async buffer mapping with wgpu's callback system.
-    pub async fn download(&self, _device: &Device, _queue: &Queue) -> GupResult<Vec<T>> {
-        // For now, return an empty vector as this functionality is not critical
-        // for the core buffer management story. A full implementation would:
-        // 1. Create a staging buffer
-        // 2. Copy GPU buffer to staging buffer
-        // 3. Map the staging buffer for reading
-        // 4. Read the data and return it
+    /// This method creates a staging buffer, copies the GPU buffer contents to it,
+    /// maps it for reading, and returns the data as a Vec<T>. Primarily used for
+    /// debugging, validation, and CPU-side post-processing.
+    ///
+    /// # Performance Note
+    /// Buffer downloads involve GPU-to-CPU synchronization and can be slow for large
+    /// buffers. Use sparingly in performance-critical code.
+    pub async fn download(&self, device: &Device, queue: &Queue) -> GupResult<Vec<T>> {
+        if self.len == 0 {
+            return Ok(Vec::new());
+        }
 
-        Err(GupError::buffer_error(
-            "Buffer download not yet implemented - use for upload/rendering only".to_string(),
-        ))
+        self.download_range(device, queue, 0, self.len).await
+    }
+
+    /// Download a range of data from the GPU buffer.
+    ///
+    /// Downloads only a specific range of elements from the buffer, which can be
+    /// more efficient than downloading the entire buffer when only a subset is needed.
+    ///
+    /// # Arguments
+    /// * `device` - The wgpu device
+    /// * `queue` - The wgpu queue
+    /// * `offset` - Starting element index
+    /// * `len` - Number of elements to download
+    ///
+    /// # Errors
+    /// Returns an error if the range is invalid or if buffer mapping fails.
+    pub async fn download_range(
+        &self,
+        device: &Device,
+        queue: &Queue,
+        offset: usize,
+        len: usize,
+    ) -> GupResult<Vec<T>> {
+        if len == 0 {
+            return Ok(Vec::new());
+        }
+
+        if offset + len > self.len {
+            return Err(GupError::buffer_error(format!(
+                "Download range exceeds buffer length: offset={}, len={}, buffer_len={}",
+                offset, len, self.len
+            )));
+        }
+
+        let element_size = std::mem::size_of::<T>() as u64;
+        let byte_offset = (offset as u64) * element_size;
+        let byte_size = (len as u64) * element_size;
+
+        // Create staging buffer for GPU-to-CPU transfer
+        let staging_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("download_staging_buffer"),
+            size: byte_size,
+            usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        // Copy from GPU buffer to staging buffer
+        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+            label: Some("download_encoder"),
+        });
+
+        encoder.copy_buffer_to_buffer(&self.buffer, byte_offset, &staging_buffer, 0, byte_size);
+
+        queue.submit(Some(encoder.finish()));
+
+        // Map the staging buffer for reading
+        let buffer_slice = staging_buffer.slice(..);
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+
+        buffer_slice.map_async(MapMode::Read, move |result| {
+            let _ = sender.send(result);
+        });
+
+        // Poll the device to complete the mapping operation
+        let _ = device.poll(PollType::Wait);
+
+        // Wait for the mapping to complete
+        receiver
+            .await
+            .map_err(|_| GupError::buffer_error("Buffer mapping callback was dropped"))?
+            .map_err(|e| {
+                GupError::buffer_error(format!("Failed to map buffer for reading: {:?}", e))
+            })?;
+
+        // Read the data
+        let data = buffer_slice.get_mapped_range();
+        let result: Vec<T> = bytemuck::cast_slice(&data).to_vec();
+
+        // Clean up
+        drop(data);
+        staging_buffer.unmap();
+
+        Ok(result)
+    }
+
+    /// Check if this buffer supports download operations.
+    ///
+    /// Returns true if the buffer was created with COPY_SRC usage, which is
+    /// required for copying data from this buffer to a staging buffer.
+    pub fn can_download(&self) -> bool {
+        self.usage.contains(BufferUsages::COPY_SRC)
     }
 
     /// Get the raw wgpu buffer for shader binding.
@@ -840,5 +930,200 @@ mod tests {
         pool.set_config(new_config);
 
         assert_eq!(pool.config().max_buffers_per_pool, 5);
+    }
+
+    #[tokio::test]
+    async fn test_buffer_download() {
+        let context = create_test_context().await;
+        let mut buffer = GpuBuffer::new(context.device(), BufferType::Vertex, 100);
+
+        // Upload test data
+        let data = vec![1.0f32, 2.0, 3.0, 4.0, 5.0];
+        buffer
+            .upload(context.device(), context.queue(), &data)
+            .unwrap();
+
+        // Download and verify
+        let downloaded = buffer
+            .download(context.device(), context.queue())
+            .await
+            .unwrap();
+
+        assert_eq!(downloaded, data);
+    }
+
+    #[tokio::test]
+    async fn test_buffer_download_range() {
+        let context = create_test_context().await;
+        let mut buffer = GpuBuffer::new(context.device(), BufferType::Storage, 100);
+
+        // Upload test data
+        let data: Vec<f32> = (0..50).map(|i| i as f32).collect();
+        buffer
+            .upload(context.device(), context.queue(), &data)
+            .unwrap();
+
+        // Download a range
+        let downloaded = buffer
+            .download_range(context.device(), context.queue(), 10, 10)
+            .await
+            .unwrap();
+
+        assert_eq!(downloaded.len(), 10);
+        assert_eq!(downloaded, &data[10..20]);
+    }
+
+    #[tokio::test]
+    async fn test_buffer_download_empty() {
+        let context = create_test_context().await;
+        let buffer = GpuBuffer::<f32>::new(context.device(), BufferType::Vertex, 100);
+
+        // Download from empty buffer should return empty vec
+        let downloaded = buffer
+            .download(context.device(), context.queue())
+            .await
+            .unwrap();
+
+        assert!(downloaded.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_buffer_download_range_invalid() {
+        let context = create_test_context().await;
+        let mut buffer = GpuBuffer::new(context.device(), BufferType::Vertex, 100);
+
+        let data = vec![1.0f32, 2.0, 3.0];
+        buffer
+            .upload(context.device(), context.queue(), &data)
+            .unwrap();
+
+        // Try to download beyond buffer length
+        let result = buffer
+            .download_range(context.device(), context.queue(), 0, 10)
+            .await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_buffer_download_range_offset() {
+        let context = create_test_context().await;
+        let mut buffer = GpuBuffer::new(context.device(), BufferType::Storage, 100);
+
+        let data: Vec<u32> = vec![100, 200, 300, 400, 500];
+        buffer
+            .upload(context.device(), context.queue(), &data)
+            .unwrap();
+
+        // Download from offset
+        let downloaded = buffer
+            .download_range(context.device(), context.queue(), 2, 2)
+            .await
+            .unwrap();
+
+        assert_eq!(downloaded, vec![300, 400]);
+    }
+
+    #[tokio::test]
+    async fn test_buffer_can_download() {
+        let context = create_test_context().await;
+
+        // All buffer types should support download (they have COPY_SRC)
+        let vertex_buffer = GpuBuffer::<f32>::new(context.device(), BufferType::Vertex, 10);
+        assert!(vertex_buffer.can_download());
+
+        let instance_buffer = GpuBuffer::<f32>::new(context.device(), BufferType::Instance, 10);
+        assert!(instance_buffer.can_download());
+
+        let uniform_buffer = GpuBuffer::<f32>::new(context.device(), BufferType::Uniform, 10);
+        assert!(uniform_buffer.can_download());
+
+        let storage_buffer = GpuBuffer::<f32>::new(context.device(), BufferType::Storage, 10);
+        assert!(storage_buffer.can_download());
+    }
+
+    #[tokio::test]
+    async fn test_buffer_round_trip() {
+        let context = create_test_context().await;
+        let mut buffer = GpuBuffer::new(context.device(), BufferType::Storage, 100);
+
+        // Test with different data types
+        let float_data = vec![1.5f32, 2.5, 3.5, 4.5];
+        buffer
+            .upload(context.device(), context.queue(), &float_data)
+            .unwrap();
+
+        let downloaded = buffer
+            .download(context.device(), context.queue())
+            .await
+            .unwrap();
+
+        assert_eq!(downloaded, float_data);
+    }
+
+    #[tokio::test]
+    async fn test_buffer_download_large() {
+        let context = create_test_context().await;
+        let mut buffer = GpuBuffer::new(context.device(), BufferType::Storage, 10000);
+
+        // Upload large dataset
+        let data: Vec<f32> = (0..5000).map(|i| i as f32 * 0.5).collect();
+        buffer
+            .upload(context.device(), context.queue(), &data)
+            .unwrap();
+
+        // Download and verify
+        let downloaded = buffer
+            .download(context.device(), context.queue())
+            .await
+            .unwrap();
+
+        assert_eq!(downloaded.len(), data.len());
+        assert_eq!(downloaded, data);
+    }
+
+    #[tokio::test]
+    async fn test_buffer_download_after_resize() {
+        let context = create_test_context().await;
+        let mut buffer = GpuBuffer::new(context.device(), BufferType::Vertex, 10);
+
+        // Upload data that triggers resize
+        let data: Vec<f32> = (0..100).map(|i| i as f32).collect();
+        buffer
+            .upload(context.device(), context.queue(), &data)
+            .unwrap();
+
+        // Download should still work after resize
+        let downloaded = buffer
+            .download(context.device(), context.queue())
+            .await
+            .unwrap();
+
+        assert_eq!(downloaded, data);
+    }
+
+    #[tokio::test]
+    async fn test_buffer_download_multiple_uploads() {
+        let context = create_test_context().await;
+        let mut buffer = GpuBuffer::new(context.device(), BufferType::Storage, 100);
+
+        // Multiple uploads
+        let data1 = vec![1.0f32, 2.0, 3.0];
+        buffer
+            .upload(context.device(), context.queue(), &data1)
+            .unwrap();
+
+        let data2 = vec![4.0f32, 5.0, 6.0, 7.0, 8.0];
+        buffer
+            .upload(context.device(), context.queue(), &data2)
+            .unwrap();
+
+        // Download should get the latest data
+        let downloaded = buffer
+            .download(context.device(), context.queue())
+            .await
+            .unwrap();
+
+        assert_eq!(downloaded, data2);
     }
 }
