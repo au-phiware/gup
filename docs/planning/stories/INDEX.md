@@ -52,7 +52,7 @@ epic and status.
 | [GUP-087](GUP-087_Chart_Builder_Performance_Optimization.md)     | Chart Builder Performance Optimization     | 💡 New      | Medium   | 3      |
 | [GUP-088](GUP-088_External_Library_Integration_System.md)        | External Library Integration System        | ✅ Complete | High     | 5      |
 | [GUP-092](GUP-092_Label_Formatting_and_Positioning.md)           | Label Formatting and Positioning           | ✅ Complete | High     | 8      |
-| [GUP-099](GUP-099_GPU_Text_Rendering_Pipeline_Implementation.md) | GPU Text Rendering Pipeline Implementation | 📋 Planned  | High     | 8      |
+| [GUP-099](GUP-099_GPU_Text_Rendering_Pipeline.md)                | GPU Text Rendering Pipeline Implementation | ✅ Complete | High     | 8      |
 | [GUP-100](GUP-100_Visual_Chart_Axis_Integration.md)              | Visual Chart Axis Integration              | ✅ Complete | Medium   | 8      |
 | [GUP-101](GUP-101_Label_Collision_Detection_Enhancement.md)      | Label Collision Detection Enhancement      | ✅ Complete | Medium   | 5      |
 | [GUP-102](GUP-102_Demo_GPU_Resource_Management_Fixes.md)         | Demo GPU Resource Management Fixes         | ✅ Complete | High     | 3      |
@@ -686,7 +686,7 @@ The following stories were created based on learnings from implementing GUP-092:
 
 | Story                                                            | Title                                      | Status      | Priority | Points |
 | ---------------------------------------------------------------- | ------------------------------------------ | ----------- | -------- | ------ |
-| [GUP-099](GUP-099_GPU_Text_Rendering_Pipeline_Implementation.md) | GPU Text Rendering Pipeline Implementation | 📋 Planned  | High     | 8      |
+| [GUP-099](GUP-099_GPU_Text_Rendering_Pipeline.md)                | GPU Text Rendering Pipeline Implementation | ✅ Complete | High     | 8      |
 | [GUP-100](GUP-100_Visual_Chart_Axis_Integration.md)              | Visual Chart Axis Integration              | ✅ Complete | Medium   | 8      |
 | [GUP-101](GUP-101_Label_Collision_Detection_Enhancement.md)      | Label Collision Detection Enhancement      | ✅ Complete | Medium   | 5      |
 | [GUP-102](GUP-102_Demo_GPU_Resource_Management_Fixes.md)         | Demo GPU Resource Management Fixes         | ✅ Complete | High     | 3      |
