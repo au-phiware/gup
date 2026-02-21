@@ -1236,8 +1236,158 @@ unsafe impl<A: bytemuck::Pod + bytemuck::Zeroable, B: bytemuck::Pod + bytemuck::
 {
 }
 
-// Note: For now, parallel composition is conceptual - full GPU implementation
-// would require more complex buffer management. This provides the API pattern.
+/// Uniforms for parallel composition - combines uniforms from both functions.
+#[derive(Copy, Clone, Debug)]
+pub struct ParallelUniforms<A, B>
+where
+    A: Copy,
+    B: Copy,
+{
+    pub first: A,
+    pub second: B,
+}
+
+unsafe impl<A: bytemuck::Pod, B: bytemuck::Pod> bytemuck::Pod for ParallelUniforms<A, B>
+where
+    A: bytemuck::Zeroable + Copy,
+    B: bytemuck::Zeroable + Copy,
+{
+}
+
+unsafe impl<A: bytemuck::Zeroable, B: bytemuck::Zeroable> bytemuck::Zeroable
+    for ParallelUniforms<A, B>
+where
+    A: Copy,
+    B: Copy,
+{
+}
+
+impl<A, B> ShaderUniform for ParallelUniforms<A, B>
+where
+    A: ShaderUniform + Copy,
+    B: ShaderUniform + Copy,
+{
+    fn wgsl_struct_definition() -> String {
+        let mut def = String::from("struct ParallelUniforms {\n");
+        def.push_str(&format!("    first: {},\n", A::wgsl_type_name()));
+        def.push_str(&format!("    second: {},\n", B::wgsl_type_name()));
+        def.push('}');
+        def
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "ParallelUniforms"
+    }
+}
+
+impl<A: ShaderType, B: ShaderType> ShaderType for ParallelOutput<A, B>
+where
+    A: bytemuck::Pod + bytemuck::Zeroable,
+    B: bytemuck::Pod + bytemuck::Zeroable,
+{
+    fn wgsl_type_name() -> &'static str {
+        // This will be dynamically generated in the actual WGSL output
+        "ParallelOutput"
+    }
+
+    fn size_bytes() -> usize {
+        A::size_bytes() + B::size_bytes()
+    }
+
+    fn alignment() -> usize {
+        // Use the maximum alignment of the two types
+        A::alignment().max(B::alignment())
+    }
+}
+
+impl<A: ComposableShaderFunction, B: ComposableShaderFunction> ComposableShaderFunction
+    for ParallelComposition<A, B>
+where
+    A::Input: ShaderCompatible<B::Input>,
+    A::Output: bytemuck::Pod + bytemuck::Zeroable + ShaderType,
+    B::Output: bytemuck::Pod + bytemuck::Zeroable + ShaderType,
+    A::Uniforms: bytemuck::Pod + bytemuck::Zeroable + Copy,
+    B::Uniforms: bytemuck::Pod + bytemuck::Zeroable + Copy,
+{
+    type Input = A::Input;
+    type Output = ParallelOutput<A::Output, B::Output>;
+    type Uniforms = ParallelUniforms<A::Uniforms, B::Uniforms>;
+
+    fn wgsl_function() -> &'static str {
+        // Template for parallel composition
+        "fn parallel_composed(input: INPUT_TYPE, uniforms: ParallelUniforms) -> ParallelOutput {\n    let first_result = FIRST_FUNCTION(input, uniforms.first);\n    let second_result = SECOND_FUNCTION(input, uniforms.second);\n    var output: ParallelOutput;\n    output.first = first_result;\n    output.second = second_result;\n    return output;\n}"
+    }
+
+    fn generate_wgsl(&self) -> String {
+        // Generate the ParallelOutput struct definition
+        let mut wgsl = format!(
+            "struct ParallelOutput {{\n    first: {},\n    second: {},\n}}\n\n",
+            <A::Output as ShaderType>::wgsl_type_name(),
+            <B::Output as ShaderType>::wgsl_type_name()
+        );
+
+        // Generate the parallel composition function
+        wgsl.push_str(&format!(
+            "fn parallel_composed(input: {}, uniforms: ParallelUniforms) -> ParallelOutput {{\n",
+            <A::Input as ShaderType>::wgsl_type_name()
+        ));
+        wgsl.push_str(&format!(
+            "    let first_result = {}(input, uniforms.first);\n",
+            A::function_name()
+        ));
+        wgsl.push_str(&format!(
+            "    let second_result = {}(input, uniforms.second);\n",
+            B::function_name()
+        ));
+        wgsl.push_str("    var output: ParallelOutput;\n");
+        wgsl.push_str("    output.first = first_result;\n");
+        wgsl.push_str("    output.second = second_result;\n");
+        wgsl.push_str("    return output;\n");
+        wgsl.push_str("}\n");
+
+        wgsl
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        match (self.first.create_uniforms(), self.second.create_uniforms()) {
+            (Some(first), Some(second)) => Some(ParallelUniforms { first, second }),
+            _ => None,
+        }
+    }
+
+    fn function_name() -> &'static str {
+        "parallel_composed"
+    }
+}
+
+/// Extension trait to enable parallel composition with fluent API.
+pub trait ParallelComposable<T: ComposableShaderFunction>: ComposableShaderFunction
+where
+    Self::Input: ShaderCompatible<T::Input>,
+{
+    /// Composes two functions in parallel - both receive the same input and produce separate outputs.
+    ///
+    /// # Type Safety
+    /// This method will only compile if both functions accept compatible input types.
+    ///
+    /// # Examples
+    /// ```rust,ignore
+    /// let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);      // f32 -> f32
+    /// let color_map = ColorMap::new(min_color, max_color);      // f32 -> Vec4
+    /// let parallel = scale.parallel(color_map);                  // f32 -> ParallelOutput<f32, Vec4>
+    /// ```
+    fn parallel(self, other: T) -> ParallelComposition<Self, T>
+    where
+        Self: Sized,
+    {
+        ParallelComposition::new(self, other)
+    }
+}
+
+impl<S: ComposableShaderFunction, T: ComposableShaderFunction> ParallelComposable<T> for S where
+    S::Input: ShaderCompatible<T::Input>
+{
+}
 
 /// Conditional composition: applies different functions based on a condition.
 ///
