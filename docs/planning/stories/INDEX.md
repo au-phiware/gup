@@ -137,6 +137,9 @@ epic and status.
 | [GUP-046](GUP-046_Context_Performance_Profiling.md)    | Context Performance Profiling    | ✅ Complete    | Medium   | 3      |
 | [GUP-047](GUP-047_Surface_Event_Integration.md)        | Surface Event Integration        | ✅ Complete    | Medium   | 3      |
 | [GUP-048](GUP-048_Context_Error_Recovery.md)           | Context Error Recovery           | ✅ Complete    | Medium   | 4      |
+| [GUP-149](GUP-149_Automatic_Device_Loss_Detection.md)  | Automatic Device Loss Detection  | 💡 New         | Low      | 2      |
+| [GUP-150](GUP-150_Recovery_Metrics_and_Analytics.md)   | Recovery Metrics and Analytics   | 💡 New         | Low      | 3      |
+| [GUP-151](GUP-151_Surface_Configuration_Caching.md)    | Surface Configuration Caching    | 💡 New         | Low      | 2      |
 | [GUP-049](GUP-049_Surface_Performance_Optimization.md) | Surface Performance Optimization | 💡 New         | Medium   | 5      |
 | [GUP-050](GUP-050_Visual_Blend_Mode_Validation.md)     | Visual Blend Mode Validation     | 💡 New         | Low      | 3      |
 | [GUP-042](GUP-042_Cross_Platform_Surface_Features.md)  | Cross Platform Surface Features  | 💡 New         | Low      | 8      |
@@ -352,6 +355,24 @@ Advanced profiling helps developers identify and fix performance bottlenecks
 **Key Learning**: GPU contexts can fail - need robust recovery mechanisms for
 production apps **Dependencies**: GUP-004 complete **Impact**: Improved
 application stability when GPU issues occur
+
+### GUP-149: Automatic Device Loss Detection
+
+**Key Learning**: Manual device loss detection requires application awareness -
+automatic detection would improve developer experience **Dependencies**: GUP-048
+complete **Impact**: Reduced boilerplate for GPU error handling
+
+### GUP-150: Recovery Metrics and Analytics
+
+**Key Learning**: Production monitoring needs aggregate recovery statistics and
+success rate tracking **Dependencies**: GUP-048 complete **Impact**: Better
+visibility into GPU stability in production
+
+### GUP-151: Surface Configuration Caching
+
+**Key Learning**: Surface recreation after recovery requires application
+involvement - caching configs would simplify this **Dependencies**: GUP-048
+complete **Impact**: Faster recovery with automatic surface restoration
 
 ### GUP-050: Visual Blend Mode Validation
 
