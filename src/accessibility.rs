@@ -28,6 +28,7 @@ pub mod aria;
 pub mod focus;
 pub mod high_contrast;
 pub mod keyboard;
+pub mod platform;
 pub mod sonification;
 
 use std::collections::HashMap;
@@ -35,10 +36,10 @@ use std::collections::HashMap;
 pub use aria::*;
 pub use focus::*;
 pub use high_contrast::*;
+pub use platform::*;
 pub use sonification::*;
 
 /// Central accessibility system coordinating all accessibility features.
-#[derive(Debug)]
 pub struct AccessibilitySystem {
     /// Screen reader integration
     pub aria_tree: AriaTree,
@@ -51,6 +52,9 @@ pub struct AccessibilitySystem {
 
     /// Data sonification
     pub sonification_engine: SonificationEngine,
+
+    /// Platform-specific accessibility bridge
+    platform_bridge: Box<dyn PlatformAccessibility>,
 
     /// Global accessibility settings
     settings: AccessibilitySettings,
@@ -93,11 +97,15 @@ impl Default for AccessibilitySettings {
 impl AccessibilitySystem {
     /// Create a new accessibility system with default settings.
     pub fn new() -> Self {
+        let mut platform_bridge = platform::create_platform_accessibility();
+        let _ = platform_bridge.initialize();
+
         Self {
             aria_tree: AriaTree::new(),
             focus_manager: FocusManager::new(),
             high_contrast_renderer: HighContrastRenderer::new(ContrastMode::Standard),
             sonification_engine: SonificationEngine::new(),
+            platform_bridge,
             settings: AccessibilitySettings::default(),
             enabled: true,
         }
@@ -105,10 +113,18 @@ impl AccessibilitySystem {
 
     /// Create a new accessibility system with custom settings.
     pub fn with_settings(settings: AccessibilitySettings) -> Self {
-        let mut system = Self::new();
-        system.settings = settings.clone();
-        system.high_contrast_renderer = HighContrastRenderer::new(settings.contrast_mode.clone());
-        system
+        let mut platform_bridge = platform::create_platform_accessibility();
+        let _ = platform_bridge.initialize();
+
+        Self {
+            aria_tree: AriaTree::new(),
+            focus_manager: FocusManager::new(),
+            high_contrast_renderer: HighContrastRenderer::new(settings.contrast_mode.clone()),
+            sonification_engine: SonificationEngine::new(),
+            platform_bridge,
+            settings,
+            enabled: true,
+        }
     }
 
     /// Enable or disable all accessibility features.
@@ -167,7 +183,17 @@ impl AccessibilitySystem {
         if !self.enabled || !self.settings.screen_reader_enabled {
             return Vec::new();
         }
-        self.aria_tree.drain_update_queue()
+
+        let updates = self.aria_tree.drain_update_queue();
+
+        // Send updates to platform bridge
+        if !updates.is_empty()
+            && let Err(e) = self.platform_bridge.update_accessibility_tree(&updates)
+        {
+            log::warn!("Failed to update platform accessibility tree: {}", e);
+        }
+
+        updates
     }
 
     /// Get a description of the currently focused element.
@@ -187,6 +213,38 @@ impl AccessibilitySystem {
     /// Get current accessibility settings.
     pub fn settings(&self) -> &AccessibilitySettings {
         &self.settings
+    }
+
+    /// Announce a message to the screen reader.
+    pub fn announce(
+        &mut self,
+        message: &str,
+        priority: AnnouncementPriority,
+    ) -> Result<(), AccessibilityError> {
+        if !self.enabled || !self.settings.screen_reader_enabled {
+            return Ok(());
+        }
+
+        self.platform_bridge.announce(message, priority)
+    }
+
+    /// Set the currently focused element.
+    pub fn set_platform_focus(&mut self, element_id: &str) -> Result<(), AccessibilityError> {
+        if !self.enabled || !self.settings.keyboard_navigation_enabled {
+            return Ok(());
+        }
+
+        self.platform_bridge.set_focus(element_id)
+    }
+
+    /// Get the platform name for debugging.
+    pub fn platform_name(&self) -> &str {
+        self.platform_bridge.platform_name()
+    }
+
+    /// Check if platform accessibility is available.
+    pub fn is_platform_available(&self) -> bool {
+        self.platform_bridge.is_available()
     }
 }
 
