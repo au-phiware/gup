@@ -80,7 +80,6 @@
             gnused
             wasm-pack
             miniserve
-            claude-code
             mprocs
             concurrently
             mdl
