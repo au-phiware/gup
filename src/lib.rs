@@ -27,6 +27,7 @@
 //! - **Interactive Visualizations**: Built-in support for user interactions and animations
 //! - **Extensible Architecture**: Modular design allowing custom marks and interactions
 
+pub mod accessibility;
 pub mod async_mixable;
 pub mod axis;
 pub mod axis_system;
@@ -51,7 +52,18 @@ pub mod shader_function;
 pub mod shader_pipeline;
 pub mod text;
 pub mod tick_generator;
-
+// Export accessibility system components
+pub use accessibility::high_contrast::{
+    AccessibilityOverrides, Color as AccessibilityColor, calculate_contrast_ratio,
+};
+pub use accessibility::{
+    AccessibilityAction, AccessibilitySettings, AccessibilitySystem, AriaLive, AriaNode,
+    AriaProperties, AriaRelevant, AriaRole, AriaTree, AriaUpdate, AudioEvent, AudioParameter,
+    AudioTrack, ContrastMode, ContrastTheme, DataPatterns, Direction, ElementId, ElementType,
+    FocusManager, FocusableElement, HighContrastRenderer, KeyEvent, MappingFunction,
+    NavigationMode, NodeId, Pattern, PatternLibrary, SonificationEngine, SonificationMapping,
+    Trend,
+};
 // Export async components selectively to avoid conflicts
 pub use async_mixable::{
     AsyncComposedVisualization, AsyncMixable, AsyncMixableExt, AsyncRenderStrategy, RenderProgress,
