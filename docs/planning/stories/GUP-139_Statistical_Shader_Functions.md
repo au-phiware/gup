@@ -4,36 +4,39 @@
 
 ## Story Overview
 
-**Title**: Implement Statistical Aggregation Shader Functions
-**Epic**: Phase 1 Initiative 4 - Advanced Data Mapping
-**Priority**: Low
-**Story Points**: 5
+**Title**: Implement Statistical Aggregation Shader Functions **Epic**: Phase 1
+Initiative 4 - Advanced Data Mapping **Priority**: Low **Story Points**: 5
 
 ## Context
 
-GUP-033 implemented transformation and filtering functions but deferred statistical aggregation (mean, median, percentile). These are essential for data-driven statistical visualizations.
+GUP-033 implemented transformation and filtering functions but deferred
+statistical aggregation (mean, median, percentile). These are essential for
+data-driven statistical visualizations.
 
 ## User Story
 
-**As a** data visualization developer
-**I want** to compute statistical aggregations on GPU
-**So that** I can create responsive statistical visualizations with large datasets
+**As a** data visualization developer **I want** to compute statistical
+aggregations on GPU **So that** I can create responsive statistical
+visualizations with large datasets
 
 ## Acceptance Criteria
 
 ### AC1: Basic Statistics
+
 - [ ] Mean calculation
 - [ ] Median calculation
 - [ ] Standard deviation
 - [ ] Min/max aggregation
 
 ### AC2: Distribution Functions
+
 - [ ] Percentile calculation
 - [ ] Quantile functions
 - [ ] Histogram generation
 - [ ] Kernel density estimation
 
 ### AC3: GPU-Parallel Implementation
+
 - [ ] Use compute shaders for aggregation
 - [ ] Support streaming data aggregation
 - [ ] Handle millions of data points efficiently

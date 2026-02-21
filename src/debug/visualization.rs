@@ -16,11 +16,7 @@ pub fn visualize_memory_history(history: &[MemorySnapshot], width: usize) -> Str
         return "No memory history data available".to_string();
     }
 
-    let max_memory = history
-        .iter()
-        .map(|s| s.total_memory)
-        .max()
-        .unwrap_or(1);
+    let max_memory = history.iter().map(|s| s.total_memory).max().unwrap_or(1);
 
     let height = 20;
     let mut output = String::new();
@@ -57,43 +53,118 @@ pub fn visualize_memory_history(history: &[MemorySnapshot], width: usize) -> Str
 pub fn visualize_memory_report(report: &MemoryReport) -> String {
     let mut output = String::new();
 
-    writeln!(&mut output, "\n┌─── GPU Memory Report ───────────────────────────────────┐").unwrap();
-    writeln!(&mut output, "│ Timestamp: {}", report.timestamp.format("%Y-%m-d %H:%M:%S")).unwrap();
-    writeln!(&mut output, "│ Session Duration: {:.2}s", report.session_duration.as_secs_f32()).unwrap();
-    writeln!(&mut output, "├─────────────────────────────────────────────────────────┤").unwrap();
-    writeln!(&mut output, "│ Total Allocations: {}", report.total_allocations).unwrap();
-    writeln!(&mut output, "│ Active Allocations: {}", report.active_allocations).unwrap();
-    writeln!(&mut output, "│ Allocation Rate: {:.2}/sec", report.allocation_rate).unwrap();
-    writeln!(&mut output, "├─────────────────────────────────────────────────────────┤").unwrap();
-    writeln!(&mut output, "│ Total Allocated: {:.2} MB", report.total_memory_allocated as f64 / (1024.0 * 1024.0)).unwrap();
-    writeln!(&mut output, "│ Currently Active: {:.2} MB", report.total_memory_active as f64 / (1024.0 * 1024.0)).unwrap();
-    writeln!(&mut output, "│ Deallocated: {:.2} MB", report.total_memory_deallocated as f64 / (1024.0 * 1024.0)).unwrap();
-    writeln!(&mut output, "├─────────────────────────────────────────────────────────┤").unwrap();
+    writeln!(
+        &mut output,
+        "\n┌─── GPU Memory Report ───────────────────────────────────┐"
+    )
+    .unwrap();
+    writeln!(
+        &mut output,
+        "│ Timestamp: {}",
+        report.timestamp.format("%Y-%m-d %H:%M:%S")
+    )
+    .unwrap();
+    writeln!(
+        &mut output,
+        "│ Session Duration: {:.2}s",
+        report.session_duration.as_secs_f32()
+    )
+    .unwrap();
+    writeln!(
+        &mut output,
+        "├─────────────────────────────────────────────────────────┤"
+    )
+    .unwrap();
+    writeln!(
+        &mut output,
+        "│ Total Allocations: {}",
+        report.total_allocations
+    )
+    .unwrap();
+    writeln!(
+        &mut output,
+        "│ Active Allocations: {}",
+        report.active_allocations
+    )
+    .unwrap();
+    writeln!(
+        &mut output,
+        "│ Allocation Rate: {:.2}/sec",
+        report.allocation_rate
+    )
+    .unwrap();
+    writeln!(
+        &mut output,
+        "├─────────────────────────────────────────────────────────┤"
+    )
+    .unwrap();
+    writeln!(
+        &mut output,
+        "│ Total Allocated: {:.2} MB",
+        report.total_memory_allocated as f64 / (1024.0 * 1024.0)
+    )
+    .unwrap();
+    writeln!(
+        &mut output,
+        "│ Currently Active: {:.2} MB",
+        report.total_memory_active as f64 / (1024.0 * 1024.0)
+    )
+    .unwrap();
+    writeln!(
+        &mut output,
+        "│ Deallocated: {:.2} MB",
+        report.total_memory_deallocated as f64 / (1024.0 * 1024.0)
+    )
+    .unwrap();
+    writeln!(
+        &mut output,
+        "├─────────────────────────────────────────────────────────┤"
+    )
+    .unwrap();
 
     if !report.detected_leaks.is_empty() {
-        writeln!(&mut output, "│ ⚠️  DETECTED LEAKS: {}", report.detected_leaks.len()).unwrap();
+        writeln!(
+            &mut output,
+            "│ ⚠️  DETECTED LEAKS: {}",
+            report.detected_leaks.len()
+        )
+        .unwrap();
         for leak in &report.detected_leaks {
             let label = leak.label.as_deref().unwrap_or("<unnamed>");
-            writeln!(&mut output, "│   - {} ({:.2} MB, age: {:.1}s)",
+            writeln!(
+                &mut output,
+                "│   - {} ({:.2} MB, age: {:.1}s)",
                 label,
                 leak.size as f64 / (1024.0 * 1024.0),
                 leak.age.as_secs_f32()
-            ).unwrap();
+            )
+            .unwrap();
         }
-        writeln!(&mut output, "├─────────────────────────────────────────────────────────┤").unwrap();
+        writeln!(
+            &mut output,
+            "├─────────────────────────────────────────────────────────┤"
+        )
+        .unwrap();
     }
 
     writeln!(&mut output, "│ Largest Allocations:").unwrap();
     for (i, alloc) in report.largest_allocations.iter().take(5).enumerate() {
         let label = alloc.label.as_deref().unwrap_or("<unnamed>");
-        writeln!(&mut output, "│ {}. {} - {:.2} MB",
+        writeln!(
+            &mut output,
+            "│ {}. {} - {:.2} MB",
             i + 1,
             label,
             alloc.size as f64 / (1024.0 * 1024.0)
-        ).unwrap();
+        )
+        .unwrap();
     }
 
-    writeln!(&mut output, "└─────────────────────────────────────────────────────────┘").unwrap();
+    writeln!(
+        &mut output,
+        "└─────────────────────────────────────────────────────────┘"
+    )
+    .unwrap();
 
     output
 }
@@ -102,18 +173,64 @@ pub fn visualize_memory_report(report: &MemoryReport) -> String {
 pub fn visualize_performance_summary(summary: &PerformanceSummary) -> String {
     let mut output = String::new();
 
-    writeln!(&mut output, "\n┌─── GPU Performance Summary ─────────────────────────────┐").unwrap();
+    writeln!(
+        &mut output,
+        "\n┌─── GPU Performance Summary ─────────────────────────────┐"
+    )
+    .unwrap();
     writeln!(&mut output, "│ Total Samples: {}", summary.sample_count).unwrap();
-    writeln!(&mut output, "├─────────────────────────────────────────────────────────┤").unwrap();
-    writeln!(&mut output, "│ Frame Time (avg): {:.2} ms", summary.avg_frame_time_ms).unwrap();
-    writeln!(&mut output, "│ Frame Time (min): {:.2} ms", summary.min_frame_time_ms).unwrap();
-    writeln!(&mut output, "│ Frame Time (max): {:.2} ms", summary.max_frame_time_ms).unwrap();
+    writeln!(
+        &mut output,
+        "├─────────────────────────────────────────────────────────┤"
+    )
+    .unwrap();
+    writeln!(
+        &mut output,
+        "│ Frame Time (avg): {:.2} ms",
+        summary.avg_frame_time_ms
+    )
+    .unwrap();
+    writeln!(
+        &mut output,
+        "│ Frame Time (min): {:.2} ms",
+        summary.min_frame_time_ms
+    )
+    .unwrap();
+    writeln!(
+        &mut output,
+        "│ Frame Time (max): {:.2} ms",
+        summary.max_frame_time_ms
+    )
+    .unwrap();
     writeln!(&mut output, "│ FPS: {:.1}", summary.fps).unwrap();
-    writeln!(&mut output, "├─────────────────────────────────────────────────────────┤").unwrap();
-    writeln!(&mut output, "│ Memory (avg): {:.2} MB", summary.avg_memory_usage_bytes as f64 / (1024.0 * 1024.0)).unwrap();
-    writeln!(&mut output, "│ Memory (min): {:.2} MB", summary.min_memory_usage_bytes as f64 / (1024.0 * 1024.0)).unwrap();
-    writeln!(&mut output, "│ Memory (max): {:.2} MB", summary.max_memory_usage_bytes as f64 / (1024.0 * 1024.0)).unwrap();
-    writeln!(&mut output, "└─────────────────────────────────────────────────────────┘").unwrap();
+    writeln!(
+        &mut output,
+        "├─────────────────────────────────────────────────────────┤"
+    )
+    .unwrap();
+    writeln!(
+        &mut output,
+        "│ Memory (avg): {:.2} MB",
+        summary.avg_memory_usage_bytes as f64 / (1024.0 * 1024.0)
+    )
+    .unwrap();
+    writeln!(
+        &mut output,
+        "│ Memory (min): {:.2} MB",
+        summary.min_memory_usage_bytes as f64 / (1024.0 * 1024.0)
+    )
+    .unwrap();
+    writeln!(
+        &mut output,
+        "│ Memory (max): {:.2} MB",
+        summary.max_memory_usage_bytes as f64 / (1024.0 * 1024.0)
+    )
+    .unwrap();
+    writeln!(
+        &mut output,
+        "└─────────────────────────────────────────────────────────┘"
+    )
+    .unwrap();
 
     output
 }
@@ -141,10 +258,13 @@ pub fn visualize_usage_breakdown(breakdown: &std::collections::HashMap<String, u
         for _ in 0..bar_width {
             write!(&mut output, "▓").unwrap();
         }
-        writeln!(&mut output, " {:.1}% ({:.2} MB)",
+        writeln!(
+            &mut output,
+            " {:.1}% ({:.2} MB)",
             percentage,
             *size as f64 / (1024.0 * 1024.0)
-        ).unwrap();
+        )
+        .unwrap();
     }
 
     output

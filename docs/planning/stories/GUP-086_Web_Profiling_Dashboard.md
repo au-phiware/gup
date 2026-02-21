@@ -9,13 +9,16 @@
 
 ## Context
 
-GUP-034 implemented text-based visualization for GPU profiling. A web-based dashboard would provide interactive charts, real-time monitoring, and better visualization for complex performance data.
+GUP-034 implemented text-based visualization for GPU profiling. A web-based
+dashboard would provide interactive charts, real-time monitoring, and better
+visualization for complex performance data.
 
 ## User Story
 
 **As a** Gup library developer  
 **I want** an interactive web dashboard for GPU profiling  
-**So that** I can explore performance data interactively, monitor real-time metrics, and share profiling results with my team
+**So that** I can explore performance data interactively, monitor real-time
+metrics, and share profiling results with my team
 
 ## Acceptance Criteria
 
@@ -71,13 +74,16 @@ GUP-034 implemented text-based visualization for GPU profiling. A web-based dash
 
 ## Risk Assessment
 
-**Medium Risk**: Requires web development expertise and careful security configuration. May increase binary size and dependencies.
+**Medium Risk**: Requires web development expertise and careful security
+configuration. May increase binary size and dependencies.
 
 ## Implementation Notes
 
-- Consider feature flag for conditional compilation (e.g., `--features=web-dashboard`)
+- Consider feature flag for conditional compilation (e.g.,
+  `--features=web-dashboard`)
 - Use static file embedding to avoid separate asset deployment
-- Ensure security: bind to localhost by default, authentication for network access
+- Ensure security: bind to localhost by default, authentication for network
+  access
 - Keep web server optional to avoid bloating library for users who don't need it
 
 ---

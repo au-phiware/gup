@@ -44,10 +44,12 @@
 pub mod accessor;
 pub mod builders;
 pub mod labels;
+pub mod optimized_accessor;
 pub mod plot_api;
 
 pub use accessor::*;
 pub use builders::*;
+pub use optimized_accessor::*;
 pub use labels::*;
 pub use plot_api::*;
 

@@ -42,21 +42,21 @@ epic and status.
 
 ### Future Improvements - Post GUP-021 (Stories 26+)
 
-| Story                                                        | Title                                      | Status      | Priority | Points |
-| ------------------------------------------------------------ | ------------------------------------------ | ----------- | -------- | ------ |
-| [GUP-026](GUP-026_Data_Source_Merge_Implementation.md)       | Data Source Merge Implementation           | ✅ Complete | Medium   | 5      |
-| [GUP-027](GUP-027_GPU_Blend_State_Integration.md)            | GPU Blend State Integration                | ✅ Complete | High     | 3      |
-| [GUP-028](GUP-028_Composition_Performance_Optimization.md)   | Composition Performance Optimization       | ✅ Complete | Medium   | 4      |
-| ~~[GUP-085](GUP-085_Line_Rectangle_Mark_Implementation.md)~~ | ~~Line and Rectangle Mark Impl.~~          | ⿻ Copy     | High     | 5      |
-| [GUP-086](GUP-086_Observable_Plot_Migration_Guide.md)        | Observable Plot Migration Guide            | 💡 New      | Low      | 2      |
+| Story                                                        | Title                                      | Status         | Priority | Points |
+| ------------------------------------------------------------ | ------------------------------------------ | -------------- | -------- | ------ |
+| [GUP-026](GUP-026_Data_Source_Merge_Implementation.md)       | Data Source Merge Implementation           | ✅ Complete    | Medium   | 5      |
+| [GUP-027](GUP-027_GPU_Blend_State_Integration.md)            | GPU Blend State Integration                | ✅ Complete    | High     | 3      |
+| [GUP-028](GUP-028_Composition_Performance_Optimization.md)   | Composition Performance Optimization       | ✅ Complete    | Medium   | 4      |
+| ~~[GUP-085](GUP-085_Line_Rectangle_Mark_Implementation.md)~~ | ~~Line and Rectangle Mark Impl.~~          | ⿻ Copy        | High     | 5      |
+| [GUP-086](GUP-086_Observable_Plot_Migration_Guide.md)        | Observable Plot Migration Guide            | 💡 New         | Low      | 2      |
 | [GUP-087](GUP-087_Chart_Builder_Performance_Optimization.md) | Chart Builder Performance Optimization     | 🚧 In Progress | Medium   | 3      |
-| [GUP-088](GUP-088_External_Library_Integration_System.md)    | External Library Integration System        | ✅ Complete | High     | 5      |
-| [GUP-092](GUP-092_Label_Formatting_and_Positioning.md)       | Label Formatting and Positioning           | ✅ Complete | High     | 8      |
-| [GUP-099](GUP-099_GPU_Text_Rendering_Pipeline.md)            | GPU Text Rendering Pipeline Implementation | ✅ Complete | High     | 8      |
-| [GUP-100](GUP-100_Visual_Chart_Axis_Integration.md)          | Visual Chart Axis Integration              | ✅ Complete | Medium   | 8      |
-| [GUP-101](GUP-101_Label_Collision_Detection_Enhancement.md)  | Label Collision Detection Enhancement      | ✅ Complete | Medium   | 5      |
-| [GUP-102](GUP-102_Demo_GPU_Resource_Management_Fixes.md)     | Demo GPU Resource Management Fixes         | ✅ Complete | High     | 3      |
-| [GUP-103](GUP-103_Comprehensive_Chart_Examples_Suite.md)     | Comprehensive Chart Examples Suite         | ✅ Complete | Medium   | 8      |
+| [GUP-088](GUP-088_External_Library_Integration_System.md)    | External Library Integration System        | ✅ Complete    | High     | 5      |
+| [GUP-092](GUP-092_Label_Formatting_and_Positioning.md)       | Label Formatting and Positioning           | ✅ Complete    | High     | 8      |
+| [GUP-099](GUP-099_GPU_Text_Rendering_Pipeline.md)            | GPU Text Rendering Pipeline Implementation | ✅ Complete    | High     | 8      |
+| [GUP-100](GUP-100_Visual_Chart_Axis_Integration.md)          | Visual Chart Axis Integration              | ✅ Complete    | Medium   | 8      |
+| [GUP-101](GUP-101_Label_Collision_Detection_Enhancement.md)  | Label Collision Detection Enhancement      | ✅ Complete    | Medium   | 5      |
+| [GUP-102](GUP-102_Demo_GPU_Resource_Management_Fixes.md)     | Demo GPU Resource Management Fixes         | ✅ Complete    | High     | 3      |
+| [GUP-103](GUP-103_Comprehensive_Chart_Examples_Suite.md)     | Comprehensive Chart Examples Suite         | ✅ Complete    | Medium   | 8      |
 
 ### Post GUP-009 Stories - Mark System Enhancement (Stories 67+)
 
@@ -86,22 +86,22 @@ epic and status.
 
 ### Post GUP-002 Stories - GPU and Interaction Systems (Stories 29+)
 
-| Story                                                    | Title                                    | Status         | Priority | Points |
-| -------------------------------------------------------- | ---------------------------------------- | -------------- | -------- | ------ |
-| [GUP-029](GUP-029_WGSL_Shader_Code_Generation.md)        | WGSL Shader Code Generation System       | ✅ Complete    | High     | 8      |
-| [GUP-030](GUP-030_GPU_Buffer_Pool_Management.md)         | GPU Buffer Pool Management System        | ✅ Complete    | Medium   | 5      |
-| [GUP-031](GUP-031_GPU_Interaction_Event_System.md)       | GPU-Based Interaction Event System       | ⚠️ Partial     | High     | 13     |
-| [GUP-032](GUP-032_Advanced_Mark_System.md)               | Advanced Mark System with Custom Shapes  | ✅ Complete    | Medium   | 8      |
-| [GUP-033](GUP-033_Shader_Function_Composition_Engine.md) | Shader Function Composition Engine       | ✅ Complete    | Medium   | 10     |
-| [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md)         | GPU Memory Profiling and Debugging Tools | ✅ Complete    | Low      | 5      |
-| [GUP-131](GUP-131_Shader_Type_Constructors.md)           | Add Constructor Methods to Shader Types  | ✅ Complete    | Low      | 1      |
-| [GUP-132](GUP-132_GPU_Path_Tessellation.md)              | GPU Tessellation for Path Mark           | 💡 New         | Medium   | 8      |
-| [GUP-134](GUP-134_Storage_Buffer_ColorGradient.md)       | Storage Buffer-Based ColorGradient       | 📋 Planned     | Low      | 3      |
-| [GUP-135](GUP-135_Fix_Examples_Compilation.md)           | Fix Example Compilation Errors           | 🚧 In Progress | High     | 3      |
-| [GUP-136](GUP-136_Parallel_Composition_Implementation.md)| Parallel Composition Implementation      | ✅ Complete    | Medium   | 5      |
-| [GUP-137](GUP-137_Shader_Performance_Benchmarking.md)    | Shader Function Performance Benchmarking | 📋 Planned     | Medium   | 3      |
-| [GUP-138](GUP-138_Advanced_Temporal_Animation.md)        | Advanced Temporal Animation System       | 📋 Planned     | Low      | 8      |
-| [GUP-139](GUP-139_Statistical_Shader_Functions.md)       | Statistical Shader Functions             | 📋 Planned     | Low      | 5      |
+| Story                                                     | Title                                    | Status         | Priority | Points |
+| --------------------------------------------------------- | ---------------------------------------- | -------------- | -------- | ------ |
+| [GUP-029](GUP-029_WGSL_Shader_Code_Generation.md)         | WGSL Shader Code Generation System       | ✅ Complete    | High     | 8      |
+| [GUP-030](GUP-030_GPU_Buffer_Pool_Management.md)          | GPU Buffer Pool Management System        | ✅ Complete    | Medium   | 5      |
+| [GUP-031](GUP-031_GPU_Interaction_Event_System.md)        | GPU-Based Interaction Event System       | ⚠️ Partial     | High     | 13     |
+| [GUP-032](GUP-032_Advanced_Mark_System.md)                | Advanced Mark System with Custom Shapes  | ✅ Complete    | Medium   | 8      |
+| [GUP-033](GUP-033_Shader_Function_Composition_Engine.md)  | Shader Function Composition Engine       | ✅ Complete    | Medium   | 10     |
+| [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md)          | GPU Memory Profiling and Debugging Tools | ✅ Complete    | Low      | 5      |
+| [GUP-131](GUP-131_Shader_Type_Constructors.md)            | Add Constructor Methods to Shader Types  | ✅ Complete    | Low      | 1      |
+| [GUP-132](GUP-132_GPU_Path_Tessellation.md)               | GPU Tessellation for Path Mark           | 💡 New         | Medium   | 8      |
+| [GUP-134](GUP-134_Storage_Buffer_ColorGradient.md)        | Storage Buffer-Based ColorGradient       | 📋 Planned     | Low      | 3      |
+| [GUP-135](GUP-135_Fix_Examples_Compilation.md)            | Fix Example Compilation Errors           | 🚧 In Progress | High     | 3      |
+| [GUP-136](GUP-136_Parallel_Composition_Implementation.md) | Parallel Composition Implementation      | ✅ Complete    | Medium   | 5      |
+| [GUP-137](GUP-137_Shader_Performance_Benchmarking.md)     | Shader Function Performance Benchmarking | 📋 Planned     | Medium   | 3      |
+| [GUP-138](GUP-138_Advanced_Temporal_Animation.md)         | Advanced Temporal Animation System       | 📋 Planned     | Low      | 8      |
+| [GUP-139](GUP-139_Statistical_Shader_Functions.md)        | Statistical Shader Functions             | 📋 Planned     | Low      | 5      |
 
 ### Post GUP-015 Stories - Advanced Debug Infrastructure (Stories 80+)
 
@@ -965,5 +965,5 @@ The following story was created from GUP-031 and has been completed:
 **Dependencies**: GUP-031 ⚠️  
 **Impact**: Unblocks full interaction system functionality  
 **Created**: 2024-02-22 during GUP-031 retrospective  
-**Completed**: 2024-02-22
-| [GUP-140](GUP-140_Selection_API_Parallel_Output.md) | Selection API Parallel Output Integration | 💡 New         | Medium   | 8      |
+**Completed**: 2024-02-22 | [GUP-140](GUP-140_Selection_API_Parallel_Output.md)
+| Selection API Parallel Output Integration | 💡 New | Medium | 8 |

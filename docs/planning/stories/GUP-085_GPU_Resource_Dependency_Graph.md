@@ -9,13 +9,17 @@
 
 ## Context
 
-During GUP-034 implementation, identified the need to visualize relationships between GPU resources (buffers, pipelines, bind groups, textures) to understand resource usage patterns, detect circular dependencies, and optimize resource sharing.
+During GUP-034 implementation, identified the need to visualize relationships
+between GPU resources (buffers, pipelines, bind groups, textures) to understand
+resource usage patterns, detect circular dependencies, and optimize resource
+sharing.
 
 ## User Story
 
 **As a** Gup library developer  
 **I want** to visualize the dependency graph of GPU resources  
-**So that** I can understand resource relationships, detect issues, and optimize resource usage
+**So that** I can understand resource relationships, detect issues, and optimize
+resource usage
 
 ## Acceptance Criteria
 

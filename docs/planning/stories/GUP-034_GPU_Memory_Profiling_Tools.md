@@ -28,7 +28,7 @@ leaks, and profile performance bottlenecks.
 ### AC1: Memory Monitoring
 
 - [x] Real-time GPU memory usage tracking
-- [x] Buffer allocation/deallocation logging  
+- [x] Buffer allocation/deallocation logging
 - [x] Memory leak detection and reporting
 - [x] Resource lifetime visualization (via memory history/trends)
 
@@ -44,7 +44,8 @@ leaks, and profile performance bottlenecks.
 - [x] Memory usage graphs and charts (text-based ASCII art)
 - [x] Buffer pool utilization displays (via usage breakdown visualization)
 - [ ] GPU resource dependency graphs (deferred to GUP-085)
-- [x] Performance bottleneck identification (via performance summary visualization)
+- [x] Performance bottleneck identification (via performance summary
+      visualization)
 
 ### AC4: Integration and Usability
 
@@ -56,9 +57,10 @@ leaks, and profile performance bottlenecks.
 ## Technical Requirements
 
 - Zero performance impact in release builds ✅
-- Cross-platform WebGPU debugging support ✅  
+- Cross-platform WebGPU debugging support ✅
 - Real-time data collection and visualization ✅
-- Integration with web dev tools (partial - text-based visualization implemented)
+- Integration with web dev tools (partial - text-based visualization
+  implemented)
 
 ## Dependencies
 
@@ -70,7 +72,8 @@ leaks, and profile performance bottlenecks.
 
 **Status**: ✅ **COMPLETED**  
 **Completion Date**: 2025-01-22  
-**Implementation Location**: `src/debug/memory_profiler.rs`, `src/debug/visualization.rs`
+**Implementation Location**: `src/debug/memory_profiler.rs`,
+`src/debug/visualization.rs`
 
 ### Key Deliverables Implemented
 
@@ -95,9 +98,12 @@ leaks, and profile performance bottlenecks.
 
 ### Performance Characteristics
 
-- **Zero runtime overhead in release builds**: All profiling gated by `debug_assertions`
-- **Minimal overhead in debug builds**: Mutex-based tracking with O(1) operations
-- **Configurable stack traces**: Optional (expensive) for detailed leak investigation
+- **Zero runtime overhead in release builds**: All profiling gated by
+  `debug_assertions`
+- **Minimal overhead in debug builds**: Mutex-based tracking with O(1)
+  operations
+- **Configurable stack traces**: Optional (expensive) for detailed leak
+  investigation
 - **Memory-bounded history**: Circular buffer prevents unbounded growth
 
 ### Testing Coverage
@@ -109,9 +115,12 @@ leaks, and profile performance bottlenecks.
 
 ## Success Metrics
 
-- [x] Detect 100% of memory leaks in test scenarios (configurable threshold-based detection)
-- [x] Identify performance bottlenecks within 5% accuracy (via performance summary)
-- [x] Zero runtime overhead in release builds (all profiling gated by `cfg!(debug_assertions)`)
+- [x] Detect 100% of memory leaks in test scenarios (configurable
+      threshold-based detection)
+- [x] Identify performance bottlenecks within 5% accuracy (via performance
+      summary)
+- [x] Zero runtime overhead in release builds (all profiling gated by
+      `cfg!(debug_assertions)`)
 - [x] Clear, actionable profiling reports (text-based visualization with export)
 
 ## Risk Assessment
@@ -128,26 +137,35 @@ leaks, and profile performance bottlenecks.
 
 #### Memory Profiling Architecture
 
-- **Challenge**: Track GPU buffer allocations without invasive changes to existing code
-- **Solution**: Created `GpuMemoryProfiler` with allocation ID system and optional integration
+- **Challenge**: Track GPU buffer allocations without invasive changes to
+  existing code
+- **Solution**: Created `GpuMemoryProfiler` with allocation ID system and
+  optional integration
 - **Pattern**: Use `Arc<Mutex<HashMap>>` for thread-safe allocation tracking
-- **Critical**: Separate allocation ID from buffer lifetime - IDs persist even after deallocation
-- **Future**: Could integrate with buffer pool to automatically track all allocations
+- **Critical**: Separate allocation ID from buffer lifetime - IDs persist even
+  after deallocation
+- **Future**: Could integrate with buffer pool to automatically track all
+  allocations
 
 #### Leak Detection Strategy
 
-- **Challenge**: Distinguish between long-lived legitimate allocations and actual leaks
-- **Solution**: Time-based threshold (default 5 minutes) with configurable age limits
+- **Challenge**: Distinguish between long-lived legitimate allocations and
+  actual leaks
+- **Solution**: Time-based threshold (default 5 minutes) with configurable age
+  limits
 - **Pattern**: Track allocation timestamp and check age on demand
-- **Trade-off**: False positives for long-running visualizations vs early leak detection
+- **Trade-off**: False positives for long-running visualizations vs early leak
+  detection
 - **Recommendation**: Adjust threshold based on application lifecycle
 
 #### Memory Trend Analysis
 
-- **Challenge**: Detect memory growth patterns without complex statistical analysis
+- **Challenge**: Detect memory growth patterns without complex statistical
+  analysis
 - **Solution**: Simple moving average comparison of recent vs older history
 - **Pattern**: Keep circular buffer of snapshots with configurable size limit
-- **Performance**: O(1) snapshot recording, O(n) trend calculation (acceptable for debugging)
+- **Performance**: O(1) snapshot recording, O(n) trend calculation (acceptable
+  for debugging)
 - **Insight**: 20% threshold works well for detecting meaningful trends
 
 #### Text-Based Visualization Design
@@ -160,11 +178,14 @@ leaks, and profile performance bottlenecks.
 
 #### Serialization of GPU Types
 
-- **Challenge**: `BufferUsages` and `Instant` don't implement `Serialize`/`Deserialize`
+- **Challenge**: `BufferUsages` and `Instant` don't implement
+  `Serialize`/`Deserialize`
 - **Solution**: Separate internal types from serializable export types
 - **Pattern**: Create `*Serialized` variants with `From` implementations
-- **Learning**: Don't try to serialize wgpu types directly - convert to primitives
-- **Best Practice**: Keep internal state flexible, provide serializable views for export
+- **Learning**: Don't try to serialize wgpu types directly - convert to
+  primitives
+- **Best Practice**: Keep internal state flexible, provide serializable views
+  for export
 
 ### Architectural Decisions
 
@@ -172,24 +193,32 @@ leaks, and profile performance bottlenecks.
 
 - **Decision**: All profiling features opt-in via `GpuMemoryProfiler` creation
 - **Reasoning**: Zero overhead for users who don't need memory profiling
-- **Integration**: Profiler is a component of `GpuDebugContext`, not baked into Context
-- **Trade-off**: Requires manual registration vs automatic tracking, but gives full control
-- **Future**: Could add `Context::with_memory_profiling()` builder for convenience
+- **Integration**: Profiler is a component of `GpuDebugContext`, not baked into
+  Context
+- **Trade-off**: Requires manual registration vs automatic tracking, but gives
+  full control
+- **Future**: Could add `Context::with_memory_profiling()` builder for
+  convenience
 
 #### Text-Based vs Web Dashboard
 
 - **Decision**: Implement text-based visualization first, defer web dashboard
-- **Reasoning**: Simpler implementation, works in all environments, no server needed
-- **Practical**: Disk space constraints prevented building web features during development
-- **Value**: Text-based visualization covers 80% of use cases (debugging, CI/CD, logs)
+- **Reasoning**: Simpler implementation, works in all environments, no server
+  needed
+- **Practical**: Disk space constraints prevented building web features during
+  development
+- **Value**: Text-based visualization covers 80% of use cases (debugging, CI/CD,
+  logs)
 - **Follow-up**: GUP-086 will add web dashboard for interactive exploration
 
 #### Stack Trace Capture Configuration
 
-- **Decision**: Make stack trace capture optional with `capture_stack_traces` flag
+- **Decision**: Make stack trace capture optional with `capture_stack_traces`
+  flag
 - **Reasoning**: Stack traces are expensive (backtrace capture overhead)
 - **Default**: Enabled in debug builds via `cfg!(debug_assertions)`
-- **Use Case**: Essential for leak investigation, unnecessary for basic monitoring
+- **Use Case**: Essential for leak investigation, unnecessary for basic
+  monitoring
 - **Performance**: ~10-20% overhead when enabled vs <1% without
 
 ### Development Workflow Insights
@@ -198,36 +227,43 @@ leaks, and profile performance bottlenecks.
 
 - **Issue**: Compilation repeatedly failed due to disk space exhaustion
 - **Impact**: Prevented full test suite execution during development
-- **Workaround**: Used `cargo clean` and `--lib` checks to verify code correctness
-- **Learning**: Large Rust projects need significant disk space (6-8GB for target/)
-- **Recommendation**: Consider CI/CD with larger disk allocations for GPU projects
+- **Workaround**: Used `cargo clean` and `--lib` checks to verify code
+  correctness
+- **Learning**: Large Rust projects need significant disk space (6-8GB for
+  target/)
+- **Recommendation**: Consider CI/CD with larger disk allocations for GPU
+  projects
 
 #### Building on GUP-015 Foundation
 
 - **Benefit**: Existing debug infrastructure made integration straightforward
 - **Pattern**: Added memory profiler as new component to `GpuDebugContext`
-- **Consistency**: Followed existing patterns (Device/Queue parameters, GupResult returns)
+- **Consistency**: Followed existing patterns (Device/Queue parameters,
+  GupResult returns)
 - **Efficiency**: Reused serialization, export, and configuration patterns
 - **Time Saved**: ~50% faster implementation by leveraging existing code
 
 #### Test-Driven Development for Debug Tools
 
 - **Approach**: Write unit tests for profiler logic before GPU integration tests
-- **Benefit**: Can validate core logic (leak detection, trend analysis) without GPU
-- **Limitation**: Some features (actual buffer tracking) need GPU context to test
+- **Benefit**: Can validate core logic (leak detection, trend analysis) without
+  GPU
+- **Limitation**: Some features (actual buffer tracking) need GPU context to
+  test
 - **Best Practice**: Separate testable logic from GPU-dependent code
-- **Coverage**: Achieved good unit test coverage despite disk space preventing full tests
+- **Coverage**: Achieved good unit test coverage despite disk space preventing
+  full tests
 
 ### Follow-up Stories
 
 During implementation, identified areas that need dedicated stories:
 
-1. **GUP-085: GPU Resource Dependency Graph Visualization** — Visualize relationships
-   between buffers, pipelines, bind groups, and textures to understand resource usage
-   patterns and detect circular dependencies.
+1. **GUP-085: GPU Resource Dependency Graph Visualization** — Visualize
+   relationships between buffers, pipelines, bind groups, and textures to
+   understand resource usage patterns and detect circular dependencies.
 
-2. **GUP-086: Web-Based Profiling Dashboard** — Interactive web dashboard for real-time
-   GPU profiling with charts, graphs, and timeline visualization. Requires web server
-   integration and frontend development.
+2. **GUP-086: Web-Based Profiling Dashboard** — Interactive web dashboard for
+   real-time GPU profiling with charts, graphs, and timeline visualization.
+   Requires web server integration and frontend development.
 
 _Created from GUP-002 retrospective learnings about GPU debugging challenges._

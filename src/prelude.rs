@@ -53,14 +53,14 @@ pub use crate::shader_function::{
     Mat2,
     Mat3,
     Mat4,
-    PositionTransform,
-
-    PowerScale,
-
     // Parallel composition (GUP-136)
     ParallelComposable,
     ParallelComposition,
     ParallelOutput,
+
+    PositionTransform,
+
+    PowerScale,
 
     ShaderCompatible,
 

@@ -5,35 +5,39 @@
 ## Story Overview
 
 **Title**: Benchmark Composed Shader Functions Against Hand-Optimized Code
-**Epic**: Phase 1 Initiative 4 - Advanced Data Mapping
-**Priority**: Medium
+**Epic**: Phase 1 Initiative 4 - Advanced Data Mapping **Priority**: Medium
 **Story Points**: 3
 
 ## Context
 
-GUP-033 claimed "performance within 15% of hand-optimized shaders" but this was not empirically validated. We need GPU benchmarks to verify this claim and establish performance regression testing.
+GUP-033 claimed "performance within 15% of hand-optimized shaders" but this was
+not empirically validated. We need GPU benchmarks to verify this claim and
+establish performance regression testing.
 
 ## User Story
 
-**As a** Gup maintainer
-**I want** to measure shader function composition performance
-**So that** I can ensure composed functions remain performant and catch regressions
+**As a** Gup maintainer **I want** to measure shader function composition
+performance **So that** I can ensure composed functions remain performant and
+catch regressions
 
 ## Acceptance Criteria
 
 ### AC1: Benchmark Infrastructure
+
 - [ ] Create GPU-based benchmark suite
 - [ ] Implement hand-optimized reference shaders
 - [ ] Measure composed vs hand-optimized performance
 - [ ] Test with various composition depths (2, 3, 5 stages)
 
 ### AC2: Performance Analysis
+
 - [ ] Profile WGSL compilation time
 - [ ] Measure GPU execution time
 - [ ] Analyze memory bandwidth usage
 - [ ] Compare shader complexity metrics
 
 ### AC3: Regression Testing
+
 - [ ] Integrate benchmarks with CI
 - [ ] Set performance thresholds
 - [ ] Generate performance reports
