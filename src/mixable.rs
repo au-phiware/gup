@@ -47,7 +47,7 @@ pub enum CompositionMode {
 }
 
 /// Layout direction for SideBySide composition
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LayoutDirection {
     Horizontal,
     Vertical,
@@ -59,6 +59,24 @@ pub struct SideBySideConfig {
     pub direction: LayoutDirection,
     pub split_ratio: f32, // 0.0 to 1.0, proportion allocated to first component
     pub padding: f32,     // Padding between components in pixels
+}
+
+impl PartialEq for SideBySideConfig {
+    fn eq(&self, other: &Self) -> bool {
+        self.direction == other.direction
+            && self.split_ratio.to_bits() == other.split_ratio.to_bits()
+            && self.padding.to_bits() == other.padding.to_bits()
+    }
+}
+
+impl Eq for SideBySideConfig {}
+
+impl std::hash::Hash for SideBySideConfig {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.direction.hash(state);
+        self.split_ratio.to_bits().hash(state);
+        self.padding.to_bits().hash(state);
+    }
 }
 
 impl Default for SideBySideConfig {
@@ -253,6 +271,25 @@ pub struct ComposedVisualization<A: Mixable, B: Mixable> {
     custom_behavior: Option<CustomCompositionBehavior>,
     /// Merge strategy for Merge mode
     merge_strategy: MergeStrategy,
+    /// Viewport calculation cache for performance
+    viewport_cache: std::collections::HashMap<ViewportCacheKey, CachedViewportSplit>,
+    /// Cache generation counter for invalidation
+    cache_generation: u64,
+}
+
+/// Cache key for viewport calculations
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+struct ViewportCacheKey {
+    original_viewport: crate::Viewport,
+    config_hash: u64,
+}
+
+/// Cached viewport split result
+#[derive(Debug, Clone)]
+struct CachedViewportSplit {
+    first_viewport: crate::Viewport,
+    second_viewport: crate::Viewport,
+    generation: u64,
 }
 
 impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
@@ -270,6 +307,8 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
             side_by_side_config: SideBySideConfig::default(),
             custom_behavior: None,
             merge_strategy: MergeStrategy::default(),
+            viewport_cache: std::collections::HashMap::new(),
+            cache_generation: 0,
         }
     }
 
@@ -288,6 +327,8 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
             side_by_side_config: SideBySideConfig::default(),
             custom_behavior: None,
             merge_strategy: MergeStrategy::default(),
+            viewport_cache: std::collections::HashMap::new(),
+            cache_generation: 0,
         }
     }
 
@@ -300,6 +341,8 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
             side_by_side_config: config,
             custom_behavior: None,
             merge_strategy: MergeStrategy::default(),
+            viewport_cache: std::collections::HashMap::new(),
+            cache_generation: 0,
         }
     }
 
@@ -312,12 +355,16 @@ impl<A: Mixable, B: Mixable> ComposedVisualization<A, B> {
             side_by_side_config: SideBySideConfig::default(),
             custom_behavior: Some(behavior),
             merge_strategy: MergeStrategy::default(),
+            viewport_cache: std::collections::HashMap::new(),
+            cache_generation: 0,
         }
     }
 
     /// Configure side-by-side layout parameters
     pub fn with_side_by_side_config(mut self, config: SideBySideConfig) -> Self {
         self.side_by_side_config = config;
+        // Invalidate cache by incrementing generation
+        self.cache_generation += 1;
         self
     }
 
@@ -519,7 +566,8 @@ impl<A: Mixable + 'static, B: Mixable + 'static> ComposedVisualization<A, B> {
     fn render_side_by_side(&mut self, context: &mut RenderContext) -> GupResult<()> {
         let original_viewport = context.viewport();
 
-        let (first_viewport, second_viewport) = self.calculate_split_viewports(original_viewport);
+        let (first_viewport, second_viewport) =
+            self.calculate_split_viewports_cached(original_viewport);
 
         // Render first component in its viewport
         context.set_viewport(first_viewport)?;
@@ -607,6 +655,49 @@ impl<A: Mixable + 'static, B: Mixable + 'static> ComposedVisualization<A, B> {
                 (first_viewport, second_viewport)
             }
         }
+    }
+
+    /// Calculate hash for the current configuration
+    fn calculate_config_hash(&self) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+        self.side_by_side_config.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    /// Calculate viewport splits with caching
+    fn calculate_split_viewports_cached(
+        &mut self,
+        original: crate::Viewport,
+    ) -> (crate::Viewport, crate::Viewport) {
+        let config_hash = self.calculate_config_hash();
+        let cache_key = ViewportCacheKey {
+            original_viewport: original,
+            config_hash,
+        };
+
+        // Check cache first
+        if let Some(cached) = self.viewport_cache.get(&cache_key)
+            && cached.generation == self.cache_generation
+        {
+            return (cached.first_viewport, cached.second_viewport);
+        }
+
+        // Calculate and cache
+        let (first_vp, second_vp) = self.calculate_split_viewports(original);
+
+        self.viewport_cache.insert(
+            cache_key,
+            CachedViewportSplit {
+                first_viewport: first_vp,
+                second_viewport: second_vp,
+                generation: self.cache_generation,
+            },
+        );
+
+        (first_vp, second_vp)
     }
 }
 

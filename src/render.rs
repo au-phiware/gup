@@ -55,6 +55,24 @@ pub struct Viewport {
     pub scale_factor: f32,
 }
 
+impl PartialEq for Viewport {
+    fn eq(&self, other: &Self) -> bool {
+        self.width == other.width
+            && self.height == other.height
+            && self.scale_factor.to_bits() == other.scale_factor.to_bits()
+    }
+}
+
+impl Eq for Viewport {}
+
+impl std::hash::Hash for Viewport {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.width.hash(state);
+        self.height.hash(state);
+        self.scale_factor.to_bits().hash(state);
+    }
+}
+
 impl Default for Viewport {
     fn default() -> Self {
         Self {
