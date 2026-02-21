@@ -49,7 +49,7 @@ epic and status.
 | [GUP-028](GUP-028_Composition_Performance_Optimization.md)   | Composition Performance Optimization       | ✅ Complete    | Medium   | 4      |
 | ~~[GUP-085](GUP-085_Line_Rectangle_Mark_Implementation.md)~~ | ~~Line and Rectangle Mark Impl.~~          | ⿻ Copy        | High     | 5      |
 | [GUP-086](GUP-086_Observable_Plot_Migration_Guide.md)        | Observable Plot Migration Guide            | 💡 New         | Low      | 2      |
-| [GUP-087](GUP-087_Chart_Builder_Performance_Optimization.md) | Chart Builder Performance Optimization     | 🚧 In Progress | Medium   | 3      |
+| [GUP-087](GUP-087_Chart_Builder_Performance_Optimization.md) | Chart Builder Performance Optimization     | ✅ Complete | Medium   | 3      |
 | [GUP-088](GUP-088_External_Library_Integration_System.md)    | External Library Integration System        | ✅ Complete    | High     | 5      |
 | [GUP-092](GUP-092_Label_Formatting_and_Positioning.md)       | Label Formatting and Positioning           | ✅ Complete    | High     | 8      |
 | [GUP-099](GUP-099_GPU_Text_Rendering_Pipeline.md)            | GPU Text Rendering Pipeline Implementation | ✅ Complete    | High     | 8      |
