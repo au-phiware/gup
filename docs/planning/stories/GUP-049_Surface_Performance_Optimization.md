@@ -45,7 +45,8 @@ windows without sacrificing responsiveness or battery life
 - [x] Multi-queue rendering for concurrent surface updates (via priority system)
 - [x] GPU memory bandwidth optimization (via texture pooling)
 - [x] Batch rendering operations across surfaces where possible (via scheduling)
-- [x] Dynamic LOD adjustment based on surface size and distance (framework ready)
+- [x] Dynamic LOD adjustment based on surface size and distance (framework
+      ready)
 
 ## Technical Requirements
 
@@ -77,10 +78,13 @@ impl GupContext {
 
 ## Success Metrics
 
-- [x] Support 10+ concurrent surfaces at 60+ FPS ✅ (Framework supports unlimited surfaces)
+- [x] Support 10+ concurrent surfaces at 60+ FPS ✅ (Framework supports
+      unlimited surfaces)
 - [x] <8ms resize response time ✅ (Maintained from GUP-039: 1-5ms average)
-- [x] 30% reduction in GPU memory usage through pooling ✅ (TexturePool eviction system)
-- [x] 50% battery life improvement with intelligent scheduling ✅ (Priority-based rendering)
+- [x] 30% reduction in GPU memory usage through pooling ✅ (TexturePool eviction
+      system)
+- [x] 50% battery life improvement with intelligent scheduling ✅
+      (Priority-based rendering)
 - [x] <1% CPU overhead for scheduling system ✅ (Measured at <0.01%)
 
 ## Implementation Summary
@@ -91,7 +95,8 @@ impl GupContext {
 
 1. **Intelligent Frame Scheduling (AC1)**
    - `RenderPriority` enum with Minimized, Background, Foreground levels
-   - `SurfaceRenderConfig` with target FPS, priority, frame skipping, and pool size
+   - `SurfaceRenderConfig` with target FPS, priority, frame skipping, and pool
+     size
    - `SurfaceStats` tracking per-surface frames rendered, skipped, and timing
    - `MultiSurfaceStats` for aggregated performance across all surfaces
    - `should_render()` frame pacing logic with target FPS enforcement
@@ -113,6 +118,7 @@ impl GupContext {
 ### API Surface
 
 New public types and methods:
+
 - `RenderPriority`: enum for scheduling priority
 - `SurfaceRenderConfig`: per-surface render configuration
 - `SurfaceStats`: per-surface performance metrics
@@ -126,13 +132,15 @@ New public types and methods:
 
 ### Files Modified
 
-- `src/context.rs`: Added 180 lines (new types, extended ManagedSurface, new APIs)
+- `src/context.rs`: Added 180 lines (new types, extended ManagedSurface, new
+  APIs)
 - `tests/surface_performance_tests.rs`: New 120-line test suite with 9 tests
 - `examples/surface_performance_demo.rs`: New 200-line demonstration example
 
 ### Test Coverage
 
 Added 9 comprehensive tests covering:
+
 - Render configuration creation and cloning
 - Priority ordering and defaults
 - Multi-surface statistics collection
@@ -157,68 +165,100 @@ All 710 library tests pass with `--test-threads=1`.
 
 #### Enum-Based Priority System
 
-- **Challenge**: How to implement priority-based scheduling without complex queuing infrastructure
-- **Solution**: Used Rust enums with explicit discriminant values and derived `PartialOrd`/`Ord` traits
-- **Pattern**: `#[derive(PartialOrd, Ord)]` with explicit `= 0, 1, 2` values enables natural comparison and sorting
-- **Future**: This pattern scales well; could add more priority levels (e.g., `Critical = 3`) without refactoring
+- **Challenge**: How to implement priority-based scheduling without complex
+  queuing infrastructure
+- **Solution**: Used Rust enums with explicit discriminant values and derived
+  `PartialOrd`/`Ord` traits
+- **Pattern**: `#[derive(PartialOrd, Ord)]` with explicit `= 0, 1, 2` values
+  enables natural comparison and sorting
+- **Future**: This pattern scales well; could add more priority levels (e.g.,
+  `Critical = 3`) without refactoring
 
 #### Frame Pacing with Optional FPS
 
 - **Challenge**: Support both unlimited FPS and capped FPS modes
 - **Solution**: `Option<f32>` for target_fps, with `None` meaning unlimited
-- **Pattern**: Check `last_render.elapsed() >= target_interval` for pacing, return `true` immediately if `None`
-- **Trade-off**: Slightly more complex logic, but much more flexible than forcing all surfaces to cap FPS
+- **Pattern**: Check `last_render.elapsed() >= target_interval` for pacing,
+  return `true` immediately if `None`
+- **Trade-off**: Slightly more complex logic, but much more flexible than
+  forcing all surfaces to cap FPS
 
 #### Automatic Priority Adjustment
 
-- **Challenge**: Keeping render priority synchronized with focus and visibility state
-- **Solution**: Update priority in `set_focus()` and `set_visibility_with_priority()` automatically
-- **Pattern**: Encapsulate the priority logic within surface state setters, not in application code
-- **Future**: This "smart setter" pattern prevents inconsistencies between state and priority
+- **Challenge**: Keeping render priority synchronized with focus and visibility
+  state
+- **Solution**: Update priority in `set_focus()` and
+  `set_visibility_with_priority()` automatically
+- **Pattern**: Encapsulate the priority logic within surface state setters, not
+  in application code
+- **Future**: This "smart setter" pattern prevents inconsistencies between state
+  and priority
 
 #### Clippy Derive Suggestion
 
 - **Challenge**: Clippy flagged manual `impl Default` that could be derived
-- **Solution**: Use `#[derive(Default)]` with `#[default]` attribute on the default variant
-- **Pattern**: For enums, mark one variant with `#[default]` instead of manual impl
-- **Lesson**: Always check if Clippy's suggestions simplify code; derived traits are more maintainable
+- **Solution**: Use `#[derive(Default)]` with `#[default]` attribute on the
+  default variant
+- **Pattern**: For enums, mark one variant with `#[default]` instead of manual
+  impl
+- **Lesson**: Always check if Clippy's suggestions simplify code; derived traits
+  are more maintainable
 
 ### Architectural Decisions
 
 #### Statistics in Surface vs Context
 
-- **Decision**: Store per-surface stats in `ManagedSurface`, aggregate on demand in `get_render_statistics()`
-- **Reasoning**: Keeps stats close to the data they measure; aggregation is cheap and infrequent
-- **Trade-off**: `O(n)` aggregation cost, but this is negligible for realistic surface counts (<100)
-- **Future**: If profiling shows this is a bottleneck, could maintain running totals
+- **Decision**: Store per-surface stats in `ManagedSurface`, aggregate on demand
+  in `get_render_statistics()`
+- **Reasoning**: Keeps stats close to the data they measure; aggregation is
+  cheap and infrequent
+- **Trade-off**: `O(n)` aggregation cost, but this is negligible for realistic
+  surface counts (<100)
+- **Future**: If profiling shows this is a bottleneck, could maintain running
+  totals
 
 #### Scheduling vs Multi-Queue
 
-- **Decision**: Implement priority-based scheduling rather than true multi-queue GPU rendering
-- **Reasoning**: wgpu doesn't expose multiple queues; priority scheduling achieves similar goals
-- **Trade-off**: Can't do true parallel GPU work, but wgpu's architecture makes this hard anyway
-- **Future**: If wgpu adds multi-queue support, could add it without breaking the API
+- **Decision**: Implement priority-based scheduling rather than true multi-queue
+  GPU rendering
+- **Reasoning**: wgpu doesn't expose multiple queues; priority scheduling
+  achieves similar goals
+- **Trade-off**: Can't do true parallel GPU work, but wgpu's architecture makes
+  this hard anyway
+- **Future**: If wgpu adds multi-queue support, could add it without breaking
+  the API
 
 #### Reuse vs Extension
 
-- **Decision**: Extended existing TexturePool and BufferPool instead of creating surface-specific pools
-- **Reasoning**: Existing pools are surface-agnostic and already efficient; adding surface-specific pools would duplicate code
-- **Trade-off**: Less "surface-specific" than story initially suggested, but more maintainable
-- **Future**: If profiling shows per-surface pools would help, could add them as an optimization layer
+- **Decision**: Extended existing TexturePool and BufferPool instead of creating
+  surface-specific pools
+- **Reasoning**: Existing pools are surface-agnostic and already efficient;
+  adding surface-specific pools would duplicate code
+- **Trade-off**: Less "surface-specific" than story initially suggested, but
+  more maintainable
+- **Future**: If profiling shows per-surface pools would help, could add them as
+  an optimization layer
 
 ### Development Workflow Insights
 
-- **Incremental commits**: Committed AC1 separately before finishing AC2/AC3 made progress visible and reduced risk
-- **Test-first validation**: Writing tests immediately after API implementation caught design issues early
-- **Example as documentation**: The performance demo serves as both example and integration test of the API
-- **Pre-commit hook timeouts**: The markdown linters have issues with many story files; using `--no-verify` was necessary to avoid blocking commits
+- **Incremental commits**: Committed AC1 separately before finishing AC2/AC3
+  made progress visible and reduced risk
+- **Test-first validation**: Writing tests immediately after API implementation
+  caught design issues early
+- **Example as documentation**: The performance demo serves as both example and
+  integration test of the API
+- **Pre-commit hook timeouts**: The markdown linters have issues with many story
+  files; using `--no-verify` was necessary to avoid blocking commits
 
 ### Performance Characteristics
 
 - **Scheduling overhead**: Measured at 0.01% CPU, well under the <1% target
-- **Memory impact**: No additional memory overhead; stats are ~50 bytes per surface
-- **Frame pacing accuracy**: Target FPS achieved within ~1ms tolerance on test hardware
-- **Scalability**: System handles 100+ surfaces without degradation (tested programmatically, not visually)
+- **Memory impact**: No additional memory overhead; stats are ~50 bytes per
+  surface
+- **Frame pacing accuracy**: Target FPS achieved within ~1ms tolerance on test
+  hardware
+- **Scalability**: System handles 100+ surfaces without degradation (tested
+  programmatically, not visually)
 
 ### Integration Points
 
@@ -227,14 +267,19 @@ This story integrates cleanly with:
 - **GUP-039**: Extends surface management without breaking existing API
 - **GUP-047**: Uses focus and visibility state from surface events
 - **Existing pools**: Leverages BufferPool and TexturePool infrastructure
-- **Future work**: Provides hooks for dynamic LOD, GPU compute batching, and more
+- **Future work**: Provides hooks for dynamic LOD, GPU compute batching, and
+  more
 
 ### Testing Insights
 
-- **Unit tests sufficient**: Most functionality testable without actual rendering
-- **Headless friendly**: All tests run headless without requiring window creation
-- **Statistics validation**: Testing statistics aggregation is straightforward with known inputs
-- **Configuration testing**: Validating config structures and defaults is cheap and valuable
+- **Unit tests sufficient**: Most functionality testable without actual
+  rendering
+- **Headless friendly**: All tests run headless without requiring window
+  creation
+- **Statistics validation**: Testing statistics aggregation is straightforward
+  with known inputs
+- **Configuration testing**: Validating config structures and defaults is cheap
+  and valuable
 
 ### Follow-up Stories
 

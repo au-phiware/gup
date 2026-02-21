@@ -103,8 +103,8 @@ pub async fn create_test_context() -> GupResult<GpuContextGuard<'static>> {
 ///     // Use context, guard ensures cleanup
 /// }
 /// ```
-pub async fn create_shared_test_context(
-) -> GupResult<(Arc<RenderContext>, GpuContextGuard<'static>)> {
+pub async fn create_shared_test_context()
+-> GupResult<(Arc<RenderContext>, GpuContextGuard<'static>)> {
     let guard = create_test_context().await?;
     let context = guard.clone_context();
     Ok((context, guard))
@@ -154,7 +154,12 @@ mod tests {
 
         let (context, _guard) = result.unwrap();
         // Verify we can use the context
-        assert!(context.device().features().contains(wgpu::Features::default()));
+        assert!(
+            context
+                .device()
+                .features()
+                .contains(wgpu::Features::default())
+        );
     }
 
     #[tokio::test]

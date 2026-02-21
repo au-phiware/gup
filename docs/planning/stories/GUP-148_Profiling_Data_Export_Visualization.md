@@ -4,36 +4,39 @@
 
 ## Story Overview
 
-**Title**: Profiling Data Export and External Visualization
-**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API
-**Priority**: Low
-**Story Points**: 5
+**Title**: Profiling Data Export and External Visualization **Epic**: Phase 1
+Initiative 1 - Core GPU Primitives and Selection API **Priority**: Low **Story
+Points**: 5
 
 ## Context
 
-The performance profiling system (GUP-046) collects rich performance data but lacks export and visualization capabilities. External analysis tools and visual representations would greatly enhance debugging and optimization workflows.
+The performance profiling system (GUP-046) collects rich performance data but
+lacks export and visualization capabilities. External analysis tools and visual
+representations would greatly enhance debugging and optimization workflows.
 
 ## User Story
 
-**As a** Gup application developer
-**I want** to export and visualize profiling data
-**So that** I can analyze performance patterns using familiar tools
+**As a** Gup application developer **I want** to export and visualize profiling
+data **So that** I can analyze performance patterns using familiar tools
 
 ## Acceptance Criteria
 
 ### AC1: Data Export Formats
+
 - [ ] Export to JSON format
 - [ ] Export to CSV format
 - [ ] Export to Chrome DevTools Performance format
 - [ ] Configurable export granularity
 
 ### AC2: Flame Graph Generation
+
 - [ ] Generate flame graphs for render pass hierarchies
 - [ ] Interactive flame graph output
 - [ ] Time-based flame graph views
 - [ ] Component-level breakdown
 
 ### AC3: Web Dashboard
+
 - [ ] Real-time profiling dashboard
 - [ ] Historical performance trends
 - [ ] Comparison views (baseline vs. current)

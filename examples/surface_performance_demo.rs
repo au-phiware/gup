@@ -113,11 +113,9 @@ impl ApplicationHandler for MultiWindowApp {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.context.is_none() {
             let app_ptr = self as *mut Self;
-            tokio::runtime::Runtime::new()
-                .unwrap()
-                .block_on(async {
-                    unsafe { (*app_ptr).create_context_and_windows(event_loop).await }
-                });
+            tokio::runtime::Runtime::new().unwrap().block_on(async {
+                unsafe { (*app_ptr).create_context_and_windows(event_loop).await }
+            });
         }
     }
 
@@ -136,17 +134,13 @@ impl ApplicationHandler for MultiWindowApp {
                 self.frame_count += 1;
 
                 // Print stats every 60 frames
-                if self.frame_count % 60 == 0 && self.last_stats_print.elapsed().as_secs() >= 1 {
+                if self.frame_count.is_multiple_of(60) && self.last_stats_print.elapsed().as_secs() >= 1 {
                     self.print_statistics();
                     self.last_stats_print = Instant::now();
                 }
 
                 // Request another frame
-                if let Some((_id, window)) = self
-                    .windows
-                    .iter()
-                    .find(|(id, _)| *id == window_id)
-                {
+                if let Some((_id, window)) = self.windows.iter().find(|(id, _)| *id == window_id) {
                     window.request_redraw();
                 }
             }
@@ -169,7 +163,9 @@ fn main() {
     event_loop.set_control_flow(ControlFlow::Poll);
 
     let mut app = MultiWindowApp::new();
-    event_loop.run_app(&mut app).expect("Failed to run event loop");
+    event_loop
+        .run_app(&mut app)
+        .expect("Failed to run event loop");
 }
 
 #[cfg(test)]

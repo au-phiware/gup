@@ -4,20 +4,21 @@
 
 ## Story Overview
 
-**Title**: Automatic Device Loss Detection
-**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API
-**Priority**: Low
-**Story Points**: 2
+**Title**: Automatic Device Loss Detection **Epic**: Phase 1 Initiative 1 - Core
+GPU Primitives and Selection API **Priority**: Low **Story Points**: 2
 
 ## Context
 
-Currently, applications must manually call `mark_device_lost()` when GPU operations fail. This requires awareness of error handling and explicit recovery triggering. Automatic detection would wrap queue operations to detect failures and trigger recovery automatically.
+Currently, applications must manually call `mark_device_lost()` when GPU
+operations fail. This requires awareness of error handling and explicit recovery
+triggering. Automatic detection would wrap queue operations to detect failures
+and trigger recovery automatically.
 
 ## User Story
 
-**As a** Gup application developer
-**I want** GPU device loss to be detected automatically
-**So that** I don't need to manually monitor for failures and trigger recovery
+**As a** Gup application developer **I want** GPU device loss to be detected
+automatically **So that** I don't need to manually monitor for failures and
+trigger recovery
 
 ## Acceptance Criteria
 

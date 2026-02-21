@@ -4,20 +4,21 @@
 
 ## Story Overview
 
-**Title**: Recovery Metrics and Analytics
-**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API
-**Priority**: Low
-**Story Points**: 3
+**Title**: Recovery Metrics and Analytics **Epic**: Phase 1 Initiative 1 - Core
+GPU Primitives and Selection API **Priority**: Low **Story Points**: 3
 
 ## Context
 
-The error recovery system currently tracks individual recovery attempts but doesn't aggregate metrics over time. Production applications would benefit from analytics showing recovery patterns, success rates by tier, and performance characteristics.
+The error recovery system currently tracks individual recovery attempts but
+doesn't aggregate metrics over time. Production applications would benefit from
+analytics showing recovery patterns, success rates by tier, and performance
+characteristics.
 
 ## User Story
 
-**As a** Gup application developer
-**I want** detailed metrics on recovery attempts and success rates
-**So that** I can monitor GPU stability and optimize recovery configuration
+**As a** Gup application developer **I want** detailed metrics on recovery
+attempts and success rates **So that** I can monitor GPU stability and optimize
+recovery configuration
 
 ## Acceptance Criteria
 

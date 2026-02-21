@@ -80,20 +80,27 @@ impl GupContext {
 
 ### Key Features Implemented
 
-1. **ContextState enum** - Tracks context health through Active, DeviceLost, Recovering, and Failed states
-2. **Device loss detection** - `mark_device_lost()` and `check_device_status()` methods
-3. **Automatic recovery** - `attempt_recovery()` with multi-tier fallback strategy:
+1. **ContextState enum** - Tracks context health through Active, DeviceLost,
+   Recovering, and Failed states
+2. **Device loss detection** - `mark_device_lost()` and `check_device_status()`
+   methods
+3. **Automatic recovery** - `attempt_recovery()` with multi-tier fallback
+   strategy:
    - First tries full features
    - Falls back to reduced features if configured
    - Falls back to software rendering if enabled
-4. **Recovery callbacks** - Notify application of state changes via `set_recovery_callback()`
-5. **Recovery attempt tracking** - `RecoveryAttemptResult` records success, duration, and errors
-6. **Resource pool recreation** - Buffer and texture pools automatically recreated after recovery
+4. **Recovery callbacks** - Notify application of state changes via
+   `set_recovery_callback()`
+5. **Recovery attempt tracking** - `RecoveryAttemptResult` records success,
+   duration, and errors
+6. **Resource pool recreation** - Buffer and texture pools automatically
+   recreated after recovery
 7. **Graceful degradation options**:
    - `allow_software_fallback` - Enable software rendering fallback
    - `reduced_features` - Alternative feature set for limited GPUs
    - `reduced_limits` - Alternative limits for limited GPUs
-8. **Informative error messages** - Shows all attempted recovery paths when all fail
+8. **Informative error messages** - Shows all attempted recovery paths when all
+   fail
 
 ### Test Coverage
 
@@ -114,56 +121,83 @@ All tests pass with 100% success rate.
 ### Key Technical Learnings
 
 #### GPU Device Lifecycle Management
-- **Challenge**: wgpu doesn't provide explicit device loss detection APIs - need to handle errors during operations
-- **Solution**: Implemented state machine (Active/DeviceLost/Recovering/Failed) with manual state transitions
-- **Pattern**: Applications must call `mark_device_lost()` when operations fail to trigger recovery
-- **Future**: Could enhance with automatic detection by wrapping queue operations
+
+- **Challenge**: wgpu doesn't provide explicit device loss detection APIs - need
+  to handle errors during operations
+- **Solution**: Implemented state machine (Active/DeviceLost/Recovering/Failed)
+  with manual state transitions
+- **Pattern**: Applications must call `mark_device_lost()` when operations fail
+  to trigger recovery
+- **Future**: Could enhance with automatic detection by wrapping queue
+  operations
 
 #### Multi-Tier Recovery Strategy
+
 - **Challenge**: Recovery should try multiple strategies before giving up
-- **Solution**: Three-tier fallback: full features → reduced features → software rendering
-- **Pattern**: Each tier uses `try_create_device_with_features()` with different configurations
+- **Solution**: Three-tier fallback: full features → reduced features → software
+  rendering
+- **Pattern**: Each tier uses `try_create_device_with_features()` with different
+  configurations
 - **Trade-off**: More complex recovery logic, but maximizes chance of success
 - **Future**: Could add metrics to track which tier succeeded most often
 
 #### State Preservation During Recovery
+
 - **Challenge**: Surfaces require original window handles which aren't stored
-- **Solution**: Clear surfaces and let application re-add them after recovery callback
+- **Solution**: Clear surfaces and let application re-add them after recovery
+  callback
 - **Pattern**: Recovery callback notifies app to reconfigure surfaces
-- **Trade-off**: Application must handle surface recreation, but avoids storing window handles
-- **Future**: Could cache surface configurations (size, format) for faster recreation
+- **Trade-off**: Application must handle surface recreation, but avoids storing
+  window handles
+- **Future**: Could cache surface configurations (size, format) for faster
+  recreation
 
 ### Architectural Decisions
 
 #### Async Recovery
-- **Decision**: Made `attempt_recovery()` async despite potential for synchronous impl
-- **Reasoning**: wgpu device creation is async; keeping it consistent with initialization
+
+- **Decision**: Made `attempt_recovery()` async despite potential for
+  synchronous impl
+- **Reasoning**: wgpu device creation is async; keeping it consistent with
+  initialization
 - **Trade-off**: Requires async context to call, but matches wgpu's async nature
 - **Future**: Enables potential for timeout-based recovery attempts
 
 #### Cloning Options for Storage
+
 - **Decision**: Clone GupOptions when storing for recovery
-- **Reasoning**: Limits doesn't implement Copy, and we need to store for future device creation
+- **Reasoning**: Limits doesn't implement Copy, and we need to store for future
+  device creation
 - **Trade-off**: Small memory overhead, but necessary for recovery
 - **Future**: Could optimize by storing only essential recovery data
 
 #### Callback-Based Notification
+
 - **Decision**: Use callback pattern for state change notifications
-- **Reasoning**: Allows application to respond to recovery events without polling
-- **Trade-off**: Requires managing callback lifetime, but provides immediate notification
-- **Future**: Could add event stream/channel option for more flexible notification
+- **Reasoning**: Allows application to respond to recovery events without
+  polling
+- **Trade-off**: Requires managing callback lifetime, but provides immediate
+  notification
+- **Future**: Could add event stream/channel option for more flexible
+  notification
 
 ### Development Workflow Insights
 
-- **Testing GPU recovery**: Can't actually trigger real device loss in tests, so rely on manual state transitions
-- **Multi-stage implementation**: Broke work into device loss detection, recovery, then graceful degradation - made progress visible
-- **Test-first approach**: Wrote tests alongside implementation to verify each capability
-- **Incremental commits**: Two commits (detection+recovery, then degradation) made review easier
+- **Testing GPU recovery**: Can't actually trigger real device loss in tests, so
+  rely on manual state transitions
+- **Multi-stage implementation**: Broke work into device loss detection,
+  recovery, then graceful degradation - made progress visible
+- **Test-first approach**: Wrote tests alongside implementation to verify each
+  capability
+- **Incremental commits**: Two commits (detection+recovery, then degradation)
+  made review easier
 
 ### Performance Characteristics
 
-- **Recovery time**: Tests show recovery completes in <300ms on test machine, well under 2-second requirement
-- **Memory impact**: Minimal - only stores options (few KB) and last recovery result
+- **Recovery time**: Tests show recovery completes in <300ms on test machine,
+  well under 2-second requirement
+- **Memory impact**: Minimal - only stores options (few KB) and last recovery
+  result
 - **CPU overhead**: Negligible when not recovering; recovery is rare event
 - **No runtime overhead**: State checks are simple enum comparisons
 
@@ -212,5 +246,6 @@ All tests pass with 100% success rate.
 1. **State machines are powerful**: Made complex recovery logic manageable
 2. **Multi-tier fallback is valuable**: Gives users best chance of success
 3. **Callback patterns work well**: Simple and effective for notifications
-4. **Test GPU behavior carefully**: Can't fully test device loss, document limitations
+4. **Test GPU behavior carefully**: Can't fully test device loss, document
+   limitations
 5. **Keep options cloneable**: Makes storing configuration easier

@@ -4,20 +4,21 @@
 
 ## Story Overview
 
-**Title**: Surface Configuration Caching
-**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API
-**Priority**: Low
-**Story Points**: 2
+**Title**: Surface Configuration Caching **Epic**: Phase 1 Initiative 1 - Core
+GPU Primitives and Selection API **Priority**: Low **Story Points**: 2
 
 ## Context
 
-After device recovery, surfaces must be recreated by the application. We currently don't cache surface configurations (size, format, scale factor) which forces applications to track and restore these settings. Caching configurations would enable automatic surface recreation with the same settings.
+After device recovery, surfaces must be recreated by the application. We
+currently don't cache surface configurations (size, format, scale factor) which
+forces applications to track and restore these settings. Caching configurations
+would enable automatic surface recreation with the same settings.
 
 ## User Story
 
-**As a** Gup application developer
-**I want** surface configurations to be preserved during recovery
-**So that** surfaces are automatically restored to their previous settings
+**As a** Gup application developer **I want** surface configurations to be
+preserved during recovery **So that** surfaces are automatically restored to
+their previous settings
 
 ## Acceptance Criteria
 

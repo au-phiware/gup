@@ -36,7 +36,9 @@ impl gup::InteractionData for TestData {
 
 /// Create test render context for GPU operations using safe test utilities
 async fn get_test_context() -> Arc<RenderContext> {
-    let guard = create_test_context().await.expect("Failed to create test context");
+    let guard = create_test_context()
+        .await
+        .expect("Failed to create test context");
     guard.clone_context()
 }
 
