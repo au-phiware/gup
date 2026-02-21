@@ -1,5 +1,8 @@
 # GUP-044: GPU Test Resource Management
 
+**Status**: 🚧 In Progress  
+**Started**: 2025-01-21
+
 ## Story
 
 **As a** developer running tests  
