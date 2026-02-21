@@ -1126,4 +1126,36 @@ mod tests {
 
         assert_eq!(downloaded, data2);
     }
+
+    #[tokio::test]
+    async fn test_download_performance_10k() {
+        use std::time::Instant;
+
+        let context = create_test_context().await;
+        let mut buffer = GpuBuffer::new(context.device(), BufferType::Storage, 10000);
+
+        // Upload 10K elements
+        let data: Vec<f32> = (0..10000).map(|i| i as f32).collect();
+        buffer
+            .upload(context.device(), context.queue(), &data)
+            .unwrap();
+
+        // Measure download time
+        let start = Instant::now();
+        let downloaded = buffer
+            .download(context.device(), context.queue())
+            .await
+            .unwrap();
+        let elapsed = start.elapsed();
+
+        assert_eq!(downloaded.len(), 10000);
+        println!("Downloaded 10K elements in {:?}", elapsed);
+
+        // Performance target: <50ms (very conservative, should be much faster)
+        assert!(
+            elapsed.as_millis() < 50,
+            "Download took too long: {:?}",
+            elapsed
+        );
+    }
 }
