@@ -453,6 +453,14 @@ impl<T, M: Mark> Selection<T, M> {
         &self.data
     }
 
+    /// Get a reference to the cached attribute values
+    ///
+    /// This returns the attribute values that have been computed from the data.
+    /// If attributes haven't been computed yet, this will return an empty slice.
+    pub fn cached_attributes(&self) -> &[M::AttributeValue] {
+        &self.cached_attributes
+    }
+
     /// Update the data in this selection
     pub fn set_data(&mut self, data: Vec<T>) {
         self.data = data;
