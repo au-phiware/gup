@@ -7,6 +7,7 @@
 //! for use with the DOM overlay positioning system.
 
 use crate::accessibility::position_sync::GpuPosition;
+use crate::mark::Mark;
 use crate::mark::circle::CircleVertex;
 use crate::mark::line::LineVertex;
 use crate::mark::rectangle::RectangleVertex;
