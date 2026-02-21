@@ -843,7 +843,7 @@ support
 
 ### GUP-117: Web Accessibility DOM Overlay
 
-**Status**: 🚧 In Progress  
+**Status**: ✅ Complete  
 **Priority**: High  
 **Story Points**: 5  
 **Key Need**: DOM overlay with keyboard navigation, touch support, and focus
@@ -853,7 +853,7 @@ management for web platform
 
 ---
 
-_Last Updated: After completion of GUP-112 (Platform-Specific Accessibility
-Integration) - 2025-01-24_  
-_Next Priority Stories: GUP-117 (Web DOM Overlay), GUP-111 (Automatic ARIA
-Generation), GUP-113 (Pattern Rendering)_ (Automatic ARIA Generation)\_
+_Last Updated: After completion of GUP-117 (Web Accessibility DOM Overlay) -
+2025-01-24_  
+_Next Priority Stories: GUP-111 (Automatic ARIA Generation), GUP-113 (Pattern
+Rendering), GUP-114 (macOS NSAccessibility)_
