@@ -914,9 +914,35 @@ Screen Reader Tests), GUP-111 (Automatic ARIA Generation)_
 
 ---
 
-## Recent Additions (Post GUP-031)
+## Recent Additions (Post GUP-128)
 
-The following stories were created based on learnings from implementing GUP-031:
+The following stories were created based on learnings from implementing GUP-128:
+
+### GUP-129: GPU Interaction Debug Visualization Tool
+
+**Status**: 💡 New  
+**Priority**: Medium  
+**Story Points**: 8  
+**Key Need**: Visual debugging tool for GPU interaction data (elements, queries, results)  
+**Dependencies**: GUP-128 ✅  
+**Impact**: Faster GPU debugging for future issues  
+**Created**: 2024-02-22 during GUP-128 retrospective
+
+### GUP-130: Mark Type ID Proc Macro
+
+**Status**: 💡 New  
+**Priority**: Low  
+**Story Points**: 5  
+**Key Need**: Replace fragile type name matching with compile-time stable mark type IDs  
+**Dependencies**: GUP-128 ✅  
+**Impact**: More robust mark type ID system, resistant to refactoring  
+**Created**: 2024-02-22 during GUP-128 retrospective
+
+---
+
+## Earlier Additions (Post GUP-031)
+
+The following story was created from GUP-031 and has been completed:
 
 ### GUP-128: Debug GPU Hit Test Element Detection
 
