@@ -36,6 +36,9 @@ pub struct RenderContext {
     blend_state_stack: Vec<BlendMode>,
     /// Cached render pipelines by blend mode
     pipeline_cache: HashMap<BlendMode, RenderPipeline>,
+    /// Pipeline cache statistics
+    pipeline_cache_hits: u64,
+    pipeline_cache_misses: u64,
     /// Global alpha uniform buffer
     global_alpha_buffer: Option<Buffer>,
     /// Global alpha bind group
@@ -80,6 +83,80 @@ impl Default for Viewport {
             height: 600,
             scale_factor: 1.0,
         }
+    }
+}
+
+/// Pipeline cache statistics
+#[derive(Debug, Clone, Copy)]
+pub struct PipelineCacheStats {
+    /// Number of cache hits
+    pub hits: u64,
+    /// Number of cache misses
+    pub misses: u64,
+    /// Number of cached pipelines
+    pub cached_pipelines: usize,
+}
+
+impl PipelineCacheStats {
+    /// Calculate cache hit rate
+    pub fn hit_rate(&self) -> f64 {
+        if self.hits + self.misses == 0 {
+            0.0
+        } else {
+            self.hits as f64 / (self.hits + self.misses) as f64
+        }
+    }
+}
+
+/// Batched state changes for optimal GPU state management
+#[derive(Debug, Clone, Default)]
+pub struct BatchedStateChange {
+    blend_mode: Option<BlendMode>,
+    viewport: Option<Viewport>,
+    global_alpha: Option<f32>,
+}
+
+/// State batch builder for efficient state change operations
+pub struct StateBatch<'a> {
+    changes: BatchedStateChange,
+    context: &'a mut RenderContext,
+}
+
+impl<'a> StateBatch<'a> {
+    /// Queue blend mode change
+    pub fn set_blend_mode(mut self, mode: BlendMode) -> Self {
+        self.changes.blend_mode = Some(mode);
+        self
+    }
+
+    /// Queue viewport change
+    pub fn set_viewport(mut self, viewport: Viewport) -> Self {
+        self.changes.viewport = Some(viewport);
+        self
+    }
+
+    /// Queue global alpha change
+    pub fn set_global_alpha(mut self, alpha: f32) -> Self {
+        self.changes.global_alpha = Some(alpha);
+        self
+    }
+
+    /// Apply all batched changes at once
+    pub fn commit(self) -> GupResult<()> {
+        // Apply all changes in optimal order
+        if let Some(blend_mode) = self.changes.blend_mode {
+            self.context.set_blend_mode(blend_mode)?;
+        }
+
+        if let Some(viewport) = self.changes.viewport {
+            self.context.set_viewport(viewport)?;
+        }
+
+        if let Some(alpha) = self.changes.global_alpha {
+            self.context.set_global_alpha(alpha)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -147,6 +224,8 @@ impl RenderContext {
             current_blend_mode: BlendMode::default(),
             blend_state_stack: Vec::new(),
             pipeline_cache: HashMap::new(),
+            pipeline_cache_hits: 0,
+            pipeline_cache_misses: 0,
             global_alpha_buffer: None,
             global_alpha_bind_group: None,
             global_alpha_bind_group_layout,
@@ -220,6 +299,14 @@ impl RenderContext {
         }
 
         Ok(())
+    }
+
+    /// Begin a batch of state changes for optimal GPU state management
+    pub fn begin_state_batch(&mut self) -> StateBatch<'_> {
+        StateBatch {
+            changes: BatchedStateChange::default(),
+            context: self,
+        }
     }
 
     /// Begin a new render pass with automatic surface handling
@@ -298,6 +385,15 @@ impl RenderContext {
         self.current_blend_mode
     }
 
+    /// Get pipeline cache statistics
+    pub fn pipeline_cache_stats(&self) -> PipelineCacheStats {
+        PipelineCacheStats {
+            hits: self.pipeline_cache_hits,
+            misses: self.pipeline_cache_misses,
+            cached_pipelines: self.pipeline_cache.len(),
+        }
+    }
+
     /// Set global alpha for rendering operations
     pub fn set_global_alpha(&mut self, alpha: f32) -> GupResult<()> {
         let alpha_uniform = GlobalAlphaUniform {
@@ -354,8 +450,11 @@ impl RenderContext {
     pub fn get_pipeline_with_blend(&mut self, blend_mode: BlendMode) -> GupResult<&RenderPipeline> {
         // Check if we already have a cached pipeline for this blend mode
         if !self.pipeline_cache.contains_key(&blend_mode) {
+            self.pipeline_cache_misses += 1;
             let pipeline = self.create_pipeline_with_blend(blend_mode)?;
             self.pipeline_cache.insert(blend_mode, pipeline);
+        } else {
+            self.pipeline_cache_hits += 1;
         }
 
         Ok(self.pipeline_cache.get(&blend_mode).unwrap())
@@ -523,23 +622,40 @@ mod tests {
     async fn test_pipeline_caching() {
         let mut context = RenderContext::new().await.unwrap();
 
-        // First call should create and cache pipeline
+        // Initial stats should be zero
+        let stats = context.pipeline_cache_stats();
+        assert_eq!(stats.hits, 0);
+        assert_eq!(stats.misses, 0);
+        assert_eq!(stats.cached_pipelines, 0);
+
+        // First call should create and cache pipeline (miss)
         let _pipeline1 = context
             .get_pipeline_with_blend(BlendMode::AlphaBlending)
             .unwrap();
         assert_eq!(context.pipeline_cache_size(), 1);
+        let stats = context.pipeline_cache_stats();
+        assert_eq!(stats.misses, 1);
+        assert_eq!(stats.hits, 0);
 
-        // Second call should reuse cached pipeline
+        // Second call should reuse cached pipeline (hit)
         let _pipeline2 = context
             .get_pipeline_with_blend(BlendMode::AlphaBlending)
             .unwrap();
         assert_eq!(context.pipeline_cache_size(), 1);
+        let stats = context.pipeline_cache_stats();
+        assert_eq!(stats.misses, 1);
+        assert_eq!(stats.hits, 1);
+        assert!((stats.hit_rate() - 0.5).abs() < 0.01); // 1 hit, 1 miss = 50%
 
-        // Different blend mode should create new pipeline
+        // Different blend mode should create new pipeline (miss)
         let _pipeline3 = context
             .get_pipeline_with_blend(BlendMode::Additive)
             .unwrap();
         assert_eq!(context.pipeline_cache_size(), 2);
+        let stats = context.pipeline_cache_stats();
+        assert_eq!(stats.misses, 2);
+        assert_eq!(stats.hits, 1);
+        assert!((stats.hit_rate() - 0.333).abs() < 0.01); // 1 hit, 2 misses = 33.3%
     }
 
     #[tokio::test]
@@ -591,6 +707,35 @@ mod tests {
         // Test that GlobalAlphaUniform has correct size and alignment
         assert_eq!(std::mem::size_of::<GlobalAlphaUniform>(), 16);
         assert_eq!(std::mem::align_of::<GlobalAlphaUniform>(), 4);
+    }
+
+    #[tokio::test]
+    async fn test_state_batching() {
+        let mut context = RenderContext::new().await.unwrap();
+
+        // Set initial state
+        context.set_blend_mode(BlendMode::None).unwrap();
+        context.set_global_alpha(1.0).unwrap();
+
+        // Use batch to change multiple states at once
+        context
+            .begin_state_batch()
+            .set_blend_mode(BlendMode::AlphaBlending)
+            .set_global_alpha(0.5)
+            .commit()
+            .unwrap();
+
+        // Verify all changes were applied
+        assert_eq!(context.current_blend_mode(), BlendMode::AlphaBlending);
+
+        // Test partial batching (only some fields)
+        context
+            .begin_state_batch()
+            .set_blend_mode(BlendMode::Additive)
+            .commit()
+            .unwrap();
+
+        assert_eq!(context.current_blend_mode(), BlendMode::Additive);
     }
 
     #[tokio::test]

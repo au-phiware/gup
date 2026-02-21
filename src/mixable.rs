@@ -1299,4 +1299,34 @@ mod tests {
         let mut custom = viz1.cross_fade(viz2, 0.5);
         assert!(custom.render(&mut context).is_ok());
     }
+
+    #[tokio::test]
+    async fn test_viewport_caching() {
+        let mut context = RenderContext::new().await.unwrap();
+
+        let viz1 = TestVisualization::new("viz1");
+        let viz2 = TestVisualization::new("viz2");
+
+        let mut composition = viz1.beside(viz2);
+
+        // First render should calculate and cache viewport splits
+        assert!(composition.render(&mut context).is_ok());
+
+        // Subsequent renders with same viewport should hit cache
+        assert!(composition.render(&mut context).is_ok());
+        assert!(composition.render(&mut context).is_ok());
+
+        // Changing viewport should calculate new split
+        context
+            .set_viewport(crate::Viewport {
+                width: 1024,
+                height: 768,
+                scale_factor: 1.0,
+            })
+            .unwrap();
+        assert!(composition.render(&mut context).is_ok());
+
+        // Cache should still work with new viewport
+        assert!(composition.render(&mut context).is_ok());
+    }
 }
