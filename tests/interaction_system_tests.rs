@@ -10,6 +10,7 @@ use gup::Circle;
 use gup::RenderContext;
 use gup::interaction::{InteractionEvent, InteractionSystem, Rect, Renderable, Vec2};
 use gup::selection::Selection;
+use gup::test_utils::create_test_context;
 use std::sync::Arc;
 
 /// Test data structure for interaction testing
@@ -33,13 +34,10 @@ impl gup::InteractionData for TestData {
     }
 }
 
-/// Create test render context for GPU operations
-async fn create_test_context() -> Arc<RenderContext> {
-    Arc::new(
-        RenderContext::new()
-            .await
-            .expect("Failed to create test context"),
-    )
+/// Create test render context for GPU operations using safe test utilities
+async fn get_test_context() -> Arc<RenderContext> {
+    let guard = create_test_context().await.expect("Failed to create test context");
+    guard.clone_context()
 }
 
 /// Create test selection with known positions for accuracy testing
@@ -59,7 +57,7 @@ async fn create_test_selection(
 /// Basic system creation and initialization tests
 #[tokio::test]
 async fn test_interaction_system_creation() {
-    let context = create_test_context().await;
+    let context = get_test_context().await;
     let interaction_system = InteractionSystem::new(&context).await;
 
     assert!(
@@ -77,7 +75,7 @@ async fn test_interaction_system_creation() {
 /// Test point query accuracy with known element positions
 #[tokio::test]
 async fn test_point_query_accuracy() {
-    let context = create_test_context().await;
+    let context = get_test_context().await;
     let mut interaction_system = InteractionSystem::new(&context).await.unwrap();
 
     // Create selection with precise positions
@@ -111,7 +109,7 @@ async fn test_point_query_accuracy() {
 /// Test that queries miss at positions between elements
 #[tokio::test]
 async fn test_point_query_misses() {
-    let context = create_test_context().await;
+    let context = get_test_context().await;
     let mut interaction_system = InteractionSystem::new(&context).await.unwrap();
 
     // Create selection with elements at known positions
@@ -146,7 +144,7 @@ async fn test_point_query_misses() {
 /// Test region query functionality
 #[tokio::test]
 async fn test_region_query() {
-    let context = create_test_context().await;
+    let context = get_test_context().await;
     let mut interaction_system = InteractionSystem::new(&context).await.unwrap();
 
     // Create grid of elements
@@ -188,7 +186,7 @@ async fn test_region_query() {
 /// Test performance requirements: <1ms for point queries on large datasets
 #[tokio::test]
 async fn test_point_query_performance() {
-    let context = create_test_context().await;
+    let context = get_test_context().await;
     let mut interaction_system = InteractionSystem::new(&context).await.unwrap();
 
     // Create large dataset (10K points for reasonable test performance)
@@ -231,7 +229,7 @@ async fn test_point_query_performance() {
 /// Test region query performance with large datasets
 #[tokio::test]
 async fn test_region_query_performance() {
-    let context = create_test_context().await;
+    let context = get_test_context().await;
     let mut interaction_system = InteractionSystem::new(&context).await.unwrap();
 
     // Create large dataset
@@ -271,7 +269,7 @@ async fn test_region_query_performance() {
 /// Test multiple concurrent queries
 #[tokio::test]
 async fn test_multiple_queries() {
-    let context = create_test_context().await;
+    let context = get_test_context().await;
     let mut interaction_system = InteractionSystem::new(&context).await.unwrap();
 
     // Create test selection
@@ -311,7 +309,7 @@ async fn test_multiple_queries() {
 /// Test event handler registration and processing
 #[tokio::test]
 async fn test_event_handler_integration() {
-    let context = create_test_context().await;
+    let context = get_test_context().await;
     let mut interaction_system = InteractionSystem::new(&context).await.unwrap();
 
     // Test event handler registration
@@ -342,7 +340,7 @@ async fn test_event_handler_integration() {
 /// Test different mark types (Circle, Rectangle, Line)
 #[tokio::test]
 async fn test_different_mark_types() {
-    let context = create_test_context().await;
+    let context = get_test_context().await;
     let mut interaction_system = InteractionSystem::new(&context).await.unwrap();
 
     // Create selections with different mark types
@@ -367,7 +365,7 @@ async fn test_different_mark_types() {
 /// Test edge cases and error conditions
 #[tokio::test]
 async fn test_edge_cases() {
-    let context = create_test_context().await;
+    let context = get_test_context().await;
     let mut interaction_system = InteractionSystem::new(&context).await.unwrap();
 
     // Test empty selection
@@ -394,7 +392,7 @@ async fn test_edge_cases() {
 /// Test query statistics accuracy
 #[tokio::test]
 async fn test_query_statistics() {
-    let context = create_test_context().await;
+    let context = get_test_context().await;
     let mut interaction_system = InteractionSystem::new(&context).await.unwrap();
 
     // Reset stats to start clean
@@ -424,7 +422,7 @@ async fn test_query_statistics() {
 /// Integration test with Selection system
 #[tokio::test]
 async fn test_selection_integration() {
-    let context = create_test_context().await;
+    let context = get_test_context().await;
     let mut selection = create_test_selection(Arc::clone(&context), vec![(25.0, 25.0)]).await;
 
     // Test that Selection implements Renderable
@@ -448,7 +446,7 @@ async fn test_selection_integration() {
 #[tokio::test]
 #[ignore] // Ignore by default due to long runtime
 async fn test_large_dataset_stress() {
-    let context = create_test_context().await;
+    let context = get_test_context().await;
     let mut interaction_system = InteractionSystem::new(&context).await.unwrap();
 
     // Create very large dataset (100K points)

@@ -51,6 +51,7 @@ pub mod scale;
 pub mod selection;
 pub mod shader_function;
 pub mod shader_pipeline;
+pub mod test_utils;
 pub mod text;
 pub mod tick_generator;
 // Export accessibility system components
