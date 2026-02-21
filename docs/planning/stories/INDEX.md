@@ -892,6 +892,15 @@ screen reader access
 **Impact**: Validates accessibility implementation, certifies WCAG compliance  
 **Note**: Requires Windows (NVDA/JAWS), macOS (VoiceOver), optionally iOS
 
+### GUP-127: Focus Elements for Data Points
+
+**Status**: 🚧 In Progress  
+**Priority**: High  
+**Story Points**: 5  
+**Key Need**: Enable keyboard navigation of individual data points by creating focusable elements for marks  
+**Dependencies**: GUP-016 ✅, GUP-111 ✅  
+**Impact**: Complete keyboard accessibility, WCAG 2.1 AA compliance (SC 2.1.1: Keyboard)
+
 ---
 
 _Last Updated: After completion of GUP-118 (Visualization Position
