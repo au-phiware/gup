@@ -11,9 +11,7 @@
 //! cargo run --example position_sync_demo
 //! ```
 
-use gup::accessibility::{
-    GpuPosition, ViewportTransform,
-};
+use gup::accessibility::{GpuPosition, ViewportTransform};
 // Commented out: These are not yet exported or broken:
 // AccessibilitySystem, AriaNode, AriaRole, NodeId,
 // extract_positions_from_selection, PositionExtractor, ScreenPosition
@@ -31,7 +29,7 @@ fn main() {
     // that don't exist yet (create_vertex, extract_positions_from_selection)
     // demo_position_extraction();
     // demo_viewport_updates();
-    
+
     println!("\nNote: Demo 2 and 3 are disabled pending API implementation.");
 }
 

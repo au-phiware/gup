@@ -124,10 +124,11 @@ with real assistive technologies.
 ### Orca Setup (Linux)
 
 1. **Install Orca**:
+
    ```bash
    # Debian/Ubuntu
    sudo apt install orca
-   
+
    # Fedora
    sudo dnf install orca
    ```
@@ -164,6 +165,7 @@ with real assistive technologies.
    - [ ] Focus indicators are visible (for sighted users)
 
 **Expected Announcements** (NVDA/JAWS):
+
 ```
 "Sample Accessible Chart, region"
 "Data Point 1: 10, clickable"
@@ -173,6 +175,7 @@ with real assistive technologies.
 ```
 
 **Expected Announcements** (VoiceOver):
+
 ```
 "Sample Accessible Chart, region"
 "Data Point 1: 10, button"
@@ -181,6 +184,7 @@ with real assistive technologies.
 ```
 
 **Notes**:
+
 - JAWS may announce more context
 - VoiceOver uses different terminology ("button" vs "clickable")
 - Orca follows NVDA patterns generally
@@ -231,6 +235,7 @@ with real assistive technologies.
    - [ ] Announcements are not repetitive or verbose
 
 **Expected Announcements**:
+
 ```
 "Data Point 1: 10, clickable"
 [Move to next]
@@ -238,6 +243,7 @@ with real assistive technologies.
 ```
 
 **Anti-patterns** (what to avoid):
+
 - "Data Point Data Point 1 10 clickable clickable" (repetitive)
 - "10" (no context)
 - Long aria-descriptions that obscure the value
@@ -258,12 +264,14 @@ with real assistive technologies.
    - [ ] User can continue navigating after interaction
 
 **Expected Behavior**:
+
 - Press Enter on "Data Point 1: 10"
 - Hear: "Selected Data Point 1" (via live region)
 - Visual: Data point changes appearance
 - Screen reader: Announces selection state
 
 **Test Keyboard Shortcuts**:
+
 - [ ] Tab: Next element (forward)
 - [ ] Shift+Tab: Previous element (backward)
 - [ ] Arrow keys: Navigate within chart (if implemented)
@@ -287,15 +295,19 @@ with real assistive technologies.
    - [ ] Announcement timing is appropriate (not too fast/slow)
 
 **Expected Announcements**:
+
 ```
 "Data updated: 5 points"
 ```
+
 or
+
 ```
 "Filtered to: 10 of 50 points"
 ```
 
 **Test Cases**:
+
 - [ ] Add data points
 - [ ] Remove data points
 - [ ] Update existing point values
@@ -319,6 +331,7 @@ or
    - [ ] All functions work (selection, activation, etc.)
 
 **Common Issues to Check**:
+
 - Elements that only respond to mouse hover
 - Custom controls without keyboard handlers
 - Focus lost after interaction
@@ -341,6 +354,7 @@ or
    - [ ] Swipe gestures work for navigation
 
 **Mobile-Specific Tests**:
+
 - [ ] Portrait orientation
 - [ ] Landscape orientation
 - [ ] Different screen sizes (iPhone, iPad)
@@ -355,8 +369,8 @@ For each screen reader tested, record results using this template:
 ```markdown
 ## [Screen Reader Name] [Version] - [Date]
 
-**Tester**: [Your Name]
-**Environment**:
+**Tester**: [Your Name] **Environment**:
+
 - OS: [Windows 10/macOS 14.2/etc.]
 - Browser: [Chrome 120/Safari 17/etc.]
 - Example: [web_accessibility_demo]
@@ -371,10 +385,12 @@ For each screen reader tested, record results using this template:
 ### Scenario Results
 
 #### Scenario 1: Basic Navigation
+
 - **Status**: ✅ Pass / ⚠️ Partial / ❌ Fail
 - **Notes**: [Any observations, issues, or exceptional behavior]
 
 #### Scenario 2: Screen Reader Navigation
+
 - **Status**: ✅ Pass / ⚠️ Partial / ❌ Fail
 - **Notes**: [...]
 
@@ -383,6 +399,7 @@ For each screen reader tested, record results using this template:
 ### Issues Found
 
 #### Issue #1: [Title]
+
 - **Severity**: Critical / Major / Minor
 - **Scenario**: [Which scenario]
 - **Description**: [What happened]
@@ -398,18 +415,21 @@ For each screen reader tested, record results using this template:
 ### Issue Severity Levels
 
 **Critical**:
+
 - Functionality completely inaccessible
 - Screen reader crashes or freezes
 - Navigation completely broken
 - No announcements for key elements
 
 **Major**:
+
 - Functionality difficult to use
 - Confusing or missing announcements
 - Inconsistent behavior
 - Keyboard trap in some scenarios
 
 **Minor**:
+
 - Suboptimal announcements (verbose, repetitive)
 - Visual focus indicator could be improved
 - Inconsistent terminology
@@ -419,15 +439,16 @@ For each screen reader tested, record results using this template:
 
 Document compatibility with this matrix format:
 
-| Feature | NVDA | JAWS | VoiceOver (macOS) | VoiceOver (iOS) | Orca |
-|---------|------|------|-------------------|-----------------|------|
-| Basic Navigation | ✅ | ✅ | ✅ | ⚠️ | ❓ |
-| ARIA Announcements | ✅ | ✅ | ⚠️ | ⚠️ | ❓ |
-| Keyboard Shortcuts | ✅ | ✅ | ✅ | N/A | ❓ |
-| Live Regions | ⚠️ | ✅ | ⚠️ | ⚠️ | ❓ |
-| Touch Exploration | N/A | N/A | N/A | ✅ | N/A |
+| Feature            | NVDA | JAWS | VoiceOver (macOS) | VoiceOver (iOS) | Orca |
+| ------------------ | ---- | ---- | ----------------- | --------------- | ---- |
+| Basic Navigation   | ✅   | ✅   | ✅                | ⚠️              | ❓   |
+| ARIA Announcements | ✅   | ✅   | ⚠️                | ⚠️              | ❓   |
+| Keyboard Shortcuts | ✅   | ✅   | ✅                | N/A             | ❓   |
+| Live Regions       | ⚠️   | ✅   | ⚠️                | ⚠️              | ❓   |
+| Touch Exploration  | N/A  | N/A  | N/A               | ✅              | N/A  |
 
 **Legend**:
+
 - ✅ Fully supported
 - ⚠️ Partially supported (note issues)
 - ❌ Not supported
@@ -438,11 +459,13 @@ Document compatibility with this matrix format:
 
 ### Issue: VoiceOver Announces Button Instead of Data Point
 
-**Symptoms**: VoiceOver on macOS announces data points as "button" even though ARIA role is "datapoint"
+**Symptoms**: VoiceOver on macOS announces data points as "button" even though
+ARIA role is "datapoint"
 
 **Cause**: VoiceOver maps custom ARIA roles to nearest standard role
 
-**Workaround**: Accept this behavior; "button" is semantically correct for interactive elements
+**Workaround**: Accept this behavior; "button" is semantically correct for
+interactive elements
 
 **Status**: Not a bug, expected behavior
 
@@ -452,7 +475,8 @@ Document compatibility with this matrix format:
 
 **Cause**: Live region announcements queue behind current speech
 
-**Workaround**: Use `aria-live="assertive"` for critical updates, `aria-live="polite"` for informational
+**Workaround**: Use `aria-live="assertive"` for critical updates,
+`aria-live="polite"` for informational
 
 **Status**: Known NVDA behavior, working as designed
 
@@ -468,7 +492,8 @@ Document compatibility with this matrix format:
 
 ## Automated Validation
 
-While manual testing is required, use automated tools first to catch obvious issues:
+While manual testing is required, use automated tools first to catch obvious
+issues:
 
 ### axe DevTools
 
@@ -484,8 +509,10 @@ axe http://localhost:8080 --exit
 
 ### WAVE Browser Extension
 
-- Chrome: https://chrome.google.com/webstore/detail/wave-evaluation-tool/jbbplnpkjmmeebjpijfedlgcdilocofh
-- Firefox: https://addons.mozilla.org/en-US/firefox/addon/wave-accessibility-tool/
+- Chrome:
+  https://chrome.google.com/webstore/detail/wave-evaluation-tool/jbbplnpkjmmeebjpijfedlgcdilocofh
+- Firefox:
+  https://addons.mozilla.org/en-US/firefox/addon/wave-accessibility-tool/
 
 ### Lighthouse Accessibility Audit
 
@@ -500,6 +527,7 @@ axe http://localhost:8080 --exit
 ## Best Practices
 
 ### DO:
+
 - ✅ Test with at least 2 different screen readers
 - ✅ Test with keyboard only first
 - ✅ Record audio/video of tests for reference
@@ -509,6 +537,7 @@ axe http://localhost:8080 --exit
 - ✅ Verify fixes with original screen reader
 
 ### DON'T:
+
 - ❌ Rely only on automated tools
 - ❌ Test only in virtual machines (performance issues)
 - ❌ Skip testing after "minor" code changes
@@ -520,10 +549,14 @@ axe http://localhost:8080 --exit
 
 ### Screen Reader Documentation
 
-- **NVDA User Guide**: https://www.nvaccess.org/files/nvda/documentation/userGuide.html
-- **JAWS Documentation**: https://support.freedomscientific.com/Documentation/JAWS
-- **VoiceOver User Guide** (macOS): https://support.apple.com/guide/voiceover/welcome/mac
-- **VoiceOver User Guide** (iOS): https://support.apple.com/guide/iphone/turn-on-and-practice-voiceover-iph3e2e415f/ios
+- **NVDA User Guide**:
+  https://www.nvaccess.org/files/nvda/documentation/userGuide.html
+- **JAWS Documentation**:
+  https://support.freedomscientific.com/Documentation/JAWS
+- **VoiceOver User Guide** (macOS):
+  https://support.apple.com/guide/voiceover/welcome/mac
+- **VoiceOver User Guide** (iOS):
+  https://support.apple.com/guide/iphone/turn-on-and-practice-voiceover-iph3e2e415f/ios
 - **Orca Documentation**: https://help.gnome.org/users/orca/stable/
 
 ### ARIA Best Practices
@@ -534,8 +567,10 @@ axe http://localhost:8080 --exit
 
 ### Testing Resources
 
-- **WebAIM Screen Reader Testing**: https://webaim.org/articles/screenreader_testing/
-- **Deque Screen Reader Testing**: https://www.deque.com/blog/basic-screen-reader-commands-for-accessibility-testing/
+- **WebAIM Screen Reader Testing**:
+  https://webaim.org/articles/screenreader_testing/
+- **Deque Screen Reader Testing**:
+  https://www.deque.com/blog/basic-screen-reader-commands-for-accessibility-testing/
 - **A11y Project**: https://www.a11yproject.com/
 
 ## Reporting Test Results
@@ -550,7 +585,8 @@ After completing tests, update the following files:
    - Document any issues found
    - Include workarounds if available
 
-3. **Story Document**: `docs/planning/stories/GUP-121_Screen_Reader_Manual_Testing.md`
+3. **Story Document**:
+   `docs/planning/stories/GUP-121_Screen_Reader_Manual_Testing.md`
    - Check off acceptance criteria
    - Add Implementation Summary section
    - List which screen readers were tested
@@ -566,5 +602,4 @@ If you discover critical accessibility issues, please:
 
 ---
 
-**Last Updated**: 2025-01-24
-**Version**: 1.0
+**Last Updated**: 2025-01-24 **Version**: 1.0

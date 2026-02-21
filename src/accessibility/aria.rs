@@ -139,6 +139,11 @@ impl AriaTree {
         std::mem::take(&mut self.update_queue)
     }
 
+    /// Get the root node ID of this tree.
+    pub fn get_root_node(&self) -> Option<NodeId> {
+        self.root
+    }
+
     /// Analyze data patterns for description generation.
     pub fn analyze_data_patterns<T>(&self, data: &[T]) -> String {
         let count = data.len();

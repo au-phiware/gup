@@ -878,7 +878,8 @@ from GPU
 **Key Need**: Validate with NVDA, JAWS, and VoiceOver screen readers  
 **Dependencies**: GUP-117 ✅  
 **Impact**: Production certification and WCAG validation  
-**Note**: Documentation and infrastructure complete; requires human testers with screen reader access
+**Note**: Documentation and infrastructure complete; requires human testers with
+screen reader access
 
 ### GUP-122: Manual Screen Reader Testing Execution
 
@@ -892,5 +893,7 @@ from GPU
 
 ---
 
-_Last Updated: After completion of GUP-118 (Visualization Position Synchronization) - 2025-01-24_  
-_Next Priority Stories: GUP-122 (Execute Screen Reader Tests), GUP-111 (Automatic ARIA Generation), GUP-119 (Interactive Event Forwarding)_
+_Last Updated: After completion of GUP-118 (Visualization Position
+Synchronization) - 2025-01-24_  
+_Next Priority Stories: GUP-122 (Execute Screen Reader Tests), GUP-111
+(Automatic ARIA Generation), GUP-119 (Interactive Event Forwarding)_

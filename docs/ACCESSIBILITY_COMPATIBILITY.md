@@ -5,8 +5,7 @@ across different screen readers, browsers, and platforms.
 
 ## Testing Status: In Progress
 
-**Last Updated**: 2025-01-24
-**Test Coverage**: 0% (Manual testing in progress)
+**Last Updated**: 2025-01-24 **Test Coverage**: 0% (Manual testing in progress)
 
 ---
 
@@ -14,56 +13,56 @@ across different screen readers, browsers, and platforms.
 
 ### Core Navigation Features
 
-| Feature                    | NVDA (Win) | JAWS (Win) | VoiceOver (macOS) | VoiceOver (iOS) | Orca (Linux) | Notes |
-|----------------------------|------------|------------|-------------------|-----------------|--------------|-------|
-| Tab Navigation             | ❓         | ❓         | ❓                | ❓              | ❓           |       |
-| Arrow Key Navigation       | ❓         | ❓         | ❓                | ❓              | ❓           |       |
-| Enter/Space Activation     | ❓         | ❓         | ❓                | ❓              | ❓           |       |
-| Escape to Cancel           | ❓         | ❓         | ❓                | ❓              | ❓           |       |
-| Focus Indicators           | ❓         | ❓         | ❓                | ❓              | ❓           | Visual feature |
-| Focus Management           | ❓         | ❓         | ❓                | ❓              | ❓           |       |
+| Feature                | NVDA (Win) | JAWS (Win) | VoiceOver (macOS) | VoiceOver (iOS) | Orca (Linux) | Notes          |
+| ---------------------- | ---------- | ---------- | ----------------- | --------------- | ------------ | -------------- |
+| Tab Navigation         | ❓         | ❓         | ❓                | ❓              | ❓           |                |
+| Arrow Key Navigation   | ❓         | ❓         | ❓                | ❓              | ❓           |                |
+| Enter/Space Activation | ❓         | ❓         | ❓                | ❓              | ❓           |                |
+| Escape to Cancel       | ❓         | ❓         | ❓                | ❓              | ❓           |                |
+| Focus Indicators       | ❓         | ❓         | ❓                | ❓              | ❓           | Visual feature |
+| Focus Management       | ❓         | ❓         | ❓                | ❓              | ❓           |                |
 
 ### ARIA Announcements
 
-| Feature                    | NVDA (Win) | JAWS (Win) | VoiceOver (macOS) | VoiceOver (iOS) | Orca (Linux) | Notes |
-|----------------------------|------------|------------|-------------------|-----------------|--------------|-------|
-| Role Announcements         | ❓         | ❓         | ❓                | ❓              | ❓           |       |
-| Label Announcements        | ❓         | ❓         | ❓                | ❓              | ❓           |       |
-| Description Announcements  | ❓         | ❓         | ❓                | ❓              | ❓           |       |
-| Value Announcements        | ❓         | ❓         | ❓                | ❓              | ❓           |       |
-| State Changes              | ❓         | ❓         | ❓                | ❓              | ❓           |       |
-| Live Regions (Polite)      | ❓         | ❓         | ❓                | ❓              | ❓           |       |
-| Live Regions (Assertive)   | ❓         | ❓         | ❓                | ❓              | ❓           |       |
+| Feature                   | NVDA (Win) | JAWS (Win) | VoiceOver (macOS) | VoiceOver (iOS) | Orca (Linux) | Notes |
+| ------------------------- | ---------- | ---------- | ----------------- | --------------- | ------------ | ----- |
+| Role Announcements        | ❓         | ❓         | ❓                | ❓              | ❓           |       |
+| Label Announcements       | ❓         | ❓         | ❓                | ❓              | ❓           |       |
+| Description Announcements | ❓         | ❓         | ❓                | ❓              | ❓           |       |
+| Value Announcements       | ❓         | ❓         | ❓                | ❓              | ❓           |       |
+| State Changes             | ❓         | ❓         | ❓                | ❓              | ❓           |       |
+| Live Regions (Polite)     | ❓         | ❓         | ❓                | ❓              | ❓           |       |
+| Live Regions (Assertive)  | ❓         | ❓         | ❓                | ❓              | ❓           |       |
 
 ### Screen Reader Navigation
 
-| Feature                    | NVDA (Win) | JAWS (Win) | VoiceOver (macOS) | VoiceOver (iOS) | Orca (Linux) | Notes |
-|----------------------------|------------|------------|-------------------|-----------------|--------------|-------|
-| Heading Navigation (H)     | ❓         | ❓         | VO+Cmd+H          | Rotor           | ❓           |       |
-| Region Navigation (R)      | ❓         | ❓         | VO+Right Arrow    | Rotor           | ❓           |       |
-| Button Navigation (B)      | ❓         | ❓         | VO+Cmd+J          | Rotor           | ❓           |       |
-| Landmark Navigation (D)    | ❓         | ❓         | N/A               | Rotor           | ❓           |       |
-| Forms Mode                 | ❓         | ❓         | N/A               | N/A             | ❓           |       |
+| Feature                 | NVDA (Win) | JAWS (Win) | VoiceOver (macOS) | VoiceOver (iOS) | Orca (Linux) | Notes |
+| ----------------------- | ---------- | ---------- | ----------------- | --------------- | ------------ | ----- |
+| Heading Navigation (H)  | ❓         | ❓         | VO+Cmd+H          | Rotor           | ❓           |       |
+| Region Navigation (R)   | ❓         | ❓         | VO+Right Arrow    | Rotor           | ❓           |       |
+| Button Navigation (B)   | ❓         | ❓         | VO+Cmd+J          | Rotor           | ❓           |       |
+| Landmark Navigation (D) | ❓         | ❓         | N/A               | Rotor           | ❓           |       |
+| Forms Mode              | ❓         | ❓         | N/A               | N/A             | ❓           |       |
 
 ### Touch/Mobile Features
 
-| Feature                    | NVDA (Win) | JAWS (Win) | VoiceOver (macOS) | VoiceOver (iOS) | Orca (Linux) | Notes |
-|----------------------------|------------|------------|-------------------|-----------------|--------------|-------|
-| Touch Exploration          | N/A        | N/A        | N/A               | ❓              | N/A          | iOS only |
-| Touch Activation           | N/A        | N/A        | N/A               | ❓              | N/A          | iOS only |
-| Swipe Navigation           | N/A        | N/A        | N/A               | ❓              | N/A          | iOS only |
-| Rotor Control              | N/A        | N/A        | N/A               | ❓              | N/A          | iOS only |
-| Pinch to Zoom              | N/A        | N/A        | N/A               | ❓              | N/A          | If supported |
+| Feature           | NVDA (Win) | JAWS (Win) | VoiceOver (macOS) | VoiceOver (iOS) | Orca (Linux) | Notes        |
+| ----------------- | ---------- | ---------- | ----------------- | --------------- | ------------ | ------------ |
+| Touch Exploration | N/A        | N/A        | N/A               | ❓              | N/A          | iOS only     |
+| Touch Activation  | N/A        | N/A        | N/A               | ❓              | N/A          | iOS only     |
+| Swipe Navigation  | N/A        | N/A        | N/A               | ❓              | N/A          | iOS only     |
+| Rotor Control     | N/A        | N/A        | N/A               | ❓              | N/A          | iOS only     |
+| Pinch to Zoom     | N/A        | N/A        | N/A               | ❓              | N/A          | If supported |
 
 ### Advanced Features
 
-| Feature                    | NVDA (Win) | JAWS (Win) | VoiceOver (macOS) | VoiceOver (iOS) | Orca (Linux) | Notes |
-|----------------------------|------------|------------|-------------------|-----------------|--------------|-------|
-| Data Table Navigation      | ❓         | ❓         | ❓                | ❓              | ❓           | If applicable |
-| Multi-level Navigation     | ❓         | ❓         | ❓                | ❓              | ❓           |       |
-| Search/Filter              | ❓         | ❓         | ❓                | ❓              | ❓           |       |
-| Keyboard Shortcuts         | ❓         | ❓         | ❓                | N/A             | ❓           |       |
-| Context Menus              | ❓         | ❓         | ❓                | ❓              | ❓           | If implemented |
+| Feature                | NVDA (Win) | JAWS (Win) | VoiceOver (macOS) | VoiceOver (iOS) | Orca (Linux) | Notes          |
+| ---------------------- | ---------- | ---------- | ----------------- | --------------- | ------------ | -------------- |
+| Data Table Navigation  | ❓         | ❓         | ❓                | ❓              | ❓           | If applicable  |
+| Multi-level Navigation | ❓         | ❓         | ❓                | ❓              | ❓           |                |
+| Search/Filter          | ❓         | ❓         | ❓                | ❓              | ❓           |                |
+| Keyboard Shortcuts     | ❓         | ❓         | ❓                | N/A             | ❓           |                |
+| Context Menus          | ❓         | ❓         | ❓                | ❓              | ❓           | If implemented |
 
 ---
 
@@ -71,34 +70,34 @@ across different screen readers, browsers, and platforms.
 
 ### Windows (NVDA + JAWS)
 
-| Browser           | Version Tested | NVDA Status | JAWS Status | Notes |
-|-------------------|----------------|-------------|-------------|-------|
-| Chrome            | ❓             | ❓          | ❓          |       |
-| Firefox           | ❓             | ❓          | ❓          |       |
-| Edge              | ❓             | ❓          | ❓          |       |
-| Opera             | ❓             | ❓          | ❓          | Low priority |
+| Browser | Version Tested | NVDA Status | JAWS Status | Notes        |
+| ------- | -------------- | ----------- | ----------- | ------------ |
+| Chrome  | ❓             | ❓          | ❓          |              |
+| Firefox | ❓             | ❓          | ❓          |              |
+| Edge    | ❓             | ❓          | ❓          |              |
+| Opera   | ❓             | ❓          | ❓          | Low priority |
 
 ### macOS (VoiceOver)
 
-| Browser           | Version Tested | VoiceOver Status | Notes |
-|-------------------|----------------|------------------|-------|
-| Safari            | ❓             | ❓               | Recommended |
-| Chrome            | ❓             | ❓               |       |
-| Firefox           | ❓             | ❓               |       |
+| Browser | Version Tested | VoiceOver Status | Notes       |
+| ------- | -------------- | ---------------- | ----------- |
+| Safari  | ❓             | ❓               | Recommended |
+| Chrome  | ❓             | ❓               |             |
+| Firefox | ❓             | ❓               |             |
 
 ### iOS (VoiceOver)
 
-| Browser           | Version Tested | VoiceOver Status | Notes |
-|-------------------|----------------|------------------|-------|
-| Safari            | ❓             | ❓               | iOS default |
-| Chrome (iOS)      | ❓             | ❓               | Uses WebKit |
+| Browser      | Version Tested | VoiceOver Status | Notes       |
+| ------------ | -------------- | ---------------- | ----------- |
+| Safari       | ❓             | ❓               | iOS default |
+| Chrome (iOS) | ❓             | ❓               | Uses WebKit |
 
 ### Linux (Orca)
 
-| Browser           | Version Tested | Orca Status | Notes |
-|-------------------|----------------|-------------|-------|
-| Firefox           | ❓             | ❓          | Recommended |
-| Chrome/Chromium   | ❓             | ❓          |       |
+| Browser         | Version Tested | Orca Status | Notes       |
+| --------------- | -------------- | ----------- | ----------- |
+| Firefox         | ❓             | ❓          | Recommended |
+| Chrome/Chromium | ❓             | ❓          |             |
 
 ---
 
@@ -107,51 +106,60 @@ across different screen readers, browsers, and platforms.
 ### Windows
 
 **NVDA**:
+
 - Free and open-source
 - Generally most compatible with modern web standards
 - Updates frequently
 - Recommended for initial testing
 
 **JAWS**:
+
 - Commercial (expensive)
 - Industry standard in enterprise
 - More verbose announcements
 - Some proprietary features
 
 **Known Issues**:
+
 - None yet (testing in progress)
 
 ### macOS
 
 **VoiceOver**:
+
 - Built-in, no installation needed
 - Different terminology than Windows screen readers
 - Best with Safari
 - Trackpad gestures require learning
 
 **Known Issues**:
+
 - None yet (testing in progress)
 
 ### iOS
 
 **VoiceOver**:
+
 - Built-in mobile screen reader
 - Touch-based navigation
 - Different interaction model than desktop
 - Requires physical device testing
 
 **Known Issues**:
+
 - None yet (testing in progress)
 
 ### Linux
 
 **Orca**:
+
 - Free and open-source
 - Smaller user base
 - Generally follows NVDA patterns
 - Can be quirky with some web content
 
 **Known Issues**:
+
 - None yet (testing in progress)
 
 ---
@@ -164,7 +172,8 @@ All screen reader tests should be performed against:
 
 1. **web_accessibility_demo**: Basic chart with 5 data points
    - File: `examples/web_accessibility_demo.rs`
-   - Build: `wasm-pack build --target web --out-dir ../pkg/web_accessibility_demo web_accessibility_demo`
+   - Build:
+     `wasm-pack build --target web --out-dir ../pkg/web_accessibility_demo web_accessibility_demo`
    - Serve: `mask serve web_accessibility_demo`
 
 2. **Additional examples** (as implemented):
@@ -177,6 +186,7 @@ All screen reader tests should be performed against:
 Reference: See `docs/SCREEN_READER_TESTING.md` for detailed test scenarios
 
 Core scenarios to test:
+
 1. Basic Navigation
 2. Screen Reader Navigation Commands
 3. Data Exploration
@@ -211,19 +221,16 @@ When updating this matrix with test results, use these severity guidelines:
 ## Testing Priority
 
 **High Priority** (Test First):
+
 1. NVDA + Chrome (Windows) - Most common configuration
 2. VoiceOver + Safari (macOS) - Second most common
 3. JAWS + Chrome (Windows) - Enterprise standard
 4. VoiceOver + Safari (iOS) - Mobile testing
 
-**Medium Priority**:
-5. NVDA + Firefox (Windows)
-6. VoiceOver + Chrome (macOS)
-7. Orca + Firefox (Linux)
+**Medium Priority**: 5. NVDA + Firefox (Windows) 6. VoiceOver + Chrome
+(macOS) 7. Orca + Firefox (Linux)
 
-**Low Priority**:
-8. Other browser combinations
-9. Older screen reader versions
+**Low Priority**: 8. Other browser combinations 9. Older screen reader versions
 
 ---
 
@@ -238,6 +245,7 @@ When completing screen reader tests, update this file:
 5. Increment test coverage percentage
 
 **Example**:
+
 ```markdown
 | Tab Navigation | ✅ | ✅ | ⚠️ | ❓ | ❓ | VoiceOver: Focus ring not visible |
 ```
@@ -246,10 +254,13 @@ When completing screen reader tests, update this file:
 
 ## Related Documents
 
-- **Testing Guide**: `docs/SCREEN_READER_TESTING.md` - Detailed testing instructions
-- **Known Issues**: `docs/ACCESSIBILITY_KNOWN_ISSUES.md` - Issue tracking and workarounds
+- **Testing Guide**: `docs/SCREEN_READER_TESTING.md` - Detailed testing
+  instructions
+- **Known Issues**: `docs/ACCESSIBILITY_KNOWN_ISSUES.md` - Issue tracking and
+  workarounds
 - **ARIA Implementation**: `src/accessibility/` - Source code for ARIA features
-- **Story**: `docs/planning/stories/GUP-121_Screen_Reader_Manual_Testing.md` - This testing initiative
+- **Story**: `docs/planning/stories/GUP-121_Screen_Reader_Manual_Testing.md` -
+  This testing initiative
 
 ---
 
@@ -265,4 +276,5 @@ When completing screen reader tests, update this file:
 
 ---
 
-**Status**: 🚧 Testing in progress - Matrix will be populated as tests are completed
+**Status**: 🚧 Testing in progress - Matrix will be populated as tests are
+completed

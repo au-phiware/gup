@@ -204,6 +204,7 @@ The testing guide includes 7 comprehensive scenarios:
 7. **Touch Exploration** - iOS VoiceOver touch gestures
 
 Each scenario includes:
+
 - Objective
 - Detailed steps
 - Expected announcements (with examples)
@@ -231,6 +232,7 @@ with appropriate equipment:
 - **AC3**: VoiceOver testing on macOS and iOS
 
 These require:
+
 - Windows machine with NVDA (free) or JAWS (commercial license)
 - macOS machine with VoiceOver
 - iOS device with VoiceOver (optional but recommended)
@@ -277,6 +279,7 @@ testing efficiently and thoroughly.
 ### Key Achievement: Production-Ready Testing Infrastructure
 
 Created a comprehensive, production-quality testing suite that:
+
 - Provides step-by-step setup for 5 different screen readers
 - Defines 7 detailed test scenarios with expected announcements
 - Includes automated pre-checks to validate test environment
@@ -291,8 +294,8 @@ without additional guidance.
 
 #### Manual Testing Stories Require Different Approach
 
-- **Challenge**: Story requires manual testing with specialized hardware/software
-  not available in development environment
+- **Challenge**: Story requires manual testing with specialized
+  hardware/software not available in development environment
 - **Solution**: Create comprehensive documentation and automation infrastructure
   that enables others to complete the testing
 - **Pattern**: For manual testing stories:
@@ -374,11 +377,13 @@ across NVDA, JAWS, and VoiceOver platforms. Populate compatibility matrix with
 actual results.
 
 **Requires**:
+
 - Windows machine with NVDA (free) or JAWS (license)
 - macOS machine with VoiceOver
 - iOS device with VoiceOver (optional)
 
 **Deliverables**:
+
 - Completed compatibility matrix
 - Documented issues (if any)
 - Test result summaries for each screen reader
@@ -417,6 +422,7 @@ future testers and showcase accessibility.
 **Story Status**: 🎯 Ready for Manual Testing
 
 **What's Complete**:
+
 - ✅ All documentation (AC4: 100%)
 - ✅ All infrastructure and automation
 - ✅ Test scenarios defined with expected results
@@ -425,6 +431,7 @@ future testers and showcase accessibility.
 - ✅ Automated pre-check validation
 
 **What's Remaining** (requires screen reader access):
+
 - ⏳ AC1: NVDA testing execution
 - ⏳ AC2: JAWS testing execution
 - ⏳ AC3: VoiceOver testing execution

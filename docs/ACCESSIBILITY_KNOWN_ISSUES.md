@@ -3,20 +3,20 @@
 This document tracks known accessibility issues discovered during screen reader
 testing, along with their workarounds and status.
 
-**Last Updated**: 2025-01-24
-**Status**: 🚧 In Progress - Issues will be documented as testing proceeds
+**Last Updated**: 2025-01-24 **Status**: 🚧 In Progress - Issues will be
+documented as testing proceeds
 
 ---
 
 ## Issue Tracking Summary
 
-| Status | Count | Description |
-|--------|-------|-------------|
-| 🔥 Critical | 0 | Core functionality broken |
-| ⚠️ Major | 0 | Significant usability issues |
-| ℹ️ Minor | 0 | Small issues, doesn't block usage |
-| ✅ Resolved | 0 | Fixed in current version |
-| 📋 Planned | 0 | Fix scheduled for future release |
+| Status      | Count | Description                       |
+| ----------- | ----- | --------------------------------- |
+| 🔥 Critical | 0     | Core functionality broken         |
+| ⚠️ Major    | 0     | Significant usability issues      |
+| ℹ️ Minor    | 0     | Small issues, doesn't block usage |
+| ✅ Resolved | 0     | Fixed in current version          |
+| 📋 Planned  | 0     | Fix scheduled for future release  |
 
 ---
 
@@ -181,9 +181,11 @@ These are not bugs but expected behaviors that differ across platforms:
 
 ### VoiceOver Role Announcements
 
-**Behavior**: VoiceOver may announce custom ARIA roles differently than NVDA/JAWS
+**Behavior**: VoiceOver may announce custom ARIA roles differently than
+NVDA/JAWS
 
 **Example**:
+
 - ARIA role: `role="datapoint"`
 - NVDA announces: "Data point"
 - VoiceOver announces: "Button"
@@ -199,6 +201,7 @@ These are not bugs but expected behaviors that differ across platforms:
 **Behavior**: NVDA may queue live region announcements behind current speech
 
 **Example**:
+
 - User is navigating through data points
 - Data updates trigger live region announcement
 - Announcement happens after current item finishes reading
@@ -211,15 +214,18 @@ These are not bugs but expected behaviors that differ across platforms:
 
 ### JAWS Verbosity
 
-**Behavior**: JAWS provides more detailed announcements than other screen readers
+**Behavior**: JAWS provides more detailed announcements than other screen
+readers
 
 **Example**:
+
 - NVDA: "Data point 1: 10, clickable"
 - JAWS: "Data point 1: 10, clickable button, to activate press spacebar"
 
 **Explanation**: JAWS default verbosity setting is higher
 
-**Recommendation**: Don't add extra verbose aria-descriptions; JAWS provides its own help
+**Recommendation**: Don't add extra verbose aria-descriptions; JAWS provides its
+own help
 
 **Impact**: None - JAWS users are accustomed to this verbosity
 
@@ -231,7 +237,8 @@ These are not bugs but expected behaviors that differ across platforms:
 
 **Status**: Under investigation
 
-**Description**: In Chrome, live region announcements may be delayed compared to Firefox
+**Description**: In Chrome, live region announcements may be delayed compared to
+Firefox
 
 **Affected**: All screen readers in Chrome
 
@@ -243,7 +250,8 @@ These are not bugs but expected behaviors that differ across platforms:
 
 **Status**: Under investigation
 
-**Description**: Focus may reset to top after dynamic content updates on iOS Safari
+**Description**: Focus may reset to top after dynamic content updates on iOS
+Safari
 
 **Affected**: VoiceOver on iOS
 
@@ -259,24 +267,19 @@ These aren't issues but potential improvements identified during testing:
 
 ### Enhancement: Data Table Navigation
 
-**Priority**: Low
-**Description**: Add table navigation patterns for grid-based visualizations
-**Benefit**: Easier navigation of 2D data layouts
-**Effort**: Medium
+**Priority**: Low **Description**: Add table navigation patterns for grid-based
+visualizations **Benefit**: Easier navigation of 2D data layouts **Effort**:
+Medium
 
 ### Enhancement: Keyboard Shortcut Customization
 
-**Priority**: Low
-**Description**: Allow users to customize keyboard shortcuts
-**Benefit**: Accommodates different workflow preferences
-**Effort**: High
+**Priority**: Low **Description**: Allow users to customize keyboard shortcuts
+**Benefit**: Accommodates different workflow preferences **Effort**: High
 
 ### Enhancement: Audio Sonification
 
-**Priority**: Low
-**Description**: Add audio cues for data values (sonification)
-**Benefit**: Additional data exploration method
-**Effort**: Very High
+**Priority**: Low **Description**: Add audio cues for data values (sonification)
+**Benefit**: Additional data exploration method **Effort**: Very High
 
 ---
 
@@ -285,18 +288,21 @@ These aren't issues but potential improvements identified during testing:
 ### How Issues Are Categorized
 
 **Critical**: Core functionality completely broken or inaccessible
+
 - Cannot navigate to elements
 - Screen reader crashes
 - No announcements whatsoever
 - Data values never announced
 
 **Major**: Significant usability problems but workarounds exist
+
 - Confusing or incorrect announcements
 - Missing context that makes data hard to understand
 - Keyboard traps that are difficult to escape
 - Inconsistent behavior across elements
 
 **Minor**: Small issues that don't significantly impact usage
+
 - Verbose or repetitive announcements
 - Visual focus indicator could be clearer
 - Slightly awkward navigation order
@@ -350,6 +356,7 @@ If you discover an accessibility issue:
 
 ---
 
-**Status**: 🚧 This document will be updated continuously as screen reader testing proceeds and as issues are discovered in production use.
+**Status**: 🚧 This document will be updated continuously as screen reader
+testing proceeds and as issues are discovered in production use.
 
 **Next Review**: After GUP-121 completion (manual screen reader testing)

@@ -125,16 +125,15 @@ implementation works with real assistive technologies.
 ### Test Execution Order
 
 **Priority 1** (Must have for certification):
+
 1. NVDA + Chrome (Windows) - Most common configuration
 2. VoiceOver + Safari (macOS) - Most common Mac configuration
 
-**Priority 2** (Important for coverage):
-3. NVDA + Firefox (Windows) - Second most common
-4. JAWS + Chrome (Windows) - Enterprise standard (if available)
+**Priority 2** (Important for coverage): 3. NVDA + Firefox (Windows) - Second
+most common 4. JAWS + Chrome (Windows) - Enterprise standard (if available)
 
-**Priority 3** (Nice to have):
-5. VoiceOver + Safari (iOS) - Mobile validation
-6. Other browser combinations
+**Priority 3** (Nice to have): 5. VoiceOver + Safari (iOS) - Mobile
+validation 6. Other browser combinations
 
 ### Test Scenarios
 
@@ -155,19 +154,21 @@ For each test session, use the template from SCREEN_READER_TESTING.md:
 ```markdown
 ## [Screen Reader] [Version] - [Date]
 
-**Tester**: [Name]
-**Environment**: [Details]
+**Tester**: [Name] **Environment**: [Details]
 
 ### Overall Result
+
 - Pass Rate: X/Y scenarios
 - Critical Issues: N
 - Major Issues: N
 - Minor Issues: N
 
 ### Scenario Results
+
 [Details for each scenario]
 
 ### Issues Found
+
 [Document each issue]
 ```
 

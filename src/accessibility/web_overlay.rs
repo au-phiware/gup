@@ -21,7 +21,7 @@ use crate::accessibility::position_sync::{GpuPosition, PositionManager, ScreenPo
 #[cfg(target_arch = "wasm32")]
 use std::collections::HashMap;
 #[cfg(target_arch = "wasm32")]
-use wasm_bindgen::{prelude::*, JsCast};
+use wasm_bindgen::{JsCast, prelude::*};
 #[cfg(target_arch = "wasm32")]
 use web_sys::{Document, Element, HtmlElement, KeyboardEvent, PointerEvent, Window};
 

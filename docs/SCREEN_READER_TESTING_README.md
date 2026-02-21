@@ -11,9 +11,11 @@ reader testing of Gup visualizations.
    - Recording templates and best practices
 
 2. **Run the Pre-Check Script**:
+
    ```bash
    ./scripts/screen_reader_precheck.sh web_accessibility_demo
    ```
+
    This validates your test environment is ready.
 
 3. **Print the Checklist**: `SCREEN_READER_CHECKLIST.md`
@@ -21,6 +23,7 @@ reader testing of Gup visualizations.
    - Printable format with checkboxes
 
 4. **Build and Serve Example**:
+
    ```bash
    # From repository root
    cd examples
@@ -44,6 +47,7 @@ reader testing of Gup visualizations.
 ### `SCREEN_READER_TESTING.md` (16 KB)
 
 The **comprehensive testing guide** with:
+
 - Screen reader setup for NVDA, JAWS, VoiceOver (macOS/iOS), Orca
 - 7 detailed test scenarios with expected announcements
 - Test result recording templates
@@ -55,6 +59,7 @@ The **comprehensive testing guide** with:
 ### `ACCESSIBILITY_COMPATIBILITY.md` (10 KB)
 
 The **compatibility matrix** tracking:
+
 - Feature compatibility across all screen readers
 - Browser compatibility per platform
 - Platform-specific considerations
@@ -65,6 +70,7 @@ The **compatibility matrix** tracking:
 ### `ACCESSIBILITY_KNOWN_ISSUES.md` (9 KB)
 
 The **issue tracker** with:
+
 - Critical, Major, and Minor issue templates
 - Platform-specific quirks
 - Browser-specific issues
@@ -75,6 +81,7 @@ The **issue tracker** with:
 ### `SCREEN_READER_CHECKLIST.md` (7 KB)
 
 The **quick reference checklist** with:
+
 - 7 test scenarios as checklists
 - Common issues to watch for
 - Screen reader keyboard shortcuts
@@ -87,6 +94,7 @@ The **quick reference checklist** with:
 ### `scripts/screen_reader_precheck.sh`
 
 Automated validation script that checks:
+
 - ✓ WASM package is built
 - ✓ Server is running
 - ✓ Accessibility features are enabled
@@ -96,11 +104,13 @@ Automated validation script that checks:
 - ✓ Runs axe-core if available
 
 **Usage**:
+
 ```bash
 ./scripts/screen_reader_precheck.sh [example_name] [port]
 ```
 
 **Example**:
+
 ```bash
 ./scripts/screen_reader_precheck.sh web_accessibility_demo 8080
 ```
@@ -119,30 +129,34 @@ Each scenario has detailed steps, expected announcements, and pass criteria.
 
 ## Screen Readers Supported
 
-| Screen Reader | Platform | Cost | Priority | Status |
-|---------------|----------|------|----------|--------|
-| NVDA | Windows | Free | High | 📋 Ready to test |
-| JAWS | Windows | Commercial | High | 📋 Ready to test |
-| VoiceOver | macOS | Built-in | High | 📋 Ready to test |
-| VoiceOver | iOS | Built-in | Medium | 📋 Ready to test |
-| Orca | Linux | Free | Low | 📋 Ready to test |
+| Screen Reader | Platform | Cost       | Priority | Status           |
+| ------------- | -------- | ---------- | -------- | ---------------- |
+| NVDA          | Windows  | Free       | High     | 📋 Ready to test |
+| JAWS          | Windows  | Commercial | High     | 📋 Ready to test |
+| VoiceOver     | macOS    | Built-in   | High     | 📋 Ready to test |
+| VoiceOver     | iOS      | Built-in   | Medium   | 📋 Ready to test |
+| Orca          | Linux    | Free       | Low      | 📋 Ready to test |
 
 ## Browser Compatibility
 
 ### Windows (NVDA + JAWS)
+
 - Chrome ✓
 - Firefox ✓
 - Edge ✓
 
 ### macOS (VoiceOver)
+
 - Safari ✓ (recommended)
 - Chrome ✓
 - Firefox ✓
 
 ### iOS (VoiceOver)
+
 - Safari ✓
 
 ### Linux (Orca)
+
 - Firefox ✓ (recommended)
 - Chrome/Chromium ✓
 
@@ -195,24 +209,28 @@ Each scenario has detailed steps, expected announcements, and pass criteria.
 Before manual testing, run automated checks:
 
 ### axe-core (Recommended)
+
 ```bash
 npm install -g @axe-core/cli
 axe http://localhost:8080 --exit
 ```
 
 ### Lighthouse (Chrome DevTools)
+
 1. Open DevTools (F12)
 2. Go to Lighthouse tab
 3. Select "Accessibility" category
 4. Click "Generate report"
 
 ### WAVE Browser Extension
+
 - Chrome: https://chrome.google.com/webstore/detail/wave-evaluation-tool/
 - Firefox: https://addons.mozilla.org/firefox/addon/wave-accessibility-tool/
 
 ## Success Criteria
 
 A screen reader is considered **fully supported** when:
+
 - ✅ All 7 test scenarios pass
 - ✅ No critical issues found
 - ✅ Data is comprehensible from audio alone
@@ -240,6 +258,7 @@ A screen reader is considered **fully supported** when:
 ### Need More Examples?
 
 The current test suite uses:
+
 - `examples/web_accessibility_demo.rs` - Basic chart with 5 data points
 
 Additional examples will be added in future stories.
@@ -248,15 +267,16 @@ Additional examples will be added in future stories.
 
 **Overall**: 🎯 Ready for Manual Testing
 
-| Screen Reader | Status | Tester | Date |
-|---------------|--------|--------|------|
-| NVDA | ❓ Not tested | - | - |
-| JAWS | ❓ Not tested | - | - |
-| VoiceOver (macOS) | ❓ Not tested | - | - |
-| VoiceOver (iOS) | ❓ Not tested | - | - |
-| Orca | ❓ Not tested | - | - |
+| Screen Reader     | Status        | Tester | Date |
+| ----------------- | ------------- | ------ | ---- |
+| NVDA              | ❓ Not tested | -      | -    |
+| JAWS              | ❓ Not tested | -      | -    |
+| VoiceOver (macOS) | ❓ Not tested | -      | -    |
+| VoiceOver (iOS)   | ❓ Not tested | -      | -    |
+| Orca              | ❓ Not tested | -      | -    |
 
 **Legend**:
+
 - ✅ Fully tested, all scenarios pass
 - ⚠️ Tested with issues
 - ❌ Critical issues found
@@ -278,6 +298,7 @@ When you complete testing:
 ## Resources
 
 ### Official Documentation
+
 - NVDA: https://www.nvaccess.org/files/nvda/documentation/userGuide.html
 - JAWS: https://support.freedomscientific.com/Documentation/JAWS
 - VoiceOver (Mac): https://support.apple.com/guide/voiceover/welcome/mac
@@ -285,10 +306,12 @@ When you complete testing:
 - Orca: https://help.gnome.org/users/orca/stable/
 
 ### ARIA Best Practices
+
 - WAI-ARIA Authoring Practices: https://www.w3.org/WAI/ARIA/apg/
 - ARIA Live Regions: https://www.w3.org/WAI/ARIA/apg/practices/live-regions/
 
 ### Testing Guides
+
 - WebAIM: https://webaim.org/articles/screenreader_testing/
 - Deque: https://www.deque.com/blog/screen-reader-testing/
 
@@ -299,6 +322,7 @@ When you complete testing:
 **Location**: `docs/planning/stories/GUP-121_Screen_Reader_Manual_Testing.md`
 
 **Remaining Work**:
+
 - Manual testing with NVDA (Windows)
 - Manual testing with JAWS (Windows) - if available
 - Manual testing with VoiceOver (macOS)

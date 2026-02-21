@@ -36,17 +36,20 @@ side-by-side with the visualization under test.
 **Goal**: Screen reader-specific navigation works
 
 **NVDA/JAWS**:
+
 - [ ] `H` key: Navigate by headings (if present)
 - [ ] `R` key: Navigate by regions
 - [ ] `B` key: Navigate by buttons/interactive elements
 - [ ] `D` key: Navigate by landmarks
 
 **VoiceOver (macOS)**:
+
 - [ ] `VO+Cmd+H`: Navigate by headings
 - [ ] `VO+Cmd+J`: Navigate by form controls
 - [ ] `VO+Right Arrow`: Explore item by item
 
 **VoiceOver (iOS)**:
+
 - [ ] Rotor gesture: Access navigation types
 - [ ] Swipe up/down: Navigate by selected type
 - [ ] Touch exploration: Drag finger across screen
@@ -138,6 +141,7 @@ side-by-side with the visualization under test.
 ## Common Issues to Watch For
 
 ### Critical Issues
+
 - [ ] Elements not announced at all
 - [ ] Cannot navigate to key elements
 - [ ] Screen reader crashes or freezes
@@ -145,6 +149,7 @@ side-by-side with the visualization under test.
 - [ ] Data values never announced
 
 ### Major Issues
+
 - [ ] Confusing announcements
 - [ ] Missing role or label
 - [ ] Wrong navigation order
@@ -152,6 +157,7 @@ side-by-side with the visualization under test.
 - [ ] Interactions don't provide feedback
 
 ### Minor Issues
+
 - [ ] Overly verbose announcements
 - [ ] Inconsistent terminology
 - [ ] Focus indicator hard to see
@@ -182,11 +188,13 @@ Recording: [Link if available]
 ## Quick ARIA Reference
 
 ### Expected Roles
+
 - `region` - Chart container
 - `datapoint` (custom) or `button` - Interactive data elements
 - `status` or `log` - Live region for announcements
 
 ### Expected Attributes
+
 - `aria-label` - Human-readable label
 - `aria-describedby` - Additional description
 - `aria-live` - Live region behavior
@@ -197,6 +205,7 @@ Recording: [Link if available]
 ## Screen Reader Keyboard Shortcuts
 
 ### NVDA (Windows)
+
 - `NVDA+N` - Open NVDA menu
 - `NVDA+Q` - Quit NVDA
 - `Insert` = NVDA key
@@ -204,18 +213,21 @@ Recording: [Link if available]
 - `Ctrl` - Stop speaking
 
 ### JAWS (Windows)
+
 - `INSERT+F2` - JAWS menu
 - `INSERT+F4` - Close JAWS
 - `Insert` = JAWS key
 - `Ctrl` - Stop speaking
 
 ### VoiceOver (macOS)
+
 - `Cmd+F5` - Toggle VoiceOver
 - `VO+H` - VoiceOver help
 - `VO` = `Ctrl+Option`
 - `Ctrl` - Stop speaking
 
 ### VoiceOver (iOS)
+
 - Triple-click home/side button - Toggle VoiceOver
 - Two-finger tap - Stop speaking
 - Three-finger triple tap - Screen curtain
@@ -229,15 +241,14 @@ Recording: [Link if available]
 Test in these combinations (in order of priority):
 
 **High Priority**:
+
 1. [ ] NVDA + Chrome (Windows)
 2. [ ] VoiceOver + Safari (macOS)
 3. [ ] JAWS + Chrome (Windows)
 4. [ ] VoiceOver + Safari (iOS)
 
-**Medium Priority**:
-5. [ ] NVDA + Firefox (Windows)
-6. [ ] VoiceOver + Chrome (macOS)
-7. [ ] Orca + Firefox (Linux)
+**Medium Priority**: 5. [ ] NVDA + Firefox (Windows) 6. [ ] VoiceOver + Chrome
+(macOS) 7. [ ] Orca + Firefox (Linux)
 
 ---
 
@@ -245,26 +256,26 @@ Test in these combinations (in order of priority):
 
 After testing, complete this summary:
 
-**Date**: _____________
-**Tester**: _____________
-**Screen Reader**: _____________ Version: _____________
-**Browser**: _____________ Version: _____________
-**OS**: _____________ Version: _____________
+**Date**: ******\_****** **Tester**: ******\_****** **Screen Reader**:
+******\_****** Version: ******\_****** **Browser**: ******\_****** Version:
+******\_****** **OS**: ******\_****** Version: ******\_******
 
-**Overall Result**: ☐ Pass  ☐ Pass with minor issues  ☐ Fail
+**Overall Result**: ☐ Pass ☐ Pass with minor issues ☐ Fail
 
-**Scenarios Passed**: ___/7
+**Scenarios Passed**: \_\_\_/7
 
-**Critical Issues Found**: ___
-**Major Issues Found**: ___
-**Minor Issues Found**: ___
+**Critical Issues Found**: **_ **Major Issues Found**: _** **Minor Issues
+Found**: \_\_\_
 
-**Would you recommend this for production use?**: ☐ Yes  ☐ With fixes  ☐ No
+**Would you recommend this for production use?**: ☐ Yes ☐ With fixes ☐ No
 
 **Additional Notes**:
-_________________________________________________________________
-_________________________________________________________________
-_________________________________________________________________
+
+---
+
+---
+
+---
 
 ---
 
@@ -272,7 +283,8 @@ _________________________________________________________________
 
 1. [ ] Update compatibility matrix (`docs/ACCESSIBILITY_COMPATIBILITY.md`)
 2. [ ] Document issues (`docs/ACCESSIBILITY_KNOWN_ISSUES.md`)
-3. [ ] Update story (`docs/planning/stories/GUP-121_Screen_Reader_Manual_Testing.md`)
+3. [ ] Update story
+       (`docs/planning/stories/GUP-121_Screen_Reader_Manual_Testing.md`)
 4. [ ] Create GitHub issues for critical/major problems
 5. [ ] Share findings with team
 
@@ -287,5 +299,4 @@ _________________________________________________________________
 
 ---
 
-**Version**: 1.0
-**Last Updated**: 2025-01-24
+**Version**: 1.0 **Last Updated**: 2025-01-24
