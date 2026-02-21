@@ -104,15 +104,14 @@ pub fn visualize_performance_summary(summary: &PerformanceSummary) -> String {
 
     writeln!(&mut output, "\n┌─── GPU Performance Summary ─────────────────────────────┐").unwrap();
     writeln!(&mut output, "│ Total Samples: {}", summary.sample_count).unwrap();
-    writeln!(&mut output, "│ Total Executions: {}", summary.total_executions).unwrap();
     writeln!(&mut output, "├─────────────────────────────────────────────────────────┤").unwrap();
     writeln!(&mut output, "│ Frame Time (avg): {:.2} ms", summary.avg_frame_time_ms).unwrap();
     writeln!(&mut output, "│ Frame Time (min): {:.2} ms", summary.min_frame_time_ms).unwrap();
     writeln!(&mut output, "│ Frame Time (max): {:.2} ms", summary.max_frame_time_ms).unwrap();
     writeln!(&mut output, "│ FPS: {:.1}", summary.fps).unwrap();
     writeln!(&mut output, "├─────────────────────────────────────────────────────────┤").unwrap();
-    writeln!(&mut output, "│ GPU Utilization: {:.1}%", summary.average_gpu_utilization).unwrap();
     writeln!(&mut output, "│ Memory (avg): {:.2} MB", summary.avg_memory_usage_bytes as f64 / (1024.0 * 1024.0)).unwrap();
+    writeln!(&mut output, "│ Memory (min): {:.2} MB", summary.min_memory_usage_bytes as f64 / (1024.0 * 1024.0)).unwrap();
     writeln!(&mut output, "│ Memory (max): {:.2} MB", summary.max_memory_usage_bytes as f64 / (1024.0 * 1024.0)).unwrap();
     writeln!(&mut output, "└─────────────────────────────────────────────────────────┘").unwrap();
 
@@ -154,7 +153,7 @@ pub fn visualize_usage_breakdown(breakdown: &std::collections::HashMap<String, u
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{Duration, Instant};
+    use std::time::Instant;
 
     #[test]
     fn test_visualize_memory_history_empty() {
