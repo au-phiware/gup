@@ -41,6 +41,11 @@ pub use crate::shader_function::{
     ComposableFunction,
     // Core traits
     ComposableShaderFunction as ShaderFunction,
+    // Advanced composition patterns (GUP-033 AC3)
+    ConditionalFunction,
+    Easing,
+    EasingFunction,
+
     // Basic transformations
     LinearScale,
     // Advanced scales (GUP-033)
@@ -57,6 +62,7 @@ pub use crate::shader_function::{
     ShaderType,
     // Interpolation (GUP-033)
     SmoothStep,
+    TemporalInterpolation,
     Threshold,
 
     // Shader types

@@ -1184,6 +1184,364 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> UniformBuffer<T> {
     }
 }
 
+// ============================================================================
+// Advanced Composition Patterns (AC3)
+// ============================================================================
+
+/// Parallel composition: applies two functions to the same input and produces both outputs.
+///
+/// This enables patterns like computing both position and color from a single data value.
+/// Output is a tuple-like struct with both results.
+#[allow(dead_code)]
+pub struct ParallelComposition<A: ComposableShaderFunction, B: ComposableShaderFunction>
+where
+    A::Input: ShaderCompatible<B::Input>,
+{
+    first: A,
+    second: B,
+    _phantom: PhantomData<(A::Input, B::Input)>,
+}
+
+impl<A: ComposableShaderFunction, B: ComposableShaderFunction> ParallelComposition<A, B>
+where
+    A::Input: ShaderCompatible<B::Input>,
+{
+    pub fn new(first: A, second: B) -> Self {
+        Self {
+            first,
+            second,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+/// Output type for parallel composition - holds both results.
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct ParallelOutput<
+    A: bytemuck::Pod + bytemuck::Zeroable,
+    B: bytemuck::Pod + bytemuck::Zeroable,
+> {
+    pub first: A,
+    pub second: B,
+}
+
+unsafe impl<A: bytemuck::Pod + bytemuck::Zeroable, B: bytemuck::Pod + bytemuck::Zeroable>
+    bytemuck::Pod for ParallelOutput<A, B>
+{
+}
+
+unsafe impl<A: bytemuck::Pod + bytemuck::Zeroable, B: bytemuck::Pod + bytemuck::Zeroable>
+    bytemuck::Zeroable for ParallelOutput<A, B>
+{
+}
+
+// Note: For now, parallel composition is conceptual - full GPU implementation
+// would require more complex buffer management. This provides the API pattern.
+
+/// Conditional composition: applies different functions based on a condition.
+///
+/// This enables if-then-else logic in shader function pipelines.
+#[derive(Clone, Debug)]
+pub struct ConditionalFunction<T: ComposableShaderFunction, F: ComposableShaderFunction>
+where
+    T::Input: ShaderCompatible<F::Input>,
+    T::Output: ShaderCompatible<F::Output>,
+{
+    condition_threshold: f32,
+    true_branch: T,
+    false_branch: F,
+    _phantom: PhantomData<(T::Input, F::Input)>,
+}
+
+impl<T: ComposableShaderFunction, F: ComposableShaderFunction> ConditionalFunction<T, F>
+where
+    T::Input: ShaderCompatible<F::Input>,
+    T::Output: ShaderCompatible<F::Output>,
+{
+    pub fn new(condition_threshold: f32, true_branch: T, false_branch: F) -> Self {
+        Self {
+            condition_threshold,
+            true_branch,
+            false_branch,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct ConditionalUniforms<T, F>
+where
+    T: Copy,
+    F: Copy,
+{
+    pub condition_threshold: f32,
+    pub _padding: [f32; 3],
+    pub true_uniforms: T,
+    pub false_uniforms: F,
+}
+
+unsafe impl<T: bytemuck::Pod, F: bytemuck::Pod> bytemuck::Pod for ConditionalUniforms<T, F>
+where
+    T: bytemuck::Zeroable + Copy,
+    F: bytemuck::Zeroable + Copy,
+{
+}
+
+unsafe impl<T: bytemuck::Zeroable, F: bytemuck::Zeroable> bytemuck::Zeroable
+    for ConditionalUniforms<T, F>
+where
+    T: Copy,
+    F: Copy,
+{
+}
+
+impl<T: ShaderUniform + Copy, F: ShaderUniform + Copy> ShaderUniform for ConditionalUniforms<T, F> {
+    fn wgsl_struct_definition() -> String {
+        format!(
+            "struct ConditionalUniforms {{\n    condition_threshold: f32,\n    true_uniforms: {},\n    false_uniforms: {},\n}}",
+            T::wgsl_type_name(),
+            F::wgsl_type_name()
+        )
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "ConditionalUniforms"
+    }
+}
+
+impl<T: ComposableShaderFunction, F: ComposableShaderFunction> ComposableShaderFunction
+    for ConditionalFunction<T, F>
+where
+    T::Input: ShaderCompatible<F::Input>,
+    T::Output: ShaderCompatible<F::Output>,
+    T::Uniforms: bytemuck::Pod + bytemuck::Zeroable + Copy,
+    F::Uniforms: bytemuck::Pod + bytemuck::Zeroable + Copy,
+{
+    type Input = T::Input;
+    type Output = T::Output;
+    type Uniforms = ConditionalUniforms<T::Uniforms, F::Uniforms>;
+
+    fn wgsl_function() -> &'static str {
+        "fn conditional(input: INPUT_TYPE, uniforms: ConditionalUniforms) -> OUTPUT_TYPE {\n    if (input >= uniforms.condition_threshold) {\n        return TRUE_FUNCTION(input, uniforms.true_uniforms);\n    } else {\n        return FALSE_FUNCTION(input, uniforms.false_uniforms);\n    }\n}"
+    }
+
+    fn generate_wgsl(&self) -> String {
+        format!(
+            "fn conditional(input: {}, uniforms: ConditionalUniforms) -> {} {{\n    if (input >= uniforms.condition_threshold) {{\n        return {}(input, uniforms.true_uniforms);\n    }} else {{\n        return {}(input, uniforms.false_uniforms);\n    }}\n}}",
+            <T::Input as ShaderType>::wgsl_type_name(),
+            <T::Output as ShaderType>::wgsl_type_name(),
+            T::function_name(),
+            F::function_name()
+        )
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        match (
+            self.true_branch.create_uniforms(),
+            self.false_branch.create_uniforms(),
+        ) {
+            (Some(true_uniforms), Some(false_uniforms)) => Some(ConditionalUniforms {
+                condition_threshold: self.condition_threshold,
+                _padding: [0.0; 3],
+                true_uniforms,
+                false_uniforms,
+            }),
+            _ => None,
+        }
+    }
+
+    fn function_name() -> &'static str {
+        "conditional"
+    }
+}
+
+/// Temporal animation function: interpolates between two values over time.
+///
+/// Enables smooth transitions and animations in visualizations.
+#[derive(Clone, Debug)]
+pub struct TemporalInterpolation {
+    pub start_value: f32,
+    pub end_value: f32,
+    pub duration: f32,
+}
+
+impl TemporalInterpolation {
+    pub fn new(start_value: f32, end_value: f32, duration: f32) -> Self {
+        Self {
+            start_value,
+            end_value,
+            duration,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct TemporalInterpolationUniforms {
+    pub start_value: f32,
+    pub end_value: f32,
+    pub duration: f32,
+    pub _padding: f32,
+}
+
+impl ShaderUniform for TemporalInterpolationUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct TemporalInterpolationUniforms {\n    start_value: f32,\n    end_value: f32,\n    duration: f32,\n}".to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "TemporalInterpolationUniforms"
+    }
+}
+
+impl ComposableShaderFunction for TemporalInterpolation {
+    type Input = f32; // time input
+    type Output = f32;
+    type Uniforms = TemporalInterpolationUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn temporal_interpolation(time: f32, params: TemporalInterpolationUniforms) -> f32 {
+            let t = clamp(time / params.duration, 0.0, 1.0);
+            return mix(params.start_value, params.end_value, t);
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(TemporalInterpolationUniforms {
+            start_value: self.start_value,
+            end_value: self.end_value,
+            duration: self.duration,
+            _padding: 0.0,
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "temporal_interpolation"
+    }
+}
+
+/// Easing function for smooth animations.
+///
+/// Applies common easing curves to temporal values.
+#[derive(Clone, Debug)]
+pub enum EasingFunction {
+    Linear,
+    EaseInQuad,
+    EaseOutQuad,
+    EaseInOutQuad,
+    EaseInCubic,
+    EaseOutCubic,
+    EaseInOutCubic,
+}
+
+#[derive(Clone, Debug)]
+pub struct Easing {
+    pub function: EasingFunction,
+}
+
+impl Easing {
+    pub fn new(function: EasingFunction) -> Self {
+        Self { function }
+    }
+
+    pub fn linear() -> Self {
+        Self {
+            function: EasingFunction::Linear,
+        }
+    }
+
+    pub fn ease_in_out() -> Self {
+        Self {
+            function: EasingFunction::EaseInOutCubic,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct EasingUniforms {
+    pub easing_type: u32, // 0=linear, 1=ease_in_quad, etc.
+    pub _padding: [f32; 3],
+}
+
+impl ShaderUniform for EasingUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct EasingUniforms {\n    easing_type: u32,\n}".to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "EasingUniforms"
+    }
+}
+
+impl ComposableShaderFunction for Easing {
+    type Input = f32; // normalized time (0-1)
+    type Output = f32;
+    type Uniforms = EasingUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn easing(t: f32, params: EasingUniforms) -> f32 {
+            let normalized = clamp(t, 0.0, 1.0);
+
+            if (params.easing_type == 0u) {
+                return normalized; // Linear
+            } else if (params.easing_type == 1u) {
+                return normalized * normalized; // EaseInQuad
+            } else if (params.easing_type == 2u) {
+                return 1.0 - (1.0 - normalized) * (1.0 - normalized); // EaseOutQuad
+            } else if (params.easing_type == 3u) {
+                if (normalized < 0.5) {
+                    return 2.0 * normalized * normalized; // EaseInOutQuad first half
+                } else {
+                    let n = 1.0 - normalized;
+                    return 1.0 - 2.0 * n * n; // EaseInOutQuad second half
+                }
+            } else if (params.easing_type == 4u) {
+                return normalized * normalized * normalized; // EaseInCubic
+            } else if (params.easing_type == 5u) {
+                let n = 1.0 - normalized;
+                return 1.0 - n * n * n; // EaseOutCubic
+            } else if (params.easing_type == 6u) {
+                if (normalized < 0.5) {
+                    return 4.0 * normalized * normalized * normalized; // EaseInOutCubic first half
+                } else {
+                    let n = 2.0 * normalized - 2.0;
+                    return 0.5 * n * n * n + 1.0; // EaseInOutCubic second half
+                }
+            }
+
+            return normalized; // Fallback to linear
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        let easing_type = match self.function {
+            EasingFunction::Linear => 0,
+            EasingFunction::EaseInQuad => 1,
+            EasingFunction::EaseOutQuad => 2,
+            EasingFunction::EaseInOutQuad => 3,
+            EasingFunction::EaseInCubic => 4,
+            EasingFunction::EaseOutCubic => 5,
+            EasingFunction::EaseInOutCubic => 6,
+        };
+
+        Some(EasingUniforms {
+            easing_type,
+            _padding: [0.0; 3],
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "easing"
+    }
+}
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct LinearScaleUniforms {
@@ -2509,6 +2867,95 @@ mod tests {
         let stage2 = stage1.compose(smooth);
 
         let uniforms = stage2.create_uniforms();
+        assert!(uniforms.is_some());
+    }
+
+    #[test]
+    fn test_conditional_function() {
+        // Test conditional composition: different scales based on threshold
+        let high_scale = LinearScale::new(0.0, 100.0, 0.5, 1.0);
+        let low_scale = LinearScale::new(0.0, 100.0, 0.0, 0.5);
+        let conditional = ConditionalFunction::new(50.0, high_scale, low_scale);
+
+        let uniforms = conditional.create_uniforms();
+        assert!(uniforms.is_some());
+        let u = uniforms.unwrap();
+        assert_eq!(u.condition_threshold, 50.0);
+        assert_eq!(
+            ConditionalFunction::<LinearScale, LinearScale>::function_name(),
+            "conditional"
+        );
+    }
+
+    #[test]
+    fn test_temporal_interpolation() {
+        let temporal = TemporalInterpolation::new(0.0, 100.0, 2.0);
+        assert_eq!(temporal.start_value, 0.0);
+        assert_eq!(temporal.end_value, 100.0);
+        assert_eq!(temporal.duration, 2.0);
+
+        let uniforms = temporal.create_uniforms().unwrap();
+        assert_eq!(uniforms.start_value, 0.0);
+        assert_eq!(uniforms.end_value, 100.0);
+        assert_eq!(uniforms.duration, 2.0);
+        assert_eq!(
+            TemporalInterpolation::function_name(),
+            "temporal_interpolation"
+        );
+    }
+
+    #[test]
+    fn test_easing_functions() {
+        let linear = Easing::linear();
+        let uniforms = linear.create_uniforms().unwrap();
+        assert_eq!(uniforms.easing_type, 0);
+
+        let ease_in_out = Easing::ease_in_out();
+        let uniforms2 = ease_in_out.create_uniforms().unwrap();
+        assert_eq!(uniforms2.easing_type, 6); // EaseInOutCubic
+
+        let ease_in_quad = Easing::new(EasingFunction::EaseInQuad);
+        let uniforms3 = ease_in_quad.create_uniforms().unwrap();
+        assert_eq!(uniforms3.easing_type, 1);
+
+        assert_eq!(Easing::function_name(), "easing");
+    }
+
+    #[test]
+    fn test_temporal_composition() {
+        // Test composing temporal interpolation with easing
+        let temporal = TemporalInterpolation::new(0.0, 1.0, 2.0);
+        let easing = Easing::ease_in_out();
+        let composed = temporal.compose(easing);
+
+        let uniforms = composed.create_uniforms();
+        assert!(uniforms.is_some());
+    }
+
+    #[test]
+    fn test_conditional_with_colors() {
+        // Test conditional that outputs different colors
+        let hot_color = ColorMap::new(vec4![1.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 0.0, 1.0]);
+        let cold_color = ColorMap::new(vec4![0.0, 0.0, 1.0, 1.0], vec4![0.0, 1.0, 1.0, 1.0]);
+        let conditional = ConditionalFunction::new(0.5, hot_color, cold_color);
+
+        let uniforms = conditional.create_uniforms();
+        assert!(uniforms.is_some());
+    }
+
+    #[test]
+    fn test_complex_pipeline_with_conditional() {
+        // Test a complex pipeline: scale -> threshold decision -> different color paths
+        let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+        let hot_gradient =
+            ColorGradient::with_colors(vec![vec4![1.0, 1.0, 0.0, 1.0], vec4![1.0, 0.0, 0.0, 1.0]]);
+        let cold_gradient =
+            ColorGradient::with_colors(vec![vec4![0.0, 1.0, 1.0, 1.0], vec4![0.0, 0.0, 1.0, 1.0]]);
+
+        let conditional = ConditionalFunction::new(0.5, hot_gradient, cold_gradient);
+        let pipeline = scale.compose(conditional);
+
+        let uniforms = pipeline.create_uniforms();
         assert!(uniforms.is_some());
     }
 }
