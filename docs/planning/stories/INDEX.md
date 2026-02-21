@@ -29,7 +29,7 @@ epic and status.
 
 | Story                                                          | Title                                    | Status         | Priority | Points |
 | -------------------------------------------------------------- | ---------------------------------------- | -------------- | -------- | ------ |
-| [GUP-016](GUP-016_Core_Accessibility_System.md)                | Core Accessibility System                | 🚧 In Progress | High     | 4      |
+| [GUP-016](GUP-016_Core_Accessibility_System.md)                | Core Accessibility System                | ✅ Complete | High     | 4      |
 | [GUP-017](GUP-017_Error_Handling_Framework.md)                 | Error Handling and Resilience Framework  | ✅ Complete    | Critical | 8      |
 | [GUP-018](GUP-018_Observable_Plot_Chart_Builders.md)           | Observable Plot Chart Builders           | ✅ Complete    | Medium   | 6      |
 | [GUP-019](GUP-019_Mixable_Performance_Validation.md)           | Mixable Performance Validation           | ✅ Complete    | High     | 3      |
