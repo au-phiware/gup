@@ -350,6 +350,7 @@ macro_rules! mat4 {
 pub use macros::*;
 // Bring macro into scope for this module
 use crate::wgsl_function;
+pub use conversions::AutoConvert;
 
 pub trait ShaderType: Clone + Send + Sync + 'static {
     /// Returns the WGSL type name for this type
@@ -366,11 +367,62 @@ pub trait ShaderType: Clone + Send + Sync + 'static {
     /// Returns the alignment requirement for GPU memory layout
     fn alignment() -> usize;
 
-    /// Checks if this type is compatible with another shader type
+    /// Checks if this type is compatible with another shader type.
+    ///
+    /// Two types are compatible if they have the same WGSL type name.
+    /// For automatic conversion compatibility, use `is_compatible_through`.
     fn is_compatible_with<T: ShaderType>() -> bool {
         Self::wgsl_type_name() == T::wgsl_type_name()
     }
 }
+
+/// Trait for flexible compatibility checking including automatic conversions.
+///
+/// This trait extends basic type compatibility to include automatic conversions
+/// via the `AutoConvert` trait. Types are considered compatible if:
+/// 1. They are the same type (direct compatibility)
+/// 2. There is an automatic conversion available (via `AutoConvert`)
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use gup::shader_function::*;
+///
+/// // Direct compatibility
+/// assert!(f32::is_compatible::<f32>());
+///
+/// // Automatic conversion compatibility
+/// assert!(<f32 as FlexibleCompatibility>::is_compatible_through::<Vec3>());
+/// ```
+pub trait FlexibleCompatibility: ShaderType {
+    /// Checks if this type can be used where another type is expected,
+    /// either directly or through automatic conversion.
+    fn is_compatible_through<T: ShaderType>() -> bool
+    where
+        Self: AutoConvert<T>,
+    {
+        // Direct compatibility or automatic conversion available
+        Self::is_compatible_with::<T>() || Self::can_convert()
+    }
+
+    /// Returns the WGSL code needed to convert this type to another type.
+    ///
+    /// If no conversion is needed (types are the same), returns None.
+    /// If conversion is needed and available, returns the WGSL conversion expression.
+    fn conversion_code_for<T: ShaderType>(input_expr: &str) -> Option<String>
+    where
+        Self: AutoConvert<T>,
+    {
+        if Self::is_compatible_with::<T>() {
+            None // No conversion needed
+        } else {
+            Some(Self::conversion_wgsl(input_expr))
+        }
+    }
+}
+
+// Blanket implementation for all ShaderType implementors
+impl<T: ShaderType> FlexibleCompatibility for T {}
 
 impl ShaderType for f32 {
     fn wgsl_type_name() -> &'static str {
@@ -3219,5 +3271,58 @@ mod tests {
 
         let uniforms = pipeline.create_uniforms();
         assert!(uniforms.is_some());
+    }
+}
+
+#[cfg(test)]
+mod compatibility_tests {
+    use super::*;
+
+    #[test]
+    fn test_direct_compatibility() {
+        assert!(f32::is_compatible_with::<f32>());
+        assert!(Vec2::is_compatible_with::<Vec2>());
+        assert!(Vec3::is_compatible_with::<Vec3>());
+        assert!(Vec4::is_compatible_with::<Vec4>());
+    }
+
+    #[test]
+    fn test_incompatible_types() {
+        assert!(!f32::is_compatible_with::<Vec2>());
+        assert!(!Vec2::is_compatible_with::<Vec3>());
+        assert!(!Vec3::is_compatible_with::<Vec4>());
+    }
+
+    #[test]
+    fn test_flexible_compatibility_with_conversions() {
+        // f32 can convert to vectors
+        assert!(<f32 as FlexibleCompatibility>::is_compatible_through::<Vec2>());
+        assert!(<f32 as FlexibleCompatibility>::is_compatible_through::<Vec3>());
+        assert!(<f32 as FlexibleCompatibility>::is_compatible_through::<Vec4>());
+
+        // Vec2 can convert to larger vectors
+        assert!(<Vec2 as FlexibleCompatibility>::is_compatible_through::<Vec3>());
+        assert!(<Vec2 as FlexibleCompatibility>::is_compatible_through::<Vec4>());
+
+        // Vec3 can convert to Vec4
+        assert!(<Vec3 as FlexibleCompatibility>::is_compatible_through::<Vec4>());
+    }
+
+    #[test]
+    fn test_conversion_code_generation() {
+        // f32 to Vec3 - needs conversion
+        let code = <f32 as FlexibleCompatibility>::conversion_code_for::<Vec3>("temp");
+        assert_eq!(code, Some("vec3<f32>(temp, temp, temp)".to_string()));
+
+        // Vec2 to Vec4 - needs conversion
+        let code = <Vec2 as FlexibleCompatibility>::conversion_code_for::<Vec4>("pos");
+        assert_eq!(code, Some("vec4<f32>(pos.x, pos.y, 0.0, 1.0)".to_string()));
+
+        // Vec3 to Vec4 - needs conversion
+        let code = <Vec3 as FlexibleCompatibility>::conversion_code_for::<Vec4>("position");
+        assert_eq!(
+            code,
+            Some("vec4<f32>(position.x, position.y, position.z, 1.0)".to_string())
+        );
     }
 }
