@@ -3449,6 +3449,22 @@ impl StatisticsCompute {
         // Upload data to GPU
         queue.write_buffer(data_buffer, 0, bytemuck::cast_slice(data));
 
+        // Clear result buffer before computation
+        let zero_result = StatisticsResult {
+            count: 0,
+            sum: 0.0,
+            min: 0.0,
+            max: 0.0,
+            mean: 0.0,
+            variance: 0.0,
+            std_dev: 0.0,
+            _padding: 0,
+        };
+        queue.write_buffer(result_buffer, 0, bytemuck::bytes_of(&zero_result));
+        
+        // Debug: verify buffer was cleared
+        eprintln!("Debug: Cleared result buffer with {:?}", zero_result);
+
         // Create bind group
         let pipeline = self.basic_stats_pipeline.as_ref().ok_or_else(|| {
             GupError::gpu_initialization_failed(
@@ -3486,6 +3502,8 @@ impl StatisticsCompute {
             // Dispatch with workgroups covering all data
             let workgroup_size = 256;
             let num_workgroups = data.len().div_ceil(workgroup_size) as u32;
+            eprintln!("Debug dispatch: data.len()={}, workgroup_size={}, num_workgroups={}", 
+                data.len(), workgroup_size, num_workgroups);
             compute_pass.dispatch_workgroups(num_workgroups, 1, 1);
         }
 
@@ -3532,6 +3550,14 @@ impl StatisticsCompute {
             })?;
 
         let data = buffer_slice.get_mapped_range();
+        
+        // Debug: print raw bytes
+        if data.len() >= 8 {
+            let count_bytes = &data[0..4];
+            let sum_bytes = &data[4..8];
+            eprintln!("Debug raw buffer: count bytes = {:?}, sum bytes = {:?}", count_bytes, sum_bytes);
+        }
+        
         let result: StatisticsResult =
             *bytemuck::from_bytes(&data[..std::mem::size_of::<StatisticsResult>()]);
         drop(data);

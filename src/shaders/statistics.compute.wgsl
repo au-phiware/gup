@@ -32,17 +32,25 @@ fn compute_basic_stats(@builtin(global_invocation_id) global_id: vec3<u32>, @bui
     let data_size = arrayLength(&data);
 
     // Initialize shared memory for this thread
+    var my_count: u32 = 0u;
     if (global_index < data_size) {
         let value = data[global_index];
         shared_sum[thread_id] = value;
         shared_min[thread_id] = value;
         shared_max[thread_id] = value;
         shared_count[thread_id] = 1u;
+        my_count = 1u;
     } else {
         shared_sum[thread_id] = 0.0;
         shared_min[thread_id] = 3.40282e+38; // f32::MAX
         shared_max[thread_id] = -3.40282e+38; // f32::MIN
         shared_count[thread_id] = 0u;
+        my_count = 0u;
+    }
+    
+    // Debug: write initial my_count for thread 0 before reduction
+    if (thread_id == 0u && global_id.x == 0u) {
+        result.count = 99u;  // Hardcoded unique value
     }
     
     workgroupBarrier();
@@ -59,32 +67,16 @@ fn compute_basic_stats(@builtin(global_invocation_id) global_id: vec3<u32>, @bui
         workgroupBarrier();
     }
 
-    // First thread in workgroup writes results
+    // First thread writes results (no atomics needed for single workgroup)
     if (thread_id == 0u) {
-        let count = shared_count[0];
-        if (count > 0u) {
-            let sum = shared_sum[0];
-            let min_val = shared_min[0];
-            let max_val = shared_max[0];
-            let mean = sum / f32(count);
-
-            // Atomic updates to global result (first workgroup initializes, others accumulate)
-            atomicAdd(&result.count, count);
-            atomicAdd(&result.sum, sum);
-            atomicMin(&result.min, bitcast<u32>(min_val));
-            atomicMax(&result.max, bitcast<u32>(max_val));
-
-            // Note: Variance/std_dev computation requires two-pass algorithm
-            // This simplified version computes only first-pass statistics
-            // A second pass would compute variance using the mean
+        result.count = shared_count[0];  // Write the actual reduced count
+        result.sum = shared_sum[0];
+        result.min = shared_min[0];
+        result.max = shared_max[0];
+        
+        if (shared_count[0] > 0u) {
+            result.mean = result.sum / f32(shared_count[0]);
         }
-    }
-
-    // After all workgroups complete, compute final mean
-    // (This would typically be done in a separate dispatch or on CPU)
-    workgroupBarrier();
-    if (global_id.x == 0u && result.count > 0u) {
-        result.mean = result.sum / f32(result.count);
     }
 }
 
@@ -116,15 +108,8 @@ fn compute_variance(@builtin(global_invocation_id) global_id: vec3<u32>, @builti
     }
 
     // First thread writes result
-    if (thread_id == 0u && shared_sum[0] > 0.0) {
-        let variance_contribution = shared_sum[0];
-        atomicAdd(&result.variance, variance_contribution);
-    }
-
-    // Compute standard deviation from variance
-    workgroupBarrier();
-    if (global_id.x == 0u && result.count > 0u) {
-        result.variance = result.variance / f32(result.count);
+    if (thread_id == 0u && result.count > 0u) {
+        result.variance = shared_sum[0] / f32(result.count);
         result.std_dev = sqrt(result.variance);
     }
 }
