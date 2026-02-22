@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 // Re-export commonly used types
+pub use cache::*;
 pub use error_context::*;
 pub use fallback::*;
 pub use lazy_context::*;
@@ -18,6 +19,7 @@ pub use recovery::*;
 pub use reporting::*;
 pub use resource::*;
 
+pub mod cache;
 pub mod error_context;
 pub mod fallback;
 pub mod lazy_context;
