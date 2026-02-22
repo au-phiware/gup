@@ -1,6 +1,6 @@
 # GUP-132: GPU Tessellation for Path Mark
 
-**Status**: 💡 New  
+**Status**: 🚧 In Progress  
 **Priority**: Medium  
 **Story Points**: 8  
 **Created**: 2025-01-10 (from GUP-032 retrospective)

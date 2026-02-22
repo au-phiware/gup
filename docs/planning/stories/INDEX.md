@@ -96,7 +96,7 @@ epic and status.
 | [GUP-033](GUP-033_Shader_Function_Composition_Engine.md)  | Shader Function Composition Engine       | ✅ Complete    | Medium   | 10     |
 | [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md)          | GPU Memory Profiling and Debugging Tools | ✅ Complete    | Low      | 5      |
 | [GUP-131](GUP-131_Shader_Type_Constructors.md)            | Add Constructor Methods to Shader Types  | ✅ Complete    | Low      | 1      |
-| [GUP-132](GUP-132_GPU_Path_Tessellation.md)               | GPU Tessellation for Path Mark           | 💡 New         | Medium   | 8      |
+| [GUP-132](GUP-132_GPU_Path_Tessellation.md)               | GPU Tessellation for Path Mark           | 🚧 In Progress | Medium   | 8      |
 | [GUP-134](GUP-134_Storage_Buffer_ColorGradient.md)        | Storage Buffer-Based ColorGradient       | ✅ Complete    | Low      | 3      |
 | [GUP-135](GUP-135_Fix_Examples_Compilation.md)            | Fix Example Compilation Errors           | ✅ Complete    | High     | 3      |
 | [GUP-136](GUP-136_Parallel_Composition_Implementation.md) | Parallel Composition Implementation      | ✅ Complete    | Medium   | 5      |
