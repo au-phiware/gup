@@ -76,13 +76,13 @@ epic and status.
 
 ### Post GUP-006 Stories - WGSL Procedural Macro Enhancement (Stories 63+)
 
-| Story                                                           | Title                                     | Status | Priority | Points |
-| --------------------------------------------------------------- | ----------------------------------------- | ------ | -------- | ------ |
-| [GUP-063](GUP-063_Enhanced_WGSL_Code_Generation.md)             | Enhanced WGSL Code Generation             | 💡 New | Medium   | 5      |
-| [GUP-064](GUP-064_Advanced_Type_System_Support.md)              | Advanced Type System Support              | 💡 New | Low      | 3      |
-| [GUP-065](GUP-065_Documentation_Macro_First_API.md)             | Documentation for Macro-First API         | 💡 New | Medium   | 3      |
-| [GUP-065](GUP-065_Procedural_Macro_Performance_Optimization.md) | Procedural Macro Performance Optimization | 💡 New | Low      | 2      |
-| [GUP-066](GUP-066_Advanced_Type_Conversion_Patterns.md)         | Advanced Type Conversion Patterns         | 💡 New | Low      | 5      |
+| Story                                                           | Title                                     | Status         | Priority | Points |
+| --------------------------------------------------------------- | ----------------------------------------- | -------------- | -------- | ------ |
+| [GUP-063](GUP-063_Enhanced_WGSL_Code_Generation.md)             | Enhanced WGSL Code Generation             | 🚧 In Progress | Medium   | 5      |
+| [GUP-064](GUP-064_Advanced_Type_System_Support.md)              | Advanced Type System Support              | 💡 New         | Low      | 3      |
+| [GUP-065](GUP-065_Documentation_Macro_First_API.md)             | Documentation for Macro-First API         | 💡 New         | Medium   | 3      |
+| [GUP-065](GUP-065_Procedural_Macro_Performance_Optimization.md) | Procedural Macro Performance Optimization | 💡 New         | Low      | 2      |
+| [GUP-066](GUP-066_Advanced_Type_Conversion_Patterns.md)         | Advanced Type Conversion Patterns         | 💡 New         | Low      | 5      |
 
 ### Post GUP-002 Stories - GPU and Interaction Systems (Stories 29+)
 
@@ -130,19 +130,19 @@ epic and status.
 
 ### Post GUP-004 Stories - Context Enhancement (Stories 38+)
 
-| Story                                                  | Title                            | Status         | Priority | Points |
-| ------------------------------------------------------ | -------------------------------- | -------------- | -------- | ------ |
-| [GUP-038](GUP-038_Texture_Pool_Enhancement.md)         | Texture Pool Enhancement         | ✅ Complete    | Medium   | 3      |
-| [GUP-039](GUP-039_Context_Window_Integration.md)       | Context Window Integration       | ✅ Complete    | High     | 5      |
-| [GUP-046](GUP-046_Context_Performance_Profiling.md)    | Context Performance Profiling    | ✅ Complete    | Medium   | 3      |
-| [GUP-047](GUP-047_Surface_Event_Integration.md)        | Surface Event Integration        | ✅ Complete    | Medium   | 3      |
-| [GUP-048](GUP-048_Context_Error_Recovery.md)           | Context Error Recovery           | ✅ Complete    | Medium   | 4      |
-| [GUP-149](GUP-149_Automatic_Device_Loss_Detection.md)  | Automatic Device Loss Detection  | 💡 New         | Low      | 2      |
-| [GUP-150](GUP-150_Recovery_Metrics_and_Analytics.md)   | Recovery Metrics and Analytics   | 💡 New         | Low      | 3      |
-| [GUP-151](GUP-151_Surface_Configuration_Caching.md)    | Surface Configuration Caching    | 💡 New         | Low      | 2      |
-| [GUP-049](GUP-049_Surface_Performance_Optimization.md) | Surface Performance Optimization | ✅ Complete    | Medium   | 5      |
+| Story                                                  | Title                            | Status      | Priority | Points |
+| ------------------------------------------------------ | -------------------------------- | ----------- | -------- | ------ |
+| [GUP-038](GUP-038_Texture_Pool_Enhancement.md)         | Texture Pool Enhancement         | ✅ Complete | Medium   | 3      |
+| [GUP-039](GUP-039_Context_Window_Integration.md)       | Context Window Integration       | ✅ Complete | High     | 5      |
+| [GUP-046](GUP-046_Context_Performance_Profiling.md)    | Context Performance Profiling    | ✅ Complete | Medium   | 3      |
+| [GUP-047](GUP-047_Surface_Event_Integration.md)        | Surface Event Integration        | ✅ Complete | Medium   | 3      |
+| [GUP-048](GUP-048_Context_Error_Recovery.md)           | Context Error Recovery           | ✅ Complete | Medium   | 4      |
+| [GUP-149](GUP-149_Automatic_Device_Loss_Detection.md)  | Automatic Device Loss Detection  | 💡 New      | Low      | 2      |
+| [GUP-150](GUP-150_Recovery_Metrics_and_Analytics.md)   | Recovery Metrics and Analytics   | 💡 New      | Low      | 3      |
+| [GUP-151](GUP-151_Surface_Configuration_Caching.md)    | Surface Configuration Caching    | 💡 New      | Low      | 2      |
+| [GUP-049](GUP-049_Surface_Performance_Optimization.md) | Surface Performance Optimization | ✅ Complete | Medium   | 5      |
 | [GUP-050](GUP-050_Visual_Blend_Mode_Validation.md)     | Visual Blend Mode Validation     | ✅ Complete | Low      | 3      |
-| [GUP-042](GUP-042_Cross_Platform_Surface_Features.md)  | Cross Platform Surface Features  | 💡 New         | Low      | 8      |
+| [GUP-042](GUP-042_Cross_Platform_Surface_Features.md)  | Cross Platform Surface Features  | 💡 New      | Low      | 8      |
 
 ### Post GUP-027 Stories - Blend System Enhancement (Stories 43+)
 
