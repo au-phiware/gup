@@ -78,7 +78,7 @@ epic and status.
 
 | Story                                                           | Title                                     | Status         | Priority | Points |
 | --------------------------------------------------------------- | ----------------------------------------- | -------------- | -------- | ------ |
-| [GUP-063](GUP-063_Enhanced_WGSL_Code_Generation.md)             | Enhanced WGSL Code Generation             | 🚧 In Progress | Medium   | 5      |
+| [GUP-063](GUP-063_Enhanced_WGSL_Code_Generation.md)             | Enhanced WGSL Code Generation             | ✅ Complete | Medium   | 5      |
 | [GUP-064](GUP-064_Advanced_Type_System_Support.md)              | Advanced Type System Support              | 💡 New         | Low      | 3      |
 | [GUP-065](GUP-065_Documentation_Macro_First_API.md)             | Documentation for Macro-First API         | 💡 New         | Medium   | 3      |
 | [GUP-065](GUP-065_Procedural_Macro_Performance_Optimization.md) | Procedural Macro Performance Optimization | 💡 New         | Low      | 2      |
