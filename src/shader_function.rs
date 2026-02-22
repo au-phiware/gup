@@ -80,6 +80,7 @@
 //! - GUP-053: Expanded shader function library
 //! - GUP-054: Performance optimization
 
+pub mod conversions;
 pub mod macros;
 
 use crate::buffer::{BufferType, GpuBuffer};
