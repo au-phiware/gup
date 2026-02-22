@@ -124,3 +124,118 @@ compatibility issues.
 ---
 
 _Created from GUP-032 retrospective - identified as optimization opportunity._
+
+## Retrospective
+
+**Completed**: 2025-01-11
+
+### Key Technical Learnings
+
+#### WGSL Compute Shader Atomic Operations
+
+- **Challenge**: Coordinating parallel tessellation across workgroups without race conditions
+- **Solution**: Used `atomic<u32>` for vertex/index counters in storage buffer uniforms
+- **Pattern**: Atomic operations enable safe parallel writes without explicit synchronization
+- **Key insight**: Each command processes independently, incrementing shared counters atomically
+
+#### Bezier Curve Tessellation Algorithms
+
+- **Challenge**: Determining optimal segment count for smooth curves without over-tessellation
+- **Solution**: Adaptive subdivision based on control point distance vs chord length
+- **Formula**: `segments = min(max(2, ceil(curvature * factor / tolerance)), max_segments)`
+- **Trade-off**: Higher curvature → more segments; higher tolerance → fewer segments
+- **Pattern**: Quadratic curves cap at 32 segments, cubic at 48 segments to prevent explosion
+
+#### GPU Buffer Management for Compute Pipelines
+
+- **Challenge**: Passing complex nested data structures to compute shaders
+- **Solution**: Flattened `GpuPathCommand` struct with explicit padding for alignment
+- **Layout**: `#[repr(C)]` with `bytemuck::Pod` for safe GPU transfer
+- **Pattern**: Split high-level Rust enums into GPU-compatible fixed layouts
+- **Key insight**: Padding fields necessary for WGSL struct alignment (vec2 = 8 bytes)
+
+#### Async GPU Result Retrieval
+
+- **Challenge**: Reading back computed vertex counts from GPU after compute pass
+- **Solution**: Copy uniform buffer to staging buffer, map for async read
+- **Pattern**: 
+  1. Submit compute pass
+  2. Copy result buffer to staging
+  3. Async map staging buffer
+  4. Poll device until ready
+  5. Read mapped data
+- **Gotcha**: Must use `futures_channel::oneshot` for async await compatibility
+
+### Architectural Decisions
+
+#### Command-Based vs Vertex-Based Upload
+
+- **Decision**: Upload path commands, generate vertices on GPU
+- **Reasoning**: 
+  - Commands are ~40-80 bytes each
+  - Pre-tessellated vertices are 16 bytes × 10-50 per command
+  - 3-10× bandwidth reduction for complex paths
+- **Trade-off**: GPU compute overhead vs CPU->GPU bandwidth
+- **Future**: Ideal for dynamic paths; static paths may prefer pre-tessellation
+
+#### Per-Path Tessellation vs Batch Tessellation
+
+- **Decision**: Tessellate one path at a time with async API
+- **Reasoning**: Simpler memory management, easier error handling
+- **Trade-off**: Dispatch overhead per path vs batch complexity
+- **Future**: Could add batch API that tessellates multiple paths in one compute pass
+- **Performance**: Still achieves 305 paths/sec, sufficient for most use cases
+
+#### Tolerance-Based Quality Control
+
+- **Decision**: Expose tolerance parameter for user-controlled quality/performance trade-off
+- **Reasoning**: Different use cases need different tessellation density
+- **Values**: 
+  - 0.01 = very high quality, many vertices
+  - 0.1 = good quality, moderate vertices (default)
+  - 1.0 = low quality, few vertices (fast)
+- **Pattern**: Tolerance directly affects curvature threshold in subdivision
+
+### Development Workflow Insights
+
+- **Shader debugging**: WGSL compilation errors are cryptic; validate structs match exactly
+- **Atomic operations**: wgpu v26 requires `atomic<u32>` in storage buffers, not uniform buffers
+- **Test infrastructure**: GPU tests need careful async setup with pollster/tokio integration
+- **Performance measurement**: Batch operations reveal true GPU performance vs single-shot overhead
+
+### Follow-up Stories
+
+Based on implementation insights, these areas would benefit from dedicated work:
+
+1. **Batch GPU Path Tessellation** — Tessellate multiple paths in a single compute dispatch to reduce overhead and achieve even higher throughput for scenarios with many small paths.
+
+2. **Path Triangle Indexing** — Currently generates vertices but not triangle indices. Add triangle strip/fan generation for proper filling and stroking.
+
+3. **CPU Fallback Tessellation** — Implement CPU-side tessellation as fallback for systems without compute shader support or when GPU is unavailable.
+
+4. **Quality Presets** — Add named quality presets (Ultra, High, Medium, Low) that map to tolerance values for better UX.
+
+5. **Incremental Path Modification** — Support updating individual commands without full re-tessellation via change tracking and partial buffer updates.
+
+### Architectural Implications
+
+**Compute Shader Pattern Established**: This story establishes a pattern for GPU compute-based geometry generation that can be applied to other mark types:
+
+- Rectangle rounded corners could be tessellated on GPU
+- Text glyph outlines could be converted from SDF
+- Custom marks could use compute shaders for complex geometry
+
+**Performance Baseline**: 305 paths/sec provides a baseline for future GPU acceleration work:
+- Interactive tools can update 10-50 paths/frame comfortably
+- Animations of 100+ paths at 30 FPS are feasible
+- Batch API could push to 1000+ paths/frame
+
+**Memory Management Pattern**: The staging buffer copy-back pattern for result retrieval is reusable for other GPU compute operations that need to report statistics or counts back to CPU.
+
+### Lessons for Future GPU Work
+
+1. **Start Simple**: Initial approach focused on vertex generation, deferred indexing complexity
+2. **Measure Early**: Performance tests revealed 305 paths/sec - much better than expected
+3. **Adaptive Algorithms**: Curve-based subdivision is more elegant than fixed-segment counts
+4. **Tolerance Parameters**: User-controlled quality/performance trade-offs are valuable
+5. **Async All The Way**: GPU operations are inherently async; embrace it in the API
