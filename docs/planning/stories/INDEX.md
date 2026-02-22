@@ -76,33 +76,33 @@ epic and status.
 
 ### Post GUP-006 Stories - WGSL Procedural Macro Enhancement (Stories 63+)
 
-| Story                                                           | Title                                     | Status         | Priority | Points |
-| --------------------------------------------------------------- | ----------------------------------------- | -------------- | -------- | ------ |
-| [GUP-063](GUP-063_Enhanced_WGSL_Code_Generation.md)             | Enhanced WGSL Code Generation             | ✅ Complete    | Medium   | 5      |
-| [GUP-064](GUP-064_Advanced_Type_System_Support.md)              | Advanced Type System Support              | ✅ Complete    | Low      | 3      |
-| [GUP-064-B](GUP-064-B_Custom_Struct_Code_Generation.md)         | Custom Struct Code Generation             | ✅ Complete    | Low      | 3      |
-| [GUP-065](GUP-065_Documentation_Macro_First_API.md)             | Documentation for Macro-First API         | ✅ Complete    | Medium   | 3      |
-| [GUP-065](GUP-065_Procedural_Macro_Performance_Optimization.md) | Procedural Macro Performance Optimization | ✅ Complete    | Low      | 2      |
-| [GUP-066](GUP-066_Advanced_Type_Conversion_Patterns.md)         | Advanced Type Conversion Patterns         | ✅ Complete    | Low      | 5      |
+| Story                                                           | Title                                     | Status      | Priority | Points |
+| --------------------------------------------------------------- | ----------------------------------------- | ----------- | -------- | ------ |
+| [GUP-063](GUP-063_Enhanced_WGSL_Code_Generation.md)             | Enhanced WGSL Code Generation             | ✅ Complete | Medium   | 5      |
+| [GUP-064](GUP-064_Advanced_Type_System_Support.md)              | Advanced Type System Support              | ✅ Complete | Low      | 3      |
+| [GUP-064-B](GUP-064-B_Custom_Struct_Code_Generation.md)         | Custom Struct Code Generation             | ✅ Complete | Low      | 3      |
+| [GUP-065](GUP-065_Documentation_Macro_First_API.md)             | Documentation for Macro-First API         | ✅ Complete | Medium   | 3      |
+| [GUP-065](GUP-065_Procedural_Macro_Performance_Optimization.md) | Procedural Macro Performance Optimization | ✅ Complete | Low      | 2      |
+| [GUP-066](GUP-066_Advanced_Type_Conversion_Patterns.md)         | Advanced Type Conversion Patterns         | ✅ Complete | Low      | 5      |
 
 ### Post GUP-002 Stories - GPU and Interaction Systems (Stories 29+)
 
-| Story                                                     | Title                                    | Status      | Priority | Points |
-| --------------------------------------------------------- | ---------------------------------------- | ----------- | -------- | ------ |
-| [GUP-029](GUP-029_WGSL_Shader_Code_Generation.md)         | WGSL Shader Code Generation System       | ✅ Complete | High     | 8      |
-| [GUP-030](GUP-030_GPU_Buffer_Pool_Management.md)          | GPU Buffer Pool Management System        | ✅ Complete | Medium   | 5      |
-| [GUP-031](GUP-031_GPU_Interaction_Event_System.md)        | GPU-Based Interaction Event System       | ⚠️ Partial  | High     | 13     |
-| [GUP-032](GUP-032_Advanced_Mark_System.md)                | Advanced Mark System with Custom Shapes  | ✅ Complete | Medium   | 8      |
-| [GUP-033](GUP-033_Shader_Function_Composition_Engine.md)  | Shader Function Composition Engine       | ✅ Complete | Medium   | 10     |
-| [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md)          | GPU Memory Profiling and Debugging Tools | ✅ Complete | Low      | 5      |
-| [GUP-131](GUP-131_Shader_Type_Constructors.md)            | Add Constructor Methods to Shader Types  | ✅ Complete | Low      | 1      |
-| [GUP-132](GUP-132_GPU_Path_Tessellation.md)               | GPU Tessellation for Path Mark           | 💡 New      | Medium   | 8      |
-| [GUP-134](GUP-134_Storage_Buffer_ColorGradient.md)        | Storage Buffer-Based ColorGradient       | 🚧 In Progress  | Low      | 3      |
-| [GUP-135](GUP-135_Fix_Examples_Compilation.md)            | Fix Example Compilation Errors           | ✅ Complete | High     | 3      |
-| [GUP-136](GUP-136_Parallel_Composition_Implementation.md) | Parallel Composition Implementation      | ✅ Complete | Medium   | 5      |
-| [GUP-137](GUP-137_Shader_Performance_Benchmarking.md)     | Shader Function Performance Benchmarking | 📋 Planned  | Medium   | 3      |
-| [GUP-138](GUP-138_Advanced_Temporal_Animation.md)         | Advanced Temporal Animation System       | 📋 Planned  | Low      | 8      |
-| [GUP-139](GUP-139_Statistical_Shader_Functions.md)        | Statistical Shader Functions             | 📋 Planned  | Low      | 5      |
+| Story                                                     | Title                                    | Status         | Priority | Points |
+| --------------------------------------------------------- | ---------------------------------------- | -------------- | -------- | ------ |
+| [GUP-029](GUP-029_WGSL_Shader_Code_Generation.md)         | WGSL Shader Code Generation System       | ✅ Complete    | High     | 8      |
+| [GUP-030](GUP-030_GPU_Buffer_Pool_Management.md)          | GPU Buffer Pool Management System        | ✅ Complete    | Medium   | 5      |
+| [GUP-031](GUP-031_GPU_Interaction_Event_System.md)        | GPU-Based Interaction Event System       | ⚠️ Partial     | High     | 13     |
+| [GUP-032](GUP-032_Advanced_Mark_System.md)                | Advanced Mark System with Custom Shapes  | ✅ Complete    | Medium   | 8      |
+| [GUP-033](GUP-033_Shader_Function_Composition_Engine.md)  | Shader Function Composition Engine       | ✅ Complete    | Medium   | 10     |
+| [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md)          | GPU Memory Profiling and Debugging Tools | ✅ Complete    | Low      | 5      |
+| [GUP-131](GUP-131_Shader_Type_Constructors.md)            | Add Constructor Methods to Shader Types  | ✅ Complete    | Low      | 1      |
+| [GUP-132](GUP-132_GPU_Path_Tessellation.md)               | GPU Tessellation for Path Mark           | 💡 New         | Medium   | 8      |
+| [GUP-134](GUP-134_Storage_Buffer_ColorGradient.md)        | Storage Buffer-Based ColorGradient       | ✅ Complete | Low      | 3      |
+| [GUP-135](GUP-135_Fix_Examples_Compilation.md)            | Fix Example Compilation Errors           | ✅ Complete    | High     | 3      |
+| [GUP-136](GUP-136_Parallel_Composition_Implementation.md) | Parallel Composition Implementation      | ✅ Complete    | Medium   | 5      |
+| [GUP-137](GUP-137_Shader_Performance_Benchmarking.md)     | Shader Function Performance Benchmarking | 📋 Planned     | Medium   | 3      |
+| [GUP-138](GUP-138_Advanced_Temporal_Animation.md)         | Advanced Temporal Animation System       | 📋 Planned     | Low      | 8      |
+| [GUP-139](GUP-139_Statistical_Shader_Functions.md)        | Statistical Shader Functions             | 📋 Planned     | Low      | 5      |
 
 ### Post GUP-015 Stories - Advanced Debug Infrastructure (Stories 80+)
 

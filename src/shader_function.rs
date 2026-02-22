@@ -2695,32 +2695,32 @@ impl ColorGradientStorage {
     /// Creates a simple rainbow gradient.
     pub fn rainbow() -> Self {
         Self::with_colors(vec![
-            vec4![1.0, 0.0, 0.0, 1.0],      // Red
-            vec4![1.0, 0.5, 0.0, 1.0],      // Orange
-            vec4![1.0, 1.0, 0.0, 1.0],      // Yellow
-            vec4![0.0, 1.0, 0.0, 1.0],      // Green
-            vec4![0.0, 0.0, 1.0, 1.0],      // Blue
-            vec4![0.294, 0.0, 0.510, 1.0],  // Indigo
-            vec4![0.561, 0.0, 1.0, 1.0],    // Violet
+            vec4![1.0, 0.0, 0.0, 1.0],     // Red
+            vec4![1.0, 0.5, 0.0, 1.0],     // Orange
+            vec4![1.0, 1.0, 0.0, 1.0],     // Yellow
+            vec4![0.0, 1.0, 0.0, 1.0],     // Green
+            vec4![0.0, 0.0, 1.0, 1.0],     // Blue
+            vec4![0.294, 0.0, 0.510, 1.0], // Indigo
+            vec4![0.561, 0.0, 1.0, 1.0],   // Violet
         ])
     }
 
     /// Creates a cool to warm gradient (blue to red).
     pub fn cool_warm() -> Self {
         Self::with_colors(vec![
-            vec4![0.0, 0.0, 1.0, 1.0],    // Blue
-            vec4![0.0, 0.5, 1.0, 1.0],    // Light blue
-            vec4![1.0, 1.0, 1.0, 1.0],    // White
-            vec4![1.0, 0.5, 0.0, 1.0],    // Orange
-            vec4![1.0, 0.0, 0.0, 1.0],    // Red
+            vec4![0.0, 0.0, 1.0, 1.0], // Blue
+            vec4![0.0, 0.5, 1.0, 1.0], // Light blue
+            vec4![1.0, 1.0, 1.0, 1.0], // White
+            vec4![1.0, 0.5, 0.0, 1.0], // Orange
+            vec4![1.0, 0.0, 0.0, 1.0], // Red
         ])
     }
 
     /// Creates a grayscale gradient.
     pub fn grayscale() -> Self {
         Self::with_colors(vec![
-            vec4![0.0, 0.0, 0.0, 1.0],    // Black
-            vec4![1.0, 1.0, 1.0, 1.0],    // White
+            vec4![0.0, 0.0, 0.0, 1.0], // Black
+            vec4![1.0, 1.0, 1.0, 1.0], // White
         ])
     }
 
@@ -2769,12 +2769,12 @@ struct ColorGradientStorage {
 fn color_gradient_storage(value: f32) -> vec4<f32> {
     let t = clamp(value, 0.0, 1.0);
     let count = gradient_info.count;
-    
+
     // Handle single color
     if (count == 1u) {
         return gradient_colors[0];
     }
-    
+
     // Handle edge cases
     if (t <= gradient_stops[0]) {
         return gradient_colors[0];
@@ -2782,11 +2782,11 @@ fn color_gradient_storage(value: f32) -> vec4<f32> {
     if (t >= gradient_stops[count - 1u]) {
         return gradient_colors[count - 1u];
     }
-    
+
     // Binary search for the correct stop range
     var low = 0u;
     var high = count - 1u;
-    
+
     // Find the interval containing t
     while (low + 1u < high) {
         let mid = (low + high) / 2u;
@@ -2796,12 +2796,12 @@ fn color_gradient_storage(value: f32) -> vec4<f32> {
             high = mid;
         }
     }
-    
+
     // Interpolate between the two colors
     let t0 = gradient_stops[low];
     let t1 = gradient_stops[high];
     let local_t = (t - t0) / (t1 - t0);
-    
+
     return mix(gradient_colors[low], gradient_colors[high], local_t);
 }
 "#
@@ -2841,11 +2841,14 @@ impl ColorGradientBuilder {
 
     /// Builds the gradient, sorting stops by position.
     pub fn build(mut self) -> ColorGradientStorage {
-        assert!(!self.stops.is_empty(), "Gradient must have at least one stop");
-        
+        assert!(
+            !self.stops.is_empty(),
+            "Gradient must have at least one stop"
+        );
+
         // Sort by position
         self.stops.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-        
+
         let (positions, colors): (Vec<f32>, Vec<Vec4>) = self.stops.into_iter().unzip();
         ColorGradientStorage::new(colors, positions)
     }

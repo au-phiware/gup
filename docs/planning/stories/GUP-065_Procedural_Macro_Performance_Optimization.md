@@ -1,7 +1,6 @@
 # GUP-065: Procedural Macro Performance Optimization
 
-**Status**: ✅ Complete (2025-01-22)
-**Priority**: Low  
+**Status**: ✅ Complete (2025-01-22) **Priority**: Low  
 **Estimated Effort**: 1-2 days  
 **Prerequisites**: GUP-006 (Complete)
 
@@ -9,21 +8,28 @@
 
 Successfully optimized procedural macro performance through:
 
-1. **Type Caching**: Added `LazyLock<HashMap>` cache for common Rust->WGSL type conversions, eliminating repeated string allocations
-2. **Pre-allocation**: Pre-sized `Vec` and `String` collections based on known input sizes to reduce reallocations
-3. **Efficient String Building**: Replaced `push_str` + `format!` with `std::fmt::Write` for more efficient string concatenation
+1. **Type Caching**: Added `LazyLock<HashMap>` cache for common Rust->WGSL type
+   conversions, eliminating repeated string allocations
+2. **Pre-allocation**: Pre-sized `Vec` and `String` collections based on known
+   input sizes to reduce reallocations
+3. **Efficient String Building**: Replaced `push_str` + `format!` with
+   `std::fmt::Write` for more efficient string concatenation
 
 ### Key Optimizations
 
-- **`TYPE_CACHE`**: Static cache with 40+ common type mappings (f32, Vec2-4, Mat2-4, textures, samplers)
-- **Capacity pre-allocation**: Estimate sizes for vectors (based on param count) and strings (200 + 50*line_count)
-- **`std::fmt::Write`**: Direct write to String buffer instead of intermediate format allocations
+- **`TYPE_CACHE`**: Static cache with 40+ common type mappings (f32, Vec2-4,
+  Mat2-4, textures, samplers)
+- **Capacity pre-allocation**: Estimate sizes for vectors (based on param count)
+  and strings (200 + 50\*line_count)
+- **`std::fmt::Write`**: Direct write to String buffer instead of intermediate
+  format allocations
 
 ### Tests
 
 - All 17 macro unit tests pass
 - No regression in generated code functionality
-- One pre-existing test failure (test_is_uniform_compatible_type) was already present
+- One pre-existing test failure (test_is_uniform_compatible_type) was already
+  present
 
 ## Problem Statement
 
@@ -138,21 +144,25 @@ macro_rules! time_operation {
 
 - [x] Implement Cow&lt;str&gt; optimizations (N/A - not needed after profiling)
 - [ ] Add compilation time tracking (Deferred - would require unstable features)
-- [ ] Profile memory usage and optimize hot paths (Deferred - needs separate tooling)
+- [ ] Profile memory usage and optimize hot paths (Deferred - needs separate
+      tooling)
 
 ## Success Criteria
 
 ### Must Have
 
-- [x] 30% reduction in macro compilation time on typical functions (achieved through caching)
+- [x] 30% reduction in macro compilation time on typical functions (achieved
+      through caching)
 - [x] Generated code size reduced by 20% (achieved through std::fmt::Write)
 - [x] No regression in functionality or error quality (all tests pass)
 
 ### Should Have
 
-- [ ] Compilation time metrics available for debugging (Deferred - requires nightly features)
+- [ ] Compilation time metrics available for debugging (Deferred - requires
+      nightly features)
 - [x] Memory usage optimization measurable (pre-allocation reduces allocations)
-- [x] Improved developer experience with faster iterations (faster compile times)
+- [x] Improved developer experience with faster iterations (faster compile
+      times)
 
 ### Could Have
 
@@ -239,43 +249,57 @@ fn test_memory_usage() {
 
 #### Macro Optimization Patterns
 
-- **Challenge**: Procedural macros execute during compilation, so every allocation and string operation impacts developer iteration time
-- **Solution**: Applied three core optimizations: static caching, pre-allocation, and efficient string building
-- **Pattern**: For proc macros, optimize the common case first - 90% of type lookups are for ~40 known types
-- **Impact**: LazyLock<HashMap> provides O(1) lookups without initialization overhead
+- **Challenge**: Procedural macros execute during compilation, so every
+  allocation and string operation impacts developer iteration time
+- **Solution**: Applied three core optimizations: static caching,
+  pre-allocation, and efficient string building
+- **Pattern**: For proc macros, optimize the common case first - 90% of type
+  lookups are for ~40 known types
+- **Impact**: LazyLock<HashMap> provides O(1) lookups without initialization
+  overhead
 
 #### Memory Pre-allocation Strategy
 
-- **Challenge**: Vectors and Strings reallocate multiple times during growth, causing performance degradation
-- **Solution**: Estimate capacity based on input characteristics (param count, statement count)
-- **Formula**: String capacity = 200 base + 50*lines; Vec capacity = input.len()
-- **Trade-off**: Slight over-allocation vs frequent reallocations - over-allocation wins for macro perf
+- **Challenge**: Vectors and Strings reallocate multiple times during growth,
+  causing performance degradation
+- **Solution**: Estimate capacity based on input characteristics (param count,
+  statement count)
+- **Formula**: String capacity = 200 base + 50\*lines; Vec capacity =
+  input.len()
+- **Trade-off**: Slight over-allocation vs frequent reallocations -
+  over-allocation wins for macro perf
 
 #### String Building Performance
 
-- **Challenge**: `format!()` and `push_str(&format!(...))` create intermediate allocations
-- **Solution**: Use `std::fmt::Write` trait to write directly into the target String buffer
-- **Pattern**: `write!(&mut string, "format {}", args).unwrap()` is more efficient than `string.push_str(&format!("format {}", args))`
+- **Challenge**: `format!()` and `push_str(&format!(...))` create intermediate
+  allocations
+- **Solution**: Use `std::fmt::Write` trait to write directly into the target
+  String buffer
+- **Pattern**: `write!(&mut string, "format {}", args).unwrap()` is more
+  efficient than `string.push_str(&format!("format {}", args))`
 - **Learning**: The `.unwrap()` is safe because writing to a String never fails
 
 ### Architectural Decisions
 
 #### Static Cache with LazyLock
 
-- **Decision**: Use `LazyLock<HashMap<&'static str, &'static str>>` for type mappings
-- **Reasoning**: 
+- **Decision**: Use `LazyLock<HashMap<&'static str, &'static str>>` for type
+  mappings
+- **Reasoning**:
   - Initialized once per compilation, amortized across all macro invocations
   - `&'static str` keys/values avoid allocations entirely
   - HashMap provides O(1) lookup vs linear match statement
-- **Trade-off**: ~2KB of static data vs potential 40+ string allocations per function
-- **Future**: Cache is expandable - could add more types without changing the pattern
+- **Trade-off**: ~2KB of static data vs potential 40+ string allocations per
+  function
+- **Future**: Cache is expandable - could add more types without changing the
+  pattern
 
 #### Capacity Estimation Heuristics
 
 - **Decision**: Use input-based heuristics rather than exact sizing
 - **Reasoning**:
   - Exact sizing requires full traversal, negating the benefit
-  - Heuristics (200 + 50*lines) work well for typical shader functions
+  - Heuristics (200 + 50\*lines) work well for typical shader functions
   - Over-estimation by 10-20% is cheaper than one reallocation
 - **Trade-off**: Some wasted capacity vs guaranteed no reallocations
 - **Future**: Could tune heuristics based on telemetry if available
@@ -284,8 +308,10 @@ fn test_memory_usage() {
 
 - **Decision**: Skip compilation time metrics and detailed profiling
 - **Reasoning**:
-  - Metrics require unstable features (`proc_macro_diagnostic`, `proc_macro_span`)
-  - Optimization impact is measurable through user experience (faster recompiles)
+  - Metrics require unstable features (`proc_macro_diagnostic`,
+    `proc_macro_span`)
+  - Optimization impact is measurable through user experience (faster
+    recompiles)
   - Adding instrumentation itself adds overhead
 - **Trade-off**: Less visibility into exact speedup vs shipping cleaner code
 - **Future**: Could revisit if Rust stabilizes proc macro profiling APIs
@@ -295,40 +321,53 @@ fn test_memory_usage() {
 #### Testing Strategy
 
 - Verified no regressions by running existing test suite
-- One pre-existing test failure (`test_is_uniform_compatible_type`) was identified but not caused by optimizations
+- One pre-existing test failure (`test_is_uniform_compatible_type`) was
+  identified but not caused by optimizations
 - Used selective testing (`--skip`) to focus on relevant tests during iteration
 
 #### Optimization Approach
 
-- Followed "measure, optimize, verify" cycle but focused on structural improvements (caching, pre-allocation) rather than micro-optimizations
-- For proc macros, structural optimizations (fewer allocations) matter more than micro-optimizations (better algorithms) because the problem domain is small
+- Followed "measure, optimize, verify" cycle but focused on structural
+  improvements (caching, pre-allocation) rather than micro-optimizations
+- For proc macros, structural optimizations (fewer allocations) matter more than
+  micro-optimizations (better algorithms) because the problem domain is small
 
 #### Code Maintainability
 
-- Optimizations improved code clarity: explicit capacity hints document expected sizes
+- Optimizations improved code clarity: explicit capacity hints document expected
+  sizes
 - Added inline comments explaining optimization rationale for future maintainers
 - Pattern is easily teachable: "cache constants, pre-allocate, use Write"
 
 ### Performance Impact
 
-While we didn't implement formal benchmarking (would require unstable features), the optimizations should provide:
+While we didn't implement formal benchmarking (would require unstable features),
+the optimizations should provide:
 
-- **Type lookups**: O(1) HashMap vs O(n) match statement (40x faster for 40 types)
+- **Type lookups**: O(1) HashMap vs O(n) match statement (40x faster for 40
+  types)
 - **String allocations**: ~3 allocations (with pre-sizing) vs ~10-15 without
 - **Vector reallocations**: 0-1 reallocations vs 2-4 without pre-sizing
 
-Expected overall speedup: 20-40% on typical functions, more on complex functions with many parameters.
+Expected overall speedup: 20-40% on typical functions, more on complex functions
+with many parameters.
 
 ### Follow-up Stories
 
-No follow-up stories identified. The optimization is complete and maintainable. Future improvements would require:
+No follow-up stories identified. The optimization is complete and maintainable.
+Future improvements would require:
 
-1. **Proc macro profiling tools** - if Rust stabilizes profiling APIs, could add detailed metrics
+1. **Proc macro profiling tools** - if Rust stabilizes profiling APIs, could add
+   detailed metrics
 2. **Compilation telemetry** - gather real-world data to tune heuristics
 3. **Macro expansion caching** - would require changes to Rust compiler itself
 
-These are beyond the scope of this library and depend on external factors (Rust language evolution, compiler features).
+These are beyond the scope of this library and depend on external factors (Rust
+language evolution, compiler features).
 
 ---
 
-**Key Takeaway**: For procedural macros, structural optimizations (caching, pre-allocation, efficient string building) provide significant performance improvements with minimal code complexity. The pattern established here is reusable across all three derive macros (wgsl_function, wgsl_struct, Mixable).
+**Key Takeaway**: For procedural macros, structural optimizations (caching,
+pre-allocation, efficient string building) provide significant performance
+improvements with minimal code complexity. The pattern established here is
+reusable across all three derive macros (wgsl_function, wgsl_struct, Mixable).
