@@ -108,7 +108,7 @@ epic and status.
 | [GUP-142](GUP-142_Animation_Event_System.md)              | Animation Event System                   | 💡 New      | Medium   | 8      |
 | [GUP-143](GUP-143_Histogram_Generation.md)                | Histogram Generation on GPU              | ✅ Complete | Medium   | 5      |
 | [GUP-144](GUP-144_Kernel_Density_Estimation.md)           | Kernel Density Estimation                | 💡 New      | Low      | 8      |
-| [GUP-145](GUP-145_GPU_Statistics_Integration_Tests.md)    | GPU Statistics Integration Tests         | ⚠️ Partial  | High     | 3      |
+| [GUP-145](GUP-145_GPU_Statistics_Integration_Tests.md)    | GPU Statistics Integration Tests         | ✅ Complete    | High     | 3      |
 | [GUP-146](GUP-146_Streaming_Statistical_Aggregation.md)   | Streaming Statistical Aggregation        | 💡 New      | Medium   | 5      |
 | [GUP-147](GUP-147_Box_Plot_Visualization.md)              | Box Plot Visualization                   | 💡 New      | Medium   | 5      |
 | [GUP-148](GUP-148_Fix_Statistics_Shader_Bug.md)           | Fix Statistics Shader Reduction Bug      | ✅ Complete | High     | 3      |
