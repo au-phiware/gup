@@ -22,15 +22,15 @@
 //!
 //! The dashboard is only available when the `web-dashboard` feature is enabled.
 
-use crate::error::{GupError, GupResult};
 use crate::debug::memory_profiler::GpuMemoryProfiler;
+use crate::error::{GupError, GupResult};
 use std::sync::Arc;
 
 #[cfg(feature = "web-dashboard")]
 use std::thread;
 
 #[cfg(feature = "web-dashboard")]
-use tiny_http::{Server, Response, Method, StatusCode};
+use tiny_http::{Method, Response, Server, StatusCode};
 
 /// Web-based profiling dashboard server.
 ///
@@ -67,70 +67,84 @@ impl WebDashboard {
             .map_err(|e| GupError::resource_error(format!("Failed to start web server: {}", e)))?;
 
         let profiler = self.profiler.clone();
-        
+
         thread::spawn(move || {
             for request in server.incoming_requests() {
                 let response = match (request.method(), request.url()) {
                     // Serve the main dashboard HTML
                     (Method::Get, "/") | (Method::Get, "/index.html") => {
-                        Response::from_string(DASHBOARD_HTML)
-                            .with_header(tiny_http::Header::from_bytes(
+                        Response::from_string(DASHBOARD_HTML).with_header(
+                            tiny_http::Header::from_bytes(
                                 &b"Content-Type"[..],
-                                &b"text/html; charset=utf-8"[..]
-                            ).unwrap())
+                                &b"text/html; charset=utf-8"[..],
+                            )
+                            .unwrap(),
+                        )
                     }
-                    
+
                     // API: Get current memory report
                     (Method::Get, "/api/memory") => {
                         let report = profiler.get_memory_report();
                         match serde_json::to_string(&report) {
-                            Ok(json) => Response::from_string(json)
-                                .with_header(tiny_http::Header::from_bytes(
+                            Ok(json) => Response::from_string(json).with_header(
+                                tiny_http::Header::from_bytes(
                                     &b"Content-Type"[..],
-                                    &b"application/json"[..]
-                                ).unwrap()),
+                                    &b"application/json"[..],
+                                )
+                                .unwrap(),
+                            ),
                             Err(e) => Response::from_string(format!("{{\"error\": \"{}\"}}", e))
-                                .with_status_code(StatusCode(500))
+                                .with_status_code(StatusCode(500)),
                         }
                     }
-                    
+
                     // API: Get memory leak detection
                     (Method::Get, "/api/leaks") => {
                         let report = profiler.get_memory_report();
                         match serde_json::to_string(&report.detected_leaks) {
-                            Ok(json) => Response::from_string(json)
-                                .with_header(tiny_http::Header::from_bytes(
+                            Ok(json) => Response::from_string(json).with_header(
+                                tiny_http::Header::from_bytes(
                                     &b"Content-Type"[..],
-                                    &b"application/json"[..]
-                                ).unwrap()),
+                                    &b"application/json"[..],
+                                )
+                                .unwrap(),
+                            ),
                             Err(e) => Response::from_string(format!("{{\"error\": \"{}\"}}", e))
-                                .with_status_code(StatusCode(500))
+                                .with_status_code(StatusCode(500)),
                         }
                     }
-                    
+
                     // API: Export profiling data
                     (Method::Get, "/api/export") => {
                         let report = profiler.get_memory_report();
                         match serde_json::to_string_pretty(&report) {
                             Ok(json) => Response::from_string(json)
-                                .with_header(tiny_http::Header::from_bytes(
-                                    &b"Content-Type"[..],
-                                    &b"application/json"[..]
-                                ).unwrap())
-                                .with_header(tiny_http::Header::from_bytes(
-                                    &b"Content-Disposition"[..],
-                                    &b"attachment; filename=\"profiling-data.json\""[..]
-                                ).unwrap()),
-                            Err(e) => Response::from_string(format!("{{\"error\": \"{}\"}}", e.to_string()))
-                                .with_status_code(StatusCode(500))
+                                .with_header(
+                                    tiny_http::Header::from_bytes(
+                                        &b"Content-Type"[..],
+                                        &b"application/json"[..],
+                                    )
+                                    .unwrap(),
+                                )
+                                .with_header(
+                                    tiny_http::Header::from_bytes(
+                                        &b"Content-Disposition"[..],
+                                        &b"attachment; filename=\"profiling-data.json\""[..],
+                                    )
+                                    .unwrap(),
+                                ),
+                            Err(e) => Response::from_string(format!(
+                                "{{\"error\": \"{}\"}}",
+                                e
+                            ))
+                            .with_status_code(StatusCode(500)),
                         }
                     }
-                    
+
                     // 404 for everything else
-                    _ => Response::from_string("Not Found")
-                        .with_status_code(StatusCode(404))
+                    _ => Response::from_string("Not Found").with_status_code(StatusCode(404)),
                 };
-                
+
                 let _ = request.respond(response);
             }
         });
@@ -143,7 +157,7 @@ impl WebDashboard {
     pub fn start(&self, _addr: &str) -> GupResult<()> {
         Err(GupError::configuration_error(
             "web-dashboard",
-            "Feature not enabled. Rebuild with --features web-dashboard"
+            "Feature not enabled. Rebuild with --features web-dashboard",
         ))
     }
 }
@@ -609,7 +623,7 @@ mod tests {
                 backends: wgpu::Backends::all(),
                 ..Default::default()
             });
-            
+
             let adapter = instance
                 .request_adapter(&wgpu::RequestAdapterOptions::default())
                 .await
@@ -623,10 +637,10 @@ mod tests {
             let profiler = Arc::new(GpuMemoryProfiler::new(&device, &queue));
             let dashboard = WebDashboard::new(profiler);
             // Just verify we can create a dashboard
-            assert!(std::ptr::addr_of!(dashboard).is_null() == false);
+            assert!(!std::ptr::addr_of!(dashboard).is_null());
         });
     }
-    
+
     #[test]
     #[cfg(not(feature = "web-dashboard"))]
     fn test_dashboard_disabled_without_feature() {
@@ -635,7 +649,7 @@ mod tests {
                 backends: wgpu::Backends::all(),
                 ..Default::default()
             });
-            
+
             let adapter = instance
                 .request_adapter(&wgpu::RequestAdapterOptions::default())
                 .await

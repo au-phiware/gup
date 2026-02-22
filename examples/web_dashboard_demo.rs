@@ -15,8 +15,8 @@
 //!
 //! Then open http://127.0.0.1:8080 in your web browser to view the dashboard.
 
-use gup::debug::{GpuMemoryProfiler, WebDashboard};
 use gup::GupContext;
+use gup::debug::{GpuMemoryProfiler, WebDashboard};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
