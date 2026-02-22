@@ -1890,6 +1890,417 @@ impl ComposableShaderFunction for Easing {
     }
 }
 
+// ============================================================================
+// Advanced Temporal Animation System (GUP-138)
+// ============================================================================
+
+/// Keyframe for animations - represents a single point in time with a value.
+///
+/// Keyframes are used to define animation trajectories with multiple control points.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Keyframe {
+    pub time: f32,
+    pub value: f32,
+    pub _padding: [f32; 2], // Align to 16 bytes
+}
+
+impl Keyframe {
+    pub fn new(time: f32, value: f32) -> Self {
+        Self {
+            time,
+            value,
+            _padding: [0.0; 2],
+        }
+    }
+}
+
+/// Maximum number of keyframes supported in uniform buffer-based animations.
+/// For more keyframes, use storage buffer-based animations.
+pub const MAX_KEYFRAMES: usize = 16;
+
+/// Keyframe animation with up to 16 keyframes in a uniform buffer.
+///
+/// For animations requiring more keyframes, use KeyframeAnimationStorageBuffer.
+#[derive(Clone, Debug)]
+pub struct KeyframeAnimation {
+    pub keyframes: Vec<Keyframe>,
+    pub loop_animation: bool,
+    pub reverse_on_loop: bool,
+}
+
+impl KeyframeAnimation {
+    pub fn new() -> Self {
+        Self {
+            keyframes: Vec::new(),
+            loop_animation: false,
+            reverse_on_loop: false,
+        }
+    }
+
+    pub fn add_keyframe(mut self, time: f32, value: f32) -> Self {
+        if self.keyframes.len() < MAX_KEYFRAMES {
+            self.keyframes.push(Keyframe::new(time, value));
+            // Keep keyframes sorted by time
+            self.keyframes.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
+        }
+        self
+    }
+
+    pub fn with_loop(mut self, enable: bool) -> Self {
+        self.loop_animation = enable;
+        self
+    }
+
+    pub fn with_reverse(mut self, enable: bool) -> Self {
+        self.reverse_on_loop = enable;
+        self
+    }
+}
+
+impl Default for KeyframeAnimation {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct KeyframeAnimationUniforms {
+    pub keyframes: [Keyframe; MAX_KEYFRAMES],
+    pub keyframe_count: u32,
+    pub loop_animation: u32,
+    pub reverse_on_loop: u32,
+    pub _padding: u32,
+}
+
+impl ShaderUniform for KeyframeAnimationUniforms {
+    fn wgsl_struct_definition() -> String {
+        format!(
+            "struct Keyframe {{\n    time: f32,\n    value: f32,\n}}\n\n\
+             struct KeyframeAnimationUniforms {{\n    keyframes: array<Keyframe, {}>,\n    \
+             keyframe_count: u32,\n    loop_animation: u32,\n    reverse_on_loop: u32,\n}}",
+            MAX_KEYFRAMES
+        )
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "KeyframeAnimationUniforms"
+    }
+}
+
+impl ComposableShaderFunction for KeyframeAnimation {
+    type Input = f32; // time input
+    type Output = f32;
+    type Uniforms = KeyframeAnimationUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn keyframe_animation(time: f32, params: KeyframeAnimationUniforms) -> f32 {
+            if (params.keyframe_count == 0u) {
+                return 0.0;
+            }
+            
+            if (params.keyframe_count == 1u) {
+                return params.keyframes[0].value;
+            }
+            
+            // Get time range from first and last keyframes
+            let start_time = params.keyframes[0].time;
+            let end_time = params.keyframes[params.keyframe_count - 1u].time;
+            let duration = end_time - start_time;
+            
+            var t = time;
+            
+            // Handle looping
+            if (params.loop_animation != 0u && duration > 0.0) {
+                t = start_time + ((time - start_time) % duration);
+                if (t < start_time) {
+                    t = t + duration;
+                }
+                
+                // Handle reverse on loop
+                if (params.reverse_on_loop != 0u) {
+                    let cycle = floor((time - start_time) / duration);
+                    if (u32(cycle) % 2u == 1u) {
+                        t = end_time - (t - start_time);
+                    }
+                }
+            }
+            
+            // Clamp to time range
+            if (t <= params.keyframes[0].time) {
+                return params.keyframes[0].value;
+            }
+            if (t >= params.keyframes[params.keyframe_count - 1u].time) {
+                return params.keyframes[params.keyframe_count - 1u].value;
+            }
+            
+            // Find the two keyframes to interpolate between
+            for (var i = 0u; i < params.keyframe_count - 1u; i = i + 1u) {
+                let k1 = params.keyframes[i];
+                let k2 = params.keyframes[i + 1u];
+                
+                if (t >= k1.time && t <= k2.time) {
+                    let segment_duration = k2.time - k1.time;
+                    if (segment_duration <= 0.0) {
+                        return k1.value;
+                    }
+                    let local_t = (t - k1.time) / segment_duration;
+                    return mix(k1.value, k2.value, local_t);
+                }
+            }
+            
+            return params.keyframes[params.keyframe_count - 1u].value;
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        let mut keyframes = [Keyframe {
+            time: 0.0,
+            value: 0.0,
+            _padding: [0.0; 2],
+        }; MAX_KEYFRAMES];
+
+        for (i, kf) in self.keyframes.iter().enumerate().take(MAX_KEYFRAMES) {
+            keyframes[i] = *kf;
+        }
+
+        Some(KeyframeAnimationUniforms {
+            keyframes,
+            keyframe_count: self.keyframes.len().min(MAX_KEYFRAMES) as u32,
+            loop_animation: if self.loop_animation { 1 } else { 0 },
+            reverse_on_loop: if self.reverse_on_loop { 1 } else { 0 },
+            _padding: 0,
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "keyframe_animation"
+    }
+}
+
+/// Cubic bezier timing function for advanced easing curves.
+///
+/// Defines a cubic bezier curve with two control points for custom timing.
+/// Common presets:
+/// - ease: (0.25, 0.1, 0.25, 1.0)
+/// - ease-in: (0.42, 0.0, 1.0, 1.0)
+/// - ease-out: (0.0, 0.0, 0.58, 1.0)
+/// - ease-in-out: (0.42, 0.0, 0.58, 1.0)
+#[derive(Clone, Debug)]
+pub struct CubicBezierTiming {
+    pub x1: f32,
+    pub y1: f32,
+    pub x2: f32,
+    pub y2: f32,
+}
+
+impl CubicBezierTiming {
+    pub fn new(x1: f32, y1: f32, x2: f32, y2: f32) -> Self {
+        Self { x1, y1, x2, y2 }
+    }
+
+    pub fn ease() -> Self {
+        Self::new(0.25, 0.1, 0.25, 1.0)
+    }
+
+    pub fn ease_in() -> Self {
+        Self::new(0.42, 0.0, 1.0, 1.0)
+    }
+
+    pub fn ease_out() -> Self {
+        Self::new(0.0, 0.0, 0.58, 1.0)
+    }
+
+    pub fn ease_in_out() -> Self {
+        Self::new(0.42, 0.0, 0.58, 1.0)
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct CubicBezierTimingUniforms {
+    pub x1: f32,
+    pub y1: f32,
+    pub x2: f32,
+    pub y2: f32,
+}
+
+impl ShaderUniform for CubicBezierTimingUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct CubicBezierTimingUniforms {\n    x1: f32,\n    y1: f32,\n    x2: f32,\n    y2: f32,\n}".to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "CubicBezierTimingUniforms"
+    }
+}
+
+impl ComposableShaderFunction for CubicBezierTiming {
+    type Input = f32; // normalized time (0-1)
+    type Output = f32;
+    type Uniforms = CubicBezierTimingUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn cubic_bezier_timing(t: f32, params: CubicBezierTimingUniforms) -> f32 {
+            let normalized = clamp(t, 0.0, 1.0);
+            
+            // Newton-Raphson method to solve for bezier X coordinate
+            // We want to find t_bezier such that bezier_x(t_bezier) = normalized
+            var t_bezier = normalized; // Initial guess
+            
+            for (var i = 0; i < 8; i = i + 1) {
+                // Cubic bezier X formula: 3*(1-t)^2*t*x1 + 3*(1-t)*t^2*x2 + t^3
+                let one_minus_t = 1.0 - t_bezier;
+                let bezier_x = 3.0 * one_minus_t * one_minus_t * t_bezier * params.x1 +
+                               3.0 * one_minus_t * t_bezier * t_bezier * params.x2 +
+                               t_bezier * t_bezier * t_bezier;
+                
+                // Derivative of bezier X
+                let bezier_x_derivative = 3.0 * one_minus_t * one_minus_t * params.x1 +
+                                          6.0 * one_minus_t * t_bezier * (params.x2 - params.x1) +
+                                          3.0 * t_bezier * t_bezier * (1.0 - params.x2);
+                
+                if (abs(bezier_x_derivative) < 0.000001) {
+                    break;
+                }
+                
+                // Newton-Raphson iteration
+                let delta = (bezier_x - normalized) / bezier_x_derivative;
+                t_bezier = t_bezier - delta;
+                
+                if (abs(delta) < 0.000001) {
+                    break;
+                }
+            }
+            
+            // Calculate Y value at the found t_bezier
+            let one_minus_t = 1.0 - t_bezier;
+            let bezier_y = 3.0 * one_minus_t * one_minus_t * t_bezier * params.y1 +
+                           3.0 * one_minus_t * t_bezier * t_bezier * params.y2 +
+                           t_bezier * t_bezier * t_bezier;
+            
+            return clamp(bezier_y, 0.0, 1.0);
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(CubicBezierTimingUniforms {
+            x1: self.x1,
+            y1: self.y1,
+            x2: self.x2,
+            y2: self.y2,
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "cubic_bezier_timing"
+    }
+}
+
+/// Animation playback state for timeline coordination.
+///
+/// Manages play, pause, seek, and time direction for animations.
+#[derive(Clone, Debug)]
+pub enum AnimationPlaybackState {
+    Playing,
+    Paused,
+    Stopped,
+}
+
+/// Animation timeline controller for complex animation sequences.
+///
+/// Provides playback control and time management for animations.
+#[derive(Clone, Debug)]
+pub struct AnimationTimeline {
+    pub current_time: f32,
+    pub playback_rate: f32,
+    pub state: AnimationPlaybackState,
+    pub loop_timeline: bool,
+    pub duration: f32,
+}
+
+impl AnimationTimeline {
+    pub fn new(duration: f32) -> Self {
+        Self {
+            current_time: 0.0,
+            playback_rate: 1.0,
+            state: AnimationPlaybackState::Stopped,
+            loop_timeline: false,
+            duration,
+        }
+    }
+
+    pub fn play(&mut self) {
+        self.state = AnimationPlaybackState::Playing;
+    }
+
+    pub fn pause(&mut self) {
+        self.state = AnimationPlaybackState::Paused;
+    }
+
+    pub fn stop(&mut self) {
+        self.state = AnimationPlaybackState::Stopped;
+        self.current_time = 0.0;
+    }
+
+    pub fn seek(&mut self, time: f32) {
+        self.current_time = time.clamp(0.0, self.duration);
+    }
+
+    pub fn set_playback_rate(&mut self, rate: f32) {
+        self.playback_rate = rate;
+    }
+
+    pub fn enable_loop(&mut self, enable: bool) {
+        self.loop_timeline = enable;
+    }
+
+    /// Update timeline with elapsed time (in seconds)
+    pub fn update(&mut self, delta_time: f32) -> f32 {
+        match self.state {
+            AnimationPlaybackState::Playing => {
+                self.current_time += delta_time * self.playback_rate;
+
+                if self.current_time > self.duration {
+                    if self.loop_timeline {
+                        self.current_time = self.current_time % self.duration;
+                    } else {
+                        self.current_time = self.duration;
+                        self.state = AnimationPlaybackState::Stopped;
+                    }
+                } else if self.current_time < 0.0 {
+                    if self.loop_timeline {
+                        self.current_time =
+                            self.duration + (self.current_time % self.duration);
+                    } else {
+                        self.current_time = 0.0;
+                        self.state = AnimationPlaybackState::Stopped;
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        self.current_time
+    }
+
+    pub fn normalized_time(&self) -> f32 {
+        if self.duration <= 0.0 {
+            0.0
+        } else {
+            (self.current_time / self.duration).clamp(0.0, 1.0)
+        }
+    }
+}
+
+// End of Advanced Temporal Animation System
+// ============================================================================
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct LinearScaleUniforms {

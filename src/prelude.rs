@@ -73,6 +73,14 @@ pub use crate::shader_function::{
     TemporalInterpolation,
     Threshold,
 
+    // Advanced temporal animation (GUP-138)
+    AnimationPlaybackState,
+    AnimationTimeline,
+    CubicBezierTiming,
+    Keyframe,
+    KeyframeAnimation,
+    MAX_KEYFRAMES,
+
     // Shader types
     Vec2,
     Vec3,

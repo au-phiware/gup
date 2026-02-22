@@ -6,7 +6,6 @@
 //! These tests validate that composed shader functions perform within 15% of
 //! hand-optimized WGSL shaders. They use actual GPU timing to measure performance.
 
-use gup::shader_function::*;
 use pollster::FutureExt;
 use wgpu::util::DeviceExt;
 
@@ -175,13 +174,13 @@ impl GpuTestContext {
         });
 
         // Create pipeline
-        let pipeline_layout =
-            self.device
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("Test Pipeline Layout"),
-                    bind_group_layouts: &[&bind_group_layout],
-                    push_constant_ranges: &[],
-                });
+        let pipeline_layout = self
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Test Pipeline Layout"),
+                bind_group_layouts: &[&bind_group_layout],
+                push_constant_ranges: &[],
+            });
 
         let pipeline = self
             .device
@@ -209,7 +208,7 @@ impl GpuTestContext {
 
             compute_pass.set_pipeline(&pipeline);
             compute_pass.set_bind_group(0, &bind_group, &[]);
-            compute_pass.dispatch_workgroups(((TEST_DATA_SIZE as u32 + 255) / 256).max(1), 1, 1);
+            compute_pass.dispatch_workgroups((TEST_DATA_SIZE as u32).div_ceil(256).max(1), 1, 1);
         }
 
         self.queue.submit(Some(encoder.finish()));
@@ -238,16 +237,16 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     if (index >= arrayLength(&input)) {
         return;
     }
-    
+
     let value = input[index];
-    
+
     // Linear scale (inlined)
     let normalized = (value - uniforms.domain_min) / (uniforms.domain_max - uniforms.domain_min);
     let scaled = uniforms.range_min + normalized * (uniforms.range_max - uniforms.range_min);
-    
+
     // Color map (inlined)
     let color = mix(uniforms.min_color, uniforms.max_color, scaled);
-    
+
     output[index] = color;
 }
 "#;
@@ -284,13 +283,13 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     if (index >= arrayLength(&input)) {
         return;
     }
-    
+
     let value = input[index];
-    
+
     // Composed functions
     let scaled = linear_scale(value, uniforms.domain_min, uniforms.domain_max, uniforms.range_min, uniforms.range_max);
     let color = color_map(scaled, uniforms.min_color, uniforms.max_color);
-    
+
     output[index] = color;
 }
 "#;
@@ -411,10 +410,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     println!("\n=== Composition Depth Scaling ===");
     println!("3-stage time: {:.6} seconds", time_3_stage);
     println!("5-stage time: {:.6} seconds", time_5_stage);
-    println!(
-        "Ratio:        {:.2}x",
-        time_5_stage / time_3_stage
-    );
+    println!("Ratio:        {:.2}x", time_5_stage / time_3_stage);
 
     // The 5-stage should not be dramatically slower (should scale linearly or better)
     let ratio = time_5_stage / time_3_stage;

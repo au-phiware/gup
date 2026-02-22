@@ -2,7 +2,8 @@
 
 ## Overview
 
-This document describes the performance benchmarking methodology for Gup's shader function composition system (GUP-137).
+This document describes the performance benchmarking methodology for Gup's
+shader function composition system (GUP-137).
 
 ## Benchmark Types
 
@@ -10,11 +11,15 @@ This document describes the performance benchmarking methodology for Gup's shade
 
 Measures actual GPU performance using Criterion.rs:
 
-- **Composed vs Hand-Optimized**: Compares 2-stage composed pipeline (LinearScale + ColorMap) against hand-optimized equivalent
-- **Composition Depth**: Tests performance scaling with 2, 3, and 5-stage composition chains
-- **WGSL Generation**: Measures CPU time to generate WGSL code from shader functions
+- **Composed vs Hand-Optimized**: Compares 2-stage composed pipeline
+  (LinearScale + ColorMap) against hand-optimized equivalent
+- **Composition Depth**: Tests performance scaling with 2, 3, and 5-stage
+  composition chains
+- **WGSL Generation**: Measures CPU time to generate WGSL code from shader
+  functions
 
 **Usage:**
+
 ```bash
 cargo bench --bench shader_performance_benchmarks
 ```
@@ -23,10 +28,12 @@ cargo bench --bench shader_performance_benchmarks
 
 Integration tests that validate performance claims with actual GPU timing:
 
-- **Performance Target**: Validates composed shaders are within 15% of hand-optimized
+- **Performance Target**: Validates composed shaders are within 15% of
+  hand-optimized
 - **Depth Scaling**: Verifies composition scales linearly with depth
 
 **Usage:**
+
 ```bash
 cargo test --test shader_performance_tests -- --ignored --test-threads=1 --nocapture
 ```
@@ -47,7 +54,8 @@ cargo test --test shader_performance_tests -- --ignored --test-threads=1 --nocap
 
 ### Comparison Approach
 
-1. **Hand-Optimized Baseline**: Write functionally equivalent WGSL with manual inlining
+1. **Hand-Optimized Baseline**: Write functionally equivalent WGSL with manual
+   inlining
 2. **Composed Version**: Generate WGSL using shader function composition system
 3. **Measurement**: Wall-clock time for GPU submission + poll completion
 4. **Validation**: Assert overhead ≤ 15%

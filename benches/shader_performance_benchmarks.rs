@@ -8,9 +8,7 @@
 //! provides detailed performance metrics.
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use gup::shader_function::{
-    Clamp, ColorMap, ComposableShaderFunction, LinearScale, Vec4,
-};
+use gup::shader_function::{Clamp, ColorMap, ComposableShaderFunction, LinearScale, Vec4};
 use pollster::FutureExt;
 use std::hint::black_box;
 use wgpu::util::DeviceExt;
@@ -174,13 +172,13 @@ impl GpuBenchmarkContext {
         });
 
         // Create pipeline
-        let pipeline_layout =
-            self.device
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("Benchmark Pipeline Layout"),
-                    bind_group_layouts: &[&bind_group_layout],
-                    push_constant_ranges: &[],
-                });
+        let pipeline_layout = self
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Benchmark Pipeline Layout"),
+                bind_group_layouts: &[&bind_group_layout],
+                push_constant_ranges: &[],
+            });
 
         let pipeline = self
             .device
@@ -209,7 +207,7 @@ impl GpuBenchmarkContext {
             compute_pass.set_pipeline(&pipeline);
             compute_pass.set_bind_group(0, &bind_group, &[]);
             compute_pass.dispatch_workgroups(
-                ((BENCHMARK_DATA_SIZE as u32 + 255) / 256).max(1),
+                (BENCHMARK_DATA_SIZE as u32).div_ceil(256).max(1),
                 1,
                 1,
             );
@@ -256,13 +254,13 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     if (index >= arrayLength(&input)) {
         return;
     }
-    
+
     let value = input[index];
-    
+
     // Linear scale (hand-optimized)
     let normalized = (value - uniforms.domain_min) / (uniforms.domain_max - uniforms.domain_min);
     let scaled = uniforms.range_min + normalized * (uniforms.range_max - uniforms.range_min);
-    
+
     // Color map (hand-optimized)
     let color = vec4<f32>(
         uniforms.min_color_r + scaled * (uniforms.max_color_r - uniforms.min_color_r),
@@ -270,7 +268,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         uniforms.min_color_b + scaled * (uniforms.max_color_b - uniforms.min_color_b),
         uniforms.min_color_a + scaled * (uniforms.max_color_a - uniforms.min_color_a)
     );
-    
+
     output[index] = color;
 }
 "#;
