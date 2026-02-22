@@ -478,10 +478,10 @@ pub struct PerformanceTest {
     pub name: String,
     pub category: String,
     pub test_fn: Box<
-        dyn Fn(
-                &mut GpuDebugContext,
+        dyn for<'a> Fn(
+                &'a mut GpuDebugContext,
             ) -> std::pin::Pin<
-                Box<dyn std::future::Future<Output = GupResult<PerformanceSnapshot>> + '_>,
+                Box<dyn std::future::Future<Output = GupResult<PerformanceSnapshot>> + Send + 'a>,
             > + Send
             + Sync,
     >,
@@ -496,16 +496,21 @@ impl PerformanceTestSuite {
         }
     }
 
-    /// Add a test to the suite
-    pub fn add_test<F, Fut>(mut self, name: impl Into<String>, category: impl Into<String>, test_fn: F) -> Self
+    /// Add a test to the suite using a closure
+    pub fn add_test<F>(mut self, name: impl Into<String>, category: impl Into<String>, test_fn: F) -> Self
     where
-        F: Fn(&mut GpuDebugContext) -> Fut + Send + Sync + 'static,
-        Fut: std::future::Future<Output = GupResult<PerformanceSnapshot>> + 'static,
+        F: for<'a> Fn(
+                &'a mut GpuDebugContext,
+            ) -> std::pin::Pin<
+                Box<dyn std::future::Future<Output = GupResult<PerformanceSnapshot>> + Send + 'a>,
+            > + Send
+            + Sync
+            + 'static,
     {
         self.tests.push(PerformanceTest {
             name: name.into(),
             category: category.into(),
-            test_fn: Box::new(move |ctx| Box::pin(test_fn(ctx))),
+            test_fn: Box::new(test_fn),
         });
         self
     }

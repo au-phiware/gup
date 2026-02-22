@@ -1,0 +1,87 @@
+{
+  "timestamp": "2026-02-22T01:55:27.712006634Z",
+  "duration_ms": 31,
+  "test_results": [
+    {
+      "test_name": "basic_rendering",
+      "category": "rendering",
+      "snapshot": {
+        "timestamp": "2026-02-22T01:55:27.717148720Z",
+        "frame_time_ms": 5.138375,
+        "memory_usage_bytes": 1048576,
+        "gpu_utilization_percent": 0.0,
+        "query_time_us": 0.0,
+        "metadata": {}
+      },
+      "baseline_comparison": null,
+      "elapsed_ms": 5,
+      "passed": true
+    },
+    {
+      "test_name": "large_dataset_rendering",
+      "category": "rendering",
+      "snapshot": {
+        "timestamp": "2026-02-22T01:55:27.732255429Z",
+        "frame_time_ms": 15.068113,
+        "memory_usage_bytes": 10485760,
+        "gpu_utilization_percent": 0.0,
+        "query_time_us": 0.0,
+        "metadata": {}
+      },
+      "baseline_comparison": null,
+      "elapsed_ms": 15,
+      "passed": true
+    },
+    {
+      "test_name": "shader_compilation",
+      "category": "compilation",
+      "snapshot": {
+        "timestamp": "2026-02-22T01:55:27.740444391Z",
+        "frame_time_ms": 8.15071,
+        "memory_usage_bytes": 524288,
+        "gpu_utilization_percent": 0.0,
+        "query_time_us": 0.0,
+        "metadata": {}
+      },
+      "baseline_comparison": null,
+      "elapsed_ms": 8,
+      "passed": true
+    },
+    {
+      "test_name": "buffer_upload",
+      "category": "gpu_transfer",
+      "snapshot": {
+        "timestamp": "2026-02-22T01:55:27.743613985Z",
+        "frame_time_ms": 3.128617,
+        "memory_usage_bytes": 5242880,
+        "gpu_utilization_percent": 0.0,
+        "query_time_us": 0.0,
+        "metadata": {}
+      },
+      "baseline_comparison": null,
+      "elapsed_ms": 3,
+      "passed": true
+    }
+  ],
+  "summary": {
+    "sample_count": 0,
+    "avg_frame_time_ms": 0.0,
+    "min_frame_time_ms": 0.0,
+    "max_frame_time_ms": 0.0,
+    "avg_memory_usage_bytes": 0,
+    "min_memory_usage_bytes": 0,
+    "max_memory_usage_bytes": 0,
+    "fps": 0.0
+  },
+  "config": {
+    "baseline_dir": "baselines/performance",
+    "thresholds": {
+      "max_frame_time_ms": 16.67,
+      "max_query_time_us": 1000.0,
+      "max_memory_usage_bytes": 1073741824,
+      "regression_threshold_percent": 20.0
+    },
+    "fail_on_regression": true,
+    "max_suite_duration_secs": 300
+  }
+}

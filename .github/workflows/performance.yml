@@ -1,0 +1,135 @@
+name: Performance Testing
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  performance:
+    name: Performance Regression Testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all history for trend analysis
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v24
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Setup Nix development environment
+        run: nix develop --command bash -c "echo 'Nix environment ready'"
+
+      - name: Restore cached baselines
+        uses: actions/cache@v3
+        with:
+          path: baselines/performance
+          key: performance-baselines-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            performance-baselines-${{ github.ref }}-
+            performance-baselines-main-
+
+      - name: Run performance test suite
+        run: |
+          nix develop --command bash -c "cargo test --test performance_ci_tests -- --test-threads=1 --nocapture"
+
+      - name: Check for performance regressions
+        id: regression_check
+        continue-on-error: true
+        run: |
+          if [ -f performance_report.json ]; then
+            # Extract regression status from report
+            regressions=$(jq '.test_results | map(select(.passed == false)) | length' performance_report.json)
+            echo "regressions=$regressions" >> $GITHUB_OUTPUT
+            if [ "$regressions" -gt 0 ]; then
+              echo "⚠️ Performance regressions detected: $regressions test(s) failed"
+              exit 1
+            fi
+          fi
+
+      - name: Upload performance report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-report-${{ github.sha }}
+          path: |
+            performance_report.json
+            performance_report.md
+          retention-days: 30
+
+      - name: Comment PR with performance results
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            if (fs.existsSync('performance_report.md')) {
+              const report = fs.readFileSync('performance_report.md', 'utf8');
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: report
+              });
+            }
+
+      - name: Fail on critical regressions
+        if: steps.regression_check.outcome == 'failure'
+        run: |
+          echo "❌ Performance regressions detected. Review the performance report."
+          exit 1
+
+  benchmark:
+    name: Comprehensive Benchmarking
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v24
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Run comprehensive benchmarks
+        run: |
+          nix develop --command bash -c "cargo bench --all-features"
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: target/criterion/
+          retention-days: 90
+
+      - name: Store benchmark results for trend analysis
+        run: |
+          mkdir -p .benchmark-history
+          cp -r target/criterion .benchmark-history/${{ github.sha }}
+
+      - name: Commit benchmark history
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update benchmark history [${{ github.sha }}]"
+          file_pattern: .benchmark-history/
+          branch: benchmark-history
+          create_branch: true
