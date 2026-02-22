@@ -26,6 +26,43 @@
 //! - **Cross-Platform**: Works on desktop (Windows, macOS, Linux) and web (WebAssembly)
 //! - **Interactive Visualizations**: Built-in support for user interactions and animations
 //! - **Extensible Architecture**: Modular design allowing custom marks and interactions
+//!
+//! ## Quick Start
+//!
+//! ```rust,ignore
+//! use gup::prelude::*;
+//!
+//! // Create GPU-compatible types with ergonomic macros
+//! let position = vec3![1.0, 2.0, 3.0];
+//! let color = vec4![1.0, 0.5, 0.0, 1.0];
+//!
+//! // Create visualizations
+//! gup::plot()
+//!     .data(sales_data)
+//!     .scatter(x("revenue"), y("profit"))
+//!     .render()?;
+//! ```
+//!
+//! ## Type Construction
+//!
+//! Gup provides ergonomic macros for GPU-compatible vector and matrix types:
+//!
+//! - `vec2![x, y]` - 2D vectors
+//! - `vec3![x, y, z]` - 3D vectors with automatic GPU padding
+//! - `vec4![x, y, z, w]` - 4D vectors (colors, homogeneous coordinates)
+//! - `mat2![...]`, `mat3![...]`, `mat4![...]` - Matrix construction
+//!
+//! These macros ensure proper GPU memory alignment and provide zero-cost abstractions.
+//! See the [Type Construction Guide](../docs/TYPE_CONSTRUCTION_GUIDE.md) for details.
+//!
+//! ## Module Organization
+//!
+//! - [`shader_function`] - Composable GPU shader functions
+//! - [`mark`] - Visualization mark types (Circle, Rectangle, Line)
+//! - [`scale`] - Data scaling and transformation
+//! - [`axis`] - Axis rendering and tick generation
+//! - [`accessibility`] - Screen reader and keyboard navigation support
+//! - [`prelude`] - Commonly used imports
 
 pub mod accessibility;
 pub mod async_mixable;

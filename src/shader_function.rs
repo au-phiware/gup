@@ -89,10 +89,22 @@ use wgpu::{Device, Queue};
 
 /// Macro for creating 2D vectors.
 ///
+/// Creates a `Vec2` with proper GPU alignment (8 bytes).
+///
 /// # Example
-/// ```rust,ignore
-/// let position = vec2![1.0, 2.0];
+///
+/// ```rust
+/// use gup::*;
+///
+/// let position = vec2![10.0, 20.0];
+/// assert_eq!(position.x, 10.0);
+/// assert_eq!(position.y, 20.0);
 /// ```
+///
+/// # Performance
+///
+/// This is a zero-cost abstraction that expands at compile time to direct
+/// struct initialization.
 #[macro_export]
 macro_rules! vec2 {
     ($x:expr, $y:expr) => {
@@ -102,10 +114,30 @@ macro_rules! vec2 {
 
 /// Macro for creating 3D vectors with proper GPU alignment.
 ///
+/// Creates a `Vec3` with automatic padding for 16-byte GPU alignment.
+/// The padding is handled automatically and you never need to specify it.
+///
 /// # Example
-/// ```rust,ignore
+///
+/// ```rust
+/// use gup::*;
+///
 /// let position = vec3![1.0, 2.0, 3.0];
+/// assert_eq!(position.x, 1.0);
+/// assert_eq!(position.y, 2.0);
+/// assert_eq!(position.z, 3.0);
+/// // _padding field is automatically set to 0.0
 /// ```
+///
+/// # GPU Memory Layout
+///
+/// `Vec3` requires 16-byte alignment on GPU (12 bytes data + 4 bytes padding).
+/// This macro ensures correct layout for GPU buffer uploads.
+///
+/// # Performance
+///
+/// Zero-cost abstraction with compile-time expansion. Identical performance
+/// to manual struct initialization.
 #[macro_export]
 macro_rules! vec3 {
     ($x:expr, $y:expr, $z:expr) => {
@@ -120,10 +152,27 @@ macro_rules! vec3 {
 
 /// Macro for creating 4D vectors.
 ///
+/// Creates a `Vec4` commonly used for RGBA colors or homogeneous coordinates.
+///
 /// # Example
-/// ```rust,ignore
+///
+/// ```rust
+/// use gup::*;
+///
+/// // RGBA color: orange with full opacity
 /// let color = vec4![1.0, 0.5, 0.0, 1.0];
+///
+/// // Homogeneous coordinates
+/// let position = vec4![10.0, 20.0, 0.0, 1.0];
 /// ```
+///
+/// # GPU Memory Layout
+///
+/// `Vec4` is 16 bytes (4 components × 4 bytes each) with natural GPU alignment.
+///
+/// # Performance
+///
+/// Zero-cost abstraction that expands at compile time.
 #[macro_export]
 macro_rules! vec4 {
     ($x:expr, $y:expr, $z:expr, $w:expr) => {
@@ -138,13 +187,33 @@ macro_rules! vec4 {
 
 /// Macro for creating 2x2 matrices.
 ///
+/// Creates a `Mat2` with row-major order for natural reading.
+///
 /// # Example
-/// ```rust,ignore
-/// let transform = mat2![
+///
+/// ```rust
+/// use gup::*;
+///
+/// // Identity matrix
+/// let identity = mat2![
 ///     1.0, 0.0,
 ///     0.0, 1.0
 /// ];
+///
+/// // 90-degree rotation
+/// let rotation = mat2![
+///     0.0, -1.0,
+///     1.0,  0.0
+/// ];
 /// ```
+///
+/// # GPU Memory Layout
+///
+/// `Mat2` is 16 bytes with GPU-standard padding between rows.
+///
+/// # Performance
+///
+/// Compile-time expansion with zero runtime overhead.
 #[macro_export]
 macro_rules! mat2 {
     ($m00:expr, $m01:expr,
@@ -158,19 +227,39 @@ macro_rules! mat2 {
     };
 }
 
-/// Macro for creating 3x3 matrices with clear column-major ordering.
+/// Macro for creating 3x3 matrices with row-major ordering.
 ///
-/// This macro takes 9 arguments representing the matrix elements in row-major order
-/// and creates a Mat3 with proper padding for GPU alignment.
+/// Creates a `Mat3` with automatic padding for GPU alignment. Takes 9 arguments
+/// representing the matrix elements in row-major (natural reading) order.
 ///
 /// # Example
-/// ```rust,ignore
-/// let transform = mat3![
+///
+/// ```rust
+/// use gup::*;
+///
+/// // Identity matrix
+/// let identity = mat3![
 ///     1.0, 0.0, 0.0,
 ///     0.0, 1.0, 0.0,
 ///     0.0, 0.0, 1.0
 /// ];
+///
+/// // 2D affine transformation (scale + translate)
+/// let transform = mat3![
+///     2.0, 0.0, 10.0,  // Scale X=2, Translate X=10
+///     0.0, 2.0, 20.0,  // Scale Y=2, Translate Y=20
+///     0.0, 0.0,  1.0   // Homogeneous coordinate
+/// ];
 /// ```
+///
+/// # GPU Memory Layout
+///
+/// `Mat3` requires 48 bytes with padding between rows for GPU alignment.
+/// The padding is handled automatically.
+///
+/// # Performance
+///
+/// Zero-cost abstraction with compile-time expansion.
 #[macro_export]
 macro_rules! mat3 {
     ($m00:expr, $m01:expr, $m02:expr,
@@ -193,11 +282,44 @@ macro_rules! mat3 {
     };
 }
 
-/// Macro for creating 4x4 matrices with clear column-major ordering.
+/// Macro for creating 4x4 matrices with row-major ordering.
 ///
-/// This macro takes 16 arguments representing the matrix elements in row-major order
-/// and creates a Mat4 with proper alignment for GPU usage.
+/// Creates a `Mat4` with proper alignment for GPU usage. Takes 16 arguments
+/// representing the matrix elements in row-major (natural reading) order.
+/// Commonly used for 3D transformations and projection matrices.
 ///
+/// # Example
+///
+/// ```rust
+/// use gup::*;
+///
+/// // Identity matrix
+/// let identity = mat4![
+///     1.0, 0.0, 0.0, 0.0,
+///     0.0, 1.0, 0.0, 0.0,
+///     0.0, 0.0, 1.0, 0.0,
+///     0.0, 0.0, 0.0, 1.0
+/// ];
+///
+/// // Translation matrix
+/// let translate = mat4![
+///     1.0, 0.0, 0.0, 10.0,
+///     0.0, 1.0, 0.0, 20.0,
+///     0.0, 0.0, 1.0, 30.0,
+///     0.0, 0.0, 0.0,  1.0
+/// ];
+/// ```
+///
+/// # GPU Memory Layout
+///
+/// `Mat4` is 64 bytes with natural GPU alignment (16 bytes per row).
+///
+/// # Performance
+///
+/// Compile-time expansion with zero runtime overhead. Identical to direct
+/// struct initialization.
+#[macro_export]
+macro_rules! mat4 {
 /// # Example
 /// ```rust,ignore
 /// let transform = mat4![
