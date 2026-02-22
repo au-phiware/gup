@@ -143,7 +143,7 @@ plot()
 ```javascript
 Plot.dot(data, {
   tip: true, // Built-in tooltips
-  onclick: (d) => console.log(d),
+  onclick: d => console.log(d),
 }).plot();
 ```
 
@@ -158,61 +158,61 @@ chart.select_all::<Circle>()
 
 ## Feature Comparison Matrix
 
-| Feature                  | Observable Plot | Gup Status      | Notes                                        |
-| ------------------------ | --------------- | --------------- | -------------------------------------------- |
-| **Chart Types**          |                 |                 |                                              |
-| Scatter plots            | ✅              | ✅              | Full parity                                  |
-| Line charts              | ✅              | ✅              | Full parity                                  |
-| Bar charts               | ✅              | ✅              | Full parity                                  |
-| Area charts              | ✅              | ✅              | Full parity                                  |
-| Heatmaps                 | ✅              | ✅              | Full parity                                  |
-| Histograms               | ✅              | 🚧 Planned      | GUP Phase 2                                  |
-| Box plots                | ✅              | 🚧 Planned      | GUP Phase 2                                  |
-| Violin plots             | ✅              | 📋 Future       | GUP Phase 3                                  |
-| **Scales**               |                 |                 |                                              |
-| Linear scales            | ✅              | ✅              | GPU shader functions                         |
-| Log scales               | ✅              | ✅              | GPU shader functions                         |
-| Time scales              | ✅              | 📋 Planned      | GUP Phase 2                                  |
-| Band/Point scales        | ✅              | 🚧 Partial      | Category mapping available                   |
-| **Visual Encoding**      |                 |                 |                                              |
-| Position (x, y)          | ✅              | ✅              | Full parity                                  |
-| Color encoding           | ✅              | ✅              | GPU color gradients                          |
-| Size encoding            | ✅              | ✅              | Per-element sizing                           |
-| Opacity                  | ✅              | ✅              | Alpha channel support                        |
-| Shape encoding           | ✅              | 🚧 Partial      | Limited mark types currently                 |
-| **Axes & Annotations**   |                 |                 |                                              |
-| Automatic axes           | ✅              | ✅              | GPU-rendered axes                            |
-| Custom tick formats      | ✅              | ✅              | Custom label formatters                      |
-| Grid lines               | ✅              | ✅              | Configurable grid system                     |
-| Axis titles              | ✅              | ✅              | Text rendering support                       |
-| Annotations              | ✅              | 📋 Planned      | GUP Phase 2                                  |
-| **Interactions**         |                 |                 |                                              |
-| Tooltips                 | ✅              | 🚧 Planned      | GPU hit testing available                    |
-| Click events             | ✅              | ✅              | GPU-accelerated picking                      |
-| Hover events             | ✅              | ✅              | Real-time interaction                        |
-| Brush selection          | ✅              | 📋 Future       | GUP Phase 3                                  |
-| Pan & zoom               | ✅              | 🚧 Partial      | Available via custom handlers                |
-| **Data Processing**      |                 |                 |                                              |
-| Binning                  | ✅              | 📋 Planned      | GPU compute shaders                          |
-| Aggregation              | ✅              | 📋 Planned      | GPU parallel reduction                       |
-| Sorting                  | ✅              | 📋 Planned      | GPU sorting algorithms                       |
-| Filtering                | ✅              | ✅              | Rust iterators + GPU                         |
-| **Layout**               |                 |                 |                                              |
-| Faceting                 | ✅              | 📋 Future       | Multiple render passes                       |
-| Small multiples          | ✅              | 📋 Future       | Composition system                           |
-| Legends                  | ✅              | 📋 Planned      | GUP Phase 2                                  |
-| **Performance**          |                 |                 |                                              |
-| Dataset size (60 FPS)    | ~1K points      | 1M+ points      | GPU parallel processing                      |
-| Real-time streaming      | Limited         | ✅ Excellent    | GPU buffer updates                           |
-| Animation                | ✅              | 🚧 Partial      | Transitions available                        |
-| **Accessibility**        |                 |                 |                                              |
-| Screen reader support    | ✅ Excellent    | ✅ Good         | Different approach (see accessibility guide) |
-| Keyboard navigation      | ✅              | ✅              | Full keyboard support                        |
-| ARIA attributes          | ✅              | ✅              | Semantic descriptions                        |
-| **Export**               |                 |                 |                                              |
-| SVG export               | ✅              | 📋 Future       | Planned for Phase 4                          |
-| PNG export               | ✅              | 📋 Future       | Planned for Phase 4                          |
-| Interactive HTML         | ✅              | ✅              | WebGPU canvas                                |
+| Feature                | Observable Plot | Gup Status   | Notes                                        |
+| ---------------------- | --------------- | ------------ | -------------------------------------------- |
+| **Chart Types**        |                 |              |                                              |
+| Scatter plots          | ✅              | ✅           | Full parity                                  |
+| Line charts            | ✅              | ✅           | Full parity                                  |
+| Bar charts             | ✅              | ✅           | Full parity                                  |
+| Area charts            | ✅              | ✅           | Full parity                                  |
+| Heatmaps               | ✅              | ✅           | Full parity                                  |
+| Histograms             | ✅              | 🚧 Planned   | GUP Phase 2                                  |
+| Box plots              | ✅              | 🚧 Planned   | GUP Phase 2                                  |
+| Violin plots           | ✅              | 📋 Future    | GUP Phase 3                                  |
+| **Scales**             |                 |              |                                              |
+| Linear scales          | ✅              | ✅           | GPU shader functions                         |
+| Log scales             | ✅              | ✅           | GPU shader functions                         |
+| Time scales            | ✅              | 📋 Planned   | GUP Phase 2                                  |
+| Band/Point scales      | ✅              | 🚧 Partial   | Category mapping available                   |
+| **Visual Encoding**    |                 |              |                                              |
+| Position (x, y)        | ✅              | ✅           | Full parity                                  |
+| Color encoding         | ✅              | ✅           | GPU color gradients                          |
+| Size encoding          | ✅              | ✅           | Per-element sizing                           |
+| Opacity                | ✅              | ✅           | Alpha channel support                        |
+| Shape encoding         | ✅              | 🚧 Partial   | Limited mark types currently                 |
+| **Axes & Annotations** |                 |              |                                              |
+| Automatic axes         | ✅              | ✅           | GPU-rendered axes                            |
+| Custom tick formats    | ✅              | ✅           | Custom label formatters                      |
+| Grid lines             | ✅              | ✅           | Configurable grid system                     |
+| Axis titles            | ✅              | ✅           | Text rendering support                       |
+| Annotations            | ✅              | 📋 Planned   | GUP Phase 2                                  |
+| **Interactions**       |                 |              |                                              |
+| Tooltips               | ✅              | 🚧 Planned   | GPU hit testing available                    |
+| Click events           | ✅              | ✅           | GPU-accelerated picking                      |
+| Hover events           | ✅              | ✅           | Real-time interaction                        |
+| Brush selection        | ✅              | 📋 Future    | GUP Phase 3                                  |
+| Pan & zoom             | ✅              | 🚧 Partial   | Available via custom handlers                |
+| **Data Processing**    |                 |              |                                              |
+| Binning                | ✅              | 📋 Planned   | GPU compute shaders                          |
+| Aggregation            | ✅              | 📋 Planned   | GPU parallel reduction                       |
+| Sorting                | ✅              | 📋 Planned   | GPU sorting algorithms                       |
+| Filtering              | ✅              | ✅           | Rust iterators + GPU                         |
+| **Layout**             |                 |              |                                              |
+| Faceting               | ✅              | 📋 Future    | Multiple render passes                       |
+| Small multiples        | ✅              | 📋 Future    | Composition system                           |
+| Legends                | ✅              | 📋 Planned   | GUP Phase 2                                  |
+| **Performance**        |                 |              |                                              |
+| Dataset size (60 FPS)  | ~1K points      | 1M+ points   | GPU parallel processing                      |
+| Real-time streaming    | Limited         | ✅ Excellent | GPU buffer updates                           |
+| Animation              | ✅              | 🚧 Partial   | Transitions available                        |
+| **Accessibility**      |                 |              |                                              |
+| Screen reader support  | ✅ Excellent    | ✅ Good      | Different approach (see accessibility guide) |
+| Keyboard navigation    | ✅              | ✅           | Full keyboard support                        |
+| ARIA attributes        | ✅              | ✅           | Semantic descriptions                        |
+| **Export**             |                 |              |                                              |
+| SVG export             | ✅              | 📋 Future    | Planned for Phase 4                          |
+| PNG export             | ✅              | 📋 Future    | Planned for Phase 4                          |
+| Interactive HTML       | ✅              | ✅           | WebGPU canvas                                |
 
 **Legend:**
 
@@ -550,13 +550,13 @@ use different rendering backends. However, you can:
 
 ### Dataset Size Guidelines
 
-| Size            | Observable Plot | Gup                    |
-| --------------- | --------------- | ---------------------- |
-| < 1,000         | ✅ Excellent    | ✅ Excellent (overkill) |
-| 1,000 - 10,000  | ⚠️ Good         | ✅ Excellent            |
-| 10,000 - 100K   | ❌ Slow         | ✅ Excellent            |
-| 100K - 1M       | ❌ Unusable     | ✅ Good                 |
-| 1M+             | ❌ Unusable     | ✅ Specialized modes    |
+| Size           | Observable Plot | Gup                     |
+| -------------- | --------------- | ----------------------- |
+| < 1,000        | ✅ Excellent    | ✅ Excellent (overkill) |
+| 1,000 - 10,000 | ⚠️ Good         | ✅ Excellent            |
+| 10,000 - 100K  | ❌ Slow         | ✅ Excellent            |
+| 100K - 1M      | ❌ Unusable     | ✅ Good                 |
+| 1M+            | ❌ Unusable     | ✅ Specialized modes    |
 
 ### Performance Optimization Tips
 

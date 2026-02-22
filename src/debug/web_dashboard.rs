@@ -133,11 +133,8 @@ impl WebDashboard {
                                     )
                                     .unwrap(),
                                 ),
-                            Err(e) => Response::from_string(format!(
-                                "{{\"error\": \"{}\"}}",
-                                e
-                            ))
-                            .with_status_code(StatusCode(500)),
+                            Err(e) => Response::from_string(format!("{{\"error\": \"{}\"}}", e))
+                                .with_status_code(StatusCode(500)),
                         }
                     }
 
