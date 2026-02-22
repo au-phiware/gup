@@ -2604,6 +2604,259 @@ impl ComposableShaderFunction for ColorGradient {
     }
 }
 
+/// Storage buffer-based color gradient supporting unlimited color stops.
+///
+/// Unlike the uniform-based `ColorGradient` which is limited to 8 stops,
+/// this implementation uses storage buffers to support arbitrary numbers of color stops.
+/// Uses efficient binary search in WGSL for stop lookup.
+#[derive(Clone, Debug)]
+pub struct ColorGradientStorage {
+    pub colors: Vec<Vec4>,
+    pub stops: Vec<f32>,
+}
+
+impl ColorGradientStorage {
+    /// Creates a new gradient with explicit color stops.
+    pub fn new(colors: Vec<Vec4>, stops: Vec<f32>) -> Self {
+        assert_eq!(
+            colors.len(),
+            stops.len(),
+            "Colors and stops must have same length"
+        );
+        assert!(!colors.is_empty(), "Must have at least one color");
+        Self { colors, stops }
+    }
+
+    /// Creates a gradient with evenly spaced stops.
+    pub fn with_colors(colors: Vec<Vec4>) -> Self {
+        let count = colors.len();
+        let stops = (0..count)
+            .map(|i| i as f32 / (count - 1).max(1) as f32)
+            .collect();
+        Self { colors, stops }
+    }
+
+    /// Returns a builder for creating gradients.
+    pub fn builder() -> ColorGradientBuilder {
+        ColorGradientBuilder::new()
+    }
+
+    /// Creates the Viridis color gradient (perceptually uniform, colorblind-friendly).
+    pub fn viridis() -> Self {
+        Self::with_colors(vec![
+            vec4![0.267004, 0.004874, 0.329415, 1.0],
+            vec4![0.282623, 0.140926, 0.457517, 1.0],
+            vec4![0.253935, 0.265254, 0.529983, 1.0],
+            vec4![0.206756, 0.371758, 0.553117, 1.0],
+            vec4![0.163625, 0.471133, 0.558148, 1.0],
+            vec4![0.127568, 0.566949, 0.550556, 1.0],
+            vec4![0.134692, 0.658636, 0.517649, 1.0],
+            vec4![0.266941, 0.748751, 0.440573, 1.0],
+            vec4![0.477504, 0.821444, 0.318195, 1.0],
+            vec4![0.741388, 0.873449, 0.149561, 1.0],
+            vec4![0.993248, 0.906157, 0.143936, 1.0],
+        ])
+    }
+
+    /// Creates the Plasma color gradient (bright, vibrant, perceptually uniform).
+    pub fn plasma() -> Self {
+        Self::with_colors(vec![
+            vec4![0.050383, 0.029803, 0.527975, 1.0],
+            vec4![0.230556, 0.012923, 0.627545, 1.0],
+            vec4![0.401315, 0.000564, 0.658149, 1.0],
+            vec4![0.562738, 0.051545, 0.641509, 1.0],
+            vec4![0.706680, 0.165141, 0.564522, 1.0],
+            vec4![0.828139, 0.283102, 0.461594, 1.0],
+            vec4![0.920354, 0.417642, 0.338648, 1.0],
+            vec4![0.980260, 0.573940, 0.215906, 1.0],
+            vec4![0.991043, 0.746138, 0.137562, 1.0],
+            vec4![0.949368, 0.922887, 0.144767, 1.0],
+            vec4![0.940015, 0.975158, 0.131326, 1.0],
+        ])
+    }
+
+    /// Creates the Inferno color gradient (dark to bright, warm colors).
+    pub fn inferno() -> Self {
+        Self::with_colors(vec![
+            vec4![0.001462, 0.000466, 0.013866, 1.0],
+            vec4![0.087411, 0.044556, 0.224813, 1.0],
+            vec4![0.258234, 0.038571, 0.406485, 1.0],
+            vec4![0.461407, 0.075611, 0.437064, 1.0],
+            vec4![0.652443, 0.136307, 0.405923, 1.0],
+            vec4![0.816442, 0.223710, 0.331061, 1.0],
+            vec4![0.930395, 0.358711, 0.229521, 1.0],
+            vec4![0.986163, 0.543537, 0.142718, 1.0],
+            vec4![0.977201, 0.747849, 0.164568, 1.0],
+            vec4![0.929898, 0.937506, 0.349556, 1.0],
+            vec4![0.988362, 0.998364, 0.644924, 1.0],
+        ])
+    }
+
+    /// Creates a simple rainbow gradient.
+    pub fn rainbow() -> Self {
+        Self::with_colors(vec![
+            vec4![1.0, 0.0, 0.0, 1.0],      // Red
+            vec4![1.0, 0.5, 0.0, 1.0],      // Orange
+            vec4![1.0, 1.0, 0.0, 1.0],      // Yellow
+            vec4![0.0, 1.0, 0.0, 1.0],      // Green
+            vec4![0.0, 0.0, 1.0, 1.0],      // Blue
+            vec4![0.294, 0.0, 0.510, 1.0],  // Indigo
+            vec4![0.561, 0.0, 1.0, 1.0],    // Violet
+        ])
+    }
+
+    /// Creates a cool to warm gradient (blue to red).
+    pub fn cool_warm() -> Self {
+        Self::with_colors(vec![
+            vec4![0.0, 0.0, 1.0, 1.0],    // Blue
+            vec4![0.0, 0.5, 1.0, 1.0],    // Light blue
+            vec4![1.0, 1.0, 1.0, 1.0],    // White
+            vec4![1.0, 0.5, 0.0, 1.0],    // Orange
+            vec4![1.0, 0.0, 0.0, 1.0],    // Red
+        ])
+    }
+
+    /// Creates a grayscale gradient.
+    pub fn grayscale() -> Self {
+        Self::with_colors(vec![
+            vec4![0.0, 0.0, 0.0, 1.0],    // Black
+            vec4![1.0, 1.0, 1.0, 1.0],    // White
+        ])
+    }
+
+    /// Creates buffer data for colors.
+    pub fn create_colors_buffer_data(&self) -> Vec<u8> {
+        let mut data = Vec::with_capacity(self.colors.len() * 16);
+        for color in &self.colors {
+            data.extend_from_slice(&color.x.to_le_bytes());
+            data.extend_from_slice(&color.y.to_le_bytes());
+            data.extend_from_slice(&color.z.to_le_bytes());
+            data.extend_from_slice(&color.w.to_le_bytes());
+        }
+        data
+    }
+
+    /// Creates buffer data for stops.
+    pub fn create_stops_buffer_data(&self) -> Vec<u8> {
+        let mut data = Vec::with_capacity(self.stops.len() * 4);
+        for stop in &self.stops {
+            data.extend_from_slice(&stop.to_le_bytes());
+        }
+        data
+    }
+
+    /// Returns the number of color stops.
+    pub fn count(&self) -> u32 {
+        self.colors.len() as u32
+    }
+
+    /// Returns the WGSL struct definition for the storage buffer.
+    pub fn wgsl_struct_definition() -> &'static str {
+        r#"
+struct ColorGradientStorage {
+    count: u32,
+}
+
+@group(0) @binding(1) var<storage, read> gradient_colors: array<vec4<f32>>;
+@group(0) @binding(2) var<storage, read> gradient_stops: array<f32>;
+@group(0) @binding(3) var<uniform> gradient_info: ColorGradientStorage;
+"#
+    }
+
+    /// Returns the WGSL function implementation with efficient binary search.
+    pub fn wgsl_function() -> &'static str {
+        r#"
+fn color_gradient_storage(value: f32) -> vec4<f32> {
+    let t = clamp(value, 0.0, 1.0);
+    let count = gradient_info.count;
+    
+    // Handle single color
+    if (count == 1u) {
+        return gradient_colors[0];
+    }
+    
+    // Handle edge cases
+    if (t <= gradient_stops[0]) {
+        return gradient_colors[0];
+    }
+    if (t >= gradient_stops[count - 1u]) {
+        return gradient_colors[count - 1u];
+    }
+    
+    // Binary search for the correct stop range
+    var low = 0u;
+    var high = count - 1u;
+    
+    // Find the interval containing t
+    while (low + 1u < high) {
+        let mid = (low + high) / 2u;
+        if (gradient_stops[mid] <= t) {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+    
+    // Interpolate between the two colors
+    let t0 = gradient_stops[low];
+    let t1 = gradient_stops[high];
+    let local_t = (t - t0) / (t1 - t0);
+    
+    return mix(gradient_colors[low], gradient_colors[high], local_t);
+}
+"#
+    }
+}
+
+/// Builder for creating color gradients with a fluent API.
+pub struct ColorGradientBuilder {
+    stops: Vec<(f32, Vec4)>,
+}
+
+impl ColorGradientBuilder {
+    /// Creates a new gradient builder.
+    pub fn new() -> Self {
+        Self { stops: Vec::new() }
+    }
+
+    /// Adds a color stop at the specified position (0.0 to 1.0).
+    pub fn add_stop(mut self, position: f32, color: Vec4) -> Self {
+        assert!(
+            (0.0..=1.0).contains(&position),
+            "Stop position must be between 0.0 and 1.0"
+        );
+        self.stops.push((position, color));
+        self
+    }
+
+    /// Adds a color stop with RGB values (alpha = 1.0).
+    pub fn add_rgb(self, position: f32, r: f32, g: f32, b: f32) -> Self {
+        self.add_stop(position, vec4![r, g, b, 1.0])
+    }
+
+    /// Adds a color stop with RGBA values.
+    pub fn add_rgba(self, position: f32, r: f32, g: f32, b: f32, a: f32) -> Self {
+        self.add_stop(position, vec4![r, g, b, a])
+    }
+
+    /// Builds the gradient, sorting stops by position.
+    pub fn build(mut self) -> ColorGradientStorage {
+        assert!(!self.stops.is_empty(), "Gradient must have at least one stop");
+        
+        // Sort by position
+        self.stops.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        
+        let (positions, colors): (Vec<f32>, Vec<Vec4>) = self.stops.into_iter().unzip();
+        ColorGradientStorage::new(colors, positions)
+    }
+}
+
+impl Default for ColorGradientBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

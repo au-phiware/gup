@@ -36,23 +36,33 @@ fn test_wgsl_function_with_custom_struct() {
         return color * props.albedo * props.metallic;
     }
 
-    let instance = ApplyMaterial::new(
-        MaterialProps {
-            albedo: vec3![1.0, 0.5, 0.0],
-            metallic: 0.8,
-        }
-    );
+    let instance = ApplyMaterial::new(MaterialProps {
+        albedo: vec3![1.0, 0.5, 0.0],
+        metallic: 0.8,
+    });
 
     // The generated WGSL should include the struct definition
     let wgsl = instance.generate_wgsl();
-    
+
     // Should contain the MaterialProps struct definition
-    assert!(wgsl.contains("struct MaterialProps"), "WGSL should contain MaterialProps struct definition");
-    assert!(wgsl.contains("albedo: vec3<f32>"), "WGSL should contain albedo field");
-    assert!(wgsl.contains("metallic: f32"), "WGSL should contain metallic field");
-    
+    assert!(
+        wgsl.contains("struct MaterialProps"),
+        "WGSL should contain MaterialProps struct definition"
+    );
+    assert!(
+        wgsl.contains("albedo: vec3<f32>"),
+        "WGSL should contain albedo field"
+    );
+    assert!(
+        wgsl.contains("metallic: f32"),
+        "WGSL should contain metallic field"
+    );
+
     // Should also contain the function
-    assert!(wgsl.contains("fn apply_material"), "WGSL should contain the function");
+    assert!(
+        wgsl.contains("fn apply_material"),
+        "WGSL should contain the function"
+    );
 }
 
 #[test]
@@ -80,15 +90,13 @@ fn test_wgsl_function_with_nested_structs() {
         return base_color * light.color * light.intensity;
     }
 
-    let instance = ComputeLighting::new(
-        LightProperties {
-            color: vec3![1.0, 1.0, 1.0],
-            intensity: 1.0,
-        }
-    );
+    let instance = ComputeLighting::new(LightProperties {
+        color: vec3![1.0, 1.0, 1.0],
+        intensity: 1.0,
+    });
 
     let wgsl = instance.generate_wgsl();
-    
+
     // Should contain both struct definitions
     assert!(wgsl.contains("struct LightProperties"));
     assert!(wgsl.contains("color: vec3<f32>"));
@@ -105,7 +113,7 @@ fn test_wgsl_function_without_custom_struct() {
 
     let instance = SimpleScale::new(2.0_f32);
     let wgsl = instance.generate_wgsl();
-    
+
     // Should contain the function
     assert!(wgsl.contains("fn simple_scale"));
     // Should not contain random struct definitions
@@ -139,7 +147,7 @@ fn test_custom_struct_as_input_type() {
 
     let instance = ScaleX::new(2.0);
     let wgsl = instance.generate_wgsl();
-    
+
     // Should contain Position struct definition
     assert!(wgsl.contains("struct TestPosition"));
     assert!(wgsl.contains("x: f32"));
@@ -161,10 +169,9 @@ fn test_custom_struct_as_return_type() {
 
     let instance = GetColorValue::new(1.0);
     let wgsl = instance.generate_wgsl();
-    
+
     // Should contain ColorOutput struct definition
     assert!(wgsl.contains("struct TestColorOutput"));
     assert!(wgsl.contains("rgb: vec3<f32>"));
     assert!(wgsl.contains("alpha: f32"));
 }
-

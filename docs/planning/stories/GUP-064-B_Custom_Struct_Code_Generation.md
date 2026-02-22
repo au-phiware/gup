@@ -9,26 +9,33 @@
 
 ## Implementation Summary
 
-Successfully implemented custom struct code generation for WGSL with full integration into the `#[wgsl_function]` macro:
+Successfully implemented custom struct code generation for WGSL with full
+integration into the `#[wgsl_function]` macro:
 
 **Core Features Delivered**:
+
 - `#[derive(WgslStruct)]` proc-macro for automatic WGSL struct generation
 - `WgslStructType` trait for type discovery
 - Automatic inclusion of struct definitions in `#[wgsl_function]` generated WGSL
 - Support for scalar, vector, matrix, array, and nested custom types
-- Automatic skipping of padding fields (fields starting with _ or containing "padding")
+- Automatic skipping of padding fields (fields starting with \_ or containing
+  "padding")
 - Compile-time validation via #[repr(C)] requirement
 - Clear error messages for unsupported types
 
 **Files Added/Modified**:
+
 - `gup-macros/src/wgsl_struct.rs` - New derive macro implementation (217 lines)
-- `gup-macros/src/wgsl_function.rs` - Enhanced to detect and include custom structs
+- `gup-macros/src/wgsl_function.rs` - Enhanced to detect and include custom
+  structs
 - `gup-macros/src/lib.rs` - Added WgslStruct derive macro export
 - `src/shader_function.rs` - Added WgslStructType trait (18 lines)
 - `tests/wgsl_struct_derive_tests.rs` - Unit tests for derive macro (6 tests)
-- `tests/wgsl_struct_integration_tests.rs` - Integration tests with wgsl_function (5 tests)
+- `tests/wgsl_struct_integration_tests.rs` - Integration tests with
+  wgsl_function (5 tests)
 
 **Test Coverage**:
+
 - 11 new tests added, all passing
 - All existing tests continue to pass (1000+ tests)
 - Examples compile without errors
@@ -41,65 +48,97 @@ Successfully implemented custom struct code generation for WGSL with full integr
 
 #### Proc-Macro Type Discovery Limitations
 
-- **Challenge**: At proc-macro expansion time (compile-time), we cannot query whether a type implements a specific trait
-- **Solution**: Generated code that checks trait implementations at runtime via `ShaderType::wgsl_type_definition()`
-- **Pattern**: Track custom types at macro-expansion time, then generate runtime code to collect their definitions
-- **Trade-off**: Slightly more runtime overhead, but enables dynamic struct inclusion without specialization
+- **Challenge**: At proc-macro expansion time (compile-time), we cannot query
+  whether a type implements a specific trait
+- **Solution**: Generated code that checks trait implementations at runtime via
+  `ShaderType::wgsl_type_definition()`
+- **Pattern**: Track custom types at macro-expansion time, then generate runtime
+  code to collect their definitions
+- **Trade-off**: Slightly more runtime overhead, but enables dynamic struct
+  inclusion without specialization
 
 #### Visibility and Generated Code
 
-- **Challenge**: Generated structs are `pub` but using private types in their signatures causes compiler errors
-- **Solution**: Custom types used in `#[wgsl_function]` must be `pub` or at least as visible as the generated function struct
+- **Challenge**: Generated structs are `pub` but using private types in their
+  signatures causes compiler errors
+- **Solution**: Custom types used in `#[wgsl_function]` must be `pub` or at
+  least as visible as the generated function struct
 - **Pattern**: Test structs defined at module level with appropriate visibility
-- **Learning**: Proc-macros inherit visibility constraints from the context they're used in
+- **Learning**: Proc-macros inherit visibility constraints from the context
+  they're used in
 
 #### Type Annotation Inference in Generated Code
 
-- **Challenge**: The `Vec::new()` and `join()` calls in generated code sometimes need explicit type hints
-- **Solution**: Added explicit type annotation `Vec<String>` to help the compiler
-- **Pattern**: When generating collection-manipulation code, always provide explicit types
-- **Learning**: What's obvious to humans isn't always obvious to Rust's type inference in generated code
+- **Challenge**: The `Vec::new()` and `join()` calls in generated code sometimes
+  need explicit type hints
+- **Solution**: Added explicit type annotation `Vec<String>` to help the
+  compiler
+- **Pattern**: When generating collection-manipulation code, always provide
+  explicit types
+- **Learning**: What's obvious to humans isn't always obvious to Rust's type
+  inference in generated code
 
 ### Architectural Decisions
 
 #### WgslStructType as Separate Trait
 
 - **Decision**: Created `WgslStructType` as a separate trait from `ShaderType`
-- **Reasoning**: Not all `ShaderType` implementations need struct definitions (primitives don't), and vice versa
-- **Trade-off**: Slight complexity in trait hierarchy, but clearer separation of concerns
-- **Future**: Enables custom types that may not be ShaderTypes but still need WGSL definitions
+- **Reasoning**: Not all `ShaderType` implementations need struct definitions
+  (primitives don't), and vice versa
+- **Trade-off**: Slight complexity in trait hierarchy, but clearer separation of
+  concerns
+- **Future**: Enables custom types that may not be ShaderTypes but still need
+  WGSL definitions
 
 #### Runtime vs Compile-Time Struct Definition Collection
 
-- **Decision**: Collect struct definitions at runtime rather than macro-expansion time
-- **Reasoning**: Can't query trait implementations at macro-expansion time without specialization
-- **Trade-off**: Minimal runtime overhead for checking `wgsl_type_definition()` on each custom type
-- **Benefit**: Works today without unstable features, and overhead is negligible (only happens once during WGSL generation)
+- **Decision**: Collect struct definitions at runtime rather than
+  macro-expansion time
+- **Reasoning**: Can't query trait implementations at macro-expansion time
+  without specialization
+- **Trade-off**: Minimal runtime overhead for checking `wgsl_type_definition()`
+  on each custom type
+- **Benefit**: Works today without unstable features, and overhead is negligible
+  (only happens once during WGSL generation)
 
 #### Padding Field Auto-Detection
 
-- **Decision**: Automatically skip fields starting with `_` or containing "padding" in their name
+- **Decision**: Automatically skip fields starting with `_` or containing
+  "padding" in their name
 - **Reasoning**: Common Rust convention for padding fields in #[repr(C)] structs
-- **Trade-off**: User must follow naming convention, but it's already widely adopted
-- **Pattern**: Convention-over-configuration approach that "just works" for idiomatic Rust
+- **Trade-off**: User must follow naming convention, but it's already widely
+  adopted
+- **Pattern**: Convention-over-configuration approach that "just works" for
+  idiomatic Rust
 
 ### Development Workflow Insights
 
-**Iterative Implementation Success**: Breaking the work into clear phases (Phase 1: derive macro, Phase 2: integration) made the implementation smooth and testable at each stage.
+**Iterative Implementation Success**: Breaking the work into clear phases (Phase
+1: derive macro, Phase 2: integration) made the implementation smooth and
+testable at each stage.
 
-**Test-Driven Macro Development**: Writing tests before fully implementing the integration helped catch edge cases (visibility, type inference) early.
+**Test-Driven Macro Development**: Writing tests before fully implementing the
+integration helped catch edge cases (visibility, type inference) early.
 
-**Error Message Quality**: Spent extra time on clear error messages in the derive macro (e.g., explaining why #[repr(C)] is required, what types are supported). This pays dividends in user experience.
+**Error Message Quality**: Spent extra time on clear error messages in the
+derive macro (e.g., explaining why #[repr(C)] is required, what types are
+supported). This pays dividends in user experience.
 
-**Pre-existing Test Suite Value**: Having 1000+ existing tests meant we could confidently refactor without breaking anything. Only doctest failures were pre-existing.
+**Pre-existing Test Suite Value**: Having 1000+ existing tests meant we could
+confidently refactor without breaking anything. Only doctest failures were
+pre-existing.
 
 ### Follow-up Stories
 
-None identified. The implementation covers all planned features. Future enhancements could include:
+None identified. The implementation covers all planned features. Future
+enhancements could include:
 
-1. **Padding efficiency warnings** - Analyze struct layouts and warn about inefficient padding (requires deeper size/alignment analysis)
-2. **Nested struct field support** - Allow struct fields that are themselves WgslStruct-derived types (currently only primitive types in struct fields)
-3. **Array of structs** - Support `[CustomStruct; N]` in WGSL generation (needs WGSL type mapping enhancement)
+1. **Padding efficiency warnings** - Analyze struct layouts and warn about
+   inefficient padding (requires deeper size/alignment analysis)
+2. **Nested struct field support** - Allow struct fields that are themselves
+   WgslStruct-derived types (currently only primitive types in struct fields)
+3. **Array of structs** - Support `[CustomStruct; N]` in WGSL generation (needs
+   WGSL type mapping enhancement)
 
 ## Problem Statement
 
@@ -157,8 +196,10 @@ WGSL
 
 - [x] Validates field alignment matches GPU requirements (via #[repr(C)] check)
 - [x] Detects and reports alignment issues at compile time (via macro errors)
-- [x] Auto-skips padding fields (fields starting with _ or containing "padding")
-- [ ] Warns about inefficient layouts (excessive padding) - deferred as nice-to-have
+- [x] Auto-skips padding fields (fields starting with \_ or containing
+      "padding")
+- [ ] Warns about inefficient layouts (excessive padding) - deferred as
+      nice-to-have
 
 ## Technical Approach
 

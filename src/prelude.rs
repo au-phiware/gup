@@ -36,6 +36,9 @@ pub use crate::shader_function::{
     // Filtering and clamping (GUP-033)
     Clamp,
     ColorGradient,
+    // Storage buffer-based gradient (GUP-134)
+    ColorGradientStorage,
+    ColorGradientBuilder,
 
     ColorMap,
     ComposableFunction,
