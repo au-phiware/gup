@@ -108,8 +108,8 @@ epic and status.
 
 | Story                                                    | Title                              | Status         | Priority | Points |
 | -------------------------------------------------------- | ---------------------------------- | -------------- | -------- | ------ |
-| [GUP-080](GUP-080_WebGPU_Timestamp_Query_Integration.md) | WebGPU Timestamp Query Integration | ✅ Complete | Medium   | 4      |
-| [GUP-081](GUP-081_Advanced_Debug_Data_Visualization.md)  | Advanced Debug Data Visualization  | 💡 New         | Low      | 5      |
+| [GUP-080](GUP-080_WebGPU_Timestamp_Query_Integration.md) | WebGPU Timestamp Query Integration | ✅ Complete    | Medium   | 4      |
+| [GUP-081](GUP-081_Advanced_Debug_Data_Visualization.md)  | Advanced Debug Data Visualization  | 🚧 In Progress | Low      | 5      |
 | [GUP-082](GUP-082_Debug_Tool_Integration_CI_CD.md)       | Debug Tool Integration with CI/CD  | 💡 New         | Medium   | 3      |
 | [GUP-085](GUP-085_GPU_Resource_Dependency_Graph.md)      | GPU Resource Dependency Graph      | 💡 New         | Low      | 5      |
 | [GUP-086](GUP-086_Web_Profiling_Dashboard.md)            | Web-Based Profiling Dashboard      | 💡 New         | Low      | 8      |
