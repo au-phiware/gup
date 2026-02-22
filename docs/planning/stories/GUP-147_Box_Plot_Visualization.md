@@ -1,6 +1,6 @@
 # GUP-147: Box Plot Visualization
 
-**Status**: 💡 New
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
