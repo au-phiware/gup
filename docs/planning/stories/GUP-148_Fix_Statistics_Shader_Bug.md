@@ -1,6 +1,6 @@
 # GUP-148: Fix Statistics Compute Shader Reduction Bug
 
-**Status**: 💡 New
+**Status**: 🚧 In Progress (Started: 2025-01-10)
 
 ## Story Overview
 
