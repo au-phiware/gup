@@ -157,3 +157,124 @@ All 29 tests passing (100% pass rate).
 
 _Identified during GUP-138 implementation as natural extension for complex
 animations._
+
+## Retrospective
+
+**Completed**: 2026-02-22
+
+### Key Technical Learnings
+
+#### Binary Search in WGSL
+
+- **Challenge**: Implementing efficient lookup for potentially thousands of keyframes
+- **Solution**: Classic binary search algorithm adapted for WGSL shader code
+- **Pattern**: `while (low + 1u < high)` loop with midpoint calculation for interval search
+- **Future**: This pattern applies to any sorted array lookup (scales, palettes, lookup tables)
+
+#### Storage Buffer Pattern Reuse
+
+- **Decision**: Followed ColorGradientStorage pattern from GUP-134 exactly
+- **Reasoning**: Proven architecture for unlimited data via storage buffers
+- **Result**: Implementation was straightforward with predictable behavior
+- **Pattern**: Struct with `Vec` data + buffer generation methods + static WGSL + builder
+
+#### Performance Surprise
+
+- **Expectation**: Storage buffer version would be slower due to sorting overhead
+- **Reality**: Storage version is 0.35x faster than uniform for creation (65% faster!)
+- **Reason**: Simpler data structure (Vec vs fixed array), sorting is O(n log n) not bottleneck
+- **Future**: Storage buffers aren't just for capacity—they can be faster
+
+#### WGSL Struct Alignment
+
+- **Challenge**: Ensuring proper 16-byte alignment for GPU memory layout
+- **Solution**: Explicit padding fields in both Rust (#[repr(C)]) and WGSL structs
+- **Pattern**: Each keyframe is 4 f32s (time, value, _padding0, _padding1)
+- **Validation**: bytemuck::Pod trait ensures correct memory layout
+
+### Architectural Decisions
+
+#### Dual Implementation Strategy
+
+- **Decision**: Keep both KeyframeAnimation (uniform) and KeyframeAnimationStorage (storage)
+- **Reasoning**: Different optimal solutions for different scales (<16 vs 16+)
+- **Trade-off**: Slightly larger API surface vs optimal performance for each use case
+- **Future**: This pattern works well—confirmed by GUP-134 precedent
+
+#### Builder Pattern Consistency
+
+- **Decision**: Use builder pattern for storage buffer version
+- **Reasoning**: Complex constructions benefit from fluent API, especially with sorting
+- **Result**: API feels natural and intuitive, matches ColorGradientStorage
+- **Pattern**: Separate builder struct with fluent methods, `build()` finalizes
+
+#### Static vs Dynamic WGSL
+
+- **Decision**: Static WGSL string, not dynamically generated
+- **Reasoning**: Binary search algorithm is identical regardless of keyframe count
+- **Trade-off**: Less flexibility for optimizations vs much simpler implementation
+- **Result**: Clean, maintainable code with no runtime generation overhead
+
+#### Automatic Sorting
+
+- **Decision**: Sort keyframes by time automatically in builder and constructor
+- **Reasoning**: Interpolation requires sorted keyframes, user shouldn't track this
+- **Implementation**: Sort in both `new()` and `builder.build()`
+- **Result**: Prevents user errors, ensures correct binary search behavior
+
+### Development Workflow Insights
+
+- **Pattern Reuse**: Following GUP-134 pattern saved significant time (maybe 2-3 hours)
+- **Test-First Approach**: Writing 19 unit tests before GPU tests caught edge cases early
+- **GPU Validation**: GPU tests revealed WGSL compilation works with large arrays (1000+ keyframes)
+- **Performance Testing**: Performance tests validated linear scaling and competitive creation speed
+- **Example-Driven**: Comprehensive example forced thinking through all use cases
+
+### Performance Insights
+
+- **Creation Speed**: 0.35x ratio (storage is 65% faster than uniform!)
+- **Memory Scaling**: Perfect linearity at 16 bytes per keyframe
+- **Large Arrays**: 10,000 keyframes creates in ~500µs (no performance cliff)
+- **Buffer Generation**: 1000 keyframes generates buffer data in ~44µs
+- **Sorting Cost**: Reverse-sorted 1000 keyframes sorts in ~36µs (not a bottleneck)
+
+### Follow-up Stories
+
+No blocking follow-up stories identified. The implementation is complete and self-contained.
+
+Optional future enhancements (not required):
+
+1. **GUP-XXX: GPU Animation Example** - End-to-end example with storage buffer binding in render pipeline, demonstrating full GPU integration.
+
+2. **GUP-XXX: Interpolation Modes** - Add cubic, hermite, or spline interpolation options beyond linear for smoother motion.
+
+3. **GUP-XXX: Animation Blending** - Support blending between multiple animations for complex motion combinations.
+
+These are enhancements, not requirements. The current implementation fully satisfies all acceptance criteria and enables complex animations with unlimited keyframes.
+
+### Integration with Existing System
+
+The storage buffer keyframe system integrates seamlessly:
+
+- **API Consistency**: Matches ColorGradientStorage pattern from GUP-134
+- **Backward Compatible**: KeyframeAnimation still available for simple cases
+- **Type Safety**: Rust types ensure correct buffer data generation
+- **Prelude Export**: All types available via `use gup::prelude::*`
+- **Testing**: Follows established patterns (unit, GPU, performance tests)
+
+### Comparison with Prerequisites
+
+GUP-138 (KeyframeAnimation, uniform buffer):
+- Maximum 16 keyframes
+- O(n) linear search in WGSL
+- Embedded uniforms approach
+- Suitable for simple animations
+
+GUP-140 (KeyframeAnimationStorage, storage buffer):
+- Unlimited keyframes (tested 10,000+)
+- O(log n) binary search in WGSL
+- External buffer management approach
+- Suitable for complex motion paths, recorded data
+
+The two implementations complement each other perfectly—use whichever fits your keyframe count.
+
