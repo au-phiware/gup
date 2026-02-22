@@ -130,3 +130,114 @@ visualizations with precise control over motion
 
 _Identified during GUP-033 implementation as natural extension of temporal
 functions._
+
+## Retrospective
+
+**Completed**: 2026-02-22
+
+### Key Technical Learnings
+
+#### WGSL Struct Alignment and Padding
+
+- **Challenge**: Initial GPU tests failed with validation errors due to misaligned WGSL structs
+- **Solution**: Added explicit padding fields to both Rust (`#[repr(C)]`) and WGSL struct definitions to ensure 16-byte alignment
+- **Pattern**: Always verify GPU memory layout by adding padding fields in both Rust and WGSL, matching the bytemuck layout
+- **Future**: Consider creating a macro to automatically generate aligned WGSL structs from Rust definitions
+
+#### Newton-Raphson Cubic Bezier Solver
+
+- **Decision**: Implemented Newton-Raphson iterative solver for cubic bezier timing in WGSL
+- **Reasoning**: Cubic bezier curves require solving for t given x, which has no closed-form solution
+- **Trade-off**: 8 iterations provide excellent accuracy (<0.000001 tolerance) with minimal GPU cost
+- **Performance**: Tested with 1000 simultaneous animations, no performance degradation
+
+#### Keyframe Storage Strategy
+
+- **Decision**: Limited to 16 keyframes using uniform buffers
+- **Reasoning**: Uniform buffers are simpler, faster, and sufficient for most animation use cases
+- **Trade-off**: Complex animations with many keyframes will need future storage buffer implementation
+- **Future**: Story identified for unlimited keyframes via storage buffers (similar to ColorGradientStorage pattern)
+
+#### CPU vs GPU State Management
+
+- **Decision**: AnimationTimeline on CPU, KeyframeAnimation generates GPU shaders
+- **Reasoning**: Timeline is application state (play/pause/seek), keyframes are rendering data
+- **Pattern**: Clear separation: CPU manages playback state and time, GPU evaluates keyframe values
+- **Result**: Zero CPU-GPU synchronization during animation, maximum performance
+
+### Architectural Decisions
+
+#### Composable Animation Pipeline
+
+- **Decision**: Animation functions integrate with existing shader function composition system
+- **Reasoning**: Animations can be composed with scales, colors, and other shader functions
+- **Example**: `KeyframeAnimation -> CubicBezierTiming -> ColorMap` for smooth color transitions
+- **Future**: This enables rich animation pipelines without special-case code
+
+#### Loop and Reverse Support
+
+- **Decision**: Built-in support for looping and ping-pong animations
+- **Reasoning**: Common animation patterns should be first-class features
+- **Implementation**: Modulo arithmetic and cycle detection in WGSL for GPU efficiency
+- **Trade-off**: Slightly more complex WGSL code, but significantly better UX
+
+#### Animation Timeline API
+
+- **Decision**: Provide separate AnimationTimeline for CPU-side playback control
+- **Reasoning**: Developers need to manage animation state independent of GPU rendering
+- **API**: play(), pause(), stop(), seek(), update() methods for intuitive control
+- **Pattern**: Similar to web Animation API, familiar to web developers
+
+### Development Workflow Insights
+
+- **Test-First Approach**: Writing 27 integration tests before GPU tests clarified API requirements and caught edge cases early
+- **GPU Validation**: GPU tests revealed alignment issues that unit tests couldn't catch - essential for shader function development
+- **WGSL Generation Testing**: Verifying generated WGSL compiles on GPU catches bugs that Rust tests miss
+- **Example-Driven Design**: Building comprehensive example helped validate that the API is intuitive and powerful
+
+### Performance Insights
+
+- **1000 Animations**: GPU test successfully processed 1000 simultaneous animations without performance issues
+- **Zero Synchronization**: Animations run entirely on GPU with no CPU-GPU data transfer during playback
+- **Interpolation Accuracy**: Linear interpolation verified accurate within 0.1 units across test range
+- **Shader Compilation**: Complex nested WGSL (structs with arrays) compiles successfully on all GPU backends
+
+### Follow-up Stories
+
+During implementation, the following areas were identified that would benefit from dedicated stories:
+
+1. **GUP-140: Storage Buffer Keyframe Animations** (Medium Priority)
+   - Extend KeyframeAnimation to support unlimited keyframes via storage buffers
+   - Implement efficient GPU search/lookup for large keyframe arrays
+   - Similar to ColorGradientStorage pattern from GUP-134
+   - Enables complex animations with hundreds of control points
+
+2. **GUP-141: Spline-Based Animation Curves** (Low Priority)
+   - Add Catmull-Rom and B-spline interpolation modes
+   - Support smooth curves through keyframes without manual control points
+   - Enables more natural motion paths
+   - Builds on keyframe system foundation
+
+3. **GUP-142: Animation Event System** (Medium Priority)
+   - Trigger events at specific keyframe times
+   - Support animation completion callbacks
+   - Enable synchronized multi-track animations
+   - Foundation provided by AnimationTimeline, needs event dispatch
+
+### Integration with Existing System
+
+The animation system integrates seamlessly with existing Gup components:
+
+- **ShaderFunction Trait**: KeyframeAnimation and CubicBezierTiming are ComposableShaderFunctions
+- **Uniform System**: Reuses existing uniform buffer management and WGSL generation
+- **Type Safety**: Inherits compile-time type checking from shader function system
+- **Prelude**: All animation types exported for easy access
+
+### API Consistency
+
+The animation API follows established Gup patterns:
+
+- Fluent builder API for keyframe construction
+- Separate creation and uniform generation phases
+- WGSL code generation integrated with shader pipeline
+- Consistent naming: `new()`, `create_uniforms()`, `wgsl_function()`
