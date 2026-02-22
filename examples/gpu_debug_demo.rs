@@ -379,5 +379,6 @@ fn create_mock_execution_stats(
             map.insert("shader_name".to_string(), shader_name.to_string());
             map
         },
+        used_hardware_timestamps: false,
     }
 }

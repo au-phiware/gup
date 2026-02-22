@@ -7,13 +7,11 @@
 //! GPU utilization, and detecting performance regressions in compute and render pipelines.
 
 use crate::error::{GupError, GupResult};
+use crate::performance::TimestampQueryManager;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-use wgpu::{
-    BindGroup, CommandEncoderDescriptor, ComputePassDescriptor, ComputePipeline, Device, PollType,
-    QuerySet, Queue,
-};
+use wgpu::*;
 
 /// GPU shader profiler for performance analysis
 #[derive(Debug)]
@@ -21,27 +19,46 @@ pub struct ShaderProfiler {
     device: Device,
     queue: Queue,
     /// Query sets for GPU timing measurements
-    #[allow(dead_code)] // TODO: Implement timestamp queries when WebGPU supports them
+    #[allow(dead_code)] // Kept for backward compatibility
     timestamp_query_sets: HashMap<String, QuerySet>,
+    /// GPU timestamp query manager (if supported)
+    timestamp_manager: Option<TimestampQueryManager>,
     /// Profiling session history
     profiling_sessions: Vec<ProfilingSession>,
     /// Performance baselines for regression detection
     performance_baselines: HashMap<String, PerformanceBaseline>,
     /// Current profiling session (if active)
     current_session: Option<ProfilingSession>,
+    /// Whether timestamp queries are supported
+    supports_timestamps: bool,
 }
 
 impl ShaderProfiler {
     /// Create a new shader profiler
     pub fn new(device: &Device, queue: &Queue) -> Self {
+        let supports_timestamps = device.features().contains(Features::TIMESTAMP_QUERY);
+
+        let timestamp_manager = if supports_timestamps {
+            TimestampQueryManager::new(device, 64).ok()
+        } else {
+            None
+        };
+
         Self {
             device: device.clone(),
             queue: queue.clone(),
             timestamp_query_sets: HashMap::new(),
+            timestamp_manager,
             profiling_sessions: Vec::new(),
             performance_baselines: HashMap::new(),
             current_session: None,
+            supports_timestamps,
         }
+    }
+
+    /// Check if GPU timestamp queries are supported
+    pub fn supports_timestamps(&self) -> bool {
+        self.supports_timestamps
     }
 
     /// Profile a compute shader execution
@@ -52,33 +69,60 @@ impl ShaderProfiler {
         dispatch_size: (u32, u32, u32),
     ) -> GupResult<ShaderExecutionStats> {
         let start_time = Instant::now();
+        let mut used_hardware_timestamps = false;
 
-        // Create command encoder with timing
-        let mut encoder = self
-            .device
-            .create_command_encoder(&CommandEncoderDescriptor {
-                label: Some("shader_profiler_compute"),
-            });
+        // Try to use GPU timestamps if available
+        let gpu_duration = if let Some(ref timestamp_manager) = self.timestamp_manager {
+            match self
+                .profile_compute_with_timestamps(
+                    pipeline,
+                    bind_group,
+                    dispatch_size,
+                    timestamp_manager,
+                )
+                .await
+            {
+                Ok(duration) => {
+                    used_hardware_timestamps = true;
+                    Some(duration)
+                }
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
 
-        // Execute compute pass
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                label: Some("profiled_compute_pass"),
-                timestamp_writes: None, // TODO: Add timestamp query support when available
-            });
+        // Fallback to CPU timing if GPU timestamps unavailable or failed
+        let total_duration = if let Some(gpu_dur) = gpu_duration {
+            gpu_dur
+        } else {
+            // Create command encoder with timing
+            let mut encoder = self
+                .device
+                .create_command_encoder(&CommandEncoderDescriptor {
+                    label: Some("shader_profiler_compute"),
+                });
 
-            compute_pass.set_pipeline(pipeline);
-            compute_pass.set_bind_group(0, bind_group, &[]);
-            compute_pass.dispatch_workgroups(dispatch_size.0, dispatch_size.1, dispatch_size.2);
-        }
+            // Execute compute pass
+            {
+                let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                    label: Some("profiled_compute_pass"),
+                    timestamp_writes: None,
+                });
 
-        // Submit and wait for completion
-        let submission_index = self.queue.submit([encoder.finish()]);
-        let _ = self
-            .device
-            .poll(PollType::WaitForSubmissionIndex(submission_index));
+                compute_pass.set_pipeline(pipeline);
+                compute_pass.set_bind_group(0, bind_group, &[]);
+                compute_pass.dispatch_workgroups(dispatch_size.0, dispatch_size.1, dispatch_size.2);
+            }
 
-        let total_duration = start_time.elapsed();
+            // Submit and wait for completion
+            let submission_index = self.queue.submit([encoder.finish()]);
+            let _ = self
+                .device
+                .poll(PollType::WaitForSubmissionIndex(submission_index));
+
+            start_time.elapsed()
+        };
 
         // Calculate approximate GPU utilization (simplified)
         let workgroup_count = dispatch_size.0 * dispatch_size.1 * dispatch_size.2;
@@ -94,7 +138,71 @@ impl ShaderProfiler {
             instructions_per_second: 0.0, // TODO: Implement instruction counting
             timestamp: chrono::Utc::now(),
             metadata: HashMap::new(),
+            used_hardware_timestamps,
         })
+    }
+
+    /// Profile a compute shader execution with hardware timestamp queries
+    async fn profile_compute_with_timestamps(
+        &self,
+        pipeline: &ComputePipeline,
+        bind_group: &BindGroup,
+        dispatch_size: (u32, u32, u32),
+        timestamp_manager: &TimestampQueryManager,
+    ) -> GupResult<Duration> {
+        let query_set = timestamp_manager
+            .query_set()
+            .ok_or_else(|| GupError::invalid_operation("Query set not available".to_string()))?;
+
+        // Create command encoder
+        let mut encoder = self
+            .device
+            .create_command_encoder(&CommandEncoderDescriptor {
+                label: Some("shader_profiler_timestamp"),
+            });
+
+        // Execute compute pass with timestamp queries
+        {
+            let mut compute_pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("profiled_compute_timestamp"),
+                timestamp_writes: Some(wgpu::ComputePassTimestampWrites {
+                    query_set,
+                    beginning_of_pass_write_index: Some(0),
+                    end_of_pass_write_index: Some(1),
+                }),
+            });
+
+            compute_pass.set_pipeline(pipeline);
+            compute_pass.set_bind_group(0, bind_group, &[]);
+            compute_pass.dispatch_workgroups(dispatch_size.0, dispatch_size.1, dispatch_size.2);
+        }
+
+        // Resolve and copy timestamp queries
+        timestamp_manager.resolve_queries(&mut encoder, 0..2);
+        timestamp_manager.copy_to_readback(&mut encoder, 2);
+
+        // Submit commands
+        let submission_index = self.queue.submit([encoder.finish()]);
+        let _ = self
+            .device
+            .poll(PollType::WaitForSubmissionIndex(submission_index));
+
+        // Read timestamp results
+        let timestamps = timestamp_manager.read_timestamps(2).await?;
+
+        if timestamps.len() < 2 {
+            return Err(GupError::validation_error(
+                "Insufficient timestamp results".to_string(),
+            ));
+        }
+
+        // Calculate duration from timestamp difference
+        let start = timestamps[0];
+        let end = timestamps[1];
+        let duration_ticks = end.saturating_sub(start);
+        let duration = timestamp_manager.ticks_to_duration(duration_ticks);
+
+        Ok(duration)
     }
 
     /// Profile multiple compute shader executions and return batch statistics
@@ -353,11 +461,18 @@ pub struct ShaderExecutionStats {
     pub instructions_per_second: f32,
     pub timestamp: chrono::DateTime<chrono::Utc>,
     pub metadata: HashMap<String, String>,
+    /// Whether this measurement used hardware timestamp queries
+    pub used_hardware_timestamps: bool,
 }
 
 impl ShaderExecutionStats {
     pub fn with_metadata(mut self, key: &str, value: &str) -> Self {
         self.metadata.insert(key.to_string(), value.to_string());
+        self
+    }
+
+    pub fn with_hardware_timestamps(mut self, used: bool) -> Self {
+        self.used_hardware_timestamps = used;
         self
     }
 }
@@ -448,6 +563,7 @@ impl From<PerformanceBaseline> for ShaderExecutionStats {
             instructions_per_second: 0.0,
             timestamp: baseline.created_at,
             metadata: HashMap::new(),
+            used_hardware_timestamps: false,
         }
     }
 }
@@ -509,6 +625,7 @@ mod tests {
             instructions_per_second: 1_000_000.0,
             timestamp: chrono::Utc::now(),
             metadata: HashMap::new(),
+            used_hardware_timestamps: false,
         }
         .with_metadata("test_key", "test_value");
 
@@ -516,6 +633,7 @@ mod tests {
         assert_eq!(stats.gpu_utilization_percent, 75.0);
         assert_eq!(stats.dispatch_size, (64, 64, 1));
         assert_eq!(stats.workgroup_count, 4096);
+        assert!(!stats.used_hardware_timestamps);
         assert_eq!(
             stats.metadata.get("test_key"),
             Some(&"test_value".to_string())
@@ -534,6 +652,7 @@ mod tests {
                 instructions_per_second: 0.0,
                 timestamp: chrono::Utc::now(),
                 metadata: HashMap::new(),
+                used_hardware_timestamps: false,
             },
             ShaderExecutionStats {
                 duration: Duration::from_millis(7),
@@ -544,6 +663,7 @@ mod tests {
                 instructions_per_second: 0.0,
                 timestamp: chrono::Utc::now(),
                 metadata: HashMap::new(),
+                used_hardware_timestamps: false,
             },
         ];
 
@@ -573,6 +693,7 @@ mod tests {
             instructions_per_second: 0.0,
             timestamp: chrono::Utc::now(),
             metadata: HashMap::new(),
+            used_hardware_timestamps: false,
         };
 
         let baseline_stats = ShaderExecutionStats {
@@ -584,6 +705,7 @@ mod tests {
             instructions_per_second: 0.0,
             timestamp: chrono::Utc::now(),
             metadata: HashMap::new(),
+            used_hardware_timestamps: false,
         };
 
         let regression = PerformanceRegression {
