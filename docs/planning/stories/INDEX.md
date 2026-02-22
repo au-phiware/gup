@@ -80,6 +80,7 @@ epic and status.
 | --------------------------------------------------------------- | ----------------------------------------- | -------------- | -------- | ------ |
 | [GUP-063](GUP-063_Enhanced_WGSL_Code_Generation.md)             | Enhanced WGSL Code Generation             | ✅ Complete    | Medium   | 5      |
 | [GUP-064](GUP-064_Advanced_Type_System_Support.md)              | Advanced Type System Support              | ✅ Complete    | Low      | 3      |
+| [GUP-064-B](GUP-064-B_Custom_Struct_Code_Generation.md)         | Custom Struct Code Generation             | 📋 Planned     | Low      | 3      |
 | [GUP-065](GUP-065_Documentation_Macro_First_API.md)             | Documentation for Macro-First API         | 💡 New         | Medium   | 3      |
 | [GUP-065](GUP-065_Procedural_Macro_Performance_Optimization.md) | Procedural Macro Performance Optimization | 💡 New         | Low      | 2      |
 | [GUP-066](GUP-066_Advanced_Type_Conversion_Patterns.md)         | Advanced Type Conversion Patterns         | 💡 New         | Low      | 5      |
@@ -452,11 +453,21 @@ proper WGSL compilation
 
 ### GUP-064: Advanced Type System Support
 
-**Key Learning**: Basic type support (f32, Vec2-4) insufficient for complex GPU
-programming scenarios  
+**Status**: ✅ Complete (Phase 1)  
+**Key Learning**: Basic type support (f32, Vec2-4) insufficient for complex GPU programming scenarios  
 **Dependencies**: GUP-006 complete  
-**Impact**: Support for matrices, custom structs, textures, and advanced WGSL
-types
+**Impact**: Support for all WGSL built-in matrices, textures, and samplers
+
+**Completed**: Extended type system with all non-square matrices, texture types, and samplers. Comprehensive GPU compilation validation. Custom struct support deferred to GUP-064-B.
+
+### GUP-064-B: Custom Struct Code Generation
+
+**Status**: 📋 Planned  
+**Key Learning**: Manual WGSL struct definitions are error-prone and hard to maintain  
+**Dependencies**: GUP-064 complete  
+**Impact**: Auto-generate WGSL struct definitions from Rust `#[derive(WgslStruct)]`
+
+**Scope**: New derive macro for automatic struct definition generation with GPU alignment validation. Enables seamless use of custom types in `#[wgsl_function]`.
 
 ### GUP-065: Procedural Macro Performance Optimization
 
