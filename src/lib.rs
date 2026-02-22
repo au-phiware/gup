@@ -132,9 +132,9 @@ pub use label::*;
 pub use scale::*;
 // Export interaction system components (excluding ambiguous types)
 pub use interaction::{
-    CustomInteractionQuery, ElementData, ElementHit, EventHandler, GpuInteractionQuery,
-    InteractionElement, InteractionEvent, InteractionResult, InteractionSystem, InteractionType,
-    QueryStats, Rect, Renderable,
+    CustomInteractionQuery, ElementData, ElementHit, EventHandler, GestureRecognizer, GestureType,
+    GpuInteractionQuery, InteractionElement, InteractionEvent, InteractionResult,
+    InteractionSystem, InteractionType, PropagationPhase, QueryStats, Rect, Renderable, TouchPoint,
 };
 pub use mixable::*;
 pub use plugins::*;

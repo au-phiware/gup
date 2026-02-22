@@ -49,7 +49,7 @@ use wgpu::{
 };
 
 /// Geometric shapes for spatial queries
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Vec2 {
     pub x: f32,
     pub y: f32,
@@ -172,13 +172,88 @@ impl ElementHit {
     }
 }
 
+/// Represents a single touch point for multi-touch interactions
+#[derive(Debug, Clone, Copy)]
+pub struct TouchPoint {
+    /// Unique identifier for this touch
+    pub id: u64,
+    /// Screen position of the touch
+    pub position: Vec2,
+    /// Timestamp of the touch event
+    pub timestamp: f64,
+}
+
+impl TouchPoint {
+    pub fn new(id: u64, position: Vec2, timestamp: f64) -> Self {
+        Self {
+            id,
+            position,
+            timestamp,
+        }
+    }
+}
+
+/// Multi-touch gesture types
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum GestureType {
+    /// Two-finger pinch gesture (scale)
+    Pinch {
+        /// Center point of the pinch
+        center: Vec2,
+        /// Current scale factor (1.0 = no scale)
+        scale: f32,
+        /// Change in scale since last event
+        delta_scale: f32,
+    },
+    /// Two-finger rotation gesture
+    Rotate {
+        /// Center point of the rotation
+        center: Vec2,
+        /// Current rotation angle in radians
+        angle: f32,
+        /// Change in angle since last event
+        delta_angle: f32,
+    },
+    /// Swipe gesture with velocity
+    Swipe {
+        /// Start position
+        start: Vec2,
+        /// End position
+        end: Vec2,
+        /// Swipe direction vector (normalized)
+        direction: Vec2,
+        /// Swipe velocity in pixels per second
+        velocity: f32,
+    },
+    /// Generic multi-touch pan
+    Pan {
+        /// Start position
+        start: Vec2,
+        /// Current position
+        current: Vec2,
+        /// Delta from last position
+        delta: Vec2,
+    },
+}
+
 /// Event handler trait for processing interaction events
 pub trait EventHandler: Send + Sync {
     /// Handle an interaction event
     fn handle_event(&self, event: &InteractionEvent);
 }
 
-/// Interaction event data
+/// Event propagation phase during event bubbling
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PropagationPhase {
+    /// Capture phase - event travels down the hierarchy
+    Capture,
+    /// Target phase - event is at the target element
+    Target,
+    /// Bubble phase - event travels up the hierarchy
+    Bubble,
+}
+
+/// Interaction event data with propagation support
 #[derive(Debug, Clone)]
 pub struct InteractionEvent {
     /// Type of interaction that occurred
@@ -191,6 +266,18 @@ pub struct InteractionEvent {
     pub hit: Option<ElementHit>,
     /// Additional event-specific data
     pub metadata: HashMap<String, String>,
+    /// Whether propagation has been stopped
+    propagation_stopped: bool,
+    /// Whether immediate propagation has been stopped
+    immediate_propagation_stopped: bool,
+    /// Whether default behavior has been prevented
+    default_prevented: bool,
+    /// Current propagation phase
+    phase: PropagationPhase,
+    /// Active touch points (for multi-touch interactions)
+    pub touch_points: Vec<TouchPoint>,
+    /// Recognized gesture (if any)
+    pub gesture: Option<GestureType>,
 }
 
 impl InteractionEvent {
@@ -201,6 +288,12 @@ impl InteractionEvent {
             world_position: None,
             hit: None,
             metadata: HashMap::new(),
+            propagation_stopped: false,
+            immediate_propagation_stopped: false,
+            default_prevented: false,
+            phase: PropagationPhase::Target,
+            touch_points: Vec::new(),
+            gesture: None,
         }
     }
 
@@ -217,6 +310,65 @@ impl InteractionEvent {
     pub fn with_metadata(mut self, key: &str, value: &str) -> Self {
         self.metadata.insert(key.to_string(), value.to_string());
         self
+    }
+
+    /// Add touch points to this event for multi-touch interactions.
+    pub fn with_touch_points(mut self, touch_points: Vec<TouchPoint>) -> Self {
+        self.touch_points = touch_points;
+        self
+    }
+
+    /// Add a recognized gesture to this event.
+    pub fn with_gesture(mut self, gesture: GestureType) -> Self {
+        self.gesture = Some(gesture);
+        self
+    }
+
+    /// Stop propagation of this event to other elements in the hierarchy.
+    ///
+    /// After calling this, the event will not bubble up or capture down to other elements,
+    /// but remaining handlers on the current element will still execute.
+    pub fn stop_propagation(&mut self) {
+        self.propagation_stopped = true;
+    }
+
+    /// Stop immediate propagation of this event.
+    ///
+    /// After calling this, no further event handlers will execute, including handlers
+    /// on the current element.
+    pub fn stop_immediate_propagation(&mut self) {
+        self.immediate_propagation_stopped = true;
+        self.propagation_stopped = true;
+    }
+
+    /// Prevent the default behavior associated with this event.
+    pub fn prevent_default(&mut self) {
+        self.default_prevented = true;
+    }
+
+    /// Check if propagation has been stopped.
+    pub fn is_propagation_stopped(&self) -> bool {
+        self.propagation_stopped
+    }
+
+    /// Check if immediate propagation has been stopped.
+    pub fn is_immediate_propagation_stopped(&self) -> bool {
+        self.immediate_propagation_stopped
+    }
+
+    /// Check if default behavior has been prevented.
+    pub fn is_default_prevented(&self) -> bool {
+        self.default_prevented
+    }
+
+    /// Get the current propagation phase.
+    pub fn phase(&self) -> PropagationPhase {
+        self.phase
+    }
+
+    /// Set the propagation phase (internal use only).
+    pub(crate) fn set_phase(&mut self, phase: PropagationPhase) {
+        self.phase = phase;
     }
 }
 
@@ -1362,5 +1514,210 @@ mod tests {
             offset_of!(InteractionResult, intersection_point)
         );
         println!("  _padding: {}", offset_of!(InteractionResult, _padding));
+    }
+}
+
+/// Multi-touch gesture recognizer that processes touch events to detect gestures.
+///
+/// This recognizer tracks active touches and applies heuristics to identify
+/// common gestures like pinch, rotate, swipe, and pan.
+pub struct GestureRecognizer {
+    /// Active touches being tracked
+    active_touches: HashMap<u64, TouchPoint>,
+    /// Previous touch positions for delta calculations
+    previous_touches: HashMap<u64, TouchPoint>,
+    /// Minimum distance for swipe recognition (pixels)
+    swipe_threshold: f32,
+    /// Minimum velocity for swipe recognition (pixels/second)
+    swipe_velocity_threshold: f32,
+}
+
+impl GestureRecognizer {
+    /// Create a new gesture recognizer with default thresholds.
+    pub fn new() -> Self {
+        Self {
+            active_touches: HashMap::new(),
+            previous_touches: HashMap::new(),
+            swipe_threshold: 50.0,           // 50 pixels minimum
+            swipe_velocity_threshold: 500.0, // 500 px/s minimum
+        }
+    }
+
+    /// Update with new touch points and recognize gestures.
+    ///
+    /// Returns the recognized gesture, if any.
+    pub fn update(&mut self, touches: Vec<TouchPoint>) -> Option<GestureType> {
+        // Store previous state
+        self.previous_touches = self.active_touches.clone();
+
+        // Update active touches
+        self.active_touches.clear();
+        for touch in touches {
+            self.active_touches.insert(touch.id, touch);
+        }
+
+        // Recognize gestures based on touch count
+        match self.active_touches.len() {
+            0 => {
+                // Check for completed swipe
+                if self.previous_touches.len() == 1 {
+                    self.recognize_swipe()
+                } else {
+                    None
+                }
+            }
+            1 => {
+                // Single touch - could be start of swipe or pan
+                self.recognize_pan()
+            }
+            2 => {
+                // Two touches - could be pinch or rotate
+                self.recognize_two_finger_gesture()
+            }
+            _ => {
+                // Three or more touches - generic multi-touch pan
+                self.recognize_pan()
+            }
+        }
+    }
+
+    /// Recognize swipe gesture from touch release.
+    fn recognize_swipe(&self) -> Option<GestureType> {
+        if let Some((_, _prev_touch)) = self.previous_touches.iter().next() {
+            // For swipe recognition, we'd need start position stored separately
+            // This is a simplified version
+            None // Swipe detection requires more state tracking
+        } else {
+            None
+        }
+    }
+
+    /// Recognize pan gesture from single or multi-touch movement.
+    fn recognize_pan(&self) -> Option<GestureType> {
+        if self.active_touches.is_empty() || self.previous_touches.is_empty() {
+            return None;
+        }
+
+        // Calculate average position and delta
+        let (current_pos, prev_pos) = self.calculate_average_positions();
+
+        let delta = Vec2::new(current_pos.x - prev_pos.x, current_pos.y - prev_pos.y);
+
+        // Only return pan if there's meaningful movement
+        let delta_magnitude = (delta.x * delta.x + delta.y * delta.y).sqrt();
+        if delta_magnitude > 1.0 {
+            Some(GestureType::Pan {
+                start: prev_pos,
+                current: current_pos,
+                delta,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Recognize two-finger gestures (pinch and rotate).
+    fn recognize_two_finger_gesture(&self) -> Option<GestureType> {
+        if self.active_touches.len() != 2 || self.previous_touches.len() != 2 {
+            return None;
+        }
+
+        let touches: Vec<&TouchPoint> = self.active_touches.values().collect();
+        let prev_touches: Vec<&TouchPoint> = self.previous_touches.values().collect();
+
+        // Calculate distances and angles
+        let current_distance = self.distance_between(touches[0].position, touches[1].position);
+        let previous_distance =
+            self.distance_between(prev_touches[0].position, prev_touches[1].position);
+
+        let current_angle = self.angle_between(touches[0].position, touches[1].position);
+        let previous_angle = self.angle_between(prev_touches[0].position, prev_touches[1].position);
+
+        let center = Vec2::new(
+            (touches[0].position.x + touches[1].position.x) * 0.5,
+            (touches[0].position.y + touches[1].position.y) * 0.5,
+        );
+
+        // Calculate deltas
+        let scale = if previous_distance > 0.0 {
+            current_distance / previous_distance
+        } else {
+            1.0
+        };
+        let delta_scale = scale - 1.0;
+
+        let delta_angle = current_angle - previous_angle;
+
+        // Determine dominant gesture
+        // Prefer pinch if scale change is significant
+        if delta_scale.abs() > 0.01 {
+            Some(GestureType::Pinch {
+                center,
+                scale,
+                delta_scale,
+            })
+        } else if delta_angle.abs() > 0.02 {
+            // 0.02 radians ≈ 1 degree
+            Some(GestureType::Rotate {
+                center,
+                angle: current_angle,
+                delta_angle,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Calculate distance between two points.
+    fn distance_between(&self, p1: Vec2, p2: Vec2) -> f32 {
+        let dx = p2.x - p1.x;
+        let dy = p2.y - p1.y;
+        (dx * dx + dy * dy).sqrt()
+    }
+
+    /// Calculate angle between two points (in radians).
+    fn angle_between(&self, p1: Vec2, p2: Vec2) -> f32 {
+        (p2.y - p1.y).atan2(p2.x - p1.x)
+    }
+
+    /// Calculate average position of current and previous touches.
+    fn calculate_average_positions(&self) -> (Vec2, Vec2) {
+        let current_avg = if !self.active_touches.is_empty() {
+            let sum = self
+                .active_touches
+                .values()
+                .fold(Vec2::new(0.0, 0.0), |acc, t| {
+                    Vec2::new(acc.x + t.position.x, acc.y + t.position.y)
+                });
+            Vec2::new(
+                sum.x / self.active_touches.len() as f32,
+                sum.y / self.active_touches.len() as f32,
+            )
+        } else {
+            Vec2::new(0.0, 0.0)
+        };
+
+        let prev_avg = if !self.previous_touches.is_empty() {
+            let sum = self
+                .previous_touches
+                .values()
+                .fold(Vec2::new(0.0, 0.0), |acc, t| {
+                    Vec2::new(acc.x + t.position.x, acc.y + t.position.y)
+                });
+            Vec2::new(
+                sum.x / self.previous_touches.len() as f32,
+                sum.y / self.previous_touches.len() as f32,
+            )
+        } else {
+            Vec2::new(0.0, 0.0)
+        };
+
+        (current_avg, prev_avg)
+    }
+}
+
+impl Default for GestureRecognizer {
+    fn default() -> Self {
+        Self::new()
     }
 }

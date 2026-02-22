@@ -20,7 +20,9 @@ pub use crate::mark::Mark;
 static NEXT_SELECTION_ID: AtomicU32 = AtomicU32::new(0);
 
 /// Event handler function type
-pub type EventHandlerFn<T> = Box<dyn Fn(&InteractionEvent, &T) + Send + Sync>;
+///
+/// Event handlers receive a mutable reference to the event to support propagation control.
+pub type EventHandlerFn<T> = Box<dyn Fn(&mut InteractionEvent, &T) + Send + Sync>;
 
 /// Trait for data types that can provide interaction geometry.
 ///
@@ -102,7 +104,7 @@ impl<T, M: Mark> Selection<T, M> {
     /// ```
     pub fn on<F>(&mut self, event_type: &str, handler: F) -> &mut Self
     where
-        F: Fn(&InteractionEvent, &T) + Send + Sync + 'static,
+        F: Fn(&mut InteractionEvent, &T) + Send + Sync + 'static,
     {
         {
             let mut handlers = self.event_handlers.lock().unwrap();
@@ -117,11 +119,16 @@ impl<T, M: Mark> Selection<T, M> {
     /// Trigger event handlers for a specific event on a data item.
     ///
     /// This is called internally when the interaction system detects an event on an element.
-    pub fn trigger_event(&self, event_type: &str, event: &InteractionEvent, element_id: u32) {
+    /// Supports event propagation control via stop_propagation() and stop_immediate_propagation().
+    pub fn trigger_event(&self, event_type: &str, event: &mut InteractionEvent, element_id: u32) {
         if let Some(data_item) = self.data.get(element_id as usize) {
             let handlers = self.event_handlers.lock().unwrap();
             if let Some(event_handlers) = handlers.get(event_type) {
                 for handler in event_handlers {
+                    // Stop executing handlers if immediate propagation was stopped
+                    if event.is_immediate_propagation_stopped() {
+                        break;
+                    }
                     handler(event, data_item);
                 }
             }
