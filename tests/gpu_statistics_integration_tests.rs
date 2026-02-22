@@ -7,7 +7,6 @@
 //! and verify correctness against CPU ground truth across various datasets.
 
 use gup::{Mean, MinMax, StandardDeviation, StatisticsCompute};
-use wgpu;
 
 /// Test helper to create GPU context
 async fn create_gpu_context() -> Option<(wgpu::Device, wgpu::Queue)> {

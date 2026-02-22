@@ -55,6 +55,9 @@ pub use crate::shader_function::{
 
     Keyframe,
     KeyframeAnimation,
+    // Storage buffer-based keyframe animation (GUP-140)
+    KeyframeAnimationStorage,
+    KeyframeAnimationStorageBuilder,
     // Basic transformations
     LinearScale,
     // Advanced scales (GUP-033)

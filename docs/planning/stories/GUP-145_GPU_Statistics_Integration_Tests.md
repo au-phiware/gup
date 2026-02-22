@@ -96,7 +96,8 @@ _Identified during GUP-139 implementation to validate GPU compute correctness._
 
 ### Delivered Components
 
-1. **GPU Integration Test Suite** (14 comprehensive tests in `tests/gpu_statistics_integration_tests.rs`):
+1. **GPU Integration Test Suite** (14 comprehensive tests in
+   `tests/gpu_statistics_integration_tests.rs`):
    - Small, medium, and large dataset tests (5, 100, 10K, 1M elements)
    - Special value handling (NaN, infinity, extremes)
    - Edge cases (empty, single value, uniform distribution)
@@ -107,7 +108,8 @@ _Identified during GUP-139 implementation to validate GPU compute correctness._
 
 2. **Shader Fixes**:
    - Fixed atomic type usage in `statistics.compute.wgsl`
-   - Added result buffer clearing logic in `StatisticsCompute::compute_basic_stats()`
+   - Added result buffer clearing logic in
+     `StatisticsCompute::compute_basic_stats()`
    - Simplified shader to remove atomics for single-workgroup case
    - Added extensive debug output capabilities
 
@@ -119,13 +121,17 @@ _Identified during GUP-139 implementation to validate GPU compute correctness._
 
 ### Critical Issue Discovered
 
-**Shader Bug**: The workgroup reduction algorithm in `statistics.compute.wgsl` has a bug that causes incorrect count aggregation. The reduction returns `workgroup_size` (256) instead of the actual data count (5 for test dataset).
+**Shader Bug**: The workgroup reduction algorithm in `statistics.compute.wgsl`
+has a bug that causes incorrect count aggregation. The reduction returns
+`workgroup_size` (256) instead of the actual data count (5 for test dataset).
 
-**Status**: Bug requires dedicated debugging with GPU profiling tools. All test infrastructure is in place and ready once the shader is fixed.
+**Status**: Bug requires dedicated debugging with GPU profiling tools. All test
+infrastructure is in place and ready once the shader is fixed.
 
 ### Files Changed
 
-- `tests/gpu_statistics_integration_tests.rs` - New 499-line test file with 14 GPU integration tests
+- `tests/gpu_statistics_integration_tests.rs` - New 499-line test file with 14
+  GPU integration tests
 - `src/shaders/statistics.compute.wgsl` - Fixed atomic types, simplified logic
 - `src/shader_function.rs` - Added buffer clearing and debug output (26 lines)
 
@@ -138,8 +144,9 @@ _Identified during GUP-139 implementation to validate GPU compute correctness._
 
 ## Follow-Up Stories Needed
 
-1. **GUP-148: Fix Statistics Compute Shader Reduction Bug** — Debug and fix the workgroup reduction algorithm in statistics.compute.wgsl that causes incorrect count aggregation. High priority, 3 points.
-
+1. **GUP-148: Fix Statistics Compute Shader Reduction Bug** — Debug and fix the
+   workgroup reduction algorithm in statistics.compute.wgsl that causes
+   incorrect count aggregation. High priority, 3 points.
 
 ## Retrospective
 
@@ -149,21 +156,29 @@ _Identified during GUP-139 implementation to validate GPU compute correctness._
 
 #### GPU Shader Debugging Complexity
 
-- **Challenge**: Debugging GPU compute shaders without print statements or step-through debugging
-- **Solution**: Used incremental testing with hardcoded values to isolate the bug location
+- **Challenge**: Debugging GPU compute shaders without print statements or
+  step-through debugging
+- **Solution**: Used incremental testing with hardcoded values to isolate the
+  bug location
 - **Pattern**: Write specific test values at each stage to trace execution flow
-- **Future**: Need GPU profiling tools (NSight, RenderDoc) for complex shader debugging
+- **Future**: Need GPU profiling tools (NSight, RenderDoc) for complex shader
+  debugging
 
 #### Shared Memory and Workgroup Reduction
 
-- **Challenge**: Parallel reduction algorithm appeared correct but produced wrong results
-- **Investigation**: Verified thread initialization, reduction loop logic, barrier placement
-- **Finding**: Bug manifests in shared memory reads after initialization - may be synchronization issue
-- **Future**: Always test workgroup algorithms with varying workgroup sizes and data counts
+- **Challenge**: Parallel reduction algorithm appeared correct but produced
+  wrong results
+- **Investigation**: Verified thread initialization, reduction loop logic,
+  barrier placement
+- **Finding**: Bug manifests in shared memory reads after initialization - may
+  be synchronization issue
+- **Future**: Always test workgroup algorithms with varying workgroup sizes and
+  data counts
 
 #### Test Infrastructure Value
 
-- **Challenge**: Building comprehensive GPU tests without a working implementation
+- **Challenge**: Building comprehensive GPU tests without a working
+  implementation
 - **Solution**: Created CPU ground truth comparisons and edge case coverage
 - **Pattern**: Test infrastructure is valuable even when implementation has bugs
 - **Future**: Write tests first before GPU shader implementation
@@ -172,43 +187,56 @@ _Identified during GUP-139 implementation to validate GPU compute correctness._
 
 - **Challenge**: GPU operations are inherently async, need proper test framework
 - **Solution**: Used `tokio::test` with graceful fallback when GPU unavailable
-- **Pattern**: `create_gpu_context() -> Option<(Device, Queue)>` pattern works well
+- **Pattern**: `create_gpu_context() -> Option<(Device, Queue)>` pattern works
+  well
 - **Future**: This pattern is reusable for all GPU compute tests
 
 ### Architectural Decisions
 
 #### Simplified Shader Without Atomics
 
-- **Decision**: Removed atomic operations from shader, use direct writes for single workgroup
-- **Reasoning**: Atomics added complexity without benefit for small datasets; bug persisted anyway
+- **Decision**: Removed atomic operations from shader, use direct writes for
+  single workgroup
+- **Reasoning**: Atomics added complexity without benefit for small datasets;
+  bug persisted anyway
 - **Trade-off**: Limits to single workgroup (256 elements max currently)
 - **Future**: Will need atomics for multi-workgroup support (GUP-148 AC3)
 
 #### Comprehensive Test Coverage Before Fix
 
 - **Decision**: Wrote all 14 test cases even though shader is broken
-- **Reasoning**: Tests define the contract and provide validation once shader is fixed
+- **Reasoning**: Tests define the contract and provide validation once shader is
+  fixed
 - **Trade-off**: Time spent on tests that can't pass yet
-- **Future**: This was correct - tests are ready for immediate validation after fix
+- **Future**: This was correct - tests are ready for immediate validation after
+  fix
 
 #### Separate Follow-Up Story for Shader Fix
 
 - **Decision**: Created GUP-148 for shader bug fix rather than extending GUP-145
-- **Reasoning**: Shader debugging may require GPU profiling tools and significant investigation
-- **Trade-off**: Leaves GUP-145 "partial", but documents progress and blockers clearly
-- **Future**: Better to mark stories partial with clear blockers than leave them "in progress" indefinitely
+- **Reasoning**: Shader debugging may require GPU profiling tools and
+  significant investigation
+- **Trade-off**: Leaves GUP-145 "partial", but documents progress and blockers
+  clearly
+- **Future**: Better to mark stories partial with clear blockers than leave them
+  "in progress" indefinitely
 
 ### Development Workflow Insights
 
 - **GPU Test Execution**: Tests run fast (<1s each) even with GPU initialization
-- **Clean Builds**: Sometimes necessary for GPU shader changes, but didn't fix this bug
-- **Debug Output**: Added extensive debug output to shader and Rust code for troubleshooting
-- **Version Control**: Small, focused commits with clear description of what works/doesn't work
+- **Clean Builds**: Sometimes necessary for GPU shader changes, but didn't fix
+  this bug
+- **Debug Output**: Added extensive debug output to shader and Rust code for
+  troubleshooting
+- **Version Control**: Small, focused commits with clear description of what
+  works/doesn't work
 
 ### Shader Bug Investigation Summary
 
 **Symptoms**:
-1. `result.count` consistently returns 256 (workgroup size) instead of 5 (data size)
+
+1. `result.count` consistently returns 256 (workgroup size) instead of 5 (data
+   size)
 2. `result.sum` is CORRECT (150 for data [10,20,30,40,50])
 3. `result.min` and `result.max` are partially wrong
 4. Hardcoded writes work correctly (writing 42 returns 42)
@@ -216,6 +244,7 @@ _Identified during GUP-139 implementation to validate GPU compute correctness._
 6. Bug persists before AND after reduction loop
 
 **Verified Correct**:
+
 - Dispatch parameters (1 workgroup for 5 elements)
 - Buffer clearing (writes zeros before compute)
 - Thread 0 identification (local_id.x == 0)
@@ -223,12 +252,14 @@ _Identified during GUP-139 implementation to validate GPU compute correctness._
 - Shader compilation (no WGSL errors)
 
 **Suspected Issues**:
+
 - Shared memory initialization race condition
-- Workgroup barrier synchronization bug  
+- Workgroup barrier synchronization bug
 - Compiler optimization issue
 - GPU driver bug (less likely)
 
 **Next Steps** (for GUP-148):
+
 1. Create minimal reproduction shader
 2. Use GPU profiling tools to inspect shared memory
 3. Test on different GPU backends
@@ -237,10 +268,13 @@ _Identified during GUP-139 implementation to validate GPU compute correctness._
 
 ### Lessons for Future GPU Work
 
-1. **Write Tests First**: GPU test infrastructure is valuable even before implementation works
+1. **Write Tests First**: GPU test infrastructure is valuable even before
+   implementation works
 2. **Incremental Debug**: Use hardcoded values at each stage to trace execution
-3. **GPU Profiling Tools**: Essential for complex shader debugging, command-line debug isn't enough
-4. **Workgroup Testing**: Always test at workgroup boundaries (255, 256, 257 elements)
+3. **GPU Profiling Tools**: Essential for complex shader debugging, command-line
+   debug isn't enough
+4. **Workgroup Testing**: Always test at workgroup boundaries (255, 256, 257
+   elements)
 5. **Multiple Backends**: Test on Vulkan, Metal, DX12 to rule out driver bugs
-6. **Document Blockers**: Clear documentation of partial work is better than abandoned "in progress" stories
-
+6. **Document Blockers**: Clear documentation of partial work is better than
+   abandoned "in progress" stories

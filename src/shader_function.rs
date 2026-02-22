@@ -2083,6 +2083,229 @@ impl ComposableShaderFunction for KeyframeAnimation {
     }
 }
 
+// ============================================================================
+// Storage Buffer Keyframe Animation (GUP-140)
+// ============================================================================
+
+/// Storage buffer-based keyframe animation supporting unlimited keyframes.
+///
+/// Similar to ColorGradientStorage, this uses storage buffers instead of uniform
+/// buffers to support arbitrarily large keyframe arrays. Uses efficient binary
+/// search in WGSL for O(log n) keyframe lookup.
+///
+/// For animations with <= 16 keyframes, prefer KeyframeAnimation (uniform-based)
+/// for simplicity and performance.
+#[derive(Clone, Debug)]
+pub struct KeyframeAnimationStorage {
+    pub keyframes: Vec<Keyframe>,
+    pub loop_animation: bool,
+    pub reverse_on_loop: bool,
+}
+
+impl KeyframeAnimationStorage {
+    /// Creates a new storage-based keyframe animation.
+    pub fn new(keyframes: Vec<Keyframe>) -> Self {
+        assert!(!keyframes.is_empty(), "Must have at least one keyframe");
+        let mut kfs = keyframes;
+        kfs.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
+        Self {
+            keyframes: kfs,
+            loop_animation: false,
+            reverse_on_loop: false,
+        }
+    }
+
+    /// Creates a new animation and enables looping.
+    pub fn with_loop(mut self, enable: bool) -> Self {
+        self.loop_animation = enable;
+        self
+    }
+
+    /// Creates a new animation with reverse-on-loop enabled.
+    pub fn with_reverse(mut self, enable: bool) -> Self {
+        self.reverse_on_loop = enable;
+        self
+    }
+
+    /// Returns a builder for fluent keyframe construction.
+    pub fn builder() -> KeyframeAnimationStorageBuilder {
+        KeyframeAnimationStorageBuilder::new()
+    }
+
+    /// Creates buffer data for keyframes (for storage buffer upload).
+    pub fn create_keyframes_buffer_data(&self) -> Vec<u8> {
+        let mut data = Vec::with_capacity(self.keyframes.len() * 16); // 16 bytes per keyframe
+        for kf in &self.keyframes {
+            data.extend_from_slice(&kf.time.to_le_bytes());
+            data.extend_from_slice(&kf.value.to_le_bytes());
+            data.extend_from_slice(&kf._padding[0].to_le_bytes());
+            data.extend_from_slice(&kf._padding[1].to_le_bytes());
+        }
+        data
+    }
+
+    /// Returns the number of keyframes.
+    pub fn count(&self) -> u32 {
+        self.keyframes.len() as u32
+    }
+
+    /// Returns the WGSL struct definition for the storage buffer.
+    pub fn wgsl_struct_definition() -> &'static str {
+        r#"
+struct Keyframe {
+    time: f32,
+    value: f32,
+    _padding0: f32,
+    _padding1: f32,
+}
+
+struct KeyframeAnimationStorageInfo {
+    keyframe_count: u32,
+    loop_animation: u32,
+    reverse_on_loop: u32,
+    _padding: u32,
+}
+
+@group(0) @binding(1) var<storage, read> keyframe_data: array<Keyframe>;
+@group(0) @binding(2) var<uniform> animation_info: KeyframeAnimationStorageInfo;
+"#
+    }
+
+    /// Returns the WGSL function implementation with efficient binary search.
+    pub fn wgsl_function() -> &'static str {
+        r#"
+fn keyframe_animation_storage(time: f32) -> f32 {
+    let count = animation_info.keyframe_count;
+    
+    // Handle edge cases
+    if (count == 0u) {
+        return 0.0;
+    }
+    
+    if (count == 1u) {
+        return keyframe_data[0].value;
+    }
+    
+    // Get time range from first and last keyframes
+    let start_time = keyframe_data[0].time;
+    let end_time = keyframe_data[count - 1u].time;
+    let duration = end_time - start_time;
+    
+    var t = time;
+    
+    // Handle looping
+    if (animation_info.loop_animation != 0u && duration > 0.0) {
+        t = start_time + ((time - start_time) % duration);
+        if (t < start_time) {
+            t = t + duration;
+        }
+        
+        // Handle reverse on loop
+        if (animation_info.reverse_on_loop != 0u) {
+            let cycle = floor((time - start_time) / duration);
+            if (u32(cycle) % 2u == 1u) {
+                t = end_time - (t - start_time);
+            }
+        }
+    }
+    
+    // Clamp to time range
+    if (t <= keyframe_data[0].time) {
+        return keyframe_data[0].value;
+    }
+    if (t >= keyframe_data[count - 1u].time) {
+        return keyframe_data[count - 1u].value;
+    }
+    
+    // Binary search to find the interval containing t
+    var low = 0u;
+    var high = count - 1u;
+    
+    while (low + 1u < high) {
+        let mid = (low + high) / 2u;
+        if (keyframe_data[mid].time <= t) {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+    
+    // Interpolate between the two keyframes
+    let k1 = keyframe_data[low];
+    let k2 = keyframe_data[high];
+    let segment_duration = k2.time - k1.time;
+    
+    if (segment_duration <= 0.0) {
+        return k1.value;
+    }
+    
+    let local_t = (t - k1.time) / segment_duration;
+    return mix(k1.value, k2.value, local_t);
+}
+"#
+    }
+}
+
+/// Builder for creating storage-based keyframe animations with a fluent API.
+pub struct KeyframeAnimationStorageBuilder {
+    keyframes: Vec<Keyframe>,
+    loop_animation: bool,
+    reverse_on_loop: bool,
+}
+
+impl KeyframeAnimationStorageBuilder {
+    /// Creates a new builder.
+    pub fn new() -> Self {
+        Self {
+            keyframes: Vec::new(),
+            loop_animation: false,
+            reverse_on_loop: false,
+        }
+    }
+
+    /// Adds a keyframe at the specified time and value.
+    pub fn add_keyframe(mut self, time: f32, value: f32) -> Self {
+        self.keyframes.push(Keyframe::new(time, value));
+        self
+    }
+
+    /// Enables looping.
+    pub fn with_loop(mut self, enable: bool) -> Self {
+        self.loop_animation = enable;
+        self
+    }
+
+    /// Enables reverse-on-loop.
+    pub fn with_reverse(mut self, enable: bool) -> Self {
+        self.reverse_on_loop = enable;
+        self
+    }
+
+    /// Builds the animation, sorting keyframes by time.
+    pub fn build(mut self) -> KeyframeAnimationStorage {
+        assert!(
+            !self.keyframes.is_empty(),
+            "Animation must have at least one keyframe"
+        );
+
+        // Sort by time
+        self.keyframes
+            .sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
+
+        KeyframeAnimationStorage {
+            keyframes: self.keyframes,
+            loop_animation: self.loop_animation,
+            reverse_on_loop: self.reverse_on_loop,
+        }
+    }
+}
+
+impl Default for KeyframeAnimationStorageBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Cubic bezier timing function for advanced easing curves.
 ///
 /// Defines a cubic bezier curve with two control points for custom timing.

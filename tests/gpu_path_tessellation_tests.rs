@@ -3,8 +3,8 @@
 
 //! Integration tests for GPU path tessellation performance.
 
-use gup::mark::{GpuPathTessellator, PathCommand};
 use gup::Vec2;
+use gup::mark::{GpuPathTessellator, PathCommand};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -84,7 +84,10 @@ async fn test_gpu_tessellation_single_path() {
     println!("  Commands: {}", path.len());
     println!("  Vertices generated: {}", vertex_count);
     println!("  Time: {:?}", duration);
-    println!("  Throughput: {:.2} paths/sec", 1.0 / duration.as_secs_f32());
+    println!(
+        "  Throughput: {:.2} paths/sec",
+        1.0 / duration.as_secs_f32()
+    );
 
     assert!(vertex_count > 0);
 }
@@ -125,10 +128,7 @@ async fn test_gpu_tessellation_multiple_paths() {
     println!("  Paths: {}", path_count);
     println!("  Total vertices: {}", total_vertices);
     println!("  Total time: {:?}", duration);
-    println!(
-        "  Average per path: {:?}",
-        duration / path_count as u32
-    );
+    println!("  Average per path: {:?}", duration / path_count as u32);
     println!(
         "  Throughput: {:.2} paths/sec",
         path_count as f32 / duration.as_secs_f32()
@@ -231,10 +231,7 @@ async fn test_gpu_tessellation_tolerance_levels() {
         assert!(result.is_ok());
 
         let (_vbuf, _ibuf, vertex_count, _index_count) = result.unwrap();
-        println!(
-            "  Tolerance {:.2}: {} vertices",
-            tolerance, vertex_count
-        );
+        println!("  Tolerance {:.2}: {} vertices", tolerance, vertex_count);
 
         // Higher tolerance should produce fewer vertices
         assert!(vertex_count > 0);

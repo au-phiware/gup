@@ -11,7 +11,10 @@
 
 ## Context
 
-GUP-145 discovered a critical bug in the statistics compute shader from GUP-139. The workgroup reduction algorithm returns incorrect count values (returns `workgroup_size` instead of actual data count), which causes all statistical calculations to be wrong.
+GUP-145 discovered a critical bug in the statistics compute shader from GUP-139.
+The workgroup reduction algorithm returns incorrect count values (returns
+`workgroup_size` instead of actual data count), which causes all statistical
+calculations to be wrong.
 
 ## User Story
 
@@ -45,24 +48,29 @@ GUP-145 discovered a critical bug in the statistics compute shader from GUP-139.
 
 ### Known Symptoms
 
-1. `shared_count[0]` after reduction contains 256 instead of 5 (for 5-element dataset)
+1. `shared_count[0]` after reduction contains 256 instead of 5 (for 5-element
+   dataset)
 2. Single-thread writes work correctly (hardcoded 42 writes as 42)
-3. Thread initialization appears correct (valid threads count=1, invalid count=0)
+3. Thread initialization appears correct (valid threads count=1, invalid
+   count=0)
 4. Parallel reduction tree logic appears sound
 5. Bug persists after clean rebuild
 
 ### Debugging Approaches
 
-1. **Shared Memory Inspection**: Use GPU debugging tools to inspect shared memory contents
+1. **Shared Memory Inspection**: Use GPU debugging tools to inspect shared
+   memory contents
 2. **Reduction Step Tracing**: Verify each stride of the reduction loop
-3. **Workgroup Barrier Validation**: Ensure barriers are correct and not optimized away
-4. **GPU Profiler**: Use vendor tools (NSight, RenderDoc, PIX) to trace execution
+3. **Workgroup Barrier Validation**: Ensure barriers are correct and not
+   optimized away
+4. **GPU Profiler**: Use vendor tools (NSight, RenderDoc, PIX) to trace
+   execution
 5. **Simplified Test**: Create minimal reproduction shader
 
 ### Potential Root Causes
 
 - Workgroup barrier placement or synchronization issue
-- Shared memory initialization race condition  
+- Shared memory initialization race condition
 - Compiler optimization removing necessary synchronization
 - GPU driver bug (less likely but possible)
 - Incorrect loop bounds in reduction algorithm
@@ -89,9 +97,11 @@ GUP-145 discovered a critical bug in the statistics compute shader from GUP-139.
 
 ## Risk Assessment
 
-**Medium Risk**: Shader debugging can be time-consuming without proper GPU profiling tools.
+**Medium Risk**: Shader debugging can be time-consuming without proper GPU
+profiling tools.
 
-**Mitigation**: Start with simplified reproduction case, use multiple debugging approaches.
+**Mitigation**: Start with simplified reproduction case, use multiple debugging
+approaches.
 
 ## Definition of Done
 
@@ -105,4 +115,5 @@ GUP-145 discovered a critical bug in the statistics compute shader from GUP-139.
 
 ---
 
-_Created from GUP-145 when shader bug was discovered during GPU integration test implementation._
+_Created from GUP-145 when shader bug was discovered during GPU integration test
+implementation._
