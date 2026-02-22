@@ -44,6 +44,8 @@ pub struct WgslFunctionInfo {
     pub uniform_params: Vec<UniformParam>,
     /// The original WGSL function body as a string
     pub wgsl_body: String,
+    /// Custom types that may have WgslStruct definitions
+    pub custom_types: Vec<Type>,
 }
 
 /// Information about a uniform parameter
@@ -103,6 +105,26 @@ impl Parse for WgslFunctionInfo {
         let (input_type, output_type, uniform_params) = parse_function_signature(&function.sig)
             .map_err(|e| Error::new(e.span(), format!("Function signature error: {e}")))?;
 
+        // Collect custom types (non-primitives) that might need struct definitions
+        let mut custom_types = Vec::new();
+        
+        // Check input type
+        if is_custom_type(&input_type) {
+            custom_types.push(input_type.clone());
+        }
+        
+        // Check output type
+        if is_custom_type(&output_type) {
+            custom_types.push(output_type.clone());
+        }
+        
+        // Check uniform parameter types
+        for param in &uniform_params {
+            if is_custom_type(&param.rust_type) {
+                custom_types.push(param.rust_type.clone());
+            }
+        }
+
         // Extract WGSL function body
         let wgsl_body = extract_wgsl_body(&function)
             .map_err(|e| Error::new(e.span(), format!("WGSL body generation error: {e}")))?;
@@ -115,6 +137,7 @@ impl Parse for WgslFunctionInfo {
             output_type,
             uniform_params,
             wgsl_body,
+            custom_types,
         })
     }
 }
@@ -674,7 +697,13 @@ fn is_uniform_compatible_type(ty: &Type) -> bool {
                     "Mat2x3" | "Mat2x4" | "Mat3x2" | "Mat3x4" | "Mat4x2" | "Mat4x3" => true,
                     // Texture and sampler types cannot be used in uniforms
                     // They must be passed as bindings
-                    _ => false, // Custom types need explicit verification
+                    "Texture1D" | "Texture2D" | "Texture3D" | "TextureCube"
+                    | "Texture2DArray" | "TextureCubeArray" | "TextureMultisampled2D"
+                    | "TextureStorage1D" | "TextureStorage2D" | "TextureStorage3D"
+                    | "Sampler" | "SamplerComparison" => false,
+                    // Custom types are assumed to be uniform-compatible if they implement Pod + Zeroable
+                    // The derive macro or user will ensure this
+                    _ => true,
                 }
             } else {
                 false
@@ -683,6 +712,54 @@ fn is_uniform_compatible_type(ty: &Type) -> bool {
         Type::Array(type_array) => {
             // Arrays of uniform-compatible types are also uniform-compatible
             is_uniform_compatible_type(&type_array.elem)
+        }
+        _ => false,
+    }
+}
+
+/// Check if a type is a custom (non-primitive) type that might have a WgslStruct definition
+fn is_custom_type(ty: &Type) -> bool {
+    match ty {
+        Type::Path(type_path) => {
+            let path = &type_path.path;
+            if path.segments.len() == 1 {
+                let segment = &path.segments[0];
+                let type_name = segment.ident.to_string();
+                // Return true if it's not a known primitive type
+                !matches!(
+                    type_name.as_str(),
+                    "f32"
+                        | "i32"
+                        | "u32"
+                        | "bool"
+                        | "Vec2"
+                        | "Vec3"
+                        | "Vec4"
+                        | "Mat2"
+                        | "Mat3"
+                        | "Mat4"
+                        | "Mat2x3"
+                        | "Mat2x4"
+                        | "Mat3x2"
+                        | "Mat3x4"
+                        | "Mat4x2"
+                        | "Mat4x3"
+                        | "Texture1D"
+                        | "Texture2D"
+                        | "Texture3D"
+                        | "TextureCube"
+                        | "Texture2DArray"
+                        | "TextureCubeArray"
+                        | "TextureMultisampled2D"
+                        | "TextureStorage1D"
+                        | "TextureStorage2D"
+                        | "TextureStorage3D"
+                        | "Sampler"
+                        | "SamplerComparison"
+                )
+            } else {
+                false
+            }
         }
         _ => false,
     }
@@ -712,6 +789,7 @@ impl ToTokens for WgslFunctionInfo {
         let output_type = &self.output_type;
         let function_name = &self.function_name;
         let wgsl_body = &self.wgsl_body;
+        let custom_types = &self.custom_types;
 
         // Generate uniform struct fields
         let uniform_fields = self.uniform_params.iter().map(|param| {
@@ -920,6 +998,25 @@ impl ToTokens for WgslFunctionInfo {
 
                 fn wgsl_function() -> &'static str {
                     #wgsl_body
+                }
+
+                fn generate_wgsl(&self) -> String {
+                    // Collect custom struct definitions from types that implement ShaderType
+                    let mut definitions: Vec<String> = Vec::new();
+                    
+                    // Add definitions for each custom type if available
+                    #(
+                        if let Some(def) = <#custom_types as crate::shader_function::ShaderType>::wgsl_type_definition() {
+                            definitions.push(def.to_string());
+                        }
+                    )*
+                    
+                    // Prepend struct definitions to the function body
+                    if definitions.is_empty() {
+                        Self::wgsl_function().to_string()
+                    } else {
+                        format!("{}\n\n{}", definitions.join("\n\n"), Self::wgsl_function())
+                    }
                 }
 
                 fn create_uniforms(&self) -> Option<Self::Uniforms> {
