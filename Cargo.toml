@@ -98,6 +98,11 @@ name = "gpu_debug_demo"
 path = "examples/gpu_debug_demo.rs"
 
 [[example]]
+name = "web_dashboard_demo"
+path = "examples/web_dashboard_demo.rs"
+required-features = ["web-dashboard"]
+
+[[example]]
 name = "async_streaming_demo"
 path = "examples/async_streaming_demo.rs"
 
