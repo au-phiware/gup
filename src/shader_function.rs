@@ -1977,9 +1977,9 @@ pub struct KeyframeAnimationUniforms {
 impl ShaderUniform for KeyframeAnimationUniforms {
     fn wgsl_struct_definition() -> String {
         format!(
-            "struct Keyframe {{\n    time: f32,\n    value: f32,\n}}\n\n\
+            "struct Keyframe {{\n    time: f32,\n    value: f32,\n    _padding0: f32,\n    _padding1: f32,\n}}\n\n\
              struct KeyframeAnimationUniforms {{\n    keyframes: array<Keyframe, {}>,\n    \
-             keyframe_count: u32,\n    loop_animation: u32,\n    reverse_on_loop: u32,\n}}",
+             keyframe_count: u32,\n    loop_animation: u32,\n    reverse_on_loop: u32,\n    _padding: u32,\n}}",
             MAX_KEYFRAMES
         )
     }
