@@ -212,10 +212,10 @@ The migration guide itself is accessible:
 
 #### Documentation as First-Class Deliverable
 
-- **Challenge**: Creating comprehensive migration documentation without overwhelming
-  users with too much detail
-- **Solution**: Structured guide with clear sections, progressive complexity, and
-  concrete examples that can be copy-pasted
+- **Challenge**: Creating comprehensive migration documentation without
+  overwhelming users with too much detail
+- **Solution**: Structured guide with clear sections, progressive complexity,
+  and concrete examples that can be copy-pasted
 - **Pattern**: Start with high-level differences, then dive into specific
   examples, finally provide reference materials (feature matrix, checklist)
 - **Future**: This structure works well and should be reused for other migration
@@ -317,7 +317,8 @@ No new stories needed. This documentation story is complete and self-contained.
 Future updates should be done incrementally as:
 
 1. **GUP-087**: May warrant performance optimization updates to migration guide
-2. **Phase 2 features**: Update feature matrix as new chart types are implemented
+2. **Phase 2 features**: Update feature matrix as new chart types are
+   implemented
 3. **GUP-132 (GPU Path Tessellation)**: Add path/curve examples to migration
    guide
 4. **Phase 4 export features**: Add export comparison when SVG/PNG export
