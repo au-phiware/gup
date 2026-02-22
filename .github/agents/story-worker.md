@@ -93,7 +93,24 @@ Before marking the story complete, perform comprehensive checks:
 5. **Definition of Done review**: Walk through the Definition of Done checklist
    and verify each item.
 6. **Run relevant examples**: If the story involves visual output, run the
-   relevant examples and verify they work correctly. Note what you tested.
+   relevant example in the background, capture a screenshot with the
+   `screen-grabber` agent, then read the screenshot to verify it visually.
+
+   ```bash
+   # Launch the example and grab its PID
+   cargo run --example <name> &>/tmp/<name>.log &
+   EXAMPLE_PID=$!
+   ```
+
+   Then use the Task tool with `subagent_type: "screen-grabber"`:
+
+   ```
+   Capture a screenshot of the window with PID <EXAMPLE_PID>.
+   Save it to /tmp/<name>-screenshot.png
+   ```
+
+   The agent returns the file path. Read the screenshot to verify the output,
+   then kill the example process. Note what you tested.
 
 ---
 
