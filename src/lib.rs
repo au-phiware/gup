@@ -54,6 +54,7 @@ pub mod shader_pipeline;
 pub mod test_utils;
 pub mod text;
 pub mod tick_generator;
+pub mod visual_test_utils;
 // Export accessibility system components
 pub use accessibility::high_contrast::{
     AccessibilityOverrides, Color as AccessibilityColor, calculate_contrast_ratio,
