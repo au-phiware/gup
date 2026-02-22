@@ -103,7 +103,7 @@ epic and status.
 | [GUP-137](GUP-137_Shader_Performance_Benchmarking.md)     | Shader Function Performance Benchmarking | ✅ Complete    | Medium   | 3      |
 | [GUP-138](GUP-138_Advanced_Temporal_Animation.md)         | Advanced Temporal Animation System       | ✅ Complete    | Low      | 8      |
 | [GUP-139](GUP-139_Statistical_Shader_Functions.md)        | Statistical Shader Functions             | ✅ Complete    | Low      | 5      |
-| [GUP-140](GUP-140_Storage_Buffer_Keyframes.md)            | Storage Buffer Keyframe Animations       | 🚧 In Progress | Medium   | 5      |
+| [GUP-140](GUP-140_Storage_Buffer_Keyframes.md)            | Storage Buffer Keyframe Animations       | ✅ Complete    | Medium   | 5      |
 | [GUP-141](GUP-141_Spline_Animation_Curves.md)             | Spline-Based Animation Curves            | 💡 New         | Low      | 5      |
 | [GUP-142](GUP-142_Animation_Event_System.md)              | Animation Event System                   | 💡 New         | Medium   | 8      |
 | [GUP-143](GUP-143_Histogram_Generation.md)                | Histogram Generation on GPU              | 💡 New         | Medium   | 5      |
