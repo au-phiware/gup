@@ -36,6 +36,7 @@ pub use crate::shader_function::{
     // Advanced temporal animation (GUP-138)
     AnimationPlaybackState,
     AnimationTimeline,
+    BinningStrategy,
     // Filtering and clamping (GUP-033)
     Clamp,
     ColorGradient,
@@ -53,6 +54,11 @@ pub use crate::shader_function::{
     Easing,
     EasingFunction,
 
+    // Histogram functions (GUP-143)
+    Histogram,
+    HistogramCompute,
+    HistogramConfig,
+    HistogramResult,
     Keyframe,
     KeyframeAnimation,
     // Storage buffer-based keyframe animation (GUP-140)

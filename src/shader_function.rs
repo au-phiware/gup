@@ -3797,6 +3797,278 @@ impl StatisticsCompute {
     }
 }
 
+/// Configuration for histogram computation on GPU
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct HistogramConfig {
+    /// Number of bins
+    pub bin_count: u32,
+    /// Minimum value for binning range
+    pub min_value: f32,
+    /// Maximum value for binning range
+    pub max_value: f32,
+    /// 0 = counts, 1 = probabilities
+    pub normalize: u32,
+    /// Actual number of data elements (not buffer size)
+    pub data_length: u32,
+    /// Padding for 16-byte alignment (uniform buffer requirement)
+    _padding: u32,
+    _padding2: u32,
+    _padding3: u32,
+}
+
+/// GPU compute pipeline for histogram generation
+pub struct HistogramCompute {
+    /// Compute pipeline for histogram binning
+    histogram_pipeline: Option<wgpu::ComputePipeline>,
+    /// Input data buffer
+    data_buffer: Option<wgpu::Buffer>,
+    /// Output bins buffer (atomic u32 array)
+    bins_buffer: Option<wgpu::Buffer>,
+    /// Configuration uniform buffer
+    config_buffer: Option<wgpu::Buffer>,
+    /// Maximum number of elements
+    max_elements: usize,
+    /// Maximum number of bins
+    max_bins: usize,
+    /// Device and queue references
+    device: Option<Arc<wgpu::Device>>,
+    queue: Option<Arc<wgpu::Queue>>,
+}
+
+impl HistogramCompute {
+    /// Create a new histogram compute system
+    pub async fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        max_elements: usize,
+        max_bins: usize,
+    ) -> GupResult<Self> {
+        let histogram_pipeline = Self::create_histogram_pipeline(device).await?;
+
+        let data_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("histogram_data"),
+            size: (max_elements * std::mem::size_of::<f32>()) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let bins_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("histogram_bins"),
+            size: (max_bins * std::mem::size_of::<u32>()) as u64,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let config_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("histogram_config"),
+            size: std::mem::size_of::<HistogramConfig>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        Ok(Self {
+            histogram_pipeline: Some(histogram_pipeline),
+            data_buffer: Some(data_buffer),
+            bins_buffer: Some(bins_buffer),
+            config_buffer: Some(config_buffer),
+            max_elements,
+            max_bins,
+            device: Some(Arc::new(device.clone())),
+            queue: Some(Arc::new(queue.clone())),
+        })
+    }
+
+    /// Create compute pipeline for histogram generation
+    async fn create_histogram_pipeline(device: &wgpu::Device) -> GupResult<wgpu::ComputePipeline> {
+        let shader_source = include_str!("shaders/histogram.compute.wgsl");
+
+        let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("histogram_compute"),
+            source: wgpu::ShaderSource::Wgsl(shader_source.into()),
+        });
+
+        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("histogram_pipeline"),
+            layout: None,
+            module: &shader_module,
+            entry_point: Some("compute_histogram"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            cache: None,
+        });
+
+        Ok(pipeline)
+    }
+
+    /// Compute histogram for a dataset
+    pub async fn compute_histogram(
+        &self,
+        data: &[f32],
+        bin_count: usize,
+        min_value: f32,
+        max_value: f32,
+        normalize: bool,
+    ) -> GupResult<HistogramResult> {
+        if data.is_empty() {
+            return Ok(HistogramResult {
+                bins: vec![0; bin_count],
+                edges: vec![0.0; bin_count + 1],
+                min: min_value,
+                max: max_value,
+                count: 0,
+            });
+        }
+
+        if bin_count > self.max_bins {
+            return Err(GupError::buffer_error(format!(
+                "Requested {} bins exceeds maximum of {}",
+                bin_count, self.max_bins
+            )));
+        }
+
+        let device = self.device.as_ref().ok_or_else(|| {
+            GupError::gpu_initialization_failed(
+                "HistogramCompute device not initialized".to_string(),
+            )
+        })?;
+        let queue = self.queue.as_ref().ok_or_else(|| {
+            GupError::gpu_initialization_failed(
+                "HistogramCompute queue not initialized".to_string(),
+            )
+        })?;
+        let data_buffer = self.data_buffer.as_ref().ok_or_else(|| {
+            GupError::gpu_initialization_failed(
+                "HistogramCompute data_buffer not initialized".to_string(),
+            )
+        })?;
+        let bins_buffer = self.bins_buffer.as_ref().ok_or_else(|| {
+            GupError::gpu_initialization_failed(
+                "HistogramCompute bins_buffer not initialized".to_string(),
+            )
+        })?;
+        let config_buffer = self.config_buffer.as_ref().ok_or_else(|| {
+            GupError::gpu_initialization_failed(
+                "HistogramCompute config_buffer not initialized".to_string(),
+            )
+        })?;
+
+        // Upload data to GPU
+        queue.write_buffer(data_buffer, 0, bytemuck::cast_slice(data));
+
+        // Clear bins buffer
+        let zero_bins = vec![0u32; bin_count];
+        queue.write_buffer(bins_buffer, 0, bytemuck::cast_slice(&zero_bins));
+
+        // Upload configuration
+        let config = HistogramConfig {
+            bin_count: bin_count as u32,
+            min_value,
+            max_value,
+            normalize: if normalize { 1 } else { 0 },
+            data_length: data.len() as u32,
+            _padding: 0,
+            _padding2: 0,
+            _padding3: 0,
+        };
+        queue.write_buffer(config_buffer, 0, bytemuck::bytes_of(&config));
+
+        // Create bind group
+        let pipeline = self.histogram_pipeline.as_ref().ok_or_else(|| {
+            GupError::gpu_initialization_failed(
+                "HistogramCompute pipeline not initialized".to_string(),
+            )
+        })?;
+        let bind_group_layout = pipeline.get_bind_group_layout(0);
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("histogram_bind_group"),
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: data_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: bins_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: config_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        // Execute compute shader
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("histogram_encoder"),
+        });
+
+        {
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("histogram_pass"),
+                timestamp_writes: None,
+            });
+            compute_pass.set_pipeline(pipeline);
+            compute_pass.set_bind_group(0, &bind_group, &[]);
+
+            let workgroup_count = (data.len() as u32).div_ceil(256);
+            compute_pass.dispatch_workgroups(workgroup_count, 1, 1);
+        }
+
+        // Read back results
+        let staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("histogram_staging"),
+            size: (bin_count * std::mem::size_of::<u32>()) as u64,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        encoder.copy_buffer_to_buffer(
+            bins_buffer,
+            0,
+            &staging_buffer,
+            0,
+            (bin_count * std::mem::size_of::<u32>()) as u64,
+        );
+
+        queue.submit(Some(encoder.finish()));
+
+        let buffer_slice = staging_buffer.slice(..);
+        let (sender, receiver) = futures::channel::oneshot::channel();
+        buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
+            sender.send(result).ok();
+        });
+
+        let _ = device.poll(wgpu::PollType::Wait);
+        receiver
+            .await
+            .map_err(|_| GupError::webgpu_error("Failed to receive buffer mapping".to_string()))?
+            .map_err(|e| GupError::webgpu_error(format!("Failed to map buffer: {:?}", e)))?;
+
+        let buffer_data = buffer_slice.get_mapped_range();
+        let bins: Vec<u32> = bytemuck::cast_slice(&buffer_data).to_vec();
+        drop(buffer_data);
+        staging_buffer.unmap();
+
+        // Compute bin edges
+        let range = max_value - min_value;
+        let step = range / bin_count as f32;
+        let edges: Vec<f32> = (0..=bin_count)
+            .map(|i| min_value + i as f32 * step)
+            .collect();
+
+        Ok(HistogramResult {
+            bins,
+            edges,
+            min: min_value,
+            max: max_value,
+            count: data.len(),
+        })
+    }
+}
+
 /// Mean calculation shader function - computes average of dataset
 #[derive(Clone, Debug)]
 pub struct Mean {
@@ -3896,6 +4168,189 @@ impl Percentile {
         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         let index = (self.percentile * (sorted.len() - 1) as f32) as usize;
         sorted[index]
+    }
+}
+
+/// Binning strategy for histogram generation
+#[derive(Clone, Debug, PartialEq)]
+pub enum BinningStrategy {
+    /// Equal-width bins across the data range
+    EqualWidth,
+    /// Equal-frequency bins (each bin has approximately same count)
+    EqualFrequency,
+}
+
+/// Histogram generation shader function
+#[derive(Clone, Debug)]
+pub struct Histogram {
+    /// Data values to compute histogram over
+    pub values: Vec<f32>,
+    /// Number of bins
+    pub bin_count: usize,
+    /// Custom bin edges (if None, will auto-detect from min/max)
+    pub custom_edges: Option<Vec<f32>>,
+    /// Binning strategy
+    pub strategy: BinningStrategy,
+    /// Whether to normalize to probabilities
+    pub normalize: bool,
+}
+
+impl Histogram {
+    /// Create a new histogram with equal-width bins
+    pub fn new(values: Vec<f32>, bin_count: usize) -> Self {
+        Self {
+            values,
+            bin_count,
+            custom_edges: None,
+            strategy: BinningStrategy::EqualWidth,
+            normalize: false,
+        }
+    }
+
+    /// Set custom bin edges
+    pub fn with_edges(mut self, edges: Vec<f32>) -> Self {
+        self.custom_edges = Some(edges);
+        self
+    }
+
+    /// Set binning strategy
+    pub fn with_strategy(mut self, strategy: BinningStrategy) -> Self {
+        self.strategy = strategy;
+        self
+    }
+
+    /// Enable probability normalization
+    pub fn with_normalization(mut self, normalize: bool) -> Self {
+        self.normalize = normalize;
+        self
+    }
+
+    /// Compute histogram on CPU (for small datasets or fallback)
+    pub fn compute_cpu(&self) -> HistogramResult {
+        if self.values.is_empty() {
+            return HistogramResult {
+                bins: vec![0; self.bin_count],
+                edges: vec![0.0; self.bin_count + 1],
+                min: 0.0,
+                max: 0.0,
+                count: 0,
+            };
+        }
+
+        // Determine bin edges
+        let (min, max) = if let Some(ref edges) = self.custom_edges {
+            (*edges.first().unwrap(), *edges.last().unwrap())
+        } else {
+            let min = self.values.iter().fold(f32::INFINITY, |a, &b| a.min(b));
+            let max = self.values.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+            (min, max)
+        };
+
+        let edges = self.compute_bin_edges(min, max);
+        let mut bins = vec![0u32; self.bin_count];
+
+        // Bin the data
+        for &value in &self.values {
+            if value < min || value > max {
+                continue;
+            }
+            let range = max - min;
+            if range == 0.0 {
+                bins[0] += 1;
+            } else {
+                let normalized = (value - min) / range;
+                let bin_index = (normalized * self.bin_count as f32) as usize;
+                let bin_index = bin_index.min(self.bin_count - 1);
+                bins[bin_index] += 1;
+            }
+        }
+
+        // Normalize if requested
+        if self.normalize {
+            let total: u32 = bins.iter().sum();
+            if total > 0 {
+                // Convert to f32 for normalization, then back to u32 (storing as bits)
+                bins = bins
+                    .iter()
+                    .map(|&count| {
+                        let prob = count as f32 / total as f32;
+                        prob.to_bits()
+                    })
+                    .collect();
+            }
+        }
+
+        HistogramResult {
+            bins,
+            edges,
+            min,
+            max,
+            count: self.values.len(),
+        }
+    }
+
+    /// Compute bin edges based on strategy
+    fn compute_bin_edges(&self, min: f32, max: f32) -> Vec<f32> {
+        if let Some(ref edges) = self.custom_edges {
+            return edges.clone();
+        }
+
+        match self.strategy {
+            BinningStrategy::EqualWidth => {
+                let range = max - min;
+                let step = range / self.bin_count as f32;
+                (0..=self.bin_count)
+                    .map(|i| min + i as f32 * step)
+                    .collect()
+            }
+            BinningStrategy::EqualFrequency => {
+                // For equal frequency, we need to sort and find quantiles
+                let mut sorted = self.values.clone();
+                sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+                let mut edges = Vec::with_capacity(self.bin_count + 1);
+                edges.push(min);
+
+                for i in 1..self.bin_count {
+                    let quantile = i as f32 / self.bin_count as f32;
+                    let index = (quantile * (sorted.len() - 1) as f32) as usize;
+                    edges.push(sorted[index]);
+                }
+
+                edges.push(max);
+                edges
+            }
+        }
+    }
+}
+
+/// Result of histogram computation
+#[derive(Clone, Debug)]
+pub struct HistogramResult {
+    /// Bin counts (or normalized probabilities if normalize=true)
+    pub bins: Vec<u32>,
+    /// Bin edges (length = bin_count + 1)
+    pub edges: Vec<f32>,
+    /// Minimum value in dataset
+    pub min: f32,
+    /// Maximum value in dataset
+    pub max: f32,
+    /// Total count of values
+    pub count: usize,
+}
+
+impl HistogramResult {
+    /// Get bin counts as f32 (handles normalized histograms)
+    pub fn bin_values(&self) -> Vec<f32> {
+        self.bins.iter().map(|&bits| f32::from_bits(bits)).collect()
+    }
+
+    /// Check if this is a normalized histogram
+    pub fn is_normalized(&self) -> bool {
+        // If any bin value is less than 1.0, it's likely normalized
+        self.bins
+            .iter()
+            .any(|&bits| f32::from_bits(bits) < 1.0 && bits != 0)
     }
 }
 
