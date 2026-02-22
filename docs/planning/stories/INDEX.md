@@ -76,14 +76,14 @@ epic and status.
 
 ### Post GUP-006 Stories - WGSL Procedural Macro Enhancement (Stories 63+)
 
-| Story                                                           | Title                                     | Status         | Priority | Points |
-| --------------------------------------------------------------- | ----------------------------------------- | -------------- | -------- | ------ |
-| [GUP-063](GUP-063_Enhanced_WGSL_Code_Generation.md)             | Enhanced WGSL Code Generation             | ✅ Complete    | Medium   | 5      |
-| [GUP-064](GUP-064_Advanced_Type_System_Support.md)              | Advanced Type System Support              | ✅ Complete    | Low      | 3      |
-| [GUP-064-B](GUP-064-B_Custom_Struct_Code_Generation.md)         | Custom Struct Code Generation             | 📋 Planned     | Low      | 3      |
-| [GUP-065](GUP-065_Documentation_Macro_First_API.md)             | Documentation for Macro-First API         | ✅ Complete    | Medium   | 3      |
-| [GUP-065](GUP-065_Procedural_Macro_Performance_Optimization.md) | Procedural Macro Performance Optimization | 💡 New         | Low      | 2      |
-| [GUP-066](GUP-066_Advanced_Type_Conversion_Patterns.md)         | Advanced Type Conversion Patterns         | ✅ Complete    | Low      | 5      |
+| Story                                                           | Title                                     | Status      | Priority | Points |
+| --------------------------------------------------------------- | ----------------------------------------- | ----------- | -------- | ------ |
+| [GUP-063](GUP-063_Enhanced_WGSL_Code_Generation.md)             | Enhanced WGSL Code Generation             | ✅ Complete | Medium   | 5      |
+| [GUP-064](GUP-064_Advanced_Type_System_Support.md)              | Advanced Type System Support              | ✅ Complete | Low      | 3      |
+| [GUP-064-B](GUP-064-B_Custom_Struct_Code_Generation.md)         | Custom Struct Code Generation             | 📋 Planned  | Low      | 3      |
+| [GUP-065](GUP-065_Documentation_Macro_First_API.md)             | Documentation for Macro-First API         | ✅ Complete | Medium   | 3      |
+| [GUP-065](GUP-065_Procedural_Macro_Performance_Optimization.md) | Procedural Macro Performance Optimization | 💡 New      | Low      | 2      |
+| [GUP-066](GUP-066_Advanced_Type_Conversion_Patterns.md)         | Advanced Type Conversion Patterns         | ✅ Complete | Low      | 5      |
 
 ### Post GUP-002 Stories - GPU and Interaction Systems (Stories 29+)
 
@@ -106,13 +106,13 @@ epic and status.
 
 ### Post GUP-015 Stories - Advanced Debug Infrastructure (Stories 80+)
 
-| Story                                                    | Title                              | Status | Priority | Points |
-| -------------------------------------------------------- | ---------------------------------- | ------ | -------- | ------ |
-| [GUP-080](GUP-080_WebGPU_Timestamp_Query_Integration.md) | WebGPU Timestamp Query Integration | 💡 New | Medium   | 4      |
-| [GUP-081](GUP-081_Advanced_Debug_Data_Visualization.md)  | Advanced Debug Data Visualization  | 💡 New | Low      | 5      |
-| [GUP-082](GUP-082_Debug_Tool_Integration_CI_CD.md)       | Debug Tool Integration with CI/CD  | 💡 New | Medium   | 3      |
-| [GUP-085](GUP-085_GPU_Resource_Dependency_Graph.md)      | GPU Resource Dependency Graph      | 💡 New | Low      | 5      |
-| [GUP-086](GUP-086_Web_Profiling_Dashboard.md)            | Web-Based Profiling Dashboard      | 💡 New | Low      | 8      |
+| Story                                                    | Title                              | Status         | Priority | Points |
+| -------------------------------------------------------- | ---------------------------------- | -------------- | -------- | ------ |
+| [GUP-080](GUP-080_WebGPU_Timestamp_Query_Integration.md) | WebGPU Timestamp Query Integration | 🚧 In Progress | Medium   | 4      |
+| [GUP-081](GUP-081_Advanced_Debug_Data_Visualization.md)  | Advanced Debug Data Visualization  | 💡 New         | Low      | 5      |
+| [GUP-082](GUP-082_Debug_Tool_Integration_CI_CD.md)       | Debug Tool Integration with CI/CD  | 💡 New         | Medium   | 3      |
+| [GUP-085](GUP-085_GPU_Resource_Dependency_Graph.md)      | GPU Resource Dependency Graph      | 💡 New         | Low      | 5      |
+| [GUP-086](GUP-086_Web_Profiling_Dashboard.md)            | Web-Based Profiling Dashboard      | 💡 New         | Low      | 8      |
 
 ### Post GUP-017 Stories - Error Handling Optimization (Stories 83+)
 

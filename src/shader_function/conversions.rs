@@ -135,10 +135,7 @@ impl AutoConvert<Vec4> for Vec2 {
     }
 
     fn conversion_wgsl(input_expr: &str) -> String {
-        format!(
-            "vec4<f32>({}.x, {}.y, 0.0, 1.0)",
-            input_expr, input_expr
-        )
+        format!("vec4<f32>({}.x, {}.y, 0.0, 1.0)", input_expr, input_expr)
     }
 }
 
