@@ -84,8 +84,9 @@ pub mod conversions;
 pub mod macros;
 
 use crate::buffer::{BufferType, GpuBuffer};
-use crate::error::GupResult;
+use crate::error::{GupError, GupResult};
 use std::marker::PhantomData;
+use std::sync::Arc;
 use wgpu::{Device, Queue};
 
 /// Macro for creating 2D vectors.
@@ -3268,6 +3269,380 @@ impl Default for ColorGradientBuilder {
     }
 }
 
+// ============================================================================
+// Statistical Aggregation Functions (GUP-139)
+// ============================================================================
+
+/// GPU-accelerated statistical aggregation system for computing mean, median,
+/// standard deviation, percentiles, and other statistical measures on large datasets.
+///
+/// This module provides compute shader-based parallel reduction algorithms for
+/// efficient statistical computation on the GPU. These functions are designed for
+/// data-driven statistical visualizations like box plots, violin plots, and
+/// distribution analyses.
+///
+/// # Architecture
+///
+/// Statistical aggregations use a two-stage reduction approach:
+/// 1. **Local Reduction**: Each workgroup computes partial results using shared memory
+/// 2. **Global Reduction**: Partial results are combined to produce final statistics
+///
+/// This approach enables efficient processing of millions of data points with minimal
+/// CPU-GPU round trips.
+
+/// Result of statistical aggregation computation
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct StatisticsResult {
+    /// Number of valid data points processed
+    pub count: u32,
+    /// Sum of all values
+    pub sum: f32,
+    /// Minimum value
+    pub min: f32,
+    /// Maximum value
+    pub max: f32,
+    /// Mean (average) value
+    pub mean: f32,
+    /// Variance
+    pub variance: f32,
+    /// Standard deviation
+    pub std_dev: f32,
+    /// Padding for 16-byte alignment
+    pub _padding: u32,
+}
+
+/// GPU compute pipeline for statistical aggregations
+pub struct StatisticsCompute {
+    /// Compute pipeline for basic statistics (mean, min, max, std dev)
+    basic_stats_pipeline: Option<wgpu::ComputePipeline>,
+    /// Compute pipeline for median and percentiles
+    percentile_pipeline: Option<wgpu::ComputePipeline>,
+    /// Input data buffer
+    data_buffer: Option<wgpu::Buffer>,
+    /// Output statistics buffer
+    result_buffer: Option<wgpu::Buffer>,
+    /// Maximum number of elements
+    max_elements: usize,
+    /// Device and queue references
+    device: Option<Arc<wgpu::Device>>,
+    queue: Option<Arc<wgpu::Queue>>,
+}
+
+impl StatisticsCompute {
+    /// Create a new statistics compute system
+    pub async fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        max_elements: usize,
+    ) -> GupResult<Self> {
+        let basic_stats_pipeline = Self::create_basic_stats_pipeline(device).await?;
+        let percentile_pipeline = Self::create_percentile_pipeline(device).await?;
+
+        let data_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("statistics_data"),
+            size: (max_elements * std::mem::size_of::<f32>()) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let result_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("statistics_result"),
+            size: std::mem::size_of::<StatisticsResult>() as u64,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        Ok(Self {
+            basic_stats_pipeline: Some(basic_stats_pipeline),
+            percentile_pipeline: Some(percentile_pipeline),
+            data_buffer: Some(data_buffer),
+            result_buffer: Some(result_buffer),
+            max_elements,
+            device: Some(Arc::new(device.clone())),
+            queue: Some(Arc::new(queue.clone())),
+        })
+    }
+
+    /// Create compute pipeline for basic statistics
+    async fn create_basic_stats_pipeline(
+        device: &wgpu::Device,
+    ) -> GupResult<wgpu::ComputePipeline> {
+        let shader_source = include_str!("shaders/statistics.compute.wgsl");
+
+        let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("statistics_compute"),
+            source: wgpu::ShaderSource::Wgsl(shader_source.into()),
+        });
+
+        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("basic_stats_pipeline"),
+            layout: None,
+            module: &shader_module,
+            entry_point: Some("compute_basic_stats"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            cache: None,
+        });
+
+        Ok(pipeline)
+    }
+
+    /// Create compute pipeline for percentile calculation
+    async fn create_percentile_pipeline(device: &wgpu::Device) -> GupResult<wgpu::ComputePipeline> {
+        let shader_source = include_str!("shaders/percentile.compute.wgsl");
+
+        let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("percentile_compute"),
+            source: wgpu::ShaderSource::Wgsl(shader_source.into()),
+        });
+
+        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("percentile_pipeline"),
+            layout: None,
+            module: &shader_module,
+            entry_point: Some("compute_percentile"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            cache: None,
+        });
+
+        Ok(pipeline)
+    }
+
+    /// Compute basic statistics (mean, min, max, std dev) for a dataset
+    pub async fn compute_basic_stats(&self, data: &[f32]) -> GupResult<StatisticsResult> {
+        if data.is_empty() {
+            return Ok(StatisticsResult {
+                count: 0,
+                sum: 0.0,
+                min: 0.0,
+                max: 0.0,
+                mean: 0.0,
+                variance: 0.0,
+                std_dev: 0.0,
+                _padding: 0,
+            });
+        }
+
+        let device = self.device.as_ref().ok_or_else(|| {
+            GupError::gpu_initialization_failed(
+                "StatisticsCompute device not initialized".to_string(),
+            )
+        })?;
+        let queue = self.queue.as_ref().ok_or_else(|| {
+            GupError::gpu_initialization_failed(
+                "StatisticsCompute queue not initialized".to_string(),
+            )
+        })?;
+        let data_buffer = self.data_buffer.as_ref().ok_or_else(|| {
+            GupError::gpu_initialization_failed(
+                "StatisticsCompute data_buffer not initialized".to_string(),
+            )
+        })?;
+        let result_buffer = self.result_buffer.as_ref().ok_or_else(|| {
+            GupError::gpu_initialization_failed(
+                "StatisticsCompute result_buffer not initialized".to_string(),
+            )
+        })?;
+
+        // Upload data to GPU
+        queue.write_buffer(data_buffer, 0, bytemuck::cast_slice(data));
+
+        // Create bind group
+        let pipeline = self.basic_stats_pipeline.as_ref().ok_or_else(|| {
+            GupError::gpu_initialization_failed(
+                "StatisticsCompute pipeline not initialized".to_string(),
+            )
+        })?;
+        let bind_group_layout = pipeline.get_bind_group_layout(0);
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("statistics_bind_group"),
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: data_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: result_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        // Execute compute pass
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("statistics_encoder"),
+        });
+
+        {
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("statistics_pass"),
+                timestamp_writes: None,
+            });
+            compute_pass.set_pipeline(pipeline);
+            compute_pass.set_bind_group(0, &bind_group, &[]);
+            // Dispatch with workgroups covering all data
+            let workgroup_size = 256;
+            let num_workgroups = ((data.len() + workgroup_size - 1) / workgroup_size) as u32;
+            compute_pass.dispatch_workgroups(num_workgroups, 1, 1);
+        }
+
+        queue.submit(Some(encoder.finish()));
+
+        // Read results back
+        let staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("statistics_staging"),
+            size: std::mem::size_of::<StatisticsResult>() as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("statistics_copy_encoder"),
+        });
+        encoder.copy_buffer_to_buffer(
+            result_buffer,
+            0,
+            &staging_buffer,
+            0,
+            std::mem::size_of::<StatisticsResult>() as u64,
+        );
+        queue.submit(Some(encoder.finish()));
+
+        // Wait for GPU to complete
+        let _ = device.poll(wgpu::PollType::Wait);
+
+        // Map and read results
+        let buffer_slice = staging_buffer.slice(..);
+        let (tx, rx) = futures_channel::oneshot::channel();
+        buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = tx.send(result);
+        });
+        let _ = device.poll(wgpu::PollType::Wait);
+        rx.await
+            .map_err(|_| {
+                GupError::gpu_initialization_failed(
+                    "Failed to receive buffer map result".to_string(),
+                )
+            })?
+            .map_err(|e| {
+                GupError::gpu_initialization_failed(format!("Buffer mapping failed: {:?}", e))
+            })?;
+
+        let data = buffer_slice.get_mapped_range();
+        let result: StatisticsResult =
+            *bytemuck::from_bytes(&data[..std::mem::size_of::<StatisticsResult>()]);
+        drop(data);
+        staging_buffer.unmap();
+
+        Ok(result)
+    }
+}
+
+/// Mean calculation shader function - computes average of dataset
+#[derive(Clone, Debug)]
+pub struct Mean {
+    /// Data values to compute mean over
+    pub values: Vec<f32>,
+}
+
+impl Mean {
+    pub fn new(values: Vec<f32>) -> Self {
+        Self { values }
+    }
+
+    /// Compute mean on CPU (for small datasets or fallback)
+    pub fn compute_cpu(&self) -> f32 {
+        if self.values.is_empty() {
+            return 0.0;
+        }
+        let sum: f32 = self.values.iter().sum();
+        sum / self.values.len() as f32
+    }
+}
+
+/// Standard deviation shader function
+#[derive(Clone, Debug)]
+pub struct StandardDeviation {
+    /// Data values to compute std dev over
+    pub values: Vec<f32>,
+}
+
+impl StandardDeviation {
+    pub fn new(values: Vec<f32>) -> Self {
+        Self { values }
+    }
+
+    /// Compute standard deviation on CPU (for small datasets or fallback)
+    pub fn compute_cpu(&self) -> f32 {
+        if self.values.len() < 2 {
+            return 0.0;
+        }
+        let mean = Mean::new(self.values.clone()).compute_cpu();
+        let variance: f32 = self
+            .values
+            .iter()
+            .map(|v| {
+                let diff = v - mean;
+                diff * diff
+            })
+            .sum::<f32>()
+            / self.values.len() as f32;
+        variance.sqrt()
+    }
+}
+
+/// Min/Max aggregation shader function
+#[derive(Clone, Debug)]
+pub struct MinMax {
+    /// Data values to find min/max over
+    pub values: Vec<f32>,
+}
+
+impl MinMax {
+    pub fn new(values: Vec<f32>) -> Self {
+        Self { values }
+    }
+
+    /// Compute min and max on CPU (for small datasets or fallback)
+    pub fn compute_cpu(&self) -> (f32, f32) {
+        if self.values.is_empty() {
+            return (0.0, 0.0);
+        }
+        let min = self.values.iter().fold(f32::INFINITY, |a, &b| a.min(b));
+        let max = self.values.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+        (min, max)
+    }
+}
+
+/// Percentile calculation shader function
+#[derive(Clone, Debug)]
+pub struct Percentile {
+    /// Data values to compute percentile over
+    pub values: Vec<f32>,
+    /// Percentile to compute (0.0 to 1.0)
+    pub percentile: f32,
+}
+
+impl Percentile {
+    pub fn new(values: Vec<f32>, percentile: f32) -> Self {
+        Self { values, percentile }
+    }
+
+    /// Compute percentile on CPU (for small datasets or fallback)
+    pub fn compute_cpu(&self) -> f32 {
+        if self.values.is_empty() {
+            return 0.0;
+        }
+        let mut sorted = self.values.clone();
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let index = (self.percentile * (sorted.len() - 1) as f32) as usize;
+        sorted[index]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3969,6 +4344,72 @@ mod tests {
 
         let uniforms = pipeline.create_uniforms();
         assert!(uniforms.is_some());
+    }
+
+    // GUP-139: Statistical function tests
+    #[test]
+    fn test_mean_cpu() {
+        let values = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let mean = Mean::new(values);
+        assert_eq!(mean.compute_cpu(), 3.0);
+
+        let empty_mean = Mean::new(vec![]);
+        assert_eq!(empty_mean.compute_cpu(), 0.0);
+    }
+
+    #[test]
+    fn test_std_dev_cpu() {
+        let values = vec![2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];
+        let std_dev = StandardDeviation::new(values);
+        let result = std_dev.compute_cpu();
+        // Expected std dev is 2.0
+        assert!((result - 2.0).abs() < 0.01, "Expected ~2.0, got {}", result);
+
+        let single_value = StandardDeviation::new(vec![5.0]);
+        assert_eq!(single_value.compute_cpu(), 0.0);
+    }
+
+    #[test]
+    fn test_min_max_cpu() {
+        let values = vec![3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0];
+        let min_max = MinMax::new(values);
+        let (min, max) = min_max.compute_cpu();
+        assert_eq!(min, 1.0);
+        assert_eq!(max, 9.0);
+
+        let empty_min_max = MinMax::new(vec![]);
+        let (min, max) = empty_min_max.compute_cpu();
+        assert_eq!(min, 0.0);
+        assert_eq!(max, 0.0);
+    }
+
+    #[test]
+    fn test_percentile_cpu() {
+        let values = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+
+        let p50 = Percentile::new(values.clone(), 0.5);
+        assert_eq!(p50.compute_cpu(), 5.0);
+
+        let p25 = Percentile::new(values.clone(), 0.25);
+        assert_eq!(p25.compute_cpu(), 3.0);
+
+        let p75 = Percentile::new(values.clone(), 0.75);
+        assert_eq!(p75.compute_cpu(), 7.0);
+
+        let empty_percentile = Percentile::new(vec![], 0.5);
+        assert_eq!(empty_percentile.compute_cpu(), 0.0);
+    }
+
+    #[test]
+    fn test_statistics_result_alignment() {
+        // Verify that StatisticsResult has correct alignment for GPU
+        use std::mem;
+        assert_eq!(
+            mem::size_of::<StatisticsResult>(),
+            32,
+            "StatisticsResult should be 32 bytes for GPU alignment"
+        );
+        assert_eq!(mem::align_of::<StatisticsResult>(), 4);
     }
 }
 

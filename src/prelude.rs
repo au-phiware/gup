@@ -64,10 +64,15 @@ pub use crate::shader_function::{
     Mat2,
     Mat3,
     Mat4,
+    // Statistical functions (GUP-139)
+    Mean,
+    MinMax,
     // Parallel composition (GUP-136)
     ParallelComposable,
     ParallelComposition,
     ParallelOutput,
+    // Statistical functions (GUP-139)
+    Percentile,
 
     PositionTransform,
 
@@ -78,6 +83,10 @@ pub use crate::shader_function::{
     ShaderType,
     // Interpolation (GUP-033)
     SmoothStep,
+    // Statistical functions (GUP-139)
+    StandardDeviation,
+    StatisticsCompute,
+    StatisticsResult,
     TemporalInterpolation,
     Threshold,
 
