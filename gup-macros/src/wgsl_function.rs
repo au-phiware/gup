@@ -22,8 +22,8 @@
 use proc_macro2::TokenStream;
 use quote::{ToTokens, format_ident, quote};
 use syn::{
-    BinOp, Block, Error, Expr, ExprBinary, ExprField, ExprPath, ExprReturn, FnArg, Ident, ItemFn,
-    Member, Pat, PatType, Result, Stmt, Type, Visibility,
+    BinOp, Block, Error, Expr, ExprBinary, ExprField, ExprIf, ExprPath, ExprReturn, FnArg, Ident,
+    ItemFn, Member, Pat, PatType, Result, Stmt, Type, Visibility,
     parse::{Parse, ParseStream},
 };
 
@@ -438,7 +438,28 @@ fn translate_expr_to_wgsl(expr: &Expr, uniform_params: &[String]) -> Result<Stri
                 .map(|arg| translate_expr_to_wgsl(arg, uniform_params))
                 .collect();
             let args_wgsl = args?.join(", ");
-            Ok(format!("{func_name}({args_wgsl})"))
+            
+            // Map common Rust functions to WGSL equivalents
+            let wgsl_func_name = match func_name.as_str() {
+                // Rust type constructors to WGSL
+                "Vec2" => "vec2<f32>",
+                "Vec3" => "vec3<f32>",
+                "Vec4" => "vec4<f32>",
+                "Mat2" => "mat2x2<f32>",
+                "Mat3" => "mat3x3<f32>",
+                "Mat4" => "mat4x4<f32>",
+                // Keep WGSL built-ins as-is
+                "abs" | "acos" | "asin" | "atan" | "atan2" |
+                "ceil" | "clamp" | "cos" | "cross" | "distance" |
+                "dot" | "exp" | "exp2" | "floor" | "fract" |
+                "inverseSqrt" | "length" | "log" | "log2" |
+                "max" | "min" | "mix" | "normalize" | "pow" |
+                "round" | "sign" | "sin" | "smoothstep" |
+                "sqrt" | "step" | "tan" | "trunc" => func_name.as_str(),
+                _ => func_name.as_str(),
+            };
+            
+            Ok(format!("{wgsl_func_name}({args_wgsl})"))
         }
         Expr::MethodCall(method_call) => {
             // Method calls - translate some common patterns
@@ -462,6 +483,46 @@ fn translate_expr_to_wgsl(expr: &Expr, uniform_params: &[String]) -> Result<Stri
                     method_call,
                     format!("Method '{}' not supported in WGSL translation. Use function call syntax instead.", method_name),
                 ))
+            }
+        }
+        Expr::If(ExprIf { cond, then_branch, else_branch, .. }) => {
+            // If-else expressions
+            let cond_wgsl = translate_expr_to_wgsl(cond, uniform_params)?;
+            let then_wgsl = translate_body_to_wgsl(then_branch, &syn::punctuated::Punctuated::new())?;
+            
+            let mut wgsl = format!("if ({cond_wgsl}) {{\n{then_wgsl}\n    }}");
+            
+            if let Some((_, else_expr)) = else_branch {
+                match &**else_expr {
+                    Expr::Block(block) => {
+                        let else_wgsl = translate_body_to_wgsl(&block.block, &syn::punctuated::Punctuated::new())?;
+                        wgsl.push_str(&format!(" else {{\n{else_wgsl}\n    }}"));
+                    }
+                    Expr::If(_) => {
+                        let else_wgsl = translate_expr_to_wgsl(else_expr, uniform_params)?;
+                        wgsl.push_str(&format!(" else {else_wgsl}"));
+                    }
+                    _ => {
+                        return Err(Error::new_spanned(
+                            else_expr,
+                            "Only block or if expressions are supported in else branches",
+                        ));
+                    }
+                }
+            }
+            
+            Ok(wgsl)
+        }
+        Expr::Unary(unary) => {
+            // Unary operations (-, !)
+            let inner = translate_expr_to_wgsl(&unary.expr, uniform_params)?;
+            match unary.op {
+                syn::UnOp::Neg(_) => Ok(format!("-{inner}")),
+                syn::UnOp::Not(_) => Ok(format!("!{inner}")),
+                _ => Err(Error::new_spanned(
+                    unary,
+                    "Unsupported unary operator for WGSL",
+                )),
             }
         }
         _ => Err(Error::new_spanned(
@@ -582,25 +643,6 @@ fn is_uniform_compatible_type(ty: &Type) -> bool {
             is_uniform_compatible_type(&type_array.elem)
         }
         _ => false,
-    }
-}
-
-/// Generate a default value for WGSL types (used in placeholder function bodies)
-fn wgsl_type_default_value(wgsl_type: &str) -> &'static str {
-    match wgsl_type {
-        "f32" => "0.0",
-        "i32" => "0",
-        "u32" => "0u",
-        "bool" => "false",
-        "vec2<f32>" => "vec2<f32>(0.0, 0.0)",
-        "vec3<f32>" => "vec3<f32>(0.0, 0.0, 0.0)",
-        "vec4<f32>" => "vec4<f32>(0.0, 0.0, 0.0, 1.0)",
-        "mat2x2<f32>" => "mat2x2<f32>(1.0, 0.0, 0.0, 1.0)",
-        "mat3x3<f32>" => "mat3x3<f32>(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)",
-        "mat4x4<f32>" => {
-            "mat4x4<f32>(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0)"
-        }
-        _ => "0.0", // Fallback for custom types
     }
 }
 
