@@ -268,6 +268,43 @@ impl GpuDebugContext {
         self.performance_history.clear();
     }
 
+    /// Create an interactive visualizer for debug data
+    ///
+    /// This creates a `GpuDebugVisualizer` that can generate GPU-accelerated
+    /// interactive visualizations of performance data, memory usage, and buffer contents.
+    ///
+    /// # Arguments
+    ///
+    /// * `context` - The render context to use for visualizations
+    ///
+    /// # Returns
+    ///
+    /// Returns a `GpuDebugVisualizer` configured for this debug context
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let render_context = Arc::new(RenderContext::new().await?);
+    /// let mut debug_context = GpuDebugContext::new(&device, &queue);
+    ///
+    /// // Create visualizer
+    /// let visualizer = debug_context.create_visualizer(render_context);
+    ///
+    /// // Visualize performance trends
+    /// let chart = visualizer.visualize_performance_trends(&debug_context.performance_history).await?;
+    /// ```
+    pub fn create_visualizer(
+        &self,
+        context: std::sync::Arc<crate::RenderContext>,
+    ) -> GpuDebugVisualizer {
+        GpuDebugVisualizer::new(context)
+    }
+
+    /// Get access to performance history for visualization
+    pub fn performance_history(&self) -> &[PerformanceSnapshot] {
+        &self.performance_history
+    }
+
     /// Export debug report with all collected data
     pub async fn export_debug_report(&self, output_path: &str) -> GupResult<()> {
         let summary = self.get_performance_summary();
