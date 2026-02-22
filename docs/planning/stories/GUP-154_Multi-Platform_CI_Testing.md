@@ -1,4 +1,4 @@
-# GUP-087: Multi-Platform CI Testing
+# GUP-154: Multi-Platform CI Testing
 
 **Priority**: Medium  
 **Complexity**: High  

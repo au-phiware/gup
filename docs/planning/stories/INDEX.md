@@ -140,8 +140,11 @@ epic and status.
 | [GUP-048](GUP-048_Context_Error_Recovery.md)           | Context Error Recovery           | ✅ Complete | Medium   | 4      |
 | [GUP-149](GUP-149_Automatic_Device_Loss_Detection.md)  | Automatic Device Loss Detection  | 💡 New      | Low      | 2      |
 | [GUP-150](GUP-150_Recovery_Metrics_and_Analytics.md)   | Recovery Metrics and Analytics   | 💡 New      | Low      | 3      |
-| [GUP-151](GUP-151_Surface_Configuration_Caching.md)    | Surface Configuration Caching    | 💡 New      | Low      | 2      |
-| [GUP-049](GUP-049_Surface_Performance_Optimization.md) | Surface Performance Optimization | ✅ Complete | Medium   | 5      |
+| [GUP-151](GUP-151_Surface_Configuration_Caching.md)    | Surface Configuration Caching         | 💡 New      | Low      | 2      |
+| [GUP-152](GUP-152_Performance_Trend_Visualization.md)  | Performance Trend Visualization       | 💡 New      | Low      | 3      |
+| [GUP-153](GUP-153_Automated_Baseline_Recommendation.md) | Automated Baseline Recommendation     | 💡 New      | Low      | 5      |
+| [GUP-154](GUP-154_Multi-Platform_CI_Testing.md)        | Multi-Platform CI Testing             | 💡 New      | Medium   | 8      |
+| [GUP-049](GUP-049_Surface_Performance_Optimization.md) | Surface Performance Optimization      | ✅ Complete | Medium   | 5      |
 | [GUP-050](GUP-050_Visual_Blend_Mode_Validation.md)     | Visual Blend Mode Validation     | ✅ Complete | Low      | 3      |
 | [GUP-042](GUP-042_Cross_Platform_Surface_Features.md)  | Cross Platform Surface Features  | 💡 New      | Low      | 8      |
 
@@ -374,6 +377,24 @@ visibility into GPU stability in production
 **Key Learning**: Surface recreation after recovery requires application
 involvement - caching configs would simplify this **Dependencies**: GUP-048
 complete **Impact**: Faster recovery with automatic surface restoration
+
+### GUP-152: Performance Trend Visualization
+
+**Key Learning**: Historical performance data is most valuable when visualized
+**Dependencies**: GUP-082 complete **Impact**: Enable trend analysis and pattern
+recognition for performance optimization
+
+### GUP-153: Automated Baseline Recommendation
+
+**Key Learning**: Manual baseline management is error-prone - statistical
+analysis can automate this **Dependencies**: GUP-082 complete **Impact**: Reduce
+false positives and improve baseline accuracy
+
+### GUP-154: Multi-Platform CI Testing
+
+**Key Learning**: GPU performance varies significantly across vendors -
+platform-specific testing is essential **Dependencies**: GUP-082 complete
+**Impact**: Ensure consistent performance across NVIDIA, AMD, and Intel GPUs
 
 ### GUP-050: Visual Blend Mode Validation
 

@@ -1,4 +1,4 @@
-# GUP-083: Performance Trend Visualization
+# GUP-152: Performance Trend Visualization
 
 **Priority**: Low  
 **Complexity**: Medium  

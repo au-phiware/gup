@@ -211,17 +211,17 @@ impl CiPerformanceRunner {
 
 Based on implementation experience, identified these follow-up opportunities:
 
-1. **GUP-083: Performance Trend Visualization** - Graphical visualization of performance trends over time using historical data
+1. **GUP-152: Performance Trend Visualization** - Graphical visualization of performance trends over time using historical data
    - Use existing `GpuDebugVisualizer` to create charts
    - Store trend data in benchmark history branch
    - Generate SVG/PNG charts for embedding in reports
 
-2. **GUP-084: Automated Baseline Recommendation** - ML-based system to recommend when baselines should be updated
+2. **GUP-153: Automated Baseline Recommendation** - ML-based system to recommend when baselines should be updated
    - Analyze performance variance over multiple runs
    - Detect "new normal" performance levels
    - Suggest baseline updates with confidence levels
 
-3. **GUP-087: Multi-Platform CI Testing** - Extend CI to test across multiple GPU vendors
+3. **GUP-154: Multi-Platform CI Testing** - Extend CI to test across multiple GPU vendors
    - Add matrix strategy for NVIDIA, AMD, Intel GPUs
    - Compare performance across hardware
    - Detect hardware-specific regressions
