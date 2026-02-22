@@ -2176,30 +2176,30 @@ struct KeyframeAnimationStorageInfo {
         r#"
 fn keyframe_animation_storage(time: f32) -> f32 {
     let count = animation_info.keyframe_count;
-    
+
     // Handle edge cases
     if (count == 0u) {
         return 0.0;
     }
-    
+
     if (count == 1u) {
         return keyframe_data[0].value;
     }
-    
+
     // Get time range from first and last keyframes
     let start_time = keyframe_data[0].time;
     let end_time = keyframe_data[count - 1u].time;
     let duration = end_time - start_time;
-    
+
     var t = time;
-    
+
     // Handle looping
     if (animation_info.loop_animation != 0u && duration > 0.0) {
         t = start_time + ((time - start_time) % duration);
         if (t < start_time) {
             t = t + duration;
         }
-        
+
         // Handle reverse on loop
         if (animation_info.reverse_on_loop != 0u) {
             let cycle = floor((time - start_time) / duration);
@@ -2208,7 +2208,7 @@ fn keyframe_animation_storage(time: f32) -> f32 {
             }
         }
     }
-    
+
     // Clamp to time range
     if (t <= keyframe_data[0].time) {
         return keyframe_data[0].value;
@@ -2216,11 +2216,11 @@ fn keyframe_animation_storage(time: f32) -> f32 {
     if (t >= keyframe_data[count - 1u].time) {
         return keyframe_data[count - 1u].value;
     }
-    
+
     // Binary search to find the interval containing t
     var low = 0u;
     var high = count - 1u;
-    
+
     while (low + 1u < high) {
         let mid = (low + high) / 2u;
         if (keyframe_data[mid].time <= t) {
@@ -2229,16 +2229,16 @@ fn keyframe_animation_storage(time: f32) -> f32 {
             high = mid;
         }
     }
-    
+
     // Interpolate between the two keyframes
     let k1 = keyframe_data[low];
     let k2 = keyframe_data[high];
     let segment_duration = k2.time - k1.time;
-    
+
     if (segment_duration <= 0.0) {
         return k1.value;
     }
-    
+
     let local_t = (t - k1.time) / segment_duration;
     return mix(k1.value, k2.value, local_t);
 }

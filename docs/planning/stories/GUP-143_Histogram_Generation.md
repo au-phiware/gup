@@ -1,6 +1,6 @@
 # GUP-143: Histogram Generation on GPU
 
-**Status**: 💡 New
+**Status**: 🚧 In Progress
 
 ## Story Overview
 

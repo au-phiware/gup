@@ -7,7 +7,7 @@
 //! of keyframes using KeyframeAnimationStorage, which uses GPU storage buffers
 //! for unlimited keyframe capacity.
 
-use gup::{Keyframe, KeyframeAnimation, KeyframeAnimationStorage};
+use gup::{KeyframeAnimation, KeyframeAnimationStorage};
 
 fn main() {
     println!("=== Storage Buffer Keyframe Animation Example ===\n");
@@ -46,13 +46,18 @@ fn example_basic_usage() {
     }
     let animation = builder.build();
 
-    println!("Created sine wave animation with {} keyframes", animation.count());
-    println!("First keyframe: time={}, value={}", 
-             animation.keyframes[0].time, 
-             animation.keyframes[0].value);
-    println!("Last keyframe: time={}, value={}", 
-             animation.keyframes[49].time, 
-             animation.keyframes[49].value);
+    println!(
+        "Created sine wave animation with {} keyframes",
+        animation.count()
+    );
+    println!(
+        "First keyframe: time={}, value={}",
+        animation.keyframes[0].time, animation.keyframes[0].value
+    );
+    println!(
+        "Last keyframe: time={}, value={}",
+        animation.keyframes[49].time, animation.keyframes[49].value
+    );
     println!();
 }
 
@@ -62,20 +67,22 @@ fn example_complex_motion_path() {
     // Simulate a complex motion path with 200 keyframes
     // (e.g., hand-drawn path, recorded motion, or algorithmic curve)
     let mut builder = KeyframeAnimationStorage::builder();
-    
+
     for i in 0..200 {
         let t = i as f32 / 199.0;
         // Complex curve: combination of multiple sine waves
-        let value = 
-            0.5 * (t * std::f32::consts::PI * 4.0).sin() +
-            0.3 * (t * std::f32::consts::PI * 8.0).sin() +
-            0.2 * (t * std::f32::consts::PI * 16.0).sin();
+        let value = 0.5 * (t * std::f32::consts::PI * 4.0).sin()
+            + 0.3 * (t * std::f32::consts::PI * 8.0).sin()
+            + 0.2 * (t * std::f32::consts::PI * 16.0).sin();
         builder = builder.add_keyframe(t, value);
     }
-    
+
     let animation = builder.build();
-    
-    println!("Created complex motion path with {} keyframes", animation.count());
+
+    println!(
+        "Created complex motion path with {} keyframes",
+        animation.count()
+    );
     println!("This would be impossible with uniform buffers (16 keyframe limit)");
     println!("Binary search enables efficient GPU lookup in large keyframe arrays");
     println!();

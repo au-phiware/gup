@@ -3,7 +3,7 @@
 
 //! GPU execution tests for storage buffer-based keyframe animations.
 
-use gup::{Keyframe, KeyframeAnimationStorage};
+use gup::KeyframeAnimationStorage;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
@@ -19,15 +19,13 @@ async fn create_test_context() -> Option<(Arc<wgpu::Device>, Arc<wgpu::Queue>)> 
         .ok()?;
 
     let (device, queue) = adapter
-        .request_device(
-            &wgpu::DeviceDescriptor {
-                label: None,
-                required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::default(),
-                memory_hints: wgpu::MemoryHints::default(),
-                trace: Default::default(),
-            },
-        )
+        .request_device(&wgpu::DeviceDescriptor {
+            label: None,
+            required_features: wgpu::Features::empty(),
+            required_limits: wgpu::Limits::default(),
+            memory_hints: wgpu::MemoryHints::default(),
+            trace: Default::default(),
+        })
         .await
         .ok()?;
 
@@ -472,7 +470,10 @@ fn main() {{
     });
 
     println!("Binary search shader compiled successfully with 1000 keyframes");
-    println!("Buffer size: {} bytes", anim.create_keyframes_buffer_data().len());
+    println!(
+        "Buffer size: {} bytes",
+        anim.create_keyframes_buffer_data().len()
+    );
 
     assert!(std::ptr::addr_of!(result) as usize != 0);
 }

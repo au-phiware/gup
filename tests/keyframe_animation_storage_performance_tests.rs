@@ -103,10 +103,7 @@ fn test_buffer_data_generation_performance() {
         "Buffer data generation (1000 keyframes): {:?} for 1000 iterations",
         duration
     );
-    println!(
-        "Average per generation: {:?}",
-        duration / 1000
-    );
+    println!("Average per generation: {:?}", duration / 1000);
 }
 
 #[test]
@@ -130,7 +127,10 @@ fn test_keyframe_count_comparison() {
 
     println!("\nStorage buffer enables:");
     println!("  - {} keyframes (6.25x more than uniform)", anim.count());
-    println!("  - Buffer size: {} bytes", anim.create_keyframes_buffer_data().len());
+    println!(
+        "  - Buffer size: {} bytes",
+        anim.create_keyframes_buffer_data().len()
+    );
 }
 
 #[test]
@@ -182,9 +182,18 @@ fn test_memory_efficiency() {
         builder.build()
     };
 
-    println!("16 keyframes:   {} bytes", anim_16.create_keyframes_buffer_data().len());
-    println!("100 keyframes:  {} bytes", anim_100.create_keyframes_buffer_data().len());
-    println!("1000 keyframes: {} bytes", anim_1000.create_keyframes_buffer_data().len());
+    println!(
+        "16 keyframes:   {} bytes",
+        anim_16.create_keyframes_buffer_data().len()
+    );
+    println!(
+        "100 keyframes:  {} bytes",
+        anim_100.create_keyframes_buffer_data().len()
+    );
+    println!(
+        "1000 keyframes: {} bytes",
+        anim_1000.create_keyframes_buffer_data().len()
+    );
 
     println!("\nLinear memory scaling: 16 bytes per keyframe");
 }

@@ -3,7 +3,7 @@
 
 //! Comprehensive tests for storage buffer-based keyframe animations.
 
-use gup::{Keyframe, KeyframeAnimationStorage, KeyframeAnimationStorageBuilder};
+use gup::{Keyframe, KeyframeAnimationStorage};
 
 #[test]
 fn test_basic_storage_creation() {
@@ -139,11 +139,9 @@ fn test_wgsl_function_code() {
 
 #[test]
 fn test_loop_configuration() {
-    let anim = KeyframeAnimationStorage::new(vec![
-        Keyframe::new(0.0, 0.0),
-        Keyframe::new(1.0, 1.0),
-    ])
-    .with_loop(true);
+    let anim =
+        KeyframeAnimationStorage::new(vec![Keyframe::new(0.0, 0.0), Keyframe::new(1.0, 1.0)])
+            .with_loop(true);
 
     assert!(anim.loop_animation);
     assert!(!anim.reverse_on_loop);
@@ -151,11 +149,9 @@ fn test_loop_configuration() {
 
 #[test]
 fn test_reverse_configuration() {
-    let anim = KeyframeAnimationStorage::new(vec![
-        Keyframe::new(0.0, 0.0),
-        Keyframe::new(1.0, 1.0),
-    ])
-    .with_reverse(true);
+    let anim =
+        KeyframeAnimationStorage::new(vec![Keyframe::new(0.0, 0.0), Keyframe::new(1.0, 1.0)])
+            .with_reverse(true);
 
     assert!(!anim.loop_animation);
     assert!(anim.reverse_on_loop);
@@ -163,12 +159,10 @@ fn test_reverse_configuration() {
 
 #[test]
 fn test_combined_loop_and_reverse() {
-    let anim = KeyframeAnimationStorage::new(vec![
-        Keyframe::new(0.0, 0.0),
-        Keyframe::new(1.0, 1.0),
-    ])
-    .with_loop(true)
-    .with_reverse(true);
+    let anim =
+        KeyframeAnimationStorage::new(vec![Keyframe::new(0.0, 0.0), Keyframe::new(1.0, 1.0)])
+            .with_loop(true)
+            .with_reverse(true);
 
     assert!(anim.loop_animation);
     assert!(anim.reverse_on_loop);
@@ -188,8 +182,7 @@ fn test_builder_empty_panics() {
 
 #[test]
 fn test_single_keyframe() {
-    let anim =
-        KeyframeAnimationStorage::new(vec![Keyframe::new(0.0, 5.0)]);
+    let anim = KeyframeAnimationStorage::new(vec![Keyframe::new(0.0, 5.0)]);
 
     assert_eq!(anim.count(), 1);
     assert_eq!(anim.keyframes[0].value, 5.0);
