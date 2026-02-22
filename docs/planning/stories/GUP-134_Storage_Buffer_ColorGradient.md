@@ -1,6 +1,6 @@
 # GUP-134: Storage Buffer-Based ColorGradient
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
