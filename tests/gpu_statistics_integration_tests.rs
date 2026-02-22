@@ -29,15 +29,13 @@ async fn create_gpu_context() -> Option<(wgpu::Device, wgpu::Queue)> {
     };
 
     match adapter
-        .request_device(
-            &wgpu::DeviceDescriptor {
-                label: None,
-                required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::default(),
-                memory_hints: wgpu::MemoryHints::default(),
-                trace: Default::default(),
-            },
-        )
+        .request_device(&wgpu::DeviceDescriptor {
+            label: None,
+            required_features: wgpu::Features::empty(),
+            required_limits: wgpu::Limits::default(),
+            memory_hints: wgpu::MemoryHints::default(),
+            trace: Default::default(),
+        })
         .await
     {
         Ok((device, queue)) => Some((device, queue)),
@@ -72,15 +70,35 @@ async fn test_statistics_compute_basic_stats_small_dataset() {
         .expect("Failed to compute GPU stats");
 
     // Verify results match CPU
-    println!("Debug: result.count={}, expected={}", result.count, data.len());
-    println!("Debug: result.sum={}, result.mean={}", result.sum, result.mean);
-    println!("Debug: result.min={}, result.max={}", result.min, result.max);
-    
+    println!(
+        "Debug: result.count={}, expected={}",
+        result.count,
+        data.len()
+    );
+    println!(
+        "Debug: result.sum={}, result.mean={}",
+        result.sum, result.mean
+    );
+    println!(
+        "Debug: result.min={}, result.max={}",
+        result.min, result.max
+    );
+
     assert_eq!(result.count, data.len() as u32);
-    assert!((result.mean - mean_cpu).abs() < 0.001, "Mean mismatch: GPU={}, CPU={}", result.mean, mean_cpu);
+    assert!(
+        (result.mean - mean_cpu).abs() < 0.001,
+        "Mean mismatch: GPU={}, CPU={}",
+        result.mean,
+        mean_cpu
+    );
     assert_eq!(result.min, min_cpu, "Min mismatch");
     assert_eq!(result.max, max_cpu, "Max mismatch");
-    assert!((result.std_dev - std_dev_cpu).abs() < 0.001, "Std dev mismatch: GPU={}, CPU={}", result.std_dev, std_dev_cpu);
+    assert!(
+        (result.std_dev - std_dev_cpu).abs() < 0.001,
+        "Std dev mismatch: GPU={}, CPU={}",
+        result.std_dev,
+        std_dev_cpu
+    );
 
     println!("Small dataset stats:");
     println!("  Count: {}", result.count);
@@ -150,7 +168,7 @@ async fn test_statistics_compute_10k_elements() {
     let stats_compute = StatisticsCompute::new(&device, &queue, 100_000)
         .await
         .expect("Failed to create StatisticsCompute");
-    
+
     let start = std::time::Instant::now();
     let result = stats_compute
         .compute_basic_stats(&data)
@@ -189,7 +207,7 @@ async fn test_statistics_compute_1m_elements() {
     let stats_compute = StatisticsCompute::new(&device, &queue, 2_000_000)
         .await
         .expect("Failed to create StatisticsCompute");
-    
+
     let start = std::time::Instant::now();
     let result = stats_compute
         .compute_basic_stats(&data)
@@ -219,15 +237,7 @@ async fn test_statistics_compute_with_special_values() {
     let (device, queue) = context.unwrap();
 
     // Test with extreme values
-    let data = vec![
-        f32::MIN,
-        -1000.0,
-        -10.0,
-        0.0,
-        10.0,
-        1000.0,
-        f32::MAX,
-    ];
+    let data = vec![f32::MIN, -1000.0, -10.0, 0.0, 10.0, 1000.0, f32::MAX];
 
     let stats_compute = StatisticsCompute::new(&device, &queue, 1000)
         .await
@@ -296,7 +306,10 @@ async fn test_statistics_compute_with_infinity() {
     // Infinity should propagate
     assert!(result.sum.is_infinite());
     assert_eq!(result.max, f32::INFINITY);
-    println!("Infinity handling - Sum: {}, Max: {}", result.sum, result.max);
+    println!(
+        "Infinity handling - Sum: {}, Max: {}",
+        result.sum, result.max
+    );
 }
 
 #[tokio::test]
@@ -381,7 +394,10 @@ async fn test_statistics_compute_uniform_distribution() {
     assert_eq!(result.min, 5.0);
     assert_eq!(result.max, 5.0);
     assert!((result.std_dev - std_dev_cpu).abs() < 0.001);
-    println!("Uniform distribution std_dev: {} (should be ~0)", result.std_dev);
+    println!(
+        "Uniform distribution std_dev: {} (should be ~0)",
+        result.std_dev
+    );
 }
 
 #[tokio::test]
@@ -395,8 +411,8 @@ async fn test_statistics_compute_real_world_temperatures() {
 
     // Realistic temperature data
     let temperatures: Vec<f32> = vec![
-        20.5, 21.0, 19.8, 22.3, 21.5, 20.9, 21.2, 22.0, 20.7, 21.3, 
-        21.8, 20.4, 22.1, 21.6, 20.8, 21.4, 19.9, 22.5, 21.1, 20.6,
+        20.5, 21.0, 19.8, 22.3, 21.5, 20.9, 21.2, 22.0, 20.7, 21.3, 21.8, 20.4, 22.1, 21.6, 20.8,
+        21.4, 19.9, 22.5, 21.1, 20.6,
     ];
 
     // CPU ground truth
@@ -422,7 +438,10 @@ async fn test_statistics_compute_real_world_temperatures() {
     println!("Temperature statistics:");
     println!("  Mean: {:.2}°C (CPU: {:.2}°C)", result.mean, mean_cpu);
     println!("  Range: {:.2}°C - {:.2}°C", result.min, result.max);
-    println!("  Std Dev: {:.2}°C (CPU: {:.2}°C)", result.std_dev, std_dev_cpu);
+    println!(
+        "  Std Dev: {:.2}°C (CPU: {:.2}°C)",
+        result.std_dev, std_dev_cpu
+    );
 }
 
 #[tokio::test]
@@ -444,15 +463,18 @@ async fn test_statistics_compute_shader_compilation() {
 #[tokio::test]
 async fn test_statistics_compute_memory_layout() {
     // Verify StatisticsResult has correct memory layout for GPU
-    use std::mem;
     use gup::StatisticsResult;
+    use std::mem;
 
     let size = mem::size_of::<StatisticsResult>();
     let align = mem::align_of::<StatisticsResult>();
 
     // Should be properly aligned for GPU buffers
     assert_eq!(size, 32, "StatisticsResult should be 32 bytes");
-    assert!(align >= 4, "StatisticsResult should be at least 4-byte aligned");
+    assert!(
+        align >= 4,
+        "StatisticsResult should be at least 4-byte aligned"
+    );
 
     println!("StatisticsResult layout:");
     println!("  Size: {} bytes", size);
@@ -470,12 +492,12 @@ async fn test_statistics_compute_workgroup_coverage() {
 
     // Test various dataset sizes that exercise workgroup boundaries
     let test_sizes = vec![
-        1,      // Single element
-        255,    // Just under one workgroup
-        256,    // Exactly one workgroup
-        257,    // Just over one workgroup
-        512,    // Exactly two workgroups
-        1000,   // Multiple workgroups with remainder
+        1,    // Single element
+        255,  // Just under one workgroup
+        256,  // Exactly one workgroup
+        257,  // Just over one workgroup
+        512,  // Exactly two workgroups
+        1000, // Multiple workgroups with remainder
     ];
 
     for size in test_sizes {
@@ -491,9 +513,17 @@ async fn test_statistics_compute_workgroup_coverage() {
             .expect("Failed to compute GPU stats");
 
         assert_eq!(result.count, size as u32);
-        assert!((result.mean - mean_cpu).abs() < 0.1, 
-            "Size {} - Mean mismatch: GPU={}, CPU={}", size, result.mean, mean_cpu);
-        
-        println!("Size {}: mean={:.2} (CPU={:.2})", size, result.mean, mean_cpu);
+        assert!(
+            (result.mean - mean_cpu).abs() < 0.1,
+            "Size {} - Mean mismatch: GPU={}, CPU={}",
+            size,
+            result.mean,
+            mean_cpu
+        );
+
+        println!(
+            "Size {}: mean={:.2} (CPU={:.2})",
+            size, result.mean, mean_cpu
+        );
     }
 }

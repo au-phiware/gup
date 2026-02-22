@@ -3461,7 +3461,7 @@ impl StatisticsCompute {
             _padding: 0,
         };
         queue.write_buffer(result_buffer, 0, bytemuck::bytes_of(&zero_result));
-        
+
         // Debug: verify buffer was cleared
         eprintln!("Debug: Cleared result buffer with {:?}", zero_result);
 
@@ -3502,8 +3502,12 @@ impl StatisticsCompute {
             // Dispatch with workgroups covering all data
             let workgroup_size = 256;
             let num_workgroups = data.len().div_ceil(workgroup_size) as u32;
-            eprintln!("Debug dispatch: data.len()={}, workgroup_size={}, num_workgroups={}", 
-                data.len(), workgroup_size, num_workgroups);
+            eprintln!(
+                "Debug dispatch: data.len()={}, workgroup_size={}, num_workgroups={}",
+                data.len(),
+                workgroup_size,
+                num_workgroups
+            );
             compute_pass.dispatch_workgroups(num_workgroups, 1, 1);
         }
 
@@ -3550,14 +3554,17 @@ impl StatisticsCompute {
             })?;
 
         let data = buffer_slice.get_mapped_range();
-        
+
         // Debug: print raw bytes
         if data.len() >= 8 {
             let count_bytes = &data[0..4];
             let sum_bytes = &data[4..8];
-            eprintln!("Debug raw buffer: count bytes = {:?}, sum bytes = {:?}", count_bytes, sum_bytes);
+            eprintln!(
+                "Debug raw buffer: count bytes = {:?}, sum bytes = {:?}",
+                count_bytes, sum_bytes
+            );
         }
-        
+
         let result: StatisticsResult =
             *bytemuck::from_bytes(&data[..std::mem::size_of::<StatisticsResult>()]);
         drop(data);
