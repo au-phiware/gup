@@ -102,10 +102,15 @@ epic and status.
 | [GUP-136](GUP-136_Parallel_Composition_Implementation.md) | Parallel Composition Implementation      | ✅ Complete    | Medium   | 5      |
 | [GUP-137](GUP-137_Shader_Performance_Benchmarking.md)     | Shader Function Performance Benchmarking | ✅ Complete    | Medium   | 3      |
 | [GUP-138](GUP-138_Advanced_Temporal_Animation.md)         | Advanced Temporal Animation System       | ✅ Complete    | Low      | 8      |
-| [GUP-139](GUP-139_Statistical_Shader_Functions.md)        | Statistical Shader Functions             | ✅ Complete | Low      | 5      |
+| [GUP-139](GUP-139_Statistical_Shader_Functions.md)        | Statistical Shader Functions             | ✅ Complete    | Low      | 5      |
 | [GUP-140](GUP-140_Storage_Buffer_Keyframes.md)            | Storage Buffer Keyframe Animations       | 💡 New         | Medium   | 5      |
 | [GUP-141](GUP-141_Spline_Animation_Curves.md)             | Spline-Based Animation Curves            | 💡 New         | Low      | 5      |
 | [GUP-142](GUP-142_Animation_Event_System.md)              | Animation Event System                   | 💡 New         | Medium   | 8      |
+| [GUP-143](GUP-143_Histogram_Generation.md)                | Histogram Generation on GPU              | 💡 New         | Medium   | 5      |
+| [GUP-144](GUP-144_Kernel_Density_Estimation.md)           | Kernel Density Estimation                | 💡 New         | Low      | 8      |
+| [GUP-145](GUP-145_GPU_Statistics_Integration_Tests.md)    | GPU Statistics Integration Tests         | 💡 New         | High     | 3      |
+| [GUP-146](GUP-146_Streaming_Statistical_Aggregation.md)   | Streaming Statistical Aggregation        | 💡 New         | Medium   | 5      |
+| [GUP-147](GUP-147_Box_Plot_Visualization.md)              | Box Plot Visualization                   | 💡 New         | Medium   | 5      |
 
 ### Post GUP-015 Stories - Advanced Debug Infrastructure (Stories 80+)
 
