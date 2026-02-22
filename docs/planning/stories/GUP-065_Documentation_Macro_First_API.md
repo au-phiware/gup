@@ -1,5 +1,8 @@
 # GUP-065: Documentation for Macro-First Type Construction API
 
+**Status**: 🚧 In Progress  
+**Started**: 2025-01-06
+
 ## Story Overview
 
 **Title**: Update Documentation for Macro-First Type Construction API **Epic**:
