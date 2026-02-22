@@ -3,8 +3,8 @@
 
 //! Integration test for WebGPU timestamp query support
 
-use gup::debug::ShaderProfiler;
 use gup::GupContext;
+use gup::debug::ShaderProfiler;
 use wgpu::*;
 
 #[tokio::test]
@@ -48,12 +48,10 @@ async fn test_timestamp_query_fallback() {
     };
 
     // Create a simple compute shader for testing
-    let shader = context
-        .device
-        .create_shader_module(ShaderModuleDescriptor {
-            label: Some("test_compute_shader"),
-            source: ShaderSource::Wgsl(
-                r#"
+    let shader = context.device.create_shader_module(ShaderModuleDescriptor {
+        label: Some("test_compute_shader"),
+        source: ShaderSource::Wgsl(
+            r#"
                 @group(0) @binding(0) var<storage, read_write> data: array<f32>;
 
                 @compute @workgroup_size(64)
@@ -62,9 +60,9 @@ async fn test_timestamp_query_fallback() {
                     data[index] = data[index] * 2.0;
                 }
             "#
-                .into(),
-            ),
-        });
+            .into(),
+        ),
+    });
 
     // Create buffer
     let buffer = context.device.create_buffer(&BufferDescriptor {
@@ -167,12 +165,10 @@ async fn test_profiling_with_baseline() {
     };
 
     // Create a simple compute shader
-    let shader = context
-        .device
-        .create_shader_module(ShaderModuleDescriptor {
-            label: Some("baseline_test_shader"),
-            source: ShaderSource::Wgsl(
-                r#"
+    let shader = context.device.create_shader_module(ShaderModuleDescriptor {
+        label: Some("baseline_test_shader"),
+        source: ShaderSource::Wgsl(
+            r#"
                 @group(0) @binding(0) var<storage, read_write> data: array<f32>;
 
                 @compute @workgroup_size(64)
@@ -181,9 +177,9 @@ async fn test_profiling_with_baseline() {
                     data[index] = data[index] + 1.0;
                 }
             "#
-                .into(),
-            ),
-        });
+            .into(),
+        ),
+    });
 
     // Create buffer
     let buffer = context.device.create_buffer(&BufferDescriptor {

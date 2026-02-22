@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✅ GPU context initialized");
 
     // Create debug context
-    let mut debug_context = GpuDebugContext::new(&context.device(), &context.queue());
+    let mut debug_context = GpuDebugContext::new(context.device(), context.queue());
     println!("✅ Debug context initialized");
 
     // Create visualizer
@@ -107,7 +107,16 @@ async fn demonstrate_performance_visualization(
         let snapshot = PerformanceSnapshot::new(frame_time, memory)
             .with_gpu_utilization(gpu_util)
             .with_query_time(500.0 + (time_ms * 0.2).sin() * 100.0)
-            .with_metadata("phase", if i < 33 { "startup" } else if i < 66 { "steady" } else { "peak" });
+            .with_metadata(
+                "phase",
+                if i < 33 {
+                    "startup"
+                } else if i < 66 {
+                    "steady"
+                } else {
+                    "peak"
+                },
+            );
 
         snapshots.push(snapshot.clone());
         debug_context.record_performance(snapshot);
@@ -125,7 +134,10 @@ async fn demonstrate_performance_visualization(
 
     if let Some((start, end)) = chart.time_range() {
         let duration = end - start;
-        println!("  • Time range: {:.2}s", duration.num_milliseconds() as f64 / 1000.0);
+        println!(
+            "  • Time range: {:.2}s",
+            duration.num_milliseconds() as f64 / 1000.0
+        );
     }
 
     let stats = chart.get_statistics();
@@ -243,10 +255,7 @@ async fn demonstrate_buffer_visualization(
     // Create different visualizations for the same data
     println!("\nCreating scatter plot visualization...");
     let scatter_viz = visualizer
-        .visualize_buffer_contents(
-            &element_data,
-            BufferVisualizationType::ScatterPlot,
-        )
+        .visualize_buffer_contents(&element_data, BufferVisualizationType::ScatterPlot)
         .await?;
 
     println!("✅ Scatter plot created");
@@ -255,10 +264,7 @@ async fn demonstrate_buffer_visualization(
 
     println!("\nCreating histogram visualization...");
     let histogram_viz = visualizer
-        .visualize_buffer_contents(
-            &element_data,
-            BufferVisualizationType::Histogram,
-        )
+        .visualize_buffer_contents(&element_data, BufferVisualizationType::Histogram)
         .await?;
 
     println!("✅ Histogram created");
@@ -267,10 +273,7 @@ async fn demonstrate_buffer_visualization(
 
     println!("\nCreating heatmap visualization...");
     let heatmap_viz = visualizer
-        .visualize_buffer_contents(
-            &element_data,
-            BufferVisualizationType::Heatmap,
-        )
+        .visualize_buffer_contents(&element_data, BufferVisualizationType::Heatmap)
         .await?;
 
     println!("✅ Heatmap created");
@@ -326,10 +329,9 @@ async fn demonstrate_dashboard_creation(
 
     println!("\nPerformance Overview:");
     println!("  • Average FPS: {:.1}", perf_stats.fps);
-    println!("  • Frame time: {:.2}ms (min: {:.2}ms, max: {:.2}ms)",
-        perf_stats.avg_frame_time_ms,
-        perf_stats.min_frame_time_ms,
-        perf_stats.max_frame_time_ms
+    println!(
+        "  • Frame time: {:.2}ms (min: {:.2}ms, max: {:.2}ms)",
+        perf_stats.avg_frame_time_ms, perf_stats.min_frame_time_ms, perf_stats.max_frame_time_ms
     );
 
     println!("\nMemory Overview:");
@@ -357,48 +359,66 @@ async fn demonstrate_configuration_options(
     // Default configuration
     let default_config = VisualizationConfig::default();
     println!("\nDefault Configuration:");
-    println!("  • Size: {}x{}", default_config.width, default_config.height);
+    println!(
+        "  • Size: {}x{}",
+        default_config.width, default_config.height
+    );
     println!("  • Interactive: {}", default_config.enable_interaction);
     println!("  • Color scheme: {:?}", default_config.color_scheme);
     println!("  • Max data points: {}", default_config.max_data_points);
 
     // Custom configurations
     let configs = vec![
-        ("High Resolution", VisualizationConfig {
-            width: 1920,
-            height: 1080,
-            enable_interaction: true,
-            color_scheme: ColorScheme::Default,
-            max_data_points: 20_000,
-        }),
-        ("Performance Mode", VisualizationConfig {
-            width: 800,
-            height: 600,
-            enable_interaction: false,
-            color_scheme: ColorScheme::Grayscale,
-            max_data_points: 5_000,
-        }),
-        ("Accessibility", VisualizationConfig {
-            width: 1024,
-            height: 768,
-            enable_interaction: true,
-            color_scheme: ColorScheme::HighContrast,
-            max_data_points: 10_000,
-        }),
-        ("Warm Theme", VisualizationConfig {
-            width: 800,
-            height: 600,
-            enable_interaction: true,
-            color_scheme: ColorScheme::Warm,
-            max_data_points: 10_000,
-        }),
-        ("Cool Theme", VisualizationConfig {
-            width: 800,
-            height: 600,
-            enable_interaction: true,
-            color_scheme: ColorScheme::Cool,
-            max_data_points: 10_000,
-        }),
+        (
+            "High Resolution",
+            VisualizationConfig {
+                width: 1920,
+                height: 1080,
+                enable_interaction: true,
+                color_scheme: ColorScheme::Default,
+                max_data_points: 20_000,
+            },
+        ),
+        (
+            "Performance Mode",
+            VisualizationConfig {
+                width: 800,
+                height: 600,
+                enable_interaction: false,
+                color_scheme: ColorScheme::Grayscale,
+                max_data_points: 5_000,
+            },
+        ),
+        (
+            "Accessibility",
+            VisualizationConfig {
+                width: 1024,
+                height: 768,
+                enable_interaction: true,
+                color_scheme: ColorScheme::HighContrast,
+                max_data_points: 10_000,
+            },
+        ),
+        (
+            "Warm Theme",
+            VisualizationConfig {
+                width: 800,
+                height: 600,
+                enable_interaction: true,
+                color_scheme: ColorScheme::Warm,
+                max_data_points: 10_000,
+            },
+        ),
+        (
+            "Cool Theme",
+            VisualizationConfig {
+                width: 800,
+                height: 600,
+                enable_interaction: true,
+                color_scheme: ColorScheme::Cool,
+                max_data_points: 10_000,
+            },
+        ),
     ];
 
     for (name, config) in configs {

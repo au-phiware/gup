@@ -13,12 +13,14 @@ use thiserror::Error;
 // Re-export commonly used types
 pub use error_context::*;
 pub use fallback::*;
+pub use lazy_context::*;
 pub use recovery::*;
 pub use reporting::*;
 pub use resource::*;
 
 pub mod error_context;
 pub mod fallback;
+pub mod lazy_context;
 pub mod recovery;
 pub mod reporting;
 pub mod resource;
@@ -264,6 +266,94 @@ impl GupError {
 
             _ => false,
         }
+    }
+
+    /// Fast error classification for hot paths (const fn where possible).
+    ///
+    /// This method provides a fast path for error classification that can be
+    /// optimized by the compiler. Use this in performance-critical code instead
+    /// of the full `category()` method.
+    pub const fn category_fast(&self) -> ErrorCategory {
+        match self {
+            Self::GpuInitializationError { .. }
+            | Self::GpuResourceCreationError { .. }
+            | Self::WebGpuError { .. } => ErrorCategory::GpuInitialization,
+
+            Self::ShaderCompilationError { .. } | Self::ShaderError { .. } => {
+                ErrorCategory::ShaderCompilation
+            }
+
+            Self::GpuMemoryExhausted { .. }
+            | Self::ResourceLimitExceeded { .. }
+            | Self::StreamBufferOverflow { .. }
+            | Self::ResourceError { .. } => ErrorCategory::ResourceExhaustion,
+
+            Self::InvalidDataFormat { .. }
+            | Self::TypeMismatch { .. }
+            | Self::DataValidationError { .. }
+            | Self::BufferSizeMismatch { .. }
+            | Self::ValidationError { .. } => ErrorCategory::DataValidation,
+
+            Self::PerformanceTargetMissed { .. } => ErrorCategory::Performance,
+
+            Self::PlatformNotSupported { .. }
+            | Self::FeatureNotSupported { .. }
+            | Self::WebGpuNotAvailable { .. } => ErrorCategory::PlatformCompatibility,
+
+            Self::NetworkError { .. } | Self::FileError { .. } => ErrorCategory::IO,
+
+            Self::ConfigurationError { .. } | Self::SystemResourceUnavailable { .. } => {
+                ErrorCategory::Configuration
+            }
+
+            Self::RenderError { .. } | Self::CompositionError { .. } => ErrorCategory::Rendering,
+
+            Self::BufferError { .. } => ErrorCategory::BufferManagement,
+
+            Self::InvalidOperation { .. } => ErrorCategory::InvalidOperation,
+
+            Self::FallbackAlreadyActive { .. }
+            | Self::RecoveryFailed { .. }
+            | Self::NoFallbackAvailable { .. } => ErrorCategory::Recovery,
+        }
+    }
+
+    /// Whether this error needs full context creation with system information.
+    ///
+    /// Returns `true` for critical errors that benefit from detailed diagnostics,
+    /// `false` for frequent, low-priority errors where context creation overhead
+    /// is not justified.
+    pub const fn needs_full_context(&self) -> bool {
+        match self {
+            // Critical errors need full context
+            Self::GpuInitializationError { .. }
+            | Self::SystemResourceUnavailable { .. }
+            | Self::WebGpuNotAvailable { .. }
+            | Self::GpuMemoryExhausted { .. }
+            | Self::ShaderCompilationError { .. } => true,
+
+            // Frequent, low-priority errors don't need full context
+            Self::PerformanceTargetMissed { .. }
+            | Self::DataValidationError { .. }
+            | Self::InvalidDataFormat { .. } => false,
+
+            // Medium priority errors - context may be useful
+            _ => true,
+        }
+    }
+
+    /// Whether this error is likely to occur frequently in hot paths.
+    ///
+    /// This helps determine if the error should use lazy context creation
+    /// or other performance optimizations.
+    pub const fn is_hot_path_error(&self) -> bool {
+        matches!(
+            self,
+            Self::PerformanceTargetMissed { .. }
+                | Self::DataValidationError { .. }
+                | Self::InvalidDataFormat { .. }
+                | Self::BufferSizeMismatch { .. }
+        )
     }
 }
 

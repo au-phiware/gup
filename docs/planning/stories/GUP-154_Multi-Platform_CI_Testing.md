@@ -102,7 +102,7 @@ impl PlatformInfo {
         let adapter_info = device.adapter.get_info();
         // Parse vendor, model from adapter info
     }
-    
+
     pub fn platform_id(&self) -> String {
         format!("{:?}_{}", self.vendor, self.model)
     }

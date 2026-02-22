@@ -6,11 +6,11 @@
 //! This test suite is designed to run in CI/CD pipelines and detect performance
 //! regressions by comparing against stored baselines.
 
+use gup::GupContext;
 use gup::debug::{
     BaselineStorage, CiConfig, CiPerformanceRunner, GpuDebugContext, PerformanceSnapshot,
     PerformanceTestSuite,
 };
-use gup::GupContext;
 use std::path::PathBuf;
 
 /// Create test configuration for CI environment
@@ -224,13 +224,13 @@ async fn test_baseline_management() {
     assert_eq!(loaded.avg_memory_usage_bytes, 1024 * 1024);
 
     // List baselines
-    let baselines = storage
-        .list_baselines()
-        .expect("Failed to list baselines");
+    let baselines = storage.list_baselines().expect("Failed to list baselines");
     assert_eq!(baselines.len(), 1);
-    assert_eq!(baselines[0], ("test_category".to_string(), "test_foo".to_string()));
+    assert_eq!(
+        baselines[0],
+        ("test_category".to_string(), "test_foo".to_string())
+    );
 
     // Clean up
-    std::fs::remove_dir_all("/tmp/gup_test_baselines")
-        .expect("Failed to clean up test directory");
+    std::fs::remove_dir_all("/tmp/gup_test_baselines").expect("Failed to clean up test directory");
 }

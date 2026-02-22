@@ -115,17 +115,8 @@ impl CiPerformanceRunner {
         };
 
         let is_regression = frame_time_delta_percent
-            > self
-                .config
-                .thresholds
-                .regression_threshold_percent
-                .into()
-            || memory_delta_percent
-                > self
-                    .config
-                    .thresholds
-                    .regression_threshold_percent
-                    .into();
+            > self.config.thresholds.regression_threshold_percent.into()
+            || memory_delta_percent > self.config.thresholds.regression_threshold_percent.into();
 
         BaselineComparison {
             baseline_frame_time_ms: baseline.avg_frame_time_ms,
@@ -143,8 +134,8 @@ impl CiPerformanceRunner {
         let mut regressions = Vec::new();
 
         for result in &report.test_results {
-            if let Some(comparison) = &result.baseline_comparison {
-                if comparison.is_regression {
+            if let Some(comparison) = &result.baseline_comparison
+                && comparison.is_regression {
                     regressions.push(PerformanceRegression {
                         test_name: result.test_name.clone(),
                         category: result.category.clone(),
@@ -153,7 +144,6 @@ impl CiPerformanceRunner {
                         severity: self.determine_regression_severity(comparison),
                     });
                 }
-            }
         }
 
         regressions
@@ -222,10 +212,7 @@ impl CiPerformanceRunner {
 
         // Summary
         md.push_str("## Summary\n\n");
-        md.push_str(&format!(
-            "- **Tests Run**: {}\n",
-            report.test_results.len()
-        ));
+        md.push_str(&format!("- **Tests Run**: {}\n", report.test_results.len()));
         let passed = report.test_results.iter().filter(|r| r.passed).count();
         md.push_str(&format!("- **Passed**: {}\n", passed));
         md.push_str(&format!(
@@ -249,7 +236,7 @@ impl CiPerformanceRunner {
                     regression.memory_delta_percent
                 ));
             }
-            md.push_str("\n");
+            md.push('\n');
         } else {
             md.push_str("## ✅ No Performance Regressions\n\n");
         }
@@ -312,11 +299,7 @@ impl BaselineStorage {
     }
 
     /// Load a baseline from storage
-    pub fn load_baseline(
-        &self,
-        test_name: &str,
-        category: &str,
-    ) -> GupResult<PerformanceBaseline> {
+    pub fn load_baseline(&self, test_name: &str, category: &str) -> GupResult<PerformanceBaseline> {
         let path = self.baseline_path(test_name, category);
 
         let json = std::fs::read_to_string(&path).map_err(|e| {
@@ -377,10 +360,7 @@ impl BaselineStorage {
             })?;
 
             if category_entry.path().is_dir() {
-                let category = category_entry
-                    .file_name()
-                    .to_string_lossy()
-                    .to_string();
+                let category = category_entry.file_name().to_string_lossy().to_string();
 
                 for baseline_entry in std::fs::read_dir(category_entry.path()).map_err(|e| {
                     GupError::resource_error(format!("Failed to read baseline files: {e}"))
@@ -389,12 +369,11 @@ impl BaselineStorage {
                         GupError::resource_error(format!("Failed to read baseline entry: {e}"))
                     })?;
 
-                    if let Some(file_name) = baseline_entry.file_name().to_str() {
-                        if file_name.ends_with(".json") {
+                    if let Some(file_name) = baseline_entry.file_name().to_str()
+                        && file_name.ends_with(".json") {
                             let test_name = file_name.strip_suffix(".json").unwrap().to_string();
                             baselines.push((category.clone(), test_name));
                         }
-                    }
                 }
             }
         }
@@ -497,7 +476,12 @@ impl PerformanceTestSuite {
     }
 
     /// Add a test to the suite using a closure
-    pub fn add_test<F>(mut self, name: impl Into<String>, category: impl Into<String>, test_fn: F) -> Self
+    pub fn add_test<F>(
+        mut self,
+        name: impl Into<String>,
+        category: impl Into<String>,
+        test_fn: F,
+    ) -> Self
     where
         F: for<'a> Fn(
                 &'a mut GpuDebugContext,
@@ -561,7 +545,9 @@ mod tests {
 
         // 5% increase should not be a regression (default threshold is 20%)
         let config = create_test_config();
-        let context = crate::GupContext::new().await.expect("Failed to create context");
+        let context = crate::GupContext::new()
+            .await
+            .expect("Failed to create context");
         let debug_ctx = GpuDebugContext::new(&context.device, &context.queue);
         let runner = CiPerformanceRunner::new(debug_ctx, config);
 
@@ -572,7 +558,9 @@ mod tests {
     #[tokio::test]
     async fn test_regression_severity_determination() {
         let config = create_test_config();
-        let context = crate::GupContext::new().await.expect("Failed to create context");
+        let context = crate::GupContext::new()
+            .await
+            .expect("Failed to create context");
         let debug_ctx = GpuDebugContext::new(&context.device, &context.queue);
         let runner = CiPerformanceRunner::new(debug_ctx, config);
 

@@ -1,6 +1,7 @@
 # CI/CD Performance Testing
 
-This directory contains GitHub Actions workflows for automated performance testing and regression detection.
+This directory contains GitHub Actions workflows for automated performance
+testing and regression detection.
 
 ## Workflows
 
@@ -10,7 +11,8 @@ Runs on every PR and push to `main` to detect performance regressions.
 
 #### Features
 
-- **Automated Regression Detection**: Compares performance against stored baselines
+- **Automated Regression Detection**: Compares performance against stored
+  baselines
 - **PR Comments**: Posts detailed performance reports as PR comments
 - **Artifact Storage**: Stores performance reports for 30 days
 - **Configurable Thresholds**: Default 20% increase triggers regression warnings
@@ -53,12 +55,12 @@ Add tests to `tests/performance_ci_tests.rs`:
 ```rust
 async fn test_my_feature(_ctx: &mut GpuDebugContext) -> gup::GupResult<PerformanceSnapshot> {
     let start = std::time::Instant::now();
-    
+
     // Your test code here
     my_feature_to_test();
-    
+
     let elapsed = start.elapsed();
-    
+
     Ok(PerformanceSnapshot::new(
         elapsed.as_secs_f32() * 1000.0,
         memory_usage_bytes,
@@ -78,7 +80,8 @@ Baselines are stored in `baselines/performance/` and version-controlled.
 
 #### Updating Baselines
 
-When performance changes are intentional (e.g., optimizations), update baselines:
+When performance changes are intentional (e.g., optimizations), update
+baselines:
 
 1. Review the performance report to confirm changes are expected
 2. Run locally: `UPDATE_BASELINES=1 cargo test --test performance_ci_tests`

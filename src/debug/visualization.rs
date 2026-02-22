@@ -33,9 +33,9 @@
 //! }
 //! ```
 
+use crate::RenderContext;
 use crate::debug::{MemoryReport, MemorySnapshot, PerformanceSnapshot, PerformanceSummary};
 use crate::error::{GupError, GupResult};
-use crate::RenderContext;
 use std::fmt::Write;
 use std::sync::Arc;
 
@@ -533,7 +533,9 @@ impl PerformanceTrendChart {
     }
 
     /// Get the time range covered by the chart
-    pub fn time_range(&self) -> Option<(chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)> {
+    pub fn time_range(
+        &self,
+    ) -> Option<(chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)> {
         if self.snapshots.is_empty() {
             return None;
         }
@@ -558,9 +560,7 @@ impl PerformanceTrendChart {
 
         let avg_frame_time = frame_times.iter().sum::<f32>() / frame_times.len() as f32;
         let min_frame_time = frame_times.iter().fold(f32::INFINITY, |a, &b| a.min(b));
-        let max_frame_time = frame_times
-            .iter()
-            .fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+        let max_frame_time = frame_times.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
 
         let avg_memory = memory_usage.iter().sum::<u64>() / memory_usage.len() as u64;
         let min_memory = *memory_usage.iter().min().unwrap_or(&0);

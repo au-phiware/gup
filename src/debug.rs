@@ -56,8 +56,7 @@ pub use buffer_inspector::*;
 // Export CI performance types explicitly to avoid conflicts
 pub use ci_performance::{
     BaselineComparison, BaselineStorage, CiConfig, CiPerformanceRunner, PerformanceReport,
-    PerformanceTest, PerformanceTestSuite, RegressionSeverity as CiRegressionSeverity,
-    TestResult,
+    PerformanceTest, PerformanceTestSuite, RegressionSeverity as CiRegressionSeverity, TestResult,
 };
 pub use layout_validator::*;
 pub use memory_profiler::*;

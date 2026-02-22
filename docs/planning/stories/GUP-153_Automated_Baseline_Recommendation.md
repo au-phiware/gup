@@ -43,10 +43,14 @@ impl BaselineRecommendationEngine {
 
 ### Features
 
-- **Statistical Analysis**: Detect stable performance patterns using moving averages and variance
-- **Confidence Scoring**: Calculate confidence levels for recommendations (0-100%)
-- **Auto-Update Mode**: Optionally auto-update baselines when confidence > threshold
-- **Change Detection**: Identify significant shifts in performance characteristics
+- **Statistical Analysis**: Detect stable performance patterns using moving
+  averages and variance
+- **Confidence Scoring**: Calculate confidence levels for recommendations
+  (0-100%)
+- **Auto-Update Mode**: Optionally auto-update baselines when confidence >
+  threshold
+- **Change Detection**: Identify significant shifts in performance
+  characteristics
 
 ## Acceptance Criteria
 
@@ -100,7 +104,8 @@ pub struct BaselineRecommendation {
 
 A recommendation is made when:
 
-- Performance has been stable for N consecutive runs (N configurable, default 10)
+- Performance has been stable for N consecutive runs (N configurable,
+  default 10)
 - Variance is below threshold (indicating stability)
 - New level differs from baseline by >10% (significant change)
 - Confidence score >80% (high confidence)
