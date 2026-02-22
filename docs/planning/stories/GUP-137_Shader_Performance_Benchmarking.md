@@ -1,6 +1,6 @@
 # GUP-137: Shader Function Performance Benchmarking
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
