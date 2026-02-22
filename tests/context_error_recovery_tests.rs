@@ -27,9 +27,11 @@ async fn test_graceful_degradation_options() {
 
 #[tokio::test]
 async fn test_context_with_reduced_features() {
-    let mut options = GupOptions::default();
-    options.reduced_features = Some(Features::empty());
-    options.reduced_limits = Some(Limits::downlevel_defaults());
+    let options = GupOptions {
+        reduced_features: Some(Features::empty()),
+        reduced_limits: Some(Limits::downlevel_defaults()),
+        ..Default::default()
+    };
 
     let context = GupContext::with_options(options)
         .await
@@ -39,10 +41,12 @@ async fn test_context_with_reduced_features() {
 
 #[tokio::test]
 async fn test_recovery_with_fallback_options() {
-    let mut options = GupOptions::default();
-    options.allow_software_fallback = true;
-    options.reduced_features = Some(Features::empty());
-    options.reduced_limits = Some(Limits::downlevel_defaults());
+    let options = GupOptions {
+        allow_software_fallback: true,
+        reduced_features: Some(Features::empty()),
+        reduced_limits: Some(Limits::downlevel_defaults()),
+        ..Default::default()
+    };
 
     let mut context = GupContext::with_options(options)
         .await

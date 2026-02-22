@@ -3,6 +3,8 @@
 
 //! Performance benchmarks for composition optimizations (GUP-028)
 
+#![allow(dead_code)]
+
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use gup::mixable::{BlendMode, Mixable, MixableExt};
 use gup::{RenderContext, Viewport};

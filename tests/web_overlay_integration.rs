@@ -198,5 +198,5 @@ mod wasm_overlay_tests {
 fn test_web_overlay_only_for_wasm() {
     // This test just ensures the module compiles on non-wasm platforms
     // The actual overlay functionality is only available on wasm32
-    assert!(true);
+    // No assertions needed - compilation success is the test
 }

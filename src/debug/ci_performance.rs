@@ -454,18 +454,21 @@ pub struct PerformanceTestSuite {
     pub tests: Vec<PerformanceTest>,
 }
 
+/// Type alias for the complex async test function type
+type AsyncTestFn = Box<
+    dyn for<'a> Fn(
+            &'a mut GpuDebugContext,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = GupResult<PerformanceSnapshot>> + Send + 'a>,
+        > + Send
+        + Sync,
+>;
+
 /// Individual performance test
 pub struct PerformanceTest {
     pub name: String,
     pub category: String,
-    pub test_fn: Box<
-        dyn for<'a> Fn(
-                &'a mut GpuDebugContext,
-            ) -> std::pin::Pin<
-                Box<dyn std::future::Future<Output = GupResult<PerformanceSnapshot>> + Send + 'a>,
-            > + Send
-            + Sync,
-    >,
+    pub test_fn: AsyncTestFn,
 }
 
 impl PerformanceTestSuite {

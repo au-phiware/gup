@@ -174,9 +174,10 @@ impl AutoConvert<Vec4> for Vec3 {
 /// assert!(!can_convert_types::<Vec4, f32>()); // No downward conversions
 /// ```
 #[inline]
-pub fn can_convert_types<From: ShaderType, To: ShaderType>() -> bool
+pub fn can_convert_types<From, To>() -> bool
 where
-    From: AutoConvert<To>,
+    From: ShaderType + AutoConvert<To>,
+    To: ShaderType,
 {
     From::can_convert()
 }
@@ -196,9 +197,10 @@ where
 /// assert_eq!(wgsl, "vec3<f32>(temperature, temperature, temperature)");
 /// ```
 #[inline]
-pub fn conversion_wgsl<From: ShaderType, To: ShaderType>(input_expr: &str) -> String
+pub fn conversion_wgsl<From, To>(input_expr: &str) -> String
 where
-    From: AutoConvert<To>,
+    From: ShaderType + AutoConvert<To>,
+    To: ShaderType,
 {
     From::conversion_wgsl(input_expr)
 }

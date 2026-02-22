@@ -3512,7 +3512,6 @@ impl Default for ColorGradientBuilder {
 ///
 /// This approach enables efficient processing of millions of data points with minimal
 /// CPU-GPU round trips.
-
 /// Result of statistical aggregation computation
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -3542,12 +3541,14 @@ pub struct StatisticsCompute {
     /// Compute pipeline for variance (second pass)
     variance_pipeline: Option<wgpu::ComputePipeline>,
     /// Compute pipeline for median and percentiles
+    #[allow(dead_code)]
     percentile_pipeline: Option<wgpu::ComputePipeline>,
     /// Input data buffer
     data_buffer: Option<wgpu::Buffer>,
     /// Output statistics buffer
     result_buffer: Option<wgpu::Buffer>,
     /// Maximum number of elements
+    #[allow(dead_code)]
     max_elements: usize,
     /// Device and queue references
     device: Option<Arc<wgpu::Device>>,
@@ -3752,7 +3753,7 @@ impl StatisticsCompute {
         }
 
         queue.submit(Some(encoder.finish()));
-        device.poll(wgpu::PollType::Wait);
+        let _ = device.poll(wgpu::PollType::Wait);
 
         // Second pass: compute variance (requires mean from first pass)
         let variance_pipeline = self.variance_pipeline.as_ref().ok_or_else(|| {
@@ -3878,6 +3879,7 @@ pub struct HistogramCompute {
     /// Configuration uniform buffer
     config_buffer: Option<wgpu::Buffer>,
     /// Maximum number of elements
+    #[allow(dead_code)]
     max_elements: usize,
     /// Maximum number of bins
     max_bins: usize,

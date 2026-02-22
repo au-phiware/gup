@@ -16,6 +16,7 @@ use gup::chart_builder::shader_specialization::{
 use std::hint::black_box;
 
 #[derive(Clone)]
+#[allow(dead_code)]
 struct DataPoint {
     x: f32,
     y: f32,

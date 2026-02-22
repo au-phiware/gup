@@ -39,6 +39,7 @@ use tiny_http::{Method, Response, Server, StatusCode};
 /// profiling data.
 #[derive(Clone)]
 pub struct WebDashboard {
+    #[allow(dead_code)]
     profiler: Arc<GpuMemoryProfiler>,
 }
 

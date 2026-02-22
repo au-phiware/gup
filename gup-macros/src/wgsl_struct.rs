@@ -88,7 +88,7 @@ pub fn derive_wgsl_struct_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         // Map Rust type to WGSL type
-        let wgsl_type = rust_type_to_wgsl(&field_type)?;
+        let wgsl_type = rust_type_to_wgsl(field_type)?;
 
         wgsl_fields.push(format!("    {}: {},", field_name_str, wgsl_type));
 
