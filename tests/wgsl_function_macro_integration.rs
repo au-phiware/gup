@@ -317,3 +317,76 @@ async fn test_wgsl_builtin_functions() {
 
     drop(shader_result);
 }
+
+// Test matrix types
+#[wgsl_function]
+fn test_matrix_transform(pos: Vec2, transform: Mat3) -> Vec2 {
+    let homogeneous = Vec3(pos.x, pos.y, 1.0);
+    let transformed = transform * homogeneous;
+    return Vec2(transformed.x, transformed.y);
+}
+
+#[tokio::test]
+async fn test_matrix_type_support() {
+    // Create identity matrix for testing
+    let identity_mat3 = Mat3::identity();
+    let transform = TestMatrixTransform::new(identity_mat3);
+
+    // Test that generated WGSL includes matrix type
+    let wgsl = TestMatrixTransform::wgsl_function();
+    println!("Generated matrix WGSL:\n{}", wgsl);
+    assert!(
+        wgsl.contains("mat3x3<f32>"),
+        "WGSL should contain mat3x3<f32> type"
+    );
+
+    // Test uniform creation
+    let uniforms = transform.create_uniforms().unwrap();
+    // Verify the matrix was stored correctly
+    assert_eq!(uniforms.transform.m00, 1.0);
+    assert_eq!(uniforms.transform.m11, 1.0);
+    assert_eq!(uniforms.transform.m22, 1.0);
+}
+
+#[tokio::test]
+async fn test_matrix_gpu_compilation() {
+    // Test that matrix functions compile on GPU
+    let context = match GupContext::headless().await {
+        Ok(ctx) => ctx,
+        Err(_) => {
+            println!("Skipping GPU test - no device available");
+            return;
+        }
+    };
+
+    let matrix_wgsl = TestMatrixTransform::wgsl_function();
+
+    let full_shader = format!(
+        r#"
+        {matrix_wgsl}
+
+        @vertex
+        fn vs_main() -> @builtin(position) vec4<f32> {{
+            return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+        }}
+
+        @fragment
+        fn fs_main() -> @location(0) vec4<f32> {{
+            return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+        }}
+        "#
+    );
+
+    // Try to create a shader module - this will fail if WGSL syntax is invalid
+    let shader_result = context
+        .device
+        .create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("test_matrix_wgsl"),
+            source: wgpu::ShaderSource::Wgsl(full_shader.into()),
+        });
+
+    drop(shader_result);
+}
+
+
+

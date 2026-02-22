@@ -590,10 +590,36 @@ fn rust_type_to_wgsl_type(ty: &Type) -> Result<String> {
                     "Vec3" => Ok("vec3<f32>".to_string()),
                     "Vec4" => Ok("vec4<f32>".to_string()),
 
-                    // Matrix types
+                    // Matrix types - square matrices
                     "Mat2" => Ok("mat2x2<f32>".to_string()),
                     "Mat3" => Ok("mat3x3<f32>".to_string()),
                     "Mat4" => Ok("mat4x4<f32>".to_string()),
+
+                    // Matrix types - non-square matrices
+                    "Mat2x3" => Ok("mat2x3<f32>".to_string()),
+                    "Mat2x4" => Ok("mat2x4<f32>".to_string()),
+                    "Mat3x2" => Ok("mat3x2<f32>".to_string()),
+                    "Mat3x4" => Ok("mat3x4<f32>".to_string()),
+                    "Mat4x2" => Ok("mat4x2<f32>".to_string()),
+                    "Mat4x3" => Ok("mat4x3<f32>".to_string()),
+
+                    // Texture types
+                    "Texture1D" => Ok("texture_1d<f32>".to_string()),
+                    "Texture2D" => Ok("texture_2d<f32>".to_string()),
+                    "Texture3D" => Ok("texture_3d<f32>".to_string()),
+                    "TextureCube" => Ok("texture_cube<f32>".to_string()),
+                    "Texture2DArray" => Ok("texture_2d_array<f32>".to_string()),
+                    "TextureCubeArray" => Ok("texture_cube_array<f32>".to_string()),
+                    "TextureMultisampled2D" => Ok("texture_multisampled_2d<f32>".to_string()),
+
+                    // Storage texture types (read-only)
+                    "TextureStorage1D" => Ok("texture_storage_1d<rgba8unorm, read>".to_string()),
+                    "TextureStorage2D" => Ok("texture_storage_2d<rgba8unorm, read>".to_string()),
+                    "TextureStorage3D" => Ok("texture_storage_3d<rgba8unorm, read>".to_string()),
+
+                    // Sampler types
+                    "Sampler" => Ok("sampler".to_string()),
+                    "SamplerComparison" => Ok("sampler_comparison".to_string()),
 
                     // For custom types, use the type name as-is
                     // This allows for user-defined structs
@@ -642,7 +668,12 @@ fn is_uniform_compatible_type(ty: &Type) -> bool {
                 match segment.ident.to_string().as_str() {
                     "f32" | "i32" | "u32" | "bool" => true,
                     "Vec2" | "Vec3" | "Vec4" => true,
+                    // Square matrices
                     "Mat2" | "Mat3" | "Mat4" => true,
+                    // Non-square matrices
+                    "Mat2x3" | "Mat2x4" | "Mat3x2" | "Mat3x4" | "Mat4x2" | "Mat4x3" => true,
+                    // Texture and sampler types cannot be used in uniforms
+                    // They must be passed as bindings
                     _ => false, // Custom types need explicit verification
                 }
             } else {
@@ -955,6 +986,81 @@ mod tests {
             rust_type_to_wgsl_type(&array_type).unwrap(),
             "array<f32, 4>"
         );
+
+        // Non-square matrix types
+        let mat2x3_type: Type = parse_quote!(Mat2x3);
+        assert_eq!(rust_type_to_wgsl_type(&mat2x3_type).unwrap(), "mat2x3<f32>");
+
+        let mat3x4_type: Type = parse_quote!(Mat3x4);
+        assert_eq!(rust_type_to_wgsl_type(&mat3x4_type).unwrap(), "mat3x4<f32>");
+
+        let mat4x2_type: Type = parse_quote!(Mat4x2);
+        assert_eq!(rust_type_to_wgsl_type(&mat4x2_type).unwrap(), "mat4x2<f32>");
+
+        // Texture types
+        let texture2d_type: Type = parse_quote!(Texture2D);
+        assert_eq!(rust_type_to_wgsl_type(&texture2d_type).unwrap(), "texture_2d<f32>");
+
+        let texture3d_type: Type = parse_quote!(Texture3D);
+        assert_eq!(rust_type_to_wgsl_type(&texture3d_type).unwrap(), "texture_3d<f32>");
+
+        let texturecube_type: Type = parse_quote!(TextureCube);
+        assert_eq!(rust_type_to_wgsl_type(&texturecube_type).unwrap(), "texture_cube<f32>");
+
+        // Sampler types
+        let sampler_type: Type = parse_quote!(Sampler);
+        assert_eq!(rust_type_to_wgsl_type(&sampler_type).unwrap(), "sampler");
+
+        let sampler_comparison_type: Type = parse_quote!(SamplerComparison);
+        assert_eq!(rust_type_to_wgsl_type(&sampler_comparison_type).unwrap(), "sampler_comparison");
+    }
+
+    #[test]
+    fn test_extended_matrix_types() {
+        // Test all non-square matrix types
+        let mat2x3: Type = parse_quote!(Mat2x3);
+        assert_eq!(rust_type_to_wgsl_type(&mat2x3).unwrap(), "mat2x3<f32>");
+        
+        let mat2x4: Type = parse_quote!(Mat2x4);
+        assert_eq!(rust_type_to_wgsl_type(&mat2x4).unwrap(), "mat2x4<f32>");
+        
+        let mat3x2: Type = parse_quote!(Mat3x2);
+        assert_eq!(rust_type_to_wgsl_type(&mat3x2).unwrap(), "mat3x2<f32>");
+        
+        let mat3x4: Type = parse_quote!(Mat3x4);
+        assert_eq!(rust_type_to_wgsl_type(&mat3x4).unwrap(), "mat3x4<f32>");
+        
+        let mat4x2: Type = parse_quote!(Mat4x2);
+        assert_eq!(rust_type_to_wgsl_type(&mat4x2).unwrap(), "mat4x2<f32>");
+        
+        let mat4x3: Type = parse_quote!(Mat4x3);
+        assert_eq!(rust_type_to_wgsl_type(&mat4x3).unwrap(), "mat4x3<f32>");
+    }
+
+    #[test]
+    fn test_texture_and_sampler_types() {
+        // Texture types
+        let texture1d: Type = parse_quote!(Texture1D);
+        assert_eq!(rust_type_to_wgsl_type(&texture1d).unwrap(), "texture_1d<f32>");
+        
+        let texture2d: Type = parse_quote!(Texture2D);
+        assert_eq!(rust_type_to_wgsl_type(&texture2d).unwrap(), "texture_2d<f32>");
+        
+        let texture3d: Type = parse_quote!(Texture3D);
+        assert_eq!(rust_type_to_wgsl_type(&texture3d).unwrap(), "texture_3d<f32>");
+        
+        let texturecube: Type = parse_quote!(TextureCube);
+        assert_eq!(rust_type_to_wgsl_type(&texturecube).unwrap(), "texture_cube<f32>");
+        
+        let texture2darray: Type = parse_quote!(Texture2DArray);
+        assert_eq!(rust_type_to_wgsl_type(&texture2darray).unwrap(), "texture_2d_array<f32>");
+        
+        // Sampler types
+        let sampler: Type = parse_quote!(Sampler);
+        assert_eq!(rust_type_to_wgsl_type(&sampler).unwrap(), "sampler");
+        
+        let sampler_comparison: Type = parse_quote!(SamplerComparison);
+        assert_eq!(rust_type_to_wgsl_type(&sampler_comparison).unwrap(), "sampler_comparison");
     }
 
     #[test]
@@ -967,6 +1073,20 @@ mod tests {
 
         let array_type: Type = parse_quote!([f32; 4]);
         assert!(is_uniform_compatible_type(&array_type));
+
+        // Matrix types should be uniform compatible
+        let mat2_type: Type = parse_quote!(Mat2);
+        assert!(is_uniform_compatible_type(&mat2_type));
+
+        let mat3x4_type: Type = parse_quote!(Mat3x4);
+        assert!(is_uniform_compatible_type(&mat3x4_type));
+
+        // Texture and sampler types should NOT be uniform compatible
+        let texture2d_type: Type = parse_quote!(Texture2D);
+        assert!(!is_uniform_compatible_type(&texture2d_type));
+
+        let sampler_type: Type = parse_quote!(Sampler);
+        assert!(!is_uniform_compatible_type(&sampler_type));
 
         // Custom types should return false (need explicit verification)
         let custom_type: Type = parse_quote!(MyCustomType);
