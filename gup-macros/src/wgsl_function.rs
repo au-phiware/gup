@@ -257,28 +257,28 @@ fn extract_wgsl_body(function: &ItemFn) -> Result<String> {
 
     // Collect uniform struct definition if there are uniform parameters
     let mut wgsl_output = String::new();
-    
+
     if inputs.len() > 1 {
         let uniforms_name = format!("{}Uniforms", pascal_case(&function_name.to_string()));
-        
+
         // Generate WGSL struct definition for uniforms
         let mut struct_fields = Vec::new();
         for input in inputs.iter().skip(1) {
-            if let FnArg::Typed(PatType { pat, ty, .. }) = input {
-                if let Pat::Ident(pat_ident) = &**pat {
-                    let field_name = &pat_ident.ident;
-                    let wgsl_type = rust_type_to_wgsl_type(ty)?;
-                    struct_fields.push(format!("    {field_name}: {wgsl_type}"));
-                }
+            if let FnArg::Typed(PatType { pat, ty, .. }) = input
+                && let Pat::Ident(pat_ident) = &**pat
+            {
+                let field_name = &pat_ident.ident;
+                let wgsl_type = rust_type_to_wgsl_type(ty)?;
+                struct_fields.push(format!("    {field_name}: {wgsl_type}"));
             }
         }
-        
+
         wgsl_output.push_str(&format!(
             "struct {} {{\n{},\n}}\n\n",
             uniforms_name,
             struct_fields.join(",\n")
         ));
-        
+
         wgsl_params.push(format!("uniforms: {uniforms_name}"));
     }
 
@@ -304,18 +304,21 @@ fn extract_wgsl_body(function: &ItemFn) -> Result<String> {
 }
 
 /// Translate a Rust function body to WGSL
-fn translate_body_to_wgsl(block: &Block, inputs: &syn::punctuated::Punctuated<FnArg, syn::token::Comma>) -> Result<String> {
+fn translate_body_to_wgsl(
+    block: &Block,
+    inputs: &syn::punctuated::Punctuated<FnArg, syn::token::Comma>,
+) -> Result<String> {
     let mut wgsl_statements = Vec::new();
 
     // Extract uniform parameter names for field access translation
     let uniform_params: Vec<String> = inputs
         .iter()
-        .skip(1)  // Skip first param (the value)
+        .skip(1) // Skip first param (the value)
         .filter_map(|arg| {
-            if let FnArg::Typed(PatType { pat, .. }) = arg {
-                if let Pat::Ident(pat_ident) = &**pat {
-                    return Some(pat_ident.ident.to_string());
-                }
+            if let FnArg::Typed(PatType { pat, .. }) = arg
+                && let Pat::Ident(pat_ident) = &**pat
+            {
+                return Some(pat_ident.ident.to_string());
             }
             None
         })
@@ -374,7 +377,7 @@ fn translate_expr_to_wgsl(expr: &Expr, uniform_params: &[String]) -> Result<Stri
                 .get_ident()
                 .ok_or_else(|| Error::new_spanned(path, "Complex paths not supported"))?;
             let ident_str = ident.to_string();
-            
+
             // Check if this identifier is a uniform parameter
             if uniform_params.contains(&ident_str) {
                 Ok(format!("uniforms.{ident_str}"))
@@ -385,7 +388,7 @@ fn translate_expr_to_wgsl(expr: &Expr, uniform_params: &[String]) -> Result<Stri
         Expr::Field(ExprField { base, member, .. }) => {
             // Field access (e.g., scale.domain_min)
             let base_expr = translate_expr_to_wgsl(base, uniform_params)?;
-            
+
             // Check if base is a uniform parameter - if so, prefix with "uniforms."
             let base_str = base_expr.as_str();
             let prefixed_base = if uniform_params.contains(&base_str.to_string()) {
@@ -393,17 +396,14 @@ fn translate_expr_to_wgsl(expr: &Expr, uniform_params: &[String]) -> Result<Stri
             } else {
                 base_expr
             };
-            
+
             match member {
                 Member::Named(field_name) => Ok(format!("{prefixed_base}.{field_name}")),
                 Member::Unnamed(index) => Ok(format!("{prefixed_base}._{}", index.index)),
             }
         }
         Expr::Binary(ExprBinary {
-            left,
-            op,
-            right,
-            ..
+            left, op, right, ..
         }) => {
             // Binary operations (e.g., a + b, a * b)
             let left_wgsl = translate_expr_to_wgsl(left, uniform_params)?;
@@ -438,7 +438,7 @@ fn translate_expr_to_wgsl(expr: &Expr, uniform_params: &[String]) -> Result<Stri
                 .map(|arg| translate_expr_to_wgsl(arg, uniform_params))
                 .collect();
             let args_wgsl = args?.join(", ");
-            
+
             // Map common Rust functions to WGSL equivalents
             let wgsl_func_name = match func_name.as_str() {
                 // Rust type constructors to WGSL
@@ -449,23 +449,22 @@ fn translate_expr_to_wgsl(expr: &Expr, uniform_params: &[String]) -> Result<Stri
                 "Mat3" => "mat3x3<f32>",
                 "Mat4" => "mat4x4<f32>",
                 // Keep WGSL built-ins as-is
-                "abs" | "acos" | "asin" | "atan" | "atan2" |
-                "ceil" | "clamp" | "cos" | "cross" | "distance" |
-                "dot" | "exp" | "exp2" | "floor" | "fract" |
-                "inverseSqrt" | "length" | "log" | "log2" |
-                "max" | "min" | "mix" | "normalize" | "pow" |
-                "round" | "sign" | "sin" | "smoothstep" |
-                "sqrt" | "step" | "tan" | "trunc" => func_name.as_str(),
+                "abs" | "acos" | "asin" | "atan" | "atan2" | "ceil" | "clamp" | "cos" | "cross"
+                | "distance" | "dot" | "exp" | "exp2" | "floor" | "fract" | "inverseSqrt"
+                | "length" | "log" | "log2" | "max" | "min" | "mix" | "normalize" | "pow"
+                | "round" | "sign" | "sin" | "smoothstep" | "sqrt" | "step" | "tan" | "trunc" => {
+                    func_name.as_str()
+                }
                 _ => func_name.as_str(),
             };
-            
+
             Ok(format!("{wgsl_func_name}({args_wgsl})"))
         }
         Expr::MethodCall(method_call) => {
             // Method calls - translate some common patterns
             let receiver = translate_expr_to_wgsl(&method_call.receiver, uniform_params)?;
             let method_name = &method_call.method;
-            
+
             // Handle some common Rust methods that have WGSL equivalents
             match method_name.to_string().as_str() {
                 "abs" => Ok(format!("abs({receiver})")),
@@ -481,21 +480,33 @@ fn translate_expr_to_wgsl(expr: &Expr, uniform_params: &[String]) -> Result<Stri
                 }
                 _ => Err(Error::new_spanned(
                     method_call,
-                    format!("Method '{}' not supported in WGSL translation. Use function call syntax instead.", method_name),
-                ))
+                    format!(
+                        "Method '{}' not supported in WGSL translation. Use function call syntax instead.",
+                        method_name
+                    ),
+                )),
             }
         }
-        Expr::If(ExprIf { cond, then_branch, else_branch, .. }) => {
+        Expr::If(ExprIf {
+            cond,
+            then_branch,
+            else_branch,
+            ..
+        }) => {
             // If-else expressions
             let cond_wgsl = translate_expr_to_wgsl(cond, uniform_params)?;
-            let then_wgsl = translate_body_to_wgsl(then_branch, &syn::punctuated::Punctuated::new())?;
-            
+            let then_wgsl =
+                translate_body_to_wgsl(then_branch, &syn::punctuated::Punctuated::new())?;
+
             let mut wgsl = format!("if ({cond_wgsl}) {{\n{then_wgsl}\n    }}");
-            
+
             if let Some((_, else_expr)) = else_branch {
                 match &**else_expr {
                     Expr::Block(block) => {
-                        let else_wgsl = translate_body_to_wgsl(&block.block, &syn::punctuated::Punctuated::new())?;
+                        let else_wgsl = translate_body_to_wgsl(
+                            &block.block,
+                            &syn::punctuated::Punctuated::new(),
+                        )?;
                         wgsl.push_str(&format!(" else {{\n{else_wgsl}\n    }}"));
                     }
                     Expr::If(_) => {
@@ -510,7 +521,7 @@ fn translate_expr_to_wgsl(expr: &Expr, uniform_params: &[String]) -> Result<Stri
                     }
                 }
             }
-            
+
             Ok(wgsl)
         }
         Expr::Unary(unary) => {
