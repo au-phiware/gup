@@ -81,7 +81,7 @@ epic and status.
 | [GUP-063](GUP-063_Enhanced_WGSL_Code_Generation.md)             | Enhanced WGSL Code Generation             | ✅ Complete    | Medium   | 5      |
 | [GUP-064](GUP-064_Advanced_Type_System_Support.md)              | Advanced Type System Support              | ✅ Complete    | Low      | 3      |
 | [GUP-064-B](GUP-064-B_Custom_Struct_Code_Generation.md)         | Custom Struct Code Generation             | 📋 Planned     | Low      | 3      |
-| [GUP-065](GUP-065_Documentation_Macro_First_API.md)             | Documentation for Macro-First API         | 🚧 In Progress | Medium   | 3      |
+| [GUP-065](GUP-065_Documentation_Macro_First_API.md)             | Documentation for Macro-First API         | ✅ Complete    | Medium   | 3      |
 | [GUP-065](GUP-065_Procedural_Macro_Performance_Optimization.md) | Procedural Macro Performance Optimization | 💡 New         | Low      | 2      |
 | [GUP-066](GUP-066_Advanced_Type_Conversion_Patterns.md)         | Advanced Type Conversion Patterns         | 💡 New         | Low      | 5      |
 
