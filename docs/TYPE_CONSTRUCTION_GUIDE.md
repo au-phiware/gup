@@ -151,16 +151,16 @@ let m = mat4![
 
 The macros automatically handle GPU-specific requirements:
 
--   **Alignment**: Ensures proper memory alignment for GPU buffers
--   **Padding**: Adds necessary padding bytes (e.g., Vec3 needs 4 bytes of
-    padding)
--   **Layout**: Follows GPU memory layout standards (std140/std430)
+- **Alignment**: Ensures proper memory alignment for GPU buffers
+- **Padding**: Adds necessary padding bytes (e.g., Vec3 needs 4 bytes of
+  padding)
+- **Layout**: Follows GPU memory layout standards (std140/std430)
 
 ### Performance
 
--   **Zero Runtime Cost**: Macros expand at compile time
--   **Compile-Time Validation**: Type errors caught during compilation
--   **Inlining**: Macro expansions are always inlined
+- **Zero Runtime Cost**: Macros expand at compile time
+- **Compile-Time Validation**: Type errors caught during compilation
+- **Inlining**: Macro expansions are always inlined
 
 ## Migration Guide
 
@@ -292,23 +292,23 @@ for compatibility but macros provide better ergonomics.
 
 ### Compile-Time Benefits
 
--   Macro expansion happens during compilation
--   No runtime overhead compared to constructors
--   Full compiler optimizations apply to expanded code
+- Macro expansion happens during compilation
+- No runtime overhead compared to constructors
+- Full compiler optimizations apply to expanded code
 
 ### Runtime Performance
 
--   Identical to hand-written struct initialization
--   Zero-cost abstraction
--   Memory layout optimized for GPU access patterns
+- Identical to hand-written struct initialization
+- Zero-cost abstraction
+- Memory layout optimized for GPU access patterns
 
 ### Benchmark Results
 
 The macro approach has been validated to have:
 
--   **Zero overhead** compared to direct struct construction
--   **Better code generation** in some cases due to simpler expansion
--   **Identical GPU performance** with proper alignment guarantees
+- **Zero overhead** compared to direct struct construction
+- **Better code generation** in some cases due to simpler expansion
+- **Identical GPU performance** with proper alignment guarantees
 
 ## Advanced Usage
 
@@ -350,8 +350,8 @@ const IDENTITY_2X2: Mat2 = mat2![
 
 ## See Also
 
--   [Shader Function Guide](./TECHNICAL_APPROACH.md) - Using types in shader
-    functions
--   [Custom Mark Guide](./CUSTOM_MARK_GUIDE.md) - Creating custom visualization
-    marks
--   [API Documentation](https://docs.rs/gup) - Full API reference
+- [Shader Function Guide](./TECHNICAL_APPROACH.md) - Using types in shader
+  functions
+- [Custom Mark Guide](./CUSTOM_MARK_GUIDE.md) - Creating custom visualization
+  marks
+- [API Documentation](https://docs.rs/gup) - Full API reference

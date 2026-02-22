@@ -387,6 +387,3 @@ async fn test_matrix_gpu_compilation() {
 
     drop(shader_result);
 }
-
-
-

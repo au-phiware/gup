@@ -999,20 +999,32 @@ mod tests {
 
         // Texture types
         let texture2d_type: Type = parse_quote!(Texture2D);
-        assert_eq!(rust_type_to_wgsl_type(&texture2d_type).unwrap(), "texture_2d<f32>");
+        assert_eq!(
+            rust_type_to_wgsl_type(&texture2d_type).unwrap(),
+            "texture_2d<f32>"
+        );
 
         let texture3d_type: Type = parse_quote!(Texture3D);
-        assert_eq!(rust_type_to_wgsl_type(&texture3d_type).unwrap(), "texture_3d<f32>");
+        assert_eq!(
+            rust_type_to_wgsl_type(&texture3d_type).unwrap(),
+            "texture_3d<f32>"
+        );
 
         let texturecube_type: Type = parse_quote!(TextureCube);
-        assert_eq!(rust_type_to_wgsl_type(&texturecube_type).unwrap(), "texture_cube<f32>");
+        assert_eq!(
+            rust_type_to_wgsl_type(&texturecube_type).unwrap(),
+            "texture_cube<f32>"
+        );
 
         // Sampler types
         let sampler_type: Type = parse_quote!(Sampler);
         assert_eq!(rust_type_to_wgsl_type(&sampler_type).unwrap(), "sampler");
 
         let sampler_comparison_type: Type = parse_quote!(SamplerComparison);
-        assert_eq!(rust_type_to_wgsl_type(&sampler_comparison_type).unwrap(), "sampler_comparison");
+        assert_eq!(
+            rust_type_to_wgsl_type(&sampler_comparison_type).unwrap(),
+            "sampler_comparison"
+        );
     }
 
     #[test]
@@ -1020,19 +1032,19 @@ mod tests {
         // Test all non-square matrix types
         let mat2x3: Type = parse_quote!(Mat2x3);
         assert_eq!(rust_type_to_wgsl_type(&mat2x3).unwrap(), "mat2x3<f32>");
-        
+
         let mat2x4: Type = parse_quote!(Mat2x4);
         assert_eq!(rust_type_to_wgsl_type(&mat2x4).unwrap(), "mat2x4<f32>");
-        
+
         let mat3x2: Type = parse_quote!(Mat3x2);
         assert_eq!(rust_type_to_wgsl_type(&mat3x2).unwrap(), "mat3x2<f32>");
-        
+
         let mat3x4: Type = parse_quote!(Mat3x4);
         assert_eq!(rust_type_to_wgsl_type(&mat3x4).unwrap(), "mat3x4<f32>");
-        
+
         let mat4x2: Type = parse_quote!(Mat4x2);
         assert_eq!(rust_type_to_wgsl_type(&mat4x2).unwrap(), "mat4x2<f32>");
-        
+
         let mat4x3: Type = parse_quote!(Mat4x3);
         assert_eq!(rust_type_to_wgsl_type(&mat4x3).unwrap(), "mat4x3<f32>");
     }
@@ -1041,26 +1053,44 @@ mod tests {
     fn test_texture_and_sampler_types() {
         // Texture types
         let texture1d: Type = parse_quote!(Texture1D);
-        assert_eq!(rust_type_to_wgsl_type(&texture1d).unwrap(), "texture_1d<f32>");
-        
+        assert_eq!(
+            rust_type_to_wgsl_type(&texture1d).unwrap(),
+            "texture_1d<f32>"
+        );
+
         let texture2d: Type = parse_quote!(Texture2D);
-        assert_eq!(rust_type_to_wgsl_type(&texture2d).unwrap(), "texture_2d<f32>");
-        
+        assert_eq!(
+            rust_type_to_wgsl_type(&texture2d).unwrap(),
+            "texture_2d<f32>"
+        );
+
         let texture3d: Type = parse_quote!(Texture3D);
-        assert_eq!(rust_type_to_wgsl_type(&texture3d).unwrap(), "texture_3d<f32>");
-        
+        assert_eq!(
+            rust_type_to_wgsl_type(&texture3d).unwrap(),
+            "texture_3d<f32>"
+        );
+
         let texturecube: Type = parse_quote!(TextureCube);
-        assert_eq!(rust_type_to_wgsl_type(&texturecube).unwrap(), "texture_cube<f32>");
-        
+        assert_eq!(
+            rust_type_to_wgsl_type(&texturecube).unwrap(),
+            "texture_cube<f32>"
+        );
+
         let texture2darray: Type = parse_quote!(Texture2DArray);
-        assert_eq!(rust_type_to_wgsl_type(&texture2darray).unwrap(), "texture_2d_array<f32>");
-        
+        assert_eq!(
+            rust_type_to_wgsl_type(&texture2darray).unwrap(),
+            "texture_2d_array<f32>"
+        );
+
         // Sampler types
         let sampler: Type = parse_quote!(Sampler);
         assert_eq!(rust_type_to_wgsl_type(&sampler).unwrap(), "sampler");
-        
+
         let sampler_comparison: Type = parse_quote!(SamplerComparison);
-        assert_eq!(rust_type_to_wgsl_type(&sampler_comparison).unwrap(), "sampler_comparison");
+        assert_eq!(
+            rust_type_to_wgsl_type(&sampler_comparison).unwrap(),
+            "sampler_comparison"
+        );
     }
 
     #[test]

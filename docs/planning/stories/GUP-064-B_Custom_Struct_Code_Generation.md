@@ -7,11 +7,15 @@
 
 ## Problem Statement
 
-The current `#[wgsl_function]` macro supports all WGSL built-in types (matrices, textures, samplers), but does not automatically generate WGSL struct definitions from Rust structs. Users must manually define WGSL structs and keep them in sync with Rust definitions.
+The current `#[wgsl_function]` macro supports all WGSL built-in types (matrices,
+textures, samplers), but does not automatically generate WGSL struct definitions
+from Rust structs. Users must manually define WGSL structs and keep them in sync
+with Rust definitions.
 
 ## Goals
 
-Enable automatic WGSL struct generation from Rust types with proper GPU alignment:
+Enable automatic WGSL struct generation from Rust types with proper GPU
+alignment:
 
 ```rust
 #[derive(WgslStruct)]  // New derive macro
@@ -32,7 +36,8 @@ fn apply_material(color: Vec3, mat: MaterialProps) -> Vec3 {
 ## User Story
 
 **As a** shader developer  
-**I want** to define custom structs in Rust and have them automatically work in WGSL  
+**I want** to define custom structs in Rust and have them automatically work in
+WGSL  
 **So that** I don't have to manually maintain parallel struct definitions
 
 ## Acceptance Criteria
@@ -90,11 +95,13 @@ Update `rust_type_to_wgsl_type()` to:
 ### 3. Validation Strategy
 
 **At Macro Expansion Time**:
+
 - Check `#[repr(C)]` attribute present
 - Validate field types are WGSL-compatible
 - Calculate expected memory layout
 
 **At Compile Time**:
+
 - Verify `Pod + Zeroable` implementation
 - Check struct size matches expected layout
 
@@ -134,7 +141,7 @@ fn test_derive_simple_struct() {
         x: f32,
         y: f32,
     }
-    
+
     let wgsl = Simple::wgsl_struct_definition();
     assert!(wgsl.contains("struct Simple"));
     assert!(wgsl.contains("x: f32"));
@@ -148,7 +155,7 @@ fn test_derive_with_vectors() {
         position: Vec3,
         color: Vec4,
     }
-    
+
     let wgsl = WithVectors::wgsl_struct_definition();
     assert!(wgsl.contains("position: vec3<f32>"));
 }
@@ -180,14 +187,14 @@ fn test_custom_struct_in_shader() {
         roughness: 0.2,
         padding: [0.0; 3],
     };
-    
+
     let func = Shade::new(material);
     let wgsl = Shade::wgsl_function();
-    
+
     // Should include struct definition
     assert!(wgsl.contains("struct Material"));
     assert!(wgsl.contains("albedo: vec3<f32>"));
-    
+
     // Should compile on GPU
     let context = GupContext::headless().await?;
     context.device.create_shader_module(wgpu::ShaderModuleDescriptor {

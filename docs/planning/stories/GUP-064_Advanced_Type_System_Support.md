@@ -1,30 +1,36 @@
 # GUP-064: Advanced Type System Support for WGSL Macros
 
 **Status**: ✅ Complete (Partial)  
-**Completed**: 2025-01-27
-**Priority**: Low  
+**Completed**: 2025-01-27 **Priority**: Low  
 **Estimated Effort**: 2-3 days  
-**Actual Effort**: 0.5 days
-**Prerequisites**: GUP-006 (Complete)
+**Actual Effort**: 0.5 days **Prerequisites**: GUP-006 (Complete)
 
 ## Implementation Summary
 
-Successfully implemented Phase 1 (Extended Built-in Types) with comprehensive support for:
+Successfully implemented Phase 1 (Extended Built-in Types) with comprehensive
+support for:
 
 **Type Additions**:
+
 - All non-square matrix types: Mat2x3, Mat2x4, Mat3x2, Mat3x4, Mat4x2, Mat4x3
-- Texture types: Texture1D, Texture2D, Texture3D, TextureCube, Texture2DArray, TextureCubeArray, TextureMultisampled2D
+- Texture types: Texture1D, Texture2D, Texture3D, TextureCube, Texture2DArray,
+  TextureCubeArray, TextureMultisampled2D
 - Storage texture types: TextureStorage1D, TextureStorage2D, TextureStorage3D
 - Sampler types: Sampler, SamplerComparison
 
 **Testing**:
-- Added 3 new unit tests covering all matrix and texture type mappings (18 total tests passing)
+
+- Added 3 new unit tests covering all matrix and texture type mappings (18 total
+  tests passing)
 - Added integration tests for matrix types with GPU compilation validation
 - All tests pass with WGSL compilation confirmed on GPU
 
 **Technical Notes**:
-- Non-square matrix types map to WGSL but don't have Rust equivalents in glam (users can define custom types)
-- Texture/sampler types properly flagged as non-uniform-compatible (must use bindings)
+
+- Non-square matrix types map to WGSL but don't have Rust equivalents in glam
+  (users can define custom types)
+- Texture/sampler types properly flagged as non-uniform-compatible (must use
+  bindings)
 - Matrix types work as both input parameters and uniform parameters
 - Custom struct support deferred to follow-up story (GUP-064-B)
 
@@ -122,7 +128,7 @@ fn apply_material(base_color: Vec3, material: MaterialProperties) -> Vec3 {
 ### Phase 1: Extended Built-in Types (1 day)
 
 - [x] Add comprehensive matrix type support
-- [x] Implement texture and sampler type mapping  
+- [x] Implement texture and sampler type mapping
 - [x] Add validation for new built-in types
 
 ### Phase 2: Custom Struct Support (1-2 days)
@@ -131,7 +137,9 @@ fn apply_material(base_color: Vec3, material: MaterialProperties) -> Vec3 {
 - [ ] Implement struct field validation
 - [ ] Add WGSL struct definition generation
 
-**Note**: Custom struct support deferred to future story (see Follow-up Stories section). Current implementation allows custom type names to pass through for manual WGSL struct definitions.
+**Note**: Custom struct support deferred to future story (see Follow-up Stories
+section). Current implementation allows custom type names to pass through for
+manual WGSL struct definitions.
 
 ### Phase 3: Advanced Arrays and Validation (1 day)
 
@@ -144,7 +152,8 @@ fn apply_material(base_color: Vec3, material: MaterialProperties) -> Vec3 {
 ### Must Have
 
 - [x] Support for all standard WGSL built-in types
-- [ ] Custom struct parameters work correctly (deferred - requires significant refactoring)
+- [ ] Custom struct parameters work correctly (deferred - requires significant
+      refactoring)
 - [x] All new types generate valid WGSL definitions
 - [x] Comprehensive validation prevents invalid type usage
 
@@ -232,47 +241,66 @@ fn test_lighting_function() {
 ### Key Technical Learnings
 
 #### Extended Type System for WGSL
-- **Challenge**: WGSL supports many more types than the initial macro implementation
-- **Solution**: Extended `rust_type_to_wgsl_type()` to map all matrix variants, textures, and samplers
-- **Pattern**: Simple string mapping for type conversion with validation in separate function
+
+- **Challenge**: WGSL supports many more types than the initial macro
+  implementation
+- **Solution**: Extended `rust_type_to_wgsl_type()` to map all matrix variants,
+  textures, and samplers
+- **Pattern**: Simple string mapping for type conversion with validation in
+  separate function
 
 #### Type Validation Strategy
-- **Challenge**: Different types have different constraints (uniforms vs bindings)
-- **Solution**: Separate validation function `is_uniform_compatible_type()` that checks GPU uniform compatibility
-- **Trade-off**: Texture/sampler types correctly identified as non-uniform-compatible but still allowed for future binding support
+
+- **Challenge**: Different types have different constraints (uniforms vs
+  bindings)
+- **Solution**: Separate validation function `is_uniform_compatible_type()` that
+  checks GPU uniform compatibility
+- **Trade-off**: Texture/sampler types correctly identified as
+  non-uniform-compatible but still allowed for future binding support
 
 #### Non-Square Matrix Support
+
 - **Challenge**: glam doesn't provide Mat2x3, Mat3x2, etc.
-- **Solution**: Macro maps type names to WGSL equivalents; users can define custom Rust types with matching names
+- **Solution**: Macro maps type names to WGSL equivalents; users can define
+  custom Rust types with matching names
 - **Pattern**: Allow type names to pass through for manual struct definitions
 
 ### Architectural Decisions
 
 #### Phase 1 Only Implementation
-- **Decision**: Implement only extended built-in types (Phase 1), defer custom structs to future story
+
+- **Decision**: Implement only extended built-in types (Phase 1), defer custom
+  structs to future story
 - **Reasoning**: Custom struct support requires:
   1. Parsing Rust struct definitions to generate WGSL structs
   2. Complex field validation and alignment calculation
   3. Reflection or proc-macro attribute cooperation
   4. Significant refactoring of validation logic
-- **Trade-off**: Users must manually define WGSL structs for custom types, but all built-in types fully supported
+- **Trade-off**: Users must manually define WGSL structs for custom types, but
+  all built-in types fully supported
 - **Future**: Create GUP-064-B for proper custom struct codegen
 
 #### Comprehensive Test Coverage
+
 - **Decision**: Add both unit tests and integration tests with GPU compilation
 - **Reasoning**: Type mapping failures only show up at WGSL compilation time
-- **Pattern**: Unit tests for type mapping, integration tests for end-to-end validation
+- **Pattern**: Unit tests for type mapping, integration tests for end-to-end
+  validation
 
 ### Development Workflow Insights
 
-- **Rapid Implementation**: Phase 1 completed in 0.5 days vs 3-day estimate due to focused scope
+- **Rapid Implementation**: Phase 1 completed in 0.5 days vs 3-day estimate due
+  to focused scope
 - **Test-Driven**: Created failing tests first, then implemented type mappings
-- **GPU Validation**: Integration tests that compile actual WGSL caught issues early
-- **Documentation**: Clear error messages and test names make debugging straightforward
+- **GPU Validation**: Integration tests that compile actual WGSL caught issues
+  early
+- **Documentation**: Clear error messages and test names make debugging
+  straightforward
 
 ### Follow-up Stories
 
 #### GUP-064-B: Custom Struct Code Generation
+
 **Priority**: Low (nice-to-have feature)
 
 Support automatic WGSL struct generation from Rust types:
@@ -293,15 +321,17 @@ fn apply_material(color: Vec3, mat: MaterialProps) -> Vec3 {
 ```
 
 **Technical Requirements**:
+
 - New proc-macro `#[derive(WgslStruct)]` to analyze struct layout
 - Field-by-field WGSL type generation with alignment validation
 - Integration with existing `#[wgsl_function]` macro
 - Validation that derived structs implement Pod + Zeroable
 
-**Estimated Effort**: 2-3 days
-**Dependencies**: None (can build on GUP-064 work)
+**Estimated Effort**: 2-3 days **Dependencies**: None (can build on GUP-064
+work)
 
 #### GUP-064-C: Advanced Array Types
+
 **Priority**: Very Low
 
 Support multi-dimensional arrays and dynamic-sized arrays:
@@ -314,4 +344,3 @@ fn process_grid(data: [[f32; 4]; 4]) -> f32 {
 ```
 
 **Estimated Effort**: 1 day
-

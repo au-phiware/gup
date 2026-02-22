@@ -122,8 +122,9 @@ let transform = mat4![
 ```
 
 These macros ensure proper GPU memory alignment and provide zero-cost
-abstractions. See the [Type Construction Guide](./docs/TYPE_CONSTRUCTION_GUIDE.md)
-for complete documentation.
+abstractions. See the
+[Type Construction Guide](./docs/TYPE_CONSTRUCTION_GUIDE.md) for complete
+documentation.
 
 ## Architecture Highlights
 
