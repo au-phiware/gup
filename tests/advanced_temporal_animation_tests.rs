@@ -130,7 +130,7 @@ fn test_animation_timeline_creation() {
     assert_eq!(timeline.current_time, 0.0);
     assert_eq!(timeline.playback_rate, 1.0);
     assert_eq!(timeline.duration, 10.0);
-    assert_eq!(timeline.loop_timeline, false);
+    assert!(!timeline.loop_timeline);
 }
 
 #[test]
@@ -337,8 +337,8 @@ fn test_keyframe_animation_single_keyframe() {
 fn test_keyframe_animation_defaults() {
     let anim = KeyframeAnimation::default();
     assert_eq!(anim.keyframes.len(), 0);
-    assert_eq!(anim.loop_animation, false);
-    assert_eq!(anim.reverse_on_loop, false);
+    assert!(!anim.loop_animation);
+    assert!(!anim.reverse_on_loop);
 }
 
 #[test]

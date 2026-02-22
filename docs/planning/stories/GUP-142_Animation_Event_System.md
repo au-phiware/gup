@@ -19,7 +19,8 @@ data, play sounds, synchronize animations).
 
 **As a** data visualization developer  
 **I want** to trigger events at animation keyframes  
-**So that** I can synchronize multiple animations and respond to animation progress
+**So that** I can synchronize multiple animations and respond to animation
+progress
 
 ## Acceptance Criteria
 
@@ -88,4 +89,5 @@ data, play sounds, synchronize animations).
 
 ---
 
-_Identified during GUP-138 implementation as requirement for complex animation scenarios._
+_Identified during GUP-138 implementation as requirement for complex animation
+scenarios._

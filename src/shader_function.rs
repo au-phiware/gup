@@ -1942,7 +1942,8 @@ impl KeyframeAnimation {
         if self.keyframes.len() < MAX_KEYFRAMES {
             self.keyframes.push(Keyframe::new(time, value));
             // Keep keyframes sorted by time
-            self.keyframes.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
+            self.keyframes
+                .sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap());
         }
         self
     }
@@ -2000,25 +2001,25 @@ impl ComposableShaderFunction for KeyframeAnimation {
             if (params.keyframe_count == 0u) {
                 return 0.0;
             }
-            
+
             if (params.keyframe_count == 1u) {
                 return params.keyframes[0].value;
             }
-            
+
             // Get time range from first and last keyframes
             let start_time = params.keyframes[0].time;
             let end_time = params.keyframes[params.keyframe_count - 1u].time;
             let duration = end_time - start_time;
-            
+
             var t = time;
-            
+
             // Handle looping
             if (params.loop_animation != 0u && duration > 0.0) {
                 t = start_time + ((time - start_time) % duration);
                 if (t < start_time) {
                     t = t + duration;
                 }
-                
+
                 // Handle reverse on loop
                 if (params.reverse_on_loop != 0u) {
                     let cycle = floor((time - start_time) / duration);
@@ -2027,7 +2028,7 @@ impl ComposableShaderFunction for KeyframeAnimation {
                     }
                 }
             }
-            
+
             // Clamp to time range
             if (t <= params.keyframes[0].time) {
                 return params.keyframes[0].value;
@@ -2035,12 +2036,12 @@ impl ComposableShaderFunction for KeyframeAnimation {
             if (t >= params.keyframes[params.keyframe_count - 1u].time) {
                 return params.keyframes[params.keyframe_count - 1u].value;
             }
-            
+
             // Find the two keyframes to interpolate between
             for (var i = 0u; i < params.keyframe_count - 1u; i = i + 1u) {
                 let k1 = params.keyframes[i];
                 let k2 = params.keyframes[i + 1u];
-                
+
                 if (t >= k1.time && t <= k2.time) {
                     let segment_duration = k2.time - k1.time;
                     if (segment_duration <= 0.0) {
@@ -2050,7 +2051,7 @@ impl ComposableShaderFunction for KeyframeAnimation {
                     return mix(k1.value, k2.value, local_t);
                 }
             }
-            
+
             return params.keyframes[params.keyframe_count - 1u].value;
         }
         "#
@@ -2147,42 +2148,42 @@ impl ComposableShaderFunction for CubicBezierTiming {
         r#"
         fn cubic_bezier_timing(t: f32, params: CubicBezierTimingUniforms) -> f32 {
             let normalized = clamp(t, 0.0, 1.0);
-            
+
             // Newton-Raphson method to solve for bezier X coordinate
             // We want to find t_bezier such that bezier_x(t_bezier) = normalized
             var t_bezier = normalized; // Initial guess
-            
+
             for (var i = 0; i < 8; i = i + 1) {
                 // Cubic bezier X formula: 3*(1-t)^2*t*x1 + 3*(1-t)*t^2*x2 + t^3
                 let one_minus_t = 1.0 - t_bezier;
                 let bezier_x = 3.0 * one_minus_t * one_minus_t * t_bezier * params.x1 +
                                3.0 * one_minus_t * t_bezier * t_bezier * params.x2 +
                                t_bezier * t_bezier * t_bezier;
-                
+
                 // Derivative of bezier X
                 let bezier_x_derivative = 3.0 * one_minus_t * one_minus_t * params.x1 +
                                           6.0 * one_minus_t * t_bezier * (params.x2 - params.x1) +
                                           3.0 * t_bezier * t_bezier * (1.0 - params.x2);
-                
+
                 if (abs(bezier_x_derivative) < 0.000001) {
                     break;
                 }
-                
+
                 // Newton-Raphson iteration
                 let delta = (bezier_x - normalized) / bezier_x_derivative;
                 t_bezier = t_bezier - delta;
-                
+
                 if (abs(delta) < 0.000001) {
                     break;
                 }
             }
-            
+
             // Calculate Y value at the found t_bezier
             let one_minus_t = 1.0 - t_bezier;
             let bezier_y = 3.0 * one_minus_t * one_minus_t * t_bezier * params.y1 +
                            3.0 * one_minus_t * t_bezier * t_bezier * params.y2 +
                            t_bezier * t_bezier * t_bezier;
-            
+
             return clamp(bezier_y, 0.0, 1.0);
         }
         "#
@@ -2262,28 +2263,24 @@ impl AnimationTimeline {
 
     /// Update timeline with elapsed time (in seconds)
     pub fn update(&mut self, delta_time: f32) -> f32 {
-        match self.state {
-            AnimationPlaybackState::Playing => {
-                self.current_time += delta_time * self.playback_rate;
+        if let AnimationPlaybackState::Playing = self.state {
+            self.current_time += delta_time * self.playback_rate;
 
-                if self.current_time > self.duration {
-                    if self.loop_timeline {
-                        self.current_time = self.current_time % self.duration;
-                    } else {
-                        self.current_time = self.duration;
-                        self.state = AnimationPlaybackState::Stopped;
-                    }
-                } else if self.current_time < 0.0 {
-                    if self.loop_timeline {
-                        self.current_time =
-                            self.duration + (self.current_time % self.duration);
-                    } else {
-                        self.current_time = 0.0;
-                        self.state = AnimationPlaybackState::Stopped;
-                    }
+            if self.current_time > self.duration {
+                if self.loop_timeline {
+                    self.current_time %= self.duration;
+                } else {
+                    self.current_time = self.duration;
+                    self.state = AnimationPlaybackState::Stopped;
+                }
+            } else if self.current_time < 0.0 {
+                if self.loop_timeline {
+                    self.current_time = self.duration + (self.current_time % self.duration);
+                } else {
+                    self.current_time = 0.0;
+                    self.state = AnimationPlaybackState::Stopped;
                 }
             }
-            _ => {}
         }
 
         self.current_time

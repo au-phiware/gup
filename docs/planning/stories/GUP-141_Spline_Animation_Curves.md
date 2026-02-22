@@ -19,7 +19,8 @@ curves.
 
 **As a** data visualization developer  
 **I want** smooth spline interpolation between animation keyframes  
-**So that** I can create natural-looking motion without manually tuning control points
+**So that** I can create natural-looking motion without manually tuning control
+points
 
 ## Acceptance Criteria
 

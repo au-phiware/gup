@@ -74,4 +74,5 @@ require hundreds or thousands of keyframes.
 
 ---
 
-_Identified during GUP-138 implementation as natural extension for complex animations._
+_Identified during GUP-138 implementation as natural extension for complex
+animations._

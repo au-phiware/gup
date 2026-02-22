@@ -6,7 +6,7 @@
 //! Tests that verify animation WGSL code compiles and executes correctly on the GPU.
 
 use gup::shader_function::{
-    CubicBezierTiming, CubicBezierTimingUniforms, ComposableShaderFunction, KeyframeAnimation,
+    ComposableShaderFunction, CubicBezierTiming, CubicBezierTimingUniforms, KeyframeAnimation,
     KeyframeAnimationUniforms, ShaderUniform,
 };
 use wgpu::util::DeviceExt;
@@ -368,10 +368,7 @@ async fn test_keyframe_animation_gpu_execution() {
         (results[1] - 50.0).abs() < 1.0,
         "At t=0.5, should be ~50 (linear interpolation)"
     );
-    assert!(
-        (results[2] - 100.0).abs() < 0.1,
-        "At t=1.0, should be ~100"
-    );
+    assert!((results[2] - 100.0).abs() < 0.1, "At t=1.0, should be ~100");
 
     println!("✓ GPU keyframe animation interpolation verified");
 }
@@ -508,5 +505,8 @@ async fn test_animation_performance_1000_simultaneous() {
     queue.submit(Some(encoder.finish()));
     let _ = device.poll(wgpu::PollType::Wait);
 
-    println!("✓ Successfully processed {} simultaneous animations on GPU", num_animations);
+    println!(
+        "✓ Successfully processed {} simultaneous animations on GPU",
+        num_animations
+    );
 }

@@ -33,6 +33,9 @@ pub use crate::mixable::Mixable;
 
 // Shader functions
 pub use crate::shader_function::{
+    // Advanced temporal animation (GUP-138)
+    AnimationPlaybackState,
+    AnimationTimeline,
     // Filtering and clamping (GUP-033)
     Clamp,
     ColorGradient,
@@ -46,13 +49,18 @@ pub use crate::shader_function::{
     ComposableShaderFunction as ShaderFunction,
     // Advanced composition patterns (GUP-033 AC3)
     ConditionalFunction,
+    CubicBezierTiming,
     Easing,
     EasingFunction,
 
+    Keyframe,
+    KeyframeAnimation,
     // Basic transformations
     LinearScale,
     // Advanced scales (GUP-033)
     LogScale,
+    MAX_KEYFRAMES,
+
     Mat2,
     Mat3,
     Mat4,
@@ -72,14 +80,6 @@ pub use crate::shader_function::{
     SmoothStep,
     TemporalInterpolation,
     Threshold,
-
-    // Advanced temporal animation (GUP-138)
-    AnimationPlaybackState,
-    AnimationTimeline,
-    CubicBezierTiming,
-    Keyframe,
-    KeyframeAnimation,
-    MAX_KEYFRAMES,
 
     // Shader types
     Vec2,

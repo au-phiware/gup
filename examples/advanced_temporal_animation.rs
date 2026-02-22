@@ -43,20 +43,38 @@ fn demo_basic_keyframes() {
         .add_keyframe(1.0, 100.0) // Peak at 100
         .add_keyframe(2.0, 50.0); // End at 50
 
-    println!("Created animation with {} keyframes", animation.keyframes.len());
+    println!(
+        "Created animation with {} keyframes",
+        animation.keyframes.len()
+    );
 
     // Generate uniforms for GPU
     if let Some(uniforms) = animation.create_uniforms() {
         println!("  Keyframe count: {}", uniforms.keyframe_count);
-        println!("  Keyframe 0: time={}, value={}", uniforms.keyframes[0].time, uniforms.keyframes[0].value);
-        println!("  Keyframe 1: time={}, value={}", uniforms.keyframes[1].time, uniforms.keyframes[1].value);
-        println!("  Keyframe 2: time={}, value={}", uniforms.keyframes[2].time, uniforms.keyframes[2].value);
+        println!(
+            "  Keyframe 0: time={}, value={}",
+            uniforms.keyframes[0].time, uniforms.keyframes[0].value
+        );
+        println!(
+            "  Keyframe 1: time={}, value={}",
+            uniforms.keyframes[1].time, uniforms.keyframes[1].value
+        );
+        println!(
+            "  Keyframe 2: time={}, value={}",
+            uniforms.keyframes[2].time, uniforms.keyframes[2].value
+        );
     }
 
     // Show WGSL generation
     let wgsl = KeyframeAnimation::wgsl_function();
-    println!("  WGSL function name: {}", KeyframeAnimation::function_name());
-    println!("  WGSL contains interpolation: {}", wgsl.contains("mix(k1.value, k2.value"));
+    println!(
+        "  WGSL function name: {}",
+        KeyframeAnimation::function_name()
+    );
+    println!(
+        "  WGSL contains interpolation: {}",
+        wgsl.contains("mix(k1.value, k2.value")
+    );
     println!();
 }
 
@@ -65,20 +83,35 @@ fn demo_cubic_bezier_timing() {
 
     // Demonstrate different cubic bezier presets
     let ease = CubicBezierTiming::ease();
-    println!("  ease: ({}, {}, {}, {})", ease.x1, ease.y1, ease.x2, ease.y2);
+    println!(
+        "  ease: ({}, {}, {}, {})",
+        ease.x1, ease.y1, ease.x2, ease.y2
+    );
 
     let ease_in = CubicBezierTiming::ease_in();
-    println!("  ease-in: ({}, {}, {}, {})", ease_in.x1, ease_in.y1, ease_in.x2, ease_in.y2);
+    println!(
+        "  ease-in: ({}, {}, {}, {})",
+        ease_in.x1, ease_in.y1, ease_in.x2, ease_in.y2
+    );
 
     let ease_out = CubicBezierTiming::ease_out();
-    println!("  ease-out: ({}, {}, {}, {})", ease_out.x1, ease_out.y1, ease_out.x2, ease_out.y2);
+    println!(
+        "  ease-out: ({}, {}, {}, {})",
+        ease_out.x1, ease_out.y1, ease_out.x2, ease_out.y2
+    );
 
     let ease_in_out = CubicBezierTiming::ease_in_out();
-    println!("  ease-in-out: ({}, {}, {}, {})", ease_in_out.x1, ease_in_out.y1, ease_in_out.x2, ease_in_out.y2);
+    println!(
+        "  ease-in-out: ({}, {}, {}, {})",
+        ease_in_out.x1, ease_in_out.y1, ease_in_out.x2, ease_in_out.y2
+    );
 
     // Custom cubic bezier
     let custom = CubicBezierTiming::new(0.68, -0.55, 0.265, 1.55);
-    println!("  custom (bounce): ({}, {}, {}, {})", custom.x1, custom.y1, custom.x2, custom.y2);
+    println!(
+        "  custom (bounce): ({}, {}, {}, {})",
+        custom.x1, custom.y1, custom.x2, custom.y2
+    );
 
     // Show WGSL generation uses Newton-Raphson method
     let wgsl = CubicBezierTiming::wgsl_function();
@@ -107,22 +140,34 @@ fn demo_animation_timeline() {
     timeline.pause();
     let time_paused = timeline.current_time;
     timeline.update(10.0); // Time shouldn't advance when paused
-    println!("  After pause and 10.0s: current_time={:.2}s (unchanged)", timeline.current_time);
+    println!(
+        "  After pause and 10.0s: current_time={:.2}s (unchanged)",
+        timeline.current_time
+    );
     assert_eq!(timeline.current_time, time_paused);
 
     // Seek
     timeline.seek(1.5);
-    println!("  After seek(1.5): current_time={:.2}s", timeline.current_time);
+    println!(
+        "  After seek(1.5): current_time={:.2}s",
+        timeline.current_time
+    );
 
     // Playback rate
     timeline.set_playback_rate(2.0);
     timeline.play();
     timeline.update(1.0);
-    println!("  With 2x playback rate, 1.0s update: current_time={:.2}s", timeline.current_time);
+    println!(
+        "  With 2x playback rate, 1.0s update: current_time={:.2}s",
+        timeline.current_time
+    );
 
     // Normalized time
     timeline.seek(2.5); // Halfway through 5.0s duration
-    println!("  Normalized time at 2.5s: {:.2}", timeline.normalized_time());
+    println!(
+        "  Normalized time at 2.5s: {:.2}",
+        timeline.normalized_time()
+    );
     println!();
 }
 
@@ -151,8 +196,14 @@ fn demo_complex_animation_pipeline() {
     timeline.play();
 
     println!("  Created multi-stage animation:");
-    println!("    - Position animation: {} keyframes", position_anim.keyframes.len());
-    println!("    - Color animation: {} keyframes", color_anim.keyframes.len());
+    println!(
+        "    - Position animation: {} keyframes",
+        position_anim.keyframes.len()
+    );
+    println!(
+        "    - Color animation: {} keyframes",
+        color_anim.keyframes.len()
+    );
     println!("    - Timing curve: ease-in-out");
     println!("    - Timeline: 6.0s duration, looping enabled");
 
@@ -161,7 +212,10 @@ fn demo_complex_animation_pipeline() {
     for i in 0..4 {
         let time = timeline.update(0.5);
         let normalized = timeline.normalized_time();
-        println!("    Frame {}: time={:.2}s, normalized={:.2}", i, time, normalized);
+        println!(
+            "    Frame {}: time={:.2}s, normalized={:.2}",
+            i, time, normalized
+        );
     }
     println!();
 }

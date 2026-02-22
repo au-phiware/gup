@@ -1,6 +1,6 @@
 # GUP-139: Statistical Shader Functions
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
