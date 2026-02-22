@@ -101,6 +101,30 @@ gup::plot()
     .render()?;
 ```
 
+### Type Construction with Macros
+
+Gup provides ergonomic macros for creating GPU-compatible vectors and matrices:
+
+```rust
+use gup::*;
+
+// Create vectors
+let position = vec3![1.0, 2.0, 3.0];
+let color = vec4![1.0, 0.5, 0.0, 1.0];
+
+// Create matrices
+let transform = mat4![
+    1.0, 0.0, 0.0, 0.0,
+    0.0, 1.0, 0.0, 0.0,
+    0.0, 0.0, 1.0, 0.0,
+    0.0, 0.0, 0.0, 1.0
+];
+```
+
+These macros ensure proper GPU memory alignment and provide zero-cost
+abstractions. See the [Type Construction Guide](./docs/TYPE_CONSTRUCTION_GUIDE.md)
+for complete documentation.
+
 ## Architecture Highlights
 
 ### GPU-First Design
