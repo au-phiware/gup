@@ -187,7 +187,6 @@ fn test_generated_structs_implement_debug_clone() {
 
 // Test with GPU context to ensure WGSL compiles correctly
 #[tokio::test]
-#[ignore = "Placeholder WGSL doesn't include struct definitions - will be implemented in future story"]
 async fn test_wgsl_compilation() {
     // Create a GPU context for testing
     let context = match GupContext::headless().await {

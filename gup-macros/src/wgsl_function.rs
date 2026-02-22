@@ -22,7 +22,8 @@
 use proc_macro2::TokenStream;
 use quote::{ToTokens, format_ident, quote};
 use syn::{
-    Error, FnArg, Ident, ItemFn, Pat, PatType, Result, Type, Visibility,
+    BinOp, Block, Error, Expr, ExprBinary, ExprField, ExprPath, ExprReturn, FnArg, Ident, ItemFn,
+    Member, Pat, PatType, Result, Stmt, Type, Visibility,
     parse::{Parse, ParseStream},
 };
 
@@ -239,8 +240,6 @@ fn parse_function_signature(sig: &syn::Signature) -> Result<(Type, Type, Vec<Uni
 
 /// Extract WGSL function body from the Rust function
 fn extract_wgsl_body(function: &ItemFn) -> Result<String> {
-    // For now, we'll reconstruct the WGSL from the Rust function
-    // In the future, this could parse actual WGSL syntax within the function body
     let function_name = &function.sig.ident;
     let inputs = &function.sig.inputs;
     let output = &function.sig.output;
@@ -256,9 +255,30 @@ fn extract_wgsl_body(function: &ItemFn) -> Result<String> {
         wgsl_params.push(format!("{}: {}", pat_ident.ident, wgsl_type));
     }
 
-    // Add uniforms parameter if there are uniform fields
+    // Collect uniform struct definition if there are uniform parameters
+    let mut wgsl_output = String::new();
+    
     if inputs.len() > 1 {
         let uniforms_name = format!("{}Uniforms", pascal_case(&function_name.to_string()));
+        
+        // Generate WGSL struct definition for uniforms
+        let mut struct_fields = Vec::new();
+        for input in inputs.iter().skip(1) {
+            if let FnArg::Typed(PatType { pat, ty, .. }) = input {
+                if let Pat::Ident(pat_ident) = &**pat {
+                    let field_name = &pat_ident.ident;
+                    let wgsl_type = rust_type_to_wgsl_type(ty)?;
+                    struct_fields.push(format!("    {field_name}: {wgsl_type}"));
+                }
+            }
+        }
+        
+        wgsl_output.push_str(&format!(
+            "struct {} {{\n{},\n}}\n\n",
+            uniforms_name,
+            struct_fields.join(",\n")
+        ));
+        
         wgsl_params.push(format!("uniforms: {uniforms_name}"));
     }
 
@@ -268,18 +288,215 @@ fn extract_wgsl_body(function: &ItemFn) -> Result<String> {
         syn::ReturnType::Default => "void".to_string(),
     };
 
-    // Generate basic WGSL function signature
-    // The actual body would need more sophisticated parsing in a full implementation
-    let default_return = wgsl_type_default_value(&return_type);
-    let wgsl_body = format!(
-        "fn {}({}) -> {} {{\n    // TODO: Implement WGSL body parsing\n    return {};\n}}",
+    // Parse function body and convert to WGSL
+    let body_wgsl = translate_body_to_wgsl(&function.block, inputs)?;
+
+    // Generate complete WGSL function
+    wgsl_output.push_str(&format!(
+        "fn {}({}) -> {} {{\n{}\n}}",
         function_name,
         wgsl_params.join(", "),
         return_type,
-        default_return
-    );
+        body_wgsl
+    ));
 
-    Ok(wgsl_body)
+    Ok(wgsl_output)
+}
+
+/// Translate a Rust function body to WGSL
+fn translate_body_to_wgsl(block: &Block, inputs: &syn::punctuated::Punctuated<FnArg, syn::token::Comma>) -> Result<String> {
+    let mut wgsl_statements = Vec::new();
+
+    // Extract uniform parameter names for field access translation
+    let uniform_params: Vec<String> = inputs
+        .iter()
+        .skip(1)  // Skip first param (the value)
+        .filter_map(|arg| {
+            if let FnArg::Typed(PatType { pat, .. }) = arg {
+                if let Pat::Ident(pat_ident) = &**pat {
+                    return Some(pat_ident.ident.to_string());
+                }
+            }
+            None
+        })
+        .collect();
+
+    for stmt in &block.stmts {
+        match stmt {
+            Stmt::Expr(expr, semi) => {
+                let wgsl_expr = translate_expr_to_wgsl(expr, &uniform_params)?;
+                if semi.is_some() {
+                    wgsl_statements.push(format!("    {wgsl_expr};"));
+                } else {
+                    // Expression without semicolon (implicit return in Rust)
+                    wgsl_statements.push(format!("    return {wgsl_expr};"));
+                }
+            }
+            Stmt::Local(local) => {
+                // Handle let bindings
+                if let Pat::Ident(pat_ident) = &local.pat {
+                    let var_name = &pat_ident.ident;
+                    if let Some(init) = &local.init {
+                        let init_expr = translate_expr_to_wgsl(&init.expr, &uniform_params)?;
+                        wgsl_statements.push(format!("    let {var_name} = {init_expr};"));
+                    }
+                } else {
+                    return Err(Error::new_spanned(
+                        local,
+                        "Only simple variable bindings are supported in WGSL functions",
+                    ));
+                }
+            }
+            Stmt::Item(_) => {
+                return Err(Error::new_spanned(
+                    stmt,
+                    "Item definitions are not supported in WGSL function bodies",
+                ));
+            }
+            Stmt::Macro(_) => {
+                return Err(Error::new_spanned(
+                    stmt,
+                    "Macro invocations are not supported in WGSL function bodies",
+                ));
+            }
+        }
+    }
+
+    Ok(wgsl_statements.join("\n"))
+}
+
+/// Translate a Rust expression to WGSL
+fn translate_expr_to_wgsl(expr: &Expr, uniform_params: &[String]) -> Result<String> {
+    match expr {
+        Expr::Path(ExprPath { path, .. }) => {
+            // Simple identifier reference
+            let ident = path
+                .get_ident()
+                .ok_or_else(|| Error::new_spanned(path, "Complex paths not supported"))?;
+            let ident_str = ident.to_string();
+            
+            // Check if this identifier is a uniform parameter
+            if uniform_params.contains(&ident_str) {
+                Ok(format!("uniforms.{ident_str}"))
+            } else {
+                Ok(ident_str)
+            }
+        }
+        Expr::Field(ExprField { base, member, .. }) => {
+            // Field access (e.g., scale.domain_min)
+            let base_expr = translate_expr_to_wgsl(base, uniform_params)?;
+            
+            // Check if base is a uniform parameter - if so, prefix with "uniforms."
+            let base_str = base_expr.as_str();
+            let prefixed_base = if uniform_params.contains(&base_str.to_string()) {
+                format!("uniforms.{base_str}")
+            } else {
+                base_expr
+            };
+            
+            match member {
+                Member::Named(field_name) => Ok(format!("{prefixed_base}.{field_name}")),
+                Member::Unnamed(index) => Ok(format!("{prefixed_base}._{}", index.index)),
+            }
+        }
+        Expr::Binary(ExprBinary {
+            left,
+            op,
+            right,
+            ..
+        }) => {
+            // Binary operations (e.g., a + b, a * b)
+            let left_wgsl = translate_expr_to_wgsl(left, uniform_params)?;
+            let right_wgsl = translate_expr_to_wgsl(right, uniform_params)?;
+            let op_wgsl = translate_binop_to_wgsl(op)?;
+            Ok(format!("{left_wgsl} {op_wgsl} {right_wgsl}"))
+        }
+        Expr::Paren(paren) => {
+            // Parenthesized expression
+            let inner = translate_expr_to_wgsl(&paren.expr, uniform_params)?;
+            Ok(format!("({inner})"))
+        }
+        Expr::Return(ExprReturn { expr, .. }) => {
+            // Return statement
+            if let Some(ret_expr) = expr {
+                let ret_wgsl = translate_expr_to_wgsl(ret_expr, uniform_params)?;
+                Ok(format!("return {ret_wgsl}"))
+            } else {
+                Ok("return".to_string())
+            }
+        }
+        Expr::Lit(lit) => {
+            // Literal values
+            Ok(quote!(#lit).to_string())
+        }
+        Expr::Call(call) => {
+            // Function calls (e.g., vec2(x, y), clamp(value, 0.0, 1.0))
+            let func_name = translate_expr_to_wgsl(&call.func, uniform_params)?;
+            let args: Result<Vec<String>> = call
+                .args
+                .iter()
+                .map(|arg| translate_expr_to_wgsl(arg, uniform_params))
+                .collect();
+            let args_wgsl = args?.join(", ");
+            Ok(format!("{func_name}({args_wgsl})"))
+        }
+        Expr::MethodCall(method_call) => {
+            // Method calls - translate some common patterns
+            let receiver = translate_expr_to_wgsl(&method_call.receiver, uniform_params)?;
+            let method_name = &method_call.method;
+            
+            // Handle some common Rust methods that have WGSL equivalents
+            match method_name.to_string().as_str() {
+                "abs" => Ok(format!("abs({receiver})")),
+                "sqrt" => Ok(format!("sqrt({receiver})")),
+                "min" | "max" | "clamp" => {
+                    let args: Result<Vec<String>> = method_call
+                        .args
+                        .iter()
+                        .map(|arg| translate_expr_to_wgsl(arg, uniform_params))
+                        .collect();
+                    let args_wgsl = args?.join(", ");
+                    Ok(format!("{}({receiver}, {args_wgsl})", method_name))
+                }
+                _ => Err(Error::new_spanned(
+                    method_call,
+                    format!("Method '{}' not supported in WGSL translation. Use function call syntax instead.", method_name),
+                ))
+            }
+        }
+        _ => Err(Error::new_spanned(
+            expr,
+            "This expression type is not yet supported in WGSL translation. Supported: binary ops, field access, function calls, literals, return statements.",
+        )),
+    }
+}
+
+/// Translate binary operator to WGSL
+fn translate_binop_to_wgsl(op: &BinOp) -> Result<&'static str> {
+    match op {
+        BinOp::Add(_) => Ok("+"),
+        BinOp::Sub(_) => Ok("-"),
+        BinOp::Mul(_) => Ok("*"),
+        BinOp::Div(_) => Ok("/"),
+        BinOp::Rem(_) => Ok("%"),
+        BinOp::And(_) => Ok("&&"),
+        BinOp::Or(_) => Ok("||"),
+        BinOp::BitXor(_) => Ok("^"),
+        BinOp::BitAnd(_) => Ok("&"),
+        BinOp::BitOr(_) => Ok("|"),
+        BinOp::Shl(_) => Ok("<<"),
+        BinOp::Shr(_) => Ok(">>"),
+        BinOp::Eq(_) => Ok("=="),
+        BinOp::Lt(_) => Ok("<"),
+        BinOp::Le(_) => Ok("<="),
+        BinOp::Ne(_) => Ok("!="),
+        BinOp::Ge(_) => Ok(">="),
+        BinOp::Gt(_) => Ok(">"),
+        _ => Err(Error::new(
+            proc_macro2::Span::call_site(),
+            "Unsupported binary operator for WGSL",
+        )),
+    }
 }
 
 /// Convert Rust type to WGSL type string
