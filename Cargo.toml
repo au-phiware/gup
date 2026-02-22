@@ -45,6 +45,9 @@ unicode-normalization = "0.1"
 ttf-parser = "0.21.1"
 lru = "0.12"
 
+# Web dashboard dependencies (optional, feature-gated)
+tiny_http = { version = "0.12", optional = true }
+
 [dependencies.web-sys]
 version = "0.3"
 features = [
@@ -132,3 +135,7 @@ path = "examples/intermediate/categorical_bar.rs"
 [[example]]
 name = "business_dashboard"
 path = "examples/showcase/business_dashboard.rs"
+
+[features]
+default = []
+web-dashboard = ["tiny_http"]

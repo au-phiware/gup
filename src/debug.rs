@@ -51,6 +51,7 @@ pub mod layout_validator;
 pub mod memory_profiler;
 pub mod shader_profiler;
 pub mod visualization;
+pub mod web_dashboard;
 
 pub use buffer_inspector::*;
 // Export CI performance types explicitly to avoid conflicts
@@ -62,6 +63,7 @@ pub use layout_validator::*;
 pub use memory_profiler::*;
 pub use shader_profiler::*;
 pub use visualization::*;
+pub use web_dashboard::*;
 
 /// Debug configuration for GPU debugging tools
 #[derive(Debug, Clone, Serialize, Deserialize)]
