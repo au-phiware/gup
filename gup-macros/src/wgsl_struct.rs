@@ -102,11 +102,7 @@ pub fn derive_wgsl_struct_impl(input: DeriveInput) -> Result<TokenStream> {
     }
 
     // Build complete WGSL struct definition
-    let wgsl_definition = format!(
-        "struct {} {{\n{}\n}}",
-        name_str,
-        wgsl_fields.join("\n")
-    );
+    let wgsl_definition = format!("struct {} {{\n{}\n}}", name_str, wgsl_fields.join("\n"));
 
     // Generate the trait implementation
     let generated = quote! {
@@ -196,7 +192,10 @@ fn rust_type_to_wgsl(ty: &Type) -> Result<String> {
                     ..
                 }) => {
                     let len = lit_int.base10_parse::<usize>().map_err(|_| {
-                        Error::new_spanned(lit_int, "Invalid array length. Must be a positive integer.")
+                        Error::new_spanned(
+                            lit_int,
+                            "Invalid array length. Must be a positive integer.",
+                        )
                     })?;
                     Ok(format!("array<{}, {}>", elem_type, len))
                 }

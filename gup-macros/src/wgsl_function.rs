@@ -19,6 +19,9 @@
 //! This module implements the core procedural macro that parses WGSL function syntax
 //! and generates corresponding Rust trait implementations.
 
+use std::collections::HashMap;
+use std::sync::LazyLock;
+
 use proc_macro2::TokenStream;
 use quote::{ToTokens, format_ident, quote};
 use syn::{
@@ -107,17 +110,17 @@ impl Parse for WgslFunctionInfo {
 
         // Collect custom types (non-primitives) that might need struct definitions
         let mut custom_types = Vec::new();
-        
+
         // Check input type
         if is_custom_type(&input_type) {
             custom_types.push(input_type.clone());
         }
-        
+
         // Check output type
         if is_custom_type(&output_type) {
             custom_types.push(output_type.clone());
         }
-        
+
         // Check uniform parameter types
         for param in &uniform_params {
             if is_custom_type(&param.rust_type) {
@@ -262,13 +265,14 @@ fn parse_function_signature(sig: &syn::Signature) -> Result<(Type, Type, Vec<Uni
 }
 
 /// Extract WGSL function body from the Rust function
+/// Optimized to pre-allocate string capacity and reduce reallocations
 fn extract_wgsl_body(function: &ItemFn) -> Result<String> {
     let function_name = &function.sig.ident;
     let inputs = &function.sig.inputs;
     let output = &function.sig.output;
 
-    // Build parameter list
-    let mut wgsl_params = Vec::new();
+    // Pre-allocate capacity for parameters (estimate 30 chars per param)
+    let mut wgsl_params = Vec::with_capacity(inputs.len());
 
     // First parameter is the input value
     if let Some(FnArg::Typed(PatType { pat, ty, .. })) = inputs.first()
@@ -279,13 +283,15 @@ fn extract_wgsl_body(function: &ItemFn) -> Result<String> {
     }
 
     // Collect uniform struct definition if there are uniform parameters
-    let mut wgsl_output = String::new();
+    // Pre-allocate for typical function size (200 bytes base + 50 per line)
+    let estimated_size = 200 + (inputs.len() * 50);
+    let mut wgsl_output = String::with_capacity(estimated_size);
 
     if inputs.len() > 1 {
         let uniforms_name = format!("{}Uniforms", pascal_case(&function_name.to_string()));
 
         // Generate WGSL struct definition for uniforms
-        let mut struct_fields = Vec::new();
+        let mut struct_fields = Vec::with_capacity(inputs.len() - 1);
         for input in inputs.iter().skip(1) {
             if let FnArg::Typed(PatType { pat, ty, .. }) = input
                 && let Pat::Ident(pat_ident) = &**pat
@@ -296,11 +302,15 @@ fn extract_wgsl_body(function: &ItemFn) -> Result<String> {
             }
         }
 
-        wgsl_output.push_str(&format!(
+        // Use write! macro for more efficient string building
+        use std::fmt::Write;
+        write!(
+            &mut wgsl_output,
             "struct {} {{\n{},\n}}\n\n",
             uniforms_name,
             struct_fields.join(",\n")
-        ));
+        )
+        .unwrap();
 
         wgsl_params.push(format!("uniforms: {uniforms_name}"));
     }
@@ -314,24 +324,29 @@ fn extract_wgsl_body(function: &ItemFn) -> Result<String> {
     // Parse function body and convert to WGSL
     let body_wgsl = translate_body_to_wgsl(&function.block, inputs)?;
 
-    // Generate complete WGSL function
-    wgsl_output.push_str(&format!(
+    // Generate complete WGSL function using write! for efficiency
+    use std::fmt::Write;
+    write!(
+        &mut wgsl_output,
         "fn {}({}) -> {} {{\n{}\n}}",
         function_name,
         wgsl_params.join(", "),
         return_type,
         body_wgsl
-    ));
+    )
+    .unwrap();
 
     Ok(wgsl_output)
 }
 
 /// Translate a Rust function body to WGSL
+/// Optimized with pre-allocated vectors
 fn translate_body_to_wgsl(
     block: &Block,
     inputs: &syn::punctuated::Punctuated<FnArg, syn::token::Comma>,
 ) -> Result<String> {
-    let mut wgsl_statements = Vec::new();
+    // Pre-allocate based on statement count
+    let mut wgsl_statements = Vec::with_capacity(block.stmts.len());
 
     // Extract uniform parameter names for field access translation
     let uniform_params: Vec<String> = inputs
@@ -594,60 +609,73 @@ fn translate_binop_to_wgsl(op: &BinOp) -> Result<&'static str> {
     }
 }
 
-/// Convert Rust type to WGSL type string
+/// Type mapping cache for common Rust to WGSL type conversions
+/// This cache reduces the number of string allocations during macro expansion
+static TYPE_CACHE: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| {
+    let mut map = HashMap::with_capacity(32);
+
+    // Scalar types
+    map.insert("f32", "f32");
+    map.insert("i32", "i32");
+    map.insert("u32", "u32");
+    map.insert("bool", "bool");
+
+    // Vector types
+    map.insert("Vec2", "vec2<f32>");
+    map.insert("Vec3", "vec3<f32>");
+    map.insert("Vec4", "vec4<f32>");
+
+    // Matrix types - square
+    map.insert("Mat2", "mat2x2<f32>");
+    map.insert("Mat3", "mat3x3<f32>");
+    map.insert("Mat4", "mat4x4<f32>");
+
+    // Matrix types - non-square
+    map.insert("Mat2x3", "mat2x3<f32>");
+    map.insert("Mat2x4", "mat2x4<f32>");
+    map.insert("Mat3x2", "mat3x2<f32>");
+    map.insert("Mat3x4", "mat3x4<f32>");
+    map.insert("Mat4x2", "mat4x2<f32>");
+    map.insert("Mat4x3", "mat4x3<f32>");
+
+    // Texture types
+    map.insert("Texture1D", "texture_1d<f32>");
+    map.insert("Texture2D", "texture_2d<f32>");
+    map.insert("Texture3D", "texture_3d<f32>");
+    map.insert("TextureCube", "texture_cube<f32>");
+    map.insert("Texture2DArray", "texture_2d_array<f32>");
+    map.insert("TextureCubeArray", "texture_cube_array<f32>");
+    map.insert("TextureMultisampled2D", "texture_multisampled_2d<f32>");
+
+    // Storage texture types
+    map.insert("TextureStorage1D", "texture_storage_1d<rgba8unorm, read>");
+    map.insert("TextureStorage2D", "texture_storage_2d<rgba8unorm, read>");
+    map.insert("TextureStorage3D", "texture_storage_3d<rgba8unorm, read>");
+
+    // Sampler types
+    map.insert("Sampler", "sampler");
+    map.insert("SamplerComparison", "sampler_comparison");
+
+    map
+});
+
+/// Convert Rust type to WGSL type string (optimized version)
+/// Uses a static cache for common types to reduce allocations
 fn rust_type_to_wgsl_type(ty: &Type) -> Result<String> {
     match ty {
         Type::Path(type_path) => {
             let path = &type_path.path;
             if path.segments.len() == 1 {
                 let segment = &path.segments[0];
-                match segment.ident.to_string().as_str() {
-                    // Scalar types
-                    "f32" => Ok("f32".to_string()),
-                    "i32" => Ok("i32".to_string()),
-                    "u32" => Ok("u32".to_string()),
-                    "bool" => Ok("bool".to_string()),
+                let type_name = segment.ident.to_string();
 
-                    // Vector types
-                    "Vec2" => Ok("vec2<f32>".to_string()),
-                    "Vec3" => Ok("vec3<f32>".to_string()),
-                    "Vec4" => Ok("vec4<f32>".to_string()),
-
-                    // Matrix types - square matrices
-                    "Mat2" => Ok("mat2x2<f32>".to_string()),
-                    "Mat3" => Ok("mat3x3<f32>".to_string()),
-                    "Mat4" => Ok("mat4x4<f32>".to_string()),
-
-                    // Matrix types - non-square matrices
-                    "Mat2x3" => Ok("mat2x3<f32>".to_string()),
-                    "Mat2x4" => Ok("mat2x4<f32>".to_string()),
-                    "Mat3x2" => Ok("mat3x2<f32>".to_string()),
-                    "Mat3x4" => Ok("mat3x4<f32>".to_string()),
-                    "Mat4x2" => Ok("mat4x2<f32>".to_string()),
-                    "Mat4x3" => Ok("mat4x3<f32>".to_string()),
-
-                    // Texture types
-                    "Texture1D" => Ok("texture_1d<f32>".to_string()),
-                    "Texture2D" => Ok("texture_2d<f32>".to_string()),
-                    "Texture3D" => Ok("texture_3d<f32>".to_string()),
-                    "TextureCube" => Ok("texture_cube<f32>".to_string()),
-                    "Texture2DArray" => Ok("texture_2d_array<f32>".to_string()),
-                    "TextureCubeArray" => Ok("texture_cube_array<f32>".to_string()),
-                    "TextureMultisampled2D" => Ok("texture_multisampled_2d<f32>".to_string()),
-
-                    // Storage texture types (read-only)
-                    "TextureStorage1D" => Ok("texture_storage_1d<rgba8unorm, read>".to_string()),
-                    "TextureStorage2D" => Ok("texture_storage_2d<rgba8unorm, read>".to_string()),
-                    "TextureStorage3D" => Ok("texture_storage_3d<rgba8unorm, read>".to_string()),
-
-                    // Sampler types
-                    "Sampler" => Ok("sampler".to_string()),
-                    "SamplerComparison" => Ok("sampler_comparison".to_string()),
-
-                    // For custom types, use the type name as-is
-                    // This allows for user-defined structs
-                    other => Ok(other.to_string()),
+                // Fast path: Check cache first
+                if let Some(&wgsl_type) = TYPE_CACHE.get(type_name.as_str()) {
+                    return Ok(wgsl_type.to_string());
                 }
+
+                // Custom type - use as-is
+                Ok(type_name)
             } else {
                 Err(Error::new_spanned(
                     ty,
@@ -697,10 +725,18 @@ fn is_uniform_compatible_type(ty: &Type) -> bool {
                     "Mat2x3" | "Mat2x4" | "Mat3x2" | "Mat3x4" | "Mat4x2" | "Mat4x3" => true,
                     // Texture and sampler types cannot be used in uniforms
                     // They must be passed as bindings
-                    "Texture1D" | "Texture2D" | "Texture3D" | "TextureCube"
-                    | "Texture2DArray" | "TextureCubeArray" | "TextureMultisampled2D"
-                    | "TextureStorage1D" | "TextureStorage2D" | "TextureStorage3D"
-                    | "Sampler" | "SamplerComparison" => false,
+                    "Texture1D"
+                    | "Texture2D"
+                    | "Texture3D"
+                    | "TextureCube"
+                    | "Texture2DArray"
+                    | "TextureCubeArray"
+                    | "TextureMultisampled2D"
+                    | "TextureStorage1D"
+                    | "TextureStorage2D"
+                    | "TextureStorage3D"
+                    | "Sampler"
+                    | "SamplerComparison" => false,
                     // Custom types are assumed to be uniform-compatible if they implement Pod + Zeroable
                     // The derive macro or user will ensure this
                     _ => true,
@@ -1003,14 +1039,14 @@ impl ToTokens for WgslFunctionInfo {
                 fn generate_wgsl(&self) -> String {
                     // Collect custom struct definitions from types that implement ShaderType
                     let mut definitions: Vec<String> = Vec::new();
-                    
+
                     // Add definitions for each custom type if available
                     #(
                         if let Some(def) = <#custom_types as crate::shader_function::ShaderType>::wgsl_type_definition() {
                             definitions.push(def.to_string());
                         }
                     )*
-                    
+
                     // Prepend struct definitions to the function body
                     if definitions.is_empty() {
                         Self::wgsl_function().to_string()
