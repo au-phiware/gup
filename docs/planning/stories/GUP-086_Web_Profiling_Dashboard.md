@@ -1,5 +1,8 @@
 # GUP-086: Web-Based Profiling Dashboard
 
+**Status**: 🚧 In Progress  
+**Started**: 2025-02-22
+
 ## Story Overview
 
 **Title**: Interactive Web Dashboard for GPU Profiling and Debugging  
