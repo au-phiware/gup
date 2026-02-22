@@ -1,6 +1,7 @@
 # Error Handling Performance Optimization Guide
 
-This guide explains how to use Gup's optimized error handling features to minimize performance overhead while maintaining comprehensive error diagnostics.
+This guide explains how to use Gup's optimized error handling features to
+minimize performance overhead while maintaining comprehensive error diagnostics.
 
 ## Overview
 
@@ -138,13 +139,13 @@ fn hot_path_function() -> Result<(), GupError> {
     if some_condition {
         return Err(GupError::performance_target_missed(16.67, 20.0));
     }
-    
+
     // ✅ Fast classification without context
     let result = might_fail()?;
     if result.category_fast() == ErrorCategory::Performance {
         // Handle performance errors quickly
     }
-    
+
     Ok(())
 }
 ```
@@ -194,7 +195,7 @@ impl App {
             error_cache: Arc::new(ErrorContextCache::new()),
         }
     }
-    
+
     pub fn handle_error(&self, error: GupError) {
         // All components share the same cache
         let context = self.error_cache.get_or_create_context(&error);
@@ -223,6 +224,7 @@ cargo bench --bench error_handling_benchmarks
 ```
 
 This measures:
+
 - Error creation overhead
 - Lazy context performance
 - Cache hit/miss performance
@@ -235,12 +237,14 @@ This measures:
 If you're using the GUP-017 error handling:
 
 ### Before (GUP-017)
+
 ```rust
 let error = GupError::performance_target_missed(16.67, 20.0);
 let context = ErrorContext::new(error); // Always creates full context
 ```
 
 ### After (GUP-084 optimized)
+
 ```rust
 let error = GupError::performance_target_missed(16.67, 20.0);
 

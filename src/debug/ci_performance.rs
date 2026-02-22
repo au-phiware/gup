@@ -135,15 +135,16 @@ impl CiPerformanceRunner {
 
         for result in &report.test_results {
             if let Some(comparison) = &result.baseline_comparison
-                && comparison.is_regression {
-                    regressions.push(PerformanceRegression {
-                        test_name: result.test_name.clone(),
-                        category: result.category.clone(),
-                        frame_time_delta_percent: comparison.frame_time_delta_percent,
-                        memory_delta_percent: comparison.memory_delta_percent,
-                        severity: self.determine_regression_severity(comparison),
-                    });
-                }
+                && comparison.is_regression
+            {
+                regressions.push(PerformanceRegression {
+                    test_name: result.test_name.clone(),
+                    category: result.category.clone(),
+                    frame_time_delta_percent: comparison.frame_time_delta_percent,
+                    memory_delta_percent: comparison.memory_delta_percent,
+                    severity: self.determine_regression_severity(comparison),
+                });
+            }
         }
 
         regressions
@@ -370,10 +371,11 @@ impl BaselineStorage {
                     })?;
 
                     if let Some(file_name) = baseline_entry.file_name().to_str()
-                        && file_name.ends_with(".json") {
-                            let test_name = file_name.strip_suffix(".json").unwrap().to_string();
-                            baselines.push((category.clone(), test_name));
-                        }
+                        && file_name.ends_with(".json")
+                    {
+                        let test_name = file_name.strip_suffix(".json").unwrap().to_string();
+                        baselines.push((category.clone(), test_name));
+                    }
                 }
             }
         }

@@ -87,22 +87,22 @@ epic and status.
 
 ### Post GUP-002 Stories - GPU and Interaction Systems (Stories 29+)
 
-| Story                                                     | Title                                    | Status         | Priority | Points |
-| --------------------------------------------------------- | ---------------------------------------- | -------------- | -------- | ------ |
-| [GUP-029](GUP-029_WGSL_Shader_Code_Generation.md)         | WGSL Shader Code Generation System       | ✅ Complete    | High     | 8      |
-| [GUP-030](GUP-030_GPU_Buffer_Pool_Management.md)          | GPU Buffer Pool Management System        | ✅ Complete    | Medium   | 5      |
-| [GUP-031](GUP-031_GPU_Interaction_Event_System.md)        | GPU-Based Interaction Event System       | ⚠️ Partial     | High     | 13     |
-| [GUP-032](GUP-032_Advanced_Mark_System.md)                | Advanced Mark System with Custom Shapes  | ✅ Complete    | Medium   | 8      |
-| [GUP-033](GUP-033_Shader_Function_Composition_Engine.md)  | Shader Function Composition Engine       | ✅ Complete    | Medium   | 10     |
-| [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md)          | GPU Memory Profiling and Debugging Tools | ✅ Complete    | Low      | 5      |
-| [GUP-131](GUP-131_Shader_Type_Constructors.md)            | Add Constructor Methods to Shader Types  | ✅ Complete    | Low      | 1      |
-| [GUP-132](GUP-132_GPU_Path_Tessellation.md)               | GPU Tessellation for Path Mark           | 💡 New         | Medium   | 8      |
-| [GUP-134](GUP-134_Storage_Buffer_ColorGradient.md)        | Storage Buffer-Based ColorGradient       | 📋 Planned     | Low      | 3      |
+| Story                                                     | Title                                    | Status      | Priority | Points |
+| --------------------------------------------------------- | ---------------------------------------- | ----------- | -------- | ------ |
+| [GUP-029](GUP-029_WGSL_Shader_Code_Generation.md)         | WGSL Shader Code Generation System       | ✅ Complete | High     | 8      |
+| [GUP-030](GUP-030_GPU_Buffer_Pool_Management.md)          | GPU Buffer Pool Management System        | ✅ Complete | Medium   | 5      |
+| [GUP-031](GUP-031_GPU_Interaction_Event_System.md)        | GPU-Based Interaction Event System       | ⚠️ Partial  | High     | 13     |
+| [GUP-032](GUP-032_Advanced_Mark_System.md)                | Advanced Mark System with Custom Shapes  | ✅ Complete | Medium   | 8      |
+| [GUP-033](GUP-033_Shader_Function_Composition_Engine.md)  | Shader Function Composition Engine       | ✅ Complete | Medium   | 10     |
+| [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md)          | GPU Memory Profiling and Debugging Tools | ✅ Complete | Low      | 5      |
+| [GUP-131](GUP-131_Shader_Type_Constructors.md)            | Add Constructor Methods to Shader Types  | ✅ Complete | Low      | 1      |
+| [GUP-132](GUP-132_GPU_Path_Tessellation.md)               | GPU Tessellation for Path Mark           | 💡 New      | Medium   | 8      |
+| [GUP-134](GUP-134_Storage_Buffer_ColorGradient.md)        | Storage Buffer-Based ColorGradient       | 📋 Planned  | Low      | 3      |
 | [GUP-135](GUP-135_Fix_Examples_Compilation.md)            | Fix Example Compilation Errors           | ✅ Complete | High     | 3      |
-| [GUP-136](GUP-136_Parallel_Composition_Implementation.md) | Parallel Composition Implementation      | ✅ Complete    | Medium   | 5      |
-| [GUP-137](GUP-137_Shader_Performance_Benchmarking.md)     | Shader Function Performance Benchmarking | 📋 Planned     | Medium   | 3      |
-| [GUP-138](GUP-138_Advanced_Temporal_Animation.md)         | Advanced Temporal Animation System       | 📋 Planned     | Low      | 8      |
-| [GUP-139](GUP-139_Statistical_Shader_Functions.md)        | Statistical Shader Functions             | 📋 Planned     | Low      | 5      |
+| [GUP-136](GUP-136_Parallel_Composition_Implementation.md) | Parallel Composition Implementation      | ✅ Complete | Medium   | 5      |
+| [GUP-137](GUP-137_Shader_Performance_Benchmarking.md)     | Shader Function Performance Benchmarking | 📋 Planned  | Medium   | 3      |
+| [GUP-138](GUP-138_Advanced_Temporal_Animation.md)         | Advanced Temporal Animation System       | 📋 Planned  | Low      | 8      |
+| [GUP-139](GUP-139_Statistical_Shader_Functions.md)        | Statistical Shader Functions             | 📋 Planned  | Low      | 5      |
 
 ### Post GUP-015 Stories - Advanced Debug Infrastructure (Stories 80+)
 
@@ -116,9 +116,9 @@ epic and status.
 
 ### Post GUP-017 Stories - Error Handling Optimization (Stories 83+)
 
-| Story                                                         | Title                                   | Status         | Priority | Points |
-| ------------------------------------------------------------- | --------------------------------------- | -------------- | -------- | ------ |
-| [GUP-083](GUP-083_Debug_Tool_Type_Complexity_Refactor.md)     | Debug Tool Type Complexity Refactor     | 💡 New         | Low      | 1      |
+| Story                                                         | Title                                   | Status      | Priority | Points |
+| ------------------------------------------------------------- | --------------------------------------- | ----------- | -------- | ------ |
+| [GUP-083](GUP-083_Debug_Tool_Type_Complexity_Refactor.md)     | Debug Tool Type Complexity Refactor     | ✅ Complete | Low      | 1      |
 | [GUP-084](GUP-084_Error_Handling_Performance_Optimization.md) | Error Handling Performance Optimization | ✅ Complete | Medium   | 8      |
 
 ### Post GUP-003 Stories - Buffer System Enhancement (Stories 35+)

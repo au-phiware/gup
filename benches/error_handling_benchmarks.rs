@@ -6,7 +6,7 @@
 //! These benchmarks measure the overhead of error creation, context generation,
 //! and caching to validate the <2% performance overhead target.
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use gup::error::{ErrorContextCache, GupError, LazyErrorContext};
 use std::hint::black_box;
 
