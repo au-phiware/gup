@@ -35,34 +35,34 @@ Plot to Gup, what features are available, and where the APIs differ
 
 ### AC1: Migration Guide Document
 
-- [ ] Create comprehensive migration guide at
+- [x] Create comprehensive migration guide at
       `docs/MIGRATION_FROM_OBSERVABLE_PLOT.md`
-- [ ] Include side-by-side code examples comparing Observable Plot and Gup
-- [ ] Document API differences and design philosophy differences
-- [ ] Provide migration strategy and step-by-step process
+- [x] Include side-by-side code examples comparing Observable Plot and Gup
+- [x] Document API differences and design philosophy differences
+- [x] Provide migration strategy and step-by-step process
 
 ### AC2: Feature Comparison Matrix
 
-- [ ] Create feature parity matrix showing Observable Plot features vs Gup
-- [ ] Document which features are implemented, partially implemented, or not
+- [x] Create feature parity matrix showing Observable Plot features vs Gup
+- [x] Document which features are implemented, partially implemented, or not
       planned
-- [ ] Explain Gup's unique features not present in Observable Plot
-- [ ] Include performance comparison for common use cases
+- [x] Explain Gup's unique features not present in Observable Plot
+- [x] Include performance comparison for common use cases
 
 ### AC3: Code Examples
 
-- [ ] Provide at least 5 side-by-side migration examples covering common chart
+- [x] Provide at least 5 side-by-side migration examples covering common chart
       types
-- [ ] Include scatter plots, line charts, bar charts, and area charts examples
-- [ ] Show how to migrate from Plot's mark system to Gup's mark system
-- [ ] Demonstrate data accessor pattern differences
+- [x] Include scatter plots, line charts, bar charts, and area charts examples
+- [x] Show how to migrate from Plot's mark system to Gup's mark system
+- [x] Demonstrate data accessor pattern differences
 
 ### AC4: Integration Guidance
 
-- [ ] Document how to integrate Gup into Observable Plot workflows
-- [ ] Explain interoperability considerations
-- [ ] Provide guidance on when to use Gup vs Observable Plot
-- [ ] Include performance considerations for large datasets
+- [x] Document how to integrate Gup into Observable Plot workflows
+- [x] Explain interoperability considerations
+- [x] Provide guidance on when to use Gup vs Observable Plot
+- [x] Include performance considerations for large datasets
 
 ## Technical Tasks
 

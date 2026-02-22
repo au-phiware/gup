@@ -176,15 +176,27 @@ Gup uniquely combines:
 See [`IMPLEMENTATION_STRATEGY.md`](./docs/IMPLEMENTATION_STRATEGY.md) for
 detailed roadmap.
 
-## Contributing
+## Documentation
 
-Gup is developed in the open with community input. See:
+### Migration Guides
+
+- [**Migration from Observable Plot**](./docs/MIGRATION_FROM_OBSERVABLE_PLOT.md) -
+  Comprehensive guide for Observable Plot users transitioning to Gup
+
+### Technical Documentation
 
 - [`MISSION_AND_GOALS.md`](./docs/MISSION_AND_GOALS.md) - Project vision and
   objectives
 - [`TECHNICAL_APPROACH.md`](./docs/TECHNICAL_APPROACH.md) - Architecture deep
   dive
 - [`MARKET_ANALYSIS.md`](./docs/MARKET_ANALYSIS.md) - Competitive positioning
+- [`TYPE_CONSTRUCTION_GUIDE.md`](./docs/TYPE_CONSTRUCTION_GUIDE.md) - Guide to
+  GPU-compatible type construction
+
+## Contributing
+
+Gup is developed in the open with community input. See the documentation above
+for technical details and architectural decisions.
 
 ## Examples
 
