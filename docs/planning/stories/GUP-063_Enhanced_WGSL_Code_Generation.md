@@ -114,7 +114,8 @@ fn generate_uniform_struct_wgsl(&self) -> String {
 ### Could Have
 
 - [ ] Advanced WGSL optimizations
-- [ ] Support for complex control flow (loops, conditionals) - Basic if-else implemented
+- [ ] Support for complex control flow (loops, conditionals) - Basic if-else
+      implemented
 - [ ] Integration with WGSL debugging tools
 
 ## Testing Strategy
@@ -171,35 +172,47 @@ fn enhanced_linear_scale(value: f32, scale: f32, offset: f32) -> f32 {
 
 ## Implementation Summary
 
-Successfully implemented complete WGSL code generation with Rust-to-WGSL body translation:
+Successfully implemented complete WGSL code generation with Rust-to-WGSL body
+translation:
 
 ### Key Deliverables
 
-- **Complete WGSL struct generation**: Uniform structs are now fully defined in generated WGSL with proper field types
-- **Rust-to-WGSL expression translation**: Comprehensive translation of Rust expressions to WGSL including:
-  - Binary operations (+, -, *, /, %, &&, ||, etc.)
+- **Complete WGSL struct generation**: Uniform structs are now fully defined in
+  generated WGSL with proper field types
+- **Rust-to-WGSL expression translation**: Comprehensive translation of Rust
+  expressions to WGSL including:
+  - Binary operations (+, -, \*, /, %, &&, ||, etc.)
   - Field access with automatic uniform prefixing
-  - Function calls with type constructor mapping (Vec2/Vec3/Vec4 → vec2/vec3/vec4)
+  - Function calls with type constructor mapping (Vec2/Vec3/Vec4 →
+    vec2/vec3/vec4)
   - Return statements
   - Let bindings
   - If-else expressions
   - Unary operations (-, !)
   - Parenthesized expressions
-- **WGSL built-in function support**: Comprehensive mapping of common WGSL functions (abs, clamp, sin, cos, sqrt, etc.)
-- **GPU compilation validation**: All generated WGSL compiles successfully on actual GPU hardware
-- **Enhanced test coverage**: Added tests for vector constructors and built-in functions
+- **WGSL built-in function support**: Comprehensive mapping of common WGSL
+  functions (abs, clamp, sin, cos, sqrt, etc.)
+- **GPU compilation validation**: All generated WGSL compiles successfully on
+  actual GPU hardware
+- **Enhanced test coverage**: Added tests for vector constructors and built-in
+  functions
 
 ### Technical Implementation
 
-- **Expression parser**: Recursive descent parser for Rust expressions with full error handling
-- **Uniform parameter tracking**: Automatic detection and prefixing of uniform references
+- **Expression parser**: Recursive descent parser for Rust expressions with full
+  error handling
+- **Uniform parameter tracking**: Automatic detection and prefixing of uniform
+  references
 - **Type mapping**: Complete mapping of Rust types to WGSL equivalents
-- **Error messages**: Clear, actionable error messages for unsupported Rust syntax
+- **Error messages**: Clear, actionable error messages for unsupported Rust
+  syntax
 
 ### Files Modified
 
-- `gup-macros/src/wgsl_function.rs`: 250+ lines added for complete WGSL generation
-- `tests/wgsl_function_macro_integration.rs`: Added 2 new tests, enabled GPU compilation test
+- `gup-macros/src/wgsl_function.rs`: 250+ lines added for complete WGSL
+  generation
+- `tests/wgsl_function_macro_integration.rs`: Added 2 new tests, enabled GPU
+  compilation test
 
 ## Retrospective
 
@@ -208,71 +221,112 @@ Successfully implemented complete WGSL code generation with Rust-to-WGSL body tr
 ### Key Technical Learnings
 
 #### Rust Expression to WGSL Translation
-- **Challenge**: Translating Rust's rich expression syntax to WGSL while maintaining correctness
-- **Solution**: Recursive descent parsing using syn's AST with explicit support for each expression type
-- **Pattern**: Match on expression types, translate recursively, accumulate results as strings
-- **Key insight**: Uniform parameter references need automatic prefixing with `uniforms.` which requires tracking parameter names
+
+- **Challenge**: Translating Rust's rich expression syntax to WGSL while
+  maintaining correctness
+- **Solution**: Recursive descent parsing using syn's AST with explicit support
+  for each expression type
+- **Pattern**: Match on expression types, translate recursively, accumulate
+  results as strings
+- **Key insight**: Uniform parameter references need automatic prefixing with
+  `uniforms.` which requires tracking parameter names
 
 #### Uniform Field Access Translation
-- **Challenge**: Rust function parameters become struct fields in WGSL - references need translation
-- **Solution**: Track uniform parameter names during parsing, check against them during expression translation
-- **Pattern**: Build a set of uniform parameter names, check simple identifiers against it, prefix with `uniforms.` if matched
-- **Edge case**: Field access on uniform parameters (`scale.value`) requires checking the base expression, not the field
+
+- **Challenge**: Rust function parameters become struct fields in WGSL -
+  references need translation
+- **Solution**: Track uniform parameter names during parsing, check against them
+  during expression translation
+- **Pattern**: Build a set of uniform parameter names, check simple identifiers
+  against it, prefix with `uniforms.` if matched
+- **Edge case**: Field access on uniform parameters (`scale.value`) requires
+  checking the base expression, not the field
 
 #### WGSL Built-in Function Mapping
-- **Challenge**: Rust and WGSL have different naming conventions for functions and types
-- **Solution**: Explicit mapping table for common functions and type constructors
-- **Pattern**: Map function names during translation: `Vec2` → `vec2<f32>`, keeping WGSL built-ins as-is
-- **Learning**: WGSL has a rich set of built-in functions that closely match Rust math functions
+
+- **Challenge**: Rust and WGSL have different naming conventions for functions
+  and types
+- **Solution**: Explicit mapping table for common functions and type
+  constructors
+- **Pattern**: Map function names during translation: `Vec2` → `vec2<f32>`,
+  keeping WGSL built-ins as-is
+- **Learning**: WGSL has a rich set of built-in functions that closely match
+  Rust math functions
 
 #### Statement vs Expression Handling
+
 - **Challenge**: syn 2.0 removed `Stmt::Semi`, combining it with `Stmt::Expr`
-- **Solution**: Check for semicolon presence in `Stmt::Expr` variant to determine if expression should return
-- **Pattern**: `Stmt::Expr(expr, Some(_))` is a statement, `Stmt::Expr(expr, None)` is implicit return
-- **Learning**: Always check syn changelog when upgrading - AST structure can change significantly
+- **Solution**: Check for semicolon presence in `Stmt::Expr` variant to
+  determine if expression should return
+- **Pattern**: `Stmt::Expr(expr, Some(_))` is a statement,
+  `Stmt::Expr(expr, None)` is implicit return
+- **Learning**: Always check syn changelog when upgrading - AST structure can
+  change significantly
 
 ### Architectural Decisions
 
 #### Generate Complete WGSL Modules
-- **Decision**: Include struct definitions in generated WGSL output, not just functions
-- **Reasoning**: Makes generated code self-contained and compilable without external context
-- **Trade-off**: Slightly larger generated strings, but enables independent compilation and validation
-- **Future**: This enables GPU-side validation during proc macro expansion (could validate with naga)
+
+- **Decision**: Include struct definitions in generated WGSL output, not just
+  functions
+- **Reasoning**: Makes generated code self-contained and compilable without
+  external context
+- **Trade-off**: Slightly larger generated strings, but enables independent
+  compilation and validation
+- **Future**: This enables GPU-side validation during proc macro expansion
+  (could validate with naga)
 
 #### String-Based WGSL Generation vs AST
+
 - **Decision**: Generate WGSL as formatted strings rather than building an AST
 - **Reasoning**: Simpler implementation, WGSL is the final output anyway
-- **Trade-off**: Less structured, harder to optimize, but sufficient for current needs
-- **Future**: Could build a WGSL AST layer if optimization or analysis is needed later
+- **Trade-off**: Less structured, harder to optimize, but sufficient for current
+  needs
+- **Future**: Could build a WGSL AST layer if optimization or analysis is needed
+  later
 
 #### Expression Translation Coverage
+
 - **Decision**: Support common expressions, clear errors for unsupported ones
-- **Reasoning**: 80/20 rule - most shader functions use simple arithmetic and function calls
-- **Trade-off**: Some Rust patterns unsupported (loops, match, complex control flow)
+- **Reasoning**: 80/20 rule - most shader functions use simple arithmetic and
+  function calls
+- **Trade-off**: Some Rust patterns unsupported (loops, match, complex control
+  flow)
 - **Future**: Can incrementally add support for more expression types as needed
 
 ### Development Workflow Insights
 
-- **Rapid iteration**: Test-driven development with GPU compilation test was crucial - caught issues immediately
-- **syn documentation**: Heavy reliance on syn's excellent documentation and `Debug` implementations
-- **Incremental commits**: Breaking work into phases (structs → body translation → built-ins) made progress visible
-- **GPU test as quality gate**: Enabling the GPU compilation test early ensured all changes produced valid WGSL
-- **Clippy patterns**: Let-chain syntax (&&-style let guards) caught by clippy, easy to fix
+- **Rapid iteration**: Test-driven development with GPU compilation test was
+  crucial - caught issues immediately
+- **syn documentation**: Heavy reliance on syn's excellent documentation and
+  `Debug` implementations
+- **Incremental commits**: Breaking work into phases (structs → body translation
+  → built-ins) made progress visible
+- **GPU test as quality gate**: Enabling the GPU compilation test early ensured
+  all changes produced valid WGSL
+- **Clippy patterns**: Let-chain syntax (&&-style let guards) caught by clippy,
+  easy to fix
 
 ### Performance Considerations
 
-- **Compilation time**: Minimal impact - proc macros run at compile time, additional parsing is fast
+- **Compilation time**: Minimal impact - proc macros run at compile time,
+  additional parsing is fast
 - **Runtime**: Zero impact - all code generation happens at compile time
 - **Memory**: Generated strings are `&'static str`, no runtime allocation
 - **GPU performance**: Generated WGSL should be identical to hand-written code
 
 ### Lessons for Future Stories
 
-1. **Start with the test**: Enable/write the GPU compilation test first, work backwards to make it pass
-2. **Incremental expression support**: Don't try to support all expressions at once, add them as needed
-3. **Leverage syn's AST**: syn provides excellent structure, use it rather than string parsing
-4. **Clear error messages matter**: Users will make mistakes, good errors save hours of debugging
-5. **WGSL and Rust are close**: Many patterns translate directly, focus on the differences (field access, constructors)
+1. **Start with the test**: Enable/write the GPU compilation test first, work
+   backwards to make it pass
+2. **Incremental expression support**: Don't try to support all expressions at
+   once, add them as needed
+3. **Leverage syn's AST**: syn provides excellent structure, use it rather than
+   string parsing
+4. **Clear error messages matter**: Users will make mistakes, good errors save
+   hours of debugging
+5. **WGSL and Rust are close**: Many patterns translate directly, focus on the
+   differences (field access, constructors)
 
 ### Follow-up Opportunities
 
@@ -281,6 +335,9 @@ While this story is complete, several enhancement opportunities exist:
 1. **GUP-064**: Advanced Type System Support - custom structs, textures, arrays
 2. **Loop support**: Add for/while loop translation for complex calculations
 3. **Pattern matching**: Translate match expressions to WGSL switch statements
-4. **Compile-time WGSL validation**: Integrate naga to validate during macro expansion
-5. **WGSL optimization**: Dead code elimination, constant folding in generated code
-6. **Better error spans**: Attach errors to specific expression spans for IDE integration
+4. **Compile-time WGSL validation**: Integrate naga to validate during macro
+   expansion
+5. **WGSL optimization**: Dead code elimination, constant folding in generated
+   code
+6. **Better error spans**: Attach errors to specific expression spans for IDE
+   integration

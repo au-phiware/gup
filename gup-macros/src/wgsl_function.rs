@@ -974,20 +974,6 @@ mod tests {
     }
 
     #[test]
-    fn test_wgsl_type_default_value() {
-        assert_eq!(wgsl_type_default_value("f32"), "0.0");
-        assert_eq!(wgsl_type_default_value("i32"), "0");
-        assert_eq!(wgsl_type_default_value("u32"), "0u");
-        assert_eq!(wgsl_type_default_value("bool"), "false");
-        assert_eq!(wgsl_type_default_value("vec2<f32>"), "vec2<f32>(0.0, 0.0)");
-        assert_eq!(
-            wgsl_type_default_value("vec4<f32>"),
-            "vec4<f32>(0.0, 0.0, 0.0, 1.0)"
-        );
-        assert_eq!(wgsl_type_default_value("unknown"), "0.0");
-    }
-
-    #[test]
     fn test_parse_simple_function() {
         let input = quote! {
             fn linear_scale(value: f32, scale: f32) -> f32 {

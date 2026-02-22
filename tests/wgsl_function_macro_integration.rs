@@ -248,13 +248,19 @@ fn test_clamp_function(value: f32, min_val: f32, max_val: f32) -> f32 {
 #[tokio::test]
 async fn test_vector_constructor_translation() {
     let func = TestVecConstructor::new(2.0);
-    
+
     // Test that generated WGSL includes Vec2 constructor as vec2<f32>
     let wgsl = TestVecConstructor::wgsl_function();
     println!("Generated WGSL:\n{}", wgsl);
-    assert!(wgsl.contains("vec2<f32>"), "WGSL should contain vec2<f32> constructor");
-    assert!(wgsl.contains("uniforms.scale"), "WGSL should reference uniforms.scale");
-    
+    assert!(
+        wgsl.contains("vec2<f32>"),
+        "WGSL should contain vec2<f32> constructor"
+    );
+    assert!(
+        wgsl.contains("uniforms.scale"),
+        "WGSL should reference uniforms.scale"
+    );
+
     // Test uniform creation
     let uniforms = func.create_uniforms().unwrap();
     assert_eq!(uniforms.scale, 2.0);
@@ -263,13 +269,19 @@ async fn test_vector_constructor_translation() {
 #[tokio::test]
 async fn test_wgsl_builtin_functions() {
     let _func = TestClampFunction::new(0.0, 1.0);
-    
+
     // Test that clamp function is preserved in WGSL
     let wgsl = TestClampFunction::wgsl_function();
     assert!(wgsl.contains("clamp"), "WGSL should contain clamp function");
-    assert!(wgsl.contains("uniforms.min_val"), "WGSL should reference uniforms.min_val");
-    assert!(wgsl.contains("uniforms.max_val"), "WGSL should reference uniforms.max_val");
-    
+    assert!(
+        wgsl.contains("uniforms.min_val"),
+        "WGSL should reference uniforms.min_val"
+    );
+    assert!(
+        wgsl.contains("uniforms.max_val"),
+        "WGSL should reference uniforms.max_val"
+    );
+
     // Verify GPU compilation
     let context = match GupContext::headless().await {
         Ok(ctx) => ctx,
@@ -278,7 +290,7 @@ async fn test_wgsl_builtin_functions() {
             return;
         }
     };
-    
+
     let full_shader = format!(
         r#"
         {}
@@ -295,13 +307,13 @@ async fn test_wgsl_builtin_functions() {
         "#,
         wgsl
     );
-    
+
     let shader_result = context
         .device
         .create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("test_clamp_wgsl"),
             source: wgpu::ShaderSource::Wgsl(full_shader.into()),
         });
-    
+
     drop(shader_result);
 }

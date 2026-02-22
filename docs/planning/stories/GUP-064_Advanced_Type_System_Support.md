@@ -1,6 +1,7 @@
 # GUP-064: Advanced Type System Support for WGSL Macros
 
-**Status**: Not Started  
+**Status**: 🚧 In Progress  
+**Started**: 2025-01-27  
 **Priority**: Low  
 **Estimated Effort**: 2-3 days  
 **Prerequisites**: GUP-006 (Complete)

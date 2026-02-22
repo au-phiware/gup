@@ -851,7 +851,10 @@ mod tests {
         // Use RAII guard to temporarily change blend mode
         {
             let guard = context.with_blend_mode(BlendMode::AlphaBlending).unwrap();
-            assert_eq!(guard.context().current_blend_mode(), BlendMode::AlphaBlending);
+            assert_eq!(
+                guard.context().current_blend_mode(),
+                BlendMode::AlphaBlending
+            );
             // Guard drops here
         }
 
@@ -896,7 +899,10 @@ mod tests {
 
         {
             let mut guard = context.with_blend_mode(BlendMode::AlphaBlending).unwrap();
-            assert_eq!(guard.context().current_blend_mode(), BlendMode::AlphaBlending);
+            assert_eq!(
+                guard.context().current_blend_mode(),
+                BlendMode::AlphaBlending
+            );
 
             // Manually change blend mode while guard is active
             guard
@@ -921,7 +927,10 @@ mod tests {
         // Test that guard restores state even if we panic
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let guard = context.with_blend_mode(BlendMode::AlphaBlending).unwrap();
-            assert_eq!(guard.context().current_blend_mode(), BlendMode::AlphaBlending);
+            assert_eq!(
+                guard.context().current_blend_mode(),
+                BlendMode::AlphaBlending
+            );
 
             // Simulate panic by using panic! (but we catch it)
             if true {
@@ -946,7 +955,10 @@ mod tests {
         // First guard
         {
             let guard = context.with_blend_mode(BlendMode::AlphaBlending).unwrap();
-            assert_eq!(guard.context().current_blend_mode(), BlendMode::AlphaBlending);
+            assert_eq!(
+                guard.context().current_blend_mode(),
+                BlendMode::AlphaBlending
+            );
         }
         assert_eq!(context.current_blend_mode(), BlendMode::None);
 

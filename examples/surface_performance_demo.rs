@@ -134,7 +134,9 @@ impl ApplicationHandler for MultiWindowApp {
                 self.frame_count += 1;
 
                 // Print stats every 60 frames
-                if self.frame_count.is_multiple_of(60) && self.last_stats_print.elapsed().as_secs() >= 1 {
+                if self.frame_count.is_multiple_of(60)
+                    && self.last_stats_print.elapsed().as_secs() >= 1
+                {
                     self.print_statistics();
                     self.last_stats_print = Instant::now();
                 }
