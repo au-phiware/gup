@@ -46,12 +46,19 @@ use std::collections::HashMap;
 use wgpu::{Device, Queue};
 
 pub mod buffer_inspector;
+pub mod ci_performance;
 pub mod layout_validator;
 pub mod memory_profiler;
 pub mod shader_profiler;
 pub mod visualization;
 
 pub use buffer_inspector::*;
+// Export CI performance types explicitly to avoid conflicts
+pub use ci_performance::{
+    BaselineComparison, BaselineStorage, CiConfig, CiPerformanceRunner, PerformanceReport,
+    PerformanceTest, PerformanceTestSuite, RegressionSeverity as CiRegressionSeverity,
+    TestResult,
+};
 pub use layout_validator::*;
 pub use memory_profiler::*;
 pub use shader_profiler::*;
