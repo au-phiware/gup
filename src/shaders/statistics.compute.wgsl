@@ -22,35 +22,27 @@ struct StatisticsResult {
 var<workgroup> shared_sum: array<f32, 256>;
 var<workgroup> shared_min: array<f32, 256>;
 var<workgroup> shared_max: array<f32, 256>;
-var<workgroup> shared_count: array<u32, 256>;
+var<workgroup> shared_count: array<f32, 256>;
 
 // Workgroup size of 256 for maximum GPU compatibility
 @compute @workgroup_size(256)
 fn compute_basic_stats(@builtin(global_invocation_id) global_id: vec3<u32>, @builtin(local_invocation_id) local_id: vec3<u32>) {
     let thread_id = local_id.x;
     let global_index = global_id.x;
-    let data_size = arrayLength(&data);
+    let data_size = result.count; // Use pre-initialized count from result buffer
 
     // Initialize shared memory for this thread
-    var my_count: u32 = 0u;
     if (global_index < data_size) {
         let value = data[global_index];
         shared_sum[thread_id] = value;
         shared_min[thread_id] = value;
         shared_max[thread_id] = value;
-        shared_count[thread_id] = 1u;
-        my_count = 1u;
+        shared_count[thread_id] = 1.0;
     } else {
         shared_sum[thread_id] = 0.0;
-        shared_min[thread_id] = 3.40282e+38; // f32::MAX
-        shared_max[thread_id] = -3.40282e+38; // f32::MIN
-        shared_count[thread_id] = 0u;
-        my_count = 0u;
-    }
-    
-    // Debug: write initial my_count for thread 0 before reduction
-    if (thread_id == 0u && global_id.x == 0u) {
-        result.count = 99u;  // Hardcoded unique value
+        shared_min[thread_id] = 1e38; // Large value for min
+        shared_max[thread_id] = -1e38; // Large negative value for max
+        shared_count[thread_id] = 0.0;
     }
     
     workgroupBarrier();
@@ -67,15 +59,16 @@ fn compute_basic_stats(@builtin(global_invocation_id) global_id: vec3<u32>, @bui
         workgroupBarrier();
     }
 
-    // First thread writes results (no atomics needed for single workgroup)
+    // First thread writes results (single workgroup only - AC3 will add multi-workgroup)
     if (thread_id == 0u) {
-        result.count = shared_count[0];  // Write the actual reduced count
+        let final_count = u32(shared_count[0]);
+        result.count = final_count;
         result.sum = shared_sum[0];
         result.min = shared_min[0];
         result.max = shared_max[0];
         
-        if (shared_count[0] > 0u) {
-            result.mean = result.sum / f32(shared_count[0]);
+        if (final_count > 0u) {
+            result.mean = result.sum / f32(final_count);
         }
     }
 }
@@ -85,7 +78,7 @@ fn compute_basic_stats(@builtin(global_invocation_id) global_id: vec3<u32>, @bui
 fn compute_variance(@builtin(global_invocation_id) global_id: vec3<u32>, @builtin(local_invocation_id) local_id: vec3<u32>) {
     let thread_id = local_id.x;
     let global_index = global_id.x;
-    let data_size = arrayLength(&data);
+    let data_size = result.count; // Use count from result buffer
 
     var local_squared_diff: f32 = 0.0;
 
@@ -107,7 +100,7 @@ fn compute_variance(@builtin(global_invocation_id) global_id: vec3<u32>, @builti
         workgroupBarrier();
     }
 
-    // First thread writes result
+    // First thread writes result (single workgroup only)
     if (thread_id == 0u && result.count > 0u) {
         result.variance = shared_sum[0] / f32(result.count);
         result.std_dev = sqrt(result.variance);

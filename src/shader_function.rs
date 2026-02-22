@@ -3539,6 +3539,8 @@ pub struct StatisticsResult {
 pub struct StatisticsCompute {
     /// Compute pipeline for basic statistics (mean, min, max, std dev)
     basic_stats_pipeline: Option<wgpu::ComputePipeline>,
+    /// Compute pipeline for variance (second pass)
+    variance_pipeline: Option<wgpu::ComputePipeline>,
     /// Compute pipeline for median and percentiles
     percentile_pipeline: Option<wgpu::ComputePipeline>,
     /// Input data buffer
@@ -3560,6 +3562,7 @@ impl StatisticsCompute {
         max_elements: usize,
     ) -> GupResult<Self> {
         let basic_stats_pipeline = Self::create_basic_stats_pipeline(device).await?;
+        let variance_pipeline = Self::create_variance_pipeline(device).await?;
         let percentile_pipeline = Self::create_percentile_pipeline(device).await?;
 
         let data_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -3580,6 +3583,7 @@ impl StatisticsCompute {
 
         Ok(Self {
             basic_stats_pipeline: Some(basic_stats_pipeline),
+            variance_pipeline: Some(variance_pipeline),
             percentile_pipeline: Some(percentile_pipeline),
             data_buffer: Some(data_buffer),
             result_buffer: Some(result_buffer),
@@ -3605,6 +3609,27 @@ impl StatisticsCompute {
             layout: None,
             module: &shader_module,
             entry_point: Some("compute_basic_stats"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            cache: None,
+        });
+
+        Ok(pipeline)
+    }
+
+    /// Create compute pipeline for variance calculation
+    async fn create_variance_pipeline(device: &wgpu::Device) -> GupResult<wgpu::ComputePipeline> {
+        let shader_source = include_str!("shaders/statistics.compute.wgsl");
+
+        let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("statistics_compute"),
+            source: wgpu::ShaderSource::Wgsl(shader_source.into()),
+        });
+
+        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("variance_pipeline"),
+            layout: None,
+            module: &shader_module,
+            entry_point: Some("compute_variance"),
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             cache: None,
         });
@@ -3672,9 +3697,10 @@ impl StatisticsCompute {
         // Upload data to GPU
         queue.write_buffer(data_buffer, 0, bytemuck::cast_slice(data));
 
-        // Clear result buffer before computation
-        let zero_result = StatisticsResult {
-            count: 0,
+        // Initialize result buffer with actual data count
+        // IMPORTANT: Set count to actual data size so shader can use it via result.count
+        let init_result = StatisticsResult {
+            count: data.len() as u32,
             sum: 0.0,
             min: 0.0,
             max: 0.0,
@@ -3683,10 +3709,7 @@ impl StatisticsCompute {
             std_dev: 0.0,
             _padding: 0,
         };
-        queue.write_buffer(result_buffer, 0, bytemuck::bytes_of(&zero_result));
-
-        // Debug: verify buffer was cleared
-        eprintln!("Debug: Cleared result buffer with {:?}", zero_result);
+        queue.write_buffer(result_buffer, 0, bytemuck::bytes_of(&init_result));
 
         // Create bind group
         let pipeline = self.basic_stats_pipeline.as_ref().ok_or_else(|| {
@@ -3710,7 +3733,7 @@ impl StatisticsCompute {
             ],
         });
 
-        // Execute compute pass
+        // Execute compute pass for basic stats
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("statistics_encoder"),
         });
@@ -3725,12 +3748,49 @@ impl StatisticsCompute {
             // Dispatch with workgroups covering all data
             let workgroup_size = 256;
             let num_workgroups = data.len().div_ceil(workgroup_size) as u32;
-            eprintln!(
-                "Debug dispatch: data.len()={}, workgroup_size={}, num_workgroups={}",
-                data.len(),
-                workgroup_size,
-                num_workgroups
-            );
+            compute_pass.dispatch_workgroups(num_workgroups, 1, 1);
+        }
+
+        queue.submit(Some(encoder.finish()));
+        device.poll(wgpu::PollType::Wait);
+
+        // Second pass: compute variance (requires mean from first pass)
+        let variance_pipeline = self.variance_pipeline.as_ref().ok_or_else(|| {
+            GupError::gpu_initialization_failed(
+                "StatisticsCompute variance pipeline not initialized".to_string(),
+            )
+        })?;
+
+        // Create bind group for variance pipeline
+        let variance_bind_group_layout = variance_pipeline.get_bind_group_layout(0);
+        let variance_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("variance_bind_group"),
+            layout: &variance_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: data_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: result_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("variance_encoder"),
+        });
+
+        {
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("variance_pass"),
+                timestamp_writes: None,
+            });
+            compute_pass.set_pipeline(variance_pipeline);
+            compute_pass.set_bind_group(0, &variance_bind_group, &[]);
+            let workgroup_size = 256;
+            let num_workgroups = data.len().div_ceil(workgroup_size) as u32;
             compute_pass.dispatch_workgroups(num_workgroups, 1, 1);
         }
 
@@ -3777,16 +3837,6 @@ impl StatisticsCompute {
             })?;
 
         let data = buffer_slice.get_mapped_range();
-
-        // Debug: print raw bytes
-        if data.len() >= 8 {
-            let count_bytes = &data[0..4];
-            let sum_bytes = &data[4..8];
-            eprintln!(
-                "Debug raw buffer: count bytes = {:?}, sum bytes = {:?}",
-                count_bytes, sum_bytes
-            );
-        }
 
         let result: StatisticsResult =
             *bytemuck::from_bytes(&data[..std::mem::size_of::<StatisticsResult>()]);

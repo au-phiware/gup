@@ -69,20 +69,6 @@ async fn test_statistics_compute_basic_stats_small_dataset() {
         .expect("Failed to compute GPU stats");
 
     // Verify results match CPU
-    println!(
-        "Debug: result.count={}, expected={}",
-        result.count,
-        data.len()
-    );
-    println!(
-        "Debug: result.sum={}, result.mean={}",
-        result.sum, result.mean
-    );
-    println!(
-        "Debug: result.min={}, result.max={}",
-        result.min, result.max
-    );
-
     assert_eq!(result.count, data.len() as u32);
     assert!(
         (result.mean - mean_cpu).abs() < 0.001,
