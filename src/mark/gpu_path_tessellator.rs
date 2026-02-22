@@ -8,7 +8,6 @@
 
 use crate::error::{GupError, GupResult};
 use crate::mark::path::PathCommand;
-use crate::Vec2;
 use std::sync::Arc;
 use wgpu;
 use wgpu::util::DeviceExt;
@@ -46,8 +45,8 @@ struct TessellationUniforms {
     command_count: u32,
     tolerance: f32,
     max_vertices: u32,
-    vertex_count: u32,  // Will be atomic in shader
-    index_count: u32,   // Will be atomic in shader
+    vertex_count: u32, // Will be atomic in shader
+    index_count: u32,  // Will be atomic in shader
     _padding: [u32; 3],
 }
 
@@ -171,11 +170,13 @@ impl GpuPathTessellator {
         let max_indices = max_vertices * 3;
 
         // Create GPU buffers
-        let command_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Path Commands Buffer"),
-            contents: bytemuck::cast_slice(&gpu_commands),
-            usage: wgpu::BufferUsages::STORAGE,
-        });
+        let command_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Path Commands Buffer"),
+                contents: bytemuck::cast_slice(&gpu_commands),
+                usage: wgpu::BufferUsages::STORAGE,
+            });
 
         let vertex_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Path Vertices Buffer"),
@@ -200,11 +201,13 @@ impl GpuPathTessellator {
             _padding: [0; 3],
         };
 
-        let uniform_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Tessellation Uniforms"),
-            contents: bytemuck::bytes_of(&uniforms),
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
-        });
+        let uniform_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Tessellation Uniforms"),
+                contents: bytemuck::bytes_of(&uniforms),
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            });
 
         // Create bind group
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -248,7 +251,7 @@ impl GpuPathTessellator {
 
             // Dispatch one workgroup per command
             let workgroup_size = 64;
-            let num_workgroups = (gpu_commands.len() as u32 + workgroup_size - 1) / workgroup_size;
+            let num_workgroups = (gpu_commands.len() as u32).div_ceil(workgroup_size);
             compute_pass.dispatch_workgroups(num_workgroups, 1, 1);
         }
 
@@ -344,12 +347,8 @@ impl GpuPathTessellator {
 
         receiver
             .await
-            .map_err(|e| {
-                GupError::webgpu_error(format!("Failed to map buffer: {e}"))
-            })?
-            .map_err(|e| {
-                GupError::webgpu_error(format!("Buffer map error: {e:?}"))
-            })?;
+            .map_err(|e| GupError::webgpu_error(format!("Failed to map buffer: {e}")))?
+            .map_err(|e| GupError::webgpu_error(format!("Buffer map error: {e:?}")))?;
 
         let data = buffer_slice.get_mapped_range();
         let uniforms: TessellationUniforms =
@@ -365,6 +364,7 @@ impl GpuPathTessellator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Vec2;
 
     fn create_test_context() -> Option<(Arc<wgpu::Device>, Arc<wgpu::Queue>)> {
         pollster::block_on(async {
@@ -422,7 +422,7 @@ mod tests {
 
         println!("Tessellating {} commands...", commands.len());
         let result = tessellator.tessellate(&commands, 1.0).await;
-        
+
         if let Err(ref e) = result {
             eprintln!("Tessellation error: {:?}", e);
         }
@@ -433,7 +433,7 @@ mod tests {
             "Triangle tessellated: {} vertices, {} indices",
             vertex_count, index_count
         );
-        
+
         assert!(vertex_count > 0, "Expected at least some vertices");
     }
 
@@ -458,7 +458,10 @@ mod tests {
         assert!(result.is_ok());
 
         let (_vertex_buffer, _index_buffer, vertex_count, _index_count) = result.unwrap();
-        assert!(vertex_count >= 3, "Quadratic curve should have at least 3 vertices");
+        assert!(
+            vertex_count >= 3,
+            "Quadratic curve should have at least 3 vertices"
+        );
         println!("Quadratic curve tessellated: {} vertices", vertex_count);
     }
 }

@@ -1,6 +1,6 @@
 # GUP-140: Storage Buffer Keyframe Animations
 
-**Status**: 💡 New
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
