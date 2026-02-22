@@ -3,3 +3,4 @@
 /.direnv/
 mprocs.log
 *.local.*
+performance_report.*
