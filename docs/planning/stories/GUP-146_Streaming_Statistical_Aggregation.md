@@ -11,7 +11,9 @@
 
 ## Context
 
-GUP-139 statistical functions are limited by GPU memory size. For datasets larger than GPU memory (billions of elements), streaming/chunked aggregation is needed to process data in batches while maintaining statistical correctness.
+GUP-139 statistical functions are limited by GPU memory size. For datasets
+larger than GPU memory (billions of elements), streaming/chunked aggregation is
+needed to process data in batches while maintaining statistical correctness.
 
 ## User Story
 
@@ -71,9 +73,11 @@ GUP-139 statistical functions are limited by GPU memory size. For datasets large
 
 ## Risk Assessment
 
-**Medium Risk**: Streaming variance/std_dev requires careful algorithm selection (Welford's algorithm).
+**Medium Risk**: Streaming variance/std_dev requires careful algorithm selection
+(Welford's algorithm).
 
-**Mitigation**: Use well-established online algorithms with proven numerical stability.
+**Mitigation**: Use well-established online algorithms with proven numerical
+stability.
 
 ## Definition of Done
 
@@ -87,4 +91,5 @@ GUP-139 statistical functions are limited by GPU memory size. For datasets large
 
 ---
 
-_Identified during GUP-139 implementation to handle datasets larger than GPU memory._
+_Identified during GUP-139 implementation to handle datasets larger than GPU
+memory._

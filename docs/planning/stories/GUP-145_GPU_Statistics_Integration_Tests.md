@@ -1,6 +1,6 @@
 # GUP-145: GPU Statistics Integration Tests
 
-**Status**: 💡 New
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
@@ -11,7 +11,10 @@
 
 ## Context
 
-GUP-139 implemented GPU statistical compute infrastructure but included primarily CPU-side tests. Full integration tests that execute compute shaders on GPU and verify correctness are needed to ensure GPU implementation works across different GPU vendors and drivers.
+GUP-139 implemented GPU statistical compute infrastructure but included
+primarily CPU-side tests. Full integration tests that execute compute shaders on
+GPU and verify correctness are needed to ensure GPU implementation works across
+different GPU vendors and drivers.
 
 ## User Story
 

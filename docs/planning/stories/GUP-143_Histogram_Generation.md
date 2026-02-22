@@ -11,7 +11,10 @@
 
 ## Context
 
-GUP-139 implemented basic statistical aggregations but deferred histogram generation. Histograms are essential for distribution analysis and many statistical visualizations like bar charts of distributions, density plots, and frequency analysis.
+GUP-139 implemented basic statistical aggregations but deferred histogram
+generation. Histograms are essential for distribution analysis and many
+statistical visualizations like bar charts of distributions, density plots, and
+frequency analysis.
 
 ## User Story
 
@@ -71,9 +74,11 @@ GUP-139 implemented basic statistical aggregations but deferred histogram genera
 
 ## Risk Assessment
 
-**Medium Risk**: Atomic operations on GPUs can have contention issues with many threads writing to same bins.
+**Medium Risk**: Atomic operations on GPUs can have contention issues with many
+threads writing to same bins.
 
-**Mitigation**: Use workgroup-local histograms with final reduction to minimize global atomic contention.
+**Mitigation**: Use workgroup-local histograms with final reduction to minimize
+global atomic contention.
 
 ## Definition of Done
 

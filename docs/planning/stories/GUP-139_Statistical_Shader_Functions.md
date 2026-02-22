@@ -90,11 +90,12 @@ visualizations with large datasets
 
 ### Design Decisions
 
-- **CPU fallback methods**: All statistical functions provide CPU-side computation
-  for small datasets or when GPU is unavailable
-- **Two-stage reduction**: GPU aggregation uses local (workgroup) + global reduction
-  for optimal performance
-- **Parallel reduction**: Workgroup size of 256 threads for maximum GPU compatibility
+- **CPU fallback methods**: All statistical functions provide CPU-side
+  computation for small datasets or when GPU is unavailable
+- **Two-stage reduction**: GPU aggregation uses local (workgroup) + global
+  reduction for optimal performance
+- **Parallel reduction**: Workgroup size of 256 threads for maximum GPU
+  compatibility
 - **Type safety**: All GPU buffers use bytemuck for safe memory layout
 
 ## Definition of Done
@@ -118,82 +119,124 @@ _Identified during GUP-033 implementation as AC2 follow-up._
 
 #### GPU Compute Shader Architecture
 
-- **Challenge**: Implementing statistical aggregations requires different patterns than render shaders
-- **Solution**: Two-stage parallel reduction (workgroup-local + global) for efficient aggregation
-- **Pattern**: Shared memory within workgroups for local reductions, atomic operations for global aggregation
-- **Future**: This pattern is reusable for any aggregation operation (sum, product, histogram bins)
+- **Challenge**: Implementing statistical aggregations requires different
+  patterns than render shaders
+- **Solution**: Two-stage parallel reduction (workgroup-local + global) for
+  efficient aggregation
+- **Pattern**: Shared memory within workgroups for local reductions, atomic
+  operations for global aggregation
+- **Future**: This pattern is reusable for any aggregation operation (sum,
+  product, histogram bins)
 
 #### Workgroup Size Optimization
 
 - **Challenge**: Choosing optimal workgroup size for statistical compute shaders
-- **Solution**: Used 256 threads per workgroup - standard for GPU compatibility across vendors
-- **Reasoning**: Powers of 2 enable efficient parallel reduction, 256 is maximum common denominator
-- **Trade-off**: Larger workgroups (512, 1024) may be faster on some GPUs but reduce portability
+- **Solution**: Used 256 threads per workgroup - standard for GPU compatibility
+  across vendors
+- **Reasoning**: Powers of 2 enable efficient parallel reduction, 256 is maximum
+  common denominator
+- **Trade-off**: Larger workgroups (512, 1024) may be faster on some GPUs but
+  reduce portability
 
 #### Two-Pass Statistics (Mean + Variance)
 
 - **Challenge**: Computing variance requires mean first (two-pass algorithm)
-- **Solution**: Separate compute dispatches for basic stats (pass 1) and variance (pass 2)
-- **Pattern**: First pass computes sum/count/min/max, second pass uses mean for variance
-- **Future**: Consider Welford's online algorithm for single-pass variance in future optimization
+- **Solution**: Separate compute dispatches for basic stats (pass 1) and
+  variance (pass 2)
+- **Pattern**: First pass computes sum/count/min/max, second pass uses mean for
+  variance
+- **Future**: Consider Welford's online algorithm for single-pass variance in
+  future optimization
 
 #### CPU Fallback Strategy
 
-- **Challenge**: Not all environments have GPU available, need fallback for small datasets
-- **Solution**: Every statistical function has `compute_cpu()` method for CPU-side computation
+- **Challenge**: Not all environments have GPU available, need fallback for
+  small datasets
+- **Solution**: Every statistical function has `compute_cpu()` method for
+  CPU-side computation
 - **Pattern**: GPU infrastructure is optional, CPU methods always work
-- **Future**: Automatic selection based on dataset size threshold (e.g., <1000 elements use CPU)
+- **Future**: Automatic selection based on dataset size threshold (e.g., <1000
+  elements use CPU)
 
 ### Architectural Decisions
 
 #### Statistical Functions as Standalone Types (Not ComposableShaderFunction)
 
-- **Decision**: Implemented as standalone types (`Mean`, `StandardDeviation`) rather than `ComposableShaderFunction`
-- **Reasoning**: Statistical aggregations operate on full datasets, not per-element transformations
-- **Trade-off**: Can't compose with shader functions, but clearer API for aggregation operations
-- **Future**: Could add `AggregatedShaderFunction` trait for composing aggregations with transformations
+- **Decision**: Implemented as standalone types (`Mean`, `StandardDeviation`)
+  rather than `ComposableShaderFunction`
+- **Reasoning**: Statistical aggregations operate on full datasets, not
+  per-element transformations
+- **Trade-off**: Can't compose with shader functions, but clearer API for
+  aggregation operations
+- **Future**: Could add `AggregatedShaderFunction` trait for composing
+  aggregations with transformations
 
 #### Compute Shaders vs Vertex/Fragment Shaders
 
-- **Decision**: Use dedicated compute shaders rather than hijacking render pipeline
-- **Reasoning**: Compute shaders are designed for parallel processing without graphics output
-- **Trade-off**: Separate pipeline management, but much clearer semantics and better performance
+- **Decision**: Use dedicated compute shaders rather than hijacking render
+  pipeline
+- **Reasoning**: Compute shaders are designed for parallel processing without
+  graphics output
+- **Trade-off**: Separate pipeline management, but much clearer semantics and
+  better performance
 - **Future**: All aggregation and data processing should use compute shaders
 
 #### Deferred Histogram and KDE Implementation
 
-- **Decision**: Deferred histogram generation and kernel density estimation to follow-up stories
-- **Reasoning**: These require more complex algorithms (binning, kernel functions) beyond basic aggregation
-- **Trade-off**: Story scope remains manageable, but visualizations needing histograms must wait
-- **Future**: GUP-143 (Histogram Generation), GUP-144 (Kernel Density Estimation) identified as follow-ups
+- **Decision**: Deferred histogram generation and kernel density estimation to
+  follow-up stories
+- **Reasoning**: These require more complex algorithms (binning, kernel
+  functions) beyond basic aggregation
+- **Trade-off**: Story scope remains manageable, but visualizations needing
+  histograms must wait
+- **Future**: GUP-143 (Histogram Generation), GUP-144 (Kernel Density
+  Estimation) identified as follow-ups
 
 ### Development Workflow Insights
 
-- **GPU Test Infrastructure**: Existing GPU test patterns from GUP-012 (Interaction System) were directly applicable
-- **Buffer Management**: `bytemuck::Pod` trait makes GPU buffer handling type-safe and straightforward
-- **Async Complexity**: GPU compute requires async/await; kept async surface minimal (only `StatisticsCompute::compute_basic_stats`)
-- **Error Handling**: Used `gpu_initialization_failed()` for GPU resource errors - standard pattern from GUP-017
-- **Test Coverage**: 15 tests (5 unit + 10 integration) provide comprehensive coverage including edge cases
+- **GPU Test Infrastructure**: Existing GPU test patterns from GUP-012
+  (Interaction System) were directly applicable
+- **Buffer Management**: `bytemuck::Pod` trait makes GPU buffer handling
+  type-safe and straightforward
+- **Async Complexity**: GPU compute requires async/await; kept async surface
+  minimal (only `StatisticsCompute::compute_basic_stats`)
+- **Error Handling**: Used `gpu_initialization_failed()` for GPU resource
+  errors - standard pattern from GUP-017
+- **Test Coverage**: 15 tests (5 unit + 10 integration) provide comprehensive
+  coverage including edge cases
 
 ### Performance Characteristics
 
-- **CPU Baseline**: 1M value mean computation <100ms on CPU (test requirement met)
-- **GPU Advantage**: GPU parallel reduction should be 10-100x faster for 1M+ element datasets
+- **CPU Baseline**: 1M value mean computation <100ms on CPU (test requirement
+  met)
+- **GPU Advantage**: GPU parallel reduction should be 10-100x faster for 1M+
+  element datasets
 - **Memory Bandwidth**: GPU aggregation is memory-bound, not compute-bound
-- **Optimization Opportunity**: Streaming aggregation (process data in chunks) for datasets larger than GPU memory
+- **Optimization Opportunity**: Streaming aggregation (process data in chunks)
+  for datasets larger than GPU memory
 
 ### Follow-up Stories
 
-1. **GUP-143: Histogram Generation** — GPU-parallel binning for histogram generation, essential for distribution plots
-2. **GUP-144: Kernel Density Estimation** — Gaussian KDE for smooth density plots, violin plots
-3. **GUP-145: GPU Statistics Integration Tests** — Dedicated async GPU tests verifying compute shader correctness
-4. **GUP-146: Streaming Statistical Aggregation** — Process arbitrarily large datasets via chunked aggregation
-5. **GUP-147: Box Plot Visualization** — Use statistical functions for interactive box plots
+1. **GUP-143: Histogram Generation** — GPU-parallel binning for histogram
+   generation, essential for distribution plots
+2. **GUP-144: Kernel Density Estimation** — Gaussian KDE for smooth density
+   plots, violin plots
+3. **GUP-145: GPU Statistics Integration Tests** — Dedicated async GPU tests
+   verifying compute shader correctness
+4. **GUP-146: Streaming Statistical Aggregation** — Process arbitrarily large
+   datasets via chunked aggregation
+5. **GUP-147: Box Plot Visualization** — Use statistical functions for
+   interactive box plots
 
 ### Lessons for Future Statistical Work
 
-1. **Start with CPU**: CPU implementations are valuable for testing, debugging, and small datasets
-2. **Parallel Reduction Pattern**: Well-understood, efficient, applies to most aggregations
-3. **Two-Pass is Acceptable**: Two-pass algorithms are fine when each pass is highly parallel
-4. **Atomic Operations**: Modern GPUs handle atomics well for final reduction stage
-5. **Type Safety**: `bytemuck::Pod` catches alignment bugs at compile time - invaluable for GPU work
+1. **Start with CPU**: CPU implementations are valuable for testing, debugging,
+   and small datasets
+2. **Parallel Reduction Pattern**: Well-understood, efficient, applies to most
+   aggregations
+3. **Two-Pass is Acceptable**: Two-pass algorithms are fine when each pass is
+   highly parallel
+4. **Atomic Operations**: Modern GPUs handle atomics well for final reduction
+   stage
+5. **Type Safety**: `bytemuck::Pod` catches alignment bugs at compile time -
+   invaluable for GPU work

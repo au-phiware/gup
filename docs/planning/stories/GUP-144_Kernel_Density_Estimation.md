@@ -11,13 +11,17 @@
 
 ## Context
 
-GUP-139 provided basic statistical aggregations, but kernel density estimation (KDE) is needed for smooth density plots, violin plots, and advanced distribution visualization. KDE provides a continuous probability density function from discrete samples.
+GUP-139 provided basic statistical aggregations, but kernel density estimation
+(KDE) is needed for smooth density plots, violin plots, and advanced
+distribution visualization. KDE provides a continuous probability density
+function from discrete samples.
 
 ## User Story
 
 **As a** data visualization developer  
 **I want** to compute kernel density estimates on the GPU  
-**So that** I can create smooth density plots and violin plots for large datasets
+**So that** I can create smooth density plots and violin plots for large
+datasets
 
 ## Acceptance Criteria
 
@@ -72,9 +76,11 @@ GUP-139 provided basic statistical aggregations, but kernel density estimation (
 
 ## Risk Assessment
 
-**High Risk**: KDE is computationally expensive - O(n×m) where n=samples, m=evaluation points.
+**High Risk**: KDE is computationally expensive - O(n×m) where n=samples,
+m=evaluation points.
 
-**Mitigation**: 
+**Mitigation**:
+
 1. Use GPU parallelism over evaluation points
 2. Consider approximations for very large datasets (binned KDE)
 3. Adaptive evaluation grid (finer where density is high)

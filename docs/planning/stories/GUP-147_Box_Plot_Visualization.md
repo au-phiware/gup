@@ -11,7 +11,9 @@
 
 ## Context
 
-GUP-139 provides the statistical foundation (min, max, quartiles) needed for box plots. Box plots are essential statistical visualizations showing distribution summary through five-number summary (min, Q1, median, Q3, max) plus outliers.
+GUP-139 provides the statistical foundation (min, max, quartiles) needed for box
+plots. Box plots are essential statistical visualizations showing distribution
+summary through five-number summary (min, Q1, median, Q3, max) plus outliers.
 
 ## User Story
 
@@ -75,7 +77,8 @@ GUP-139 provides the statistical foundation (min, max, quartiles) needed for box
 
 **Low Risk**: Building on proven statistical and rendering foundations.
 
-**Mitigation**: Reuse patterns from existing mark types and statistical functions.
+**Mitigation**: Reuse patterns from existing mark types and statistical
+functions.
 
 ## Definition of Done
 
@@ -91,4 +94,5 @@ GUP-139 provides the statistical foundation (min, max, quartiles) needed for box
 
 ---
 
-_Identified during GUP-139 implementation as statistical visualization use case._
+_Identified during GUP-139 implementation as statistical visualization use
+case._

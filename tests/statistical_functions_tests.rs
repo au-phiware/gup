@@ -93,7 +93,7 @@ fn test_percentile_quartiles() {
 fn test_statistics_compute_structure() {
     // This test just verifies the type exists and has the expected structure
     // Full GPU tests would require an async test framework
-    
+
     use std::mem;
     // Verify StatisticsCompute is defined
     let _size = mem::size_of::<StatisticsCompute>();
@@ -109,10 +109,7 @@ fn test_mean_performance() {
     let _result = mean.compute_cpu();
     let elapsed = start.elapsed();
 
-    println!(
-        "CPU mean of 1M values: {:?} (should be <10ms)",
-        elapsed
-    );
+    println!("CPU mean of 1M values: {:?} (should be <10ms)", elapsed);
     assert!(
         elapsed.as_millis() < 100,
         "Mean calculation took too long: {:?}",
@@ -123,9 +120,7 @@ fn test_mean_performance() {
 /// Integration test: compute multiple statistics on same dataset
 #[test]
 fn test_combined_statistics() {
-    let data: Vec<f32> = vec![
-        10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0,
-    ];
+    let data: Vec<f32> = vec![10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0];
 
     let mean = Mean::new(data.clone()).compute_cpu();
     let (min, max) = MinMax::new(data.clone()).compute_cpu();

@@ -3485,7 +3485,7 @@ impl StatisticsCompute {
             compute_pass.set_bind_group(0, &bind_group, &[]);
             // Dispatch with workgroups covering all data
             let workgroup_size = 256;
-            let num_workgroups = ((data.len() + workgroup_size - 1) / workgroup_size) as u32;
+            let num_workgroups = data.len().div_ceil(workgroup_size) as u32;
             compute_pass.dispatch_workgroups(num_workgroups, 1, 1);
         }
 
