@@ -320,17 +320,6 @@ macro_rules! mat3 {
 /// struct initialization.
 #[macro_export]
 macro_rules! mat4 {
-/// # Example
-/// ```rust,ignore
-/// let transform = mat4![
-///     1.0, 0.0, 0.0, 0.0,
-///     0.0, 1.0, 0.0, 0.0,
-///     0.0, 0.0, 1.0, 0.0,
-///     0.0, 0.0, 0.0, 1.0
-/// ];
-/// ```
-#[macro_export]
-macro_rules! mat4 {
     ($m00:expr, $m01:expr, $m02:expr, $m03:expr,
      $m10:expr, $m11:expr, $m12:expr, $m13:expr,
      $m20:expr, $m21:expr, $m22:expr, $m23:expr,
