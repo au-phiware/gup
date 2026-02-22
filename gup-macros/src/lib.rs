@@ -22,6 +22,7 @@ use syn::{Data, DeriveInput, Fields, parse_macro_input};
 
 mod mixable_derive;
 mod wgsl_function;
+mod wgsl_struct;
 
 use wgsl_function::WgslFunctionInfo;
 
@@ -206,6 +207,56 @@ pub fn derive_mixable(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
     match mixable_derive::generate_mixable_impl(&input) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
+}
+
+/// Derive macro for automatically implementing the `WgslStructType` trait.
+///
+/// This macro generates WGSL struct definitions from Rust structs with proper GPU
+/// alignment validation. It automatically maps Rust types to WGSL types and generates
+/// the complete struct definition string.
+///
+/// # Requirements
+///
+/// - Struct must have `#[repr(C)]` for GPU memory layout compatibility
+/// - Struct must have named fields (no tuple structs)
+/// - All field types must be WGSL-compatible or implement `WgslStructType`
+/// - Padding fields (starting with `_` or containing "padding") are automatically skipped
+///
+/// # Supported Types
+///
+/// - Scalar types: `f32`, `i32`, `u32`, `bool`
+/// - Vector types: `Vec2`, `Vec3`, `Vec4`
+/// - Matrix types: `Mat2`, `Mat3`, `Mat4`, `Mat2x3`, `Mat2x4`, `Mat3x2`, `Mat3x4`, `Mat4x2`, `Mat4x3`
+/// - Array types: `[T; N]` where T is a supported type
+/// - Custom types that implement `WgslStructType`
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use gup_macros::WgslStruct;
+///
+/// #[derive(WgslStruct, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+/// #[repr(C)]
+/// struct Material {
+///     albedo: Vec3,
+///     metallic: f32,
+///     roughness: f32,
+///     _padding: [f32; 3],  // Automatically skipped in WGSL
+/// }
+/// ```
+///
+/// This generates:
+/// - `WgslStructType` trait implementation with WGSL struct definition
+/// - `ShaderType` trait implementation for full integration
+/// - Proper size and alignment calculations
+#[proc_macro_derive(WgslStruct)]
+pub fn derive_wgsl_struct(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    match wgsl_struct::derive_wgsl_struct_impl(input) {
         Ok(tokens) => tokens.into(),
         Err(error) => error.to_compile_error().into(),
     }

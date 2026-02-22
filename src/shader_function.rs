@@ -421,6 +421,40 @@ pub trait FlexibleCompatibility: ShaderType {
     }
 }
 
+/// Trait for types that have WGSL struct definitions.
+///
+/// This trait is automatically implemented by the `#[derive(WgslStruct)]` macro
+/// and enables automatic generation of WGSL struct definitions from Rust types.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use gup_macros::WgslStruct;
+///
+/// #[derive(WgslStruct, Clone, Copy)]
+/// #[repr(C)]
+/// struct Material {
+///     albedo: Vec3,
+///     metallic: f32,
+///     roughness: f32,
+/// }
+///
+/// // The macro automatically implements WgslStructType:
+/// let wgsl = Material::wgsl_struct_definition();
+/// assert!(wgsl.contains("struct Material"));
+/// ```
+pub trait WgslStructType: ShaderType {
+    /// Returns the complete WGSL struct definition as a string.
+    ///
+    /// The definition includes the struct name and all fields with their types.
+    fn wgsl_struct_definition() -> &'static str;
+
+    /// Returns the struct name as it appears in WGSL.
+    ///
+    /// This is typically the same as the Rust struct name.
+    fn struct_name() -> &'static str;
+}
+
 // Blanket implementation for all ShaderType implementors
 impl<T: ShaderType> FlexibleCompatibility for T {}
 
