@@ -135,30 +135,30 @@ epic and status.
 
 ### Post GUP-003 Stories - Buffer System Enhancement (Stories 35+)
 
-| Story                                                       | Title                                 | Status         | Priority | Points |
-| ----------------------------------------------------------- | ------------------------------------- | -------------- | -------- | ------ |
-| [GUP-035](GUP-035_Advanced_Buffer_Download_System.md)       | Advanced Buffer Download System       | ✅ Complete    | Medium   | 5      |
-| [GUP-036](GUP-036_Buffer_Pool_Performance_Optimization.md)  | Buffer Pool Performance Optimization  | ✅ Complete    | Medium   | 3      |
+| Story                                                       | Title                                 | Status      | Priority | Points |
+| ----------------------------------------------------------- | ------------------------------------- | ----------- | -------- | ------ |
+| [GUP-035](GUP-035_Advanced_Buffer_Download_System.md)       | Advanced Buffer Download System       | ✅ Complete | Medium   | 5      |
+| [GUP-036](GUP-036_Buffer_Pool_Performance_Optimization.md)  | Buffer Pool Performance Optimization  | ✅ Complete | Medium   | 3      |
 | [GUP-037](GUP-037_Buffer_Validation_and_Debugging_Tools.md) | Buffer Validation and Debugging Tools | ✅ Complete | Low      | 4      |
 
 ### Post GUP-004 Stories - Context Enhancement (Stories 38+)
 
-| Story                                                   | Title                             | Status      | Priority | Points |
-| ------------------------------------------------------- | --------------------------------- | ----------- | -------- | ------ |
-| [GUP-038](GUP-038_Texture_Pool_Enhancement.md)          | Texture Pool Enhancement          | ✅ Complete | Medium   | 3      |
-| [GUP-039](GUP-039_Context_Window_Integration.md)        | Context Window Integration        | ✅ Complete | High     | 5      |
-| [GUP-046](GUP-046_Context_Performance_Profiling.md)     | Context Performance Profiling     | ✅ Complete | Medium   | 3      |
-| [GUP-047](GUP-047_Surface_Event_Integration.md)         | Surface Event Integration         | ✅ Complete | Medium   | 3      |
-| [GUP-048](GUP-048_Context_Error_Recovery.md)            | Context Error Recovery            | ✅ Complete | Medium   | 4      |
-| [GUP-149](GUP-149_Automatic_Device_Loss_Detection.md)   | Automatic Device Loss Detection   | 💡 New      | Low      | 2      |
-| [GUP-150](GUP-150_Recovery_Metrics_and_Analytics.md)    | Recovery Metrics and Analytics    | 💡 New      | Low      | 3      |
-| [GUP-151](GUP-151_Surface_Configuration_Caching.md)     | Surface Configuration Caching     | 💡 New      | Low      | 2      |
-| [GUP-152](GUP-152_Performance_Trend_Visualization.md)   | Performance Trend Visualization   | 💡 New      | Low      | 3      |
-| [GUP-153](GUP-153_Automated_Baseline_Recommendation.md) | Automated Baseline Recommendation | 💡 New      | Low      | 5      |
-| [GUP-154](GUP-154_Multi-Platform_CI_Testing.md)         | Multi-Platform CI Testing         | 💡 New      | Medium   | 8      |
-| [GUP-049](GUP-049_Surface_Performance_Optimization.md)  | Surface Performance Optimization  | ✅ Complete | Medium   | 5      |
-| [GUP-050](GUP-050_Visual_Blend_Mode_Validation.md)      | Visual Blend Mode Validation      | ✅ Complete | Low      | 3      |
-| [GUP-042](GUP-042_Cross_Platform_Surface_Features.md)   | Cross Platform Surface Features   | 💡 New      | Low      | 8      |
+| Story                                                   | Title                             | Status         | Priority | Points |
+| ------------------------------------------------------- | --------------------------------- | -------------- | -------- | ------ |
+| [GUP-038](GUP-038_Texture_Pool_Enhancement.md)          | Texture Pool Enhancement          | ✅ Complete    | Medium   | 3      |
+| [GUP-039](GUP-039_Context_Window_Integration.md)        | Context Window Integration        | ✅ Complete    | High     | 5      |
+| [GUP-046](GUP-046_Context_Performance_Profiling.md)     | Context Performance Profiling     | ✅ Complete    | Medium   | 3      |
+| [GUP-047](GUP-047_Surface_Event_Integration.md)         | Surface Event Integration         | ✅ Complete    | Medium   | 3      |
+| [GUP-048](GUP-048_Context_Error_Recovery.md)            | Context Error Recovery            | ✅ Complete    | Medium   | 4      |
+| [GUP-149](GUP-149_Automatic_Device_Loss_Detection.md)   | Automatic Device Loss Detection   | 💡 New         | Low      | 2      |
+| [GUP-150](GUP-150_Recovery_Metrics_and_Analytics.md)    | Recovery Metrics and Analytics    | 💡 New         | Low      | 3      |
+| [GUP-151](GUP-151_Surface_Configuration_Caching.md)     | Surface Configuration Caching     | 💡 New         | Low      | 2      |
+| [GUP-152](GUP-152_Performance_Trend_Visualization.md)   | Performance Trend Visualization   | 💡 New         | Low      | 3      |
+| [GUP-153](GUP-153_Automated_Baseline_Recommendation.md) | Automated Baseline Recommendation | 💡 New         | Low      | 5      |
+| [GUP-154](GUP-154_Multi-Platform_CI_Testing.md)         | Multi-Platform CI Testing         | 🚧 In Progress | Medium   | 8      |
+| [GUP-049](GUP-049_Surface_Performance_Optimization.md)  | Surface Performance Optimization  | ✅ Complete    | Medium   | 5      |
+| [GUP-050](GUP-050_Visual_Blend_Mode_Validation.md)      | Visual Blend Mode Validation      | ✅ Complete    | Low      | 3      |
+| [GUP-042](GUP-042_Cross_Platform_Surface_Features.md)   | Cross Platform Surface Features   | 💡 New         | Low      | 8      |
 
 ### Post GUP-027 Stories - Blend System Enhancement (Stories 43+)
 

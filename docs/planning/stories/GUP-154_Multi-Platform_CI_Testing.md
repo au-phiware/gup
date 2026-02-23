@@ -3,7 +3,8 @@
 **Priority**: Medium  
 **Complexity**: High  
 **Created**: 2025-02-22  
-**Status**: 💡 New  
+**Status**: 🚧 In Progress  
+**Started**: 2025-02-22  
 **Dependencies**: GUP-082 (Debug Tool Integration with CI/CD)
 
 ## Problem Statement
@@ -111,7 +112,7 @@ impl PlatformInfo {
 
 ### Baseline Organization
 
-```
+```text
 baselines/performance/
 ├── nvidia_rtx3080/
 │   ├── rendering/
@@ -148,17 +149,17 @@ baselines/performance/
 
 ### Costs and Alternatives
 
-**Option A: Self-hosted runners**
+#### Option A: Self-hosted runners
 
 - Pros: Full control, consistent hardware, no usage limits
 - Cons: Requires dedicated machines, maintenance overhead
 
-**Option B: Cloud GPU instances**
+#### Option B: Cloud GPU instances
 
 - Pros: No hardware management, flexible scaling
 - Cons: Usage costs, potential inconsistency across runs
 
-**Option C: Hybrid approach**
+#### Option C: Hybrid approach
 
 - Common platforms (NVIDIA) on cloud
 - Less common platforms (AMD, Intel) on self-hosted
