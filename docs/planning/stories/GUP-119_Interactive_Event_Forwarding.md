@@ -175,3 +175,95 @@ Successfully implemented event forwarding from the Web DOM overlay to enable GPU
 - ✅ 44x44px minimum touch target size via CSS
 - ✅ Zero performance overhead on event forwarding
 - ✅ Full test coverage for configuration options
+
+## Retrospective
+
+**Completed**: 2025-01-25
+
+### Key Technical Learnings
+
+#### Closure State Management in WASM
+
+- **Challenge**: Event handlers in web-sys require closures that can't capture mutable references to `self`
+- **Solution**: Used static handler methods that clone necessary state (callback, config, document)
+- **Pattern**: `Rc<RefCell<dyn FnMut>>` for the event callback allows mutable borrows at event time
+- **Trade-off**: Small memory overhead for cloned state, but eliminates lifetime complexity
+
+#### Coordinate System Mapping
+
+- **Challenge**: DOM events provide client coordinates, but visualization needs canvas-relative coordinates
+- **Solution**: Use `getBoundingClientRect()` to get canvas position and compute offset
+- **Pattern**: Cache canvas bounds per event (not across events) to handle dynamic canvas positioning
+- **Insight**: Canvas can move due to scroll, resize, or CSS changes - don't cache bounds globally
+
+#### Event Deduplication Strategy
+
+- **Challenge**: Both canvas and overlay can receive the same physical user interaction
+- **Solution**: Track last event timestamp and coordinates, reject events within 50ms and 1px
+- **Pattern**: Simple temporal+spatial threshold is more reliable than complex event tracking
+- **Limitation**: May miss legitimate rapid events at same position (rare in practice)
+
+### Architectural Decisions
+
+#### Event Forwarding Callback Pattern
+
+- **Decision**: Use `Rc<RefCell<dyn FnMut(DomInteractionEvent)>>` for the callback
+- **Reasoning**: 
+  - Allows mutable state capture in visualization handlers
+  - `Rc` enables cloning into closures
+  - `RefCell` provides interior mutability for runtime borrow checking
+- **Trade-off**: Runtime borrow checking vs compile-time safety
+- **Future**: Consider `Rc<Cell<Option<Box<dyn FnMut>>>>` for single-threaded optimization
+
+#### Separate Touch and Pointer Handlers
+
+- **Decision**: Implement both touch and pointer event handlers despite overlap
+- **Reasoning**:
+  - Some browsers/devices only support one or the other
+  - Touch events provide multi-touch details not in pointer events
+  - Pointer events provide hover state not in touch events
+- **Trade-off**: More code vs better compatibility
+- **Future**: May consolidate to pointer events only when browser support matures
+
+#### Configuration-Driven Behavior
+
+- **Decision**: Make forwarding and deduplication configurable via `DomOverlayConfig`
+- **Reasoning**:
+  - Allows testing without interference
+  - Supports custom integration patterns
+  - Enables progressive enhancement
+- **Trade-off**: More API surface vs flexibility
+- **Future**: Consider preset configurations (e.g., `DomOverlayConfig::standard()`, `::testing()`)
+
+### Development Workflow Insights
+
+#### Testing Web-Specific Code
+
+- Testing WASM-only code is challenging without browser environment
+- Used minimal native placeholder tests to maintain test structure
+- Real testing requires wasm-bindgen-test with headless browser
+- Consider adding integration tests that run in actual browser for future stories
+
+#### Event Handler Lifetime Management
+
+- web-sys closures must be stored or they're dropped immediately
+- Used `Vec<Closure<dyn FnMut>>` to keep handlers alive
+- cleanup() method ensures proper removal on drop
+- This pattern should be documented in CLAUDE.md for future web work
+
+#### Coordinate Precision
+
+- Canvas position changes frequently (scroll, resize, CSS animations)
+- Avoid caching canvas bounds - compute per event
+- 1px threshold for deduplication is appropriate for touch/pointer accuracy
+- Future: Consider sub-pixel precision for pen input devices
+
+### Follow-up Stories
+
+No new stories identified. This story completes the event forwarding infrastructure. Future enhancements could include:
+
+1. **Gesture Recognition** - Pinch, rotate, swipe detection from raw touch events (could leverage existing GestureRecognizer from GUP-012)
+2. **Event Throttling** - Limit high-frequency events (pointermove) to reduce processing load
+3. **Custom Event Types** - Support for application-specific events beyond standard DOM events
+
+However, these are optimizations rather than core functionality gaps and should wait for user demand.
