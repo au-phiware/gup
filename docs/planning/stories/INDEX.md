@@ -1058,6 +1058,50 @@ paths)
 **Impact**: Complete accessibility coverage for all visualization types  
 **Created**: 2025-02-24 during GUP-113 retrospective
 
+### GUP-161: GPU Timestamp Query Integration
+
+**Status**: 📋 Planned  
+**Priority**: Low  
+**Story Points**: 3  
+**Key Need**: Add GPU timestamp queries for accurate fragment shader performance
+measurement  
+**Dependencies**: GUP-156 ✅  
+**Impact**: Validates <5ms target with actual GPU execution time, not just CPU
+overhead  
+**Created**: 2025-02-24 during GUP-156 retrospective
+
+### GUP-162: Pattern Benchmark CI Integration
+
+**Status**: 📋 Planned  
+**Priority**: Medium  
+**Story Points**: 2  
+**Key Need**: Integrate pattern benchmarks into CI/CD for automatic regression
+detection  
+**Dependencies**: GUP-156 ✅  
+**Impact**: Prevents performance regressions in pattern rendering  
+**Created**: 2025-02-24 during GUP-156 retrospective
+
+### GUP-163: Texture-Based Pattern Rendering
+
+**Status**: 📋 Planned  
+**Priority**: Low  
+**Story Points**: 5  
+**Key Need**: Implement texture-based patterns for memory vs computation
+comparison  
+**Dependencies**: GUP-113 ✅, GUP-156 ✅  
+**Impact**: Provides data-driven validation of procedural pattern decision  
+**Created**: 2025-02-24 during GUP-156 retrospective
+
+### GUP-164: Pattern Rendering Optimization
+
+**Status**: 📋 Planned  
+**Priority**: Medium  
+**Story Points**: 5  
+**Key Need**: Optimize pattern rendering if <5ms target not met  
+**Dependencies**: GUP-156 ✅, GUP-161 (optional)  
+**Impact**: Ensures pattern rendering meets performance requirements  
+**Created**: 2025-02-24 during GUP-156 retrospective
+
 ---
 
 ## Earlier Additions (Post GUP-031)
