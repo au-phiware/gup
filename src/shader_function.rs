@@ -1923,9 +1923,10 @@ pub const MAX_KEYFRAMES: usize = 16;
 /// Interpolation mode for keyframe animation.
 ///
 /// Determines how values are interpolated between keyframes.
-#[derive(Clone, Debug, Copy, PartialEq)]
+#[derive(Clone, Debug, Copy, PartialEq, Default)]
 pub enum InterpolationMode {
     /// Linear interpolation between keyframes (default).
+    #[default]
     Linear,
     /// Catmull-Rom spline interpolation with configurable tension.
     /// Tension of 0.0 gives a standard Catmull-Rom spline (C1 continuous).
@@ -1951,12 +1952,6 @@ impl InterpolationMode {
             InterpolationMode::CatmullRom { tension } => *tension,
             _ => 0.0,
         }
-    }
-}
-
-impl Default for InterpolationMode {
-    fn default() -> Self {
-        InterpolationMode::Linear
     }
 }
 
@@ -2104,31 +2099,31 @@ impl ComposableShaderFunction for KeyframeAnimation {
         fn catmull_rom_interpolate(p0: f32, p1: f32, p2: f32, p3: f32, t: f32, tension: f32) -> f32 {
             let t2 = t * t;
             let t3 = t2 * t;
-            
+
             // Catmull-Rom basis matrix with tension parameter
             // Standard Catmull-Rom uses tension = 0.0
             let s = (1.0 - tension) * 0.5;
-            
+
             let c0 = -s * t3 + 2.0 * s * t2 - s * t;
             let c1 = (2.0 - s) * t3 + (s - 3.0) * t2 + 1.0;
             let c2 = (s - 2.0) * t3 + (3.0 - 2.0 * s) * t2 + s * t;
             let c3 = s * t3 - s * t2;
-            
+
             return c0 * p0 + c1 * p1 + c2 * p2 + c3 * p3;
         }
-        
+
         // Helper function: Cubic B-spline interpolation
         // Interpolates within the segment using four control points
         fn bspline_interpolate(p0: f32, p1: f32, p2: f32, p3: f32, t: f32) -> f32 {
             let t2 = t * t;
             let t3 = t2 * t;
-            
+
             // Cubic B-spline basis functions
             let b0 = (1.0 - t) * (1.0 - t) * (1.0 - t) / 6.0;
             let b1 = (3.0 * t3 - 6.0 * t2 + 4.0) / 6.0;
             let b2 = (-3.0 * t3 + 3.0 * t2 + 3.0 * t + 1.0) / 6.0;
             let b3 = t3 / 6.0;
-            
+
             return b0 * p0 + b1 * p1 + b2 * p2 + b3 * p3;
         }
 
@@ -2184,11 +2179,11 @@ impl ComposableShaderFunction for KeyframeAnimation {
             let k1 = params.keyframes[segment_index];
             let k2 = params.keyframes[segment_index + 1u];
             let segment_duration = k2.time - k1.time;
-            
+
             if (segment_duration <= 0.0) {
                 return k1.value;
             }
-            
+
             let local_t = (t - k1.time) / segment_duration;
 
             // Interpolation mode selection
@@ -2200,7 +2195,7 @@ impl ComposableShaderFunction for KeyframeAnimation {
                 // Need 4 control points: p0, p1 (k1), p2 (k2), p3
                 var p0: f32;
                 var p3: f32;
-                
+
                 // Get p0 (point before k1)
                 if (segment_index > 0u) {
                     p0 = params.keyframes[segment_index - 1u].value;
@@ -2208,7 +2203,7 @@ impl ComposableShaderFunction for KeyframeAnimation {
                     // Duplicate first point for boundary
                     p0 = k1.value;
                 }
-                
+
                 // Get p3 (point after k2)
                 if (segment_index + 2u < params.keyframe_count) {
                     p3 = params.keyframes[segment_index + 2u].value;
@@ -2216,28 +2211,28 @@ impl ComposableShaderFunction for KeyframeAnimation {
                     // Duplicate last point for boundary
                     p3 = k2.value;
                 }
-                
+
                 return catmull_rom_interpolate(p0, k1.value, k2.value, p3, local_t, params.tension);
             } else if (params.interpolation_mode == 2u) {
                 // B-spline interpolation
                 // Need 4 control points
                 var p0: f32;
                 var p3: f32;
-                
+
                 // Get p0
                 if (segment_index > 0u) {
                     p0 = params.keyframes[segment_index - 1u].value;
                 } else {
                     p0 = k1.value;
                 }
-                
+
                 // Get p3
                 if (segment_index + 2u < params.keyframe_count) {
                     p3 = params.keyframes[segment_index + 2u].value;
                 } else {
                     p3 = k2.value;
                 }
-                
+
                 return bspline_interpolate(p0, k1.value, k2.value, p3, local_t);
             }
 
@@ -5227,6 +5222,556 @@ impl StreamingStatistics {
     /// Get configured chunk size
     pub fn chunk_size(&self) -> usize {
         self.chunk_size
+    }
+}
+
+/// Kernel function for density estimation
+#[derive(Clone, Debug, Copy, PartialEq)]
+pub enum KernelFunction {
+    /// Gaussian kernel (most common) - K(u) = (1/√(2π)) * exp(-u²/2)
+    Gaussian,
+    /// Epanechnikov kernel (optimal for MSE) - K(u) = (3/4) * (1 - u²) for |u| ≤ 1
+    Epanechnikov,
+    /// Uniform kernel (rectangular) - K(u) = 1/2 for |u| ≤ 1
+    Uniform,
+    /// Triangular kernel - K(u) = (1 - |u|) for |u| ≤ 1
+    Triangular,
+}
+
+impl KernelFunction {
+    /// Evaluate the kernel function at point u
+    pub fn evaluate(&self, u: f32) -> f32 {
+        match self {
+            KernelFunction::Gaussian => {
+                let factor = 1.0 / (2.0 * std::f32::consts::PI).sqrt();
+                factor * (-0.5 * u * u).exp()
+            }
+            KernelFunction::Epanechnikov => {
+                if u.abs() <= 1.0 {
+                    0.75 * (1.0 - u * u)
+                } else {
+                    0.0
+                }
+            }
+            KernelFunction::Uniform => {
+                if u.abs() <= 1.0 {
+                    0.5
+                } else {
+                    0.0
+                }
+            }
+            KernelFunction::Triangular => {
+                let abs_u = u.abs();
+                if abs_u <= 1.0 {
+                    1.0 - abs_u
+                } else {
+                    0.0
+                }
+            }
+        }
+    }
+
+    /// Get the WGSL function code for this kernel
+    fn wgsl_code(&self) -> &'static str {
+        match self {
+            KernelFunction::Gaussian => {
+                r#"
+fn gaussian_kernel(u: f32) -> f32 {
+    let factor = 1.0 / sqrt(2.0 * 3.14159265359);
+    return factor * exp(-0.5 * u * u);
+}
+"#
+            }
+            KernelFunction::Epanechnikov => {
+                r#"
+fn epanechnikov_kernel(u: f32) -> f32 {
+    let abs_u = abs(u);
+    if (abs_u <= 1.0) {
+        return 0.75 * (1.0 - u * u);
+    } else {
+        return 0.0;
+    }
+}
+"#
+            }
+            KernelFunction::Uniform => {
+                r#"
+fn uniform_kernel(u: f32) -> f32 {
+    if (abs(u) <= 1.0) {
+        return 0.5;
+    } else {
+        return 0.0;
+    }
+}
+"#
+            }
+            KernelFunction::Triangular => {
+                r#"
+fn triangular_kernel(u: f32) -> f32 {
+    let abs_u = abs(u);
+    if (abs_u <= 1.0) {
+        return 1.0 - abs_u;
+    } else {
+        return 0.0;
+    }
+}
+"#
+            }
+        }
+    }
+
+    /// Get the WGSL function name for this kernel
+    fn wgsl_function_name(&self) -> &'static str {
+        match self {
+            KernelFunction::Gaussian => "gaussian_kernel",
+            KernelFunction::Epanechnikov => "epanechnikov_kernel",
+            KernelFunction::Uniform => "uniform_kernel",
+            KernelFunction::Triangular => "triangular_kernel",
+        }
+    }
+}
+
+/// Bandwidth estimation method for kernel density estimation
+#[derive(Clone, Debug, Copy, PartialEq)]
+pub enum BandwidthMethod {
+    /// Manual bandwidth specification
+    Manual(f32),
+    /// Silverman's rule of thumb - bandwidth = 0.9 * min(std, IQR/1.34) * n^(-1/5)
+    Silverman,
+    /// Scott's rule - bandwidth = std * n^(-1/5)
+    Scott,
+}
+
+/// 1D Kernel Density Estimation
+#[derive(Clone, Debug)]
+pub struct KernelDensity1D {
+    /// Sample data points
+    pub samples: Vec<f32>,
+    /// Kernel function to use
+    pub kernel: KernelFunction,
+    /// Bandwidth (smoothing parameter)
+    pub bandwidth: BandwidthMethod,
+    /// Evaluation points (if None, will auto-generate)
+    pub eval_points: Option<Vec<f32>>,
+    /// Number of evaluation points for auto-generation
+    pub n_eval_points: usize,
+}
+
+impl KernelDensity1D {
+    /// Create a new 1D KDE with default settings (Gaussian kernel, Silverman bandwidth, 1000 eval points)
+    pub fn new(samples: Vec<f32>) -> Self {
+        Self {
+            samples,
+            kernel: KernelFunction::Gaussian,
+            bandwidth: BandwidthMethod::Silverman,
+            eval_points: None,
+            n_eval_points: 1000,
+        }
+    }
+
+    /// Set the kernel function
+    pub fn with_kernel(mut self, kernel: KernelFunction) -> Self {
+        self.kernel = kernel;
+        self
+    }
+
+    /// Set manual bandwidth
+    pub fn with_bandwidth(mut self, bandwidth: f32) -> Self {
+        self.bandwidth = BandwidthMethod::Manual(bandwidth);
+        self
+    }
+
+    /// Set bandwidth method
+    pub fn with_bandwidth_method(mut self, method: BandwidthMethod) -> Self {
+        self.bandwidth = method;
+        self
+    }
+
+    /// Set custom evaluation points
+    pub fn with_eval_points(mut self, points: Vec<f32>) -> Self {
+        self.eval_points = Some(points);
+        self
+    }
+
+    /// Set number of evaluation points for auto-generation
+    pub fn with_n_eval_points(mut self, n: usize) -> Self {
+        self.n_eval_points = n;
+        self
+    }
+
+    /// Estimate optimal bandwidth using the specified method
+    fn estimate_bandwidth(&self) -> f32 {
+        match self.bandwidth {
+            BandwidthMethod::Manual(bw) => bw,
+            BandwidthMethod::Silverman => {
+                // Silverman's rule: 0.9 * min(std, IQR/1.34) * n^(-1/5)
+                let n = self.samples.len() as f32;
+                let std_dev = StandardDeviation::new(self.samples.clone()).compute_cpu();
+
+                // Compute IQR (interquartile range)
+                let q1 = Percentile::new(self.samples.clone(), 0.25).compute_cpu();
+                let q3 = Percentile::new(self.samples.clone(), 0.75).compute_cpu();
+                let iqr = q3 - q1;
+
+                let scale = std_dev.min(iqr / 1.34);
+                0.9 * scale * n.powf(-0.2)
+            }
+            BandwidthMethod::Scott => {
+                // Scott's rule: std * n^(-1/5)
+                let n = self.samples.len() as f32;
+                let std_dev = StandardDeviation::new(self.samples.clone()).compute_cpu();
+                std_dev * n.powf(-0.2)
+            }
+        }
+    }
+
+    /// Generate evaluation points across the data range
+    fn generate_eval_points(&self) -> Vec<f32> {
+        if let Some(ref points) = self.eval_points {
+            return points.clone();
+        }
+
+        let (min, max) = MinMax::new(self.samples.clone()).compute_cpu();
+        let bandwidth = self.estimate_bandwidth();
+
+        // Extend range slightly beyond data bounds
+        let padding = bandwidth * 3.0;
+        let start = min - padding;
+        let end = max + padding;
+        let step = (end - start) / (self.n_eval_points - 1) as f32;
+
+        (0..self.n_eval_points)
+            .map(|i| start + i as f32 * step)
+            .collect()
+    }
+
+    /// Compute KDE on CPU (for small datasets or fallback)
+    pub fn compute_cpu(&self) -> KDEResult {
+        if self.samples.is_empty() {
+            return KDEResult {
+                densities: vec![],
+                eval_points: vec![],
+                bandwidth: 0.0,
+                kernel: self.kernel,
+            };
+        }
+
+        let bandwidth = self.estimate_bandwidth();
+        let eval_points = self.generate_eval_points();
+        let n = self.samples.len() as f32;
+
+        // Compute density at each evaluation point
+        let densities: Vec<f32> = eval_points
+            .iter()
+            .map(|&x| {
+                // Sum kernel contributions from all samples
+                let sum: f32 = self
+                    .samples
+                    .iter()
+                    .map(|&xi| {
+                        let u = (x - xi) / bandwidth;
+                        self.kernel.evaluate(u)
+                    })
+                    .sum();
+
+                // Normalize by sample count and bandwidth
+                sum / (n * bandwidth)
+            })
+            .collect();
+
+        KDEResult {
+            densities,
+            eval_points,
+            bandwidth,
+            kernel: self.kernel,
+        }
+    }
+}
+
+/// 2D Kernel Density Estimation
+#[derive(Clone, Debug)]
+pub struct KernelDensity2D {
+    /// Sample data points (x, y)
+    pub samples: Vec<(f32, f32)>,
+    /// Kernel function to use
+    pub kernel: KernelFunction,
+    /// Bandwidth for x dimension
+    pub bandwidth_x: BandwidthMethod,
+    /// Bandwidth for y dimension
+    pub bandwidth_y: BandwidthMethod,
+    /// Evaluation grid points (if None, will auto-generate)
+    pub eval_grid: Option<(Vec<f32>, Vec<f32>)>,
+    /// Number of evaluation points per dimension for auto-generation
+    pub n_eval_points: usize,
+}
+
+impl KernelDensity2D {
+    /// Create a new 2D KDE with default settings
+    pub fn new(samples: Vec<(f32, f32)>) -> Self {
+        Self {
+            samples,
+            kernel: KernelFunction::Gaussian,
+            bandwidth_x: BandwidthMethod::Silverman,
+            bandwidth_y: BandwidthMethod::Silverman,
+            eval_grid: None,
+            n_eval_points: 100, // 100x100 = 10,000 points
+        }
+    }
+
+    /// Set the kernel function
+    pub fn with_kernel(mut self, kernel: KernelFunction) -> Self {
+        self.kernel = kernel;
+        self
+    }
+
+    /// Set manual bandwidth for both dimensions
+    pub fn with_bandwidth(mut self, bandwidth: f32) -> Self {
+        self.bandwidth_x = BandwidthMethod::Manual(bandwidth);
+        self.bandwidth_y = BandwidthMethod::Manual(bandwidth);
+        self
+    }
+
+    /// Set bandwidths separately for x and y
+    pub fn with_bandwidths(mut self, bandwidth_x: f32, bandwidth_y: f32) -> Self {
+        self.bandwidth_x = BandwidthMethod::Manual(bandwidth_x);
+        self.bandwidth_y = BandwidthMethod::Manual(bandwidth_y);
+        self
+    }
+
+    /// Set custom evaluation grid
+    pub fn with_eval_grid(mut self, x_points: Vec<f32>, y_points: Vec<f32>) -> Self {
+        self.eval_grid = Some((x_points, y_points));
+        self
+    }
+
+    /// Set number of evaluation points per dimension
+    pub fn with_n_eval_points(mut self, n: usize) -> Self {
+        self.n_eval_points = n;
+        self
+    }
+
+    /// Estimate bandwidth for a single dimension
+    fn estimate_bandwidth_dim(&self, values: &[f32], method: &BandwidthMethod) -> f32 {
+        match method {
+            BandwidthMethod::Manual(bw) => *bw,
+            BandwidthMethod::Silverman => {
+                let n = values.len() as f32;
+                let std_dev = StandardDeviation::new(values.to_vec()).compute_cpu();
+                let q1 = Percentile::new(values.to_vec(), 0.25).compute_cpu();
+                let q3 = Percentile::new(values.to_vec(), 0.75).compute_cpu();
+                let iqr = q3 - q1;
+                let scale = std_dev.min(iqr / 1.34);
+                0.9 * scale * n.powf(-0.2)
+            }
+            BandwidthMethod::Scott => {
+                let n = values.len() as f32;
+                let std_dev = StandardDeviation::new(values.to_vec()).compute_cpu();
+                std_dev * n.powf(-0.2)
+            }
+        }
+    }
+
+    /// Generate evaluation grid across the data range
+    fn generate_eval_grid(&self) -> (Vec<f32>, Vec<f32>, f32, f32) {
+        if let Some((ref x_points, ref y_points)) = self.eval_grid {
+            let x_values: Vec<f32> = self.samples.iter().map(|(x, _)| *x).collect();
+            let y_values: Vec<f32> = self.samples.iter().map(|(_, y)| *y).collect();
+            let bw_x = self.estimate_bandwidth_dim(&x_values, &self.bandwidth_x);
+            let bw_y = self.estimate_bandwidth_dim(&y_values, &self.bandwidth_y);
+            return (x_points.clone(), y_points.clone(), bw_x, bw_y);
+        }
+
+        let x_values: Vec<f32> = self.samples.iter().map(|(x, _)| *x).collect();
+        let y_values: Vec<f32> = self.samples.iter().map(|(_, y)| *y).collect();
+
+        let (x_min, x_max) = MinMax::new(x_values.clone()).compute_cpu();
+        let (y_min, y_max) = MinMax::new(y_values.clone()).compute_cpu();
+
+        let bw_x = self.estimate_bandwidth_dim(&x_values, &self.bandwidth_x);
+        let bw_y = self.estimate_bandwidth_dim(&y_values, &self.bandwidth_y);
+
+        // Extend range slightly beyond data bounds
+        let x_padding = bw_x * 3.0;
+        let y_padding = bw_y * 3.0;
+
+        let x_start = x_min - x_padding;
+        let x_end = x_max + x_padding;
+        let x_step = (x_end - x_start) / (self.n_eval_points - 1) as f32;
+
+        let y_start = y_min - y_padding;
+        let y_end = y_max + y_padding;
+        let y_step = (y_end - y_start) / (self.n_eval_points - 1) as f32;
+
+        let x_points: Vec<f32> = (0..self.n_eval_points)
+            .map(|i| x_start + i as f32 * x_step)
+            .collect();
+
+        let y_points: Vec<f32> = (0..self.n_eval_points)
+            .map(|i| y_start + i as f32 * y_step)
+            .collect();
+
+        (x_points, y_points, bw_x, bw_y)
+    }
+
+    /// Compute 2D KDE on CPU (for small datasets or fallback)
+    pub fn compute_cpu(&self) -> KDEResult2D {
+        if self.samples.is_empty() {
+            return KDEResult2D {
+                densities: vec![],
+                x_points: vec![],
+                y_points: vec![],
+                bandwidth_x: 0.0,
+                bandwidth_y: 0.0,
+                kernel: self.kernel,
+            };
+        }
+
+        let (x_points, y_points, bw_x, bw_y) = self.generate_eval_grid();
+        let n = self.samples.len() as f32;
+
+        // Compute density at each grid point
+        let mut densities = Vec::with_capacity(x_points.len() * y_points.len());
+
+        for &y in &y_points {
+            for &x in &x_points {
+                // Sum kernel contributions from all samples
+                let sum: f32 = self
+                    .samples
+                    .iter()
+                    .map(|&(xi, yi)| {
+                        let ux = (x - xi) / bw_x;
+                        let uy = (y - yi) / bw_y;
+                        // Product kernel: K(ux, uy) = K(ux) * K(uy)
+                        self.kernel.evaluate(ux) * self.kernel.evaluate(uy)
+                    })
+                    .sum();
+
+                // Normalize by sample count and bandwidth product
+                densities.push(sum / (n * bw_x * bw_y));
+            }
+        }
+
+        KDEResult2D {
+            densities,
+            x_points,
+            y_points,
+            bandwidth_x: bw_x,
+            bandwidth_y: bw_y,
+            kernel: self.kernel,
+        }
+    }
+}
+
+/// Result of 1D kernel density estimation
+#[derive(Clone, Debug)]
+pub struct KDEResult {
+    /// Density values at evaluation points
+    pub densities: Vec<f32>,
+    /// Evaluation points
+    pub eval_points: Vec<f32>,
+    /// Bandwidth used
+    pub bandwidth: f32,
+    /// Kernel function used
+    pub kernel: KernelFunction,
+}
+
+impl KDEResult {
+    /// Check if density is properly normalized (integral ≈ 1.0)
+    pub fn is_normalized(&self) -> bool {
+        if self.densities.is_empty() {
+            return false;
+        }
+
+        // Numerical integration using trapezoidal rule
+        let integral: f32 = self
+            .densities
+            .windows(2)
+            .zip(self.eval_points.windows(2))
+            .map(|(d, x)| {
+                let dx = x[1] - x[0];
+                0.5 * (d[0] + d[1]) * dx
+            })
+            .sum();
+
+        // Allow 10% tolerance for numerical integration error
+        (integral - 1.0).abs() < 0.1
+    }
+
+    /// Find the peak density value
+    pub fn peak_density(&self) -> f32 {
+        self.densities
+            .iter()
+            .fold(f32::NEG_INFINITY, |a, &b| a.max(b))
+    }
+
+    /// Find the mode (point with maximum density)
+    pub fn mode(&self) -> Option<f32> {
+        if self.densities.is_empty() {
+            return None;
+        }
+
+        let max_idx = self
+            .densities
+            .iter()
+            .enumerate()
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))?
+            .0;
+
+        Some(self.eval_points[max_idx])
+    }
+}
+
+/// Result of 2D kernel density estimation
+#[derive(Clone, Debug)]
+pub struct KDEResult2D {
+    /// Density values at grid points (row-major order: y varies faster)
+    pub densities: Vec<f32>,
+    /// X-axis evaluation points
+    pub x_points: Vec<f32>,
+    /// Y-axis evaluation points
+    pub y_points: Vec<f32>,
+    /// Bandwidth used for x dimension
+    pub bandwidth_x: f32,
+    /// Bandwidth used for y dimension
+    pub bandwidth_y: f32,
+    /// Kernel function used
+    pub kernel: KernelFunction,
+}
+
+impl KDEResult2D {
+    /// Get density at grid position (i, j)
+    pub fn density_at(&self, x_idx: usize, y_idx: usize) -> Option<f32> {
+        if x_idx >= self.x_points.len() || y_idx >= self.y_points.len() {
+            return None;
+        }
+        let idx = y_idx * self.x_points.len() + x_idx;
+        self.densities.get(idx).copied()
+    }
+
+    /// Find the peak density value
+    pub fn peak_density(&self) -> f32 {
+        self.densities
+            .iter()
+            .fold(f32::NEG_INFINITY, |a, &b| a.max(b))
+    }
+
+    /// Find the mode (point with maximum density)
+    pub fn mode(&self) -> Option<(f32, f32)> {
+        if self.densities.is_empty() {
+            return None;
+        }
+
+        let max_idx = self
+            .densities
+            .iter()
+            .enumerate()
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))?
+            .0;
+
+        let y_idx = max_idx / self.x_points.len();
+        let x_idx = max_idx % self.x_points.len();
+
+        Some((self.x_points[x_idx], self.y_points[y_idx]))
     }
 }
 

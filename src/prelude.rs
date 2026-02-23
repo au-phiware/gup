@@ -65,6 +65,13 @@ pub use crate::shader_function::{
     HistogramResult,
     // Spline interpolation (GUP-141)
     InterpolationMode,
+    // Kernel Density Estimation (GUP-144)
+    KDEResult,
+    KDEResult2D,
+    KernelDensity1D,
+    KernelDensity2D,
+    KernelFunction,
+    BandwidthMethod,
     Keyframe,
     KeyframeAnimation,
     // Storage buffer-based keyframe animation (GUP-140)
