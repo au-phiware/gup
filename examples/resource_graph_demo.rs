@@ -83,7 +83,13 @@ fn main() -> GupResult<()> {
         Some("Material Bind Group".to_string()),
         128,
         None,
-        vec![camera_uniform, model_uniform, diffuse_texture, normal_map, sampler],
+        vec![
+            camera_uniform,
+            model_uniform,
+            diffuse_texture,
+            normal_map,
+            sampler,
+        ],
     );
 
     // 6. Create render pipeline (depends on bind group)
@@ -148,10 +154,7 @@ fn main() -> GupResult<()> {
             if let Some(node) = graph.get_resource(*id) {
                 let default_label = format!("{}", node.resource_type);
                 let label = node.label.as_deref().unwrap_or(&default_label);
-                println!(
-                    "  {} ({}) shared by {} resources",
-                    label, id, count
-                );
+                println!("  {} ({}) shared by {} resources", label, id, count);
             }
         }
     }
@@ -165,10 +168,7 @@ fn main() -> GupResult<()> {
                 let default_label = format!("{}", node.resource_type);
                 let label = node.label.as_deref().unwrap_or(&default_label);
                 let size_mb = node.size as f64 / (1024.0 * 1024.0);
-                println!(
-                    "  {} ({}) - {:.2} MB",
-                    label, id, size_mb
-                );
+                println!("  {} ({}) - {:.2} MB", label, id, size_mb);
             }
         }
     }

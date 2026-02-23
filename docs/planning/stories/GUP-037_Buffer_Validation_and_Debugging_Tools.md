@@ -1,5 +1,8 @@
 # GUP-037: Buffer Validation and Debugging Tools
 
+**Status**: 🚧 In Progress  
+**Started**: 2025-01-25
+
 ## Story Overview
 
 **Title**: Buffer Validation and Debugging Tools **Epic**: Phase 2 Initiative

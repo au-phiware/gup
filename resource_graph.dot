@@ -1,0 +1,24 @@
+digraph ResourceGraph {
+  rankdir=LR;
+  node [style=filled];
+
+  R3 [label="Model Matrix Uniform\n0.00 MB", shape=box, fillcolor="#4285F4", color="green"];
+  R9 [label="Shadow Map\n2.00 MB", shape=hexagon, fillcolor="#34A853", color="orange"];
+  R4 [label="Diffuse Texture\n4.00 MB", shape=hexagon, fillcolor="#34A853", color="green"];
+  R5 [label="Normal Map\n4.00 MB", shape=hexagon, fillcolor="#34A853", color="green"];
+  R0 [label="Vertex Buffer\n2.00 MB", shape=box, fillcolor="#4285F4", color="green"];
+  R2 [label="Camera Uniform\n0.00 MB", shape=box, fillcolor="#4285F4", color="green"];
+  R7 [label="Material Bind Group\n0.00 MB", shape=diamond, fillcolor="#FBBC04", color="green"];
+  R6 [label="Texture Sampler\n0.00 MB", shape=octagon, fillcolor="#9C27B0", color="green"];
+  R1 [label="Index Buffer\n0.50 MB", shape=box, fillcolor="#4285F4", color="green"];
+  R8 [label="Forward Render Pipeline\n0.00 MB", shape=ellipse, fillcolor="#EA4335", color="green"];
+
+  R7 -> R2;
+  R7 -> R3;
+  R7 -> R4;
+  R7 -> R5;
+  R7 -> R6;
+  R8 -> R7;
+  R8 -> R0;
+  R8 -> R1;
+}

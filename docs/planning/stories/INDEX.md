@@ -118,13 +118,13 @@ epic and status.
 
 ### Post GUP-015 Stories - Advanced Debug Infrastructure (Stories 80+)
 
-| Story                                                    | Title                              | Status         | Priority | Points |
-| -------------------------------------------------------- | ---------------------------------- | -------------- | -------- | ------ |
-| [GUP-080](GUP-080_WebGPU_Timestamp_Query_Integration.md) | WebGPU Timestamp Query Integration | ✅ Complete    | Medium   | 4      |
-| [GUP-081](GUP-081_Advanced_Debug_Data_Visualization.md)  | Advanced Debug Data Visualization  | ✅ Complete    | Low      | 5      |
-| [GUP-082](GUP-082_Debug_Tool_Integration_CI_CD.md)       | Debug Tool Integration with CI/CD  | ✅ Complete    | Medium   | 3      |
-| [GUP-085](GUP-085_GPU_Resource_Dependency_Graph.md)      | GPU Resource Dependency Graph      | ✅ Complete    | Low      | 5      |
-| [GUP-086](GUP-086_Web_Profiling_Dashboard.md)            | Web-Based Profiling Dashboard      | ✅ Complete    | Low      | 8      |
+| Story                                                    | Title                              | Status      | Priority | Points |
+| -------------------------------------------------------- | ---------------------------------- | ----------- | -------- | ------ |
+| [GUP-080](GUP-080_WebGPU_Timestamp_Query_Integration.md) | WebGPU Timestamp Query Integration | ✅ Complete | Medium   | 4      |
+| [GUP-081](GUP-081_Advanced_Debug_Data_Visualization.md)  | Advanced Debug Data Visualization  | ✅ Complete | Low      | 5      |
+| [GUP-082](GUP-082_Debug_Tool_Integration_CI_CD.md)       | Debug Tool Integration with CI/CD  | ✅ Complete | Medium   | 3      |
+| [GUP-085](GUP-085_GPU_Resource_Dependency_Graph.md)      | GPU Resource Dependency Graph      | ✅ Complete | Low      | 5      |
+| [GUP-086](GUP-086_Web_Profiling_Dashboard.md)            | Web-Based Profiling Dashboard      | ✅ Complete | Low      | 8      |
 
 ### Post GUP-017 Stories - Error Handling Optimization (Stories 83+)
 
@@ -135,11 +135,11 @@ epic and status.
 
 ### Post GUP-003 Stories - Buffer System Enhancement (Stories 35+)
 
-| Story                                                       | Title                                 | Status      | Priority | Points |
-| ----------------------------------------------------------- | ------------------------------------- | ----------- | -------- | ------ |
-| [GUP-035](GUP-035_Advanced_Buffer_Download_System.md)       | Advanced Buffer Download System       | ✅ Complete | Medium   | 5      |
-| [GUP-036](GUP-036_Buffer_Pool_Performance_Optimization.md)  | Buffer Pool Performance Optimization  | ✅ Complete | Medium   | 3      |
-| [GUP-037](GUP-037_Buffer_Validation_and_Debugging_Tools.md) | Buffer Validation and Debugging Tools | 💡 New      | Low      | 4      |
+| Story                                                       | Title                                 | Status         | Priority | Points |
+| ----------------------------------------------------------- | ------------------------------------- | -------------- | -------- | ------ |
+| [GUP-035](GUP-035_Advanced_Buffer_Download_System.md)       | Advanced Buffer Download System       | ✅ Complete    | Medium   | 5      |
+| [GUP-036](GUP-036_Buffer_Pool_Performance_Optimization.md)  | Buffer Pool Performance Optimization  | ✅ Complete    | Medium   | 3      |
+| [GUP-037](GUP-037_Buffer_Validation_and_Debugging_Tools.md) | Buffer Validation and Debugging Tools | 🚧 In Progress | Low      | 4      |
 
 ### Post GUP-004 Stories - Context Enhancement (Stories 38+)
 

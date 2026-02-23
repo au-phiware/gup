@@ -47,11 +47,11 @@ impl ResourceType {
     /// Get a color code for Graphviz visualization
     fn dot_color(&self) -> &'static str {
         match self {
-            ResourceType::Buffer => "#4285F4",       // Blue
-            ResourceType::Pipeline => "#EA4335",     // Red
-            ResourceType::BindGroup => "#FBBC04",    // Yellow
-            ResourceType::Texture => "#34A853",      // Green
-            ResourceType::Sampler => "#9C27B0",      // Purple
+            ResourceType::Buffer => "#4285F4",    // Blue
+            ResourceType::Pipeline => "#EA4335",  // Red
+            ResourceType::BindGroup => "#FBBC04", // Yellow
+            ResourceType::Texture => "#34A853",   // Green
+            ResourceType::Sampler => "#9C27B0",   // Purple
         }
     }
 
@@ -143,7 +143,11 @@ impl ResourceGraph {
         // Validate that all dependencies exist
         for dep_id in &dependencies {
             if !self.nodes.contains_key(dep_id) {
-                log::warn!("Resource {:?} references non-existent dependency {:?}", id, dep_id);
+                log::warn!(
+                    "Resource {:?} references non-existent dependency {:?}",
+                    id,
+                    dep_id
+                );
             }
         }
 
@@ -163,7 +167,7 @@ impl ResourceGraph {
         for dep_id in dependencies {
             self.dependents
                 .entry(dep_id)
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .insert(id);
         }
 
@@ -225,13 +229,7 @@ impl ResourceGraph {
 
         for id in self.nodes.keys() {
             if !visited.contains(id) {
-                self.dfs_cycle_detection(
-                    *id,
-                    &mut visited,
-                    &mut rec_stack,
-                    &mut path,
-                    &mut cycles,
-                );
+                self.dfs_cycle_detection(*id, &mut visited, &mut rec_stack, &mut path, &mut cycles);
             }
         }
 
@@ -275,7 +273,7 @@ impl ResourceGraph {
             .iter()
             .filter(|(id, node)| {
                 node.state != ResourceState::Active
-                    && self.dependents.get(id).map_or(true, |deps| deps.is_empty())
+                    && self.dependents.get(id).is_none_or(|deps| deps.is_empty())
             })
             .map(|(id, _)| *id)
             .collect()
@@ -341,7 +339,7 @@ impl ResourceGraph {
             ));
         }
 
-        dot.push_str("\n");
+        dot.push('\n');
 
         // Add edges
         for node in self.nodes.values() {
@@ -388,7 +386,12 @@ impl ResourceGraph {
         visited: &mut HashSet<ResourceId>,
     ) {
         if visited.contains(&id) {
-            output.push_str(&format!("{}{}─ {} (circular reference)\n", prefix, if is_last { "└" } else { "├" }, id));
+            output.push_str(&format!(
+                "{}{}─ {} (circular reference)\n",
+                prefix,
+                if is_last { "└" } else { "├" },
+                id
+            ));
             return;
         }
 
@@ -531,10 +534,22 @@ impl ResourceGraphReport {
 
         // Summary
         output.push_str("┌─ Summary ─────────────────────────────────────┐\n");
-        output.push_str(&format!("│ Total Resources:     {:>10}           │\n", self.total_resources));
-        output.push_str(&format!("│ Active Resources:    {:>10}           │\n", self.active_resources));
-        output.push_str(&format!("│ Inactive Resources:  {:>10}           │\n", self.inactive_resources));
-        output.push_str(&format!("│ Total Memory:        {:>10.2} MB     │\n", self.total_memory as f64 / (1024.0 * 1024.0)));
+        output.push_str(&format!(
+            "│ Total Resources:     {:>10}           │\n",
+            self.total_resources
+        ));
+        output.push_str(&format!(
+            "│ Active Resources:    {:>10}           │\n",
+            self.active_resources
+        ));
+        output.push_str(&format!(
+            "│ Inactive Resources:  {:>10}           │\n",
+            self.inactive_resources
+        ));
+        output.push_str(&format!(
+            "│ Total Memory:        {:>10.2} MB     │\n",
+            self.total_memory as f64 / (1024.0 * 1024.0)
+        ));
         output.push_str("└───────────────────────────────────────────────┘\n\n");
 
         // Resources by type
@@ -553,18 +568,30 @@ impl ResourceGraphReport {
 
         // Issues
         output.push_str("┌─ Issues ──────────────────────────────────────┐\n");
-        output.push_str(&format!("│ Circular Dependencies: {:>10}           │\n", self.circular_dependencies));
-        output.push_str(&format!("│ Unused Resources:      {:>10}           │\n", self.unused_resources));
+        output.push_str(&format!(
+            "│ Circular Dependencies: {:>10}           │\n",
+            self.circular_dependencies
+        ));
+        output.push_str(&format!(
+            "│ Unused Resources:      {:>10}           │\n",
+            self.unused_resources
+        ));
         output.push_str("└───────────────────────────────────────────────┘\n\n");
 
         // Opportunities
         output.push_str("┌─ Optimization Opportunities ──────────────────┐\n");
-        output.push_str(&format!("│ Sharing Opportunities: {:>10}           │\n", self.sharing_opportunities));
+        output.push_str(&format!(
+            "│ Sharing Opportunities: {:>10}           │\n",
+            self.sharing_opportunities
+        ));
         if !self.sharing_opportunity_details.is_empty() {
             output.push_str("│                                               │\n");
             output.push_str("│ Top shared resources:                         │\n");
             for (id, count) in self.sharing_opportunity_details.iter().take(5) {
-                output.push_str(&format!("│   {} shared by {} resources         │\n", id, count));
+                output.push_str(&format!(
+                    "│   {} shared by {} resources         │\n",
+                    id, count
+                ));
             }
         }
         output.push_str("└───────────────────────────────────────────────┘\n");
@@ -580,7 +607,7 @@ mod tests {
     #[test]
     fn test_resource_graph_creation() {
         let mut graph = ResourceGraph::new();
-        
+
         let buffer_id = graph.add_resource(
             ResourceType::Buffer,
             Some("Vertex Buffer".to_string()),
@@ -604,14 +631,18 @@ mod tests {
     #[test]
     fn test_circular_dependency_detection() {
         let mut graph = ResourceGraph::new();
-        
+
         let r1 = graph.add_resource(ResourceType::Buffer, None, 1024, None, vec![]);
         let r2 = graph.add_resource(ResourceType::Buffer, None, 1024, None, vec![r1]);
-        
+
         // Manually create circular dependency
         if let Some(node) = graph.nodes.get_mut(&r1) {
             node.dependencies.push(r2);
-            graph.dependents.entry(r2).or_insert_with(HashSet::new).insert(r1);
+            graph
+                .dependents
+                .entry(r2)
+                .or_default()
+                .insert(r1);
         }
 
         let cycles = graph.detect_circular_dependencies();
@@ -621,11 +652,11 @@ mod tests {
     #[test]
     fn test_unused_resource_detection() {
         let mut graph = ResourceGraph::new();
-        
+
         let r1 = graph.add_resource(ResourceType::Buffer, None, 1024, None, vec![]);
         let _r2 = graph.add_resource(ResourceType::Buffer, None, 1024, None, vec![r1]);
         let r3 = graph.add_resource(ResourceType::Texture, None, 2048, None, vec![]);
-        
+
         // Mark r3 as inactive
         graph.mark_inactive(r3).unwrap();
 
@@ -636,19 +667,23 @@ mod tests {
     #[test]
     fn test_dependency_footprint() {
         let mut graph = ResourceGraph::new();
-        
+
         let r1 = graph.add_resource(ResourceType::Buffer, None, 1024, None, vec![]);
         let r2 = graph.add_resource(ResourceType::Buffer, None, 2048, None, vec![r1]);
         let r3 = graph.add_resource(ResourceType::Pipeline, None, 512, None, vec![r1, r2]);
 
         let footprint = graph.calculate_dependency_footprint(r3);
-        assert_eq!(footprint, 1024 + 2048 + 512, "Should calculate total footprint");
+        assert_eq!(
+            footprint,
+            1024 + 2048 + 512,
+            "Should calculate total footprint"
+        );
     }
 
     #[test]
     fn test_sharing_opportunities() {
         let mut graph = ResourceGraph::new();
-        
+
         let shared = graph.add_resource(ResourceType::Buffer, None, 1024, None, vec![]);
         let _r2 = graph.add_resource(ResourceType::Pipeline, None, 512, None, vec![shared]);
         let _r3 = graph.add_resource(ResourceType::Pipeline, None, 512, None, vec![shared]);
@@ -657,15 +692,30 @@ mod tests {
         let opportunities = graph.find_sharing_opportunities();
         assert_eq!(opportunities.len(), 1);
         assert_eq!(opportunities[0].0, shared);
-        assert_eq!(opportunities[0].1, 3, "Shared resource should have 3 dependents");
+        assert_eq!(
+            opportunities[0].1, 3,
+            "Shared resource should have 3 dependents"
+        );
     }
 
     #[test]
     fn test_dot_export() {
         let mut graph = ResourceGraph::new();
-        
-        let r1 = graph.add_resource(ResourceType::Buffer, Some("Data".to_string()), 1024, None, vec![]);
-        let _r2 = graph.add_resource(ResourceType::Pipeline, Some("Render".to_string()), 512, None, vec![r1]);
+
+        let r1 = graph.add_resource(
+            ResourceType::Buffer,
+            Some("Data".to_string()),
+            1024,
+            None,
+            vec![],
+        );
+        let _r2 = graph.add_resource(
+            ResourceType::Pipeline,
+            Some("Render".to_string()),
+            512,
+            None,
+            vec![r1],
+        );
 
         let dot = graph.to_dot();
         assert!(dot.contains("digraph ResourceGraph"));
@@ -676,7 +726,7 @@ mod tests {
     #[test]
     fn test_json_export() {
         let mut graph = ResourceGraph::new();
-        
+
         let r1 = graph.add_resource(ResourceType::Buffer, None, 1024, None, vec![]);
         let _r2 = graph.add_resource(ResourceType::Pipeline, None, 512, None, vec![r1]);
 
@@ -688,7 +738,7 @@ mod tests {
     #[test]
     fn test_report_generation() {
         let mut graph = ResourceGraph::new();
-        
+
         let r1 = graph.add_resource(ResourceType::Buffer, None, 1024, None, vec![]);
         let _r2 = graph.add_resource(ResourceType::Pipeline, None, 512, None, vec![r1]);
         let r3 = graph.add_resource(ResourceType::Texture, None, 2048, None, vec![]);

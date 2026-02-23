@@ -1,0 +1,138 @@
+{
+  "nodes": [
+    {
+      "id": 3,
+      "resource_type": "Buffer",
+      "label": "Model Matrix Uniform",
+      "size": 256,
+      "state": "Active",
+      "usage_flags": "UNIFORM | COPY_DST",
+      "dependencies": []
+    },
+    {
+      "id": 9,
+      "resource_type": "Texture",
+      "label": "Shadow Map",
+      "size": 2097152,
+      "state": "Inactive",
+      "usage_flags": "SAMPLED | RENDER_ATTACHMENT",
+      "dependencies": []
+    },
+    {
+      "id": 4,
+      "resource_type": "Texture",
+      "label": "Diffuse Texture",
+      "size": 4194304,
+      "state": "Active",
+      "usage_flags": "SAMPLED | COPY_DST",
+      "dependencies": []
+    },
+    {
+      "id": 5,
+      "resource_type": "Texture",
+      "label": "Normal Map",
+      "size": 4194304,
+      "state": "Active",
+      "usage_flags": "SAMPLED | COPY_DST",
+      "dependencies": []
+    },
+    {
+      "id": 0,
+      "resource_type": "Buffer",
+      "label": "Vertex Buffer",
+      "size": 2097152,
+      "state": "Active",
+      "usage_flags": "VERTEX | COPY_DST",
+      "dependencies": []
+    },
+    {
+      "id": 2,
+      "resource_type": "Buffer",
+      "label": "Camera Uniform",
+      "size": 256,
+      "state": "Active",
+      "usage_flags": "UNIFORM | COPY_DST",
+      "dependencies": []
+    },
+    {
+      "id": 7,
+      "resource_type": "BindGroup",
+      "label": "Material Bind Group",
+      "size": 128,
+      "state": "Active",
+      "usage_flags": null,
+      "dependencies": [
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "id": 6,
+      "resource_type": "Sampler",
+      "label": "Texture Sampler",
+      "size": 64,
+      "state": "Active",
+      "usage_flags": null,
+      "dependencies": []
+    },
+    {
+      "id": 1,
+      "resource_type": "Buffer",
+      "label": "Index Buffer",
+      "size": 524288,
+      "state": "Active",
+      "usage_flags": "INDEX | COPY_DST",
+      "dependencies": []
+    },
+    {
+      "id": 8,
+      "resource_type": "Pipeline",
+      "label": "Forward Render Pipeline",
+      "size": 1024,
+      "state": "Active",
+      "usage_flags": null,
+      "dependencies": [
+        7,
+        0,
+        1
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": 7,
+      "to": 2
+    },
+    {
+      "from": 7,
+      "to": 3
+    },
+    {
+      "from": 7,
+      "to": 4
+    },
+    {
+      "from": 7,
+      "to": 5
+    },
+    {
+      "from": 7,
+      "to": 6
+    },
+    {
+      "from": 8,
+      "to": 7
+    },
+    {
+      "from": 8,
+      "to": 0
+    },
+    {
+      "from": 8,
+      "to": 1
+    }
+  ]
+}

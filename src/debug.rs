@@ -64,8 +64,8 @@ pub use layout_validator::*;
 pub use memory_profiler::*;
 // Export resource graph types with explicit names to avoid conflicts with error::ResourceId
 pub use resource_graph::{
-    ResourceGraph, ResourceGraphReport, ResourceId as DebugResourceId,
-    ResourceNode, ResourceState as DebugResourceState, ResourceType as DebugResourceType,
+    ResourceGraph, ResourceGraphReport, ResourceId as DebugResourceId, ResourceNode,
+    ResourceState as DebugResourceState, ResourceType as DebugResourceType,
 };
 pub use shader_profiler::*;
 pub use visualization::*;

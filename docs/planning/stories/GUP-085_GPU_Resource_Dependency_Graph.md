@@ -175,8 +175,8 @@ _Created from GUP-034 retrospective analysis._
 - **Pattern**: Prefix with module name to disambiguate: `Debug*`, `Error*`
 - **Trade-off**: Slightly more verbose but avoids ambiguous glob reexports
   warning
-- **Alternative**: Could have used separate names from the start
-  (e.g., `GraphResourceId`)
+- **Alternative**: Could have used separate names from the start (e.g.,
+  `GraphResourceId`)
 
 ### Architectural Decisions
 
