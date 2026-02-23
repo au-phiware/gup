@@ -958,10 +958,12 @@ from GPU
 **Status**: ✅ Complete  
 **Priority**: High  
 **Story Points**: 3  
-**Key Need**: Create testing infrastructure and documentation for screen reader validation  
+**Key Need**: Create testing infrastructure and documentation for screen reader
+validation  
 **Dependencies**: GUP-117 ✅  
 **Impact**: Production certification and WCAG validation infrastructure  
-**Deliverables**: Complete documentation suite (4 docs, 1,500+ lines), automation tools, test scenarios  
+**Deliverables**: Complete documentation suite (4 docs, 1,500+ lines),
+automation tools, test scenarios  
 **Completed**: 2025-01-24
 
 ### GUP-122: Manual Screen Reader Testing Execution
@@ -972,7 +974,8 @@ from GPU
 **Key Need**: Execute tests defined in GUP-121 with actual screen readers  
 **Dependencies**: GUP-121 ✅ (infrastructure), GUP-117 ✅  
 **Impact**: Validates accessibility implementation, certifies WCAG compliance  
-**Blockers**: Requires Windows (NVDA/JAWS), macOS (VoiceOver), iOS (optional) - not available in Linux dev environment  
+**Blockers**: Requires Windows (NVDA/JAWS), macOS (VoiceOver), iOS (optional) -
+not available in Linux dev environment  
 **Next**: Assign to team member with Windows/macOS access for testing
 
 ### GUP-127: Focus Elements for Data Points
@@ -1061,7 +1064,7 @@ paths)
 
 ### GUP-158: Path Mark Pattern Support
 
-**Status**: 🚧 In Progress  
+**Status**: ✅ Complete (2025-02-26)  
 **Priority**: Low  
 **Story Points**: 3  
 **Key Need**: Extend pattern rendering to Path marks with generated or
