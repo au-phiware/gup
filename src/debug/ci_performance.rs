@@ -836,9 +836,9 @@ impl PerformanceTrendVisualizer {
             HashMap::new();
 
         for (platform_id, category, test_name) in baselines {
-            let baseline = self
-                .baseline_storage
-                .load_baseline(&test_name, &category, &platform_id)?;
+            let baseline =
+                self.baseline_storage
+                    .load_baseline(&test_name, &category, &platform_id)?;
 
             test_baselines
                 .entry(test_name.clone())
@@ -880,7 +880,7 @@ impl PerformanceTrendVisualizer {
                 frame_time_ms: baseline.avg_frame_time_ms,
                 memory_usage_bytes: baseline.avg_memory_usage_bytes,
                 gpu_utilization_percent: 0.0, // Not tracked in baselines
-                query_time_us: 0.0,            // Not tracked in baselines
+                query_time_us: 0.0,           // Not tracked in baselines
                 metadata: baseline.metadata.clone(),
             })
             .collect();

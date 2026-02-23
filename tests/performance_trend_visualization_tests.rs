@@ -3,9 +3,11 @@
 
 //! Integration tests for performance trend visualization
 
-use gup::debug::ci_performance::{BaselineStorage, PerformanceBaseline, PerformanceTrendVisualizer};
-use gup::debug::PerformanceSnapshot;
 use gup::GupResult;
+use gup::debug::PerformanceSnapshot;
+use gup::debug::ci_performance::{
+    BaselineStorage, PerformanceBaseline, PerformanceTrendVisualizer,
+};
 use std::collections::HashMap;
 
 #[test]
@@ -17,7 +19,7 @@ fn test_trend_visualization_with_sample_data() -> GupResult<()> {
 
     // Create some sample baseline data
     let storage = BaselineStorage::new(temp_dir.clone());
-    
+
     // Simulate historical performance data for a test
     let test_name = "render_100k_points";
     let category = "rendering";
@@ -30,9 +32,9 @@ fn test_trend_visualization_with_sample_data() -> GupResult<()> {
         chrono::Utc::now() - chrono::Duration::days(10),
         chrono::Utc::now(),
     ];
-    
+
     let frame_times = [16.8, 16.5, 16.2, 16.0]; // Gradual improvement
-    
+
     for (i, (&timestamp, &frame_time)) in timestamps.iter().zip(frame_times.iter()).enumerate() {
         let baseline = PerformanceBaseline {
             test_name: test_name.to_string(),
@@ -55,10 +57,10 @@ fn test_trend_visualization_with_sample_data() -> GupResult<()> {
 
     // Generate trend charts
     let charts = visualizer.generate_all_trend_charts()?;
-    
+
     // Verify charts were generated
-    assert!(charts.len() >= 1, "Should generate at least one chart");
-    
+    assert!(!charts.is_empty(), "Should generate at least one chart");
+
     for (name, svg) in &charts {
         println!("Generated chart for: {}", name);
         assert!(svg.contains("<svg"), "Should contain SVG tag");
@@ -69,9 +71,9 @@ fn test_trend_visualization_with_sample_data() -> GupResult<()> {
     // Test exporting charts to directory
     let output_dir = temp_dir.join("charts");
     let paths = visualizer.export_charts_to_directory(&output_dir)?;
-    
+
     assert!(!paths.is_empty(), "Should export at least one chart file");
-    
+
     for path in &paths {
         assert!(path.exists(), "Chart file should exist: {:?}", path);
         let content = std::fs::read_to_string(path)?;
@@ -80,8 +82,14 @@ fn test_trend_visualization_with_sample_data() -> GupResult<()> {
 
     // Test dashboard generation
     let dashboard_html = visualizer.generate_dashboard_html()?;
-    assert!(dashboard_html.contains("<!DOCTYPE html>"), "Should be valid HTML");
-    assert!(dashboard_html.contains("Performance Trend Dashboard"), "Should have dashboard title");
+    assert!(
+        dashboard_html.contains("<!DOCTYPE html>"),
+        "Should be valid HTML"
+    );
+    assert!(
+        dashboard_html.contains("Performance Trend Dashboard"),
+        "Should have dashboard title"
+    );
     assert!(dashboard_html.contains("<svg"), "Should include chart SVG");
 
     // Test exporting dashboard
@@ -100,8 +108,7 @@ fn test_svg_chart_structure() {
     use std::collections::HashMap;
 
     // Create sample performance snapshots
-    let _snapshots = vec![
-        PerformanceSnapshot {
+    let _snapshots = [PerformanceSnapshot {
             timestamp: chrono::Utc::now(),
             frame_time_ms: 10.0,
             memory_usage_bytes: 1_000_000,
@@ -124,12 +131,11 @@ fn test_svg_chart_structure() {
             gpu_utilization_percent: 52.0,
             query_time_us: 105.0,
             metadata: HashMap::new(),
-        },
-    ];
+        }];
 
     // Create a trend chart and export as SVG
     use gup::debug::visualization::VisualizationConfig;
-    
+
     let config = VisualizationConfig {
         width: 800,
         height: 600,
@@ -154,12 +160,21 @@ fn test_empty_baseline_handling() -> GupResult<()> {
 
     // Should handle empty baseline directory gracefully
     let charts = visualizer.generate_all_trend_charts()?;
-    assert!(charts.is_empty(), "Should return empty map for no baselines");
+    assert!(
+        charts.is_empty(),
+        "Should return empty map for no baselines"
+    );
 
     // Dashboard should still work with no data
     let dashboard = visualizer.generate_dashboard_html()?;
-    assert!(dashboard.contains("<!DOCTYPE html>"), "Should generate valid HTML");
-    assert!(dashboard.contains("Total tests tracked: 0"), "Should show zero tests");
+    assert!(
+        dashboard.contains("<!DOCTYPE html>"),
+        "Should generate valid HTML"
+    );
+    assert!(
+        dashboard.contains("Total tests tracked: 0"),
+        "Should show zero tests"
+    );
 
     // Clean up
     let _ = std::fs::remove_dir_all(&temp_dir);

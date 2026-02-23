@@ -58,10 +58,13 @@ impl PerformanceTrendVisualizer {
 
 ## Success Metrics
 
-- **Visualization Speed**: Generate charts in <5 seconds ✅ (~instant for typical datasets)
-- **Data Coverage**: Support 1000+ historical data points ✅ (tested with configurable limits)
+- **Visualization Speed**: Generate charts in <5 seconds ✅ (~instant for
+  typical datasets)
+- **Data Coverage**: Support 1000+ historical data points ✅ (tested with
+  configurable limits)
 - **Format Support**: SVG, PNG, HTML exports ✅ (SVG and HTML implemented)
-- **Integration**: Seamlessly works with CI workflow ✅ (integrated with BaselineStorage)
+- **Integration**: Seamlessly works with CI workflow ✅ (integrated with
+  BaselineStorage)
 
 ## Implementation Summary
 
@@ -109,7 +112,7 @@ impl PerformanceTrendVisualizer {
 ### Test Coverage
 
 - 3 new integration tests for trend visualization
-- 3 new unit tests in ci_performance module  
+- 3 new unit tests in ci_performance module
 - All 816+ library tests passing
 - Demo example verified working
 
@@ -145,31 +148,38 @@ impl PerformanceTrendVisualizer {
 
 #### SVG Generation for Performance Visualization
 
-- **Challenge**: Generating clean, professional SVG charts without external dependencies
+- **Challenge**: Generating clean, professional SVG charts without external
+  dependencies
 - **Solution**: Implemented lightweight SVG generation using string formatting
   - Direct SVG path generation for line charts
   - Grid lines and axes with proper scaling
   - Clean separation of data transformation and rendering
-- **Pattern**: String-based SVG generation is sufficient for simple charts; no need for heavy plotting libraries
+- **Pattern**: String-based SVG generation is sufficient for simple charts; no
+  need for heavy plotting libraries
   - ~130 lines of code for full chart generation
   - Easy to customize and extend
   - No runtime dependencies beyond stdlib
 
 #### Integration with Existing Debug Infrastructure
 
-- **Challenge**: Integrating trend visualization with GUP-081 and GUP-082's baseline storage
-- **Solution**: Created `PerformanceTrendVisualizer` that reads from `BaselineStorage`
-  - Reuses existing data structures (`PerformanceSnapshot`, `PerformanceBaseline`)
+- **Challenge**: Integrating trend visualization with GUP-081 and GUP-082's
+  baseline storage
+- **Solution**: Created `PerformanceTrendVisualizer` that reads from
+  `BaselineStorage`
+  - Reuses existing data structures (`PerformanceSnapshot`,
+    `PerformanceBaseline`)
   - Maintains consistency with CI/CD baseline format
   - Groups and sorts historical data by test name
-- **Pattern**: Build on existing infrastructure rather than creating parallel systems
+- **Pattern**: Build on existing infrastructure rather than creating parallel
+  systems
   - Leveraged `BaselineStorage.list_baselines()` for discovery
   - Used same directory structure (`platform_id/category/test_name.json`)
   - Converted baselines to snapshots for rendering
 
 #### HTML Dashboard with Embedded SVG
 
-- **Challenge**: Creating a standalone dashboard without web server or JavaScript
+- **Challenge**: Creating a standalone dashboard without web server or
+  JavaScript
 - **Solution**: Generated self-contained HTML with inline CSS and embedded SVG
   - Responsive grid layout for multiple charts
   - Clean, professional styling
@@ -184,7 +194,7 @@ impl PerformanceTrendVisualizer {
 #### SVG Instead of GPU-Rendered Charts
 
 - **Decision**: Generate SVG charts rather than using GPU rendering
-- **Reasoning**: 
+- **Reasoning**:
   - SVG is embeddable in CI artifacts and GitHub comments
   - No GPU context needed for static chart generation
   - Smaller file sizes and universal browser support
@@ -198,18 +208,21 @@ impl PerformanceTrendVisualizer {
   - Baselines already track performance over time via `last_updated`
   - No need for separate time-series database
   - Consistent with GUP-082's regression detection
-- **Trade-off**: Each baseline is a single point; need multiple baselines per test for trends
+- **Trade-off**: Each baseline is a single point; need multiple baselines per
+  test for trends
 - **Future**: Consider aggregating multiple samples into single baseline
 
 #### Direct SVG Generation vs. Charting Library
 
-- **Decision**: Implement custom SVG generation instead of using a charting library
+- **Decision**: Implement custom SVG generation instead of using a charting
+  library
 - **Reasoning**:
   - Keep dependencies minimal
   - Full control over output format
   - Simple line charts don't justify heavy library
 - **Trade-off**: Limited chart types (only line charts implemented)
-- **Future**: Consider plotters.rs or similar if more complex visualizations needed
+- **Future**: Consider plotters.rs or similar if more complex visualizations
+  needed
 
 ### Development Workflow Insights
 
@@ -230,9 +243,12 @@ impl PerformanceTrendVisualizer {
 
 ### Follow-up Stories
 
-No additional stories identified. The implementation is complete and meets all acceptance criteria. Potential future enhancements:
+No additional stories identified. The implementation is complete and meets all
+acceptance criteria. Potential future enhancements:
 
-1. **PNG Export** - Add raster image generation (would require image processing library)
+1. **PNG Export** - Add raster image generation (would require image processing
+   library)
 2. **Multi-Metric Charts** - Show frame time + memory on same chart
 3. **Interactive Charts** - GPU-rendered version with zoom/pan
-4. **Regression Highlighting** - Visual markers for detected regressions on trend lines
+4. **Regression Highlighting** - Visual markers for detected regressions on
+   trend lines

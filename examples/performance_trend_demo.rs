@@ -8,9 +8,10 @@
 //! 2. Generate trend visualizations
 //! 3. Export charts as SVG and HTML
 
-use gup::debug::ci_performance::{BaselineStorage, PerformanceBaseline, PerformanceTrendVisualizer};
+use gup::debug::ci_performance::{
+    BaselineStorage, PerformanceBaseline, PerformanceTrendVisualizer,
+};
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("📊 Performance Trend Visualization Demo\n");
@@ -27,16 +28,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Simulate 3 months of performance data for multiple tests
     println!("📝 Creating sample performance baselines...");
-    
+
     let tests = vec![
-        ("render_100k_points", vec![16.8, 16.5, 16.2, 16.0, 15.8, 15.7]),
+        (
+            "render_100k_points",
+            vec![16.8, 16.5, 16.2, 16.0, 15.8, 15.7],
+        ),
         ("compute_statistics", vec![5.2, 5.1, 4.9, 4.8, 4.7, 4.6]),
         ("text_rendering", vec![8.5, 8.3, 8.2, 8.1, 8.0, 7.9]),
     ];
 
     for (test_name, frame_times) in &tests {
         println!("  - {}", test_name);
-        
+
         for (i, &frame_time) in frame_times.iter().enumerate() {
             let days_ago = (frame_times.len() - 1 - i) as i64 * 15; // Every 15 days
             let timestamp = chrono::Utc::now() - chrono::Duration::days(days_ago);
@@ -58,7 +62,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    println!("\n✅ Created {} tests with {} data points each\n", tests.len(), tests[0].1.len());
+    println!(
+        "\n✅ Created {} tests with {} data points each\n",
+        tests.len(),
+        tests[0].1.len()
+    );
 
     // Create trend visualizer
     println!("📈 Generating trend charts...");
@@ -72,7 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("💾 Exporting SVG files...");
     let charts_dir = demo_dir.join("charts");
     let paths = visualizer.export_charts_to_directory(&charts_dir)?;
-    
+
     for path in &paths {
         println!("  - {}", path.display());
     }
@@ -81,7 +89,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🌐 Generating HTML dashboard...");
     let dashboard_path = demo_dir.join("dashboard.html");
     visualizer.export_dashboard(&dashboard_path)?;
-    
+
     println!("  Dashboard: {}", dashboard_path.display());
 
     // Display some statistics
@@ -95,7 +103,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n💡 View the results:");
     println!("   HTML Dashboard: file://{}", dashboard_path.display());
     println!("   SVG Charts:     {}", charts_dir.display());
-    println!("\n   Or open in browser: xdg-open {}", dashboard_path.display());
+    println!(
+        "\n   Or open in browser: xdg-open {}",
+        dashboard_path.display()
+    );
 
     Ok(())
 }

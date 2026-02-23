@@ -585,7 +585,12 @@ impl PerformanceTrendChart {
     ///
     /// Generates an SVG representation of the performance trend chart.
     pub fn export_svg(&self, title: &str) -> String {
-        generate_performance_svg(&self.snapshots, title, self.config.width, self.config.height)
+        generate_performance_svg(
+            &self.snapshots,
+            title,
+            self.config.width,
+            self.config.height,
+        )
     }
 }
 

@@ -45,6 +45,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use wgpu::{Device, Queue};
 
+pub mod baseline_recommendation;
 pub mod buffer_inspector;
 pub mod buffer_validation;
 pub mod ci_performance;
@@ -56,6 +57,7 @@ pub mod shader_profiler;
 pub mod visualization;
 pub mod web_dashboard;
 
+pub use baseline_recommendation::*;
 pub use buffer_inspector::*;
 pub use buffer_validation::*;
 #[cfg(debug_assertions)]
