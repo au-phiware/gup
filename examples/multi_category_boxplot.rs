@@ -7,10 +7,10 @@
 //! Shows category grouping, automatic positioning, color differentiation, and
 //! different ordering strategies.
 
-use gup::chart_builder::accessor::AccessorValue;
-use gup::chart_builder::builders::{boxplot, AccessorFunction, ConfigurableBuilder};
-use gup::chart_builder::ChartBuilder;
 use gup::RenderContext;
+use gup::chart_builder::ChartBuilder;
+use gup::chart_builder::accessor::AccessorValue;
+use gup::chart_builder::builders::{AccessorFunction, ConfigurableBuilder, boxplot};
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]

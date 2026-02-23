@@ -1920,14 +1920,56 @@ impl Keyframe {
 /// For more keyframes, use storage buffer-based animations.
 pub const MAX_KEYFRAMES: usize = 16;
 
+/// Interpolation mode for keyframe animation.
+///
+/// Determines how values are interpolated between keyframes.
+#[derive(Clone, Debug, Copy, PartialEq)]
+pub enum InterpolationMode {
+    /// Linear interpolation between keyframes (default).
+    Linear,
+    /// Catmull-Rom spline interpolation with configurable tension.
+    /// Tension of 0.0 gives a standard Catmull-Rom spline (C1 continuous).
+    /// Tension of 1.0 gives straight lines. Range: [0.0, 1.0]
+    CatmullRom { tension: f32 },
+    /// Cubic B-spline interpolation (C2 continuous, very smooth).
+    BSpline,
+}
+
+impl InterpolationMode {
+    /// Returns the mode identifier for WGSL code generation.
+    fn mode_id(&self) -> u32 {
+        match self {
+            InterpolationMode::Linear => 0,
+            InterpolationMode::CatmullRom { .. } => 1,
+            InterpolationMode::BSpline => 2,
+        }
+    }
+
+    /// Returns the tension parameter (only used for Catmull-Rom).
+    fn tension(&self) -> f32 {
+        match self {
+            InterpolationMode::CatmullRom { tension } => *tension,
+            _ => 0.0,
+        }
+    }
+}
+
+impl Default for InterpolationMode {
+    fn default() -> Self {
+        InterpolationMode::Linear
+    }
+}
+
 /// Keyframe animation with up to 16 keyframes in a uniform buffer.
 ///
+/// Supports multiple interpolation modes including linear, Catmull-Rom, and B-spline.
 /// For animations requiring more keyframes, use KeyframeAnimationStorageBuffer.
 #[derive(Clone, Debug)]
 pub struct KeyframeAnimation {
     pub keyframes: Vec<Keyframe>,
     pub loop_animation: bool,
     pub reverse_on_loop: bool,
+    pub interpolation_mode: InterpolationMode,
 }
 
 impl KeyframeAnimation {
@@ -1936,6 +1978,7 @@ impl KeyframeAnimation {
             keyframes: Vec::new(),
             loop_animation: false,
             reverse_on_loop: false,
+            interpolation_mode: InterpolationMode::default(),
         }
     }
 
@@ -1958,6 +2001,59 @@ impl KeyframeAnimation {
         self.reverse_on_loop = enable;
         self
     }
+
+    /// Set the interpolation mode for this animation.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use gup::shader_function::{KeyframeAnimation, InterpolationMode};
+    ///
+    /// let anim = KeyframeAnimation::new()
+    ///     .add_keyframe(0.0, 0.0)
+    ///     .add_keyframe(1.0, 10.0)
+    ///     .with_interpolation(InterpolationMode::CatmullRom { tension: 0.0 });
+    /// ```
+    pub fn with_interpolation(mut self, mode: InterpolationMode) -> Self {
+        self.interpolation_mode = mode;
+        self
+    }
+
+    /// Convenience method to set Catmull-Rom interpolation with specified tension.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use gup::shader_function::KeyframeAnimation;
+    ///
+    /// let anim = KeyframeAnimation::new()
+    ///     .add_keyframe(0.0, 0.0)
+    ///     .add_keyframe(1.0, 10.0)
+    ///     .with_catmull_rom(0.0); // Standard Catmull-Rom spline
+    /// ```
+    pub fn with_catmull_rom(mut self, tension: f32) -> Self {
+        self.interpolation_mode = InterpolationMode::CatmullRom {
+            tension: tension.clamp(0.0, 1.0),
+        };
+        self
+    }
+
+    /// Convenience method to set B-spline interpolation.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use gup::shader_function::KeyframeAnimation;
+    ///
+    /// let anim = KeyframeAnimation::new()
+    ///     .add_keyframe(0.0, 0.0)
+    ///     .add_keyframe(1.0, 10.0)
+    ///     .with_bspline();
+    /// ```
+    pub fn with_bspline(mut self) -> Self {
+        self.interpolation_mode = InterpolationMode::BSpline;
+        self
+    }
 }
 
 impl Default for KeyframeAnimation {
@@ -1973,7 +2069,10 @@ pub struct KeyframeAnimationUniforms {
     pub keyframe_count: u32,
     pub loop_animation: u32,
     pub reverse_on_loop: u32,
-    pub _padding: u32,
+    pub interpolation_mode: u32, // 0=Linear, 1=CatmullRom, 2=BSpline
+    pub tension: f32,            // For Catmull-Rom interpolation
+    pub _padding: [f32; 3],      // Ensure 16-byte alignment
+    pub _padding2: [f32; 4],     // Extra padding to match WGSL struct size (304 bytes)
 }
 
 impl ShaderUniform for KeyframeAnimationUniforms {
@@ -1981,7 +2080,8 @@ impl ShaderUniform for KeyframeAnimationUniforms {
         format!(
             "struct Keyframe {{\n    time: f32,\n    value: f32,\n    _padding0: f32,\n    _padding1: f32,\n}}\n\n\
              struct KeyframeAnimationUniforms {{\n    keyframes: array<Keyframe, {}>,\n    \
-             keyframe_count: u32,\n    loop_animation: u32,\n    reverse_on_loop: u32,\n    _padding: u32,\n}}",
+             keyframe_count: u32,\n    loop_animation: u32,\n    reverse_on_loop: u32,\n    \
+             interpolation_mode: u32,\n    tension: f32,\n    _padding: vec3<f32>,\n}}",
             MAX_KEYFRAMES
         )
     }
@@ -1998,6 +2098,40 @@ impl ComposableShaderFunction for KeyframeAnimation {
 
     fn wgsl_function() -> &'static str {
         r#"
+        // Helper function: Catmull-Rom spline interpolation
+        // Interpolates between p1 and p2 using p0 and p3 as control points
+        // tension: 0.0 = standard Catmull-Rom, 1.0 = linear
+        fn catmull_rom_interpolate(p0: f32, p1: f32, p2: f32, p3: f32, t: f32, tension: f32) -> f32 {
+            let t2 = t * t;
+            let t3 = t2 * t;
+            
+            // Catmull-Rom basis matrix with tension parameter
+            // Standard Catmull-Rom uses tension = 0.0
+            let s = (1.0 - tension) * 0.5;
+            
+            let c0 = -s * t3 + 2.0 * s * t2 - s * t;
+            let c1 = (2.0 - s) * t3 + (s - 3.0) * t2 + 1.0;
+            let c2 = (s - 2.0) * t3 + (3.0 - 2.0 * s) * t2 + s * t;
+            let c3 = s * t3 - s * t2;
+            
+            return c0 * p0 + c1 * p1 + c2 * p2 + c3 * p3;
+        }
+        
+        // Helper function: Cubic B-spline interpolation
+        // Interpolates within the segment using four control points
+        fn bspline_interpolate(p0: f32, p1: f32, p2: f32, p3: f32, t: f32) -> f32 {
+            let t2 = t * t;
+            let t3 = t2 * t;
+            
+            // Cubic B-spline basis functions
+            let b0 = (1.0 - t) * (1.0 - t) * (1.0 - t) / 6.0;
+            let b1 = (3.0 * t3 - 6.0 * t2 + 4.0) / 6.0;
+            let b2 = (-3.0 * t3 + 3.0 * t2 + 3.0 * t + 1.0) / 6.0;
+            let b3 = t3 / 6.0;
+            
+            return b0 * p0 + b1 * p1 + b2 * p2 + b3 * p3;
+        }
+
         fn keyframe_animation(time: f32, params: KeyframeAnimationUniforms) -> f32 {
             if (params.keyframe_count == 0u) {
                 return 0.0;
@@ -2038,22 +2172,77 @@ impl ComposableShaderFunction for KeyframeAnimation {
                 return params.keyframes[params.keyframe_count - 1u].value;
             }
 
-            // Find the two keyframes to interpolate between
+            // Find the segment containing time t
+            var segment_index = 0u;
             for (var i = 0u; i < params.keyframe_count - 1u; i = i + 1u) {
-                let k1 = params.keyframes[i];
-                let k2 = params.keyframes[i + 1u];
-
-                if (t >= k1.time && t <= k2.time) {
-                    let segment_duration = k2.time - k1.time;
-                    if (segment_duration <= 0.0) {
-                        return k1.value;
-                    }
-                    let local_t = (t - k1.time) / segment_duration;
-                    return mix(k1.value, k2.value, local_t);
+                if (t >= params.keyframes[i].time && t <= params.keyframes[i + 1u].time) {
+                    segment_index = i;
+                    break;
                 }
             }
 
-            return params.keyframes[params.keyframe_count - 1u].value;
+            let k1 = params.keyframes[segment_index];
+            let k2 = params.keyframes[segment_index + 1u];
+            let segment_duration = k2.time - k1.time;
+            
+            if (segment_duration <= 0.0) {
+                return k1.value;
+            }
+            
+            let local_t = (t - k1.time) / segment_duration;
+
+            // Interpolation mode selection
+            if (params.interpolation_mode == 0u) {
+                // Linear interpolation
+                return mix(k1.value, k2.value, local_t);
+            } else if (params.interpolation_mode == 1u) {
+                // Catmull-Rom spline
+                // Need 4 control points: p0, p1 (k1), p2 (k2), p3
+                var p0: f32;
+                var p3: f32;
+                
+                // Get p0 (point before k1)
+                if (segment_index > 0u) {
+                    p0 = params.keyframes[segment_index - 1u].value;
+                } else {
+                    // Duplicate first point for boundary
+                    p0 = k1.value;
+                }
+                
+                // Get p3 (point after k2)
+                if (segment_index + 2u < params.keyframe_count) {
+                    p3 = params.keyframes[segment_index + 2u].value;
+                } else {
+                    // Duplicate last point for boundary
+                    p3 = k2.value;
+                }
+                
+                return catmull_rom_interpolate(p0, k1.value, k2.value, p3, local_t, params.tension);
+            } else if (params.interpolation_mode == 2u) {
+                // B-spline interpolation
+                // Need 4 control points
+                var p0: f32;
+                var p3: f32;
+                
+                // Get p0
+                if (segment_index > 0u) {
+                    p0 = params.keyframes[segment_index - 1u].value;
+                } else {
+                    p0 = k1.value;
+                }
+                
+                // Get p3
+                if (segment_index + 2u < params.keyframe_count) {
+                    p3 = params.keyframes[segment_index + 2u].value;
+                } else {
+                    p3 = k2.value;
+                }
+                
+                return bspline_interpolate(p0, k1.value, k2.value, p3, local_t);
+            }
+
+            // Fallback to linear
+            return mix(k1.value, k2.value, local_t);
         }
         "#
     }
@@ -2074,7 +2263,10 @@ impl ComposableShaderFunction for KeyframeAnimation {
             keyframe_count: self.keyframes.len().min(MAX_KEYFRAMES) as u32,
             loop_animation: if self.loop_animation { 1 } else { 0 },
             reverse_on_loop: if self.reverse_on_loop { 1 } else { 0 },
-            _padding: 0,
+            interpolation_mode: self.interpolation_mode.mode_id(),
+            tension: self.interpolation_mode.tension(),
+            _padding: [0.0; 3],
+            _padding2: [0.0; 4],
         })
     }
 

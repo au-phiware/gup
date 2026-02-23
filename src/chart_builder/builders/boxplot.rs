@@ -393,8 +393,8 @@ where
                 }
 
                 let value = value_accessor.apply(datum);
-                let values = category_data.entry(category).or_insert_with(Vec::new);
-                
+                let values = category_data.entry(category).or_default();
+
                 match value {
                     AccessorValue::Float(v) => values.push(v),
                     AccessorValue::FloatArray(arr) => values.extend(arr),
@@ -421,7 +421,7 @@ where
                             cat
                         )));
                     }
-                    
+
                     // Temporary position, will be updated after ordering
                     let position = Vec2 { x: 0.0, y: 0.0 };
                     let attrs = BoxPlotAttributes::from_data(
@@ -430,11 +430,11 @@ where
                         self.width_value,
                         self.orientation,
                     );
-                    
+
                     // Calculate mean and capture median before moving attrs
                     let mean = values.iter().sum::<f32>() / values.len() as f32;
                     let median = attrs.median;
-                    
+
                     Ok((cat, attrs, mean, median))
                 })
                 .collect::<GupResult<Vec<_>>>()?;
@@ -451,16 +451,21 @@ where
                         .enumerate()
                         .map(|(i, cat)| (cat, i))
                         .collect();
-                    category_stats.sort_by_key(|(cat, _, _, _)| order_map.get(cat).copied().unwrap_or(0));
+                    category_stats
+                        .sort_by_key(|(cat, _, _, _)| order_map.get(cat).copied().unwrap_or(0));
                 }
                 CategoryOrder::ByMedian => {
                     category_stats.sort_by(|(_, _, _, med_a), (_, _, _, med_b)| {
-                        med_a.partial_cmp(med_b).unwrap_or(std::cmp::Ordering::Equal)
+                        med_a
+                            .partial_cmp(med_b)
+                            .unwrap_or(std::cmp::Ordering::Equal)
                     });
                 }
                 CategoryOrder::ByMean => {
                     category_stats.sort_by(|(_, _, mean_a, _), (_, _, mean_b, _)| {
-                        mean_a.partial_cmp(mean_b).unwrap_or(std::cmp::Ordering::Equal)
+                        mean_a
+                            .partial_cmp(mean_b)
+                            .unwrap_or(std::cmp::Ordering::Equal)
                     });
                 }
             }
@@ -469,7 +474,7 @@ where
             let mut result = Vec::new();
             for (i, (_cat, mut attrs, _, _)) in category_stats.into_iter().enumerate() {
                 let position_offset = i as f32 * self.category_spacing;
-                
+
                 match self.orientation {
                     BoxPlotOrientation::Vertical => {
                         attrs.position = Vec2 {
@@ -484,7 +489,7 @@ where
                         };
                     }
                 }
-                
+
                 result.push(attrs);
             }
 

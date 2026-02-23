@@ -5,10 +5,10 @@
 //!
 //! Tests for grouped box plots with category-based data organization.
 
-use gup::chart_builder::accessor::AccessorValue;
-use gup::chart_builder::builders::{boxplot, AccessorFunction};
-use gup::chart_builder::ChartBuilder;
 use gup::RenderContext;
+use gup::chart_builder::ChartBuilder;
+use gup::chart_builder::accessor::AccessorValue;
+use gup::chart_builder::builders::{AccessorFunction, boxplot};
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -111,7 +111,7 @@ async fn test_category_ordering_alphabetical() {
         .iter()
         .map(|m| m.position.x)
         .collect();
-    
+
     // Should be in ascending order (A, B, C alphabetically)
     assert!(
         positions[0] < positions[1] && positions[1] < positions[2],
@@ -184,17 +184,26 @@ async fn test_category_ordering_by_median() {
         .iter()
         .map(|m| m.median)
         .collect();
-    
+
     assert!(
         medians[0] < medians[1] && medians[1] < medians[2],
         "Medians should be ordered: {:?}",
         medians
     );
-    
+
     // First should be A (35), then C (55), then B (75)
-    assert!((medians[0] - 35.0).abs() < 0.1, "First median should be ~35");
-    assert!((medians[1] - 55.0).abs() < 0.1, "Second median should be ~55");
-    assert!((medians[2] - 75.0).abs() < 0.1, "Third median should be ~75");
+    assert!(
+        (medians[0] - 35.0).abs() < 0.1,
+        "First median should be ~35"
+    );
+    assert!(
+        (medians[1] - 55.0).abs() < 0.1,
+        "Second median should be ~55"
+    );
+    assert!(
+        (medians[2] - 75.0).abs() < 0.1,
+        "Third median should be ~75"
+    );
 }
 
 #[tokio::test]
@@ -238,7 +247,7 @@ async fn test_category_spacing() {
         .iter()
         .map(|m| m.position.x)
         .collect();
-    
+
     // Verify spacing between categories
     assert!(
         (positions[1] - positions[0] - custom_spacing).abs() < 0.1,
@@ -289,7 +298,7 @@ async fn test_horizontal_orientation_categories() {
         .iter()
         .map(|m| m.position.y)
         .collect();
-    
+
     assert_eq!(chart.len(), 2, "Should have 2 box plots");
     assert!(
         positions[1] > positions[0],
@@ -359,7 +368,7 @@ async fn test_varying_sample_sizes() {
         .unwrap();
 
     assert_eq!(chart.len(), 3, "Should handle varying sample sizes");
-    
+
     // Each category should have valid statistical values
     for attrs in chart.visualization.data() {
         assert!(attrs.min <= attrs.q1);
@@ -426,7 +435,7 @@ async fn test_outliers_per_category() {
         !chart.visualization.data()[0].outliers.is_empty(),
         "Category A should have outliers"
     );
-    
+
     // Category B (second) should have no outliers
     assert!(
         chart.visualization.data()[1].outliers.is_empty(),
@@ -461,7 +470,7 @@ async fn test_many_categories() {
         .unwrap();
 
     assert_eq!(chart.len(), 10, "Should handle 10 categories");
-    
+
     // Verify positions are distinct
     let positions: Vec<f32> = chart
         .visualization

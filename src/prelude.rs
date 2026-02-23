@@ -63,6 +63,8 @@ pub use crate::shader_function::{
     HistogramCompute,
     HistogramConfig,
     HistogramResult,
+    // Spline interpolation (GUP-141)
+    InterpolationMode,
     Keyframe,
     KeyframeAnimation,
     // Storage buffer-based keyframe animation (GUP-140)
