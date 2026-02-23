@@ -234,6 +234,19 @@ pub trait Mark: Clone + Send + Sync + 'static {
     fn generate_indices() -> Option<Vec<u32>> {
         None
     }
+
+    /// Get vertex attributes for this mark's vertex buffer layout.
+    ///
+    /// By default, returns a single vec2 position attribute at location 0.
+    /// Marks with more complex vertex data (e.g., Line with position and normal)
+    /// should override this method.
+    fn vertex_attributes() -> &'static [VertexAttribute] {
+        &[VertexAttribute {
+            offset: 0,
+            shader_location: 0,
+            format: VertexFormat::Float32x2,
+        }]
+    }
 }
 
 /// Type-erased information about a mark type for runtime management
@@ -532,11 +545,7 @@ impl<M: Mark> MarkInfoImpl<M> {
         VertexBufferLayout {
             array_stride: std::mem::size_of::<M::Vertex>() as BufferAddress,
             step_mode: VertexStepMode::Vertex,
-            attributes: &[VertexAttribute {
-                offset: 0,
-                shader_location: 0,
-                format: VertexFormat::Float32x2, // Assuming 2D positions
-            }],
+            attributes: M::vertex_attributes(),
         }
     }
 }

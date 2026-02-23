@@ -421,6 +421,26 @@ impl Mark for Line {
             Err(_) => false,
         }
     }
+
+    /// Get vertex attributes for line rendering.
+    ///
+    /// Lines require two vertex attributes:
+    /// - @location(0): position (vec2<f32>) - local position within quad
+    /// - @location(1): normal (vec2<f32>) - normal vector for width expansion
+    fn vertex_attributes() -> &'static [wgpu::VertexAttribute] {
+        &[
+            wgpu::VertexAttribute {
+                offset: 0,
+                shader_location: 0,
+                format: wgpu::VertexFormat::Float32x2, // position
+            },
+            wgpu::VertexAttribute {
+                offset: 8, // offset of second vec2 (2 * 4 bytes)
+                shader_location: 1,
+                format: wgpu::VertexFormat::Float32x2, // normal
+            },
+        ]
+    }
 }
 
 impl Default for LineAttributes {
