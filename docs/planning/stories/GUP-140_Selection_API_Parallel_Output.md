@@ -193,3 +193,109 @@ GPU execution requires:
 - Performance benchmarking on actual GPU execution
 
 These will be addressed as the mark rendering system evolves.
+
+## Retrospective
+
+**Completed**: 2024-12-25
+
+### Key Technical Learnings
+
+#### Buffer Extraction Pattern for Generic GPU Types
+
+- **Challenge**: Extracting individual components from `ParallelOutput<A, B>` while
+  maintaining GPU memory safety
+- **Solution**: Iterator-based extraction with explicit `Pod` and `Zeroable` bounds
+- **Pattern**: `parallel_buffer.iter().map(|p| p.first).collect()` is efficient and
+  type-safe
+- **Future**: This pattern applies to any composite GPU type requiring component
+  extraction
+
+#### Const Generic Arrays for Type-Safe APIs
+
+- **Challenge**: Ensuring the number of attribute names matches the parallel output
+  width at compile time
+- **Solution**: Used `[&str; N]` with const generic `N` parameter in `attr_parallel()`
+- **Result**: Compile-time errors if attribute count doesn't match (e.g., providing
+  3 names for 2-way parallel composition)
+- **Trade-off**: Slightly verbose syntax, but prevents runtime errors
+
+#### Module-Based API Organization
+
+- **Decision**: Created `parallel_output_extraction` module rather than free functions
+- **Reasoning**: Clear namespace separation, easier discovery, future extensibility
+- **Pattern**: Export module in prelude for convenience while maintaining structure
+- **Result**: Clean API surface: `parallel_output_extraction::split_parallel_buffer()`
+
+### Architectural Decisions
+
+#### Placeholder vs Full Integration
+
+- **Decision**: Implement API surface with placeholder internals, matching existing
+  `Selection::attr()` pattern
+- **Reasoning**: Full GPU buffer management requires mark rendering system updates
+  that exceed story scope
+- **Trade-off**: API is complete and tested, but actual GPU execution deferred
+- **Future**: Integration point is clear—mark renderer can consume `attr_parallel()`
+  bindings when ready
+
+#### Nested ParallelOutput for N-Way Composition
+
+- **Decision**: Support 3-way and higher compositions via nested `ParallelOutput<A, B>`
+  structures
+- **Reasoning**: Consistent with GUP-136's recursive composition approach
+- **Result**: `extract_first()` on nested output yields another `ParallelOutput`,
+  enabling progressive decomposition
+- **Example**: `ParallelOutput<ParallelOutput<Vec2, Vec4>, f32>` for (x, y, color,
+  size)
+
+#### Type Safety Throughout
+
+- **Decision**: Enforce `Pod` and `Zeroable` bounds on all buffer extraction functions
+- **Reasoning**: GPU memory safety is non-negotiable; catch errors at compile time
+- **Pattern**: Generic bounds propagate through function signatures automatically
+- **Result**: Impossible to extract non-GPU-compatible types
+
+### Development Workflow Insights
+
+- **Test-First Approach**: Writing unit tests before implementation clarified memory
+  alignment requirements and edge cases (empty buffers, nested outputs)
+- **Example-Driven Development**: Creating `parallel_composition_demo.rs` early
+  revealed API usability issues before finalization
+- **Incremental Commits**: Separate commits for AC1, AC2, and AC3 made review easier
+  and rollback safer
+- **Disk Space Management**: Required `cargo clean` mid-development due to space
+  constraints; consider CI caching strategies
+
+### Patterns for Reuse
+
+1. **Generic Buffer Extraction Pattern**:
+   ```rust
+   pub fn extract_component<A, B>(buffer: &[Composite<A, B>]) -> Vec<A>
+   where A: Pod + Zeroable + Copy, B: Pod + Zeroable
+   {
+       buffer.iter().map(|item| item.component).collect()
+   }
+   ```
+
+2. **Const Generic Type-Safe Binding**:
+   ```rust
+   pub fn bind<const N: usize>(&mut self, names: [&str; N], values: [Value; N])
+   {
+       // Compile-time guarantee: names.len() == values.len()
+   }
+   ```
+
+3. **Module-Based Utilities**:
+   ```rust
+   pub mod extraction_utils {
+       pub fn extract_a<T>(composite: &[T]) -> Vec<A> { /* ... */ }
+       pub fn extract_b<T>(composite: &[T]) -> Vec<B> { /* ... */ }
+   }
+   // Usage: extraction_utils::extract_a(buffer)
+   ```
+
+### Follow-Up Stories
+
+No new stories identified. GUP-140 successfully completes the parallel composition
+integration with the Selection API. Future enhancements will happen organically as
+the mark rendering system evolves to consume parallel attribute bindings.
