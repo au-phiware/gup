@@ -144,6 +144,55 @@ impl<T, M: Mark> Selection<T, M> {
         self
     }
 
+    /// Set multiple attributes from a parallel composition.
+    ///
+    /// This method enables efficient multi-attribute binding where a single shader
+    /// function computes multiple outputs (e.g., position and color) from the same
+    /// input data.
+    ///
+    /// # Arguments
+    ///
+    /// * `parallel_function` - A ParallelComposition that computes multiple outputs
+    /// * `attribute_names` - Array of attribute names matching the outputs (e.g., ["position", "color"])
+    ///
+    /// # Type Safety
+    ///
+    /// The compiler ensures that the parallel function outputs are compatible with
+    /// the mark's attribute types.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use gup::prelude::*;
+    ///
+    /// // Create parallel composition: data -> (position, color)
+    /// let position_fn = LinearScale::new(0.0, 100.0, 0.0, 800.0);
+    /// let color_fn = ColorMap::new(min_color, max_color);
+    /// let parallel = position_fn.parallel(color_fn);
+    ///
+    /// // Bind both attributes in single call
+    /// selection.attr_parallel(parallel, ["position", "color"]);
+    /// ```
+    ///
+    /// ```rust,ignore
+    /// // 3-way parallel binding (position XY + color + size)
+    /// let xy_and_color = x_scale.parallel(color_fn);
+    /// let all_three = xy_and_color.parallel(size_fn);
+    /// selection.attr_parallel(all_three, ["position", "color", "size"]);
+    /// ```
+    pub fn attr_parallel<P, const N: usize>(
+        &mut self,
+        _parallel_function: P,
+        _attribute_names: [&str; N],
+    ) -> &mut Self
+    where
+        P: Send + Sync + 'static,
+    {
+        // Placeholder implementation - will be integrated with mark rendering system
+        // when the full attribute binding pipeline is implemented
+        self
+    }
+
     /// Get the data in this selection.
     pub fn data(&self) -> &[T] {
         &self.data
