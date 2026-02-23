@@ -10,7 +10,10 @@
 
 ## Context
 
-GUP-113 implemented pattern rendering with a target of <5ms overhead. We need comprehensive benchmarks to validate this target and identify optimization opportunities. Benchmarks should cover various pattern types, data sizes, and rendering scenarios.
+GUP-113 implemented pattern rendering with a target of <5ms overhead. We need
+comprehensive benchmarks to validate this target and identify optimization
+opportunities. Benchmarks should cover various pattern types, data sizes, and
+rendering scenarios.
 
 ## User Story
 

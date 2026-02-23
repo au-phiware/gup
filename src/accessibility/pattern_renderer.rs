@@ -98,8 +98,6 @@ impl PatternRenderer {
             }],
         });
 
-        
-
         // Initialize buffer with initial uniforms (requires queue, so we'll do it in update)
         Self {
             uniform_buffer,

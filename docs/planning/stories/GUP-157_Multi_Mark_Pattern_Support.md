@@ -10,7 +10,9 @@
 
 ## Context
 
-GUP-113 created pattern infrastructure and GUP-119 integrated it with circles. However, Gup has multiple mark types (rectangles, lines, paths, text), and all should support pattern rendering for comprehensive accessibility.
+GUP-113 created pattern infrastructure and GUP-119 integrated it with circles.
+However, Gup has multiple mark types (rectangles, lines, paths, text), and all
+should support pattern rendering for comprehensive accessibility.
 
 ## User Story
 
@@ -23,7 +25,7 @@ GUP-113 created pattern infrastructure and GUP-119 integrated it with circles. H
 ### AC1: Pattern Shaders for All Marks
 
 - [ ] Rectangle marks with pattern support
-- [ ] Line marks with pattern support  
+- [ ] Line marks with pattern support
 - [ ] Path marks with pattern support
 - [ ] Text background patterns (optional)
 - [ ] Boxplot marks with pattern support

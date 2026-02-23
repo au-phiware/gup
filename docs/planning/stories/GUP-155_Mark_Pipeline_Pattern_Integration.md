@@ -6,11 +6,14 @@
 **Epic**: Phase 1 Initiative 4 - Interaction System and Performance  
 **Priority**: High  
 **Story Points**: 3  
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Context
 
-GUP-113 implemented the pattern rendering infrastructure (PatternUniforms, PatternRenderer, WGSL shaders), but patterns are not yet integrated into the actual mark rendering pipeline. Marks need to use pattern bind groups in their render passes for patterns to appear in visualizations.
+GUP-113 implemented the pattern rendering infrastructure (PatternUniforms,
+PatternRenderer, WGSL shaders), but patterns are not yet integrated into the
+actual mark rendering pipeline. Marks need to use pattern bind groups in their
+render passes for patterns to appear in visualizations.
 
 ## User Story
 

@@ -143,22 +143,22 @@ epic and status.
 
 ### Post GUP-004 Stories - Context Enhancement (Stories 38+)
 
-| Story                                                   | Title                             | Status         | Priority | Points |
-| ------------------------------------------------------- | --------------------------------- | -------------- | -------- | ------ |
-| [GUP-038](GUP-038_Texture_Pool_Enhancement.md)          | Texture Pool Enhancement          | ✅ Complete    | Medium   | 3      |
-| [GUP-039](GUP-039_Context_Window_Integration.md)        | Context Window Integration        | ✅ Complete    | High     | 5      |
-| [GUP-046](GUP-046_Context_Performance_Profiling.md)     | Context Performance Profiling     | ✅ Complete    | Medium   | 3      |
-| [GUP-047](GUP-047_Surface_Event_Integration.md)         | Surface Event Integration         | ✅ Complete    | Medium   | 3      |
-| [GUP-048](GUP-048_Context_Error_Recovery.md)            | Context Error Recovery            | ✅ Complete    | Medium   | 4      |
-| [GUP-149](GUP-149_Automatic_Device_Loss_Detection.md)   | Automatic Device Loss Detection   | ✅ Complete    | Low      | 2      |
-| [GUP-150](GUP-150_Recovery_Metrics_and_Analytics.md)    | Recovery Metrics and Analytics    | ✅ Complete    | Low      | 3      |
-| [GUP-151](GUP-151_Surface_Configuration_Caching.md)     | Surface Configuration Caching     | ✅ Complete    | Low      | 2      |
-| [GUP-152](GUP-152_Performance_Trend_Visualization.md)   | Performance Trend Visualization   | ✅ Complete    | Low      | 3      |
-| [GUP-153](GUP-153_Automated_Baseline_Recommendation.md) | Automated Baseline Recommendation | ✅ Complete    | Low      | 5      |
-| [GUP-154](GUP-154_Multi-Platform_CI_Testing.md)         | Multi-Platform CI Testing         | ✅ Complete    | Medium   | 8      |
-| [GUP-049](GUP-049_Surface_Performance_Optimization.md)  | Surface Performance Optimization  | ✅ Complete    | Medium   | 5      |
-| [GUP-050](GUP-050_Visual_Blend_Mode_Validation.md)      | Visual Blend Mode Validation      | ✅ Complete    | Low      | 3      |
-| [GUP-042](GUP-042_Cross_Platform_Surface_Features.md)   | Cross Platform Surface Features   | ✅ Complete    | Low      | 8      |
+| Story                                                   | Title                             | Status      | Priority | Points |
+| ------------------------------------------------------- | --------------------------------- | ----------- | -------- | ------ |
+| [GUP-038](GUP-038_Texture_Pool_Enhancement.md)          | Texture Pool Enhancement          | ✅ Complete | Medium   | 3      |
+| [GUP-039](GUP-039_Context_Window_Integration.md)        | Context Window Integration        | ✅ Complete | High     | 5      |
+| [GUP-046](GUP-046_Context_Performance_Profiling.md)     | Context Performance Profiling     | ✅ Complete | Medium   | 3      |
+| [GUP-047](GUP-047_Surface_Event_Integration.md)         | Surface Event Integration         | ✅ Complete | Medium   | 3      |
+| [GUP-048](GUP-048_Context_Error_Recovery.md)            | Context Error Recovery            | ✅ Complete | Medium   | 4      |
+| [GUP-149](GUP-149_Automatic_Device_Loss_Detection.md)   | Automatic Device Loss Detection   | ✅ Complete | Low      | 2      |
+| [GUP-150](GUP-150_Recovery_Metrics_and_Analytics.md)    | Recovery Metrics and Analytics    | ✅ Complete | Low      | 3      |
+| [GUP-151](GUP-151_Surface_Configuration_Caching.md)     | Surface Configuration Caching     | ✅ Complete | Low      | 2      |
+| [GUP-152](GUP-152_Performance_Trend_Visualization.md)   | Performance Trend Visualization   | ✅ Complete | Low      | 3      |
+| [GUP-153](GUP-153_Automated_Baseline_Recommendation.md) | Automated Baseline Recommendation | ✅ Complete | Low      | 5      |
+| [GUP-154](GUP-154_Multi-Platform_CI_Testing.md)         | Multi-Platform CI Testing         | ✅ Complete | Medium   | 8      |
+| [GUP-049](GUP-049_Surface_Performance_Optimization.md)  | Surface Performance Optimization  | ✅ Complete | Medium   | 5      |
+| [GUP-050](GUP-050_Visual_Blend_Mode_Validation.md)      | Visual Blend Mode Validation      | ✅ Complete | Low      | 3      |
+| [GUP-042](GUP-042_Cross_Platform_Surface_Features.md)   | Cross Platform Surface Features   | ✅ Complete | Low      | 8      |
 
 ### Post GUP-027 Stories - Blend System Enhancement (Stories 43+)
 
@@ -1024,10 +1024,11 @@ type IDs
 
 ### GUP-155: Mark Pipeline Pattern Integration
 
-**Status**: 📋 Planned  
+**Status**: 🚧 In Progress  
 **Priority**: High  
 **Story Points**: 3  
-**Key Need**: Integrate PatternRenderer into mark rendering pipeline for actual pattern display  
+**Key Need**: Integrate PatternRenderer into mark rendering pipeline for actual
+pattern display  
 **Dependencies**: GUP-113 ✅  
 **Impact**: Makes pattern rendering functional in visualizations  
 **Created**: 2025-02-24 during GUP-113 retrospective
@@ -1037,7 +1038,8 @@ type IDs
 **Status**: 📋 Planned  
 **Priority**: Medium  
 **Story Points**: 2  
-**Key Need**: Validate <5ms pattern rendering overhead target with comprehensive benchmarks  
+**Key Need**: Validate <5ms pattern rendering overhead target with comprehensive
+benchmarks  
 **Dependencies**: GUP-113 ✅, GUP-155  
 **Impact**: Confirms pattern rendering meets performance requirements  
 **Created**: 2025-02-24 during GUP-113 retrospective
@@ -1047,7 +1049,8 @@ type IDs
 **Status**: 📋 Planned  
 **Priority**: Medium  
 **Story Points**: 5  
-**Key Need**: Extend pattern rendering to all mark types (rectangles, lines, paths)  
+**Key Need**: Extend pattern rendering to all mark types (rectangles, lines,
+paths)  
 **Dependencies**: GUP-113 ✅, GUP-155  
 **Impact**: Complete accessibility coverage for all visualization types  
 **Created**: 2025-02-24 during GUP-113 retrospective
