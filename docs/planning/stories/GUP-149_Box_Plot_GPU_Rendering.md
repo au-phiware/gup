@@ -1,6 +1,6 @@
 # GUP-149: Box Plot GPU Rendering Integration
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Story Overview
 

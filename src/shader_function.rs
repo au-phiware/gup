@@ -4951,8 +4951,8 @@ impl StreamingStatistics {
         let delta = other.mean - self.mean;
 
         // Update mean
-        let new_mean = (self.count as f64 * self.mean + other.count as f64 * other.mean)
-            / total_count as f64;
+        let new_mean =
+            (self.count as f64 * self.mean + other.count as f64 * other.mean) / total_count as f64;
 
         // Update M2 (variance component)
         let new_m2 = self.m2
