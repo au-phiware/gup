@@ -160,5 +160,75 @@ The following items have been deferred to future stories as they require broader
 
 ---
 
+## Retrospective
+
+**Completed**: 2025-01-10
+
+### Key Technical Learnings
+
+#### Statistical Integration Patterns
+
+- **Challenge**: Integrating statistical computations from GUP-139 into a mark type while keeping the API ergonomic.
+- **Solution**: Created `BoxPlotAttributes::from_data()` as a convenience constructor that encapsulates all statistical computation. This provides a clean separation: users pass raw data, the function computes statistics using `Percentile` and `MinMax`, and returns fully-configured attributes.
+- **Pattern**: This "statistical factory method" pattern is reusable for other statistical marks (violin plots, histogram marks, etc.). The mark type focuses on rendering while statistical computations are delegated to shader functions.
+
+#### Mark Type Architecture
+
+- **Challenge**: Box plots are compositionally complex - they consist of multiple visual elements (box, median line, whiskers, outlier points) that traditionally would be separate primitives.
+- **Solution**: Followed the existing Rectangle mark pattern of using a single instanced quad with shader-based rendering. The vertex shader positions the quad for the box, and the fragment shader handles the visual complexity. This is simpler than managing multiple sub-marks.
+- **Trade-off**: Full rendering (whiskers, median line, outliers) requires either multiple draw calls or a more sophisticated shader approach. For now, we've implemented the statistical computation layer and prepared the shader structure. Full rendering is deferred.
+- **Future**: Consider a `CompositeMark` approach for complex multi-element visualizations like box plots.
+
+#### Outlier Detection Algorithm
+
+- **Challenge**: Implementing the 1.5×IQR rule efficiently for potentially large datasets.
+- **Solution**: CPU-side implementation using simple iteration. For each value, check if it falls outside `[Q1 - 1.5*IQR, Q3 + 1.5*IQR]`. The whiskers then extend to the min/max values *within* these fences.
+- **Pattern**: This is a classic "separate statistics" pattern - outliers are identified and stored separately, allowing them to be rendered differently (e.g., as circles beyond whiskers).
+- **Future**: For large datasets, a GPU compute shader could parallelize outlier detection.
+
+### Architectural Decisions
+
+#### Separation of Statistical Computation from Rendering
+
+- **Decision**: Implemented complete statistical computation in `BoxPlotAttributes::from_data()` while deferring full GPU rendering integration.
+- **Reasoning**: This aligns with the Phase 1 focus on building solid foundations. The statistical layer is complete and tested, rendering can be integrated incrementally.
+- **Trade-off**: Users can compute box plot statistics but cannot yet render them to screen. This is acceptable for Phase 1 where we're validating the statistical API.
+- **Future**: Integration with Selection API will enable full rendering. The statistical layer is ready and won't need changes.
+
+#### Enum-Based Orientation
+
+- **Decision**: Used a simple `BoxPlotOrientation` enum (Vertical/Horizontal) rather than a generic transform system.
+- **Reasoning**: Box plots have well-defined orientations. An enum provides type safety and clear semantics. The shader can switch behavior based on a u32 flag.
+- **Pattern**: This is the same pattern used across Gup - enums for known variants, not trait objects. Provides compile-time guarantees and better performance.
+
+#### Statistical Functions as Dependencies
+
+- **Decision**: Made GUP-139 (Statistical Shader Functions) an explicit dependency.
+- **Reasoning**: Box plots are fundamentally statistical visualizations. Depending on proven, tested statistical primitives (Percentile, MinMax) ensures correctness and reusability.
+- **Future**: Other statistical marks (violin plots, histograms, density plots) will follow this same dependency pattern.
+
+### Development Workflow Insights
+
+- **Rapid Prototyping**: Starting with the example helped validate the API design early. Writing `BoxPlotAttributes::from_data()` and seeing the output clarified what the API should look like.
+- **Test-First for Statistics**: Statistical correctness is critical. Writing tests with known datasets (including outliers) before implementation helped catch edge cases (empty data, single outliers, no outliers).
+- **Mark System Consistency**: Following the Rectangle mark pattern made implementation straightforward - same trait methods, same shader structure, same test patterns. This consistency is a huge productivity multiplier.
+- **Shader Preparation Without Full Integration**: Creating shader files early, even though they're not fully used yet, helps document the intended rendering approach and makes future integration easier.
+
+### Follow-up Stories
+
+During implementation, several areas were identified that would benefit from dedicated stories:
+
+1. **GUP-149: Box Plot GPU Rendering Integration** - Complete the rendering path by integrating BoxPlot with the Selection API. Implement whisker rendering, median line, and outlier circles using the prepared shaders.
+
+2. **GUP-150: Statistical Mark Builder API** - Create Observable Plot-style builder for box plots and other statistical marks. This is a Phase 2 initiative per the implementation strategy.
+
+3. **GUP-151: Multi-Category Box Plots** - Support grouped box plots where multiple distributions are displayed side-by-side, useful for comparing categories.
+
+4. **GUP-152: GPU-Accelerated Outlier Detection** - For large datasets (10K+ points), implement a compute shader-based outlier detection that runs entirely on GPU.
+
+5. **GUP-153: Violin Plot Mark** - Similar to box plots but showing full density distribution. Can reuse the statistical computation patterns from BoxPlot.
+
+---
+
 _Identified during GUP-139 implementation as statistical visualization use
 case._
