@@ -165,10 +165,7 @@ impl ResourceGraph {
 
         // Update reverse dependencies
         for dep_id in dependencies {
-            self.dependents
-                .entry(dep_id)
-                .or_default()
-                .insert(id);
+            self.dependents.entry(dep_id).or_default().insert(id);
         }
 
         id
@@ -638,11 +635,7 @@ mod tests {
         // Manually create circular dependency
         if let Some(node) = graph.nodes.get_mut(&r1) {
             node.dependencies.push(r2);
-            graph
-                .dependents
-                .entry(r2)
-                .or_default()
-                .insert(r1);
+            graph.dependents.entry(r2).or_default().insert(r1);
         }
 
         let cycles = graph.detect_circular_dependencies();

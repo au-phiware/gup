@@ -6,6 +6,7 @@
 //! This module provides utilities for inspecting GPU buffer contents through staging buffers,
 //! enabling debugging of GPU data transfer and processing issues.
 
+use crate::debug::buffer_validation::{BufferMetadata, ValidationReport, ValidationRule};
 use crate::error::{GupError, GupResult};
 use futures_channel;
 use serde::{Deserialize, Serialize};
@@ -290,6 +291,92 @@ impl GpuBufferInspector {
             buffer_count: total_buffers,
             total_memory_bytes: total_memory,
         }
+    }
+
+    /// Validate buffer contents using provided validation rules
+    pub async fn validate_buffer<T>(
+        &mut self,
+        buffer: &Buffer,
+        capacity: usize,
+        rules: Vec<Box<dyn ValidationRule<T>>>,
+    ) -> GupResult<ValidationReport>
+    where
+        T: bytemuck::Pod + bytemuck::Zeroable,
+    {
+        let data = self.read_buffer::<T>(buffer).await?;
+        let metadata = BufferMetadata {
+            capacity,
+            len: data.len(),
+            element_size: std::mem::size_of::<T>(),
+            buffer_size: buffer.size(),
+        };
+
+        let mut results = Vec::new();
+        for rule in rules {
+            results.push(rule.validate(&data, &metadata));
+        }
+
+        Ok(ValidationReport::new(results))
+    }
+
+    /// Create a formatted statistical summary of buffer contents
+    pub async fn create_statistical_summary<T>(&mut self, buffer: &Buffer) -> GupResult<String>
+    where
+        T: bytemuck::Pod + bytemuck::Zeroable + Clone + std::fmt::Debug,
+    {
+        let data = self.read_buffer::<T>(buffer).await?;
+        if data.is_empty() {
+            return Ok("Empty buffer".to_string());
+        }
+
+        // Try to interpret as floats for statistical analysis
+        let bytes = bytemuck::cast_slice::<T, u8>(&data);
+        let floats = bytemuck::cast_slice::<u8, f32>(bytes);
+
+        let mut output = String::new();
+        output.push_str("=== Buffer Statistical Summary ===\n");
+        output.push_str(&format!("Element count: {}\n", data.len()));
+        output.push_str(&format!("Buffer size: {} bytes\n", buffer.size()));
+        output.push_str(&format!(
+            "Element size: {} bytes\n",
+            std::mem::size_of::<T>()
+        ));
+        output.push_str("\nFloat value statistics:\n");
+
+        // Calculate basic statistics
+        let valid_floats: Vec<f32> = floats.iter().filter(|f| f.is_finite()).copied().collect();
+
+        if !valid_floats.is_empty() {
+            let min = valid_floats.iter().fold(f32::INFINITY, |a, &b| a.min(b));
+            let max = valid_floats
+                .iter()
+                .fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+            let sum: f32 = valid_floats.iter().sum();
+            let mean = sum / valid_floats.len() as f32;
+
+            let variance: f32 = valid_floats
+                .iter()
+                .map(|&v| (v - mean).powi(2))
+                .sum::<f32>()
+                / valid_floats.len() as f32;
+            let std_dev = variance.sqrt();
+
+            output.push_str(&format!("  Min: {:.6}\n", min));
+            output.push_str(&format!("  Max: {:.6}\n", max));
+            output.push_str(&format!("  Mean: {:.6}\n", mean));
+            output.push_str(&format!("  Std Dev: {:.6}\n", std_dev));
+            output.push_str(&format!("  Valid values: {}\n", valid_floats.len()));
+        }
+
+        let nan_count = floats.iter().filter(|f| f.is_nan()).count();
+        let inf_count = floats.iter().filter(|f| f.is_infinite()).count();
+        let zero_count = floats.iter().filter(|&&f| f == 0.0).count();
+
+        output.push_str(&format!("  NaN values: {}\n", nan_count));
+        output.push_str(&format!("  Infinite values: {}\n", inf_count));
+        output.push_str(&format!("  Zero values: {}\n", zero_count));
+
+        Ok(output)
     }
 }
 

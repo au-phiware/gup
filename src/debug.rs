@@ -46,7 +46,9 @@ use std::collections::HashMap;
 use wgpu::{Device, Queue};
 
 pub mod buffer_inspector;
+pub mod buffer_validation;
 pub mod ci_performance;
+pub mod debug_buffer_wrapper;
 pub mod layout_validator;
 pub mod memory_profiler;
 pub mod resource_graph;
@@ -55,6 +57,9 @@ pub mod visualization;
 pub mod web_dashboard;
 
 pub use buffer_inspector::*;
+pub use buffer_validation::*;
+#[cfg(debug_assertions)]
+pub use debug_buffer_wrapper::*;
 // Export CI performance types explicitly to avoid conflicts
 pub use ci_performance::{
     BaselineComparison, BaselineStorage, CiConfig, CiPerformanceRunner, PerformanceReport,
