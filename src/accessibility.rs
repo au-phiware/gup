@@ -38,6 +38,8 @@ pub mod pattern_renderer;
 pub mod platform;
 pub mod position_sync;
 pub mod sonification;
+pub mod texture_pattern_generator;
+pub mod texture_pattern_renderer;
 pub mod web_overlay;
 #[cfg(target_os = "windows")]
 pub mod windows;
