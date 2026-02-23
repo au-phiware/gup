@@ -17,6 +17,10 @@ use crate::accessibility::aria::AriaUpdate;
 use crate::accessibility::aria::{AriaTree, NodeId};
 use std::fmt;
 
+// Import platform-specific implementations
+#[cfg(target_os = "macos")]
+pub use crate::accessibility::macos::MacOSAccessibility;
+
 /// Platform abstraction for accessibility integration.
 ///
 /// Different platforms have different accessibility frameworks. This trait
@@ -119,99 +123,6 @@ pub fn create_platform_accessibility() -> Box<dyn PlatformAccessibility> {
     )))]
     {
         Box::new(NullAccessibility::new())
-    }
-}
-
-// ============================================================================
-// macOS NSAccessibility Implementation
-// ============================================================================
-
-#[cfg(target_os = "macos")]
-pub struct MacOSAccessibility {
-    initialized: bool,
-}
-
-#[cfg(target_os = "macos")]
-impl MacOSAccessibility {
-    pub fn new() -> Self {
-        Self { initialized: false }
-    }
-}
-
-#[cfg(target_os = "macos")]
-impl PlatformAccessibility for MacOSAccessibility {
-    fn initialize(&mut self) -> Result<(), AccessibilityError> {
-        // TODO: Initialize NSAccessibility
-        // This would require Objective-C bindings (e.g., via objc2 crate)
-        self.initialized = true;
-        Ok(())
-    }
-
-    fn update_accessibility_tree(
-        &mut self,
-        updates: &[AriaUpdate],
-    ) -> Result<(), AccessibilityError> {
-        if !self.initialized {
-            return Err(AccessibilityError::PlatformUnavailable(
-                "macOS accessibility not initialized".to_string(),
-            ));
-        }
-
-        // TODO: Translate ARIA updates to NSAccessibility protocol
-        // For now, just validate we can process the updates
-        for update in updates {
-            match update {
-                AriaUpdate::NodeCreated { .. }
-                | AriaUpdate::NodeUpdated { .. }
-                | AriaUpdate::NodeRemoved { .. }
-                | AriaUpdate::FocusChanged { .. }
-                | AriaUpdate::LiveRegion { .. } => {
-                    // Would call NSAccessibility methods here
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    fn announce(
-        &mut self,
-        message: &str,
-        priority: AnnouncementPriority,
-    ) -> Result<(), AccessibilityError> {
-        if !self.initialized {
-            return Err(AccessibilityError::PlatformUnavailable(
-                "macOS accessibility not initialized".to_string(),
-            ));
-        }
-
-        // TODO: Post announcement via NSAccessibilityPostNotification
-        // with NSAccessibilityAnnouncementRequestedNotification
-        log::debug!("macOS announce ({:?}): {}", priority, message);
-
-        Ok(())
-    }
-
-    fn set_focus(&mut self, element_id: &str) -> Result<(), AccessibilityError> {
-        if !self.initialized {
-            return Err(AccessibilityError::PlatformUnavailable(
-                "macOS accessibility not initialized".to_string(),
-            ));
-        }
-
-        // TODO: Set NSAccessibility focus
-        log::debug!("macOS set focus: {}", element_id);
-
-        Ok(())
-    }
-
-    fn platform_name(&self) -> &str {
-        "macOS (NSAccessibility)"
-    }
-
-    fn is_available(&self) -> bool {
-        // NSAccessibility is always available on macOS
-        true
     }
 }
 

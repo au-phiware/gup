@@ -30,6 +30,8 @@ pub mod focus_elements;
 pub mod focus_ring;
 pub mod high_contrast;
 pub mod keyboard;
+#[cfg(target_os = "macos")]
+pub mod macos;
 pub mod mark_positions;
 pub mod pattern_renderer;
 pub mod platform;
