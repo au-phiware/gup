@@ -13,6 +13,111 @@ use crate::error::{GupError, GupResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use wgpu::{Adapter, AdapterInfo};
+
+/// GPU vendor for platform identification
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GpuVendor {
+    /// NVIDIA GPUs
+    Nvidia,
+    /// AMD GPUs
+    Amd,
+    /// Intel GPUs
+    Intel,
+    /// Apple Silicon GPUs
+    Apple,
+    /// Software/CPU fallback renderer
+    Software,
+    /// Unknown or other vendor
+    Unknown,
+}
+
+impl From<u32> for GpuVendor {
+    fn from(vendor_id: u32) -> Self {
+        match vendor_id {
+            0x10DE => GpuVendor::Nvidia,
+            0x1002 => GpuVendor::Amd,
+            0x8086 => GpuVendor::Intel,
+            0x106B => GpuVendor::Apple,
+            0x1414 | 0x5143 => GpuVendor::Software, // Microsoft Basic Render Driver, Qualcomm
+            _ => GpuVendor::Unknown,
+        }
+    }
+}
+
+/// Platform information for multi-platform testing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlatformInfo {
+    /// GPU vendor
+    pub vendor: GpuVendor,
+    /// GPU model/device name
+    pub model: String,
+    /// Driver version or description
+    pub driver: String,
+    /// Backend being used (Vulkan, Metal, DX12, etc.)
+    pub backend: String,
+    /// Platform identifier for baseline organization
+    pub platform_id: String,
+}
+
+impl PlatformInfo {
+    /// Detect platform information from wgpu adapter
+    pub fn from_adapter(adapter: &Adapter) -> Self {
+        let info = adapter.get_info();
+        Self::from_adapter_info(&info)
+    }
+
+    /// Create platform info from adapter info
+    pub fn from_adapter_info(info: &AdapterInfo) -> Self {
+        let vendor = GpuVendor::from(info.vendor);
+        let model = info.name.clone();
+        let driver = info.driver.clone();
+        let backend = format!("{:?}", info.backend);
+
+        // Create a sanitized platform ID for file paths
+        let platform_id = Self::create_platform_id(&vendor, &model);
+
+        Self {
+            vendor,
+            model,
+            driver,
+            backend,
+            platform_id,
+        }
+    }
+
+    /// Create a filesystem-safe platform identifier
+    fn create_platform_id(vendor: &GpuVendor, model: &str) -> String {
+        let vendor_str = format!("{:?}", vendor).to_lowercase();
+
+        // Sanitize model name for filesystem
+        let model_str = model
+            .to_lowercase()
+            .chars()
+            .map(|c| {
+                if c.is_alphanumeric() {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect::<String>();
+
+        // Trim excessive underscores
+        let model_str = model_str
+            .split('_')
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join("_");
+
+        format!("{}_{}", vendor_str, model_str)
+    }
+
+    /// Get a human-readable platform description
+    pub fn description(&self) -> String {
+        format!("{:?} {} ({})", self.vendor, self.model, self.backend)
+    }
+}
 
 /// CI/CD performance testing runner
 #[derive(Debug)]
@@ -23,6 +128,8 @@ pub struct CiPerformanceRunner {
     baseline_storage: BaselineStorage,
     /// Configuration for CI testing
     config: CiConfig,
+    /// Platform information for multi-platform testing
+    platform_info: Option<PlatformInfo>,
 }
 
 impl CiPerformanceRunner {
@@ -33,7 +140,22 @@ impl CiPerformanceRunner {
             debug_context,
             baseline_storage,
             config,
+            platform_info: None,
         }
+    }
+
+    /// Set platform information for multi-platform testing
+    pub fn with_platform_info(mut self, platform_info: PlatformInfo) -> Self {
+        self.platform_info = Some(platform_info);
+        self
+    }
+
+    /// Get the current platform identifier, or "default" if not set
+    fn get_platform_id(&self) -> &str {
+        self.platform_info
+            .as_ref()
+            .map(|p| p.platform_id.as_str())
+            .unwrap_or("default")
     }
 
     /// Run the complete performance test suite
@@ -58,6 +180,7 @@ impl CiPerformanceRunner {
             test_results,
             summary: self.debug_context.get_performance_summary(),
             config: self.config.clone(),
+            platform_info: self.platform_info.clone(),
         })
     }
 
@@ -70,10 +193,12 @@ impl CiPerformanceRunner {
 
         let elapsed = start_time.elapsed();
 
+        let platform_id = self.get_platform_id();
+
         // Check against baseline if available
         let baseline_comparison = if let Ok(baseline) = self
             .baseline_storage
-            .load_baseline(&test.name, &test.category)
+            .load_baseline(&test.name, &test.category, platform_id)
         {
             Some(self.compare_against_baseline(&snapshot, &baseline))
         } else {
@@ -171,6 +296,8 @@ impl CiPerformanceRunner {
 
     /// Update baselines with approved results
     pub fn update_baselines(&mut self, report: &PerformanceReport) -> GupResult<()> {
+        let platform_id = self.get_platform_id();
+
         for result in &report.test_results {
             let baseline = PerformanceBaseline {
                 test_name: result.test_name.clone(),
@@ -180,10 +307,15 @@ impl CiPerformanceRunner {
                 sample_count: 1,
                 last_updated: chrono::Utc::now(),
                 metadata: result.snapshot.metadata.clone(),
+                platform_id: platform_id.to_string(),
             };
 
-            self.baseline_storage
-                .save_baseline(&result.test_name, &result.category, &baseline)?;
+            self.baseline_storage.save_baseline(
+                &result.test_name,
+                &result.category,
+                platform_id,
+                &baseline,
+            )?;
         }
 
         Ok(())
@@ -210,6 +342,14 @@ impl CiPerformanceRunner {
             report.timestamp.format("%Y-%m-%d %H:%M:%S UTC")
         ));
         md.push_str(&format!("**Duration**: {}ms\n\n", report.duration_ms));
+
+        // Platform info
+        if let Some(platform_info) = &report.platform_info {
+            md.push_str(&format!(
+                "**Platform**: {}\n\n",
+                platform_info.description()
+            ));
+        }
 
         // Summary
         md.push_str("## Summary\n\n");
@@ -299,9 +439,14 @@ impl BaselineStorage {
         Self { base_dir }
     }
 
-    /// Load a baseline from storage
-    pub fn load_baseline(&self, test_name: &str, category: &str) -> GupResult<PerformanceBaseline> {
-        let path = self.baseline_path(test_name, category);
+    /// Load a baseline from storage for a specific platform
+    pub fn load_baseline(
+        &self,
+        test_name: &str,
+        category: &str,
+        platform_id: &str,
+    ) -> GupResult<PerformanceBaseline> {
+        let path = self.baseline_path(test_name, category, platform_id);
 
         let json = std::fs::read_to_string(&path).map_err(|e| {
             GupError::resource_error(format!("Failed to load baseline from {path:?}: {e}"))
@@ -312,14 +457,15 @@ impl BaselineStorage {
         })
     }
 
-    /// Save a baseline to storage
+    /// Save a baseline to storage for a specific platform
     pub fn save_baseline(
         &self,
         test_name: &str,
         category: &str,
+        platform_id: &str,
         baseline: &PerformanceBaseline,
     ) -> GupResult<()> {
-        let path = self.baseline_path(test_name, category);
+        let path = self.baseline_path(test_name, category, platform_id);
 
         // Ensure directory exists
         if let Some(parent) = path.parent() {
@@ -339,8 +485,9 @@ impl BaselineStorage {
     }
 
     /// Get the path for a baseline file
-    fn baseline_path(&self, test_name: &str, category: &str) -> PathBuf {
+    fn baseline_path(&self, test_name: &str, category: &str, platform_id: &str) -> PathBuf {
         self.base_dir
+            .join(platform_id)
             .join(category)
             .join(format!("{}.json", test_name))
     }
@@ -394,6 +541,7 @@ pub struct PerformanceBaseline {
     pub sample_count: usize,
     pub last_updated: chrono::DateTime<chrono::Utc>,
     pub metadata: HashMap<String, String>,
+    pub platform_id: String,
 }
 
 /// Complete performance report from a CI run
@@ -404,6 +552,8 @@ pub struct PerformanceReport {
     pub test_results: Vec<TestResult>,
     pub summary: PerformanceSummary,
     pub config: CiConfig,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub platform_info: Option<PlatformInfo>,
 }
 
 /// Result of a single performance test
@@ -505,6 +655,137 @@ impl PerformanceTestSuite {
     }
 }
 
+/// Cross-platform performance comparison helper
+pub struct CrossPlatformComparison {
+    /// Reports from different platforms
+    reports: Vec<PerformanceReport>,
+}
+
+impl CrossPlatformComparison {
+    /// Create a new cross-platform comparison
+    pub fn new() -> Self {
+        Self {
+            reports: Vec::new(),
+        }
+    }
+
+    /// Add a report for comparison
+    pub fn add_report(mut self, report: PerformanceReport) -> Self {
+        self.reports.push(report);
+        self
+    }
+
+    /// Generate a cross-platform comparison report
+    pub fn generate_markdown_report(&self) -> String {
+        if self.reports.is_empty() {
+            return "No reports available for comparison".to_string();
+        }
+
+        let mut md = String::new();
+        md.push_str("# Cross-Platform Performance Comparison\n\n");
+
+        // Platform summary
+        md.push_str("## Platforms Tested\n\n");
+        for report in &self.reports {
+            if let Some(platform_info) = &report.platform_info {
+                md.push_str(&format!("- {}\n", platform_info.description()));
+            } else {
+                md.push_str("- Unknown platform\n");
+            }
+        }
+        md.push_str("\n");
+
+        // Collect all unique test names
+        let mut test_names = std::collections::HashSet::new();
+        for report in &self.reports {
+            for result in &report.test_results {
+                test_names.insert(result.test_name.clone());
+            }
+        }
+
+        let mut test_names: Vec<_> = test_names.into_iter().collect();
+        test_names.sort();
+
+        // Create comparison table for each test
+        md.push_str("## Performance by Platform\n\n");
+        md.push_str("| Test | ");
+        for report in &self.reports {
+            if let Some(platform_info) = &report.platform_info {
+                md.push_str(&format!("{:?} | ", platform_info.vendor));
+            } else {
+                md.push_str("Unknown | ");
+            }
+        }
+        md.push_str("\n");
+
+        md.push_str("|------|");
+        for _ in &self.reports {
+            md.push_str("--------|");
+        }
+        md.push_str("\n");
+
+        for test_name in &test_names {
+            md.push_str(&format!("| {} | ", test_name));
+            for report in &self.reports {
+                if let Some(result) = report
+                    .test_results
+                    .iter()
+                    .find(|r| r.test_name == *test_name)
+                {
+                    md.push_str(&format!("{:.2}ms | ", result.snapshot.frame_time_ms));
+                } else {
+                    md.push_str("N/A | ");
+                }
+            }
+            md.push_str("\n");
+        }
+
+        md.push_str("\n");
+
+        // Find performance deltas across platforms
+        md.push_str("## Performance Variations\n\n");
+        for test_name in &test_names {
+            let mut times: Vec<f32> = Vec::new();
+            for report in &self.reports {
+                if let Some(result) = report
+                    .test_results
+                    .iter()
+                    .find(|r| r.test_name == *test_name)
+                {
+                    times.push(result.snapshot.frame_time_ms);
+                }
+            }
+
+            if !times.is_empty() {
+                let min_time = times
+                    .iter()
+                    .min_by(|a, b| a.partial_cmp(b).unwrap())
+                    .unwrap();
+                let max_time = times
+                    .iter()
+                    .max_by(|a, b| a.partial_cmp(b).unwrap())
+                    .unwrap();
+
+                let variation = ((max_time - min_time) / min_time * 100.0).abs();
+                if variation > 10.0 {
+                    md.push_str(&format!(
+                        "- **{}**: {:.1}% variation ({:.2}ms - {:.2}ms)\n",
+                        test_name, variation, min_time, max_time
+                    ));
+                }
+            }
+        }
+
+        md
+    }
+}
+
+impl Default for CrossPlatformComparison {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -527,10 +808,10 @@ mod tests {
     #[test]
     fn test_baseline_storage_path() {
         let storage = BaselineStorage::new(PathBuf::from("/tmp/baselines"));
-        let path = storage.baseline_path("test_foo", "rendering");
+        let path = storage.baseline_path("test_foo", "rendering", "default");
         assert_eq!(
             path,
-            PathBuf::from("/tmp/baselines/rendering/test_foo.json")
+            PathBuf::from("/tmp/baselines/default/rendering/test_foo.json")
         );
     }
 
@@ -544,6 +825,7 @@ mod tests {
             sample_count: 1,
             last_updated: chrono::Utc::now(),
             metadata: HashMap::new(),
+            platform_id: "default".to_string(),
         };
 
         let snapshot = PerformanceSnapshot::new(10.5, 1050);
