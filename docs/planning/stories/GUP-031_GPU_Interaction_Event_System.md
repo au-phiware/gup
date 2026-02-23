@@ -152,21 +152,25 @@ implementation._
 
 ### Test Status
 
-- ✅ **777/778 library tests pass** (1 flaky performance test unrelated to changes)
+- ✅ **777/778 library tests pass** (1 flaky performance test unrelated to
+  changes)
 - ✅ **12/13 interaction system tests pass** (1 ignored for large datasets)
 - ✅ **All 17 examples compile successfully**
 
 ### API Surface Added
 
 **Public Types:**
+
 - `PropagationPhase` - enum for event phase tracking
 - `TouchPoint` - struct for touch event data
 - `GestureType` - enum for recognized gestures
 - `GestureRecognizer` - gesture detection engine
 
 **Public Methods on `InteractionEvent`:**
+
 - `stop_propagation()`, `stop_immediate_propagation()`, `prevent_default()`
-- `is_propagation_stopped()`, `is_immediate_propagation_stopped()`, `is_default_prevented()`
+- `is_propagation_stopped()`, `is_immediate_propagation_stopped()`,
+  `is_default_prevented()`
 - `phase()`, `set_phase()` (crate-internal)
 - `with_touch_points()`, `with_gesture()`
 
@@ -448,24 +452,29 @@ visualizations, with clear path forward for remaining work.
 
 ## Story Completion Update (2024-02-22)
 
-After GUP-128 resolved the GPU hit test issues, the remaining acceptance criteria
-(event bubbling and multi-touch gestures) were implemented to fully complete this story.
+After GUP-128 resolved the GPU hit test issues, the remaining acceptance
+criteria (event bubbling and multi-touch gestures) were implemented to fully
+complete this story.
 
 ### What Was Completed
 
 **Event Propagation System:**
-- Implemented standard DOM-like event propagation with three phases (Capture, Target, Bubble)
+
+- Implemented standard DOM-like event propagation with three phases (Capture,
+  Target, Bubble)
 - Added `stop_propagation()` to prevent bubbling/capturing to other elements
 - Added `stop_immediate_propagation()` to halt all further handler execution
 - Added `prevent_default()` to mark default behavior as prevented
-- Updated event handler signature to `Fn(&mut InteractionEvent, &T)` for propagation control
+- Updated event handler signature to `Fn(&mut InteractionEvent, &T)` for
+  propagation control
 - Selection's `trigger_event()` now respects immediate propagation stopping
 
 **Multi-Touch Gesture Recognition:**
+
 - Implemented `TouchPoint` struct with ID, position, and timestamp
 - Created `GestureType` enum with four gesture types:
   - `Pinch` - scale factor and delta for zoom gestures
-  - `Rotate` - angle and delta for rotation gestures  
+  - `Rotate` - angle and delta for rotation gestures
   - `Swipe` - direction and velocity for swipe gestures
   - `Pan` - position delta for panning gestures
 - Built `GestureRecognizer` that processes touch arrays to detect gestures:
@@ -476,21 +485,25 @@ After GUP-128 resolved the GPU hit test issues, the remaining acceptance criteri
 
 ### Technical Decisions
 
-**Propagation Model:**
-Chose DOM-like propagation (capture → target → bubble) over a simpler model because:
+**Propagation Model:** Chose DOM-like propagation (capture → target → bubble)
+over a simpler model because:
+
 - Familiar to web developers
 - Supports both specific and general handlers
-- Enables fine-grained control with `stop_propagation()` vs `stop_immediate_propagation()`
+- Enables fine-grained control with `stop_propagation()` vs
+  `stop_immediate_propagation()`
 
-**Gesture Recognition Approach:**
-Implemented stateful `GestureRecognizer` rather than stateless functions because:
+**Gesture Recognition Approach:** Implemented stateful `GestureRecognizer`
+rather than stateless functions because:
+
 - Gestures require tracking state across multiple touch events
 - Centralizes threshold configuration
 - Easier to test gesture detection in isolation
 - Can be enhanced with velocity tracking and gesture history
 
-**Mutable Event Handlers:**
-Changed handler signature to `Fn(&mut InteractionEvent, &T)` because:
+**Mutable Event Handlers:** Changed handler signature to
+`Fn(&mut InteractionEvent, &T)` because:
+
 - Propagation control requires mutation
 - Handlers can now modify event metadata
 - Consistent with DOM event model where events are mutable
@@ -505,6 +518,7 @@ Changed handler signature to `Fn(&mut InteractionEvent, &T)` because:
 - **Total: ~3 hours**
 
 Much faster than Phase 1 because:
+
 - No GPU shader work required
 - API patterns already established
 - Clear acceptance criteria
@@ -512,22 +526,25 @@ Much faster than Phase 1 because:
 
 ### Learnings
 
-**Completing vs. Perfect:**
-The decision to mark the story as "Partial Complete" and later finish it proved correct:
+**Completing vs. Perfect:** The decision to mark the story as "Partial Complete"
+and later finish it proved correct:
+
 - Phase 1 delivered immediate value (Selection integration)
 - GPU debugging was separated appropriately (GUP-128)
 - Completing remaining items together was more efficient than interrupting
 - Final implementation benefited from lessons learned in GUP-128
 
-**API Evolution:**
-Changing the event handler signature was straightforward because:
+**API Evolution:** Changing the event handler signature was straightforward
+because:
+
 - Limited external usage at this stage
 - Compiler caught all call sites
 - New signature is more powerful
 - No tests broke (only needed signature updates)
 
-**Gesture Recognition Complexity:**
-Basic gesture recognition is simpler than expected:
+**Gesture Recognition Complexity:** Basic gesture recognition is simpler than
+expected:
+
 - Two-finger gestures need only distance and angle calculations
 - Pan detection is trivial (position delta)
 - Advanced features (velocity smoothing, gesture chaining) can be added later
@@ -536,13 +553,16 @@ Basic gesture recognition is simpler than expected:
 ### Updated Follow-Up Stories
 
 **GUP-128: Debug GPU Hit Test Detection** - ✅ Complete
+
 - All hit test issues resolved
 - Enabled completion of GUP-031
 
 **GUP-129: Event Bubbling and Propagation** - ✅ Completed in this story
+
 - Merged into GUP-031 completion
 - No longer needed as separate story
 
 **GUP-130: Multi-Touch Gesture Recognition** - ✅ Completed in this story
-- Merged into GUP-031 completion  
+
+- Merged into GUP-031 completion
 - No longer needed as separate story

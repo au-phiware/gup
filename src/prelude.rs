@@ -100,6 +100,8 @@ pub use crate::shader_function::{
     StandardDeviation,
     StatisticsCompute,
     StatisticsResult,
+    // Streaming statistics (GUP-146)
+    StreamingStatistics,
     TemporalInterpolation,
     Threshold,
 

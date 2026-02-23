@@ -11,7 +11,10 @@
 
 ## Context
 
-Per the implementation strategy, high-level APIs are Phase 2 work. Box plots and other statistical marks currently require manual attribute construction. An Observable Plot-style builder would provide ergonomic, declarative syntax for creating statistical visualizations.
+Per the implementation strategy, high-level APIs are Phase 2 work. Box plots and
+other statistical marks currently require manual attribute construction. An
+Observable Plot-style builder would provide ergonomic, declarative syntax for
+creating statistical visualizations.
 
 ## User Story
 
@@ -30,7 +33,8 @@ Per the implementation strategy, high-level APIs are Phase 2 work. Box plots and
 
 ### AC2: Statistical Mark Patterns
 
-- [ ] Generic pattern for statistical marks (reusable for violin, histogram, etc.)
+- [ ] Generic pattern for statistical marks (reusable for violin, histogram,
+      etc.)
 - [ ] Support for grouped data (by category)
 - [ ] Support for custom statistical functions
 - [ ] Integration with scale system

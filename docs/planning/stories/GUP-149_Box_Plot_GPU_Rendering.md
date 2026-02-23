@@ -11,12 +11,16 @@
 
 ## Context
 
-GUP-147 implemented the BoxPlot mark type and statistical computation layer, but deferred full GPU rendering integration. The mark structure and shaders are prepared, but rendering whiskers, median lines, and outlier circles requires integration with the Selection API and mark rendering pipeline.
+GUP-147 implemented the BoxPlot mark type and statistical computation layer, but
+deferred full GPU rendering integration. The mark structure and shaders are
+prepared, but rendering whiskers, median lines, and outlier circles requires
+integration with the Selection API and mark rendering pipeline.
 
 ## User Story
 
 **As a** data visualization developer  
-**I want** to render complete box plots with whiskers, median lines, and outliers  
+**I want** to render complete box plots with whiskers, median lines, and
+outliers  
 **So that** I can create production-ready statistical visualizations
 
 ## Acceptance Criteria
@@ -46,7 +50,8 @@ GUP-147 implemented the BoxPlot mark type and statistical computation layer, but
 ## Technical Requirements
 
 - Integrate BoxPlot with MarkRenderer
-- Implement multi-pass rendering for composite elements (box, whiskers, outliers)
+- Implement multi-pass rendering for composite elements (box, whiskers,
+  outliers)
 - Or implement shader-based approach for all elements in one pass
 - Ensure proper GPU buffer layout for all attributes
 

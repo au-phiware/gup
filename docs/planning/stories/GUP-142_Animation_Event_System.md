@@ -92,8 +92,10 @@ progress
 ### Delivered Components
 
 1. **AnimationTimelineWithEvents** (AC1-AC4)
-   - Event registration API with time-based, repeating, completion, progress, and marker events
-   - `on_time()`, `on_time_repeating()`, `on_complete()`, `on_progress()`, `on_marker()` methods
+   - Event registration API with time-based, repeating, completion, progress,
+     and marker events
+   - `on_time()`, `on_time_repeating()`, `on_complete()`, `on_progress()`,
+     `on_marker()` methods
    - Event removal with `remove_events()` and `clear_events()`
    - Support for closure callbacks with timeline context
 
@@ -144,15 +146,20 @@ progress
 
 ### Notable Design Decisions
 
-1. **CPU-Side Event System**: Events managed on CPU, separate from GPU animation evaluation - clean separation of concerns
+1. **CPU-Side Event System**: Events managed on CPU, separate from GPU animation
+   evaluation - clean separation of concerns
 
-2. **Loop Detection via Unwrapped Time**: Calculate unwrapped time before modulo operation to detect when timeline loops
+2. **Loop Detection via Unwrapped Time**: Calculate unwrapped time before modulo
+   operation to detect when timeline loops
 
-3. **Closure-Based Callbacks**: Use `Box<dyn FnMut>` for flexible event handlers with captured state
+3. **Closure-Based Callbacks**: Use `Box<dyn FnMut>` for flexible event handlers
+   with captured state
 
-4. **Event Ordering**: Sort fired events by time to ensure chronological execution
+4. **Event Ordering**: Sort fired events by time to ensure chronological
+   execution
 
-5. **Hierarchical Coordination**: Parent timelines cascade play/pause/stop to children for synchronized control
+5. **Hierarchical Coordination**: Parent timelines cascade play/pause/stop to
+   children for synchronized control
 
 ---
 
@@ -167,15 +174,20 @@ scenarios._
 
 #### Loop Detection in Animation Timelines
 
-- **Challenge**: Detecting when a timeline loops back to the start after reaching its duration
-- **Solution**: Calculate "unwrapped" time before modulo operation to detect when time exceeds duration
-- **Pattern**: Store `unwrapped_new_time = old_time + delta * rate`, then check `unwrapped_new_time > duration`
-- **Result**: Accurate event firing across loop boundaries without missing repeating events
+- **Challenge**: Detecting when a timeline loops back to the start after
+  reaching its duration
+- **Solution**: Calculate "unwrapped" time before modulo operation to detect
+  when time exceeds duration
+- **Pattern**: Store `unwrapped_new_time = old_time + delta * rate`, then check
+  `unwrapped_new_time > duration`
+- **Result**: Accurate event firing across loop boundaries without missing
+  repeating events
 
 #### Time Crossing Detection Algorithm
 
 - **Challenge**: Determining if an event time was crossed between two updates
-- **Solution**: Separate logic for forward playback, backward playback, and loops
+- **Solution**: Separate logic for forward playback, backward playback, and
+  loops
 - **Implementation**:
   ```rust
   if looped {
@@ -194,67 +206,96 @@ scenarios._
 
 #### Closure-Based Event Callbacks
 
-- **Decision**: Use `Box<dyn FnMut(&AnimationTimeline, f32) + Send + Sync>` for callbacks
-- **Reasoning**: Provides access to timeline state and event time while supporting captured variables
-- **Trade-off**: Requires heap allocation for each callback, but necessary for flexibility
-- **Pattern**: Common pattern in Rust for flexible callback systems with state capture
+- **Decision**: Use `Box<dyn FnMut(&AnimationTimeline, f32) + Send + Sync>` for
+  callbacks
+- **Reasoning**: Provides access to timeline state and event time while
+  supporting captured variables
+- **Trade-off**: Requires heap allocation for each callback, but necessary for
+  flexibility
+- **Pattern**: Common pattern in Rust for flexible callback systems with state
+  capture
 
 #### Event Ordering and Sorting
 
 - **Decision**: Sort events by time before firing them in a single update
-- **Reasoning**: Ensures events fire in chronological order even when multiple cross in one frame
-- **Implementation**: Collect indices of crossed events, sort by `event_time()`, then fire in order
+- **Reasoning**: Ensures events fire in chronological order even when multiple
+  cross in one frame
+- **Implementation**: Collect indices of crossed events, sort by `event_time()`,
+  then fire in order
 - **Result**: Predictable event ordering independent of registration order
 
 ### Architectural Decisions
 
 #### Separation of Timeline and Event Systems
 
-- **Decision**: AnimationTimeline remains GPU-focused, AnimationTimelineWithEvents adds CPU events
-- **Reasoning**: Clean separation - timeline manages playback state, events add behavioral hooks
-- **Alternative Considered**: Adding events directly to AnimationTimeline - rejected for single responsibility principle
-- **Future**: Other systems could wrap AnimationTimeline similarly (e.g., AnimationTimelineWithRecording)
+- **Decision**: AnimationTimeline remains GPU-focused,
+  AnimationTimelineWithEvents adds CPU events
+- **Reasoning**: Clean separation - timeline manages playback state, events add
+  behavioral hooks
+- **Alternative Considered**: Adding events directly to AnimationTimeline -
+  rejected for single responsibility principle
+- **Future**: Other systems could wrap AnimationTimeline similarly (e.g.,
+  AnimationTimelineWithRecording)
 
 #### Hierarchical Timeline Coordination
 
-- **Decision**: Support parent-child timeline relationships with cascading controls
-- **Reasoning**: Complex animations often need synchronized groups (e.g., character + UI animations)
-- **Implementation**: Parent stores `Vec<Box<AnimationTimelineWithEvents>>` of children
-- **Pattern**: Composite pattern - parent operations (play/pause/stop) cascade to children
+- **Decision**: Support parent-child timeline relationships with cascading
+  controls
+- **Reasoning**: Complex animations often need synchronized groups (e.g.,
+  character + UI animations)
+- **Implementation**: Parent stores `Vec<Box<AnimationTimelineWithEvents>>` of
+  children
+- **Pattern**: Composite pattern - parent operations (play/pause/stop) cascade
+  to children
 
 #### Named Markers Instead of Keyframe Indices
 
-- **Decision**: Provide named markers (`add_marker("name", time)`) instead of only keyframe indices
+- **Decision**: Provide named markers (`add_marker("name", time)`) instead of
+  only keyframe indices
 - **Reasoning**: More flexible and readable - names are self-documenting
-- **Usage**: `timeline.on_marker("climax".to_string(), callback)` vs `timeline.on_keyframe(7, callback)`
-- **Trade-off**: Slightly more memory for HashMap, but significantly better developer experience
+- **Usage**: `timeline.on_marker("climax".to_string(), callback)` vs
+  `timeline.on_keyframe(7, callback)`
+- **Trade-off**: Slightly more memory for HashMap, but significantly better
+  developer experience
 
 #### Repeating vs One-Time Events
 
-- **Decision**: Separate `on_time()` (fires once) and `on_time_repeating()` methods
-- **Reasoning**: Makes intention explicit and prevents accidental repeated firing
-- **Implementation**: Track `last_fire_time` for one-time events to prevent re-firing
+- **Decision**: Separate `on_time()` (fires once) and `on_time_repeating()`
+  methods
+- **Reasoning**: Makes intention explicit and prevents accidental repeated
+  firing
+- **Implementation**: Track `last_fire_time` for one-time events to prevent
+  re-firing
 - **Pattern**: Clear API design that prevents common mistakes
 
 ### Development Workflow Insights
 
-- **Test-First Approach**: Wrote 20 comprehensive tests before implementation, catching edge cases early
-- **Loop Detection Bug**: Initial implementation missed loops because `old_time` and `new_time` were equal after modulo
-- **Debugging Strategy**: Created simple calculation tests outside the system to verify loop math
-- **Example-Driven Validation**: The comprehensive example helped validate that the API is intuitive and complete
+- **Test-First Approach**: Wrote 20 comprehensive tests before implementation,
+  catching edge cases early
+- **Loop Detection Bug**: Initial implementation missed loops because `old_time`
+  and `new_time` were equal after modulo
+- **Debugging Strategy**: Created simple calculation tests outside the system to
+  verify loop math
+- **Example-Driven Validation**: The comprehensive example helped validate that
+  the API is intuitive and complete
 
 ### Performance Insights
 
-- **Event Lookup**: Linear scan of events is acceptable for typical use cases (10-100 events)
-- **Future Optimization**: Could use binary search tree if needed for 1000+ events per timeline
-- **Memory Footprint**: Each event ~48 bytes (vtable pointer + closure data), minimal for typical usage
-- **Zero Overhead**: When no events registered, no performance impact on timeline update
+- **Event Lookup**: Linear scan of events is acceptable for typical use cases
+  (10-100 events)
+- **Future Optimization**: Could use binary search tree if needed for 1000+
+  events per timeline
+- **Memory Footprint**: Each event ~48 bytes (vtable pointer + closure data),
+  minimal for typical usage
+- **Zero Overhead**: When no events registered, no performance impact on
+  timeline update
 
 ### Integration with Existing System
 
 The event system integrates cleanly with existing Gup components:
 
-- **AnimationTimeline**: Used as foundation, not modified - composition over modification
+- **AnimationTimeline**: Used as foundation, not modified - composition over
+  modification
 - **Type Safety**: Callback signatures enforced at compile time
 - **Prelude**: All event types exported for easy access
 - **Testing**: Follows established patterns for integration tests
@@ -270,7 +311,8 @@ The event API follows established Gup patterns:
 
 ### Follow-up Stories
 
-During implementation, no significant gaps were identified. The event system is complete and ready for use. Potential future enhancements:
+During implementation, no significant gaps were identified. The event system is
+complete and ready for use. Potential future enhancements:
 
 1. **Event Prioritization** (Low Priority)
    - Allow assigning priority to events that fire at the same time
@@ -285,4 +327,5 @@ During implementation, no significant gaps were identified. The event system is 
    - Requires integration with tokio or async-std
    - Use case: Loading data during animation playback
 
-These are not critical for Phase 1 and can be added as needed based on user feedback.
+These are not critical for Phase 1 and can be added as needed based on user
+feedback.

@@ -431,7 +431,7 @@ fn test_event_receives_timeline_context() {
     timeline.update(6.0);
 
     let time = *captured_time.lock().unwrap();
-    assert!(time >= 5.0 && time <= 6.0);
+    assert!((5.0..=6.0).contains(&time));
 }
 
 #[test]

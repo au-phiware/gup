@@ -28,9 +28,11 @@ different GPU vendors and drivers.
 
 - [x] Test `StatisticsCompute::compute_basic_stats()` end-to-end on GPU
 - [x] Verify mean, min, max, variance, std_dev match CPU results
-- [x] Test with various dataset sizes (100 elements for single-workgroup validation)
+- [x] Test with various dataset sizes (100 elements for single-workgroup
+      validation)
 - [x] Test with special values (NaN, infinity, extremes)
-- Note: Large dataset tests (10K, 1M elements) require multi-workgroup support (deferred to future story)
+- Note: Large dataset tests (10K, 1M elements) require multi-workgroup support
+  (deferred to future story)
 
 ### AC2: Compute Shader Validation
 
@@ -43,8 +45,10 @@ different GPU vendors and drivers.
 
 - [x] Benchmark GPU vs CPU for various dataset sizes (up to 256 elements)
 - [x] Identify crossover point where GPU becomes faster
-- [x] Verify performance scales with dataset size (within single-workgroup limit)
-- Note: Full performance analysis for large datasets requires multi-workgroup support
+- [x] Verify performance scales with dataset size (within single-workgroup
+      limit)
+- Note: Full performance analysis for large datasets requires multi-workgroup
+  support
 
 ## Technical Requirements
 
@@ -87,7 +91,8 @@ different GPU vendors and drivers.
 - [x] Graceful skip when GPU unavailable
 - [x] Documentation updated with GPU requirements
 - [x] All tests pass (11/14 pass, 3 properly ignored with clear documentation)
-- Note: Tests for >256 elements ignored pending multi-workgroup support (GUP-149)
+- Note: Tests for >256 elements ignored pending multi-workgroup support
+  (GUP-149)
 
 ---
 
@@ -121,20 +126,25 @@ _Identified during GUP-139 implementation to validate GPU compute correctness._
 
 ### Files Changed
 
-- `tests/gpu_statistics_integration_tests.rs` - Updated with #[ignore] annotations and documentation (510 lines)
+- `tests/gpu_statistics_integration_tests.rs` - Updated with #[ignore]
+  annotations and documentation (510 lines)
 - Various clippy fixes across codebase for clean build
 
 ### Test Status
 
 - ✅ 11/14 tests passing (all single-workgroup tests)
-- ⚠️ 3/14 tests properly ignored with documentation (multi-workgroup support needed)
+- ⚠️ 3/14 tests properly ignored with documentation (multi-workgroup support
+  needed)
 - All non-ignored tests compile and run correctly
 - Graceful GPU unavailable handling works
 - All Acceptance Criteria met within documented scope
 
 ### Shader Bug Resolution
 
-The shader bug discovered during initial implementation was fixed in GUP-148. The root cause was `arrayLength(&data)` returning buffer capacity instead of actual data length. The fix involved pre-initializing `result.count` with the actual data size before dispatching the shader.
+The shader bug discovered during initial implementation was fixed in GUP-148.
+The root cause was `arrayLength(&data)` returning buffer capacity instead of
+actual data length. The fix involved pre-initializing `result.count` with the
+actual data size before dispatching the shader.
 
 ## Retrospective
 
@@ -144,71 +154,108 @@ The shader bug discovered during initial implementation was fixed in GUP-148. Th
 
 #### Story Completion with Architectural Constraints
 
-- **Challenge**: Original ACs specified testing 10K and 1M element datasets, but shader implementation has single-workgroup (256 element) limitation
-- **Solution**: Properly document the limitation, mark affected tests as ignored with clear references to follow-up story
-- **Pattern**: Story completion can acknowledge architectural constraints when they're well-documented and have clear follow-up plans
-- **Future**: Better to mark stories complete with known limitations than leave them perpetually "partial"
+- **Challenge**: Original ACs specified testing 10K and 1M element datasets, but
+  shader implementation has single-workgroup (256 element) limitation
+- **Solution**: Properly document the limitation, mark affected tests as ignored
+  with clear references to follow-up story
+- **Pattern**: Story completion can acknowledge architectural constraints when
+  they're well-documented and have clear follow-up plans
+- **Future**: Better to mark stories complete with known limitations than leave
+  them perpetually "partial"
 
 #### Test Annotation for Future Features
 
-- **Challenge**: Tests exist for features not yet implemented (multi-workgroup support)
-- **Solution**: Use `#[ignore]` with clear comments referencing the blocking story
-- **Pattern**: Write comprehensive tests early, even if some must be temporarily ignored
-- **Future**: Ignored tests serve as acceptance criteria for follow-up stories and ensure no regression when feature is added
+- **Challenge**: Tests exist for features not yet implemented (multi-workgroup
+  support)
+- **Solution**: Use `#[ignore]` with clear comments referencing the blocking
+  story
+- **Pattern**: Write comprehensive tests early, even if some must be temporarily
+  ignored
+- **Future**: Ignored tests serve as acceptance criteria for follow-up stories
+  and ensure no regression when feature is added
 
 #### Integration Between Stories
 
-- **Challenge**: GUP-145 was blocked by a shader bug discovered during implementation
-- **Solution**: Created GUP-148 to fix the bug, then completed GUP-145 after fix was merged
-- **Pattern**: Clear story dependencies and hand-offs enable parallel work on different aspects
-- **Future**: This two-story approach (infrastructure + bug fix) worked well for complex GPU debugging
+- **Challenge**: GUP-145 was blocked by a shader bug discovered during
+  implementation
+- **Solution**: Created GUP-148 to fix the bug, then completed GUP-145 after fix
+  was merged
+- **Pattern**: Clear story dependencies and hand-offs enable parallel work on
+  different aspects
+- **Future**: This two-story approach (infrastructure + bug fix) worked well for
+  complex GPU debugging
 
 #### Clippy Hygiene During Story Completion
 
-- **Challenge**: Accumulated clippy warnings from other files blocked clean commit
-- **Solution**: Fixed warnings as part of story completion (unused fields, duplicate bounds, complex types)
-- **Pattern**: Always run clippy before final commit, fix issues even in unrelated files
+- **Challenge**: Accumulated clippy warnings from other files blocked clean
+  commit
+- **Solution**: Fixed warnings as part of story completion (unused fields,
+  duplicate bounds, complex types)
+- **Pattern**: Always run clippy before final commit, fix issues even in
+  unrelated files
 - **Future**: Periodic clippy cleanup prevents accumulation of warnings
 
 ### Architectural Decisions
 
 #### Single-Workgroup as Phase 1 Deliverable
 
-- **Decision**: Accept 256-element limitation for story completion, defer multi-workgroup to future story
-- **Reasoning**: Core GPU compute infrastructure is validated; multi-workgroup is an optimization/scaling concern
-- **Trade-off**: 3/14 tests must be ignored, limiting immediate production use for large datasets
-- **Future**: Multi-workgroup support (GUP-149) will enable full test suite and production use
+- **Decision**: Accept 256-element limitation for story completion, defer
+  multi-workgroup to future story
+- **Reasoning**: Core GPU compute infrastructure is validated; multi-workgroup
+  is an optimization/scaling concern
+- **Trade-off**: 3/14 tests must be ignored, limiting immediate production use
+  for large datasets
+- **Future**: Multi-workgroup support (GUP-149) will enable full test suite and
+  production use
 
 #### Comprehensive Test Suite Before Full Implementation
 
-- **Decision**: Write all 14 tests (including multi-workgroup cases) before implementation is complete
-- **Reasoning**: Tests define the contract and provide immediate validation once implementation is ready
+- **Decision**: Write all 14 tests (including multi-workgroup cases) before
+  implementation is complete
+- **Reasoning**: Tests define the contract and provide immediate validation once
+  implementation is ready
 - **Trade-off**: Some tests must be marked ignored temporarily
-- **Future**: This approach paid off - GUP-148 fix was immediately validated by existing test suite
+- **Future**: This approach paid off - GUP-148 fix was immediately validated by
+  existing test suite
 
 #### Ignore vs Delete Unimplemented Tests
 
-- **Decision**: Use `#[ignore]` for multi-workgroup tests instead of deleting them
-- **Reasoning**: Tests serve as documentation of future requirements and acceptance criteria for GUP-149
-- **Trade-off**: Test count shows 3 ignored, but this is actually helpful visibility
-- **Future**: Ignored tests make it easy to verify GUP-149 completion - just remove #[ignore] and run
+- **Decision**: Use `#[ignore]` for multi-workgroup tests instead of deleting
+  them
+- **Reasoning**: Tests serve as documentation of future requirements and
+  acceptance criteria for GUP-149
+- **Trade-off**: Test count shows 3 ignored, but this is actually helpful
+  visibility
+- **Future**: Ignored tests make it easy to verify GUP-149 completion - just
+  remove #[ignore] and run
 
 ### Development Workflow Insights
 
-- **Two-Phase Completion**: GUP-145 was started, blocked by bug, bug fixed in GUP-148, then GUP-145 completed - this workflow kept progress moving
-- **Test-First Value**: Having comprehensive tests from initial implementation meant GUP-148 fix was immediately validated
-- **Documentation Discipline**: Clear comments on ignored tests prevent confusion about why they're skipped
-- **Clippy as Quality Gate**: Running clippy before commit caught multiple issues across codebase
-- **Commit Hygiene**: Combined test updates with clippy fixes in single commit for clean history
+- **Two-Phase Completion**: GUP-145 was started, blocked by bug, bug fixed in
+  GUP-148, then GUP-145 completed - this workflow kept progress moving
+- **Test-First Value**: Having comprehensive tests from initial implementation
+  meant GUP-148 fix was immediately validated
+- **Documentation Discipline**: Clear comments on ignored tests prevent
+  confusion about why they're skipped
+- **Clippy as Quality Gate**: Running clippy before commit caught multiple
+  issues across codebase
+- **Commit Hygiene**: Combined test updates with clippy fixes in single commit
+  for clean history
 
 ### Lessons for Future GPU Work
 
-1. **Scope Flexibility**: Stories can be completed with documented limitations if follow-up is clear
-2. **Test Comprehensiveness**: Write all tests early, even if some must be temporarily ignored
-3. **Story Dependencies**: Clear hand-offs between stories (145→148→145) enable parallel work
-4. **Limitation Documentation**: Use `#[ignore]` with references to blocking stories for clarity
-5. **Quality Checks**: Always run clippy and fix warnings before story completion
-6. **Incremental Progress**: Better to complete with known limits than stay "partial" indefinitely
+1. **Scope Flexibility**: Stories can be completed with documented limitations
+   if follow-up is clear
+2. **Test Comprehensiveness**: Write all tests early, even if some must be
+   temporarily ignored
+3. **Story Dependencies**: Clear hand-offs between stories (145→148→145) enable
+   parallel work
+4. **Limitation Documentation**: Use `#[ignore]` with references to blocking
+   stories for clarity
+5. **Quality Checks**: Always run clippy and fix warnings before story
+   completion
+6. **Incremental Progress**: Better to complete with known limits than stay
+   "partial" indefinitely
 
 ### Story Relationship Analysis
 
@@ -218,6 +265,8 @@ This story demonstrates an effective pattern for handling discovered blockers:
 2. **Blocker Discovered**: Shader bug found during testing
 3. **GUP-148 Created**: Dedicated story to fix shader bug
 4. **GUP-148 Completed**: Bug fixed, 11/14 tests passing
-5. **GUP-145 Completed**: Tests updated with #[ignore] for multi-workgroup cases, story marked complete with clear limitation documentation
+5. **GUP-145 Completed**: Tests updated with #[ignore] for multi-workgroup
+   cases, story marked complete with clear limitation documentation
 
-This two-story approach kept both testing infrastructure and bug fix work visible and trackable, while enabling progress on both fronts.
+This two-story approach kept both testing infrastructure and bug fix work
+visible and trackable, while enabling progress on both fronts.

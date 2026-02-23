@@ -11,7 +11,9 @@
 
 ## Context
 
-Box plots are often used to compare distributions across multiple categories (e.g., sales by region, test scores by grade level). Supporting grouped box plots requires handling multi-category data and automatic positioning.
+Box plots are often used to compare distributions across multiple categories
+(e.g., sales by region, test scores by grade level). Supporting grouped box
+plots requires handling multi-category data and automatic positioning.
 
 ## User Story
 

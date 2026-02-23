@@ -4762,6 +4762,282 @@ impl HistogramResult {
     }
 }
 
+/// Streaming statistical aggregation for datasets larger than GPU memory
+///
+/// Uses Welford's online algorithm for numerically stable variance computation
+/// and processes data in configurable chunks to handle arbitrarily large datasets.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use gup::StreamingStatistics;
+///
+/// // Process 1 billion points in chunks
+/// let mut stats = StreamingStatistics::with_chunk_size(1_000_000);
+///
+/// for chunk in data_source.chunks() {
+///     stats.push_chunk(&chunk);
+/// }
+///
+/// let result = stats.finalize();
+/// println!("Mean: {}, Std Dev: {}", result.mean, result.std_dev);
+/// ```
+#[derive(Clone, Debug)]
+pub struct StreamingStatistics {
+    /// Running count of elements processed
+    count: u64,
+    /// Running mean (Welford's algorithm)
+    mean: f64,
+    /// Running M2 value for variance computation (Welford's algorithm)
+    m2: f64,
+    /// Running minimum value
+    min: f32,
+    /// Running maximum value
+    max: f32,
+    /// Running sum (for verification)
+    sum: f64,
+    /// Chunk size for processing (default: 1M elements)
+    chunk_size: usize,
+    /// Total chunks processed
+    chunks_processed: usize,
+}
+
+impl Default for StreamingStatistics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl StreamingStatistics {
+    /// Create a new streaming statistics aggregator with default chunk size (1M elements)
+    pub fn new() -> Self {
+        Self::with_chunk_size(1_000_000)
+    }
+
+    /// Create a new streaming statistics aggregator with custom chunk size
+    ///
+    /// # Arguments
+    /// * `chunk_size` - Number of elements to process per chunk (affects GPU buffer size)
+    pub fn with_chunk_size(chunk_size: usize) -> Self {
+        Self {
+            count: 0,
+            mean: 0.0,
+            m2: 0.0,
+            min: f32::INFINITY,
+            max: f32::NEG_INFINITY,
+            sum: 0.0,
+            chunk_size,
+            chunks_processed: 0,
+        }
+    }
+
+    /// Push a single value into the stream (uses Welford's algorithm)
+    ///
+    /// # Arguments
+    /// * `value` - Single f32 value to aggregate
+    pub fn push(&mut self, value: f32) {
+        self.count += 1;
+        let value_f64 = value as f64;
+
+        // Update sum
+        self.sum += value_f64;
+
+        // Update min/max
+        self.min = self.min.min(value);
+        self.max = self.max.max(value);
+
+        // Welford's online algorithm for mean and variance
+        let delta = value_f64 - self.mean;
+        self.mean += delta / self.count as f64;
+        let delta2 = value_f64 - self.mean;
+        self.m2 += delta * delta2;
+    }
+
+    /// Push a chunk of values into the stream
+    ///
+    /// # Arguments
+    /// * `chunk` - Slice of f32 values to aggregate
+    pub fn push_chunk(&mut self, chunk: &[f32]) {
+        for &value in chunk {
+            self.push(value);
+        }
+        self.chunks_processed += 1;
+    }
+
+    /// Process data from an iterator in chunks
+    ///
+    /// This is the recommended way to process large datasets as it handles
+    /// chunking automatically and provides progress reporting.
+    ///
+    /// # Arguments
+    /// * `data` - Iterator providing f32 values
+    /// * `progress_callback` - Optional callback for progress reporting (processed, total)
+    pub fn process_iter<I>(
+        &mut self,
+        data: I,
+        progress_callback: Option<Box<dyn Fn(usize, Option<usize>)>>,
+    ) where
+        I: Iterator<Item = f32>,
+    {
+        let mut chunk = Vec::with_capacity(self.chunk_size);
+        let mut total_processed = 0;
+
+        for value in data {
+            chunk.push(value);
+            if chunk.len() >= self.chunk_size {
+                self.push_chunk(&chunk);
+                total_processed += chunk.len();
+                chunk.clear();
+
+                if let Some(ref callback) = progress_callback {
+                    callback(total_processed, None);
+                }
+            }
+        }
+
+        // Process remaining values
+        if !chunk.is_empty() {
+            self.push_chunk(&chunk);
+            total_processed += chunk.len();
+
+            if let Some(ref callback) = progress_callback {
+                callback(total_processed, None);
+            }
+        }
+    }
+
+    /// Process data from a slice in chunks with progress reporting
+    ///
+    /// # Arguments
+    /// * `data` - Slice of f32 values to process
+    /// * `progress_callback` - Optional callback for progress reporting (processed, total)
+    pub fn process_slice(
+        &mut self,
+        data: &[f32],
+        progress_callback: Option<Box<dyn Fn(usize, usize)>>,
+    ) {
+        let total = data.len();
+        let mut processed = 0;
+
+        for chunk in data.chunks(self.chunk_size) {
+            self.push_chunk(chunk);
+            processed += chunk.len();
+
+            if let Some(ref callback) = progress_callback {
+                callback(processed, total);
+            }
+        }
+    }
+
+    /// Merge statistics from another streaming aggregator
+    ///
+    /// This enables parallel processing where multiple StreamingStatistics
+    /// instances process different parts of the dataset and then merge.
+    ///
+    /// # Arguments
+    /// * `other` - Another StreamingStatistics instance to merge
+    pub fn merge(&mut self, other: &StreamingStatistics) {
+        if other.count == 0 {
+            return;
+        }
+
+        if self.count == 0 {
+            *self = other.clone();
+            return;
+        }
+
+        // Merge using parallel algorithm
+        let total_count = self.count + other.count;
+        let delta = other.mean - self.mean;
+
+        // Update mean
+        let new_mean = (self.count as f64 * self.mean + other.count as f64 * other.mean)
+            / total_count as f64;
+
+        // Update M2 (variance component)
+        let new_m2 = self.m2
+            + other.m2
+            + delta * delta * (self.count as f64 * other.count as f64) / total_count as f64;
+
+        self.mean = new_mean;
+        self.m2 = new_m2;
+        self.count = total_count;
+        self.sum += other.sum;
+        self.min = self.min.min(other.min);
+        self.max = self.max.max(other.max);
+        self.chunks_processed += other.chunks_processed;
+    }
+
+    /// Get current count of processed elements
+    pub fn count(&self) -> u64 {
+        self.count
+    }
+
+    /// Get current mean (available before finalization)
+    pub fn mean(&self) -> f32 {
+        self.mean as f32
+    }
+
+    /// Get current variance (available before finalization)
+    pub fn variance(&self) -> f32 {
+        if self.count < 2 {
+            0.0
+        } else {
+            (self.m2 / self.count as f64) as f32
+        }
+    }
+
+    /// Get current standard deviation (available before finalization)
+    pub fn std_dev(&self) -> f32 {
+        self.variance().sqrt()
+    }
+
+    /// Get current min/max (available before finalization)
+    pub fn min_max(&self) -> (f32, f32) {
+        (self.min, self.max)
+    }
+
+    /// Finalize and get complete statistics result
+    ///
+    /// Returns a `StatisticsResult` compatible with GPU compute results.
+    pub fn finalize(&self) -> StatisticsResult {
+        let variance = self.variance();
+        let std_dev = variance.sqrt();
+
+        StatisticsResult {
+            count: self.count as u32,
+            sum: self.sum as f32,
+            min: self.min,
+            max: self.max,
+            mean: self.mean as f32,
+            variance,
+            std_dev,
+            _padding: 0,
+        }
+    }
+
+    /// Reset the aggregator to initial state
+    pub fn reset(&mut self) {
+        self.count = 0;
+        self.mean = 0.0;
+        self.m2 = 0.0;
+        self.min = f32::INFINITY;
+        self.max = f32::NEG_INFINITY;
+        self.sum = 0.0;
+        self.chunks_processed = 0;
+    }
+
+    /// Get number of chunks processed
+    pub fn chunks_processed(&self) -> usize {
+        self.chunks_processed
+    }
+
+    /// Get configured chunk size
+    pub fn chunk_size(&self) -> usize {
+        self.chunk_size
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
