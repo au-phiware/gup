@@ -1086,7 +1086,7 @@ mark types
 
 ### GUP-160: Pattern Visual Regression Tests
 
-**Status**: 📋 Planned  
+**Status**: 🚧 In Progress  
 **Priority**: Low  
 **Story Points**: 5  
 **Key Need**: Implement screenshot-based visual testing for pattern rendering  
