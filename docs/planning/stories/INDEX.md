@@ -893,7 +893,7 @@ differentiation
 
 ### GUP-114: macOS NSAccessibility Integration
 
-**Status**: 💡 New  
+**Status**: 🚧 In Progress  
 **Priority**: Medium  
 **Story Points**: 8  
 **Key Need**: Complete macOS NSAccessibility implementation with objc2 bindings
