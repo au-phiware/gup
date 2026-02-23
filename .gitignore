@@ -4,3 +4,6 @@
 mprocs.log
 *.local.*
 performance_report.*
+# Visual regression test outputs (regenerated)
+/target/visual_test_outputs/
+/target/visual_test_diffs/
