@@ -915,7 +915,7 @@ support
 
 ### GUP-116: Linux AT-SPI2 Integration
 
-**Status**: 💡 New  
+**Status**: 🚧 In Progress  
 **Priority**: Medium  
 **Story Points**: 8  
 **Key Need**: Complete Linux AT-SPI2 implementation with D-Bus bindings for Orca
