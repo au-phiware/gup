@@ -25,7 +25,9 @@
 //!
 //! Run with: `cargo run --example pattern_pipeline_demo`
 
-use gup::accessibility::{AccessibilitySystem, Color, ContrastMode, Pattern, PatternRenderer, PatternUniforms};
+use gup::accessibility::{
+    AccessibilitySystem, Color, ContrastMode, Pattern, PatternRenderer, PatternUniforms,
+};
 use gup::context::GupContext;
 use gup::error::GupResult;
 use gup::mark::{Circle, Mark, MarkInfo, MarkInfoImpl, MarkRenderer};
@@ -131,7 +133,8 @@ fn demonstrate_pattern_renderer(device: &wgpu::Device, queue: &wgpu::Queue) -> G
     ];
 
     // Create renderer and demonstrate pattern switching
-    let initial_uniforms = PatternUniforms::from_pattern(&Pattern::Solid, Color::BLACK, Color::WHITE);
+    let initial_uniforms =
+        PatternUniforms::from_pattern(&Pattern::Solid, Color::BLACK, Color::WHITE);
     let mut renderer = PatternRenderer::new(device, initial_uniforms);
 
     for (name, pattern) in patterns {
@@ -212,7 +215,10 @@ fn demonstrate_accessibility_integration() -> GupResult<()> {
 
     let mut accessibility = AccessibilitySystem::new();
 
-    println!("  Current contrast mode: {:?}", accessibility.contrast_mode());
+    println!(
+        "  Current contrast mode: {:?}",
+        accessibility.contrast_mode()
+    );
 
     // Switch to pattern mode
     accessibility.set_contrast_mode(ContrastMode::Pattern);
@@ -238,7 +244,8 @@ fn demonstrate_accessibility_integration() -> GupResult<()> {
 fn rendering_loop_example() {
     println!("\n5. Rendering Loop Integration (Conceptual)");
     println!("-------------------------------------------");
-    println!("
+    println!(
+        "
 In a real rendering loop:
 
 ```rust
@@ -250,7 +257,7 @@ if accessibility.contrast_mode() == ContrastMode::Pattern {{
     // Use pattern pipeline
     let pattern_pipeline = registry.get_pattern_pipeline::<Circle>(device)?;
     let pattern_bind_group = pattern_renderer.bind_group();
-    
+
     mark_renderer.render_marks_with_patterns::<Circle>(
         &mut render_pass,
         pattern_pipeline,
@@ -261,7 +268,7 @@ if accessibility.contrast_mode() == ContrastMode::Pattern {{
 }} else {{
     // Use standard pipeline
     let pipeline = registry.get_pipeline::<Circle>(device)?;
-    
+
     mark_renderer.render_marks::<Circle>(
         &mut render_pass,
         pipeline,
@@ -270,5 +277,6 @@ if accessibility.contrast_mode() == ContrastMode::Pattern {{
     )?;
 }}
 ```
-");
+"
+    );
 }

@@ -84,22 +84,28 @@ render passes for patterns to appear in visualizations.
 ### What Was Implemented
 
 #### Core Pattern Pipeline Integration
-- **PATTERN_FRAGMENT_SHADER constant** added to Mark trait for pattern shader variants
-- **Circle mark** now includes `circle_pattern.frag.wgsl` shader via `PATTERN_FRAGMENT_SHADER`
+
+- **PATTERN_FRAGMENT_SHADER constant** added to Mark trait for pattern shader
+  variants
+- **Circle mark** now includes `circle_pattern.frag.wgsl` shader via
+  `PATTERN_FRAGMENT_SHADER`
 - **MarkInfo trait** extended with:
   - `has_pattern_shader()` method to check pattern support
   - `create_render_pipeline_with_patterns()` for pattern-enabled pipelines
-- **MarkInfoImpl** implements pattern pipeline creation with dual bind group layouts:
+- **MarkInfoImpl** implements pattern pipeline creation with dual bind group
+  layouts:
   - Group 0: Instance data (standard)
   - Group 1: Pattern uniforms (new)
 
 #### Rendering Integration
+
 - **MarkRenderer** enhanced with `render_marks_with_patterns()` method
 - Pattern bind groups properly set in render pass (group 0 and group 1)
 - Seamless fallback to standard rendering when patterns disabled
 - Both pipelines can coexist and be switched at runtime
 
 #### Testing & Validation
+
 - **9 comprehensive tests** in `tests/pattern_pipeline_integration_tests.rs`:
   - Pattern shader detection
   - Pattern pipeline creation
@@ -110,13 +116,15 @@ render passes for patterns to appear in visualizations.
   - Parameter transfer
   - Bind group layout structure
   - Performance overhead validation
-- **Pattern pipeline demo** in `examples/pattern_pipeline_demo.rs` demonstrating:
+- **Pattern pipeline demo** in `examples/pattern_pipeline_demo.rs`
+  demonstrating:
   - Pipeline creation (Standard: 3.9ms, Pattern: 8.4ms)
   - Pattern renderer configuration
   - Accessibility system integration
   - Complete rendering setup
 
 ### Key Files Changed
+
 - `src/mark.rs` - Added pattern support to Mark trait and MarkInfo
 - `src/mark/circle.rs` - Integrated pattern fragment shader
 - `src/mark/renderer.rs` - Added render_marks_with_patterns method
@@ -124,11 +132,13 @@ render passes for patterns to appear in visualizations.
 - `examples/pattern_pipeline_demo.rs` - NEW: Demo example
 
 ### Test Counts
+
 - Unit tests: 9 pattern integration tests
 - All library tests: 823 passed
 - **Total: All tests passing with --test-threads=1**
 
 ### Performance Validation
+
 - Standard pipeline creation: ~4ms
 - Pattern pipeline creation: ~8ms (2x overhead, well within <100ms target)
 - Pattern rendering overhead: <5ms (meets AC2 requirement)
@@ -142,76 +152,107 @@ render passes for patterns to appear in visualizations.
 
 #### Dual Bind Group Layout Architecture
 
-- **Challenge**: Integrating pattern uniforms without breaking existing pipeline architecture
-- **Solution**: Extended pipeline creation to support multiple bind group layouts - Group 0 for instance data, Group 1 for pattern uniforms
-- **Pattern**: Multi-bind-group architecture enables clean separation of concerns and runtime mode switching
-- **Future**: This pattern can be extended for other per-fragment effects (gradients, textures, etc.)
+- **Challenge**: Integrating pattern uniforms without breaking existing pipeline
+  architecture
+- **Solution**: Extended pipeline creation to support multiple bind group
+  layouts - Group 0 for instance data, Group 1 for pattern uniforms
+- **Pattern**: Multi-bind-group architecture enables clean separation of
+  concerns and runtime mode switching
+- **Future**: This pattern can be extended for other per-fragment effects
+  (gradients, textures, etc.)
 
 #### Pipeline Variant Management
 
-- **Challenge**: Managing multiple shader variants (standard vs pattern) for each mark type
-- **Solution**: Added `PATTERN_FRAGMENT_SHADER` optional constant to Mark trait, allowing marks to opt-in to pattern support
-- **Pattern**: Optional shader variants via trait constants provide compile-time flexibility without runtime overhead
-- **Trade-off**: Requires explicit shader duplication, but ensures optimal performance for both modes
-- **Future**: Consider shader preprocessing or macro-based variant generation if patterns grow more complex
+- **Challenge**: Managing multiple shader variants (standard vs pattern) for
+  each mark type
+- **Solution**: Added `PATTERN_FRAGMENT_SHADER` optional constant to Mark trait,
+  allowing marks to opt-in to pattern support
+- **Pattern**: Optional shader variants via trait constants provide compile-time
+  flexibility without runtime overhead
+- **Trade-off**: Requires explicit shader duplication, but ensures optimal
+  performance for both modes
+- **Future**: Consider shader preprocessing or macro-based variant generation if
+  patterns grow more complex
 
 #### Render Pass Integration
 
-- **Challenge**: Adding pattern bind groups to render passes without breaking existing rendering code
-- **Solution**: Created separate `render_marks_with_patterns()` method alongside existing `render_marks()` method
-- **Pattern**: Additive API design maintains backward compatibility while adding new functionality
-- **Trade-off**: Two code paths to maintain, but clear separation prevents coupling
-- **Future**: Could unify with optional pattern bind group parameter if more mode variations arise
+- **Challenge**: Adding pattern bind groups to render passes without breaking
+  existing rendering code
+- **Solution**: Created separate `render_marks_with_patterns()` method alongside
+  existing `render_marks()` method
+- **Pattern**: Additive API design maintains backward compatibility while adding
+  new functionality
+- **Trade-off**: Two code paths to maintain, but clear separation prevents
+  coupling
+- **Future**: Could unify with optional pattern bind group parameter if more
+  mode variations arise
 
 #### Type-Erased Pipeline Creation
 
-- **Challenge**: Pattern pipeline creation needed to work through the MarkInfo trait abstraction
-- **Solution**: Added `has_pattern_shader()` and `create_render_pipeline_with_patterns()` to MarkInfo trait
-- **Pattern**: Type-erased trait methods enable runtime polymorphism while maintaining compile-time type safety within implementations
-- **Future**: This pattern works well for feature detection and variant creation in the mark system
+- **Challenge**: Pattern pipeline creation needed to work through the MarkInfo
+  trait abstraction
+- **Solution**: Added `has_pattern_shader()` and
+  `create_render_pipeline_with_patterns()` to MarkInfo trait
+- **Pattern**: Type-erased trait methods enable runtime polymorphism while
+  maintaining compile-time type safety within implementations
+- **Future**: This pattern works well for feature detection and variant creation
+  in the mark system
 
 ### Architectural Decisions
 
 #### Separate Pipeline Methods vs Unified Configuration
 
-- **Decision**: Create separate methods for pattern and standard pipelines rather than a single method with configuration parameter
-- **Reasoning**: 
+- **Decision**: Create separate methods for pattern and standard pipelines
+  rather than a single method with configuration parameter
+- **Reasoning**:
   - Clearer API - intention is explicit in method name
   - Simpler implementation - no complex branching logic
   - Better performance - no runtime configuration checks
   - Easier testing - each pipeline type independently testable
-- **Trade-off**: More methods in the API surface, but better clarity and maintainability
-- **Future**: If we add more pipeline variants (gradients, textures), may need to reconsider and use a builder pattern
+- **Trade-off**: More methods in the API surface, but better clarity and
+  maintainability
+- **Future**: If we add more pipeline variants (gradients, textures), may need
+  to reconsider and use a builder pattern
 
 #### Additive Rendering Method
 
-- **Decision**: Add `render_marks_with_patterns()` instead of modifying existing `render_marks()`
+- **Decision**: Add `render_marks_with_patterns()` instead of modifying existing
+  `render_marks()`
 - **Reasoning**:
   - Maintains backward compatibility
   - No risk of breaking existing rendering code
   - Clear intent when reading code
   - Allows independent optimization of each path
-- **Trade-off**: Code duplication (both methods very similar), but isolated failure domain
+- **Trade-off**: Code duplication (both methods very similar), but isolated
+  failure domain
 - **Future**: If we add more bind group variations, consider a more flexible API
 
 #### Pattern Shader as Optional Constant
 
-- **Decision**: Add `PATTERN_FRAGMENT_SHADER` as optional constant on Mark trait rather than generating pattern variants
+- **Decision**: Add `PATTERN_FRAGMENT_SHADER` as optional constant on Mark trait
+  rather than generating pattern variants
 - **Reasoning**:
   - Simplest implementation - direct inclusion of hand-written shader
   - Maximum performance - no code generation overhead
   - Clear intent - marks explicitly opt-in to pattern support
   - Flexible - marks can provide optimized pattern shaders
-- **Trade-off**: Requires manual shader duplication, but ensures best performance
-- **Future**: Could add code generation utilities if shader variants become more complex
+- **Trade-off**: Requires manual shader duplication, but ensures best
+  performance
+- **Future**: Could add code generation utilities if shader variants become more
+  complex
 
 ### Development Workflow Insights
 
-- **Test-driven development**: Writing tests first helped clarify the API design before implementation
-- **Incremental commits**: Small, focused commits (infrastructure → tests → example) made progress clear and reviewable
-- **Example-driven validation**: Creating the demo example caught API usability issues early
-- **Performance validation**: Measuring pipeline creation times validated that overhead was acceptable (<10ms)
-- **Backward compatibility focus**: Additive approach meant no existing code needed changes
+- **Test-driven development**: Writing tests first helped clarify the API design
+  before implementation
+- **Incremental commits**: Small, focused commits (infrastructure → tests →
+  example) made progress clear and reviewable
+- **Example-driven validation**: Creating the demo example caught API usability
+  issues early
+- **Performance validation**: Measuring pipeline creation times validated that
+  overhead was acceptable (<10ms)
+- **Backward compatibility focus**: Additive approach meant no existing code
+  needed changes
 
 ### Integration Points
 
@@ -229,8 +270,14 @@ All integration points maintain clean separation and don't introduce coupling.
 
 While implementing this story, areas identified for future dedicated stories:
 
-1. **GUP-157: Multi-Mark Pattern Support** — Already identified in GUP-113 retrospective. Now unblocked - extend pattern rendering to Rectangle, Line, and Path marks using the architecture established here. Priority: Medium, Estimate: 5 points.
+1. **GUP-157: Multi-Mark Pattern Support** — Already identified in GUP-113
+   retrospective. Now unblocked - extend pattern rendering to Rectangle, Line,
+   and Path marks using the architecture established here. Priority: Medium,
+   Estimate: 5 points.
 
-2. **GUP-156: Pattern Performance Benchmarking** — Already identified in GUP-113 retrospective. Now unblocked - comprehensive benchmarks to validate <5ms overhead at scale (100K+ points). Priority: Medium, Estimate: 2 points.
+2. **GUP-156: Pattern Performance Benchmarking** — Already identified in GUP-113
+   retrospective. Now unblocked - comprehensive benchmarks to validate <5ms
+   overhead at scale (100K+ points). Priority: Medium, Estimate: 2 points.
 
-No new follow-up stories identified - the implementation was straightforward and the architecture is clean.
+No new follow-up stories identified - the implementation was straightforward and
+the architecture is clean.
