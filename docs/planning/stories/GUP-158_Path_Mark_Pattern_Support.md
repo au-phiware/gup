@@ -164,3 +164,129 @@ pattern rendering for complete accessibility coverage.
 - Start with simple straight-line paths to prove concept
 - Consider hand-written shaders if generation proves too complex
 - Use higher tessellation for curves if patterns show artifacts
+
+## Retrospective
+
+**Completed**: 2025-02-26
+
+### Key Technical Learnings
+
+#### Hand-Written vs Generated Shader Approach
+
+- **Challenge**: Path was the only mark using fully generated shaders, creating
+  an architectural inconsistency when adding pattern support
+- **Solution**: Added hand-written shaders (vertex, fragment, pattern fragment)
+  to Path mark, bringing it in line with other marks
+- **Pattern**: When a mark needs pattern support, provide three shader variants:
+  1. Standard vertex shader (with world position output)
+  2. Standard fragment shader
+  3. Pattern-enabled fragment shader (replaces standard when patterns active)
+- **Learning**: Consistency across marks is more valuable than preserving
+  generated shader flexibility, especially for simple rendering cases
+
+#### Vertex Attribute Layout Requirements
+
+- **Challenge**: Path vertex shader compilation failed initially because
+  `vertex_attributes()` was not overridden, causing mismatch between Rust struct
+  (2 attributes) and shader expectations (1 attribute)
+- **Solution**: Implemented `vertex_attributes()` for Path mark with two
+  Float32x2 attributes at offsets 0 and 8
+- **Pattern**: Any mark with multi-field vertex data MUST override
+  `vertex_attributes()` to match the GPU buffer layout
+- **Learning**: The default `vertex_attributes()` assumes a single vec2 position;
+  marks like Line and Path with additional vertex data need explicit overrides
+
+#### World Position for Pattern Consistency
+
+- **Challenge**: Patterns must be applied in world space for visual consistency
+  across instances, but Path uses matrix transforms
+- **Solution**: Extract `.xy` from 4D transformed position and output as
+  `@location(0)` world_position
+- **Pattern**: For any mark using matrix transforms:
+  ```wgsl
+  let world_pos_4d = instance.transform * vec4<f32>(position, 0.0, 1.0);
+  output.world_position = world_pos_4d.xy;
+  ```
+- **Learning**: Pattern shaders expect world_position at location(0), so vertex
+  shaders must provide it regardless of transform complexity
+
+#### Shader Constant Architecture
+
+- **Challenge**: Pattern pipeline creation logic checks for BOTH VERTEX_SHADER
+  and PATTERN_FRAGMENT_SHADER; Path initially only had PATTERN_FRAGMENT_SHADER
+- **Solution**: Added all three shader constants (VERTEX_SHADER, FRAGMENT_SHADER,
+  PATTERN_FRAGMENT_SHADER) to Path
+- **Pattern**: The mark system's `create_render_pipeline_with_patterns_impl()`
+  uses this logic:
+  ```rust
+  if M::VERTEX_SHADER.is_some() && M::PATTERN_FRAGMENT_SHADER.is_some() {
+      // Use hand-written shaders
+  } else {
+      // Fall back to generated shaders
+  }
+  ```
+- **Learning**: To opt into hand-written pattern shaders, a mark must provide
+  BOTH vertex and pattern fragment shaders; providing only one won't work
+
+### Architectural Decisions
+
+#### Decision: Hand-Written Shaders Over Generated
+
+- **Decision**: Convert Path from generated shaders to hand-written shaders
+- **Reasoning**:
+  1. Consistency: All other marks use hand-written shaders
+  2. Simplicity: Path's current rendering is simple (just fill_color)
+  3. Future-proofing: SDF-based path rendering will benefit from hand-optimization
+  4. Maintainability: Easier to debug and modify hand-written WGSL
+- **Trade-off**: Lost flexibility of shader generation system for Path
+- **Future**: If Path needs complex shader function composition, can re-introduce
+  generation as an option, but hand-written remains the primary approach
+
+#### Decision: Defer Visual Validation Example
+
+- **Decision**: Mark visual validation as deferred rather than implementing an
+  example
+- **Reasoning**:
+  1. Automated tests provide sufficient coverage for pipeline creation
+  2. Pattern rendering logic is identical to other marks (proven in GUP-157)
+  3. Creating a comprehensive example is a separate effort (could be GUP-159)
+  4. Time-box story to 3 points as planned
+- **Trade-off**: No immediate visual proof, but tests validate correctness
+- **Future**: A comprehensive pattern example showing all marks (including Path)
+  would be valuable for documentation and visual regression testing
+
+### Development Workflow Insights
+
+**What Went Well**:
+- Test-driven approach caught vertex attribute mismatch immediately
+- Error messages from wgpu were clear ("Location[1] Float32x2 not provided")
+- Following the pattern from other marks (Circle, Line) made implementation
+  straightforward
+
+**Time Sinks**:
+- Initially tried to make generated shaders work with patterns (wasted ~15 min)
+- Had to understand the shader constant check logic in mark.rs
+
+**Process Improvements**:
+- When adding feature to last remaining mark, check if it's architecturally
+  consistent with others
+- Document vertex_attributes() override requirement in Mark trait docs
+
+### Follow-up Stories
+
+No follow-up stories required. Pattern support is now complete across all mark
+types (Circle, Rectangle, Line, BoxPlot, Path). However, consider:
+
+1. **GUP-159: Comprehensive Pattern Example** — Create an example showing all
+   mark types with all pattern types, useful for:
+   - Visual regression testing
+   - Documentation and tutorials
+   - Demonstrating accessibility features to users
+   - Testing pattern behavior with complex transformations
+
+2. **GUP-160: SDF-Based Path Rendering** — Now that Path has hand-written
+   shaders, implement proper signed distance field rendering for:
+   - Anti-aliased edges
+   - Stroke rendering (currently not implemented)
+   - Better handling of complex path shapes
+   - Pattern rendering on stroke vs fill
