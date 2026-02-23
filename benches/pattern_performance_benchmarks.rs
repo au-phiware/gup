@@ -19,10 +19,7 @@ const DATA_SIZES: &[usize] = &[1_000, 10_000, 100_000, 1_000_000];
 /// All pattern types to benchmark
 const PATTERN_TYPES: &[(&str, Pattern)] = &[
     ("solid", Pattern::Solid),
-    (
-        "dots_8",
-        Pattern::Dots { spacing: 8.0 },
-    ),
+    ("dots_8", Pattern::Dots { spacing: 8.0 }),
     (
         "lines_6",
         Pattern::Lines {
@@ -30,10 +27,7 @@ const PATTERN_TYPES: &[(&str, Pattern)] = &[
             angle: 0.0,
         },
     ),
-    (
-        "crosshatch_8",
-        Pattern::Crosshatch { spacing: 8.0 },
-    ),
+    ("crosshatch_8", Pattern::Crosshatch { spacing: 8.0 }),
 ];
 
 /// GPU benchmark context for pattern rendering tests
@@ -55,15 +49,13 @@ impl PatternBenchmarkContext {
             .expect("Failed to find suitable GPU adapter");
 
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: Some("Pattern Benchmark Device"),
-                    required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::default(),
-                    memory_hints: wgpu::MemoryHints::Performance,
-                    trace: Default::default(),
-                },
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                label: Some("Pattern Benchmark Device"),
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::default(),
+                memory_hints: wgpu::MemoryHints::Performance,
+                trace: Default::default(),
+            })
             .await
             .expect("Failed to create GPU device");
 
@@ -79,8 +71,7 @@ fn bench_pattern_renderer_creation(c: &mut Criterion) {
     for (name, pattern) in PATTERN_TYPES {
         group.bench_function(*name, |b| {
             b.iter(|| {
-                let uniforms =
-                    PatternUniforms::from_pattern(pattern, Color::BLACK, Color::WHITE);
+                let uniforms = PatternUniforms::from_pattern(pattern, Color::BLACK, Color::WHITE);
                 let renderer = PatternRenderer::new(&context.device, uniforms);
                 black_box(renderer);
             });
@@ -101,8 +92,7 @@ fn bench_pattern_uniform_updates(c: &mut Criterion) {
             let mut renderer = PatternRenderer::new(&context.device, uniforms);
 
             b.iter(|| {
-                let new_uniforms =
-                    PatternUniforms::from_pattern(pattern, Color::RED, Color::BLUE);
+                let new_uniforms = PatternUniforms::from_pattern(pattern, Color::RED, Color::BLUE);
                 renderer.update(&context.queue, new_uniforms);
                 black_box(());
             });
@@ -210,11 +200,12 @@ fn bench_pattern_rendering_overhead(c: &mut Criterion) {
 
                 b.iter(|| {
                     // Simulate render pass
-                    let encoder = context
-                        .device
-                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("Benchmark Encoder"),
-                        });
+                    let encoder =
+                        context
+                            .device
+                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                label: Some("Benchmark Encoder"),
+                            });
 
                     // Note: We can't easily benchmark actual rendering without a surface,
                     // but we can benchmark the pipeline setup and data management
@@ -264,11 +255,11 @@ fn bench_pattern_rendering_overhead(c: &mut Criterion) {
 
                     b.iter(|| {
                         // Simulate render pass
-                        let encoder = context
-                            .device
-                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        let encoder = context.device.create_command_encoder(
+                            &wgpu::CommandEncoderDescriptor {
                                 label: Some("Benchmark Encoder"),
-                            });
+                            },
+                        );
 
                         black_box(&pipeline);
                         black_box(&mark_renderer);
@@ -299,8 +290,7 @@ fn bench_pattern_parameter_changes(c: &mut Criterion) {
         b.iter(|| {
             for spacing in [4.0, 6.0, 8.0, 10.0, 12.0].iter() {
                 let pattern = Pattern::Dots { spacing: *spacing };
-                let uniforms =
-                    PatternUniforms::from_pattern(&pattern, Color::BLACK, Color::WHITE);
+                let uniforms = PatternUniforms::from_pattern(&pattern, Color::BLACK, Color::WHITE);
                 renderer.update(&context.queue, uniforms);
             }
             black_box(());
@@ -322,8 +312,7 @@ fn bench_pattern_parameter_changes(c: &mut Criterion) {
                     spacing: 6.0,
                     angle: *angle,
                 };
-                let uniforms =
-                    PatternUniforms::from_pattern(&pattern, Color::BLACK, Color::WHITE);
+                let uniforms = PatternUniforms::from_pattern(&pattern, Color::BLACK, Color::WHITE);
                 renderer.update(&context.queue, uniforms);
             }
             black_box(());
@@ -367,8 +356,7 @@ fn bench_pattern_type_switching(c: &mut Criterion) {
 
         b.iter(|| {
             for (_, pattern) in PATTERN_TYPES {
-                let uniforms =
-                    PatternUniforms::from_pattern(pattern, Color::BLACK, Color::WHITE);
+                let uniforms = PatternUniforms::from_pattern(pattern, Color::BLACK, Color::WHITE);
                 renderer.update(&context.queue, uniforms);
             }
             black_box(());

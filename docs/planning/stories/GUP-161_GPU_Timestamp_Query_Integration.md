@@ -2,7 +2,8 @@
 
 ## Story Overview
 
-**Title**: Integrate GPU Timestamp Queries for Accurate Performance Measurement  
+**Title**: Integrate GPU Timestamp Queries for Accurate Performance
+Measurement  
 **Epic**: Phase 1 Initiative 4 - Interaction System and Performance  
 **Priority**: Low  
 **Story Points**: 3  
@@ -10,10 +11,10 @@
 
 ## Context
 
-GUP-156 implemented pattern performance benchmarks, but they only measure CPU-side
-overhead (command encoding, submission, polling). To accurately validate the <5ms
-target for 100K points, we need GPU timestamp queries to measure actual fragment
-shader execution time on the GPU.
+GUP-156 implemented pattern performance benchmarks, but they only measure
+CPU-side overhead (command encoding, submission, polling). To accurately
+validate the <5ms target for 100K points, we need GPU timestamp queries to
+measure actual fragment shader execution time on the GPU.
 
 The current benchmarks are useful for detecting CPU-side regressions but don't
 capture the true rendering cost of pattern generation in fragment shaders.
@@ -22,7 +23,8 @@ capture the true rendering cost of pattern generation in fragment shaders.
 
 **As a** performance engineer  
 **I want** accurate GPU execution time measurements  
-**So that** I can validate fragment shader performance and identify GPU bottlenecks
+**So that** I can validate fragment shader performance and identify GPU
+bottlenecks
 
 ## Acceptance Criteria
 

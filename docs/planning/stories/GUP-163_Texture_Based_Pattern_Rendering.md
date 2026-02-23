@@ -14,8 +14,8 @@ GUP-113 chose procedural pattern generation in fragment shaders. This approach
 offers infinite scalability and runtime parameters but requires per-pixel
 computation. A texture-based approach would trade memory for computation.
 
-This story implements texture-based patterns to enable data-driven comparison
-of both approaches, validating the architectural decision made in GUP-113.
+This story implements texture-based patterns to enable data-driven comparison of
+both approaches, validating the architectural decision made in GUP-113.
 
 ## User Story
 

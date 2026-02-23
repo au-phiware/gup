@@ -12,8 +12,9 @@ rendering meets the <5ms overhead target for 100K+ data points.
 
 ## Benchmark Suite
 
-The pattern performance benchmark suite (`benches/pattern_performance_benchmarks.rs`)
-includes the following test categories:
+The pattern performance benchmark suite
+(`benches/pattern_performance_benchmarks.rs`) includes the following test
+categories:
 
 ### 1. Pattern Renderer Creation
 
@@ -133,12 +134,12 @@ cargo bench --bench pattern_performance_benchmarks > pattern_benchmark_results.t
 
 ### Uniform Updates
 
-| Update Type   | Mean Time | Std Dev | Min | Max |
-| ------------- | --------- | ------- | --- | --- |
-| Spacing       | TBD       | TBD     | TBD | TBD |
-| Angle         | TBD       | TBD     | TBD | TBD |
-| Color         | TBD       | TBD     | TBD | TBD |
-| Pattern Type  | TBD       | TBD     | TBD | TBD |
+| Update Type  | Mean Time | Std Dev | Min | Max |
+| ------------ | --------- | ------- | --- | --- |
+| Spacing      | TBD       | TBD     | TBD | TBD |
+| Angle        | TBD       | TBD     | TBD | TBD |
+| Color        | TBD       | TBD     | TBD | TBD |
+| Pattern Type | TBD       | TBD     | TBD | TBD |
 
 ### Pipeline Creation
 
@@ -171,7 +172,7 @@ cargo bench --bench pattern_performance_benchmarks > pattern_benchmark_results.t
 
 ### Bottleneck Identification
 
-*Analysis TBD after benchmark execution*
+_Analysis TBD after benchmark execution_
 
 Key areas to investigate:
 
@@ -182,7 +183,7 @@ Key areas to investigate:
 
 ### Optimization Opportunities
 
-*Recommendations TBD after benchmark execution*
+_Recommendations TBD after benchmark execution_
 
 Potential optimizations:
 
@@ -193,7 +194,7 @@ Potential optimizations:
 
 ### Procedural vs Texture-Based Comparison
 
-*Comparison TBD - requires texture-based implementation*
+_Comparison TBD - requires texture-based implementation_
 
 Factors to compare:
 
@@ -272,7 +273,7 @@ cargo flamegraph --bench pattern_performance_benchmarks
 
 ## Conclusion
 
-*Conclusion TBD after benchmark execution*
+_Conclusion TBD after benchmark execution_
 
 ### Summary
 

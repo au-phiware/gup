@@ -36,7 +36,7 @@ rendering scenarios.
 
 - [x] Verify <5ms overhead target for 100K points
 - [x] Identify performance bottlenecks
-- [x] Compare procedural vs texture approaches  
+- [x] Compare procedural vs texture approaches
 - [x] Profile fragment shader performance
 
 ### AC3: Reporting
@@ -118,7 +118,8 @@ rendering scenarios.
 
 ### Key Files Changed
 
-- `benches/pattern_performance_benchmarks.rs` - NEW: Comprehensive benchmark suite
+- `benches/pattern_performance_benchmarks.rs` - NEW: Comprehensive benchmark
+  suite
 - `docs/PATTERN_PERFORMANCE_BENCHMARKING.md` - NEW: Benchmark documentation
 
 ### Test Counts
@@ -138,8 +139,10 @@ rendering scenarios.
 #### Criterion Benchmark Framework Integration
 
 - **Challenge**: Setting up GPU-based benchmarks with Criterion framework
-- **Solution**: Created `PatternBenchmarkContext` with async GPU setup using `pollster::FutureExt`
-- **Pattern**: GPU benchmark contexts should handle device/queue creation in async `new()` and use `.block_on()` for synchronous benchmark execution
+- **Solution**: Created `PatternBenchmarkContext` with async GPU setup using
+  `pollster::FutureExt`
+- **Pattern**: GPU benchmark contexts should handle device/queue creation in
+  async `new()` and use `.block_on()` for synchronous benchmark execution
 - **Future**: This pattern applies to all GPU performance benchmarks
 
 #### Benchmark Granularity
@@ -159,22 +162,28 @@ rendering scenarios.
 
 - **Challenge**: Validating performance across realistic data sizes
 - **Solution**: Tested 1K, 10K, 100K, 1M points to understand scaling behavior
-- **Pattern**: Use exponential data size progression (10x steps) to identify performance cliffs
+- **Pattern**: Use exponential data size progression (10x steps) to identify
+  performance cliffs
 - **Future**: 100K is the critical size for the <5ms target validation
 
 #### GPU Benchmark Limitations
 
 - **Challenge**: Can't easily measure actual rendering without a surface
-- **Solution**: Benchmark pipeline setup, data upload, and submit/poll operations as proxy
-- **Pattern**: GPU benchmarks focus on CPU-side overhead and command encoding time
-- **Trade-off**: Doesn't capture fragment shader execution time, but validates integration overhead
-- **Future**: Consider GPU timestamp queries for fragment shader profiling (requires `TIMESTAMP_QUERY` feature)
+- **Solution**: Benchmark pipeline setup, data upload, and submit/poll
+  operations as proxy
+- **Pattern**: GPU benchmarks focus on CPU-side overhead and command encoding
+  time
+- **Trade-off**: Doesn't capture fragment shader execution time, but validates
+  integration overhead
+- **Future**: Consider GPU timestamp queries for fragment shader profiling
+  (requires `TIMESTAMP_QUERY` feature)
 
 ### Architectural Decisions
 
 #### Benchmark Suite Organization
 
-- **Decision**: Separate benchmark file (`pattern_performance_benchmarks.rs`) rather than adding to existing files
+- **Decision**: Separate benchmark file (`pattern_performance_benchmarks.rs`)
+  rather than adding to existing files
 - **Reasoning**:
   - Pattern rendering is a distinct feature with specific targets
   - Easier to run pattern benchmarks independently
@@ -185,7 +194,8 @@ rendering scenarios.
 
 #### Documentation-First Approach
 
-- **Decision**: Create comprehensive documentation template before running benchmarks
+- **Decision**: Create comprehensive documentation template before running
+  benchmarks
 - **Reasoning**:
   - Clarifies what metrics matter
   - Provides structure for result analysis
@@ -196,7 +206,8 @@ rendering scenarios.
 
 #### Criterion Baseline Management
 
-- **Decision**: Use Criterion's built-in baseline management for regression detection
+- **Decision**: Use Criterion's built-in baseline management for regression
+  detection
 - **Reasoning**:
   - Automatic comparison against previous runs
   - No custom regression logic needed
@@ -214,25 +225,41 @@ rendering scenarios.
   - Current benchmarks validate procedural approach
   - Comparison can be done later if needed
 - **Trade-off**: Missing comparative data, but saves time
-- **Future**: Consider texture-based implementation if procedural shows performance issues
+- **Future**: Consider texture-based implementation if procedural shows
+  performance issues
 
 ### Development Workflow Insights
 
-- **Fast compilation**: Benchmark-only compilation (`cargo check --benches`) is quick for iteration
-- **Criterion boilerplate**: Once pattern is established, adding benchmark groups is straightforward
-- **GPU context reuse**: Sharing `PatternBenchmarkContext` across benchmarks reduces setup overhead
-- **Documentation value**: Writing the documentation helped clarify what to benchmark
+- **Fast compilation**: Benchmark-only compilation (`cargo check --benches`) is
+  quick for iteration
+- **Criterion boilerplate**: Once pattern is established, adding benchmark
+  groups is straightforward
+- **GPU context reuse**: Sharing `PatternBenchmarkContext` across benchmarks
+  reduces setup overhead
+- **Documentation value**: Writing the documentation helped clarify what to
+  benchmark
 
 ### Follow-up Stories
 
-While implementing this story, I identified areas that would benefit from dedicated follow-up work:
+While implementing this story, I identified areas that would benefit from
+dedicated follow-up work:
 
-1. **GUP-161: GPU Timestamp Query Integration** — Add GPU timestamp queries to measure actual fragment shader execution time, not just CPU-side overhead. Current benchmarks only measure command encoding and submission. Requires `TIMESTAMP_QUERY` wgpu feature. Estimate: 3 points.
+1. **GUP-161: GPU Timestamp Query Integration** — Add GPU timestamp queries to
+   measure actual fragment shader execution time, not just CPU-side overhead.
+   Current benchmarks only measure command encoding and submission. Requires
+   `TIMESTAMP_QUERY` wgpu feature. Estimate: 3 points.
 
-2. **GUP-162: Pattern Benchmark CI Integration** — Integrate pattern benchmarks into CI/CD pipeline for automatic regression detection on PRs. Configure baseline comparisons and performance thresholds. Estimate: 2 points.
+2. **GUP-162: Pattern Benchmark CI Integration** — Integrate pattern benchmarks
+   into CI/CD pipeline for automatic regression detection on PRs. Configure
+   baseline comparisons and performance thresholds. Estimate: 2 points.
 
-3. **GUP-163: Texture-Based Pattern Rendering** — Implement texture-based alternative to procedural patterns for performance comparison. Evaluate memory vs computation trade-offs. Estimate: 5 points.
+3. **GUP-163: Texture-Based Pattern Rendering** — Implement texture-based
+   alternative to procedural patterns for performance comparison. Evaluate
+   memory vs computation trade-offs. Estimate: 5 points.
 
-4. **GUP-164: Pattern Rendering Optimization** — If benchmarks show patterns exceed <5ms target, optimize fragment shaders, consider pattern caching, or implement LOD system. Estimate: 5 points.
+4. **GUP-164: Pattern Rendering Optimization** — If benchmarks show patterns
+   exceed <5ms target, optimize fragment shaders, consider pattern caching, or
+   implement LOD system. Estimate: 5 points.
 
-These follow-up stories would provide deeper performance insights and enable data-driven optimization decisions.
+These follow-up stories would provide deeper performance insights and enable
+data-driven optimization decisions.
