@@ -485,6 +485,128 @@ pub struct CachedSurfaceConfig {
     pub view_formats: Vec<TextureFormat>,
 }
 
+/// Platform surface capabilities exposed to users.
+#[derive(Debug, Clone)]
+pub struct PlatformSurfaceCapabilities {
+    /// Available texture formats for this surface
+    pub formats: Vec<TextureFormat>,
+    /// Available present modes
+    pub present_modes: Vec<PresentMode>,
+    /// Available alpha blending modes
+    pub alpha_modes: Vec<CompositeAlphaMode>,
+    /// Supported texture usages
+    pub usages: TextureUsages,
+}
+
+impl From<&SurfaceCapabilities> for PlatformSurfaceCapabilities {
+    fn from(caps: &SurfaceCapabilities) -> Self {
+        Self {
+            formats: caps.formats.clone(),
+            present_modes: caps.present_modes.clone(),
+            alpha_modes: caps.alpha_modes.clone(),
+            usages: caps.usages,
+        }
+    }
+}
+
+/// Surface configuration builder for platform-specific features.
+///
+/// This builder allows fine-grained control over surface configuration,
+/// with sensible defaults and automatic capability negotiation.
+#[derive(Debug, Clone)]
+pub struct SurfaceConfigBuilder {
+    /// Initial width (will be adjusted on first resize)
+    pub width: u32,
+    /// Initial height (will be adjusted on first resize)
+    pub height: u32,
+    /// Override present mode selection (None = automatic)
+    pub present_mode: Option<PresentMode>,
+    /// Override alpha mode selection (None = automatic)
+    pub alpha_mode: Option<CompositeAlphaMode>,
+    /// Override format selection (None = automatic)
+    pub format: Option<TextureFormat>,
+    /// View formats for format reinterpretation (e.g., sRGB ↔ linear)
+    pub view_formats: Vec<TextureFormat>,
+    /// Frame latency hint (1-3 frames, None = default 2)
+    pub desired_maximum_frame_latency: Option<u32>,
+}
+
+impl Default for SurfaceConfigBuilder {
+    fn default() -> Self {
+        Self {
+            width: 800,
+            height: 600,
+            present_mode: None,
+            alpha_mode: None,
+            format: None,
+            view_formats: Vec::new(),
+            desired_maximum_frame_latency: None,
+        }
+    }
+}
+
+impl SurfaceConfigBuilder {
+    /// Create a new surface configuration builder with defaults.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set initial dimensions.
+    pub fn with_size(mut self, width: u32, height: u32) -> Self {
+        self.width = width;
+        self.height = height;
+        self
+    }
+
+    /// Override present mode selection.
+    ///
+    /// Common values:
+    /// - `PresentMode::Immediate`: Low latency, no vsync (tearing possible)
+    /// - `PresentMode::Mailbox`: Low latency with vsync (no tearing)
+    /// - `PresentMode::Fifo`: Traditional vsync (always supported)
+    pub fn with_present_mode(mut self, mode: PresentMode) -> Self {
+        self.present_mode = Some(mode);
+        self
+    }
+
+    /// Override alpha mode selection.
+    pub fn with_alpha_mode(mut self, mode: CompositeAlphaMode) -> Self {
+        self.alpha_mode = Some(mode);
+        self
+    }
+
+    /// Override format selection.
+    pub fn with_format(mut self, format: TextureFormat) -> Self {
+        self.format = Some(format);
+        self
+    }
+
+    /// Add view formats for texture format reinterpretation.
+    ///
+    /// View formats allow reinterpreting the surface texture in different formats
+    /// without recreating it. Common use cases:
+    /// - sRGB ↔ linear conversion for gamma-correct rendering
+    /// - HDR workflow preparation
+    ///
+    /// Example: `with_view_formats(vec![TextureFormat::Bgra8Unorm])`
+    /// allows reinterpreting an sRGB surface as linear.
+    pub fn with_view_formats(mut self, formats: Vec<TextureFormat>) -> Self {
+        self.view_formats = formats;
+        self
+    }
+
+    /// Set frame latency hint (1-3 frames).
+    ///
+    /// Lower values reduce input latency but may hurt performance.
+    /// - 1: Minimal latency (interactive apps, games)
+    /// - 2: Balanced (default)
+    /// - 3: Maximum throughput (heavy rendering)
+    pub fn with_frame_latency(mut self, frames: u32) -> Self {
+        self.desired_maximum_frame_latency = Some(frames.clamp(1, 3));
+        self
+    }
+}
+
 /// Trait for handling surface events.
 pub trait SurfaceEventHandler: Send + Sync {
     /// Called when DPI/scale factor changes.
@@ -1234,6 +1356,182 @@ impl GupContext {
         }
 
         Ok(())
+    }
+
+    /// Add a surface with custom configuration.
+    ///
+    /// This allows fine-grained control over surface settings including present mode,
+    /// alpha blending, view formats, and frame latency.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use gup::context::{GupContext, SurfaceId, SurfaceConfigBuilder};
+    /// # use std::sync::Arc;
+    /// # let mut context = GupContext::new_headless().unwrap();
+    /// # let window = Arc::new(());
+    /// let config = SurfaceConfigBuilder::new()
+    ///     .with_size(1920, 1080)
+    ///     .with_present_mode(wgpu::PresentMode::Immediate)  // Low latency
+    ///     .with_frame_latency(1)  // Minimal input lag
+    ///     .with_view_formats(vec![wgpu::TextureFormat::Bgra8Unorm]);
+    ///
+    /// let id = SurfaceId::new();
+    /// context.add_surface_with_config(id, window, config)?;
+    /// # Ok::<(), gup::error::GupError>(())
+    /// ```
+    pub fn add_surface_with_config<W>(
+        &mut self,
+        id: SurfaceId,
+        window: Arc<W>,
+        config: SurfaceConfigBuilder,
+    ) -> GupResult<()>
+    where
+        W: raw_window_handle::HasWindowHandle
+            + raw_window_handle::HasDisplayHandle
+            + Send
+            + Sync
+            + 'static,
+    {
+        if self.surfaces.contains_key(&id) {
+            return Err(GupError::resource_error(format!(
+                "Surface with ID {id} already exists"
+            )));
+        }
+
+        let surface = self
+            ._instance
+            .create_surface(window)
+            .map_err(|e| GupError::webgpu_error(format!("Failed to create surface: {e}")))?;
+
+        let surface_caps = surface.get_capabilities(&self._adapter);
+
+        // Use configured values or fall back to automatic selection
+        let format = if let Some(fmt) = config.format {
+            // Validate that the requested format is supported
+            if !surface_caps.formats.contains(&fmt) {
+                return Err(GupError::configuration_error(
+                    "surface_format",
+                    format!(
+                        "Requested format {:?} is not supported. Available: {:?}",
+                        fmt, surface_caps.formats
+                    ),
+                ));
+            }
+            fmt
+        } else {
+            self.negotiate_surface_format(&surface_caps)?
+        };
+
+        let present_mode = if let Some(mode) = config.present_mode {
+            // Validate that the requested mode is supported
+            if !surface_caps.present_modes.contains(&mode) {
+                return Err(GupError::configuration_error(
+                    "present_mode",
+                    format!(
+                        "Requested present mode {:?} is not supported. Available: {:?}",
+                        mode, surface_caps.present_modes
+                    ),
+                ));
+            }
+            mode
+        } else {
+            self.select_present_mode(&surface_caps)
+        };
+
+        let alpha_mode = if let Some(mode) = config.alpha_mode {
+            // Validate that the requested mode is supported
+            if !surface_caps.alpha_modes.contains(&mode) {
+                return Err(GupError::configuration_error(
+                    "alpha_mode",
+                    format!(
+                        "Requested alpha mode {:?} is not supported. Available: {:?}",
+                        mode, surface_caps.alpha_modes
+                    ),
+                ));
+            }
+            mode
+        } else {
+            self.select_alpha_mode(&surface_caps)
+        };
+
+        // Validate view formats if provided
+        for view_fmt in &config.view_formats {
+            if !surface_caps.formats.contains(view_fmt) {
+                return Err(GupError::configuration_error(
+                    "view_formats",
+                    format!(
+                        "View format {:?} is not supported. Available: {:?}",
+                        view_fmt, surface_caps.formats
+                    ),
+                ));
+            }
+        }
+
+        let surface_config = SurfaceConfiguration {
+            usage: TextureUsages::RENDER_ATTACHMENT,
+            format,
+            width: config.width,
+            height: config.height,
+            present_mode,
+            alpha_mode,
+            view_formats: config.view_formats,
+            desired_maximum_frame_latency: config.desired_maximum_frame_latency.unwrap_or(2),
+        };
+
+        surface.configure(&self.device, &surface_config);
+
+        let managed_surface = ManagedSurface::new(surface, surface_config, 1.0);
+
+        // Cache the surface configuration
+        self.cache_surface_config(id, &managed_surface);
+
+        self.surfaces.insert(id, managed_surface);
+
+        // Set as primary if this is the first surface
+        if self.primary_surface_id.is_none() {
+            self.primary_surface_id = Some(id);
+        }
+
+        Ok(())
+    }
+
+    /// Query platform capabilities for a given window.
+    ///
+    /// This allows inspecting what formats, present modes, and alpha modes are
+    /// available before creating a surface, useful for building UI or selecting
+    /// optimal configurations.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use gup::context::GupContext;
+    /// # use std::sync::Arc;
+    /// # let context = GupContext::new_headless().unwrap();
+    /// # let window = Arc::new(());
+    /// let caps = context.query_surface_capabilities(window)?;
+    /// println!("Available formats: {:?}", caps.formats);
+    /// println!("Available present modes: {:?}", caps.present_modes);
+    /// # Ok::<(), gup::error::GupError>(())
+    /// ```
+    pub fn query_surface_capabilities<W>(
+        &self,
+        window: Arc<W>,
+    ) -> GupResult<PlatformSurfaceCapabilities>
+    where
+        W: raw_window_handle::HasWindowHandle
+            + raw_window_handle::HasDisplayHandle
+            + Send
+            + Sync
+            + 'static,
+    {
+        let surface = self
+            ._instance
+            .create_surface(window)
+            .map_err(|e| GupError::webgpu_error(format!("Failed to create surface: {e}")))?;
+
+        let surface_caps = surface.get_capabilities(&self._adapter);
+        Ok(PlatformSurfaceCapabilities::from(&surface_caps))
     }
 
     /// Remove a surface from the context.
