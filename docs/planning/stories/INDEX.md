@@ -1096,7 +1096,7 @@ mark types
 
 ### GUP-161: GPU Timestamp Query Integration
 
-**Status**: 📋 Planned  
+**Status**: 🚧 In Progress  
 **Priority**: Low  
 **Story Points**: 3  
 **Key Need**: Add GPU timestamp queries for accurate fragment shader performance
