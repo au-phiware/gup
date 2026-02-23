@@ -108,6 +108,13 @@ impl Mark for Path {
     type Vertex = PathVertex;
     type AttributeValue = PathAttributes;
 
+    /// Pattern-enabled fragment shader for accessibility rendering.
+    ///
+    /// This shader integrates pattern-based rendering for colorblind users,
+    /// using texture patterns instead of colors for data encoding.
+    const PATTERN_FRAGMENT_SHADER: Option<&'static str> =
+        Some(include_str!("shaders/path_pattern.frag.wgsl"));
+
     /// Paths use dynamic vertex count based on tessellation.
     /// This returns a default quad for the base geometry.
     fn vertex_count() -> usize {
@@ -169,10 +176,11 @@ var<storage, read> instances: array<PathInstance>;
 
 struct VertexOutput {{
     @builtin(position) position: vec4<f32>,
-    @location(0) tex_coords: vec2<f32>,
-    @location(1) fill_color: vec4<f32>,
-    @location(2) stroke_color: vec4<f32>,
-    @location(3) stroke_width: f32,
+    @location(0) world_position: vec2<f32>,
+    @location(1) tex_coords: vec2<f32>,
+    @location(2) fill_color: vec4<f32>,
+    @location(3) stroke_color: vec4<f32>,
+    @location(4) stroke_width: f32,
 }}
 
 @vertex
@@ -184,9 +192,12 @@ fn vs_main(
     let instance = instances[instance_index];
     var output: VertexOutput;
     
-    // Transform path vertex
-    let world_pos = instance.transform * vec4<f32>(position, 0.0, 1.0);
-    output.position = world_pos;
+    // Transform path vertex to world space
+    let world_pos_4d = instance.transform * vec4<f32>(position, 0.0, 1.0);
+    let world_pos_2d = world_pos_4d.xy;
+    
+    output.position = world_pos_4d;
+    output.world_position = world_pos_2d;
     output.tex_coords = tex_coords;
     output.fill_color = instance.fill_color;
     output.stroke_color = instance.stroke_color;
