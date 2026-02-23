@@ -1,6 +1,6 @@
 # GUP-130: Mark Type ID Proc Macro
 
-**Status**: 💡 New
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
