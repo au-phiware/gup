@@ -95,8 +95,7 @@ procedural pattern generation in WGSL is highly efficient.
 ## Recommendation
 
 **No optimization needed** for pattern rendering. Performance is excellent
-across all pattern types and data sizes. The <5ms target is met with 47x
-margin.
+across all pattern types and data sizes. The <5ms target is met with 47x margin.
 
 ### Why No Optimization Was Needed
 

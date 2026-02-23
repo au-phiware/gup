@@ -128,8 +128,9 @@ visualizations
 
 ### Educational Value
 
-The example runs in console mode (no window) to provide clear, text-based
-output demonstrating:
+The example runs in console mode (no window) to provide clear, text-based output
+demonstrating:
+
 - Pattern support validation across all marks
 - Pattern configuration with concrete examples
 - Real-world use case scenarios
@@ -164,8 +165,8 @@ clear documentation that developers can read without running a GUI.
 
 #### Educational Examples vs Visual Demos
 
-- **Challenge**: Originally planned as a window-based visual demo with actual GPU
-  rendering
+- **Challenge**: Originally planned as a window-based visual demo with actual
+  GPU rendering
 - **Solution**: Created educational console example with comprehensive
   documentation instead
 - **Pattern**: For API demonstration and developer education, clear console
@@ -217,6 +218,7 @@ clear documentation that developers can read without running a GUI.
 #### API-First Design Validation
 
 The example serves as API validation for pattern rendering:
+
 - Confirms `MarkInfo::has_pattern_shader()` works for all marks
 - Validates `create_render_pipeline_with_patterns()` API
 - Tests `PatternRenderer::new()` and `update()` methods
@@ -228,6 +230,7 @@ This validates that the pattern API is ergonomic and complete.
 
 Including 150+ lines of module documentation and inline comments makes the
 example self-documenting:
+
 - Developers can read the source to understand patterns
 - Doc comments provide context and guidance
 - Example output serves as reference material
@@ -248,6 +251,7 @@ benchmarks.
 ### Pattern Selection Guidance
 
 A significant portion of the example is dedicated to pattern selection guidance:
+
 - When to use each pattern type
 - Spacing guidelines (4px-15px range)
 - Visual clarity considerations
@@ -264,8 +268,8 @@ GUP-160 (Pattern Visual Regression Tests) would be the logical next step.
 
 ### Impact Assessment
 
-**Developer Experience**: The example provides clear, comprehensive reference for
-pattern usage across all mark types, achieving the story's educational goal.
+**Developer Experience**: The example provides clear, comprehensive reference
+for pattern usage across all mark types, achieving the story's educational goal.
 
 **Accessibility Awareness**: By emphasizing color vision deficiencies and
 pattern+color dual encoding, the example raises awareness of accessibility

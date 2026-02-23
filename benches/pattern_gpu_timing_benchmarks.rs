@@ -58,7 +58,7 @@ impl GpuTimingContext {
         // Request device with TIMESTAMP_QUERY feature
         let features = adapter.features();
         let supports_timestamps = features.contains(wgpu::Features::TIMESTAMP_QUERY);
-        
+
         let required_features = if supports_timestamps {
             wgpu::Features::TIMESTAMP_QUERY
         } else {
@@ -119,7 +119,7 @@ impl GpuTimingContext {
 
         // Read timestamps
         let timestamps = timestamp_manager.read_timestamps(2).await.ok()?;
-        
+
         if timestamps.len() >= 2 && timestamps[1] > timestamps[0] {
             let elapsed_ticks = timestamps[1] - timestamps[0];
             Some(timestamp_manager.ticks_to_duration(elapsed_ticks))
@@ -134,7 +134,9 @@ fn bench_pattern_gpu_rendering_time(c: &mut Criterion<WallTime>) {
     let context = GpuTimingContext::new().block_on();
 
     if !context.supports_timestamps {
-        eprintln!("⚠️  GPU timestamp queries not supported on this device - skipping GPU timing benchmarks");
+        eprintln!(
+            "⚠️  GPU timestamp queries not supported on this device - skipping GPU timing benchmarks"
+        );
         return;
     }
 
@@ -196,18 +198,22 @@ fn bench_pattern_gpu_rendering_time(c: &mut Criterion<WallTime>) {
                 }
 
                 b.iter(|| {
-                    let _gpu_time = black_box(context.measure_render_pass_gpu(|encoder, query_set| {
-                        // Write timestamp at pass start
-                        encoder.write_timestamp(query_set, 0);
-                        
-                        // Note: We can't create an actual render pass without a texture,
-                        // so this measures command encoding overhead
-                        black_box(&pipeline);
-                        black_box(&mark_renderer);
-                        
-                        // Write timestamp at pass end
-                        encoder.write_timestamp(query_set, 1);
-                    }).block_on());
+                    let _gpu_time = black_box(
+                        context
+                            .measure_render_pass_gpu(|encoder, query_set| {
+                                // Write timestamp at pass start
+                                encoder.write_timestamp(query_set, 0);
+
+                                // Note: We can't create an actual render pass without a texture,
+                                // so this measures command encoding overhead
+                                black_box(&pipeline);
+                                black_box(&mark_renderer);
+
+                                // Write timestamp at pass end
+                                encoder.write_timestamp(query_set, 1);
+                            })
+                            .block_on(),
+                    );
                 });
             },
         );
@@ -244,19 +250,23 @@ fn bench_pattern_gpu_rendering_time(c: &mut Criterion<WallTime>) {
                     }
 
                     b.iter(|| {
-                        let _gpu_time = black_box(context.measure_render_pass_gpu(|encoder, query_set| {
-                            // Write timestamp at pass start
-                            encoder.write_timestamp(query_set, 0);
-                            
-                            // Note: We can't create an actual render pass without a texture,
-                            // so this measures command encoding overhead
-                            black_box(&pipeline);
-                            black_box(&mark_renderer);
-                            black_box(&pattern_renderer);
-                            
-                            // Write timestamp at pass end
-                            encoder.write_timestamp(query_set, 1);
-                        }).block_on());
+                        let _gpu_time = black_box(
+                            context
+                                .measure_render_pass_gpu(|encoder, query_set| {
+                                    // Write timestamp at pass start
+                                    encoder.write_timestamp(query_set, 0);
+
+                                    // Note: We can't create an actual render pass without a texture,
+                                    // so this measures command encoding overhead
+                                    black_box(&pipeline);
+                                    black_box(&mark_renderer);
+                                    black_box(&pattern_renderer);
+
+                                    // Write timestamp at pass end
+                                    encoder.write_timestamp(query_set, 1);
+                                })
+                                .block_on(),
+                        );
                     });
                 },
             );
@@ -332,13 +342,17 @@ fn bench_pattern_gpu_overhead(c: &mut Criterion<WallTime>) {
             }
 
             b.iter(|| {
-                let _gpu_time = black_box(context.measure_render_pass_gpu(|encoder, query_set| {
-                    encoder.write_timestamp(query_set, 0);
-                    black_box(&pipeline);
-                    black_box(&mark_renderer);
-                    black_box(&pattern_renderer);
-                    encoder.write_timestamp(query_set, 1);
-                }).block_on());
+                let _gpu_time = black_box(
+                    context
+                        .measure_render_pass_gpu(|encoder, query_set| {
+                            encoder.write_timestamp(query_set, 0);
+                            black_box(&pipeline);
+                            black_box(&mark_renderer);
+                            black_box(&pattern_renderer);
+                            encoder.write_timestamp(query_set, 1);
+                        })
+                        .block_on(),
+                );
             });
         });
     }

@@ -153,15 +153,16 @@ This is documented and can be addressed in a follow-up story if needed.
 #### Existing Infrastructure Pays Off
 
 - **Challenge**: Implementing GPU timestamp queries from scratch could have been
-  complex with query set management, buffer synchronization, and tick conversion.
-- **Solution**: The `TimestampQueryManager` already existed in `src/performance.rs`
-  with all the infrastructure needed: query sets, resolve/readback buffers, and
-  tick-to-duration conversion.
-- **Pattern**: When adding new functionality, always check if existing code provides
-  the infrastructure. The performance module already had timestamp support for the
-  shader profiler.
-- **Impact**: Implementation took ~2 hours instead of potential days of debugging
-  GPU synchronization issues.
+  complex with query set management, buffer synchronization, and tick
+  conversion.
+- **Solution**: The `TimestampQueryManager` already existed in
+  `src/performance.rs` with all the infrastructure needed: query sets,
+  resolve/readback buffers, and tick-to-duration conversion.
+- **Pattern**: When adding new functionality, always check if existing code
+  provides the infrastructure. The performance module already had timestamp
+  support for the shader profiler.
+- **Impact**: Implementation took ~2 hours instead of potential days of
+  debugging GPU synchronization issues.
 
 #### Benchmark Architecture Design
 
@@ -170,9 +171,9 @@ This is documented and can be addressed in a follow-up story if needed.
 - **Solution**: Used `pollster::FutureExt::block_on()` to bridge async GPU
   operations into sync benchmark context. Created `measure_render_pass_gpu()`
   helper that encapsulates the entire query lifecycle.
-- **Pattern**: For GPU benchmarks, wrap async operations in a helper function that
-  handles all query setup, execution, and teardown. Let the benchmark iteration
-  call the helper synchronously.
+- **Pattern**: For GPU benchmarks, wrap async operations in a helper function
+  that handles all query setup, execution, and teardown. Let the benchmark
+  iteration call the helper synchronously.
 - **Trade-off**: `block_on()` adds overhead but is necessary for Criterion
   integration. For pure performance testing, consider custom benchmark harness.
 
@@ -180,38 +181,40 @@ This is documented and can be addressed in a follow-up story if needed.
 
 - **Challenge**: Cannot create actual render passes without a surface/texture,
   limiting measurement to command encoding overhead.
-- **Discovery**: This limitation wasn't immediately obvious. The benchmark compiles
-  and runs but doesn't measure what we intended (fragment shader execution).
-- **Pattern**: For true GPU render timing, need offscreen texture as render target.
-  Document limitations clearly when they exist.
+- **Discovery**: This limitation wasn't immediately obvious. The benchmark
+  compiles and runs but doesn't measure what we intended (fragment shader
+  execution).
+- **Pattern**: For true GPU render timing, need offscreen texture as render
+  target. Document limitations clearly when they exist.
 - **Future**: Follow-up story should create offscreen texture and measure actual
-  fragment shader execution. The infrastructure is ready; just needs render target.
+  fragment shader execution. The infrastructure is ready; just needs render
+  target.
 
 ### Architectural Decisions
 
 #### Separate Benchmark File
 
-- **Decision**: Created new `pattern_gpu_timing_benchmarks.rs` instead of modifying
-  existing `pattern_performance_benchmarks.rs`.
-- **Reasoning**: Keeps CPU and GPU timing concerns separate. Different measurement
-  methodologies, different use cases, different audiences.
+- **Decision**: Created new `pattern_gpu_timing_benchmarks.rs` instead of
+  modifying existing `pattern_performance_benchmarks.rs`.
+- **Reasoning**: Keeps CPU and GPU timing concerns separate. Different
+  measurement methodologies, different use cases, different audiences.
 - **Trade-off**: More files to maintain, but clearer separation of concerns. CPU
   benchmarks for regression detection, GPU benchmarks for fragment shader
   validation.
-- **Future**: This pattern scales well - can add more specialized benchmark files
-  for different GPU metrics (memory bandwidth, cache utilization, etc.).
+- **Future**: This pattern scales well - can add more specialized benchmark
+  files for different GPU metrics (memory bandwidth, cache utilization, etc.).
 
 #### Graceful Degradation
 
 - **Decision**: Check for `TIMESTAMP_QUERY` support and skip benchmarks if
   unavailable rather than failing.
-- **Reasoning**: Not all GPUs/drivers support timestamp queries. Want benchmarks to
-  run successfully on older hardware while providing enhanced metrics on modern
-  hardware.
+- **Reasoning**: Not all GPUs/drivers support timestamp queries. Want benchmarks
+  to run successfully on older hardware while providing enhanced metrics on
+  modern hardware.
 - **Pattern**: Feature detection at runtime, clear warning messages, graceful
   fallback. Never make cutting-edge GPU features mandatory.
-- **Impact**: Benchmarks can run anywhere, providing best-effort metrics based on
-  hardware capabilities.
+- **Impact**: Benchmarks can run anywhere, providing best-effort metrics based
+  on hardware capabilities.
 
 ### Development Workflow Insights
 
@@ -224,8 +227,8 @@ Writing `docs/GPU_TIMESTAMP_INTEGRATION.md` after implementation helped clarify:
 - Future enhancement paths
 - Usage patterns and troubleshooting
 
-The documentation revealed the surface-less rendering limitation more clearly than
-the code did.
+The documentation revealed the surface-less rendering limitation more clearly
+than the code did.
 
 #### Testing GPU Features
 
@@ -291,5 +294,7 @@ During implementation, several areas were identified for future work:
 
 1. **wgpu Features**: Always check feature support at runtime, never assume
 2. **Render Targets**: Offscreen textures are required for actual render timing
-3. **Async Bridging**: `block_on()` works but adds overhead - consider alternatives
-4. **Existing Code**: Performance module has rich profiling infrastructure - use it
+3. **Async Bridging**: `block_on()` works but adds overhead - consider
+   alternatives
+4. **Existing Code**: Performance module has rich profiling infrastructure - use
+   it

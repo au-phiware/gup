@@ -77,7 +77,8 @@ async fn test_visual_my_new_pattern() -> GupResult<()> {
 cargo test --test pattern_visual_regression_tests test_visual_my_new_pattern -- --test-threads=1
 ```
 
-3. **Review the reference image** at `tests/visual_references/my_new_pattern.png`
+3. **Review the reference image** at
+   `tests/visual_references/my_new_pattern.png`
 
 4. **Commit the reference image** to git:
 
@@ -129,6 +130,7 @@ FAIL - 2.50% pixels differ (max diff: 10.25%), 12000 / 480000 pixels
 ```
 
 This means:
+
 - 2.50% of pixels differed from the reference
 - The maximum difference in any pixel was 10.25% (per channel)
 - 12,000 out of 480,000 total pixels were different
@@ -193,9 +195,9 @@ Visual regression tests run in CI with the same commands:
   run: cargo test --test pattern_visual_regression_tests -- --test-threads=1
 ```
 
-**Important**: Reference images must be committed to git for CI to work. If tests
-fail in CI, it means your code produces different output than the committed
-references.
+**Important**: Reference images must be committed to git for CI to work. If
+tests fail in CI, it means your code produces different output than the
+committed references.
 
 ## Best Practices
 

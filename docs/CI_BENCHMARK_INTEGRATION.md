@@ -120,7 +120,7 @@ regressions are found.
 
 #### Comment Format
 
-```text
+````text
 ## 🎨 Pattern Benchmark Results
 
 **PR #123** - Pattern rendering performance analysis
@@ -136,7 +136,7 @@ Pattern benchmarks compare rendering performance for different pattern types
 
 ```text
 [Criterion benchmark output excerpt]
-```
+````
 
 ### ⚠️ Performance Regression Detected
 
@@ -152,7 +152,8 @@ impact.
 real hardware.
 
 📊 Full benchmark results available in workflow artifacts.
-```
+
+````
 
 #### Comment Behavior
 
@@ -216,7 +217,7 @@ cargo bench --all-features -- --save-baseline main
 # Commit new baseline
 git add target/criterion
 git commit -m "chore: reset benchmark baselines after [change]"
-```
+````
 
 #### Adjusting Thresholds
 

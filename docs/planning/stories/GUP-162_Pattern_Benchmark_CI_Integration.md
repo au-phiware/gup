@@ -141,7 +141,8 @@ degradation and maintains the <5ms overhead target.
 
 ### Key Files Changed
 
-- `.github/workflows/performance.yml` - Added PR benchmark job, enhanced main job
+- `.github/workflows/performance.yml` - Added PR benchmark job, enhanced main
+  job
 - `scripts/benchmark_baseline.sh` - NEW: Manual baseline management utility
 - `docs/CI_BENCHMARK_INTEGRATION.md` - NEW: Comprehensive documentation
 - `docs/planning/stories/GUP-162_Pattern_Benchmark_CI_Integration.md` - Story
@@ -203,7 +204,7 @@ degradation and maintains the <5ms overhead target.
 
 - **Challenge**: Sharing baseline data between main branch and PR workflows
 - **Solution**: Use `actions/cache` with hierarchical restore-keys
-- **Pattern**: 
+- **Pattern**:
   - Main branch: `key: pattern-benchmarks-baselines-main-${{ github.ref }}`
   - PR: `restore-keys: pattern-benchmarks-baselines-main-`
 - **Trade-off**: Cache might be stale if main moves quickly, but acceptable for
@@ -339,6 +340,7 @@ integration as specified. Related future work:
 ### Success Validation
 
 ✅ All acceptance criteria met:
+
 - Pattern benchmarks run automatically on PRs
 - Regression detection active with 10% threshold
 - PR comments provide clear feedback
@@ -346,12 +348,14 @@ integration as specified. Related future work:
 - Comprehensive documentation written
 
 ✅ Testing performed:
+
 - Baseline script tested locally with `list` command
 - Pattern benchmark binary verified to exist
 - Library tests pass (826 passed)
 - Markdown lint issues resolved
 
 ✅ Integration verified:
+
 - CI workflow syntax valid (GitHub Actions YAML)
 - Criterion baseline commands validated
 - GitHub API comment management implemented

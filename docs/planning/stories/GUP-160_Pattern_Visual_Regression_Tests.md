@@ -37,7 +37,8 @@ aliasing artifacts).
 - [x] Tests for different pattern spacings (4px, 8px, 12px, 16px, 32px)
 - [x] Tests for different pattern angles (horizontal, diagonal)
 - [x] Tests for edge cases (dense spacing, sparse spacing, color combinations)
-- [ ] Visual tests for each mark type (Circle, Rectangle, Line, BoxPlot) - Deferred: Current tests use a simple quad shader
+- [ ] Visual tests for each mark type (Circle, Rectangle, Line, BoxPlot) -
+      Deferred: Current tests use a simple quad shader
 
 ### AC3: CI Integration
 
@@ -80,7 +81,8 @@ aliasing artifacts).
 ## Definition of Done
 
 - [x] Visual regression test infrastructure implemented
-- [x] Tests for all pattern types (10 tests covering Solid, Dots, Lines, Crosshatch)
+- [x] Tests for all pattern types (10 tests covering Solid, Dots, Lines,
+      Crosshatch)
 - [x] Reference images committed
 - [x] Tests run in CI (standard cargo test integration)
 - [x] Documentation for maintaining tests
@@ -104,7 +106,8 @@ aliasing artifacts).
 
 ## Implementation Summary
 
-Successfully implemented a comprehensive visual regression testing system for pattern rendering in Gup.
+Successfully implemented a comprehensive visual regression testing system for
+pattern rendering in Gup.
 
 ### Delivered Components
 
@@ -112,7 +115,8 @@ Successfully implemented a comprehensive visual regression testing system for pa
    - `VisualTestRenderer` - Headless rendering to offscreen textures
    - `VisualTestConfig` - Configurable tolerance and paths
    - `ComparisonResult` - Detailed comparison metrics
-   - Handles wgpu buffer alignment requirements (256-byte COPY_BYTES_PER_ROW_ALIGNMENT)
+   - Handles wgpu buffer alignment requirements (256-byte
+     COPY_BYTES_PER_ROW_ALIGNMENT)
    - Automatic reference image generation on first run
 
 2. **Pattern Visual Tests** (`tests/pattern_visual_regression_tests.rs`):
@@ -157,8 +161,8 @@ Successfully implemented a comprehensive visual regression testing system for pa
    Subsequent runs compare against these. Simple to update by deleting and
    re-running.
 
-5. **Visual Diff Generation**: Failed tests generate red/gray diff images showing
-   exactly where differences occurred, making debugging straightforward.
+5. **Visual Diff Generation**: Failed tests generate red/gray diff images
+   showing exactly where differences occurred, making debugging straightforward.
 
 ### Test Coverage
 
@@ -166,11 +170,12 @@ Successfully implemented a comprehensive visual regression testing system for pa
 - ✅ Multiple spacing values (4px to 32px range)
 - ✅ Pattern angles (horizontal, diagonal)
 - ✅ Edge cases (dense/sparse patterns, color combinations)
-- ⏸️  Per-mark testing deferred (current tests focus on pattern functions)
+- ⏸️ Per-mark testing deferred (current tests focus on pattern functions)
 
 ### Success Metrics Achieved
 
-- ✅ Visual tests detect spacing changes (2% tolerance catches >5/255 differences)
+- ✅ Visual tests detect spacing changes (2% tolerance catches >5/255
+  differences)
 - ✅ Visual tests detect color/blend issues
 - ✅ Test execution time: 6 seconds (well under 30 second target)
 - ✅ False positive rate: 0% in initial testing (tolerance well-tuned)
@@ -179,6 +184,7 @@ Successfully implemented a comprehensive visual regression testing system for pa
 ### CI Integration
 
 Tests integrate seamlessly with existing CI:
+
 ```bash
 cargo test --test pattern_visual_regression_tests -- --test-threads=1
 ```
@@ -188,6 +194,7 @@ No special CI configuration needed beyond standard GPU access requirements.
 ### Files Modified/Created
 
 **Created**:
+
 - `tests/visual_regression_utils.rs` (420 lines)
 - `tests/pattern_visual_regression_tests.rs` (340 lines)
 - `tests/visual_test_pattern_shader.wgsl` (100 lines)
@@ -195,6 +202,7 @@ No special CI configuration needed beyond standard GPU access requirements.
 - `docs/VISUAL_REGRESSION_TESTING.md` (260 lines)
 
 **Modified**:
+
 - `Cargo.toml` (added futures-channel dev dependency)
 - `.gitignore` (added visual test output directories)
 
@@ -206,8 +214,8 @@ No special CI configuration needed beyond standard GPU access requirements.
 
 #### wgpu Buffer Alignment Requirements
 
-- **Challenge**: `copy_texture_to_buffer` requires 256-byte aligned rows, but our
-  images don't naturally align
+- **Challenge**: `copy_texture_to_buffer` requires 256-byte aligned rows, but
+  our images don't naturally align
 - **Solution**: Calculate padded bytes per row, allocate larger buffer, then
   remove padding when extracting image data
 - **Pattern**: Always use
@@ -229,7 +237,8 @@ No special CI configuration needed beyond standard GPU access requirements.
   thresholds:
   - Per-channel tolerance (2% = ~5/255) filters noise
   - Pixel difference percentage (1%) prevents localized issues passing
-- **Pattern**: Two-level threshold catches both systematic and localized problems
+- **Pattern**: Two-level threshold catches both systematic and localized
+  problems
 
 #### Reference Image Workflow
 
@@ -242,8 +251,8 @@ No special CI configuration needed beyond standard GPU access requirements.
 
 #### Build Custom Comparison vs External Library
 
-- **Decision**: Implemented custom pixel comparison instead of using image-compare
-  crate
+- **Decision**: Implemented custom pixel comparison instead of using
+  image-compare crate
 - **Reasoning**:
   - Custom algorithm gives precise control over tolerance
   - No external deps beyond existing `image` crate
@@ -281,6 +290,7 @@ No special CI configuration needed beyond standard GPU access requirements.
 ### Development Workflow Insights
 
 **What Went Well**:
+
 - Leveraging existing `src/visual_test_utils.rs` saved significant time
 - wgpu API differences were easy to find by grepping existing code
 - Test-driven approach: wrote tests, ran to generate references, validated
@@ -288,19 +298,22 @@ No special CI configuration needed beyond standard GPU access requirements.
 - Documentation written concurrently with implementation
 
 **Debugging Techniques**:
+
 - `RUST_BACKTRACE=1` essential for catching wgpu validation errors
-- Error message "Bytes per row does not respect COPY_BYTES_PER_ROW_ALIGNMENT" led
-  directly to solution
+- Error message "Bytes per row does not respect COPY_BYTES_PER_ROW_ALIGNMENT"
+  led directly to solution
 - Checking existing texture copy code in `src/visual_test_utils.rs` showed
   correct API
 
 **Time Distribution**:
+
 - Infrastructure setup: ~40% (renderer, comparison, utilities)
 - Test writing: ~20% (straightforward once infrastructure done)
 - Debugging alignment issues: ~15% (one-time learning)
 - Documentation: ~25% (comprehensive guide for maintainers)
 
 **Testing Strategy**:
+
 - Ran tests individually first to validate infrastructure
 - Generated all references in one batch
 - Re-ran full suite to verify comparison logic

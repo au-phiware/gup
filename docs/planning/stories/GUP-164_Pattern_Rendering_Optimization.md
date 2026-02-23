@@ -140,8 +140,8 @@ the 5ms target.
 The original implementation from GUP-113 already meets performance targets with
 significant margin:
 
-1. **Procedural generation is efficient**: WGSL pattern functions execute in <0.2ms
-   even at 100K points
+1. **Procedural generation is efficient**: WGSL pattern functions execute in
+   <0.2ms even at 100K points
 2. **No memory bottleneck**: Pattern uniforms are small (64 bytes), updated via
    efficient GPU buffer writes
 3. **Pipeline overhead acceptable**: One-time cost of 356µs at startup
@@ -186,9 +186,8 @@ See `docs/PATTERN_BENCHMARK_RESULTS.md` for full details.
   device is dropped. This synchronizes cleanup and prevents driver-level race
   conditions.
 - **Pattern**: Always implement proper cleanup for GPU resources, especially in
-  test/benchmark contexts where resource lifecycles overlap. The
-  `device.poll()` call ensures all pending GPU work completes before releasing
-  the device.
+  test/benchmark contexts where resource lifecycles overlap. The `device.poll()`
+  call ensures all pending GPU work completes before releasing the device.
 - **Future**: Any benchmark or test creating GPU devices should follow this
   pattern. Consider creating a reusable `GpuTestContext` helper that handles
   lifecycle correctly.

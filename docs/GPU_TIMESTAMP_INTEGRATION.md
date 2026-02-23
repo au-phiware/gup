@@ -8,9 +8,9 @@ rendering performance measurement, implemented in GUP-161.
 ## Background
 
 The pattern performance benchmarks (GUP-156) measure CPU-side overhead including
-command encoding, submission, and polling. However, they don't capture the actual
-GPU execution time of fragment shaders, which is critical for validating the <5ms
-target for 100K points.
+command encoding, submission, and polling. However, they don't capture the
+actual GPU execution time of fragment shaders, which is critical for validating
+the <5ms target for 100K points.
 
 GPU timestamp queries provide hardware-level timing measurements that accurately
 reflect fragment shader execution time on the GPU.
@@ -22,7 +22,8 @@ reflect fragment shader execution time on the GPU.
 The `TimestampQueryManager` (src/performance.rs) already provided the necessary
 infrastructure:
 
-- **Query Set Creation**: Creates wgpu timestamp query sets with configurable size
+- **Query Set Creation**: Creates wgpu timestamp query sets with configurable
+  size
 - **Resolution Buffer**: GPU-side buffer for query results
 - **Readback Buffer**: CPU-accessible buffer for timestamp retrieval
 - **Timestamp Period**: Converts GPU ticks to nanoseconds
@@ -40,11 +41,13 @@ measure GPU execution time using timestamp queries.
    - Manages timestamp query lifecycle
 
 2. **Measurement Function**
+
    ```rust
    async fn measure_render_pass_gpu<F>(&self, mut render_fn: F) -> Option<Duration>
    where
        F: FnMut(&mut wgpu::CommandEncoder, &wgpu::QuerySet)
    ```
+
    - Writes timestamps at render pass start/end
    - Resolves and reads back query results
    - Converts GPU ticks to Duration
@@ -55,9 +58,9 @@ measure GPU execution time using timestamp queries.
 
 ### Limitations
 
-The current implementation has a known limitation: it cannot create actual render
-passes without a surface/texture. Therefore, it measures command encoding overhead
-rather than true fragment shader execution.
+The current implementation has a known limitation: it cannot create actual
+render passes without a surface/texture. Therefore, it measures command encoding
+overhead rather than true fragment shader execution.
 
 To get actual GPU fragment shader timing, we would need to:
 
@@ -65,8 +68,8 @@ To get actual GPU fragment shader timing, we would need to:
 2. Execute a real render pass with the texture
 3. Measure timestamp difference
 
-This limitation is documented in code comments and will be addressed in a follow-up
-story if actual fragment shader timing is required.
+This limitation is documented in code comments and will be addressed in a
+follow-up story if actual fragment shader timing is required.
 
 ## Usage
 
@@ -92,6 +95,7 @@ The benchmarks report:
 - **Overhead**: Difference between CPU and GPU time (command encoding overhead)
 
 Example output:
+
 ```
 pattern_gpu_overhead/overhead_solid
                         time:   [145.2 µs 147.8 µs 150.1 µs]
@@ -114,14 +118,16 @@ timing tests:
 
 ## Integration with Existing Benchmarks
 
-The GPU timing benchmarks complement the existing pattern performance benchmarks:
+The GPU timing benchmarks complement the existing pattern performance
+benchmarks:
 
-| Benchmark File                   | Measures                    | Use Case                      |
-| -------------------------------- | --------------------------- | ----------------------------- |
-| pattern_performance_benchmarks   | CPU-side overhead           | Regression detection          |
-| pattern_gpu_timing_benchmarks    | GPU execution time          | Fragment shader validation    |
+| Benchmark File                 | Measures           | Use Case                   |
+| ------------------------------ | ------------------ | -------------------------- |
+| pattern_performance_benchmarks | CPU-side overhead  | Regression detection       |
+| pattern_gpu_timing_benchmarks  | GPU execution time | Fragment shader validation |
 
-Both benchmark files should be run together for comprehensive performance analysis.
+Both benchmark files should be run together for comprehensive performance
+analysis.
 
 ## Future Enhancements
 

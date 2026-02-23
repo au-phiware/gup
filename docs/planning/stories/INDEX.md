@@ -1121,7 +1121,7 @@ detection
 
 ### GUP-163: Texture-Based Pattern Rendering
 
-**Status**: 📋 Planned  
+**Status**: 🚧 In Progress  
 **Priority**: Low  
 **Story Points**: 5  
 **Key Need**: Implement texture-based patterns for memory vs computation
