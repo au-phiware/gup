@@ -1075,7 +1075,7 @@ hand-written shaders
 
 ### GUP-159: Multi-Mark Pattern Visual Example
 
-**Status**: 📋 Planned  
+**Status**: 🚧 In Progress  
 **Priority**: Medium  
 **Story Points**: 2  
 **Key Need**: Create comprehensive example demonstrating patterns across all
