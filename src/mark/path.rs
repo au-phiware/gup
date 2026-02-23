@@ -108,6 +108,12 @@ impl Mark for Path {
     type Vertex = PathVertex;
     type AttributeValue = PathAttributes;
 
+    /// Hand-written vertex shader for path rendering.
+    const VERTEX_SHADER: Option<&'static str> = Some(include_str!("shaders/path.vert.wgsl"));
+
+    /// Hand-written fragment shader for path rendering.
+    const FRAGMENT_SHADER: Option<&'static str> = Some(include_str!("shaders/path.frag.wgsl"));
+
     /// Pattern-enabled fragment shader for accessibility rendering.
     ///
     /// This shader integrates pattern-based rendering for colorblind users,
@@ -151,6 +157,26 @@ impl Mark for Path {
     /// Generate indices for quad rendering.
     fn generate_indices() -> Option<Vec<u32>> {
         Some(vec![0, 1, 2, 0, 2, 3])
+    }
+
+    /// Get vertex attributes for path rendering.
+    ///
+    /// Paths require two vertex attributes:
+    /// - @location(0): position (vec2<f32>) - local position within bounding box
+    /// - @location(1): tex_coords (vec2<f32>) - texture coordinates for SDF rendering
+    fn vertex_attributes() -> &'static [wgpu::VertexAttribute] {
+        &[
+            wgpu::VertexAttribute {
+                offset: 0,
+                shader_location: 0,
+                format: wgpu::VertexFormat::Float32x2, // position
+            },
+            wgpu::VertexAttribute {
+                offset: 8, // offset of second vec2 (2 * 4 bytes)
+                shader_location: 1,
+                format: wgpu::VertexFormat::Float32x2, // tex_coords
+            },
+        ]
     }
 
     /// Generate vertex shader with path-specific transformations.
