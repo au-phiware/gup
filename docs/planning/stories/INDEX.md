@@ -158,7 +158,7 @@ epic and status.
 | [GUP-154](GUP-154_Multi-Platform_CI_Testing.md)         | Multi-Platform CI Testing         | ✅ Complete    | Medium   | 8      |
 | [GUP-049](GUP-049_Surface_Performance_Optimization.md)  | Surface Performance Optimization  | ✅ Complete    | Medium   | 5      |
 | [GUP-050](GUP-050_Visual_Blend_Mode_Validation.md)      | Visual Blend Mode Validation      | ✅ Complete    | Low      | 3      |
-| [GUP-042](GUP-042_Cross_Platform_Surface_Features.md)   | Cross Platform Surface Features   | 💡 New         | Low      | 8      |
+| [GUP-042](GUP-042_Cross_Platform_Surface_Features.md)   | Cross Platform Surface Features   | 🚧 In Progress | Low      | 8      |
 
 ### Post GUP-027 Stories - Blend System Enhancement (Stories 43+)
 

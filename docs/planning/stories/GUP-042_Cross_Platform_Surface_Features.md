@@ -1,5 +1,8 @@
 # GUP-042: Cross-Platform Surface Features
 
+**Status**: 🚧 In Progress  
+**Started**: 2025-01-16
+
 ## Story Overview
 
 **Title**: Platform-Specific Surface Features and Optimizations  
