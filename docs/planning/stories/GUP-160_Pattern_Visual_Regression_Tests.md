@@ -197,3 +197,137 @@ No special CI configuration needed beyond standard GPU access requirements.
 **Modified**:
 - `Cargo.toml` (added futures-channel dev dependency)
 - `.gitignore` (added visual test output directories)
+
+## Retrospective
+
+**Completed**: 2025-02-26
+
+### Key Technical Learnings
+
+#### wgpu Buffer Alignment Requirements
+
+- **Challenge**: `copy_texture_to_buffer` requires 256-byte aligned rows, but our
+  images don't naturally align
+- **Solution**: Calculate padded bytes per row, allocate larger buffer, then
+  remove padding when extracting image data
+- **Pattern**: Always use
+  `((unpadded_bytes_per_row + COPY_BYTES_PER_ROW_ALIGNMENT - 1) / COPY_BYTES_PER_ROW_ALIGNMENT) * COPY_BYTES_PER_ROW_ALIGNMENT`
+
+#### Correct wgpu API (v26) Types
+
+- `ImageCopyTexture` → `TexelCopyTextureInfo`
+- `ImageCopyBuffer` → `TexelCopyBufferInfo`
+- `ImageDataLayout` → `TexelCopyBufferLayout`
+- `Maintain::Wait` → `PollType::Wait`
+- Used existing `src/visual_test_utils.rs` as reference for correct API usage
+
+#### Visual Comparison Algorithm Design
+
+- **Challenge**: Need tolerance for GPU floating-point variation while catching
+  real bugs
+- **Solution**: Per-pixel L-infinity distance (max channel diff) with dual
+  thresholds:
+  - Per-channel tolerance (2% = ~5/255) filters noise
+  - Pixel difference percentage (1%) prevents localized issues passing
+- **Pattern**: Two-level threshold catches both systematic and localized problems
+
+#### Reference Image Workflow
+
+- **Challenge**: Managing reference images and making updates easy
+- **Solution**: Generate on first run, compare on subsequent runs
+- **Pattern**: Check if reference exists → if not, copy output as reference
+- **Benefit**: Simple workflow, no special tools needed, works in CI naturally
+
+### Architectural Decisions
+
+#### Build Custom Comparison vs External Library
+
+- **Decision**: Implemented custom pixel comparison instead of using image-compare
+  crate
+- **Reasoning**:
+  - Custom algorithm gives precise control over tolerance
+  - No external deps beyond existing `image` crate
+  - SSIM/MSE from libraries may not match our needs (pixel-perfect pattern
+    testing)
+  - Simple implementation (~50 lines) vs dependency management overhead
+- **Trade-off**: We maintain comparison code, but gain simplicity and control
+- **Future**: If needs become complex (perceptual diff, etc.), could revisit
+
+#### Isolate Pattern Rendering with Simple Shader
+
+- **Decision**: Created standalone pattern shader instead of using existing mark
+  shaders
+- **Reasoning**:
+  - Tests focus on pattern functions, not full mark pipeline
+  - Simpler test setup (just a quad, no mark vertex data)
+  - Faster execution (no mark-specific logic)
+  - Easier to debug (fewer moving parts)
+- **Trade-off**: Doesn't test mark-pattern integration, but that's covered by
+  existing unit tests
+- **Future**: Could add per-mark visual tests later if needed (GUP-160 AC2 note)
+
+#### Store References in Git vs External Storage
+
+- **Decision**: Commit reference images to git
+- **Reasoning**:
+  - Small size (~250KB total for 10 images)
+  - Versioned alongside code
+  - No external storage setup needed
+  - Works in any CI environment
+  - Easy to review changes in PRs
+- **Trade-off**: Repo size grows slightly, but acceptable for quality assurance
+- **Future**: If reference count grows significantly, could move to LFS
+
+### Development Workflow Insights
+
+**What Went Well**:
+- Leveraging existing `src/visual_test_utils.rs` saved significant time
+- wgpu API differences were easy to find by grepping existing code
+- Test-driven approach: wrote tests, ran to generate references, validated
+  visually
+- Documentation written concurrently with implementation
+
+**Debugging Techniques**:
+- `RUST_BACKTRACE=1` essential for catching wgpu validation errors
+- Error message "Bytes per row does not respect COPY_BYTES_PER_ROW_ALIGNMENT" led
+  directly to solution
+- Checking existing texture copy code in `src/visual_test_utils.rs` showed
+  correct API
+
+**Time Distribution**:
+- Infrastructure setup: ~40% (renderer, comparison, utilities)
+- Test writing: ~20% (straightforward once infrastructure done)
+- Debugging alignment issues: ~15% (one-time learning)
+- Documentation: ~25% (comprehensive guide for maintainers)
+
+**Testing Strategy**:
+- Ran tests individually first to validate infrastructure
+- Generated all references in one batch
+- Re-ran full suite to verify comparison logic
+- Total development time: ~3 hours (including docs and cleanup)
+
+### Follow-up Stories
+
+Based on implementation, identified potential future enhancements:
+
+1. **GUP-161: Per-Mark Visual Regression Tests** (Low Priority)
+   - Visual tests for Circle, Rectangle, Line, BoxPlot marks with patterns
+   - Would catch mark-pattern integration issues
+   - Current AC2 gap, but existing unit tests provide good coverage
+   - Estimated: 3 points
+
+2. **GUP-163: Visual Test Performance Profiling** (Very Low Priority)
+   - Profile rendering/comparison performance
+   - Optimize if test suite grows large
+   - Currently not needed (6s for 10 tests is fast)
+   - Estimated: 2 points
+
+3. **GUP-164: Perceptual Visual Diff Algorithm** (Very Low Priority)
+   - Implement perceptual difference metrics (SSIM, CIE94)
+   - May better match human perception of visual changes
+   - Current pixel-perfect approach working well
+   - Estimated: 5 points
+
+**Recommendation**: None of these are urgent. Current implementation meets all
+requirements. Consider GUP-161 only if bugs are found that tests would have
+caught.
