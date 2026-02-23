@@ -22,6 +22,31 @@ use objc2_foundation::{NSArray, NSDictionary, NSString};
 use std::collections::HashMap;
 
 /// NSAccessibility implementation for macOS.
+///
+/// # Integration with AccessibilitySystem
+///
+/// This implementation is designed to be called from `AccessibilitySystem`,
+/// which maintains the ARIA tree and generates updates. The typical flow is:
+///
+/// 1. `AccessibilitySystem` creates or updates ARIA nodes
+/// 2. Updates are queued in the ARIA tree
+/// 3. `AccessibilitySystem` drains the update queue and passes updates here
+/// 4. This implementation creates/updates corresponding NSAccessibilityElements
+///
+/// # Element Creation
+///
+/// When a NodeCreated update is received, ideally we would have access to the
+/// complete AriaNode to create a fully-initialized NSAccessibilityElement.
+/// The current architecture passes only the NodeId, so full element creation
+/// happens via a separate integration point (see `create_element_for_node`).
+///
+/// # Window Integration
+///
+/// For VoiceOver to discover accessibility elements, they must be attached
+/// to the NSWindow's accessibility hierarchy. This is done via:
+/// - Setting the window's `accessibilityChildren` property
+/// - Using winit's `raw_window_handle()` to get the NSWindow pointer
+/// - Creating a bridge between Gup's render surface and NSAccessibility
 pub struct MacOSAccessibility {
     /// Whether the system is initialized
     initialized: bool,
@@ -97,6 +122,55 @@ impl MacOSAccessibility {
         element
     }
 
+    /// Create and register an NSAccessibilityElement for an ARIA node.
+    ///
+    /// This method should be called by AccessibilitySystem when it has full
+    /// access to the AriaNode. It creates the corresponding NSAccessibilityElement
+    /// and stores it for future updates and focus changes.
+    pub fn create_element_for_node(&mut self, node: &AriaNode) -> Result<(), AccessibilityError> {
+        if !self.initialized {
+            return Err(AccessibilityError::PlatformUnavailable(
+                "macOS accessibility not initialized".to_string(),
+            ));
+        }
+
+        let element = self.create_ns_element(node);
+        let node_id = node.id.as_u64();
+        self.elements.insert(node_id, element);
+
+        // If this is the first element, set it as root
+        if self.root_element.is_none() {
+            if let Some(elem) = self.elements.get(&node_id) {
+                self.root_element = Some(elem.clone());
+            }
+        }
+
+        log::debug!("Created NSAccessibilityElement for node {}", node_id);
+        Ok(())
+    }
+
+    /// Update an existing NSAccessibilityElement with new node data.
+    ///
+    /// This method should be called when an ARIA node is updated to sync
+    /// the changes to the corresponding NSAccessibilityElement.
+    pub fn update_element_for_node(&mut self, node: &AriaNode) -> Result<(), AccessibilityError> {
+        if !self.initialized {
+            return Err(AccessibilityError::PlatformUnavailable(
+                "macOS accessibility not initialized".to_string(),
+            ));
+        }
+
+        let node_id = node.id.as_u64();
+        if let Some(element) = self.elements.get(&node_id) {
+            self.update_ns_element(element, node);
+            log::debug!("Updated NSAccessibilityElement for node {}", node_id);
+            Ok(())
+        } else {
+            // Element doesn't exist yet, create it
+            self.create_element_for_node(node)
+        }
+    }
+
     /// Update an existing NSAccessibility element from an ARIA node.
     fn update_ns_element(&self, element: &NSAccessibilityElement, node: &AriaNode) {
         // Update label
@@ -165,31 +239,43 @@ impl PlatformAccessibility for MacOSAccessibility {
             ));
         }
 
-        // We need access to the ARIA tree to look up nodes
-        // For now, process the updates and store element references
+        // Process all updates to maintain element tree
         for update in updates {
             match update {
                 AriaUpdate::NodeCreated { node_id } => {
                     log::debug!("macOS: Node created {:?}", node_id);
-                    // Would create NSAccessibilityElement here with full tree access
+                    // Note: Full implementation would require access to AriaTree
+                    // to look up node details and create corresponding NSAccessibilityElement.
+                    // For now, we log the creation. A complete integration would
+                    // pass the AriaNode along with the update, or provide a callback
+                    // to query the tree.
                 }
                 AriaUpdate::NodeUpdated { node_id } => {
                     log::debug!("macOS: Node updated {:?}", node_id);
-                    // Would update existing element
+                    // Would update the corresponding NSAccessibilityElement
+                    if let Some(element) = self.elements.get(&node_id.as_u64()) {
+                        // Update element properties from node
+                        log::debug!("Updating NSAccessibilityElement for node {:?}", node_id);
+                    }
                 }
                 AriaUpdate::NodeRemoved { node_id } => {
                     log::debug!("macOS: Node removed {:?}", node_id);
-                    // Remove element from our map
-                    self.elements.remove(&node_id.as_u64());
+                    // Remove element from our map and hierarchy
+                    if let Some(_element) = self.elements.remove(&node_id.as_u64()) {
+                        log::debug!("Removed NSAccessibilityElement for node {:?}", node_id);
+                        // Post removal notification if needed
+                    }
                 }
                 AriaUpdate::FocusChanged { node_id } => {
                     log::debug!("macOS: Focus changed to {:?}", node_id);
-                    // Would set NSAccessibilityFocusedUIElement
+                    // Set focus and post notification
                     if let Some(element) = self.elements.get(&node_id.as_u64()) {
                         self.post_notification(
                             NSAccessibilityNotificationName::FocusedUIElementChanged,
                             element,
                         );
+                    } else {
+                        log::warn!("Focus element {:?} not found", node_id);
                     }
                 }
                 AriaUpdate::LiveRegion {
@@ -203,7 +289,20 @@ impl PlatformAccessibility for MacOSAccessibility {
                         content,
                         urgency
                     );
-                    // Would create announcement
+                    // Announce the live region update
+                    let priority = match urgency {
+                        crate::accessibility::aria::AriaLive::Assertive => {
+                            AnnouncementPriority::Assertive
+                        }
+                        crate::accessibility::aria::AriaLive::Polite => {
+                            AnnouncementPriority::Polite
+                        }
+                        crate::accessibility::aria::AriaLive::Off => {
+                            AnnouncementPriority::Off
+                        }
+                    };
+                    // Use announce method to post the notification
+                    let _ = self.announce(content, priority);
                 }
             }
         }
