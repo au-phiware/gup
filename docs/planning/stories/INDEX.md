@@ -904,7 +904,7 @@ integration
 
 ### GUP-115: Windows UI Automation Integration
 
-**Status**: 💡 New  
+**Status**: 🚧 In Progress  
 **Priority**: Medium  
 **Story Points**: 8  
 **Key Need**: Complete Windows UI Automation implementation with windows-rs
