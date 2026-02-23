@@ -230,15 +230,13 @@ fn test_pattern_debug() {
 #[test]
 fn test_all_pattern_variants() {
     // Test that we can create all pattern types
-    let patterns = vec![
-        Pattern::Solid,
+    let patterns = [Pattern::Solid,
         Pattern::Dots { spacing: 8.0 },
         Pattern::Lines {
             spacing: 6.0,
             angle: 0.0,
         },
-        Pattern::Crosshatch { spacing: 8.0 },
-    ];
+        Pattern::Crosshatch { spacing: 8.0 }];
 
     for (i, pattern) in patterns.iter().enumerate() {
         assert_eq!(pattern.pattern_type_id(), i as u32);

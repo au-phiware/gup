@@ -1022,6 +1022,36 @@ type IDs
 **Impact**: More robust mark type ID system, resistant to refactoring  
 **Created**: 2024-02-22 during GUP-128 retrospective
 
+### GUP-155: Mark Pipeline Pattern Integration
+
+**Status**: 📋 Planned  
+**Priority**: High  
+**Story Points**: 3  
+**Key Need**: Integrate PatternRenderer into mark rendering pipeline for actual pattern display  
+**Dependencies**: GUP-113 ✅  
+**Impact**: Makes pattern rendering functional in visualizations  
+**Created**: 2025-02-24 during GUP-113 retrospective
+
+### GUP-156: Pattern Performance Benchmarking
+
+**Status**: 📋 Planned  
+**Priority**: Medium  
+**Story Points**: 2  
+**Key Need**: Validate <5ms pattern rendering overhead target with comprehensive benchmarks  
+**Dependencies**: GUP-113 ✅, GUP-155  
+**Impact**: Confirms pattern rendering meets performance requirements  
+**Created**: 2025-02-24 during GUP-113 retrospective
+
+### GUP-157: Multi-Mark Pattern Support
+
+**Status**: 📋 Planned  
+**Priority**: Medium  
+**Story Points**: 5  
+**Key Need**: Extend pattern rendering to all mark types (rectangles, lines, paths)  
+**Dependencies**: GUP-113 ✅, GUP-155  
+**Impact**: Complete accessibility coverage for all visualization types  
+**Created**: 2025-02-24 during GUP-113 retrospective
+
 ---
 
 ## Earlier Additions (Post GUP-031)

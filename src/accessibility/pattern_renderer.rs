@@ -98,14 +98,14 @@ impl PatternRenderer {
             }],
         });
 
-        let renderer = Self {
+        
+
+        // Initialize buffer with initial uniforms (requires queue, so we'll do it in update)
+        Self {
             uniform_buffer,
             bind_group,
             current_uniforms: initial_uniforms,
-        };
-
-        // Initialize buffer with initial uniforms (requires queue, so we'll do it in update)
-        renderer
+        }
     }
 
     /// Create the bind group layout for pattern uniforms.
