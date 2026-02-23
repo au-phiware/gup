@@ -1,5 +1,8 @@
 # GUP-085: GPU Resource Dependency Graph Visualization
 
+**Status**: 🚧 In Progress  
+**Started**: 2025-01-30
+
 ## Story Overview
 
 **Title**: Visualize GPU Resource Dependencies and Relationships  
