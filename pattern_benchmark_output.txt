@@ -1,0 +1,69 @@
+warning: unused imports: `BufferType` and `GpuBuffer`
+ --> src/debug/debug_buffer_wrapper.rs:9:21
+  |
+9 | use crate::buffer::{BufferType, GpuBuffer};
+  |                     ^^^^^^^^^^  ^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused imports: `BufferMetadata`, `ValidationReport`, `ValidationResult`, and `ValidationRule`
+  --> src/debug/debug_buffer_wrapper.rs:11:5
+   |
+11 |     BufferMetadata, ValidationReport, ValidationResult, ValidationRule,
+   |     ^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^
+
+warning: unused import: `crate::error::GupResult`
+  --> src/debug/debug_buffer_wrapper.rs:13:5
+   |
+13 | use crate::error::GupResult;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `Device` and `Queue`
+  --> src/debug/debug_buffer_wrapper.rs:15:12
+   |
+15 | use wgpu::{Device, Queue};
+   |            ^^^^^^  ^^^^^
+
+warning: method `set_phase` is never used
+   --> src/interaction.rs:370:19
+    |
+283 | impl InteractionEvent {
+    | --------------------- method in this implementation
+...
+370 |     pub(crate) fn set_phase(&mut self, phase: PropagationPhase) {
+    |                   ^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `swipe_threshold` and `swipe_velocity_threshold` are never read
+    --> src/interaction.rs:1530:5
+     |
+1524 | pub struct GestureRecognizer {
+     |            ----------------- fields in this struct
+...
+1530 |     swipe_threshold: f32,
+     |     ^^^^^^^^^^^^^^^
+1531 |     /// Minimum velocity for swipe recognition (pixels/second)
+1532 |     swipe_velocity_threshold: f32,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `wgsl_code` and `wgsl_function_name` are never used
+    --> src/shader_function.rs:5271:8
+     |
+5241 | impl KernelFunction {
+     | ------------------- methods in this implementation
+...
+5271 |     fn wgsl_code(&self) -> &'static str {
+     |        ^^^^^^^^^
+...
+5320 |     fn wgsl_function_name(&self) -> &'static str {
+     |        ^^^^^^^^^^^^^^^^^^
+
+warning: `gup` (lib) generated 7 warnings (run `cargo fix --lib -p gup` to apply 4 suggestions)
+    Finished `bench` profile [optimized] target(s) in 0.21s
+     Running benches/pattern_performance_benchmarks.rs (target/release/deps/pattern_performance_benchmarks-db5842dde20ec540)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
