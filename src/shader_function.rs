@@ -1588,6 +1588,76 @@ impl<S: ComposableShaderFunction, T: ComposableShaderFunction> ParallelComposabl
 {
 }
 
+/// Buffer extraction utilities for ParallelOutput types.
+///
+/// These utilities enable the Selection API to split `ParallelOutput<A, B>` into
+/// separate GPU buffers for individual attribute binding.
+pub mod parallel_output_extraction {
+    use super::*;
+
+    /// Extract the first component from a buffer of ParallelOutput values.
+    ///
+    /// # Type Safety
+    /// Both A and B must be `Pod` and `Zeroable` for safe GPU memory operations.
+    ///
+    /// # Memory Layout
+    /// This function correctly handles memory alignment and padding in the source buffer.
+    pub fn extract_first<A, B>(parallel_buffer: &[ParallelOutput<A, B>]) -> Vec<A>
+    where
+        A: bytemuck::Pod + bytemuck::Zeroable + Copy,
+        B: bytemuck::Pod + bytemuck::Zeroable,
+    {
+        parallel_buffer.iter().map(|p| p.first).collect()
+    }
+
+    /// Extract the second component from a buffer of ParallelOutput values.
+    ///
+    /// # Type Safety
+    /// Both A and B must be `Pod` and `Zeroable` for safe GPU memory operations.
+    ///
+    /// # Memory Layout
+    /// This function correctly handles memory alignment and padding in the source buffer.
+    pub fn extract_second<A, B>(parallel_buffer: &[ParallelOutput<A, B>]) -> Vec<B>
+    where
+        A: bytemuck::Pod + bytemuck::Zeroable,
+        B: bytemuck::Pod + bytemuck::Zeroable + Copy,
+    {
+        parallel_buffer.iter().map(|p| p.second).collect()
+    }
+
+    /// Split a ParallelOutput buffer into two separate buffers.
+    ///
+    /// This is the most efficient way to extract both components when you need
+    /// both for separate attribute bindings.
+    ///
+    /// # Returns
+    /// A tuple of (first_buffer, second_buffer).
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let parallel_buffer = vec![
+    ///     ParallelOutput { first: [0.0, 1.0], second: [1.0, 0.0, 0.0, 1.0] },
+    ///     ParallelOutput { first: [1.0, 0.0], second: [0.0, 1.0, 0.0, 1.0] },
+    /// ];
+    /// let (positions, colors) = split_parallel_buffer(&parallel_buffer);
+    /// ```
+    pub fn split_parallel_buffer<A, B>(parallel_buffer: &[ParallelOutput<A, B>]) -> (Vec<A>, Vec<B>)
+    where
+        A: bytemuck::Pod + bytemuck::Zeroable + Copy,
+        B: bytemuck::Pod + bytemuck::Zeroable + Copy,
+    {
+        let mut first_buffer = Vec::with_capacity(parallel_buffer.len());
+        let mut second_buffer = Vec::with_capacity(parallel_buffer.len());
+
+        for output in parallel_buffer {
+            first_buffer.push(output.first);
+            second_buffer.push(output.second);
+        }
+
+        (first_buffer, second_buffer)
+    }
+}
+
 /// Conditional composition: applies different functions based on a condition.
 ///
 /// This enables if-then-else logic in shader function pipelines.
