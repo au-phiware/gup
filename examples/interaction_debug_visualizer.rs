@@ -31,6 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             position: [100.0, 100.0],
             size: [15.0, 15.0],
             mark_type: 0, // Circle
+            element_id: 0, 
             selection_id: 0,
             _padding: 0,
         },
@@ -38,6 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             position: [200.0, 150.0],
             size: [20.0, 30.0],
             mark_type: 1, // Rectangle
+            element_id: 0, 
             selection_id: 0,
             _padding: 0,
         },
@@ -45,6 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             position: [300.0, 200.0],
             size: [10.0, 10.0],
             mark_type: 0, // Circle
+            element_id: 0, 
             selection_id: 1,
             _padding: 0,
         },
@@ -52,6 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             position: [150.0, 250.0],
             size: [25.0, 5.0],
             mark_type: 2, // Line
+            element_id: 0, 
             selection_id: 1,
             _padding: 0,
         },
@@ -161,6 +165,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 position: [50.0 + x as f32 * 40.0, 50.0 + y as f32 * 40.0],
                 size: [8.0, 8.0],
                 mark_type: 0, // Circle
+            element_id: 0, 
                 selection_id: 0,
                 _padding: 0,
             });
@@ -212,6 +217,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             position: [100.0, 100.0],
             size: [20.0, 20.0],
             mark_type: 0,
+            element_id: 0, 
             selection_id: 0, // Selection A
             _padding: 0,
         },
@@ -219,6 +225,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             position: [150.0, 100.0],
             size: [20.0, 20.0],
             mark_type: 0,
+            element_id: 0, 
             selection_id: 0, // Selection A
             _padding: 0,
         },
@@ -226,6 +233,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             position: [100.0, 200.0],
             size: [30.0, 30.0],
             mark_type: 1,
+            element_id: 0, 
             selection_id: 1, // Selection B
             _padding: 0,
         },
@@ -233,6 +241,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             position: [200.0, 200.0],
             size: [30.0, 30.0],
             mark_type: 1,
+            element_id: 0, 
             selection_id: 1, // Selection B
             _padding: 0,
         },
