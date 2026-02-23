@@ -492,36 +492,55 @@ impl BaselineStorage {
             .join(format!("{}.json", test_name))
     }
 
-    /// List all available baselines
-    pub fn list_baselines(&self) -> GupResult<Vec<(String, String)>> {
+    /// List all available baselines (returns (platform_id, category, test_name) tuples)
+    pub fn list_baselines(&self) -> GupResult<Vec<(String, String, String)>> {
         let mut baselines = Vec::new();
 
         if !self.base_dir.exists() {
             return Ok(baselines);
         }
 
-        for category_entry in std::fs::read_dir(&self.base_dir).map_err(|e| {
+        // Iterate through platform directories
+        for platform_entry in std::fs::read_dir(&self.base_dir).map_err(|e| {
             GupError::resource_error(format!("Failed to read baseline directory: {e}"))
         })? {
-            let category_entry = category_entry.map_err(|e| {
-                GupError::resource_error(format!("Failed to read category entry: {e}"))
+            let platform_entry = platform_entry.map_err(|e| {
+                GupError::resource_error(format!("Failed to read platform entry: {e}"))
             })?;
 
-            if category_entry.path().is_dir() {
-                let category = category_entry.file_name().to_string_lossy().to_string();
+            if platform_entry.path().is_dir() {
+                let platform_id = platform_entry.file_name().to_string_lossy().to_string();
 
-                for baseline_entry in std::fs::read_dir(category_entry.path()).map_err(|e| {
-                    GupError::resource_error(format!("Failed to read baseline files: {e}"))
+                // Iterate through category directories within each platform
+                for category_entry in std::fs::read_dir(platform_entry.path()).map_err(|e| {
+                    GupError::resource_error(format!("Failed to read category directory: {e}"))
                 })? {
-                    let baseline_entry = baseline_entry.map_err(|e| {
-                        GupError::resource_error(format!("Failed to read baseline entry: {e}"))
+                    let category_entry = category_entry.map_err(|e| {
+                        GupError::resource_error(format!("Failed to read category entry: {e}"))
                     })?;
 
-                    if let Some(file_name) = baseline_entry.file_name().to_str()
-                        && file_name.ends_with(".json")
-                    {
-                        let test_name = file_name.strip_suffix(".json").unwrap().to_string();
-                        baselines.push((category.clone(), test_name));
+                    if category_entry.path().is_dir() {
+                        let category = category_entry.file_name().to_string_lossy().to_string();
+
+                        // Iterate through baseline files
+                        for baseline_entry in
+                            std::fs::read_dir(category_entry.path()).map_err(|e| {
+                                GupError::resource_error(format!("Failed to read baseline files: {e}"))
+                            })?
+                        {
+                            let baseline_entry = baseline_entry.map_err(|e| {
+                                GupError::resource_error(format!("Failed to read baseline entry: {e}"))
+                            })?;
+
+                            if let Some(file_name) = baseline_entry.file_name().to_str()
+                                && file_name.ends_with(".json")
+                            {
+                                let test_name =
+                                    file_name.strip_suffix(".json").unwrap().to_string();
+                                baselines
+                                    .push((platform_id.clone(), category.clone(), test_name));
+                            }
+                        }
                     }
                 }
             }

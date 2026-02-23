@@ -98,8 +98,27 @@ async fn run_ci_performance_suite() {
     let debug_context = GpuDebugContext::new(&context.device, &context.queue);
     let config = create_ci_config();
 
-    // Create performance runner
-    let mut runner = CiPerformanceRunner::new(debug_context, config);
+    // Detect platform information
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::all(),
+        ..Default::default()
+    });
+
+    let adapter = instance
+        .request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            compatible_surface: None,
+            force_fallback_adapter: false,
+        })
+        .await
+        .expect("Failed to find adapter");
+
+    let platform_info = gup::debug::PlatformInfo::from_adapter(&adapter);
+    println!("\n🖥️  Testing on platform: {}", platform_info.description());
+
+    // Create performance runner with platform info
+    let mut runner = CiPerformanceRunner::new(debug_context, config)
+        .with_platform_info(platform_info.clone());
 
     // Build test suite
     let test_suite = PerformanceTestSuite::new("Gup Core Performance Suite")
@@ -208,15 +227,16 @@ async fn test_baseline_management() {
         sample_count: 10,
         last_updated: chrono::Utc::now(),
         metadata: std::collections::HashMap::new(),
+        platform_id: "default".to_string(),
     };
 
     storage
-        .save_baseline("test_foo", "test_category", &baseline)
+        .save_baseline("test_foo", "test_category", "default", &baseline)
         .expect("Failed to save baseline");
 
     // Load it back
     let loaded = storage
-        .load_baseline("test_foo", "test_category")
+        .load_baseline("test_foo", "test_category", "default")
         .expect("Failed to load baseline");
 
     assert_eq!(loaded.test_name, "test_foo");
@@ -228,7 +248,11 @@ async fn test_baseline_management() {
     assert_eq!(baselines.len(), 1);
     assert_eq!(
         baselines[0],
-        ("test_category".to_string(), "test_foo".to_string())
+        (
+            "default".to_string(),
+            "test_category".to_string(),
+            "test_foo".to_string()
+        )
     );
 
     // Clean up

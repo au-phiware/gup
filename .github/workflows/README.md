@@ -90,16 +90,100 @@ baselines:
 
 #### Baseline File Structure
 
-```
+Multi-platform baselines are organized by platform:
+
+```text
 baselines/performance/
-├── rendering/
-│   ├── basic_rendering.json
-│   └── large_dataset_rendering.json
-├── compilation/
-│   └── shader_compilation.json
-└── gpu_transfer/
-    └── buffer_upload.json
+├── default/                    # Software rendering (default)
+│   ├── rendering/
+│   │   ├── basic_rendering.json
+│   │   └── large_dataset_rendering.json
+│   └── compilation/
+│       └── shader_compilation.json
+├── nvidia_rtx_3080/           # NVIDIA GPU platform
+│   ├── rendering/
+│   │   └── ...
+│   └── compilation/
+│       └── ...
+└── amd_rx_6800/              # AMD GPU platform
+    └── ...
 ```
+
+Each platform has its own baseline set to account for hardware-specific
+performance characteristics.
+
+## Multi-Platform Testing
+
+The CI workflow supports testing across multiple GPU platforms to detect
+platform-specific performance regressions.
+
+### Platform Detection
+
+The system automatically detects the GPU platform using wgpu adapter info:
+
+- **NVIDIA**: RTX 3000/4000 series
+- **AMD**: RX 6000/7000 series  
+- **Intel**: Arc A-series
+- **Software**: CPU fallback renderer (default)
+
+Platform information is included in performance reports and used to organize
+baselines.
+
+### Enabling Multi-Platform Testing
+
+Multi-platform testing requires self-hosted GitHub Actions runners with specific
+GPU hardware:
+
+1. **Set up self-hosted runners**:
+   - Configure runners with different GPU vendors
+   - Tag runners with appropriate labels (e.g., `self-hosted-nvidia-gpu`)
+
+2. **Update workflow matrix**:
+   - Uncomment GPU platform entries in `.github/workflows/performance.yml`
+   - Update runner labels to match your infrastructure
+
+3. **Trigger workflow**:
+   ```bash
+   # Manual trigger with multi-platform enabled
+   gh workflow run performance.yml -f enable_multi_platform=true
+   ```
+
+### Cross-Platform Comparison
+
+When multiple platforms are tested, a comparison report is automatically
+generated showing:
+
+- Performance on each platform
+- Platform-specific variations
+- Hardware that performs best/worst for each test
+
+Example comparison:
+
+| Test                    | NVIDIA RTX 3080 | AMD RX 6800 | Intel Arc A770 | Software |
+| ----------------------- | --------------- | ----------- | -------------- | -------- |
+| basic_rendering         | 5.1ms           | 5.8ms       | 6.2ms          | 45ms     |
+| large_dataset_rendering | 15.0ms          | 16.2ms      | 17.5ms         | 180ms    |
+
+### Platform-Specific Baselines
+
+Each platform maintains independent baselines:
+
+```rust
+// Baselines are automatically loaded based on detected platform
+let runner = CiPerformanceRunner::new(debug_context, config)
+    .with_platform_info(platform_info);  // Auto-detects GPU
+```
+
+### Infrastructure Requirements
+
+For full multi-platform testing:
+
+- **NVIDIA Runner**: Linux machine with RTX 3070+ or equivalent
+- **AMD Runner**: Linux machine with RX 6000+ series
+- **Intel Runner**: Linux machine with Arc A-series
+- **Software Runner**: Standard GitHub-hosted runner (no GPU)
+
+Alternatively, use cloud GPU instances for occasional multi-platform validation.
 
 ### Configuration
 
