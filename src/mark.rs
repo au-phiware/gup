@@ -39,6 +39,7 @@
 //!     );
 //! ```
 
+pub mod boxplot;
 pub mod circle;
 pub mod composite;
 pub mod gpu_path_tessellator;
@@ -48,6 +49,7 @@ pub mod rectangle;
 pub mod renderer;
 pub mod text;
 
+pub use boxplot::{BoxPlot, BoxPlotAttributes, BoxPlotOrientation, BoxPlotVertex};
 pub use circle::{Circle, CircleAttributes, CircleVertex};
 pub use composite::{
     CompositeMark, CompositeMarkAttributes, CompositeMarkVertex, SubMark, Transform,

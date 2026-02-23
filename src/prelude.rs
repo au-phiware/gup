@@ -26,7 +26,7 @@ pub use crate::chart_builder::{
 pub use crate::selection::{Mark, Selection};
 
 // Mark types
-pub use crate::{Circle, Line, Rectangle};
+pub use crate::{BoxPlot, Circle, Line, Rectangle};
 
 // Mixable trait for composition
 pub use crate::mixable::Mixable;
