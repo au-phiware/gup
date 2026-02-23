@@ -1013,7 +1013,7 @@ results)
 
 ### GUP-130: Mark Type ID Proc Macro
 
-**Status**: 🚧 In Progress  
+**Status**: ✅ Complete (2025-01-15)  
 **Priority**: Low  
 **Story Points**: 5  
 **Key Need**: Replace fragile type name matching with compile-time stable mark
