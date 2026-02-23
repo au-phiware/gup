@@ -277,6 +277,195 @@ pub struct RecoveryAttemptResult {
     pub error: Option<String>,
 }
 
+/// Recovery tier that succeeded for a recovery attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecoveryTier {
+    /// Full features recovery succeeded
+    FullFeatures,
+    /// Reduced features recovery succeeded
+    ReducedFeatures,
+    /// Software rendering fallback succeeded
+    SoftwareRendering,
+}
+
+/// Statistics for recovery attempts.
+#[derive(Debug, Clone)]
+pub struct RecoveryMetrics {
+    /// Total number of recovery attempts
+    pub total_attempts: u64,
+    /// Number of successful recoveries
+    pub successful_recoveries: u64,
+    /// Number of failed recoveries
+    pub failed_recoveries: u64,
+    /// Minimum recovery time observed
+    pub min_recovery_time: Option<Duration>,
+    /// Maximum recovery time observed
+    pub max_recovery_time: Option<Duration>,
+    /// Sum of all recovery times (for calculating average)
+    pub total_recovery_time: Duration,
+    /// Number of recoveries per tier
+    pub full_features_count: u64,
+    pub reduced_features_count: u64,
+    pub software_rendering_count: u64,
+    /// Rolling window of recent recovery attempts (last 100)
+    pub recent_attempts: Vec<RecoveryAttemptResult>,
+}
+
+impl Default for RecoveryMetrics {
+    fn default() -> Self {
+        Self {
+            total_attempts: 0,
+            successful_recoveries: 0,
+            failed_recoveries: 0,
+            min_recovery_time: None,
+            max_recovery_time: None,
+            total_recovery_time: Duration::ZERO,
+            full_features_count: 0,
+            reduced_features_count: 0,
+            software_rendering_count: 0,
+            recent_attempts: Vec::with_capacity(100),
+        }
+    }
+}
+
+impl RecoveryMetrics {
+    /// Record a recovery attempt.
+    pub fn record_attempt(&mut self, result: &RecoveryAttemptResult, tier: Option<RecoveryTier>) {
+        self.total_attempts += 1;
+
+        if result.success {
+            self.successful_recoveries += 1;
+
+            // Record tier
+            if let Some(tier) = tier {
+                match tier {
+                    RecoveryTier::FullFeatures => self.full_features_count += 1,
+                    RecoveryTier::ReducedFeatures => self.reduced_features_count += 1,
+                    RecoveryTier::SoftwareRendering => self.software_rendering_count += 1,
+                }
+            }
+        } else {
+            self.failed_recoveries += 1;
+        }
+
+        // Update timing statistics
+        self.total_recovery_time += result.duration;
+
+        match self.min_recovery_time {
+            None => self.min_recovery_time = Some(result.duration),
+            Some(min) if result.duration < min => self.min_recovery_time = Some(result.duration),
+            _ => {}
+        }
+
+        match self.max_recovery_time {
+            None => self.max_recovery_time = Some(result.duration),
+            Some(max) if result.duration > max => self.max_recovery_time = Some(result.duration),
+            _ => {}
+        }
+
+        // Add to rolling window (keep last 100)
+        if self.recent_attempts.len() >= 100 {
+            self.recent_attempts.remove(0);
+        }
+        self.recent_attempts.push(result.clone());
+    }
+
+    /// Calculate average recovery time.
+    pub fn average_recovery_time(&self) -> Option<Duration> {
+        if self.total_attempts > 0 {
+            Some(self.total_recovery_time / self.total_attempts as u32)
+        } else {
+            None
+        }
+    }
+
+    /// Calculate success rate as a percentage (0.0 to 100.0).
+    pub fn success_rate(&self) -> f64 {
+        if self.total_attempts > 0 {
+            (self.successful_recoveries as f64 / self.total_attempts as f64) * 100.0
+        } else {
+            0.0
+        }
+    }
+
+    /// Export metrics as JSON string.
+    pub fn to_json(&self) -> String {
+        format!(
+            r#"{{
+  "total_attempts": {},
+  "successful_recoveries": {},
+  "failed_recoveries": {},
+  "success_rate": {:.2},
+  "min_recovery_time_ms": {},
+  "max_recovery_time_ms": {},
+  "avg_recovery_time_ms": {},
+  "full_features_count": {},
+  "reduced_features_count": {},
+  "software_rendering_count": {}
+}}"#,
+            self.total_attempts,
+            self.successful_recoveries,
+            self.failed_recoveries,
+            self.success_rate(),
+            self.min_recovery_time
+                .map(|d| d.as_millis().to_string())
+                .unwrap_or_else(|| "null".to_string()),
+            self.max_recovery_time
+                .map(|d| d.as_millis().to_string())
+                .unwrap_or_else(|| "null".to_string()),
+            self.average_recovery_time()
+                .map(|d| d.as_millis().to_string())
+                .unwrap_or_else(|| "null".to_string()),
+            self.full_features_count,
+            self.reduced_features_count,
+            self.software_rendering_count
+        )
+    }
+
+    /// Export metrics as CSV string.
+    pub fn to_csv(&self) -> String {
+        let mut csv = String::from("metric,value\n");
+        csv.push_str(&format!("total_attempts,{}\n", self.total_attempts));
+        csv.push_str(&format!(
+            "successful_recoveries,{}\n",
+            self.successful_recoveries
+        ));
+        csv.push_str(&format!("failed_recoveries,{}\n", self.failed_recoveries));
+        csv.push_str(&format!("success_rate,{:.2}\n", self.success_rate()));
+        csv.push_str(&format!(
+            "min_recovery_time_ms,{}\n",
+            self.min_recovery_time
+                .map(|d| d.as_millis().to_string())
+                .unwrap_or_else(|| "null".to_string())
+        ));
+        csv.push_str(&format!(
+            "max_recovery_time_ms,{}\n",
+            self.max_recovery_time
+                .map(|d| d.as_millis().to_string())
+                .unwrap_or_else(|| "null".to_string())
+        ));
+        csv.push_str(&format!(
+            "avg_recovery_time_ms,{}\n",
+            self.average_recovery_time()
+                .map(|d| d.as_millis().to_string())
+                .unwrap_or_else(|| "null".to_string())
+        ));
+        csv.push_str(&format!(
+            "full_features_count,{}\n",
+            self.full_features_count
+        ));
+        csv.push_str(&format!(
+            "reduced_features_count,{}\n",
+            self.reduced_features_count
+        ));
+        csv.push_str(&format!(
+            "software_rendering_count,{}\n",
+            self.software_rendering_count
+        ));
+        csv
+    }
+}
+
 /// Cached surface configuration for automatic recreation after device loss.
 #[derive(Debug, Clone)]
 pub struct CachedSurfaceConfig {
@@ -826,6 +1015,9 @@ pub struct GupContext {
 
     /// Window handle renewal callback for surface recreation
     window_handle_renewal_callback: Option<WindowHandleRenewalCallback>,
+
+    /// Recovery metrics for monitoring and analytics
+    recovery_metrics: RecoveryMetrics,
 }
 
 // Manual Debug implementation to handle non-Debug trait objects
@@ -852,6 +1044,7 @@ impl std::fmt::Debug for GupContext {
             .field("context_state", &self.context_state)
             .field("recovery_callback", &self.recovery_callback.is_some())
             .field("last_recovery_attempt", &self.last_recovery_attempt)
+            .field("recovery_metrics", &self.recovery_metrics)
             .finish()
     }
 }
@@ -941,6 +1134,7 @@ impl GupContext {
             context_options: stored_options,
             cached_surface_configs: HashMap::new(),
             window_handle_renewal_callback: None,
+            recovery_metrics: RecoveryMetrics::default(),
         }))
     }
 
@@ -981,10 +1175,10 @@ impl GupContext {
 
         let managed_surface = ManagedSurface::new(surface, config, 1.0);
         let surface_id = SurfaceId::new();
-        
+
         // Cache the surface configuration
         self.cache_surface_config(surface_id, &managed_surface);
-        
+
         self.surfaces.insert(surface_id, managed_surface);
         self.primary_surface_id = Some(surface_id);
 
@@ -1028,10 +1222,10 @@ impl GupContext {
         surface.configure(&self.device, &config);
 
         let managed_surface = ManagedSurface::new(surface, config, 1.0);
-        
+
         // Cache the surface configuration
         self.cache_surface_config(id, &managed_surface);
-        
+
         self.surfaces.insert(id, managed_surface);
 
         // Set as primary if this is the first surface
@@ -1075,7 +1269,7 @@ impl GupContext {
             width: size.width,
             height: size.height,
         })?;
-        
+
         // Update cached configuration
         self.update_cached_surface_config(id);
 
@@ -1111,7 +1305,7 @@ impl GupContext {
             surface_id: id,
             scale_factor,
         })?;
-        
+
         // Update cached configuration
         self.update_cached_surface_config(id);
 
@@ -1552,6 +1746,11 @@ impl GupContext {
         self.last_recovery_attempt.as_ref()
     }
 
+    /// Get recovery metrics for monitoring and analytics.
+    pub fn recovery_metrics(&self) -> &RecoveryMetrics {
+        &self.recovery_metrics
+    }
+
     /// Check if the device is still valid.
     pub fn check_device_status(&self) -> bool {
         // In wgpu, the device is lost when poll() returns false or when
@@ -1579,33 +1778,47 @@ impl GupContext {
         let recovery_result = self.recreate_device().await;
 
         let duration = start_time.elapsed();
-        let result = match recovery_result {
-            Ok(()) => {
-                log::info!("Context recovery succeeded in {:?}", duration);
-                self.update_state(ContextState::Active);
-                RecoveryAttemptResult {
-                    success: true,
+        let (result, tier) = match recovery_result {
+            Ok(tier) => {
+                log::info!(
+                    "Context recovery succeeded in {:?} using {:?}",
                     duration,
-                    error: None,
-                }
+                    tier
+                );
+                self.update_state(ContextState::Active);
+                (
+                    RecoveryAttemptResult {
+                        success: true,
+                        duration,
+                        error: None,
+                    },
+                    Some(tier),
+                )
             }
             Err(e) => {
                 log::error!("Context recovery failed: {}", e);
                 self.update_state(ContextState::Failed);
-                RecoveryAttemptResult {
-                    success: false,
-                    duration,
-                    error: Some(e.to_string()),
-                }
+                (
+                    RecoveryAttemptResult {
+                        success: false,
+                        duration,
+                        error: Some(e.to_string()),
+                    },
+                    None,
+                )
             }
         };
+
+        // Record metrics
+        self.recovery_metrics.record_attempt(&result, tier);
 
         self.last_recovery_attempt = Some(result.clone());
         Ok(result)
     }
 
     /// Internal method to recreate the device after device loss.
-    async fn recreate_device(&mut self) -> GupResult<()> {
+    /// Returns the recovery tier that succeeded, if any.
+    async fn recreate_device(&mut self) -> GupResult<RecoveryTier> {
         log::info!("Recreating GPU device...");
 
         // Try with full features first, then fall back to reduced features
@@ -1621,7 +1834,7 @@ impl GupContext {
             Ok((device, queue, adapter)) => {
                 log::info!("Device recreated successfully with full features");
                 self.apply_device_update(device, queue, adapter)?;
-                Ok(())
+                Ok(RecoveryTier::FullFeatures)
             }
             Err(full_features_err) => {
                 log::warn!(
@@ -1646,7 +1859,7 @@ impl GupContext {
                         Ok((device, queue, adapter)) => {
                             log::warn!("Device recreated with reduced feature set");
                             self.apply_device_update(device, queue, adapter)?;
-                            return Ok(());
+                            return Ok(RecoveryTier::ReducedFeatures);
                         }
                         Err(reduced_err) => {
                             log::warn!("Failed with reduced features: {}", reduced_err);
@@ -1675,7 +1888,7 @@ impl GupContext {
                                 "Device recreated using software rendering (degraded performance expected)"
                             );
                             self.apply_device_update(device, queue, adapter)?;
-                            return Ok(());
+                            return Ok(RecoveryTier::SoftwareRendering);
                         }
                         Err(software_err) => {
                             log::error!("Software fallback also failed: {}", software_err);
@@ -1756,17 +1969,19 @@ impl GupContext {
     fn recreate_surfaces(&mut self) -> GupResult<()> {
         // If we have a window handle renewal callback and cached configs, try to recreate surfaces
         let has_callback = self.window_handle_renewal_callback.is_some();
-        
+
         if has_callback {
-            log::info!("Attempting automatic surface recreation with {} cached configs", 
-                       self.cached_surface_configs.len());
-            
+            log::info!(
+                "Attempting automatic surface recreation with {} cached configs",
+                self.cached_surface_configs.len()
+            );
+
             let mut recreated_count = 0;
             let mut failed_surfaces = Vec::new();
-            
+
             // Collect surface IDs to process
             let surface_ids: Vec<_> = self.cached_surface_configs.keys().copied().collect();
-            
+
             // Try to recreate each cached surface
             for surface_id in surface_ids {
                 // Get the callback and call it (need to clone the callback reference)
@@ -1775,12 +1990,12 @@ impl GupContext {
                 } else {
                     None
                 };
-                
+
                 match window_opt {
                     Some(window) => {
                         // Get cached config before calling recreate_single_surface
                         let cached_config = self.cached_surface_configs.get(&surface_id).cloned();
-                        
+
                         if let Some(config) = cached_config {
                             match self.recreate_single_surface(surface_id, window, &config) {
                                 Ok(()) => {
@@ -1795,33 +2010,41 @@ impl GupContext {
                         }
                     }
                     None => {
-                        log::warn!("Window handle not available for surface {}, skipping", surface_id);
+                        log::warn!(
+                            "Window handle not available for surface {}, skipping",
+                            surface_id
+                        );
                         failed_surfaces.push(surface_id);
                     }
                 }
             }
-            
+
             // Remove failed surfaces from cache
             for surface_id in &failed_surfaces {
                 self.cached_surface_configs.remove(surface_id);
             }
-            
-            log::info!("Recreated {} of {} surfaces", recreated_count, 
-                       recreated_count + failed_surfaces.len());
-            
+
+            log::info!(
+                "Recreated {} of {} surfaces",
+                recreated_count,
+                recreated_count + failed_surfaces.len()
+            );
+
             Ok(())
         } else {
             // No callback set - fall back to manual recreation
-            log::warn!("No window handle renewal callback set. Surfaces need to be reconfigured by the application after device recovery");
-            
+            log::warn!(
+                "No window handle renewal callback set. Surfaces need to be reconfigured by the application after device recovery"
+            );
+
             // Clear surfaces - application must re-add them
             self.surfaces.clear();
             self.primary_surface_id = None;
-            
+
             Ok(())
         }
     }
-    
+
     /// Recreate a single surface with cached configuration.
     fn recreate_single_surface(
         &mut self,
@@ -1833,7 +2056,7 @@ impl GupContext {
             ._instance
             .create_surface(window)
             .map_err(|e| GupError::webgpu_error(format!("Failed to create surface: {e}")))?;
-        
+
         let config = SurfaceConfiguration {
             usage: TextureUsages::RENDER_ATTACHMENT,
             format: cached_config.format,
@@ -1844,12 +2067,12 @@ impl GupContext {
             view_formats: cached_config.view_formats.clone(),
             desired_maximum_frame_latency: 2,
         };
-        
+
         surface.configure(&self.device, &config);
-        
+
         let managed_surface = ManagedSurface::new(surface, config, cached_config.scale_factor);
         self.surfaces.insert(id, managed_surface);
-        
+
         Ok(())
     }
 
@@ -1901,7 +2124,7 @@ impl GupContext {
         self.cached_surface_configs.insert(id, cached);
         log::debug!("Cached configuration for surface {}", id);
     }
-    
+
     /// Update cached surface configuration after a surface property changes.
     fn update_cached_surface_config(&mut self, id: SurfaceId) {
         // Create the cached config first, then insert it
@@ -1914,7 +2137,7 @@ impl GupContext {
             scale_factor: surface.scale_factor,
             view_formats: surface.config.view_formats.clone(),
         });
-        
+
         if let Some(cached) = cached_opt {
             self.cached_surface_configs.insert(id, cached);
             log::debug!("Updated cached configuration for surface {}", id);
