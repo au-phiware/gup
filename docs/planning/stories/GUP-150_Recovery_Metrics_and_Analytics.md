@@ -1,6 +1,6 @@
 # GUP-150: Recovery Metrics and Analytics
 
-**Status**: 💡 New
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
