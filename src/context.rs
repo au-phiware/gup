@@ -244,6 +244,28 @@ pub enum ContextState {
 /// Context recovery callback type.
 pub type RecoveryCallback = Box<dyn Fn(ContextState) + Send + Sync>;
 
+/// Trait for window handles that can be used for surface creation.
+///
+/// This combines the required traits for wgpu surface creation with thread safety.
+pub trait WindowHandle:
+    raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle + Send + Sync
+{
+}
+
+// Blanket implementation for all types that satisfy the bounds
+impl<T> WindowHandle for T where
+    T: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle + Send + Sync
+{
+}
+
+/// Window handle renewal callback type for surface recreation after device loss.
+///
+/// This callback is invoked during recovery to allow the application to provide
+/// a new window handle for a surface that needs to be recreated. Returns `Some(window)`
+/// if the window is still available, or `None` if the window has been destroyed.
+pub type WindowHandleRenewalCallback =
+    Box<dyn Fn(SurfaceId) -> Option<Arc<dyn WindowHandle>> + Send + Sync>;
+
 /// Recovery attempt result.
 #[derive(Debug, Clone)]
 pub struct RecoveryAttemptResult {
@@ -253,6 +275,25 @@ pub struct RecoveryAttemptResult {
     pub duration: Duration,
     /// Error message if recovery failed
     pub error: Option<String>,
+}
+
+/// Cached surface configuration for automatic recreation after device loss.
+#[derive(Debug, Clone)]
+pub struct CachedSurfaceConfig {
+    /// Surface width
+    pub width: u32,
+    /// Surface height
+    pub height: u32,
+    /// Surface format
+    pub format: TextureFormat,
+    /// Surface present mode
+    pub present_mode: PresentMode,
+    /// Alpha mode
+    pub alpha_mode: CompositeAlphaMode,
+    /// Scale factor
+    pub scale_factor: f64,
+    /// View formats
+    pub view_formats: Vec<TextureFormat>,
 }
 
 /// Trait for handling surface events.
@@ -779,6 +820,12 @@ pub struct GupContext {
 
     /// Options used for context creation (for recovery)
     context_options: GupOptions,
+
+    /// Cached surface configurations for automatic recreation after device loss
+    cached_surface_configs: HashMap<SurfaceId, CachedSurfaceConfig>,
+
+    /// Window handle renewal callback for surface recreation
+    window_handle_renewal_callback: Option<WindowHandleRenewalCallback>,
 }
 
 // Manual Debug implementation to handle non-Debug trait objects
@@ -892,6 +939,8 @@ impl GupContext {
             recovery_callback: None,
             last_recovery_attempt: None,
             context_options: stored_options,
+            cached_surface_configs: HashMap::new(),
+            window_handle_renewal_callback: None,
         }))
     }
 
@@ -932,6 +981,10 @@ impl GupContext {
 
         let managed_surface = ManagedSurface::new(surface, config, 1.0);
         let surface_id = SurfaceId::new();
+        
+        // Cache the surface configuration
+        self.cache_surface_config(surface_id, &managed_surface);
+        
         self.surfaces.insert(surface_id, managed_surface);
         self.primary_surface_id = Some(surface_id);
 
@@ -975,6 +1028,10 @@ impl GupContext {
         surface.configure(&self.device, &config);
 
         let managed_surface = ManagedSurface::new(surface, config, 1.0);
+        
+        // Cache the surface configuration
+        self.cache_surface_config(id, &managed_surface);
+        
         self.surfaces.insert(id, managed_surface);
 
         // Set as primary if this is the first surface
@@ -1018,6 +1075,9 @@ impl GupContext {
             width: size.width,
             height: size.height,
         })?;
+        
+        // Update cached configuration
+        self.update_cached_surface_config(id);
 
         Ok(())
     }
@@ -1051,6 +1111,9 @@ impl GupContext {
             surface_id: id,
             scale_factor,
         })?;
+        
+        // Update cached configuration
+        self.update_cached_surface_config(id);
 
         Ok(())
     }
@@ -1691,15 +1754,102 @@ impl GupContext {
 
     /// Recreate all surfaces after device recovery.
     fn recreate_surfaces(&mut self) -> GupResult<()> {
-        // We can't recreate surfaces without the original window handles,
-        // so we mark them as needing reconfiguration and let the application
-        // handle it through the callback
-        log::warn!("Surfaces need to be reconfigured by the application after device recovery");
-
-        // Clear surfaces - application must re-add them
-        self.surfaces.clear();
-        self.primary_surface_id = None;
-
+        // If we have a window handle renewal callback and cached configs, try to recreate surfaces
+        let has_callback = self.window_handle_renewal_callback.is_some();
+        
+        if has_callback {
+            log::info!("Attempting automatic surface recreation with {} cached configs", 
+                       self.cached_surface_configs.len());
+            
+            let mut recreated_count = 0;
+            let mut failed_surfaces = Vec::new();
+            
+            // Collect surface IDs to process
+            let surface_ids: Vec<_> = self.cached_surface_configs.keys().copied().collect();
+            
+            // Try to recreate each cached surface
+            for surface_id in surface_ids {
+                // Get the callback and call it (need to clone the callback reference)
+                let window_opt = if let Some(ref callback) = self.window_handle_renewal_callback {
+                    callback(surface_id)
+                } else {
+                    None
+                };
+                
+                match window_opt {
+                    Some(window) => {
+                        // Get cached config before calling recreate_single_surface
+                        let cached_config = self.cached_surface_configs.get(&surface_id).cloned();
+                        
+                        if let Some(config) = cached_config {
+                            match self.recreate_single_surface(surface_id, window, &config) {
+                                Ok(()) => {
+                                    log::info!("Successfully recreated surface {}", surface_id);
+                                    recreated_count += 1;
+                                }
+                                Err(e) => {
+                                    log::error!("Failed to recreate surface {}: {}", surface_id, e);
+                                    failed_surfaces.push(surface_id);
+                                }
+                            }
+                        }
+                    }
+                    None => {
+                        log::warn!("Window handle not available for surface {}, skipping", surface_id);
+                        failed_surfaces.push(surface_id);
+                    }
+                }
+            }
+            
+            // Remove failed surfaces from cache
+            for surface_id in &failed_surfaces {
+                self.cached_surface_configs.remove(surface_id);
+            }
+            
+            log::info!("Recreated {} of {} surfaces", recreated_count, 
+                       recreated_count + failed_surfaces.len());
+            
+            Ok(())
+        } else {
+            // No callback set - fall back to manual recreation
+            log::warn!("No window handle renewal callback set. Surfaces need to be reconfigured by the application after device recovery");
+            
+            // Clear surfaces - application must re-add them
+            self.surfaces.clear();
+            self.primary_surface_id = None;
+            
+            Ok(())
+        }
+    }
+    
+    /// Recreate a single surface with cached configuration.
+    fn recreate_single_surface(
+        &mut self,
+        id: SurfaceId,
+        window: Arc<dyn WindowHandle>,
+        cached_config: &CachedSurfaceConfig,
+    ) -> GupResult<()> {
+        let surface = self
+            ._instance
+            .create_surface(window)
+            .map_err(|e| GupError::webgpu_error(format!("Failed to create surface: {e}")))?;
+        
+        let config = SurfaceConfiguration {
+            usage: TextureUsages::RENDER_ATTACHMENT,
+            format: cached_config.format,
+            width: cached_config.width,
+            height: cached_config.height,
+            present_mode: cached_config.present_mode,
+            alpha_mode: cached_config.alpha_mode,
+            view_formats: cached_config.view_formats.clone(),
+            desired_maximum_frame_latency: 2,
+        };
+        
+        surface.configure(&self.device, &config);
+        
+        let managed_surface = ManagedSurface::new(surface, config, cached_config.scale_factor);
+        self.surfaces.insert(id, managed_surface);
+        
         Ok(())
     }
 
@@ -1726,6 +1876,49 @@ impl GupContext {
     pub fn mark_device_lost(&mut self) {
         log::warn!("Device loss detected");
         self.update_state(ContextState::DeviceLost);
+    }
+
+    /// Set the window handle renewal callback for surface recreation during recovery.
+    ///
+    /// This callback will be invoked during device recovery to obtain new window handles
+    /// for surfaces that need to be recreated. The callback should return `Some(window)`
+    /// if the window is still available, or `None` if the window has been destroyed.
+    pub fn set_window_handle_renewal_callback(&mut self, callback: WindowHandleRenewalCallback) {
+        self.window_handle_renewal_callback = Some(callback);
+    }
+
+    /// Cache surface configuration for automatic recreation.
+    fn cache_surface_config(&mut self, id: SurfaceId, managed_surface: &ManagedSurface) {
+        let cached = CachedSurfaceConfig {
+            width: managed_surface.config.width,
+            height: managed_surface.config.height,
+            format: managed_surface.config.format,
+            present_mode: managed_surface.config.present_mode,
+            alpha_mode: managed_surface.config.alpha_mode,
+            scale_factor: managed_surface.scale_factor,
+            view_formats: managed_surface.config.view_formats.clone(),
+        };
+        self.cached_surface_configs.insert(id, cached);
+        log::debug!("Cached configuration for surface {}", id);
+    }
+    
+    /// Update cached surface configuration after a surface property changes.
+    fn update_cached_surface_config(&mut self, id: SurfaceId) {
+        // Create the cached config first, then insert it
+        let cached_opt = self.surfaces.get(&id).map(|surface| CachedSurfaceConfig {
+            width: surface.config.width,
+            height: surface.config.height,
+            format: surface.config.format,
+            present_mode: surface.config.present_mode,
+            alpha_mode: surface.config.alpha_mode,
+            scale_factor: surface.scale_factor,
+            view_formats: surface.config.view_formats.clone(),
+        });
+        
+        if let Some(cached) = cached_opt {
+            self.cached_surface_configs.insert(id, cached);
+            log::debug!("Updated cached configuration for surface {}", id);
+        }
     }
 
     /// Get all active surface IDs.
