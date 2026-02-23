@@ -10,7 +10,10 @@
 
 ## Context
 
-Pattern rendering has functional tests but no visual validation. Since patterns are visual by nature, automated screenshot comparison would catch visual regressions that unit tests might miss (spacing issues, alignment problems, aliasing artifacts).
+Pattern rendering has functional tests but no visual validation. Since patterns
+are visual by nature, automated screenshot comparison would catch visual
+regressions that unit tests might miss (spacing issues, alignment problems,
+aliasing artifacts).
 
 ## User Story
 
@@ -86,12 +89,14 @@ Pattern rendering has functional tests but no visual validation. Since patterns 
 ## Risk Assessment
 
 **Technical Risks**:
+
 - Headless rendering may behave differently than windowed rendering
 - GPU differences across machines may cause pixel differences
 - Image comparison thresholds may be hard to tune
 - Reference image maintenance overhead
 
 **Mitigation**:
+
 - Use software rendering for consistency
 - Allow configurable comparison tolerance
 - Start with small reference image set

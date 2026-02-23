@@ -10,7 +10,11 @@
 
 ## Context
 
-GUP-157 added pattern support to Circle, Rectangle, Line, and BoxPlot marks, but Path marks were deferred because they use generated shaders rather than hand-written shaders. Path marks are important for complex visualizations (geographic boundaries, custom shapes, SVG-like graphics) and should support pattern rendering for complete accessibility coverage.
+GUP-157 added pattern support to Circle, Rectangle, Line, and BoxPlot marks, but
+Path marks were deferred because they use generated shaders rather than
+hand-written shaders. Path marks are important for complex visualizations
+(geographic boundaries, custom shapes, SVG-like graphics) and should support
+pattern rendering for complete accessibility coverage.
 
 ## User Story
 
@@ -77,11 +81,13 @@ GUP-157 added pattern support to Circle, Rectangle, Line, and BoxPlot marks, but
 ## Risk Assessment
 
 **Technical Risks**:
+
 - Path tessellation may complicate pattern world position calculation
 - Generated shader system may need significant changes for pattern support
 - Curved paths may show pattern artifacts
 
 **Mitigation**:
+
 - Start with simple straight-line paths to prove concept
 - Consider hand-written shaders if generation proves too complex
 - Use higher tessellation for curves if patterns show artifacts

@@ -2,7 +2,8 @@
 
 ## Story Overview
 
-**Title**: Create Visual Example Showcasing Pattern Rendering Across Mark Types  
+**Title**: Create Visual Example Showcasing Pattern Rendering Across Mark
+Types  
 **Epic**: Phase 1 Initiative 4 - Interaction System and Performance  
 **Priority**: Medium  
 **Story Points**: 2  
@@ -10,19 +11,24 @@
 
 ## Context
 
-Pattern rendering has been implemented across all major mark types (Circle, Rectangle, Line, BoxPlot) but lacks a comprehensive visual example demonstrating the accessibility benefits and consistency of patterns across different chart types.
+Pattern rendering has been implemented across all major mark types (Circle,
+Rectangle, Line, BoxPlot) but lacks a comprehensive visual example demonstrating
+the accessibility benefits and consistency of patterns across different chart
+types.
 
 ## User Story
 
 **As a** visualization developer  
 **I want** to see patterns demonstrated across multiple mark types  
-**So that** I understand how to use patterns effectively for accessible visualizations
+**So that** I understand how to use patterns effectively for accessible
+visualizations
 
 ## Acceptance Criteria
 
 ### AC1: Example Completeness
 
-- [ ] Example includes all pattern-enabled marks (Circle, Rectangle, Line, BoxPlot)
+- [ ] Example includes all pattern-enabled marks (Circle, Rectangle, Line,
+      BoxPlot)
 - [ ] Shows all pattern types (Solid, Dots, Lines, Crosshatch)
 - [ ] Demonstrates practical use case (not just technical demo)
 - [ ] Shows patterns with different colors and spacings

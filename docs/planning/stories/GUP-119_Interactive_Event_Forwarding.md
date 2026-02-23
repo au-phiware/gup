@@ -106,7 +106,8 @@ respond
 
 **Completed**: 2025-01-25
 
-Successfully implemented event forwarding from the Web DOM overlay to enable GPU-accelerated interaction with accessible touch and pointer events.
+Successfully implemented event forwarding from the Web DOM overlay to enable
+GPU-accelerated interaction with accessible touch and pointer events.
 
 ### Key Components
 
@@ -184,36 +185,50 @@ Successfully implemented event forwarding from the Web DOM overlay to enable GPU
 
 #### Closure State Management in WASM
 
-- **Challenge**: Event handlers in web-sys require closures that can't capture mutable references to `self`
-- **Solution**: Used static handler methods that clone necessary state (callback, config, document)
-- **Pattern**: `Rc<RefCell<dyn FnMut>>` for the event callback allows mutable borrows at event time
-- **Trade-off**: Small memory overhead for cloned state, but eliminates lifetime complexity
+- **Challenge**: Event handlers in web-sys require closures that can't capture
+  mutable references to `self`
+- **Solution**: Used static handler methods that clone necessary state
+  (callback, config, document)
+- **Pattern**: `Rc<RefCell<dyn FnMut>>` for the event callback allows mutable
+  borrows at event time
+- **Trade-off**: Small memory overhead for cloned state, but eliminates lifetime
+  complexity
 
 #### Coordinate System Mapping
 
-- **Challenge**: DOM events provide client coordinates, but visualization needs canvas-relative coordinates
-- **Solution**: Use `getBoundingClientRect()` to get canvas position and compute offset
-- **Pattern**: Cache canvas bounds per event (not across events) to handle dynamic canvas positioning
-- **Insight**: Canvas can move due to scroll, resize, or CSS changes - don't cache bounds globally
+- **Challenge**: DOM events provide client coordinates, but visualization needs
+  canvas-relative coordinates
+- **Solution**: Use `getBoundingClientRect()` to get canvas position and compute
+  offset
+- **Pattern**: Cache canvas bounds per event (not across events) to handle
+  dynamic canvas positioning
+- **Insight**: Canvas can move due to scroll, resize, or CSS changes - don't
+  cache bounds globally
 
 #### Event Deduplication Strategy
 
-- **Challenge**: Both canvas and overlay can receive the same physical user interaction
-- **Solution**: Track last event timestamp and coordinates, reject events within 50ms and 1px
-- **Pattern**: Simple temporal+spatial threshold is more reliable than complex event tracking
-- **Limitation**: May miss legitimate rapid events at same position (rare in practice)
+- **Challenge**: Both canvas and overlay can receive the same physical user
+  interaction
+- **Solution**: Track last event timestamp and coordinates, reject events within
+  50ms and 1px
+- **Pattern**: Simple temporal+spatial threshold is more reliable than complex
+  event tracking
+- **Limitation**: May miss legitimate rapid events at same position (rare in
+  practice)
 
 ### Architectural Decisions
 
 #### Event Forwarding Callback Pattern
 
-- **Decision**: Use `Rc<RefCell<dyn FnMut(DomInteractionEvent)>>` for the callback
-- **Reasoning**: 
+- **Decision**: Use `Rc<RefCell<dyn FnMut(DomInteractionEvent)>>` for the
+  callback
+- **Reasoning**:
   - Allows mutable state capture in visualization handlers
   - `Rc` enables cloning into closures
   - `RefCell` provides interior mutability for runtime borrow checking
 - **Trade-off**: Runtime borrow checking vs compile-time safety
-- **Future**: Consider `Rc<Cell<Option<Box<dyn FnMut>>>>` for single-threaded optimization
+- **Future**: Consider `Rc<Cell<Option<Box<dyn FnMut>>>>` for single-threaded
+  optimization
 
 #### Separate Touch and Pointer Handlers
 
@@ -223,17 +238,20 @@ Successfully implemented event forwarding from the Web DOM overlay to enable GPU
   - Touch events provide multi-touch details not in pointer events
   - Pointer events provide hover state not in touch events
 - **Trade-off**: More code vs better compatibility
-- **Future**: May consolidate to pointer events only when browser support matures
+- **Future**: May consolidate to pointer events only when browser support
+  matures
 
 #### Configuration-Driven Behavior
 
-- **Decision**: Make forwarding and deduplication configurable via `DomOverlayConfig`
+- **Decision**: Make forwarding and deduplication configurable via
+  `DomOverlayConfig`
 - **Reasoning**:
   - Allows testing without interference
   - Supports custom integration patterns
   - Enables progressive enhancement
 - **Trade-off**: More API surface vs flexibility
-- **Future**: Consider preset configurations (e.g., `DomOverlayConfig::standard()`, `::testing()`)
+- **Future**: Consider preset configurations (e.g.,
+  `DomOverlayConfig::standard()`, `::testing()`)
 
 ### Development Workflow Insights
 
@@ -242,7 +260,8 @@ Successfully implemented event forwarding from the Web DOM overlay to enable GPU
 - Testing WASM-only code is challenging without browser environment
 - Used minimal native placeholder tests to maintain test structure
 - Real testing requires wasm-bindgen-test with headless browser
-- Consider adding integration tests that run in actual browser for future stories
+- Consider adding integration tests that run in actual browser for future
+  stories
 
 #### Event Handler Lifetime Management
 
@@ -260,10 +279,15 @@ Successfully implemented event forwarding from the Web DOM overlay to enable GPU
 
 ### Follow-up Stories
 
-No new stories identified. This story completes the event forwarding infrastructure. Future enhancements could include:
+No new stories identified. This story completes the event forwarding
+infrastructure. Future enhancements could include:
 
-1. **Gesture Recognition** - Pinch, rotate, swipe detection from raw touch events (could leverage existing GestureRecognizer from GUP-012)
-2. **Event Throttling** - Limit high-frequency events (pointermove) to reduce processing load
-3. **Custom Event Types** - Support for application-specific events beyond standard DOM events
+1. **Gesture Recognition** - Pinch, rotate, swipe detection from raw touch
+   events (could leverage existing GestureRecognizer from GUP-012)
+2. **Event Throttling** - Limit high-frequency events (pointermove) to reduce
+   processing load
+3. **Custom Event Types** - Support for application-specific events beyond
+   standard DOM events
 
-However, these are optimizations rather than core functionality gaps and should wait for user demand.
+However, these are optimizations rather than core functionality gaps and should
+wait for user demand.

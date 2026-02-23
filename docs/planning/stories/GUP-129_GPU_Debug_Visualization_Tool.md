@@ -1,6 +1,6 @@
 # GUP-129: GPU Interaction Debug Visualization Tool
 
-**Status**: 💡 New
+**Status**: 🚧 In Progress
 
 ## Story Overview
 

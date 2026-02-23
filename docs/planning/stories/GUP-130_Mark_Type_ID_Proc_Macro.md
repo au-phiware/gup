@@ -259,7 +259,8 @@ mark type IDs._
 
 #### Proc Macro Attribute Parsing with syn 2.0
 
-- **Challenge**: The `syn` 2.0 API changed from earlier versions. Attribute values are now `syn::Expr` variants rather than direct `Lit` types.
+- **Challenge**: The `syn` 2.0 API changed from earlier versions. Attribute
+  values are now `syn::Expr` variants rather than direct `Lit` types.
 - **Solution**: Use pattern matching with `let-else` chains:
   ```rust
   if let Meta::NameValue(nv) = meta
@@ -269,19 +270,29 @@ mark type IDs._
       return lit_int.base10_parse();
   }
   ```
-- **Pattern**: When working with proc macros, use `let-else` chains for nested pattern matching. This passes Clippy's `collapsible_if` lint and is more idiomatic in Rust 2021 edition.
-- **Future**: Always check the current `syn` version docs when writing proc macros. The API surface is stable but the types evolve.
+- **Pattern**: When working with proc macros, use `let-else` chains for nested
+  pattern matching. This passes Clippy's `collapsible_if` lint and is more
+  idiomatic in Rust 2021 edition.
+- **Future**: Always check the current `syn` version docs when writing proc
+  macros. The API surface is stable but the types evolve.
 
 #### Trait Implementation in Generated Code
 
-- **Challenge**: Generated code from proc macros needs to reference traits from the main crate, but the proc macro crate can't depend on the main crate (circular dependency).
-- **Solution**: Use relative paths in the generated code: `crate::mark::MarkTypeIdProvider` instead of `gup::mark::MarkTypeIdProvider`.
-- **Pattern**: Proc macros generate code that runs in the context of the caller's crate, so `crate::` refers to the caller's crate root, not the proc macro crate.
-- **Future**: Always use `crate::` paths in proc macro generated code for maximum flexibility. The user might re-export or rename the crate.
+- **Challenge**: Generated code from proc macros needs to reference traits from
+  the main crate, but the proc macro crate can't depend on the main crate
+  (circular dependency).
+- **Solution**: Use relative paths in the generated code:
+  `crate::mark::MarkTypeIdProvider` instead of `gup::mark::MarkTypeIdProvider`.
+- **Pattern**: Proc macros generate code that runs in the context of the
+  caller's crate, so `crate::` refers to the caller's crate root, not the proc
+  macro crate.
+- **Future**: Always use `crate::` paths in proc macro generated code for
+  maximum flexibility. The user might re-export or rename the crate.
 
 #### Backward Compatibility with TypeId
 
-- **Challenge**: Need to support existing marks without breaking them while adding the new compile-time IDs.
+- **Challenge**: Need to support existing marks without breaking them while
+  adding the new compile-time IDs.
 - **Solution**: Use `std::any::TypeId` comparison as a bridge:
   ```rust
   let type_id = std::any::TypeId::of::<M>();
@@ -289,55 +300,91 @@ mark type IDs._
       Circle::MARK_TYPE_ID
   } else { /* fallback */ }
   ```
-- **Pattern**: `TypeId` provides a way to do type equality checks at runtime when you can't use trait bounds. This is useful for migration paths where not all types implement a new trait yet.
-- **Trade-off**: This approach requires importing the concrete types (Circle, Rectangle, Line) in the selection module, creating a small coupling. The benefit is zero-cost abstraction - no runtime overhead compared to the previous string matching.
+- **Pattern**: `TypeId` provides a way to do type equality checks at runtime
+  when you can't use trait bounds. This is useful for migration paths where not
+  all types implement a new trait yet.
+- **Trade-off**: This approach requires importing the concrete types (Circle,
+  Rectangle, Line) in the selection module, creating a small coupling. The
+  benefit is zero-cost abstraction - no runtime overhead compared to the
+  previous string matching.
 
 #### Compile-Time Validation Strategy
 
-- **Decision**: Error at compile time if `#[mark_type_id]` attribute is missing rather than auto-assigning IDs.
-- **Reasoning**: Explicit is better than implicit for GPU shader coordination. Auto-assignment could lead to subtle bugs if marks are reordered or added.
-- **Trade-off**: Requires more boilerplate (adding the attribute) but prevents entire classes of bugs where mark type IDs silently drift out of sync with shaders.
-- **Future**: If we need auto-assignment later, could implement it with a separate derive like `#[derive(AutoMarkTypeId)]` that maintains a registry.
+- **Decision**: Error at compile time if `#[mark_type_id]` attribute is missing
+  rather than auto-assigning IDs.
+- **Reasoning**: Explicit is better than implicit for GPU shader coordination.
+  Auto-assignment could lead to subtle bugs if marks are reordered or added.
+- **Trade-off**: Requires more boilerplate (adding the attribute) but prevents
+  entire classes of bugs where mark type IDs silently drift out of sync with
+  shaders.
+- **Future**: If we need auto-assignment later, could implement it with a
+  separate derive like `#[derive(AutoMarkTypeId)]` that maintains a registry.
 
 ### Architectural Decisions
 
 #### Separate Trait for Type IDs
 
-- **Decision**: Created `MarkTypeIdProvider` as a separate trait rather than adding to the `Mark` trait.
-- **Reasoning**: 
+- **Decision**: Created `MarkTypeIdProvider` as a separate trait rather than
+  adding to the `Mark` trait.
+- **Reasoning**:
   - Mark trait is complex and central to the system
   - Type ID is optional (not all marks need GPU interaction)
   - Keeps concerns separated: rendering vs interaction
-- **Trade-off**: One more trait to understand, but better separation of concerns.
-- **Future**: This pattern works well for optional capabilities. Consider similar traits for other optional mark features (e.g., `MarkAnimatable`, `MarkSerializable`).
+- **Trade-off**: One more trait to understand, but better separation of
+  concerns.
+- **Future**: This pattern works well for optional capabilities. Consider
+  similar traits for other optional mark features (e.g., `MarkAnimatable`,
+  `MarkSerializable`).
 
 #### Documentation as Validation
 
-- **Decision**: Added explicit comments in the WGSL shader documenting the ID mappings.
-- **Reasoning**: The shader-Rust coordination is manual (no codegen from WGSL to Rust). Documentation + tests provide the safety net.
-- **Pattern**: When two subsystems must stay synchronized manually (e.g., Rust and WGSL), document the invariant in both places and add a test that validates the invariant.
-- **Future**: Could explore codegen from WGSL to Rust (or vice versa) to eliminate this manual coordination, but the complexity may not be worth it for a small enum.
+- **Decision**: Added explicit comments in the WGSL shader documenting the ID
+  mappings.
+- **Reasoning**: The shader-Rust coordination is manual (no codegen from WGSL to
+  Rust). Documentation + tests provide the safety net.
+- **Pattern**: When two subsystems must stay synchronized manually (e.g., Rust
+  and WGSL), document the invariant in both places and add a test that validates
+  the invariant.
+- **Future**: Could explore codegen from WGSL to Rust (or vice versa) to
+  eliminate this manual coordination, but the complexity may not be worth it for
+  a small enum.
 
 ### Development Workflow Insights
 
-- **Incremental Testing**: Built the proc macro first, then applied it to one mark type (Circle), then verified with tests before expanding to all marks. This caught the `syn` API issue early.
-- **Clippy Discipline**: Running `cargo clippy -- -D warnings` caught the nested if statements immediately. The `let-else` chain is both cleaner and more idiomatic.
-- **Test Coverage**: The test `test_mark_type_id_constants` is simple but effective - it validates the core invariant (IDs match expectations) in 15 lines. This is the kind of test that should never be removed.
-- **Git Discipline**: Kept unrelated documentation changes out of the commits. This makes the history cleaner and easier to review.
+- **Incremental Testing**: Built the proc macro first, then applied it to one
+  mark type (Circle), then verified with tests before expanding to all marks.
+  This caught the `syn` API issue early.
+- **Clippy Discipline**: Running `cargo clippy -- -D warnings` caught the nested
+  if statements immediately. The `let-else` chain is both cleaner and more
+  idiomatic.
+- **Test Coverage**: The test `test_mark_type_id_constants` is simple but
+  effective - it validates the core invariant (IDs match expectations) in 15
+  lines. This is the kind of test that should never be removed.
+- **Git Discipline**: Kept unrelated documentation changes out of the commits.
+  This makes the history cleaner and easier to review.
 
 ### Performance Characteristics
 
-- **Zero Runtime Overhead**: The `TypeId` comparison compiles down to a simple integer comparison. The MARK_TYPE_ID constant is inlined everywhere it's used.
-- **Compile-Time Validation**: Invalid IDs (>255, missing attributes) fail at compile time, not at runtime or during shader compilation.
-- **No Code Size Bloat**: The generated code is minimal - one const and one trait impl per mark type, both of which inline away.
+- **Zero Runtime Overhead**: The `TypeId` comparison compiles down to a simple
+  integer comparison. The MARK_TYPE_ID constant is inlined everywhere it's used.
+- **Compile-Time Validation**: Invalid IDs (>255, missing attributes) fail at
+  compile time, not at runtime or during shader compilation.
+- **No Code Size Bloat**: The generated code is minimal - one const and one
+  trait impl per mark type, both of which inline away.
 
 ### Follow-up Stories
 
-No follow-up stories needed. This story is self-contained and complete. The implementation is production-ready and addresses the fragility identified in GUP-128.
+No follow-up stories needed. This story is self-contained and complete. The
+implementation is production-ready and addresses the fragility identified in
+GUP-128.
 
-If we later discover additional mark types need better ID management, we could consider:
-1. **GUP-XXX: Auto-Assignment for Mark Type IDs** - Implement a registry-based auto-assignment system for marks that don't need explicit IDs.
-2. **GUP-XXX: WGSL Codegen from Rust** - Generate WGSL enum definitions from Rust mark type IDs to eliminate manual synchronization.
+If we later discover additional mark types need better ID management, we could
+consider:
 
-But neither is necessary at this time. The current approach is simple, explicit, and validated by tests.
+1. **GUP-XXX: Auto-Assignment for Mark Type IDs** - Implement a registry-based
+   auto-assignment system for marks that don't need explicit IDs.
+2. **GUP-XXX: WGSL Codegen from Rust** - Generate WGSL enum definitions from
+   Rust mark type IDs to eliminate manual synchronization.
 
+But neither is necessary at this time. The current approach is simple, explicit,
+and validated by tests.

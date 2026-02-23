@@ -2,7 +2,9 @@
 
 ## Overview
 
-The Web DOM Overlay provides event forwarding capabilities that bridge browser DOM events to Gup's GPU-accelerated interaction system. This enables accessible touch, pointer, and keyboard interactions while maintaining high performance.
+The Web DOM Overlay provides event forwarding capabilities that bridge browser
+DOM events to Gup's GPU-accelerated interaction system. This enables accessible
+touch, pointer, and keyboard interactions while maintaining high performance.
 
 ## Architecture
 
@@ -87,7 +89,7 @@ async fn handle_dom_event(event: DomInteractionEvent) {
             // Query GPU for elements at this position
             let position = Vec2::new(event.canvas_x, event.canvas_y);
             let hits = interaction_system.query_point(position, &selections).await?;
-            
+
             // Handle selection
             for hit in hits {
                 println!("Selected element {} in selection {}",
@@ -117,24 +119,24 @@ All forwarded events are wrapped in a `DomInteractionEvent` structure:
 pub struct DomInteractionEvent {
     /// Event type: "pointerdown", "pointermove", "pointerup", etc.
     pub event_type: String,
-    
+
     /// Screen coordinates (client X/Y from the DOM event)
     pub screen_x: f32,
     pub screen_y: f32,
-    
+
     /// Canvas-relative coordinates (accounting for canvas position)
     pub canvas_x: f32,
     pub canvas_y: f32,
-    
+
     /// Pointer type: "mouse", "pen", "touch"
     pub pointer_type: String,
-    
+
     /// Pointer ID for multi-touch tracking
     pub pointer_id: i32,
-    
+
     /// Button state for pointer events
     pub button: i16,
-    
+
     /// Timestamp of the event
     pub timestamp: f64,
 }
@@ -158,17 +160,21 @@ pub struct DomInteractionEvent {
 
 The overlay automatically maps DOM coordinates to canvas coordinates:
 
-1. **Screen Coordinates** (`screen_x`, `screen_y`): Raw client coordinates from the browser event
-2. **Canvas Coordinates** (`canvas_x`, `canvas_y`): Coordinates relative to the canvas element
+1. **Screen Coordinates** (`screen_x`, `screen_y`): Raw client coordinates from
+   the browser event
+2. **Canvas Coordinates** (`canvas_x`, `canvas_y`): Coordinates relative to the
+   canvas element
 
 This mapping accounts for:
+
 - Canvas position within the page
 - Scroll offsets
 - Any CSS transformations
 
 ## Event Deduplication
 
-When enabled, the overlay prevents duplicate events that might occur when both the canvas and overlay receive the same user action:
+When enabled, the overlay prevents duplicate events that might occur when both
+the canvas and overlay receive the same user action:
 
 ```rust
 // Deduplication logic:
@@ -187,11 +193,13 @@ config.deduplicate_events = false; // Disable
 
 ## Touch Target Size
 
-For accessibility, the overlay ensures touch targets meet WCAG 2.1 AAA minimum size requirements (44x44px). This is automatically handled by the CSS styling.
+For accessibility, the overlay ensures touch targets meet WCAG 2.1 AAA minimum
+size requirements (44x44px). This is automatically handled by the CSS styling.
 
 ## Multi-Touch Support
 
-The overlay tracks individual touch points by `pointer_id`. For multi-touch gestures, you can:
+The overlay tracks individual touch points by `pointer_id`. For multi-touch
+gestures, you can:
 
 1. Track touch points by ID
 2. Calculate distances and angles between touches
@@ -211,7 +219,7 @@ overlay.set_event_forward_callback(move |event| {
             if let Some(pos) = touch_points.get_mut(&event.pointer_id) {
                 *pos = (event.canvas_x, event.canvas_y);
             }
-            
+
             // Calculate gesture from touch_points
             if touch_points.len() == 2 {
                 calculate_pinch_gesture(&touch_points);
@@ -227,7 +235,8 @@ overlay.set_event_forward_callback(move |event| {
 
 ## Performance Considerations
 
-1. **Event Forwarding**: Minimal overhead - events are forwarded through a zero-cost closure
+1. **Event Forwarding**: Minimal overhead - events are forwarded through a
+   zero-cost closure
 2. **Coordinate Mapping**: Computed once per event using cached canvas bounds
 3. **Deduplication**: Simple timestamp and coordinate comparison (<1µs)
 4. **GPU Hit Testing**: Asynchronous, doesn't block event handling
@@ -249,7 +258,8 @@ wasm-pack test --headless --firefox
 The event forwarding system enables:
 
 1. **Keyboard Navigation**: Arrow keys, Tab, Enter/Space for element selection
-2. **Touch/Pointer Access**: Native browser touch handling with proper target sizes
+2. **Touch/Pointer Access**: Native browser touch handling with proper target
+   sizes
 3. **Screen Reader Support**: ARIA tree synchronized with visual state
 4. **Focus Management**: Visible focus indicators and proper focus order
 
