@@ -177,6 +177,170 @@ jobs:
               });
             }
 
+  # Pattern-specific benchmarks for PRs (fast feedback)
+  pattern_benchmarks_pr:
+    name: Pattern Performance Benchmarks (PR)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Need history for baseline comparison
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v24
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Setup Nix development environment
+        run: nix develop --command bash -c "echo 'Nix environment ready'"
+
+      - name: Restore Criterion baselines from main
+        uses: actions/cache@v3
+        with:
+          path: target/criterion
+          key: pattern-benchmarks-baselines-main-${{ github.base_ref }}
+          restore-keys: |
+            pattern-benchmarks-baselines-main-
+            pattern-benchmarks-baselines-
+
+      - name: Run pattern benchmarks
+        run: |
+          nix develop --command bash -c "cargo bench --bench pattern_performance_benchmarks -- --save-baseline pr-${{ github.event.pull_request.number }}"
+
+      - name: Compare against baseline
+        id: compare
+        continue-on-error: true
+        run: |
+          nix develop --command bash -c "cargo bench --bench pattern_performance_benchmarks -- --baseline main --save-baseline pr-${{ github.event.pull_request.number }}" > benchmark_comparison.txt 2>&1 || true
+          
+          # Parse Criterion output for regressions
+          # Criterion marks regressions with "Performance has regressed" or shows percentage changes
+          if grep -q "Performance has regressed\|change:.*+[1-9][0-9]\{1,\}%" benchmark_comparison.txt; then
+            echo "regression_detected=true" >> $GITHUB_OUTPUT
+            echo "⚠️ Performance regression detected in pattern benchmarks"
+          else
+            echo "regression_detected=false" >> $GITHUB_OUTPUT
+            echo "✅ No significant performance regressions detected"
+          fi
+
+      - name: Generate benchmark summary
+        if: always()
+        run: |
+          cat > benchmark_summary.md << 'EOF'
+          ## 🎨 Pattern Benchmark Results
+          
+          **PR #${{ github.event.pull_request.number }}** - Pattern rendering performance analysis
+          
+          ### Summary
+          
+          Pattern benchmarks compare rendering performance for different pattern types (Solid, Dots, Lines, Crosshatch) across various data sizes.
+          
+          **Target**: <5ms overhead for 100K points with patterns
+          
+          ### Results
+          
+          EOF
+          
+          if [ -f benchmark_comparison.txt ]; then
+            echo '```' >> benchmark_summary.md
+            # Extract key metrics from Criterion output
+            grep -A 2 "pattern_rendering_overhead\|pattern_uniform_updates\|pattern_pipeline_creation" benchmark_comparison.txt | head -30 >> benchmark_summary.md || echo "See full output in artifacts" >> benchmark_summary.md
+            echo '```' >> benchmark_summary.md
+          else
+            echo "Benchmark comparison output not available. Check artifacts for full results." >> benchmark_summary.md
+          fi
+          
+          echo "" >> benchmark_summary.md
+          
+          if [ "${{ steps.compare.outputs.regression_detected }}" = "true" ]; then
+            cat >> benchmark_summary.md << 'EOF'
+          ### ⚠️ Performance Regression Detected
+          
+          One or more benchmarks show >10% performance degradation compared to the main branch baseline.
+          
+          **Action Required**: Review the changes and optimize or document the performance impact.
+          
+          EOF
+          else
+            cat >> benchmark_summary.md << 'EOF'
+          ### ✅ No Significant Regressions
+          
+          Pattern rendering performance is within acceptable bounds (≤10% variance).
+          
+          EOF
+          fi
+          
+          echo "---" >> benchmark_summary.md
+          echo "" >> benchmark_summary.md
+          echo "**Note**: Benchmarks run on software rendering (no GPU). Results may differ on real hardware." >> benchmark_summary.md
+          echo "" >> benchmark_summary.md
+          echo "📊 Full benchmark results available in workflow artifacts." >> benchmark_summary.md
+
+      - name: Upload benchmark comparison
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: pattern-benchmarks-pr-${{ github.event.pull_request.number }}
+          path: |
+            benchmark_comparison.txt
+            benchmark_summary.md
+            target/criterion/
+          retention-days: 30
+
+      - name: Comment PR with results
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            if (fs.existsSync('benchmark_summary.md')) {
+              const summary = fs.readFileSync('benchmark_summary.md', 'utf8');
+              
+              // Find existing benchmark comment
+              const { data: comments } = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+              });
+              
+              const botComment = comments.find(comment => 
+                comment.user.type === 'Bot' && 
+                comment.body.includes('🎨 Pattern Benchmark Results')
+              );
+              
+              if (botComment) {
+                // Update existing comment
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: botComment.id,
+                  body: summary
+                });
+              } else {
+                // Create new comment
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: summary
+                });
+              }
+            }
+
+      - name: Fail on critical regression
+        if: steps.compare.outputs.regression_detected == 'true'
+        run: |
+          echo "❌ Critical performance regression detected. Review benchmark results."
+          echo "If this regression is intentional, document it in the PR description."
+          exit 1
+
   benchmark:
     name: Comprehensive Benchmarking
     runs-on: ubuntu-latest
@@ -196,7 +360,7 @@ jobs:
 
       - name: Run comprehensive benchmarks
         run: |
-          nix develop --command bash -c "cargo bench --all-features"
+          nix develop --command bash -c "cargo bench --all-features -- --save-baseline main"
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v3
@@ -204,6 +368,12 @@ jobs:
           name: benchmark-results-${{ github.sha }}
           path: target/criterion/
           retention-days: 90
+
+      - name: Cache baselines for PR comparisons
+        uses: actions/cache@v3
+        with:
+          path: target/criterion
+          key: pattern-benchmarks-baselines-main-${{ github.ref }}
 
       - name: Store benchmark results for trend analysis
         run: |
