@@ -154,7 +154,7 @@ epic and status.
 | [GUP-150](GUP-150_Recovery_Metrics_and_Analytics.md)    | Recovery Metrics and Analytics    | 💡 New         | Low      | 3      |
 | [GUP-151](GUP-151_Surface_Configuration_Caching.md)     | Surface Configuration Caching     | 💡 New         | Low      | 2      |
 | [GUP-152](GUP-152_Performance_Trend_Visualization.md)   | Performance Trend Visualization   | ✅ Complete    | Low      | 3      |
-| [GUP-153](GUP-153_Automated_Baseline_Recommendation.md) | Automated Baseline Recommendation | 💡 New         | Low      | 5      |
+| [GUP-153](GUP-153_Automated_Baseline_Recommendation.md) | Automated Baseline Recommendation | 🚧 In Progress | Low      | 5      |
 | [GUP-154](GUP-154_Multi-Platform_CI_Testing.md)         | Multi-Platform CI Testing         | ✅ Complete    | Medium   | 8      |
 | [GUP-049](GUP-049_Surface_Performance_Optimization.md)  | Surface Performance Optimization  | ✅ Complete    | Medium   | 5      |
 | [GUP-050](GUP-050_Visual_Blend_Mode_Validation.md)      | Visual Blend Mode Validation      | ✅ Complete    | Low      | 3      |
