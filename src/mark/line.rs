@@ -54,7 +54,8 @@ use std::collections::HashMap;
 /// let vertices = Line::generate_vertices();
 /// assert_eq!(vertices.len(), 4); // Quad for instanced rendering
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, gup_macros::MarkTypeId)]
+#[mark_type_id = 2]
 pub struct Line;
 
 /// Line style enumeration for different line appearances.

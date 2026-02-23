@@ -55,7 +55,8 @@ use std::collections::HashMap;
 /// let vertices = Rectangle::generate_vertices();
 /// assert_eq!(vertices.len(), 4); // Quad for instanced rendering
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, gup_macros::MarkTypeId)]
+#[mark_type_id = 1]
 pub struct Rectangle;
 
 /// GPU vertex data for rectangle rendering.

@@ -249,6 +249,36 @@ pub trait Mark: Clone + Send + Sync + 'static {
     }
 }
 
+/// Trait for providing stable mark type IDs for GPU interaction.
+///
+/// This trait is automatically implemented by the `#[derive(MarkTypeId)]` macro
+/// and provides a compile-time stable ID that corresponds to the mark type's
+/// GPU shader representation.
+///
+/// # GPU Integration
+///
+/// Mark type IDs are used by the interaction system to identify which type
+/// of mark was clicked or hovered. The IDs must match the enum values in
+/// GPU shaders like `hit_test.compute.wgsl`.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use gup_macros::MarkTypeId;
+/// use gup::mark::{Mark, MarkTypeIdProvider};
+///
+/// #[derive(Clone, MarkTypeId)]
+/// #[mark_type_id = 0]
+/// pub struct Circle;
+///
+/// assert_eq!(Circle::MARK_TYPE_ID, 0);
+/// assert_eq!(Circle::mark_type_id(), 0);
+/// ```
+pub trait MarkTypeIdProvider {
+    /// Get the mark type ID for GPU interaction system.
+    fn mark_type_id() -> u32;
+}
+
 /// Type-erased information about a mark type for runtime management
 pub trait MarkInfo: Send + Sync {
     /// Get the type name for debugging

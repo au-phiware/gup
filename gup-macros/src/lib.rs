@@ -20,6 +20,7 @@ use proc_macro::TokenStream;
 use quote::{ToTokens, quote};
 use syn::{Data, DeriveInput, Fields, parse_macro_input};
 
+mod mark_type_id;
 mod mixable_derive;
 mod wgsl_function;
 mod wgsl_struct;
@@ -257,6 +258,63 @@ pub fn derive_wgsl_struct(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
     match wgsl_struct::derive_wgsl_struct_impl(input) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
+}
+
+/// Derive macro for automatically generating stable mark type IDs.
+///
+/// This macro generates a compile-time constant `MARK_TYPE_ID` and implements
+/// the `MarkTypeIdProvider` trait for mark types. This provides stable, GPU-compatible
+/// IDs that are validated at compile time.
+///
+/// # Requirements
+///
+/// - Must be used with the `#[mark_type_id = N]` attribute
+/// - ID must be in the range 0-255 (u8 range for GPU compatibility)
+/// - IDs must be unique across all mark types (validated at runtime in tests)
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use gup_macros::MarkTypeId;
+/// use gup::mark::Mark;
+///
+/// #[derive(Clone, MarkTypeId)]
+/// #[mark_type_id = 0]
+/// pub struct Circle;
+///
+/// #[derive(Clone, MarkTypeId)]
+/// #[mark_type_id = 1]
+/// pub struct Rectangle;
+///
+/// // Access the compile-time constant
+/// assert_eq!(Circle::MARK_TYPE_ID, 0);
+/// assert_eq!(Rectangle::MARK_TYPE_ID, 1);
+/// ```
+///
+/// This generates:
+/// - `pub const MARK_TYPE_ID: u32` - The stable type ID
+/// - `MarkTypeIdProvider` trait implementation
+/// - Documentation explaining the ID value
+///
+/// # GPU Shader Integration
+///
+/// The generated IDs must match the enum values in GPU shaders. Document
+/// the mapping in your shader code:
+///
+/// ```wgsl
+/// // Mark type IDs must match Rust MarkTypeId assignments:
+/// // 0 = Circle
+/// // 1 = Rectangle
+/// // 2 = Line
+/// ```
+#[proc_macro_derive(MarkTypeId, attributes(mark_type_id))]
+pub fn derive_mark_type_id(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    match mark_type_id::derive_mark_type_id_impl(input) {
         Ok(tokens) => tokens.into(),
         Err(error) => error.to_compile_error().into(),
     }

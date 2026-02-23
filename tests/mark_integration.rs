@@ -538,3 +538,44 @@ async fn test_mark_trait_extensibility() -> GupResult<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_mark_type_id_constants() {
+    // Validate that mark type IDs match the expected GPU shader values
+    // These must stay stable and match the hit_test.compute.wgsl shader
+
+    // Test that the constants are accessible
+    assert_eq!(
+        Circle::MARK_TYPE_ID,
+        0,
+        "Circle must have ID 0 to match GPU shader"
+    );
+    assert_eq!(
+        Rectangle::MARK_TYPE_ID,
+        1,
+        "Rectangle must have ID 1 to match GPU shader"
+    );
+    assert_eq!(
+        Line::MARK_TYPE_ID,
+        2,
+        "Line must have ID 2 to match GPU shader"
+    );
+
+    // Test that IDs are in valid range (0-255 for u8 compatibility)
+    assert!(Circle::MARK_TYPE_ID <= 255, "Mark type IDs must fit in u8");
+    assert!(
+        Rectangle::MARK_TYPE_ID <= 255,
+        "Mark type IDs must fit in u8"
+    );
+    assert!(Line::MARK_TYPE_ID <= 255, "Mark type IDs must fit in u8");
+
+    // Test that IDs are unique
+    let mut ids = vec![
+        Circle::MARK_TYPE_ID,
+        Rectangle::MARK_TYPE_ID,
+        Line::MARK_TYPE_ID,
+    ];
+    ids.sort_unstable();
+    ids.dedup();
+    assert_eq!(ids.len(), 3, "Mark type IDs must be unique");
+}

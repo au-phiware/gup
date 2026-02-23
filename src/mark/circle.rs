@@ -53,7 +53,8 @@ use std::collections::HashMap;
 /// let vertices = Circle::generate_vertices();
 /// assert_eq!(vertices.len(), 4); // Quad for instanced rendering
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, gup_macros::MarkTypeId)]
+#[mark_type_id = 0]
 pub struct Circle;
 
 /// GPU vertex data for circle rendering.

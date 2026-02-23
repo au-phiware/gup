@@ -1074,8 +1074,8 @@ hand-written shaders
 **Status**: 📋 Planned  
 **Priority**: Medium  
 **Story Points**: 2  
-**Key Need**: Create comprehensive example demonstrating patterns across all mark
-types  
+**Key Need**: Create comprehensive example demonstrating patterns across all
+mark types  
 **Dependencies**: GUP-157 ✅  
 **Impact**: Developer education and pattern usage documentation  
 **Created**: 2025-02-26 during GUP-157 retrospective

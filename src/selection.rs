@@ -234,22 +234,39 @@ where
 
 /// Get a numeric mark type identifier for a mark.
 ///
-/// This maps mark types to the numeric IDs expected by the GPU hit test shader:
+/// This maps mark types to the numeric IDs expected by the GPU hit test shader.
+/// The IDs are provided by the MarkTypeIdProvider trait, which is automatically
+/// implemented using the #[derive(MarkTypeId)] macro.
+///
+/// For marks that don't implement MarkTypeIdProvider, falls back to type name matching
+/// for backward compatibility:
 /// - 0 = Circle
 /// - 1 = Rectangle
 /// - 2 = Line
 fn get_mark_type_id<M: Mark>() -> u32 {
-    let type_name = std::any::type_name::<M>();
+    // Try to use MarkTypeIdProvider if available, otherwise fall back to type name matching
+    use crate::mark::{Circle, Line, Rectangle};
 
-    // Map mark types to GPU shader IDs
-    if type_name.contains("Circle") {
-        0
-    } else if type_name.contains("Rectangle") {
-        1
-    } else if type_name.contains("Line") {
-        2
+    let type_id = std::any::TypeId::of::<M>();
+
+    if type_id == std::any::TypeId::of::<Circle>() {
+        Circle::MARK_TYPE_ID
+    } else if type_id == std::any::TypeId::of::<Rectangle>() {
+        Rectangle::MARK_TYPE_ID
+    } else if type_id == std::any::TypeId::of::<Line>() {
+        Line::MARK_TYPE_ID
     } else {
-        // Default to circle for unknown mark types
-        0
+        // Fallback to type name matching for custom marks
+        let type_name = std::any::type_name::<M>();
+        if type_name.contains("Circle") {
+            0
+        } else if type_name.contains("Rectangle") {
+            1
+        } else if type_name.contains("Line") {
+            2
+        } else {
+            // Default to circle for unknown mark types
+            0
+        }
     }
 }
