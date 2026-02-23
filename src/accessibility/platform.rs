@@ -21,6 +21,9 @@ use std::fmt;
 #[cfg(target_os = "macos")]
 pub use crate::accessibility::macos::MacOSAccessibility;
 
+#[cfg(target_os = "windows")]
+pub use crate::accessibility::windows::WindowsAccessibility;
+
 /// Platform abstraction for accessibility integration.
 ///
 /// Different platforms have different accessibility frameworks. This trait
@@ -123,97 +126,6 @@ pub fn create_platform_accessibility() -> Box<dyn PlatformAccessibility> {
     )))]
     {
         Box::new(NullAccessibility::new())
-    }
-}
-
-// ============================================================================
-// Windows UI Automation Implementation
-// ============================================================================
-
-#[cfg(target_os = "windows")]
-pub struct WindowsAccessibility {
-    initialized: bool,
-}
-
-#[cfg(target_os = "windows")]
-impl WindowsAccessibility {
-    pub fn new() -> Self {
-        Self { initialized: false }
-    }
-}
-
-#[cfg(target_os = "windows")]
-impl PlatformAccessibility for WindowsAccessibility {
-    fn initialize(&mut self) -> Result<(), AccessibilityError> {
-        // TODO: Initialize UI Automation
-        // This would require Windows API bindings (e.g., via windows-rs crate)
-        self.initialized = true;
-        Ok(())
-    }
-
-    fn update_accessibility_tree(
-        &mut self,
-        updates: &[AriaUpdate],
-    ) -> Result<(), AccessibilityError> {
-        if !self.initialized {
-            return Err(AccessibilityError::PlatformUnavailable(
-                "Windows accessibility not initialized".to_string(),
-            ));
-        }
-
-        // TODO: Translate ARIA updates to UI Automation patterns
-        for update in updates {
-            match update {
-                AriaUpdate::NodeCreated { .. }
-                | AriaUpdate::NodeUpdated { .. }
-                | AriaUpdate::NodeRemoved { .. }
-                | AriaUpdate::FocusChanged { .. }
-                | AriaUpdate::LiveRegion { .. } => {
-                    // Would call UI Automation methods here
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    fn announce(
-        &mut self,
-        message: &str,
-        priority: AnnouncementPriority,
-    ) -> Result<(), AccessibilityError> {
-        if !self.initialized {
-            return Err(AccessibilityError::PlatformUnavailable(
-                "Windows accessibility not initialized".to_string(),
-            ));
-        }
-
-        // TODO: Use UIA_NotificationEventId for announcements
-        log::debug!("Windows announce ({:?}): {}", priority, message);
-
-        Ok(())
-    }
-
-    fn set_focus(&mut self, element_id: &str) -> Result<(), AccessibilityError> {
-        if !self.initialized {
-            return Err(AccessibilityError::PlatformUnavailable(
-                "Windows accessibility not initialized".to_string(),
-            ));
-        }
-
-        // TODO: Set UI Automation focus
-        log::debug!("Windows set focus: {}", element_id);
-
-        Ok(())
-    }
-
-    fn platform_name(&self) -> &str {
-        "Windows (UI Automation)"
-    }
-
-    fn is_available(&self) -> bool {
-        // UI Automation is available on Windows Vista and later
-        true
     }
 }
 

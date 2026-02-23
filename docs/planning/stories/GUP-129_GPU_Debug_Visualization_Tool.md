@@ -110,10 +110,12 @@ logging
 
 ### What Was Implemented
 
-Created `InteractionDebugVisualizer` - a comprehensive debugging tool for GPU interaction system:
+Created `InteractionDebugVisualizer` - a comprehensive debugging tool for GPU
+interaction system:
 
-1. **Visual Representations**: 
-   - `VisualElement`, `VisualQuery`, `VisualResult` types for readable debug output
+1. **Visual Representations**:
+   - `VisualElement`, `VisualQuery`, `VisualResult` types for readable debug
+     output
    - Color coding by mark type and hit/miss status
    - Element highlighting for hits
 
@@ -138,8 +140,9 @@ Created `InteractionDebugVisualizer` - a comprehensive debugging tool for GPU in
 ### Test Coverage
 
 All 7 tests pass:
+
 - Basic functionality test
-- JSON export test  
+- JSON export test
 - ASCII rendering test
 - Buffer inspection test
 - Enable/disable test
@@ -215,48 +218,68 @@ visualization._
 
 #### Debug Tooling Architecture
 
-- **Challenge**: GPU data is opaque - difficult to inspect without proper tooling
-- **Solution**: Created intermediate visual representation layer that converts GPU structs to debuggable types
-- **Pattern**: `VisualElement`/`VisualQuery`/`VisualResult` types separate concerns between GPU layout (bytemuck::Pod) and debug output (Serialize)
-- **Future**: This pattern can be extended to other GPU systems (shader profiling, memory tracking)
+- **Challenge**: GPU data is opaque - difficult to inspect without proper
+  tooling
+- **Solution**: Created intermediate visual representation layer that converts
+  GPU structs to debuggable types
+- **Pattern**: `VisualElement`/`VisualQuery`/`VisualResult` types separate
+  concerns between GPU layout (bytemuck::Pod) and debug output (Serialize)
+- **Future**: This pattern can be extended to other GPU systems (shader
+  profiling, memory tracking)
 
 #### Serialization vs GPU Compatibility
 
-- **Challenge**: `InteractionType` enum includes trait objects, making serialization complex
-- **Solution**: Store query_type as u32 ID and string name, avoiding serialization of complex types
-- **Pattern**: For debug visualizations, store simplified representations rather than full object graphs
-- **Trade-off**: Lost type safety in debug output, but gained simplicity and JSON export capability
+- **Challenge**: `InteractionType` enum includes trait objects, making
+  serialization complex
+- **Solution**: Store query_type as u32 ID and string name, avoiding
+  serialization of complex types
+- **Pattern**: For debug visualizations, store simplified representations rather
+  than full object graphs
+- **Trade-off**: Lost type safety in debug output, but gained simplicity and
+  JSON export capability
 
 #### State Capture Design
 
 - **Challenge**: When to capture state - every frame vs on-demand?
-- **Solution**: Explicit `update()` call allows developer control over when to snapshot
-- **Pattern**: Debug visualizer as passive observer that captures when told, doesn't poll
-- **Reasoning**: Gives developers control, avoids performance impact when not actively debugging
+- **Solution**: Explicit `update()` call allows developer control over when to
+  snapshot
+- **Pattern**: Debug visualizer as passive observer that captures when told,
+  doesn't poll
+- **Reasoning**: Gives developers control, avoids performance impact when not
+  actively debugging
 
 ### Architectural Decisions
 
 #### No GUI Framework Dependency
 
-- **Decision**: Pure data structures with ASCII/JSON output, no egui/imgui required
-- **Reasoning**: Keeps dependencies minimal, allows tool to work in headless CI environments
-- **Trade-off**: No interactive GUI out of the box, but data can be consumed by external tools
-- **Alternative Considered**: Integrate egui for rich UI, but rejected due to dependency weight for a debug tool
-- **Future**: Could add optional feature flag for egui-based UI that consumes the same data structures
+- **Decision**: Pure data structures with ASCII/JSON output, no egui/imgui
+  required
+- **Reasoning**: Keeps dependencies minimal, allows tool to work in headless CI
+  environments
+- **Trade-off**: No interactive GUI out of the box, but data can be consumed by
+  external tools
+- **Alternative Considered**: Integrate egui for rich UI, but rejected due to
+  dependency weight for a debug tool
+- **Future**: Could add optional feature flag for egui-based UI that consumes
+  the same data structures
 
 #### Enable/Disable Toggle Pattern
 
 - **Decision**: Runtime toggle with `cfg!(debug_assertions)` default
-- **Reasoning**: Allows debug build overhead but easy to disable in performance-critical testing
+- **Reasoning**: Allows debug build overhead but easy to disable in
+  performance-critical testing
 - **Pattern**: Check `enabled` flag before any state capture work
-- **Performance**: Zero overhead when disabled (early return), minimal overhead when enabled (Vec clones)
+- **Performance**: Zero overhead when disabled (early return), minimal overhead
+  when enabled (Vec clones)
 
 #### ASCII Visualization Trade-offs
 
-- **Decision**: Simple grid-based terminal visualization with single-character marks
+- **Decision**: Simple grid-based terminal visualization with single-character
+  marks
 - **Limitations**: Low resolution, no zooming/panning, fixed bounds
 - **Advantages**: Works everywhere (SSH, CI logs, terminal), no dependencies
-- **Use Case**: Quick sanity checks, not detailed analysis (use JSON export for that)
+- **Use Case**: Quick sanity checks, not detailed analysis (use JSON export for
+  that)
 - **Future**: Could add higher-res box drawing characters for better clarity
 
 ### Development Workflow Insights
@@ -266,25 +289,31 @@ visualization._
 The development followed a test-first approach which worked well:
 
 1. **Define data structures** (`VisualElement`, `VisualQuery`, `VisualResult`)
-2. **Write tests** for conversions and summaries  
+2. **Write tests** for conversions and summaries
 3. **Implement** core functionality to pass tests
 4. **Add exports** (JSON, ASCII) once core was solid
 5. **Create example** to dogfood the API
 
-This ensured the debug tool itself was well-tested and reliable. Key insight: **debug tools need tests too** - a broken debug tool wastes more time than it saves.
+This ensured the debug tool itself was well-tested and reliable. Key insight:
+**debug tools need tests too** - a broken debug tool wastes more time than it
+saves.
 
 #### Field Alignment Issues
 
 Hit several compilation errors due to struct field mismatches:
-- `_padding` as `u32` vs `[u32; 2]` between `ElementData` and `InteractionResult`
+
+- `_padding` as `u32` vs `[u32; 2]` between `ElementData` and
+  `InteractionResult`
 - Missing `element_id` field in test data
 - `radius_or_size` vs `region_size` field name changes
 
-**Pattern**: When working with GPU structs, always copy field definitions directly from source, don't trust memory
+**Pattern**: When working with GPU structs, always copy field definitions
+directly from source, don't trust memory
 
 #### Example-Driven API Design
 
 The example revealed several API improvements:
+
 - Initially had too many manual conversions - added convenience methods
 - Summary statistics weren't exposed - added getter method
 - Enable/disable wasn't obvious - made it a first-class method
@@ -293,11 +322,13 @@ The example revealed several API improvements:
 
 ### Follow-up Ideas
 
-During implementation, several enhancement opportunities were identified that could become dedicated stories if needed:
+During implementation, several enhancement opportunities were identified that
+could become dedicated stories if needed:
 
-1. **GUP-XXX: Interactive Debug UI** - Optional egui-based interactive visualizer
+1. **GUP-XXX: Interactive Debug UI** - Optional egui-based interactive
+   visualizer
    - Zoom/pan element view
-   - Click elements to inspect details  
+   - Click elements to inspect details
    - Real-time updates while app runs
    - Would be behind optional `debug-viz-ui` feature flag
 
@@ -307,30 +338,39 @@ During implementation, several enhancement opportunities were identified that co
    - Export as video or animated GIF
    - Useful for reproducing intermittent bugs
 
-3. **GUP-XXX: Performance Profiling Integration** - Integrate with shader profiler
+3. **GUP-XXX: Performance Profiling Integration** - Integrate with shader
+   profiler
    - Show query time overlaid on element distribution
    - Identify spatial index hotspots
    - Correlate element density with performance
    - Would connect `InteractionDebugVisualizer` with `ShaderProfiler`
 
-None of these are blocking issues - the current implementation fully satisfies the story requirements. These are nice-to-have enhancements that could improve developer experience further.
+None of these are blocking issues - the current implementation fully satisfies
+the story requirements. These are nice-to-have enhancements that could improve
+developer experience further.
 
 ### Documentation and Usability
 
 The example (`interaction_debug_visualizer.rs`) serves multiple purposes:
+
 - **Tutorial**: Shows three common debugging scenarios
 - **Test**: Verifies the tool works end-to-end (though not automated)
 - **Reference**: Demonstrates best practices for using the visualizer
 
-This "example as documentation" approach worked well and should be repeated for future debug tools.
+This "example as documentation" approach worked well and should be repeated for
+future debug tools.
 
 ### Success Metrics Validation
 
 All success metrics were met:
 
-- ✅ **<5 minutes to identify issues**: ASCII output provides immediate feedback, JSON export enables deep analysis
-- ✅ **Accurate for 100K+ elements**: No practical limit, tested with 10K elements in example scenario 2
-- ✅ **<5% overhead when enabled**: Only work is Vec cloning, no GPU operations added
+- ✅ **<5 minutes to identify issues**: ASCII output provides immediate
+  feedback, JSON export enables deep analysis
+- ✅ **Accurate for 100K+ elements**: No practical limit, tested with 10K
+  elements in example scenario 2
+- ✅ **<5% overhead when enabled**: Only work is Vec cloning, no GPU operations
+  added
 - ✅ **Zero overhead when disabled**: Early return on `enabled` flag check
 
-The tool achieves its goal: making GPU interaction debugging fast and approachable.
+The tool achieves its goal: making GPU interaction debugging fast and
+approachable.

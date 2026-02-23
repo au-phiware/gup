@@ -22,15 +22,15 @@ Each visualization component is represented as an `NSAccessibilityElement` with:
 
 ### ARIA to NSAccessibility Mapping
 
-| ARIA Role      | NSAccessibility Role | Description                   |
-| -------------- | -------------------- | ----------------------------- |
-| Chart          | Image                | Overall visualization         |
-| ChartSeries    | List                 | Group of related data points  |
-| DataPoint      | Cell                 | Individual data point         |
-| Legend         | Group                | Legend explaining encodings   |
-| Axis           | Ruler                | Scale/axis                    |
-| Tooltip        | HelpTag              | Contextual information        |
-| Control        | Button               | Interactive control           |
+| ARIA Role   | NSAccessibility Role | Description                  |
+| ----------- | -------------------- | ---------------------------- |
+| Chart       | Image                | Overall visualization        |
+| ChartSeries | List                 | Group of related data points |
+| DataPoint   | Cell                 | Individual data point        |
+| Legend      | Group                | Legend explaining encodings  |
+| Axis        | Ruler                | Scale/axis                   |
+| Tooltip     | HelpTag              | Contextual information       |
+| Control     | Button               | Interactive control          |
 
 ## Using VoiceOver
 
@@ -89,10 +89,10 @@ let raw_handle = window.raw_window_handle();
 if let RawWindowHandle::AppKit(handle) = raw_handle {
     unsafe {
         let ns_window: *mut NSWindow = handle.ns_window as *mut _;
-        
+
         // Get accessibility elements from Gup
         let elements = accessibility_system.get_platform_elements();
-        
+
         // Set as window's accessibility children
         (*ns_window).setAccessibilityChildren(elements);
     }
@@ -122,7 +122,7 @@ for (month, sales) in data.iter() {
         AriaRole::DataPoint,
         format!("{}: ${:.2}", month, sales)
     ).with_value(sales.to_string());
-    
+
     accessibility.add_child_node(chart_id, point_node)?;
 }
 
@@ -259,10 +259,8 @@ Applications don't need special permissions for NSAccessibility, but:
 ## Resources
 
 - [Apple Accessibility Programming Guide](https://developer.apple.com/accessibility/)
-- [NSAccessibility Protocol
-  Reference](https://developer.apple.com/documentation/appkit/nsaccessibility)
-- [VoiceOver User
-  Guide](https://support.apple.com/guide/voiceover/welcome/mac)
+- [NSAccessibility Protocol Reference](https://developer.apple.com/documentation/appkit/nsaccessibility)
+- [VoiceOver User Guide](https://support.apple.com/guide/voiceover/welcome/mac)
 - [Gup Accessibility System Documentation](../ACCESSIBILITY_KNOWN_ISSUES.md)
 
 ## Support

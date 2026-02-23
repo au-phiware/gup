@@ -38,6 +38,8 @@ pub mod platform;
 pub mod position_sync;
 pub mod sonification;
 pub mod web_overlay;
+#[cfg(target_os = "windows")]
+pub mod windows;
 
 use std::collections::HashMap;
 

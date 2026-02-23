@@ -157,6 +157,7 @@ bindings for VoiceOver support.
 ### Integration Pattern
 
 The implementation follows a clear integration pattern:
+
 1. AccessibilitySystem maintains ARIA tree
 2. Updates queued and drained from ARIA tree
 3. MacOSAccessibility translates updates to NSAccessibility
@@ -182,12 +183,14 @@ The implementation follows a clear integration pattern:
 
 Since this was developed on Linux, runtime testing with VoiceOver requires a
 macOS machine. The implementation is complete and correct based on:
+
 - NSAccessibility API documentation
 - objc2 crate patterns
 - Existing platform patterns in GUP-112
 - Integration with proven ARIA system from GUP-016
 
 Manual VoiceOver testing on macOS will validate:
+
 - Element discovery and navigation
 - Announcement delivery
 - Focus management
@@ -208,11 +211,12 @@ Manual VoiceOver testing on macOS will validate:
   `Retained<T>` for ARC memory management and `msg_send!` macros for Objective-C
   method calls. The `objc2-app-kit` crate provides NSAccessibility types.
 - **Pattern**: Wrap all unsafe Objective-C calls in safe Rust methods. Use
-  `Retained<T>` for all NSObject references to ensure proper retain/release. Mark
-  the entire module with `#![cfg(target_os = "macos")]` to isolate
+  `Retained<T>` for all NSObject references to ensure proper retain/release.
+  Mark the entire module with `#![cfg(target_os = "macos")]` to isolate
   platform-specific code.
 - **Future**: This pattern applies to any macOS-specific API integration.
-  Consider extracting a reusable "objc2 bridge pattern" for other macOS features.
+  Consider extracting a reusable "objc2 bridge pattern" for other macOS
+  features.
 
 #### NSAccessibility Element Lifecycle
 
@@ -220,8 +224,9 @@ Manual VoiceOver testing on macOS will validate:
   creation and updates when updates only contain NodeIds, not full node data.
 - **Solution**: Implemented a two-tier approach:
   1. Process AriaUpdate events to track element lifecycle
-  2. Provide explicit `create_element_for_node()` and `update_element_for_node()`
-     methods for AccessibilitySystem to call with full node data
+  2. Provide explicit `create_element_for_node()` and
+     `update_element_for_node()` methods for AccessibilitySystem to call with
+     full node data
 - **Pattern**: Store `HashMap<u64, Retained<NSAccessibilityElement>>` to track
   elements by NodeId. Maintain separate root_element reference. Document the
   integration pattern clearly for future maintainers.
@@ -233,16 +238,16 @@ Manual VoiceOver testing on macOS will validate:
 - **Challenge**: Building a complete platform implementation when the platform
   abstraction was designed with stubs and unclear integration points.
 - **Solution**: Extended GUP-112's platform trait with practical implementation
-  details, then documented the "ideal" integration pattern in comprehensive guide
-  documentation.
+  details, then documented the "ideal" integration pattern in comprehensive
+  guide documentation.
 - **Pattern**: When implementing platform-specific features:
   1. Start with trait methods (initialize, update_tree, announce, set_focus)
   2. Add platform-specific public methods for direct integration
   3. Document both the abstract interface and concrete integration patterns
   4. Provide code examples showing complete integration
-- **Future**: The platform abstraction could benefit from a callback-based design
-  where platforms can request node data on-demand rather than needing separate
-  public methods.
+- **Future**: The platform abstraction could benefit from a callback-based
+  design where platforms can request node data on-demand rather than needing
+  separate public methods.
 
 ### Architectural Decisions
 
@@ -274,9 +279,9 @@ Manual VoiceOver testing on macOS will validate:
 
 #### Element Storage with Retained<T>
 
-- **Decision**: Store NSAccessibilityElements in `HashMap<u64,
-  Retained<NSAccessibilityElement>>` rather than raw pointers or Objective-C
-  object references.
+- **Decision**: Store NSAccessibilityElements in
+  `HashMap<u64, Retained<NSAccessibilityElement>>` rather than raw pointers or
+  Objective-C object references.
 - **Reasoning**: `Retained<T>` provides automatic retain/release through Drop
   implementation, preventing memory leaks. HashMap lookup by u64 NodeId is fast
   and type-safe.

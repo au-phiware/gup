@@ -15,9 +15,7 @@ use crate::accessibility::platform::{
 };
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2_app_kit::{
-    NSAccessibility, NSAccessibilityNotificationName, NSAccessibilityRole,
-};
+use objc2_app_kit::{NSAccessibility, NSAccessibilityNotificationName, NSAccessibilityRole};
 use objc2_foundation::{NSArray, NSDictionary, NSString};
 use std::collections::HashMap;
 
@@ -87,9 +85,7 @@ impl MacOSAccessibility {
 
     /// Create an NSAccessibility element from an ARIA node.
     fn create_ns_element(&self, node: &AriaNode) -> Retained<NSAccessibilityElement> {
-        let element = unsafe {
-            NSAccessibilityElement::alloc()
-        };
+        let element = unsafe { NSAccessibilityElement::alloc() };
 
         // Set the role
         let role = Self::aria_role_to_ns_role(node.role);
@@ -211,11 +207,7 @@ impl MacOSAccessibility {
         element: &NSAccessibilityElement,
     ) {
         unsafe {
-            NSAccessibility::postNotificationWithUserInfo(
-                element,
-                notification,
-                None,
-            );
+            NSAccessibility::postNotificationWithUserInfo(element, notification, None);
         }
     }
 }
@@ -297,9 +289,7 @@ impl PlatformAccessibility for MacOSAccessibility {
                         crate::accessibility::aria::AriaLive::Polite => {
                             AnnouncementPriority::Polite
                         }
-                        crate::accessibility::aria::AriaLive::Off => {
-                            AnnouncementPriority::Off
-                        }
+                        crate::accessibility::aria::AriaLive::Off => AnnouncementPriority::Off,
                     };
                     // Use announce method to post the notification
                     let _ = self.announce(content, priority);
@@ -325,14 +315,10 @@ impl PlatformAccessibility for MacOSAccessibility {
         log::debug!("macOS announce ({:?}): {}", priority, message);
 
         // Create the announcement dictionary
-        let announcement_key = unsafe {
-            NSString::from_str("NSAccessibilityAnnouncementKey")
-        };
+        let announcement_key = unsafe { NSString::from_str("NSAccessibilityAnnouncementKey") };
         let announcement_value = NSString::from_str(message);
 
-        let priority_key = unsafe {
-            NSString::from_str("NSAccessibilityPriorityKey")
-        };
+        let priority_key = unsafe { NSString::from_str("NSAccessibilityPriorityKey") };
         let priority_value = match priority {
             AnnouncementPriority::Assertive => "high",
             AnnouncementPriority::Polite => "low",
@@ -344,7 +330,10 @@ impl PlatformAccessibility for MacOSAccessibility {
         let user_info = unsafe {
             NSDictionary::from_keys_and_objects(
                 &[&announcement_key, &priority_key],
-                &[&announcement_value as &AnyObject, &priority_string as &AnyObject],
+                &[
+                    &announcement_value as &AnyObject,
+                    &priority_string as &AnyObject,
+                ],
             )
         };
 
@@ -506,15 +495,19 @@ mod tests {
         let mut accessibility = MacOSAccessibility::new();
 
         // Should fail before initialization
-        assert!(accessibility
-            .announce("test", AnnouncementPriority::Polite)
-            .is_err());
+        assert!(
+            accessibility
+                .announce("test", AnnouncementPriority::Polite)
+                .is_err()
+        );
         assert!(accessibility.set_focus("123").is_err());
 
         // Initialize and try again
         accessibility.initialize().unwrap();
-        assert!(accessibility
-            .announce("test", AnnouncementPriority::Polite)
-            .is_ok());
+        assert!(
+            accessibility
+                .announce("test", AnnouncementPriority::Polite)
+                .is_ok()
+        );
     }
 }
