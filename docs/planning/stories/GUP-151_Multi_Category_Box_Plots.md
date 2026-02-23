@@ -1,6 +1,6 @@
 # GUP-151: Multi-Category Box Plots
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Story Overview
 

@@ -90,6 +90,7 @@ creating statistical visualizations.
 ## Implementation Summary
 
 **Files Changed**:
+
 - `src/chart_builder/builders/boxplot.rs` (new) - BoxPlotBuilder implementation
 - `src/chart_builder/builders.rs` - Export boxplot module
 - `src/chart_builder/plot_api.rs` - Add boxplot() to BoundPlotBuilder
@@ -101,6 +102,7 @@ creating statistical visualizations.
 **Documentation**: Full API documentation and example code
 
 **Key Features**:
+
 - Fluent API with chainable methods (box_width, orientation, colors)
 - Automatic statistical computation using GUP-139 functions
 - Support for both individual values and value arrays
@@ -120,39 +122,57 @@ _Identified during GUP-147 implementation. Aligns with Phase 2 strategy._
 
 #### Builder Pattern for Statistical Marks
 
-- **Challenge**: Statistical marks require different data flow than geometric marks - need to aggregate individual data points into statistics before rendering
-- **Solution**: Separate `compute_boxplot_attributes()` method that processes raw data and returns mark attributes; builder aggregates all values first, then computes statistics
-- **Pattern**: Statistical builders should have data transformation pipeline: raw data → aggregation → statistical computation → mark attributes
-- **Future**: This pattern is reusable for other statistical marks (violin plots, histograms, etc.)
+- **Challenge**: Statistical marks require different data flow than geometric
+  marks - need to aggregate individual data points into statistics before
+  rendering
+- **Solution**: Separate `compute_boxplot_attributes()` method that processes
+  raw data and returns mark attributes; builder aggregates all values first,
+  then computes statistics
+- **Pattern**: Statistical builders should have data transformation pipeline:
+  raw data → aggregation → statistical computation → mark attributes
+- **Future**: This pattern is reusable for other statistical marks (violin
+  plots, histograms, etc.)
 
 #### AccessorValue Extension
 
-- **Challenge**: Box plots need to accept both single values (Float) and arrays of values (Vec<f32>) from accessors
+- **Challenge**: Box plots need to accept both single values (Float) and arrays
+  of values (Vec<f32>) from accessors
 - **Solution**: Added `FloatArray(Vec<f32>)` variant to AccessorValue enum
-- **Implementation**: Updated all match arms in accessor conversion methods (as_f32, as_color, as_position) to handle the new variant
-- **Impact**: Scale analysis in scale.rs also needed updating to handle FloatArray
-- **Trade-off**: Additional complexity in AccessorValue, but enables flexible data input for statistical marks
+- **Implementation**: Updated all match arms in accessor conversion methods
+  (as_f32, as_color, as_position) to handle the new variant
+- **Impact**: Scale analysis in scale.rs also needed updating to handle
+  FloatArray
+- **Trade-off**: Additional complexity in AccessorValue, but enables flexible
+  data input for statistical marks
 
 #### Integration with Plot API
 
-- **Decision**: Add boxplot() method to BoundPlotBuilder following existing pattern
-- **Reasoning**: Maintains Observable Plot-style API consistency; users can chain plot().data().boxplot()
-- **Implementation**: Used macro-generated ConfiguredBoxPlot following scatter/line/bar pattern
+- **Decision**: Add boxplot() method to BoundPlotBuilder following existing
+  pattern
+- **Reasoning**: Maintains Observable Plot-style API consistency; users can
+  chain plot().data().boxplot()
+- **Implementation**: Used macro-generated ConfiguredBoxPlot following
+  scatter/line/bar pattern
 - **Result**: Zero-friction integration with existing API surface
 
 ### Architectural Decisions
 
 #### Grouping Deferred to Future Story
 
-- **Decision**: Single box plot per dataset in initial implementation; grouped box plots deferred to GUP-151
-- **Reasoning**: Grouping by category requires X accessor integration and potentially multiple box plots per dataset; adds significant complexity
-- **Trade-off**: Simpler initial API, but users cannot create side-by-side box plots by category yet
-- **Future**: GUP-151 will add category grouping support using X accessor for group selection
+- **Decision**: Single box plot per dataset in initial implementation; grouped
+  box plots deferred to GUP-151
+- **Reasoning**: Grouping by category requires X accessor integration and
+  potentially multiple box plots per dataset; adds significant complexity
+- **Trade-off**: Simpler initial API, but users cannot create side-by-side box
+  plots by category yet
+- **Future**: GUP-151 will add category grouping support using X accessor for
+  group selection
 
 #### Statistical Computation Location
 
 - **Decision**: Compute statistics in builder, not in mark rendering
-- **Reasoning**: Builder has access to raw data; mark only needs final attributes; separation of concerns
+- **Reasoning**: Builder has access to raw data; mark only needs final
+  attributes; separation of concerns
 - **Pattern**: Builder = data transformation layer, Mark = rendering layer
 - **Benefit**: Mark implementation remains simple and focused on GPU rendering
 
@@ -160,22 +180,36 @@ _Identified during GUP-147 implementation. Aligns with Phase 2 strategy._
 
 - **Decision**: Implement GridCapableBuilder for BoxPlotBuilder
 - **Reasoning**: All chart builders should support consistent grid styling API
-- **Implementation**: Simple trait implementation enables light_grid(), dark_grid(), etc.
+- **Implementation**: Simple trait implementation enables light_grid(),
+  dark_grid(), etc.
 - **Result**: Box plots inherit full grid API with zero additional code
 
 ### Development Workflow Insights
 
-- **Builder Pattern Velocity**: Once scatter plot builder was understood, box plot builder took ~2 hours to implement following the same pattern
-- **Test-Driven Approach**: Writing tests first helped clarify the desired API before implementation details
-- **Error Handling**: Used existing ChartBuilderError variants where possible; added custom GupError for invalid accessor types
-- **Example Value**: Creating boxplot_builder_demo.rs immediately revealed missing imports and validated API ergonomics
+- **Builder Pattern Velocity**: Once scatter plot builder was understood, box
+  plot builder took ~2 hours to implement following the same pattern
+- **Test-Driven Approach**: Writing tests first helped clarify the desired API
+  before implementation details
+- **Error Handling**: Used existing ChartBuilderError variants where possible;
+  added custom GupError for invalid accessor types
+- **Example Value**: Creating boxplot_builder_demo.rs immediately revealed
+  missing imports and validated API ergonomics
 
 ### Follow-up Stories
 
-1. **GUP-151: Multi-Category Box Plots** — Add support for grouped box plots using X accessor to specify categories; render multiple box plots side-by-side; auto-scale positioning based on category count
+1. **GUP-151: Multi-Category Box Plots** — Add support for grouped box plots
+   using X accessor to specify categories; render multiple box plots
+   side-by-side; auto-scale positioning based on category count
 
-2. **GUP-152: Statistical Mark Builder Pattern Documentation** — Extract reusable pattern from BoxPlotBuilder for other statistical marks; create developer guide for implementing histogram, violin plot, density plot builders
+2. **GUP-152: Statistical Mark Builder Pattern Documentation** — Extract
+   reusable pattern from BoxPlotBuilder for other statistical marks; create
+   developer guide for implementing histogram, violin plot, density plot
+   builders
 
-3. **GUP-153: Pre-Computed Statistics Support** — Allow users to provide pre-computed quartiles instead of raw data; useful when statistics are computed server-side or in data pipeline
+3. **GUP-153: Pre-Computed Statistics Support** — Allow users to provide
+   pre-computed quartiles instead of raw data; useful when statistics are
+   computed server-side or in data pipeline
 
-4. **GUP-154: Box Plot Visual Enhancements** — Add notched box plots (confidence intervals), customizable outlier symbols, whisker style options (min/max vs. 1.5×IQR vs. custom percentiles)
+4. **GUP-154: Box Plot Visual Enhancements** — Add notched box plots (confidence
+   intervals), customizable outlier symbols, whisker style options (min/max vs.
+   1.5×IQR vs. custom percentiles)

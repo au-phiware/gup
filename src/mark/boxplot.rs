@@ -23,7 +23,7 @@ use std::collections::HashMap;
 /// # Examples
 ///
 /// ```rust
-/// use gup::mark::{BoxPlot, BoxPlotAttributes, Mark};
+/// use gup::mark::{BoxPlot, BoxPlotAttributes, BoxPlotOrientation, Mark};
 /// use gup::{vec2, vec4, Vec2, Vec4};
 ///
 /// // Create box plot attributes

@@ -53,10 +53,26 @@ pub struct BoxPlotBuilder<T> {
     pub(crate) x_accessor: Option<AccessorFunction<T>>,
     pub(crate) y_accessor: Option<AccessorFunction<T>>,
     pub(crate) color_accessor: Option<AccessorFunction<T>>,
+    pub(crate) category_accessor: Option<AccessorFunction<T>>,
     pub(crate) width_value: f32,
+    pub(crate) category_spacing: f32,
     pub(crate) orientation: BoxPlotOrientation,
+    pub(crate) category_order: CategoryOrder,
     pub(crate) config: ChartConfig,
     pub(crate) _phantom: PhantomData<T>,
+}
+
+/// Category ordering strategy for grouped box plots.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CategoryOrder {
+    /// Order categories alphabetically (default)
+    Alphabetical,
+    /// Order categories by appearance in data
+    Appearance,
+    /// Order categories by median value
+    ByMedian,
+    /// Order categories by mean value
+    ByMean,
 }
 
 impl<T> BoxPlotBuilder<T> {
@@ -66,8 +82,11 @@ impl<T> BoxPlotBuilder<T> {
             x_accessor: None,
             y_accessor: None,
             color_accessor: None,
+            category_accessor: None,
             width_value: 40.0,
+            category_spacing: 50.0,
             orientation: BoxPlotOrientation::Vertical,
+            category_order: CategoryOrder::Alphabetical,
             config: ChartConfig::default(),
             _phantom: PhantomData,
         }
@@ -143,6 +162,70 @@ impl<T> BoxPlotBuilder<T> {
         self.color_accessor = Some(AccessorFunction::new(move |_: &T| {
             AccessorValue::Color(color)
         }));
+        self
+    }
+
+    /// Set the category accessor for grouping box plots.
+    ///
+    /// The category accessor determines how data is grouped. Each unique
+    /// category value will produce a separate box plot.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// # use gup::chart_builder::accessor::AccessorValue;
+    /// # use gup::chart_builder::builders::{AccessorFunction, boxplot};
+    /// # #[derive(Clone, Debug)] struct Data { category: String, value: f32 }
+    /// boxplot()
+    ///     .y(AccessorFunction::new(|d: &Data| AccessorValue::Float(d.value)))
+    ///     .category(AccessorFunction::new(|d: &Data| AccessorValue::String(d.category.clone())))
+    ///     // ...
+    /// # ;
+    /// ```
+    pub fn category<A>(mut self, accessor: A) -> Self
+    where
+        A: Into<AccessorFunction<T>>,
+    {
+        self.category_accessor = Some(accessor.into());
+        self
+    }
+
+    /// Set the spacing between box plot categories.
+    ///
+    /// Default is 50.0 pixels. This determines the horizontal (for vertical orientation)
+    /// or vertical (for horizontal orientation) distance between category groups.
+    pub fn category_spacing(mut self, spacing: f32) -> Self {
+        self.category_spacing = spacing;
+        self
+    }
+
+    /// Set the category ordering strategy.
+    ///
+    /// Controls how categories are ordered when displayed. Options include:
+    /// - `Alphabetical` (default): Sort categories by name
+    /// - `Appearance`: Use order from data
+    /// - `ByMedian`: Sort by median value
+    /// - `ByMean`: Sort by mean value
+    pub fn order_categories(mut self, order: CategoryOrder) -> Self {
+        self.category_order = order;
+        self
+    }
+
+    /// Order categories alphabetically (default).
+    pub fn order_alphabetically(mut self) -> Self {
+        self.category_order = CategoryOrder::Alphabetical;
+        self
+    }
+
+    /// Order categories by their median value.
+    pub fn order_by_median(mut self) -> Self {
+        self.category_order = CategoryOrder::ByMedian;
+        self
+    }
+
+    /// Order categories by their mean value.
+    pub fn order_by_mean(mut self) -> Self {
+        self.category_order = CategoryOrder::ByMean;
         self
     }
 }
@@ -269,9 +352,11 @@ where
     /// Compute box plot attributes from raw data using statistical functions.
     ///
     /// This extracts values from the Y accessor (or X accessor for horizontal orientation)
-    /// and computes the five-number summary plus outliers.
+    /// and computes the five-number summary plus outliers. If a category accessor is provided,
+    /// data is grouped by category and multiple box plots are generated.
     fn compute_boxplot_attributes(&self, data: &[T]) -> GupResult<Vec<BoxPlotAttributes>> {
         use crate::chart_builder::accessor::AccessorValue;
+        use std::collections::HashMap;
 
         // Get the value accessor based on orientation
         let value_accessor = match self.orientation {
@@ -289,34 +374,154 @@ where
                     },
                 })?;
 
-        // For now, create one box plot from all data
-        // Future enhancement: group by category from X accessor
-        let mut all_values = Vec::new();
+        // Check if we have a category accessor for grouping
+        if let Some(ref cat_accessor) = self.category_accessor {
+            // Group data by category
+            let mut category_data: HashMap<String, Vec<f32>> = HashMap::new();
+            let mut category_order_vec: Vec<String> = Vec::new();
 
-        for datum in data {
-            let value = value_accessor.apply(datum);
-            match value {
-                AccessorValue::Float(v) => all_values.push(v),
-                AccessorValue::FloatArray(arr) => all_values.extend(arr),
-                _ => {
-                    return Err(crate::error::GupError::validation_error(format!(
-                        "Box plot requires Float or FloatArray accessor, got: {:?}",
-                        value
-                    )));
+            for datum in data {
+                let category = match cat_accessor.apply(datum) {
+                    AccessorValue::String(s) => s,
+                    AccessorValue::Categorical(s) => s,
+                    other => format!("{:?}", other),
+                };
+
+                // Track order of appearance
+                if !category_data.contains_key(&category) {
+                    category_order_vec.push(category.clone());
+                }
+
+                let value = value_accessor.apply(datum);
+                let values = category_data.entry(category).or_insert_with(Vec::new);
+                
+                match value {
+                    AccessorValue::Float(v) => values.push(v),
+                    AccessorValue::FloatArray(arr) => values.extend(arr),
+                    _ => {
+                        return Err(crate::error::GupError::validation_error(format!(
+                            "Box plot requires Float or FloatArray accessor, got: {:?}",
+                            value
+                        )));
+                    }
                 }
             }
+
+            if category_data.is_empty() {
+                return Err(ChartBuilderError::EmptyData.into());
+            }
+
+            // Compute statistics for each category
+            let mut category_stats: Vec<(String, BoxPlotAttributes, f32, f32)> = category_data
+                .into_iter()
+                .map(|(cat, values)| {
+                    if values.is_empty() {
+                        return Err(crate::error::GupError::validation_error(format!(
+                            "Category '{}' has no values",
+                            cat
+                        )));
+                    }
+                    
+                    // Temporary position, will be updated after ordering
+                    let position = Vec2 { x: 0.0, y: 0.0 };
+                    let attrs = BoxPlotAttributes::from_data(
+                        &values,
+                        position,
+                        self.width_value,
+                        self.orientation,
+                    );
+                    
+                    // Calculate mean and capture median before moving attrs
+                    let mean = values.iter().sum::<f32>() / values.len() as f32;
+                    let median = attrs.median;
+                    
+                    Ok((cat, attrs, mean, median))
+                })
+                .collect::<GupResult<Vec<_>>>()?;
+
+            // Order categories according to strategy
+            match self.category_order {
+                CategoryOrder::Alphabetical => {
+                    category_stats.sort_by(|(a, _, _, _), (b, _, _, _)| a.cmp(b));
+                }
+                CategoryOrder::Appearance => {
+                    // Keep original order from category_order_vec
+                    let order_map: HashMap<String, usize> = category_order_vec
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, cat)| (cat, i))
+                        .collect();
+                    category_stats.sort_by_key(|(cat, _, _, _)| order_map.get(cat).copied().unwrap_or(0));
+                }
+                CategoryOrder::ByMedian => {
+                    category_stats.sort_by(|(_, _, _, med_a), (_, _, _, med_b)| {
+                        med_a.partial_cmp(med_b).unwrap_or(std::cmp::Ordering::Equal)
+                    });
+                }
+                CategoryOrder::ByMean => {
+                    category_stats.sort_by(|(_, _, mean_a, _), (_, _, mean_b, _)| {
+                        mean_a.partial_cmp(mean_b).unwrap_or(std::cmp::Ordering::Equal)
+                    });
+                }
+            }
+
+            // Position box plots with proper spacing
+            let mut result = Vec::new();
+            for (i, (_cat, mut attrs, _, _)) in category_stats.into_iter().enumerate() {
+                let position_offset = i as f32 * self.category_spacing;
+                
+                match self.orientation {
+                    BoxPlotOrientation::Vertical => {
+                        attrs.position = Vec2 {
+                            x: position_offset,
+                            y: 0.0,
+                        };
+                    }
+                    BoxPlotOrientation::Horizontal => {
+                        attrs.position = Vec2 {
+                            x: 0.0,
+                            y: position_offset,
+                        };
+                    }
+                }
+                
+                result.push(attrs);
+            }
+
+            Ok(result)
+        } else {
+            // No category accessor - create single box plot from all data
+            let mut all_values = Vec::new();
+
+            for datum in data {
+                let value = value_accessor.apply(datum);
+                match value {
+                    AccessorValue::Float(v) => all_values.push(v),
+                    AccessorValue::FloatArray(arr) => all_values.extend(arr),
+                    _ => {
+                        return Err(crate::error::GupError::validation_error(format!(
+                            "Box plot requires Float or FloatArray accessor, got: {:?}",
+                            value
+                        )));
+                    }
+                }
+            }
+
+            if all_values.is_empty() {
+                return Err(ChartBuilderError::EmptyData.into());
+            }
+
+            // Compute box plot statistics
+            let position = Vec2 { x: 0.0, y: 0.0 };
+            let attrs = BoxPlotAttributes::from_data(
+                &all_values,
+                position,
+                self.width_value,
+                self.orientation,
+            );
+
+            Ok(vec![attrs])
         }
-
-        if all_values.is_empty() {
-            return Err(ChartBuilderError::EmptyData.into());
-        }
-
-        // Compute box plot statistics
-        let position = Vec2 { x: 0.0, y: 0.0 };
-        let attrs =
-            BoxPlotAttributes::from_data(&all_values, position, self.width_value, self.orientation);
-
-        Ok(vec![attrs])
     }
 }
 
