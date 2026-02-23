@@ -134,3 +134,113 @@ points
 ---
 
 _Identified during GUP-138 implementation as enhancement for motion quality._
+
+## Retrospective
+
+**Completed**: 2025-01-12
+
+### Key Technical Learnings
+
+#### WGSL Struct Alignment with vec3<f32>
+
+- **Challenge**: Initial struct size mismatch - Rust struct was 288 bytes but WGSL expected 304 bytes
+- **Solution**: Added explicit padding field (`_padding2: [f32; 4]`) to match WGSL's 16-byte alignment rules for vec3<f32>
+- **Pattern**: Always verify GPU memory layout when adding fields; vec3 types in WGSL have special alignment requirements
+- **Future**: This reinforces the pattern from GUP-138 retrospective about explicit padding in both Rust and WGSL
+
+#### Spline Mathematics in WGSL
+
+- **Decision**: Implemented Catmull-Rom and B-spline as separate helper functions in WGSL
+- **Reasoning**: Modular helper functions are easier to test and maintain than inline calculations
+- **Implementation**: 
+  - Catmull-Rom uses basis matrix with configurable tension parameter
+  - B-spline uses basis functions for cubic interpolation
+  - Both handle boundary conditions by duplicating endpoint values
+- **Trade-off**: Slightly more WGSL code, but much clearer and maintainable
+
+#### Boundary Handling for Splines
+
+- **Challenge**: Splines need 4 control points but segments only have 2 keyframes
+- **Solution**: Duplicate first/last keyframes at boundaries (p0=k1 at start, p3=k2 at end)
+- **Pattern**: This simple approach works well and doesn't require users to add extra keyframes
+- **Alternative**: Could have used "natural" boundary conditions, but duplication is simpler and visually acceptable
+
+#### Tension Parameter Design
+
+- **Decision**: Tension range [0.0, 1.0] where 0.0 is standard Catmull-Rom
+- **Reasoning**: Matches industry conventions (Unreal, Unity use similar ranges)
+- **Implementation**: Clamped in builder method, stored in uniforms, used in WGSL calculation
+- **UX**: Provides intuitive control - 0.0 for smooth, higher values for tighter curves
+
+### Architectural Decisions
+
+#### Backward Compatibility Strategy
+
+- **Decision**: Default InterpolationMode::Linear maintains existing behavior
+- **Reasoning**: Users can upgrade without code changes; opt-in for new features
+- **Pattern**: New fields in structs should always have sensible defaults
+- **Result**: All existing tests passed without modification
+
+#### Enum-Based Mode Selection
+
+- **Decision**: Used enum with mode_id() for WGSL communication rather than separate structs
+- **Reasoning**: Single KeyframeAnimation type is simpler than multiple specialized types
+- **Implementation**: Mode stored in uniforms as u32, branched in WGSL
+- **Trade-off**: All modes in one shader (slightly larger) vs. simpler API
+
+#### Fluent API Convenience Methods
+
+- **Decision**: Provided both `with_interpolation(mode)` and `with_catmull_rom(tension)` shortcuts
+- **Reasoning**: Generic method for flexibility, shortcuts for common cases
+- **Pattern**: Follows Rust API design guidelines (builder pattern with convenience)
+- **UX**: Users can choose verbosity level based on need
+
+### Development Workflow Insights
+
+- **Test-First Approach**: Wrote 14 integration tests before GPU tests, caught API design issues early
+- **GPU Validation Sequence**: Integration tests → GPU compilation tests → existing test compatibility
+- **Struct Size Debugging**: Used standalone Rust program to verify struct sizes before running GPU tests
+- **Example-Driven**: Building comprehensive example helped validate API ergonomics
+
+### Performance Insights
+
+- **WGSL Compilation**: All three interpolation modes compile successfully on GPU
+- **Test Execution**: 19 tests run in <1 second with single-threaded GPU tests
+- **Struct Size**: 304 bytes fits comfortably in uniform buffer limits
+- **No Performance Degradation**: Existing animation performance tests still pass
+
+### Integration with Existing System
+
+The spline implementation integrates seamlessly with GUP-138:
+
+- **KeyframeAnimation**: Extended without breaking changes
+- **AnimationTimeline**: Works identically with all interpolation modes
+- **Composition**: Spline animations compose with scales, colors, etc.
+- **Storage Buffers**: Pattern can extend to KeyframeAnimationStorage for unlimited keyframes
+
+### Follow-up Stories
+
+No significant gaps identified. Possible enhancements (not critical):
+
+1. **Advanced Spline Modes** (Very Low Priority)
+   - Hermite splines with tangent control
+   - Bezier path support for 2D/3D curves
+   - Would be separate story if user demand emerges
+
+2. **Visual Interpolation Preview** (Low Priority)
+   - Tool to visualize interpolation curves
+   - Help users choose appropriate mode
+   - Would be part of tooling/editor work
+
+### Documentation Insights
+
+- **Example Coverage**: Single example demonstrates all three modes effectively
+- **API Documentation**: Inline docs explain when to use each mode
+- **Story Format**: Implementation Summary section provides good reference for future stories
+
+### Code Quality Notes
+
+- **Test Coverage**: 19 tests covering API, WGSL generation, GPU compilation
+- **Type Safety**: Enum ensures only valid modes can be constructed
+- **Error Handling**: No new error paths; invalid inputs clamped gracefully
+- **Code Organization**: All spline logic co-located in shader_function.rs
