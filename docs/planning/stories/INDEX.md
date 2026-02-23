@@ -1061,7 +1061,7 @@ paths)
 
 ### GUP-158: Path Mark Pattern Support
 
-**Status**: 📋 Planned  
+**Status**: 🚧 In Progress  
 **Priority**: Low  
 **Story Points**: 3  
 **Key Need**: Extend pattern rendering to Path marks with generated or
