@@ -1058,6 +1058,38 @@ paths)
 **Impact**: Complete accessibility coverage for all visualization types  
 **Created**: 2025-02-24 during GUP-113 retrospective
 
+### GUP-158: Path Mark Pattern Support
+
+**Status**: 📋 Planned  
+**Priority**: Low  
+**Story Points**: 3  
+**Key Need**: Extend pattern rendering to Path marks with generated or
+hand-written shaders  
+**Dependencies**: GUP-113 ✅, GUP-157 ✅  
+**Impact**: Complete pattern coverage for complex vector graphics  
+**Created**: 2025-02-26 during GUP-157 retrospective
+
+### GUP-159: Multi-Mark Pattern Visual Example
+
+**Status**: 📋 Planned  
+**Priority**: Medium  
+**Story Points**: 2  
+**Key Need**: Create comprehensive example demonstrating patterns across all mark
+types  
+**Dependencies**: GUP-157 ✅  
+**Impact**: Developer education and pattern usage documentation  
+**Created**: 2025-02-26 during GUP-157 retrospective
+
+### GUP-160: Pattern Visual Regression Tests
+
+**Status**: 📋 Planned  
+**Priority**: Low  
+**Story Points**: 5  
+**Key Need**: Implement screenshot-based visual testing for pattern rendering  
+**Dependencies**: GUP-157 ✅  
+**Impact**: Automated detection of visual quality regressions  
+**Created**: 2025-02-26 during GUP-157 retrospective
+
 ### GUP-161: GPU Timestamp Query Integration
 
 **Status**: 📋 Planned  
