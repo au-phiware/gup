@@ -45,6 +45,7 @@ pub mod windows;
 use std::collections::HashMap;
 
 pub use aria::*;
+pub use atspi::*;
 pub use focus::*;
 pub use focus_elements::*;
 pub use focus_ring::*;
