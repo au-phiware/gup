@@ -14,10 +14,18 @@
 //!
 //! ```no_run
 //! use gup::debug::{GpuMemoryProfiler, WebDashboard};
+//! use std::sync::Arc;
 //!
-//! let profiler = GpuMemoryProfiler::new();
-//! let dashboard = WebDashboard::new(profiler.clone());
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! # // Setup GPU device (simplified for doctest)
+//! # let instance = wgpu::Instance::default();
+//! # let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions::default()).await.unwrap();
+//! # let (device, queue) = adapter.request_device(&wgpu::DeviceDescriptor::default()).await.unwrap();
+//! let profiler = Arc::new(GpuMemoryProfiler::new(&device, &queue));
+//! let dashboard = WebDashboard::new(profiler);
 //! dashboard.start("127.0.0.1:8080")?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! The dashboard is only available when the `web-dashboard` feature is enabled.
