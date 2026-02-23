@@ -101,6 +101,13 @@ impl Mark for Circle {
     /// proper stroke rendering.
     const FRAGMENT_SHADER: Option<&'static str> = Some(include_str!("shaders/circle.frag.wgsl"));
 
+    /// Pattern-enabled fragment shader for accessibility rendering.
+    ///
+    /// This shader integrates pattern-based rendering for colorblind users,
+    /// using texture patterns instead of colors for data encoding.
+    const PATTERN_FRAGMENT_SHADER: Option<&'static str> =
+        Some(include_str!("shaders/circle_pattern.frag.wgsl"));
+
     /// Generate vertex shader with shader function integration.
     ///
     /// When using generated shaders, this method creates WGSL that integrates

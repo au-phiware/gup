@@ -177,6 +177,46 @@ impl MarkRenderer {
         Ok(())
     }
 
+    /// Render mark instances with pattern support for accessibility.
+    ///
+    /// This method extends the basic rendering to include pattern bind groups
+    /// for accessibility features. The pattern bind group should be set at group 1.
+    pub fn render_marks_with_patterns<M: Mark>(
+        &self,
+        render_pass: &mut RenderPass,
+        pipeline: &wgpu::RenderPipeline,
+        bind_group: &wgpu::BindGroup,
+        pattern_bind_group: &wgpu::BindGroup,
+        instance_count: u32,
+    ) -> GupResult<()> {
+        // Set pipeline and bind groups
+        render_pass.set_pipeline(pipeline);
+        render_pass.set_bind_group(0, bind_group, &[]);
+        render_pass.set_bind_group(1, pattern_bind_group, &[]);
+
+        // Set vertex buffer
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.buffer().slice(..));
+
+        // Render based on mark characteristics
+        if let Some(index_count) = M::index_count() {
+            // Indexed rendering
+            if let Some(ref index_buffer) = self.index_buffer {
+                render_pass
+                    .set_index_buffer(index_buffer.buffer().slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(0..index_count as u32, 0, 0..instance_count);
+            } else {
+                return Err(crate::error::GupError::render_error(
+                    "Mark requires indexed rendering but no index buffer available".to_string(),
+                ));
+            }
+        } else {
+            // Non-indexed rendering
+            render_pass.draw(0..M::vertex_count() as u32, 0..instance_count);
+        }
+
+        Ok(())
+    }
+
     /// Get the current vertex buffer capacity in bytes.
     pub fn vertex_capacity(&self) -> usize {
         self.vertex_buffer.capacity()

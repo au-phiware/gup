@@ -147,6 +147,10 @@ pub trait Mark: Clone + Send + Sync + 'static {
     /// Pre-written fragment shader (fastest) - None means generate shaders
     const FRAGMENT_SHADER: Option<&'static str> = None;
 
+    /// Pattern-enabled fragment shader for accessibility rendering
+    /// Uses patterns instead of colors for data encoding
+    const PATTERN_FRAGMENT_SHADER: Option<&'static str> = None;
+
     /// Generate vertex shader WGSL code integrating shader functions
     ///
     /// This method creates a vertex shader that integrates with the shader function
@@ -246,8 +250,14 @@ pub trait MarkInfo: Send + Sync {
     /// Check if this mark has hand-written custom shaders
     fn has_custom_shaders(&self) -> bool;
 
+    /// Check if this mark supports pattern rendering
+    fn has_pattern_shader(&self) -> bool;
+
     /// Create a render pipeline for this mark type
     fn create_render_pipeline(&self, device: &Device) -> GupResult<RenderPipeline>;
+
+    /// Create a render pipeline with pattern support
+    fn create_render_pipeline_with_patterns(&self, device: &Device) -> GupResult<RenderPipeline>;
 
     /// Get the vertex count for this mark type
     fn vertex_count(&self) -> usize;
@@ -364,6 +374,108 @@ impl<M: Mark> MarkInfoImpl<M> {
         Ok(pipeline)
     }
 
+    /// Create render pipeline with pattern support for accessibility.
+    fn create_render_pipeline_with_patterns_impl(
+        &self,
+        device: &Device,
+    ) -> GupResult<RenderPipeline> {
+        // Determine shader sources (use pattern fragment shader if available)
+        let (vertex_source, fragment_source) =
+            if M::VERTEX_SHADER.is_some() && M::PATTERN_FRAGMENT_SHADER.is_some() {
+                // Use hand-optimized vertex shader with pattern fragment shader
+                (
+                    M::VERTEX_SHADER.unwrap().to_string(),
+                    M::PATTERN_FRAGMENT_SHADER.unwrap().to_string(),
+                )
+            } else {
+                // Fall back to standard shaders
+                let pipeline = ComposableShaderPipeline::new();
+                let vertex_shader = M::generate_vertex_shader(&pipeline);
+                let fragment_shader = M::generate_fragment_shader(&pipeline);
+                (vertex_shader, fragment_shader)
+            };
+
+        // Create shader modules
+        let vertex_module = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some(&format!("{}_pattern_vertex", self.type_name())),
+            source: ShaderSource::Wgsl(vertex_source.into()),
+        });
+
+        let fragment_module = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some(&format!("{}_pattern_fragment", self.type_name())),
+            source: ShaderSource::Wgsl(fragment_source.into()),
+        });
+
+        // Create bind group layouts
+        let instance_bind_group_layout = self.create_bind_group_layout(device)?;
+        let pattern_bind_group_layout = self.create_pattern_bind_group_layout(device);
+
+        // Create pipeline layout with both bind groups
+        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+            label: Some(&format!("{}_pattern_pipeline_layout", self.type_name())),
+            bind_group_layouts: &[&instance_bind_group_layout, &pattern_bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+        // Create render pipeline
+        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+            label: Some(&format!("{}_pattern_pipeline", self.type_name())),
+            layout: Some(&pipeline_layout),
+            vertex: VertexState {
+                module: &vertex_module,
+                entry_point: Some("vs_main"),
+                buffers: &[self.create_vertex_buffer_layout()],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(FragmentState {
+                module: &fragment_module,
+                entry_point: Some("fs_main"),
+                targets: &[Some(ColorTargetState {
+                    format: TextureFormat::Bgra8UnormSrgb,
+                    blend: Some(BlendState::ALPHA_BLENDING),
+                    write_mask: ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: PrimitiveState {
+                topology: PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: FrontFace::Ccw,
+                cull_mode: None,
+                unclipped_depth: false,
+                polygon_mode: PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+            cache: None,
+        });
+
+        Ok(pipeline)
+    }
+
+    /// Create bind group layout for pattern uniforms.
+    fn create_pattern_bind_group_layout(&self, device: &Device) -> BindGroupLayout {
+        device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some("Pattern Bind Group Layout"),
+            entries: &[BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        })
+    }
+
     /// Create bind group layout for this mark type.
     fn create_bind_group_layout(&self, device: &Device) -> GupResult<BindGroupLayout> {
         let mut entries = Vec::new();
@@ -446,8 +558,16 @@ impl<M: Mark> MarkInfo for MarkInfoImpl<M> {
         M::VERTEX_SHADER.is_some() && M::FRAGMENT_SHADER.is_some()
     }
 
+    fn has_pattern_shader(&self) -> bool {
+        M::PATTERN_FRAGMENT_SHADER.is_some()
+    }
+
     fn create_render_pipeline(&self, device: &Device) -> GupResult<RenderPipeline> {
         self.create_render_pipeline_impl(device)
+    }
+
+    fn create_render_pipeline_with_patterns(&self, device: &Device) -> GupResult<RenderPipeline> {
+        self.create_render_pipeline_with_patterns_impl(device)
     }
 
     fn vertex_count(&self) -> usize {
