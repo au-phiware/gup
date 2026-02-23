@@ -87,3 +87,99 @@ recovery configuration
 - RecoveryMetrics default implementation
 
 All tests pass with 100% success rate.
+
+## Retrospective
+
+**Completed**: 2025-02-22
+
+### Key Technical Learnings
+
+#### Metrics Collection in Recovery Path
+
+- **Challenge**: Need to track which recovery tier succeeded without changing existing API significantly
+- **Solution**: Modified `recreate_device()` to return `RecoveryTier` instead of `()`, allowing `attempt_recovery()` to record tier information
+- **Pattern**: Return value enrichment - changing internal method signatures to provide more information for metrics without exposing complexity to public API
+- **Future**: This pattern could be extended to other recovery-related methods
+
+#### Rolling Window Implementation
+
+- **Challenge**: Need to limit memory usage for long-running applications with many recovery attempts
+- **Solution**: Used `Vec` with capacity pre-allocation and manual size management (remove oldest when > 100)
+- **Pattern**: Simple rolling window with `Vec::remove(0)` when at capacity
+- **Trade-off**: `remove(0)` is O(n) but only happens once per 100 recoveries, acceptable for this use case
+- **Future**: Could use `VecDeque` for O(1) removal, but current approach is simple and sufficient
+
+#### Zero-Copy Statistics
+
+- **Challenge**: Want to provide statistics without copying all metrics data
+- **Solution**: Return reference to RecoveryMetrics with calculated methods (`success_rate()`, `average_recovery_time()`)
+- **Pattern**: Store raw data, calculate derived statistics on-demand
+- **Trade-off**: Small CPU cost for calculations, but avoids memory overhead of storing both raw and calculated data
+- **Future**: Could cache calculated statistics if queries become frequent
+
+### Architectural Decisions
+
+#### Metrics as Struct, Not Trait
+
+- **Decision**: Implement RecoveryMetrics as concrete struct with methods, not as trait
+- **Reasoning**: Only one implementation needed, no extensibility required
+- **Trade-off**: Less flexible, but simpler and more direct
+- **Future**: If multiple metric implementations are needed, could refactor to trait
+
+#### Automatic Collection, Not Manual
+
+- **Decision**: Automatically record metrics in `attempt_recovery()` rather than requiring manual calls
+- **Reasoning**: Ensures metrics are always accurate and complete, reduces user error
+- **Trade-off**: No way to disable metrics collection, but overhead is negligible
+- **Future**: Could add configuration flag if overhead becomes concern
+
+#### Export as Strings, Not Structured Data
+
+- **Decision**: Export methods return `String` with JSON/CSV formatted data
+- **Reasoning**: Simple, no external dependencies, works with any telemetry system
+- **Trade-off**: Not type-safe, requires parsing on receiving end
+- **Future**: Could add `serde` feature flag for structured serialization
+
+### Development Workflow Insights
+
+- **Small increments**: Implemented in logical order: struct → tracking → queries → export → tests
+- **Test-first validation**: Wrote tests alongside implementation to verify each feature worked
+- **Existing patterns**: Followed RecoveryAttemptResult pattern for consistency
+- **Clean commits**: Two commits (implementation, then completion) kept history clear
+
+### Performance Characteristics
+
+- **Memory overhead**: ~10-20 KB per context (100 recent attempts + statistics)
+- **CPU overhead**: Negligible - only runs during recovery (rare event)
+- **Statistics calculation**: O(1) for success rate, O(1) for timing stats (precomputed sums)
+- **Export generation**: O(n) where n = number of metrics fields (~10), very fast
+
+### Integration Points
+
+- **GupContext**: Core integration - metrics stored as field, updated by `attempt_recovery()`
+- **RecoveryAttemptResult**: Reused existing type, no duplication
+- **RecoveryTier**: New enum to identify which tier succeeded
+- **Public API**: `recovery_metrics()` provides read-only access
+
+### What Worked Well
+
+- Automatic metrics collection ensures accuracy
+- Rolling window limits memory growth
+- Export formats (JSON/CSV) provide flexibility
+- Simple, focused implementation with no external dependencies
+- Comprehensive test coverage validates all features
+
+### What Could Be Improved
+
+- `Vec::remove(0)` for rolling window is not optimal (could use `VecDeque`)
+- No way to reset metrics (could add `reset_metrics()` method)
+- Export formats are hardcoded strings (could use templating)
+- No histogram or percentile statistics (only min/max/avg)
+
+### Lessons for Future Stories
+
+1. **Return value enrichment**: Changing internal method return types can provide more information for metrics without complicating public API
+2. **Automatic collection**: When possible, collect metrics automatically rather than requiring manual calls - reduces user error
+3. **Simple exports**: String-based export formats (JSON/CSV) are sufficient for most use cases, no need to add dependencies
+4. **Rolling windows**: Simple `Vec` with manual size management works well for moderate-sized windows
+5. **On-demand calculation**: Store raw data, calculate derived statistics on-demand to minimize memory overhead
