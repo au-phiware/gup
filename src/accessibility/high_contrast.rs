@@ -88,7 +88,6 @@ pub struct HighContrastRenderer {
     color_replacements: HashMap<String, Color>,
 
     /// Pattern library for pattern-based rendering
-    #[allow(dead_code)]
     pattern_library: PatternLibrary,
 }
 
@@ -244,6 +243,26 @@ impl HighContrastRenderer {
             _ => AccessibilityOverrides::default(),
         }
     }
+
+    /// Get the pattern library for pattern-based rendering.
+    pub fn pattern_library(&self) -> &PatternLibrary {
+        &self.pattern_library
+    }
+
+    /// Get a pattern for a given category index.
+    /// This assigns patterns in a consistent order for distinguishing categories.
+    pub fn get_pattern_for_category(&self, category: usize) -> Pattern {
+        match category % 4 {
+            0 => Pattern::Solid,
+            1 => Pattern::Dots { spacing: 8.0 },
+            2 => Pattern::Lines {
+                spacing: 6.0,
+                angle: 0.0,
+            },
+            3 => Pattern::Crosshatch { spacing: 8.0 },
+            _ => Pattern::Solid,
+        }
+    }
 }
 
 /// Contrast modes for visual accessibility.
@@ -386,6 +405,45 @@ pub enum Pattern {
 
     /// Crosshatch pattern
     Crosshatch { spacing: f32 },
+}
+
+impl Pattern {
+    /// Get the pattern type ID for GPU shader
+    pub fn pattern_type_id(&self) -> u32 {
+        match self {
+            Pattern::Solid => 0,
+            Pattern::Dots { .. } => 1,
+            Pattern::Lines { .. } => 2,
+            Pattern::Crosshatch { .. } => 3,
+        }
+    }
+
+    /// Get the spacing parameter for the pattern
+    pub fn spacing(&self) -> f32 {
+        match self {
+            Pattern::Solid => 0.0,
+            Pattern::Dots { spacing } => *spacing,
+            Pattern::Lines { spacing, .. } => *spacing,
+            Pattern::Crosshatch { spacing } => *spacing,
+        }
+    }
+
+    /// Get the angle parameter for line patterns (in radians)
+    pub fn angle(&self) -> f32 {
+        match self {
+            Pattern::Lines { angle, .. } => *angle,
+            _ => 0.0,
+        }
+    }
+
+    /// Get a default line thickness for the pattern
+    pub fn thickness(&self) -> f32 {
+        match self {
+            Pattern::Lines { spacing, .. } => spacing * 0.2,
+            Pattern::Crosshatch { spacing } => spacing * 0.2,
+            _ => 1.0,
+        }
+    }
 }
 
 /// Calculate WCAG contrast ratio between two colors.
