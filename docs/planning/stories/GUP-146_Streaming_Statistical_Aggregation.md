@@ -137,13 +137,14 @@ memory._
 
 ### Design Decisions
 
-- **Welford's Algorithm**: Used for numerically stable online variance computation
+- **Welford's Algorithm**: Used for numerically stable online variance
+  computation
   - Avoids catastrophic cancellation errors in naive two-pass algorithm
   - Single-pass, incremental, suitable for streaming data
   - Maintains running mean and M2 (sum of squared differences)
 
-- **f64 for intermediate computations**: Used f64 for mean, m2, and sum to minimize
-  precision loss with large datasets
+- **f64 for intermediate computations**: Used f64 for mean, m2, and sum to
+  minimize precision loss with large datasets
   - Final results cast to f32 for compatibility with `StatisticsResult`
 
 - **Chunk-based processing**: Processes data in configurable chunks
@@ -168,8 +169,8 @@ memory._
 
 #### Welford's Online Algorithm for Variance
 
-- **Challenge**: Computing variance typically requires two passes (calculate mean,
-  then calculate squared differences from mean)
+- **Challenge**: Computing variance typically requires two passes (calculate
+  mean, then calculate squared differences from mean)
 - **Solution**: Welford's online algorithm maintains running mean and M2 (sum of
   squared differences) incrementally
 - **Pattern**: Single-pass streaming computation:
@@ -185,19 +186,20 @@ memory._
 
 #### Numerical Stability with f64 Intermediate Values
 
-- **Challenge**: Large datasets with extreme values can cause precision loss with f32
-- **Solution**: Use f64 for intermediate computations (mean, m2, sum), cast to f32
-  only at finalization
-- **Reasoning**: f64 has ~15 decimal digits of precision vs f32's ~7, critical for
-  billions of accumulated values
+- **Challenge**: Large datasets with extreme values can cause precision loss
+  with f32
+- **Solution**: Use f64 for intermediate computations (mean, m2, sum), cast to
+  f32 only at finalization
+- **Reasoning**: f64 has ~15 decimal digits of precision vs f32's ~7, critical
+  for billions of accumulated values
 - **Trade-off**: Slight memory increase (24 bytes vs 12 bytes) but negligible
   compared to overall system memory
 - **Future**: Consider user-configurable precision mode for ultra-large datasets
 
 #### Parallel Aggregation via Merge
 
-- **Challenge**: Processing billions of elements may require distributed/parallel
-  computation
+- **Challenge**: Processing billions of elements may require
+  distributed/parallel computation
 - **Solution**: Implement merge() using parallel aggregation formulas:
   - Combined mean: `(n1*mean1 + n2*mean2) / (n1 + n2)`
   - Combined M2: `m1 + m2 + delta^2 * (n1*n2)/(n1+n2)`
@@ -206,9 +208,10 @@ memory._
 
 #### Progress Callback Design
 
-- **Challenge**: Long-running operations need progress reporting and cancellation
-- **Solution**: Optional `Box<dyn Fn(usize, Option<usize>)>` callback with processed
-  count and optional total
+- **Challenge**: Long-running operations need progress reporting and
+  cancellation
+- **Solution**: Optional `Box<dyn Fn(usize, Option<usize>)>` callback with
+  processed count and optional total
 - **Pattern**: Callback after each chunk, not each element (balances overhead vs
   responsiveness)
 - **Trade-off**: Boxed closure has small overhead but provides flexibility
@@ -218,15 +221,17 @@ memory._
 
 #### CPU-Only Implementation (No GPU for Now)
 
-- **Decision**: Implemented as CPU-only streaming aggregation, not GPU-accelerated
-- **Reasoning**: Streaming is fundamentally serial (can't hold full dataset in GPU
-  memory)
+- **Decision**: Implemented as CPU-only streaming aggregation, not
+  GPU-accelerated
+- **Reasoning**: Streaming is fundamentally serial (can't hold full dataset in
+  GPU memory)
   - GPU compute is beneficial for batch operations, not streaming
   - Welford's algorithm is simple enough that CPU is efficient
   - GPU overhead (buffer upload/download) would dominate for small chunks
-- **Trade-off**: No GPU acceleration, but constant memory usage is more important
-- **Future**: Could add GPU acceleration for large chunks (e.g., 10M+ element chunks)
-  where GPU overhead is amortized
+- **Trade-off**: No GPU acceleration, but constant memory usage is more
+  important
+- **Future**: Could add GPU acceleration for large chunks (e.g., 10M+ element
+  chunks) where GPU overhead is amortized
 
 #### Chunk Size Default (1M Elements)
 
@@ -236,11 +241,13 @@ memory._
   - Large enough to amortize iteration overhead
   - Matches typical L3 cache size (8-32MB)
 - **Trade-off**: One-size-fits-all may not be optimal for all use cases
-- **Future**: Could auto-tune based on available memory or dataset characteristics
+- **Future**: Could auto-tune based on available memory or dataset
+  characteristics
 
 #### StatisticsResult Compatibility
 
-- **Decision**: `finalize()` returns `StatisticsResult` (same as GPU `StatisticsCompute`)
+- **Decision**: `finalize()` returns `StatisticsResult` (same as GPU
+  `StatisticsCompute`)
 - **Reasoning**: Consistent API between CPU streaming and GPU batch processing
   - Users can switch between streaming and batch without code changes
   - Same result struct reduces cognitive load
@@ -258,14 +265,17 @@ memory._
 
 ### Development Workflow Insights
 
-- **Welford's Algorithm**: Well-documented online algorithm with clear derivation
+- **Welford's Algorithm**: Well-documented online algorithm with clear
+  derivation
   - Implementation from pseudocode was straightforward
   - Tests confirmed numerical stability vs naive two-pass algorithm
-- **Test Strategy**: Comprehensive tests cover correctness, performance, edge cases
+- **Test Strategy**: Comprehensive tests cover correctness, performance, edge
+  cases
   - Tested against exact statistical formulas
   - Verified streaming matches batch results
   - Simulated 1M element datasets (constant memory verified)
-- **Merge Algorithm**: Parallel aggregation formulas well-established in literature
+- **Merge Algorithm**: Parallel aggregation formulas well-established in
+  literature
   - Implementation straightforward once formulas understood
   - Tests verified merge(a, b) == batch(a ++ b)
 - **Progress Callbacks**: Required Arc<Mutex<T>> pattern for test verification
@@ -297,12 +307,15 @@ streaming statistical aggregation. Future enhancements could include:
 
 ### Lessons for Future Streaming Work
 
-1. **Use f64 for accumulators**: Precision loss is real with billions of f32 values
-2. **Welford's algorithm is gold**: Numerically stable, single-pass, easy to implement
-3. **Merge enables parallelism**: Parallel aggregation formulas unlock distributed
-   processing
+1. **Use f64 for accumulators**: Precision loss is real with billions of f32
+   values
+2. **Welford's algorithm is gold**: Numerically stable, single-pass, easy to
+   implement
+3. **Merge enables parallelism**: Parallel aggregation formulas unlock
+   distributed processing
 4. **Test against exact formulas**: Verify streaming matches batch statistical
    computation
 5. **Constant memory is key**: Chunk-based processing enables arbitrarily large
    datasets
-6. **Progress callbacks need 'static**: Arc<Mutex<T>> pattern for shared mutable state
+6. **Progress callbacks need 'static**: Arc<Mutex<T>> pattern for shared mutable
+   state
