@@ -1,6 +1,6 @@
 # GUP-144: Kernel Density Estimation
 
-**Status**: 💡 New
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
