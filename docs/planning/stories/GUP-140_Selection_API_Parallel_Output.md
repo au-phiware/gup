@@ -1,6 +1,6 @@
 # GUP-140: Selection API Parallel Output Integration
 
-**Status**: 💡 New
+**Status**: 🚧 In Progress
 
 ## Story Overview
 

@@ -101,6 +101,7 @@ both approaches, validating the architectural decision made in GUP-113.
 ### What Was Implemented
 
 #### Texture Pattern Generator
+
 - **File**: `src/accessibility/texture_pattern_generator.rs` (330 lines)
 - Generates pre-rendered pattern textures at multiple resolutions
 - Supports Solid, Dots, Lines, and Crosshatch patterns
@@ -108,6 +109,7 @@ both approaches, validating the architectural decision made in GUP-113.
 - Seamless tiling support
 
 #### Texture Pattern Renderer
+
 - **File**: `src/accessibility/texture_pattern_renderer.rs` (292 lines)
 - GPU texture-based pattern rendering system
 - Texture caching for performance
@@ -115,20 +117,23 @@ both approaches, validating the architectural decision made in GUP-113.
 - Memory usage tracking
 
 #### WGSL Shader Support
+
 - **File**: `src/shaders/texture_patterns.wgsl` (49 lines)
 - Texture sampling functions
 - Tiled pattern support
 - Color blending with foreground/background
 
 #### Benchmarks
+
 - **File**: `benches/texture_vs_procedural_patterns.rs` (302 lines)
 - Comprehensive comparison benchmarks:
-  * Texture generation time
-  * Texture upload performance
-  * Uniform update performance
-  * Memory usage analysis
+  - Texture generation time
+  - Texture upload performance
+  - Uniform update performance
+  - Memory usage analysis
 
 #### Example
+
 - **File**: `examples/texture_vs_procedural_patterns.rs` (228 lines)
 - Side-by-side comparison demonstration
 - Performance measurements
@@ -139,16 +144,19 @@ both approaches, validating the architectural decision made in GUP-113.
 From `texture_vs_procedural_patterns` example:
 
 **Texture Generation (CPU)**:
+
 - 128×128: ~1ms per pattern
 - 256×256: ~3-4ms per pattern
 - 512×512: ~14-15ms per pattern
 
 **Uniform Updates (1000 iterations)**:
+
 - Procedural: 28-37µs per update
 - Texture-based: 25-30µs per update
 - **Result**: Similar performance, slight edge to textures
 
 **Memory Usage**:
+
 - Procedural: 64 bytes (uniforms only)
 - Texture 128×128: 256 KB (4 patterns)
 - Texture 256×256: 1 MB (4 patterns)
@@ -157,20 +165,26 @@ From `texture_vs_procedural_patterns` example:
 
 ### Key Findings
 
-1. **Memory Trade-off**: Texture approach requires 256KB to 4MB per pattern set vs procedural's 64 bytes
-2. **Performance**: Both approaches have similar uniform update performance (~25-37µs)
-3. **Quality**: Procedural patterns are vector-based (infinite scale), textures are fixed resolution
-4. **Flexibility**: Procedural patterns can change parameters at runtime, textures require regeneration
+1. **Memory Trade-off**: Texture approach requires 256KB to 4MB per pattern set
+   vs procedural's 64 bytes
+2. **Performance**: Both approaches have similar uniform update performance
+   (~25-37µs)
+3. **Quality**: Procedural patterns are vector-based (infinite scale), textures
+   are fixed resolution
+4. **Flexibility**: Procedural patterns can change parameters at runtime,
+   textures require regeneration
 
 ### Recommendation
 
 **Use procedural patterns** (GUP-113 decision validated):
+
 - Minimal memory footprint
 - Perfect quality at any scale
 - Runtime parameter flexibility
 - Modern GPUs handle fragment shader computation efficiently
 
 The texture-based approach only makes sense for:
+
 - Extremely complex patterns that are too expensive to compute procedurally
 - Platforms with abundant texture memory but limited shader capability
 - Pre-baked artistic patterns that can't be expressed procedurally
@@ -199,61 +213,96 @@ For Gup's accessibility patterns, procedural generation is clearly superior.
 ### Key Technical Learnings
 
 #### Texture Generation Performance
-- **Challenge**: CPU-side texture generation can be expensive for large resolutions
-- **Solution**: Implemented efficient pixel-by-pixel generation with anti-aliasing
-- **Pattern**: For 512×512 textures, generation takes 14-15ms per pattern - acceptable for one-time cost but not real-time
-- **Observation**: Complex patterns (dots, lines, crosshatch) take ~3-4x longer than solid patterns
+
+- **Challenge**: CPU-side texture generation can be expensive for large
+  resolutions
+- **Solution**: Implemented efficient pixel-by-pixel generation with
+  anti-aliasing
+- **Pattern**: For 512×512 textures, generation takes 14-15ms per pattern -
+  acceptable for one-time cost but not real-time
+- **Observation**: Complex patterns (dots, lines, crosshatch) take ~3-4x longer
+  than solid patterns
 
 #### GPU Texture Upload
+
 - **Challenge**: Understanding wgpu v26 API for texture writing
-- **Solution**: Use `TexelCopyTextureInfo` and `TexelCopyBufferLayout` structs instead of deprecated `ImageCopyTexture`
-- **Pattern**: Texture uploads are fast (1-20ms) and can be amortized across multiple frames
-- **Learning**: First upload shows outlier timing (~30ms) due to driver initialization
+- **Solution**: Use `TexelCopyTextureInfo` and `TexelCopyBufferLayout` structs
+  instead of deprecated `ImageCopyTexture`
+- **Pattern**: Texture uploads are fast (1-20ms) and can be amortized across
+  multiple frames
+- **Learning**: First upload shows outlier timing (~30ms) due to driver
+  initialization
 
 #### Memory vs Computation Trade-off
+
 - **Challenge**: Quantifying the actual memory vs computation trade-off
 - **Solution**: Implemented both approaches fully and measured comprehensively
-- **Result**: Texture approach uses 4,000-64,000x more memory with no performance benefit
-- **Pattern**: Modern GPUs handle procedural computation very efficiently - the "texture for speed" assumption doesn't hold for simple patterns
+- **Result**: Texture approach uses 4,000-64,000x more memory with no
+  performance benefit
+- **Pattern**: Modern GPUs handle procedural computation very efficiently - the
+  "texture for speed" assumption doesn't hold for simple patterns
 
 ### Architectural Decisions
 
 #### Texture Caching Strategy
-- **Decision**: Cache generated textures by pattern parameters (type, spacing, angle)
-- **Reasoning**: Texture generation is expensive (~14ms for 512×512), should only happen once per unique pattern
+
+- **Decision**: Cache generated textures by pattern parameters (type, spacing,
+  angle)
+- **Reasoning**: Texture generation is expensive (~14ms for 512×512), should
+  only happen once per unique pattern
 - **Trade-off**: Memory grows with number of unique patterns used
-- **Future**: HashMap-based cache works well for small pattern sets (4-10 patterns)
+- **Future**: HashMap-based cache works well for small pattern sets (4-10
+  patterns)
 
 #### Separate Renderer Implementation
-- **Decision**: Create `TexturePatternRenderer` separate from `PatternRenderer` rather than adding a flag
-- **Reasoning**: The implementations are fundamentally different (texture sampling vs procedural generation)
+
+- **Decision**: Create `TexturePatternRenderer` separate from `PatternRenderer`
+  rather than adding a flag
+- **Reasoning**: The implementations are fundamentally different (texture
+  sampling vs procedural generation)
 - **Trade-off**: Some code duplication but clearer architecture
-- **Future**: If we need runtime switching, could add a `PatternBackend` enum with both renderers
+- **Future**: If we need runtime switching, could add a `PatternBackend` enum
+  with both renderers
 
 #### Resolution Options
+
 - **Decision**: Support three fixed resolutions (128×128, 256×256, 512×512)
 - **Reasoning**: Covers low-memory, balanced, and high-quality use cases
-- **Trade-off**: Cannot generate arbitrary sizes, but simplifies API and benchmarking
-- **Observation**: 256×256 provides good quality/memory balance (1MB for 4 patterns)
+- **Trade-off**: Cannot generate arbitrary sizes, but simplifies API and
+  benchmarking
+- **Observation**: 256×256 provides good quality/memory balance (1MB for 4
+  patterns)
 
 ### Development Workflow Insights
 
-- **Fast iteration**: Having both approaches in parallel allowed quick A/B comparison
-- **Example-driven development**: Building the comparison example first clarified requirements
-- **Benchmark design**: Measuring generation, upload, and update separately revealed full cost model
-- **wgpu API changes**: wgpu v26 has different texture APIs - referenced existing code in `text/atlas.rs` for guidance
-- **Memory measurement**: Simple byte counting (width × height × 4) works well for RGBA textures
+- **Fast iteration**: Having both approaches in parallel allowed quick A/B
+  comparison
+- **Example-driven development**: Building the comparison example first
+  clarified requirements
+- **Benchmark design**: Measuring generation, upload, and update separately
+  revealed full cost model
+- **wgpu API changes**: wgpu v26 has different texture APIs - referenced
+  existing code in `text/atlas.rs` for guidance
+- **Memory measurement**: Simple byte counting (width × height × 4) works well
+  for RGBA textures
 
 ### Validation of GUP-113 Decision
 
-This story provides **data-driven validation** that the GUP-113 decision to use procedural patterns was correct:
+This story provides **data-driven validation** that the GUP-113 decision to use
+procedural patterns was correct:
 
-1. **Memory**: 64 bytes (procedural) vs 256KB-4MB (texture) - **64,000x difference at high resolution**
-2. **Performance**: Both approaches ~25-37µs per update - **no significant difference**
-3. **Quality**: Procedural is vector-based (infinite scale), textures alias at large scales
-4. **Flexibility**: Procedural parameters change instantly, textures require regeneration
+1. **Memory**: 64 bytes (procedural) vs 256KB-4MB (texture) - **64,000x
+   difference at high resolution**
+2. **Performance**: Both approaches ~25-37µs per update - **no significant
+   difference**
+3. **Quality**: Procedural is vector-based (infinite scale), textures alias at
+   large scales
+4. **Flexibility**: Procedural parameters change instantly, textures require
+   regeneration
 
-**Conclusion**: For accessibility patterns in Gup, procedural generation is unequivocally superior. Texture-based patterns would only make sense for:
+**Conclusion**: For accessibility patterns in Gup, procedural generation is
+unequivocally superior. Texture-based patterns would only make sense for:
+
 - Extremely complex artistic patterns (hundreds of shapes)
 - Platforms with severe shader limitations
 - Pre-baked patterns that can't be expressed procedurally
@@ -262,4 +311,5 @@ None of these apply to Gup's simple geometric accessibility patterns.
 
 ### Follow-up Stories
 
-None identified. This story successfully demonstrates that the current procedural approach is optimal.
+None identified. This story successfully demonstrates that the current
+procedural approach is optimal.

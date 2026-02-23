@@ -46,10 +46,7 @@ async fn run() {
                 angle: 0.0,
             },
         ),
-        (
-            "Crosshatch (8px)",
-            Pattern::Crosshatch { spacing: 8.0 },
-        ),
+        ("Crosshatch (8px)", Pattern::Crosshatch { spacing: 8.0 }),
     ];
 
     // Colors
@@ -126,7 +123,12 @@ async fn run() {
         }
         let elapsed = start.elapsed();
 
-        println!("  {}: {:?} ({:.2}µs/update)", name, elapsed, elapsed.as_micros() as f64 / 1000.0);
+        println!(
+            "  {}: {:?} ({:.2}µs/update)",
+            name,
+            elapsed,
+            elapsed.as_micros() as f64 / 1000.0
+        );
     }
 
     // Texture approach
@@ -144,7 +146,12 @@ async fn run() {
         }
         let elapsed = start.elapsed();
 
-        println!("  {}: {:?} ({:.2}µs/update)", name, elapsed, elapsed.as_micros() as f64 / 1000.0);
+        println!(
+            "  {}: {:?} ({:.2}µs/update)",
+            name,
+            elapsed,
+            elapsed.as_micros() as f64 / 1000.0
+        );
     }
 
     println!();

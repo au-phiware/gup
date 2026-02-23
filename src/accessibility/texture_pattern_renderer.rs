@@ -187,14 +187,14 @@ impl TexturePatternRenderer {
     ) {
         // Get key and ensure texture exists
         let key = PatternKey::from_pattern(pattern);
-        
+
         if !self.textures.contains_key(&key) {
             let texture = self.generator.create_texture(device, queue, pattern);
             let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
             self.textures.insert(key, texture);
             self.texture_views.insert(key, view);
         }
-        
+
         // Get texture view (now we know it exists)
         let texture_view = self.texture_views.get(&key).unwrap();
         let bind_group_layout = Self::create_bind_group_layout(device);
@@ -269,7 +269,7 @@ mod tests {
         let key = PatternKey::from_pattern(&pattern);
 
         assert_eq!(key.pattern_type, 1); // Dots
-        assert_eq!(key.spacing, 80);     // 8.0 * 10
+        assert_eq!(key.spacing, 80); // 8.0 * 10
     }
 
     #[test]
@@ -286,6 +286,9 @@ mod tests {
         let key3 = PatternKey::from_pattern(&pattern3);
 
         assert_ne!(key1, key2, "Different spacing should create different keys");
-        assert_ne!(key1, key3, "Different patterns should create different keys");
+        assert_ne!(
+            key1, key3,
+            "Different patterns should create different keys"
+        );
     }
 }

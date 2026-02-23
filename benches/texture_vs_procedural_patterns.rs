@@ -9,7 +9,7 @@
 //! - Rendering performance (simulated via uniform updates)
 //! - Quality comparison
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use gup::accessibility::high_contrast::Pattern;
 use gup::accessibility::pattern_renderer::{PatternRenderer, PatternUniforms};
 use gup::accessibility::texture_pattern_generator::{TexturePatternGenerator, TextureResolution};
@@ -230,16 +230,15 @@ fn bench_memory_usage(c: &mut Criterion) {
                     let fg = gup::accessibility::high_contrast::Color::BLACK;
                     let bg = gup::accessibility::high_contrast::Color::WHITE;
                     let uniforms = TexturePatternUniforms::new(fg, bg, 1.0);
-                    let mut renderer =
-                        TexturePatternRenderer::new(&device, *res, uniforms);
+                    let mut renderer = TexturePatternRenderer::new(&device, *res, uniforms);
 
                     // Create textures for all patterns
                     for pattern in &patterns {
                         renderer.update_bind_group(&device, &queue, pattern);
                     }
 
-                    let memory_bytes = black_box(renderer.memory_usage());
-                    memory_bytes
+                    
+                    black_box(renderer.memory_usage())
                 });
             },
         );

@@ -51,7 +51,9 @@ impl TexturePatternGenerator {
             Pattern::Lines { spacing, angle } => {
                 self.generate_lines(&mut pixels, size, *spacing, *angle)
             }
-            Pattern::Crosshatch { spacing } => self.generate_crosshatch(&mut pixels, size, *spacing),
+            Pattern::Crosshatch { spacing } => {
+                self.generate_crosshatch(&mut pixels, size, *spacing)
+            }
         }
 
         pixels
@@ -61,7 +63,7 @@ impl TexturePatternGenerator {
     fn generate_solid(&self, pixels: &mut [u8], size: usize) {
         for i in 0..size * size {
             let idx = i * 4;
-            pixels[idx] = 255;     // R
+            pixels[idx] = 255; // R
             pixels[idx + 1] = 255; // G
             pixels[idx + 2] = 255; // B
             pixels[idx + 3] = 255; // A
@@ -98,9 +100,9 @@ impl TexturePatternGenerator {
                 };
 
                 let alpha_byte = (alpha * 255.0) as u8;
-                pixels[idx] = 255;         // R
-                pixels[idx + 1] = 255;     // G
-                pixels[idx + 2] = 255;     // B
+                pixels[idx] = 255; // R
+                pixels[idx + 1] = 255; // G
+                pixels[idx + 2] = 255; // B
                 pixels[idx + 3] = alpha_byte; // A
             }
         }
@@ -141,9 +143,9 @@ impl TexturePatternGenerator {
                 };
 
                 let alpha_byte = (alpha * 255.0) as u8;
-                pixels[idx] = 255;         // R
-                pixels[idx + 1] = 255;     // G
-                pixels[idx + 2] = 255;     // B
+                pixels[idx] = 255; // R
+                pixels[idx + 1] = 255; // G
+                pixels[idx + 2] = 255; // B
                 pixels[idx + 3] = alpha_byte; // A
             }
         }
@@ -188,9 +190,9 @@ impl TexturePatternGenerator {
                 let alpha = h_alpha.max(v_alpha);
 
                 let alpha_byte = (alpha * 255.0) as u8;
-                pixels[idx] = 255;         // R
-                pixels[idx + 1] = 255;     // G
-                pixels[idx + 2] = 255;     // B
+                pixels[idx] = 255; // R
+                pixels[idx + 1] = 255; // G
+                pixels[idx + 2] = 255; // B
                 pixels[idx + 3] = alpha_byte; // A
             }
         }
