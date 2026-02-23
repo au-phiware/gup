@@ -10,11 +10,11 @@
 //!
 //! Run with: `cargo run --example baseline_recommendation_demo`
 
+use gup::GupResult;
 use gup::debug::baseline_recommendation::{
     BaselineRecommendationEngine, BatchRecommendationAnalyzer, RecommendationConfig,
 };
 use gup::debug::ci_performance::{BaselineStorage, PerformanceBaseline};
-use gup::GupResult;
 use std::collections::HashMap;
 
 fn main() -> GupResult<()> {
@@ -36,10 +36,10 @@ fn main() -> GupResult<()> {
 
     // Configure recommendation engine
     let config = RecommendationConfig {
-        min_samples: 3,              // Lower threshold for demo
-        min_change_threshold: 0.10,  // 10%
+        min_samples: 3,               // Lower threshold for demo
+        min_change_threshold: 0.10,   // 10%
         min_confidence: 0.70,         // 70%
-        max_cv_for_stability: 0.15,  // 15%
+        max_cv_for_stability: 0.15,   // 15%
         auto_update_confidence: 0.85, // 85%
     };
 
@@ -72,10 +72,7 @@ fn main() -> GupResult<()> {
 
     let recommendations = analyzer.analyze_all_tests(&tests)?;
 
-    println!(
-        "Found {} recommendations\n",
-        recommendations.len()
-    );
+    println!("Found {} recommendations\n", recommendations.len());
 
     // Generate and display report
     println!("📋 Generating recommendation report...\n");
@@ -155,7 +152,7 @@ fn create_demo_baselines(storage: &BaselineStorage) -> GupResult<()> {
     Ok(())
 }
 
-fn analyze_individual_test(analyzer: &BatchRecommendationAnalyzer) -> GupResult<()> {
+fn analyze_individual_test(_analyzer: &BatchRecommendationAnalyzer) -> GupResult<()> {
     // Access the engine to analyze a single test
     let test_name = "render_100k_points";
     let category = "rendering";

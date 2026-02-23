@@ -108,7 +108,8 @@ fn test_svg_chart_structure() {
     use std::collections::HashMap;
 
     // Create sample performance snapshots
-    let _snapshots = [PerformanceSnapshot {
+    let _snapshots = [
+        PerformanceSnapshot {
             timestamp: chrono::Utc::now(),
             frame_time_ms: 10.0,
             memory_usage_bytes: 1_000_000,
@@ -131,7 +132,8 @@ fn test_svg_chart_structure() {
             gpu_utilization_percent: 52.0,
             query_time_us: 105.0,
             metadata: HashMap::new(),
-        }];
+        },
+    ];
 
     // Create a trend chart and export as SVG
     use gup::debug::visualization::VisualizationConfig;

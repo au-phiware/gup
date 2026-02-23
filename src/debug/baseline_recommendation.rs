@@ -77,9 +77,9 @@ impl Default for RecommendationConfig {
     fn default() -> Self {
         Self {
             min_samples: 10,
-            min_change_threshold: 0.10, // 10%
-            min_confidence: 0.80,        // 80%
-            max_cv_for_stability: 0.10,  // 10% CV
+            min_change_threshold: 0.10,   // 10%
+            min_confidence: 0.80,         // 80%
+            max_cv_for_stability: 0.10,   // 10% CV
             auto_update_confidence: 0.90, // 90%
         }
     }
@@ -121,8 +121,7 @@ impl BaselineRecommendationEngine {
                 .load_baseline(test_name, category, platform_id)?;
 
         // Load historical data (we'll use the baseline storage's list functionality)
-        let historical_data =
-            self.load_historical_data(test_name, category, platform_id)?;
+        let historical_data = self.load_historical_data(test_name, category, platform_id)?;
 
         if historical_data.is_empty() {
             return Err(GupError::validation_error(format!(
@@ -134,12 +133,11 @@ impl BaselineRecommendationEngine {
         // Calculate statistics on recent samples
         let recent_average = self.calculate_average(&historical_data);
         let std_deviation = self.calculate_std_deviation(&historical_data, recent_average);
-        let coefficient_of_variation =
-            if recent_average > 0.0 {
-                std_deviation / recent_average
-            } else {
-                f32::MAX
-            };
+        let coefficient_of_variation = if recent_average > 0.0 {
+            std_deviation / recent_average
+        } else {
+            f32::MAX
+        };
 
         // Determine if performance is stable
         let is_stable = coefficient_of_variation <= self.config.max_cv_for_stability;
@@ -338,9 +336,7 @@ impl BatchRecommendationAnalyzer {
             {
                 Ok(analysis) => {
                     // Check if recommendation should be made
-                    if let Some(recommendation) =
-                        self.engine.recommend_baseline_update(&analysis)
-                    {
+                    if let Some(recommendation) = self.engine.recommend_baseline_update(&analysis) {
                         let key = format!("{}/{}/{}", category, platform_id, test_name);
                         recommendations.insert(key, recommendation);
                     }

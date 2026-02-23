@@ -3,11 +3,11 @@
 
 //! Integration tests for automated baseline recommendation system
 
+use gup::GupResult;
 use gup::debug::baseline_recommendation::{
     BaselineRecommendationEngine, BatchRecommendationAnalyzer, RecommendationConfig,
 };
 use gup::debug::ci_performance::{BaselineStorage, PerformanceBaseline};
-use gup::GupResult;
 use std::collections::HashMap;
 
 #[test]
@@ -42,11 +42,8 @@ fn test_baseline_recommendation_workflow() -> GupResult<()> {
     let engine = BaselineRecommendationEngine::with_defaults(storage);
 
     // Analyze trend (should not recommend update with single sample)
-    let analysis_result = engine.analyze_performance_trend(
-        "render_100k_points",
-        "rendering",
-        "nvidia_rtx_3080",
-    );
+    let analysis_result =
+        engine.analyze_performance_trend("render_100k_points", "rendering", "nvidia_rtx_3080");
 
     assert!(
         analysis_result.is_ok(),
@@ -143,9 +140,9 @@ fn test_confidence_scoring_factors() -> GupResult<()> {
     let storage = BaselineStorage::new(test_dir.clone());
     let config = RecommendationConfig {
         min_samples: 5,
-        min_change_threshold: 0.15, // 15%
-        min_confidence: 0.70,        // 70%
-        max_cv_for_stability: 0.15,  // 15%
+        min_change_threshold: 0.15,   // 15%
+        min_confidence: 0.70,         // 70%
+        max_cv_for_stability: 0.15,   // 15%
         auto_update_confidence: 0.85, // 85%
     };
     let engine = BaselineRecommendationEngine::new(storage, config);
@@ -155,9 +152,9 @@ fn test_confidence_scoring_factors() -> GupResult<()> {
         test_name: "test".to_string(),
         category: "cat".to_string(),
         platform_id: "platform".to_string(),
-        sample_count: 20,               // Many samples
+        sample_count: 20, // Many samples
         current_baseline: 10.0,
-        recent_average: 12.0,            // 20% increase
+        recent_average: 12.0, // 20% increase
         std_deviation: 0.3,
         coefficient_of_variation: 0.025, // 2.5% - very stable
         significant_shift: true,
