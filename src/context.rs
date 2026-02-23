@@ -45,6 +45,8 @@ pub struct GupOptions {
     pub reduced_features: Option<Features>,
     /// Reduced limits for limited GPUs
     pub reduced_limits: Option<Limits>,
+    /// Enable automatic device loss detection and recovery
+    pub automatic_device_loss_detection: bool,
 }
 
 /// Unique identifier for surfaces in multi-window applications.
@@ -385,6 +387,7 @@ impl Default for GupOptions {
             allow_software_fallback: true,
             reduced_features: Some(Features::empty()),
             reduced_limits: Some(Limits::downlevel_defaults()),
+            automatic_device_loss_detection: true,
         }
     }
 }
@@ -1274,9 +1277,18 @@ impl GupContext {
             .get(&id)
             .ok_or_else(|| GupError::resource_error(format!("Surface with ID {id} not found")))?;
 
-        let output = surface.surface.get_current_texture().map_err(|e| {
-            GupError::webgpu_error(format!("Failed to acquire surface texture: {e}"))
-        })?;
+        let output = match surface.surface.get_current_texture() {
+            Ok(output) => output,
+            Err(e) => {
+                // If automatic detection is enabled, mark device as lost
+                if self.context_options.automatic_device_loss_detection {
+                    self.mark_device_lost();
+                }
+                return Err(GupError::webgpu_error(format!(
+                    "Failed to acquire surface texture: {e}"
+                )));
+            }
+        };
         let view = output
             .texture
             .create_view(&TextureViewDescriptor::default());
@@ -1305,9 +1317,18 @@ impl GupContext {
                 .surfaces
                 .get(&primary_id)
                 .ok_or_else(|| GupError::resource_error("Primary surface not found".to_string()))?;
-            let output = surface.surface.get_current_texture().map_err(|e| {
-                GupError::webgpu_error(format!("Failed to acquire surface texture: {e}"))
-            })?;
+            let output = match surface.surface.get_current_texture() {
+                Ok(output) => output,
+                Err(e) => {
+                    // If automatic detection is enabled, mark device as lost
+                    if self.context_options.automatic_device_loss_detection {
+                        self.mark_device_lost();
+                    }
+                    return Err(GupError::webgpu_error(format!(
+                        "Failed to acquire surface texture: {e}"
+                    )));
+                }
+            };
             let view = output
                 .texture
                 .create_view(&TextureViewDescriptor::default());
