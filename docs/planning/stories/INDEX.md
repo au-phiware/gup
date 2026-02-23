@@ -105,7 +105,7 @@ epic and status.
 | [GUP-139](GUP-139_Statistical_Shader_Functions.md)        | Statistical Shader Functions             | ✅ Complete | Low      | 5      |
 | [GUP-140](GUP-140_Storage_Buffer_Keyframes.md)            | Storage Buffer Keyframe Animations       | ✅ Complete | Medium   | 5      |
 | [GUP-141](GUP-141_Spline_Animation_Curves.md)             | Spline-Based Animation Curves            | 💡 New      | Low      | 5      |
-| [GUP-142](GUP-142_Animation_Event_System.md)              | Animation Event System                   | 💡 New      | Medium   | 8      |
+| [GUP-142](GUP-142_Animation_Event_System.md)              | Animation Event System                   | 🚧 In Progress      | Medium   | 8      |
 | [GUP-143](GUP-143_Histogram_Generation.md)                | Histogram Generation on GPU              | ✅ Complete | Medium   | 5      |
 | [GUP-144](GUP-144_Kernel_Density_Estimation.md)           | Kernel Density Estimation                | 💡 New      | Low      | 8      |
 | [GUP-145](GUP-145_GPU_Statistics_Integration_Tests.md)    | GPU Statistics Integration Tests         | ✅ Complete    | High     | 3      |

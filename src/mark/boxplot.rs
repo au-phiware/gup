@@ -8,7 +8,7 @@
 //! with the statistical shader functions from GUP-139 for efficient quartile calculation.
 
 use crate::mark::Mark;
-use crate::shader_function::{Percentile, MinMax, Vec2, Vec4};
+use crate::shader_function::{MinMax, Percentile, Vec2, Vec4};
 use crate::shader_pipeline::ComposableShaderPipeline;
 use std::collections::HashMap;
 
@@ -164,11 +164,36 @@ impl BoxPlotAttributes {
             outliers,
             width,
             orientation,
-            box_fill_color: Vec4 { x: 0.7, y: 0.7, z: 1.0, w: 0.8 },
-            box_stroke_color: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
-            median_color: Vec4 { x: 1.0, y: 0.0, z: 0.0, w: 1.0 },
-            whisker_color: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
-            outlier_color: Vec4 { x: 1.0, y: 0.5, z: 0.0, w: 1.0 },
+            box_fill_color: Vec4 {
+                x: 0.7,
+                y: 0.7,
+                z: 1.0,
+                w: 0.8,
+            },
+            box_stroke_color: Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+            median_color: Vec4 {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+            whisker_color: Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+            outlier_color: Vec4 {
+                x: 1.0,
+                y: 0.5,
+                z: 0.0,
+                w: 1.0,
+            },
             stroke_width: 1.0,
             outlier_radius: 3.0,
             notched: false,
@@ -230,7 +255,9 @@ impl Mark for BoxPlot {
         shader.push_str("    notch_width: f32,\n");
         shader.push_str("}\n\n");
 
-        shader.push_str("@group(1) @binding(0) var<storage, read> instances: array<BoxPlotInstance>;\n\n");
+        shader.push_str(
+            "@group(1) @binding(0) var<storage, read> instances: array<BoxPlotInstance>;\n\n",
+        );
 
         shader.push_str("struct VertexInput {\n");
         shader.push_str("    @location(0) position: vec2<f32>,\n");
@@ -298,10 +325,18 @@ impl Mark for BoxPlot {
 
     fn generate_vertices() -> Vec<Self::Vertex> {
         vec![
-            BoxPlotVertex { position: [-0.5, -0.5] },
-            BoxPlotVertex { position: [0.5, -0.5] },
-            BoxPlotVertex { position: [0.5, 0.5] },
-            BoxPlotVertex { position: [-0.5, 0.5] },
+            BoxPlotVertex {
+                position: [-0.5, -0.5],
+            },
+            BoxPlotVertex {
+                position: [0.5, -0.5],
+            },
+            BoxPlotVertex {
+                position: [0.5, 0.5],
+            },
+            BoxPlotVertex {
+                position: [-0.5, 0.5],
+            },
         ]
     }
 
@@ -312,10 +347,10 @@ impl Mark for BoxPlot {
     fn get_attribute_type(attribute_name: &str) -> crate::error::GupResult<&'static str> {
         match attribute_name {
             "position" => Ok("vec2<f32>"),
-            "min" | "q1" | "median" | "q3" | "max" | "width" | "stroke_width" 
+            "min" | "q1" | "median" | "q3" | "max" | "width" | "stroke_width"
             | "outlier_radius" | "notch_width" => Ok("f32"),
-            "box_fill_color" | "box_stroke_color" | "median_color" 
-            | "whisker_color" | "outlier_color" => Ok("vec4<f32>"),
+            "box_fill_color" | "box_stroke_color" | "median_color" | "whisker_color"
+            | "outlier_color" => Ok("vec4<f32>"),
             "orientation" => Ok("u32"),
             "notched" => Ok("bool"),
             _ => Err(crate::error::GupError::validation_error(format!(
@@ -344,11 +379,36 @@ impl Default for BoxPlotAttributes {
             outliers: Vec::new(),
             width: 40.0,
             orientation: BoxPlotOrientation::Vertical,
-            box_fill_color: Vec4 { x: 0.7, y: 0.7, z: 1.0, w: 0.8 },
-            box_stroke_color: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
-            median_color: Vec4 { x: 1.0, y: 0.0, z: 0.0, w: 1.0 },
-            whisker_color: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
-            outlier_color: Vec4 { x: 1.0, y: 0.5, z: 0.0, w: 1.0 },
+            box_fill_color: Vec4 {
+                x: 0.7,
+                y: 0.7,
+                z: 1.0,
+                w: 0.8,
+            },
+            box_stroke_color: Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+            median_color: Vec4 {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+            whisker_color: Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+            outlier_color: Vec4 {
+                x: 1.0,
+                y: 0.5,
+                z: 0.0,
+                w: 1.0,
+            },
             stroke_width: 1.0,
             outlier_radius: 3.0,
             notched: false,
@@ -415,7 +475,7 @@ mod tests {
 
         // The value 1000.0 should be an outlier
         assert!(attrs.is_outlier(1000.0));
-        
+
         // Values within IQR should not be outliers
         assert!(!attrs.is_outlier(attrs.median));
         assert!(!attrs.is_outlier(attrs.q1));
@@ -434,18 +494,27 @@ mod tests {
         assert_eq!(default_attrs.position.x, 0.0);
         assert_eq!(default_attrs.width, 40.0);
         assert_eq!(default_attrs.median, 50.0);
-        assert!(matches!(default_attrs.orientation, BoxPlotOrientation::Vertical));
+        assert!(matches!(
+            default_attrs.orientation,
+            BoxPlotOrientation::Vertical
+        ));
     }
 
     #[test]
     fn test_boxplot_attribute_type_validation() {
-        assert_eq!(BoxPlot::get_attribute_type("position").unwrap(), "vec2<f32>");
+        assert_eq!(
+            BoxPlot::get_attribute_type("position").unwrap(),
+            "vec2<f32>"
+        );
         assert_eq!(BoxPlot::get_attribute_type("min").unwrap(), "f32");
         assert_eq!(BoxPlot::get_attribute_type("q1").unwrap(), "f32");
         assert_eq!(BoxPlot::get_attribute_type("median").unwrap(), "f32");
         assert_eq!(BoxPlot::get_attribute_type("q3").unwrap(), "f32");
         assert_eq!(BoxPlot::get_attribute_type("max").unwrap(), "f32");
-        assert_eq!(BoxPlot::get_attribute_type("box_fill_color").unwrap(), "vec4<f32>");
+        assert_eq!(
+            BoxPlot::get_attribute_type("box_fill_color").unwrap(),
+            "vec4<f32>"
+        );
         assert!(BoxPlot::get_attribute_type("unknown").is_err());
     }
 
@@ -453,7 +522,7 @@ mod tests {
     fn test_boxplot_orientation() {
         let vertical = BoxPlotOrientation::Vertical;
         let horizontal = BoxPlotOrientation::Horizontal;
-        
+
         assert_ne!(vertical, horizontal);
         assert_eq!(vertical, BoxPlotOrientation::Vertical);
     }

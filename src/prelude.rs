@@ -33,9 +33,13 @@ pub use crate::mixable::Mixable;
 
 // Shader functions
 pub use crate::shader_function::{
+    // Animation event system (GUP-142)
+    AnimationEventCallback,
+    AnimationEventType,
     // Advanced temporal animation (GUP-138)
     AnimationPlaybackState,
     AnimationTimeline,
+    AnimationTimelineWithEvents,
     BinningStrategy,
     // Filtering and clamping (GUP-033)
     Clamp,

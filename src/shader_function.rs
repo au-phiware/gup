@@ -2519,6 +2519,362 @@ impl AnimationTimeline {
     }
 }
 
+// ============================================================================
+// Animation Event System (GUP-142)
+// ============================================================================
+
+/// Callback type for animation events.
+///
+/// Events receive the timeline reference and event time for context.
+pub type AnimationEventCallback = Box<dyn FnMut(&AnimationTimeline, f32) + Send + Sync>;
+
+/// Types of animation events that can be triggered.
+#[derive(Clone, Debug, PartialEq)]
+pub enum AnimationEventType {
+    /// Event fires once at a specific time
+    Once(f32),
+    /// Event fires every time the timeline crosses a specific time
+    Repeating(f32),
+    /// Event fires when animation completes (reaches duration)
+    Complete,
+    /// Event fires at progress milestones (0.0 to 1.0)
+    Progress(f32),
+    /// Event fires when entering a specific keyframe (0-indexed)
+    Keyframe(usize),
+    /// Event fires at a custom named marker
+    Marker(String),
+}
+
+/// A registered animation event with its trigger condition and callback.
+struct AnimationEvent {
+    event_type: AnimationEventType,
+    callback: AnimationEventCallback,
+    fired_this_frame: bool,
+    last_fire_time: Option<f32>,
+}
+
+/// Extended AnimationTimeline with event system support.
+///
+/// Provides event registration, synchronization, and timeline coordination.
+pub struct AnimationTimelineWithEvents {
+    /// The underlying timeline
+    pub timeline: AnimationTimeline,
+    /// Registered events
+    events: Vec<AnimationEvent>,
+    /// Named markers for custom event triggers
+    markers: std::collections::HashMap<String, f32>,
+    /// Previous time for detecting time crossings
+    previous_time: f32,
+    /// Child timelines for hierarchical animation
+    children: Vec<Box<AnimationTimelineWithEvents>>,
+}
+
+impl AnimationTimelineWithEvents {
+    /// Create a new timeline with event support
+    pub fn new(duration: f32) -> Self {
+        Self {
+            timeline: AnimationTimeline::new(duration),
+            events: Vec::new(),
+            markers: std::collections::HashMap::new(),
+            previous_time: 0.0,
+            children: Vec::new(),
+        }
+    }
+
+    /// Register an event callback at a specific time
+    pub fn on_time(&mut self, time: f32, callback: AnimationEventCallback) -> &mut Self {
+        self.events.push(AnimationEvent {
+            event_type: AnimationEventType::Once(time),
+            callback,
+            fired_this_frame: false,
+            last_fire_time: None,
+        });
+        self
+    }
+
+    /// Register a repeating event callback at a specific time
+    pub fn on_time_repeating(&mut self, time: f32, callback: AnimationEventCallback) -> &mut Self {
+        self.events.push(AnimationEvent {
+            event_type: AnimationEventType::Repeating(time),
+            callback,
+            fired_this_frame: false,
+            last_fire_time: None,
+        });
+        self
+    }
+
+    /// Register a callback when animation completes
+    pub fn on_complete(&mut self, callback: AnimationEventCallback) -> &mut Self {
+        self.events.push(AnimationEvent {
+            event_type: AnimationEventType::Complete,
+            callback,
+            fired_this_frame: false,
+            last_fire_time: None,
+        });
+        self
+    }
+
+    /// Register a callback at a progress milestone (0.0 to 1.0)
+    pub fn on_progress(&mut self, progress: f32, callback: AnimationEventCallback) -> &mut Self {
+        self.events.push(AnimationEvent {
+            event_type: AnimationEventType::Progress(progress.clamp(0.0, 1.0)),
+            callback,
+            fired_this_frame: false,
+            last_fire_time: None,
+        });
+        self
+    }
+
+    /// Register a callback for a specific keyframe
+    pub fn on_keyframe(
+        &mut self,
+        keyframe_index: usize,
+        callback: AnimationEventCallback,
+    ) -> &mut Self {
+        self.events.push(AnimationEvent {
+            event_type: AnimationEventType::Keyframe(keyframe_index),
+            callback,
+            fired_this_frame: false,
+            last_fire_time: None,
+        });
+        self
+    }
+
+    /// Add a named marker at a specific time
+    pub fn add_marker(&mut self, name: String, time: f32) -> &mut Self {
+        self.markers.insert(name, time);
+        self
+    }
+
+    /// Register a callback for a named marker
+    pub fn on_marker(
+        &mut self,
+        marker_name: String,
+        callback: AnimationEventCallback,
+    ) -> &mut Self {
+        self.events.push(AnimationEvent {
+            event_type: AnimationEventType::Marker(marker_name),
+            callback,
+            fired_this_frame: false,
+            last_fire_time: None,
+        });
+        self
+    }
+
+    /// Remove all events matching a predicate
+    pub fn remove_events<F>(&mut self, predicate: F) -> &mut Self
+    where
+        F: Fn(&AnimationEventType) -> bool,
+    {
+        self.events.retain(|event| !predicate(&event.event_type));
+        self
+    }
+
+    /// Clear all registered events
+    pub fn clear_events(&mut self) -> &mut Self {
+        self.events.clear();
+        self
+    }
+
+    /// Add a child timeline for hierarchical coordination
+    pub fn add_child(&mut self, child: AnimationTimelineWithEvents) -> &mut Self {
+        self.children.push(Box::new(child));
+        self
+    }
+
+    /// Play this timeline and all children
+    pub fn play(&mut self) {
+        self.timeline.play();
+        for child in &mut self.children {
+            child.play();
+        }
+    }
+
+    /// Pause this timeline and all children
+    pub fn pause(&mut self) {
+        self.timeline.pause();
+        for child in &mut self.children {
+            child.pause();
+        }
+    }
+
+    /// Stop this timeline and all children
+    pub fn stop(&mut self) {
+        self.timeline.stop();
+        for child in &mut self.children {
+            child.stop();
+        }
+    }
+
+    /// Seek this timeline and all children to a specific time
+    pub fn seek(&mut self, time: f32) {
+        self.previous_time = self.timeline.current_time;
+        self.timeline.seek(time);
+        for child in &mut self.children {
+            child.seek(time);
+        }
+    }
+
+    /// Update timeline and fire events
+    pub fn update(&mut self, delta_time: f32) -> f32 {
+        let old_time = self.timeline.current_time;
+        self.previous_time = old_time;
+
+        // Calculate what the new time would be before wrapping
+        let unwrapped_new_time = if matches!(self.timeline.state, AnimationPlaybackState::Playing) {
+            old_time + delta_time * self.timeline.playback_rate
+        } else {
+            old_time
+        };
+
+        // Update timeline (may wrap due to loop)
+        let new_time = self.timeline.update(delta_time);
+
+        // Detect if we looped
+        let looped = self.timeline.loop_timeline && unwrapped_new_time > self.timeline.duration;
+
+        // Check for time crossing (handles forward, backward, and loops)
+        let crossed_events = self.find_crossed_events(old_time, new_time, looped);
+
+        // Fire events in order
+        for event_index in crossed_events {
+            if let Some(event) = self.events.get_mut(event_index) {
+                if !event.fired_this_frame {
+                    event.fired_this_frame = true;
+                    event.last_fire_time = Some(new_time);
+                    // Call the callback
+                    (event.callback)(&self.timeline, new_time);
+                }
+            }
+        }
+
+        // Reset fired flags after processing all events
+        for event in &mut self.events {
+            event.fired_this_frame = false;
+        }
+
+        // Update children
+        for child in &mut self.children {
+            child.update(delta_time);
+        }
+
+        new_time
+    }
+
+    /// Find events that should fire based on time crossing
+    fn find_crossed_events(&self, old_time: f32, new_time: f32, looped: bool) -> Vec<usize> {
+        let mut crossed = Vec::new();
+
+        for (index, event) in self.events.iter().enumerate() {
+            let should_fire = match &event.event_type {
+                AnimationEventType::Once(time) => {
+                    // Fire only if we haven't fired before and we crossed the time
+                    event.last_fire_time.is_none()
+                        && self.time_crossed(old_time, new_time, *time, looped)
+                }
+                AnimationEventType::Repeating(time) => {
+                    // Fire every time we cross the time
+                    self.time_crossed(old_time, new_time, *time, looped)
+                }
+                AnimationEventType::Complete => {
+                    // Fire when we reach the end and stop
+                    matches!(self.timeline.state, AnimationPlaybackState::Stopped)
+                        && new_time >= self.timeline.duration
+                        && old_time < self.timeline.duration
+                }
+                AnimationEventType::Progress(progress) => {
+                    let target_time = progress * self.timeline.duration;
+                    self.time_crossed(old_time, new_time, target_time, looped)
+                }
+                AnimationEventType::Keyframe(_keyframe_index) => {
+                    // For keyframe events, we need keyframe time information
+                    // This is a placeholder - actual implementation would need keyframe data
+                    false
+                }
+                AnimationEventType::Marker(marker_name) => {
+                    if let Some(&marker_time) = self.markers.get(marker_name) {
+                        self.time_crossed(old_time, new_time, marker_time, looped)
+                    } else {
+                        false
+                    }
+                }
+            };
+
+            if should_fire {
+                crossed.push(index);
+            }
+        }
+
+        // Sort by event time for proper ordering
+        crossed.sort_by(|a, b| {
+            let time_a = self.event_time(&self.events[*a].event_type);
+            let time_b = self.event_time(&self.events[*b].event_type);
+            time_a
+                .partial_cmp(&time_b)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        crossed
+    }
+
+    /// Check if timeline crossed a specific time
+    fn time_crossed(&self, old_time: f32, new_time: f32, target_time: f32, looped: bool) -> bool {
+        if looped {
+            // When looping forward, we crossed the time if:
+            // 1. The target is between old_time and duration, OR
+            // 2. The target is between 0 and new_time
+            (old_time < target_time && target_time <= self.timeline.duration)
+                || (0.0 <= target_time && target_time <= new_time)
+        } else if old_time < new_time {
+            // Forward playback
+            old_time < target_time && new_time >= target_time
+        } else if old_time > new_time {
+            // Backward playback (negative playback rate)
+            old_time > target_time && new_time <= target_time
+        } else {
+            // No time change
+            false
+        }
+    }
+
+    /// Get the time for an event type (for sorting)
+    fn event_time(&self, event_type: &AnimationEventType) -> f32 {
+        match event_type {
+            AnimationEventType::Once(time) => *time,
+            AnimationEventType::Repeating(time) => *time,
+            AnimationEventType::Complete => self.timeline.duration,
+            AnimationEventType::Progress(progress) => progress * self.timeline.duration,
+            AnimationEventType::Keyframe(_) => 0.0, // Placeholder
+            AnimationEventType::Marker(name) => self.markers.get(name).copied().unwrap_or(0.0),
+        }
+    }
+
+    /// Get normalized progress (0.0 to 1.0)
+    pub fn normalized_time(&self) -> f32 {
+        self.timeline.normalized_time()
+    }
+
+    /// Get current playback state
+    pub fn state(&self) -> &AnimationPlaybackState {
+        &self.timeline.state
+    }
+
+    /// Get current time
+    pub fn current_time(&self) -> f32 {
+        self.timeline.current_time
+    }
+
+    /// Set playback rate (can be negative for reverse)
+    pub fn set_playback_rate(&mut self, rate: f32) {
+        self.timeline.set_playback_rate(rate);
+    }
+
+    /// Enable or disable looping
+    pub fn enable_loop(&mut self, enable: bool) {
+        self.timeline.enable_loop(enable);
+    }
+}
+
 // End of Advanced Temporal Animation System
 // ============================================================================
 

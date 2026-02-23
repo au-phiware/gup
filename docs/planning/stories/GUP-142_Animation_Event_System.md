@@ -1,6 +1,6 @@
 # GUP-142: Animation Event System
 
-**Status**: 💡 New
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
