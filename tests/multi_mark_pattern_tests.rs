@@ -305,10 +305,10 @@ async fn test_pattern_angle_variations() -> GupResult<()> {
     // Test different angles
     let angles = vec![
         0.0,
-        std::f32::consts::PI / 6.0,  // 30 degrees
-        std::f32::consts::PI / 4.0,  // 45 degrees
-        std::f32::consts::PI / 3.0,  // 60 degrees
-        std::f32::consts::PI / 2.0,  // 90 degrees
+        std::f32::consts::PI / 6.0, // 30 degrees
+        std::f32::consts::PI / 4.0, // 45 degrees
+        std::f32::consts::PI / 3.0, // 60 degrees
+        std::f32::consts::PI / 2.0, // 90 degrees
     ];
 
     for angle in angles {

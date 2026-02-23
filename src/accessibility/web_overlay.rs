@@ -19,11 +19,15 @@ use crate::accessibility::platform::AccessibilityError;
 #[cfg(target_arch = "wasm32")]
 use crate::accessibility::position_sync::{GpuPosition, PositionManager, ScreenPosition};
 #[cfg(target_arch = "wasm32")]
+use std::cell::RefCell;
+#[cfg(target_arch = "wasm32")]
 use std::collections::HashMap;
+#[cfg(target_arch = "wasm32")]
+use std::rc::Rc;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::{JsCast, prelude::*};
 #[cfg(target_arch = "wasm32")]
-use web_sys::{Document, Element, HtmlElement, KeyboardEvent, PointerEvent, Window};
+use web_sys::{Document, Element, HtmlElement, KeyboardEvent, PointerEvent, TouchEvent, Window};
 
 /// Configuration for the DOM overlay
 #[cfg(target_arch = "wasm32")]
@@ -41,7 +45,37 @@ pub struct DomOverlayConfig {
     pub show_focus_indicators: bool,
     /// Z-index for overlay positioning
     pub z_index: i32,
+    /// Forward events to visualization
+    pub forward_events: bool,
+    /// Prevent duplicate events (when both overlay and canvas emit events)
+    pub deduplicate_events: bool,
 }
+
+/// Event data forwarded from DOM overlay to visualization
+#[cfg(target_arch = "wasm32")]
+#[derive(Debug, Clone)]
+pub struct DomInteractionEvent {
+    /// Event type: "pointerdown", "pointermove", "pointerup", etc.
+    pub event_type: String,
+    /// Screen coordinates (client X/Y from the DOM event)
+    pub screen_x: f32,
+    pub screen_y: f32,
+    /// Canvas-relative coordinates (accounting for canvas position)
+    pub canvas_x: f32,
+    pub canvas_y: f32,
+    /// Pointer type: "mouse", "pen", "touch"
+    pub pointer_type: String,
+    /// Pointer ID for multi-touch tracking
+    pub pointer_id: i32,
+    /// Button state for pointer events
+    pub button: i16,
+    /// Timestamp of the event
+    pub timestamp: f64,
+}
+
+/// Callback type for forwarding events to the visualization
+#[cfg(target_arch = "wasm32")]
+pub type EventForwardCallback = Rc<RefCell<dyn FnMut(DomInteractionEvent)>>;
 
 #[cfg(target_arch = "wasm32")]
 impl Default for DomOverlayConfig {
@@ -53,6 +87,8 @@ impl Default for DomOverlayConfig {
             pointer_enabled: true,
             show_focus_indicators: true,
             z_index: 1000,
+            forward_events: true,
+            deduplicate_events: true,
         }
     }
 }
@@ -72,10 +108,18 @@ pub struct WebDomOverlay {
     keyboard_handlers: Vec<Closure<dyn FnMut(KeyboardEvent)>>,
     /// Pointer event handlers
     pointer_handlers: Vec<Closure<dyn FnMut(PointerEvent)>>,
+    /// Touch event handlers
+    touch_handlers: Vec<Closure<dyn FnMut(TouchEvent)>>,
     /// Position manager for coordinate synchronization
     position_manager: PositionManager,
     /// Animation frame ID for position updates
     animation_frame_id: Option<i32>,
+    /// Callback for forwarding events to visualization
+    event_forward_callback: Option<EventForwardCallback>,
+    /// Track last event timestamp for deduplication
+    last_event_timestamp: f64,
+    /// Track last event coordinates for deduplication
+    last_event_coords: (f32, f32),
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -104,8 +148,12 @@ impl WebDomOverlay {
             focused_element: None,
             keyboard_handlers: Vec::new(),
             pointer_handlers: Vec::new(),
+            touch_handlers: Vec::new(),
             position_manager: PositionManager::new(),
             animation_frame_id: None,
+            event_forward_callback: None,
+            last_event_timestamp: 0.0,
+            last_event_coords: (0.0, 0.0),
         })
     }
 
@@ -180,6 +228,7 @@ impl WebDomOverlay {
         // Set up pointer events
         if self.config.pointer_enabled {
             self.setup_pointer_events()?;
+            self.setup_touch_events()?;
         }
 
         // Add CSS for focus indicators
@@ -255,31 +304,281 @@ impl WebDomOverlay {
             .as_ref()
             .ok_or_else(|| AccessibilityError::Other("Container not initialized".to_string()))?;
 
-        // Add pointer event listener
-        let handler = Closure::wrap(Box::new(move |event: PointerEvent| {
-            Self::handle_pointer_event(event);
+        // Create a shared state for the handlers
+        let self_rc = Rc::new(RefCell::new(()));
+
+        // Add pointerdown handler
+        let forward_cb = self.event_forward_callback.clone();
+        let config = self.config.clone();
+        let document = self.document.clone();
+        let handler_down = Closure::wrap(Box::new(move |event: PointerEvent| {
+            Self::handle_pointer_event_static(
+                &event,
+                "pointerdown",
+                &forward_cb,
+                &config,
+                &document,
+            );
         }) as Box<dyn FnMut(PointerEvent)>);
 
         container
-            .add_event_listener_with_callback("pointerdown", handler.as_ref().unchecked_ref())
-            .map_err(|_| AccessibilityError::Other("Failed to add pointer listener".to_string()))?;
+            .add_event_listener_with_callback("pointerdown", handler_down.as_ref().unchecked_ref())
+            .map_err(|_| {
+                AccessibilityError::Other("Failed to add pointerdown listener".to_string())
+            })?;
+        self.pointer_handlers.push(handler_down);
 
-        self.pointer_handlers.push(handler);
+        // Add pointermove handler
+        let forward_cb = self.event_forward_callback.clone();
+        let config = self.config.clone();
+        let document = self.document.clone();
+        let handler_move = Closure::wrap(Box::new(move |event: PointerEvent| {
+            Self::handle_pointer_event_static(
+                &event,
+                "pointermove",
+                &forward_cb,
+                &config,
+                &document,
+            );
+        }) as Box<dyn FnMut(PointerEvent)>);
+
+        container
+            .add_event_listener_with_callback("pointermove", handler_move.as_ref().unchecked_ref())
+            .map_err(|_| {
+                AccessibilityError::Other("Failed to add pointermove listener".to_string())
+            })?;
+        self.pointer_handlers.push(handler_move);
+
+        // Add pointerup handler
+        let forward_cb = self.event_forward_callback.clone();
+        let config = self.config.clone();
+        let document = self.document.clone();
+        let handler_up = Closure::wrap(Box::new(move |event: PointerEvent| {
+            Self::handle_pointer_event_static(&event, "pointerup", &forward_cb, &config, &document);
+        }) as Box<dyn FnMut(PointerEvent)>);
+
+        container
+            .add_event_listener_with_callback("pointerup", handler_up.as_ref().unchecked_ref())
+            .map_err(|_| {
+                AccessibilityError::Other("Failed to add pointerup listener".to_string())
+            })?;
+        self.pointer_handlers.push(handler_up);
+
+        // Add pointerenter handler (for hover)
+        let forward_cb = self.event_forward_callback.clone();
+        let config = self.config.clone();
+        let document = self.document.clone();
+        let handler_enter = Closure::wrap(Box::new(move |event: PointerEvent| {
+            Self::handle_pointer_event_static(
+                &event,
+                "pointerenter",
+                &forward_cb,
+                &config,
+                &document,
+            );
+        }) as Box<dyn FnMut(PointerEvent)>);
+
+        container
+            .add_event_listener_with_callback(
+                "pointerenter",
+                handler_enter.as_ref().unchecked_ref(),
+            )
+            .map_err(|_| {
+                AccessibilityError::Other("Failed to add pointerenter listener".to_string())
+            })?;
+        self.pointer_handlers.push(handler_enter);
+
+        // Add pointerleave handler
+        let forward_cb = self.event_forward_callback.clone();
+        let config = self.config.clone();
+        let document = self.document.clone();
+        let handler_leave = Closure::wrap(Box::new(move |event: PointerEvent| {
+            Self::handle_pointer_event_static(
+                &event,
+                "pointerleave",
+                &forward_cb,
+                &config,
+                &document,
+            );
+        }) as Box<dyn FnMut(PointerEvent)>);
+
+        container
+            .add_event_listener_with_callback(
+                "pointerleave",
+                handler_leave.as_ref().unchecked_ref(),
+            )
+            .map_err(|_| {
+                AccessibilityError::Other("Failed to add pointerleave listener".to_string())
+            })?;
+        self.pointer_handlers.push(handler_leave);
 
         Ok(())
     }
 
-    /// Handle pointer events
-    fn handle_pointer_event(event: PointerEvent) {
+    /// Handle pointer events (static version for closures)
+    fn handle_pointer_event_static(
+        event: &PointerEvent,
+        event_type: &str,
+        forward_cb: &Option<EventForwardCallback>,
+        config: &DomOverlayConfig,
+        document: &Document,
+    ) {
         log::debug!(
-            "Pointer event: ({}, {}), type: {}",
+            "{}: ({}, {}), type: {}",
+            event_type,
             event.client_x(),
             event.client_y(),
             event.pointer_type()
         );
 
-        // TODO: Forward pointer events to visualization
-        // For now, just log
+        // Forward event if callback is set and forwarding is enabled
+        if config.forward_events {
+            if let Some(callback) = forward_cb {
+                let client_x = event.client_x() as f32;
+                let client_y = event.client_y() as f32;
+
+                // Map to canvas coordinates
+                let (canvas_x, canvas_y) =
+                    if let Some(canvas) = document.get_element_by_id(&config.canvas_id) {
+                        let rect = canvas.get_bounding_client_rect();
+                        (client_x - rect.left() as f32, client_y - rect.top() as f32)
+                    } else {
+                        (client_x, client_y)
+                    };
+
+                let dom_event = DomInteractionEvent {
+                    event_type: event_type.to_string(),
+                    screen_x: client_x,
+                    screen_y: client_y,
+                    canvas_x,
+                    canvas_y,
+                    pointer_type: event.pointer_type(),
+                    pointer_id: event.pointer_id(),
+                    button: event.button(),
+                    timestamp: event.time_stamp(),
+                };
+
+                if let Ok(mut cb) = callback.try_borrow_mut() {
+                    cb(dom_event);
+                }
+            }
+        }
+    }
+
+    /// Set up touch event handlers
+    fn setup_touch_events(&mut self) -> Result<(), AccessibilityError> {
+        let container = self
+            .container
+            .as_ref()
+            .ok_or_else(|| AccessibilityError::Other("Container not initialized".to_string()))?;
+
+        // Add touchstart handler
+        let forward_cb = self.event_forward_callback.clone();
+        let config = self.config.clone();
+        let document = self.document.clone();
+        let handler_start = Closure::wrap(Box::new(move |event: TouchEvent| {
+            Self::handle_touch_event_static(&event, "touchstart", &forward_cb, &config, &document);
+        }) as Box<dyn FnMut(TouchEvent)>);
+
+        container
+            .add_event_listener_with_callback("touchstart", handler_start.as_ref().unchecked_ref())
+            .map_err(|_| {
+                AccessibilityError::Other("Failed to add touchstart listener".to_string())
+            })?;
+        self.touch_handlers.push(handler_start);
+
+        // Add touchmove handler
+        let forward_cb = self.event_forward_callback.clone();
+        let config = self.config.clone();
+        let document = self.document.clone();
+        let handler_move = Closure::wrap(Box::new(move |event: TouchEvent| {
+            Self::handle_touch_event_static(&event, "touchmove", &forward_cb, &config, &document);
+        }) as Box<dyn FnMut(TouchEvent)>);
+
+        container
+            .add_event_listener_with_callback("touchmove", handler_move.as_ref().unchecked_ref())
+            .map_err(|_| {
+                AccessibilityError::Other("Failed to add touchmove listener".to_string())
+            })?;
+        self.touch_handlers.push(handler_move);
+
+        // Add touchend handler
+        let forward_cb = self.event_forward_callback.clone();
+        let config = self.config.clone();
+        let document = self.document.clone();
+        let handler_end = Closure::wrap(Box::new(move |event: TouchEvent| {
+            Self::handle_touch_event_static(&event, "touchend", &forward_cb, &config, &document);
+        }) as Box<dyn FnMut(TouchEvent)>);
+
+        container
+            .add_event_listener_with_callback("touchend", handler_end.as_ref().unchecked_ref())
+            .map_err(|_| {
+                AccessibilityError::Other("Failed to add touchend listener".to_string())
+            })?;
+        self.touch_handlers.push(handler_end);
+
+        Ok(())
+    }
+
+    /// Handle touch events (static version for closures)
+    fn handle_touch_event_static(
+        event: &TouchEvent,
+        event_type: &str,
+        forward_cb: &Option<EventForwardCallback>,
+        config: &DomOverlayConfig,
+        document: &Document,
+    ) {
+        // Get the first touch point
+        let touches = event.touches();
+        if touches.length() == 0 {
+            return;
+        }
+
+        let touch = match touches.get(0) {
+            Some(t) => t,
+            None => return,
+        };
+
+        log::debug!(
+            "{}: ({}, {}), identifier: {}",
+            event_type,
+            touch.client_x(),
+            touch.client_y(),
+            touch.identifier()
+        );
+
+        // Forward event if callback is set and forwarding is enabled
+        if config.forward_events {
+            if let Some(callback) = forward_cb {
+                let client_x = touch.client_x() as f32;
+                let client_y = touch.client_y() as f32;
+
+                // Map to canvas coordinates
+                let (canvas_x, canvas_y) =
+                    if let Some(canvas) = document.get_element_by_id(&config.canvas_id) {
+                        let rect = canvas.get_bounding_client_rect();
+                        (client_x - rect.left() as f32, client_y - rect.top() as f32)
+                    } else {
+                        (client_x, client_y)
+                    };
+
+                let dom_event = DomInteractionEvent {
+                    event_type: event_type.to_string(),
+                    screen_x: client_x,
+                    screen_y: client_y,
+                    canvas_x,
+                    canvas_y,
+                    pointer_type: "touch".to_string(),
+                    pointer_id: touch.identifier(),
+                    button: 0,
+                    timestamp: event.time_stamp(),
+                };
+
+                if let Ok(mut cb) = callback.try_borrow_mut() {
+                    cb(dom_event);
+                }
+            }
+        }
     }
 
     /// Inject CSS for focus indicators
@@ -625,6 +924,185 @@ impl WebDomOverlay {
         self.position_manager.get_screen_position(node_id)
     }
 
+    /// Set the event forward callback
+    ///
+    /// This callback will be called for all pointer and touch events if event forwarding is enabled
+    pub fn set_event_forward_callback<F>(&mut self, callback: F)
+    where
+        F: FnMut(DomInteractionEvent) + 'static,
+    {
+        self.event_forward_callback = Some(Rc::new(RefCell::new(callback)));
+    }
+
+    /// Map DOM coordinates to canvas coordinates
+    ///
+    /// This accounts for the canvas position within the page and any transformations
+    fn map_to_canvas_coords(
+        &self,
+        client_x: f32,
+        client_y: f32,
+    ) -> Result<(f32, f32), AccessibilityError> {
+        // Get canvas element
+        let canvas = self
+            .document
+            .get_element_by_id(&self.config.canvas_id)
+            .ok_or_else(|| AccessibilityError::Other("Canvas not found".to_string()))?;
+
+        // Get canvas bounding rect
+        let rect = canvas.get_bounding_client_rect();
+
+        // Calculate canvas-relative coordinates
+        let canvas_x = client_x - rect.left() as f32;
+        let canvas_y = client_y - rect.top() as f32;
+
+        Ok((canvas_x, canvas_y))
+    }
+
+    /// Check if an event should be deduplicated
+    ///
+    /// Returns true if this event is likely a duplicate of the last event
+    fn should_deduplicate_event(&self, x: f32, y: f32, timestamp: f64) -> bool {
+        if !self.config.deduplicate_events {
+            return false;
+        }
+
+        // Check if event is within 50ms and at same coordinates
+        let time_diff = (timestamp - self.last_event_timestamp).abs();
+        let coord_diff =
+            ((x - self.last_event_coords.0).abs() + (y - self.last_event_coords.1).abs());
+
+        time_diff < 50.0 && coord_diff < 1.0
+    }
+
+    /// Update event deduplication tracking
+    fn update_event_tracking(&mut self, x: f32, y: f32, timestamp: f64) {
+        self.last_event_timestamp = timestamp;
+        self.last_event_coords = (x, y);
+    }
+
+    /// Forward a pointer event to the visualization
+    fn forward_pointer_event(&mut self, event: &PointerEvent, event_type: &str) {
+        if !self.config.forward_events {
+            return;
+        }
+
+        let callback = match &self.event_forward_callback {
+            Some(cb) => cb.clone(),
+            None => return,
+        };
+
+        let client_x = event.client_x() as f32;
+        let client_y = event.client_y() as f32;
+        let timestamp = event.time_stamp();
+
+        // Check for duplicate
+        if self.should_deduplicate_event(client_x, client_y, timestamp) {
+            log::debug!(
+                "Deduplicated event at ({}, {}) within 50ms",
+                client_x,
+                client_y
+            );
+            return;
+        }
+
+        // Map to canvas coordinates
+        let (canvas_x, canvas_y) = match self.map_to_canvas_coords(client_x, client_y) {
+            Ok(coords) => coords,
+            Err(e) => {
+                log::warn!("Failed to map coordinates: {:?}", e);
+                return;
+            }
+        };
+
+        // Update tracking
+        self.update_event_tracking(client_x, client_y, timestamp);
+
+        // Create event data
+        let dom_event = DomInteractionEvent {
+            event_type: event_type.to_string(),
+            screen_x: client_x,
+            screen_y: client_y,
+            canvas_x,
+            canvas_y,
+            pointer_type: event.pointer_type(),
+            pointer_id: event.pointer_id(),
+            button: event.button(),
+            timestamp,
+        };
+
+        // Forward to callback
+        if let Ok(mut cb) = callback.try_borrow_mut() {
+            cb(dom_event);
+        } else {
+            log::warn!("Event forward callback is already borrowed");
+        }
+    }
+
+    /// Forward a touch event to the visualization
+    fn forward_touch_event(&mut self, event: &TouchEvent, event_type: &str) {
+        if !self.config.forward_events {
+            return;
+        }
+
+        let callback = match &self.event_forward_callback {
+            Some(cb) => cb.clone(),
+            None => return,
+        };
+
+        // Get the first touch point
+        let touches = event.touches();
+        if touches.length() == 0 {
+            return;
+        }
+
+        let touch = match touches.get(0) {
+            Some(t) => t,
+            None => return,
+        };
+
+        let client_x = touch.client_x() as f32;
+        let client_y = touch.client_y() as f32;
+        let timestamp = event.time_stamp();
+
+        // Check for duplicate
+        if self.should_deduplicate_event(client_x, client_y, timestamp) {
+            log::debug!("Deduplicated touch event at ({}, {})", client_x, client_y);
+            return;
+        }
+
+        // Map to canvas coordinates
+        let (canvas_x, canvas_y) = match self.map_to_canvas_coords(client_x, client_y) {
+            Ok(coords) => coords,
+            Err(e) => {
+                log::warn!("Failed to map touch coordinates: {:?}", e);
+                return;
+            }
+        };
+
+        // Update tracking
+        self.update_event_tracking(client_x, client_y, timestamp);
+
+        // Create event data
+        let dom_event = DomInteractionEvent {
+            event_type: event_type.to_string(),
+            screen_x: client_x,
+            screen_y: client_y,
+            canvas_x,
+            canvas_y,
+            pointer_type: "touch".to_string(),
+            pointer_id: touch.identifier(),
+            button: 0,
+            timestamp,
+        };
+
+        // Forward to callback
+        if let Ok(mut cb) = callback.try_borrow_mut() {
+            cb(dom_event);
+        } else {
+            log::warn!("Touch event forward callback is already borrowed");
+        }
+    }
+
     /// Clean up event handlers
     pub fn cleanup(&mut self) {
         // Remove container
@@ -635,8 +1113,10 @@ impl WebDomOverlay {
         // Clear handlers (they will be dropped automatically)
         self.keyboard_handlers.clear();
         self.pointer_handlers.clear();
+        self.touch_handlers.clear();
         self.element_map.clear();
         self.container = None;
+        self.event_forward_callback = None;
     }
 }
 
