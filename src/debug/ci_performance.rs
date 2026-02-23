@@ -94,13 +94,7 @@ impl PlatformInfo {
         let model_str = model
             .to_lowercase()
             .chars()
-            .map(|c| {
-                if c.is_alphanumeric() {
-                    c
-                } else {
-                    '_'
-                }
-            })
+            .map(|c| if c.is_alphanumeric() { c } else { '_' })
             .collect::<String>();
 
         // Trim excessive underscores
@@ -196,9 +190,9 @@ impl CiPerformanceRunner {
         let platform_id = self.get_platform_id();
 
         // Check against baseline if available
-        let baseline_comparison = if let Ok(baseline) = self
-            .baseline_storage
-            .load_baseline(&test.name, &test.category, platform_id)
+        let baseline_comparison = if let Ok(baseline) =
+            self.baseline_storage
+                .load_baseline(&test.name, &test.category, platform_id)
         {
             Some(self.compare_against_baseline(&snapshot, &baseline))
         } else {
@@ -525,11 +519,15 @@ impl BaselineStorage {
                         // Iterate through baseline files
                         for baseline_entry in
                             std::fs::read_dir(category_entry.path()).map_err(|e| {
-                                GupError::resource_error(format!("Failed to read baseline files: {e}"))
+                                GupError::resource_error(format!(
+                                    "Failed to read baseline files: {e}"
+                                ))
                             })?
                         {
                             let baseline_entry = baseline_entry.map_err(|e| {
-                                GupError::resource_error(format!("Failed to read baseline entry: {e}"))
+                                GupError::resource_error(format!(
+                                    "Failed to read baseline entry: {e}"
+                                ))
                             })?;
 
                             if let Some(file_name) = baseline_entry.file_name().to_str()
@@ -537,8 +535,7 @@ impl BaselineStorage {
                             {
                                 let test_name =
                                     file_name.strip_suffix(".json").unwrap().to_string();
-                                baselines
-                                    .push((platform_id.clone(), category.clone(), test_name));
+                                baselines.push((platform_id.clone(), category.clone(), test_name));
                             }
                         }
                     }
@@ -712,7 +709,7 @@ impl CrossPlatformComparison {
                 md.push_str("- Unknown platform\n");
             }
         }
-        md.push_str("\n");
+        md.push('\n');
 
         // Collect all unique test names
         let mut test_names = std::collections::HashSet::new();
@@ -735,13 +732,13 @@ impl CrossPlatformComparison {
                 md.push_str("Unknown | ");
             }
         }
-        md.push_str("\n");
+        md.push('\n');
 
         md.push_str("|------|");
         for _ in &self.reports {
             md.push_str("--------|");
         }
-        md.push_str("\n");
+        md.push('\n');
 
         for test_name in &test_names {
             md.push_str(&format!("| {} | ", test_name));
@@ -756,10 +753,10 @@ impl CrossPlatformComparison {
                     md.push_str("N/A | ");
                 }
             }
-            md.push_str("\n");
+            md.push('\n');
         }
 
-        md.push_str("\n");
+        md.push('\n');
 
         // Find performance deltas across platforms
         md.push_str("## Performance Variations\n\n");
@@ -803,6 +800,360 @@ impl Default for CrossPlatformComparison {
     fn default() -> Self {
         Self::new()
     }
+}
+
+//==============================================================================
+// Performance Trend Visualization
+//==============================================================================
+
+/// Performance trend visualizer for CI/CD pipelines
+///
+/// Generates visual trend charts from historical performance baseline data,
+/// useful for understanding performance evolution over time and identifying
+/// gradual performance degradation.
+pub struct PerformanceTrendVisualizer {
+    baseline_storage: BaselineStorage,
+}
+
+impl PerformanceTrendVisualizer {
+    /// Create a new trend visualizer
+    pub fn new(baseline_dir: PathBuf) -> Self {
+        Self {
+            baseline_storage: BaselineStorage::new(baseline_dir),
+        }
+    }
+
+    /// Generate trend charts for all available baselines
+    ///
+    /// Returns a map of test names to their SVG chart representations
+    pub fn generate_all_trend_charts(&self) -> GupResult<HashMap<String, String>> {
+        let mut charts = HashMap::new();
+
+        let baselines = self.baseline_storage.list_baselines()?;
+
+        // Group baselines by test name across all platforms and categories
+        let mut test_baselines: HashMap<String, Vec<(String, PerformanceBaseline)>> =
+            HashMap::new();
+
+        for (platform_id, category, test_name) in baselines {
+            let baseline = self
+                .baseline_storage
+                .load_baseline(&test_name, &category, &platform_id)?;
+
+            test_baselines
+                .entry(test_name.clone())
+                .or_default()
+                .push((platform_id, baseline));
+        }
+
+        // Generate a chart for each test
+        for (test_name, baselines_vec) in test_baselines {
+            // Sort by timestamp
+            let mut baselines_vec = baselines_vec;
+            baselines_vec.sort_by_key(|(_, b)| b.last_updated);
+
+            let svg = self.generate_trend_chart(&test_name, &baselines_vec)?;
+            charts.insert(test_name, svg);
+        }
+
+        Ok(charts)
+    }
+
+    /// Generate a trend chart for a specific test
+    pub fn generate_trend_chart(
+        &self,
+        test_name: &str,
+        baselines: &[(String, PerformanceBaseline)],
+    ) -> GupResult<String> {
+        if baselines.is_empty() {
+            return Err(GupError::validation_error(format!(
+                "No baseline data available for test: {}",
+                test_name
+            )));
+        }
+
+        // Convert baselines to PerformanceSnapshot format for rendering
+        let snapshots: Vec<PerformanceSnapshot> = baselines
+            .iter()
+            .map(|(_, baseline)| PerformanceSnapshot {
+                timestamp: baseline.last_updated,
+                frame_time_ms: baseline.avg_frame_time_ms,
+                memory_usage_bytes: baseline.avg_memory_usage_bytes,
+                gpu_utilization_percent: 0.0, // Not tracked in baselines
+                query_time_us: 0.0,            // Not tracked in baselines
+                metadata: baseline.metadata.clone(),
+            })
+            .collect();
+
+        // Generate SVG directly
+        let title = format!("Performance Trend: {}", test_name);
+        Ok(generate_performance_trend_svg(&snapshots, &title, 800, 600))
+    }
+
+    /// Export trend charts to files
+    pub fn export_charts_to_directory(&self, output_dir: &Path) -> GupResult<Vec<PathBuf>> {
+        std::fs::create_dir_all(output_dir).map_err(|e| {
+            GupError::resource_error(format!("Failed to create output directory: {e}"))
+        })?;
+
+        let charts = self.generate_all_trend_charts()?;
+        let mut paths = Vec::new();
+
+        for (test_name, svg_content) in charts {
+            let file_name = format!("{}.svg", test_name.replace(' ', "_"));
+            let path = output_dir.join(&file_name);
+
+            std::fs::write(&path, svg_content).map_err(|e| {
+                GupError::resource_error(format!("Failed to write chart file {}: {e}", file_name))
+            })?;
+
+            paths.push(path);
+        }
+
+        Ok(paths)
+    }
+
+    /// Generate a summary dashboard HTML with all trend charts
+    pub fn generate_dashboard_html(&self) -> GupResult<String> {
+        let charts = self.generate_all_trend_charts()?;
+
+        let mut html = String::from(
+            r#"<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Performance Trend Dashboard</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(800px, 1fr));
+            gap: 30px;
+            margin-top: 30px;
+        }
+        .chart-container {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 20px;
+            background-color: #fafafa;
+        }
+        .chart-container h2 {
+            margin-top: 0;
+            color: #555;
+            font-size: 18px;
+        }
+        .timestamp {
+            color: #888;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Performance Trend Dashboard</h1>
+        <p class="timestamp">Generated: "#,
+        );
+
+        html.push_str(&format!(
+            "{}</p>\n        <p>Total tests tracked: {}</p>\n",
+            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
+            charts.len()
+        ));
+
+        html.push_str(r#"        <div class="chart-grid">"#);
+        html.push('\n');
+
+        let mut test_names: Vec<_> = charts.keys().collect();
+        test_names.sort();
+
+        for test_name in test_names {
+            let svg_content = &charts[test_name];
+
+            html.push_str(&format!(
+                r#"            <div class="chart-container">
+                <h2>{}</h2>
+                {}
+            </div>
+"#,
+                test_name, svg_content
+            ));
+        }
+
+        html.push_str(
+            r#"        </div>
+    </div>
+</body>
+</html>"#,
+        );
+
+        Ok(html)
+    }
+
+    /// Export dashboard HTML to a file
+    pub fn export_dashboard(&self, output_path: &Path) -> GupResult<()> {
+        let html = self.generate_dashboard_html()?;
+
+        if let Some(parent) = output_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                GupError::resource_error(format!("Failed to create output directory: {e}"))
+            })?;
+        }
+
+        std::fs::write(output_path, html).map_err(|e| {
+            GupError::resource_error(format!("Failed to write dashboard HTML: {e}"))
+        })?;
+
+        Ok(())
+    }
+}
+
+/// Generate an SVG performance trend chart (internal helper)
+fn generate_performance_trend_svg(
+    snapshots: &[PerformanceSnapshot],
+    title: &str,
+    width: u32,
+    height: u32,
+) -> String {
+    if snapshots.is_empty() {
+        return String::from("<svg></svg>");
+    }
+
+    let margin = 60.0;
+    let chart_width = width as f64 - 2.0 * margin;
+    let chart_height = height as f64 - 2.0 * margin;
+
+    // Calculate data ranges
+    let frame_times: Vec<f32> = snapshots.iter().map(|s| s.frame_time_ms).collect();
+    let min_frame = frame_times.iter().fold(f32::INFINITY, |a, &b| a.min(b));
+    let max_frame = frame_times.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+    let frame_range = max_frame - min_frame;
+
+    // Generate SVG
+    let mut svg = String::new();
+    svg.push_str(&format!(
+        r#"<svg width="{}" height="{}" xmlns="http://www.w3.org/2000/svg">"#,
+        width, height
+    ));
+
+    // Background
+    svg.push_str(&format!(
+        r#"<rect width="{}" height="{}" fill="white"/>"#,
+        width, height
+    ));
+
+    // Title
+    svg.push_str(&format!(
+        r#"<text x="{}" y="30" font-size="20" font-weight="bold" text-anchor="middle" fill="black">{}</text>"#,
+        width as f64 / 2.0,
+        title
+    ));
+
+    // Chart area border
+    svg.push_str(&format!(
+        r#"<rect x="{}" y="{}" width="{}" height="{}" fill="none" stroke="gray" stroke-width="1"/>"#,
+        margin, margin, chart_width, chart_height
+    ));
+
+    // Y-axis labels and grid lines
+    for i in 0..=5 {
+        let y = margin + (i as f64 / 5.0) * chart_height;
+        let value = max_frame - (i as f32 / 5.0) * frame_range;
+
+        // Grid line
+        svg.push_str(&format!(
+            r#"<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="lightgray" stroke-width="1" stroke-dasharray="2,2"/>"#,
+            margin,
+            y,
+            margin + chart_width,
+            y
+        ));
+
+        // Label
+        svg.push_str(&format!(
+            r#"<text x="{}" y="{}" font-size="12" text-anchor="end" alignment-baseline="middle" fill="black">{:.2}ms</text>"#,
+            margin - 10.0,
+            y,
+            value
+        ));
+    }
+
+    // X-axis label
+    svg.push_str(&format!(
+        r#"<text x="{}" y="{}" font-size="14" text-anchor="middle" fill="black">Time</text>"#,
+        margin + chart_width / 2.0,
+        height as f64 - 10.0
+    ));
+
+    // Y-axis label
+    svg.push_str(&format!(
+        r#"<text x="20" y="{}" font-size="14" text-anchor="middle" transform="rotate(-90, 20, {})" fill="black">Frame Time (ms)</text>"#,
+        margin + chart_height / 2.0,
+        margin + chart_height / 2.0
+    ));
+
+    // Plot data points and line
+    if snapshots.len() > 1 {
+        let mut path = String::from("M");
+
+        for (i, snapshot) in snapshots.iter().enumerate() {
+            let x = margin + (i as f64 / (snapshots.len() - 1) as f64) * chart_width;
+            let normalized = if frame_range > 0.0 {
+                (snapshot.frame_time_ms - min_frame) / frame_range
+            } else {
+                0.5
+            };
+            let y = margin + chart_height - (normalized as f64 * chart_height);
+
+            if i == 0 {
+                path.push_str(&format!(" {} {}", x, y));
+            } else {
+                path.push_str(&format!(" L {} {}", x, y));
+            }
+
+            // Data point circle
+            svg.push_str(&format!(
+                r#"<circle cx="{}" cy="{}" r="3" fill="steelblue"/>"#,
+                x, y
+            ));
+        }
+
+        // Line
+        svg.push_str(&format!(
+            r#"<path d="{}" fill="none" stroke="steelblue" stroke-width="2"/>"#,
+            path
+        ));
+    }
+
+    // Legend
+    svg.push_str(&format!(
+        r#"<text x="{}" y="{}" font-size="12" fill="gray">Data points: {}</text>"#,
+        margin,
+        height as f64 - margin + 40.0,
+        snapshots.len()
+    ));
+
+    svg.push_str("</svg>");
+    svg
 }
 
 #[cfg(test)]
@@ -929,5 +1280,69 @@ mod tests {
             runner.determine_regression_severity(&comparison),
             RegressionSeverity::Critical
         );
+    }
+
+    #[test]
+    fn test_performance_trend_visualizer() {
+        // Test creating visualizer
+        let visualizer = PerformanceTrendVisualizer::new(PathBuf::from("/tmp/test_baselines"));
+
+        // Test generating empty charts (should return error for empty data)
+        let result = visualizer.generate_all_trend_charts();
+        // Empty baselines directory should return empty map, not error
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_generate_performance_trend_svg() {
+        use std::collections::HashMap;
+
+        let snapshots = vec![
+            PerformanceSnapshot {
+                timestamp: chrono::Utc::now(),
+                frame_time_ms: 10.0,
+                memory_usage_bytes: 1000,
+                gpu_utilization_percent: 50.0,
+                query_time_us: 100.0,
+                metadata: HashMap::new(),
+            },
+            PerformanceSnapshot {
+                timestamp: chrono::Utc::now(),
+                frame_time_ms: 12.0,
+                memory_usage_bytes: 1100,
+                gpu_utilization_percent: 55.0,
+                query_time_us: 110.0,
+                metadata: HashMap::new(),
+            },
+            PerformanceSnapshot {
+                timestamp: chrono::Utc::now(),
+                frame_time_ms: 11.0,
+                memory_usage_bytes: 1050,
+                gpu_utilization_percent: 52.0,
+                query_time_us: 105.0,
+                metadata: HashMap::new(),
+            },
+        ];
+
+        let svg = generate_performance_trend_svg(&snapshots, "Test Chart", 800, 600);
+
+        // Verify SVG structure
+        assert!(svg.contains("<svg"));
+        assert!(svg.contains("</svg>"));
+        assert!(svg.contains("Test Chart"));
+        assert!(svg.contains("Frame Time (ms)"));
+        assert!(svg.contains("Data points: 3"));
+        assert!(svg.contains("<path"));
+        assert!(svg.contains("<circle"));
+    }
+
+    #[test]
+    fn test_generate_performance_trend_svg_empty() {
+        let snapshots: Vec<PerformanceSnapshot> = vec![];
+        let svg = generate_performance_trend_svg(&snapshots, "Empty Chart", 800, 600);
+
+        // Should return minimal SVG
+        assert!(svg.contains("<svg"));
+        assert!(svg.contains("</svg>"));
     }
 }

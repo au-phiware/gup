@@ -580,6 +580,13 @@ impl PerformanceTrendChart {
             },
         }
     }
+
+    /// Export chart as SVG
+    ///
+    /// Generates an SVG representation of the performance trend chart.
+    pub fn export_svg(&self, title: &str) -> String {
+        generate_performance_svg(&self.snapshots, title, self.config.width, self.config.height)
+    }
 }
 
 /// Interactive memory trend chart
@@ -691,6 +698,139 @@ pub struct MemoryStatistics {
     pub avg_allocations: usize,
     pub min_allocations: usize,
     pub max_allocations: usize,
+}
+
+//==============================================================================
+// SVG Export Functions
+//==============================================================================
+
+/// Generate an SVG performance trend chart
+fn generate_performance_svg(
+    snapshots: &[PerformanceSnapshot],
+    title: &str,
+    width: u32,
+    height: u32,
+) -> String {
+    if snapshots.is_empty() {
+        return String::from("<svg></svg>");
+    }
+
+    let margin = 60.0;
+    let chart_width = width as f64 - 2.0 * margin;
+    let chart_height = height as f64 - 2.0 * margin;
+
+    // Calculate data ranges
+    let frame_times: Vec<f32> = snapshots.iter().map(|s| s.frame_time_ms).collect();
+    let min_frame = frame_times.iter().fold(f32::INFINITY, |a, &b| a.min(b));
+    let max_frame = frame_times.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+    let frame_range = max_frame - min_frame;
+
+    // Generate SVG
+    let mut svg = String::new();
+    svg.push_str(&format!(
+        r#"<svg width="{}" height="{}" xmlns="http://www.w3.org/2000/svg">"#,
+        width, height
+    ));
+
+    // Background
+    svg.push_str(&format!(
+        r#"<rect width="{}" height="{}" fill="white"/>"#,
+        width, height
+    ));
+
+    // Title
+    svg.push_str(&format!(
+        r#"<text x="{}" y="30" font-size="20" font-weight="bold" text-anchor="middle" fill="black">{}</text>"#,
+        width as f64 / 2.0,
+        title
+    ));
+
+    // Chart area border
+    svg.push_str(&format!(
+        r#"<rect x="{}" y="{}" width="{}" height="{}" fill="none" stroke="gray" stroke-width="1"/>"#,
+        margin, margin, chart_width, chart_height
+    ));
+
+    // Y-axis labels and grid lines
+    for i in 0..=5 {
+        let y = margin + (i as f64 / 5.0) * chart_height;
+        let value = max_frame - (i as f32 / 5.0) * frame_range;
+
+        // Grid line
+        svg.push_str(&format!(
+            r#"<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="lightgray" stroke-width="1" stroke-dasharray="2,2"/>"#,
+            margin,
+            y,
+            margin + chart_width,
+            y
+        ));
+
+        // Label
+        svg.push_str(&format!(
+            r#"<text x="{}" y="{}" font-size="12" text-anchor="end" alignment-baseline="middle" fill="black">{:.2}ms</text>"#,
+            margin - 10.0,
+            y,
+            value
+        ));
+    }
+
+    // X-axis label
+    svg.push_str(&format!(
+        r#"<text x="{}" y="{}" font-size="14" text-anchor="middle" fill="black">Time</text>"#,
+        margin + chart_width / 2.0,
+        height as f64 - 10.0
+    ));
+
+    // Y-axis label
+    svg.push_str(&format!(
+        r#"<text x="20" y="{}" font-size="14" text-anchor="middle" transform="rotate(-90, 20, {})" fill="black">Frame Time (ms)</text>"#,
+        margin + chart_height / 2.0,
+        margin + chart_height / 2.0
+    ));
+
+    // Plot data points and line
+    if snapshots.len() > 1 {
+        let mut path = String::from("M");
+
+        for (i, snapshot) in snapshots.iter().enumerate() {
+            let x = margin + (i as f64 / (snapshots.len() - 1) as f64) * chart_width;
+            let normalized = if frame_range > 0.0 {
+                (snapshot.frame_time_ms - min_frame) / frame_range
+            } else {
+                0.5
+            };
+            let y = margin + chart_height - (normalized as f64 * chart_height);
+
+            if i == 0 {
+                path.push_str(&format!(" {} {}", x, y));
+            } else {
+                path.push_str(&format!(" L {} {}", x, y));
+            }
+
+            // Data point circle
+            svg.push_str(&format!(
+                r#"<circle cx="{}" cy="{}" r="3" fill="steelblue"/>"#,
+                x, y
+            ));
+        }
+
+        // Line
+        svg.push_str(&format!(
+            r#"<path d="{}" fill="none" stroke="steelblue" stroke-width="2"/>"#,
+            path
+        ));
+    }
+
+    // Legend
+    svg.push_str(&format!(
+        r#"<text x="{}" y="{}" font-size="12" fill="gray">Data points: {}</text>"#,
+        margin,
+        height as f64 - margin + 40.0,
+        snapshots.len()
+    ));
+
+    svg.push_str("</svg>");
+    svg
 }
 
 #[cfg(test)]

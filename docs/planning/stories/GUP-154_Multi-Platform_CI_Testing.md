@@ -69,8 +69,8 @@ pub enum GpuVendor {
 
 ## Success Metrics
 
-- **Platform Coverage**: ✅ Infrastructure supports 4 platform types (NVIDIA, AMD,
-  Intel, Software)
+- **Platform Coverage**: ✅ Infrastructure supports 4 platform types (NVIDIA,
+  AMD, Intel, Software)
 - **Test Consistency**: ✅ Same test suite runs on all platforms via workflow
   matrix
 - **Detection Rate**: ✅ Platform-specific baselines enable targeted regression
@@ -252,7 +252,8 @@ baselines/performance/
   enum variants
 - **Critical**: Sanitize device names for filesystem paths (replace
   non-alphanumeric with underscores)
-- **Result**: Clean platform IDs like `nvidia_rtx_3080` and `intel_hd_graphics_630`
+- **Result**: Clean platform IDs like `nvidia_rtx_3080` and
+  `intel_hd_graphics_630`
 
 #### Hierarchical Baseline Storage
 
@@ -298,7 +299,8 @@ baselines/performance/
 - **Implementation**: Added `with_platform_info()` builder method for optional
   platform setting
 - **Benefit**: Methods like `update_baselines()` don't need extra parameters
-- **Trade-off**: Slightly more state in runner vs more flexible method signatures
+- **Trade-off**: Slightly more state in runner vs more flexible method
+  signatures
 
 #### Automatic vs Manual Platform Detection
 
@@ -322,7 +324,8 @@ baselines/performance/
 #### Optional Multi-Platform Testing
 
 - **Decision**: Multi-platform testing is opt-in via `workflow_dispatch` input
-- **Reasoning**: Most PRs don't need full multi-platform testing, saves resources
+- **Reasoning**: Most PRs don't need full multi-platform testing, saves
+  resources
 - **Implementation**: Default matrix has only software rendering, GPU platforms
   commented out
 - **Usage**: Manual trigger with `enable_multi_platform=true` for comprehensive

@@ -6,11 +6,11 @@
 //! This example shows how to use the buffer validation system to detect common
 //! buffer issues like NaN values, out-of-range data, and inefficient memory usage.
 
+use gup::GupContext;
 use gup::debug::{
     BufferSizeValidationRule, FiniteValueRule, GpuBufferInspector, RangeValidationRule,
     UtilizationValidationRule, ValidationRule,
 };
-use gup::GupContext;
 use std::sync::Arc;
 use wgpu::{BufferDescriptor, BufferUsages};
 
@@ -121,10 +121,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     println!("Buffers identical: {}", comparison.is_identical);
-    println!(
-        "Similarity: {:.1}%",
-        comparison.similarity_percentage
-    );
+    println!("Similarity: {:.1}%", comparison.similarity_percentage);
     if !comparison.differences.is_empty() {
         println!("Differences found:");
         for diff in &comparison.differences {
@@ -161,7 +158,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Helper function to create a buffer and write data to it
 fn create_buffer(context: &GupContext, data: &[f32], label: &str) -> wgpu::Buffer {
-    let buffer_size = (data.len() * std::mem::size_of::<f32>()) as u64;
+    let buffer_size = std::mem::size_of_val(data) as u64;
 
     let buffer = context.device.create_buffer(&BufferDescriptor {
         label: Some(label),

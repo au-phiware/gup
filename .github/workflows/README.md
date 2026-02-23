@@ -122,7 +122,7 @@ platform-specific performance regressions.
 The system automatically detects the GPU platform using wgpu adapter info:
 
 - **NVIDIA**: RTX 3000/4000 series
-- **AMD**: RX 6000/7000 series  
+- **AMD**: RX 6000/7000 series
 - **Intel**: Arc A-series
 - **Software**: CPU fallback renderer (default)
 

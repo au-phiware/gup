@@ -117,8 +117,8 @@ async fn run_ci_performance_suite() {
     println!("\n🖥️  Testing on platform: {}", platform_info.description());
 
     // Create performance runner with platform info
-    let mut runner = CiPerformanceRunner::new(debug_context, config)
-        .with_platform_info(platform_info.clone());
+    let mut runner =
+        CiPerformanceRunner::new(debug_context, config).with_platform_info(platform_info.clone());
 
     // Build test suite
     let test_suite = PerformanceTestSuite::new("Gup Core Performance Suite")
