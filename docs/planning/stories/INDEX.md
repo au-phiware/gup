@@ -1164,4 +1164,4 @@ The following story was created from GUP-031 and has been completed:
 **Impact**: Unblocks full interaction system functionality  
 **Created**: 2024-02-22 during GUP-031 retrospective  
 **Completed**: 2024-02-22 | [GUP-140](GUP-140_Selection_API_Parallel_Output.md)
-| Selection API Parallel Output Integration | 🚧 In Progress | Medium | 8 |
+| Selection API Parallel Output Integration | ✅ Complete | Medium | 8 |
