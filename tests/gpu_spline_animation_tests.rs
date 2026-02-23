@@ -48,12 +48,12 @@ async fn test_linear_interpolation_gpu() {
     let wgsl = KeyframeAnimation::wgsl_function();
     let shader_code = format!(
         "{}
-        
+
         {}
-        
+
         @group(0) @binding(0) var<uniform> params: KeyframeAnimationUniforms;
         @group(0) @binding(1) var<storage, read_write> output: array<f32>;
-        
+
         @compute @workgroup_size(1)
         fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {{
             let time = f32(global_id.x) * 0.5; // Test at 0.0, 0.5, 1.0
@@ -88,12 +88,12 @@ async fn test_catmull_rom_interpolation_gpu() {
     let wgsl = KeyframeAnimation::wgsl_function();
     let shader_code = format!(
         "{}
-        
+
         {}
-        
+
         @group(0) @binding(0) var<uniform> params: KeyframeAnimationUniforms;
         @group(0) @binding(1) var<storage, read_write> output: array<f32>;
-        
+
         @compute @workgroup_size(1)
         fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {{
             let time = f32(global_id.x) * 0.25; // Test multiple time points
@@ -126,12 +126,12 @@ async fn test_bspline_interpolation_gpu() {
     let wgsl = KeyframeAnimation::wgsl_function();
     let shader_code = format!(
         "{}
-        
+
         {}
-        
+
         @group(0) @binding(0) var<uniform> params: KeyframeAnimationUniforms;
         @group(0) @binding(1) var<storage, read_write> output: array<f32>;
-        
+
         @compute @workgroup_size(1)
         fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {{
             let time = f32(global_id.x) * 0.25; // Test multiple time points
@@ -164,12 +164,12 @@ async fn test_catmull_rom_with_tension_gpu() {
     let wgsl = KeyframeAnimation::wgsl_function();
     let shader_code = format!(
         "{}
-        
+
         {}
-        
+
         @group(0) @binding(0) var<uniform> params: KeyframeAnimationUniforms;
         @group(0) @binding(1) var<storage, read_write> output: array<f32>;
-        
+
         @compute @workgroup_size(1)
         fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {{
             let time = f32(global_id.x) * 0.25;

@@ -6,9 +6,7 @@
 //! This test file verifies that KDE functions compute correct density estimates
 //! for various distributions and kernel functions.
 
-use gup::{
-    BandwidthMethod, KernelDensity1D, KernelDensity2D, KernelFunction,
-};
+use gup::{BandwidthMethod, KernelDensity1D, KernelDensity2D, KernelFunction};
 
 /// Test that KDE types are accessible
 #[test]
@@ -25,7 +23,11 @@ fn test_kernel_functions() {
     let gaussian = KernelFunction::Gaussian;
     let at_zero = gaussian.evaluate(0.0);
     // At u=0, Gaussian should be 1/sqrt(2π) ≈ 0.3989
-    assert!((at_zero - 0.3989).abs() < 0.01, "Gaussian at 0: {}", at_zero);
+    assert!(
+        (at_zero - 0.3989).abs() < 0.01,
+        "Gaussian at 0: {}",
+        at_zero
+    );
 
     // Test Epanechnikov kernel
     let epan = KernelFunction::Epanechnikov;
@@ -50,8 +52,7 @@ fn test_kernel_functions() {
 fn test_kde_1d_normal_distribution() {
     // Generate samples roughly centered around 0
     let samples: Vec<f32> = vec![
-        -2.0, -1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0,
-        -1.8, -1.2, -0.8, -0.2, 0.2, 0.8, 1.2, 1.8,
+        -2.0, -1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0, -1.8, -1.2, -0.8, -0.2, 0.2, 0.8, 1.2, 1.8,
     ];
 
     let kde = KernelDensity1D::new(samples)
@@ -94,7 +95,7 @@ fn test_kde_1d_uniform_distribution() {
     let result = kde.compute_cpu();
 
     // Density should be relatively flat in the middle
-    assert!(result.densities.len() > 0);
+    assert!(!result.densities.is_empty());
     assert!(result.densities.iter().all(|&d| d >= 0.0));
 }
 
@@ -206,13 +207,7 @@ fn test_custom_eval_points() {
 #[test]
 fn test_kde_2d_simple() {
     // Simple 2D samples
-    let samples = vec![
-        (0.0, 0.0),
-        (1.0, 1.0),
-        (2.0, 2.0),
-        (0.5, 0.5),
-        (1.5, 1.5),
-    ];
+    let samples = vec![(0.0, 0.0), (1.0, 1.0), (2.0, 2.0), (0.5, 0.5), (1.5, 1.5)];
 
     let kde = KernelDensity2D::new(samples)
         .with_kernel(KernelFunction::Gaussian)

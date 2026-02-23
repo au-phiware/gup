@@ -40,6 +40,7 @@ pub use crate::shader_function::{
     AnimationPlaybackState,
     AnimationTimeline,
     AnimationTimelineWithEvents,
+    BandwidthMethod,
     BinningStrategy,
     // Filtering and clamping (GUP-033)
     Clamp,
@@ -71,7 +72,6 @@ pub use crate::shader_function::{
     KernelDensity1D,
     KernelDensity2D,
     KernelFunction,
-    BandwidthMethod,
     Keyframe,
     KeyframeAnimation,
     // Storage buffer-based keyframe animation (GUP-140)

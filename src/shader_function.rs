@@ -5262,11 +5262,7 @@ impl KernelFunction {
             }
             KernelFunction::Triangular => {
                 let abs_u = u.abs();
-                if abs_u <= 1.0 {
-                    1.0 - abs_u
-                } else {
-                    0.0
-                }
+                if abs_u <= 1.0 { 1.0 - abs_u } else { 0.0 }
             }
         }
     }

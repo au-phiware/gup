@@ -49,6 +49,7 @@ pub mod buffer_inspector;
 pub mod ci_performance;
 pub mod layout_validator;
 pub mod memory_profiler;
+pub mod resource_graph;
 pub mod shader_profiler;
 pub mod visualization;
 pub mod web_dashboard;
@@ -61,6 +62,11 @@ pub use ci_performance::{
 };
 pub use layout_validator::*;
 pub use memory_profiler::*;
+// Export resource graph types with explicit names to avoid conflicts with error::ResourceId
+pub use resource_graph::{
+    ResourceGraph, ResourceGraphReport, ResourceId as DebugResourceId,
+    ResourceNode, ResourceState as DebugResourceState, ResourceType as DebugResourceType,
+};
 pub use shader_profiler::*;
 pub use visualization::*;
 pub use web_dashboard::*;
@@ -133,6 +139,8 @@ pub struct GpuDebugContext {
     pub memory_profiler: GpuMemoryProfiler,
     /// Shader profiler for performance analysis
     pub shader_profiler: ShaderProfiler,
+    /// Resource dependency graph for relationship analysis
+    pub resource_graph: ResourceGraph,
     /// Debug configuration
     pub config: DebugConfig,
     /// Performance history for regression detection
@@ -152,6 +160,7 @@ impl GpuDebugContext {
             layout_validator: MemoryLayoutValidator::new(),
             memory_profiler: GpuMemoryProfiler::new(device, queue),
             shader_profiler: ShaderProfiler::new(device, queue),
+            resource_graph: ResourceGraph::new(),
             config,
             performance_history: Vec::new(),
         }
@@ -317,6 +326,7 @@ impl GpuDebugContext {
     pub async fn export_debug_report(&self, output_path: &str) -> GupResult<()> {
         let summary = self.get_performance_summary();
         let memory_report = self.memory_profiler.get_memory_report();
+        let resource_report = self.resource_graph.generate_report();
         let report = DebugReport {
             timestamp: chrono::Utc::now(),
             config: self.config.clone(),
@@ -324,6 +334,7 @@ impl GpuDebugContext {
             performance_history: self.performance_history.clone(),
             layout_validation_results: self.layout_validator.get_validation_history(),
             memory_report: Some(memory_report),
+            resource_graph_report: Some(resource_report),
         };
 
         let json = serde_json::to_string_pretty(&report).map_err(|e| {
@@ -398,6 +409,7 @@ pub struct DebugReport {
     pub performance_history: Vec<PerformanceSnapshot>,
     pub layout_validation_results: Vec<LayoutValidationResult>,
     pub memory_report: Option<MemoryReport>,
+    pub resource_graph_report: Option<ResourceGraphReport>,
 }
 
 #[cfg(test)]
@@ -454,6 +466,7 @@ mod tests {
             performance_history: Vec::new(),
             layout_validation_results: Vec::new(),
             memory_report: None,
+            resource_graph_report: None,
         };
 
         let json = serde_json::to_string_pretty(&report);

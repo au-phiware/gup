@@ -116,20 +116,25 @@ points
 
 ### Test Coverage
 
-- **14 integration tests**: All passing, covering mode selection, tension clamping, uniforms generation
+- **14 integration tests**: All passing, covering mode selection, tension
+  clamping, uniforms generation
 - **5 GPU tests**: WGSL compilation verified for all interpolation modes
 - **Backward compatibility**: Default Linear mode maintains existing behavior
 - All existing GPU animation tests continue to pass
 
 ### Notable Design Decisions
 
-1. **Tension Parameter Range**: Clamped to [0.0, 1.0] where 0.0 is standard Catmull-Rom and 1.0 approaches linear interpolation
+1. **Tension Parameter Range**: Clamped to [0.0, 1.0] where 0.0 is standard
+   Catmull-Rom and 1.0 approaches linear interpolation
 
-2. **Boundary Handling**: At segment endpoints, duplicate first/last keyframes to maintain smooth curves without requiring extra control points
+2. **Boundary Handling**: At segment endpoints, duplicate first/last keyframes
+   to maintain smooth curves without requiring extra control points
 
-3. **Struct Alignment**: Added explicit padding to match WGSL's 16-byte alignment requirements (vec3<f32> alignment rules)
+3. **Struct Alignment**: Added explicit padding to match WGSL's 16-byte
+   alignment requirements (vec3<f32> alignment rules)
 
-4. **Backward Compatibility**: Default InterpolationMode is Linear, ensuring all existing code works without modification
+4. **Backward Compatibility**: Default InterpolationMode is Linear, ensuring all
+   existing code works without modification
 
 ---
 
@@ -143,16 +148,22 @@ _Identified during GUP-138 implementation as enhancement for motion quality._
 
 #### WGSL Struct Alignment with vec3<f32>
 
-- **Challenge**: Initial struct size mismatch - Rust struct was 288 bytes but WGSL expected 304 bytes
-- **Solution**: Added explicit padding field (`_padding2: [f32; 4]`) to match WGSL's 16-byte alignment rules for vec3<f32>
-- **Pattern**: Always verify GPU memory layout when adding fields; vec3 types in WGSL have special alignment requirements
-- **Future**: This reinforces the pattern from GUP-138 retrospective about explicit padding in both Rust and WGSL
+- **Challenge**: Initial struct size mismatch - Rust struct was 288 bytes but
+  WGSL expected 304 bytes
+- **Solution**: Added explicit padding field (`_padding2: [f32; 4]`) to match
+  WGSL's 16-byte alignment rules for vec3<f32>
+- **Pattern**: Always verify GPU memory layout when adding fields; vec3 types in
+  WGSL have special alignment requirements
+- **Future**: This reinforces the pattern from GUP-138 retrospective about
+  explicit padding in both Rust and WGSL
 
 #### Spline Mathematics in WGSL
 
-- **Decision**: Implemented Catmull-Rom and B-spline as separate helper functions in WGSL
-- **Reasoning**: Modular helper functions are easier to test and maintain than inline calculations
-- **Implementation**: 
+- **Decision**: Implemented Catmull-Rom and B-spline as separate helper
+  functions in WGSL
+- **Reasoning**: Modular helper functions are easier to test and maintain than
+  inline calculations
+- **Implementation**:
   - Catmull-Rom uses basis matrix with configurable tension parameter
   - B-spline uses basis functions for cubic interpolation
   - Both handle boundary conditions by duplicating endpoint values
@@ -160,17 +171,23 @@ _Identified during GUP-138 implementation as enhancement for motion quality._
 
 #### Boundary Handling for Splines
 
-- **Challenge**: Splines need 4 control points but segments only have 2 keyframes
-- **Solution**: Duplicate first/last keyframes at boundaries (p0=k1 at start, p3=k2 at end)
-- **Pattern**: This simple approach works well and doesn't require users to add extra keyframes
-- **Alternative**: Could have used "natural" boundary conditions, but duplication is simpler and visually acceptable
+- **Challenge**: Splines need 4 control points but segments only have 2
+  keyframes
+- **Solution**: Duplicate first/last keyframes at boundaries (p0=k1 at start,
+  p3=k2 at end)
+- **Pattern**: This simple approach works well and doesn't require users to add
+  extra keyframes
+- **Alternative**: Could have used "natural" boundary conditions, but
+  duplication is simpler and visually acceptable
 
 #### Tension Parameter Design
 
 - **Decision**: Tension range [0.0, 1.0] where 0.0 is standard Catmull-Rom
 - **Reasoning**: Matches industry conventions (Unreal, Unity use similar ranges)
-- **Implementation**: Clamped in builder method, stored in uniforms, used in WGSL calculation
-- **UX**: Provides intuitive control - 0.0 for smooth, higher values for tighter curves
+- **Implementation**: Clamped in builder method, stored in uniforms, used in
+  WGSL calculation
+- **UX**: Provides intuitive control - 0.0 for smooth, higher values for tighter
+  curves
 
 ### Architectural Decisions
 
@@ -183,31 +200,41 @@ _Identified during GUP-138 implementation as enhancement for motion quality._
 
 #### Enum-Based Mode Selection
 
-- **Decision**: Used enum with mode_id() for WGSL communication rather than separate structs
-- **Reasoning**: Single KeyframeAnimation type is simpler than multiple specialized types
+- **Decision**: Used enum with mode_id() for WGSL communication rather than
+  separate structs
+- **Reasoning**: Single KeyframeAnimation type is simpler than multiple
+  specialized types
 - **Implementation**: Mode stored in uniforms as u32, branched in WGSL
 - **Trade-off**: All modes in one shader (slightly larger) vs. simpler API
 
 #### Fluent API Convenience Methods
 
-- **Decision**: Provided both `with_interpolation(mode)` and `with_catmull_rom(tension)` shortcuts
+- **Decision**: Provided both `with_interpolation(mode)` and
+  `with_catmull_rom(tension)` shortcuts
 - **Reasoning**: Generic method for flexibility, shortcuts for common cases
-- **Pattern**: Follows Rust API design guidelines (builder pattern with convenience)
+- **Pattern**: Follows Rust API design guidelines (builder pattern with
+  convenience)
 - **UX**: Users can choose verbosity level based on need
 
 ### Development Workflow Insights
 
-- **Test-First Approach**: Wrote 14 integration tests before GPU tests, caught API design issues early
-- **GPU Validation Sequence**: Integration tests → GPU compilation tests → existing test compatibility
-- **Struct Size Debugging**: Used standalone Rust program to verify struct sizes before running GPU tests
-- **Example-Driven**: Building comprehensive example helped validate API ergonomics
+- **Test-First Approach**: Wrote 14 integration tests before GPU tests, caught
+  API design issues early
+- **GPU Validation Sequence**: Integration tests → GPU compilation tests →
+  existing test compatibility
+- **Struct Size Debugging**: Used standalone Rust program to verify struct sizes
+  before running GPU tests
+- **Example-Driven**: Building comprehensive example helped validate API
+  ergonomics
 
 ### Performance Insights
 
-- **WGSL Compilation**: All three interpolation modes compile successfully on GPU
+- **WGSL Compilation**: All three interpolation modes compile successfully on
+  GPU
 - **Test Execution**: 19 tests run in <1 second with single-threaded GPU tests
 - **Struct Size**: 304 bytes fits comfortably in uniform buffer limits
-- **No Performance Degradation**: Existing animation performance tests still pass
+- **No Performance Degradation**: Existing animation performance tests still
+  pass
 
 ### Integration with Existing System
 
@@ -216,7 +243,8 @@ The spline implementation integrates seamlessly with GUP-138:
 - **KeyframeAnimation**: Extended without breaking changes
 - **AnimationTimeline**: Works identically with all interpolation modes
 - **Composition**: Spline animations compose with scales, colors, etc.
-- **Storage Buffers**: Pattern can extend to KeyframeAnimationStorage for unlimited keyframes
+- **Storage Buffers**: Pattern can extend to KeyframeAnimationStorage for
+  unlimited keyframes
 
 ### Follow-up Stories
 
@@ -236,7 +264,8 @@ No significant gaps identified. Possible enhancements (not critical):
 
 - **Example Coverage**: Single example demonstrates all three modes effectively
 - **API Documentation**: Inline docs explain when to use each mode
-- **Story Format**: Implementation Summary section provides good reference for future stories
+- **Story Format**: Implementation Summary section provides good reference for
+  future stories
 
 ### Code Quality Notes
 
