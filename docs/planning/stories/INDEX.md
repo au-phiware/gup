@@ -112,7 +112,7 @@ epic and status.
 | [GUP-146](GUP-146_Streaming_Statistical_Aggregation.md)   | Streaming Statistical Aggregation        | ✅ Complete    | Medium   | 5      |
 | [GUP-147](GUP-147_Box_Plot_Visualization.md)              | Box Plot Visualization                   | ✅ Complete    | Medium   | 5      |
 | [GUP-148](GUP-148_Fix_Statistics_Shader_Bug.md)           | Fix Statistics Shader Reduction Bug      | ✅ Complete    | High     | 3      |
-| [GUP-149](GUP-149_Box_Plot_GPU_Rendering.md)              | Box Plot GPU Rendering Integration       | 🚧 In Progress | Medium   | 3      |
+| [GUP-149](GUP-149_Box_Plot_GPU_Rendering.md)              | Box Plot GPU Rendering Integration       | ✅ Complete    | Medium   | 3      |
 | [GUP-150](GUP-150_Statistical_Mark_Builder_API.md)        | Statistical Mark Builder API             | 📋 Planned     | Low      | 5      |
 | [GUP-151](GUP-151_Multi_Category_Box_Plots.md)            | Multi-Category Box Plots                 | 📋 Planned     | Low      | 3      |
 
