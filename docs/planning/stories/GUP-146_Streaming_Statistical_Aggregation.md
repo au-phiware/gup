@@ -1,6 +1,6 @@
 # GUP-146: Streaming Statistical Aggregation
 
-**Status**: 💡 New
+**Status**: 🚧 In Progress
 
 ## Story Overview
 

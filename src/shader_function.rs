@@ -2738,13 +2738,13 @@ impl AnimationTimelineWithEvents {
 
         // Fire events in order
         for event_index in crossed_events {
-            if let Some(event) = self.events.get_mut(event_index) {
-                if !event.fired_this_frame {
-                    event.fired_this_frame = true;
-                    event.last_fire_time = Some(new_time);
-                    // Call the callback
-                    (event.callback)(&self.timeline, new_time);
-                }
+            if let Some(event) = self.events.get_mut(event_index)
+                && !event.fired_this_frame
+            {
+                event.fired_this_frame = true;
+                event.last_fire_time = Some(new_time);
+                // Call the callback
+                (event.callback)(&self.timeline, new_time);
             }
         }
 
