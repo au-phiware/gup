@@ -1049,7 +1049,7 @@ benchmarks
 
 ### GUP-157: Multi-Mark Pattern Support
 
-**Status**: 🚧 In Progress  
+**Status**: ✅ Complete (2025-02-26)  
 **Priority**: Medium  
 **Story Points**: 5  
 **Key Need**: Extend pattern rendering to all mark types (rectangles, lines,
