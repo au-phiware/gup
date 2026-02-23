@@ -121,11 +121,11 @@ let raw_handle = window.raw_window_handle();
 
 if let RawWindowHandle::Win32(handle) = raw_handle {
     let hwnd = HWND(handle.hwnd.get() as isize);
-    
+
     // In WM_GETOBJECT handler:
     // Return provider for this HWND
     let provider = accessibility_system.get_uia_provider();
-    
+
     unsafe {
         UiaReturnRawElementProvider(hwnd, wparam, lparam, provider);
     }
@@ -153,7 +153,7 @@ impl IRawElementProviderSimple_Impl for ChartProvider {
         // Return pattern implementations (ITextProvider, IValueProvider, etc.)
         Ok(None)
     }
-    
+
     fn GetPropertyValue(&self, property_id: UIA_PROPERTY_ID) -> Result<VARIANT> {
         match property_id {
             UIA_NamePropertyId => {
@@ -171,11 +171,11 @@ impl IRawElementProviderSimple_Impl for ChartProvider {
             _ => Ok(VARIANT::default())
         }
     }
-    
+
     fn ProviderOptions(&self) -> Result<ProviderOptions> {
         Ok(ProviderOptions::ServerSideProvider)
     }
-    
+
     fn HostRawElementProvider(&self) -> Result<IRawElementProviderSimple> {
         Ok(None)
     }

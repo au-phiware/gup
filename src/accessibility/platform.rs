@@ -134,8 +134,11 @@ pub fn create_platform_accessibility() -> Box<dyn PlatformAccessibility> {
 // ============================================================================
 
 #[cfg(target_os = "linux")]
+/// Linux accessibility implementation using AT-SPI2.
+#[cfg(target_os = "linux")]
 pub struct LinuxAccessibility {
-    initialized: bool,
+    atspi_manager: crate::accessibility::atspi::AtSpiManager,
+    runtime: Option<tokio::runtime::Runtime>,
 }
 
 #[cfg(target_os = "linux")]
@@ -147,16 +150,35 @@ impl Default for LinuxAccessibility {
 
 impl LinuxAccessibility {
     pub fn new() -> Self {
-        Self { initialized: false }
+        Self {
+            atspi_manager: crate::accessibility::atspi::AtSpiManager::new(
+                "Gup Visualization".to_string(),
+            ),
+            runtime: None,
+        }
     }
 }
 
 #[cfg(target_os = "linux")]
 impl PlatformAccessibility for LinuxAccessibility {
     fn initialize(&mut self) -> Result<(), AccessibilityError> {
-        // TODO: Initialize ATK/AT-SPI2
-        // This would require D-Bus bindings to communicate with accessibility bus
-        self.initialized = true;
+        // Create a runtime for async D-Bus operations
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| {
+                AccessibilityError::Other(format!("Failed to create tokio runtime: {}", e))
+            })?;
+
+        // Connect to AT-SPI2 accessibility bus
+        runtime.block_on(async {
+            self.atspi_manager.connect().await.map_err(|e| {
+                AccessibilityError::Other(format!("Failed to connect to AT-SPI2: {}", e))
+            })
+        })?;
+
+        self.runtime = Some(runtime);
+        log::info!("Linux AT-SPI2 accessibility initialized");
         Ok(())
     }
 
@@ -164,23 +186,46 @@ impl PlatformAccessibility for LinuxAccessibility {
         &mut self,
         updates: &[AriaUpdate],
     ) -> Result<(), AccessibilityError> {
-        if !self.initialized {
+        if self.runtime.is_none() {
             return Err(AccessibilityError::PlatformUnavailable(
                 "Linux accessibility not initialized".to_string(),
             ));
         }
 
-        // TODO: Translate ARIA updates to ATK objects and send via AT-SPI2
-        for update in updates {
-            match update {
-                AriaUpdate::NodeCreated { .. }
-                | AriaUpdate::NodeUpdated { .. }
-                | AriaUpdate::NodeRemoved { .. }
-                | AriaUpdate::FocusChanged { .. }
-                | AriaUpdate::LiveRegion { .. } => {
-                    // Would create ATK objects and send signals via D-Bus
+        // We need access to the ARIA nodes to translate updates
+        // For now, process the updates without full node data
+        // In production, we would need to pass the full node map
+
+        if let Some(runtime) = &self.runtime {
+            runtime.block_on(async {
+                // Process updates through AT-SPI2 manager
+                // Note: This simplified version doesn't have access to full aria_nodes
+                // A full implementation would need to pass or maintain the node map
+                for update in updates {
+                    match update {
+                        AriaUpdate::NodeCreated { node_id } => {
+                            log::debug!("AT-SPI2: Node created {:?}", node_id);
+                        }
+                        AriaUpdate::NodeUpdated { node_id } => {
+                            log::debug!("AT-SPI2: Node updated {:?}", node_id);
+                        }
+                        AriaUpdate::NodeRemoved { node_id } => {
+                            log::debug!("AT-SPI2: Node removed {:?}", node_id);
+                        }
+                        AriaUpdate::FocusChanged { node_id } => {
+                            log::debug!("AT-SPI2: Focus changed to {:?}", node_id);
+                            let _ = self.atspi_manager.set_focus(node_id).await;
+                        }
+                        AriaUpdate::LiveRegion {
+                            content, urgency, ..
+                        } => {
+                            log::debug!("AT-SPI2: Live region update ({:?}): {}", urgency, content);
+                            let _ = self.atspi_manager.announce(content).await;
+                        }
+                    }
                 }
-            }
+                Ok::<(), AccessibilityError>(())
+            })?;
         }
 
         Ok(())
@@ -191,39 +236,50 @@ impl PlatformAccessibility for LinuxAccessibility {
         message: &str,
         priority: AnnouncementPriority,
     ) -> Result<(), AccessibilityError> {
-        if !self.initialized {
+        if self.runtime.is_none() {
             return Err(AccessibilityError::PlatformUnavailable(
                 "Linux accessibility not initialized".to_string(),
             ));
         }
 
-        // TODO: Send announcement via AT-SPI2 notification signal
         log::debug!("Linux announce ({:?}): {}", priority, message);
+
+        if let Some(runtime) = &self.runtime {
+            runtime.block_on(async {
+                self.atspi_manager.announce(message).await.map_err(|e| {
+                    AccessibilityError::AnnouncementFailed(format!(
+                        "Failed to announce via AT-SPI2: {}",
+                        e
+                    ))
+                })
+            })?;
+        }
 
         Ok(())
     }
 
     fn set_focus(&mut self, element_id: &str) -> Result<(), AccessibilityError> {
-        if !self.initialized {
+        if self.runtime.is_none() {
             return Err(AccessibilityError::PlatformUnavailable(
                 "Linux accessibility not initialized".to_string(),
             ));
         }
 
-        // TODO: Set focus via AT-SPI2
         log::debug!("Linux set focus: {}", element_id);
+
+        // In a full implementation, we would parse element_id to get NodeId
+        // For now, just log the focus change
 
         Ok(())
     }
 
     fn platform_name(&self) -> &str {
-        "Linux (ATK/AT-SPI2)"
+        "Linux (AT-SPI2)"
     }
 
     fn is_available(&self) -> bool {
-        // Check if AT-SPI2 is available (would check D-Bus connection)
-        // For now, assume it's available
-        true
+        // Check if AT-SPI2 is available (D-Bus connection established)
+        self.atspi_manager.is_connected()
     }
 }
 

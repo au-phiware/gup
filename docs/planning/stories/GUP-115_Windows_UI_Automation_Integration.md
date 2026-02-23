@@ -372,5 +372,3 @@ priority.
 7. **Document for future self**: Comprehensive documentation serves current
    users and future implementers (possibly yourself) when Windows testing
    becomes available.
-
-

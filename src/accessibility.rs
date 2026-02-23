@@ -25,6 +25,7 @@
 //! ```
 
 pub mod aria;
+pub mod atspi;
 pub mod focus;
 pub mod focus_elements;
 pub mod focus_ring;
