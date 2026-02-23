@@ -1,6 +1,6 @@
 # GUP-141: Spline-Based Animation Curves
 
-**Status**: 💡 New
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
