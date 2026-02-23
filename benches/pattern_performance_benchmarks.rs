@@ -63,6 +63,14 @@ impl PatternBenchmarkContext {
     }
 }
 
+impl Drop for PatternBenchmarkContext {
+    fn drop(&mut self) {
+        // Poll device to ensure cleanup completes before dropping.
+        // This prevents resource contention between sequential benchmark runs.
+        let _ = self.device.poll(wgpu::PollType::Wait);
+    }
+}
+
 /// Benchmark pattern renderer creation
 fn bench_pattern_renderer_creation(c: &mut Criterion) {
     let context = PatternBenchmarkContext::new().block_on();
