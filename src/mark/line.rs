@@ -118,6 +118,13 @@ impl Mark for Line {
     /// proper style rendering (solid, dashed, dotted).
     const FRAGMENT_SHADER: Option<&'static str> = Some(include_str!("shaders/line.frag.wgsl"));
 
+    /// Pattern-enabled fragment shader for lines.
+    ///
+    /// Integrates pattern rendering for accessibility support while maintaining
+    /// all standard line features (style, anti-aliasing).
+    const PATTERN_FRAGMENT_SHADER: Option<&'static str> =
+        Some(include_str!("shaders/line_pattern.frag.wgsl"));
+
     /// Generate vertex shader with shader function integration.
     ///
     /// When using generated shaders, this method creates WGSL that integrates

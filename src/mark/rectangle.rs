@@ -105,6 +105,13 @@ impl Mark for Rectangle {
     /// proper stroke rendering and rounded corner support.
     const FRAGMENT_SHADER: Option<&'static str> = Some(include_str!("shaders/rectangle.frag.wgsl"));
 
+    /// Pattern-enabled fragment shader for rectangles.
+    ///
+    /// Integrates pattern rendering for accessibility support while maintaining
+    /// all standard rectangle features (stroke, rounded corners, anti-aliasing).
+    const PATTERN_FRAGMENT_SHADER: Option<&'static str> =
+        Some(include_str!("shaders/rectangle_pattern.frag.wgsl"));
+
     /// Generate vertex shader with shader function integration.
     ///
     /// When using generated shaders, this method creates WGSL that integrates

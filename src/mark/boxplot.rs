@@ -225,6 +225,13 @@ impl Mark for BoxPlot {
     /// Hand-optimized fragment shader for box plots.
     const FRAGMENT_SHADER: Option<&'static str> = Some(include_str!("shaders/boxplot.frag.wgsl"));
 
+    /// Pattern-enabled fragment shader for box plots.
+    ///
+    /// Integrates pattern rendering for accessibility support while maintaining
+    /// all standard box plot features (stroke, anti-aliasing).
+    const PATTERN_FRAGMENT_SHADER: Option<&'static str> =
+        Some(include_str!("shaders/boxplot_pattern.frag.wgsl"));
+
     fn generate_vertex_shader(pipeline: &ComposableShaderPipeline) -> String {
         Self::generate_vertex_shader_with_functions(pipeline, &HashMap::new())
     }
