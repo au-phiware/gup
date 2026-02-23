@@ -9,7 +9,8 @@
 use super::ChartBuilder;
 use super::accessor::FieldAccessor;
 use super::builders::{
-    AreaChartBuilder, BarChartBuilder, HeatmapBuilder, LineChartBuilder, ScatterPlotBuilder,
+    AreaChartBuilder, BarChartBuilder, BoxPlotBuilder, HeatmapBuilder, LineChartBuilder,
+    ScatterPlotBuilder,
 };
 use crate::RenderContext;
 use crate::error::{GupError, GupResult};
@@ -195,6 +196,25 @@ where
         ConfiguredHeatmap::new(self.data, self.context, builder)
     }
 
+    /// Create a box plot with the specified Y accessor.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    ///
+    /// # #[derive(Debug, Clone)] struct DataSet { values: Vec<f32> }
+    /// # let data_sets = vec![DataSet { values: vec![1.0, 2.0, 3.0] }];
+    /// let chart = plot()
+    ///     .data(data_sets)
+    ///     .boxplot(y("values"));
+    /// ```
+    pub fn boxplot(self, y_accessor: FieldAccessor) -> ConfiguredBoxPlot<T> {
+        let builder = BoxPlotBuilder::new().y(y_accessor);
+
+        ConfiguredBoxPlot::new(self.data, self.context, builder)
+    }
+
     /// Get the underlying data.
     pub fn data(&self) -> &[T] {
         &self.data
@@ -352,6 +372,7 @@ impl_configured_chart!(ConfiguredLineChart, LineChartBuilder<T>);
 impl_configured_chart!(ConfiguredBarChart, BarChartBuilder<T>);
 impl_configured_chart!(ConfiguredAreaChart, AreaChartBuilder<T>);
 impl_configured_chart!(ConfiguredHeatmap, HeatmapBuilder<T>);
+impl_configured_chart!(ConfiguredBoxPlot, BoxPlotBuilder<T>);
 
 /// Main entry point for Observable Plot-style API.
 ///
@@ -486,6 +507,14 @@ mod tests {
             .data(data5)
             .heatmap(x("x"), y("y"), FieldAccessor::new("category"))
             .title("Heatmap");
+
+        let data6 = vec![TestData {
+            x: 1.0,
+            y: 2.0,
+            category: "test".to_string(),
+        }];
+
+        let _boxplot = plot().data(data6).boxplot(y("y")).title("Box Plot");
     }
 
     #[test]

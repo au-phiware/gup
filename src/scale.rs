@@ -483,7 +483,10 @@ impl DataAnalyzer {
                         categories.push(s);
                     }
                 }
-                AccessorValue::Color(_) | AccessorValue::Position(_) | AccessorValue::Bool(_) => {
+                AccessorValue::Color(_)
+                | AccessorValue::Position(_)
+                | AccessorValue::Bool(_)
+                | AccessorValue::FloatArray(_) => {
                     // Convert to numeric for analysis
                     let value = accessor.call(item).as_f32() as f64;
                     numeric_values.push(value);

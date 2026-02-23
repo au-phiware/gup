@@ -44,7 +44,10 @@ fn test_boxplot_normal_distribution() {
     assert!(iqr > 0.0, "IQR should be positive");
 
     println!("Normal distribution:");
-    println!("  min={}, Q1={}, median={}, Q3={}, max={}", attrs.min, attrs.q1, attrs.median, attrs.q3, attrs.max);
+    println!(
+        "  min={}, Q1={}, median={}, Q3={}, max={}",
+        attrs.min, attrs.q1, attrs.median, attrs.q3, attrs.max
+    );
     println!("  IQR={}, outliers={}", iqr, attrs.outliers.len());
 }
 
@@ -91,7 +94,10 @@ fn test_boxplot_with_outliers() {
     }
 
     println!("With outliers:");
-    println!("  min={}, Q1={}, median={}, Q3={}, max={}", attrs.min, attrs.q1, attrs.median, attrs.q3, attrs.max);
+    println!(
+        "  min={}, Q1={}, median={}, Q3={}, max={}",
+        attrs.min, attrs.q1, attrs.median, attrs.q3, attrs.max
+    );
     println!("  outliers={:?}", attrs.outliers);
 }
 
@@ -119,7 +125,10 @@ fn test_boxplot_skewed_distribution() {
     println!("Skewed distribution:");
     println!("  Q1 to median: {}", q1_to_median);
     println!("  Median to Q3: {}", median_to_q3);
-    println!("  min={}, Q1={}, median={}, Q3={}, max={}", attrs.min, attrs.q1, attrs.median, attrs.q3, attrs.max);
+    println!(
+        "  min={}, Q1={}, median={}, Q3={}, max={}",
+        attrs.min, attrs.q1, attrs.median, attrs.q3, attrs.max
+    );
 
     // Basic sanity checks
     assert!(attrs.q1 < attrs.median);
@@ -147,7 +156,10 @@ fn test_boxplot_uniform_distribution() {
 
     println!("Uniform distribution:");
     println!("  Median position in range: {:.2}", median_position);
-    println!("  min={}, Q1={}, median={}, Q3={}, max={}", attrs.min, attrs.q1, attrs.median, attrs.q3, attrs.max);
+    println!(
+        "  min={}, Q1={}, median={}, Q3={}, max={}",
+        attrs.min, attrs.q1, attrs.median, attrs.q3, attrs.max
+    );
 
     // Median should be roughly centered (allow some variance)
     assert!(
@@ -257,7 +269,10 @@ fn test_boxplot_iqr_calculation() {
 
     println!("IQR calculation:");
     println!("  IQR: {}", iqr);
-    println!("  Lower fence: {}, Upper fence: {}", lower_fence, upper_fence);
+    println!(
+        "  Lower fence: {}, Upper fence: {}",
+        lower_fence, upper_fence
+    );
     println!("  Whisker min: {}, Whisker max: {}", attrs.min, attrs.max);
 }
 
@@ -308,7 +323,7 @@ fn test_boxplot_colors() {
 #[test]
 fn test_boxplot_multiple_instances() {
     // Test creating multiple box plots for comparison
-    let datasets = vec![
+    let datasets = [
         vec![10.0, 20.0, 30.0, 40.0, 50.0],
         vec![60.0, 70.0, 80.0, 90.0, 100.0],
         vec![5.0, 15.0, 25.0, 35.0, 45.0],
@@ -321,8 +336,7 @@ fn test_boxplot_multiple_instances() {
             x: (i as f32) * 0.3 - 0.3,
             y: 0.0,
         };
-        let attrs =
-            BoxPlotAttributes::from_data(data, position, 0.1, BoxPlotOrientation::Vertical);
+        let attrs = BoxPlotAttributes::from_data(data, position, 0.1, BoxPlotOrientation::Vertical);
         all_attrs.push(attrs);
     }
 

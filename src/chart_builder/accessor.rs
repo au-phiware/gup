@@ -186,6 +186,8 @@ pub enum AccessorValue {
     Numeric(f64),
     Temporal(chrono::DateTime<chrono::Utc>),
     Categorical(String),
+    // Array of floats for statistical computations
+    FloatArray(Vec<f32>),
 }
 
 impl AccessorValue {
@@ -206,6 +208,13 @@ impl AccessorValue {
             AccessorValue::Numeric(n) => *n as f32,
             AccessorValue::Temporal(dt) => dt.timestamp() as f32,
             AccessorValue::Categorical(s) => s.len() as f32,
+            AccessorValue::FloatArray(arr) => {
+                if arr.is_empty() {
+                    0.0
+                } else {
+                    arr[0] // Use first element
+                }
+            }
         }
     }
 
@@ -229,6 +238,14 @@ impl AccessorValue {
             }
             AccessorValue::Temporal(_) => [0.6, 0.8, 1.0, 1.0], // Light blue for temporal
             AccessorValue::Categorical(_) => [0.7, 0.7, 0.7, 1.0], // Gray for categorical
+            AccessorValue::FloatArray(arr) => {
+                if arr.is_empty() {
+                    [0.5, 0.5, 0.5, 1.0]
+                } else {
+                    let val = arr[0];
+                    [val, val, val, 1.0] // Grayscale from first element
+                }
+            }
         }
     }
 
@@ -252,6 +269,15 @@ impl AccessorValue {
             }
             AccessorValue::Temporal(dt) => [dt.timestamp() as f32, 0.0],
             AccessorValue::Categorical(s) => [s.len() as f32, 0.0],
+            AccessorValue::FloatArray(arr) => {
+                if arr.is_empty() {
+                    [0.0, 0.0]
+                } else {
+                    let x = arr[0];
+                    let y = if arr.len() > 1 { arr[1] } else { 0.0 };
+                    [x, y]
+                }
+            }
         }
     }
 
@@ -266,6 +292,7 @@ impl AccessorValue {
             AccessorValue::Numeric(_) => "f64",
             AccessorValue::Temporal(_) => "datetime",
             AccessorValue::Categorical(_) => "categorical",
+            AccessorValue::FloatArray(_) => "array<f32>",
         }
     }
 }

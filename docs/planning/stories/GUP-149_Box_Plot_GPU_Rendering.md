@@ -33,7 +33,8 @@ outliers
 - [x] Support both vertical and horizontal orientations
 - [x] Comprehensive test coverage for statistical computation
 
-**Note**: Full GPU rendering implementation deferred. See Implementation Notes below.
+**Note**: Full GPU rendering implementation deferred. See Implementation Notes
+below.
 
 ### AC2: Statistical Foundation
 
@@ -61,31 +62,33 @@ outliers
 
 - ✅ BoxPlot mark type with statistical computation (GUP-147)
 - ✅ Integration with Percentile and MinMax shader functions
-- ✅ Component generation for rendering (rectangles for box/whiskers, circles for outliers)
+- ✅ Component generation for rendering (rectangles for box/whiskers, circles
+  for outliers)
 - ✅ Comprehensive test coverage
 - ⏸️ Full GPU rendering pipeline (deferred - see Implementation Notes)
 
 ## Implementation Notes
 
-During implementation, it became clear that full GPU rendering integration requires
-more infrastructure than currently exists:
+During implementation, it became clear that full GPU rendering integration
+requires more infrastructure than currently exists:
 
-1. **Selection API Not Ready**: The Selection API is a stub focused on event handling,
-   not rendering. It doesn't provide render pipeline creation, buffer management, or
-   draw call orchestration needed for mark rendering.
+1. **Selection API Not Ready**: The Selection API is a stub focused on event
+   handling, not rendering. It doesn't provide render pipeline creation, buffer
+   management, or draw call orchestration needed for mark rendering.
 
-2. **Component-Based Approach Works**: Box plots can be rendered by decomposing them
-   into primitives:
+2. **Component-Based Approach Works**: Box plots can be rendered by decomposing
+   them into primitives:
    - Rectangle marks for boxes, medians, and whiskers
    - Circle marks for outliers
-   
+
    This approach is demonstrated in `examples/boxplot_rendering_demo.rs`.
 
 3. **Path Forward**: Two options for future work:
-   - **Option A**: Build out Selection API rendering capabilities (Phase 1 initiative)
-   - **Option B**: Create a higher-level chart builder API that handles rendering
-     (Phase 2 initiative per implementation strategy)
-   
+   - **Option A**: Build out Selection API rendering capabilities (Phase 1
+     initiative)
+   - **Option B**: Create a higher-level chart builder API that handles
+     rendering (Phase 2 initiative per implementation strategy)
+
    The statistical foundation (this story + GUP-147) is complete and ready for
    either approach.
 
@@ -153,10 +156,8 @@ This story successfully completed the statistical foundation:
 - [x] All tests pass
 - [x] Path forward documented
 
-**Note**: Full GPU rendering deferred to future story based on infrastructure needs.
-See Implementation Notes section.
-
-
+**Note**: Full GPU rendering deferred to future story based on infrastructure
+needs. See Implementation Notes section.
 
 ---
 
@@ -180,6 +181,7 @@ See Implementation Notes section.
    - Demonstrated in `examples/boxplot_rendering_demo.rs`
 
 3. **Test Coverage**:
+
    ```
    test test_boxplot_colors ... ok
    test test_boxplot_iqr_calculation ... ok
@@ -191,7 +193,7 @@ See Implementation Notes section.
    test test_boxplot_skewed_distribution ... ok
    test test_boxplot_uniform_distribution ... ok
    test test_boxplot_with_outliers ... ok
-   
+
    test result: ok. 10 passed; 0 failed; 0 ignored
    ```
 
@@ -203,9 +205,10 @@ See Implementation Notes section.
 
 ### Architectural Decision
 
-**Component-Based Rendering Approach**: After investigation, determined that full
-GPU rendering requires Selection API infrastructure not yet built. The pragmatic
-solution is to use component-based rendering (Rectangle + Circle marks) which:
+**Component-Based Rendering Approach**: After investigation, determined that
+full GPU rendering requires Selection API infrastructure not yet built. The
+pragmatic solution is to use component-based rendering (Rectangle + Circle
+marks) which:
 
 - Works with existing mark system
 - Provides full functionality
@@ -224,8 +227,8 @@ integration is complete (likely Phase 2 per implementation strategy).
    single-pass BoxPlot mark that renders all components (box, median, whiskers,
    outliers) in one shader.
 
-3. **Box Plot Chart Builder**: Observable Plot-style high-level API for box plots
-   (Phase 2 per implementation strategy).
+3. **Box Plot Chart Builder**: Observable Plot-style high-level API for box
+   plots (Phase 2 per implementation strategy).
 
 ---
 
@@ -239,9 +242,9 @@ _Identified during GUP-147 implementation._
 
 #### Selection API Architecture
 
-- **Challenge**: Story initially seemed straightforward - "integrate BoxPlot with
-  Selection API for rendering". Investigation revealed Selection API is currently
-  a stub focused on event handling, not rendering.
+- **Challenge**: Story initially seemed straightforward - "integrate BoxPlot
+  with Selection API for rendering". Investigation revealed Selection API is
+  currently a stub focused on event handling, not rendering.
 - **Discovery**: Selection API doesn't provide:
   - Render pipeline creation
   - GPU buffer management for vertex/instance data
@@ -255,16 +258,16 @@ _Identified during GUP-147 implementation._
 
 #### Component-Based Rendering for Composite Marks
 
-- **Challenge**: Box plots are composite visualizations (box + median + whiskers +
-  outliers). How to render them?
+- **Challenge**: Box plots are composite visualizations (box + median +
+  whiskers + outliers). How to render them?
 - **Solution**: Decompose into primitive marks:
   - Rectangles for box, median line, whisker lines, caps
   - Circles for outlier points
-- **Trade-off**: More draw calls vs. simpler implementation. For statistical marks,
-  the number of instances is typically small (<100 box plots), so this is
+- **Trade-off**: More draw calls vs. simpler implementation. For statistical
+  marks, the number of instances is typically small (<100 box plots), so this is
   acceptable.
-- **Pattern**: Composite marks can be rendered as collections of primitives until
-  unified mark implementation is needed. This is especially useful during
+- **Pattern**: Composite marks can be rendered as collections of primitives
+  until unified mark implementation is needed. This is especially useful during
   foundation phases.
 
 #### Test-Driven Validation
@@ -273,8 +276,8 @@ _Identified during GUP-147 implementation._
   testing of the statistical foundation.
 - **Result**: 10 tests covering all box plot functionality, edge cases, and
   distributions. This validates the statistical computation layer is solid.
-- **Value**: Tests provide confidence that when rendering integration happens, the
-  statistical layer will work correctly. Tests also serve as documentation.
+- **Value**: Tests provide confidence that when rendering integration happens,
+  the statistical layer will work correctly. Tests also serve as documentation.
 - **Pattern**: When blocked on infrastructure, validate what you can with tests.
   This makes progress tangible and ensures foundation is solid.
 
@@ -284,17 +287,19 @@ _Identified during GUP-147 implementation._
 
 - **Decision**: Complete statistical foundation and testing, defer full GPU
   rendering integration to future story.
-- **Reasoning**: Selection API rendering infrastructure doesn't exist yet. Building
-  it properly is a larger effort than this 3-point story. The statistical
-  foundation (GUP-147 + this story) is valuable independently.
-- **Trade-off**: Box plots can't be rendered with single API call yet, but can be
-  rendered using component approach. Users have working solution, maintainers have
-  tested foundation.
+- **Reasoning**: Selection API rendering infrastructure doesn't exist yet.
+  Building it properly is a larger effort than this 3-point story. The
+  statistical foundation (GUP-147 + this story) is valuable independently.
+- **Trade-off**: Box plots can't be rendered with single API call yet, but can
+  be rendered using component approach. Users have working solution, maintainers
+  have tested foundation.
 - **Future**: This decision enables two paths:
   1. Build Selection API rendering (Phase 1 - low-level API focus)
-  2. Build high-level chart builders that abstract rendering (Phase 2 - convenience API focus)
-  
-  Both are valid per implementation strategy. Statistical foundation supports both.
+  2. Build high-level chart builders that abstract rendering (Phase 2 -
+     convenience API focus)
+
+  Both are valid per implementation strategy. Statistical foundation supports
+  both.
 
 #### Component Generation as First-Class Feature
 
@@ -310,14 +315,11 @@ _Identified during GUP-147 implementation._
 - **Investigation First**: Spent significant time investigating Selection API,
   MarkRenderer, existing examples. This prevented going down wrong path and
   revealed architectural gaps.
-  
-- **Scope Adjustment**: Initial story scope ("integrate with Selection API") wasn't
-  achievable without major infrastructure work. Adjusted to focus on statistical
-  foundation validation and component generation.
-  
+- **Scope Adjustment**: Initial story scope ("integrate with Selection API")
+  wasn't achievable without major infrastructure work. Adjusted to focus on
+  statistical foundation validation and component generation.
 - **Testing as Progress**: When rendering wasn't feasible, comprehensive testing
   provided tangible progress and ensured foundation quality.
-  
 - **Documentation of Decisions**: Clearly documenting why rendering was deferred
   and what the path forward is makes this story valuable, not a failure. It's
   architectural discovery.
@@ -328,16 +330,17 @@ _Identified during GUP-147 implementation._
 
 ### Follow-Up Stories
 
-During implementation, architectural gaps were identified that need dedicated stories:
+During implementation, architectural gaps were identified that need dedicated
+stories:
 
-1. **GUP-XXX: Selection API Render Integration** - Build out rendering capabilities
-   in Selection API. This would include:
+1. **GUP-XXX: Selection API Render Integration** - Build out rendering
+   capabilities in Selection API. This would include:
    - Pipeline creation and caching
    - Buffer management integration with MarkRenderer
    - Bind group creation
    - Draw call orchestration
    - Support for both simple and composite marks
-   
+
    This is likely a 13-point story (similar to GUP-002 Core Selection Type).
 
 2. **GUP-XXX: Unified BoxPlot Mark Renderer** - Once Selection API supports
@@ -345,7 +348,7 @@ During implementation, architectural gaps were identified that need dedicated st
    - Geometry shader or instancing approach for all components
    - Single draw call for entire box plot
    - Performance optimization for many box plots
-   
+
    This is a 5-point story, depends on Selection API rendering.
 
 3. **GUP-150: Statistical Mark Builder API** - Already identified in GUP-147,
@@ -354,8 +357,8 @@ During implementation, architectural gaps were identified that need dedicated st
 ### Conclusion
 
 This story successfully validated the box plot statistical foundation through
-comprehensive testing. While full GPU rendering integration wasn't achievable due
-to Selection API infrastructure gaps, the work completed:
+comprehensive testing. While full GPU rendering integration wasn't achievable
+due to Selection API infrastructure gaps, the work completed:
 
 - Validates GUP-147's statistical layer is correct and complete
 - Demonstrates component-based rendering approach works
@@ -366,4 +369,3 @@ to Selection API infrastructure gaps, the work completed:
 The pragmatic decision to defer rendering and focus on statistical validation
 aligns with Phase 1's "engineering excellence first" philosophy - build solid
 foundations, prove they work with tests, then build rendering on top.
-

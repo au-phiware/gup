@@ -1,6 +1,6 @@
 # GUP-150: Statistical Mark Builder API
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
