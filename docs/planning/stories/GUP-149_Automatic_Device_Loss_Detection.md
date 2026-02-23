@@ -1,6 +1,6 @@
 # GUP-149: Automatic Device Loss Detection
 
-**Status**: 💡 New
+**Status**: 🚧 In Progress
 
 ## Story Overview
 

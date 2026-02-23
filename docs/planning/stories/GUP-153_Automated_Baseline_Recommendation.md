@@ -131,7 +131,8 @@ A recommendation is made when:
 
 **Key Files:**
 
-- `src/debug/baseline_recommendation.rs` - Core recommendation module (560 lines)
+- `src/debug/baseline_recommendation.rs` - Core recommendation module (560
+  lines)
 - `tests/baseline_recommendation_tests.rs` - Integration test suite (351 lines)
 - `examples/baseline_recommendation_demo.rs` - Demo example (171 lines)
 
@@ -176,116 +177,158 @@ A recommendation is made when:
 
 #### Statistical Analysis for Performance Trends
 
-- **Challenge**: Determining when performance has genuinely changed vs. natural variance
-- **Solution**: Multi-metric approach using mean, standard deviation, and coefficient of variation (CV)
-- **Pattern**: CV (std_dev / mean) is a normalized measure of stability that works across different performance scales
-- **Result**: CV threshold of 10% effectively identifies stable performance patterns
+- **Challenge**: Determining when performance has genuinely changed vs. natural
+  variance
+- **Solution**: Multi-metric approach using mean, standard deviation, and
+  coefficient of variation (CV)
+- **Pattern**: CV (std_dev / mean) is a normalized measure of stability that
+  works across different performance scales
+- **Result**: CV threshold of 10% effectively identifies stable performance
+  patterns
 
 #### Multi-Factor Confidence Scoring
 
-- **Challenge**: Converting multiple independent metrics into a single actionable confidence score
-- **Solution**: Weighted combination of stability (50%), sample size (30%), and change magnitude (20%)
-- **Reasoning**: Stability is most important - unstable performance shouldn't trigger recommendations regardless of other factors
-- **Trade-off**: Simple weighted average vs complex Bayesian models - chose simplicity for interpretability
+- **Challenge**: Converting multiple independent metrics into a single
+  actionable confidence score
+- **Solution**: Weighted combination of stability (50%), sample size (30%), and
+  change magnitude (20%)
+- **Reasoning**: Stability is most important - unstable performance shouldn't
+  trigger recommendations regardless of other factors
+- **Trade-off**: Simple weighted average vs complex Bayesian models - chose
+  simplicity for interpretability
 - **Future**: Could enhance with more sophisticated statistical models if needed
 
 #### Threshold-Based Recommendation System
 
-- **Challenge**: Balancing sensitivity (catching real changes) with specificity (avoiding false positives)
-- **Solution**: Configurable thresholds with sensible defaults (10% change, 80% confidence, 10 samples)
-- **Pattern**: Separate thresholds for "recommend" (80%) vs "auto-update" (90%) provides safety net
-- **Critical**: Auto-update requires very high confidence to avoid unintended baseline changes
+- **Challenge**: Balancing sensitivity (catching real changes) with specificity
+  (avoiding false positives)
+- **Solution**: Configurable thresholds with sensible defaults (10% change, 80%
+  confidence, 10 samples)
+- **Pattern**: Separate thresholds for "recommend" (80%) vs "auto-update" (90%)
+  provides safety net
+- **Critical**: Auto-update requires very high confidence to avoid unintended
+  baseline changes
 - **Best Practice**: Start conservative, tune based on real-world usage patterns
 
 #### Historical Data Limitations
 
-- **Challenge**: Current `BaselineStorage` stores single baseline per test, not time series
-- **Solution**: Designed API to accept historical data, implemented with single-baseline fallback
-- **Trade-off**: Full functionality requires CI storing historical snapshots vs current single-file approach
-- **Future**: Add `load_historical_baselines()` method when CI stores performance history
+- **Challenge**: Current `BaselineStorage` stores single baseline per test, not
+  time series
+- **Solution**: Designed API to accept historical data, implemented with
+  single-baseline fallback
+- **Trade-off**: Full functionality requires CI storing historical snapshots vs
+  current single-file approach
+- **Future**: Add `load_historical_baselines()` method when CI stores
+  performance history
 
 ### Architectural Decisions
 
 #### Separate Recommendation Module
 
-- **Decision**: Create dedicated `baseline_recommendation` module instead of extending `ci_performance`
-- **Reasoning**: Recommendation logic is distinct from performance testing - separation of concerns
-- **Trade-off**: Slight API duplication vs cleaner module boundaries - chose cleaner boundaries
-- **Performance**: No performance impact - recommendation is separate phase after testing
+- **Decision**: Create dedicated `baseline_recommendation` module instead of
+  extending `ci_performance`
+- **Reasoning**: Recommendation logic is distinct from performance testing -
+  separation of concerns
+- **Trade-off**: Slight API duplication vs cleaner module boundaries - chose
+  cleaner boundaries
+- **Performance**: No performance impact - recommendation is separate phase
+  after testing
 
 #### Configuration-Driven Thresholds
 
-- **Decision**: Make all thresholds configurable via `RecommendationConfig` struct
-- **Reasoning**: Different projects/teams may have different tolerance for performance variance
-- **Implementation**: Sensible defaults for immediate usability, full customization for power users
-- **Alternative**: Could have used environment variables, but structured config is more maintainable
+- **Decision**: Make all thresholds configurable via `RecommendationConfig`
+  struct
+- **Reasoning**: Different projects/teams may have different tolerance for
+  performance variance
+- **Implementation**: Sensible defaults for immediate usability, full
+  customization for power users
+- **Alternative**: Could have used environment variables, but structured config
+  is more maintainable
 
 #### Confidence Calculation Algorithm
 
-- **Decision**: Use weighted average of three factors rather than more complex statistical models
+- **Decision**: Use weighted average of three factors rather than more complex
+  statistical models
 - **Reasoning**: Simple, interpretable, and effective for initial implementation
-- **Trade-off**: Statistical rigor vs ease of understanding - chose understanding
+- **Trade-off**: Statistical rigor vs ease of understanding - chose
+  understanding
 - **Validation**: Manual testing with various scenarios confirmed good behavior
-- **Future**: Could add Bayesian confidence intervals if needed for more precision
+- **Future**: Could add Bayesian confidence intervals if needed for more
+  precision
 
 #### Report Generation Format
 
-- **Decision**: Generate Markdown reports with high/medium/low confidence grouping
-- **Reasoning**: Markdown is human-readable, version-controllable, and embeddable in CI output
-- **Pattern**: Group by confidence level so high-confidence items (auto-update candidates) are prominent
-- **Format**: Include all relevant metrics (baseline, recommended, confidence, samples, rationale)
+- **Decision**: Generate Markdown reports with high/medium/low confidence
+  grouping
+- **Reasoning**: Markdown is human-readable, version-controllable, and
+  embeddable in CI output
+- **Pattern**: Group by confidence level so high-confidence items (auto-update
+  candidates) are prominent
+- **Format**: Include all relevant metrics (baseline, recommended, confidence,
+  samples, rationale)
 
 ### Development Workflow Insights
 
 #### Iterative Development Approach
 
-- **Increment 1**: Core statistical analysis and recommendation engine (560 lines)
+- **Increment 1**: Core statistical analysis and recommendation engine (560
+  lines)
 - **Increment 2**: Integration tests for full workflow (351 lines)
 - **Increment 3**: Demo example and documentation (171 lines)
-- **Pattern**: Build core algorithm first, validate with tests, then demonstrate with example
+- **Pattern**: Build core algorithm first, validate with tests, then demonstrate
+  with example
 - **Testing**: Unit tests during development, integration tests for validation
 
 #### Test-First for Statistical Calculations
 
 - **Pattern**: Write tests for mean, std dev, and confidence calculations first
-- **Benefit**: Catches numerical edge cases (division by zero, single sample, etc.)
-- **Example**: Discovered need for `sample_count >= 2` check for std deviation calculation
+- **Benefit**: Catches numerical edge cases (division by zero, single sample,
+  etc.)
+- **Example**: Discovered need for `sample_count >= 2` check for std deviation
+  calculation
 - **Learning**: Statistical code is subtle - test thoroughly with edge cases
 
 #### Avoiding External Dependencies
 
-- **Decision**: Implement statistical calculations manually instead of using stats crates
-- **Reasoning**: Basic statistics (mean, std dev) are simple and avoid dependency bloat
+- **Decision**: Implement statistical calculations manually instead of using
+  stats crates
+- **Reasoning**: Basic statistics (mean, std dev) are simple and avoid
+  dependency bloat
 - **Trade-off**: Reinventing the wheel vs minimal dependencies - chose minimal
 - **Validation**: Unit tests confirm calculations match expected values
 
 #### API Design for Future Enhancement
 
-- **Pattern**: `load_historical_data()` method designed for future time-series support
-- **Implementation**: Currently returns single baseline, ready to expand to multiple
-- **Benefit**: API consumers don't need to change when historical data becomes available
-- **Learning**: Design APIs with future growth in mind, even if current implementation is simple
+- **Pattern**: `load_historical_data()` method designed for future time-series
+  support
+- **Implementation**: Currently returns single baseline, ready to expand to
+  multiple
+- **Benefit**: API consumers don't need to change when historical data becomes
+  available
+- **Learning**: Design APIs with future growth in mind, even if current
+  implementation is simple
 
 ### Follow-up Stories
 
 Based on implementation experience, identified these follow-up opportunities:
 
-1. **GUP-155: Historical Performance Data Storage** - Extend BaselineStorage to maintain time-series history
+1. **GUP-155: Historical Performance Data Storage** - Extend BaselineStorage to
+   maintain time-series history
    - Store multiple baselines with timestamps
    - Implement retention policies (keep last N samples, aggregate old data)
    - Add `load_baseline_history()` method to retrieve time series
-   
-2. **GUP-156: Advanced Statistical Models** - Enhance recommendation with more sophisticated analysis
+2. **GUP-156: Advanced Statistical Models** - Enhance recommendation with more
+   sophisticated analysis
    - Implement exponential moving average (EMA) for trend smoothing
    - Add change point detection algorithms
    - Calculate prediction intervals for expected performance ranges
-   
-3. **GUP-157: Auto-Update CI Integration** - Fully automate baseline updates in CI/CD
+3. **GUP-157: Auto-Update CI Integration** - Fully automate baseline updates in
+   CI/CD
    - Generate PR with baseline updates when auto-update confidence met
    - Include recommendation reports in PR description
    - Require approval for medium-confidence updates
-   
-4. **GUP-158: Performance Anomaly Detection** - Detect unusual patterns beyond simple regressions
+4. **GUP-158: Performance Anomaly Detection** - Detect unusual patterns beyond
+   simple regressions
    - Identify sudden spikes or drops (not gradual changes)
    - Detect cyclical patterns or day-of-week effects
    - Flag tests with increasing variance (becoming unstable)
@@ -293,23 +336,32 @@ Based on implementation experience, identified these follow-up opportunities:
 ### Success Metrics Assessment
 
 **Response Time**: ✅ Exceeds target
+
 - Analysis completes in <1ms per test (target was <1 second)
 - Batch analysis of 100 tests in <100ms
 
 **Coverage**: ✅ Achieved
+
 - Works across all test categories
 - Supports multiple platforms via platform_id
 
 **Accuracy & False Positives**: ⏳ Requires production data
+
 - Need real-world usage to measure acceptance rate
 - Configurable thresholds allow tuning based on team preferences
 - Conservative defaults (80% confidence, 10% change) minimize false positives
 
 ### Lessons for Future Stories
 
-1. **Start Simple**: Basic statistics (mean, std dev) are often sufficient - don't over-engineer
-2. **Configuration is Key**: Make thresholds configurable - different teams have different needs
-3. **Design for Growth**: Even when current implementation is simple, design APIs for future enhancement
-4. **Test Edge Cases**: Statistical calculations have many edge cases (zero, one sample, negative values)
-5. **Iterative Validation**: Build core, test thoroughly, then add user-facing features (demos, reports)
-6. **Documentation Matters**: Good rationale in recommendations helps users trust the system
+1. **Start Simple**: Basic statistics (mean, std dev) are often sufficient -
+   don't over-engineer
+2. **Configuration is Key**: Make thresholds configurable - different teams have
+   different needs
+3. **Design for Growth**: Even when current implementation is simple, design
+   APIs for future enhancement
+4. **Test Edge Cases**: Statistical calculations have many edge cases (zero, one
+   sample, negative values)
+5. **Iterative Validation**: Build core, test thoroughly, then add user-facing
+   features (demos, reports)
+6. **Documentation Matters**: Good rationale in recommendations helps users
+   trust the system

@@ -150,7 +150,7 @@ epic and status.
 | [GUP-046](GUP-046_Context_Performance_Profiling.md)     | Context Performance Profiling     | ✅ Complete    | Medium   | 3      |
 | [GUP-047](GUP-047_Surface_Event_Integration.md)         | Surface Event Integration         | ✅ Complete    | Medium   | 3      |
 | [GUP-048](GUP-048_Context_Error_Recovery.md)            | Context Error Recovery            | ✅ Complete    | Medium   | 4      |
-| [GUP-149](GUP-149_Automatic_Device_Loss_Detection.md)   | Automatic Device Loss Detection   | 💡 New         | Low      | 2      |
+| [GUP-149](GUP-149_Automatic_Device_Loss_Detection.md)   | Automatic Device Loss Detection   | 🚧 In Progress | Low      | 2      |
 | [GUP-150](GUP-150_Recovery_Metrics_and_Analytics.md)    | Recovery Metrics and Analytics    | 💡 New         | Low      | 3      |
 | [GUP-151](GUP-151_Surface_Configuration_Caching.md)     | Surface Configuration Caching     | 💡 New         | Low      | 2      |
 | [GUP-152](GUP-152_Performance_Trend_Visualization.md)   | Performance Trend Visualization   | ✅ Complete    | Low      | 3      |
