@@ -1,6 +1,6 @@
 # GUP-151: Surface Configuration Caching
 
-**Status**: 💡 New
+**Status**: 🚧 In Progress
 
 ## Story Overview
 

@@ -152,7 +152,7 @@ epic and status.
 | [GUP-048](GUP-048_Context_Error_Recovery.md)            | Context Error Recovery            | ✅ Complete    | Medium   | 4      |
 | [GUP-149](GUP-149_Automatic_Device_Loss_Detection.md)   | Automatic Device Loss Detection   | ✅ Complete    | Low      | 2      |
 | [GUP-150](GUP-150_Recovery_Metrics_and_Analytics.md)    | Recovery Metrics and Analytics    | 💡 New         | Low      | 3      |
-| [GUP-151](GUP-151_Surface_Configuration_Caching.md)     | Surface Configuration Caching     | 💡 New         | Low      | 2      |
+| [GUP-151](GUP-151_Surface_Configuration_Caching.md)     | Surface Configuration Caching     | 🚧 In Progress | Low      | 2      |
 | [GUP-152](GUP-152_Performance_Trend_Visualization.md)   | Performance Trend Visualization   | ✅ Complete    | Low      | 3      |
 | [GUP-153](GUP-153_Automated_Baseline_Recommendation.md) | Automated Baseline Recommendation | ✅ Complete    | Low      | 5      |
 | [GUP-154](GUP-154_Multi-Platform_CI_Testing.md)         | Multi-Platform CI Testing         | ✅ Complete    | Medium   | 8      |
