@@ -498,16 +498,20 @@ deferred to GUP-064-B.
 
 ### GUP-064-B: Custom Struct Code Generation
 
-**Status**: 📋 Planned  
-**Key Learning**: Manual WGSL struct definitions are error-prone and hard to
-maintain  
-**Dependencies**: GUP-064 complete  
-**Impact**: Auto-generate WGSL struct definitions from Rust
-`#[derive(WgslStruct)]`
+**Status**: ✅ Complete  
+**Completed**: 2025-01-27  
+**Key Learnings**:
+- Proc-macro type discovery limitations require runtime struct definition
+  collection
+- Generated code must respect visibility constraints of custom types
+- Convention-based padding field auto-detection (`_` prefix or "padding" in
+  name)
+- WgslStructType as separate trait from ShaderType for cleaner separation
 
-**Scope**: New derive macro for automatic struct definition generation with GPU
-alignment validation. Enables seamless use of custom types in
-`#[wgsl_function]`.
+**Completed**: Implemented `#[derive(WgslStruct)]` proc-macro with full
+integration into `#[wgsl_function]`. Automatic WGSL struct generation from Rust
+types with GPU alignment validation. Supports scalars, vectors, matrices,
+arrays, and nested custom types. 11 new tests, all passing.
 
 ### GUP-065: Procedural Macro Performance Optimization
 
