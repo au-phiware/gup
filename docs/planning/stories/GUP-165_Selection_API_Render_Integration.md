@@ -113,8 +113,8 @@ large.
 - [x] `boxplot_rendering_demo.rs` renders visibly (AC5)
 - [x] All existing tests still pass (`mask test`)
 - [x] No new Clippy warnings (`mask all-fix` clean)
-- [ ] GUP-149 can be marked complete
-- [ ] Retrospective written with follow-up stories identified
+- [x] GUP-149 can be marked complete
+- [x] Retrospective written with follow-up stories identified
 
 ---
 
