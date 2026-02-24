@@ -88,6 +88,7 @@ pub mod scale;
 pub mod selection;
 pub mod shader_function;
 pub mod shader_pipeline;
+pub mod spatial_index;
 pub mod test_utils;
 pub mod text;
 pub mod tick_generator;
