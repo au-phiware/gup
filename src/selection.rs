@@ -1068,4 +1068,167 @@ mod tests {
             frame.finish().expect("finish frame");
         });
     }
+
+    #[test]
+    fn gpu_prepare_and_render_boxplot_selection() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            use crate::BoxPlotAttributes;
+            use crate::mark::BoxPlot;
+            use crate::mark::boxplot::{BoxPlotInstance, BoxPlotOrientation};
+
+            let data = vec![BoxPlotAttributes {
+                position: Vec2 { x: 0.0, y: 0.0 },
+                min: -0.5,
+                q1: -0.2,
+                median: 0.0,
+                q3: 0.2,
+                max: 0.5,
+                outliers: vec![-0.7, 0.8],
+                width: 0.3,
+                orientation: BoxPlotOrientation::Vertical,
+                stroke_width: 0.01,
+                outlier_radius: 0.03,
+                ..Default::default()
+            }];
+
+            let mut selection: Selection<BoxPlotAttributes, BoxPlot> = Selection::from_data(data);
+
+            selection
+                .prepare_render(&context.device, &context.queue, |a| {
+                    BoxPlotInstance::from(a)
+                })
+                .expect("boxplot prepare_render");
+
+            assert!(selection.is_render_ready());
+
+            let mut ctx = Arc::try_unwrap(context).expect("single owner");
+            let mut frame = ctx.begin_frame().expect("begin_frame");
+
+            {
+                let mut render_pass = frame.render_pass(Some(wgpu::Color::WHITE));
+                selection
+                    .render(&mut render_pass)
+                    .expect("boxplot render should succeed");
+            }
+
+            frame.finish().expect("finish frame");
+        });
+    }
+
+    #[test]
+    fn gpu_render_multiple_boxplots() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            use crate::BoxPlotAttributes;
+            use crate::mark::BoxPlot;
+            use crate::mark::boxplot::{BoxPlotInstance, BoxPlotOrientation};
+
+            let data: Vec<BoxPlotAttributes> = (0..4)
+                .map(|i| {
+                    let x = -0.6 + i as f32 * 0.4;
+                    BoxPlotAttributes {
+                        position: Vec2 { x, y: 0.0 },
+                        min: -0.4,
+                        q1: -0.1,
+                        median: 0.1,
+                        q3: 0.3,
+                        max: 0.5,
+                        outliers: vec![-0.6],
+                        width: 0.15,
+                        orientation: BoxPlotOrientation::Vertical,
+                        stroke_width: 0.005,
+                        outlier_radius: 0.02,
+                        ..Default::default()
+                    }
+                })
+                .collect();
+
+            let mut selection: Selection<BoxPlotAttributes, BoxPlot> = Selection::from_data(data);
+            assert_eq!(selection.len(), 4);
+
+            selection
+                .prepare_render(&context.device, &context.queue, |a| {
+                    BoxPlotInstance::from(a)
+                })
+                .expect("prepare_render");
+
+            let mut ctx = Arc::try_unwrap(context).expect("single owner");
+            let mut frame = ctx.begin_frame().expect("begin_frame");
+
+            {
+                let mut render_pass = frame.render_pass(Some(wgpu::Color::BLACK));
+                selection
+                    .render(&mut render_pass)
+                    .expect("render 4 box plots");
+            }
+
+            frame.finish().expect("finish frame");
+        });
+    }
+
+    #[test]
+    fn gpu_render_horizontal_boxplot() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            use crate::BoxPlotAttributes;
+            use crate::mark::BoxPlot;
+            use crate::mark::boxplot::{BoxPlotInstance, BoxPlotOrientation};
+
+            let data = vec![BoxPlotAttributes {
+                position: Vec2 { x: 0.0, y: 0.0 },
+                min: -0.5,
+                q1: -0.2,
+                median: 0.0,
+                q3: 0.2,
+                max: 0.5,
+                outliers: vec![],
+                width: 0.3,
+                orientation: BoxPlotOrientation::Horizontal,
+                stroke_width: 0.01,
+                outlier_radius: 0.03,
+                ..Default::default()
+            }];
+
+            let mut selection: Selection<BoxPlotAttributes, BoxPlot> = Selection::from_data(data);
+            selection
+                .prepare_render(&context.device, &context.queue, |a| {
+                    BoxPlotInstance::from(a)
+                })
+                .expect("prepare_render horizontal");
+
+            let mut ctx = Arc::try_unwrap(context).expect("single owner");
+            let mut frame = ctx.begin_frame().expect("begin_frame");
+
+            {
+                let mut render_pass = frame.render_pass(Some(wgpu::Color::BLACK));
+                selection
+                    .render(&mut render_pass)
+                    .expect("render horizontal boxplot");
+            }
+
+            frame.finish().expect("finish frame");
+        });
+    }
 }
