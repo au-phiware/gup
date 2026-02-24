@@ -154,6 +154,8 @@ reorganisation._
 | [GUP-167](GUP-167_GpuBufferPool_Selection_Integration.md)  | GpuBufferPool Selection Integration      | 📋 Planned     | Low      | 3      |
 | [GUP-168](GUP-168_Selection_Attribute_Binding_Pipeline.md) | Selection Attribute Binding Pipeline     | 📋 Planned     | Medium   | 8      |
 | [GUP-169](GUP-169_Shared_Pipeline_Cache_Selections.md)     | Shared Pipeline Cache for Selections     | 📋 Planned     | Low      | 3      |
+| [GUP-170](GUP-170_BoxPlot_Notch_Rendering.md)              | BoxPlot Notch Rendering                  | 📋 Planned     | Low      | 2      |
+| [GUP-171](GUP-171_BoxPlot_Pixel_Space_Strokes.md)          | BoxPlot Pixel-Space Stroke Widths        | 📋 Planned     | Low      | 3      |
 
 ### Post GUP-014 Stories - Interaction Performance (Stories 76-79)
 
@@ -1166,12 +1168,29 @@ workaround to be replaced with a clean API
 
 ### GUP-166: Unified BoxPlot Mark Renderer
 
-**Status**: 📋 Planned **Priority**: Medium **Story Points**: 5 **Key Need**:
-Replace the manual primitive decomposition in `boxplot_rendering_demo.rs` with a
-first-class `BoxPlotMark` that renders box, median, whiskers, and outliers in
-coordinated draw calls via the Selection API. **Dependencies**: GUP-149 🚧,
-GUP-165 📋, GUP-068 ✅ **Impact**: Single-call box plot rendering; closes
-GUP-149; performance baseline of 100 box plots at ≥60 FPS
+**Status**: ✅ Complete (2025-07-17) **Priority**: Medium **Story Points**: 5
+**Key Need**: Replace the manual primitive decomposition in
+`boxplot_rendering_demo.rs` with a first-class `BoxPlotMark` that renders box,
+median, whiskers, and outliers in coordinated draw calls via the Selection API.
+**Dependencies**: GUP-149 ✅, GUP-165 ✅, GUP-068 ✅ **Impact**: Single-call box
+plot rendering; closes GUP-149; performance baseline of 100 box plots at ≥60 FPS
+
+### GUP-170: BoxPlot Notch Rendering
+
+**Status**: 📋 Planned **Priority**: Low **Story Points**: 2 **Key Need**: The
+`BoxPlotAttributes` has `notched` and `notch_width` fields but the SDF shader
+does not render notches. **Dependencies**: GUP-166 ✅ **Impact**: Enables
+confidence interval visualisation in box plots **Created**: 2025-07-17 during
+GUP-166 retrospective
+
+### GUP-171: BoxPlot Pixel-Space Stroke Widths
+
+**Status**: 📋 Planned **Priority**: Low **Story Points**: 3 **Key Need**:
+Stroke widths and outlier radii are in clip-space units, causing visual
+inconsistency across window sizes. A viewport-dimensions uniform would enable
+pixel-perfect rendering. **Dependencies**: GUP-166 ✅ **Impact**: Consistent
+visual appearance at all resolutions **Created**: 2025-07-17 during GUP-166
+retrospective
 
 ---
 

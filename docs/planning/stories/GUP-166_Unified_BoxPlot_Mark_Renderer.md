@@ -162,3 +162,109 @@ reads instance data from the storage buffer.
 for 4 boxplots (including full headless context setup, shader compilation)
 completes in ~90ms. Actual per-frame render time is sub-millisecond, well above
 the 60 FPS target.
+
+## Retrospective
+
+**Completed**: 2025-07-17
+
+### Key Technical Learnings
+
+#### SDF-Based Multi-Component Mark Rendering
+
+- **Challenge**: A box plot comprises 5+ visual components (box, median,
+  whiskers, caps, outliers) traditionally requiring separate draw calls or
+  separate mark types. The original demo used 4 Selections and 4 draw calls.
+- **Solution**: Use a Signed Distance Field (SDF) approach where a single
+  oversized quad per instance covers the entire box plot extent. The fragment
+  shader uses coordinate-based tests to determine which component each pixel
+  belongs to and applies the correct colour/alpha.
+- **Pattern**: SDF rendering in a single fragment shader is effective for
+  composite marks with up to ~5 sub-components. For marks with more (e.g.,
+  scatter plot with error bars, labels, and trend lines), separate draw calls
+  may be more maintainable.
+
+#### Storage Buffer Access in Fragment Shader
+
+- **Challenge**: The box plot has more per-instance data (256 bytes including 32
+  outlier values) than can fit in vertex-to-fragment interpolated outputs (limit
+  ~16 locations × vec4 = ~256 bytes, but outlier array alone needs 128 bytes
+  across 8 vec4 outputs).
+- **Solution**: Made the instance storage buffer visible to `VERTEX_FRAGMENT`
+  stages and passed the `instance_index` as a `flat`-interpolated u32. The
+  fragment shader reads the full instance data directly from the storage buffer
+  using `instances[input.instance_index]`.
+- **Pattern**: When per-instance data exceeds ~8 vec4 worth of vertex outputs,
+  use `@interpolate(flat)` to pass the instance index and read from storage in
+  the fragment shader. This requires the bind group layout to include
+  `ShaderStages::VERTEX_FRAGMENT` for the storage buffer.
+
+#### WGSL Fixed-Size Arrays in Storage Buffers
+
+- **Challenge**: Packing up to 32 outlier values into a WGSL struct required
+  careful alignment. WGSL `array<vec4<f32>, 8>` has alignment 16 and stride 16,
+  so the Rust `[[f32; 4]; 8]` matches perfectly with `#[repr(C)]`.
+- **Solution**: Used `array<vec4<f32>, 8>` in WGSL and `[[f32; 4]; 8]` in Rust.
+  Outlier values are packed 4-per-vec4 with `outliers[i / 4u][i % 4u]` in the
+  shader.
+- **Pattern**: For variable-length data in fixed-size GPU structs, pack into
+  vec4 arrays and use integer division/modulo for indexing. Store a count field
+  to know how many elements are valid.
+
+### Architectural Decisions
+
+#### Single Draw Call vs Separate Outlier Pass
+
+- **Decision**: Render outlier circles in the same SDF fragment shader as the
+  box components, not as a separate draw call with the Circle mark.
+- **Reasoning**: The story allows a second draw call for outliers ("they are a
+  different primitive topology; this is acceptable"), but the SDF approach
+  handles circles naturally. This keeps the Selection API simple — one draw call
+  per render().
+- **Trade-off**: The SDF approach means outlier circles are rendered as
+  per-pixel distance checks in the fragment shader, which is slightly less
+  efficient than instanced circle geometry for very large outlier counts. With
+  the 32-outlier limit this is not a concern.
+- **Future**: If outlier counts need to exceed 32, a two-pass approach (box
+  SDF + circle instances) would be needed.
+
+#### VERTEX_FRAGMENT Bind Group Visibility
+
+- **Decision**: Changed the generic `MarkInfoImpl` bind group layout from
+  `ShaderStages::VERTEX` to `ShaderStages::VERTEX_FRAGMENT` for the instance
+  storage buffer.
+- **Reasoning**: The BoxPlot fragment shader needs to read instance data. The
+  alternative — overriding pipeline creation for just BoxPlot — would have
+  required significant refactoring of the generic MarkInfoImpl.
+- **Trade-off**: All marks now declare fragment-stage access to the storage
+  buffer, even if their fragment shader doesn't reference it. This has zero
+  runtime cost (wgpu only validates that used bindings are visible, not that
+  visible bindings are used).
+- **Future**: This change enables other marks to adopt the same SDF pattern for
+  complex rendering without additional bind group changes.
+
+### Development Workflow Insights
+
+- **WGSL alignment verification**: Calculating struct alignment by hand before
+  writing Rust code saved debugging time. The 256-byte BoxPlotInstance aligned
+  correctly on the first attempt.
+- **Incremental shader development**: Writing the vertex shader first (quad
+  positioning), then the fragment shader (SDF component by component) made each
+  step testable.
+- **Pre-existing flaky test**: `test_performance_500_labels` continues to fail
+  intermittently (11ms vs 10ms target). Not related to this story.
+- **Demo visual verification**: The niri Wayland compositor did not display the
+  demo window in the agent's session. GPU integration tests with headless
+  context provided equivalent validation.
+
+### Follow-up Stories
+
+1. **GUP-170: BoxPlot Notch Rendering** — The `BoxPlotAttributes` has `notched`
+   and `notch_width` fields but the SDF shader does not render notches. This is
+   a low-priority visual enhancement that would modify the box SDF to include
+   the confidence interval notch shape.
+
+2. **GUP-171: BoxPlot Pixel-Space Stroke Widths** — Currently stroke width and
+   outlier radius are specified in clip-space units. A follow-up could add a
+   uniform with viewport dimensions so the fragment shader can compute
+   pixel-perfect line widths regardless of window size. This would improve
+   visual consistency across different resolutions.
