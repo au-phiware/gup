@@ -159,12 +159,12 @@ reorganisation._
 
 ### Post GUP-014 Stories - Interaction Performance (Stories 76-79)
 
-| Story                                                      | Title                                | Status     | Priority | Points |
-| ---------------------------------------------------------- | ------------------------------------ | ---------- | -------- | ------ |
-| [GUP-076](GUP-076_Spatial_Index_Bind_Group_Layout_Fix.md)  | Spatial Index Bind Group Layout Fix  | 🚧 In Progress | High     | —      |
-| [GUP-077](GUP-077_Performance_Benchmarking_Suite.md)       | Performance Benchmarking Suite       | 📋 Planned | Medium   | —      |
-| [GUP-078](GUP-078_Spatial_Index_Algorithm_Optimization.md) | Spatial Index Algorithm Optimization | 📋 Planned | Medium   | —      |
-| [GUP-079](GUP-079_GPU_Memory_Pool_Optimization.md)         | GPU Memory Pool Optimization         | 📋 Planned | Low      | —      |
+| Story                                                      | Title                                | Status      | Priority | Points |
+| ---------------------------------------------------------- | ------------------------------------ | ----------- | -------- | ------ |
+| [GUP-076](GUP-076_Spatial_Index_Bind_Group_Layout_Fix.md)  | Spatial Index Bind Group Layout Fix  | ✅ Complete | High     | —      |
+| [GUP-077](GUP-077_Performance_Benchmarking_Suite.md)       | Performance Benchmarking Suite       | 📋 Planned  | Medium   | —      |
+| [GUP-078](GUP-078_Spatial_Index_Algorithm_Optimization.md) | Spatial Index Algorithm Optimization | 📋 Planned  | Medium   | —      |
+| [GUP-079](GUP-079_GPU_Memory_Pool_Optimization.md)         | GPU Memory Pool Optimization         | 📋 Planned  | Low      | —      |
 
 ### Post GUP-015 Stories - Advanced Debug Infrastructure (Stories 80+)
 
