@@ -3,16 +3,23 @@
 
 //! Box Plot GPU Rendering Demo
 //!
-//! Demonstrates complete box plot visualization with GPU rendering:
-//! - Box (IQR: Q1-Q3)
-//! - Median line
-//! - Whiskers (extending to min/max non-outliers)
-//! - Outlier points
+//! Demonstrates complete box plot visualization with GPU rendering using the
+//! Selection API. Each box plot component (box, median, whiskers, outliers) is
+//! rendered through a typed Selection with the matching mark type.
 //!
-//! This example shows how to render all box plot components using the mark system.
+//! This example shows:
+//! - Selection::from_data() for render-only selections
+//! - Selection::prepare_render() to upload data to the GPU
+//! - Selection::render() for draw call orchestration in a single render pass
+//! - Composite mark rendering (rectangles + circles) via multiple Selections
 
+use gup::mark::circle::CircleInstance;
+use gup::mark::rectangle::RectangleInstance;
+use gup::mark::{Circle, Rectangle};
+use gup::selection::Selection;
 use gup::shader_function::Vec2;
 use gup::{BoxPlotAttributes, BoxPlotOrientation, GupContext, PhysicalSize, SurfaceId};
+use gup::{CircleAttributes, RectangleAttributes, Vec4};
 use std::sync::Arc;
 use wgpu::Color;
 use winit::{
@@ -62,210 +69,224 @@ fn create_sample_datasets() -> Vec<(&'static str, Vec<f32>, Vec2)> {
     ]
 }
 
-/// Convert box plot attributes to visual primitives for rendering
+/// Build RectangleAttributes and CircleAttributes from raw datasets.
+///
+/// Returns (boxes, medians, whiskers, outliers).
+fn build_attributes(
+    datasets: &[(&str, Vec<f32>, Vec2)],
+) -> (
+    Vec<RectangleAttributes>,
+    Vec<RectangleAttributes>,
+    Vec<RectangleAttributes>,
+    Vec<CircleAttributes>,
+) {
+    let mut boxes = Vec::new();
+    let mut medians = Vec::new();
+    let mut whiskers = Vec::new();
+    let mut outliers = Vec::new();
+
+    for (_name, data, position) in datasets {
+        let attrs =
+            BoxPlotAttributes::from_data(data, *position, 0.15, BoxPlotOrientation::Vertical);
+
+        // Normalise data values to clip space
+        let y_scale = |val: f32| (val - 10.0) / 90.0 * 1.6 - 0.8;
+
+        let q1_y = y_scale(attrs.q1);
+        let q3_y = y_scale(attrs.q3);
+        let median_y = y_scale(attrs.median);
+        let min_y = y_scale(attrs.min);
+        let max_y = y_scale(attrs.max);
+
+        // Box (IQR)
+        boxes.push(RectangleAttributes {
+            center: Vec2 {
+                x: position.x,
+                y: (q1_y + q3_y) * 0.5,
+            },
+            size: Vec2 {
+                x: attrs.width,
+                y: q3_y - q1_y,
+            },
+            fill_color: attrs.box_fill_color,
+            stroke_width: attrs.stroke_width / 100.0,
+            stroke_color: attrs.box_stroke_color,
+            corner_radius: 0.0,
+        });
+
+        // Median line
+        medians.push(RectangleAttributes {
+            center: Vec2 {
+                x: position.x,
+                y: median_y,
+            },
+            size: Vec2 {
+                x: attrs.width,
+                y: 0.01,
+            },
+            fill_color: attrs.median_color,
+            stroke_width: 0.0,
+            stroke_color: Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 0.0,
+            },
+            corner_radius: 0.0,
+        });
+
+        // Lower whisker
+        whiskers.push(RectangleAttributes {
+            center: Vec2 {
+                x: position.x,
+                y: (q1_y + min_y) * 0.5,
+            },
+            size: Vec2 {
+                x: 0.005,
+                y: q1_y - min_y,
+            },
+            fill_color: attrs.whisker_color,
+            stroke_width: 0.0,
+            stroke_color: Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 0.0,
+            },
+            corner_radius: 0.0,
+        });
+
+        // Upper whisker
+        whiskers.push(RectangleAttributes {
+            center: Vec2 {
+                x: position.x,
+                y: (q3_y + max_y) * 0.5,
+            },
+            size: Vec2 {
+                x: 0.005,
+                y: max_y - q3_y,
+            },
+            fill_color: attrs.whisker_color,
+            stroke_width: 0.0,
+            stroke_color: Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 0.0,
+            },
+            corner_radius: 0.0,
+        });
+
+        // Whisker caps
+        let cap_width = attrs.width * 0.3;
+        for &y in &[min_y, max_y] {
+            whiskers.push(RectangleAttributes {
+                center: Vec2 { x: position.x, y },
+                size: Vec2 {
+                    x: cap_width,
+                    y: 0.005,
+                },
+                fill_color: attrs.whisker_color,
+                stroke_width: 0.0,
+                stroke_color: Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 0.0,
+                },
+                corner_radius: 0.0,
+            });
+        }
+
+        // Outliers
+        for &outlier_value in &attrs.outliers {
+            let outlier_y = y_scale(outlier_value);
+            outliers.push(CircleAttributes {
+                center: Vec2 {
+                    x: position.x,
+                    y: outlier_y,
+                },
+                radius: attrs.outlier_radius / 100.0,
+                fill_color: attrs.outlier_color,
+                stroke_width: attrs.stroke_width / 200.0,
+                stroke_color: attrs.box_stroke_color,
+            });
+        }
+    }
+
+    (boxes, medians, whiskers, outliers)
+}
+
+/// Renderer that drives multiple Selections for the composite box plot.
 struct BoxPlotRenderer {
-    boxes: Vec<RectangleInstance>,
-    medians: Vec<RectangleInstance>,
-    whiskers: Vec<RectangleInstance>,
-    outliers: Vec<CircleInstance>,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct RectangleInstance {
-    position: [f32; 2],
-    size: [f32; 2],
-    fill_color: [f32; 4],
-    stroke_width: f32,
-    _padding: [f32; 3],
-    stroke_color: [f32; 4],
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct CircleInstance {
-    center: [f32; 2],
-    radius: f32,
-    _padding1: f32,
-    fill_color: [f32; 4],
-    stroke_width: f32,
-    _padding2: [f32; 3],
-    stroke_color: [f32; 4],
+    /// Rectangles for the IQR boxes
+    box_selection: Selection<RectangleAttributes, Rectangle>,
+    /// Rectangles for median lines
+    median_selection: Selection<RectangleAttributes, Rectangle>,
+    /// Rectangles for whisker lines and caps
+    whisker_selection: Selection<RectangleAttributes, Rectangle>,
+    /// Circles for outlier points
+    outlier_selection: Selection<CircleAttributes, Circle>,
+    /// Whether GPU resources have been prepared
+    prepared: bool,
 }
 
 impl BoxPlotRenderer {
     fn new(datasets: &[(&str, Vec<f32>, Vec2)]) -> Self {
-        let mut boxes = Vec::new();
-        let mut medians = Vec::new();
-        let mut whiskers = Vec::new();
-        let mut outliers = Vec::new();
+        let (boxes, medians, whiskers, outliers) = build_attributes(datasets);
 
-        for (_name, data, position) in datasets {
-            let attrs = BoxPlotAttributes::from_data(
-                data,
-                *position,
-                0.15, // width
-                BoxPlotOrientation::Vertical,
-            );
-
-            // Normalize values to screen space
-            let y_scale = |val: f32| (val - 10.0) / 90.0 * 1.6 - 0.8;
-
-            let q1_y = y_scale(attrs.q1);
-            let q3_y = y_scale(attrs.q3);
-            let median_y = y_scale(attrs.median);
-            let min_y = y_scale(attrs.min);
-            let max_y = y_scale(attrs.max);
-
-            // Box (IQR)
-            boxes.push(RectangleInstance {
-                position: [position.x, (q1_y + q3_y) * 0.5],
-                size: [attrs.width, q3_y - q1_y],
-                fill_color: [
-                    attrs.box_fill_color.x,
-                    attrs.box_fill_color.y,
-                    attrs.box_fill_color.z,
-                    attrs.box_fill_color.w,
-                ],
-                stroke_width: attrs.stroke_width / 100.0,
-                _padding: [0.0; 3],
-                stroke_color: [
-                    attrs.box_stroke_color.x,
-                    attrs.box_stroke_color.y,
-                    attrs.box_stroke_color.z,
-                    attrs.box_stroke_color.w,
-                ],
-            });
-
-            // Median line
-            medians.push(RectangleInstance {
-                position: [position.x, median_y],
-                size: [attrs.width, 0.01], // Thin horizontal line
-                fill_color: [
-                    attrs.median_color.x,
-                    attrs.median_color.y,
-                    attrs.median_color.z,
-                    attrs.median_color.w,
-                ],
-                stroke_width: 0.0,
-                _padding: [0.0; 3],
-                stroke_color: [0.0, 0.0, 0.0, 0.0],
-            });
-
-            // Lower whisker
-            whiskers.push(RectangleInstance {
-                position: [position.x, (q1_y + min_y) * 0.5],
-                size: [0.005, q1_y - min_y], // Thin vertical line
-                fill_color: [
-                    attrs.whisker_color.x,
-                    attrs.whisker_color.y,
-                    attrs.whisker_color.z,
-                    attrs.whisker_color.w,
-                ],
-                stroke_width: 0.0,
-                _padding: [0.0; 3],
-                stroke_color: [0.0, 0.0, 0.0, 0.0],
-            });
-
-            // Upper whisker
-            whiskers.push(RectangleInstance {
-                position: [position.x, (q3_y + max_y) * 0.5],
-                size: [0.005, max_y - q3_y], // Thin vertical line
-                fill_color: [
-                    attrs.whisker_color.x,
-                    attrs.whisker_color.y,
-                    attrs.whisker_color.z,
-                    attrs.whisker_color.w,
-                ],
-                stroke_width: 0.0,
-                _padding: [0.0; 3],
-                stroke_color: [0.0, 0.0, 0.0, 0.0],
-            });
-
-            // Whisker caps (horizontal lines at min/max)
-            let cap_width = attrs.width * 0.3;
-            whiskers.push(RectangleInstance {
-                position: [position.x, min_y],
-                size: [cap_width, 0.005],
-                fill_color: [
-                    attrs.whisker_color.x,
-                    attrs.whisker_color.y,
-                    attrs.whisker_color.z,
-                    attrs.whisker_color.w,
-                ],
-                stroke_width: 0.0,
-                _padding: [0.0; 3],
-                stroke_color: [0.0, 0.0, 0.0, 0.0],
-            });
-            whiskers.push(RectangleInstance {
-                position: [position.x, max_y],
-                size: [cap_width, 0.005],
-                fill_color: [
-                    attrs.whisker_color.x,
-                    attrs.whisker_color.y,
-                    attrs.whisker_color.z,
-                    attrs.whisker_color.w,
-                ],
-                stroke_width: 0.0,
-                _padding: [0.0; 3],
-                stroke_color: [0.0, 0.0, 0.0, 0.0],
-            });
-
-            // Outliers
-            for &outlier_value in &attrs.outliers {
-                let outlier_y = y_scale(outlier_value);
-                outliers.push(CircleInstance {
-                    center: [position.x, outlier_y],
-                    radius: attrs.outlier_radius / 100.0,
-                    _padding1: 0.0,
-                    fill_color: [
-                        attrs.outlier_color.x,
-                        attrs.outlier_color.y,
-                        attrs.outlier_color.z,
-                        attrs.outlier_color.w,
-                    ],
-                    stroke_width: attrs.stroke_width / 200.0,
-                    _padding2: [0.0; 3],
-                    stroke_color: [
-                        attrs.box_stroke_color.x,
-                        attrs.box_stroke_color.y,
-                        attrs.box_stroke_color.z,
-                        attrs.box_stroke_color.w,
-                    ],
-                });
-            }
-        }
+        println!(
+            "  Components: {} boxes, {} medians, {} whiskers, {} outliers",
+            boxes.len(),
+            medians.len(),
+            whiskers.len(),
+            outliers.len(),
+        );
 
         Self {
-            boxes,
-            medians,
-            whiskers,
-            outliers,
+            box_selection: Selection::from_data(boxes),
+            median_selection: Selection::from_data(medians),
+            whisker_selection: Selection::from_data(whiskers),
+            outlier_selection: Selection::from_data(outliers),
+            prepared: false,
         }
     }
 
-    fn render(&mut self, frame: &mut gup::RenderFrame) {
-        let clear_color = Color {
-            r: 0.98,
-            g: 0.98,
-            b: 0.98,
-            a: 1.0,
-        };
-
-        // Render all components
-        {
-            let _render_pass = frame.render_pass(Some(clear_color));
-
-            // Note: This is a placeholder for actual rendering
-            // Full implementation would use MarkRenderer and render pipelines
-            // to render rectangles (boxes, medians, whiskers) and circles (outliers)
-
-            // Count components for validation
-            let _box_count = self.boxes.len();
-            let _median_count = self.medians.len();
-            let _whisker_count = self.whiskers.len();
-            let _outlier_count = self.outliers.len();
+    /// Upload data to GPU (call once, or when data changes).
+    fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        if self.prepared {
+            return;
         }
+
+        self.box_selection
+            .prepare_render(device, queue, |a| RectangleInstance::from(a))
+            .expect("box prepare_render");
+        self.median_selection
+            .prepare_render(device, queue, |a| RectangleInstance::from(a))
+            .expect("median prepare_render");
+        self.whisker_selection
+            .prepare_render(device, queue, |a| RectangleInstance::from(a))
+            .expect("whisker prepare_render");
+        self.outlier_selection
+            .prepare_render(device, queue, |a| CircleInstance::from(a))
+            .expect("outlier prepare_render");
+
+        self.prepared = true;
+    }
+
+    /// Issue draw calls inside an existing render pass.
+    fn render<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+        // Multiple draw calls in one render pass (single render pass rule).
+        self.box_selection.render(render_pass).expect("box render");
+        self.median_selection
+            .render(render_pass)
+            .expect("median render");
+        self.whisker_selection
+            .render(render_pass)
+            .expect("whisker render");
+        self.outlier_selection
+            .render(render_pass)
+            .expect("outlier render");
     }
 }
 
@@ -309,8 +330,9 @@ impl BoxPlotApp {
         self.surface_id = surface_id;
         self.renderer = Some(renderer);
 
-        println!("Box Plot Rendering Demo");
-        println!("======================");
+        println!();
+        println!("Box Plot Rendering Demo (Selection API)");
+        println!("=======================================");
         println!("Displaying 4 different distributions:");
         println!("  1. Normal distribution");
         println!("  2. Skewed distribution");
@@ -338,11 +360,28 @@ impl BoxPlotApp {
                 }
             };
 
+            // Ensure GPU resources are uploaded.
+            if let Some(renderer) = &mut self.renderer {
+                renderer.prepare(&ctx.device, &ctx.queue);
+            }
+
             match ctx.begin_frame() {
                 Ok(mut frame) => {
-                    if let Some(renderer) = &mut self.renderer {
-                        renderer.render(&mut frame);
+                    let clear_color = Color {
+                        r: 0.98,
+                        g: 0.98,
+                        b: 0.98,
+                        a: 1.0,
+                    };
+
+                    // Single render pass for all box plot components.
+                    {
+                        let mut render_pass = frame.render_pass(Some(clear_color));
+                        if let Some(renderer) = &self.renderer {
+                            renderer.render(&mut render_pass);
+                        }
                     }
+
                     let _ = frame.finish();
                 }
                 Err(e) => eprintln!("Render error: {e}"),
@@ -438,13 +477,23 @@ mod tests {
     }
 
     #[test]
-    fn test_boxplot_renderer_creation() {
+    fn test_build_attributes() {
         let datasets = create_sample_datasets();
-        let renderer = BoxPlotRenderer::new(&datasets);
+        let (boxes, medians, whiskers, outliers) = build_attributes(&datasets);
 
-        assert_eq!(renderer.boxes.len(), 4); // One box per dataset
-        assert_eq!(renderer.medians.len(), 4); // One median per dataset
-        assert!(renderer.whiskers.len() >= 8); // At least 2 whiskers per dataset
-        assert!(renderer.outliers.len() >= 5); // At least 5 outliers from "With Outliers" dataset
+        assert_eq!(boxes.len(), 4); // One box per dataset
+        assert_eq!(medians.len(), 4); // One median per dataset
+        assert!(whiskers.len() >= 8); // At least 2 whiskers per dataset
+        assert!(outliers.len() >= 5); // At least 5 outliers from "With Outliers" dataset
+    }
+
+    #[test]
+    fn test_selection_from_data() {
+        let datasets = create_sample_datasets();
+        let (boxes, _, _, _) = build_attributes(&datasets);
+
+        let selection: Selection<RectangleAttributes, Rectangle> = Selection::from_data(boxes);
+        assert_eq!(selection.len(), 4);
+        assert!(!selection.is_render_ready());
     }
 }

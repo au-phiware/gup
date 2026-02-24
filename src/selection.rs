@@ -80,8 +80,8 @@ pub struct Selection<T, M: Mark> {
     selection_id: u32,
     /// Data items in this selection
     data: Vec<T>,
-    /// Render context for GPU operations
-    context: Arc<RenderContext>,
+    /// Render context for GPU operations (optional — needed only for interaction)
+    context: Option<Arc<RenderContext>>,
     /// Event handlers keyed by event type
     event_handlers: Arc<Mutex<HashMap<String, Vec<EventHandlerFn<T>>>>>,
     /// Mark type phantom
@@ -102,16 +102,36 @@ impl<T, M: Mark> std::fmt::Debug for Selection<T, M> {
 
 impl<T, M: Mark> Selection<T, M> {
     /// Create a new selection from data and render context.
+    ///
+    /// The render context is used for interaction features (hit testing).
+    /// For rendering-only use cases, prefer [`from_data`](Self::from_data).
     pub fn new(data: Vec<T>, context: Arc<RenderContext>) -> GupResult<Self> {
         let selection_id = NEXT_SELECTION_ID.fetch_add(1, Ordering::Relaxed);
         Ok(Self {
             selection_id,
             data,
-            context,
+            context: Some(context),
             event_handlers: Arc::new(Mutex::new(HashMap::new())),
             _mark: PhantomData,
             render_state: None,
         })
+    }
+
+    /// Create a render-only selection from data (no interaction context).
+    ///
+    /// Use this when you only need GPU rendering via
+    /// [`prepare_render`](Self::prepare_render) / [`render`](Self::render)
+    /// and do not need the interaction system.
+    pub fn from_data(data: Vec<T>) -> Self {
+        let selection_id = NEXT_SELECTION_ID.fetch_add(1, Ordering::Relaxed);
+        Self {
+            selection_id,
+            data,
+            context: None,
+            event_handlers: Arc::new(Mutex::new(HashMap::new())),
+            _mark: PhantomData,
+            render_state: None,
+        }
     }
 
     /// Get the unique ID of this selection
@@ -229,9 +249,9 @@ impl<T, M: Mark> Selection<T, M> {
         &self.data
     }
 
-    /// Get the render context.
-    pub fn context(&self) -> &Arc<RenderContext> {
-        &self.context
+    /// Get the render context (if available).
+    pub fn context(&self) -> Option<&Arc<RenderContext>> {
+        self.context.as_ref()
     }
 
     /// Get the number of items in this selection.
