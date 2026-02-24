@@ -86,6 +86,60 @@ pub struct CircleAttributes {
     pub stroke_color: Vec4,
 }
 
+/// GPU-ready instance data for circle rendering.
+///
+/// This struct matches the WGSL `CircleInstance` layout in `circle.vert.wgsl`
+/// and is suitable for upload to a storage buffer. Fields are aligned to
+/// satisfy WGSL storage buffer alignment rules (vec4 → 16-byte aligned).
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct CircleInstance {
+    /// Center position in clip space
+    pub center: [f32; 2],
+    /// Radius in clip space units
+    pub radius: f32,
+    /// Padding for vec4 alignment of fill_color
+    pub _pad0: f32,
+    /// Fill color (RGBA)
+    pub fill_color: [f32; 4],
+    /// Stroke width in clip space units
+    pub stroke_width: f32,
+    /// Padding for vec4 alignment of stroke_color
+    pub _pad1: [f32; 3],
+    /// Stroke color (RGBA)
+    pub stroke_color: [f32; 4],
+}
+
+impl From<&CircleAttributes> for CircleInstance {
+    fn from(attrs: &CircleAttributes) -> Self {
+        Self {
+            center: [attrs.center.x, attrs.center.y],
+            radius: attrs.radius,
+            _pad0: 0.0,
+            fill_color: [
+                attrs.fill_color.x,
+                attrs.fill_color.y,
+                attrs.fill_color.z,
+                attrs.fill_color.w,
+            ],
+            stroke_width: attrs.stroke_width,
+            _pad1: [0.0; 3],
+            stroke_color: [
+                attrs.stroke_color.x,
+                attrs.stroke_color.y,
+                attrs.stroke_color.z,
+                attrs.stroke_color.w,
+            ],
+        }
+    }
+}
+
+impl From<CircleAttributes> for CircleInstance {
+    fn from(attrs: CircleAttributes) -> Self {
+        Self::from(&attrs)
+    }
+}
+
 impl Mark for Circle {
     type Vertex = CircleVertex;
     type AttributeValue = CircleAttributes;

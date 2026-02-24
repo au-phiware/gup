@@ -90,6 +90,66 @@ pub struct RectangleAttributes {
     pub corner_radius: f32,
 }
 
+/// GPU-ready instance data for rectangle rendering.
+///
+/// This struct matches the WGSL `RectangleInstance` layout in `rectangle.vert.wgsl`
+/// and is suitable for upload to a storage buffer. Fields are aligned to
+/// satisfy WGSL storage buffer alignment rules (vec4 → 16-byte aligned).
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct RectangleInstance {
+    /// Center position in clip space
+    pub center: [f32; 2],
+    /// Size (width, height) in clip space units
+    pub size: [f32; 2],
+    /// Fill color (RGBA)
+    pub fill_color: [f32; 4],
+    /// Stroke width in clip space units
+    pub stroke_width: f32,
+    /// Padding for vec4 alignment of stroke_color
+    pub _pad1: [f32; 3],
+    /// Stroke color (RGBA)
+    pub stroke_color: [f32; 4],
+    /// Corner radius for rounded rectangles
+    pub corner_radius: f32,
+    /// Padding to match WGSL struct _padding field
+    pub _padding: f32,
+    /// Padding to align struct size to 16 bytes
+    pub _pad2: [f32; 2],
+}
+
+impl From<&RectangleAttributes> for RectangleInstance {
+    fn from(attrs: &RectangleAttributes) -> Self {
+        Self {
+            center: [attrs.center.x, attrs.center.y],
+            size: [attrs.size.x, attrs.size.y],
+            fill_color: [
+                attrs.fill_color.x,
+                attrs.fill_color.y,
+                attrs.fill_color.z,
+                attrs.fill_color.w,
+            ],
+            stroke_width: attrs.stroke_width,
+            _pad1: [0.0; 3],
+            stroke_color: [
+                attrs.stroke_color.x,
+                attrs.stroke_color.y,
+                attrs.stroke_color.z,
+                attrs.stroke_color.w,
+            ],
+            corner_radius: attrs.corner_radius,
+            _padding: 0.0,
+            _pad2: [0.0; 2],
+        }
+    }
+}
+
+impl From<RectangleAttributes> for RectangleInstance {
+    fn from(attrs: RectangleAttributes) -> Self {
+        Self::from(&attrs)
+    }
+}
+
 impl Mark for Rectangle {
     type Vertex = RectangleVertex;
     type AttributeValue = RectangleAttributes;
