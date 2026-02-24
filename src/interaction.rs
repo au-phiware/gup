@@ -40,6 +40,7 @@
 
 use crate::RenderContext;
 use crate::error::{GupError, GupResult};
+use crate::spatial_index::{Aabb, ElementPosition, SpatialAlgorithm, SpatialIndex, SpatialQuery};
 use futures_channel;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -563,6 +564,10 @@ pub struct InteractionSystem {
     spatial_index_built: bool,
     /// CPU-side spatial index: sorted element indices per cell
     spatial_element_indices: Vec<u32>,
+    /// Advanced spatial index (Morton or Hierarchical, built lazily)
+    advanced_spatial_index: Option<SpatialIndex>,
+    /// Which algorithm to use for the advanced spatial index
+    spatial_algorithm: SpatialAlgorithm,
 
     /// GPU resources
     device: Arc<Device>,
@@ -722,6 +727,8 @@ impl InteractionSystem {
             spatial_config,
             spatial_index_built: false,
             spatial_element_indices: Vec::new(),
+            advanced_spatial_index: None,
+            spatial_algorithm: SpatialAlgorithm::Auto,
             device: Arc::new(device.clone()),
             queue: Arc::new(queue.clone()),
             max_elements,
@@ -955,12 +962,10 @@ impl InteractionSystem {
         self.upload_element_data(&elements)?;
         self.upload_query_data(&[query])?;
 
-        // Execute compute shader – always use brute-force hit test on GPU.
-        // The CPU-side spatial index narrows the candidate set in
-        // `dispatcher_spatial_query`, but the final hit test is still a GPU
-        // dispatch for consistency and correctness.
+        // Execute compute shader – when a spatial index is available, use it
+        // to narrow candidates before GPU dispatch. Otherwise brute-force.
         if elements.len() > 1000 && self.spatial_index_built {
-            self.dispatcher_spatial_query(query, elements.len()).await?;
+            self.dispatcher_spatial_query(query, &elements).await?;
         } else {
             self.dispatch_hit_test_compute(elements.len(), 1).await?;
         }
@@ -981,20 +986,50 @@ impl InteractionSystem {
 
     /// Dispatch spatial-indexed query for better performance on large datasets.
     ///
-    /// Uses the CPU-built spatial index to determine which cells overlap the
-    /// query region, then dispatches the GPU hit test only over elements in
-    /// those cells. For large datasets with localised queries this can reduce
-    /// the number of GPU threads by orders of magnitude.
+    /// Uses the advanced spatial index (Morton or Hierarchical) to determine
+    /// which elements are candidates for the query, then uploads only those
+    /// candidates to the GPU hit test pipeline. For large datasets with
+    /// localised queries this dramatically reduces GPU work.
     async fn dispatcher_spatial_query(
         &mut self,
-        _query: GpuInteractionQuery,
-        element_count: usize,
+        query: GpuInteractionQuery,
+        elements: &[ElementData],
     ) -> GupResult<()> {
-        // For now, dispatch the full brute-force hit test on GPU.
-        // The spatial index is built and ready; a follow-up story (GUP-078)
-        // will implement a spatial-query-aware compute shader that reads the
-        // index on the GPU side to skip irrelevant cells.
-        self.dispatch_hit_test_compute(element_count, 1).await
+        // If no advanced index is available, fall back to brute-force
+        let adv_index = match &self.advanced_spatial_index {
+            Some(idx) => idx,
+            None => return self.dispatch_hit_test_compute(elements.len(), 1).await,
+        };
+
+        // Determine candidate elements based on query type
+        let candidates = if query.query_type == 0 {
+            // Point query
+            adv_index.query_point(query.position)
+        } else {
+            // Region query
+            let half_w = query.region_size[0] * 0.5;
+            let half_h = query.region_size[1] * 0.5;
+            let region = Aabb::new(
+                [query.position[0] - half_w, query.position[1] - half_h],
+                [query.position[0] + half_w, query.position[1] + half_h],
+            );
+            adv_index.query_region(&region)
+        };
+
+        if candidates.is_empty() {
+            return Ok(());
+        }
+
+        // Build a reduced element list from candidates
+        let candidate_elements: Vec<ElementData> = candidates
+            .iter()
+            .filter_map(|&idx| elements.get(idx as usize).copied())
+            .collect();
+
+        // Upload only the candidate elements and run the hit test
+        self.upload_element_data(&candidate_elements)?;
+        self.dispatch_hit_test_compute(candidate_elements.len(), 1)
+            .await
     }
 
     /// Extract element data from selections for GPU processing
@@ -1313,6 +1348,23 @@ impl InteractionSystem {
 
         self.spatial_index_built = true;
 
+        // Build advanced spatial index for narrowing candidates
+        let positions: Vec<ElementPosition> = elements
+            .iter()
+            .enumerate()
+            .map(|(i, e)| ElementPosition {
+                position: e.position,
+                size: e.size,
+                element_index: i as u32,
+            })
+            .collect();
+        let adv_bounds = Aabb::new([min_bounds.x, min_bounds.y], [max_bounds.x, max_bounds.y]);
+        self.advanced_spatial_index = Some(SpatialIndex::build(
+            self.spatial_algorithm,
+            &positions,
+            adv_bounds,
+        ));
+
         Ok(())
     }
 
@@ -1419,6 +1471,7 @@ impl InteractionSystem {
     pub fn invalidate_spatial_index(&mut self) {
         self.spatial_index_built = false;
         self.spatial_element_indices.clear();
+        self.advanced_spatial_index = None;
     }
 
     /// Build the spatial index from raw element data (public for testing).
@@ -1427,6 +1480,33 @@ impl InteractionSystem {
         elements: &[ElementData],
     ) -> GupResult<()> {
         self.build_spatial_index(elements).await
+    }
+
+    /// Set the spatial algorithm to use. Invalidates any existing index.
+    pub fn set_spatial_algorithm(&mut self, algorithm: SpatialAlgorithm) {
+        if self.spatial_algorithm != algorithm {
+            self.spatial_algorithm = algorithm;
+            self.invalidate_spatial_index();
+        }
+    }
+
+    /// Returns the current spatial algorithm setting.
+    pub fn spatial_algorithm(&self) -> SpatialAlgorithm {
+        self.spatial_algorithm
+    }
+
+    /// Returns the algorithm that was actually selected (relevant when using `Auto`).
+    pub fn active_spatial_algorithm(&self) -> Option<SpatialAlgorithm> {
+        self.advanced_spatial_index
+            .as_ref()
+            .map(|idx| idx.algorithm())
+    }
+
+    /// Returns memory usage of the advanced spatial index in bytes, or 0 if none.
+    pub fn advanced_index_memory_bytes(&self) -> usize {
+        self.advanced_spatial_index
+            .as_ref()
+            .map_or(0, |idx| idx.memory_usage_bytes())
     }
 
     /// Register an event handler for a specific event type
