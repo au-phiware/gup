@@ -1,6 +1,6 @@
 # GUP-165: Selection API Render Integration
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
