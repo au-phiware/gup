@@ -159,3 +159,105 @@ The Selection API now supports complete GPU rendering pipelines:
 - GPU tests cover: circle rendering, rectangle rendering, empty selection,
   pipeline reuse, buffer resize, composite rendering (multiple mark types in one
   render pass)
+
+## Retrospective
+
+**Completed**: 2025-07-15
+
+### Key Technical Learnings
+
+#### Storage Buffers for Instance Data
+
+- **Challenge**: The mark shaders (circle.vert.wgsl, rectangle.vert.wgsl) use
+  storage buffers (`@group(0) @binding(0) var<storage, read>`) for instance
+  data, not vertex buffers with `VertexStepMode::Instance`. This was initially
+  unclear because examples like `scatter_plot_demo.rs` use a different approach
+  with vertex buffer instance stepping.
+- **Solution**: Used `create_buffer_init` with `BufferUsages::STORAGE` and
+  derived the bind group layout directly from the compiled pipeline via
+  `pipeline.get_bind_group_layout(0)`.
+- **Pattern**: Always derive bind group layouts from the pipeline itself rather
+  than recreating them independently — this guarantees layout compatibility.
+
+#### WGSL Struct Alignment
+
+- **Challenge**: WGSL storage buffer structs have strict alignment rules
+  (`vec4<f32>` = 16-byte aligned). The Rust-side `#[repr(C)]` struct must
+  include explicit padding fields to match.
+- **Solution**: Defined `CircleInstance` (64 bytes) and `RectangleInstance` (80
+  bytes) with explicit `_padN` fields. The rectangle shader already has an
+  explicit `_padding` field, confirming the alignment requirements.
+- **Pattern**: When defining bytemuck::Pod structs matching WGSL storage
+  buffers, calculate the WGSL layout first (accounting for member alignment and
+  struct rounding) then add Rust padding fields.
+
+#### Optional Context for Selection
+
+- **Challenge**: The Selection constructor required `Arc<RenderContext>` (the
+  old interaction context), but the rendering demo uses `GupContext`. Making the
+  demo work required bridging two context types.
+- **Solution**: Made the context field `Option<Arc<RenderContext>>` and added a
+  `Selection::from_data()` constructor. Rendering methods take
+  `&Device`/`&Queue`/`&mut RenderPass` directly, decoupling from any specific
+  context type.
+- **Pattern**: Decouple GPU resource management from context types — accept raw
+  wgpu handles where possible for maximum flexibility.
+
+### Architectural Decisions
+
+#### Direct Buffer Creation vs GpuBufferPool
+
+- **Decision**: Used `device.create_buffer_init()` directly instead of
+  `GpuBufferPool` from GUP-030.
+- **Reasoning**: Each Selection owns its buffers exclusively (no sharing), and
+  the pool's allocation/deallocation lifecycle doesn't fit the Selection's RAII
+  ownership model well.
+- **Trade-off**: Missed opportunity for buffer reuse when selections are
+  created/destroyed frequently. For static visualisations (the current use
+  case), this has no measurable impact.
+- **Future**: A dedicated story could add pool integration if profiling reveals
+  allocation overhead in dynamic scenarios.
+
+#### Pipeline Per-Selection vs Shared Pipeline Cache
+
+- **Decision**: Each Selection creates its own pipeline via
+  `MarkInfoImpl::create_render_pipeline()`. There is no global pipeline cache.
+- **Reasoning**: wgpu may cache compiled shaders internally. The existing
+  `MarkRegistry` provides pipeline caching for code that uses it directly. The
+  Selection's `SelectionRenderState` caches the pipeline across frames for its
+  own use.
+- **Trade-off**: If many Selections of the same mark type exist, each will hold
+  its own pipeline object. In practice this is fine — pipelines are lightweight
+  handles.
+- **Future**: GUP-166 (Unified BoxPlot Mark Renderer) could introduce a shared
+  pipeline cache if needed.
+
+### Development Workflow Insights
+
+- **Incremental commits**: Breaking the 13-point story into 4 commits (instance
+  types → render infra → demo → tests) made each step reviewable and revertible.
+- **GPU test simplicity**: The `GupContext::headless()` → `begin_frame()` →
+  `render_pass()` → `finish()` pattern makes GPU integration tests
+  straightforward. Tests run in ~0.5s total.
+- **Pre-existing flaky test**: `test_performance_500_labels` (12ms vs 10ms
+  target) fails intermittently. Not related to this story but adds noise to test
+  results.
+
+### Follow-up Stories
+
+1. **GUP-167: GpuBufferPool Integration for Selection Rendering** — Wire the
+   Selection's instance buffer creation through GpuBufferPool (GUP-030) for
+   buffer reuse in dynamic scenarios where selections are frequently
+   created/destroyed. Low priority unless profiling reveals allocation overhead.
+
+2. **GUP-168: Selection Attribute Binding Pipeline** — The current
+   `prepare_render()` requires the caller to provide a mapper closure
+   (`|a| Instance::from(a)`). Implement the `attr()` / `attr_parallel()` methods
+   so the Selection can automatically compose shader functions into instance
+   data without manual mapping. Medium priority — enables the
+   "selection.attr('position', scale)" API pattern.
+
+3. **GUP-169: Shared Pipeline Cache for Selections** — Extract the per-mark
+   pipeline cache from MarkRegistry into a standalone `PipelineCache` that
+   multiple Selections can share. Low priority — only valuable when many
+   Selections of the same mark type coexist.
