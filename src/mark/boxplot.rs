@@ -243,27 +243,29 @@ impl Mark for BoxPlot {
         let mut shader = String::new();
         shader.push_str("// Generated BoxPlot vertex shader\n\n");
 
-        // Data structures
+        // BoxPlotInstance struct (must match BoxPlotInstance Rust struct layout)
         shader.push_str("struct BoxPlotInstance {\n");
         shader.push_str("    position: vec2<f32>,\n");
-        shader.push_str("    min: f32,\n");
+        shader.push_str("    whisker_min: f32,\n");
         shader.push_str("    q1: f32,\n");
         shader.push_str("    median: f32,\n");
         shader.push_str("    q3: f32,\n");
-        shader.push_str("    max: f32,\n");
+        shader.push_str("    whisker_max: f32,\n");
         shader.push_str("    width: f32,\n");
-        shader.push_str("    orientation: u32,\n");
         shader.push_str("    box_fill_color: vec4<f32>,\n");
         shader.push_str("    box_stroke_color: vec4<f32>,\n");
         shader.push_str("    median_color: vec4<f32>,\n");
         shader.push_str("    whisker_color: vec4<f32>,\n");
+        shader.push_str("    outlier_color: vec4<f32>,\n");
         shader.push_str("    stroke_width: f32,\n");
-        shader.push_str("    notched: u32,\n");
-        shader.push_str("    notch_width: f32,\n");
+        shader.push_str("    outlier_radius: f32,\n");
+        shader.push_str("    orientation: u32,\n");
+        shader.push_str("    outlier_count: u32,\n");
+        shader.push_str("    outliers: array<vec4<f32>, 8>,\n");
         shader.push_str("}\n\n");
 
         shader.push_str(
-            "@group(1) @binding(0) var<storage, read> instances: array<BoxPlotInstance>;\n\n",
+            "@group(0) @binding(0) var<storage, read> instances: array<BoxPlotInstance>;\n\n",
         );
 
         shader.push_str("struct VertexInput {\n");
@@ -274,7 +276,7 @@ impl Mark for BoxPlot {
         shader.push_str("struct VertexOutput {\n");
         shader.push_str("    @builtin(position) clip_position: vec4<f32>,\n");
         shader.push_str("    @location(0) world_position: vec2<f32>,\n");
-        shader.push_str("    @location(1) box_fill_color: vec4<f32>,\n");
+        shader.push_str("    @location(1) @interpolate(flat) instance_index: u32,\n");
         shader.push_str("}\n\n");
 
         // Add shader function definitions
@@ -286,11 +288,34 @@ impl Mark for BoxPlot {
 
         shader.push_str("@vertex\n");
         shader.push_str("fn vs_main(input: VertexInput) -> VertexOutput {\n");
-        shader.push_str("    let instance = instances[input.instance_index];\n");
+        shader.push_str("    let inst = instances[input.instance_index];\n");
+        shader.push_str("    var val_min = inst.whisker_min;\n");
+        shader.push_str("    var val_max = inst.whisker_max;\n");
+        shader.push_str("    for (var i = 0u; i < inst.outlier_count; i++) {\n");
+        shader.push_str("        let v = inst.outliers[i / 4u][i % 4u];\n");
+        shader.push_str("        val_min = min(val_min, v);\n");
+        shader.push_str("        val_max = max(val_max, v);\n");
+        shader.push_str("    }\n");
+        shader.push_str("    let margin = max(inst.outlier_radius, inst.stroke_width) + 0.005;\n");
+        shader.push_str("    val_min -= margin;\n");
+        shader.push_str("    val_max += margin;\n");
+        shader.push_str("    let half_w = inst.width * 0.5 + margin;\n");
+        shader.push_str("    var world_pos: vec2<f32>;\n");
+        shader.push_str("    if (inst.orientation == 0u) {\n");
+        shader.push_str("        world_pos = vec2<f32>(\n");
+        shader.push_str("            inst.position.x + input.position.x * half_w * 2.0,\n");
+        shader.push_str("            val_min + (input.position.y + 0.5) * (val_max - val_min),\n");
+        shader.push_str("        );\n");
+        shader.push_str("    } else {\n");
+        shader.push_str("        world_pos = vec2<f32>(\n");
+        shader.push_str("            val_min + (input.position.x + 0.5) * (val_max - val_min),\n");
+        shader.push_str("            inst.position.y + input.position.y * half_w * 2.0,\n");
+        shader.push_str("        );\n");
+        shader.push_str("    }\n");
         shader.push_str("    var output: VertexOutput;\n");
-        shader.push_str("    output.clip_position = vec4<f32>(input.position, 0.0, 1.0);\n");
-        shader.push_str("    output.world_position = input.position;\n");
-        shader.push_str("    output.box_fill_color = instance.box_fill_color;\n");
+        shader.push_str("    output.clip_position = vec4<f32>(world_pos, 0.0, 1.0);\n");
+        shader.push_str("    output.world_position = world_pos;\n");
+        shader.push_str("    output.instance_index = input.instance_index;\n");
         shader.push_str("    return output;\n");
         shader.push_str("}\n");
 
@@ -308,15 +333,41 @@ impl Mark for BoxPlot {
         let mut shader = String::new();
         shader.push_str("// Generated BoxPlot fragment shader\n\n");
 
+        // Same BoxPlotInstance struct for storage buffer access
+        shader.push_str("struct BoxPlotInstance {\n");
+        shader.push_str("    position: vec2<f32>,\n");
+        shader.push_str("    whisker_min: f32,\n");
+        shader.push_str("    q1: f32,\n");
+        shader.push_str("    median: f32,\n");
+        shader.push_str("    q3: f32,\n");
+        shader.push_str("    whisker_max: f32,\n");
+        shader.push_str("    width: f32,\n");
+        shader.push_str("    box_fill_color: vec4<f32>,\n");
+        shader.push_str("    box_stroke_color: vec4<f32>,\n");
+        shader.push_str("    median_color: vec4<f32>,\n");
+        shader.push_str("    whisker_color: vec4<f32>,\n");
+        shader.push_str("    outlier_color: vec4<f32>,\n");
+        shader.push_str("    stroke_width: f32,\n");
+        shader.push_str("    outlier_radius: f32,\n");
+        shader.push_str("    orientation: u32,\n");
+        shader.push_str("    outlier_count: u32,\n");
+        shader.push_str("    outliers: array<vec4<f32>, 8>,\n");
+        shader.push_str("}\n\n");
+
+        shader.push_str(
+            "@group(0) @binding(0) var<storage, read> instances: array<BoxPlotInstance>;\n\n",
+        );
+
         shader.push_str("struct VertexOutput {\n");
         shader.push_str("    @builtin(position) clip_position: vec4<f32>,\n");
         shader.push_str("    @location(0) world_position: vec2<f32>,\n");
-        shader.push_str("    @location(1) box_fill_color: vec4<f32>,\n");
+        shader.push_str("    @location(1) @interpolate(flat) instance_index: u32,\n");
         shader.push_str("}\n\n");
 
         shader.push_str("@fragment\n");
         shader.push_str("fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {\n");
-        shader.push_str("    return input.box_fill_color;\n");
+        shader.push_str("    let inst = instances[input.instance_index];\n");
+        shader.push_str("    return inst.box_fill_color;\n");
         shader.push_str("}\n");
 
         shader
@@ -421,6 +472,125 @@ impl Default for BoxPlotAttributes {
             notched: false,
             notch_width: 0.5,
         }
+    }
+}
+
+/// Maximum number of outliers per box plot instance.
+///
+/// Outlier values are packed into a fixed-size array for GPU upload.
+/// Additional outliers beyond this limit are silently dropped.
+pub const MAX_OUTLIERS: usize = 32;
+
+/// GPU-ready instance data for box plot rendering.
+///
+/// This struct matches the WGSL `BoxPlotInstance` layout in `boxplot.vert.wgsl`
+/// and is suitable for upload to a storage buffer. Fields are aligned to
+/// satisfy WGSL storage buffer alignment rules (vec4 → 16-byte aligned).
+///
+/// The struct packs all box plot data — statistical values, colours, style
+/// parameters, and up to 32 outlier values — so that the entire box plot
+/// (box, median, whiskers, caps, outliers) can be rendered in a single
+/// instanced draw call.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct BoxPlotInstance {
+    /// Center position in clip space (category axis position)
+    pub position: [f32; 2],
+    /// Lower whisker end in clip space
+    pub whisker_min: f32,
+    /// First quartile (bottom of box) in clip space
+    pub q1: f32,
+    /// Median line position in clip space
+    pub median: f32,
+    /// Third quartile (top of box) in clip space
+    pub q3: f32,
+    /// Upper whisker end in clip space
+    pub whisker_max: f32,
+    /// Box width in clip space units
+    pub width: f32,
+    /// Box fill colour (RGBA)
+    pub box_fill_color: [f32; 4],
+    /// Box stroke colour (RGBA)
+    pub box_stroke_color: [f32; 4],
+    /// Median line colour (RGBA)
+    pub median_color: [f32; 4],
+    /// Whisker line colour (RGBA)
+    pub whisker_color: [f32; 4],
+    /// Outlier circle colour (RGBA)
+    pub outlier_color: [f32; 4],
+    /// Stroke width in clip space units
+    pub stroke_width: f32,
+    /// Outlier circle radius in clip space units
+    pub outlier_radius: f32,
+    /// Orientation: 0 = vertical, 1 = horizontal
+    pub orientation: u32,
+    /// Number of valid outlier values in the `outliers` array
+    pub outlier_count: u32,
+    /// Outlier values packed into vec4s (up to 32 values, 4 per vec4)
+    pub outliers: [[f32; 4]; 8],
+}
+
+impl From<&BoxPlotAttributes> for BoxPlotInstance {
+    fn from(attrs: &BoxPlotAttributes) -> Self {
+        let mut outliers = [[0.0f32; 4]; 8];
+        let outlier_count = attrs.outliers.len().min(MAX_OUTLIERS) as u32;
+        for (i, &val) in attrs.outliers.iter().take(MAX_OUTLIERS).enumerate() {
+            outliers[i / 4][i % 4] = val;
+        }
+
+        Self {
+            position: [attrs.position.x, attrs.position.y],
+            whisker_min: attrs.min,
+            q1: attrs.q1,
+            median: attrs.median,
+            q3: attrs.q3,
+            whisker_max: attrs.max,
+            width: attrs.width,
+            box_fill_color: [
+                attrs.box_fill_color.x,
+                attrs.box_fill_color.y,
+                attrs.box_fill_color.z,
+                attrs.box_fill_color.w,
+            ],
+            box_stroke_color: [
+                attrs.box_stroke_color.x,
+                attrs.box_stroke_color.y,
+                attrs.box_stroke_color.z,
+                attrs.box_stroke_color.w,
+            ],
+            median_color: [
+                attrs.median_color.x,
+                attrs.median_color.y,
+                attrs.median_color.z,
+                attrs.median_color.w,
+            ],
+            whisker_color: [
+                attrs.whisker_color.x,
+                attrs.whisker_color.y,
+                attrs.whisker_color.z,
+                attrs.whisker_color.w,
+            ],
+            outlier_color: [
+                attrs.outlier_color.x,
+                attrs.outlier_color.y,
+                attrs.outlier_color.z,
+                attrs.outlier_color.w,
+            ],
+            stroke_width: attrs.stroke_width,
+            outlier_radius: attrs.outlier_radius,
+            orientation: match attrs.orientation {
+                BoxPlotOrientation::Vertical => 0,
+                BoxPlotOrientation::Horizontal => 1,
+            },
+            outlier_count,
+            outliers,
+        }
+    }
+}
+
+impl From<BoxPlotAttributes> for BoxPlotInstance {
+    fn from(attrs: BoxPlotAttributes) -> Self {
+        Self::from(&attrs)
     }
 }
 
@@ -532,5 +702,80 @@ mod tests {
 
         assert_ne!(vertical, horizontal);
         assert_eq!(vertical, BoxPlotOrientation::Vertical);
+    }
+
+    #[test]
+    fn test_boxplot_instance_size_and_alignment() {
+        // BoxPlotInstance must be exactly 256 bytes to match the WGSL layout.
+        assert_eq!(std::mem::size_of::<BoxPlotInstance>(), 256);
+        // Alignment must be at least 4 (repr(C)).
+        assert!(std::mem::align_of::<BoxPlotInstance>() >= 4);
+    }
+
+    #[test]
+    fn test_boxplot_instance_from_attributes() {
+        let attrs = BoxPlotAttributes {
+            position: Vec2 { x: 0.5, y: 0.0 },
+            min: 0.1,
+            q1: 0.3,
+            median: 0.5,
+            q3: 0.7,
+            max: 0.9,
+            outliers: vec![-0.1, 1.1],
+            width: 0.2,
+            orientation: BoxPlotOrientation::Vertical,
+            stroke_width: 0.01,
+            outlier_radius: 0.02,
+            ..Default::default()
+        };
+
+        let inst = BoxPlotInstance::from(&attrs);
+
+        assert_eq!(inst.position, [0.5, 0.0]);
+        assert_eq!(inst.whisker_min, 0.1);
+        assert_eq!(inst.q1, 0.3);
+        assert_eq!(inst.median, 0.5);
+        assert_eq!(inst.q3, 0.7);
+        assert_eq!(inst.whisker_max, 0.9);
+        assert_eq!(inst.width, 0.2);
+        assert_eq!(inst.orientation, 0); // Vertical
+        assert_eq!(inst.outlier_count, 2);
+        assert_eq!(inst.outliers[0][0], -0.1);
+        assert_eq!(inst.outliers[0][1], 1.1);
+        assert_eq!(inst.stroke_width, 0.01);
+        assert_eq!(inst.outlier_radius, 0.02);
+    }
+
+    #[test]
+    fn test_boxplot_instance_horizontal_orientation() {
+        let attrs = BoxPlotAttributes {
+            orientation: BoxPlotOrientation::Horizontal,
+            ..Default::default()
+        };
+        let inst = BoxPlotInstance::from(&attrs);
+        assert_eq!(inst.orientation, 1);
+    }
+
+    #[test]
+    fn test_boxplot_instance_outlier_clamping() {
+        // More than MAX_OUTLIERS should be clamped silently.
+        let attrs = BoxPlotAttributes {
+            outliers: (0..40).map(|i| i as f32).collect(),
+            ..Default::default()
+        };
+        let inst = BoxPlotInstance::from(&attrs);
+        assert_eq!(inst.outlier_count, MAX_OUTLIERS as u32);
+        // Last valid packed value: index 31 → vec4 index 7, component 3
+        assert_eq!(inst.outliers[7][3], 31.0);
+    }
+
+    #[test]
+    fn test_boxplot_instance_from_owned() {
+        let attrs = BoxPlotAttributes::default();
+        let inst_ref = BoxPlotInstance::from(&attrs);
+        let inst_owned = BoxPlotInstance::from(attrs);
+        // Both conversions should produce identical results.
+        assert_eq!(inst_ref.position, inst_owned.position);
+        assert_eq!(inst_ref.median, inst_owned.median);
     }
 }

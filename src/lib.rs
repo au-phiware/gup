@@ -157,7 +157,9 @@ pub use tick_generator::{
 };
 
 // Export mark system with explicit re-exports to avoid conflicts
-pub use mark::boxplot::{BoxPlot, BoxPlotAttributes, BoxPlotOrientation, BoxPlotVertex};
+pub use mark::boxplot::{
+    BoxPlot, BoxPlotAttributes, BoxPlotInstance, BoxPlotOrientation, BoxPlotVertex,
+};
 pub use mark::circle::{Circle, CircleAttributes, CircleInstance, CircleVertex};
 pub use mark::line::{Line, LineAttributes, LineStyle, LineVertex};
 pub use mark::rectangle::{Rectangle, RectangleAttributes, RectangleInstance, RectangleVertex};

@@ -49,7 +49,7 @@ pub mod rectangle;
 pub mod renderer;
 pub mod text;
 
-pub use boxplot::{BoxPlot, BoxPlotAttributes, BoxPlotOrientation, BoxPlotVertex};
+pub use boxplot::{BoxPlot, BoxPlotAttributes, BoxPlotInstance, BoxPlotOrientation, BoxPlotVertex};
 pub use circle::{Circle, CircleAttributes, CircleVertex};
 pub use composite::{
     CompositeMark, CompositeMarkAttributes, CompositeMarkVertex, SubMark, Transform,
@@ -523,10 +523,13 @@ impl<M: Mark> MarkInfoImpl<M> {
     fn create_bind_group_layout(&self, device: &Device) -> GupResult<BindGroupLayout> {
         let mut entries = Vec::new();
 
-        // Instance data buffer (always present)
+        // Instance data buffer (always present).
+        // Visible to both vertex and fragment stages so that marks like BoxPlot
+        // can read instance data in the fragment shader (e.g. for SDF rendering
+        // with per-instance outlier arrays that don't fit in vertex outputs).
         entries.push(BindGroupLayoutEntry {
             binding: 0,
-            visibility: ShaderStages::VERTEX,
+            visibility: ShaderStages::VERTEX_FRAGMENT,
             ty: BindingType::Buffer {
                 ty: BufferBindingType::Storage { read_only: true },
                 has_dynamic_offset: false,

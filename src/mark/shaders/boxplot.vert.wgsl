@@ -1,22 +1,27 @@
-// Box Plot Vertex Shader
-// Handles rendering of box plot components: box, median, whiskers, and outliers
+// Box Plot Vertex Shader — unified SDF renderer
+// Positions a quad that covers the full box plot extent (whiskers + outliers).
+// The fragment shader uses the instance data (read from the storage buffer
+// via flat instance_index) to render all components: box, median, whiskers,
+// caps, and outlier circles.
 
 struct BoxPlotInstance {
     position: vec2<f32>,
-    min: f32,
+    whisker_min: f32,
     q1: f32,
     median: f32,
     q3: f32,
-    max: f32,
+    whisker_max: f32,
     width: f32,
-    orientation: u32,
     box_fill_color: vec4<f32>,
     box_stroke_color: vec4<f32>,
     median_color: vec4<f32>,
     whisker_color: vec4<f32>,
+    outlier_color: vec4<f32>,
     stroke_width: f32,
-    notched: u32,
-    notch_width: f32,
+    outlier_radius: f32,
+    orientation: u32,
+    outlier_count: u32,
+    outliers: array<vec4<f32>, 8>,
 }
 
 @group(0) @binding(0)
@@ -30,55 +35,47 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) world_position: vec2<f32>,
-    @location(1) local_position: vec2<f32>,
-    @location(2) box_fill_color: vec4<f32>,
-    @location(3) box_stroke_color: vec4<f32>,
-    @location(4) median_color: vec4<f32>,
-    @location(5) whisker_color: vec4<f32>,
-    @location(6) stats: vec4<f32>, // min, q1, median, q3
-    @location(7) max_width: vec2<f32>, // max, width
-    @location(8) stroke_width: f32,
-    @location(9) orientation: f32,
+    @location(1) @interpolate(flat) instance_index: u32,
 }
 
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
-    let instance = instances[input.instance_index];
-    
-    var output: VertexOutput;
-    
-    // For box plot, we render the box (Q1-Q3)
-    // The vertex shader positions vertices for the box
-    let box_height = instance.q3 - instance.q1;
-    let box_center_y = (instance.q1 + instance.q3) * 0.5;
-    
+    let inst = instances[input.instance_index];
+
+    // Compute the full extent including whiskers and outliers.
+    var val_min = inst.whisker_min;
+    var val_max = inst.whisker_max;
+    for (var i = 0u; i < inst.outlier_count; i++) {
+        let v = inst.outliers[i / 4u][i % 4u];
+        val_min = min(val_min, v);
+        val_max = max(val_max, v);
+    }
+
+    // Add margin so outlier circles and strokes are not clipped.
+    let margin = max(inst.outlier_radius, inst.stroke_width) + 0.005;
+    val_min -= margin;
+    val_max += margin;
+    let half_w = inst.width * 0.5 + margin;
+
+    // Map the unit quad [-0.5, 0.5] to cover the full extent.
     var world_pos: vec2<f32>;
-    
-    if (instance.orientation == 0u) {
-        // Vertical orientation
+    if (inst.orientation == 0u) {
+        // Vertical: category = x, value = y
         world_pos = vec2<f32>(
-            instance.position.x + input.position.x * instance.width,
-            instance.position.y + input.position.y * box_height + box_center_y
+            inst.position.x + input.position.x * half_w * 2.0,
+            val_min + (input.position.y + 0.5) * (val_max - val_min),
         );
     } else {
-        // Horizontal orientation
+        // Horizontal: category = y, value = x
         world_pos = vec2<f32>(
-            instance.position.x + input.position.y * box_height + box_center_y,
-            instance.position.y + input.position.x * instance.width
+            val_min + (input.position.x + 0.5) * (val_max - val_min),
+            inst.position.y + input.position.y * half_w * 2.0,
         );
     }
-    
+
+    var output: VertexOutput;
     output.clip_position = vec4<f32>(world_pos, 0.0, 1.0);
     output.world_position = world_pos;
-    output.local_position = input.position;
-    output.box_fill_color = instance.box_fill_color;
-    output.box_stroke_color = instance.box_stroke_color;
-    output.median_color = instance.median_color;
-    output.whisker_color = instance.whisker_color;
-    output.stats = vec4<f32>(instance.min, instance.q1, instance.median, instance.q3);
-    output.max_width = vec2<f32>(instance.max, instance.width);
-    output.stroke_width = instance.stroke_width;
-    output.orientation = f32(instance.orientation);
-    
+    output.instance_index = input.instance_index;
     return output;
 }

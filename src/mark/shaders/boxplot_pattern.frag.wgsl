@@ -1,18 +1,33 @@
 // Box Plot Fragment Shader with Pattern Support
 // Renders the box with anti-aliased edges and pattern support for accessibility
 
+struct BoxPlotInstance {
+    position: vec2<f32>,
+    whisker_min: f32,
+    q1: f32,
+    median: f32,
+    q3: f32,
+    whisker_max: f32,
+    width: f32,
+    box_fill_color: vec4<f32>,
+    box_stroke_color: vec4<f32>,
+    median_color: vec4<f32>,
+    whisker_color: vec4<f32>,
+    outlier_color: vec4<f32>,
+    stroke_width: f32,
+    outlier_radius: f32,
+    orientation: u32,
+    outlier_count: u32,
+    outliers: array<vec4<f32>, 8>,
+}
+
+@group(0) @binding(0)
+var<storage, read> instances: array<BoxPlotInstance>;
+
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) world_position: vec2<f32>,
-    @location(1) local_position: vec2<f32>,
-    @location(2) box_fill_color: vec4<f32>,
-    @location(3) box_stroke_color: vec4<f32>,
-    @location(4) median_color: vec4<f32>,
-    @location(5) whisker_color: vec4<f32>,
-    @location(6) stats: vec4<f32>, // min, q1, median, q3
-    @location(7) max_width: vec2<f32>, // max, width
-    @location(8) stroke_width: f32,
-    @location(9) orientation: f32,
+    @location(1) @interpolate(flat) instance_index: u32,
 }
 
 struct PatternUniforms {
@@ -59,17 +74,17 @@ fn pattern_crosshatch(position: vec2<f32>, spacing: f32, thickness: f32) -> f32 
     let horizontal_pos = fract(position.y / spacing);
     let h_dist = abs(horizontal_pos - 0.5) * spacing;
     let h_alpha = 1.0 - smoothstep(thickness * 0.25, thickness * 0.25 + 1.0, h_dist);
-    
+
     let vertical_pos = fract(position.x / spacing);
     let v_dist = abs(vertical_pos - 0.5) * spacing;
     let v_alpha = 1.0 - smoothstep(thickness * 0.25, thickness * 0.25 + 1.0, v_dist);
-    
+
     return max(h_alpha, v_alpha);
 }
 
 fn apply_pattern(position: vec2<f32>) -> vec4<f32> {
     var pattern_alpha = 0.0;
-    
+
     switch pattern.pattern_type {
         case PATTERN_DOTS: {
             pattern_alpha = pattern_dots(position, pattern.spacing);
@@ -85,39 +100,106 @@ fn apply_pattern(position: vec2<f32>) -> vec4<f32> {
             return pattern.foreground_color;
         }
     }
-    
+
     return mix(pattern.background_color, pattern.foreground_color, pattern_alpha);
 }
 
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-    // Calculate distance to edge for anti-aliasing
-    let edge_distance = min(
-        min(0.5 - abs(input.local_position.x), 0.5 - abs(input.local_position.y)),
-        0.5
-    );
-    
-    // Anti-aliasing
-    let edge_width = 0.01;
-    let alpha = smoothstep(0.0, edge_width, edge_distance);
-    
-    // Determine if we're on the stroke or fill
-    let is_stroke = edge_distance < input.stroke_width / input.max_width.y;
-    
-    var color: vec4<f32>;
-    
-    if pattern.pattern_type != PATTERN_SOLID {
-        // Apply pattern for accessibility
-        let pattern_color = apply_pattern(input.world_position);
-        color = pattern_color;
+    let inst = instances[input.instance_index];
+
+    var val: f32;
+    var cat: f32;
+    var cat0: f32;
+    if (inst.orientation == 0u) {
+        val = input.world_position.y;
+        cat = input.world_position.x;
+        cat0 = inst.position.x;
     } else {
-        // Standard rendering without pattern
-        if (is_stroke) {
-            color = input.box_stroke_color;
-        } else {
-            color = input.box_fill_color;
+        val = input.world_position.x;
+        cat = input.world_position.y;
+        cat0 = inst.position.y;
+    }
+
+    let hw  = inst.width * 0.5;
+    let dc  = abs(cat - cat0);
+    let sw  = inst.stroke_width;
+    let aa  = 0.002;
+
+    // ── Outlier circles ─────────────────────────────────────────────
+    for (var i = 0u; i < inst.outlier_count; i++) {
+        let ov = inst.outliers[i / 4u][i % 4u];
+        let d  = length(vec2<f32>(cat - cat0, val - ov));
+        let r  = inst.outlier_radius;
+        if (d < r + aa) {
+            let outer_alpha = 1.0 - smoothstep(r - aa, r + aa, d);
+            let inner = r - sw * 0.6;
+            if (d > inner) {
+                return vec4<f32>(inst.box_stroke_color.rgb,
+                                inst.box_stroke_color.a * outer_alpha);
+            }
+            if pattern.pattern_type != PATTERN_SOLID {
+                let pc = apply_pattern(input.world_position);
+                return vec4<f32>(pc.rgb, pc.a * outer_alpha);
+            }
+            return vec4<f32>(inst.outlier_color.rgb,
+                            inst.outlier_color.a * outer_alpha);
         }
     }
-    
-    return vec4<f32>(color.rgb, color.a * alpha);
+
+    // ── Box (IQR) ───────────────────────────────────────────────────
+    let in_box_x = dc <= hw + aa;
+    let in_box_y = val >= inst.q1 - aa && val <= inst.q3 + aa;
+    if (in_box_x && in_box_y) {
+        let edge_x = hw - dc;
+        let edge_y = min(val - inst.q1, inst.q3 - val);
+        let edge   = min(edge_x, edge_y);
+        let alpha  = smoothstep(-aa, aa, edge);
+
+        if (edge < sw) {
+            return vec4<f32>(inst.box_stroke_color.rgb,
+                            inst.box_stroke_color.a * alpha);
+        }
+
+        let md = abs(val - inst.median);
+        if (md < sw * 0.8) {
+            let m_alpha = 1.0 - smoothstep(sw * 0.4, sw * 0.8, md);
+            let color   = mix(inst.box_fill_color, inst.median_color, m_alpha);
+            return vec4<f32>(color.rgb, color.a * alpha);
+        }
+
+        if pattern.pattern_type != PATTERN_SOLID {
+            let pc = apply_pattern(input.world_position);
+            return vec4<f32>(pc.rgb, pc.a * alpha);
+        }
+        return vec4<f32>(inst.box_fill_color.rgb,
+                        inst.box_fill_color.a * alpha);
+    }
+
+    // ── Whisker lines ───────────────────────────────────────────────
+    let wlw = sw * 0.5;
+    if (dc <= wlw + aa && val >= inst.whisker_min - aa && val < inst.q1) {
+        let a = 1.0 - smoothstep(wlw - aa, wlw + aa, dc);
+        return vec4<f32>(inst.whisker_color.rgb, inst.whisker_color.a * a);
+    }
+    if (dc <= wlw + aa && val > inst.q3 && val <= inst.whisker_max + aa) {
+        let a = 1.0 - smoothstep(wlw - aa, wlw + aa, dc);
+        return vec4<f32>(inst.whisker_color.rgb, inst.whisker_color.a * a);
+    }
+
+    // ── Whisker caps ────────────────────────────────────────────────
+    let cap_hw = hw * 0.5;
+    let cap_hh = sw * 0.5;
+    if (dc <= cap_hw + aa && abs(val - inst.whisker_min) <= cap_hh + aa) {
+        let ax = 1.0 - smoothstep(cap_hw - aa, cap_hw + aa, dc);
+        let ay = 1.0 - smoothstep(cap_hh - aa, cap_hh + aa, abs(val - inst.whisker_min));
+        return vec4<f32>(inst.whisker_color.rgb, inst.whisker_color.a * ax * ay);
+    }
+    if (dc <= cap_hw + aa && abs(val - inst.whisker_max) <= cap_hh + aa) {
+        let ax = 1.0 - smoothstep(cap_hw - aa, cap_hw + aa, dc);
+        let ay = 1.0 - smoothstep(cap_hh - aa, cap_hh + aa, abs(val - inst.whisker_max));
+        return vec4<f32>(inst.whisker_color.rgb, inst.whisker_color.a * ax * ay);
+    }
+
+    discard;
 }
