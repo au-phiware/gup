@@ -1,6 +1,6 @@
 # GUP-166: Unified BoxPlot Mark Renderer
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
