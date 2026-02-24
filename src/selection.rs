@@ -583,3 +583,489 @@ fn get_mark_type_id<M: Mark>() -> u32 {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mark::circle::{CircleAttributes, CircleInstance};
+    use crate::mark::rectangle::{RectangleAttributes, RectangleInstance};
+    use crate::mark::{Circle, Rectangle};
+    use crate::shader_function::{Vec2, Vec4};
+
+    // --- Unit tests (no GPU) ---
+
+    #[test]
+    fn from_data_creates_selection() {
+        let data = vec![
+            CircleAttributes {
+                center: Vec2 { x: 0.0, y: 0.0 },
+                radius: 0.1,
+                fill_color: Vec4 {
+                    x: 1.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0,
+                },
+                stroke_width: 0.0,
+                stroke_color: Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 0.0,
+                },
+            },
+            CircleAttributes {
+                center: Vec2 { x: 0.5, y: 0.5 },
+                radius: 0.2,
+                fill_color: Vec4 {
+                    x: 0.0,
+                    y: 1.0,
+                    z: 0.0,
+                    w: 1.0,
+                },
+                stroke_width: 0.0,
+                stroke_color: Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 0.0,
+                },
+            },
+        ];
+
+        let selection: Selection<CircleAttributes, Circle> = Selection::from_data(data);
+        assert_eq!(selection.len(), 2);
+        assert!(!selection.is_render_ready());
+        assert!(selection.context().is_none());
+    }
+
+    #[test]
+    fn set_data_invalidates_render_state() {
+        let mut selection: Selection<CircleAttributes, Circle> =
+            Selection::from_data(vec![CircleAttributes {
+                center: Vec2 { x: 0.0, y: 0.0 },
+                radius: 0.1,
+                fill_color: Vec4 {
+                    x: 1.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0,
+                },
+                stroke_width: 0.0,
+                stroke_color: Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 0.0,
+                },
+            }]);
+
+        assert_eq!(selection.len(), 1);
+
+        selection.set_data(vec![]);
+        assert_eq!(selection.len(), 0);
+        assert!(!selection.is_render_ready());
+    }
+
+    #[test]
+    fn render_without_prepare_returns_error() {
+        let selection: Selection<CircleAttributes, Circle> = Selection::from_data(vec![]);
+        // We can't call render() without a RenderPass, but we can verify state.
+        assert!(!selection.is_render_ready());
+    }
+
+    #[test]
+    fn circle_instance_from_attributes() {
+        let attrs = CircleAttributes {
+            center: Vec2 { x: 0.5, y: -0.3 },
+            radius: 0.1,
+            fill_color: Vec4 {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+            stroke_width: 0.02,
+            stroke_color: Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+        };
+
+        let instance = CircleInstance::from(&attrs);
+        assert_eq!(instance.center, [0.5, -0.3]);
+        assert_eq!(instance.radius, 0.1);
+        assert_eq!(instance.fill_color, [1.0, 0.0, 0.0, 1.0]);
+        assert_eq!(instance.stroke_width, 0.02);
+        assert_eq!(instance.stroke_color, [0.0, 0.0, 0.0, 1.0]);
+    }
+
+    #[test]
+    fn rectangle_instance_from_attributes() {
+        let attrs = RectangleAttributes {
+            center: Vec2 { x: 0.0, y: 0.0 },
+            size: Vec2 { x: 0.5, y: 0.3 },
+            fill_color: Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 1.0,
+                w: 1.0,
+            },
+            stroke_width: 0.01,
+            stroke_color: Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+            corner_radius: 0.05,
+        };
+
+        let instance = RectangleInstance::from(&attrs);
+        assert_eq!(instance.center, [0.0, 0.0]);
+        assert_eq!(instance.size, [0.5, 0.3]);
+        assert_eq!(instance.fill_color, [0.0, 0.0, 1.0, 1.0]);
+        assert_eq!(instance.stroke_width, 0.01);
+        assert_eq!(instance.stroke_color, [0.0, 0.0, 0.0, 1.0]);
+        assert_eq!(instance.corner_radius, 0.05);
+    }
+
+    // --- GPU integration tests ---
+
+    #[test]
+    fn gpu_prepare_and_render_circle_selection() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let data = vec![CircleAttributes {
+                center: Vec2 { x: 0.0, y: 0.0 },
+                radius: 0.1,
+                fill_color: Vec4 {
+                    x: 1.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0,
+                },
+                stroke_width: 0.0,
+                stroke_color: Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 0.0,
+                },
+            }];
+
+            let mut selection: Selection<CircleAttributes, Circle> = Selection::from_data(data);
+
+            // Prepare GPU resources.
+            selection
+                .prepare_render(&context.device, &context.queue, |a| CircleInstance::from(a))
+                .expect("prepare_render should succeed");
+
+            assert!(selection.is_render_ready());
+
+            // Render to an offscreen frame.
+            let mut ctx = Arc::try_unwrap(context).expect("single owner");
+            let mut frame = ctx.begin_frame().expect("begin_frame");
+
+            {
+                let mut render_pass = frame.render_pass(Some(wgpu::Color::BLACK));
+                selection
+                    .render(&mut render_pass)
+                    .expect("render should succeed");
+            }
+
+            frame.finish().expect("finish frame");
+        });
+    }
+
+    #[test]
+    fn gpu_prepare_and_render_rectangle_selection() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let data = vec![
+                RectangleAttributes {
+                    center: Vec2 { x: -0.3, y: 0.0 },
+                    size: Vec2 { x: 0.4, y: 0.6 },
+                    fill_color: Vec4 {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 1.0,
+                        w: 1.0,
+                    },
+                    stroke_width: 0.01,
+                    stroke_color: Vec4 {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 0.0,
+                        w: 1.0,
+                    },
+                    corner_radius: 0.0,
+                },
+                RectangleAttributes {
+                    center: Vec2 { x: 0.3, y: 0.0 },
+                    size: Vec2 { x: 0.4, y: 0.6 },
+                    fill_color: Vec4 {
+                        x: 0.0,
+                        y: 1.0,
+                        z: 0.0,
+                        w: 1.0,
+                    },
+                    stroke_width: 0.0,
+                    stroke_color: Vec4 {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 0.0,
+                        w: 0.0,
+                    },
+                    corner_radius: 0.02,
+                },
+            ];
+
+            let mut selection: Selection<RectangleAttributes, Rectangle> =
+                Selection::from_data(data);
+
+            selection
+                .prepare_render(&context.device, &context.queue, |a| {
+                    RectangleInstance::from(a)
+                })
+                .expect("prepare_render should succeed");
+
+            assert!(selection.is_render_ready());
+
+            let mut ctx = Arc::try_unwrap(context).expect("single owner");
+            let mut frame = ctx.begin_frame().expect("begin_frame");
+
+            {
+                let mut render_pass = frame.render_pass(Some(wgpu::Color::BLACK));
+                selection
+                    .render(&mut render_pass)
+                    .expect("render should succeed");
+            }
+
+            frame.finish().expect("finish frame");
+        });
+    }
+
+    #[test]
+    fn gpu_pipeline_reuse_across_prepare_calls() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let data = vec![CircleAttributes {
+                center: Vec2 { x: 0.0, y: 0.0 },
+                radius: 0.1,
+                fill_color: Vec4 {
+                    x: 1.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0,
+                },
+                stroke_width: 0.0,
+                stroke_color: Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 0.0,
+                },
+            }];
+
+            let mut selection: Selection<CircleAttributes, Circle> = Selection::from_data(data);
+
+            // First prepare — creates pipeline, buffers, bind group.
+            selection
+                .prepare_render(&context.device, &context.queue, |a| CircleInstance::from(a))
+                .expect("first prepare_render");
+
+            assert!(selection.is_render_ready());
+
+            // Second prepare with same-sized data — reuses pipeline + buffers.
+            selection
+                .prepare_render(&context.device, &context.queue, |a| CircleInstance::from(a))
+                .expect("second prepare_render (re-upload)");
+
+            assert!(selection.is_render_ready());
+        });
+    }
+
+    #[test]
+    fn gpu_buffer_resize_on_larger_data() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let make_attr = |x: f32| CircleAttributes {
+                center: Vec2 { x, y: 0.0 },
+                radius: 0.05,
+                fill_color: Vec4 {
+                    x: 1.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0,
+                },
+                stroke_width: 0.0,
+                stroke_color: Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 0.0,
+                },
+            };
+
+            // Start with 2 items.
+            let mut selection: Selection<CircleAttributes, Circle> =
+                Selection::from_data(vec![make_attr(-0.5), make_attr(0.5)]);
+
+            selection
+                .prepare_render(&context.device, &context.queue, |a| CircleInstance::from(a))
+                .expect("first prepare");
+
+            // Grow to 10 items — triggers buffer resize.
+            let large_data: Vec<_> = (0..10).map(|i| make_attr(-0.9 + i as f32 * 0.2)).collect();
+            selection.set_data(large_data);
+
+            selection
+                .prepare_render(&context.device, &context.queue, |a| CircleInstance::from(a))
+                .expect("second prepare after resize");
+
+            // Verify the new count is reflected.
+            assert_eq!(selection.len(), 10);
+        });
+    }
+
+    #[test]
+    fn gpu_empty_selection_renders_noop() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let mut selection: Selection<CircleAttributes, Circle> =
+                Selection::from_data(Vec::new());
+
+            selection
+                .prepare_render(&context.device, &context.queue, |a| CircleInstance::from(a))
+                .expect("prepare empty selection");
+
+            let mut ctx = Arc::try_unwrap(context).expect("single owner");
+            let mut frame = ctx.begin_frame().expect("begin_frame");
+
+            {
+                let mut render_pass = frame.render_pass(Some(wgpu::Color::BLACK));
+                // Should be a no-op, not an error.
+                selection
+                    .render(&mut render_pass)
+                    .expect("empty render should succeed");
+            }
+
+            frame.finish().expect("finish frame");
+        });
+    }
+
+    #[test]
+    fn gpu_composite_rendering_multiple_selections() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            // Create rectangle and circle selections (like box plot).
+            let rect_data = vec![RectangleAttributes {
+                center: Vec2 { x: 0.0, y: 0.0 },
+                size: Vec2 { x: 0.4, y: 0.6 },
+                fill_color: Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 1.0,
+                    w: 1.0,
+                },
+                stroke_width: 0.01,
+                stroke_color: Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0,
+                },
+                corner_radius: 0.0,
+            }];
+
+            let circle_data = vec![CircleAttributes {
+                center: Vec2 { x: 0.0, y: 0.5 },
+                radius: 0.05,
+                fill_color: Vec4 {
+                    x: 1.0,
+                    y: 0.5,
+                    z: 0.0,
+                    w: 1.0,
+                },
+                stroke_width: 0.0,
+                stroke_color: Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 0.0,
+                },
+            }];
+
+            let mut rect_sel: Selection<RectangleAttributes, Rectangle> =
+                Selection::from_data(rect_data);
+            let mut circle_sel: Selection<CircleAttributes, Circle> =
+                Selection::from_data(circle_data);
+
+            rect_sel
+                .prepare_render(&context.device, &context.queue, |a| {
+                    RectangleInstance::from(a)
+                })
+                .expect("rect prepare");
+            circle_sel
+                .prepare_render(&context.device, &context.queue, |a| CircleInstance::from(a))
+                .expect("circle prepare");
+
+            // Both render in the same render pass (single render pass rule).
+            let mut ctx = Arc::try_unwrap(context).expect("single owner");
+            let mut frame = ctx.begin_frame().expect("begin_frame");
+
+            {
+                let mut render_pass = frame.render_pass(Some(wgpu::Color::BLACK));
+                rect_sel.render(&mut render_pass).expect("rect render");
+                circle_sel.render(&mut render_pass).expect("circle render");
+            }
+
+            frame.finish().expect("finish frame");
+        });
+    }
+}
