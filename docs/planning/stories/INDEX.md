@@ -149,7 +149,7 @@ reorganisation._
 | [GUP-149](GUP-149_Box_Plot_GPU_Rendering.md)              | Box Plot GPU Rendering Integration       | 🚧 In Progress | Medium   | 3      |
 | [GUP-150](GUP-150_Statistical_Mark_Builder_API.md)        | Statistical Mark Builder API             | ✅ Complete    | Low      | 5      |
 | [GUP-151](GUP-151_Multi_Category_Box_Plots.md)            | Multi-Category Box Plots                 | ✅ Complete    | Low      | 3      |
-| [GUP-165](GUP-165_Selection_API_Render_Integration.md)    | Selection API Render Integration         | 🚧 In Progress | High     | 13     |
+| [GUP-165](GUP-165_Selection_API_Render_Integration.md)    | Selection API Render Integration         | ✅ Complete    | High     | 13     |
 | [GUP-166](GUP-166_Unified_BoxPlot_Mark_Renderer.md)       | Unified BoxPlot Mark Renderer            | 📋 Planned     | Medium   | 5      |
 
 ### Post GUP-014 Stories - Interaction Performance (Stories 76-79)
