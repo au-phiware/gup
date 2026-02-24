@@ -302,8 +302,8 @@ system story. The expanded story is also complete._
 1. **GUP-001** → **GUP-020** → **GUP-021** ✅ _Foundation complete_
 2. **GUP-014** → **GUP-076** → **GUP-077** → **GUP-078** 📋 _Interaction
    performance chain (unblocks 100K pts metric)_
-3. **GUP-068** → **GUP-165** → **GUP-149** / **GUP-166** / **GUP-127** 📋
-   _Rendering integration chain (highest current priority)_
+3. **GUP-068** → **GUP-165** ✅ → **GUP-149** / **GUP-166** / **GUP-127** 📋
+   _Rendering integration chain (GUP-165 done — unblocks GUP-149, 166, 127)_
 4. **GUP-005** → **GUP-054-ES** → **GUP-055–062** 📋 _Phase 2 transpilation (not
    yet started)_
 
@@ -332,12 +332,12 @@ system story. The expanded story is also complete._
   GUP-025 ✅, GUP-027 ✅, GUP-039 ✅, GUP-043 ✅, GUP-067 ✅, GUP-068 ✅,
   GUP-088 ✅
 - **Remaining (Phase 1 blockers)**:
-  - GUP-165 📋 Selection API Render Integration — Selection API lacks GPU buffer
-    management and draw call orchestration (blocks GUP-149, GUP-166, GUP-127)
+  - GUP-165 ✅ Selection API Render Integration — complete; unblocks GUP-149,
+    GUP-166, GUP-127
   - GUP-076 📋 Spatial Index Bind Group Fix — spatial indexing disabled since
     GUP-014; blocks GUP-077, GUP-078, and the "100K points at 60 FPS" metric
 - **Phase 1 success metric status**: Performance target (100K pts @ 60 FPS) is
-  unvalidated for the full rendering path until GUP-165 + GUP-076 are complete
+  unvalidated for the full rendering path until GUP-076 is complete
 
 ### Phase 2 Advanced Features (original scope)
 
