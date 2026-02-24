@@ -4,14 +4,31 @@
 //! Selection module for managing data selections and marks.
 //!
 //! This module provides the Selection type that enables GPU-accelerated interactive
-//! visualizations with event handling and spatial queries.
+//! visualizations with event handling, spatial queries, and GPU rendering.
+//!
+//! # Rendering
+//!
+//! The Selection can render its bound data to a GPU render pass using the mark's
+//! hand-optimized shaders. Call [`Selection::prepare_render`] to upload data and
+//! set up GPU resources, then [`Selection::render`] in the render pass.
+//!
+//! ```rust,ignore
+//! // Prepare GPU resources with a data-to-instance mapping
+//! selection.prepare_render(&device, &queue, |attrs| CircleInstance::from(attrs))?;
+//!
+//! // Later, in a render pass:
+//! selection.render(&mut render_pass)?;
+//! ```
 
 use crate::interaction::{InteractionElement, InteractionEvent, Renderable};
+use crate::mark::{MarkInfo, MarkInfoImpl};
 use crate::{GupResult, RenderContext};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
+use wgpu::util::DeviceExt;
+use wgpu::{Device, Queue, RenderPass};
 
 /// Mark types should implement the mark::Mark trait
 pub use crate::mark::Mark;
@@ -48,6 +65,16 @@ pub trait InteractionData: Send + Sync {
 /// - Interactive event handling (click, hover, drag)
 /// - Spatial queries for hit testing
 /// - Shader function composition for visual attributes
+///
+/// # GPU Rendering
+///
+/// The Selection manages a complete GPU rendering pipeline for its bound mark type.
+/// Call [`prepare_render`](Selection::prepare_render) to upload data and then
+/// [`render`](Selection::render) inside a render pass.
+///
+/// Pipelines are created once per mark type and cached. Instance buffers resize
+/// automatically when the data set grows. Bind groups are rebuilt only when the
+/// underlying storage buffer changes.
 pub struct Selection<T, M: Mark> {
     /// Unique identifier for this selection
     selection_id: u32,
@@ -59,6 +86,8 @@ pub struct Selection<T, M: Mark> {
     event_handlers: Arc<Mutex<HashMap<String, Vec<EventHandlerFn<T>>>>>,
     /// Mark type phantom
     _mark: PhantomData<M>,
+    /// GPU render state, lazily initialised via prepare_render()
+    render_state: Option<SelectionRenderState>,
 }
 
 impl<T, M: Mark> std::fmt::Debug for Selection<T, M> {
@@ -66,6 +95,7 @@ impl<T, M: Mark> std::fmt::Debug for Selection<T, M> {
         f.debug_struct("Selection")
             .field("selection_id", &self.selection_id)
             .field("data_count", &self.data.len())
+            .field("render_ready", &self.render_state.is_some())
             .finish()
     }
 }
@@ -80,6 +110,7 @@ impl<T, M: Mark> Selection<T, M> {
             context,
             event_handlers: Arc::new(Mutex::new(HashMap::new())),
             _mark: PhantomData,
+            render_state: None,
         })
     }
 
@@ -211,6 +242,219 @@ impl<T, M: Mark> Selection<T, M> {
     /// Check if this selection is empty.
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
+    }
+
+    /// Replace the data in this selection.
+    ///
+    /// This invalidates the GPU render state; call
+    /// [`prepare_render`](Self::prepare_render) again before the next
+    /// [`render`](Self::render) call.
+    pub fn set_data(&mut self, data: Vec<T>) {
+        self.data = data;
+        // Invalidate render state so next prepare_render re-uploads.
+        self.render_state = None;
+    }
+
+    /// Prepare GPU resources for rendering this selection.
+    ///
+    /// The `mapper` closure converts each data item `T` into a GPU-ready
+    /// instance struct `I` that matches the mark's WGSL storage buffer layout.
+    /// For example, `CircleInstance::from` for `Circle` marks or
+    /// `RectangleInstance::from` for `Rectangle` marks.
+    ///
+    /// On the first call this creates the render pipeline, vertex buffer,
+    /// instance storage buffer and bind group.  On subsequent calls with
+    /// changed data it re-uploads instances and rebuilds the bind group only
+    /// if the buffer was reallocated.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if pipeline or buffer creation fails.
+    pub fn prepare_render<I>(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        mapper: impl Fn(&T) -> I,
+    ) -> GupResult<()>
+    where
+        I: bytemuck::Pod + bytemuck::Zeroable,
+    {
+        // Convert data items to GPU instances.
+        let instances: Vec<I> = self.data.iter().map(&mapper).collect();
+        let instance_bytes: &[u8] = bytemuck::cast_slice(&instances);
+        let instance_count = instances.len() as u32;
+
+        if let Some(ref mut state) = self.render_state {
+            // Re-use existing pipeline and vertex buffers.
+            // If the instance buffer is too small, reallocate.
+            if instance_bytes.len() > state.instance_buffer_capacity {
+                let (instance_buffer, bind_group) =
+                    SelectionRenderState::create_instance_buffer_and_bind_group(
+                        device,
+                        &state.pipeline,
+                        instance_bytes,
+                    );
+                state.instance_buffer = instance_buffer;
+                state.bind_group = bind_group;
+                state.instance_buffer_capacity = instance_bytes.len();
+            } else {
+                // Buffer large enough: just re-upload.
+                queue.write_buffer(&state.instance_buffer, 0, instance_bytes);
+            }
+            state.instance_count = instance_count;
+        } else {
+            // First-time setup: create everything.
+            let state = SelectionRenderState::new::<M>(device, instance_bytes, instance_count)?;
+            self.render_state = Some(state);
+        }
+
+        Ok(())
+    }
+
+    /// Render the selection to an active render pass.
+    ///
+    /// [`prepare_render`](Self::prepare_render) **must** be called at least
+    /// once before the first `render` call.  The render pass must have been
+    /// created in the same frame (single render pass rule).
+    ///
+    /// Issues instanced draw calls using the mark's hand-optimised shaders,
+    /// with instance data streamed via a storage buffer at `@group(0)
+    /// @binding(0)`.
+    pub fn render<'a>(&'a self, render_pass: &mut RenderPass<'a>) -> GupResult<()> {
+        let state = self.render_state.as_ref().ok_or_else(|| {
+            crate::error::GupError::render_error(
+                "Selection render state not initialised — call prepare_render() first".to_string(),
+            )
+        })?;
+
+        if state.instance_count == 0 {
+            return Ok(());
+        }
+
+        render_pass.set_pipeline(&state.pipeline);
+        render_pass.set_bind_group(0, &state.bind_group, &[]);
+        render_pass.set_vertex_buffer(0, state.vertex_buffer.slice(..));
+
+        if let (Some(index_count), Some(index_buffer)) = (state.index_count, &state.index_buffer) {
+            render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            render_pass.draw_indexed(0..index_count, 0, 0..state.instance_count);
+        } else {
+            render_pass.draw(0..state.vertex_count, 0..state.instance_count);
+        }
+
+        Ok(())
+    }
+
+    /// Returns `true` if the selection has been prepared for rendering.
+    pub fn is_render_ready(&self) -> bool {
+        self.render_state.is_some()
+    }
+}
+
+/// Internal GPU state for rendering a Selection's data.
+///
+/// Holds the render pipeline, vertex/index/instance buffers, and bind group.
+/// Created by [`Selection::prepare_render`] and consumed by
+/// [`Selection::render`].
+struct SelectionRenderState {
+    /// Render pipeline created from the mark's shaders.
+    pipeline: wgpu::RenderPipeline,
+    /// Vertex buffer containing the mark's base geometry (e.g., unit quad).
+    vertex_buffer: wgpu::Buffer,
+    /// Optional index buffer for indexed rendering.
+    index_buffer: Option<wgpu::Buffer>,
+    /// Storage buffer holding per-instance data.
+    instance_buffer: wgpu::Buffer,
+    /// Bind group referencing the instance storage buffer.
+    bind_group: wgpu::BindGroup,
+    /// Number of vertices in the base geometry.
+    vertex_count: u32,
+    /// Number of indices (None for non-indexed marks).
+    index_count: Option<u32>,
+    /// Number of instances to draw.
+    instance_count: u32,
+    /// Current byte capacity of the instance buffer.
+    instance_buffer_capacity: usize,
+}
+
+impl SelectionRenderState {
+    /// Create a complete render state for a mark type.
+    fn new<M: Mark>(
+        device: &Device,
+        instance_bytes: &[u8],
+        instance_count: u32,
+    ) -> GupResult<Self> {
+        // --- Pipeline ------------------------------------------------
+        let mark_info = MarkInfoImpl::<M>::new();
+        let pipeline = mark_info.create_render_pipeline(device)?;
+
+        // --- Vertex buffer -------------------------------------------
+        let vertices = M::generate_vertices();
+        let vertex_bytes: &[u8] = bytemuck::cast_slice(&vertices);
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("selection_vertex_buffer"),
+            contents: vertex_bytes,
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        // --- Index buffer (optional) ---------------------------------
+        let index_buffer = M::generate_indices().map(|indices| {
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("selection_index_buffer"),
+                contents: bytemuck::cast_slice(&indices),
+                usage: wgpu::BufferUsages::INDEX,
+            })
+        });
+
+        // --- Instance buffer + bind group ----------------------------
+        let (instance_buffer, bind_group) =
+            Self::create_instance_buffer_and_bind_group(device, &pipeline, instance_bytes);
+
+        let vertex_count = M::vertex_count() as u32;
+        let index_count = M::index_count().map(|c| c as u32);
+
+        Ok(Self {
+            pipeline,
+            vertex_buffer,
+            index_buffer,
+            instance_buffer,
+            bind_group,
+            vertex_count,
+            index_count,
+            instance_count,
+            instance_buffer_capacity: instance_bytes.len(),
+        })
+    }
+
+    /// Create (or recreate) the instance storage buffer and matching bind group.
+    fn create_instance_buffer_and_bind_group(
+        device: &Device,
+        pipeline: &wgpu::RenderPipeline,
+        instance_bytes: &[u8],
+    ) -> (wgpu::Buffer, wgpu::BindGroup) {
+        // Ensure at least 16 bytes for wgpu minimum buffer size requirements.
+        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("selection_instance_buffer"),
+            contents: if instance_bytes.is_empty() {
+                &[0u8; 16]
+            } else {
+                instance_bytes
+            },
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
+
+        // Derive bind group layout from the pipeline (guaranteed to match).
+        let bind_group_layout = pipeline.get_bind_group_layout(0);
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("selection_bind_group"),
+            layout: &bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: instance_buffer.as_entire_binding(),
+            }],
+        });
+
+        (instance_buffer, bind_group)
     }
 }
 
