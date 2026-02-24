@@ -8,6 +8,7 @@ use gup::vec4;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct TestData {
     value: f32,
 }
@@ -15,10 +16,8 @@ struct TestData {
 #[test]
 fn test_selection_attr_parallel_api() {
     // This test verifies the API surface exists and compiles
-    let context = Arc::new(
-        pollster::block_on(RenderContext::new())
-            .expect("Failed to create context"),
-    );
+    let context =
+        Arc::new(pollster::block_on(RenderContext::new()).expect("Failed to create context"));
 
     let data = vec![
         TestData { value: 0.0 },
@@ -26,8 +25,8 @@ fn test_selection_attr_parallel_api() {
         TestData { value: 100.0 },
     ];
 
-    let mut selection = Selection::<TestData, Circle>::new(data, context)
-        .expect("Failed to create selection");
+    let mut selection =
+        Selection::<TestData, Circle>::new(data, context).expect("Failed to create selection");
 
     // Create parallel composition
     let position_scale = LinearScale::new(0.0, 100.0, 0.0, 800.0);
@@ -43,15 +42,13 @@ fn test_selection_attr_parallel_api() {
 
 #[test]
 fn test_selection_attr_parallel_method_chaining() {
-    let context = Arc::new(
-        pollster::block_on(RenderContext::new())
-            .expect("Failed to create context"),
-    );
+    let context =
+        Arc::new(pollster::block_on(RenderContext::new()).expect("Failed to create context"));
 
     let data = vec![TestData { value: 0.0 }];
 
-    let mut selection = Selection::<TestData, Circle>::new(data, context)
-        .expect("Failed to create selection");
+    let mut selection =
+        Selection::<TestData, Circle>::new(data, context).expect("Failed to create selection");
 
     // Create parallel compositions
     let position_scale = LinearScale::new(0.0, 100.0, 0.0, 800.0);
@@ -70,15 +67,13 @@ fn test_selection_attr_parallel_method_chaining() {
 
 #[test]
 fn test_selection_attr_parallel_three_way_binding() {
-    let context = Arc::new(
-        pollster::block_on(RenderContext::new())
-            .expect("Failed to create context"),
-    );
+    let context =
+        Arc::new(pollster::block_on(RenderContext::new()).expect("Failed to create context"));
 
     let data = vec![TestData { value: 0.0 }];
 
-    let mut selection = Selection::<TestData, Circle>::new(data, context)
-        .expect("Failed to create selection");
+    let mut selection =
+        Selection::<TestData, Circle>::new(data, context).expect("Failed to create selection");
 
     // Create 3-way parallel composition (nested ParallelOutput)
     let x_scale = LinearScale::new(0.0, 100.0, 0.0, 800.0);
@@ -99,15 +94,13 @@ fn test_selection_attr_parallel_three_way_binding() {
 
 #[test]
 fn test_selection_attr_parallel_with_composed_functions() {
-    let context = Arc::new(
-        pollster::block_on(RenderContext::new())
-            .expect("Failed to create context"),
-    );
+    let context =
+        Arc::new(pollster::block_on(RenderContext::new()).expect("Failed to create context"));
 
     let data = vec![TestData { value: 0.0 }];
 
-    let mut selection = Selection::<TestData, Circle>::new(data, context)
-        .expect("Failed to create selection");
+    let mut selection =
+        Selection::<TestData, Circle>::new(data, context).expect("Failed to create selection");
 
     // Create composed functions and then parallel compose them
     let normalize = LinearScale::new(0.0, 100.0, 0.0, 1.0);
@@ -127,15 +120,13 @@ fn test_selection_attr_parallel_with_composed_functions() {
 
 #[test]
 fn test_selection_attr_and_attr_parallel_mixed_usage() {
-    let context = Arc::new(
-        pollster::block_on(RenderContext::new())
-            .expect("Failed to create context"),
-    );
+    let context =
+        Arc::new(pollster::block_on(RenderContext::new()).expect("Failed to create context"));
 
     let data = vec![TestData { value: 0.0 }];
 
-    let mut selection = Selection::<TestData, Circle>::new(data, context)
-        .expect("Failed to create selection");
+    let mut selection =
+        Selection::<TestData, Circle>::new(data, context).expect("Failed to create selection");
 
     // Mix regular attr() and attr_parallel() calls
     let position_scale = LinearScale::new(0.0, 100.0, 0.0, 800.0);
@@ -155,15 +146,13 @@ fn test_selection_attr_parallel_type_safety() {
     // This test demonstrates compile-time type safety
     // Uncomment to verify compilation errors
 
-    let context = Arc::new(
-        pollster::block_on(RenderContext::new())
-            .expect("Failed to create context"),
-    );
+    let context =
+        Arc::new(pollster::block_on(RenderContext::new()).expect("Failed to create context"));
 
     let data = vec![TestData { value: 0.0 }];
 
-    let mut selection = Selection::<TestData, Circle>::new(data, context)
-        .expect("Failed to create selection");
+    let mut selection =
+        Selection::<TestData, Circle>::new(data, context).expect("Failed to create selection");
 
     let position_scale = LinearScale::new(0.0, 100.0, 0.0, 800.0);
     let color_map = ColorMap::new(vec4![0.0, 0.0, 1.0, 1.0], vec4![1.0, 0.0, 0.0, 1.0]);

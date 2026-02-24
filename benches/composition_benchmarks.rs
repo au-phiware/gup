@@ -5,10 +5,11 @@
 
 #![allow(dead_code)]
 
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use gup::mixable::{BlendMode, Mixable, MixableExt};
 use gup::{RenderContext, Viewport};
 use pollster::FutureExt;
+use std::hint::black_box;
 
 /// Simple test visualization for benchmarking
 #[derive(Debug)]

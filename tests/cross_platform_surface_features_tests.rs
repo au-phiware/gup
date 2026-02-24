@@ -112,7 +112,7 @@ async fn test_platform_surface_capabilities_conversion() {
 // Note: Native integration tests are disabled because winit's EventLoop
 // requires initialization on the main thread, which conflicts with tokio::test.
 // These tests can be run manually in examples or with a custom test harness.
-#[cfg(all(not(target_arch = "wasm32"), feature = "disabled-for-now"))]
+#[cfg(any())] // Tests disabled: winit's EventLoop requires main thread, conflicts with tokio::test
 mod native_tests {
     use super::*;
     use gup::context::PhysicalSize;

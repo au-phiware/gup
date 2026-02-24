@@ -125,7 +125,7 @@ fn test_vector_array_creation() {
 
 #[test]
 fn test_color_gradient_stops() {
-    let gradient_stops = vec![
+    let gradient_stops = [
         vec4![1.0, 0.0, 0.0, 1.0], // Red
         vec4![1.0, 1.0, 0.0, 1.0], // Yellow
         vec4![0.0, 1.0, 0.0, 1.0], // Green
@@ -144,7 +144,7 @@ fn test_color_gradient_stops() {
 #[test]
 fn test_gpu_vertex_data() {
     // Prepare vertex data for GPU
-    let vertices = vec![
+    let vertices = [
         vec3![0.0, 0.5, 0.0],   // Top
         vec3![-0.5, -0.5, 0.0], // Bottom left
         vec3![0.5, -0.5, 0.0],  // Bottom right

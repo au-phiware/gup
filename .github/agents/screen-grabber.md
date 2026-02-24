@@ -22,20 +22,20 @@ You have two capture backends:
 
 ### niri (preferred for window and screen capture)
 
-```
+```shell
 niri msg action screenshot-window [--id <ID>] [--path <PATH>]
 niri msg action screenshot-screen [--path <PATH>] [--show-pointer <true|false>]
 ```
 
 ### grim (required for arbitrary geometry capture)
 
-```
+```shell
 grim [-g "X,Y WxH"] [-o <output>] [-c] [output-file]
 ```
 
 ### niri queries (for window/output discovery)
 
-```
+```shell
 niri msg -j windows          # JSON list of all windows
 niri msg -j outputs          # JSON map of all outputs
 niri msg -j focused-window   # JSON of focused window
@@ -44,7 +44,7 @@ niri msg -j focused-output   # JSON of focused output
 
 ### niri focus actions (for targeting before capture)
 
-```
+```shell
 niri msg action focus-window --id <ID>    # Focus a window by niri ID
 niri msg action focus-monitor <OUTPUT>    # Focus a monitor by name (e.g. "DP-1")
 ```

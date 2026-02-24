@@ -133,7 +133,6 @@ pub fn create_platform_accessibility() -> Box<dyn PlatformAccessibility> {
 // Linux ATK/AT-SPI2 Implementation
 // ============================================================================
 
-#[cfg(target_os = "linux")]
 /// Linux accessibility implementation using AT-SPI2.
 #[cfg(target_os = "linux")]
 pub struct LinuxAccessibility {

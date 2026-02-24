@@ -19,6 +19,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct DataPoint {
     value: f32,
     temperature: f32,
@@ -62,10 +63,7 @@ async fn async_main() -> GupResult<()> {
 }
 
 /// Demonstrates 2-way parallel composition: position and color computed together
-fn example_two_way_parallel(
-    context: &Arc<RenderContext>,
-    data: &[DataPoint],
-) -> GupResult<()> {
+fn example_two_way_parallel(context: &Arc<RenderContext>, data: &[DataPoint]) -> GupResult<()> {
     let mut selection = Selection::<DataPoint, Circle>::new(data.to_vec(), context.clone())?;
 
     // Create shader functions
@@ -80,8 +78,14 @@ fn example_two_way_parallel(
 
     // Verify WGSL generation
     let wgsl = parallel.generate_wgsl();
-    println!("  Generated WGSL contains ParallelOutput: {}", wgsl.contains("ParallelOutput"));
-    println!("  Generated WGSL contains parallel_composed: {}", wgsl.contains("parallel_composed"));
+    println!(
+        "  Generated WGSL contains ParallelOutput: {}",
+        wgsl.contains("ParallelOutput")
+    );
+    println!(
+        "  Generated WGSL contains parallel_composed: {}",
+        wgsl.contains("parallel_composed")
+    );
 
     // Bind both attributes in a single call
     let start = Instant::now();
@@ -95,19 +99,13 @@ fn example_two_way_parallel(
 }
 
 /// Demonstrates 3-way parallel composition using nested ParallelOutput
-fn example_three_way_parallel(
-    context: &Arc<RenderContext>,
-    data: &[DataPoint],
-) -> GupResult<()> {
+fn example_three_way_parallel(context: &Arc<RenderContext>, data: &[DataPoint]) -> GupResult<()> {
     let mut selection = Selection::<DataPoint, Circle>::new(data.to_vec(), context.clone())?;
 
     // Create three shader functions
     let x_scale = LinearScale::new(0.0, 100.0, 0.0, 800.0); // value -> X
     let y_scale = LinearScale::new(20.0, 50.0, 0.0, 600.0); // temperature -> Y
-    let color_map = ColorMap::new(
-        vec4![0.0, 0.0, 1.0, 1.0],
-        vec4![1.0, 0.0, 0.0, 1.0],
-    );
+    let color_map = ColorMap::new(vec4![0.0, 0.0, 1.0, 1.0], vec4![1.0, 0.0, 0.0, 1.0]);
 
     // First parallel: x and y positions
     let xy_parallel = x_scale.parallel(y_scale);
@@ -128,20 +126,14 @@ fn example_three_way_parallel(
 }
 
 /// Compares performance: parallel binding vs sequential binding
-fn performance_comparison(
-    context: &Arc<RenderContext>,
-    data: &[DataPoint],
-) -> GupResult<()> {
+fn performance_comparison(context: &Arc<RenderContext>, data: &[DataPoint]) -> GupResult<()> {
     const ITERATIONS: usize = 100;
 
     // Scenario 1: Parallel binding (simulated)
     let mut parallel_times = Vec::with_capacity(ITERATIONS);
     for _ in 0..ITERATIONS {
         let position_scale = LinearScale::new(0.0, 100.0, 0.0, 800.0);
-        let color_map = ColorMap::new(
-            vec4![0.0, 0.0, 1.0, 1.0],
-            vec4![1.0, 0.0, 0.0, 1.0],
-        );
+        let color_map = ColorMap::new(vec4![0.0, 0.0, 1.0, 1.0], vec4![1.0, 0.0, 0.0, 1.0]);
         let parallel = position_scale.parallel(color_map);
 
         let mut selection = Selection::<DataPoint, Circle>::new(data.to_vec(), context.clone())?;
@@ -154,10 +146,7 @@ fn performance_comparison(
     let mut sequential_times = Vec::with_capacity(ITERATIONS);
     for _ in 0..ITERATIONS {
         let position_scale = LinearScale::new(0.0, 100.0, 0.0, 800.0);
-        let color_map = ColorMap::new(
-            vec4![0.0, 0.0, 1.0, 1.0],
-            vec4![1.0, 0.0, 0.0, 1.0],
-        );
+        let color_map = ColorMap::new(vec4![0.0, 0.0, 1.0, 1.0], vec4![1.0, 0.0, 0.0, 1.0]);
 
         let mut selection = Selection::<DataPoint, Circle>::new(data.to_vec(), context.clone())?;
         let start = Instant::now();
@@ -180,7 +169,9 @@ fn performance_comparison(
         println!("  ✓ Parallel is {:.2}x faster", speedup);
     } else {
         println!("  ℹ Note: Actual performance gains require GPU shader execution");
-        println!("    (current implementation is placeholder, real gains come from GPU parallelism)");
+        println!(
+            "    (current implementation is placeholder, real gains come from GPU parallelism)"
+        );
     }
 
     Ok(())

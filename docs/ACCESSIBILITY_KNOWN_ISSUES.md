@@ -42,6 +42,7 @@ documented as testing proceeds
 [How this affects users - e.g., "Cannot navigate any data points"]
 
 **Reproduction Steps**:
+
 1. [Step 1]
 2. [Step 2]
 3. [Observe issue]
@@ -61,6 +62,7 @@ or
 [Once fixed, describe what was done]
 
 **Related**:
+
 - Issue: [GitHub issue #]
 - Story: [GUP-XXX]
 - Commit: [commit hash]
@@ -90,6 +92,7 @@ or
 [How this affects users]
 
 **Reproduction Steps**:
+
 1. [Step 1]
 2. [Step 2]
 3. [Observe issue]
@@ -107,6 +110,7 @@ or
 [Once fixed, describe fix]
 
 **Related**:
+
 - Issue: [GitHub issue #]
 - Story: [GUP-XXX]
 
@@ -165,6 +169,7 @@ or
 [How it was fixed]
 
 **Fixed In**:
+
 - Version: [0.1.x]
 - Commit: [hash]
 - PR: [#xxx]

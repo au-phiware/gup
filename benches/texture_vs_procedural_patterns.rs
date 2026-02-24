@@ -237,7 +237,6 @@ fn bench_memory_usage(c: &mut Criterion) {
                         renderer.update_bind_group(&device, &queue, pattern);
                     }
 
-                    
                     black_box(renderer.memory_usage())
                 });
             },

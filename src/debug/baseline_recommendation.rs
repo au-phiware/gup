@@ -240,9 +240,8 @@ impl BaselineRecommendationEngine {
     /// - Magnitude of change (larger = higher confidence, but capped)
     fn calculate_confidence(&self, analysis: &TrendAnalysis) -> f32 {
         // Sample size factor (0.5 to 1.0)
-        let sample_factor = (analysis.sample_count as f32 / (self.config.min_samples as f32 * 2.0))
-            .min(1.0)
-            .max(0.5);
+        let sample_factor =
+            (analysis.sample_count as f32 / (self.config.min_samples as f32 * 2.0)).clamp(0.5, 1.0);
 
         // Stability factor (0.0 to 1.0)
         let stability_factor = (1.0 - analysis.coefficient_of_variation).max(0.0);
@@ -250,7 +249,7 @@ impl BaselineRecommendationEngine {
         // Change magnitude factor (0.5 to 1.0)
         // Larger changes are more confident, but cap at 2x the threshold
         let change_magnitude = analysis.percent_change.abs() / self.config.min_change_threshold;
-        let change_factor = (change_magnitude / 2.0).min(1.0).max(0.5);
+        let change_factor = (change_magnitude / 2.0).clamp(0.5, 1.0);
 
         // Weighted average: stability is most important
         let confidence = stability_factor * 0.5 + sample_factor * 0.3 + change_factor * 0.2;

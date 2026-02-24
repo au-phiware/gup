@@ -9,8 +9,10 @@ use std::time::Duration;
 
 #[tokio::test]
 async fn test_initial_metrics() {
-    let mut options = GupOptions::default();
-    options.automatic_device_loss_detection = false;
+    let options = GupOptions {
+        automatic_device_loss_detection: false,
+        ..Default::default()
+    };
 
     let context = GupContext::with_options(options).await.unwrap();
     let context = Arc::try_unwrap(context).unwrap();
@@ -28,8 +30,10 @@ async fn test_initial_metrics() {
 
 #[tokio::test]
 async fn test_single_recovery_metrics() {
-    let mut options = GupOptions::default();
-    options.automatic_device_loss_detection = false;
+    let options = GupOptions {
+        automatic_device_loss_detection: false,
+        ..Default::default()
+    };
 
     let context = GupContext::with_options(options).await.unwrap();
     let mut context = Arc::try_unwrap(context).unwrap();
@@ -54,8 +58,10 @@ async fn test_single_recovery_metrics() {
 
 #[tokio::test]
 async fn test_multiple_recovery_metrics() {
-    let mut options = GupOptions::default();
-    options.automatic_device_loss_detection = false;
+    let options = GupOptions {
+        automatic_device_loss_detection: false,
+        ..Default::default()
+    };
 
     let context = GupContext::with_options(options).await.unwrap();
     let mut context = Arc::try_unwrap(context).unwrap();
@@ -79,8 +85,10 @@ async fn test_multiple_recovery_metrics() {
 
 #[tokio::test]
 async fn test_recovery_timing_statistics() {
-    let mut options = GupOptions::default();
-    options.automatic_device_loss_detection = false;
+    let options = GupOptions {
+        automatic_device_loss_detection: false,
+        ..Default::default()
+    };
 
     let context = GupContext::with_options(options).await.unwrap();
     let mut context = Arc::try_unwrap(context).unwrap();
@@ -112,8 +120,10 @@ async fn test_recovery_timing_statistics() {
 
 #[tokio::test]
 async fn test_recovery_tier_tracking() {
-    let mut options = GupOptions::default();
-    options.automatic_device_loss_detection = false;
+    let options = GupOptions {
+        automatic_device_loss_detection: false,
+        ..Default::default()
+    };
 
     let context = GupContext::with_options(options).await.unwrap();
     let mut context = Arc::try_unwrap(context).unwrap();
@@ -132,8 +142,10 @@ async fn test_recovery_tier_tracking() {
 
 #[tokio::test]
 async fn test_rolling_window_limit() {
-    let mut options = GupOptions::default();
-    options.automatic_device_loss_detection = false;
+    let options = GupOptions {
+        automatic_device_loss_detection: false,
+        ..Default::default()
+    };
 
     let context = GupContext::with_options(options).await.unwrap();
     let mut context = Arc::try_unwrap(context).unwrap();
@@ -154,8 +166,10 @@ async fn test_rolling_window_limit() {
 
 #[tokio::test]
 async fn test_json_export() {
-    let mut options = GupOptions::default();
-    options.automatic_device_loss_detection = false;
+    let options = GupOptions {
+        automatic_device_loss_detection: false,
+        ..Default::default()
+    };
 
     let context = GupContext::with_options(options).await.unwrap();
     let mut context = Arc::try_unwrap(context).unwrap();
@@ -186,8 +200,10 @@ async fn test_json_export() {
 
 #[tokio::test]
 async fn test_csv_export() {
-    let mut options = GupOptions::default();
-    options.automatic_device_loss_detection = false;
+    let options = GupOptions {
+        automatic_device_loss_detection: false,
+        ..Default::default()
+    };
 
     let context = GupContext::with_options(options).await.unwrap();
     let mut context = Arc::try_unwrap(context).unwrap();

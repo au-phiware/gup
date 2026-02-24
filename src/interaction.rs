@@ -367,6 +367,7 @@ impl InteractionEvent {
     }
 
     /// Set the propagation phase (internal use only).
+    #[allow(dead_code)]
     pub(crate) fn set_phase(&mut self, phase: PropagationPhase) {
         self.phase = phase;
     }
@@ -1521,14 +1522,17 @@ mod tests {
 ///
 /// This recognizer tracks active touches and applies heuristics to identify
 /// common gestures like pinch, rotate, swipe, and pan.
+#[allow(clippy::items_after_test_module)]
 pub struct GestureRecognizer {
     /// Active touches being tracked
     active_touches: HashMap<u64, TouchPoint>,
     /// Previous touch positions for delta calculations
     previous_touches: HashMap<u64, TouchPoint>,
     /// Minimum distance for swipe recognition (pixels)
+    #[allow(dead_code)]
     swipe_threshold: f32,
     /// Minimum velocity for swipe recognition (pixels/second)
+    #[allow(dead_code)]
     swipe_velocity_threshold: f32,
 }
 

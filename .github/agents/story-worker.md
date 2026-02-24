@@ -104,7 +104,7 @@ Before marking the story complete, perform comprehensive checks:
 
    Then use the Task tool with `subagent_type: "screen-grabber"`:
 
-   ```
+   ```text
    Capture a screenshot of the window with PID <EXAMPLE_PID>.
    Save it to /tmp/<name>-screenshot.png
    ```
@@ -202,10 +202,12 @@ State your recommendation clearly with reasoning.
   a significant ambiguity, make a reasonable decision, document it in the retro,
   and continue.
 - **Copyright headers**: Every new `.rs` file must start with:
-  ```
+
+  ```rust
   // Copyright (C) 2024 Corin Lawson
   // SPDX-License-Identifier: GPL-3.0-or-later
   ```
+
 - **No D3/Observable Plot references** in code files.
 - **GPU tests**: Always use `--test-threads=1`.
 - **Quality gate**: `mask all-fix` must pass before every commit.

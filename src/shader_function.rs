@@ -2823,7 +2823,7 @@ pub struct AnimationTimelineWithEvents {
     /// Previous time for detecting time crossings
     previous_time: f32,
     /// Child timelines for hierarchical animation
-    children: Vec<Box<AnimationTimelineWithEvents>>,
+    children: Vec<AnimationTimelineWithEvents>,
 }
 
 impl AnimationTimelineWithEvents {
@@ -2935,7 +2935,7 @@ impl AnimationTimelineWithEvents {
 
     /// Add a child timeline for hierarchical coordination
     pub fn add_child(&mut self, child: AnimationTimelineWithEvents) -> &mut Self {
-        self.children.push(Box::new(child));
+        self.children.push(child);
         self
     }
 
@@ -5065,6 +5065,9 @@ impl Default for StreamingStatistics {
     }
 }
 
+/// Callback type for progress reporting in streaming statistics: (processed, total).
+type ProgressCallback = Box<dyn Fn(usize, Option<usize>)>;
+
 impl StreamingStatistics {
     /// Create a new streaming statistics aggregator with default chunk size (1M elements)
     pub fn new() -> Self {
@@ -5129,11 +5132,8 @@ impl StreamingStatistics {
     /// # Arguments
     /// * `data` - Iterator providing f32 values
     /// * `progress_callback` - Optional callback for progress reporting (processed, total)
-    pub fn process_iter<I>(
-        &mut self,
-        data: I,
-        progress_callback: Option<Box<dyn Fn(usize, Option<usize>)>>,
-    ) where
+    pub fn process_iter<I>(&mut self, data: I, progress_callback: Option<ProgressCallback>)
+    where
         I: Iterator<Item = f32>,
     {
         let mut chunk = Vec::with_capacity(self.chunk_size);
@@ -5338,6 +5338,7 @@ impl KernelFunction {
     }
 
     /// Get the WGSL function code for this kernel
+    #[allow(dead_code)]
     fn wgsl_code(&self) -> &'static str {
         match self {
             KernelFunction::Gaussian => {
@@ -5387,6 +5388,7 @@ fn triangular_kernel(u: f32) -> f32 {
     }
 
     /// Get the WGSL function name for this kernel
+    #[allow(dead_code)]
     fn wgsl_function_name(&self) -> &'static str {
         match self {
             KernelFunction::Gaussian => "gaussian_kernel",

@@ -93,8 +93,6 @@ pub use crate::shader_function::{
     ParallelComposable,
     ParallelComposition,
     ParallelOutput,
-    // Parallel output extraction (GUP-140)
-    parallel_output_extraction,
     // Statistical functions (GUP-139)
     Percentile,
 
@@ -120,6 +118,8 @@ pub use crate::shader_function::{
     Vec2,
     Vec3,
     Vec4,
+    // Parallel output extraction (GUP-140)
+    parallel_output_extraction,
 };
 
 // Legacy aliases for compatibility

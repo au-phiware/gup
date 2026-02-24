@@ -563,6 +563,7 @@ mod tests {
     use crate::chart_builder::accessor::AccessorValue;
 
     #[derive(Debug, Clone)]
+    #[allow(dead_code)]
     struct TestData {
         category: String,
         values: Vec<f32>,

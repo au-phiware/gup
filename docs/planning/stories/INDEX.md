@@ -65,6 +65,18 @@ epic and status.
 | [GUP-067](GUP-067_Rectangle_Line_Mark_Implementations.md) | Rectangle and Line Mark Types | ✅ Complete | High     | 5      |
 | [GUP-068](GUP-068_Mark_Pipeline_Integration.md)           | Mark Pipeline Integration     | ✅ Complete | High     | 5      |
 
+### Post GUP-068/011 Follow-up Stories - Advanced Mark System (Stories 69-75)
+
+| Story                                                  | Title                                          | Status     | Priority | Points |
+| ------------------------------------------------------ | ---------------------------------------------- | ---------- | -------- | ------ |
+| [GUP-069](GUP-069_Advanced_Mark_Rendering_Features.md) | Advanced Mark Rendering Features               | 📋 Planned | Medium   | —      |
+| [GUP-070](GUP-070_Mark_Performance_Optimization.md)    | Mark Performance Optimization                  | 📋 Planned | Medium   | —      |
+| [GUP-071](GUP-071_Custom_Mark_Development_Kit.md)      | Custom Mark Development Kit                    | 📋 Planned | Low      | —      |
+| [GUP-072](GUP-072_Mark_System_Documentation.md)        | Mark System Documentation                      | 📋 Planned | Low      | —      |
+| [GUP-073](GUP-073_Advanced_Shader_Composition.md)      | Advanced Shader Composition                    | 📋 Planned | Medium   | —      |
+| [GUP-074](GUP-074_Mark_Performance_Optimization.md)    | Mark Performance Optimization (GPU Instancing) | 📋 Planned | High     | —      |
+| [GUP-075](GUP-075_Interactive_Mark_Selection.md)       | Interactive Mark Selection                     | 📋 Planned | Medium   | —      |
+
 ### Post GUP-005 Stories - Shader Function System Enhancement (Stories 51+)
 
 | Story                                                          | Title                                    | Status      | Priority | Points |
@@ -85,36 +97,69 @@ epic and status.
 | [GUP-065](GUP-065_Procedural_Macro_Performance_Optimization.md) | Procedural Macro Performance Optimization | ✅ Complete | Low      | 2      |
 | [GUP-066](GUP-066_Advanced_Type_Conversion_Patterns.md)         | Advanced Type Conversion Patterns         | ✅ Complete | Low      | 5      |
 
+### Phase 2 - Rust-to-WGSL Transpilation System (Stories 054-ES, 055-062)
+
+_Initiative doc:
+[Phase_2_Rust_to_WGSL_Transpilation.md](../initiatives/Phase_2_Rust_to_WGSL_Transpilation.md)_
+
+| Story                                                         | Title                                     | Status     | Priority | Points |
+| ------------------------------------------------------------- | ----------------------------------------- | ---------- | -------- | ------ |
+| [GUP-054](GUP-054_Existing_Solutions_Analysis.md)             | Existing Solutions Analysis               | 📋 Planned | High     | 8      |
+| [GUP-055](GUP-055_Rust_AST_Parsing_Research.md)               | Rust AST Parsing Research and Prototype   | 📋 Planned | High     | 8      |
+| [GUP-056](GUP-056_Type_System_Mapping.md)                     | Rust-to-WGSL Type System Mapping          | 📋 Planned | High     | 8      |
+| [GUP-057](GUP-057_Expression_Transpilation.md)                | Expression and Operator Transpilation     | 📋 Planned | High     | 13     |
+| [GUP-058](GUP-058_Control_Flow_Handling.md)                   | Control Flow and Statement Transpilation  | 📋 Planned | High     | 10     |
+| [GUP-059](GUP-059_Built_in_Function_Library.md)               | Built-in Function Library                 | 📋 Planned | Medium   | 8      |
+| [GUP-060](GUP-060_Optimization_Error_Reporting.md)            | Optimization Engine and Error Reporting   | 📋 Planned | Medium   | 13     |
+| [GUP-061](GUP-061_Integration_With_Shader_Function_System.md) | Integration with Shader Function System   | 📋 Planned | High     | 8      |
+| [GUP-062](GUP-062_Community_Validation_Prototyping.md)        | Community Validation and Proof-of-Concept | 📋 Planned | High     | 13     |
+
+_Note: GUP-054 here is the Phase 2 research story (Existing Solutions Analysis).
+GUP-054 in the Post-GUP-005/007 tables above refers to the Phase 1 Shader
+Function Type Safety Enhancement — a number collision from project
+reorganisation._
+
 ### Post GUP-002 Stories - GPU and Interaction Systems (Stories 29+)
 
-| Story                                                     | Title                                    | Status      | Priority | Points |
-| --------------------------------------------------------- | ---------------------------------------- | ----------- | -------- | ------ |
-| [GUP-029](GUP-029_WGSL_Shader_Code_Generation.md)         | WGSL Shader Code Generation System       | ✅ Complete | High     | 8      |
-| [GUP-030](GUP-030_GPU_Buffer_Pool_Management.md)          | GPU Buffer Pool Management System        | ✅ Complete | Medium   | 5      |
-| [GUP-031](GUP-031_GPU_Interaction_Event_System.md)        | GPU-Based Interaction Event System       | ✅ Complete | High     | 13     |
-| [GUP-032](GUP-032_Advanced_Mark_System.md)                | Advanced Mark System with Custom Shapes  | ✅ Complete | Medium   | 8      |
-| [GUP-033](GUP-033_Shader_Function_Composition_Engine.md)  | Shader Function Composition Engine       | ✅ Complete | Medium   | 10     |
-| [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md)          | GPU Memory Profiling and Debugging Tools | ✅ Complete | Low      | 5      |
-| [GUP-131](GUP-131_Shader_Type_Constructors.md)            | Add Constructor Methods to Shader Types  | ✅ Complete | Low      | 1      |
-| [GUP-132](GUP-132_GPU_Path_Tessellation.md)               | GPU Tessellation for Path Mark           | ✅ Complete | Medium   | 8      |
-| [GUP-134](GUP-134_Storage_Buffer_ColorGradient.md)        | Storage Buffer-Based ColorGradient       | ✅ Complete | Low      | 3      |
-| [GUP-135](GUP-135_Fix_Examples_Compilation.md)            | Fix Example Compilation Errors           | ✅ Complete | High     | 3      |
-| [GUP-136](GUP-136_Parallel_Composition_Implementation.md) | Parallel Composition Implementation      | ✅ Complete | Medium   | 5      |
-| [GUP-137](GUP-137_Shader_Performance_Benchmarking.md)     | Shader Function Performance Benchmarking | ✅ Complete | Medium   | 3      |
-| [GUP-138](GUP-138_Advanced_Temporal_Animation.md)         | Advanced Temporal Animation System       | ✅ Complete | Low      | 8      |
-| [GUP-139](GUP-139_Statistical_Shader_Functions.md)        | Statistical Shader Functions             | ✅ Complete | Low      | 5      |
-| [GUP-140](GUP-140_Storage_Buffer_Keyframes.md)            | Storage Buffer Keyframe Animations       | ✅ Complete | Medium   | 5      |
-| [GUP-141](GUP-141_Spline_Animation_Curves.md)             | Spline-Based Animation Curves            | ✅ Complete | Low      | 5      |
-| [GUP-142](GUP-142_Animation_Event_System.md)              | Animation Event System                   | ✅ Complete | Medium   | 8      |
-| [GUP-143](GUP-143_Histogram_Generation.md)                | Histogram Generation on GPU              | ✅ Complete | Medium   | 5      |
-| [GUP-144](GUP-144_Kernel_Density_Estimation.md)           | Kernel Density Estimation                | ✅ Complete | Low      | 8      |
-| [GUP-145](GUP-145_GPU_Statistics_Integration_Tests.md)    | GPU Statistics Integration Tests         | ✅ Complete | High     | 3      |
-| [GUP-146](GUP-146_Streaming_Statistical_Aggregation.md)   | Streaming Statistical Aggregation        | ✅ Complete | Medium   | 5      |
-| [GUP-147](GUP-147_Box_Plot_Visualization.md)              | Box Plot Visualization                   | ✅ Complete | Medium   | 5      |
-| [GUP-148](GUP-148_Fix_Statistics_Shader_Bug.md)           | Fix Statistics Shader Reduction Bug      | ✅ Complete | High     | 3      |
-| [GUP-149](GUP-149_Box_Plot_GPU_Rendering.md)              | Box Plot GPU Rendering Integration       | ✅ Complete | Medium   | 3      |
-| [GUP-150](GUP-150_Statistical_Mark_Builder_API.md)        | Statistical Mark Builder API             | ✅ Complete | Low      | 5      |
-| [GUP-151](GUP-151_Multi_Category_Box_Plots.md)            | Multi-Category Box Plots                 | ✅ Complete | Low      | 3      |
+| Story                                                     | Title                                    | Status         | Priority | Points |
+| --------------------------------------------------------- | ---------------------------------------- | -------------- | -------- | ------ |
+| [GUP-029](GUP-029_WGSL_Shader_Code_Generation.md)         | WGSL Shader Code Generation System       | ✅ Complete    | High     | 8      |
+| [GUP-030](GUP-030_GPU_Buffer_Pool_Management.md)          | GPU Buffer Pool Management System        | ✅ Complete    | Medium   | 5      |
+| [GUP-031](GUP-031_GPU_Interaction_Event_System.md)        | GPU-Based Interaction Event System       | ✅ Complete    | High     | 13     |
+| [GUP-032](GUP-032_Advanced_Mark_System.md)                | Advanced Mark System with Custom Shapes  | ✅ Complete    | Medium   | 8      |
+| [GUP-033](GUP-033_Shader_Function_Composition_Engine.md)  | Shader Function Composition Engine       | ✅ Complete    | Medium   | 10     |
+| [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md)          | GPU Memory Profiling and Debugging Tools | ✅ Complete    | Low      | 5      |
+| [GUP-131](GUP-131_Shader_Type_Constructors.md)            | Add Constructor Methods to Shader Types  | ✅ Complete    | Low      | 1      |
+| [GUP-132](GUP-132_GPU_Path_Tessellation.md)               | GPU Tessellation for Path Mark           | ✅ Complete    | Medium   | 8      |
+| [GUP-134](GUP-134_Storage_Buffer_ColorGradient.md)        | Storage Buffer-Based ColorGradient       | ✅ Complete    | Low      | 3      |
+| [GUP-135](GUP-135_Fix_Examples_Compilation.md)            | Fix Example Compilation Errors           | ✅ Complete    | High     | 3      |
+| [GUP-136](GUP-136_Parallel_Composition_Implementation.md) | Parallel Composition Implementation      | ✅ Complete    | Medium   | 5      |
+| [GUP-137](GUP-137_Shader_Performance_Benchmarking.md)     | Shader Function Performance Benchmarking | ✅ Complete    | Medium   | 3      |
+| [GUP-138](GUP-138_Advanced_Temporal_Animation.md)         | Advanced Temporal Animation System       | ✅ Complete    | Low      | 8      |
+| [GUP-139](GUP-139_Statistical_Shader_Functions.md)        | Statistical Shader Functions             | ✅ Complete    | Low      | 5      |
+| [GUP-140](GUP-140_Storage_Buffer_Keyframes.md)            | Storage Buffer Keyframe Animations       | ✅ Complete    | Medium   | 5      |
+| [GUP-141](GUP-141_Spline_Animation_Curves.md)             | Spline-Based Animation Curves            | ✅ Complete    | Low      | 5      |
+| [GUP-142](GUP-142_Animation_Event_System.md)              | Animation Event System                   | ✅ Complete    | Medium   | 8      |
+| [GUP-143](GUP-143_Histogram_Generation.md)                | Histogram Generation on GPU              | ✅ Complete    | Medium   | 5      |
+| [GUP-144](GUP-144_Kernel_Density_Estimation.md)           | Kernel Density Estimation                | ✅ Complete    | Low      | 8      |
+| [GUP-145](GUP-145_GPU_Statistics_Integration_Tests.md)    | GPU Statistics Integration Tests         | ✅ Complete    | High     | 3      |
+| [GUP-146](GUP-146_Streaming_Statistical_Aggregation.md)   | Streaming Statistical Aggregation        | ✅ Complete    | Medium   | 5      |
+| [GUP-147](GUP-147_Box_Plot_Visualization.md)              | Box Plot Visualization                   | ✅ Complete    | Medium   | 5      |
+| [GUP-148](GUP-148_Fix_Statistics_Shader_Bug.md)           | Fix Statistics Shader Reduction Bug      | ✅ Complete    | High     | 3      |
+| [GUP-149](GUP-149_Box_Plot_GPU_Rendering.md)              | Box Plot GPU Rendering Integration       | 🚧 In Progress | Medium   | 3      |
+| [GUP-150](GUP-150_Statistical_Mark_Builder_API.md)        | Statistical Mark Builder API             | ✅ Complete    | Low      | 5      |
+| [GUP-151](GUP-151_Multi_Category_Box_Plots.md)            | Multi-Category Box Plots                 | ✅ Complete    | Low      | 3      |
+| [GUP-165](GUP-165_Selection_API_Render_Integration.md)    | Selection API Render Integration         | 📋 Planned     | High     | 13     |
+| [GUP-166](GUP-166_Unified_BoxPlot_Mark_Renderer.md)       | Unified BoxPlot Mark Renderer            | 📋 Planned     | Medium   | 5      |
+
+### Post GUP-014 Stories - Interaction Performance (Stories 76-79)
+
+| Story                                                      | Title                                | Status     | Priority | Points |
+| ---------------------------------------------------------- | ------------------------------------ | ---------- | -------- | ------ |
+| [GUP-076](GUP-076_Spatial_Index_Bind_Group_Layout_Fix.md)  | Spatial Index Bind Group Layout Fix  | 📋 Planned | High     | —      |
+| [GUP-077](GUP-077_Performance_Benchmarking_Suite.md)       | Performance Benchmarking Suite       | 📋 Planned | Medium   | —      |
+| [GUP-078](GUP-078_Spatial_Index_Algorithm_Optimization.md) | Spatial Index Algorithm Optimization | 📋 Planned | Medium   | —      |
+| [GUP-079](GUP-079_GPU_Memory_Pool_Optimization.md)         | GPU Memory Pool Optimization         | 📋 Planned | Low      | —      |
 
 ### Post GUP-015 Stories - Advanced Debug Infrastructure (Stories 80+)
 
@@ -160,13 +205,83 @@ epic and status.
 | [GUP-050](GUP-050_Visual_Blend_Mode_Validation.md)      | Visual Blend Mode Validation      | ✅ Complete | Low      | 3      |
 | [GUP-042](GUP-042_Cross_Platform_Surface_Features.md)   | Cross Platform Surface Features   | ✅ Complete | Low      | 8      |
 
-### Post GUP-027 Stories - Blend System Enhancement (Stories 43+)
+### Post GUP-027 Stories - Blend System Enhancement (Stories 40, 43-45)
 
-| Story                                                 | Title                           | Status      | Priority | Points |
-| ----------------------------------------------------- | ------------------------------- | ----------- | -------- | ------ |
-| [GUP-043](GUP-043_Visual_Blend_Mode_Demonstration.md) | Visual Blend Mode Demonstration | ✅ Complete | High     | 3      |
-| [GUP-044](GUP-044_GPU_Test_Resource_Management.md)    | GPU Test Resource Management    | ✅ Complete | Medium   | 4      |
-| [GUP-045](GUP-045_RAII_State_Management_System.md)    | RAII State Management System    | ✅ Complete | Medium   | 2      |
+| Story                                                   | Title                             | Status      | Priority | Points |
+| ------------------------------------------------------- | --------------------------------- | ----------- | -------- | ------ |
+| [GUP-040](GUP-040_Advanced_Blend_State_Optimization.md) | Advanced Blend State Optimization | ✅ Complete | Medium   | 2      |
+| [GUP-043](GUP-043_Visual_Blend_Mode_Demonstration.md)   | Visual Blend Mode Demonstration   | ✅ Complete | High     | 3      |
+| [GUP-044](GUP-044_GPU_Test_Resource_Management.md)      | GPU Test Resource Management      | ✅ Complete | Medium   | 4      |
+| [GUP-045](GUP-045_RAII_State_Management_System.md)      | RAII State Management System      | ✅ Complete | Medium   | 2      |
+
+### Axis and Grid System (Stories 89-98)
+
+| Story                                                     | Title                                       | Status      | Priority | Points |
+| --------------------------------------------------------- | ------------------------------------------- | ----------- | -------- | ------ |
+| [GUP-089](GUP-089_Core_Axis_System_Infrastructure.md)     | Core Axis System Infrastructure             | ✅ Complete | High     | 13     |
+| [GUP-090](GUP-090_Automatic_Tick_Generation_Algorithm.md) | Automatic Tick Generation Algorithm         | ✅ Complete | High     | 8      |
+| [GUP-091](GUP-091_Grid_Line_Rendering_System.md)          | Grid Line Rendering System                  | ✅ Complete | High     | 5      |
+| [GUP-092](GUP-092_Label_Formatting_and_Positioning.md)    | Label Formatting and Positioning (expanded) | ✅ Complete | Medium   | 10     |
+| [GUP-093](GUP-093_Scale_Axis_Integration_System.md)       | Scale-Axis Integration System               | ✅ Complete | Medium   | 6      |
+| [GUP-094](GUP-094_Axis_Performance_Optimization.md)       | Axis Performance Optimization               | 📋 Planned  | Low      | 4      |
+| [GUP-095](GUP-095_Grid_Visual_Rendering_Integration.md)   | Grid Visual Rendering Integration           | ✅ Complete | High     | 8      |
+| [GUP-096](GUP-096_Grid_Performance_Benchmarking.md)       | Grid Performance Benchmarking               | 📋 Planned  | Medium   | 5      |
+| [GUP-097](GUP-097_Chart_Builder_Grid_API_Enhancement.md)  | Chart Builder Grid API Enhancement          | ✅ Complete | Medium   | 6      |
+| [GUP-098](GUP-098_Grid_System_Documentation.md)           | Grid System Documentation                   | 📋 Planned  | Medium   | 4      |
+
+_Note: GUP-092 appears twice — once as the 8-pt story in the Post-GUP-021 table
+(basic label formatting, complete) and once here as the 10-pt expanded axis/grid
+system story. The expanded story is also complete._
+
+### Text Rendering Stories (Stories 104-110)
+
+| Story                                                                              | Title                                       | Status      | Priority | Points |
+| ---------------------------------------------------------------------------------- | ------------------------------------------- | ----------- | -------- | ------ |
+| [GUP-104](GUP-104_SDF_Glyph_Texture_Upload.md)                                     | SDF Glyph Texture Upload                    | 📋 Planned  | High     | —      |
+| [GUP-105](GUP-105_Text_Clipping_Detection_and_Viewport_Bounds_Management.md)       | Text Clipping Detection and Viewport Bounds | 📋 Planned  | Medium   | 8      |
+| [GUP-106](GUP-106_System_Font_Loading.md)                                          | System Font Loading                         | 📋 Planned  | Medium   | —      |
+| [GUP-107](GUP-107_Text_Character_Positioning_Bug.md)                               | Text Character Positioning Bug              | ✅ Complete | Medium   | —      |
+| [GUP-108](GUP-108_Correct_SDF_Font_Atlas_Generation.md)                            | Correct SDF Font Atlas Generation           | ✅ Complete | High     | —      |
+| [GUP-109](GUP-109_TTF_Outline_Based_SDF_Generation_with_Performance_Comparison.md) | TTF Outline-Based SDF Generation            | 📋 Planned  | Medium   | —      |
+| [GUP-110](GUP-110_Multi_Channel_SDF_Sharp_Corner_Preservation.md)                  | Multi-Channel SDF Sharp Corner Preservation | 📋 Planned  | Medium   | —      |
+
+### Post GUP-016 Stories - Accessibility System (Stories 111-130)
+
+| Story                                                        | Title                                       | Status                          | Priority | Points |
+| ------------------------------------------------------------ | ------------------------------------------- | ------------------------------- | -------- | ------ |
+| [GUP-111](GUP-111_Automatic_ARIA_Generation.md)              | Automatic ARIA Generation from Selections   | ✅ Complete                     | Medium   | 3      |
+| [GUP-112](GUP-112_Platform_Accessibility_Integration.md)     | Platform-Specific Accessibility Integration | ✅ Complete                     | High     | 5      |
+| [GUP-113](GUP-113_Pattern_Rendering.md)                      | Pattern-Based Rendering Implementation      | ✅ Complete                     | Medium   | 3      |
+| [GUP-114](GUP-114_macOS_NSAccessibility_Integration.md)      | macOS NSAccessibility Integration           | ✅ Complete                     | Medium   | 8      |
+| [GUP-115](GUP-115_Windows_UI_Automation_Integration.md)      | Windows UI Automation Integration           | ✅ Complete                     | Medium   | 8      |
+| [GUP-116](GUP-116_Linux_AT-SPI2_Integration.md)              | Linux AT-SPI2 Integration                   | ✅ Complete                     | Medium   | 8      |
+| [GUP-117](GUP-117_Web_Accessibility_DOM_Overlay.md)          | Web Accessibility DOM Overlay               | ✅ Complete                     | High     | 5      |
+| [GUP-118](GUP-118_Visualization_Position_Synchronization.md) | Visualization Position Synchronization      | ✅ Complete                     | Medium   | 5      |
+| [GUP-119](GUP-119_Interactive_Event_Forwarding.md)           | Interactive Event Forwarding                | ✅ Complete                     | Medium   | 3      |
+| [GUP-121](GUP-121_Screen_Reader_Manual_Testing.md)           | Screen Reader Manual Testing Infrastructure | ✅ Complete                     | High     | 3      |
+| [GUP-122](GUP-122_Manual_Screen_Reader_Testing_Execution.md) | Manual Screen Reader Testing Execution      | 🎯 Awaiting Resources           | High     | 5      |
+| [GUP-124](GUP-124_Enhanced_Color_Description.md)             | Enhanced Color Description                  | 💡 New                          | Low      | 2      |
+| [GUP-125](GUP-125_Automatic_ARIA_Registration.md)            | Automatic ARIA Registration                 | 💡 New                          | Medium   | 3      |
+| [GUP-126](GUP-126_Reactive_ARIA_Updates.md)                  | Reactive ARIA Updates                       | 💡 New                          | Medium   | 5      |
+| [GUP-127](GUP-127_Focus_Elements_for_Data_Points.md)         | Focus Elements for Data Points              | ⚠️ Partially Complete — Blocked | High     | 5      |
+| [GUP-128](GUP-128_Debug_GPU_Hit_Test_Detection.md)           | Debug GPU Hit Test Element Detection        | ✅ Complete                     | High     | 5      |
+| [GUP-129](GUP-129_GPU_Debug_Visualization_Tool.md)           | GPU Interaction Debug Visualization Tool    | ✅ Complete                     | Medium   | 8      |
+| [GUP-130](GUP-130_Mark_Type_ID_Proc_Macro.md)                | Mark Type ID Proc Macro                     | ✅ Complete                     | Low      | 5      |
+
+### Post GUP-113 Stories - Pattern Rendering (Stories 155-164)
+
+| Story                                                   | Title                             | Status      | Priority | Points |
+| ------------------------------------------------------- | --------------------------------- | ----------- | -------- | ------ |
+| [GUP-155](GUP-155_Mark_Pipeline_Pattern_Integration.md) | Mark Pipeline Pattern Integration | ✅ Complete | High     | 3      |
+| [GUP-156](GUP-156_Pattern_Performance_Benchmarking.md)  | Pattern Performance Benchmarking  | ✅ Complete | Medium   | 2      |
+| [GUP-157](GUP-157_Multi_Mark_Pattern_Support.md)        | Multi-Mark Pattern Support        | ✅ Complete | Medium   | 5      |
+| [GUP-158](GUP-158_Path_Mark_Pattern_Support.md)         | Path Mark Pattern Support         | ✅ Complete | Low      | 3      |
+| [GUP-159](GUP-159_Multi_Mark_Pattern_Visual_Example.md) | Multi-Mark Pattern Visual Example | ✅ Complete | Medium   | 2      |
+| [GUP-160](GUP-160_Pattern_Visual_Regression_Tests.md)   | Pattern Visual Regression Tests   | ✅ Complete | Low      | 5      |
+| [GUP-161](GUP-161_GPU_Timestamp_Query_Integration.md)   | GPU Timestamp Query Integration   | ✅ Complete | Low      | 3      |
+| [GUP-162](GUP-162_Pattern_Benchmark_CI_Integration.md)  | Pattern Benchmark CI Integration  | ✅ Complete | Medium   | 2      |
+| [GUP-163](GUP-163_Texture_Based_Pattern_Rendering.md)   | Texture-Based Pattern Rendering   | ✅ Complete | Low      | 5      |
+| [GUP-164](GUP-164_Pattern_Rendering_Optimization.md)    | Pattern Rendering Optimization    | ✅ Complete | Medium   | 5      |
 
 ## Story Status Legend
 
@@ -182,8 +297,12 @@ epic and status.
 ### Critical Path Stories
 
 1. **GUP-001** → **GUP-020** → **GUP-021** ✅ _Foundation complete_
-2. **GUP-021** → **GUP-027** → **GUP-028** 📋 _Next priority sequence_
-3. **GUP-021** → **GUP-026** 📋 _Parallel development track_
+2. **GUP-014** → **GUP-076** → **GUP-077** → **GUP-078** 📋 _Interaction
+   performance chain (unblocks 100K pts metric)_
+3. **GUP-068** → **GUP-165** → **GUP-149** / **GUP-166** / **GUP-127** 📋
+   _Rendering integration chain (highest current priority)_
+4. **GUP-005** → **GUP-054-ES** → **GUP-055–062** 📋 _Phase 2 transpilation (not
+   yet started)_
 
 ### Foundation Dependencies
 
@@ -201,40 +320,60 @@ epic and status.
 
 ### Phase 1 Foundation
 
-- **Completed**: 18/18 stories (100%)
-- **Critical Path**: GUP-001 ✅, GUP-002 ✅, GUP-003 ✅, GUP-004 ✅, GUP-005 ✅,
-  GUP-006 ✅, GUP-007 ✅, GUP-008 ✅, GUP-009 ✅, GUP-010 ✅, GUP-011 ✅,
-  GUP-012 ✅, GUP-013 ✅, GUP-014 ✅, GUP-015 ✅, GUP-017 ✅, GUP-018 ✅,
-  GUP-019 ✅, GUP-020 ✅, GUP-021 ✅, GUP-022 ✅, GUP-023 ✅, GUP-025 ✅,
-  GUP-027 ✅, GUP-039 ✅, GUP-043 ✅, GUP-067 ✅, GUP-068 ✅, GUP-088 ✅
+- **Status**: 🚧 In Progress — core stories done, rendering integration gap
+  remains
+- **Core stories complete**: GUP-001 ✅, GUP-002 ✅, GUP-003 ✅, GUP-004 ✅,
+  GUP-005 ✅, GUP-006 ✅, GUP-007 ✅, GUP-008 ✅, GUP-009 ✅, GUP-010 ✅,
+  GUP-011 ✅, GUP-012 ✅, GUP-013 ✅, GUP-014 ✅, GUP-015 ✅, GUP-017 ✅,
+  GUP-018 ✅, GUP-019 ✅, GUP-020 ✅, GUP-021 ✅, GUP-022 ✅, GUP-023 ✅,
+  GUP-025 ✅, GUP-027 ✅, GUP-039 ✅, GUP-043 ✅, GUP-067 ✅, GUP-068 ✅,
+  GUP-088 ✅
+- **Remaining (Phase 1 blockers)**:
+  - GUP-165 📋 Selection API Render Integration — Selection API lacks GPU buffer
+    management and draw call orchestration (blocks GUP-149, GUP-166, GUP-127)
+  - GUP-076 📋 Spatial Index Bind Group Fix — spatial indexing disabled since
+    GUP-014; blocks GUP-077, GUP-078, and the "100K points at 60 FPS" metric
+- **Phase 1 success metric status**: Performance target (100K pts @ 60 FPS) is
+  unvalidated for the full rendering path until GUP-165 + GUP-076 are complete
 
-### Phase 2 Advanced Features
+### Phase 2 Advanced Features (original scope)
 
-- **Completed**: 9/10 stories (90%)
-- **Remaining**: GUP-016 (Core Accessibility System)
+- **Completed**: All 10 stories ✅ (GUP-016 complete per 2025-01-24)
+- **Note**: These stories were built opportunistically before Phase 1 rendering
+  infrastructure was finished. The high-level Phase 2 initiative (Rust-to-WGSL
+  transpilation, Observable Plot APIs on proven foundation) has not yet started
+  — see "Phase 2 - Rust-to-WGSL Transpilation" table above.
 
-### Post-GUP-021 Improvements
+### Accessibility System (Post-GUP-016)
 
-- **Identified**: 3 new stories based on learnings
-- **Next Priority**: GUP-027 (GPU Blend State Integration)
+- **Completed**: GUP-111 ✅, GUP-112 ✅, GUP-113 ✅, GUP-114 ✅, GUP-115 ✅,
+  GUP-116 ✅, GUP-117 ✅, GUP-118 ✅, GUP-119 ✅, GUP-121 ✅, GUP-128 ✅,
+  GUP-129 ✅, GUP-130 ✅
+- **Blocked**: GUP-127 ⚠️ (Focus Elements — same Selection rendering gap as
+  GUP-165)
+- **Awaiting resources**: GUP-122 🎯 (requires Windows/macOS for screen reader
+  tests)
+- **New / unstarted**: GUP-124 💡, GUP-125 💡, GUP-126 💡
 
-### Post-GUP-003 Buffer Enhancements
+### Pattern Rendering (Post-GUP-113)
 
-- **Identified**: 3 new stories based on buffer system learnings
-- **Focus Areas**: Download operations, pool optimization, debugging tools
+- **Completed**: GUP-155 ✅ through GUP-164 ✅ — all 10 pattern stories done
+
+### Axis, Grid, and Text Rendering
+
+- **Axis/Grid complete**: GUP-089 ✅, GUP-090 ✅, GUP-091 ✅, GUP-092 ✅,
+  GUP-093 ✅, GUP-095 ✅, GUP-097 ✅
+- **Axis/Grid planned**: GUP-094 📋, GUP-096 📋, GUP-098 📋
+- **Text complete**: GUP-107 ✅, GUP-108 ✅
+- **Text planned**: GUP-104 📋, GUP-105 📋, GUP-106 📋, GUP-109 📋, GUP-110 📋
 
 ## Story Point Summary
 
-- **Total Planned**: ~396 story points across all stories (including new GUP-092
-  follow-up stories)
-- **Completed**: 190 story points (GUP-001: 3pts, GUP-002: 13pts, GUP-003: 8pts,
-  GUP-004: 5pts, GUP-005: 13pts, GUP-006: 13pts, GUP-007: 13pts, GUP-008: 8pts,
-  GUP-009: 8pts, GUP-010: 4pts, GUP-011: 8pts, GUP-012: 13pts, GUP-013: 5pts,
-  GUP-014: 8pts, GUP-015: 5pts, GUP-017: 8pts, GUP-018: 6pts, GUP-019: 3pts,
-  GUP-020: 5pts, GUP-021: 6pts, GUP-022: 4pts, GUP-023: 4pts, GUP-025: 5pts,
-  GUP-027: 3pts, GUP-039: 5pts, GUP-043: 3pts, GUP-067: 5pts, GUP-068: 5pts,
-  GUP-088: 5pts, GUP-092: 8pts, GUP-100: 8pts)
-- **Progress**: ~48% of total scope
+- **Note**: Point estimates are incomplete for many stories; totals are
+  approximate.
+- **Completed (sampled)**: ~380+ story points across the completed stories
+- **Remaining (key items)**: GUP-165 (13 pts), GUP-076–079 chain, Phase 2
+  transpilation sequence (~81 pts), text/axis/grid follow-ups
 
 ## Recent Additions (Post GUP-021)
 
@@ -849,10 +988,10 @@ cancellation support, and timeout handling
 
 ---
 
-_Last Updated: After completion of GUP-100 (Visual Chart Axis Integration) -
-2026-02-06_  
-_Next Priority Stories: GUP-099 (GPU Text Rendering Pipeline), GUP-102 (Demo GPU
-Resource Management Fixes), GUP-016 (Core Accessibility System)_
+_Last Updated: 2026-02-25 — 62 missing stories added to tables; GUP-061 created;
+GUP-092 file status fixed; Epic Progress section rewritten to reflect true
+state_ _Next Priority Stories: GUP-165 (Selection API Render Integration),
+GUP-076 (Spatial Index Bind Group Fix), GUP-122 (Execute Screen Reader Tests)_
 
 ---
 
@@ -999,9 +1138,37 @@ integration tests and examples
 ---
 
 _Last Updated: After completion of GUP-128 (Debug GPU Hit Test Detection) -
-2024-02-22_  
-_Next Priority Stories: GUP-122 (Execute Screen Reader Tests), GUP-111
-(Automatic ARIA Generation)_
+2024-02-22_ _Next Priority Stories: GUP-122 (Execute Screen Reader Tests),
+GUP-111 (Automatic ARIA Generation)_
+
+---
+
+## Recent Additions (Post GUP-149)
+
+The following stories were identified during GUP-149 (Box Plot GPU Rendering
+Integration) when investigation revealed that the Selection API has no rendering
+capabilities. Full GPU rendering was deferred; GUP-149 remains in progress until
+these stories unblock it.
+
+### GUP-165: Selection API Render Integration
+
+**Status**: 📋 Planned **Priority**: High **Story Points**: 13 **Key Need**: The
+Selection API (GUP-002) handles data binding and events but provides no render
+pipeline creation, buffer management, bind group setup, or draw call
+orchestration. Every mark type that wants to render through a Selection is
+blocked by this gap. **Dependencies**: GUP-002 ✅, GUP-068 ✅, GUP-030 ✅
+**Blocks**: GUP-149 (completion), GUP-166 **Impact**: Unblocks all mark types
+from rendering through the Selection API; enables the component-based box plot
+workaround to be replaced with a clean API
+
+### GUP-166: Unified BoxPlot Mark Renderer
+
+**Status**: 📋 Planned **Priority**: Medium **Story Points**: 5 **Key Need**:
+Replace the manual primitive decomposition in `boxplot_rendering_demo.rs` with a
+first-class `BoxPlotMark` that renders box, median, whiskers, and outliers in
+coordinated draw calls via the Selection API. **Dependencies**: GUP-149 🚧,
+GUP-165 📋, GUP-068 ✅ **Impact**: Single-call box plot rendering; closes
+GUP-149; performance baseline of 100 box plots at ≥60 FPS
 
 ---
 

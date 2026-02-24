@@ -112,6 +112,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Example 4: Box plot from individual data points");
 
     #[derive(Debug, Clone)]
+    #[allow(dead_code)]
     struct DataPoint {
         group: String,
         value: f32,

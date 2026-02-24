@@ -18,8 +18,10 @@ async fn test_automatic_detection_enabled_by_default() {
 /// Test that automatic detection can be disabled.
 #[tokio::test]
 async fn test_automatic_detection_can_be_disabled() {
-    let mut options = GupOptions::default();
-    options.automatic_device_loss_detection = false;
+    let options = GupOptions {
+        automatic_device_loss_detection: false,
+        ..Default::default()
+    };
     assert!(
         !options.automatic_device_loss_detection,
         "Automatic device loss detection should be disabled when set to false"
@@ -29,8 +31,10 @@ async fn test_automatic_detection_can_be_disabled() {
 /// Test that context stores the automatic detection setting.
 #[tokio::test]
 async fn test_context_stores_automatic_detection_setting() {
-    let mut options = GupOptions::default();
-    options.automatic_device_loss_detection = false;
+    let options = GupOptions {
+        automatic_device_loss_detection: false,
+        ..Default::default()
+    };
 
     let context = GupContext::with_options(options)
         .await
@@ -45,8 +49,10 @@ async fn test_context_stores_automatic_detection_setting() {
 /// Test backward compatibility - manual detection still works.
 #[tokio::test]
 async fn test_manual_detection_still_works() {
-    let mut options = GupOptions::default();
-    options.automatic_device_loss_detection = false;
+    let options = GupOptions {
+        automatic_device_loss_detection: false,
+        ..Default::default()
+    };
 
     let context = GupContext::with_options(options)
         .await
@@ -107,8 +113,10 @@ async fn test_automatic_detection_with_recovery() {
 /// Test that disabling automatic detection doesn't affect recovery.
 #[tokio::test]
 async fn test_disabled_automatic_detection_recovery_works() {
-    let mut options = GupOptions::default();
-    options.automatic_device_loss_detection = false;
+    let options = GupOptions {
+        automatic_device_loss_detection: false,
+        ..Default::default()
+    };
 
     let context = GupContext::with_options(options)
         .await
@@ -133,8 +141,10 @@ async fn test_disabled_automatic_detection_recovery_works() {
 /// Test that automatic detection setting persists through recovery.
 #[tokio::test]
 async fn test_automatic_detection_persists_through_recovery() {
-    let mut options = GupOptions::default();
-    options.automatic_device_loss_detection = true;
+    let options = GupOptions {
+        automatic_device_loss_detection: true,
+        ..Default::default()
+    };
 
     let context = GupContext::with_options(options.clone())
         .await

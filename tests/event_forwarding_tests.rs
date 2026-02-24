@@ -95,6 +95,6 @@ mod native_tests {
     #[test]
     fn test_placeholder() {
         // Event forwarding is web-specific, so native tests are minimal
-        assert!(true, "Event forwarding is web-only");
+        // (no assertion needed here)
     }
 }

@@ -562,12 +562,15 @@ fn test_mark_type_id_constants() {
     );
 
     // Test that IDs are in valid range (0-255 for u8 compatibility)
-    assert!(Circle::MARK_TYPE_ID <= 255, "Mark type IDs must fit in u8");
-    assert!(
-        Rectangle::MARK_TYPE_ID <= 255,
-        "Mark type IDs must fit in u8"
-    );
-    assert!(Line::MARK_TYPE_ID <= 255, "Mark type IDs must fit in u8");
+    #[allow(clippy::assertions_on_constants, clippy::absurd_extreme_comparisons)]
+    {
+        assert!(Circle::MARK_TYPE_ID <= 255, "Mark type IDs must fit in u8");
+        assert!(
+            Rectangle::MARK_TYPE_ID <= 255,
+            "Mark type IDs must fit in u8"
+        );
+        assert!(Line::MARK_TYPE_ID <= 255, "Mark type IDs must fit in u8");
+    }
 
     // Test that IDs are unique
     let mut ids = vec![

@@ -189,8 +189,8 @@ _Identified during GUP-139 implementation as AC2 follow-up._
 
 #### 1D vs 2D KDE Complexity
 
-- **Challenge**: 2D KDE requires computing density on a grid, leading to O(n _
-  m_x _ m_y) complexity
+- **Challenge**: 2D KDE requires computing density on a grid, leading to
+  `O(n * m_x * m_y)` complexity
 - **Solution**: Used product kernels K(x,y) = K(x) \* K(y) which simplifies
   computation and maintains separability
 - **Pattern**: Product kernels allow independent bandwidth selection for each

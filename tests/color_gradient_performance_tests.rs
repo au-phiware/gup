@@ -143,10 +143,12 @@ fn test_large_gradient_creation() {
     }
 }
 
+type GradientPreset = (&'static str, fn() -> ColorGradientStorage);
+
 #[test]
 fn test_preset_gradient_performance() {
     // Test preset gradient creation performance
-    let presets: Vec<(&str, fn() -> ColorGradientStorage)> = vec![
+    let presets: Vec<GradientPreset> = vec![
         ("viridis", ColorGradientStorage::viridis),
         ("plasma", ColorGradientStorage::plasma),
         ("inferno", ColorGradientStorage::inferno),

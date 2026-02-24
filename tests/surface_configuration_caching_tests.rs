@@ -13,6 +13,7 @@ struct MockWindow {
 }
 
 impl MockWindow {
+    #[allow(dead_code)]
     fn new() -> Self {
         // Create mock handles (these won't be used in headless tests)
         #[cfg(target_os = "linux")]
@@ -69,8 +70,10 @@ unsafe impl Sync for MockWindow {}
 #[tokio::test]
 async fn test_surface_config_cached_on_add() {
     // Test that surface configurations are cached when surfaces are added
-    let mut options = GupOptions::default();
-    options.automatic_device_loss_detection = false;
+    let options = GupOptions {
+        automatic_device_loss_detection: false,
+        ..Default::default()
+    };
 
     let context = GupContext::with_options(options).await.unwrap();
     let mut context = Arc::try_unwrap(context).unwrap();
@@ -85,8 +88,10 @@ async fn test_surface_config_cached_on_add() {
 #[tokio::test]
 async fn test_recovery_without_callback_clears_surfaces() {
     // Test that recovery without a callback clears surfaces (backward compatibility)
-    let mut options = GupOptions::default();
-    options.automatic_device_loss_detection = false;
+    let options = GupOptions {
+        automatic_device_loss_detection: false,
+        ..Default::default()
+    };
 
     let context = GupContext::with_options(options).await.unwrap();
     let mut context = Arc::try_unwrap(context).unwrap();
@@ -102,8 +107,10 @@ async fn test_recovery_without_callback_clears_surfaces() {
 #[tokio::test]
 async fn test_window_handle_renewal_callback_can_be_set() {
     // Test that the window handle renewal callback can be set
-    let mut options = GupOptions::default();
-    options.automatic_device_loss_detection = false;
+    let options = GupOptions {
+        automatic_device_loss_detection: false,
+        ..Default::default()
+    };
 
     let context = GupContext::with_options(options).await.unwrap();
     let mut context = Arc::try_unwrap(context).unwrap();
@@ -133,8 +140,10 @@ async fn test_window_handle_renewal_callback_can_be_set() {
 #[tokio::test]
 async fn test_resize_updates_cached_config() {
     // Test that resizing a surface updates the cached configuration
-    let mut options = GupOptions::default();
-    options.automatic_device_loss_detection = false;
+    let options = GupOptions {
+        automatic_device_loss_detection: false,
+        ..Default::default()
+    };
 
     let context = GupContext::with_options(options).await.unwrap();
     let mut context = Arc::try_unwrap(context).unwrap();
@@ -151,8 +160,10 @@ async fn test_resize_updates_cached_config() {
 #[tokio::test]
 async fn test_scale_factor_update_updates_cached_config() {
     // Test that updating scale factor updates the cached configuration
-    let mut options = GupOptions::default();
-    options.automatic_device_loss_detection = false;
+    let options = GupOptions {
+        automatic_device_loss_detection: false,
+        ..Default::default()
+    };
 
     let context = GupContext::with_options(options).await.unwrap();
     let mut context = Arc::try_unwrap(context).unwrap();
@@ -168,8 +179,10 @@ async fn test_scale_factor_update_updates_cached_config() {
 #[tokio::test]
 async fn test_recovery_timing_with_caching() {
     // Test that recovery with caching infrastructure doesn't significantly impact timing
-    let mut options = GupOptions::default();
-    options.automatic_device_loss_detection = false;
+    let options = GupOptions {
+        automatic_device_loss_detection: false,
+        ..Default::default()
+    };
 
     let context = GupContext::with_options(options).await.unwrap();
     let mut context = Arc::try_unwrap(context).unwrap();
@@ -191,8 +204,10 @@ async fn test_recovery_timing_with_caching() {
 #[tokio::test]
 async fn test_callback_lifetime_and_ownership() {
     // Test that the callback can capture data and is properly stored
-    let mut options = GupOptions::default();
-    options.automatic_device_loss_detection = false;
+    let options = GupOptions {
+        automatic_device_loss_detection: false,
+        ..Default::default()
+    };
 
     let context = GupContext::with_options(options).await.unwrap();
     let mut context = Arc::try_unwrap(context).unwrap();
@@ -220,8 +235,10 @@ async fn test_callback_lifetime_and_ownership() {
 #[tokio::test]
 async fn test_backward_compatibility_without_caching() {
     // Test that systems that don't use the caching feature still work
-    let mut options = GupOptions::default();
-    options.automatic_device_loss_detection = false;
+    let options = GupOptions {
+        automatic_device_loss_detection: false,
+        ..Default::default()
+    };
 
     let context = GupContext::with_options(options).await.unwrap();
     let mut context = Arc::try_unwrap(context).unwrap();
@@ -240,8 +257,10 @@ async fn test_backward_compatibility_without_caching() {
 #[tokio::test]
 async fn test_multiple_recovery_attempts_with_caching() {
     // Test that multiple recovery attempts work correctly with caching
-    let mut options = GupOptions::default();
-    options.automatic_device_loss_detection = false;
+    let options = GupOptions {
+        automatic_device_loss_detection: false,
+        ..Default::default()
+    };
 
     let context = GupContext::with_options(options).await.unwrap();
     let mut context = Arc::try_unwrap(context).unwrap();

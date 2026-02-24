@@ -181,7 +181,7 @@ translation:
   generated WGSL with proper field types
 - **Rust-to-WGSL expression translation**: Comprehensive translation of Rust
   expressions to WGSL including:
-  - Binary operations (+, -, \*, /, %, &&, ||, etc.)
+  - Binary operations (+, -, \*, /, %, &&, \|\|, etc.)
   - Field access with automatic uniform prefixing
   - Function calls with type constructor mapping (Vec2/Vec3/Vec4 →
     vec2/vec3/vec4)

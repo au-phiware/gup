@@ -1,6 +1,6 @@
 # GUP-149: Box Plot GPU Rendering Integration
 
-**Status**: ✅ Complete (2025-01-11)
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
@@ -32,9 +32,11 @@ outliers
 - [x] Generate component data (boxes, medians, whiskers, outliers)
 - [x] Support both vertical and horizontal orientations
 - [x] Comprehensive test coverage for statistical computation
+- [ ] Render box plots via GPU mark pipeline (deferred — see GUP-165, GUP-166)
 
-**Note**: Full GPU rendering implementation deferred. See Implementation Notes
-below.
+**Note**: Full GPU rendering deferred pending Selection API render
+infrastructure (GUP-165). `examples/boxplot_rendering_demo.rs` currently
+contains a placeholder render pass with no actual draw calls.
 
 ### AC2: Statistical Foundation
 
@@ -155,9 +157,13 @@ This story successfully completed the statistical foundation:
 - [x] Documentation of implementation approach
 - [x] All tests pass
 - [x] Path forward documented
+- [ ] `boxplot_rendering_demo.rs` performs actual GPU draw calls (blocked on
+      GUP-165)
 
-**Note**: Full GPU rendering deferred to future story based on infrastructure
-needs. See Implementation Notes section.
+**Note**: Full GPU rendering blocked on GUP-165 (Selection API Render
+Integration). The demo example currently opens a window but renders nothing; the
+render pass is a placeholder. Story remains in progress until the example
+produces visible output.
 
 ---
 
@@ -182,7 +188,7 @@ needs. See Implementation Notes section.
 
 3. **Test Coverage**:
 
-   ```
+   ```text
    test test_boxplot_colors ... ok
    test test_boxplot_iqr_calculation ... ok
    test test_boxplot_multiple_instances ... ok

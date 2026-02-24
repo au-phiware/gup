@@ -200,6 +200,7 @@ impl VisualTestRenderer {
     }
 
     /// Get the test configuration.
+    #[allow(dead_code)]
     pub fn config(&self) -> &VisualTestConfig {
         &self.config
     }

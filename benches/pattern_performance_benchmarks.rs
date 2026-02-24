@@ -315,7 +315,15 @@ fn bench_pattern_parameter_changes(c: &mut Criterion) {
         let mut renderer = PatternRenderer::new(&context.device, uniforms);
 
         b.iter(|| {
-            for angle in [0.0, 0.785, 1.571, 2.356, 3.142].iter() {
+            for angle in [
+                0.0,
+                std::f32::consts::FRAC_PI_4,
+                std::f32::consts::FRAC_PI_2,
+                3.0 * std::f32::consts::FRAC_PI_4,
+                std::f32::consts::PI,
+            ]
+            .iter()
+            {
                 let pattern = Pattern::Lines {
                     spacing: 6.0,
                     angle: *angle,
