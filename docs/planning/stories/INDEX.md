@@ -336,10 +336,10 @@ system story. The expanded story is also complete._
 - **Remaining (Phase 1 blockers)**:
   - GUP-165 ✅ Selection API Render Integration — complete; unblocks GUP-149,
     GUP-166, GUP-127
-  - GUP-076 📋 Spatial Index Bind Group Fix — spatial indexing disabled since
-    GUP-014; blocks GUP-077, GUP-078, and the "100K points at 60 FPS" metric
-- **Phase 1 success metric status**: Performance target (100K pts @ 60 FPS) is
-  unvalidated for the full rendering path until GUP-076 is complete
+  - GUP-076 ✅ Spatial Index Bind Group Fix — complete; unblocks GUP-077,
+    GUP-078, and the "100K points at 60 FPS" metric
+- **Phase 1 success metric status**: Performance target (100K pts @ 60 FPS)
+  requires validation with GUP-077 (Performance Benchmarking Suite)
 
 ### Phase 2 Advanced Features (original scope)
 
