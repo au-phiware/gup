@@ -139,3 +139,80 @@ With spatial indexing enabled:
 - GUP-014: Interaction Performance Optimization (completed infrastructure)
 - `src/interaction.rs`: InteractionSystem implementation
 - `src/shaders/spatial_index.compute.wgsl`: Spatial indexing compute shader
+
+## Retrospective
+
+**Completed**: 2025-07-26
+
+### Key Technical Learnings
+
+#### wgpu Auto-Layout Omits Unused Bindings
+
+- **Challenge**: The spatial index pipeline was created with `layout: None`,
+  which lets wgpu auto-derive the bind group layout from the shader module. The
+  `build_spatial_index` entry point doesn't reference the `element_indices`
+  buffer (binding 2), so wgpu excluded it from the layout. When the Rust code
+  tried to create a bind group with all 4 bindings, it failed silently (panic /
+  validation error).
+- **Solution**: Create an explicit `BindGroupLayout` defining all 4 bindings,
+  then create an explicit `PipelineLayout` using it. Pass the explicit layout to
+  all spatial index pipelines.
+- **Pattern**: **Always use explicit bind group layouts when a shader module has
+  multiple entry points that use different subsets of bindings.** Auto-layout is
+  convenient for single-entry-point shaders but breaks when bind groups are
+  shared across entry points.
+
+#### GPU Parallel Counting Needs Atomics
+
+- **Challenge**: The original WGSL shader used
+  `spatial_cells[i].element_count = spatial_cells[i].element_count + 1u;` which
+  is a read-modify-write race condition when multiple threads increment the same
+  cell.
+- **Solution**: Moved spatial index building to the CPU where sequential
+  counting is trivially correct. For 10K cells and up to 1M elements, the CPU
+  build is O(n) and fast (sub-millisecond).
+- **Pattern**: For operations requiring atomics (counting, insertion), prefer
+  CPU when the workload is small relative to the data. Reserve GPU atomics for
+  truly massive datasets where the parallelism outweighs the overhead.
+
+### Architectural Decisions
+
+#### CPU-Side Spatial Index Building
+
+- **Decision**: Build the spatial index (count, prefix-sum, populate) on the CPU
+  rather than fixing the GPU shader to use atomics.
+- **Reasoning**: The prefix-sum over ~10K cells is trivial on CPU. Correct GPU
+  prefix-sum requires multiple dispatch passes. CPU building avoids race
+  conditions entirely and is simpler to verify.
+- **Trade-off**: Slightly more CPU work per index build. For 1M elements the
+  overhead is negligible (O(n) iteration).
+- **Future**: GUP-078 can optimize to GPU-side building with atomics for
+  datasets > 10M elements if needed.
+
+#### Explicit Pipeline Layout Shared Across Entry Points
+
+- **Decision**: Create one `PipelineLayout` shared by both the build and
+  populate pipelines.
+- **Reasoning**: All spatial index entry points use the same 4 bindings, so a
+  single layout is correct and efficient. The bind group can be reused across
+  dispatches without recreation.
+- **Trade-off**: Slightly more verbose setup code vs. the simplicity of
+  auto-layout.
+- **Future**: This pattern enables adding more spatial index stages (e.g.,
+  spatial query) without layout issues.
+
+### Development Workflow Insights
+
+- The root cause diagnosis was straightforward once the wgpu auto-layout
+  behavior was understood. The key insight is that wgpu's `layout: None` is
+  entry-point-specific, not module-wide.
+- The existing test infrastructure (`create_test_context`, `--test-threads=1`)
+  made GPU integration testing smooth.
+- The pre-existing flaky timing test (`test_performance_500_labels`) is
+  unrelated to this work and should be addressed separately.
+
+### Follow-up Stories
+
+No new follow-up stories needed — the existing GUP-078 (Spatial Index Algorithm
+Optimization) covers the natural next step of implementing GPU-side spatial
+querying with the index data that is now correctly built and uploaded.
