@@ -109,6 +109,14 @@ harness = false
 name = "pattern_gpu_timing_benchmarks"
 harness = false
 
+[[bench]]
+name = "interaction_benchmarks"
+harness = false
+
+[[bench]]
+name = "interaction_memory_benchmarks"
+harness = false
+
 [[example]]
 name = "blend_modes_showcase"
 path = "examples/blend_modes_showcase.rs"
