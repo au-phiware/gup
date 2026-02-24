@@ -1673,6 +1673,160 @@ mod tests {
         );
         println!("  _padding: {}", offset_of!(InteractionResult, _padding));
     }
+
+    #[test]
+    fn test_spatial_index_config_alignment() {
+        // Verify SpatialIndexConfig alignment matches WGSL SpatialIndex struct
+        use std::mem::offset_of;
+        assert_eq!(
+            std::mem::size_of::<SpatialIndexConfig>(),
+            32,
+            "SpatialIndexConfig must be 32 bytes to match WGSL"
+        );
+        assert_eq!(offset_of!(SpatialIndexConfig, grid_size), 0);
+        assert_eq!(offset_of!(SpatialIndexConfig, cell_size), 8);
+        assert_eq!(offset_of!(SpatialIndexConfig, world_bounds_min), 16);
+        assert_eq!(offset_of!(SpatialIndexConfig, world_bounds_max), 24);
+    }
+
+    #[test]
+    fn test_spatial_cell_alignment() {
+        // Verify SpatialCell alignment matches WGSL SpatialCell struct
+        use std::mem::offset_of;
+        assert_eq!(
+            std::mem::size_of::<SpatialCell>(),
+            24,
+            "SpatialCell must be 24 bytes to match WGSL"
+        );
+        assert_eq!(offset_of!(SpatialCell, element_count), 0);
+        assert_eq!(offset_of!(SpatialCell, element_start_index), 4);
+        assert_eq!(offset_of!(SpatialCell, bounds_min), 8);
+        assert_eq!(offset_of!(SpatialCell, bounds_max), 16);
+    }
+
+    #[test]
+    fn test_spatial_index_world_to_cell() {
+        // Test the cell index computation directly using a helper
+        let config = SpatialIndexConfig {
+            grid_size: [10, 10],
+            cell_size: [10.0, 10.0],
+            world_bounds_min: [0.0, 0.0],
+            world_bounds_max: [100.0, 100.0],
+        };
+
+        // Helper mimicking InteractionSystem::world_to_cell_index
+        let world_to_cell = |pos: [f32; 2]| -> usize {
+            let grid_w = config.grid_size[0] as usize;
+            let min = config.world_bounds_min;
+            let max = config.world_bounds_max;
+            let range_x = max[0] - min[0];
+            let range_y = max[1] - min[1];
+            let nx = ((pos[0] - min[0]) / range_x).clamp(0.0, 1.0 - f32::EPSILON);
+            let ny = ((pos[1] - min[1]) / range_y).clamp(0.0, 1.0 - f32::EPSILON);
+            let cx = (nx * grid_w as f32) as usize;
+            let cy = (ny * grid_w as f32) as usize;
+            cy * grid_w + cx
+        };
+
+        // Origin → cell (0,0) = index 0
+        assert_eq!(world_to_cell([0.0, 0.0]), 0);
+        // Position in cell (5,5) → index 55
+        assert_eq!(world_to_cell([55.0, 55.0]), 55);
+        // Edge of grid → last cell (9,9) = index 99
+        assert_eq!(world_to_cell([99.0, 99.0]), 99);
+        // Out of bounds clamped to valid range
+        assert_eq!(world_to_cell([-10.0, -10.0]), 0);
+    }
+
+    #[test]
+    fn test_spatial_index_cpu_build() {
+        // Test the CPU spatial index building logic
+        let elements = vec![
+            ElementData {
+                position: [10.0, 10.0],
+                size: [5.0, 5.0],
+                mark_type: 0,
+                element_id: 0,
+                selection_id: 0,
+                _padding: 0,
+            },
+            ElementData {
+                position: [10.0, 10.0],
+                size: [5.0, 5.0],
+                mark_type: 0,
+                element_id: 1,
+                selection_id: 0,
+                _padding: 0,
+            },
+            ElementData {
+                position: [90.0, 90.0],
+                size: [5.0, 5.0],
+                mark_type: 0,
+                element_id: 2,
+                selection_id: 0,
+                _padding: 0,
+            },
+        ];
+
+        // Simple CPU-side index build matching InteractionSystem::build_spatial_index
+        let grid_w = 10usize;
+        let grid_h = 10usize;
+        let total_cells = grid_w * grid_h;
+        let min_x = 0.0f32;
+        let min_y = 0.0f32;
+        let max_x = 100.0f32;
+        let max_y = 100.0f32;
+        let range_x = max_x - min_x;
+        let range_y = max_y - min_y;
+
+        // Phase 1: count
+        let mut counts = vec![0u32; total_cells];
+        for e in &elements {
+            let nx = ((e.position[0] - min_x) / range_x).clamp(0.0, 1.0 - f32::EPSILON);
+            let ny = ((e.position[1] - min_y) / range_y).clamp(0.0, 1.0 - f32::EPSILON);
+            let cx = (nx * grid_w as f32) as usize;
+            let cy = (ny * grid_h as f32) as usize;
+            let idx = cy * grid_w + cx;
+            counts[idx] += 1;
+        }
+
+        // Elements 0 and 1 are at (10,10) → cell (1,1) = index 11
+        assert_eq!(counts[11], 2);
+        // Element 2 is at (90,90) → cell (9,9) = index 99
+        assert_eq!(counts[99], 1);
+        // Other cells should be empty
+        assert_eq!(counts.iter().sum::<u32>(), 3);
+
+        // Phase 2: prefix sum
+        let mut offsets = vec![0u32; total_cells];
+        let mut running = 0u32;
+        for i in 0..total_cells {
+            offsets[i] = running;
+            running += counts[i];
+        }
+        assert_eq!(offsets[11], 0); // first non-empty cell starts at 0
+        assert_eq!(offsets[99], 2); // after two elements
+
+        // Phase 3: populate
+        let total_indexed = running as usize;
+        assert_eq!(total_indexed, 3);
+        let mut indices = vec![0u32; total_indexed];
+        let mut cursors = offsets.clone();
+        for (i, e) in elements.iter().enumerate() {
+            let nx = ((e.position[0] - min_x) / range_x).clamp(0.0, 1.0 - f32::EPSILON);
+            let ny = ((e.position[1] - min_y) / range_y).clamp(0.0, 1.0 - f32::EPSILON);
+            let cx = (nx * grid_w as f32) as usize;
+            let cy = (ny * grid_h as f32) as usize;
+            let cell_idx = cy * grid_w + cx;
+            let pos = cursors[cell_idx] as usize;
+            indices[pos] = i as u32;
+            cursors[cell_idx] += 1;
+        }
+        // Element indices should be stored in order within each cell
+        assert_eq!(indices[0], 0); // first element in cell 11
+        assert_eq!(indices[1], 1); // second element in cell 11
+        assert_eq!(indices[2], 2); // element in cell 99
+    }
 }
 
 /// Multi-touch gesture recognizer that processes touch events to detect gestures.
