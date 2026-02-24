@@ -197,3 +197,19 @@ Run performance benchmarks
 ```bash
 cargo bench
 ```
+
+## bench-interaction
+
+Run interaction system benchmarks only
+
+```bash
+cargo bench --bench interaction_benchmarks --bench interaction_memory_benchmarks
+```
+
+## perf-check
+
+Run performance regression tests (CI-friendly)
+
+```bash
+cargo test --test interaction_performance_tests -- --test-threads=1
+```
