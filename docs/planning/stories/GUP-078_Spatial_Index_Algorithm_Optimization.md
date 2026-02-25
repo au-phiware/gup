@@ -296,3 +296,114 @@ Two advanced spatial indexing algorithms with auto-selection:
 - **19 integration tests** in `tests/advanced_spatial_index_tests.rs`
 - **10 existing GPU tests** pass unchanged
 - **881 total project tests** pass (1 pre-existing flaky test excluded)
+
+## Retrospective
+
+**Completed**: 2025-08-06
+
+### Key Technical Learnings
+
+#### Morton Encoding Is Remarkably Simple
+
+- **Challenge**: Implementing Z-order curve encoding seemed complex in theory.
+- **Solution**: The bit-interleaving approach using magic numbers is only ~5
+  lines of code and provides excellent spatial locality.
+- **Pattern**: For any 2D spatial problem, Morton encoding is a strong default
+  choice. The 16-bit per axis (65536×65536 grid) resolution is more than
+  sufficient for visualisation contexts while keeping keys to 32 bits.
+
+#### Memory Overhead vs Aspirational Targets
+
+- **Challenge**: The story specified <5% memory overhead, but any spatial index
+  that stores per-element data (even just a 4-byte index) already uses 12.5% of
+  32-byte ElementData.
+- **Solution**: Designed Morton index with minimal 8-byte entries (key + index)
+  at 25% of source data. The hierarchical grid needs more (~60-80%) due to
+  position + size storage for precise cell-level testing.
+- **Pattern**: When evaluating memory targets, distinguish between _structural
+  overhead_ (tree nodes, cell metadata) and _per-element overhead_ (sorted
+  indices, position duplicates). The structural overhead is typically <1% for
+  both algorithms; the per-element cost is inherent to any spatial index.
+
+#### Candidate Narrowing vs Precise Hit Testing
+
+- **Challenge**: Initial design stored full Aabb per element in the Morton
+  index, leading to memory bloat and redundancy.
+- **Solution**: Redesigned the index to return _candidates_ (element indices
+  only) and let the caller perform precise hit testing. This halved Morton
+  memory usage and produced a cleaner API.
+- **Pattern**: Spatial indices should narrow the search space, not perform the
+  final test. This separation of concerns allows each layer to be optimised
+  independently.
+
+#### Adaptive Quadtree Needs a Degeneracy Guard
+
+- **Challenge**: Initial hierarchical grid would infinitely subdivide when all
+  elements had the same position, since every child gets 100% of elements.
+- **Solution**: Added a 95% threshold: if one child receives 95%+ of the
+  parent's elements, stop subdividing and make it a leaf.
+- **Pattern**: Any tree-based spatial structure needs a guard against degenerate
+  inputs (coincident points, all-same-position data). A concentration threshold
+  is simpler and more robust than tracking unique positions.
+
+### Architectural Decisions
+
+#### CPU-Side Index Building with GPU Candidate Narrowing
+
+- **Decision**: Build spatial indices on CPU, use them to narrow candidates
+  before GPU hit testing.
+- **Reasoning**: The CPU is better at complex data structure construction
+  (sorting, tree building), while the GPU excels at parallel hit testing over
+  the narrowed candidate set.
+- **Trade-off**: Adds CPU-GPU data transfer for the candidate subset, but avoids
+  the complexity of GPU atomics and dynamic allocation in compute shaders.
+- **Future**: A future story could implement the full Morton-based query on GPU
+  using sorted buffers and binary search in compute shaders, avoiding the CPU
+  roundtrip entirely.
+
+#### Enum-Based Algorithm Selection (SpatialIndex Enum)
+
+- **Decision**: Used an enum `SpatialIndex` wrapping `MortonIndex` and
+  `HierarchicalGrid` rather than trait objects.
+- **Reasoning**: Follows the project convention of enums over trait objects for
+  known variant sets. Enables static dispatch and pattern matching.
+- **Trade-off**: Adding new algorithms requires modifying the enum, but this is
+  acceptable given the small, known set of spatial index algorithms.
+- **Future**: The `SpatialAlgorithm::Auto` variant makes it easy to add new
+  heuristics without changing the API.
+
+#### Separate Module vs Extending interaction.rs
+
+- **Decision**: Created a new `spatial_index` module rather than adding
+  algorithms inline to `interaction.rs`.
+- **Reasoning**: `interaction.rs` is already ~1800 lines. The spatial index
+  algorithms are self-contained and independently testable.
+- **Trade-off**: Requires coordination between modules (import, data
+  conversion), but keeps each module focused.
+- **Future**: The `spatial_index` module could be used by other systems (e.g.,
+  collision detection, LOD) without depending on the interaction system.
+
+### Development Workflow Insights
+
+- **Iterative test-fix cycle**: Initial tests revealed three bugs (uniform data
+  appearing clustered, memory overhead miscalculation, hierarchical not
+  subdividing) which were all caught before the first commit. Writing tests
+  alongside implementation is essential.
+- **Pre-existing flaky test**: `test_performance_500_labels` fails by 1ms on
+  this machine. Not related to our changes. GUP-174 exists for this.
+- **Benchmark compilation**: Even without running benchmarks, compiling them
+  catches API issues early. The `--no-run` flag is useful during development.
+- **`mask all-fix`** caught formatting issues in the WGSL shader (trailing
+  whitespace) that wouldn't have been noticed otherwise.
+
+### Follow-up Stories
+
+1. **GUP-175: GPU-Side Morton Range Query** — Implement Morton-based spatial
+   query entirely on GPU using sorted buffers and binary search in compute
+   shaders, eliminating the CPU roundtrip for candidate narrowing. This would
+   move the query hot path fully to GPU for maximum performance.
+
+2. **GUP-176: Spatial Index Adaptive Grid Size** — Currently the grid uses a
+   fixed 100×100 layout. An adaptive strategy that adjusts grid resolution based
+   on dataset size and distribution (e.g., √N × √N) would improve performance
+   across a wider range of data scales.
