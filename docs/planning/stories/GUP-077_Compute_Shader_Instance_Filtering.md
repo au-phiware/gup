@@ -125,3 +125,121 @@ per dispatch) but **zero CPU readback**: the draw indirect buffer goes directly
 to the render pass. CPU-side overhead is microseconds (command encoding only).
 In production, output buffers would be pre-allocated and reused across frames,
 eliminating the allocation overhead.
+
+## Retrospective
+
+**Completed**: 2026-07-19
+
+### Key Technical Learnings
+
+#### Blelloch prefix sum requires multi-pass dispatch
+
+- **Challenge**: A correct parallel exclusive prefix sum on arrays larger than a
+  single 256-thread workgroup requires multiple dispatch passes (per-workgroup
+  scan → scan block totals → add block offsets). Cannot be done in a single
+  dispatch because inter-workgroup synchronisation is not available in WGSL.
+- **Solution**: Implemented a three-pass approach with separate WGSL entry
+  points (`prefix_sum_workgroup`, `prefix_sum_blocks`,
+  `prefix_sum_add_block_offsets`). The Rust host controls the multi-pass
+  orchestration.
+- **Pattern**: For GPU algorithms requiring global synchronisation across
+  workgroups, use multiple dispatches controlled from the host rather than
+  trying to synchronise within a single dispatch.
+
+#### DrawIndirect must be written in the prefix sum pass, not skipped
+
+- **Challenge**: Initially, the `prefix_sum_blocks` pass was only dispatched for
+  `num_workgroups > 1`. For single-workgroup inputs (≤256 instances) the draw
+  indirect buffer was never written, causing all tests with small inputs to
+  report 0 visible instances.
+- **Solution**: Always dispatch `prefix_sum_blocks` since it writes the
+  `draw_indirect` parameters (total visible count, vertex count).
+- **Pattern**: When a GPU pass produces side-effects (writing control buffers)
+  that are consumed by later passes, it must always execute regardless of
+  whether its primary computation is needed.
+
+#### WGSL mat4x4 column-major access
+
+- **Challenge**: WGSL `mat4x4<f32>` stores columns contiguously (column-major).
+  Accessing `transform[3]` gives the fourth column (translation), and
+  `transform[0].xy` gives the first two elements of column 0 (X-axis direction
+  and scale). This matches the Rust `InstanceAttributes` layout where
+  `transform[12..14]` holds the translation.
+- **Solution**: Used `inst.transform[3].x` / `.y` for position and
+  `length(inst.transform[0].xy)` / `length(inst.transform[1].xy)` for bounding
+  radius. This correctly extracts 2D position and scale from the 4×4 matrix.
+- **Pattern**: When reading Rust `#[repr(C)]` column-major matrices in WGSL, the
+  column index in WGSL `mat[col]` maps to the Rust array at `offset = col * 4`.
+
+#### Buffer size limits constrain single-dispatch scale
+
+- **Challenge**: wgpu's default `max_buffer_size` is 256 MB. At 96 bytes per
+  `InstanceAttributes`, 10M instances = 960 MB which exceeds this limit. The 10M
+  GPU benchmark panicked.
+- **Solution**: Capped GPU benchmarks at 1M. Documented that datasets beyond 1M
+  would need streaming/chunked processing or increased device limits.
+- **Pattern**: Always validate buffer sizes against device limits before
+  allocation. For very large datasets, implement chunked dispatch with multiple
+  input buffers.
+
+### Architectural Decisions
+
+#### Separate module vs extending batch_renderer
+
+- **Decision**: Created `compute_instance_filter` as a new module rather than
+  adding GPU filter logic to `batch_renderer.rs`.
+- **Reasoning**: The compute filter is independently useful (any code path can
+  use it, not just the batch renderer) and has complex GPU resource management
+  that would bloat the already-large batch renderer module.
+- **Trade-off**: Users must create and manage `ComputeInstanceFilter` separately
+  from `InstancedBatchRenderer`.
+- **Future**: The filter could be embedded within a higher-level
+  `GpuBatchRenderer` that automatically selects CPU vs GPU path.
+
+#### Transient buffer allocation per dispatch
+
+- **Decision**: Each `dispatch()` call creates new output, visibility,
+  prefix_sums, and draw_indirect buffers.
+- **Reasoning**: Simplifies the API (no pre-allocation step) and avoids buffer
+  size mismatch issues when instance count changes between frames. Correct for
+  initial implementation.
+- **Trade-off**: Buffer allocation overhead dominates benchmark results.
+- **Future**: Add a `PooledComputeInstanceFilter` that pre-allocates buffers for
+  a maximum instance count and reuses them across frames.
+
+#### Z-order sorting deferred
+
+- **Decision**: The compact pass preserves input order (stable compaction)
+  rather than performing GPU-side radix sort by Z-depth. An `enable_sort` config
+  flag is reserved.
+- **Reasoning**: In 2D visualization, Z-order is typically determined by draw
+  order. GPU radix sort adds significant complexity (multiple passes) and is
+  only needed for 3D or depth-varying 2D scenes. The current implementation
+  satisfies the acceptance criterion for correct rendering order.
+- **Trade-off**: 3D visualisations would need an additional sort pass.
+- **Future**: Implement GPU radix sort when 3D mark types are added or when Z
+  depth varies across instances.
+
+### Development Workflow Insights
+
+- The Blelloch prefix sum algorithm is well-documented but tricky to get right
+  in WGSL. The up-sweep/down-sweep pattern with `workgroupBarrier()` works
+  correctly but the edge cases (single workgroup, block sums, draw indirect
+  writes) required careful thought.
+- Testing at exact workgroup boundaries (1, 256, 512) caught the single-
+  workgroup draw-indirect bug immediately.
+- The `mask all-fix` pre-commit hook catches clippy `too_many_arguments` which
+  is reasonable to `#[allow]` for GPU dispatch methods that inherently need many
+  parameters.
+- GPU benchmark numbers are dominated by buffer allocation. In production with
+  buffer pooling, the GPU path would show its true advantage at 1M+ scales.
+
+### Follow-up Stories
+
+1. **GUP-183: Pooled GPU Instance Filter Buffers** — Pre-allocate and reuse
+   output/visibility/prefix_sums buffers across frames to eliminate per-dispatch
+   allocation overhead. Would make the GPU path competitive at 100K and dominant
+   at 1M+ scales.
+2. **GUP-184: GPU Radix Sort for Z-Order** — Implement a parallel radix sort
+   pass in the compute shader pipeline for depth-based instance ordering. Needed
+   for 3D visualization support and depth-varying 2D scenes.
