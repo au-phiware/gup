@@ -1,10 +1,23 @@
 // Copyright (C) 2024 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Individual chart type builders with Observable Plot compatibility.
+//! Individual chart type builders with grid system integration.
 //!
 //! This module implements specific chart builders for common visualization types:
 //! scatter plots, line charts, bar charts, area charts, and heatmaps.
+//!
+//! # Grid System Integration
+//!
+//! All chart builders implement the [`GridCapableBuilder`] trait, which provides:
+//!
+//! - **One-call enabling**: `.grid()` adds professional grid lines instantly
+//! - **Theme presets**: `.light_grid()`, `.scientific_grid()`, etc.
+//! - **Quick styling**: `.grid_color()`, `.grid_opacity()`, `.grid_width()`
+//! - **Directional control**: `.horizontal_grid()`, `.vertical_grid()`
+//! - **Full configuration**: `.grid_configuration(GridConfiguration)`
+//!
+//! See [`crate::grid`] module and `docs/GRID_SYSTEM.md` for comprehensive
+//! documentation.
 
 pub mod area;
 pub mod bar;
@@ -50,8 +63,39 @@ pub trait ConfigurableBuilder: Sized {
 
 /// Extended trait for chart builders that support advanced grid configuration.
 ///
-/// GridCapableBuilder provides fine-grained control over grid line appearance
-/// and behavior, extending beyond the basic show/hide functionality.
+/// `GridCapableBuilder` provides fine-grained control over grid line appearance
+/// and behavior, extending beyond the basic show/hide functionality of
+/// [`ConfigurableBuilder::show_grid`].
+///
+/// This trait is implemented by all chart builders: [`ScatterPlotBuilder`],
+/// [`LineChartBuilder`], [`BoxPlotBuilder`], [`BarChartBuilder`],
+/// [`AreaChartBuilder`], and [`HeatmapBuilder`].
+///
+/// # Quick Start
+///
+/// ```rust,ignore
+/// use gup::chart_builder::ScatterPlotBuilder;
+///
+/// let chart = ScatterPlotBuilder::new()
+///     .data(data)
+///     .grid()                    // Enable with professional defaults
+///     .grid_color("#cccccc")     // Customize color
+///     .grid_opacity(0.5)         // Adjust transparency
+///     .build()?;
+/// ```
+///
+/// # Theme Presets
+///
+/// | Method | Best For |
+/// |--------|----------|
+/// | `.light_grid()` | Bright backgrounds |
+/// | `.dark_grid()` | Dark mode |
+/// | `.scientific_grid()` | Publications (includes minor grids) |
+/// | `.business_grid()` | Dashboards (horizontal only) |
+/// | `.minimal_grid()` | Design-focused |
+/// | `.high_contrast_grid()` | Accessibility |
+///
+/// See `docs/GRID_SYSTEM.md` for comprehensive documentation.
 pub trait GridCapableBuilder: ConfigurableBuilder {
     /// Configure major grid line appearance.
     ///
