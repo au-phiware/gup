@@ -369,6 +369,44 @@ impl<T, M: Mark> Selection<T, M> {
     pub fn is_render_ready(&self) -> bool {
         self.render_state.is_some()
     }
+
+    /// Register the data points in this selection as focusable elements.
+    ///
+    /// This is a convenience wrapper around
+    /// [`SelectionFocusBridge::sync_focus_elements`](crate::accessibility::SelectionFocusBridge::sync_focus_elements).
+    /// The `descriptor_fn` maps each data item to a [`FocusPointDescriptor`]
+    /// that specifies the screen position, label, and optional value.
+    ///
+    /// Returns the number of elements registered (may be capped by max_elements).
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use gup::accessibility::selection_focus::{SelectionFocusBridge, FocusPointDescriptor};
+    /// use gup::accessibility::FocusManager;
+    ///
+    /// let mut bridge = SelectionFocusBridge::new(Default::default());
+    /// let mut fm = FocusManager::new();
+    ///
+    /// selection.register_focus_elements(&mut bridge, &mut fm, |item, idx| {
+    ///     FocusPointDescriptor {
+    ///         position: item.position(),
+    ///         label: format!("Point {}", idx),
+    ///         value: None,
+    ///     }
+    /// });
+    /// ```
+    pub fn register_focus_elements<F>(
+        &self,
+        bridge: &mut crate::accessibility::SelectionFocusBridge,
+        focus_manager: &mut crate::accessibility::FocusManager,
+        descriptor_fn: F,
+    ) -> usize
+    where
+        F: Fn(&T, usize) -> crate::accessibility::FocusPointDescriptor,
+    {
+        bridge.sync_focus_elements(&self.data, focus_manager, descriptor_fn)
+    }
 }
 
 /// Internal GPU state for rendering a Selection's data.
@@ -730,6 +768,69 @@ mod tests {
         assert_eq!(instance.stroke_width, 0.01);
         assert_eq!(instance.stroke_color, [0.0, 0.0, 0.0, 1.0]);
         assert_eq!(instance.corner_radius, 0.05);
+    }
+
+    #[test]
+    fn register_focus_elements_bridges_to_focus_manager() {
+        use crate::accessibility::FocusManager;
+        use crate::accessibility::selection_focus::{FocusPointDescriptor, SelectionFocusBridge};
+
+        let data = vec![
+            CircleAttributes {
+                center: Vec2 { x: 0.1, y: 0.2 },
+                radius: 0.05,
+                fill_color: Vec4 {
+                    x: 1.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0,
+                },
+                stroke_width: 0.0,
+                stroke_color: Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 0.0,
+                },
+            },
+            CircleAttributes {
+                center: Vec2 { x: 0.5, y: 0.6 },
+                radius: 0.1,
+                fill_color: Vec4 {
+                    x: 0.0,
+                    y: 1.0,
+                    z: 0.0,
+                    w: 1.0,
+                },
+                stroke_width: 0.0,
+                stroke_color: Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 0.0,
+                },
+            },
+        ];
+
+        let selection: Selection<CircleAttributes, Circle> = Selection::from_data(data);
+        let mut bridge = SelectionFocusBridge::new(Default::default());
+        let mut fm = FocusManager::new();
+
+        let count = selection.register_focus_elements(&mut bridge, &mut fm, |attr, idx| {
+            FocusPointDescriptor {
+                position: [attr.center.x, attr.center.y],
+                label: format!("Circle {}", idx),
+                value: Some(attr.radius as f64),
+            }
+        });
+
+        assert_eq!(count, 2);
+        assert_eq!(bridge.last_sync_count(), 2);
+
+        // Navigate and verify.
+        fm.handle_key_input(crate::accessibility::keyboard::KeyEvent::Tab);
+        let desc = fm.describe_current_focus().unwrap();
+        assert!(desc.contains("Circle 0"));
     }
 
     // --- GPU integration tests ---
