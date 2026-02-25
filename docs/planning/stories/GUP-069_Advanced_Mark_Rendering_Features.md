@@ -1,6 +1,6 @@
 # GUP-069: Advanced Mark Rendering Features
 
-**Status**: 📋 PLANNED  
+**Status**: 🚧 In Progress  
 **Priority**: Medium  
 **Category**: Feature Enhancement  
 **Estimated Effort**: 3 days  
