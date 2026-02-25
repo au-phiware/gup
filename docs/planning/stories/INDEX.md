@@ -398,8 +398,9 @@ system story. The expanded story is also complete._
 - **Axis/Grid complete**: GUP-089 ✅, GUP-090 ✅, GUP-091 ✅, GUP-092 ✅,
   GUP-093 ✅, GUP-095 ✅, GUP-097 ✅
 - **Axis/Grid planned**: GUP-094 📋, GUP-096 📋, GUP-098 📋
-- **Text complete**: GUP-107 ✅, GUP-108 ✅
-- **Text planned**: GUP-104 📋, GUP-105 📋, GUP-106 📋, GUP-109 📋, GUP-110 📋
+- **Text complete**: GUP-104 ✅, GUP-105 ✅, GUP-107 ✅, GUP-108 ✅
+- **Text planned**: GUP-106 📋, GUP-109 📋, GUP-110 📋, GUP-199 📋, GUP-200 📋,
+  GUP-201 📋
 
 ## Story Point Summary
 
