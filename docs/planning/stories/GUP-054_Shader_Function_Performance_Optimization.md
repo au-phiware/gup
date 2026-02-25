@@ -1,5 +1,7 @@
 # GUP-054: Shader Function Performance Optimization
 
+**Status**: 🚧 In Progress
+
 ## Story Overview
 
 **Title**: Optimize Shader Function Composition Performance **Epic**: Phase 1
