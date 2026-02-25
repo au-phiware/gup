@@ -183,7 +183,7 @@ impl BoxPlotRenderer {
             return;
         }
         self.selection
-            .prepare_render(device, queue, |a| BoxPlotInstance::from(a))
+            .prepare_render(device, queue, |a| BoxPlotInstance::from(a), None)
             .expect("boxplot prepare_render");
         self.prepared = true;
     }

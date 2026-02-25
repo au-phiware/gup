@@ -81,6 +81,7 @@ pub mod label;
 pub mod mark;
 pub mod mixable;
 pub mod performance;
+pub mod pipeline_cache;
 pub mod plugins;
 pub mod prelude;
 pub mod render;
@@ -167,6 +168,7 @@ pub use mark::rectangle::{Rectangle, RectangleAttributes, RectangleInstance, Rec
 pub use mark::{Mark, MarkInfo, MarkInfoImpl, MarkRegistry};
 
 // Export selection system
+pub use pipeline_cache::PipelineCache;
 pub use selection::{
     AttrValue, InteractionData, IntoAttrValue, IntoAttrValues, MarkInstanceBuilder, Selection,
 };

@@ -105,7 +105,7 @@ fn example_individual_attrs(context: &Arc<RenderContext>) -> GupResult<()> {
     println!("  ✓ {} data points", selection.len());
 
     // Prepare and render via bound attributes (no manual mapper needed!)
-    selection.prepare_render_bound(context.device(), context.queue())?;
+    selection.prepare_render_bound(context.device(), context.queue(), None)?;
     println!("  ✓ prepare_render_bound() succeeded");
 
     Ok(())
@@ -133,7 +133,7 @@ fn example_parallel_attrs(context: &Arc<RenderContext>) -> GupResult<()> {
     println!("  ✓ Bound: {:?}", selection.bound_attributes());
     println!("  ✓ {} data points", selection.len());
 
-    selection.prepare_render_bound(context.device(), context.queue())?;
+    selection.prepare_render_bound(context.device(), context.queue(), None)?;
     println!("  ✓ prepare_render_bound() succeeded");
 
     Ok(())
@@ -168,7 +168,7 @@ fn example_rectangle_attrs(context: &Arc<RenderContext>) -> GupResult<()> {
 
     println!("  ✓ Bound: {:?}", selection.bound_attributes());
 
-    selection.prepare_render_bound(context.device(), context.queue())?;
+    selection.prepare_render_bound(context.device(), context.queue(), None)?;
     println!("  ✓ prepare_render_bound() succeeded");
 
     Ok(())
@@ -182,15 +182,20 @@ fn example_comparison(context: &Arc<RenderContext>) -> GupResult<()> {
     // --- Traditional: manual mapper closure ---
     {
         let mut selection = Selection::<SalesData, Circle>::from_data(data.clone());
-        selection.prepare_render(context.device(), context.queue(), |d| CircleInstance {
-            center: [d.revenue / 50.0 - 1.0, d.profit_margin * 2.0 - 1.0],
-            radius: 0.02,
-            _pad0: 0.0,
-            fill_color: [0.9, 0.2, 0.2, 0.8],
-            stroke_width: 0.0,
-            _pad1: [0.0; 3],
-            stroke_color: [0.0; 4],
-        })?;
+        selection.prepare_render(
+            context.device(),
+            context.queue(),
+            |d| CircleInstance {
+                center: [d.revenue / 50.0 - 1.0, d.profit_margin * 2.0 - 1.0],
+                radius: 0.02,
+                _pad0: 0.0,
+                fill_color: [0.9, 0.2, 0.2, 0.8],
+                stroke_width: 0.0,
+                _pad1: [0.0; 3],
+                stroke_color: [0.0; 4],
+            },
+            None,
+        )?;
         println!("  ✓ Traditional prepare_render(mapper): OK");
     }
 
@@ -204,7 +209,7 @@ fn example_comparison(context: &Arc<RenderContext>) -> GupResult<()> {
             .attr("radius", |_: &SalesData| 0.02f32)
             .attr("fill_color", |_: &SalesData| [0.9f32, 0.2, 0.2, 0.8]);
 
-        selection.prepare_render_bound(context.device(), context.queue())?;
+        selection.prepare_render_bound(context.device(), context.queue(), None)?;
         println!("  ✓ Declarative prepare_render_bound(): OK");
     }
 
@@ -229,29 +234,34 @@ fn example_comparison(context: &Arc<RenderContext>) -> GupResult<()> {
 
         // Traditional
         let mut trad = Selection::<BarItem, Rectangle>::from_data(bar_data.clone());
-        trad.prepare_render(context.device(), context.queue(), |d| {
-            RectangleInstance::from(&RectangleAttributes {
-                center: Vec2 {
-                    x: d.label_index as f32 * 0.4 - 0.2,
-                    y: 0.0,
-                },
-                size: Vec2 { x: 0.3, y: d.value },
-                fill_color: Vec4 {
-                    x: 0.2,
-                    y: 0.5,
-                    z: 0.8,
-                    w: 1.0,
-                },
-                stroke_width: 0.0,
-                stroke_color: Vec4 {
-                    x: 0.0,
-                    y: 0.0,
-                    z: 0.0,
-                    w: 0.0,
-                },
-                corner_radius: 0.0,
-            })
-        })?;
+        trad.prepare_render(
+            context.device(),
+            context.queue(),
+            |d| {
+                RectangleInstance::from(&RectangleAttributes {
+                    center: Vec2 {
+                        x: d.label_index as f32 * 0.4 - 0.2,
+                        y: 0.0,
+                    },
+                    size: Vec2 { x: 0.3, y: d.value },
+                    fill_color: Vec4 {
+                        x: 0.2,
+                        y: 0.5,
+                        z: 0.8,
+                        w: 1.0,
+                    },
+                    stroke_width: 0.0,
+                    stroke_color: Vec4 {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 0.0,
+                        w: 0.0,
+                    },
+                    corner_radius: 0.0,
+                })
+            },
+            None,
+        )?;
 
         // Declarative
         let mut decl = Selection::<BarItem, Rectangle>::from_data(bar_data);
@@ -261,7 +271,7 @@ fn example_comparison(context: &Arc<RenderContext>) -> GupResult<()> {
         .attr("size", |d: &BarItem| [0.3, d.value])
         .attr("fill_color", |_: &BarItem| [0.2f32, 0.5, 0.8, 1.0]);
 
-        decl.prepare_render_bound(context.device(), context.queue())?;
+        decl.prepare_render_bound(context.device(), context.queue(), None)?;
 
         println!("  ✓ Rectangle: traditional and declarative both OK");
     }

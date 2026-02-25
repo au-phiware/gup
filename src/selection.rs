@@ -14,7 +14,7 @@
 //!
 //! ```rust,ignore
 //! // Prepare GPU resources with a data-to-instance mapping
-//! selection.prepare_render(&device, &queue, |attrs| CircleInstance::from(attrs))?;
+//! selection.prepare_render(&device, &queue, |attrs| CircleInstance::from(attrs), None)?;
 //!
 //! // Later, in a render pass:
 //! selection.render(&mut render_pass)?;
@@ -22,6 +22,7 @@
 
 use crate::interaction::{InteractionElement, InteractionEvent, Renderable};
 use crate::mark::{MarkInfo, MarkInfoImpl};
+use crate::pipeline_cache::PipelineCache;
 use crate::{GupResult, RenderContext};
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -462,6 +463,10 @@ impl<T, M: Mark> Selection<T, M> {
     /// changed data it re-uploads instances and rebuilds the bind group only
     /// if the buffer was reallocated.
     ///
+    /// Pass a [`PipelineCache`] to share render pipelines across Selections
+    /// of the same mark type.  When `cache` is `None` a new pipeline is
+    /// created for every Selection.
+    ///
     /// # Errors
     ///
     /// Returns an error if pipeline or buffer creation fails.
@@ -470,6 +475,7 @@ impl<T, M: Mark> Selection<T, M> {
         device: &Device,
         queue: &Queue,
         mapper: impl Fn(&T) -> I,
+        cache: Option<&mut PipelineCache>,
     ) -> GupResult<()>
     where
         I: bytemuck::Pod + bytemuck::Zeroable,
@@ -479,7 +485,7 @@ impl<T, M: Mark> Selection<T, M> {
         let instance_bytes: &[u8] = bytemuck::cast_slice(&instances);
         let instance_count = instances.len() as u32;
 
-        self.upload_instances(device, queue, instance_bytes, instance_count)
+        self.upload_instances(device, queue, instance_bytes, instance_count, cache)
     }
 
     /// Prepare GPU resources using the attribute bindings stored via
@@ -489,6 +495,9 @@ impl<T, M: Mark> Selection<T, M> {
     /// [`prepare_render`](Self::prepare_render). Instead, it evaluates the
     /// stored attribute bindings for each data item and uses the mark's
     /// [`MarkInstanceBuilder`] to construct GPU instance data.
+    ///
+    /// Pass a [`PipelineCache`] to share render pipelines across Selections
+    /// of the same mark type.
     ///
     /// # Errors
     ///
@@ -502,9 +511,14 @@ impl<T, M: Mark> Selection<T, M> {
     ///     .attr("center", |d: &MyData| [d.x, d.y])
     ///     .attr("radius", |d: &MyData| d.size * 0.1)
     ///     .attr("fill_color", |d: &MyData| [d.r, d.g, d.b, 1.0])
-    ///     .prepare_render_bound(&device, &queue)?;
+    ///     .prepare_render_bound(&device, &queue, None)?;
     /// ```
-    pub fn prepare_render_bound(&mut self, device: &Device, queue: &Queue) -> GupResult<()>
+    pub fn prepare_render_bound(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        cache: Option<&mut PipelineCache>,
+    ) -> GupResult<()>
     where
         M: MarkInstanceBuilder,
     {
@@ -530,7 +544,7 @@ impl<T, M: Mark> Selection<T, M> {
         let instance_bytes: &[u8] = bytemuck::cast_slice(&instances);
         let instance_count = instances.len() as u32;
 
-        self.upload_instances(device, queue, instance_bytes, instance_count)
+        self.upload_instances(device, queue, instance_bytes, instance_count, cache)
     }
 
     /// Get the names of currently bound attributes.
@@ -550,6 +564,7 @@ impl<T, M: Mark> Selection<T, M> {
         queue: &Queue,
         instance_bytes: &[u8],
         instance_count: u32,
+        cache: Option<&mut PipelineCache>,
     ) -> GupResult<()> {
         if let Some(ref mut state) = self.render_state {
             // Re-use existing pipeline and vertex buffers.
@@ -571,7 +586,8 @@ impl<T, M: Mark> Selection<T, M> {
             state.instance_count = instance_count;
         } else {
             // First-time setup: create everything.
-            let state = SelectionRenderState::new::<M>(device, instance_bytes, instance_count)?;
+            let state =
+                SelectionRenderState::new::<M>(device, instance_bytes, instance_count, cache)?;
             self.render_state = Some(state);
         }
 
@@ -662,8 +678,9 @@ impl<T, M: Mark> Selection<T, M> {
 /// Created by [`Selection::prepare_render`] and consumed by
 /// [`Selection::render`].
 struct SelectionRenderState {
-    /// Render pipeline created from the mark's shaders.
-    pipeline: wgpu::RenderPipeline,
+    /// Render pipeline created from the mark's shaders (shared via Arc when
+    /// a [`PipelineCache`] is used).
+    pipeline: Arc<wgpu::RenderPipeline>,
     /// Vertex buffer containing the mark's base geometry (e.g., unit quad).
     vertex_buffer: wgpu::Buffer,
     /// Optional index buffer for indexed rendering.
@@ -688,10 +705,16 @@ impl SelectionRenderState {
         device: &Device,
         instance_bytes: &[u8],
         instance_count: u32,
+        cache: Option<&mut PipelineCache>,
     ) -> GupResult<Self> {
         // --- Pipeline ------------------------------------------------
-        let mark_info = MarkInfoImpl::<M>::new();
-        let pipeline = mark_info.create_render_pipeline(device)?;
+        let pipeline: Arc<wgpu::RenderPipeline> = match cache {
+            Some(c) => c.get_or_create::<M>(device)?,
+            None => {
+                let mark_info = MarkInfoImpl::<M>::new();
+                Arc::new(mark_info.create_render_pipeline(device)?)
+            }
+        };
 
         // --- Vertex buffer -------------------------------------------
         let vertices = M::generate_vertices();
@@ -1215,7 +1238,12 @@ mod tests {
 
             // Prepare GPU resources.
             selection
-                .prepare_render(&context.device, &context.queue, |a| CircleInstance::from(a))
+                .prepare_render(
+                    &context.device,
+                    &context.queue,
+                    |a| CircleInstance::from(a),
+                    None,
+                )
                 .expect("prepare_render should succeed");
 
             assert!(selection.is_render_ready());
@@ -1289,9 +1317,12 @@ mod tests {
                 Selection::from_data(data);
 
             selection
-                .prepare_render(&context.device, &context.queue, |a| {
-                    RectangleInstance::from(a)
-                })
+                .prepare_render(
+                    &context.device,
+                    &context.queue,
+                    |a| RectangleInstance::from(a),
+                    None,
+                )
                 .expect("prepare_render should succeed");
 
             assert!(selection.is_render_ready());
@@ -1343,14 +1374,24 @@ mod tests {
 
             // First prepare — creates pipeline, buffers, bind group.
             selection
-                .prepare_render(&context.device, &context.queue, |a| CircleInstance::from(a))
+                .prepare_render(
+                    &context.device,
+                    &context.queue,
+                    |a| CircleInstance::from(a),
+                    None,
+                )
                 .expect("first prepare_render");
 
             assert!(selection.is_render_ready());
 
             // Second prepare with same-sized data — reuses pipeline + buffers.
             selection
-                .prepare_render(&context.device, &context.queue, |a| CircleInstance::from(a))
+                .prepare_render(
+                    &context.device,
+                    &context.queue,
+                    |a| CircleInstance::from(a),
+                    None,
+                )
                 .expect("second prepare_render (re-upload)");
 
             assert!(selection.is_render_ready());
@@ -1391,7 +1432,12 @@ mod tests {
                 Selection::from_data(vec![make_attr(-0.5), make_attr(0.5)]);
 
             selection
-                .prepare_render(&context.device, &context.queue, |a| CircleInstance::from(a))
+                .prepare_render(
+                    &context.device,
+                    &context.queue,
+                    |a| CircleInstance::from(a),
+                    None,
+                )
                 .expect("first prepare");
 
             // Grow to 10 items — triggers buffer resize.
@@ -1399,7 +1445,12 @@ mod tests {
             selection.set_data(large_data);
 
             selection
-                .prepare_render(&context.device, &context.queue, |a| CircleInstance::from(a))
+                .prepare_render(
+                    &context.device,
+                    &context.queue,
+                    |a| CircleInstance::from(a),
+                    None,
+                )
                 .expect("second prepare after resize");
 
             // Verify the new count is reflected.
@@ -1422,7 +1473,12 @@ mod tests {
                 Selection::from_data(Vec::new());
 
             selection
-                .prepare_render(&context.device, &context.queue, |a| CircleInstance::from(a))
+                .prepare_render(
+                    &context.device,
+                    &context.queue,
+                    |a| CircleInstance::from(a),
+                    None,
+                )
                 .expect("prepare empty selection");
 
             let mut ctx = Arc::try_unwrap(context).expect("single owner");
@@ -1495,12 +1551,20 @@ mod tests {
                 Selection::from_data(circle_data);
 
             rect_sel
-                .prepare_render(&context.device, &context.queue, |a| {
-                    RectangleInstance::from(a)
-                })
+                .prepare_render(
+                    &context.device,
+                    &context.queue,
+                    |a| RectangleInstance::from(a),
+                    None,
+                )
                 .expect("rect prepare");
             circle_sel
-                .prepare_render(&context.device, &context.queue, |a| CircleInstance::from(a))
+                .prepare_render(
+                    &context.device,
+                    &context.queue,
+                    |a| CircleInstance::from(a),
+                    None,
+                )
                 .expect("circle prepare");
 
             // Both render in the same render pass (single render pass rule).
@@ -1550,9 +1614,12 @@ mod tests {
             let mut selection: Selection<BoxPlotAttributes, BoxPlot> = Selection::from_data(data);
 
             selection
-                .prepare_render(&context.device, &context.queue, |a| {
-                    BoxPlotInstance::from(a)
-                })
+                .prepare_render(
+                    &context.device,
+                    &context.queue,
+                    |a| BoxPlotInstance::from(a),
+                    None,
+                )
                 .expect("boxplot prepare_render");
 
             assert!(selection.is_render_ready());
@@ -1610,9 +1677,12 @@ mod tests {
             assert_eq!(selection.len(), 4);
 
             selection
-                .prepare_render(&context.device, &context.queue, |a| {
-                    BoxPlotInstance::from(a)
-                })
+                .prepare_render(
+                    &context.device,
+                    &context.queue,
+                    |a| BoxPlotInstance::from(a),
+                    None,
+                )
                 .expect("prepare_render");
 
             let mut ctx = Arc::try_unwrap(context).expect("single owner");
@@ -1661,9 +1731,12 @@ mod tests {
 
             let mut selection: Selection<BoxPlotAttributes, BoxPlot> = Selection::from_data(data);
             selection
-                .prepare_render(&context.device, &context.queue, |a| {
-                    BoxPlotInstance::from(a)
-                })
+                .prepare_render(
+                    &context.device,
+                    &context.queue,
+                    |a| BoxPlotInstance::from(a),
+                    None,
+                )
                 .expect("prepare_render horizontal");
 
             let mut ctx = Arc::try_unwrap(context).expect("single owner");
@@ -1729,7 +1802,7 @@ mod tests {
                 });
 
             selection
-                .prepare_render_bound(&context.device, &context.queue)
+                .prepare_render_bound(&context.device, &context.queue, None)
                 .expect("prepare_render_bound should succeed");
 
             assert!(selection.is_render_ready());
@@ -1783,7 +1856,7 @@ mod tests {
                 .attr("corner_radius", |_: &ScatterPoint| 0.02f32);
 
             selection
-                .prepare_render_bound(&context.device, &context.queue)
+                .prepare_render_bound(&context.device, &context.queue, None)
                 .expect("prepare_render_bound should succeed");
 
             assert!(selection.is_render_ready());
@@ -1837,7 +1910,7 @@ mod tests {
                 .attr("radius", |d: &ScatterPoint| d.value * 0.1);
 
             selection
-                .prepare_render_bound(&context.device, &context.queue)
+                .prepare_render_bound(&context.device, &context.queue, None)
                 .expect("prepare_render_bound should succeed");
 
             assert!(selection.is_render_ready());
@@ -1872,7 +1945,7 @@ mod tests {
             selection.attr("center", |d: &ScatterPoint| [d.x, d.y]);
 
             selection
-                .prepare_render_bound(&context.device, &context.queue)
+                .prepare_render_bound(&context.device, &context.queue, None)
                 .expect("prepare empty selection");
 
             let mut ctx = Arc::try_unwrap(context).expect("single owner");
@@ -1908,7 +1981,7 @@ mod tests {
                 }]);
 
             // No attr() calls — should fail
-            let result = selection.prepare_render_bound(&context.device, &context.queue);
+            let result = selection.prepare_render_bound(&context.device, &context.queue, None);
             assert!(result.is_err());
         });
     }
