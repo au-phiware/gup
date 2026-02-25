@@ -33,6 +33,7 @@
 pub mod generator;
 pub mod optimizer;
 pub mod parser;
+pub mod pipeline;
 pub mod type_check;
 pub mod types;
 
@@ -43,5 +44,6 @@ pub use optimizer::{
     function_inlining, optimize,
 };
 pub use parser::{ParseError, WgslParser, parse_wgsl};
+pub use pipeline::AstShaderPipeline;
 pub use type_check::{CompositionError, FunctionSignature, TypeChecker, TypeError};
 pub use types::*;

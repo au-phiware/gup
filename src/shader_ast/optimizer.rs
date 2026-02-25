@@ -345,9 +345,10 @@ fn fold_statement(stmt: &mut Statement) -> bool {
                 changed = true;
             }
             if let Some(eb) = else_body
-                && fold_block(eb) {
-                    changed = true;
-                }
+                && fold_block(eb)
+            {
+                changed = true;
+            }
             changed
         }
         Statement::For {
@@ -358,17 +359,20 @@ fn fold_statement(stmt: &mut Statement) -> bool {
         } => {
             let mut changed = false;
             if let Some(i) = init
-                && fold_statement(i) {
-                    changed = true;
-                }
+                && fold_statement(i)
+            {
+                changed = true;
+            }
             if let Some(c) = condition
-                && fold_expr(c) {
-                    changed = true;
-                }
+                && fold_expr(c)
+            {
+                changed = true;
+            }
             if let Some(u) = update
-                && fold_statement(u) {
-                    changed = true;
-                }
+                && fold_statement(u)
+            {
+                changed = true;
+            }
             if fold_block(body) {
                 changed = true;
             }
@@ -662,9 +666,10 @@ fn inline_calls_in_stmt(
                 changed = true;
             }
             if let Some(eb) = else_body
-                && inline_calls_in_block(eb, func_name, params, body_expr) {
-                    changed = true;
-                }
+                && inline_calls_in_block(eb, func_name, params, body_expr)
+            {
+                changed = true;
+            }
             changed
         }
         Statement::For {
@@ -675,17 +680,20 @@ fn inline_calls_in_stmt(
         } => {
             let mut changed = false;
             if let Some(i) = init
-                && inline_calls_in_stmt(i, func_name, params, body_expr) {
-                    changed = true;
-                }
+                && inline_calls_in_stmt(i, func_name, params, body_expr)
+            {
+                changed = true;
+            }
             if let Some(c) = condition
-                && inline_calls_in_expr(c, func_name, params, body_expr) {
-                    changed = true;
-                }
+                && inline_calls_in_expr(c, func_name, params, body_expr)
+            {
+                changed = true;
+            }
             if let Some(u) = update
-                && inline_calls_in_stmt(u, func_name, params, body_expr) {
-                    changed = true;
-                }
+                && inline_calls_in_stmt(u, func_name, params, body_expr)
+            {
+                changed = true;
+            }
             if inline_calls_in_block(body, func_name, params, body_expr) {
                 changed = true;
             }

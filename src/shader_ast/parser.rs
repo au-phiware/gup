@@ -409,11 +409,12 @@ impl WgslParser {
                 tok => {
                     // Try to parse as a global variable declaration
                     if let Token::Ident(id) = tok
-                        && (id == "var" || id.starts_with("var<")) {
-                            let global = self.parse_global_var(attrs)?;
-                            module.globals.push(global);
-                            continue;
-                        }
+                        && (id == "var" || id.starts_with("var<"))
+                    {
+                        let global = self.parse_global_var(attrs)?;
+                        module.globals.push(global);
+                        continue;
+                    }
                     // Also handle Var token
                     if tok == &Token::Var {
                         let global = self.parse_global_var(attrs)?;
