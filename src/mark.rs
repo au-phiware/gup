@@ -43,6 +43,7 @@ pub mod batch_renderer;
 pub mod boxplot;
 pub mod circle;
 pub mod composite;
+pub mod compute_instance_filter;
 pub mod gpu_path_tessellator;
 pub mod line;
 pub mod path;
@@ -59,6 +60,7 @@ pub use circle::{Circle, CircleAttributes, CircleVertex};
 pub use composite::{
     CompositeMark, CompositeMarkAttributes, CompositeMarkVertex, SubMark, Transform,
 };
+pub use compute_instance_filter::{ComputeInstanceFilter, FilterConfig, FilterResult};
 pub use gpu_path_tessellator::GpuPathTessellator;
 pub use line::{Line, LineAttributes, LineStyle, LineVertex};
 pub use path::{Path, PathAttributes, PathCommand, PathVertex};
