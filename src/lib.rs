@@ -160,8 +160,8 @@ pub use tick_generator::{
 
 // Export mark system with explicit re-exports to avoid conflicts
 pub use mark::batch_renderer::{
-    BatchFrameStats, BatchRendererConfig, CullingManager, InstancedBatchRenderer, LodLevel,
-    RenderBatch, Viewport2D,
+    BatchFrameStats, BatchRendererConfig, CullingManager, InstanceAttributes,
+    InstancedBatchRenderer, LodLevel, RenderBatch, Viewport2D,
 };
 pub use mark::boxplot::{
     BoxPlot, BoxPlotAttributes, BoxPlotInstance, BoxPlotOrientation, BoxPlotVertex,

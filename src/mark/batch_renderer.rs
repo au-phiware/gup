@@ -216,6 +216,112 @@ pub struct RenderBatch {
 }
 
 // ---------------------------------------------------------------------------
+// Common instance attributes
+// ---------------------------------------------------------------------------
+
+/// Universal per-instance attributes for batch rendering.
+///
+/// This layout provides a common attribute buffer format that works
+/// across all mark types. Each mark type maps its specific attributes
+/// (center, radius, size, etc.) into this common layout.
+///
+/// The 4×4 transform matrix encodes position, scale, and rotation
+/// in a single GPU-efficient format.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct InstanceAttributes {
+    /// 4×4 transform matrix (column-major) encoding position/scale/rotation.
+    pub transform: [f32; 16],
+    /// RGBA colour.
+    pub color: [f32; 4],
+    /// Mark-specific data (e.g., radius, line width, corner radius, style).
+    pub custom_data: [f32; 4],
+}
+
+impl Default for InstanceAttributes {
+    fn default() -> Self {
+        Self {
+            // Identity matrix
+            transform: [
+                1.0, 0.0, 0.0, 0.0, // col 0
+                0.0, 1.0, 0.0, 0.0, // col 1
+                0.0, 0.0, 1.0, 0.0, // col 2
+                0.0, 0.0, 0.0, 1.0, // col 3
+            ],
+            color: [1.0, 1.0, 1.0, 1.0],
+            custom_data: [0.0; 4],
+        }
+    }
+}
+
+impl InstanceAttributes {
+    /// Create instance attributes for a circle.
+    ///
+    /// Maps circle center → translation, radius → uniform scale,
+    /// fill colour → colour.
+    pub fn from_circle(center: [f32; 2], radius: f32, color: [f32; 4]) -> Self {
+        Self {
+            transform: [
+                radius, 0.0, 0.0, 0.0, // col 0
+                0.0, radius, 0.0, 0.0, // col 1
+                0.0, 0.0, 1.0, 0.0, // col 2
+                center[0], center[1], 0.0, 1.0, // col 3 (translation)
+            ],
+            color,
+            custom_data: [radius, 0.0, 0.0, 0.0],
+        }
+    }
+
+    /// Create instance attributes for a rectangle.
+    ///
+    /// Maps rectangle center → translation, size → non-uniform scale,
+    /// fill colour → colour, corner radius → custom_data.
+    pub fn from_rectangle(
+        center: [f32; 2],
+        size: [f32; 2],
+        color: [f32; 4],
+        corner_radius: f32,
+    ) -> Self {
+        Self {
+            transform: [
+                size[0], 0.0, 0.0, 0.0, // col 0
+                0.0, size[1], 0.0, 0.0, // col 1
+                0.0, 0.0, 1.0, 0.0, // col 2
+                center[0], center[1], 0.0, 1.0, // col 3
+            ],
+            color,
+            custom_data: [corner_radius, 0.0, 0.0, 0.0],
+        }
+    }
+
+    /// Create instance attributes for a line.
+    ///
+    /// Encodes start/end in the transform and width in custom_data.
+    pub fn from_line(start: [f32; 2], end: [f32; 2], color: [f32; 4], width: f32) -> Self {
+        Self {
+            transform: [
+                start[0], start[1], 0.0, 0.0, // col 0 stores start
+                end[0], end[1], 0.0, 0.0, // col 1 stores end
+                0.0, 0.0, 1.0, 0.0, // col 2
+                0.0, 0.0, 0.0, 1.0, // col 3
+            ],
+            color,
+            custom_data: [width, 0.0, 0.0, 0.0],
+        }
+    }
+
+    /// Extract the 2D translation from the transform matrix.
+    pub fn position(&self) -> [f32; 2] {
+        [self.transform[12], self.transform[13]]
+    }
+
+    /// Extract the 2D scale from the transform matrix.
+    pub fn scale(&self) -> [f32; 2] {
+        [self.transform[0], self.transform[5]]
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Per-frame statistics
 // ---------------------------------------------------------------------------
 
@@ -755,6 +861,66 @@ mod tests {
         assert_eq!(stats.draw_calls, 0);
         assert_eq!(stats.total_instances, 0);
         assert_eq!(stats.culled_instances, 0);
+    }
+
+    // ------------------------------------------------------------------
+    // InstanceAttributes unit tests
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_instance_attributes_default() {
+        let attrs = InstanceAttributes::default();
+        // Identity transform
+        assert_eq!(attrs.transform[0], 1.0);
+        assert_eq!(attrs.transform[5], 1.0);
+        assert_eq!(attrs.transform[10], 1.0);
+        assert_eq!(attrs.transform[15], 1.0);
+        // White colour
+        assert_eq!(attrs.color, [1.0, 1.0, 1.0, 1.0]);
+        // Zero custom data
+        assert_eq!(attrs.custom_data, [0.0; 4]);
+    }
+
+    #[test]
+    fn test_instance_attributes_from_circle() {
+        let attrs = InstanceAttributes::from_circle([0.5, -0.3], 0.1, [1.0, 0.0, 0.0, 1.0]);
+        assert_eq!(attrs.position(), [0.5, -0.3]);
+        assert_eq!(attrs.scale(), [0.1, 0.1]); // uniform scale
+        assert_eq!(attrs.color, [1.0, 0.0, 0.0, 1.0]);
+        assert_eq!(attrs.custom_data[0], 0.1); // radius
+    }
+
+    #[test]
+    fn test_instance_attributes_from_rectangle() {
+        let attrs =
+            InstanceAttributes::from_rectangle([0.0, 0.0], [0.5, 0.3], [0.0, 1.0, 0.0, 1.0], 5.0);
+        assert_eq!(attrs.position(), [0.0, 0.0]);
+        assert_eq!(attrs.scale(), [0.5, 0.3]); // non-uniform scale
+        assert_eq!(attrs.color, [0.0, 1.0, 0.0, 1.0]);
+        assert_eq!(attrs.custom_data[0], 5.0); // corner radius
+    }
+
+    #[test]
+    fn test_instance_attributes_from_line() {
+        let attrs =
+            InstanceAttributes::from_line([-0.5, 0.0], [0.5, 0.0], [0.0, 0.0, 1.0, 1.0], 2.0);
+        assert_eq!(attrs.color, [0.0, 0.0, 1.0, 1.0]);
+        assert_eq!(attrs.custom_data[0], 2.0); // line width
+        // Start stored in col 0
+        assert_eq!(attrs.transform[0], -0.5);
+        assert_eq!(attrs.transform[1], 0.0);
+        // End stored in col 1
+        assert_eq!(attrs.transform[4], 0.5);
+        assert_eq!(attrs.transform[5], 0.0);
+    }
+
+    #[test]
+    fn test_instance_attributes_bytemuck() {
+        let attrs = InstanceAttributes::from_circle([0.0, 0.0], 1.0, [1.0; 4]);
+        let bytes = bytemuck::bytes_of(&attrs);
+        assert_eq!(bytes.len(), std::mem::size_of::<InstanceAttributes>());
+        // 16 * 4 (transform) + 4 * 4 (color) + 4 * 4 (custom) = 96 bytes
+        assert_eq!(std::mem::size_of::<InstanceAttributes>(), 96);
     }
 
     // ------------------------------------------------------------------

@@ -51,8 +51,8 @@ pub mod renderer;
 pub mod text;
 
 pub use batch_renderer::{
-    BatchFrameStats, BatchRendererConfig, CullingManager, InstancedBatchRenderer, LodLevel,
-    RenderBatch, Viewport2D,
+    BatchFrameStats, BatchRendererConfig, CullingManager, InstanceAttributes,
+    InstancedBatchRenderer, LodLevel, RenderBatch, Viewport2D,
 };
 pub use boxplot::{BoxPlot, BoxPlotAttributes, BoxPlotInstance, BoxPlotOrientation, BoxPlotVertex};
 pub use circle::{Circle, CircleAttributes, CircleVertex};
