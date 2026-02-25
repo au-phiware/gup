@@ -258,4 +258,105 @@ mod tests {
         assert_eq!(cache.statistics().memory_usage, 0);
         assert_eq!(cache.statistics().entries, 0);
     }
+
+    // -----------------------------------------------------------------------
+    // AST integration tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_ast_optimized_vertex_shader() {
+        let config = OptimizationConfig {
+            use_ast_analysis: true,
+            ..Default::default()
+        };
+
+        let mut pipeline = ComposableShaderPipeline::new().with_optimization_config(config);
+        let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+        pipeline.add_function(scale);
+        pipeline.map_attribute("color", "linear_scale");
+
+        let optimized = pipeline.generate_optimized_vertex_shader();
+
+        // Must still contain the entry point.
+        assert!(
+            optimized.contains("vs_main"),
+            "entry point preserved after AST optimization"
+        );
+    }
+
+    #[test]
+    fn test_ast_optimized_fragment_shader() {
+        let config = OptimizationConfig {
+            use_ast_analysis: true,
+            ..Default::default()
+        };
+
+        let mut pipeline = ComposableShaderPipeline::new().with_optimization_config(config);
+        let color = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 1.0, 1.0]);
+        pipeline.add_function(color);
+        pipeline.map_attribute("color", "color_map");
+
+        let optimized = pipeline.generate_optimized_fragment_shader();
+
+        assert!(
+            optimized.contains("fs_main"),
+            "entry point preserved after AST optimization"
+        );
+    }
+
+    #[test]
+    fn test_ast_fallback_preserves_shader() {
+        // A pipeline whose generated shader may trip the AST parser.
+        // Even if it does, the fallback must preserve the shader's entry points.
+        let config = OptimizationConfig {
+            use_ast_analysis: true,
+            ..Default::default()
+        };
+
+        let mut pipeline = ComposableShaderPipeline::new().with_optimization_config(config);
+        let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+        let color = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 1.0, 1.0]);
+        pipeline.add_function(scale);
+        pipeline.add_function(color);
+        pipeline.map_attribute("size", "linear_scale");
+        pipeline.map_attribute("color", "color_map");
+
+        let vertex = pipeline.generate_optimized_vertex_shader();
+        let fragment = pipeline.generate_optimized_fragment_shader();
+
+        assert!(vertex.contains("vs_main"));
+        assert!(fragment.contains("fs_main"));
+    }
+
+    #[test]
+    fn test_ast_and_string_produce_equivalent_shaders() {
+        // Both paths must produce shaders that contain the same key elements.
+        let mut string_pipeline = ComposableShaderPipeline::new();
+        let scale1 = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+        string_pipeline.add_function(scale1);
+        string_pipeline.map_attribute("color", "linear_scale");
+        let string_vertex = string_pipeline.generate_optimized_vertex_shader();
+
+        let ast_config = OptimizationConfig {
+            use_ast_analysis: true,
+            ..Default::default()
+        };
+        let mut ast_pipeline = ComposableShaderPipeline::new().with_optimization_config(ast_config);
+        let scale2 = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+        ast_pipeline.add_function(scale2);
+        ast_pipeline.map_attribute("color", "linear_scale");
+        let ast_vertex = ast_pipeline.generate_optimized_vertex_shader();
+
+        // Both must contain core elements.
+        for keyword in &["vs_main", "VertexOutput", "VertexInput"] {
+            assert!(
+                string_vertex.contains(keyword),
+                "string shader missing '{keyword}'"
+            );
+            assert!(
+                ast_vertex.contains(keyword),
+                "AST shader missing '{keyword}'"
+            );
+        }
+    }
 }
