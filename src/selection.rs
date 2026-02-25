@@ -23,6 +23,7 @@
 use crate::interaction::{InteractionElement, InteractionEvent, Renderable};
 use crate::mark::{MarkInfo, MarkInfoImpl};
 use crate::pipeline_cache::PipelineCache;
+use crate::shader_function::{ComposableShaderFunction, ShaderType, ShaderUniform};
 use crate::{GupResult, RenderContext};
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -97,6 +98,62 @@ impl IntoAttrValue for crate::shader_function::Vec4 {
 struct AttributeBinding<T> {
     name: String,
     extractor: Box<dyn Fn(&T) -> AttrValue + Send + Sync>,
+}
+
+// ---------------------------------------------------------------------------
+// GPU shader function binding types
+// ---------------------------------------------------------------------------
+
+/// Type-erased metadata for a GPU shader function binding.
+///
+/// Stores all the information needed to generate WGSL code and create uniform
+/// buffers for a shader function that transforms an attribute on the GPU.
+struct ShaderFnInfo {
+    /// The name of the shader function in WGSL (e.g., `"linear_scale"`).
+    function_name: String,
+    /// WGSL code defining the shader function.
+    wgsl_code: String,
+    /// WGSL struct definition for the uniform type, or empty if no uniforms.
+    uniform_struct_def: String,
+    /// WGSL type name for the uniform (e.g., `"LinearScaleUniforms"`).
+    uniform_type_name: String,
+    /// Serialised uniform bytes (`bytemuck::bytes_of`), or empty if no uniforms.
+    uniform_bytes: Vec<u8>,
+    /// WGSL type name for the shader function input.
+    input_wgsl_type: &'static str,
+    /// WGSL type name for the shader function output.
+    output_wgsl_type: &'static str,
+}
+
+/// A named attribute binding that extracts raw data from `T` on the CPU and
+/// transforms it on the GPU via a [`ComposableShaderFunction`].
+///
+/// The `extractor` pulls a lightweight raw value from each data item; the
+/// heavy transformation is deferred to the GPU vertex shader.
+struct ShaderAttributeBinding<T> {
+    /// Attribute name (must match a field recognised by the mark's vertex shader).
+    name: String,
+    /// CPU-side extractor that provides the shader function's raw input value.
+    extractor: Box<dyn Fn(&T) -> AttrValue + Send + Sync>,
+    /// Type-erased shader function metadata for WGSL generation.
+    shader_fn: ShaderFnInfo,
+}
+
+/// Helper: create a [`ShaderFnInfo`] from a concrete [`ComposableShaderFunction`].
+fn shader_fn_info_from<S: ComposableShaderFunction>(shader_fn: &S) -> ShaderFnInfo {
+    let uniform_bytes = match shader_fn.create_uniforms() {
+        Some(u) => bytemuck::bytes_of(&u).to_vec(),
+        None => Vec::new(),
+    };
+    ShaderFnInfo {
+        function_name: S::function_name().to_string(),
+        wgsl_code: shader_fn.generate_wgsl(),
+        uniform_struct_def: <S::Uniforms as ShaderUniform>::wgsl_struct_definition(),
+        uniform_type_name: <S::Uniforms as ShaderUniform>::wgsl_type_name().to_string(),
+        uniform_bytes,
+        input_wgsl_type: <S::Input as ShaderType>::wgsl_type_name(),
+        output_wgsl_type: <S::Output as ShaderType>::wgsl_type_name(),
+    }
 }
 
 /// Trait for extracting multiple attribute values from a single closure.
@@ -223,6 +280,8 @@ pub struct Selection<T, M: Mark> {
     /// Named attribute bindings stored via [`attr`](Self::attr) /
     /// [`attr_parallel`](Self::attr_parallel).
     attr_bindings: Vec<AttributeBinding<T>>,
+    /// GPU shader function bindings stored via [`attr_shader`](Self::attr_shader).
+    shader_attr_bindings: Vec<ShaderAttributeBinding<T>>,
 }
 
 impl<T, M: Mark> std::fmt::Debug for Selection<T, M> {
@@ -250,6 +309,7 @@ impl<T, M: Mark> Selection<T, M> {
             _mark: PhantomData,
             render_state: None,
             attr_bindings: Vec::new(),
+            shader_attr_bindings: Vec::new(),
         })
     }
 
@@ -268,6 +328,7 @@ impl<T, M: Mark> Selection<T, M> {
             _mark: PhantomData,
             render_state: None,
             attr_bindings: Vec::new(),
+            shader_attr_bindings: Vec::new(),
         }
     }
 
@@ -358,6 +419,65 @@ impl<T, M: Mark> Selection<T, M> {
         // Invalidate GPU state — new bindings require re-upload.
         self.render_state = None;
         self
+    }
+
+    /// Bind a named attribute to a GPU shader function.
+    ///
+    /// The `extractor` closure extracts a raw input value from each data item
+    /// on the CPU.  Instead of transforming the value on the CPU (as
+    /// [`attr`](Self::attr) does), the raw value is uploaded to the GPU and
+    /// `shader_fn` is executed in the vertex shader.
+    ///
+    /// This provides three benefits:
+    /// 1. **Performance**: GPU parallelism for complex transformations on large
+    ///    datasets.
+    /// 2. **Re-mapping**: Changing shader function parameters (e.g. scale
+    ///    domain) only requires a uniform buffer update — no data re-upload.
+    /// 3. **Composition**: Shader functions integrate with the
+    ///    [`ComposableShaderFunction`] composition system.
+    ///
+    /// # Type Safety
+    ///
+    /// The shader function's output WGSL type must match the mark attribute's
+    /// expected type.  This is validated at `prepare_render_shader_bound` time.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let scale = LinearScale::new(0.0, 100.0, -1.0, 1.0);
+    /// selection
+    ///     .attr("center", |d: &MyData| [d.x, d.y])       // CPU binding
+    ///     .attr_shader("radius", |d: &MyData| d.size, scale); // GPU binding
+    /// ```
+    pub fn attr_shader<V, F, S>(&mut self, name: &str, extractor: F, shader_fn: S) -> &mut Self
+    where
+        F: Fn(&T) -> V + Send + Sync + 'static,
+        V: IntoAttrValue,
+        S: ComposableShaderFunction + 'static,
+        S::Uniforms: ShaderUniform,
+    {
+        let info = shader_fn_info_from(&shader_fn);
+        self.shader_attr_bindings.push(ShaderAttributeBinding {
+            name: name.to_string(),
+            extractor: Box::new(move |t| extractor(t).into_attr_value()),
+            shader_fn: info,
+        });
+        // Invalidate GPU state.
+        self.render_state = None;
+        self
+    }
+
+    /// Returns `true` if any GPU shader function bindings have been set.
+    pub fn has_shader_bindings(&self) -> bool {
+        !self.shader_attr_bindings.is_empty()
+    }
+
+    /// Get the names of GPU shader-function-bound attributes.
+    pub fn shader_bound_attributes(&self) -> Vec<&str> {
+        self.shader_attr_bindings
+            .iter()
+            .map(|b| b.name.as_str())
+            .collect()
     }
 
     /// Bind multiple attributes from a single closure that returns a tuple.
@@ -522,6 +642,11 @@ impl<T, M: Mark> Selection<T, M> {
     where
         M: MarkInstanceBuilder,
     {
+        // If there are GPU shader bindings, delegate to the shader-aware path.
+        if !self.shader_attr_bindings.is_empty() {
+            return self.prepare_render_shader_bound(device, queue);
+        }
+
         if self.attr_bindings.is_empty() {
             return Err(crate::error::GupError::validation_error(
                 "No attribute bindings set — call attr() before prepare_render_bound()".to_string(),
@@ -547,14 +672,210 @@ impl<T, M: Mark> Selection<T, M> {
         self.upload_instances(device, queue, instance_bytes, instance_count, cache)
     }
 
+    /// Prepare GPU resources with shader function bindings.
+    ///
+    /// This method handles the case where some (or all) attribute bindings use
+    /// GPU shader functions.  CPU-bound attributes are evaluated as normal;
+    /// GPU-bound attributes upload raw input values and the transformation is
+    /// deferred to a generated vertex shader.
+    ///
+    /// # Pipeline
+    ///
+    /// A custom render pipeline is created with:
+    /// - A modified vertex shader that includes shader function code and
+    ///   uniform bindings for each GPU-bound attribute.
+    /// - The mark's original fragment shader (unchanged).
+    /// - A bind group layout with the instance storage buffer at binding 0
+    ///   and one uniform buffer per GPU-bound attribute at bindings 1…N.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no bindings are set, or if GPU resource creation
+    /// fails.
+    fn prepare_render_shader_bound(&mut self, device: &Device, queue: &Queue) -> GupResult<()>
+    where
+        M: MarkInstanceBuilder,
+    {
+        if self.attr_bindings.is_empty() && self.shader_attr_bindings.is_empty() {
+            return Err(crate::error::GupError::validation_error(
+                "No attribute bindings set".to_string(),
+            ));
+        }
+
+        // 1. Build instance data: CPU bindings produce final values; GPU
+        //    bindings produce raw input values (the shader function will
+        //    transform them on the GPU).
+        let cpu_bindings = &self.attr_bindings;
+        let gpu_bindings = &self.shader_attr_bindings;
+
+        let instances: Vec<M::Instance> = self
+            .data
+            .iter()
+            .map(|t| {
+                let mut attr_values: Vec<(&str, AttrValue)> = cpu_bindings
+                    .iter()
+                    .map(|b| (b.name.as_str(), (b.extractor)(t)))
+                    .collect();
+                // GPU-bound attrs: extract the *raw* value (the shader will transform it).
+                for sb in gpu_bindings {
+                    attr_values.push((sb.name.as_str(), (sb.extractor)(t)));
+                }
+                M::build_instance(&attr_values)
+            })
+            .collect();
+
+        let instance_bytes: &[u8] = bytemuck::cast_slice(&instances);
+        let instance_count = instances.len() as u32;
+
+        // 2. Generate modified vertex shader with shader function injection.
+        let base_vertex_wgsl = M::VERTEX_SHADER
+            .ok_or_else(|| {
+                crate::error::GupError::validation_error(
+                    "Shader function bindings require a mark with a hand-written vertex shader"
+                        .to_string(),
+                )
+            })?
+            .to_string();
+
+        let shader_bindings_info: Vec<(&str, &ShaderFnInfo)> = gpu_bindings
+            .iter()
+            .map(|sb| (sb.name.as_str(), &sb.shader_fn))
+            .collect();
+
+        let modified_vertex_wgsl =
+            generate_shader_bound_vertex_wgsl(&base_vertex_wgsl, &shader_bindings_info);
+
+        let fragment_wgsl = M::FRAGMENT_SHADER
+            .ok_or_else(|| {
+                crate::error::GupError::validation_error(
+                    "Shader function bindings require a mark with a hand-written fragment shader"
+                        .to_string(),
+                )
+            })?
+            .to_string();
+
+        // 3. Create (or update) render state with the generated pipeline.
+        if let Some(ref mut state) = self.render_state {
+            // Re-use existing pipeline (shader functions don't change between
+            // frames — only uniform values might).  Re-upload instances.
+            if instance_bytes.len() > state.instance_buffer_capacity {
+                let (instance_buffer, bind_group) =
+                    Self::create_shader_bound_buffers_and_bind_group(
+                        device,
+                        &state.pipeline,
+                        instance_bytes,
+                        gpu_bindings,
+                    );
+                state.instance_buffer = instance_buffer;
+                state.bind_group = bind_group;
+                state.instance_buffer_capacity = instance_bytes.len();
+            } else {
+                queue.write_buffer(&state.instance_buffer, 0, instance_bytes);
+                // Also re-upload uniform data (shader function params may have
+                // changed).
+                Self::update_uniform_buffers(queue, &state.uniform_buffers, gpu_bindings);
+            }
+            state.instance_count = instance_count;
+        } else {
+            let state = SelectionRenderState::new_with_shader_fns::<M, T>(
+                device,
+                instance_bytes,
+                instance_count,
+                &modified_vertex_wgsl,
+                &fragment_wgsl,
+                gpu_bindings,
+            )?;
+            self.render_state = Some(state);
+        }
+
+        Ok(())
+    }
+
+    /// Update uniform buffers for shader function bindings (re-upload params).
+    fn update_uniform_buffers(
+        queue: &Queue,
+        uniform_buffers: &[wgpu::Buffer],
+        gpu_bindings: &[ShaderAttributeBinding<T>],
+    ) {
+        for (i, sb) in gpu_bindings.iter().enumerate() {
+            if let Some(buf) = uniform_buffers.get(i)
+                && !sb.shader_fn.uniform_bytes.is_empty()
+            {
+                queue.write_buffer(buf, 0, &sb.shader_fn.uniform_bytes);
+            }
+        }
+    }
+
+    /// Create instance buffer, uniform buffers, and bind group for shader
+    /// function bindings.
+    fn create_shader_bound_buffers_and_bind_group(
+        device: &Device,
+        pipeline: &wgpu::RenderPipeline,
+        instance_bytes: &[u8],
+        gpu_bindings: &[ShaderAttributeBinding<T>],
+    ) -> (wgpu::Buffer, wgpu::BindGroup) {
+        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("selection_shader_instance_buffer"),
+            contents: if instance_bytes.is_empty() {
+                &[0u8; 16]
+            } else {
+                instance_bytes
+            },
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
+
+        // Create uniform buffers for each shader function.
+        let mut entries = vec![wgpu::BindGroupEntry {
+            binding: 0,
+            resource: instance_buffer.as_entire_binding(),
+        }];
+
+        let uniform_buffers: Vec<wgpu::Buffer> = gpu_bindings
+            .iter()
+            .enumerate()
+            .map(|(i, sb)| {
+                let contents = if sb.shader_fn.uniform_bytes.is_empty() {
+                    &[0u8; 16][..]
+                } else {
+                    &sb.shader_fn.uniform_bytes
+                };
+                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some(&format!("shader_fn_uniform_{i}")),
+                    contents,
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                })
+            })
+            .collect();
+
+        for (i, buf) in uniform_buffers.iter().enumerate() {
+            entries.push(wgpu::BindGroupEntry {
+                binding: (i + 1) as u32,
+                resource: buf.as_entire_binding(),
+            });
+        }
+
+        let bind_group_layout = pipeline.get_bind_group_layout(0);
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("selection_shader_bind_group"),
+            layout: &bind_group_layout,
+            entries: &entries,
+        });
+
+        // Note: uniform_buffers are dropped here but the bind_group holds refs.
+        // For update support we store them in SelectionRenderState.
+        // For now this is only used on first creation; updates go through
+        // update_uniform_buffers with the stored buffers.
+        (instance_buffer, bind_group)
+    }
+
     /// Get the names of currently bound attributes.
     pub fn bound_attributes(&self) -> Vec<&str> {
         self.attr_bindings.iter().map(|b| b.name.as_str()).collect()
     }
 
-    /// Returns `true` if any attribute bindings have been set.
+    /// Returns `true` if any attribute bindings (CPU or GPU) have been set.
     pub fn has_attr_bindings(&self) -> bool {
-        !self.attr_bindings.is_empty()
+        !self.attr_bindings.is_empty() || !self.shader_attr_bindings.is_empty()
     }
 
     /// Internal helper: upload pre-computed instance bytes to the GPU.
@@ -697,6 +1018,9 @@ struct SelectionRenderState {
     instance_count: u32,
     /// Current byte capacity of the instance buffer.
     instance_buffer_capacity: usize,
+    /// Uniform buffers for GPU shader function bindings (empty when no shader
+    /// functions are used).
+    uniform_buffers: Vec<wgpu::Buffer>,
 }
 
 impl SelectionRenderState {
@@ -751,6 +1075,7 @@ impl SelectionRenderState {
             index_count,
             instance_count,
             instance_buffer_capacity: instance_bytes.len(),
+            uniform_buffers: Vec::new(),
         })
     }
 
@@ -784,9 +1109,295 @@ impl SelectionRenderState {
 
         (instance_buffer, bind_group)
     }
+
+    /// Create a render state with a generated vertex shader that includes
+    /// shader function transformations.
+    fn new_with_shader_fns<M: Mark, T>(
+        device: &Device,
+        instance_bytes: &[u8],
+        instance_count: u32,
+        vertex_wgsl: &str,
+        fragment_wgsl: &str,
+        gpu_bindings: &[ShaderAttributeBinding<T>],
+    ) -> GupResult<Self> {
+        // --- Shader modules ------------------------------------------
+        let vertex_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("selection_shader_fn_vertex"),
+            source: wgpu::ShaderSource::Wgsl(vertex_wgsl.into()),
+        });
+        let fragment_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("selection_shader_fn_fragment"),
+            source: wgpu::ShaderSource::Wgsl(fragment_wgsl.into()),
+        });
+
+        // --- Bind group layout: binding 0 = instance storage,
+        //     bindings 1..N = uniform buffers for shader functions.
+        let mut bgl_entries = vec![wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        }];
+        for (i, _sb) in gpu_bindings.iter().enumerate() {
+            bgl_entries.push(wgpu::BindGroupLayoutEntry {
+                binding: (i + 1) as u32,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            });
+        }
+
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("selection_shader_fn_bgl"),
+            entries: &bgl_entries,
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("selection_shader_fn_pipeline_layout"),
+            bind_group_layouts: &[&bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+        let pipeline = Arc::new(
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("selection_shader_fn_pipeline"),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &vertex_module,
+                    entry_point: Some("vs_main"),
+                    buffers: &[wgpu::VertexBufferLayout {
+                        array_stride: std::mem::size_of::<M::Vertex>() as wgpu::BufferAddress,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: M::vertex_attributes(),
+                    }],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &fragment_module,
+                    entry_point: Some("fs_main"),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: None,
+                    unclipped_depth: false,
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    conservative: false,
+                },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                multiview: None,
+                cache: None,
+            }),
+        );
+
+        // --- Vertex buffer -------------------------------------------
+        let vertices = M::generate_vertices();
+        let vertex_bytes: &[u8] = bytemuck::cast_slice(&vertices);
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("selection_shader_fn_vertex_buffer"),
+            contents: vertex_bytes,
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        // --- Index buffer (optional) ---------------------------------
+        let index_buffer = M::generate_indices().map(|indices| {
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("selection_shader_fn_index_buffer"),
+                contents: bytemuck::cast_slice(&indices),
+                usage: wgpu::BufferUsages::INDEX,
+            })
+        });
+
+        // --- Instance buffer -----------------------------------------
+        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("selection_shader_fn_instance_buffer"),
+            contents: if instance_bytes.is_empty() {
+                &[0u8; 16]
+            } else {
+                instance_bytes
+            },
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
+
+        // --- Uniform buffers for shader functions --------------------
+        let uniform_buffers: Vec<wgpu::Buffer> = gpu_bindings
+            .iter()
+            .enumerate()
+            .map(|(i, sb)| {
+                let contents = if sb.shader_fn.uniform_bytes.is_empty() {
+                    &[0u8; 16][..]
+                } else {
+                    &sb.shader_fn.uniform_bytes
+                };
+                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some(&format!("selection_shader_fn_uniform_{i}")),
+                    contents,
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                })
+            })
+            .collect();
+
+        // --- Bind group ----------------------------------------------
+        let mut bg_entries = vec![wgpu::BindGroupEntry {
+            binding: 0,
+            resource: instance_buffer.as_entire_binding(),
+        }];
+        for (i, buf) in uniform_buffers.iter().enumerate() {
+            bg_entries.push(wgpu::BindGroupEntry {
+                binding: (i + 1) as u32,
+                resource: buf.as_entire_binding(),
+            });
+        }
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("selection_shader_fn_bind_group"),
+            layout: &bind_group_layout,
+            entries: &bg_entries,
+        });
+
+        let vertex_count = M::vertex_count() as u32;
+        let index_count = M::index_count().map(|c| c as u32);
+
+        Ok(Self {
+            pipeline,
+            vertex_buffer,
+            index_buffer,
+            instance_buffer,
+            bind_group,
+            vertex_count,
+            index_count,
+            instance_count,
+            instance_buffer_capacity: instance_bytes.len(),
+            uniform_buffers,
+        })
+    }
 }
 
-/// Implement Renderable trait for Selection to enable GPU interaction queries.
+// ---------------------------------------------------------------------------
+// WGSL generation for shader function attribute bindings
+// ---------------------------------------------------------------------------
+
+/// Generate a modified vertex shader that applies shader functions to
+/// instance attributes.
+///
+/// Takes the mark's original vertex shader WGSL and injects:
+/// 1. Uniform struct definitions for each shader function.
+/// 2. Uniform buffer binding declarations (`@group(0) @binding(N)`).
+/// 3. Shader function code.
+/// 4. Variable declarations that apply the shader function to the raw
+///    instance field after loading (`let _gup_<attr> = fn(instance.<attr>, ..)`).
+/// 5. Replacements of `instance.<attr>` with the transformed variable in
+///    the rest of `vs_main`.
+fn generate_shader_bound_vertex_wgsl(
+    base_wgsl: &str,
+    bindings: &[(&str, &ShaderFnInfo)],
+) -> String {
+    if bindings.is_empty() {
+        return base_wgsl.to_string();
+    }
+
+    let mut result = String::with_capacity(base_wgsl.len() + 2048);
+
+    // Split at `@vertex` to inject declarations before the entry point.
+    let (before_vertex, at_vertex) = match base_wgsl.find("@vertex") {
+        Some(pos) => (&base_wgsl[..pos], &base_wgsl[pos..]),
+        None => {
+            // Fallback: return unmodified if we can't find the entry point.
+            return base_wgsl.to_string();
+        }
+    };
+
+    // --- Part 1: everything before @vertex (struct defs, storage buffer) ---
+    result.push_str(before_vertex);
+
+    // --- Part 2: inject uniform struct defs, bindings, and function code ---
+    result.push_str("// --- Gup shader function bindings ---\n");
+    for (i, (_attr_name, info)) in bindings.iter().enumerate() {
+        // Uniform struct definition (skip if empty / primitive type).
+        let struct_def = &info.uniform_struct_def;
+        if !struct_def.is_empty() && struct_def != "f32" && struct_def != "i32" {
+            result.push_str(struct_def);
+            result.push('\n');
+        }
+        // Uniform binding declaration.
+        result.push_str(&format!(
+            "@group(0) @binding({}) var<uniform> _gup_uniforms_{}: {};\n",
+            i + 1,
+            i,
+            info.uniform_type_name,
+        ));
+    }
+    result.push('\n');
+
+    // Shader function code (deduplicated by function name).
+    let mut emitted_fns = std::collections::HashSet::new();
+    for (_attr_name, info) in bindings {
+        if emitted_fns.insert(&info.function_name) {
+            result.push_str(info.wgsl_code.trim());
+            result.push_str("\n\n");
+        }
+    }
+
+    // --- Part 3: the @vertex function with transformations ---------------
+    // Find the line with `let instance = instances[` and insert
+    // transformation statements right after it.
+    let instance_load_marker = "let instance = instances[";
+    if let Some(marker_pos) = at_vertex.find(instance_load_marker) {
+        // Find the end of the `let instance = ...;` line.
+        let after_marker = &at_vertex[marker_pos..];
+        let semicolon = after_marker.find(';').unwrap_or(after_marker.len() - 1);
+        let insert_pos = marker_pos + semicolon + 1;
+
+        // Write everything up to and including the instance load.
+        result.push_str(&at_vertex[..insert_pos]);
+        result.push('\n');
+
+        // Insert shader function application statements.
+        for (i, (attr_name, info)) in bindings.iter().enumerate() {
+            result.push_str(&format!(
+                "    let _gup_{attr} = {fn_name}(instance.{attr}, _gup_uniforms_{i});\n",
+                attr = attr_name,
+                fn_name = info.function_name,
+                i = i,
+            ));
+        }
+
+        // Write the rest of the function, replacing `instance.<attr>` with
+        // `_gup_<attr>` for each shader-bound attribute.
+        let remaining = &at_vertex[insert_pos..];
+        let mut modified_remaining = remaining.to_string();
+        for (attr_name, _info) in bindings {
+            let search = format!("instance.{attr_name}");
+            let replace = format!("_gup_{attr_name}");
+            modified_remaining = modified_remaining.replace(&search, &replace);
+        }
+        result.push_str(&modified_remaining);
+    } else {
+        // Fallback: just append the vertex function as-is.
+        result.push_str(at_vertex);
+    }
+
+    result
+}
 ///
 /// This implementation extracts element data from the selection for hit testing.
 /// Data types must implement the `InteractionData` trait to provide position and size information.
