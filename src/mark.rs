@@ -52,6 +52,7 @@ pub mod performance_opt;
 pub mod rectangle;
 pub mod renderer;
 pub mod text;
+pub mod validation;
 
 pub use advanced_rendering::{
     DynamicAttributeBufferManager, DynamicAttributeMap, DynamicAttributeValue, MarkBlendConfig,
