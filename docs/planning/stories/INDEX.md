@@ -269,15 +269,18 @@ system story. The expanded story is also complete._
 
 ### Text Rendering Stories (Stories 104-110)
 
-| Story                                                                              | Title                                       | Status         | Priority | Points |
-| ---------------------------------------------------------------------------------- | ------------------------------------------- | -------------- | -------- | ------ |
-| [GUP-104](GUP-104_SDF_Glyph_Texture_Upload.md)                                     | SDF Glyph Texture Upload                    | ✅ Complete    | High     | —      |
+| Story                                                                              | Title                                       | Status      | Priority | Points |
+| ---------------------------------------------------------------------------------- | ------------------------------------------- | ----------- | -------- | ------ |
+| [GUP-104](GUP-104_SDF_Glyph_Texture_Upload.md)                                     | SDF Glyph Texture Upload                    | ✅ Complete | High     | —      |
 | [GUP-105](GUP-105_Text_Clipping_Detection_and_Viewport_Bounds_Management.md)       | Text Clipping Detection and Viewport Bounds | ✅ Complete | Medium   | 8      |
-| [GUP-106](GUP-106_System_Font_Loading.md)                                          | System Font Loading                         | 📋 Planned     | Medium   | —      |
-| [GUP-107](GUP-107_Text_Character_Positioning_Bug.md)                               | Text Character Positioning Bug              | ✅ Complete    | Medium   | —      |
-| [GUP-108](GUP-108_Correct_SDF_Font_Atlas_Generation.md)                            | Correct SDF Font Atlas Generation           | ✅ Complete    | High     | —      |
-| [GUP-109](GUP-109_TTF_Outline_Based_SDF_Generation_with_Performance_Comparison.md) | TTF Outline-Based SDF Generation            | 📋 Planned     | Medium   | —      |
-| [GUP-110](GUP-110_Multi_Channel_SDF_Sharp_Corner_Preservation.md)                  | Multi-Channel SDF Sharp Corner Preservation | 📋 Planned     | Medium   | —      |
+| [GUP-106](GUP-106_System_Font_Loading.md)                                          | System Font Loading                         | 📋 Planned  | Medium   | —      |
+| [GUP-107](GUP-107_Text_Character_Positioning_Bug.md)                               | Text Character Positioning Bug              | ✅ Complete | Medium   | —      |
+| [GUP-108](GUP-108_Correct_SDF_Font_Atlas_Generation.md)                            | Correct SDF Font Atlas Generation           | ✅ Complete | High     | —      |
+| [GUP-109](GUP-109_TTF_Outline_Based_SDF_Generation_with_Performance_Comparison.md) | TTF Outline-Based SDF Generation            | 📋 Planned  | Medium   | —      |
+| [GUP-110](GUP-110_Multi_Channel_SDF_Sharp_Corner_Preservation.md)                  | Multi-Channel SDF Sharp Corner Preservation | 📋 Planned  | Medium   | —      |
+| [GUP-199](GUP-199_Text_Wrapping_Multi_Line_Layout.md)                              | Text Wrapping and Multi-Line Layout         | 📋 Planned  | Low      | 5      |
+| [GUP-200](GUP-200_Interactive_Clipping_Reveal.md)                                  | Interactive Clipping Reveal                 | 📋 Planned  | Low      | 3      |
+| [GUP-201](GUP-201_Text_Clipping_Visual_Demo.md)                                    | Text Clipping Visual Demo                   | 📋 Planned  | Low      | 2      |
 
 ### Post GUP-016 Stories - Accessibility System (Stories 111-130)
 
