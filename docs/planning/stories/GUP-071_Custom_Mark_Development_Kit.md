@@ -1,6 +1,6 @@
 # GUP-071: Custom Mark Development Kit
 
-**Status**: 📋 PLANNED  
+**Status**: 🚧 In Progress  
 **Priority**: Low  
 **Category**: Developer Experience  
 **Estimated Effort**: 2 days  
