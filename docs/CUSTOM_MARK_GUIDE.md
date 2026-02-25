@@ -654,3 +654,14 @@ The mark system handles:
 
 Focus on defining clean, efficient mark geometries, and let the system handle
 the GPU complexity.
+
+## See Also
+
+- [Mark System Overview](mark-system/README.md) — System architecture and quick
+  start
+- [Architecture](mark-system/architecture.md) — Design principles, component
+  hierarchy, and data flow
+- [API Reference](mark-system/api-reference.md) — Complete API documentation for
+  Mark, MarkRegistry, and MarkRenderer
+- [Performance Guide](mark-system/performance.md) — Benchmarks, optimization
+  strategies, and profiling
