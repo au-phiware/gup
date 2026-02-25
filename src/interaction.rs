@@ -588,6 +588,15 @@ pub struct InteractionSystem {
     /// Number of Morton entries currently on the GPU.
     morton_gpu_entry_count: u32,
 
+    /// GPU-resident candidate pipeline resources (GUP-193).
+    /// Gather compute pipeline that compacts candidates on the GPU.
+    gather_pipeline: ComputePipeline,
+    gather_bind_group_layout: BindGroupLayout,
+    /// Compacted candidate elements (written by gather, read by hit test).
+    gathered_element_buffer: Buffer,
+    /// Indirect dispatch arguments for the hit test (written by gather).
+    hit_test_indirect_buffer: Buffer,
+
     /// CPU-side management
     event_handlers: HashMap<String, Vec<Box<dyn EventHandler>>>,
     #[allow(dead_code)]
@@ -775,6 +784,25 @@ impl InteractionSystem {
             mapped_at_creation: false,
         });
 
+        // GPU-resident candidate pipeline resources (GUP-193)
+        let (gather_pipeline, gather_bind_group_layout) =
+            Self::create_gather_pipeline(device).await?;
+
+        let gathered_element_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("gathered_elements"),
+            size: (max_morton_candidates * std::mem::size_of::<ElementData>()) as u64,
+            usage: BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+
+        // Indirect dispatch args for the hit test: 3 × u32.
+        let hit_test_indirect_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("hit_test_indirect"),
+            size: (3 * std::mem::size_of::<u32>()) as u64,
+            usage: BufferUsages::STORAGE | BufferUsages::INDIRECT,
+            mapped_at_creation: false,
+        });
+
         // Default spatial configuration (will be updated based on data bounds)
         let spatial_config = SpatialIndexConfig {
             grid_size: [100, 100],   // 100x100 grid
@@ -802,6 +830,10 @@ impl InteractionSystem {
             morton_candidate_count_buffer,
             morton_gpu_index_built: false,
             morton_gpu_entry_count: 0,
+            gather_pipeline,
+            gather_bind_group_layout,
+            gathered_element_buffer,
+            hit_test_indirect_buffer,
             event_handlers: HashMap::new(),
             active_queries: Vec::new(),
             next_query_id: 0,
@@ -955,6 +987,100 @@ impl InteractionSystem {
             layout: Some(&pipeline_layout),
             module: &shader_module,
             entry_point: Some("morton_range_query"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            cache: None,
+        });
+
+        Ok((pipeline, bind_group_layout))
+    }
+
+    /// Create the compute pipeline and bind group layout for the GPU-resident
+    /// gather pass (GUP-193).
+    ///
+    /// The gather shader reads candidate indices + the full element buffer and
+    /// writes a compacted candidate buffer plus indirect dispatch arguments.
+    async fn create_gather_pipeline(
+        device: &Device,
+    ) -> GupResult<(ComputePipeline, BindGroupLayout)> {
+        let shader_source = include_str!("shaders/gather_candidates.compute.wgsl");
+
+        let shader_module = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("gather_candidates_compute"),
+            source: ShaderSource::Wgsl(shader_source.into()),
+        });
+
+        let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some("gather_bind_group_layout"),
+            entries: &[
+                // binding 0: all elements (storage, read-only)
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                // binding 1: candidate indices (storage, read-only)
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                // binding 2: candidate count (storage, read-only)
+                BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                // binding 3: gathered elements output (storage, read-write)
+                BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                // binding 4: indirect dispatch args (storage, read-write)
+                BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+            label: Some("gather_pipeline_layout"),
+            bind_group_layouts: &[&bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+        let pipeline = device.create_compute_pipeline(&ComputePipelineDescriptor {
+            label: Some("gather_pipeline"),
+            layout: Some(&pipeline_layout),
+            module: &shader_module,
+            entry_point: Some("gather_candidates"),
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             cache: None,
         });
