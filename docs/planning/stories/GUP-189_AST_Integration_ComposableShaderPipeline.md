@@ -1,7 +1,7 @@
 # GUP-189: AST Integration with ComposableShaderPipeline
 
 **Story ID**: GUP-189 **Title**: AST Integration with ComposableShaderPipeline
-**Status**: 📋 Planned **Priority**: Medium **Effort**: 5 story points
+**Status**: 🚧 In Progress **Priority**: Medium **Effort**: 5 story points
 **Created**: 2025-08-07 **Dependencies**: GUP-073 (Advanced Shader Composition)
 
 ## Overview

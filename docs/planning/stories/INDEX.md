@@ -82,7 +82,7 @@ epic and status.
 | [GUP-186](GUP-186_Dynamic_Attribute_GPU_Upload_Pipeline.md)    | Dynamic Attribute GPU Upload Pipeline          | 📋 Planned  | Medium   | —      |
 | [GUP-187](GUP-187_Flaky_Label_Performance_Test_Fix.md)         | Flaky Label Performance Test Fix               | 📋 Planned  | Low      | —      |
 | [GUP-188](GUP-188_Automatic_Draw_Call_Metrics.md)              | Automatic Draw Call Metrics in MarkRenderer    | 📋 Planned  | Low      | —      |
-| [GUP-189](GUP-189_AST_Integration_ComposableShaderPipeline.md) | AST Integration with ComposableShaderPipeline  | 📋 Planned  | Medium   | 5      |
+| [GUP-189](GUP-189_AST_Integration_ComposableShaderPipeline.md) | AST Integration with ComposableShaderPipeline  | 🚧 In Progress | Medium   | 5      |
 | [GUP-190](GUP-190_WGSL_Compute_Shader_AST_Support.md)          | WGSL Compute Shader AST Support                | 📋 Planned  | Low      | 5      |
 
 ### Post GUP-005 Stories - Shader Function System Enhancement (Stories 51+)
