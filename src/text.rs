@@ -10,42 +10,35 @@
 //!
 //! * **SDF Font Rendering** - Crisp text at all scale factors
 //! * **Font Atlas Caching** - Efficient glyph reuse and memory management
+//! * **System Font Loading** - Load fonts by family name from the OS
 //! * **Unicode Support** - Full Unicode text rendering with normalization
 //! * **Performance** - GPU-accelerated rendering with batching
+//!
+//! # Font Loading
+//!
+//! Fonts can be loaded from multiple sources:
+//!
+//! - **Embedded default font**: `FontAtlas::new(device, queue, font_size)`
+//! - **System font by name**: `FontAtlas::with_font(device, queue, font_size, &spec, &font_db)`
+//! - **Raw font data**: `FontAtlas::from_data(device, queue, font_size, data)`
+//!
+//! The `FontDatabase` handles system font discovery and caching across platforms.
 //!
 //! # Examples
 //!
 //! ```ignore
 //! use gup::text::{TextRenderer, TextStyle, FontAtlas, TextLayoutEngine, TextRenderConfig};
+//! use gup::text::{FontSpec, FontDatabase};
+//! use gup::text::font::FontWeight;
 //! use gup::shader_function::Vec2;
 //!
-//! // Example showing text rendering API (actual implementation requires window setup)
-//! async fn example() {
-//!     // Initialize text rendering components
-//!     // let mut font_atlas = FontAtlas::new(device, queue, 16.0)?;
-//!     // let mut renderer = TextRenderer::new(device)?;
-//!     // let mut layout_engine = TextLayoutEngine::new();
+//! // Load default embedded font
+//! // let atlas = FontAtlas::new(device, queue, 16.0)?;
 //!
-//!     let style = TextStyle::default();
-//!     let text = "Hello, World!";
-//!     let position = Vec2 { x: 10.0, y: 20.0 };
-//!
-//!     // Configuration for text rendering
-//!     // let config = TextRenderConfig {
-//!     //     text,
-//!     //     position,
-//!     //     style: &style,
-//!     //     font_atlas: &mut font_atlas,
-//!     //     layout_engine: &mut layout_engine,
-//!     //     screen_width: 800.0,
-//!     //     screen_height: 600.0,
-//!     //     viewport_bounds: None,
-//!     //     clipping_config: None,
-//!     // };
-//!
-//!     // Render the text within a frame
-//!     // let bounds = renderer.render_text(&mut frame, config)?;
-//! }
+//! // Load a system font
+//! // let font_db = FontDatabase::new();
+//! // let spec = FontSpec::new("Arial").with_weight(FontWeight::Bold);
+//! // let atlas = FontAtlas::with_font(device, queue, 16.0, &spec, &font_db)?;
 //! ```
 
 pub mod atlas;

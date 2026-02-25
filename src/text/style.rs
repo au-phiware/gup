@@ -227,6 +227,17 @@ mod tests {
         assert_eq!(style.weight, 0.5);
         assert_eq!(style.letter_spacing, 1.0);
         assert_eq!(style.line_spacing, 1.0);
+        assert_eq!(style.font_family, None);
+    }
+
+    #[test]
+    fn test_text_style_with_font_family() {
+        let style = TextStyle::new(16.0).with_font_family("Arial");
+        assert_eq!(style.font_family, Some("Arial".to_string()));
+
+        // Default has no font family
+        let style = TextStyle::default();
+        assert_eq!(style.font_family, None);
     }
 
     #[test]
