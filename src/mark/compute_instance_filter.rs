@@ -37,7 +37,7 @@
 use crate::error::{GupError, GupResult};
 use std::sync::Arc;
 use wgpu::{
-    BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
+    BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, BindingType, Buffer, BufferBindingType, BufferDescriptor, BufferUsages,
     CommandEncoderDescriptor, ComputePassDescriptor, ComputePipeline, ComputePipelineDescriptor,
     Device, PipelineLayoutDescriptor, PollType, Queue, ShaderModuleDescriptor, ShaderSource,
@@ -411,15 +411,41 @@ impl ComputeInstanceFilter {
         viewport: &Viewport2D,
         lod_thresholds: &[f32; 3],
     ) {
-        let num_workgroups = instance_count.div_ceil(WORKGROUP_SIZE);
+        let bind_group = self.create_bind_group(
+            device,
+            input_buffer,
+            output_buffer,
+            visibility_buffer,
+            prefix_sums_buffer,
+            draw_indirect_buffer,
+            config_buffer,
+        );
 
-        // Upload config.
-        let config =
-            FilterConfig::from_viewport(viewport, lod_thresholds, instance_count, vertex_count);
-        queue.write_buffer(config_buffer, 0, bytemuck::bytes_of(&config));
+        self.encode_with_bind_group(
+            queue,
+            encoder,
+            &bind_group,
+            config_buffer,
+            instance_count,
+            vertex_count,
+            viewport,
+            lod_thresholds,
+        );
+    }
 
-        // Bind group.
-        let bind_group = device.create_bind_group(&BindGroupDescriptor {
+    /// Create a bind group referencing the given buffers.
+    #[allow(clippy::too_many_arguments)]
+    fn create_bind_group(
+        &self,
+        device: &Device,
+        input_buffer: &Buffer,
+        output_buffer: &Buffer,
+        visibility_buffer: &Buffer,
+        prefix_sums_buffer: &Buffer,
+        draw_indirect_buffer: &Buffer,
+        config_buffer: &Buffer,
+    ) -> BindGroup {
+        device.create_bind_group(&BindGroupDescriptor {
             label: Some("instance_filter_bg"),
             layout: &self.bind_group_layout,
             entries: &[
@@ -448,7 +474,31 @@ impl ComputeInstanceFilter {
                     resource: config_buffer.as_entire_binding(),
                 },
             ],
-        });
+        })
+    }
+
+    /// Encode compute passes using a pre-created bind group.
+    ///
+    /// The config uniform is uploaded via `queue.write_buffer` before the
+    /// passes are recorded.
+    #[allow(clippy::too_many_arguments)]
+    fn encode_with_bind_group(
+        &self,
+        queue: &Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        bind_group: &BindGroup,
+        config_buffer: &Buffer,
+        instance_count: u32,
+        vertex_count: u32,
+        viewport: &Viewport2D,
+        lod_thresholds: &[f32; 3],
+    ) {
+        let num_workgroups = instance_count.div_ceil(WORKGROUP_SIZE);
+
+        // Upload config.
+        let config =
+            FilterConfig::from_viewport(viewport, lod_thresholds, instance_count, vertex_count);
+        queue.write_buffer(config_buffer, 0, bytemuck::bytes_of(&config));
 
         // Compute passes.
         {
@@ -457,7 +507,7 @@ impl ComputeInstanceFilter {
                 timestamp_writes: None,
             });
             pass.set_pipeline(&self.cull_pipeline);
-            pass.set_bind_group(0, &bind_group, &[]);
+            pass.set_bind_group(0, bind_group, &[]);
             pass.dispatch_workgroups(num_workgroups, 1, 1);
         }
 
@@ -467,7 +517,7 @@ impl ComputeInstanceFilter {
                 timestamp_writes: None,
             });
             pass.set_pipeline(&self.prefix_sum_pipeline);
-            pass.set_bind_group(0, &bind_group, &[]);
+            pass.set_bind_group(0, bind_group, &[]);
             pass.dispatch_workgroups(num_workgroups, 1, 1);
         }
 
@@ -477,7 +527,7 @@ impl ComputeInstanceFilter {
                 timestamp_writes: None,
             });
             pass.set_pipeline(&self.prefix_sum_blocks_pipeline);
-            pass.set_bind_group(0, &bind_group, &[]);
+            pass.set_bind_group(0, bind_group, &[]);
             pass.dispatch_workgroups(1, 1, 1);
         }
 
@@ -487,7 +537,7 @@ impl ComputeInstanceFilter {
                 timestamp_writes: None,
             });
             pass.set_pipeline(&self.prefix_sum_add_offsets_pipeline);
-            pass.set_bind_group(0, &bind_group, &[]);
+            pass.set_bind_group(0, bind_group, &[]);
             pass.dispatch_workgroups(num_workgroups, 1, 1);
         }
 
@@ -497,7 +547,7 @@ impl ComputeInstanceFilter {
                 timestamp_writes: None,
             });
             pass.set_pipeline(&self.compact_pipeline);
-            pass.set_bind_group(0, &bind_group, &[]);
+            pass.set_bind_group(0, bind_group, &[]);
             pass.dispatch_workgroups(num_workgroups, 1, 1);
         }
     }
@@ -640,7 +690,24 @@ pub struct PooledComputeInstanceFilter {
     config_buffer: Buffer,
     /// Current maximum instance capacity.
     capacity: u32,
+    /// Cached bind group, reused when the input buffer is stable.
+    cached_bind_group: Option<CachedBindGroup>,
 }
+
+/// A cached bind group along with the input buffer pointer used to
+/// create it, so we can detect when the cache is stale.
+struct CachedBindGroup {
+    /// The bind group itself.
+    bind_group: BindGroup,
+    /// Identity of the input buffer that was used to create this bind group.
+    /// Compared by raw pointer address of the `wgpu::Buffer`.
+    input_buffer_id: *const Buffer,
+}
+
+// SAFETY: `input_buffer_id` is only used for pointer identity comparison
+// (never dereferenced). All other fields (`BindGroup`) are `Send + Sync`.
+unsafe impl Send for CachedBindGroup {}
+unsafe impl Sync for CachedBindGroup {}
 
 impl PooledComputeInstanceFilter {
     /// Create a new pooled filter with pre-allocated buffers for up to
@@ -667,12 +734,30 @@ impl PooledComputeInstanceFilter {
             draw_indirect_buffer,
             config_buffer,
             capacity: max_instances,
+            cached_bind_group: None,
         }
     }
 
     /// Current buffer capacity in instances.
     pub fn capacity(&self) -> u32 {
         self.capacity
+    }
+
+    /// Returns `true` if a bind group is currently cached.
+    ///
+    /// The cache is populated after the first [`dispatch`](Self::dispatch)
+    /// call and remains valid as long as the same input buffer is passed
+    /// and no buffer growth occurs.
+    pub fn has_cached_bind_group(&self) -> bool {
+        self.cached_bind_group.is_some()
+    }
+
+    /// Explicitly invalidate the cached bind group.
+    ///
+    /// The next [`dispatch`](Self::dispatch) call will create a fresh
+    /// bind group regardless of input buffer identity.
+    pub fn invalidate_bind_group_cache(&mut self) {
+        self.cached_bind_group = None;
     }
 
     /// Access the underlying [`ComputeInstanceFilter`].
@@ -685,6 +770,10 @@ impl PooledComputeInstanceFilter {
     /// If `instance_count` exceeds the current [`capacity`](Self::capacity),
     /// the internal buffers are grown to fit. Otherwise no GPU allocations
     /// are performed.
+    ///
+    /// When the same `input_buffer` is passed across consecutive dispatches
+    /// (and no buffer growth occurs), the wgpu bind group is cached and
+    /// reused, eliminating one allocation per frame.
     ///
     /// The returned [`FilterResult`] borrows the pool's buffers via
     /// `Arc` — they remain valid until the next call to `dispatch` (or
@@ -712,10 +801,36 @@ impl PooledComputeInstanceFilter {
             )));
         }
 
-        // Grow buffers if needed.
+        // Grow buffers if needed (invalidates cached bind group).
         if instance_count > self.capacity {
             self.grow(device, instance_count);
         }
+
+        // Resolve bind group: reuse cached or create new.
+        let input_ptr: *const Buffer = input_buffer;
+        let cache_hit = self
+            .cached_bind_group
+            .as_ref()
+            .is_some_and(|c| std::ptr::eq(input_ptr, c.input_buffer_id));
+
+        if !cache_hit {
+            let bind_group = self.inner.create_bind_group(
+                device,
+                input_buffer,
+                &self.output_buffer,
+                &self.visibility_buffer,
+                &self.prefix_sums_buffer,
+                &self.draw_indirect_buffer,
+                &self.config_buffer,
+            );
+            self.cached_bind_group = Some(CachedBindGroup {
+                bind_group,
+                input_buffer_id: input_ptr,
+            });
+        }
+
+        // SAFETY: we just ensured cached_bind_group is Some above.
+        let bind_group = &self.cached_bind_group.as_ref().unwrap().bind_group;
 
         // --- Encode & submit ---
 
@@ -723,15 +838,10 @@ impl PooledComputeInstanceFilter {
             label: Some("pooled_instance_filter_encoder"),
         });
 
-        self.inner.encode(
-            device,
+        self.inner.encode_with_bind_group(
             queue,
             &mut encoder,
-            input_buffer,
-            &self.output_buffer,
-            &self.visibility_buffer,
-            &self.prefix_sums_buffer,
-            &self.draw_indirect_buffer,
+            bind_group,
             &self.config_buffer,
             instance_count,
             vertex_count,
@@ -760,6 +870,8 @@ impl PooledComputeInstanceFilter {
     // ---------------------------------------------------------------
 
     /// Grow buffers to hold at least `new_min` instances.
+    ///
+    /// Invalidates the cached bind group since the underlying buffers change.
     fn grow(&mut self, device: &Device, new_min: u32) {
         // Round up to next power-of-two to amortise future growth.
         let new_capacity = new_min.next_power_of_two().min(MAX_INSTANCES);
@@ -771,6 +883,8 @@ impl PooledComputeInstanceFilter {
         self.draw_indirect_buffer = draw_indirect;
         self.config_buffer = config;
         self.capacity = new_capacity;
+        // Buffers changed — invalidate cached bind group.
+        self.cached_bind_group = None;
     }
 
     /// Allocate a full set of transient buffers for `cap` instances.
