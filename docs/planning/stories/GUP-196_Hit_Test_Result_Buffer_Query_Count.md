@@ -113,3 +113,66 @@ to 100K candidates without silently dropping results.
 - **51+ existing** interaction/spatial index tests continue to pass
 - **1214** library tests pass (2 pre-existing flaky perf tests excluded)
 - All examples compile
+
+## Retrospective
+
+**Completed**: 2025-08-09
+
+### Key Technical Learnings
+
+#### Auto-Inferred Bind Group Layouts with wgpu
+
+- **Challenge**: The hit test pipeline uses `layout: None` (auto-inferred from
+  the shader). Adding a new `@binding(3)` to the shader automatically changes
+  the inferred bind group layout, requiring all bind group creation sites to
+  include the new binding.
+- **Solution**: Because `get_bind_group_layout(0)` returns the layout inferred
+  from the compiled shader, simply adding the binding to the WGSL and updating
+  all `create_bind_group` calls was sufficient — no explicit layout descriptor
+  needed to be changed.
+- **Pattern**: Auto-inferred layouts (`layout: None`) simplify pipeline creation
+  but require that every bind group creation site is updated when bindings
+  change. This is straightforward to audit by searching for
+  `get_bind_group_layout(0)` calls on the affected pipeline.
+
+#### Uniform Buffer Alignment for Small Structs
+
+- **Challenge**: The `HitTestConfig` struct only needs a single `u32` field
+  (`query_count`), but WGSL uniform buffers must be at least 16 bytes and
+  16-byte aligned.
+- **Solution**: Added 3×u32 padding fields to bring the struct to exactly 16
+  bytes. This matches the WGSL struct layout with `_padding0`, `_padding1`,
+  `_padding2`.
+- **Pattern**: For uniform buffers with minimal data, always pad to 16-byte
+  alignment. The overhead is negligible (16 bytes uploaded once per query) and
+  avoids runtime validation errors.
+
+### Architectural Decisions
+
+#### Uniform Over Push Constants
+
+- **Decision**: Used a uniform buffer for the query count rather than push
+  constants.
+- **Reasoning**: Push constants have limited size (128 bytes in Vulkan) and are
+  not well-supported across all wgpu backends. A uniform buffer is the standard
+  pattern already used for `MortonQueryConfig` and `SpatialIndexConfig` in this
+  codebase.
+- **Trade-off**: A single `queue.write_buffer` call per dispatch adds negligible
+  overhead compared to push constants. The uniform buffer approach is consistent
+  with the existing architecture.
+- **Future**: If more per-dispatch configuration is needed (e.g. max_results
+  override, query offset), the `HitTestConfig` struct can be extended without
+  changing the bind group layout.
+
+### Development Workflow Insights
+
+- This was a clean, surgical change. The story was well-scoped and the technical
+  tasks were exactly right. The auto-inferred bind group layout meant no
+  explicit layout code needed changing.
+- The key test (`test_single_query_exceeds_old_candidate_limit`) directly
+  validates the fix by creating 5000 candidates and asserting that more than
+  3125 are returned as hits — proving the old indexing limitation is gone.
+- Running the full test suite with `--test-threads=1` took ~20s, with 2
+  pre-existing flaky performance tests (`test_transform_to_matrix_performance`
+  and `test_performance_500_labels`) that fail under system load but pass in
+  isolation. These are tracked by GUP-187.
