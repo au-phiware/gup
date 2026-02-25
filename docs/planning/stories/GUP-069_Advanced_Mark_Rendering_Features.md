@@ -240,3 +240,95 @@ This story enables:
 - 20 GPU integration tests in `advanced_mark_rendering_tests.rs`
 - 59 new tests total
 - All 1089 existing library tests continue to pass
+
+## Retrospective
+
+**Completed**: 2025-07-22
+
+### Key Technical Learnings
+
+#### Multi-Pass Rendering within Single Render Pass
+
+- **Challenge**: The project convention is "single render pass per frame" (from
+  GUP-102), but the story called for "multi-pass rendering". These concepts
+  appear to conflict.
+- **Solution**: Clarified that "multi-pass" means multiple _draw calls_ with
+  different pipelines within the same GPU render pass — not multiple render pass
+  objects from one command encoder. Each draw call can have its own pipeline
+  with different blend state, polygon mode, or shader entry point.
+- **Pattern**: When a mark needs multiple visual layers (fill + outline, base +
+  shadow), issue separate `draw_indexed()` calls with different pipelines in the
+  same render pass. This keeps GPU state changes minimal while enabling complex
+  visual effects.
+
+#### Enum-Based Dynamic Attributes vs Trait Objects
+
+- **Challenge**: The story spec suggested `Box<dyn Fn>` for dynamic attribute
+  callbacks, which would be non-Send and hard to debug.
+- **Solution**: Used a `DynamicAttributeValue` enum with `Static`,
+  `PerInstance`, and `ShaderDriven` variants. Static and PerInstance values can
+  be updated without pipeline recreation; only ShaderDriven changes require a
+  rebuild.
+- **Pattern**: For GPU data systems, prefer flat data enums over closures. GPU
+  data flows through buffers, not callbacks.
+
+#### Blend State Deduplication
+
+- **Challenge**: `render.rs` and the new `advanced_rendering.rs` both needed to
+  convert `BlendMode` to `wgpu::BlendState`, creating duplicate code.
+- **Solution**: Extracted `blend_mode_to_wgpu()` as a public utility in
+  `advanced_rendering` and refactored `RenderContext` to use it.
+- **Pattern**: When adding new modules that overlap with existing functionality,
+  check for duplication and refactor immediately rather than letting it grow.
+
+### Architectural Decisions
+
+#### New Module vs Extending Existing
+
+- **Decision**: Created a new `mark/advanced_rendering.rs` module rather than
+  expanding `mark.rs` (already 1200+ lines) or `renderer.rs`.
+- **Reasoning**: Keeps the advanced features self-contained and importable as a
+  group. The existing `mark.rs` already has the core Mark trait, MarkInfo,
+  MarkRegistry, MarkPipelineManager, and AttributeBinding — adding 500+ lines of
+  new types would make it unwieldy.
+- **Trade-off**: Slightly more import paths for users, mitigated by re-exporting
+  through `lib.rs` and `prelude.rs`.
+- **Future**: New mark rendering features can be added to this module without
+  growing `mark.rs`.
+
+#### State Manager as Standalone Struct
+
+- **Decision**: `RenderStateManager` is a standalone struct rather than
+  integrated into `RenderContext`.
+- **Reasoning**: `RenderContext` already manages blend state stacking. Adding
+  viewport/scissor stacking directly would further bloat it. A separate manager
+  can be used by code that needs state isolation (compositions) without
+  affecting simpler rendering paths.
+- **Trade-off**: Users managing compositions need to create and pass a
+  `RenderStateManager` explicitly.
+- **Future**: Could be integrated into `RenderContext` if usage patterns show
+  it's always needed together.
+
+### Development Workflow Insights
+
+- The implementation was completed efficiently because the existing codebase has
+  clear patterns: `MarkRegistry` already had `get_pipeline()` and
+  `create_bind_group()`, so adding `get_pipeline_with_blend()` and
+  `create_multi_pass_pipelines()` followed naturally.
+- Writing unit tests first (39 tests for the standalone module) before GPU
+  integration tests (20 tests) caught several API design issues early —
+  especially around the `DynamicAttributeMap` dirty tracking.
+- The pre-existing flaky test `test_performance_500_labels` (11ms vs 10ms
+  target) is unrelated to this story.
+
+### Follow-up Stories
+
+1. **GUP-185: Multi-Pass Mark Examples** — Create example marks that use
+   multi-pass rendering (e.g., a stroked circle with fill + outline passes, a
+   drop-shadow mark). This would validate the multi-pass API with visual output.
+
+2. **GUP-186: Dynamic Attribute GPU Upload Pipeline** — Build the complete GPU
+   upload pipeline for `DynamicAttributeMap`, including automatic buffer
+   management, dirty-only uploads, and integration with the rendering loop. The
+   current implementation provides the data structures but stops at the
+   `collect_static_values()` level.
