@@ -69,7 +69,7 @@ epic and status.
 
 | Story                                                   | Title                                          | Status      | Priority | Points |
 | ------------------------------------------------------- | ---------------------------------------------- | ----------- | -------- | ------ |
-| [GUP-069](GUP-069_Advanced_Mark_Rendering_Features.md)  | Advanced Mark Rendering Features               | 🚧 In Progress | Medium   | —      |
+| [GUP-069](GUP-069_Advanced_Mark_Rendering_Features.md)  | Advanced Mark Rendering Features               | ✅ Complete | Medium   | —      |
 | [GUP-070](GUP-070_Mark_Performance_Optimization.md)     | Mark Performance Optimization                  | 📋 Planned  | Medium   | —      |
 | [GUP-071](GUP-071_Custom_Mark_Development_Kit.md)       | Custom Mark Development Kit                    | 📋 Planned  | Low      | —      |
 | [GUP-072](GUP-072_Mark_System_Documentation.md)         | Mark System Documentation                      | 📋 Planned  | Low      | —      |

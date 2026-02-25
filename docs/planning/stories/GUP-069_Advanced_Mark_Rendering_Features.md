@@ -1,6 +1,6 @@
 # GUP-069: Advanced Mark Rendering Features
 
-**Status**: 🚧 In Progress  
+**Status**: ✅ Complete (2025-07-22)  
 **Priority**: Medium  
 **Category**: Feature Enhancement  
 **Estimated Effort**: 3 days  
@@ -201,3 +201,42 @@ This story enables:
 - Data-driven mark customization in visualization applications
 - Advanced composition effects with sophisticated blending
 - Performance-optimized rendering for complex mark hierarchies
+
+## Implementation Summary
+
+### Files Changed
+
+| File                                     | Change                                                      |
+| ---------------------------------------- | ----------------------------------------------------------- |
+| `src/mark/advanced_rendering.rs`         | **New**: Core module with all advanced rendering types      |
+| `src/mark.rs`                            | Extended MarkRegistry with blend/multi-pass methods         |
+| `src/mark/renderer.rs`                   | Extended MarkRenderer with multi-pass & state-aware methods |
+| `src/render.rs`                          | Refactored to use shared `blend_mode_to_wgpu()` utility     |
+| `src/lib.rs`                             | Exported new types                                          |
+| `src/prelude.rs`                         | Added commonly-used types to prelude                        |
+| `tests/advanced_mark_rendering_tests.rs` | **New**: 20 GPU integration tests                           |
+
+### New Types Introduced
+
+- **`MultiPassConfig`** / **`RenderPassConfig`**: Configuration for multi-pass
+  draw calls with per-pass blend state, polygon mode, and shader entry points
+- **`MultiPassRenderer`**: Executes multi-pass draw calls within a single render
+  pass
+- **`MarkBlendConfig`**: Mark-specific blend mode preferences with override
+  support and custom blend state resolution
+- **`DynamicAttributeMap`** / **`DynamicAttributeValue`**: Runtime attribute
+  updates with dirty tracking, generation counters, and GPU upload workflow
+- **`RenderStateManager`**: Viewport/scissor state isolation with nested state
+  stack for compositions
+- **`MarkViewport`** / **`ScissorRect`**: Fine-grained viewport and clipping
+  configuration
+- **`RenderStateSnapshot`**: State capture/restore for nested compositions
+- **`blend_mode_to_wgpu()`**: Shared utility for BlendMode → wgpu::BlendState
+  conversion
+
+### Test Counts
+
+- 39 unit tests in `advanced_rendering.rs`
+- 20 GPU integration tests in `advanced_mark_rendering_tests.rs`
+- 59 new tests total
+- All 1089 existing library tests continue to pass
