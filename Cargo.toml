@@ -127,6 +127,10 @@ name = "mark_batch_benchmarks"
 harness = false
 
 [[bench]]
+name = "axis_performance_benchmarks"
+harness = false
+
+[[bench]]
 name = "compute_filter_benchmarks"
 harness = false
 

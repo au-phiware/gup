@@ -834,6 +834,27 @@ impl GridRenderer {
             self.cache_hits as f64 / total as f64
         }
     }
+
+    /// Public wrapper around the fingerprint computation, exposed for
+    /// benchmarks and diagnostics.
+    #[allow(clippy::too_many_arguments)]
+    pub fn compute_fingerprint_public(
+        horizontal_ticks: &[f64],
+        vertical_ticks: &[f64],
+        horizontal_minor_ticks: &[f64],
+        vertical_minor_ticks: &[f64],
+        chart_bounds: ChartBounds,
+        config: &GridConfiguration,
+    ) -> u64 {
+        Self::compute_fingerprint(
+            horizontal_ticks,
+            vertical_ticks,
+            horizontal_minor_ticks,
+            vertical_minor_ticks,
+            chart_bounds,
+            config,
+        )
+    }
 }
 
 impl Default for GridRenderer {
