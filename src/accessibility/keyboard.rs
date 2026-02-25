@@ -149,7 +149,7 @@ impl FocusManager {
                     NavigationMode::Spatial => {
                         self.move_focus_spatial(Direction::Right);
                     }
-                    _ => {
+                    NavigationMode::Sequential | NavigationMode::DataDimension => {
                         self.move_focus_sequential(1);
                     }
                 }
@@ -160,28 +160,32 @@ impl FocusManager {
                     NavigationMode::Spatial => {
                         self.move_focus_spatial(Direction::Left);
                     }
-                    _ => {
+                    NavigationMode::Sequential | NavigationMode::DataDimension => {
                         self.move_focus_sequential(-1);
                     }
                 }
                 Some(AccessibilityAction::FocusChanged)
             }
-            KeyEvent::ArrowUp => {
-                if matches!(self.navigation_mode, NavigationMode::Spatial) {
+            KeyEvent::ArrowUp => match self.navigation_mode {
+                NavigationMode::Spatial => {
                     self.move_focus_spatial(Direction::Up);
                     Some(AccessibilityAction::FocusChanged)
-                } else {
-                    None
                 }
-            }
-            KeyEvent::ArrowDown => {
-                if matches!(self.navigation_mode, NavigationMode::Spatial) {
+                NavigationMode::DataDimension => {
+                    Some(AccessibilityAction::DimensionCycleRequested { forward: false })
+                }
+                NavigationMode::Sequential => None,
+            },
+            KeyEvent::ArrowDown => match self.navigation_mode {
+                NavigationMode::Spatial => {
                     self.move_focus_spatial(Direction::Down);
                     Some(AccessibilityAction::FocusChanged)
-                } else {
-                    None
                 }
-            }
+                NavigationMode::DataDimension => {
+                    Some(AccessibilityAction::DimensionCycleRequested { forward: true })
+                }
+                NavigationMode::Sequential => None,
+            },
             KeyEvent::Enter | KeyEvent::Space => self.activate_current_element(),
             KeyEvent::Escape => {
                 self.exit_current_context();
@@ -347,6 +351,15 @@ pub enum NavigationMode {
 
     /// Spatial navigation (Arrow keys)
     Spatial,
+
+    /// Data-dimension navigation.
+    ///
+    /// In this mode Arrow Left/Right navigate sequentially through
+    /// data points (which are expected to be sorted by the active dimension),
+    /// while Arrow Up/Down have no spatial meaning and are reported as
+    /// [`AccessibilityAction::DimensionCycleRequested`] so the caller can
+    /// switch the active sort dimension.
+    DataDimension,
 }
 
 /// Keyboard event.
@@ -380,7 +393,7 @@ pub enum Direction {
 }
 
 /// Actions that can be performed for accessibility.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AccessibilityAction {
     /// Focus changed to a new element
     FocusChanged,
@@ -390,6 +403,12 @@ pub enum AccessibilityAction {
 
     /// Exited the current context
     ContextExited,
+
+    /// Arrow Up/Down in DataDimension mode requests a dimension cycle.
+    ///
+    /// `forward: true` means the user pressed Down (advance to next dimension),
+    /// `forward: false` means the user pressed Up (return to previous dimension).
+    DimensionCycleRequested { forward: bool },
 }
 
 /// Helper function to check if a point is in a direction from another point.
@@ -572,5 +591,49 @@ mod tests {
         let a = [0.0, 0.0];
         let b = [3.0, 4.0];
         assert_eq!(distance(a, b), 5.0);
+    }
+
+    #[test]
+    fn test_data_dimension_arrow_left_right_navigates_sequentially() {
+        let mut manager = FocusManager::new();
+        manager.set_navigation_mode(NavigationMode::DataDimension);
+
+        manager.add_focusable_element(create_test_element(0.0, 0.0, "A"));
+        manager.add_focusable_element(create_test_element(100.0, 0.0, "B"));
+        manager.add_focusable_element(create_test_element(200.0, 0.0, "C"));
+
+        manager.set_focus(0);
+
+        let action = manager.handle_key_input(KeyEvent::ArrowRight);
+        assert_eq!(action, Some(AccessibilityAction::FocusChanged));
+        assert_eq!(manager.current_focus, Some(1));
+
+        let action = manager.handle_key_input(KeyEvent::ArrowLeft);
+        assert_eq!(action, Some(AccessibilityAction::FocusChanged));
+        assert_eq!(manager.current_focus, Some(0));
+    }
+
+    #[test]
+    fn test_data_dimension_arrow_up_down_requests_cycle() {
+        let mut manager = FocusManager::new();
+        manager.set_navigation_mode(NavigationMode::DataDimension);
+
+        manager.add_focusable_element(create_test_element(0.0, 0.0, "A"));
+        manager.set_focus(0);
+
+        let action = manager.handle_key_input(KeyEvent::ArrowDown);
+        assert_eq!(
+            action,
+            Some(AccessibilityAction::DimensionCycleRequested { forward: true })
+        );
+        // Focus should NOT change.
+        assert_eq!(manager.current_focus, Some(0));
+
+        let action = manager.handle_key_input(KeyEvent::ArrowUp);
+        assert_eq!(
+            action,
+            Some(AccessibilityAction::DimensionCycleRequested { forward: false })
+        );
+        assert_eq!(manager.current_focus, Some(0));
     }
 }
