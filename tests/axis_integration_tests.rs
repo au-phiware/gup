@@ -462,8 +462,17 @@ async fn test_axis_performance_with_large_tick_count() {
     let positions = axis.get_tick_positions(None, 800.0);
     let duration = start.elapsed();
 
-    // Should complete quickly even with multiple calls
-    assert!(duration.as_millis() < 10);
+    // Performance: tick positions should be fast.
+    // Debug builds are slower; use generous thresholds.
+    #[cfg(debug_assertions)]
+    let threshold_ms: u128 = 50;
+    #[cfg(not(debug_assertions))]
+    let threshold_ms: u128 = 10;
+
+    assert!(
+        duration.as_millis() < threshold_ms,
+        "Tick position calculation took {duration:?} (threshold: {threshold_ms}ms)"
+    );
     assert!(!positions.is_empty());
 
     // Verify positions are valid

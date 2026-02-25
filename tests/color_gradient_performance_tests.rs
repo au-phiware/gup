@@ -114,8 +114,16 @@ fn test_builder_performance() {
     let builder_time = start.elapsed();
     println!("Builder pattern (6 stops): {:?}", builder_time);
 
-    // Should be fast (under 10ms for 1000 iterations)
-    assert!(builder_time.as_millis() < 50, "Builder pattern too slow");
+    // Performance: builder pattern creation should be fast.
+    // Debug builds are slower; use generous thresholds.
+    #[cfg(debug_assertions)]
+    let threshold_ms: u128 = 200;
+    #[cfg(not(debug_assertions))]
+    let threshold_ms: u128 = 50;
+    assert!(
+        builder_time.as_millis() < threshold_ms,
+        "Builder pattern too slow: {builder_time:?} (threshold: {threshold_ms}ms)"
+    );
 }
 
 #[test]
@@ -138,8 +146,16 @@ fn test_large_gradient_creation() {
         let elapsed = start.elapsed();
         println!("Created gradient with {} stops in {:?}", size, elapsed);
 
-        // Should complete quickly even for 500 stops
-        assert!(elapsed.as_millis() < 10, "Large gradient creation too slow");
+        // Performance: gradient creation should be fast even for many stops.
+        // Debug builds are slower; use generous thresholds.
+        #[cfg(debug_assertions)]
+        let threshold_ms: u128 = 50;
+        #[cfg(not(debug_assertions))]
+        let threshold_ms: u128 = 10;
+        assert!(
+            elapsed.as_millis() < threshold_ms,
+            "Large gradient creation too slow: {elapsed:?} (threshold: {threshold_ms}ms)"
+        );
     }
 }
 
@@ -167,8 +183,16 @@ fn test_preset_gradient_performance() {
         let elapsed = start.elapsed();
         println!("{} preset creation: {:?}", name, elapsed);
 
-        // Preset creation should be fast
-        assert!(elapsed.as_millis() < 100, "{} preset too slow", name);
+        // Performance: preset gradient creation should be fast.
+        // Debug builds are slower; use generous thresholds.
+        #[cfg(debug_assertions)]
+        let threshold_ms: u128 = 500;
+        #[cfg(not(debug_assertions))]
+        let threshold_ms: u128 = 100;
+        assert!(
+            elapsed.as_millis() < threshold_ms,
+            "{name} preset too slow: {elapsed:?} (threshold: {threshold_ms}ms)"
+        );
     }
 }
 
@@ -232,8 +256,16 @@ fn test_wgsl_generation_performance() {
     let elapsed = start.elapsed();
     println!("WGSL generation (10000 iterations): {:?}", elapsed);
 
-    // Should be instant (just returning static strings)
-    assert!(elapsed.as_millis() < 10, "WGSL generation too slow");
+    // Performance: WGSL generation should be near-instant (returns static strings).
+    // Debug builds are slower; use generous thresholds.
+    #[cfg(debug_assertions)]
+    let threshold_ms: u128 = 50;
+    #[cfg(not(debug_assertions))]
+    let threshold_ms: u128 = 10;
+    assert!(
+        elapsed.as_millis() < threshold_ms,
+        "WGSL generation too slow: {elapsed:?} (threshold: {threshold_ms}ms)"
+    );
 }
 
 #[test]

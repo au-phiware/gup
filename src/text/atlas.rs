@@ -466,11 +466,17 @@ mod tests {
         let expected_height = height + (sdf::GLYPH_PADDING * 2) as usize;
         assert_eq!(sdf.len(), expected_width * expected_height);
 
-        // Performance requirement: 32x32 glyph SDF generation should be under 50ms
+        // Performance: SDF generation for a 32x32 glyph should be fast.
+        // Debug builds are slower; use generous thresholds.
+        #[cfg(debug_assertions)]
+        let threshold_ms: u128 = 200;
+        #[cfg(not(debug_assertions))]
+        let threshold_ms: u128 = 50;
+
         println!("SDF generation for {width}x{height} glyph took: {duration:?}");
         assert!(
-            duration.as_millis() < 50,
-            "SDF generation too slow: {duration:?}"
+            duration.as_millis() < threshold_ms,
+            "SDF generation too slow: {duration:?} (threshold: {threshold_ms}ms)"
         );
     }
 
@@ -506,17 +512,28 @@ mod tests {
         }
         let lookup_duration = lookup_start.elapsed();
 
-        // Performance requirements
+        // Performance: glyph cache operations should be fast.
+        // Debug builds are slower; use generous thresholds.
+        #[cfg(debug_assertions)]
+        let insert_threshold_ms: u128 = 50;
+        #[cfg(not(debug_assertions))]
+        let insert_threshold_ms: u128 = 10;
+
+        #[cfg(debug_assertions)]
+        let lookup_threshold_ms: u128 = 25;
+        #[cfg(not(debug_assertions))]
+        let lookup_threshold_ms: u128 = 5;
+
         println!("Glyph cache insertion for {glyph_count} glyphs took: {insertion_duration:?}");
         println!("Glyph cache lookup for {glyph_count} glyphs took: {lookup_duration:?}");
 
         assert!(
-            insertion_duration.as_millis() < 10,
-            "Glyph cache insertion too slow: {insertion_duration:?}"
+            insertion_duration.as_millis() < insert_threshold_ms,
+            "Glyph cache insertion too slow: {insertion_duration:?} (threshold: {insert_threshold_ms}ms)"
         );
         assert!(
-            lookup_duration.as_millis() < 5,
-            "Glyph cache lookup too slow: {lookup_duration:?}"
+            lookup_duration.as_millis() < lookup_threshold_ms,
+            "Glyph cache lookup too slow: {lookup_duration:?} (threshold: {lookup_threshold_ms}ms)"
         );
     }
 

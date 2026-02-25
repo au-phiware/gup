@@ -137,7 +137,17 @@ async fn test_shader_function_performance() -> GupResult<()> {
     }
 
     let duration = start.elapsed();
-    assert!(duration.as_millis() < 100);
+
+    // Performance: shader function composition should be fast.
+    // Debug builds are slower; use generous thresholds.
+    #[cfg(debug_assertions)]
+    let threshold_ms: u128 = 500;
+    #[cfg(not(debug_assertions))]
+    let threshold_ms: u128 = 100;
+    assert!(
+        duration.as_millis() < threshold_ms,
+        "Shader function composition took {duration:?} (threshold: {threshold_ms}ms)"
+    );
 
     Ok(())
 }

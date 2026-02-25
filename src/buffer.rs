@@ -1523,11 +1523,18 @@ mod tests {
         assert_eq!(downloaded.len(), 10000);
         println!("Downloaded 10K elements in {:?}", elapsed);
 
-        // Performance target: <50ms (very conservative, should be much faster)
+        // Performance: GPU buffer download should be fast.
+        // Debug builds are slower; use generous thresholds.
+        #[cfg(debug_assertions)]
+        let threshold_ms: u128 = 200;
+        #[cfg(not(debug_assertions))]
+        let threshold_ms: u128 = 50;
+
         assert!(
-            elapsed.as_millis() < 50,
-            "Download took too long: {:?}",
-            elapsed
+            elapsed.as_millis() < threshold_ms,
+            "Download took too long: {:?} (threshold: {}ms)",
+            elapsed,
+            threshold_ms
         );
     }
 

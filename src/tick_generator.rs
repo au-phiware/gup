@@ -1058,10 +1058,16 @@ mod tests {
         let _ticks = generator.generate_major_ticks(&scale, 1600.0, None);
         let duration = start.elapsed();
 
-        // Should complete in well under 1ms
+        // Performance: tick generation should be very fast.
+        // Debug builds are slower; use generous thresholds.
+        #[cfg(debug_assertions)]
+        let threshold_us: u128 = 5000;
+        #[cfg(not(debug_assertions))]
+        let threshold_us: u128 = 500;
+
         assert!(
-            duration.as_micros() < 500,
-            "Tick generation took {duration:?}, should be <500μs"
+            duration.as_micros() < threshold_us,
+            "Tick generation took {duration:?}, should be <{threshold_us}μs"
         );
     }
 

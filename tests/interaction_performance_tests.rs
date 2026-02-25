@@ -80,9 +80,14 @@ async fn test_point_query_1k_threshold() {
     let elapsed = start.elapsed();
 
     println!("Point query 1K: {:?} ({} hits)", elapsed, hits.len());
+    // Debug builds are slower; use generous thresholds.
+    #[cfg(debug_assertions)]
+    let threshold_ms: u128 = 500;
+    #[cfg(not(debug_assertions))]
+    let threshold_ms: u128 = 150;
     assert!(
-        elapsed.as_millis() < 150,
-        "Point query on 1K elements took {elapsed:?} (threshold: <150ms)"
+        elapsed.as_millis() < threshold_ms,
+        "Point query on 1K elements took {elapsed:?} (threshold: <{threshold_ms}ms)"
     );
 }
 
@@ -104,9 +109,14 @@ async fn test_point_query_10k_threshold() {
     let elapsed = start.elapsed();
 
     println!("Point query 10K: {:?} ({} hits)", elapsed, hits.len());
+    // Debug builds are slower; use generous thresholds.
+    #[cfg(debug_assertions)]
+    let threshold_ms: u128 = 500;
+    #[cfg(not(debug_assertions))]
+    let threshold_ms: u128 = 100;
     assert!(
-        elapsed.as_millis() < 100,
-        "Point query on 10K elements took {elapsed:?} (threshold: <100ms)"
+        elapsed.as_millis() < threshold_ms,
+        "Point query on 10K elements took {elapsed:?} (threshold: <{threshold_ms}ms)"
     );
 }
 
@@ -159,9 +169,14 @@ async fn test_region_query_10k_medium_threshold() {
         elapsed,
         hits.len()
     );
+    // Debug builds are slower; use generous thresholds.
+    #[cfg(debug_assertions)]
+    let threshold_ms: u128 = 800;
+    #[cfg(not(debug_assertions))]
+    let threshold_ms: u128 = 200;
     assert!(
-        elapsed.as_millis() < 200,
-        "Region query on 10K elements took {elapsed:?} (threshold: <200ms)"
+        elapsed.as_millis() < threshold_ms,
+        "Region query on 10K elements took {elapsed:?} (threshold: <{threshold_ms}ms)"
     );
 }
 
@@ -218,9 +233,14 @@ async fn test_batch_query_10x10k_threshold() {
         "Batch query 10×10K: {:?} ({total_hits} total hits)",
         elapsed
     );
+    // Debug builds are slower; use generous thresholds.
+    #[cfg(debug_assertions)]
+    let threshold_ms: u128 = 2000;
+    #[cfg(not(debug_assertions))]
+    let threshold_ms: u128 = 500;
     assert!(
-        elapsed.as_millis() < 500,
-        "Batch 10 queries on 10K elements took {elapsed:?} (threshold: <500ms)"
+        elapsed.as_millis() < threshold_ms,
+        "Batch 10 queries on 10K elements took {elapsed:?} (threshold: <{threshold_ms}ms)"
     );
 }
 
@@ -251,9 +271,14 @@ async fn test_streaming_query_10k_threshold() {
     let elapsed = start.elapsed();
 
     println!("Streaming query 10K: {:?} ({hit_count} hits)", elapsed);
+    // Debug builds are slower; use generous thresholds.
+    #[cfg(debug_assertions)]
+    let threshold_ms: u128 = 800;
+    #[cfg(not(debug_assertions))]
+    let threshold_ms: u128 = 200;
     assert!(
-        elapsed.as_millis() < 200,
-        "Streaming query on 10K elements took {elapsed:?} (threshold: <200ms)"
+        elapsed.as_millis() < threshold_ms,
+        "Streaming query on 10K elements took {elapsed:?} (threshold: <{threshold_ms}ms)"
     );
 }
 
@@ -297,9 +322,14 @@ async fn test_subsequent_query_faster() {
     // Subsequent should not be dramatically slower (we verify they work,
     // not necessarily that they're faster since the first might also be fast
     // due to GPU warm-up). The key validation is correctness.
+    // Debug builds are slower; use generous thresholds.
+    #[cfg(debug_assertions)]
+    let threshold_ms: u128 = 800;
+    #[cfg(not(debug_assertions))]
+    let threshold_ms: u128 = 200;
     assert!(
-        avg_subsequent.as_millis() < 200,
-        "Subsequent queries averaged {avg_subsequent:?} (threshold: <200ms)"
+        avg_subsequent.as_millis() < threshold_ms,
+        "Subsequent queries averaged {avg_subsequent:?} (threshold: <{threshold_ms}ms)"
     );
 }
 

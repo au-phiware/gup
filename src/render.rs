@@ -738,8 +738,17 @@ mod tests {
 
         let duration = start.elapsed();
 
-        // Should complete well under 1ms for performance target
-        assert!(duration.as_millis() < 1);
+        // Performance: blend mode switching should be very fast.
+        // Debug builds are slower; use generous thresholds.
+        #[cfg(debug_assertions)]
+        let threshold_ms: u128 = 10;
+        #[cfg(not(debug_assertions))]
+        let threshold_ms: u128 = 1;
+
+        assert!(
+            duration.as_millis() < threshold_ms,
+            "Blend mode switching took too long: {duration:?} (threshold: {threshold_ms}ms)"
+        );
     }
 
     #[tokio::test]
@@ -966,10 +975,16 @@ mod tests {
 
         let duration = start.elapsed();
 
-        // Should be fast - similar to manual push/pop
+        // Performance: RAII guard creation/drop should be fast.
+        // Debug builds are slower; use generous thresholds.
+        #[cfg(debug_assertions)]
+        let threshold_ms: u128 = 500;
+        #[cfg(not(debug_assertions))]
+        let threshold_ms: u128 = 100;
+
         assert!(
-            duration.as_millis() < 100,
-            "RAII guards took too long: {}ms",
+            duration.as_millis() < threshold_ms,
+            "RAII guards took too long: {}ms (threshold: {threshold_ms}ms)",
             duration.as_millis()
         );
     }

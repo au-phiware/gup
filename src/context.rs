@@ -2960,8 +2960,17 @@ mod tests {
             let _ = ctx.resize_surface(id, PhysicalSize::new(1024, 768));
             let duration = start.elapsed();
 
-            // Should complete well under 16ms for responsive UI
-            assert!(duration.as_millis() < 16);
+            // Performance: surface resize should be responsive.
+            // Debug builds are slower; use generous thresholds.
+            #[cfg(debug_assertions)]
+            let threshold_ms: u128 = 100;
+            #[cfg(not(debug_assertions))]
+            let threshold_ms: u128 = 16;
+
+            assert!(
+                duration.as_millis() < threshold_ms,
+                "Surface resize took too long: {duration:?} (threshold: {threshold_ms}ms)"
+            );
         }
     }
 

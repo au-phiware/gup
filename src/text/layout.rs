@@ -708,15 +708,22 @@ mod tests {
             glyphs.len()
         );
 
-        // Performance requirement: glyph positioning should be under 5ms for typical text
+        // Performance: glyph positioning should be well under 5ms for typical text.
+        // Debug builds are significantly slower; use generous thresholds to avoid flaky failures.
+        #[cfg(debug_assertions)]
+        let threshold_ms: u128 = 50;
+        #[cfg(not(debug_assertions))]
+        let threshold_ms: u128 = 10;
+
         println!(
-            "Glyph positioning for {} chars took: {:?}",
+            "Glyph positioning for {} chars took: {:?} (threshold: {}ms)",
             text.len(),
-            duration
+            duration,
+            threshold_ms
         );
         assert!(
-            duration.as_millis() < 10,
-            "Glyph positioning too slow: {duration:?}"
+            duration.as_millis() < threshold_ms,
+            "Glyph positioning too slow: {duration:?} (threshold: {threshold_ms}ms)"
         );
     }
 
@@ -749,11 +756,17 @@ mod tests {
             "Should detect collision with existing bounds"
         );
 
-        // Performance requirement: collision detection should be under 1ms
+        // Performance: collision detection should be well under 1ms.
+        // Debug builds are slower; use generous thresholds.
+        #[cfg(debug_assertions)]
+        let threshold_ms: u128 = 25;
+        #[cfg(not(debug_assertions))]
+        let threshold_ms: u128 = 5;
+
         println!("Collision detection against {bounds_count} bounds took: {duration:?}");
         assert!(
-            duration.as_millis() < 5,
-            "Collision detection too slow: {duration:?}"
+            duration.as_millis() < threshold_ms,
+            "Collision detection too slow: {duration:?} (threshold: {threshold_ms}ms)"
         );
     }
 
@@ -787,17 +800,28 @@ mod tests {
         }
         let lookup_duration = lookup_start.elapsed();
 
-        // Performance requirements
+        // Performance: grid operations should scale well.
+        // Debug builds are slower; use generous thresholds.
+        #[cfg(debug_assertions)]
+        let insert_threshold_ms: u128 = 200;
+        #[cfg(not(debug_assertions))]
+        let insert_threshold_ms: u128 = 50;
+
+        #[cfg(debug_assertions)]
+        let lookup_threshold_ms: u128 = 50;
+        #[cfg(not(debug_assertions))]
+        let lookup_threshold_ms: u128 = 10;
+
         println!("Grid insertion for {bounds_count} bounds took: {insertion_duration:?}");
         println!("Grid lookup for 100 queries took: {lookup_duration:?}");
 
         assert!(
-            insertion_duration.as_millis() < 50,
-            "Grid insertion too slow: {insertion_duration:?}"
+            insertion_duration.as_millis() < insert_threshold_ms,
+            "Grid insertion too slow: {insertion_duration:?} (threshold: {insert_threshold_ms}ms)"
         );
         assert!(
-            lookup_duration.as_millis() < 10,
-            "Grid lookup too slow: {lookup_duration:?}"
+            lookup_duration.as_millis() < lookup_threshold_ms,
+            "Grid lookup too slow: {lookup_duration:?} (threshold: {lookup_threshold_ms}ms)"
         );
     }
 

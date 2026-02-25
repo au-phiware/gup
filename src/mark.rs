@@ -1863,10 +1863,16 @@ mod tests {
 
         let duration = start.elapsed();
 
-        // Shader generation should complete in reasonable time
+        // Performance: shader generation should be reasonably fast.
+        // Debug builds are slower; use generous thresholds.
+        #[cfg(debug_assertions)]
+        let threshold_ms: u128 = 500;
+        #[cfg(not(debug_assertions))]
+        let threshold_ms: u128 = 100;
+
         assert!(
-            duration.as_millis() < 100,
-            "Shader generation took too long: {duration:?}"
+            duration.as_millis() < threshold_ms,
+            "Shader generation took too long: {duration:?} (threshold: {threshold_ms}ms)"
         );
     }
 }
