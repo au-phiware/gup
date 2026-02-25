@@ -2443,4 +2443,58 @@ mod tests {
         assert_eq!(elements[0].position, [1.0, 2.0]);
         assert_eq!(elements[1].position, [3.0, 4.0]);
     }
+
+    // -- Element data version tracking (GUP-194) --
+
+    #[test]
+    fn test_initial_version_is_zero() {
+        let system = MarkSelectionSystem::new(100);
+        assert_eq!(system.element_data_version(), 0);
+    }
+
+    #[test]
+    fn test_set_positions_increments_version() {
+        let mut system = MarkSelectionSystem::new(100);
+        assert_eq!(system.element_data_version(), 0);
+
+        system.set_positions(vec![[1.0, 2.0]; 10]);
+        assert_eq!(system.element_data_version(), 1);
+
+        system.set_positions(vec![[3.0, 4.0]; 10]);
+        assert_eq!(system.element_data_version(), 2);
+    }
+
+    #[test]
+    fn test_set_positions_with_sizes_increments_version() {
+        let mut system = MarkSelectionSystem::new(100);
+
+        system.set_positions_with_sizes(vec![[1.0, 2.0]; 10], vec![[0.5, 0.5]; 10]);
+        assert_eq!(system.element_data_version(), 1);
+
+        system.set_positions_with_sizes(vec![[3.0, 4.0]; 10], vec![[1.0, 1.0]; 10]);
+        assert_eq!(system.element_data_version(), 2);
+    }
+
+    #[test]
+    fn test_version_increments_monotonically() {
+        let mut system = MarkSelectionSystem::new(100);
+
+        for i in 1..=10 {
+            system.set_positions(vec![[0.0, 0.0]; 10]);
+            assert_eq!(system.element_data_version(), i);
+        }
+    }
+
+    #[test]
+    fn test_same_data_still_increments_version() {
+        let mut system = MarkSelectionSystem::new(100);
+        let positions = vec![[1.0, 2.0]; 10];
+
+        system.set_positions(positions.clone());
+        assert_eq!(system.element_data_version(), 1);
+
+        // Setting the same positions again should still increment
+        system.set_positions(positions);
+        assert_eq!(system.element_data_version(), 2);
+    }
 }
