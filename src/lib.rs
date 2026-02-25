@@ -67,6 +67,7 @@
 pub mod accessibility;
 pub mod async_mixable;
 pub mod axis;
+pub mod axis_performance;
 pub mod axis_system;
 pub mod buffer;
 pub mod chart_builder;
