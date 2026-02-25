@@ -63,6 +63,7 @@ where
 ///
 /// ```rust,no_run
 /// # use gup::chart_builder::optimized_accessor::*;
+/// # use gup::field_accessor;
 /// #[derive(Clone)]
 /// struct Point {
 ///     x: f32,

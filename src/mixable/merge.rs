@@ -27,6 +27,7 @@ use std::marker::PhantomData;
 /// use gup::prelude::*;
 /// use gup::mixable::merge::Mergeable;
 ///
+/// #[derive(Debug)]
 /// struct MyChart {
 ///     data: Vec<(f32, f32)>,
 /// }

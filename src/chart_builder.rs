@@ -618,7 +618,7 @@ where
     /// # let context = Arc::new(gup::RenderContext::new().await?);
     /// # #[derive(Debug, Clone)]
     /// # struct D { x: f32, y: f32 }
-    /// # let sel = gup::selection::Selection::<D, gup::selection::Circle>::new(vec![], context)?;
+    /// # let sel = gup::selection::Selection::<D, gup::Circle>::new(vec![], context)?;
     /// # let config = gup::chart_builder::ChartConfig::default();
     /// let chart = ComposedChart::new(sel, config).with_default_axes();
     /// let (vertices, labels) = chart.generate_axis_geometry();
@@ -699,7 +699,7 @@ where
     /// # let context = Arc::new(gup::RenderContext::new().await?);
     /// # #[derive(Debug, Clone)]
     /// # struct D { x: f32, y: f32 }
-    /// # let sel = gup::selection::Selection::<D, gup::selection::Circle>::new(vec![], context)?;
+    /// # let sel = gup::selection::Selection::<D, gup::Circle>::new(vec![], context)?;
     /// # let config = gup::chart_builder::ChartConfig::default();
     /// let chart = ComposedChart::new(sel, config).with_default_axes();
     /// let mut positioner = LabelPositioner::new();

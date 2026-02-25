@@ -1368,8 +1368,17 @@ impl GupContext {
     /// ```no_run
     /// # use gup::context::{GupContext, SurfaceId, SurfaceConfigBuilder};
     /// # use std::sync::Arc;
-    /// # let mut context = GupContext::new_headless().unwrap();
-    /// # let window = Arc::new(());
+    /// # async fn example() -> gup::error::GupResult<()> {
+    /// # let context = GupContext::headless().await?;
+    /// # let mut context = Arc::into_inner(context).unwrap();
+    /// # struct W;
+    /// # impl raw_window_handle::HasWindowHandle for W {
+    /// #     fn window_handle(&self) -> Result<raw_window_handle::WindowHandle<'_>, raw_window_handle::HandleError> { todo!() }
+    /// # }
+    /// # impl raw_window_handle::HasDisplayHandle for W {
+    /// #     fn display_handle(&self) -> Result<raw_window_handle::DisplayHandle<'_>, raw_window_handle::HandleError> { todo!() }
+    /// # }
+    /// # let window: Arc<W> = Arc::new(W);
     /// let config = SurfaceConfigBuilder::new()
     ///     .with_size(1920, 1080)
     ///     .with_present_mode(wgpu::PresentMode::Immediate)  // Low latency
@@ -1378,7 +1387,8 @@ impl GupContext {
     ///
     /// let id = SurfaceId::new();
     /// context.add_surface_with_config(id, window, config)?;
-    /// # Ok::<(), gup::error::GupError>(())
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn add_surface_with_config<W>(
         &mut self,
@@ -1507,12 +1517,21 @@ impl GupContext {
     /// ```no_run
     /// # use gup::context::GupContext;
     /// # use std::sync::Arc;
-    /// # let context = GupContext::new_headless().unwrap();
-    /// # let window = Arc::new(());
+    /// # async fn example() -> gup::error::GupResult<()> {
+    /// # let context = GupContext::headless().await?;
+    /// # struct W;
+    /// # impl raw_window_handle::HasWindowHandle for W {
+    /// #     fn window_handle(&self) -> Result<raw_window_handle::WindowHandle<'_>, raw_window_handle::HandleError> { todo!() }
+    /// # }
+    /// # impl raw_window_handle::HasDisplayHandle for W {
+    /// #     fn display_handle(&self) -> Result<raw_window_handle::DisplayHandle<'_>, raw_window_handle::HandleError> { todo!() }
+    /// # }
+    /// # let window: Arc<W> = Arc::new(W);
     /// let caps = context.query_surface_capabilities(window)?;
     /// println!("Available formats: {:?}", caps.formats);
     /// println!("Available present modes: {:?}", caps.present_modes);
-    /// # Ok::<(), gup::error::GupError>(())
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn query_surface_capabilities<W>(
         &self,
