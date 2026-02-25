@@ -120,7 +120,7 @@ _Initiative doc:
 | ------------------------------------------------------------- | ----------------------------------------- | ----------- | -------- | ------ |
 | [GUP-054](GUP-054_Existing_Solutions_Analysis.md)             | Existing Solutions Analysis               | 📋 Planned  | High     | 8      |
 | [GUP-055](GUP-055_Rust_AST_Parsing_Research.md)               | Rust AST Parsing Research and Prototype   | ✅ Complete | High     | 8      |
-| [GUP-056](GUP-056_Type_System_Mapping.md)                     | Rust-to-WGSL Type System Mapping          | 🚧 In Progress | High     | 8      |
+| [GUP-056](GUP-056_Type_System_Mapping.md)                     | Rust-to-WGSL Type System Mapping          | ✅ Complete | High     | 8      |
 | [GUP-057](GUP-057_Expression_Transpilation.md)                | Expression and Operator Transpilation     | 📋 Planned  | High     | 13     |
 | [GUP-058](GUP-058_Control_Flow_Handling.md)                   | Control Flow and Statement Transpilation  | 📋 Planned  | High     | 10     |
 | [GUP-059](GUP-059_Built_in_Function_Library.md)               | Built-in Function Library                 | 📋 Planned  | Medium   | 8      |
