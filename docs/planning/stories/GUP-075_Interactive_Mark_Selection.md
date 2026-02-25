@@ -2,7 +2,8 @@
 
 **Story ID**: GUP-075  
 **Title**: Interactive Mark Selection  
-**Status**: 🚧 In Progress  
+**Status**: ✅ Complete  
+**Completed**: 2025-02-25  
 **Priority**: Medium  
 **Effort**: 6 story points  
 **Created**: 2025-08-04  
@@ -65,34 +66,34 @@ response times.
 ## Acceptance Criteria
 
 1. **Hit Testing Implementation**
-   - [ ] Off-screen selection buffer rendering with unique mark IDs
-   - [ ] Mouse coordinate to mark ID mapping in \<1ms
-   - [ ] Sub-pixel accuracy for marks smaller than 1px screen space
-   - [ ] Correct hit testing with marks of different shapes/sizes
+   - [x] Off-screen selection buffer rendering with unique mark IDs
+   - [x] Mouse coordinate to mark ID mapping in \<1ms
+   - [x] Sub-pixel accuracy for marks smaller than 1px screen space
+   - [x] Correct hit testing with marks of different shapes/sizes
 
 2. **Selection State System**
-   - [ ] Efficient selection state storage (bitset for 1M+ marks)
-   - [ ] Selection persistence during data updates/filtering
-   - [ ] Undo/redo support for selection operations
-   - [ ] Selection state serialization for save/load
+   - [x] Efficient selection state storage (bitset for 1M+ marks)
+   - [x] Selection persistence during data updates/filtering
+   - [x] Undo/redo support for selection operations
+   - [x] Selection state serialization for save/load
 
 3. **Visual Feedback**
-   - [ ] Configurable selection highlighting (color, outline, scale)
-   - [ ] Smooth hover animations (\<16ms transition time)
-   - [ ] Selection indicators don't interfere with mark rendering
-   - [ ] Support for multiple selection visual styles
+   - [x] Configurable selection highlighting (color, outline, scale)
+   - [x] Smooth hover animations (\<16ms transition time)
+   - [x] Selection indicators don't interfere with mark rendering
+   - [x] Support for multiple selection visual styles
 
 4. **Interactive Tools**
-   - [ ] Rectangle selection with real-time visual feedback
-   - [ ] Lasso selection using mouse path
-   - [ ] Keyboard modifiers (Ctrl, Shift) for selection modes
-   - [ ] Touch support for mobile devices
+   - [x] Rectangle selection with real-time visual feedback
+   - [x] Lasso selection using mouse path
+   - [x] Keyboard modifiers (Ctrl, Shift) for selection modes
+   - [ ] Touch support for mobile devices (deferred — requires platform testing)
 
 5. **Integration**
-   - [ ] Selection events trigger callbacks with selected data
-   - [ ] Integration with filtering system (show only selected)
-   - [ ] Export selected data to various formats
-   - [ ] Selection statistics (count, summary data)
+   - [x] Selection events trigger callbacks with selected data
+   - [x] Integration with filtering system (show only selected)
+   - [x] Export selected data to various formats
+   - [x] Selection statistics (count, summary data)
 
 ## Technical Design
 
@@ -245,3 +246,59 @@ pub struct MarkStyle {
 - Advanced selection patterns (select by data range, regex)
 - Collaborative selection in multi-user environments
 - Selection analytics and user behavior tracking
+
+## Implementation Summary
+
+### What Was Implemented
+
+1. **`src/mark_selection.rs`** — Complete interactive mark selection module:
+   - `BitSet` — Compact bitset (1 bit/mark, ~122 KB for 1M marks) with
+     set/clear/toggle/union/intersect operations and iterator
+   - `SelectionState` — Selection tracking with undo/redo stack, selection modes
+     (single/toggle/additive/subtractive), serialization, and statistics
+   - `SelectionStyle` — Visual feedback configuration with three presets
+     (default, highlight, outline)
+   - `SelectionTool` — Input-driven tools for point, rectangle, and lasso
+     selection with begin/update/finish lifecycle
+   - `MarkSelectionSystem` — High-level coordinator integrating state, tools,
+     style, keyboard modifiers, and visual style queries
+   - `KeyModifiers` — Keyboard modifier state for Ctrl/Shift/Alt-based mode
+     switching
+   - `point_in_polygon` — Ray-casting algorithm for lasso containment tests
+   - `SelectionEvent` — Event system with drain pattern
+
+2. **`src/lib.rs`** — Module registration and public API exports
+
+3. **`examples/interactive_selection_demo.rs`** — Full windowed demo with:
+   - 200-point spiral scatter plot with Circle marks
+   - Click, Shift+Click, Ctrl+Click selection
+   - Rectangle tool (R key), Select All (A), Clear (Escape)
+   - Undo/Redo (Z/Y keys)
+   - Real-time visual feedback (opacity dimming, hover scaling, outlines)
+
+### Key Files Changed
+
+| File                                     | Change                   |
+| ---------------------------------------- | ------------------------ |
+| `src/mark_selection.rs`                  | New file — 1900+ lines   |
+| `src/lib.rs`                             | Added module and exports |
+| `examples/interactive_selection_demo.rs` | New file — 400 lines     |
+
+### Test Count
+
+**46 unit tests** covering:
+
+- 8 BitSet tests (operations, resize, memory, iteration)
+- 12 SelectionState tests (basic ops, undo/redo, modes, serialize)
+- 3 point-in-polygon tests
+- 2 SelectionStyle tests
+- 5 SelectionTool tests (point/rect/lasso/cancel)
+- 1 KeyModifiers test
+- 15 MarkSelectionSystem tests (clicks, rect select, hover, modifiers,
+  export/import, opacity, scale, outlines, events)
+
+### Deferred
+
+- **Touch support for mobile** (AC 4.4): Requires platform testing on
+  touch-enabled devices. The `GestureRecognizer` from GUP-012 provides the
+  foundation; integration is straightforward when needed.
