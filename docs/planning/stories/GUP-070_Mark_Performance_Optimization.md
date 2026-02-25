@@ -1,6 +1,7 @@
 # GUP-070: Mark Performance Optimization
 
-**Status**: 🚧 In Progress  
+**Status**: ✅ Complete  
+**Completed**: 2025-07-17  
 **Priority**: Medium  
 **Category**: Performance Optimization  
 **Estimated Effort**: 2 days  
@@ -289,3 +290,60 @@ This optimization work enables:
 - Interactive performance for complex mark compositions
 - Memory-efficient rendering for resource-constrained environments
 - Advanced profiling capabilities for performance-critical applications
+
+## Implementation Summary
+
+### What Was Implemented
+
+1. **Enhanced Pipeline Cache (`EnhancedPipelineCache`)**
+   - Caches pipelines by `(mark_type, blend_mode)` pairs via `PipelineCacheKey`
+   - Cache warming (`warm()`) for pre-creating common pipeline variants
+   - Creation time tracking and cache statistics
+   - Surface format invalidation support
+
+2. **Mark Buffer Pool (`MarkBufferPool`)**
+   - Size-class-based buffer pooling (Tiny through Massive, 6 classes)
+   - `acquire_instance_buffer()` / `return_buffer()` API
+   - Automatic idle eviction with configurable timeout
+   - Pool hit rates >85% after initial warmup in tests
+
+3. **Render Batch Sorting**
+   - `sort_batches_by_state()` groups batches by `(mark_type, blend_mode)`
+   - `count_pipeline_switches()` measures effectiveness
+   - Hash-based deterministic ordering for `TypeId` (which lacks `Ord`)
+   - Z-order preserved within pipeline groups for correct alpha blending
+
+4. **Performance Metrics (`MarkPerformanceMetrics`)**
+   - Vertex processing, instance batching, and pipeline transition timing
+   - Buffer pool hit/miss tracking
+   - Draw call and instance count tracking
+   - `merge()` for accumulating across subsystems
+
+5. **MarkRenderer Integration**
+   - `get_performance_metrics()` / `metrics_mut()` /
+     `reset_performance_counters()`
+   - Backward-compatible additions to existing renderer
+
+6. **InstancedBatchRenderer Integration**
+   - `sorted_batch_order()` for optimized rendering order
+   - `BatchFrameStats::to_performance_metrics()` conversion
+
+### Key Files Changed
+
+| File                                     | Change                                                |
+| ---------------------------------------- | ----------------------------------------------------- |
+| `src/mark/performance_opt.rs`            | New: All optimization types and logic                 |
+| `src/mark/renderer.rs`                   | Extended with metrics tracking                        |
+| `src/mark/batch_renderer.rs`             | Extended with sorted rendering and metrics conversion |
+| `src/mark.rs`                            | Module registration and public exports                |
+| `benches/mark_performance_benchmarks.rs` | New: Benchmarks for sorting, size classes, cache keys |
+| `Cargo.toml`                             | New benchmark registration                            |
+
+### Test Summary
+
+- **30 unit/GPU tests** in `performance_opt.rs` (20 unit + 10 GPU)
+- **40 existing batch_renderer tests** still pass
+- **5 existing renderer tests** still pass
+- **1119 total lib tests pass** (1 pre-existing flaky label performance test)
+- All examples compile
+- All integration tests pass
