@@ -892,4 +892,161 @@ mod tests {
         assert_eq!(renderer.pipeline_cache_size(), 0);
         Ok(())
     }
+
+    #[tokio::test]
+    async fn test_rectangle_instancing() -> GupResult<()> {
+        use crate::mark::Rectangle;
+        use crate::mark::rectangle::{RectangleAttributes, RectangleInstance};
+
+        let ctx = create_test_context().await?;
+        let device = &ctx.device;
+        let queue = &ctx.queue;
+
+        let mut renderer = InstancedBatchRenderer::new(BatchRendererConfig::default());
+        renderer.begin_frame();
+
+        let instances = vec![RectangleInstance::from(&RectangleAttributes::default()); 500];
+
+        renderer.ensure_geometry::<Rectangle>(device, queue)?;
+        renderer.submit_instances::<Rectangle, _>(device, queue, &instances)?;
+
+        assert_eq!(renderer.queued_batch_count(), 1);
+        assert_eq!(renderer.queued_batches()[0].instance_count, 500);
+        assert!(renderer.has_geometry::<Rectangle>());
+
+        renderer.end_frame();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_multi_mark_type_batching() -> GupResult<()> {
+        use crate::mark::Rectangle;
+        use crate::mark::rectangle::{RectangleAttributes, RectangleInstance};
+
+        let ctx = create_test_context().await?;
+        let device = &ctx.device;
+        let queue = &ctx.queue;
+
+        let mut renderer = InstancedBatchRenderer::new(BatchRendererConfig::default());
+        renderer.begin_frame();
+
+        // Submit circles
+        let circle_instances = vec![CircleInstance::from(&CircleAttributes::default()); 100];
+        renderer.submit_instances::<Circle, _>(device, queue, &circle_instances)?;
+
+        // Submit rectangles
+        let rect_instances = vec![RectangleInstance::from(&RectangleAttributes::default()); 200];
+        renderer.submit_instances::<Rectangle, _>(device, queue, &rect_instances)?;
+
+        // Should have 2 batches (one per mark type)
+        assert_eq!(renderer.queued_batch_count(), 2);
+        assert_eq!(renderer.queued_batches()[0].instance_count, 100);
+        assert_eq!(renderer.queued_batches()[1].instance_count, 200);
+
+        renderer.end_frame();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_caching_multiple_types() -> GupResult<()> {
+        use crate::mark::Rectangle;
+
+        let ctx = create_test_context().await?;
+        let device = &ctx.device;
+
+        let mut renderer = InstancedBatchRenderer::new(BatchRendererConfig::default());
+
+        let _p1 = renderer.get_or_create_pipeline::<Circle>(device)?;
+        let _p2 = renderer.get_or_create_pipeline::<Rectangle>(device)?;
+
+        assert_eq!(renderer.pipeline_cache_size(), 2);
+
+        // Hits on second retrieval
+        let _p3 = renderer.get_or_create_pipeline::<Circle>(device)?;
+        let _p4 = renderer.get_or_create_pipeline::<Rectangle>(device)?;
+        assert_eq!(renderer.pipeline_cache_size(), 2);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_large_instance_count() -> GupResult<()> {
+        let ctx = create_test_context().await?;
+        let device = &ctx.device;
+        let queue = &ctx.queue;
+
+        let mut renderer = InstancedBatchRenderer::new(BatchRendererConfig::default());
+        renderer.begin_frame();
+
+        // 10K instances - should fit in a single batch (max is 10_000)
+        let instances = vec![CircleInstance::from(&CircleAttributes::default()); 10_000];
+
+        renderer.submit_instances::<Circle, _>(device, queue, &instances)?;
+
+        assert_eq!(renderer.queued_batch_count(), 1);
+        assert_eq!(renderer.queued_batches()[0].instance_count, 10_000);
+
+        let stats = renderer.end_frame();
+        assert!(stats.buffer_upload_us > 0);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_begin_frame_clears_batches() -> GupResult<()> {
+        let ctx = create_test_context().await?;
+        let device = &ctx.device;
+        let queue = &ctx.queue;
+
+        let mut renderer = InstancedBatchRenderer::new(BatchRendererConfig::default());
+        renderer.begin_frame();
+
+        let instances = vec![CircleInstance::from(&CircleAttributes::default()); 50];
+        renderer.submit_instances::<Circle, _>(device, queue, &instances)?;
+        assert_eq!(renderer.queued_batch_count(), 1);
+
+        // New frame clears previous batches
+        renderer.begin_frame();
+        assert_eq!(renderer.queued_batch_count(), 0);
+
+        renderer.end_frame();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_culling_with_small_viewport() -> GupResult<()> {
+        let ctx = create_test_context().await?;
+        let device = &ctx.device;
+        let queue = &ctx.queue;
+
+        let mut renderer = InstancedBatchRenderer::new(BatchRendererConfig::default());
+        renderer.culling_mut().set_viewport(Viewport2D {
+            min_x: -0.5,
+            max_x: 0.5,
+            min_y: -0.5,
+            max_y: 0.5,
+            pixel_width: 800.0,
+            pixel_height: 600.0,
+        });
+
+        renderer.begin_frame();
+
+        let instances = vec![CircleInstance::from(&CircleAttributes::default()); 4];
+        // Two inside, two outside
+        let centers = [
+            [0.0f32, 0.0], // inside
+            [0.1, -0.1],   // inside
+            [2.0, 0.0],    // outside
+            [-3.0, 3.0],   // outside
+        ];
+        let radii = [0.05f32, 0.05, 0.05, 0.05];
+
+        let submitted = renderer
+            .submit_with_culling::<Circle, _>(device, queue, &instances, &centers, &radii)?;
+
+        assert_eq!(submitted, 2);
+
+        let stats = renderer.end_frame();
+        assert_eq!(stats.culled_instances, 2);
+        Ok(())
+    }
 }
