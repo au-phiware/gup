@@ -1,6 +1,6 @@
 # GUP-072: Mark System Documentation
 
-**Status**: 📋 PLANNED  
+**Status**: 🚧 In Progress  
 **Priority**: Low  
 **Category**: Documentation  
 **Estimated Effort**: 1 day  
