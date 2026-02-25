@@ -160,6 +160,10 @@ pub use tick_generator::{
 };
 
 // Export mark system with explicit re-exports to avoid conflicts
+pub use mark::advanced_rendering::{
+    DynamicAttributeMap, DynamicAttributeValue, MarkBlendConfig, MarkViewport, MultiPassConfig,
+    MultiPassRenderer, RenderPassConfig, RenderStateManager, RenderStateSnapshot, ScissorRect,
+};
 pub use mark::batch_renderer::{
     BatchFrameStats, BatchRendererConfig, CullingManager, GeometryCache, InstanceAttributes,
     InstancedBatchRenderer, LodLevel, RenderBatch, Viewport2D,

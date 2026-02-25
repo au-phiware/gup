@@ -29,6 +29,12 @@ pub use crate::selection::{Mark, Selection};
 // Mark types
 pub use crate::{BoxPlot, Circle, Line, Rectangle};
 
+// Advanced mark rendering
+pub use crate::mark::advanced_rendering::{
+    DynamicAttributeMap, DynamicAttributeValue, MarkBlendConfig, MarkViewport, MultiPassConfig,
+    RenderPassConfig, RenderStateManager,
+};
+
 // Mixable trait for composition
 pub use crate::mixable::Mixable;
 
