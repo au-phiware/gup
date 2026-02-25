@@ -268,3 +268,92 @@ This implementation enables:
 - 24 integration tests in `type_map_integration_tests.rs`
 - All existing 17 pipeline tests continue to pass
 - All 8 WGSL validation tests continue to pass
+
+## Retrospective
+
+**Completed**: 2025-07-19
+
+### Key Technical Learnings
+
+#### Type System Duplication in Proc-Macro Crates
+
+- **Challenge**: The project had three separate type mapping implementations:
+  one in `wgsl_function.rs` (HashMap-based TYPE_CACHE), one in `wgsl_struct.rs`
+  (match-based), and one in `transpile/convert.rs` (basic inline matching). All
+  three needed to stay in sync.
+- **Solution**: Created a unified `TypeMapper` struct in `transpile/type_map.rs`
+  that serves as the single source of truth for the transpilation pipeline. The
+  `RustToWgsl` converter now delegates to it.
+- **Pattern**: When multiple modules need the same mapping logic, extract it
+  into a dedicated module with a clear API. The other implementations
+  (`wgsl_function.rs`, `wgsl_struct.rs`) remain for their specific macro
+  contexts but could be migrated to use TypeMapper in a future story.
+
+#### WGSL Memory Layout Specification
+
+- **Challenge**: WGSL has unintuitive alignment rules, especially for `vec3`
+  types (size 12 bytes but 16-byte alignment) and arrays in uniform buffers
+  (element stride rounded up to 16 bytes).
+- **Solution**: Implemented `wgsl_type_layout()` function that follows the WGSL
+  specification precisely, with tests validating the alignment quirks.
+- **Pattern**: Always test alignment values explicitly rather than assuming they
+  follow C rules. The vec3 alignment quirk is a common source of GPU buffer
+  bugs.
+
+#### Proc-Macro Self-Referentiality
+
+- **Challenge**: Changing `convert_type` from `&self` to `&mut self` (for
+  TypeMapper caching) required cascading changes through `convert_expr`,
+  `convert_stmt`, `convert_block`, and `convert_function` — plus all test code.
+- **Solution**: Used sed for bulk fixes of `let converter` → `let mut converter`
+  in test files. Identified that the `&mut self` propagation was unavoidable but
+  semantically correct (type resolution is inherently stateful with caching).
+- **Pattern**: When introducing caching/statefulness into previously stateless
+  methods, plan for the `&mut self` cascade and fix tests systematically.
+
+### Architectural Decisions
+
+#### Separate TypeMapper Module vs. Extending convert.rs
+
+- **Decision**: Created a dedicated `type_map.rs` module rather than inlining
+  the type mapping logic in `convert.rs`.
+- **Reasoning**: Separation of concerns — type mapping (what types map to what)
+  is logically distinct from AST conversion (how expressions translate). The
+  TypeMapper can be used independently for struct generation, layout validation,
+  and signature checking.
+- **Trade-off**: Slightly more indirection (TypeMapper wraps a HashMap + Vec),
+  but cleaner API and better testability.
+- **Future**: TypeMapper could potentially unify all three type mapping
+  implementations in the macro crate if the other macros are refactored to use
+  the transpilation pipeline.
+
+#### HashMap vs. LazyLock for Type Table
+
+- **Decision**: Used a function returning `HashMap` (`known_types()`) called in
+  `TypeMapper::new()`, rather than a `static LazyLock<HashMap>` like the
+  existing TYPE_CACHE in `wgsl_function.rs`.
+- **Reasoning**: TypeMapper is instance-based (not global) because it
+  accumulates struct definitions during conversion. A per-instance HashMap is
+  simpler and avoids shared global state.
+- **Trade-off**: Re-creates the table on each TypeMapper construction (minimal
+  cost — 28 entries), but avoids the complexity of global statics with mutable
+  struct tracking.
+
+### Development Workflow Insights
+
+- The story was cleanly decomposable into three increments: core module,
+  converter integration, and integration tests. Each was independently
+  committable and testable.
+- The pre-existing test failure (`test_is_uniform_compatible_type`) was
+  confirmed by checking out to the pre-change state — important to verify before
+  assuming new code broke something.
+- Integration tests for proc-macro internals must live within the macro crate
+  itself (not in `tests/`) because `syn` is not a dependency of the main crate.
+  The existing `transpile_wgsl_validation.rs` works because it only validates
+  WGSL text strings against wgpu/naga.
+
+### Follow-up Stories
+
+No new stories identified — this story cleanly enables GUP-057 (Expression and
+Operator Transpilation) and GUP-058 (Control Flow and Statement Transpilation)
+as already planned.
