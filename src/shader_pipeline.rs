@@ -25,7 +25,7 @@ use crate::buffer::{BufferType, GpuBuffer};
 use crate::error::GupResult;
 use crate::shader_function::{ComposableShaderFunction, ShaderUniform};
 use lru::LruCache;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::Duration;
@@ -458,6 +458,296 @@ impl Default for PipelineBatch {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Uniform Buffer Pool
+// ---------------------------------------------------------------------------
+
+/// Pool of reusable GPU uniform buffers, bucketed by size.
+///
+/// Uniform buffers in visualization pipelines tend to cluster around a small set
+/// of sizes (e.g. 16 bytes for `LinearScaleUniforms`, 32 bytes for
+/// `ColorMapUniforms`).  Rather than allocating and deallocating buffers every
+/// frame, the pool keeps returned buffers for reuse, avoiding GPU allocation
+/// overhead.
+pub struct UniformBufferPool {
+    /// Available buffers grouped by their aligned capacity.
+    free: HashMap<usize, VecDeque<GpuBuffer<u8>>>,
+    /// Total number of buffers ever created (for stats).
+    total_created: usize,
+    /// Total number of reuses (for stats).
+    total_reused: usize,
+    /// Maximum number of free buffers per size bucket.
+    max_per_bucket: usize,
+}
+
+impl UniformBufferPool {
+    /// Create a new pool.  `max_per_bucket` limits how many idle buffers are
+    /// retained for each size class (prevents unbounded growth).
+    pub fn new(max_per_bucket: usize) -> Self {
+        Self {
+            free: HashMap::new(),
+            total_created: 0,
+            total_reused: 0,
+            max_per_bucket,
+        }
+    }
+
+    /// Round a size up to the nearest aligned bucket.
+    ///
+    /// Uniform buffers require 256-byte alignment, so we bucket by multiples
+    /// of 256 to maximize reuse.
+    fn aligned_size(size: usize) -> usize {
+        const ALIGNMENT: usize = 256;
+        size.div_ceil(ALIGNMENT) * ALIGNMENT
+    }
+
+    /// Acquire a buffer of at least `min_size` bytes.
+    ///
+    /// Returns a pooled buffer if one is available; otherwise creates a new
+    /// one on the given device.
+    pub fn acquire(&mut self, device: &Device, min_size: usize) -> GpuBuffer<u8> {
+        let bucket_size = Self::aligned_size(min_size.max(1));
+
+        if let Some(queue) = self.free.get_mut(&bucket_size)
+            && let Some(buffer) = queue.pop_front()
+        {
+            self.total_reused += 1;
+            return buffer;
+        }
+
+        self.total_created += 1;
+        GpuBuffer::new(device, BufferType::Uniform, bucket_size)
+    }
+
+    /// Return a buffer to the pool for later reuse.
+    pub fn release(&mut self, buffer: GpuBuffer<u8>) {
+        let bucket_size = Self::aligned_size(buffer.capacity());
+        let queue = self.free.entry(bucket_size).or_default();
+
+        if queue.len() < self.max_per_bucket {
+            queue.push_back(buffer);
+        }
+        // else: drop the buffer — pool is full for this size class
+    }
+
+    /// Number of distinct size buckets currently tracked.
+    pub fn bucket_count(&self) -> usize {
+        self.free.len()
+    }
+
+    /// Total number of buffers currently idle in the pool.
+    pub fn idle_count(&self) -> usize {
+        self.free.values().map(|q| q.len()).sum()
+    }
+
+    /// Pool statistics.
+    pub fn stats(&self) -> UniformPoolStats {
+        UniformPoolStats {
+            total_created: self.total_created,
+            total_reused: self.total_reused,
+            idle_buffers: self.idle_count(),
+            bucket_count: self.bucket_count(),
+        }
+    }
+
+    /// Discard all idle buffers (e.g. on device loss).
+    pub fn clear(&mut self) {
+        self.free.clear();
+    }
+}
+
+impl Default for UniformBufferPool {
+    fn default() -> Self {
+        Self::new(16)
+    }
+}
+
+/// Statistics for [`UniformBufferPool`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UniformPoolStats {
+    /// Total buffers created (GPU allocations).
+    pub total_created: usize,
+    /// Total times a pooled buffer was reused instead of allocating.
+    pub total_reused: usize,
+    /// Number of idle buffers currently in the pool.
+    pub idle_buffers: usize,
+    /// Number of distinct size buckets.
+    pub bucket_count: usize,
+}
+
+impl UniformPoolStats {
+    /// Reuse rate as a percentage (0–100).
+    pub fn reuse_rate(&self) -> f64 {
+        let total = self.total_created + self.total_reused;
+        if total == 0 {
+            0.0
+        } else {
+            (self.total_reused as f64 / total as f64) * 100.0
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Uniform Batcher
+// ---------------------------------------------------------------------------
+
+/// A pending uniform buffer write.
+struct PendingWrite {
+    buffer_name: String,
+    data: Vec<u8>,
+}
+
+/// Batches multiple uniform buffer updates into fewer GPU transfer operations.
+///
+/// Instead of issuing one `queue.write_buffer()` per uniform, pending writes
+/// are collected and flushed in a single batch.  This reduces driver overhead
+/// when many pipelines are updated each frame.
+pub struct UniformBatcher {
+    pending: Vec<PendingWrite>,
+}
+
+impl UniformBatcher {
+    /// Create a new, empty batcher.
+    pub fn new() -> Self {
+        Self {
+            pending: Vec::new(),
+        }
+    }
+
+    /// Stage a uniform update.  The data is copied and will be written when
+    /// [`flush`](Self::flush) is called.
+    pub fn stage(&mut self, buffer_name: &str, data: &[u8]) {
+        self.pending.push(PendingWrite {
+            buffer_name: buffer_name.to_string(),
+            data: data.to_vec(),
+        });
+    }
+
+    /// Number of pending writes.
+    pub fn pending_count(&self) -> usize {
+        self.pending.len()
+    }
+
+    /// Flush all pending writes to their corresponding GPU buffers.
+    ///
+    /// Iterates through the pending writes and uploads each to the buffer
+    /// found in `uniform_buffers`.  Clears the pending list afterward.
+    ///
+    /// Returns the number of writes actually performed.
+    pub fn flush(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        uniform_buffers: &mut HashMap<String, GpuBuffer<u8>>,
+    ) -> GupResult<usize> {
+        let mut written = 0;
+        for write in self.pending.drain(..) {
+            if let Some(buffer) = uniform_buffers.get_mut(&write.buffer_name) {
+                buffer.upload(device, queue, &write.data)?;
+                written += 1;
+            }
+        }
+        Ok(written)
+    }
+
+    /// Discard all pending writes without flushing.
+    pub fn clear(&mut self) {
+        self.pending.clear();
+    }
+}
+
+impl Default for UniformBatcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Bind Group Cache
+// ---------------------------------------------------------------------------
+
+/// Cached bind group keyed by the hash of the pipeline's uniform layout.
+///
+/// Avoids recreating bind groups when the pipeline's uniform configuration
+/// has not changed.
+pub struct BindGroupCache {
+    cache: HashMap<u64, (Arc<BindGroupLayout>, Arc<BindGroup>)>,
+    stats: BindGroupCacheStats,
+}
+
+/// Statistics for [`BindGroupCache`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BindGroupCacheStats {
+    /// Number of cache hits.
+    pub hits: usize,
+    /// Number of cache misses (new bind groups created).
+    pub misses: usize,
+}
+
+impl BindGroupCacheStats {
+    /// Hit rate as a percentage (0–100).
+    pub fn hit_rate(&self) -> f64 {
+        let total = self.hits + self.misses;
+        if total == 0 {
+            0.0
+        } else {
+            (self.hits as f64 / total as f64) * 100.0
+        }
+    }
+}
+
+impl BindGroupCache {
+    /// Create a new, empty bind group cache.
+    pub fn new() -> Self {
+        Self {
+            cache: HashMap::new(),
+            stats: BindGroupCacheStats::default(),
+        }
+    }
+
+    /// Retrieve a cached bind group, or return `None` on a miss.
+    pub fn get(&mut self, key: u64) -> Option<(&Arc<BindGroupLayout>, &Arc<BindGroup>)> {
+        if let Some(entry) = self.cache.get(&key) {
+            self.stats.hits += 1;
+            Some((&entry.0, &entry.1))
+        } else {
+            self.stats.misses += 1;
+            None
+        }
+    }
+
+    /// Insert a bind group + layout pair into the cache.
+    pub fn insert(&mut self, key: u64, layout: Arc<BindGroupLayout>, bind_group: Arc<BindGroup>) {
+        self.cache.insert(key, (layout, bind_group));
+    }
+
+    /// Number of entries in the cache.
+    pub fn len(&self) -> usize {
+        self.cache.len()
+    }
+
+    /// Whether the cache is empty.
+    pub fn is_empty(&self) -> bool {
+        self.cache.is_empty()
+    }
+
+    /// Current statistics.
+    pub fn stats(&self) -> &BindGroupCacheStats {
+        &self.stats
+    }
+
+    /// Clear all entries (e.g. on device loss).
+    pub fn clear(&mut self) {
+        self.cache.clear();
+    }
+}
+
+impl Default for BindGroupCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Core shader pipeline that manages function composition and WGSL generation.
 pub struct ComposableShaderPipeline {
     functions: Vec<PipelineFunction>,
@@ -854,6 +1144,90 @@ impl ComposableShaderPipeline {
         }
 
         Ok(())
+    }
+
+    /// Create uniform buffers using a [`UniformBufferPool`] to avoid repeated
+    /// GPU allocations.
+    ///
+    /// Before acquiring new buffers, any previously-held buffers are returned
+    /// to the pool for reuse.
+    pub fn create_uniform_buffers_pooled(
+        &mut self,
+        device: &Device,
+        pool: &mut UniformBufferPool,
+    ) -> GupResult<()> {
+        // Return old buffers to the pool.
+        for (_, buffer) in self.uniform_buffers.drain() {
+            pool.release(buffer);
+        }
+
+        for function in &self.functions {
+            if function.has_uniforms() && function.uniform_size() > 0 {
+                let buffer = pool.acquire(device, function.uniform_size());
+                self.uniform_buffers
+                    .insert(function.name().to_string(), buffer);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Stage all uniform updates into a [`UniformBatcher`] for deferred,
+    /// batched upload.
+    ///
+    /// Call [`UniformBatcher::flush`] after staging updates from all pipelines
+    /// to perform the actual GPU transfers in one go.
+    pub fn stage_uniforms(&self, batcher: &mut UniformBatcher) {
+        for function in self.functions.iter() {
+            if let Some(uniform_data) = &function.uniform_buffer {
+                let data_slice = unsafe {
+                    std::slice::from_raw_parts(
+                        uniform_data.as_ref() as *const _ as *const u8,
+                        function.uniform_size(),
+                    )
+                };
+                batcher.stage(function.name(), data_slice);
+            }
+        }
+    }
+
+    /// Create a bind group using a [`BindGroupCache`] to avoid redundant
+    /// GPU resource creation.
+    pub fn create_bind_group_cached(
+        &self,
+        device: &Device,
+        cache: &mut BindGroupCache,
+    ) -> GupResult<Arc<BindGroup>> {
+        let key = self.pipeline_hash;
+
+        if let Some((_layout, bind_group)) = cache.get(key) {
+            return Ok(Arc::clone(bind_group));
+        }
+
+        let layout = Arc::new(self.create_bind_group_layout(device)?);
+        let mut entries = Vec::new();
+        let mut binding_index = 0;
+
+        for function in self.functions.iter() {
+            if function.has_uniforms()
+                && let Some(buffer) = self.uniform_buffers.get(function.name())
+            {
+                entries.push(BindGroupEntry {
+                    binding: binding_index,
+                    resource: buffer.raw_buffer().as_entire_binding(),
+                });
+                binding_index += 1;
+            }
+        }
+
+        let bind_group = Arc::new(device.create_bind_group(&BindGroupDescriptor {
+            label: Some("shader_pipeline_bind_group_cached"),
+            layout: &layout,
+            entries: &entries,
+        }));
+
+        cache.insert(key, layout, Arc::clone(&bind_group));
+        Ok(bind_group)
     }
 
     /// Create a bind group layout for the pipeline's uniforms.
@@ -1683,5 +2057,118 @@ fn vs_main() -> f32 {
             !optimized.contains("fn identity"),
             "inlined function should be eliminated by DCE"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // UniformBufferPool tests (non-GPU)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_uniform_pool_aligned_size() {
+        assert_eq!(UniformBufferPool::aligned_size(1), 256);
+        assert_eq!(UniformBufferPool::aligned_size(16), 256);
+        assert_eq!(UniformBufferPool::aligned_size(256), 256);
+        assert_eq!(UniformBufferPool::aligned_size(257), 512);
+        assert_eq!(UniformBufferPool::aligned_size(512), 512);
+    }
+
+    #[test]
+    fn test_uniform_pool_stats_initial() {
+        let pool = UniformBufferPool::new(8);
+        let stats = pool.stats();
+        assert_eq!(stats.total_created, 0);
+        assert_eq!(stats.total_reused, 0);
+        assert_eq!(stats.idle_buffers, 0);
+        assert_eq!(stats.bucket_count, 0);
+    }
+
+    #[test]
+    fn test_uniform_pool_stats_reuse_rate() {
+        let stats = UniformPoolStats {
+            total_created: 2,
+            total_reused: 8,
+            idle_buffers: 0,
+            bucket_count: 1,
+        };
+        assert!((stats.reuse_rate() - 80.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_uniform_pool_stats_reuse_rate_zero() {
+        let stats = UniformPoolStats {
+            total_created: 0,
+            total_reused: 0,
+            idle_buffers: 0,
+            bucket_count: 0,
+        };
+        assert_eq!(stats.reuse_rate(), 0.0);
+    }
+
+    #[test]
+    fn test_uniform_pool_default() {
+        let pool = UniformBufferPool::default();
+        assert_eq!(pool.max_per_bucket, 16);
+    }
+
+    // -----------------------------------------------------------------------
+    // UniformBatcher tests (non-GPU)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_batcher_stage_and_count() {
+        let mut batcher = UniformBatcher::new();
+        assert_eq!(batcher.pending_count(), 0);
+
+        batcher.stage("scale", &[1, 2, 3, 4]);
+        batcher.stage("color", &[5, 6, 7, 8]);
+        assert_eq!(batcher.pending_count(), 2);
+    }
+
+    #[test]
+    fn test_batcher_clear() {
+        let mut batcher = UniformBatcher::new();
+        batcher.stage("a", &[0]);
+        batcher.stage("b", &[1]);
+        batcher.clear();
+        assert_eq!(batcher.pending_count(), 0);
+    }
+
+    #[test]
+    fn test_batcher_default() {
+        let batcher = UniformBatcher::default();
+        assert_eq!(batcher.pending_count(), 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // BindGroupCache tests (non-GPU)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_bind_group_cache_initial() {
+        let cache = BindGroupCache::new();
+        assert!(cache.is_empty());
+        assert_eq!(cache.len(), 0);
+        assert_eq!(cache.stats().hits, 0);
+        assert_eq!(cache.stats().misses, 0);
+    }
+
+    #[test]
+    fn test_bind_group_cache_miss_records_stats() {
+        let mut cache = BindGroupCache::new();
+        assert!(cache.get(42).is_none());
+        assert_eq!(cache.stats().misses, 1);
+        assert_eq!(cache.stats().hits, 0);
+    }
+
+    #[test]
+    fn test_bind_group_cache_hit_rate() {
+        let stats = BindGroupCacheStats { hits: 3, misses: 1 };
+        assert_eq!(stats.hit_rate(), 75.0);
+    }
+
+    #[test]
+    fn test_bind_group_cache_default() {
+        let cache = BindGroupCache::default();
+        assert!(cache.is_empty());
     }
 }
