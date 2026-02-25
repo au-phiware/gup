@@ -844,11 +844,22 @@ pub fn optimize(
     }
 
     if config.enable_function_inlining {
-        results.push(function_inlining(
+        let inlining_result = function_inlining(
             module,
             config.inline_max_statements,
             config.inline_max_call_sites,
-        ));
+        );
+
+        // Re-run DCE after inlining to remove functions that became dead
+        // after their call sites were replaced with inlined code.
+        if inlining_result.changed && config.enable_dead_code_elimination {
+            let dce_result = dead_code_elimination(module);
+            if dce_result.changed {
+                results.push(dce_result);
+            }
+        }
+
+        results.push(inlining_result);
     }
 
     results

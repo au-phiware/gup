@@ -1506,4 +1506,182 @@ fn main() {
         assert!(optimized.contains("used_uniforms"));
         assert!(!optimized.contains("unused_uniforms"));
     }
+
+    // -----------------------------------------------------------------------
+    // AST integration tests
+    // -----------------------------------------------------------------------
+
+    /// Helper: create a pipeline configured for AST-based optimization.
+    fn ast_pipeline() -> ComposableShaderPipeline {
+        let config = OptimizationConfig {
+            use_ast_analysis: true,
+            ..Default::default()
+        };
+        ComposableShaderPipeline::new().with_optimization_config(config)
+    }
+
+    #[test]
+    fn test_ast_optimize_shader_basic() {
+        let pipeline = ast_pipeline();
+
+        // A simple WGSL snippet the AST parser can handle.
+        let src = r#"fn helper(x: f32) -> f32 {
+    return x + 0.0;
+}
+
+@vertex
+fn vs_main() -> f32 {
+    return helper(1.0);
+}
+"#;
+
+        let optimized = pipeline.optimize_shader(src);
+
+        // The AST optimizer should have folded `x + 0.0` -> `x`
+        // and potentially inlined `helper`.
+        assert!(
+            optimized.contains("vs_main"),
+            "entry point must be preserved"
+        );
+        // Should not contain the un-folded `+ 0.0`
+        assert!(
+            !optimized.contains("+ 0.0"),
+            "constant folding should remove identity addition"
+        );
+    }
+
+    #[test]
+    fn test_ast_optimize_shader_dead_code() {
+        let pipeline = ast_pipeline();
+
+        let src = r#"fn unused(x: f32) -> f32 {
+    return x;
+}
+
+fn used(x: f32) -> f32 {
+    return x;
+}
+
+@vertex
+fn vs_main() -> f32 {
+    return used(42.0);
+}
+"#;
+
+        let optimized = pipeline.optimize_shader(src);
+
+        // `unused` should be removed by dead-code elimination.
+        assert!(optimized.contains("vs_main"));
+        // After DCE + inlining, `unused` should not appear.
+        assert!(
+            !optimized.contains("fn unused"),
+            "dead function should be eliminated"
+        );
+    }
+
+    #[test]
+    fn test_ast_optimize_shader_fallback_on_parse_error() {
+        let pipeline = ast_pipeline();
+
+        // Deliberately unparseable WGSL.
+        let bad_src = "@@@ this is not valid WGSL @@@";
+
+        let optimized = pipeline.optimize_shader(bad_src);
+
+        // Should have fallen back to string-based optimization and not
+        // panicked. The string-based path just returns the source mostly
+        // as-is (it only does simple replacements).
+        assert!(
+            optimized.contains("not valid WGSL"),
+            "fallback must preserve source text"
+        );
+    }
+
+    #[test]
+    fn test_ast_output_no_larger_than_string_based() {
+        // Use a pipeline configured for string-only optimization.
+        let mut string_pipeline = ComposableShaderPipeline::new();
+        let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+        string_pipeline.add_function(scale);
+        string_pipeline.map_attribute("color", "linear_scale");
+        let string_optimized = string_pipeline.generate_optimized_vertex_shader();
+
+        // Now with AST optimization.
+        let config = OptimizationConfig {
+            use_ast_analysis: true,
+            ..Default::default()
+        };
+        let mut ast_pipeline = ComposableShaderPipeline::new().with_optimization_config(config);
+        let scale2 = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+        ast_pipeline.add_function(scale2);
+        ast_pipeline.map_attribute("color", "linear_scale");
+        let ast_optimized = ast_pipeline.generate_optimized_vertex_shader();
+
+        // The AST output should be at least as small as the string output.
+        // We compare non-whitespace character counts to ignore formatting diffs.
+        let string_chars: usize = string_optimized
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .count();
+        let ast_chars: usize = ast_optimized.chars().filter(|c| !c.is_whitespace()).count();
+
+        assert!(
+            ast_chars <= string_chars,
+            "AST output ({ast_chars} chars) should be <= string output ({string_chars} chars)"
+        );
+    }
+
+    #[test]
+    fn test_ast_backward_compat_default_config() {
+        // With the default config (use_ast_analysis: false), behaviour should
+        // be identical to the old code path.
+        let pipeline = ComposableShaderPipeline::new();
+        assert!(!pipeline.optimization_config().use_ast_analysis);
+
+        let src = "let x = 1.0 * y;";
+        let optimized = pipeline.optimize_shader(src);
+        assert!(optimized.contains("let x = y;"));
+    }
+
+    #[test]
+    fn test_ast_constant_folding_literals() {
+        let pipeline = ast_pipeline();
+
+        let src = r#"@vertex
+fn vs_main() -> f32 {
+    return 2.0 + 3.0;
+}
+"#;
+
+        let optimized = pipeline.optimize_shader(src);
+        // Should fold 2.0 + 3.0 into 5.0
+        assert!(
+            optimized.contains("5.0"),
+            "literal arithmetic should be folded"
+        );
+    }
+
+    #[test]
+    fn test_ast_function_inlining() {
+        let pipeline = ast_pipeline();
+
+        let src = r#"fn identity(x: f32) -> f32 {
+    return x;
+}
+
+@vertex
+fn vs_main() -> f32 {
+    return identity(42.0);
+}
+"#;
+
+        let optimized = pipeline.optimize_shader(src);
+        // After inlining `identity` and DCE, the body should just return 42.0.
+        assert!(optimized.contains("42.0"));
+        // The helper should be removed (inlined + DCE).
+        assert!(
+            !optimized.contains("fn identity"),
+            "inlined function should be eliminated by DCE"
+        );
+    }
 }
