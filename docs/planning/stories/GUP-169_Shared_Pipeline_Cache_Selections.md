@@ -1,6 +1,6 @@
 # GUP-169: Shared Pipeline Cache for Selections
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
