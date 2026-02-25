@@ -1,7 +1,7 @@
 // Copyright (C) 2024 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Rust-to-WGSL transpilation prototype.
+//! Rust-to-WGSL transpilation pipeline.
 //!
 //! This module provides a modular pipeline for converting Rust syntax
 //! (parsed by `syn`) into WGSL shader code. It is designed as a
@@ -13,8 +13,21 @@
 //!
 //! 1. **Parse**: `syn` parses Rust source into its AST (`syn::Expr`, etc.)
 //! 2. **Convert**: [`RustToWgsl`] converts `syn` AST nodes into lightweight
-//!    [`WgslAst`] nodes defined in this module
+//!    [`WgslAst`] nodes defined in this module, using [`TypeMapper`] for
+//!    comprehensive type mapping with memory layout tracking
 //! 3. **Generate**: [`WgslCodeGen`] emits WGSL source text from the AST
+//!
+//! ## Type System Mapping
+//!
+//! The [`type_map`] module provides the [`TypeMapper`] which handles:
+//!
+//! - **Primitive types**: `f32`, `i32`, `u32`, `bool`
+//! - **Vector types**: `Vec2-4`, `IVec2-4`, `UVec2-4`, `BVec2-4`
+//! - **Matrix types**: `Mat2-4`, `Mat{C}x{R}` (all non-square variants)
+//! - **Array types**: `[T; N]` → `array<T, N>`
+//! - **Struct types**: Custom struct registration with field mapping
+//! - **Memory layout**: Size and alignment per WGSL specification
+//! - **Error diagnostics**: Clear messages with suggestions for fixes
 //!
 //! ## Supported Rust Subset
 //!
