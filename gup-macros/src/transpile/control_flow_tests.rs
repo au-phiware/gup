@@ -525,6 +525,101 @@ mod tests {
         );
     }
 
+    #[test]
+    fn error_match_expression() {
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
+        let expr: syn::Expr = syn::parse_quote!(match x {
+            0 => 1,
+            _ => 2,
+        });
+        let result = converter.convert_expr(&expr);
+        assert!(result.is_err(), "Match should error");
+    }
+
+    // ===================================================================
+    // Variable Scoping Edge Cases
+    // ===================================================================
+
+    #[test]
+    fn ac4_variable_shadowing_in_block() {
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn test(x: f32) -> f32 {
+                let val = x * 2.0;
+                if x > 0.0 {
+                    let val = x * 3.0;
+                    return val;
+                }
+                return val;
+            }
+        };
+        let wgsl = transpile(&func);
+        // Both `let val` declarations should appear in the output
+        let let_count = wgsl.matches("let val =").count();
+        assert_eq!(
+            let_count, 2,
+            "Should have two `let val` declarations (shadowing), got:\n{wgsl}"
+        );
+    }
+
+    #[test]
+    fn ac4_variable_init_before_loop() {
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn test(n: i32) -> f32 {
+                let mut total = 0.0;
+                let scale = 2.0;
+                for i in 0..n {
+                    total += scale * i as f32;
+                }
+                return total;
+            }
+        };
+        let wgsl = transpile(&func);
+        // `total` and `scale` should be declared before the loop
+        let total_pos = wgsl.find("var total").unwrap();
+        let scale_pos = wgsl.find("let scale").unwrap();
+        let for_pos = wgsl.find("for (var i").unwrap();
+        assert!(
+            total_pos < for_pos,
+            "total should be before loop, got:\n{wgsl}"
+        );
+        assert!(
+            scale_pos < for_pos,
+            "scale should be before loop, got:\n{wgsl}"
+        );
+    }
+
+    #[test]
+    fn ac4_mutable_variable_in_while() {
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn test(x: f32) -> f32 {
+                let mut count = 0;
+                let mut val = x;
+                while val > 1.0 {
+                    val = val / 2.0;
+                    count += 1;
+                }
+                return count as f32;
+            }
+        };
+        let wgsl = transpile(&func);
+        assert!(wgsl.contains("var count = 0;"), "got:\n{wgsl}");
+        assert!(wgsl.contains("var val = x;"), "got:\n{wgsl}");
+        assert!(wgsl.contains("count += 1;"), "got:\n{wgsl}");
+    }
+
+    #[test]
+    fn ac3_return_without_value() {
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn test(x: f32) {
+                if x < 0.0 {
+                    return;
+                }
+            }
+        };
+        let wgsl = transpile(&func);
+        assert!(wgsl.contains("return;"), "got:\n{wgsl}");
+    }
+
     // ===================================================================
     // Code Generation Tests
     // ===================================================================
