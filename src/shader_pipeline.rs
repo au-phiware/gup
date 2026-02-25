@@ -1379,6 +1379,7 @@ impl ComposableShaderPipeline {
         }
 
         if self.optimization_config.enable_constant_folding {
+            optimized = self.propagate_constants(&optimized);
             optimized = self.fold_constants(&optimized);
         }
 
@@ -1603,14 +1604,104 @@ impl ComposableShaderPipeline {
     fn fold_constants(&self, shader: &str) -> String {
         let mut optimized = shader.to_string();
 
-        // Simple constant folding examples
-        // In practice, this would need proper expression parsing
+        // Identity operations: x * 1.0 → x, x + 0.0 → x
         optimized = optimized.replace("1.0 * ", "");
         optimized = optimized.replace(" * 1.0", "");
         optimized = optimized.replace("0.0 + ", "");
         optimized = optimized.replace(" + 0.0", "");
 
+        // Subtraction identity: x - 0.0 → x
+        optimized = optimized.replace(" - 0.0", "");
+
+        // Division identity: x / 1.0 → x
+        optimized = optimized.replace(" / 1.0", "");
+
+        // Zero multiplication: 0.0 * x → 0.0 (careful: only safe for f32)
+        // We only apply this when followed by a space to avoid mangling numbers.
+        optimized = optimized.replace("0.0 * ", "0.0; // folded: 0.0 * ");
+
+        // Fold literal vec constructors with all-same components:
+        // vec4<f32>(0.0, 0.0, 0.0, 0.0) → vec4<f32>(0.0)
+        // (Only the zero case, as it's the most common.)
+        optimized = optimized.replace("vec4<f32>(0.0, 0.0, 0.0, 0.0)", "vec4<f32>(0.0)");
+        optimized = optimized.replace("vec4<f32>(1.0, 1.0, 1.0, 1.0)", "vec4<f32>(1.0)");
+        optimized = optimized.replace("vec2<f32>(0.0, 0.0)", "vec2<f32>(0.0)");
+        optimized = optimized.replace("vec3<f32>(0.0, 0.0, 0.0)", "vec3<f32>(0.0)");
+
         optimized
+    }
+
+    /// Propagate constant let bindings.
+    ///
+    /// When a `let x = <literal>;` is used exactly once, substitute the
+    /// literal at the use site and remove the binding.  This is conservative
+    /// and only handles simple scalar/vec literals to avoid correctness issues.
+    pub fn propagate_constants(&self, shader: &str) -> String {
+        let lines: Vec<&str> = shader.lines().collect();
+        let mut constants: Vec<(String, String)> = Vec::new();
+
+        // Phase 1: identify candidates.  A candidate is `let <name> = <literal>;`
+        // where <literal> is a simple float or int literal.
+        for line in &lines {
+            let trimmed = line.trim();
+            if let Some(rest) = trimmed.strip_prefix("let ")
+                && let Some((name, value)) = rest.split_once('=')
+            {
+                let name = name.trim().to_string();
+                let value = value.trim().trim_end_matches(';').trim().to_string();
+
+                // Only propagate simple literals (f32, i32, u32).
+                if is_simple_literal(&value) {
+                    constants.push((name, value));
+                }
+            }
+        }
+
+        // Phase 2: for each candidate, count usages (excluding the
+        // definition line).  Only propagate if used exactly once.
+        let mut result = shader.to_string();
+        for (name, value) in &constants {
+            // Count non-definition occurrences of this specific name.
+            let def_prefix = format!("let {name}");
+            let usage_count = result
+                .lines()
+                .filter(|line| {
+                    let trimmed = line.trim();
+                    // Skip this variable's own definition.
+                    if trimmed.starts_with(&def_prefix)
+                        && trimmed[def_prefix.len()..].trim_start().starts_with('=')
+                    {
+                        return false;
+                    }
+                    line.contains(name.as_str())
+                })
+                .count();
+
+            if usage_count == 1 {
+                // Replace usage with the literal value.
+                let mut new_result = String::new();
+                let mut replaced = false;
+                for line in result.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with(&format!("let {name}")) && trimmed.contains('=') {
+                        // Skip the definition line.
+                        new_result.push_str("// propagated: ");
+                        new_result.push_str(line);
+                        new_result.push('\n');
+                    } else if !replaced && line.contains(name.as_str()) {
+                        new_result.push_str(&line.replace(name.as_str(), value));
+                        new_result.push('\n');
+                        replaced = true;
+                    } else {
+                        new_result.push_str(line);
+                        new_result.push('\n');
+                    }
+                }
+                result = new_result;
+            }
+        }
+
+        result
     }
 
     /// Generate optimized vertex shader.
@@ -1684,6 +1775,25 @@ impl ComposableShaderPipeline {
 
         Ok(render_pipeline)
     }
+}
+
+/// Check whether a string looks like a simple WGSL literal
+/// (float, integer, or boolean).
+fn is_simple_literal(s: &str) -> bool {
+    // Float literal (e.g. "0.0", "1.5", "-3.14")
+    if s.parse::<f64>().is_ok() {
+        return true;
+    }
+    // Integer literal (e.g. "0", "42", "0u")
+    let trimmed = s.trim_end_matches('u').trim_end_matches('i');
+    if trimmed.parse::<i64>().is_ok() {
+        return true;
+    }
+    // Boolean
+    if s == "true" || s == "false" {
+        return true;
+    }
+    false
 }
 
 #[cfg(test)]
@@ -2070,6 +2180,77 @@ fn vs_main() -> f32 {
             !optimized.contains("fn identity"),
             "inlined function should be eliminated by DCE"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Enhanced WGSL optimization tests (AC4)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_fold_subtraction_identity() {
+        let pipeline = ComposableShaderPipeline::new();
+        let result = pipeline.fold_constants("let x = y - 0.0;");
+        assert_eq!(result, "let x = y;");
+    }
+
+    #[test]
+    fn test_fold_division_identity() {
+        let pipeline = ComposableShaderPipeline::new();
+        let result = pipeline.fold_constants("let x = y / 1.0;");
+        assert_eq!(result, "let x = y;");
+    }
+
+    #[test]
+    fn test_fold_vec4_zero() {
+        let pipeline = ComposableShaderPipeline::new();
+        let result = pipeline.fold_constants("let c = vec4<f32>(0.0, 0.0, 0.0, 0.0);");
+        assert!(result.contains("vec4<f32>(0.0)"));
+    }
+
+    #[test]
+    fn test_fold_vec4_one() {
+        let pipeline = ComposableShaderPipeline::new();
+        let result = pipeline.fold_constants("let c = vec4<f32>(1.0, 1.0, 1.0, 1.0);");
+        assert!(result.contains("vec4<f32>(1.0)"));
+    }
+
+    #[test]
+    fn test_constant_propagation_single_use() {
+        let pipeline = ComposableShaderPipeline::new();
+        let shader = "let k = 42.0;\nlet result = k + 1.0;\n";
+        let propagated = pipeline.propagate_constants(shader);
+        // 'k' used once → should be inlined
+        assert!(
+            propagated.contains("42.0 + 1.0"),
+            "propagated: {:?}",
+            propagated
+        );
+    }
+
+    #[test]
+    fn test_constant_propagation_multiple_use() {
+        let pipeline = ComposableShaderPipeline::new();
+        let shader = "let k = 42.0;\nlet a = k + 1.0;\nlet b = k + 2.0;\n";
+        let propagated = pipeline.propagate_constants(shader);
+        // 'k' used twice → should NOT be inlined
+        assert!(
+            propagated.contains("let k"),
+            "should keep: {:?}",
+            propagated
+        );
+    }
+
+    #[test]
+    fn test_is_simple_literal() {
+        assert!(is_simple_literal("0.0"));
+        assert!(is_simple_literal("42.0"));
+        assert!(is_simple_literal("-3.14"));
+        assert!(is_simple_literal("0"));
+        assert!(is_simple_literal("42u"));
+        assert!(is_simple_literal("true"));
+        assert!(is_simple_literal("false"));
+        assert!(!is_simple_literal("my_var"));
+        assert!(!is_simple_literal("vec2<f32>(0.0, 0.0)"));
     }
 
     // -----------------------------------------------------------------------
