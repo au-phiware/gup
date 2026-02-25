@@ -643,6 +643,13 @@ pub struct InteractionSystem {
     max_results: usize,
     max_spatial_cells: usize,
     max_morton_candidates: usize,
+
+    /// Cached element data version. When a caller uploads element data with
+    /// a matching version and count, the upload is skipped and the GPU-resident
+    /// buffer is reused.
+    cached_element_version: u64,
+    /// Number of elements currently cached on the GPU.
+    cached_element_count: usize,
 }
 
 impl InteractionSystem {
@@ -874,6 +881,8 @@ impl InteractionSystem {
             max_results,
             max_spatial_cells,
             max_morton_candidates,
+            cached_element_version: 0,
+            cached_element_count: 0,
         })
     }
 
@@ -1250,6 +1259,313 @@ impl InteractionSystem {
             }
         }
 
+        Ok(())
+    }
+
+    // -- Cached element data API (GUP-194) --
+
+    /// Upload element data to the GPU with version-based caching.
+    ///
+    /// If `version` matches the previously uploaded version and the element
+    /// count has not changed, the upload is skipped and the GPU-resident buffer
+    /// is reused. When a cache miss occurs the element data is uploaded and the
+    /// spatial index is (re-)built for large datasets.
+    ///
+    /// Returns `true` on a cache miss (data was uploaded), `false` on a hit.
+    pub async fn upload_element_data_cached(
+        &mut self,
+        elements: &[ElementData],
+        version: u64,
+    ) -> GupResult<bool> {
+        // A version of 0 is treated as "never cached" to avoid accidental
+        // matches with the default initial value.
+        if version != 0
+            && version == self.cached_element_version
+            && elements.len() == self.cached_element_count
+        {
+            return Ok(false); // Cache hit — GPU buffer is still valid.
+        }
+
+        // Cache miss — upload element data.
+        self.upload_element_data(elements)?;
+
+        // Invalidate and rebuild spatial index for large datasets.
+        self.spatial_index_built = false;
+        self.morton_gpu_index_built = false;
+        self.morton_gpu_entry_count = 0;
+        self.advanced_spatial_index = None;
+
+        if elements.len() > 1000 {
+            self.build_spatial_index(elements).await?;
+        }
+
+        self.cached_element_version = version;
+        self.cached_element_count = elements.len();
+
+        Ok(true)
+    }
+
+    /// Invalidate the element data cache, forcing the next
+    /// [`upload_element_data_cached`](Self::upload_element_data_cached) call
+    /// to re-upload even if the version matches.
+    pub fn invalidate_element_cache(&mut self) {
+        self.cached_element_version = 0;
+        self.cached_element_count = 0;
+        self.spatial_index_built = false;
+        self.morton_gpu_index_built = false;
+        self.morton_gpu_entry_count = 0;
+        self.advanced_spatial_index = None;
+    }
+
+    /// Query for elements at a point using previously cached element data.
+    ///
+    /// The caller must have uploaded element data via
+    /// [`upload_element_data_cached`](Self::upload_element_data_cached) before
+    /// calling this method. Returns an empty vec if no data is cached.
+    pub async fn query_point_cached(&mut self, position: Vec2) -> GupResult<Vec<ElementHit>> {
+        let query = GpuInteractionQuery::point(position, 1000);
+        self.execute_query_cached(query).await
+    }
+
+    /// Query for elements within a rectangular region using cached element data.
+    ///
+    /// See [`query_point_cached`](Self::query_point_cached) for usage.
+    pub async fn query_region_cached(&mut self, region: Rect) -> GupResult<Vec<ElementHit>> {
+        let query = GpuInteractionQuery::region(region, 10000);
+        self.execute_query_cached(query).await
+    }
+
+    /// Returns the current cached element data version.
+    pub fn cached_element_version(&self) -> u64 {
+        self.cached_element_version
+    }
+
+    /// Returns the number of elements currently cached on the GPU.
+    pub fn cached_element_count(&self) -> usize {
+        self.cached_element_count
+    }
+
+    /// Execute a query using cached GPU-resident element data (GUP-194).
+    ///
+    /// Unlike [`execute_query`](Self::execute_query), this method does **not**
+    /// extract or upload element data — it assumes the data is already on the
+    /// GPU from a prior [`upload_element_data_cached`] call.
+    async fn execute_query_cached(
+        &mut self,
+        query: GpuInteractionQuery,
+    ) -> GupResult<Vec<ElementHit>> {
+        let start_time = std::time::Instant::now();
+
+        if self.cached_element_count == 0 {
+            return Ok(Vec::new());
+        }
+
+        let element_count = self.cached_element_count;
+
+        // Upload query data.
+        self.upload_query_data(&[query])?;
+
+        // Dispatch compute shader.
+        // Prefer the fully GPU-resident Morton path when available.
+        if element_count > 1000 && self.morton_gpu_index_built {
+            // The GPU Morton query pipeline reads element data directly from
+            // the GPU buffer, so no CPU-side elements are needed.
+            self.dispatch_gpu_morton_query_cached(query).await?;
+        } else {
+            self.dispatch_hit_test_compute(element_count, 1).await?;
+        }
+
+        // Download results.
+        let results = self.download_results().await?;
+        let hits = self.process_results(&results);
+
+        // Update performance statistics.
+        let query_time_us = start_time.elapsed().as_micros() as f32;
+        self.query_stats
+            .update(element_count as u32, hits.len() as u32, query_time_us);
+
+        Ok(hits)
+    }
+
+    /// Dispatch a GPU-side Morton query using cached element data.
+    ///
+    /// This is a streamlined variant of [`dispatch_gpu_morton_query`] that
+    /// does not require a CPU-side `&[ElementData]` slice.
+    async fn dispatch_gpu_morton_query_cached(
+        &mut self,
+        query: GpuInteractionQuery,
+    ) -> GupResult<()> {
+        if !self.morton_gpu_index_built || self.morton_gpu_entry_count == 0 {
+            return self
+                .dispatch_hit_test_compute(self.cached_element_count, 1)
+                .await;
+        }
+
+        let bounds = match &self.advanced_spatial_index {
+            Some(SpatialIndex::Morton(idx)) => *idx.bounds(),
+            _ => {
+                return self
+                    .dispatch_hit_test_compute(self.cached_element_count, 1)
+                    .await;
+            }
+        };
+
+        // Build query config.
+        let (qtype, half_ext) = if query.query_type == 0 {
+            (0u32, [0.0f32, 0.0f32])
+        } else {
+            (
+                1u32,
+                [query.region_size[0] * 0.5, query.region_size[1] * 0.5],
+            )
+        };
+
+        let config = MortonQueryConfig {
+            query_type: qtype,
+            search_radius: 512,
+            entry_count: self.morton_gpu_entry_count,
+            max_candidates: self.max_morton_candidates as u32,
+            query_position: query.position,
+            query_half_extent: half_ext,
+            world_bounds_min: bounds.min,
+            world_bounds_max: bounds.max,
+        };
+
+        self.queue.write_buffer(
+            &self.morton_query_config_buffer,
+            0,
+            bytemuck::bytes_of(&config),
+        );
+        self.queue
+            .write_buffer(&self.morton_candidate_count_buffer, 0, &[0u8; 4]);
+        self.queue
+            .write_buffer(&self.hit_test_indirect_buffer, 0, &[0u8; 12]);
+
+        let hit_test_config = HitTestConfig {
+            query_count: 1,
+            _padding: [0; 3],
+        };
+        self.queue.write_buffer(
+            &self.hit_test_config_buffer,
+            0,
+            bytemuck::bytes_of(&hit_test_config),
+        );
+
+        // Encode all three passes in a single command encoder (same as
+        // dispatch_gpu_morton_query but without requiring a CPU elements slice).
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("morton_query_cached_encoder"),
+            });
+
+        // Pass 1: Morton range query.
+        {
+            let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("morton_query_cached_pass"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(&self.morton_query_pipeline);
+            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("morton_query_cached_bg"),
+                layout: &self.morton_query_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.morton_entries_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: self.morton_query_config_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.morton_candidates_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: self.morton_candidate_count_buffer.as_entire_binding(),
+                    },
+                ],
+            });
+            pass.set_bind_group(0, &bind_group, &[]);
+            let workgroups = (self.morton_gpu_entry_count as usize).div_ceil(256);
+            pass.dispatch_workgroups(workgroups as u32, 1, 1);
+        }
+
+        // Pass 2: Gather candidates.
+        {
+            let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("gather_cached_pass"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(&self.gather_pipeline);
+            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("gather_cached_bg"),
+                layout: &self.gather_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.morton_candidates_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: self.morton_candidate_count_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.element_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: self.gathered_element_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: self.hit_test_indirect_buffer.as_entire_binding(),
+                    },
+                ],
+            });
+            pass.set_bind_group(0, &bind_group, &[]);
+            let workgroups = self.max_morton_candidates.div_ceil(256);
+            pass.dispatch_workgroups(workgroups as u32, 1, 1);
+        }
+
+        // Pass 3: Hit test (indirect dispatch).
+        {
+            let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("hit_test_cached_pass"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(&self.hit_test_pipeline);
+            let bind_group_layout = self.hit_test_pipeline.get_bind_group_layout(0);
+            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("hit_test_cached_bg"),
+                layout: &bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.gathered_element_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: self.query_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.result_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: self.hit_test_config_buffer.as_entire_binding(),
+                    },
+                ],
+            });
+            pass.set_bind_group(0, &bind_group, &[]);
+            pass.dispatch_workgroups_indirect(&self.hit_test_indirect_buffer, 0);
+        }
+
+        self.queue.submit([encoder.finish()]);
         Ok(())
     }
 

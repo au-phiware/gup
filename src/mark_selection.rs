@@ -42,7 +42,7 @@
 //! ```
 
 use crate::error::GupResult;
-use crate::interaction::{ElementData, InteractionSystem, Rect, Renderable, Vec2};
+use crate::interaction::{ElementData, InteractionSystem, Rect, Vec2};
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
 
@@ -1027,6 +1027,10 @@ pub struct MarkSelectionSystem {
     positions: Option<Vec<[f32; 2]>>,
     /// Cached mark sizes for hit testing (radius or half-extents).
     sizes: Option<Vec<[f32; 2]>>,
+    /// Monotonically increasing version counter for element data.
+    /// Incremented whenever positions or sizes change, enabling the
+    /// [`InteractionSystem`] to skip redundant GPU uploads.
+    element_data_version: u64,
 }
 
 impl MarkSelectionSystem {
@@ -1040,6 +1044,7 @@ impl MarkSelectionSystem {
             pending_events: Vec::new(),
             positions: None,
             sizes: None,
+            element_data_version: 0,
         }
     }
 
@@ -1338,6 +1343,7 @@ impl MarkSelectionSystem {
         let default_size = vec![[0.01f32, 0.01]; positions.len()];
         self.sizes = Some(default_size);
         self.positions = Some(positions);
+        self.element_data_version += 1;
     }
 
     /// Register mark positions and sizes for hit testing.
@@ -1351,11 +1357,22 @@ impl MarkSelectionSystem {
         );
         self.positions = Some(positions);
         self.sizes = Some(sizes);
+        self.element_data_version += 1;
     }
 
     /// Returns the cached positions, if any.
     pub fn positions(&self) -> Option<&[[f32; 2]]> {
         self.positions.as_deref()
+    }
+
+    /// Returns the current element data version.
+    ///
+    /// This counter is incremented each time positions or sizes are updated
+    /// via [`set_positions`](Self::set_positions) or
+    /// [`set_positions_with_sizes`](Self::set_positions_with_sizes). It is
+    /// used by the GPU interaction system to avoid redundant data uploads.
+    pub fn element_data_version(&self) -> u64 {
+        self.element_data_version
     }
 
     // -- CPU hit testing --
@@ -1444,6 +1461,10 @@ impl MarkSelectionSystem {
     /// Dispatches the query to `interaction_system` and returns mark IDs sorted
     /// by distance (closest first). Falls back to CPU if positions are not set.
     ///
+    /// Element data is uploaded to the GPU on the first call and cached for
+    /// subsequent queries. The cache is automatically invalidated when positions
+    /// change via [`set_positions`](Self::set_positions).
+    ///
     /// # Arguments
     ///
     /// * `position` — Query point in world/clip coordinates.
@@ -1464,12 +1485,14 @@ impl MarkSelectionSystem {
             return Ok(Vec::new());
         }
 
-        let renderable = ElementDataRenderable::new(elements);
-        let renderables: Vec<&dyn Renderable> = vec![&renderable];
-        let query_pos = Vec2::new(position[0], position[1]);
-        let hits = interaction_system
-            .query_point(query_pos, &renderables)
+        // Upload with caching — only re-uploads if version changed.
+        interaction_system
+            .upload_element_data_cached(&elements, self.element_data_version)
             .await?;
+
+        // Query using cached GPU-resident data.
+        let query_pos = Vec2::new(position[0], position[1]);
+        let hits = interaction_system.query_point_cached(query_pos).await?;
 
         let mut result: Vec<(u32, f32)> = hits.iter().map(|h| (h.element_id, h.distance)).collect();
         result.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
@@ -1480,6 +1503,8 @@ impl MarkSelectionSystem {
     ///
     /// Dispatches the query to `interaction_system` and returns mark IDs
     /// within the rectangle. Falls back to CPU if positions are not set.
+    ///
+    /// Element data is cached on the GPU — see [`hit_test_gpu`](Self::hit_test_gpu).
     pub async fn rect_hit_test_gpu(
         &self,
         rect: &Rect,
@@ -1494,9 +1519,13 @@ impl MarkSelectionSystem {
             return Ok(Vec::new());
         }
 
-        let renderable = ElementDataRenderable::new(elements);
-        let renderables: Vec<&dyn Renderable> = vec![&renderable];
-        let hits = interaction_system.query_region(*rect, &renderables).await?;
+        // Upload with caching.
+        interaction_system
+            .upload_element_data_cached(&elements, self.element_data_version)
+            .await?;
+
+        // Query using cached GPU-resident data.
+        let hits = interaction_system.query_region_cached(*rect).await?;
 
         Ok(hits.iter().map(|h| h.element_id).collect())
     }
@@ -1598,9 +1627,10 @@ impl MarkSelectionSystem {
 }
 
 // ---------------------------------------------------------------------------
-// ElementDataRenderable — adapter for GPU hit testing
+// Tests
 // ---------------------------------------------------------------------------
 
+#[cfg(test)]
 /// Adapter that wraps a `Vec<ElementData>` to implement [`Renderable`]
 /// for use with the GPU [`InteractionSystem`].
 #[derive(Debug)]
@@ -1608,6 +1638,7 @@ struct ElementDataRenderable {
     elements: Vec<crate::interaction::InteractionElement>,
 }
 
+#[cfg(test)]
 impl ElementDataRenderable {
     fn new(data: Vec<ElementData>) -> Self {
         let elements = data
@@ -1622,7 +1653,8 @@ impl ElementDataRenderable {
     }
 }
 
-impl Renderable for ElementDataRenderable {
+#[cfg(test)]
+impl crate::interaction::Renderable for ElementDataRenderable {
     fn get_elements_for_interaction(
         &self,
     ) -> GupResult<Vec<crate::interaction::InteractionElement>> {
@@ -1633,10 +1665,6 @@ impl Renderable for ElementDataRenderable {
         0
     }
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
