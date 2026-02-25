@@ -1,6 +1,6 @@
 # GUP-187: Flaky Label Performance Test Fix
 
-**Status**: 📋 Planned **Priority**: Low **Category**: Testing / Quality
+**Status**: 🚧 In Progress **Priority**: Low **Category**: Testing / Quality
 **Estimated Effort**: 0.5 days **Dependencies**: None
 
 ## Overview
