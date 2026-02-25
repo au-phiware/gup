@@ -41,7 +41,10 @@
 //! assert_eq!(state.count(), 12); // 42, 99, 10..20
 //! ```
 
-use crate::interaction::{Rect, Vec2};
+use crate::error::GupResult;
+use crate::interaction::{
+    ElementData, InteractionSystem, Rect, Renderable, Vec2,
+};
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
 
@@ -979,6 +982,16 @@ pub enum SelectionEvent {
 /// and the existing GPU interaction system to provide a complete interactive
 /// mark selection workflow.
 ///
+/// # GPU-Accelerated Hit Testing
+///
+/// When mark positions are registered via [`set_positions`](Self::set_positions),
+/// the system can dispatch hit tests to the GPU via an [`InteractionSystem`].
+/// Use [`hit_test_gpu`](Self::hit_test_gpu) for point queries and
+/// [`rect_hit_test_gpu`](Self::rect_hit_test_gpu) for rectangular selections.
+/// If no `InteractionSystem` is available, the system falls back to CPU-based
+/// hit testing automatically via [`hit_test`](Self::hit_test) and
+/// [`filter_by_rect`](Self::filter_by_rect).
+///
 /// # Usage
 ///
 /// ```rust
@@ -1011,6 +1024,11 @@ pub struct MarkSelectionSystem {
     modifiers: KeyModifiers,
     /// Events emitted since last drain.
     pending_events: Vec<SelectionEvent>,
+    /// Cached mark positions for hit testing (indexed by mark ID).
+    /// When set, enables both CPU fallback and GPU-accelerated hit testing.
+    positions: Option<Vec<[f32; 2]>>,
+    /// Cached mark sizes for hit testing (radius or half-extents).
+    sizes: Option<Vec<[f32; 2]>>,
 }
 
 impl MarkSelectionSystem {
@@ -1022,6 +1040,8 @@ impl MarkSelectionSystem {
             style: SelectionStyle::default(),
             modifiers: KeyModifiers::default(),
             pending_events: Vec::new(),
+            positions: None,
+            sizes: None,
         }
     }
 
@@ -1303,6 +1323,316 @@ impl MarkSelectionSystem {
         } else {
             None
         }
+    }
+
+    // -- Mark position management (for CPU and GPU hit testing) --
+
+    /// Register mark positions for hit testing.
+    ///
+    /// Positions are indexed by mark ID: `positions[id]` is `[x, y]` of mark `id`.
+    /// This enables the system to perform CPU-based hit testing internally,
+    /// and is required for GPU-accelerated hit testing via
+    /// [`hit_test_gpu`](Self::hit_test_gpu).
+    ///
+    /// Sizes default to `[0.01, 0.01]` per mark. Use [`set_positions_with_sizes`](Self::set_positions_with_sizes)
+    /// to provide per-mark sizes.
+    pub fn set_positions(&mut self, positions: Vec<[f32; 2]>) {
+        let default_size = vec![[0.01f32, 0.01]; positions.len()];
+        self.sizes = Some(default_size);
+        self.positions = Some(positions);
+    }
+
+    /// Register mark positions and sizes for hit testing.
+    ///
+    /// `sizes[id]` is `[half_width, half_height]` (or `[radius, 0]` for circles).
+    pub fn set_positions_with_sizes(&mut self, positions: Vec<[f32; 2]>, sizes: Vec<[f32; 2]>) {
+        assert_eq!(
+            positions.len(),
+            sizes.len(),
+            "positions and sizes must have the same length"
+        );
+        self.positions = Some(positions);
+        self.sizes = Some(sizes);
+    }
+
+    /// Returns the cached positions, if any.
+    pub fn positions(&self) -> Option<&[[f32; 2]]> {
+        self.positions.as_deref()
+    }
+
+    // -- CPU hit testing --
+
+    /// Perform a CPU-based point hit test at `position`.
+    ///
+    /// Returns mark IDs within hit distance, sorted by distance (closest first).
+    /// Requires positions to have been set via [`set_positions`](Self::set_positions).
+    /// Returns an empty vec if no positions are registered.
+    pub fn hit_test(&self, position: [f32; 2], hit_radius: f32) -> Vec<u32> {
+        let positions = match &self.positions {
+            Some(p) => p,
+            None => return Vec::new(),
+        };
+        let mut hits: Vec<(u32, f32)> = positions
+            .iter()
+            .enumerate()
+            .filter_map(|(i, pos)| {
+                let dx = pos[0] - position[0];
+                let dy = pos[1] - position[1];
+                let dist = (dx * dx + dy * dy).sqrt();
+                if dist <= hit_radius {
+                    Some((i as u32, dist))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        hits.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        hits.into_iter().map(|(id, _)| id).collect()
+    }
+
+    /// Perform a CPU-based rectangle hit test.
+    ///
+    /// Returns mark IDs whose positions fall within `rect`.
+    /// Requires positions to have been set via [`set_positions`](Self::set_positions).
+    pub fn rect_hit_test(&self, rect: &Rect) -> Vec<u32> {
+        match &self.positions {
+            Some(positions) => Self::filter_by_rect(rect, positions),
+            None => Vec::new(),
+        }
+    }
+
+    /// Perform a CPU-based lasso hit test.
+    ///
+    /// Returns mark IDs whose positions fall within the lasso `path`.
+    /// Requires positions to have been set via [`set_positions`](Self::set_positions).
+    pub fn lasso_hit_test(&self, path: &[Vec2]) -> Vec<u32> {
+        match &self.positions {
+            Some(positions) => Self::filter_by_lasso(path, positions),
+            None => Vec::new(),
+        }
+    }
+
+    // -- GPU-accelerated hit testing --
+
+    /// Build element data for the GPU interaction system from cached positions.
+    fn build_element_data(&self) -> Vec<ElementData> {
+        let positions = match &self.positions {
+            Some(p) => p,
+            None => return Vec::new(),
+        };
+        let sizes = self.sizes.as_deref();
+        positions
+            .iter()
+            .enumerate()
+            .map(|(i, pos)| {
+                let size = sizes
+                    .and_then(|s| s.get(i))
+                    .copied()
+                    .unwrap_or([0.01, 0.01]);
+                ElementData {
+                    position: *pos,
+                    size,
+                    mark_type: 0, // circle
+                    element_id: i as u32,
+                    selection_id: 0,
+                    _padding: 0,
+                }
+            })
+            .collect()
+    }
+
+    /// Perform a GPU-accelerated point hit test.
+    ///
+    /// Dispatches the query to `interaction_system` and returns mark IDs sorted
+    /// by distance (closest first). Falls back to CPU if positions are not set.
+    ///
+    /// # Arguments
+    ///
+    /// * `position` — Query point in world/clip coordinates.
+    /// * `interaction_system` — The GPU interaction system to use.
+    /// * `hit_radius` — Fallback hit radius for CPU path (GPU uses element sizes).
+    pub async fn hit_test_gpu(
+        &self,
+        position: [f32; 2],
+        interaction_system: &mut InteractionSystem,
+        hit_radius: f32,
+    ) -> GupResult<Vec<u32>> {
+        if self.positions.is_none() {
+            return Ok(self.hit_test(position, hit_radius));
+        }
+
+        let elements = self.build_element_data();
+        if elements.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let renderable = ElementDataRenderable::new(elements);
+        let renderables: Vec<&dyn Renderable> = vec![&renderable];
+        let query_pos = Vec2::new(position[0], position[1]);
+        let hits = interaction_system
+            .query_point(query_pos, &renderables)
+            .await?;
+
+        let mut result: Vec<(u32, f32)> = hits.iter().map(|h| (h.element_id, h.distance)).collect();
+        result.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        Ok(result.into_iter().map(|(id, _)| id).collect())
+    }
+
+    /// Perform a GPU-accelerated rectangle hit test.
+    ///
+    /// Dispatches the query to `interaction_system` and returns mark IDs
+    /// within the rectangle. Falls back to CPU if positions are not set.
+    pub async fn rect_hit_test_gpu(
+        &self,
+        rect: &Rect,
+        interaction_system: &mut InteractionSystem,
+    ) -> GupResult<Vec<u32>> {
+        if self.positions.is_none() {
+            return Ok(self.rect_hit_test(rect));
+        }
+
+        let elements = self.build_element_data();
+        if elements.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let renderable = ElementDataRenderable::new(elements);
+        let renderables: Vec<&dyn Renderable> = vec![&renderable];
+        let hits = interaction_system.query_region(*rect, &renderables).await?;
+
+        Ok(hits.iter().map(|h| h.element_id).collect())
+    }
+
+    /// Perform a GPU-accelerated lasso hit test.
+    ///
+    /// Uses the GPU interaction system for spatial candidate filtering, then
+    /// applies the CPU point-in-polygon test on the candidates. For large
+    /// datasets this is much faster than testing every mark.
+    ///
+    /// Falls back to CPU if positions are not set.
+    pub async fn lasso_hit_test_gpu(
+        &self,
+        path: &[Vec2],
+        interaction_system: &mut InteractionSystem,
+    ) -> GupResult<Vec<u32>> {
+        if path.len() < 3 {
+            return Ok(Vec::new());
+        }
+
+        let positions = match &self.positions {
+            Some(p) => p,
+            None => return Ok(Vec::new()),
+        };
+
+        // Compute the bounding box of the lasso path for GPU candidate filtering.
+        let (mut min_x, mut min_y) = (f32::MAX, f32::MAX);
+        let (mut max_x, mut max_y) = (f32::MIN, f32::MIN);
+        for p in path {
+            min_x = min_x.min(p.x);
+            min_y = min_y.min(p.y);
+            max_x = max_x.max(p.x);
+            max_y = max_y.max(p.y);
+        }
+        let bounding_rect = Rect::new(Vec2::new(min_x, min_y), Vec2::new(max_x, max_y));
+
+        // Use GPU to find candidates within the bounding rect.
+        let candidates = self
+            .rect_hit_test_gpu(&bounding_rect, interaction_system)
+            .await?;
+
+        // Refine candidates with CPU point-in-polygon test.
+        let result: Vec<u32> = candidates
+            .into_iter()
+            .filter(|&id| {
+                if let Some(pos) = positions.get(id as usize) {
+                    point_in_polygon(Vec2::new(pos[0], pos[1]), path)
+                } else {
+                    false
+                }
+            })
+            .collect();
+
+        Ok(result)
+    }
+
+    /// Perform a hit test using the best available method.
+    ///
+    /// If `interaction_system` is `Some`, uses GPU-accelerated hit testing.
+    /// Otherwise falls back to CPU-based hit testing.
+    ///
+    /// This is the recommended entry point for hit testing as it handles
+    /// the GPU/CPU fallback automatically.
+    pub async fn hit_test_auto(
+        &self,
+        position: [f32; 2],
+        hit_radius: f32,
+        interaction_system: Option<&mut InteractionSystem>,
+    ) -> GupResult<Vec<u32>> {
+        match interaction_system {
+            Some(is) => self.hit_test_gpu(position, is, hit_radius).await,
+            None => Ok(self.hit_test(position, hit_radius)),
+        }
+    }
+
+    /// Perform a rectangle hit test using the best available method.
+    pub async fn rect_hit_test_auto(
+        &self,
+        rect: &Rect,
+        interaction_system: Option<&mut InteractionSystem>,
+    ) -> GupResult<Vec<u32>> {
+        match interaction_system {
+            Some(is) => self.rect_hit_test_gpu(rect, is).await,
+            None => Ok(self.rect_hit_test(rect)),
+        }
+    }
+
+    /// Perform a lasso hit test using the best available method.
+    pub async fn lasso_hit_test_auto(
+        &self,
+        path: &[Vec2],
+        interaction_system: Option<&mut InteractionSystem>,
+    ) -> GupResult<Vec<u32>> {
+        match interaction_system {
+            Some(is) => self.lasso_hit_test_gpu(path, is).await,
+            None => Ok(self.lasso_hit_test(path)),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ElementDataRenderable — adapter for GPU hit testing
+// ---------------------------------------------------------------------------
+
+/// Adapter that wraps a `Vec<ElementData>` to implement [`Renderable`]
+/// for use with the GPU [`InteractionSystem`].
+#[derive(Debug)]
+struct ElementDataRenderable {
+    elements: Vec<crate::interaction::InteractionElement>,
+}
+
+impl ElementDataRenderable {
+    fn new(data: Vec<ElementData>) -> Self {
+        let elements = data
+            .into_iter()
+            .map(|e| crate::interaction::InteractionElement {
+                position: e.position,
+                size: e.size,
+                mark_type: e.mark_type,
+            })
+            .collect();
+        Self { elements }
+    }
+}
+
+impl Renderable for ElementDataRenderable {
+    fn get_elements_for_interaction(
+        &self,
+    ) -> GupResult<Vec<crate::interaction::InteractionElement>> {
+        Ok(self.elements.clone())
+    }
+
+    fn selection_id(&self) -> u32 {
+        0
     }
 }
 
@@ -1934,5 +2264,157 @@ mod tests {
         system.resize(100);
         assert!(system.state().is_selected(10));
         assert_eq!(system.state().mark_count(), 100);
+    }
+
+    // -- Position-based hit testing tests --
+
+    #[test]
+    fn test_set_positions() {
+        let mut system = MarkSelectionSystem::new(3);
+        assert!(system.positions().is_none());
+
+        system.set_positions(vec![[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]);
+        assert!(system.positions().is_some());
+        assert_eq!(system.positions().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn test_set_positions_with_sizes() {
+        let mut system = MarkSelectionSystem::new(2);
+        system.set_positions_with_sizes(vec![[0.0, 0.0], [1.0, 1.0]], vec![[0.1, 0.1], [0.2, 0.2]]);
+        assert_eq!(system.positions().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_hit_test_cpu() {
+        let mut system = MarkSelectionSystem::new(5);
+        system.set_positions(vec![
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [1.0, 1.0],
+            [5.0, 5.0],
+        ]);
+
+        // Hit test near origin — should find mark 0
+        let hits = system.hit_test([0.05, 0.05], 0.1);
+        assert_eq!(hits, vec![0]);
+
+        // Hit test near (1, 0) — should find mark 1
+        let hits = system.hit_test([1.0, 0.0], 0.1);
+        assert_eq!(hits, vec![1]);
+
+        // Hit test far from all marks — should find nothing
+        let hits = system.hit_test([10.0, 10.0], 0.1);
+        assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn test_hit_test_cpu_sorted_by_distance() {
+        let mut system = MarkSelectionSystem::new(3);
+        system.set_positions(vec![[0.0, 0.0], [0.1, 0.0], [0.05, 0.0]]);
+
+        // Large radius to hit all three — closest first
+        let hits = system.hit_test([0.0, 0.0], 0.5);
+        assert_eq!(hits, vec![0, 2, 1]); // 0 is at 0.0, 2 is at 0.05, 1 is at 0.1
+    }
+
+    #[test]
+    fn test_hit_test_no_positions() {
+        let system = MarkSelectionSystem::new(5);
+        // No positions set — returns empty
+        let hits = system.hit_test([0.0, 0.0], 0.1);
+        assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn test_rect_hit_test_cpu() {
+        let mut system = MarkSelectionSystem::new(5);
+        system.set_positions(vec![
+            [0.0, 0.0],
+            [0.5, 0.5],
+            [1.0, 1.0],
+            [1.5, 1.5],
+            [2.0, 2.0],
+        ]);
+
+        let rect = Rect::new(Vec2::new(0.4, 0.4), Vec2::new(1.6, 1.6));
+        let hits = system.rect_hit_test(&rect);
+        assert_eq!(hits, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn test_lasso_hit_test_cpu() {
+        let mut system = MarkSelectionSystem::new(4);
+        system.set_positions(vec![
+            [0.5, 0.5], // inside
+            [1.5, 1.5], // outside
+            [0.2, 0.2], // inside
+            [5.0, 5.0], // outside
+        ]);
+
+        let lasso = vec![
+            Vec2::new(0.0, 0.0),
+            Vec2::new(1.0, 0.0),
+            Vec2::new(1.0, 1.0),
+            Vec2::new(0.0, 1.0),
+        ];
+        let hits = system.lasso_hit_test(&lasso);
+        assert_eq!(hits, vec![0, 2]);
+    }
+
+    #[test]
+    fn test_build_element_data() {
+        let mut system = MarkSelectionSystem::new(3);
+        system.set_positions_with_sizes(
+            vec![[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]],
+            vec![[0.1, 0.1], [0.2, 0.2], [0.3, 0.3]],
+        );
+
+        let elements = system.build_element_data();
+        assert_eq!(elements.len(), 3);
+        assert_eq!(elements[0].position, [1.0, 2.0]);
+        assert_eq!(elements[0].size, [0.1, 0.1]);
+        assert_eq!(elements[0].element_id, 0);
+        assert_eq!(elements[2].position, [5.0, 6.0]);
+        assert_eq!(elements[2].element_id, 2);
+    }
+
+    #[test]
+    fn test_build_element_data_no_positions() {
+        let system = MarkSelectionSystem::new(3);
+        let elements = system.build_element_data();
+        assert!(elements.is_empty());
+    }
+
+    #[test]
+    fn test_element_data_renderable() {
+        use crate::interaction::Renderable;
+
+        let data = vec![
+            ElementData {
+                position: [1.0, 2.0],
+                size: [0.1, 0.1],
+                mark_type: 0,
+                element_id: 0,
+                selection_id: 0,
+                _padding: 0,
+            },
+            ElementData {
+                position: [3.0, 4.0],
+                size: [0.2, 0.2],
+                mark_type: 0,
+                element_id: 1,
+                selection_id: 0,
+                _padding: 0,
+            },
+        ];
+
+        let renderable = ElementDataRenderable::new(data);
+        assert_eq!(renderable.selection_id(), 0);
+        let elements = renderable.get_elements_for_interaction().unwrap();
+        assert_eq!(elements.len(), 2);
+        assert_eq!(elements[0].position, [1.0, 2.0]);
+        assert_eq!(elements[1].position, [3.0, 4.0]);
     }
 }
