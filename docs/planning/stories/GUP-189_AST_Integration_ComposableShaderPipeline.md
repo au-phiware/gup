@@ -1,7 +1,7 @@
 # GUP-189: AST Integration with ComposableShaderPipeline
 
 **Story ID**: GUP-189 **Title**: AST Integration with ComposableShaderPipeline
-**Status**: 🚧 In Progress **Priority**: Medium **Effort**: 5 story points
+**Status**: ✅ Complete **Completed**: 2025-08-08 **Priority**: Medium **Effort**: 5 story points
 **Created**: 2025-08-07 **Dependencies**: GUP-073 (Advanced Shader Composition)
 
 ## Overview
@@ -26,12 +26,12 @@ optimizations without changing my code.
 
 ## Acceptance Criteria
 
-- [ ] `ComposableShaderPipeline::optimize_shader()` delegates to AST-based
+- [x] `ComposableShaderPipeline::optimize_shader()` delegates to AST-based
       optimizer when `OptimizationConfig.use_ast_analysis` is true
-- [ ] Backward-compatible: existing tests still pass
-- [ ] AST parsing errors fall back to string-based optimization gracefully
-- [ ] Generated WGSL from the pipeline is at least as small as before
-- [ ] Performance: no regression in pipeline compilation benchmarks
+- [x] Backward-compatible: existing tests still pass
+- [x] AST parsing errors fall back to string-based optimization gracefully
+- [x] Generated WGSL from the pipeline is at least as small as before
+- [x] Performance: no regression in pipeline compilation benchmarks
 
 ## Technical Tasks
 
@@ -63,7 +63,38 @@ optimizations without changing my code.
 
 ## Definition of Done
 
-- [ ] Implementation complete with tests passing
-- [ ] `mask all-fix` clean
-- [ ] All examples compile
-- [ ] Documentation updated
+- [x] Implementation complete with tests passing
+- [x] `mask all-fix` clean
+- [x] All examples compile
+- [x] Documentation updated
+
+## Implementation Summary
+
+### What Was Implemented
+
+- Added `use_ast_analysis` field to `OptimizationConfig` (default: `false` for
+  backward compatibility)
+- Refactored `optimize_shader()` to delegate to AST-based optimizer
+  (`parse_wgsl` → `optimize` → `generate_wgsl_minimal`) when
+  `use_ast_analysis` is true
+- Implemented graceful fallback: if AST parsing fails, the string-based
+  optimization path is used automatically
+- Improved the `optimize()` function in `shader_ast::optimizer` to re-run
+  dead-code elimination after function inlining, removing functions that became
+  dead after their call sites were inlined
+
+### Key Files Changed
+
+| File                                        | Change                                           |
+| ------------------------------------------- | ------------------------------------------------ |
+| `src/shader_pipeline.rs`                    | Added `use_ast_analysis`, AST delegation, 7 new tests |
+| `src/shader_ast/optimizer.rs`               | Re-run DCE after inlining                        |
+| `tests/shader_pipeline_performance_tests.rs` | 4 new integration tests, updated struct literals |
+
+### Test Counts
+
+- **7 new unit tests** in `shader_pipeline::tests` (AST integration)
+- **4 new integration tests** in `shader_pipeline_performance_tests`
+- **All 23 shader_pipeline tests pass**
+- **All 58 shader_ast tests pass**
+- **All 14 performance tests pass**
