@@ -88,6 +88,7 @@ pub mod prelude;
 pub mod render;
 pub mod scale;
 pub mod selection;
+pub mod shader_ast;
 pub mod shader_function;
 pub mod shader_pipeline;
 pub mod spatial_index;
