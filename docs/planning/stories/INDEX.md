@@ -80,7 +80,7 @@ epic and status.
 | [GUP-077](GUP-077_Compute_Shader_Instance_Filtering.md)        | Compute Shader Instance Sorting and Filtering  | ✅ Complete | Medium   | —      |
 | [GUP-185](GUP-185_Multi_Pass_Mark_Examples.md)                 | Multi-Pass Mark Examples                       | 📋 Planned  | Low      | —      |
 | [GUP-186](GUP-186_Dynamic_Attribute_GPU_Upload_Pipeline.md)    | Dynamic Attribute GPU Upload Pipeline          | ✅ Complete | Medium   | —      |
-| [GUP-187](GUP-187_Flaky_Label_Performance_Test_Fix.md)         | Flaky Label Performance Test Fix               | 🚧 Active   | Low      | —      |
+| [GUP-187](GUP-187_Flaky_Label_Performance_Test_Fix.md)         | Flaky Label Performance Test Fix               | ✅ Complete | Low      | —      |
 | [GUP-188](GUP-188_Automatic_Draw_Call_Metrics.md)              | Automatic Draw Call Metrics in MarkRenderer    | 📋 Planned  | Low      | —      |
 | [GUP-189](GUP-189_AST_Integration_ComposableShaderPipeline.md) | AST Integration with ComposableShaderPipeline  | ✅ Complete | Medium   | 5      |
 | [GUP-190](GUP-190_WGSL_Compute_Shader_AST_Support.md)          | WGSL Compute Shader AST Support                | 📋 Planned  | Low      | 5      |
