@@ -1,7 +1,7 @@
 # GUP-174: Flaky Performance Test Stabilization
 
-**Priority**: Low **Complexity**: Low **Created**: 2025-08-06 **Status**: 📋
-Planned
+**Priority**: Low **Complexity**: Low **Created**: 2025-08-06 **Status**: 🚧 In
+Progress
 
 ## Overview
 
