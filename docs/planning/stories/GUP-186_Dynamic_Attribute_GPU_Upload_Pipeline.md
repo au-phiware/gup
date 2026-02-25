@@ -1,6 +1,6 @@
 # GUP-186: Dynamic Attribute GPU Upload Pipeline
 
-**Status**: 🚧 In Progress **Priority**: Medium **Category**: Feature
+**Status**: ✅ Complete (2025-07-23) **Priority**: Medium **Category**: Feature
 Enhancement **Estimated Effort**: 2 days **Dependencies**: GUP-069 (Advanced
 Mark Rendering Features)
 
@@ -27,13 +27,13 @@ runtime without manual buffer management
 
 ## Acceptance Criteria
 
-- [ ] Automatic GPU buffer creation when attributes are first set
-- [ ] Dirty-only upload: only changed attributes are re-uploaded to GPU
-- [ ] Per-instance data uploaded to storage buffers
-- [ ] Static data uploaded to uniform buffers
-- [ ] Integration with `MarkRenderer` so dynamic attributes are bound during
+- [x] Automatic GPU buffer creation when attributes are first set
+- [x] Dirty-only upload: only changed attributes are re-uploaded to GPU
+- [x] Per-instance data uploaded to storage buffers
+- [x] Static data uploaded to uniform buffers
+- [x] Integration with `MarkRenderer` so dynamic attributes are bound during
       rendering
-- [ ] Performance: attribute updates + GPU upload < 1ms for typical cases
+- [x] Performance: attribute updates + GPU upload < 1ms for typical cases
 
 ## Technical Tasks
 
@@ -63,8 +63,56 @@ runtime without manual buffer management
 
 ## Definition of Done
 
-- [ ] Automatic buffer management for dynamic attributes
-- [ ] Dirty-only upload implemented and tested
-- [ ] Integration with MarkRenderer rendering loop
-- [ ] Performance benchmarks pass
-- [ ] All existing tests continue to pass
+- [x] Automatic buffer management for dynamic attributes
+- [x] Dirty-only upload implemented and tested
+- [x] Integration with MarkRenderer rendering loop
+- [x] Performance benchmarks pass
+- [x] All existing tests continue to pass
+
+## Implementation Summary
+
+### Files Changed
+
+| File                                      | Change                                                                                        |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `src/mark/advanced_rendering.rs`          | Added `DynamicAttributeBufferManager`, `UploadStats`, helper methods on `DynamicAttributeMap` |
+| `src/mark/renderer.rs`                    | Added `render_marks_with_dynamic_attrs()` method                                              |
+| `src/mark.rs`                             | Updated exports to include new types                                                          |
+| `src/lib.rs`                              | Updated exports to include new types                                                          |
+| `src/prelude.rs`                          | Updated exports to include new types                                                          |
+| `tests/dynamic_attribute_buffer_tests.rs` | **New**: 18 GPU integration tests                                                             |
+
+### New Types Introduced
+
+- **`DynamicAttributeBufferManager`**: Manages GPU buffer lifecycle for dynamic
+  attributes. Allocates uniform buffers for static attributes and storage
+  buffers for per-instance data. Supports dirty-only uploads, automatic buffer
+  resizing, and bind group creation.
+- **`UploadStats`**: Statistics tracking for upload operations including full
+  uploads, partial uploads, storage uploads, buffer resizes, and bandwidth
+  savings.
+- **`ManagedBuffer`** (internal): Tracks individual GPU buffer state (capacity,
+  length).
+
+### New Methods on `DynamicAttributeMap`
+
+- `collect_dirty_static_values()` — returns only changed static values with
+  their sorted indices
+- `collect_per_instance_data(name)` — returns per-instance values for a named
+  attribute
+- `per_instance_attribute_names()` — sorted list of per-instance attribute names
+- `dirty_per_instance_attributes()` — sorted list of dirty per-instance names
+- `mappings()` — accessor for the raw mappings HashMap
+
+### New Method on `MarkRenderer`
+
+- `render_marks_with_dynamic_attrs()` — renders marks with both primary and
+  dynamic attribute bind groups
+
+### Test Counts
+
+- 15 new unit tests in `advanced_rendering.rs` (total 52)
+- 18 new GPU integration tests in `dynamic_attribute_buffer_tests.rs`
+- 33 new tests total
+- All 1197 existing library tests continue to pass (1 pre-existing flaky test:
+  GUP-187)
