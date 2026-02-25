@@ -1,6 +1,6 @@
 # GUP-177: GPU-Side Shader Function Attribute Binding
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
