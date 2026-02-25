@@ -281,6 +281,8 @@ system story. The expanded story is also complete._
 | [GUP-199](GUP-199_Text_Wrapping_Multi_Line_Layout.md)                              | Text Wrapping and Multi-Line Layout         | 📋 Planned  | Low      | 5      |
 | [GUP-200](GUP-200_Interactive_Clipping_Reveal.md)                                  | Interactive Clipping Reveal                 | 📋 Planned  | Low      | 3      |
 | [GUP-201](GUP-201_Text_Clipping_Visual_Demo.md)                                    | Text Clipping Visual Demo                   | 📋 Planned  | Low      | 2      |
+| [GUP-202](GUP-202_Font_Aware_Text_Rendering_Pipeline.md)                           | Font-Aware Text Rendering Pipeline          | 📋 Planned  | Medium   | —      |
+| [GUP-203](GUP-203_Multi_Font_Atlas_Manager.md)                                     | Multi-Font Atlas Manager                    | 📋 Planned  | Low      | —      |
 
 ### Post GUP-016 Stories - Accessibility System (Stories 111-130)
 
@@ -399,7 +401,8 @@ system story. The expanded story is also complete._
   GUP-093 ✅, GUP-095 ✅, GUP-097 ✅
 - **Axis/Grid planned**: GUP-094 📋, GUP-096 📋, GUP-098 📋
 - **Text complete**: GUP-104 ✅, GUP-105 ✅, GUP-106 ✅, GUP-107 ✅, GUP-108 ✅
-- **Text planned**: GUP-109 📋, GUP-110 📋, GUP-199 📋, GUP-200 📋, GUP-201 📋
+- **Text planned**: GUP-109 📋, GUP-110 📋, GUP-199 📋, GUP-200 📋, GUP-201 📋,
+  GUP-202 📋, GUP-203 📋
 
 ## Story Point Summary
 
