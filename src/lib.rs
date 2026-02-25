@@ -79,6 +79,7 @@ pub mod integration;
 pub mod interaction;
 pub mod label;
 pub mod mark;
+pub mod mark_selection;
 pub mod mixable;
 pub mod performance;
 pub mod pipeline_cache;
@@ -175,6 +176,13 @@ pub use mark::{Mark, MarkInfo, MarkInfoImpl, MarkRegistry};
 pub use pipeline_cache::PipelineCache;
 pub use selection::{
     AttrValue, InteractionData, IntoAttrValue, IntoAttrValues, MarkInstanceBuilder, Selection,
+};
+
+// Export interactive mark selection system
+pub use mark_selection::{
+    BitSet, KeyModifiers, SelectionEvent, SelectionMode, SelectionOperation, SelectionState,
+    SelectionStatistics, SelectionStyle, SelectionTool, SelectionToolKind, ToolResult, ToolState,
+    point_in_polygon,
 };
 
 // Export chart builder system (Observable Plot-style API)

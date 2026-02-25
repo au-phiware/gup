@@ -1,0 +1,1412 @@
+// Copyright (C) 2024 Corin Lawson
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+//! Interactive mark selection system for GPU-accelerated visualizations.
+//!
+//! This module provides an efficient selection state management system for
+//! large datasets, with bitset-based storage, undo/redo support, configurable
+//! visual styles, and integration with the existing interaction system.
+//!
+//! # Architecture
+//!
+//! The selection system is built from three main components:
+//!
+//! - [`SelectionState`] — Bitset-backed selection tracking with undo/redo
+//! - [`SelectionStyle`] — Visual feedback configuration for selected/hovered marks
+//! - [`SelectionTool`] — Input-driven selection tools (point, rectangle, lasso)
+//!
+//! # Examples
+//!
+//! ```rust
+//! use gup::mark_selection::{SelectionState, SelectionMode, SelectionStyle};
+//!
+//! // Create selection state for 100K marks
+//! let mut state = SelectionState::new(100_000);
+//!
+//! // Select individual marks
+//! state.select(42);
+//! state.select(99);
+//! assert_eq!(state.count(), 2);
+//!
+//! // Toggle selection
+//! state.toggle(42);
+//! assert!(!state.is_selected(42));
+//!
+//! // Undo the toggle
+//! state.undo();
+//! assert!(state.is_selected(42));
+//!
+//! // Rectangle selection (select a range)
+//! state.select_range(10..20);
+//! assert_eq!(state.count(), 12); // 42, 99, 10..20
+//! ```
+
+use crate::interaction::{Rect, Vec2};
+use serde::{Deserialize, Serialize};
+use std::ops::Range;
+
+// ---------------------------------------------------------------------------
+// Bitset — compact selection storage
+// ---------------------------------------------------------------------------
+
+/// A compact bitset for tracking selection state of up to millions of marks.
+///
+/// Uses 1 bit per mark, so 1M marks requires only ~122 KB of memory.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BitSet {
+    /// Underlying storage: each `u64` holds 64 bits.
+    blocks: Vec<u64>,
+    /// Total number of bits (marks) this bitset tracks.
+    len: usize,
+}
+
+impl BitSet {
+    /// Create a new bitset with all bits cleared.
+    pub fn new(len: usize) -> Self {
+        let block_count = len.div_ceil(64);
+        Self {
+            blocks: vec![0u64; block_count],
+            len,
+        }
+    }
+
+    /// Returns the number of bits (marks) in this bitset.
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Returns `true` if the bitset is empty (zero capacity).
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// Set the bit at `index` (mark it as selected).
+    pub fn set(&mut self, index: usize) {
+        if index < self.len {
+            self.blocks[index / 64] |= 1u64 << (index % 64);
+        }
+    }
+
+    /// Clear the bit at `index` (mark it as unselected).
+    pub fn clear_bit(&mut self, index: usize) {
+        if index < self.len {
+            self.blocks[index / 64] &= !(1u64 << (index % 64));
+        }
+    }
+
+    /// Toggle the bit at `index`.
+    pub fn toggle(&mut self, index: usize) {
+        if index < self.len {
+            self.blocks[index / 64] ^= 1u64 << (index % 64);
+        }
+    }
+
+    /// Returns `true` if the bit at `index` is set.
+    pub fn get(&self, index: usize) -> bool {
+        if index < self.len {
+            (self.blocks[index / 64] >> (index % 64)) & 1 == 1
+        } else {
+            false
+        }
+    }
+
+    /// Clear all bits.
+    pub fn clear_all(&mut self) {
+        for block in &mut self.blocks {
+            *block = 0;
+        }
+    }
+
+    /// Set all bits.
+    pub fn set_all(&mut self) {
+        for block in &mut self.blocks {
+            *block = u64::MAX;
+        }
+        // Clear trailing bits beyond len
+        let remainder = self.len % 64;
+        if remainder > 0
+            && let Some(last) = self.blocks.last_mut()
+        {
+            *last &= (1u64 << remainder) - 1;
+        }
+    }
+
+    /// Count the number of set bits (popcount).
+    pub fn count_ones(&self) -> usize {
+        self.blocks.iter().map(|b| b.count_ones() as usize).sum()
+    }
+
+    /// Iterate over the indices of all set bits.
+    pub fn ones(&self) -> BitSetOnes<'_> {
+        BitSetOnes {
+            bitset: self,
+            block_idx: 0,
+            current_block: self.blocks.first().copied().unwrap_or(0),
+        }
+    }
+
+    /// Resize the bitset to `new_len`. New bits are initialised to zero.
+    pub fn resize(&mut self, new_len: usize) {
+        let new_blocks = new_len.div_ceil(64);
+        self.blocks.resize(new_blocks, 0);
+        // Clear any trailing bits in the old last block if shrinking
+        if new_len < self.len {
+            let remainder = new_len % 64;
+            if remainder > 0
+                && let Some(last) = self.blocks.last_mut()
+            {
+                *last &= (1u64 << remainder) - 1;
+            }
+        }
+        self.len = new_len;
+    }
+
+    /// Compute the intersection of two bitsets (AND).
+    pub fn intersect(&self, other: &BitSet) -> BitSet {
+        let len = self.len.min(other.len);
+        let block_count = len.div_ceil(64);
+        let blocks: Vec<u64> = self.blocks[..block_count]
+            .iter()
+            .zip(&other.blocks[..block_count])
+            .map(|(&a, &b)| a & b)
+            .collect();
+        BitSet { blocks, len }
+    }
+
+    /// Compute the union of two bitsets (OR).
+    pub fn union(&self, other: &BitSet) -> BitSet {
+        let len = self.len.max(other.len);
+        let block_count = len.div_ceil(64);
+        let mut blocks = vec![0u64; block_count];
+        for (i, b) in blocks.iter_mut().enumerate() {
+            let a_val = self.blocks.get(i).copied().unwrap_or(0);
+            let b_val = other.blocks.get(i).copied().unwrap_or(0);
+            *b = a_val | b_val;
+        }
+        BitSet { blocks, len }
+    }
+
+    /// Memory usage in bytes.
+    pub fn memory_bytes(&self) -> usize {
+        self.blocks.len() * 8
+    }
+}
+
+/// Iterator over set bit indices in a [`BitSet`].
+pub struct BitSetOnes<'a> {
+    bitset: &'a BitSet,
+    block_idx: usize,
+    current_block: u64,
+}
+
+impl Iterator for BitSetOnes<'_> {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<usize> {
+        loop {
+            if self.current_block != 0 {
+                let bit = self.current_block.trailing_zeros() as usize;
+                self.current_block &= self.current_block - 1; // clear lowest set bit
+                let index = self.block_idx * 64 + bit;
+                if index < self.bitset.len {
+                    return Some(index);
+                } else {
+                    return None;
+                }
+            }
+            self.block_idx += 1;
+            if self.block_idx >= self.bitset.blocks.len() {
+                return None;
+            }
+            self.current_block = self.bitset.blocks[self.block_idx];
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Selection operations (for undo/redo)
+// ---------------------------------------------------------------------------
+
+/// A recorded selection operation that can be undone.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SelectionOperation {
+    /// Selected a set of mark IDs.
+    Select(Vec<u32>),
+    /// Deselected a set of mark IDs.
+    Deselect(Vec<u32>),
+    /// Toggled a set of mark IDs.
+    Toggle(Vec<u32>),
+    /// Cleared all selections. Stores the previous selection for undo.
+    Clear(BitSet),
+    /// Set all marks selected. Stores previous selection for undo.
+    SelectAll(BitSet),
+    /// Rectangle selection. Stores affected IDs and previous selection state.
+    RectangleSelect {
+        ids: Vec<u32>,
+        additive: bool,
+        previous: BitSet,
+    },
+    /// Lasso selection. Stores affected IDs and previous selection state.
+    LassoSelect {
+        ids: Vec<u32>,
+        additive: bool,
+        previous: BitSet,
+    },
+}
+
+// ---------------------------------------------------------------------------
+// Selection mode
+// ---------------------------------------------------------------------------
+
+/// Selection behaviour mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum SelectionMode {
+    /// Clicking selects one mark, deselecting all others.
+    #[default]
+    Single,
+    /// Clicking toggles the mark without affecting others (like Ctrl+Click).
+    Toggle,
+    /// Clicking adds to the current selection (like Shift+Click).
+    Additive,
+    /// Clicking removes from the current selection.
+    Subtractive,
+}
+
+// ---------------------------------------------------------------------------
+// Selection state
+// ---------------------------------------------------------------------------
+
+/// Manages the selection state for a set of marks with undo/redo support.
+///
+/// Uses a compact bitset internally so that even 1M+ marks use minimal memory
+/// (~122 KB for the bitset plus undo history).
+#[derive(Debug, Clone)]
+pub struct SelectionState {
+    /// Current selection as a bitset.
+    selected: BitSet,
+    /// Currently hovered mark (at most one).
+    hover: Option<u32>,
+    /// Current selection mode.
+    mode: SelectionMode,
+    /// Undo stack of operations.
+    undo_stack: Vec<SelectionOperation>,
+    /// Redo stack of operations.
+    redo_stack: Vec<SelectionOperation>,
+    /// Maximum undo history size.
+    max_undo_history: usize,
+}
+
+impl SelectionState {
+    /// Create a new selection state for `mark_count` marks.
+    pub fn new(mark_count: usize) -> Self {
+        Self {
+            selected: BitSet::new(mark_count),
+            hover: None,
+            mode: SelectionMode::default(),
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+            max_undo_history: 100,
+        }
+    }
+
+    /// Create a new selection state with a specific mode.
+    pub fn with_mode(mark_count: usize, mode: SelectionMode) -> Self {
+        let mut state = Self::new(mark_count);
+        state.mode = mode;
+        state
+    }
+
+    /// Returns the current selection mode.
+    pub fn mode(&self) -> SelectionMode {
+        self.mode
+    }
+
+    /// Set the selection mode.
+    pub fn set_mode(&mut self, mode: SelectionMode) {
+        self.mode = mode;
+    }
+
+    /// Returns `true` if mark `id` is selected.
+    pub fn is_selected(&self, id: u32) -> bool {
+        self.selected.get(id as usize)
+    }
+
+    /// Returns the currently hovered mark ID, if any.
+    pub fn hover(&self) -> Option<u32> {
+        self.hover
+    }
+
+    /// Set the currently hovered mark.
+    pub fn set_hover(&mut self, id: Option<u32>) {
+        self.hover = id;
+    }
+
+    /// Returns the number of selected marks.
+    pub fn count(&self) -> usize {
+        self.selected.count_ones()
+    }
+
+    /// Returns the total number of marks tracked.
+    pub fn mark_count(&self) -> usize {
+        self.selected.len()
+    }
+
+    /// Returns `true` if no marks are selected.
+    pub fn is_empty(&self) -> bool {
+        self.count() == 0
+    }
+
+    /// Select a single mark.
+    pub fn select(&mut self, id: u32) {
+        if !self.selected.get(id as usize) {
+            self.push_undo(SelectionOperation::Select(vec![id]));
+            self.selected.set(id as usize);
+        }
+    }
+
+    /// Deselect a single mark.
+    pub fn deselect(&mut self, id: u32) {
+        if self.selected.get(id as usize) {
+            self.push_undo(SelectionOperation::Deselect(vec![id]));
+            self.selected.clear_bit(id as usize);
+        }
+    }
+
+    /// Toggle the selection of a single mark.
+    pub fn toggle(&mut self, id: u32) {
+        self.push_undo(SelectionOperation::Toggle(vec![id]));
+        self.selected.toggle(id as usize);
+    }
+
+    /// Select multiple marks at once.
+    pub fn select_many(&mut self, ids: &[u32]) {
+        let new_ids: Vec<u32> = ids
+            .iter()
+            .copied()
+            .filter(|&id| !self.selected.get(id as usize))
+            .collect();
+        if !new_ids.is_empty() {
+            self.push_undo(SelectionOperation::Select(new_ids.clone()));
+            for id in &new_ids {
+                self.selected.set(*id as usize);
+            }
+        }
+    }
+
+    /// Deselect multiple marks at once.
+    pub fn deselect_many(&mut self, ids: &[u32]) {
+        let old_ids: Vec<u32> = ids
+            .iter()
+            .copied()
+            .filter(|&id| self.selected.get(id as usize))
+            .collect();
+        if !old_ids.is_empty() {
+            self.push_undo(SelectionOperation::Deselect(old_ids.clone()));
+            for id in &old_ids {
+                self.selected.clear_bit(*id as usize);
+            }
+        }
+    }
+
+    /// Select a range of marks.
+    pub fn select_range(&mut self, range: Range<u32>) {
+        let ids: Vec<u32> = range.collect();
+        self.select_many(&ids);
+    }
+
+    /// Clear all selections.
+    pub fn clear(&mut self) {
+        if self.count() > 0 {
+            let previous = self.selected.clone();
+            self.push_undo(SelectionOperation::Clear(previous));
+            self.selected.clear_all();
+        }
+    }
+
+    /// Select all marks.
+    pub fn select_all(&mut self) {
+        let previous = self.selected.clone();
+        self.push_undo(SelectionOperation::SelectAll(previous));
+        self.selected.set_all();
+    }
+
+    /// Apply a click at a specific mark ID, respecting the current selection mode.
+    pub fn click(&mut self, id: u32) {
+        match self.mode {
+            SelectionMode::Single => {
+                let previous = self.selected.clone();
+                self.push_undo(SelectionOperation::RectangleSelect {
+                    ids: vec![id],
+                    additive: false,
+                    previous,
+                });
+                self.selected.clear_all();
+                self.selected.set(id as usize);
+            }
+            SelectionMode::Toggle => {
+                self.toggle(id);
+            }
+            SelectionMode::Additive => {
+                self.select(id);
+            }
+            SelectionMode::Subtractive => {
+                self.deselect(id);
+            }
+        }
+    }
+
+    /// Apply a rectangle selection to a set of mark IDs found within the rect.
+    pub fn rect_select(&mut self, ids: &[u32], additive: bool) {
+        let previous = self.selected.clone();
+        self.push_undo(SelectionOperation::RectangleSelect {
+            ids: ids.to_vec(),
+            additive,
+            previous,
+        });
+        if !additive {
+            self.selected.clear_all();
+        }
+        for &id in ids {
+            self.selected.set(id as usize);
+        }
+    }
+
+    /// Apply a lasso selection to a set of mark IDs found within the lasso path.
+    pub fn lasso_select(&mut self, ids: &[u32], additive: bool) {
+        let previous = self.selected.clone();
+        self.push_undo(SelectionOperation::LassoSelect {
+            ids: ids.to_vec(),
+            additive,
+            previous,
+        });
+        if !additive {
+            self.selected.clear_all();
+        }
+        for &id in ids {
+            self.selected.set(id as usize);
+        }
+    }
+
+    /// Undo the last selection operation. Returns `true` if an operation was undone.
+    pub fn undo(&mut self) -> bool {
+        if let Some(op) = self.undo_stack.pop() {
+            self.apply_undo(&op);
+            self.redo_stack.push(op);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Redo the last undone operation. Returns `true` if an operation was redone.
+    pub fn redo(&mut self) -> bool {
+        if let Some(op) = self.redo_stack.pop() {
+            self.apply_redo(&op);
+            self.undo_stack.push(op);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Returns `true` if there are operations to undo.
+    pub fn can_undo(&self) -> bool {
+        !self.undo_stack.is_empty()
+    }
+
+    /// Returns `true` if there are operations to redo.
+    pub fn can_redo(&self) -> bool {
+        !self.redo_stack.is_empty()
+    }
+
+    /// Iterate over the IDs of all selected marks.
+    pub fn selected_ids(&self) -> impl Iterator<Item = u32> + '_ {
+        self.selected.ones().map(|i| i as u32)
+    }
+
+    /// Get a reference to the underlying bitset.
+    pub fn bitset(&self) -> &BitSet {
+        &self.selected
+    }
+
+    /// Resize the selection state to accommodate a new mark count.
+    ///
+    /// This preserves existing selections for marks that still exist.
+    pub fn resize(&mut self, new_mark_count: usize) {
+        self.selected.resize(new_mark_count);
+    }
+
+    /// Get selection statistics.
+    pub fn statistics(&self) -> SelectionStatistics {
+        SelectionStatistics {
+            total_marks: self.selected.len(),
+            selected_count: self.count(),
+            hover_id: self.hover,
+            mode: self.mode,
+            undo_depth: self.undo_stack.len(),
+            redo_depth: self.redo_stack.len(),
+            memory_bytes: self.selected.memory_bytes()
+                + self.undo_stack.len() * std::mem::size_of::<SelectionOperation>(),
+        }
+    }
+
+    /// Serialize the selection state to bytes.
+    pub fn serialize(&self) -> Vec<u32> {
+        self.selected_ids().collect()
+    }
+
+    /// Restore selection state from a list of selected IDs.
+    pub fn deserialize(&mut self, ids: &[u32]) {
+        self.selected.clear_all();
+        for &id in ids {
+            self.selected.set(id as usize);
+        }
+        self.undo_stack.clear();
+        self.redo_stack.clear();
+    }
+
+    // -- private helpers --
+
+    fn push_undo(&mut self, op: SelectionOperation) {
+        self.redo_stack.clear();
+        self.undo_stack.push(op);
+        if self.undo_stack.len() > self.max_undo_history {
+            self.undo_stack.remove(0);
+        }
+    }
+
+    fn apply_undo(&mut self, op: &SelectionOperation) {
+        match op {
+            SelectionOperation::Select(ids) => {
+                for &id in ids {
+                    self.selected.clear_bit(id as usize);
+                }
+            }
+            SelectionOperation::Deselect(ids) => {
+                for &id in ids {
+                    self.selected.set(id as usize);
+                }
+            }
+            SelectionOperation::Toggle(ids) => {
+                for &id in ids {
+                    self.selected.toggle(id as usize);
+                }
+            }
+            SelectionOperation::Clear(previous) | SelectionOperation::SelectAll(previous) => {
+                self.selected = previous.clone();
+            }
+            SelectionOperation::RectangleSelect { previous, .. }
+            | SelectionOperation::LassoSelect { previous, .. } => {
+                self.selected = previous.clone();
+            }
+        }
+    }
+
+    fn apply_redo(&mut self, op: &SelectionOperation) {
+        match op {
+            SelectionOperation::Select(ids) => {
+                for &id in ids {
+                    self.selected.set(id as usize);
+                }
+            }
+            SelectionOperation::Deselect(ids) => {
+                for &id in ids {
+                    self.selected.clear_bit(id as usize);
+                }
+            }
+            SelectionOperation::Toggle(ids) => {
+                for &id in ids {
+                    self.selected.toggle(id as usize);
+                }
+            }
+            SelectionOperation::Clear(_) => {
+                self.selected.clear_all();
+            }
+            SelectionOperation::SelectAll(_) => {
+                self.selected.set_all();
+            }
+            SelectionOperation::RectangleSelect { ids, additive, .. }
+            | SelectionOperation::LassoSelect { ids, additive, .. } => {
+                if !additive {
+                    self.selected.clear_all();
+                }
+                for &id in ids {
+                    self.selected.set(id as usize);
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Selection statistics
+// ---------------------------------------------------------------------------
+
+/// Summary statistics about the current selection state.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SelectionStatistics {
+    /// Total marks tracked.
+    pub total_marks: usize,
+    /// Number of currently selected marks.
+    pub selected_count: usize,
+    /// Currently hovered mark ID.
+    pub hover_id: Option<u32>,
+    /// Current selection mode.
+    pub mode: SelectionMode,
+    /// Number of undo operations available.
+    pub undo_depth: usize,
+    /// Number of redo operations available.
+    pub redo_depth: usize,
+    /// Approximate memory usage in bytes.
+    pub memory_bytes: usize,
+}
+
+// ---------------------------------------------------------------------------
+// Selection style
+// ---------------------------------------------------------------------------
+
+/// Visual style configuration for selection feedback.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SelectionStyle {
+    /// Colour multiplier applied to selected marks.
+    pub selected_color: [f32; 4],
+    /// Outline colour for selected marks.
+    pub selected_outline_color: [f32; 4],
+    /// Outline width for selected marks.
+    pub selected_outline_width: f32,
+    /// Scale factor for selected marks (1.0 = no change).
+    pub selected_scale: f32,
+
+    /// Colour multiplier applied to hovered marks.
+    pub hover_color: [f32; 4],
+    /// Outline colour for hovered marks.
+    pub hover_outline_color: [f32; 4],
+    /// Outline width for hovered marks.
+    pub hover_outline_width: f32,
+    /// Scale factor for hovered marks.
+    pub hover_scale: f32,
+
+    /// Opacity for non-selected marks when any marks are selected (dimming).
+    pub unselected_opacity: f32,
+}
+
+impl Default for SelectionStyle {
+    fn default() -> Self {
+        Self {
+            selected_color: [1.0, 1.0, 1.0, 1.0],
+            selected_outline_color: [0.2, 0.5, 1.0, 1.0],
+            selected_outline_width: 2.0,
+            selected_scale: 1.0,
+            hover_color: [1.0, 1.0, 1.0, 1.0],
+            hover_outline_color: [1.0, 0.8, 0.0, 1.0],
+            hover_outline_width: 1.5,
+            hover_scale: 1.1,
+            unselected_opacity: 0.3,
+        }
+    }
+}
+
+impl SelectionStyle {
+    /// A highlight-only style that brightens selected marks without outlines.
+    pub fn highlight() -> Self {
+        Self {
+            selected_color: [1.2, 1.2, 1.2, 1.0],
+            selected_outline_color: [0.0, 0.0, 0.0, 0.0],
+            selected_outline_width: 0.0,
+            selected_scale: 1.05,
+            hover_color: [1.1, 1.1, 1.1, 1.0],
+            hover_outline_color: [0.0, 0.0, 0.0, 0.0],
+            hover_outline_width: 0.0,
+            hover_scale: 1.1,
+            unselected_opacity: 0.4,
+        }
+    }
+
+    /// A bold outline style for clearly marking selection.
+    pub fn outline() -> Self {
+        Self {
+            selected_color: [1.0, 1.0, 1.0, 1.0],
+            selected_outline_color: [0.0, 0.4, 1.0, 1.0],
+            selected_outline_width: 3.0,
+            selected_scale: 1.0,
+            hover_color: [1.0, 1.0, 1.0, 1.0],
+            hover_outline_color: [1.0, 0.6, 0.0, 1.0],
+            hover_outline_width: 2.0,
+            hover_scale: 1.0,
+            unselected_opacity: 0.25,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Selection tool
+// ---------------------------------------------------------------------------
+
+/// The type of selection tool currently active.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub enum SelectionToolKind {
+    /// Single-click point selection.
+    #[default]
+    Point,
+    /// Drag rectangle selection.
+    Rectangle,
+    /// Free-form lasso path selection.
+    Lasso,
+}
+
+/// Input state for an active selection tool.
+#[derive(Debug, Clone)]
+pub enum ToolState {
+    /// Tool is idle, waiting for user input.
+    Idle,
+    /// Rectangle drag in progress.
+    DraggingRect {
+        /// Starting point (anchor) of the rectangle.
+        start: Vec2,
+        /// Current drag endpoint.
+        current: Vec2,
+    },
+    /// Lasso path in progress.
+    DrawingLasso {
+        /// Accumulated path points.
+        points: Vec<Vec2>,
+    },
+}
+
+/// Interactive selection tool that processes input events.
+#[derive(Debug, Clone)]
+pub struct SelectionTool {
+    /// Which tool is active.
+    pub kind: SelectionToolKind,
+    /// Current input state.
+    pub state: ToolState,
+}
+
+impl SelectionTool {
+    /// Create a new selection tool of the given kind.
+    pub fn new(kind: SelectionToolKind) -> Self {
+        Self {
+            kind,
+            state: ToolState::Idle,
+        }
+    }
+
+    /// Create a point selection tool (default).
+    pub fn point() -> Self {
+        Self::new(SelectionToolKind::Point)
+    }
+
+    /// Create a rectangle selection tool.
+    pub fn rectangle() -> Self {
+        Self::new(SelectionToolKind::Rectangle)
+    }
+
+    /// Create a lasso selection tool.
+    pub fn lasso() -> Self {
+        Self::new(SelectionToolKind::Lasso)
+    }
+
+    /// Begin a drag/draw operation at the given position.
+    pub fn begin(&mut self, position: Vec2) {
+        self.state = match self.kind {
+            SelectionToolKind::Point => ToolState::Idle,
+            SelectionToolKind::Rectangle => ToolState::DraggingRect {
+                start: position,
+                current: position,
+            },
+            SelectionToolKind::Lasso => ToolState::DrawingLasso {
+                points: vec![position],
+            },
+        };
+    }
+
+    /// Update the drag/draw position.
+    pub fn update(&mut self, position: Vec2) {
+        match &mut self.state {
+            ToolState::DraggingRect { current, .. } => {
+                *current = position;
+            }
+            ToolState::DrawingLasso { points } => {
+                points.push(position);
+            }
+            ToolState::Idle => {}
+        }
+    }
+
+    /// Finish the drag/draw operation and return the resulting geometry.
+    pub fn finish(&mut self) -> ToolResult {
+        let result = match &self.state {
+            ToolState::Idle => ToolResult::None,
+            ToolState::DraggingRect { start, current } => {
+                let rect = Rect::new(
+                    Vec2::new(start.x.min(current.x), start.y.min(current.y)),
+                    Vec2::new(start.x.max(current.x), start.y.max(current.y)),
+                );
+                ToolResult::Rectangle(rect)
+            }
+            ToolState::DrawingLasso { points } => {
+                if points.len() < 3 {
+                    ToolResult::None
+                } else {
+                    ToolResult::Lasso(points.clone())
+                }
+            }
+        };
+        self.state = ToolState::Idle;
+        result
+    }
+
+    /// Cancel the current operation.
+    pub fn cancel(&mut self) {
+        self.state = ToolState::Idle;
+    }
+
+    /// Returns `true` if the tool is actively processing input.
+    pub fn is_active(&self) -> bool {
+        !matches!(self.state, ToolState::Idle)
+    }
+
+    /// Get the current rectangle being dragged, if any.
+    pub fn current_rect(&self) -> Option<Rect> {
+        match &self.state {
+            ToolState::DraggingRect { start, current } => Some(Rect::new(
+                Vec2::new(start.x.min(current.x), start.y.min(current.y)),
+                Vec2::new(start.x.max(current.x), start.y.max(current.y)),
+            )),
+            _ => None,
+        }
+    }
+
+    /// Get the current lasso path points, if any.
+    pub fn current_lasso_points(&self) -> Option<&[Vec2]> {
+        match &self.state {
+            ToolState::DrawingLasso { points } => Some(points),
+            _ => None,
+        }
+    }
+}
+
+/// Result of completing a selection tool operation.
+#[derive(Debug, Clone)]
+pub enum ToolResult {
+    /// No result (idle or cancelled).
+    None,
+    /// A rectangle region was selected.
+    Rectangle(Rect),
+    /// A lasso path was completed.
+    Lasso(Vec<Vec2>),
+}
+
+// ---------------------------------------------------------------------------
+// Keyboard modifier integration
+// ---------------------------------------------------------------------------
+
+/// Keyboard modifier state for selection behaviour.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct KeyModifiers {
+    /// Ctrl key (toggle mode on macOS: Cmd).
+    pub ctrl: bool,
+    /// Shift key (additive mode).
+    pub shift: bool,
+    /// Alt key (subtractive mode).
+    pub alt: bool,
+}
+
+impl KeyModifiers {
+    /// Determine the effective selection mode from current modifiers.
+    pub fn effective_mode(&self, base_mode: SelectionMode) -> SelectionMode {
+        if self.ctrl {
+            SelectionMode::Toggle
+        } else if self.shift {
+            SelectionMode::Additive
+        } else if self.alt {
+            SelectionMode::Subtractive
+        } else {
+            base_mode
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Point-in-polygon test for lasso selection
+// ---------------------------------------------------------------------------
+
+/// Test whether a point is inside a polygon defined by `vertices`.
+///
+/// Uses the ray-casting algorithm (Jordan curve theorem).
+pub fn point_in_polygon(point: Vec2, vertices: &[Vec2]) -> bool {
+    if vertices.len() < 3 {
+        return false;
+    }
+
+    let mut inside = false;
+    let n = vertices.len();
+    let mut j = n - 1;
+    for i in 0..n {
+        let vi = vertices[i];
+        let vj = vertices[j];
+
+        if ((vi.y > point.y) != (vj.y > point.y))
+            && (point.x < (vj.x - vi.x) * (point.y - vi.y) / (vj.y - vi.y) + vi.x)
+        {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
+}
+
+// ---------------------------------------------------------------------------
+// Selection event callbacks
+// ---------------------------------------------------------------------------
+
+/// Events emitted by the selection system.
+#[derive(Debug, Clone)]
+pub enum SelectionEvent {
+    /// Selection changed (new selection count).
+    Changed { count: usize },
+    /// Hover changed to a new mark.
+    HoverChanged { id: Option<u32> },
+    /// Selection was cleared.
+    Cleared,
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -- BitSet tests --
+
+    #[test]
+    fn test_bitset_new() {
+        let bs = BitSet::new(100);
+        assert_eq!(bs.len(), 100);
+        assert_eq!(bs.count_ones(), 0);
+        assert!(!bs.get(0));
+        assert!(!bs.get(99));
+    }
+
+    #[test]
+    fn test_bitset_set_clear_get() {
+        let mut bs = BitSet::new(256);
+        bs.set(0);
+        bs.set(63);
+        bs.set(64);
+        bs.set(255);
+        assert!(bs.get(0));
+        assert!(bs.get(63));
+        assert!(bs.get(64));
+        assert!(bs.get(255));
+        assert!(!bs.get(1));
+        assert_eq!(bs.count_ones(), 4);
+
+        bs.clear_bit(63);
+        assert!(!bs.get(63));
+        assert_eq!(bs.count_ones(), 3);
+    }
+
+    #[test]
+    fn test_bitset_toggle() {
+        let mut bs = BitSet::new(10);
+        bs.toggle(5);
+        assert!(bs.get(5));
+        bs.toggle(5);
+        assert!(!bs.get(5));
+    }
+
+    #[test]
+    fn test_bitset_set_all_clear_all() {
+        let mut bs = BitSet::new(100);
+        bs.set_all();
+        assert_eq!(bs.count_ones(), 100);
+        // Ensure trailing bits are not set beyond len
+        assert!(!bs.get(100));
+
+        bs.clear_all();
+        assert_eq!(bs.count_ones(), 0);
+    }
+
+    #[test]
+    fn test_bitset_ones_iterator() {
+        let mut bs = BitSet::new(200);
+        bs.set(5);
+        bs.set(64);
+        bs.set(128);
+        let ones: Vec<usize> = bs.ones().collect();
+        assert_eq!(ones, vec![5, 64, 128]);
+    }
+
+    #[test]
+    fn test_bitset_resize() {
+        let mut bs = BitSet::new(50);
+        bs.set(10);
+        bs.set(49);
+        bs.resize(100);
+        assert!(bs.get(10));
+        assert!(bs.get(49));
+        assert!(!bs.get(50));
+        assert_eq!(bs.len(), 100);
+
+        bs.resize(20);
+        assert!(bs.get(10));
+        assert!(!bs.get(49)); // no longer valid
+        assert_eq!(bs.len(), 20);
+    }
+
+    #[test]
+    fn test_bitset_union_intersect() {
+        let mut a = BitSet::new(64);
+        let mut b = BitSet::new(64);
+        a.set(1);
+        a.set(2);
+        b.set(2);
+        b.set(3);
+
+        let u = a.union(&b);
+        assert_eq!(u.count_ones(), 3); // 1, 2, 3
+        let i = a.intersect(&b);
+        assert_eq!(i.count_ones(), 1); // 2
+    }
+
+    #[test]
+    fn test_bitset_memory() {
+        let bs = BitSet::new(1_000_000);
+        // 1M bits = 15625 * u64 = 125000 bytes ≈ 122 KB
+        assert!(bs.memory_bytes() <= 125_008); // allow small rounding
+    }
+
+    // -- SelectionState tests --
+
+    #[test]
+    fn test_selection_state_basic() {
+        let mut state = SelectionState::new(100);
+        assert_eq!(state.count(), 0);
+        assert!(state.is_empty());
+
+        state.select(5);
+        assert!(state.is_selected(5));
+        assert_eq!(state.count(), 1);
+
+        state.deselect(5);
+        assert!(!state.is_selected(5));
+        assert_eq!(state.count(), 0);
+    }
+
+    #[test]
+    fn test_selection_state_toggle() {
+        let mut state = SelectionState::new(100);
+        state.toggle(42);
+        assert!(state.is_selected(42));
+        state.toggle(42);
+        assert!(!state.is_selected(42));
+    }
+
+    #[test]
+    fn test_selection_state_undo_redo() {
+        let mut state = SelectionState::new(100);
+        state.select(10);
+        state.select(20);
+        assert_eq!(state.count(), 2);
+
+        // Undo last select
+        assert!(state.undo());
+        assert_eq!(state.count(), 1);
+        assert!(!state.is_selected(20));
+        assert!(state.is_selected(10));
+
+        // Redo
+        assert!(state.redo());
+        assert_eq!(state.count(), 2);
+        assert!(state.is_selected(20));
+    }
+
+    #[test]
+    fn test_selection_state_undo_clear() {
+        let mut state = SelectionState::new(100);
+        state.select(1);
+        state.select(2);
+        state.select(3);
+        assert_eq!(state.count(), 3);
+
+        state.clear();
+        assert_eq!(state.count(), 0);
+
+        state.undo();
+        assert_eq!(state.count(), 3);
+    }
+
+    #[test]
+    fn test_selection_state_select_all() {
+        let mut state = SelectionState::new(10);
+        state.select_all();
+        assert_eq!(state.count(), 10);
+
+        state.undo();
+        assert_eq!(state.count(), 0);
+    }
+
+    #[test]
+    fn test_selection_state_click_single_mode() {
+        let mut state = SelectionState::with_mode(100, SelectionMode::Single);
+        state.select(5);
+        state.select(10);
+        assert_eq!(state.count(), 2);
+
+        // Click in single mode: should clear all and select only the clicked mark
+        state.click(42);
+        assert_eq!(state.count(), 1);
+        assert!(state.is_selected(42));
+        assert!(!state.is_selected(5));
+        assert!(!state.is_selected(10));
+    }
+
+    #[test]
+    fn test_selection_state_rect_select() {
+        let mut state = SelectionState::new(100);
+        state.select(1);
+
+        // Non-additive rect select replaces existing selection
+        state.rect_select(&[10, 20, 30], false);
+        assert_eq!(state.count(), 3);
+        assert!(!state.is_selected(1));
+        assert!(state.is_selected(10));
+
+        // Undo restores previous state
+        state.undo();
+        assert_eq!(state.count(), 1);
+        assert!(state.is_selected(1));
+    }
+
+    #[test]
+    fn test_selection_state_rect_select_additive() {
+        let mut state = SelectionState::new(100);
+        state.select(1);
+        state.rect_select(&[10, 20], true);
+        assert_eq!(state.count(), 3);
+        assert!(state.is_selected(1));
+        assert!(state.is_selected(10));
+    }
+
+    #[test]
+    fn test_selection_state_hover() {
+        let mut state = SelectionState::new(100);
+        assert_eq!(state.hover(), None);
+        state.set_hover(Some(42));
+        assert_eq!(state.hover(), Some(42));
+        state.set_hover(None);
+        assert_eq!(state.hover(), None);
+    }
+
+    #[test]
+    fn test_selection_state_statistics() {
+        let mut state = SelectionState::new(1000);
+        state.select(5);
+        state.select(10);
+        state.set_hover(Some(15));
+
+        let stats = state.statistics();
+        assert_eq!(stats.total_marks, 1000);
+        assert_eq!(stats.selected_count, 2);
+        assert_eq!(stats.hover_id, Some(15));
+        assert_eq!(stats.undo_depth, 2);
+        assert_eq!(stats.redo_depth, 0);
+    }
+
+    #[test]
+    fn test_selection_state_serialize_deserialize() {
+        let mut state = SelectionState::new(100);
+        state.select(5);
+        state.select(10);
+        state.select(50);
+
+        let serialized = state.serialize();
+        assert_eq!(serialized, vec![5, 10, 50]);
+
+        let mut state2 = SelectionState::new(100);
+        state2.deserialize(&serialized);
+        assert_eq!(state2.count(), 3);
+        assert!(state2.is_selected(5));
+        assert!(state2.is_selected(10));
+        assert!(state2.is_selected(50));
+    }
+
+    #[test]
+    fn test_selection_state_resize() {
+        let mut state = SelectionState::new(50);
+        state.select(10);
+        state.select(49);
+        state.resize(100);
+        assert!(state.is_selected(10));
+        assert!(state.is_selected(49));
+        assert_eq!(state.mark_count(), 100);
+    }
+
+    // -- SelectionMode tests --
+
+    #[test]
+    fn test_key_modifiers_effective_mode() {
+        let mods = KeyModifiers {
+            ctrl: true,
+            shift: false,
+            alt: false,
+        };
+        assert_eq!(
+            mods.effective_mode(SelectionMode::Single),
+            SelectionMode::Toggle
+        );
+
+        let mods = KeyModifiers {
+            ctrl: false,
+            shift: true,
+            alt: false,
+        };
+        assert_eq!(
+            mods.effective_mode(SelectionMode::Single),
+            SelectionMode::Additive
+        );
+
+        let mods = KeyModifiers {
+            ctrl: false,
+            shift: false,
+            alt: true,
+        };
+        assert_eq!(
+            mods.effective_mode(SelectionMode::Single),
+            SelectionMode::Subtractive
+        );
+
+        let mods = KeyModifiers::default();
+        assert_eq!(
+            mods.effective_mode(SelectionMode::Single),
+            SelectionMode::Single
+        );
+    }
+
+    // -- SelectionTool tests --
+
+    #[test]
+    fn test_tool_point() {
+        let mut tool = SelectionTool::point();
+        assert!(!tool.is_active());
+        tool.begin(Vec2::new(10.0, 20.0));
+        // Point tool stays idle since clicks are handled directly
+        assert!(!tool.is_active());
+    }
+
+    #[test]
+    fn test_tool_rectangle() {
+        let mut tool = SelectionTool::rectangle();
+        tool.begin(Vec2::new(10.0, 20.0));
+        assert!(tool.is_active());
+
+        tool.update(Vec2::new(50.0, 60.0));
+        let rect = tool.current_rect().unwrap();
+        assert_eq!(rect.min.x, 10.0);
+        assert_eq!(rect.min.y, 20.0);
+        assert_eq!(rect.max.x, 50.0);
+        assert_eq!(rect.max.y, 60.0);
+
+        let result = tool.finish();
+        assert!(matches!(result, ToolResult::Rectangle(_)));
+        assert!(!tool.is_active());
+    }
+
+    #[test]
+    fn test_tool_rectangle_reversed() {
+        let mut tool = SelectionTool::rectangle();
+        tool.begin(Vec2::new(50.0, 60.0));
+        tool.update(Vec2::new(10.0, 20.0));
+        let rect = tool.current_rect().unwrap();
+        // Normalised so min < max
+        assert_eq!(rect.min.x, 10.0);
+        assert_eq!(rect.min.y, 20.0);
+        assert_eq!(rect.max.x, 50.0);
+        assert_eq!(rect.max.y, 60.0);
+    }
+
+    #[test]
+    fn test_tool_lasso() {
+        let mut tool = SelectionTool::lasso();
+        tool.begin(Vec2::new(0.0, 0.0));
+        tool.update(Vec2::new(10.0, 0.0));
+        tool.update(Vec2::new(10.0, 10.0));
+        tool.update(Vec2::new(0.0, 10.0));
+
+        let points = tool.current_lasso_points().unwrap();
+        assert_eq!(points.len(), 4);
+
+        let result = tool.finish();
+        assert!(matches!(result, ToolResult::Lasso(_)));
+    }
+
+    #[test]
+    fn test_tool_cancel() {
+        let mut tool = SelectionTool::rectangle();
+        tool.begin(Vec2::new(10.0, 20.0));
+        assert!(tool.is_active());
+        tool.cancel();
+        assert!(!tool.is_active());
+    }
+
+    // -- Point-in-polygon tests --
+
+    #[test]
+    fn test_point_in_polygon_basic() {
+        let square = vec![
+            Vec2::new(0.0, 0.0),
+            Vec2::new(10.0, 0.0),
+            Vec2::new(10.0, 10.0),
+            Vec2::new(0.0, 10.0),
+        ];
+
+        assert!(point_in_polygon(Vec2::new(5.0, 5.0), &square));
+        assert!(!point_in_polygon(Vec2::new(15.0, 5.0), &square));
+        assert!(!point_in_polygon(Vec2::new(-1.0, -1.0), &square));
+    }
+
+    #[test]
+    fn test_point_in_polygon_triangle() {
+        let triangle = vec![
+            Vec2::new(0.0, 0.0),
+            Vec2::new(10.0, 0.0),
+            Vec2::new(5.0, 10.0),
+        ];
+
+        assert!(point_in_polygon(Vec2::new(5.0, 3.0), &triangle));
+        assert!(!point_in_polygon(Vec2::new(0.0, 10.0), &triangle));
+    }
+
+    #[test]
+    fn test_point_in_polygon_degenerate() {
+        // Too few points
+        assert!(!point_in_polygon(Vec2::new(0.0, 0.0), &[]));
+        assert!(!point_in_polygon(
+            Vec2::new(0.0, 0.0),
+            &[Vec2::new(0.0, 0.0), Vec2::new(1.0, 1.0)]
+        ));
+    }
+
+    // -- SelectionStyle tests --
+
+    #[test]
+    fn test_selection_style_defaults() {
+        let style = SelectionStyle::default();
+        assert_eq!(style.selected_scale, 1.0);
+        assert_eq!(style.hover_scale, 1.1);
+        assert!(style.unselected_opacity > 0.0);
+        assert!(style.unselected_opacity < 1.0);
+    }
+
+    #[test]
+    fn test_selection_style_presets() {
+        let highlight = SelectionStyle::highlight();
+        assert!(highlight.selected_outline_width < f32::EPSILON);
+
+        let outline = SelectionStyle::outline();
+        assert!(outline.selected_outline_width > 0.0);
+    }
+}
