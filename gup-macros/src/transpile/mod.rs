@@ -52,6 +52,7 @@ mod ast;
 mod codegen;
 #[allow(dead_code, unused_imports)]
 mod convert;
+mod expression_tests;
 mod pipeline_tests;
 #[allow(dead_code, unused_imports)]
 pub mod type_map;
