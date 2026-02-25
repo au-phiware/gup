@@ -331,6 +331,36 @@ impl BuiltinFunctionRegistry {
             .collect()
     }
 
+    /// Get the WGSL function name for a given Rust-side name.
+    ///
+    /// Returns the WGSL name of the first overload (all overloads of a
+    /// given name map to the same WGSL name).
+    pub fn wgsl_name_for(&self, rust_name: &str) -> Option<&str> {
+        self.overloads
+            .get(rust_name)
+            .and_then(|sigs| sigs.first())
+            .map(|sig| sig.wgsl_name.as_str())
+    }
+
+    /// Get the expected parameter count range for a function.
+    ///
+    /// Returns `(min_params, max_params)` across all overloads.
+    pub fn param_count_range(&self, name: &str) -> Option<(usize, usize)> {
+        self.overloads.get(name).map(|sigs| {
+            let min = sigs
+                .iter()
+                .map(|s| s.param_patterns.len())
+                .min()
+                .unwrap_or(0);
+            let max = sigs
+                .iter()
+                .map(|s| s.param_patterns.len())
+                .max()
+                .unwrap_or(0);
+            (min, max)
+        })
+    }
+
     // -----------------------------------------------------------------------
     // Registration helpers
     // -----------------------------------------------------------------------
@@ -1657,5 +1687,45 @@ mod tests {
     #[test]
     fn edit_distance_different() {
         assert!(super::edit_distance("sin", "normalize") > 3);
+    }
+
+    // -- Utility methods --
+
+    #[test]
+    fn wgsl_name_for_known_function() {
+        let reg = BuiltinFunctionRegistry::new();
+        assert_eq!(reg.wgsl_name_for("sin"), Some("sin"));
+        assert_eq!(reg.wgsl_name_for("dot"), Some("dot"));
+        assert_eq!(reg.wgsl_name_for("textureSample"), Some("textureSample"));
+    }
+
+    #[test]
+    fn wgsl_name_for_unknown_returns_none() {
+        let reg = BuiltinFunctionRegistry::new();
+        assert_eq!(reg.wgsl_name_for("nonexistent"), None);
+    }
+
+    #[test]
+    fn param_count_range_for_sin() {
+        let reg = BuiltinFunctionRegistry::new();
+        assert_eq!(reg.param_count_range("sin"), Some((1, 1)));
+    }
+
+    #[test]
+    fn param_count_range_for_clamp() {
+        let reg = BuiltinFunctionRegistry::new();
+        assert_eq!(reg.param_count_range("clamp"), Some((3, 3)));
+    }
+
+    #[test]
+    fn param_count_range_for_barrier() {
+        let reg = BuiltinFunctionRegistry::new();
+        assert_eq!(reg.param_count_range("workgroupBarrier"), Some((0, 0)));
+    }
+
+    #[test]
+    fn param_count_range_unknown() {
+        let reg = BuiltinFunctionRegistry::new();
+        assert_eq!(reg.param_count_range("nonexistent"), None);
     }
 }
