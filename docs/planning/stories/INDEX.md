@@ -72,7 +72,7 @@ epic and status.
 | -------------------------------------------------------------- | ---------------------------------------------- | ----------- | -------- | ------ |
 | [GUP-069](GUP-069_Advanced_Mark_Rendering_Features.md)         | Advanced Mark Rendering Features               | ✅ Complete | Medium   | —      |
 | [GUP-070](GUP-070_Mark_Performance_Optimization.md)            | Mark Performance Optimization                  | ✅ Complete | Medium   | —      |
-| [GUP-071](GUP-071_Custom_Mark_Development_Kit.md)              | Custom Mark Development Kit                    | 🚧 Active   | Low      | —      |
+| [GUP-071](GUP-071_Custom_Mark_Development_Kit.md)              | Custom Mark Development Kit                    | ✅ Complete | Low      | —      |
 | [GUP-072](GUP-072_Mark_System_Documentation.md)                | Mark System Documentation                      | 📋 Planned  | Low      | —      |
 | [GUP-073](GUP-073_Advanced_Shader_Composition.md)              | Advanced Shader Composition                    | ✅ Complete | Medium   | —      |
 | [GUP-074](GUP-074_Mark_Performance_Optimization.md)            | Mark Performance Optimization (GPU Instancing) | ✅ Complete | High     | 5      |
