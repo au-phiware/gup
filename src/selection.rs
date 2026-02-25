@@ -1719,4 +1719,237 @@ mod tests {
             frame.finish().expect("finish frame");
         });
     }
+
+    // --- GPU tests for attribute binding pipeline (GUP-168) ---
+
+    /// Custom data type for testing attribute bindings.
+    #[derive(Debug, Clone)]
+    struct ScatterPoint {
+        x: f32,
+        y: f32,
+        value: f32,
+    }
+
+    #[test]
+    fn gpu_prepare_render_bound_circle() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let data = vec![
+                ScatterPoint {
+                    x: -0.5,
+                    y: 0.3,
+                    value: 0.8,
+                },
+                ScatterPoint {
+                    x: 0.2,
+                    y: -0.4,
+                    value: 0.3,
+                },
+                ScatterPoint {
+                    x: 0.7,
+                    y: 0.1,
+                    value: 0.6,
+                },
+            ];
+
+            let mut selection: Selection<ScatterPoint, Circle> = Selection::from_data(data);
+
+            selection
+                .attr("center", |d: &ScatterPoint| [d.x, d.y])
+                .attr("radius", |d: &ScatterPoint| d.value * 0.15)
+                .attr("fill_color", |d: &ScatterPoint| {
+                    [d.value, 0.2, 1.0 - d.value, 1.0]
+                });
+
+            selection
+                .prepare_render_bound(&context.device, &context.queue)
+                .expect("prepare_render_bound should succeed");
+
+            assert!(selection.is_render_ready());
+
+            let mut ctx = Arc::try_unwrap(context).expect("single owner");
+            let mut frame = ctx.begin_frame().expect("begin_frame");
+
+            {
+                let mut render_pass = frame.render_pass(Some(wgpu::Color::BLACK));
+                selection
+                    .render(&mut render_pass)
+                    .expect("render should succeed");
+            }
+
+            frame.finish().expect("finish frame");
+        });
+    }
+
+    #[test]
+    fn gpu_prepare_render_bound_rectangle() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let data = vec![
+                ScatterPoint {
+                    x: -0.3,
+                    y: 0.0,
+                    value: 0.5,
+                },
+                ScatterPoint {
+                    x: 0.3,
+                    y: 0.0,
+                    value: 0.7,
+                },
+            ];
+
+            let mut selection: Selection<ScatterPoint, Rectangle> = Selection::from_data(data);
+
+            selection
+                .attr("center", |d: &ScatterPoint| [d.x, d.y])
+                .attr("size", |d: &ScatterPoint| [0.2, d.value * 0.8])
+                .attr("fill_color", |d: &ScatterPoint| {
+                    [0.0, d.value, 1.0 - d.value, 1.0]
+                })
+                .attr("corner_radius", |_: &ScatterPoint| 0.02f32);
+
+            selection
+                .prepare_render_bound(&context.device, &context.queue)
+                .expect("prepare_render_bound should succeed");
+
+            assert!(selection.is_render_ready());
+
+            let mut ctx = Arc::try_unwrap(context).expect("single owner");
+            let mut frame = ctx.begin_frame().expect("begin_frame");
+
+            {
+                let mut render_pass = frame.render_pass(Some(wgpu::Color::BLACK));
+                selection
+                    .render(&mut render_pass)
+                    .expect("render should succeed");
+            }
+
+            frame.finish().expect("finish frame");
+        });
+    }
+
+    #[test]
+    fn gpu_prepare_render_bound_with_parallel() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let data = vec![
+                ScatterPoint {
+                    x: -0.5,
+                    y: 0.3,
+                    value: 0.8,
+                },
+                ScatterPoint {
+                    x: 0.5,
+                    y: -0.3,
+                    value: 0.2,
+                },
+            ];
+
+            let mut selection: Selection<ScatterPoint, Circle> = Selection::from_data(data);
+
+            // Use attr_parallel to bind position and color in one pass
+            selection
+                .attr_parallel(
+                    |d: &ScatterPoint| ([d.x, d.y], [d.value, 0.0, 1.0 - d.value, 1.0]),
+                    ["center", "fill_color"],
+                )
+                .attr("radius", |d: &ScatterPoint| d.value * 0.1);
+
+            selection
+                .prepare_render_bound(&context.device, &context.queue)
+                .expect("prepare_render_bound should succeed");
+
+            assert!(selection.is_render_ready());
+
+            let mut ctx = Arc::try_unwrap(context).expect("single owner");
+            let mut frame = ctx.begin_frame().expect("begin_frame");
+
+            {
+                let mut render_pass = frame.render_pass(Some(wgpu::Color::BLACK));
+                selection
+                    .render(&mut render_pass)
+                    .expect("render should succeed");
+            }
+
+            frame.finish().expect("finish frame");
+        });
+    }
+
+    #[test]
+    fn gpu_prepare_render_bound_empty_selection() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let mut selection: Selection<ScatterPoint, Circle> = Selection::from_data(Vec::new());
+
+            selection.attr("center", |d: &ScatterPoint| [d.x, d.y]);
+
+            selection
+                .prepare_render_bound(&context.device, &context.queue)
+                .expect("prepare empty selection");
+
+            let mut ctx = Arc::try_unwrap(context).expect("single owner");
+            let mut frame = ctx.begin_frame().expect("begin_frame");
+
+            {
+                let mut render_pass = frame.render_pass(Some(wgpu::Color::BLACK));
+                selection
+                    .render(&mut render_pass)
+                    .expect("empty render should succeed");
+            }
+
+            frame.finish().expect("finish frame");
+        });
+    }
+
+    #[test]
+    fn gpu_prepare_render_bound_no_bindings_returns_error() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let mut selection: Selection<ScatterPoint, Circle> =
+                Selection::from_data(vec![ScatterPoint {
+                    x: 0.0,
+                    y: 0.0,
+                    value: 1.0,
+                }]);
+
+            // No attr() calls — should fail
+            let result = selection.prepare_render_bound(&context.device, &context.queue);
+            assert!(result.is_err());
+        });
+    }
 }
