@@ -314,6 +314,26 @@ mod tests {
     }
 
     #[test]
+    fn test_text_bounds_contains() {
+        let outer = TextBounds::new(0.0, 0.0, 100.0, 100.0);
+        let inner = TextBounds::new(10.0, 10.0, 50.0, 50.0);
+        let overlapping = TextBounds::new(50.0, 50.0, 150.0, 150.0);
+
+        assert!(outer.contains(&inner));
+        assert!(!inner.contains(&outer));
+        assert!(!outer.contains(&overlapping));
+    }
+
+    #[test]
+    fn test_text_bounds_contains_point() {
+        let bounds = TextBounds::new(10.0, 20.0, 50.0, 60.0);
+        assert!(bounds.contains_point(30.0, 40.0)); // Inside
+        assert!(bounds.contains_point(10.0, 20.0)); // On edge
+        assert!(!bounds.contains_point(5.0, 40.0)); // Outside left
+        assert!(!bounds.contains_point(30.0, 70.0)); // Outside bottom
+    }
+
+    #[test]
     fn test_font_metrics_default() {
         let metrics = FontMetrics::default();
         assert_eq!(metrics.size, 16.0);
