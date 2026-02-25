@@ -109,8 +109,8 @@ The Grid System is built on three layers:
 └──────────────────────────────────────────────────┘
 ```
 
-1. **Chart Builder API**: The `GridCapableBuilder` trait adds grid methods to all
-   chart builders (scatter, line, box plot, bar, area, heatmap). This is the
+1. **Chart Builder API**: The `GridCapableBuilder` trait adds grid methods to
+   all chart builders (scatter, line, box plot, bar, area, heatmap). This is the
    primary API for most users.
 
 2. **GridSystem**: Manages configuration and delegates to the renderer. Use
@@ -194,12 +194,12 @@ let color: Color = "#cccccc".into();
 
 #### Preset Colors
 
-| Constant             | Value              | Use Case                     |
-| -------------------- | ------------------ | ---------------------------- |
-| `Color::LIGHT_GRID`  | `(0.9, 0.9, 0.9, 0.7)` | Light backgrounds       |
-| `Color::DARK_GRID`   | `(0.3, 0.3, 0.3, 0.8)` | Dark backgrounds        |
-| `Color::SUBTLE_GRID` | `(0.95, 0.95, 0.95, 0.5)` | Minimal styling      |
-| `Color::HIGH_CONTRAST_GRID` | `(0.0, 0.0, 0.0, 0.8)` | Accessibility     |
+| Constant                    | Value                     | Use Case          |
+| --------------------------- | ------------------------- | ----------------- |
+| `Color::LIGHT_GRID`         | `(0.9, 0.9, 0.9, 0.7)`    | Light backgrounds |
+| `Color::DARK_GRID`          | `(0.3, 0.3, 0.3, 0.8)`    | Dark backgrounds  |
+| `Color::SUBTLE_GRID`        | `(0.95, 0.95, 0.95, 0.5)` | Minimal styling   |
+| `Color::HIGH_CONTRAST_GRID` | `(0.0, 0.0, 0.0, 0.8)`    | Accessibility     |
 
 #### Conversion
 
@@ -226,13 +226,13 @@ pub struct ChartBounds {
 
 #### Methods
 
-| Method | Signature | Description |
-| --- | --- | --- |
-| `new` | `fn new(left, right, top, bottom) -> Self` | Create bounds |
-| `width` | `fn width(&self) -> f32` | Width (`right - left`) |
-| `height` | `fn height(&self) -> f32` | Height (`bottom - top`) |
-| `center` | `fn center(&self) -> Vec2` | Center point |
-| `contains` | `fn contains(&self, point: Vec2) -> bool` | Point-in-bounds test |
+| Method     | Signature                                  | Description             |
+| ---------- | ------------------------------------------ | ----------------------- |
+| `new`      | `fn new(left, right, top, bottom) -> Self` | Create bounds           |
+| `width`    | `fn width(&self) -> f32`                   | Width (`right - left`)  |
+| `height`   | `fn height(&self) -> f32`                  | Height (`bottom - top`) |
+| `center`   | `fn center(&self) -> Vec2`                 | Center point            |
+| `contains` | `fn contains(&self, point: Vec2) -> bool`  | Point-in-bounds test    |
 
 #### Example
 
@@ -274,24 +274,24 @@ let config = GridLineConfig::default()
     .with_dash_pattern(vec![5.0, 3.0]);
 ```
 
-| Method | Description |
-| --- | --- |
-| `with_color([f32; 4])` | Set RGBA color |
-| `with_line_width(f32)` | Set pixel width |
-| `with_opacity(f32)` | Set opacity multiplier |
-| `with_dash_pattern(Vec<f32>)` | Enable dashed lines |
-| `disabled()` | Create a disabled config |
-| `minor_default()` | Default config for minor grid lines |
+| Method                        | Description                         |
+| ----------------------------- | ----------------------------------- |
+| `with_color([f32; 4])`        | Set RGBA color                      |
+| `with_line_width(f32)`        | Set pixel width                     |
+| `with_opacity(f32)`           | Set opacity multiplier              |
+| `with_dash_pattern(Vec<f32>)` | Enable dashed lines                 |
+| `disabled()`                  | Create a disabled config            |
+| `minor_default()`             | Default config for minor grid lines |
 
 #### Default Values
 
-| Field | Major Default | Minor Default |
-| --- | --- | --- |
-| `enabled` | `true` | `false` |
-| `color` | `[0.8, 0.8, 0.8, 1.0]` | `[0.9, 0.9, 0.9, 1.0]` |
-| `line_width` | `0.5` | `0.25` |
-| `opacity` | `0.6` | `0.3` |
-| `dash_pattern` | `None` (solid) | `None` (solid) |
+| Field          | Major Default          | Minor Default          |
+| -------------- | ---------------------- | ---------------------- |
+| `enabled`      | `true`                 | `false`                |
+| `color`        | `[0.8, 0.8, 0.8, 1.0]` | `[0.9, 0.9, 0.9, 1.0]` |
+| `line_width`   | `0.5`                  | `0.25`                 |
+| `opacity`      | `0.6`                  | `0.3`                  |
+| `dash_pattern` | `None` (solid)         | `None` (solid)         |
 
 ---
 
@@ -311,11 +311,11 @@ pub struct GridConfiguration {
 
 #### Construction Methods
 
-| Method | Description |
-| --- | --- |
-| `GridConfiguration::default()` | Major H+V grids, minor disabled |
-| `GridConfiguration::horizontal_only()` | Horizontal grids only |
-| `GridConfiguration::vertical_only()` | Vertical grids only |
+| Method                                 | Description                     |
+| -------------------------------------- | ------------------------------- |
+| `GridConfiguration::default()`         | Major H+V grids, minor disabled |
+| `GridConfiguration::horizontal_only()` | Horizontal grids only           |
+| `GridConfiguration::vertical_only()`   | Vertical grids only             |
 
 #### Builder Methods
 
@@ -330,23 +330,23 @@ let config = GridConfiguration::default()
         .with_opacity(0.2));
 ```
 
-| Method | Description |
-| --- | --- |
-| `with_minor_grid()` | Enable minor grid lines |
-| `without_minor_grid()` | Disable minor grid lines |
-| `with_major_grid(GridLineConfig)` | Set major grid config |
-| `with_minor_grid_config(GridLineConfig)` | Set minor grid config |
+| Method                                   | Description              |
+| ---------------------------------------- | ------------------------ |
+| `with_minor_grid()`                      | Enable minor grid lines  |
+| `without_minor_grid()`                   | Disable minor grid lines |
+| `with_major_grid(GridLineConfig)`        | Set major grid config    |
+| `with_minor_grid_config(GridLineConfig)` | Set minor grid config    |
 
 #### Theme Presets
 
-| Method | Major Color | Major Width | Minor | Direction | Best For |
-| --- | --- | --- | --- | --- | --- |
-| `light_theme()` | Black α=0.15 | 0.5 | Off | Both | Bright backgrounds |
-| `dark_theme()` | White α=0.25 | 0.5 | Off | Both | Dark backgrounds |
-| `scientific()` | Gray 0.3 | 0.75 | On (gray 0.7, α=0.4) | Both | Publications |
-| `business()` | Gray 0.9 | 0.5 | Off | Horizontal only | Dashboards |
-| `minimal()` | Gray 0.95 | 0.25 | Off | Both | Minimalist design |
-| `high_contrast()` | Black | 1.0 | On (gray 0.4) | Both | Accessibility |
+| Method            | Major Color  | Major Width | Minor                | Direction       | Best For           |
+| ----------------- | ------------ | ----------- | -------------------- | --------------- | ------------------ |
+| `light_theme()`   | Black α=0.15 | 0.5         | Off                  | Both            | Bright backgrounds |
+| `dark_theme()`    | White α=0.25 | 0.5         | Off                  | Both            | Dark backgrounds   |
+| `scientific()`    | Gray 0.3     | 0.75        | On (gray 0.7, α=0.4) | Both            | Publications       |
+| `business()`      | Gray 0.9     | 0.5         | Off                  | Horizontal only | Dashboards         |
+| `minimal()`       | Gray 0.95    | 0.25        | Off                  | Both            | Minimalist design  |
+| `high_contrast()` | Black        | 1.0         | On (gray 0.4)        | Both            | Accessibility      |
 
 ---
 
@@ -356,18 +356,18 @@ GPU-accelerated grid line renderer with geometry caching.
 
 #### Key Methods
 
-| Method | Description |
-| --- | --- |
-| `new()` | Create an empty renderer |
-| `render_grid(...)` | Generate + render grid lines (cached) |
+| Method                     | Description                                       |
+| -------------------------- | ------------------------------------------------- |
+| `new()`                    | Create an empty renderer                          |
+| `render_grid(...)`         | Generate + render grid lines (cached)             |
 | `generate_grid_lines(...)` | Generate lines without rendering (for benchmarks) |
-| `clear_grid_lines()` | Remove all generated lines |
-| `total_line_count()` | Count of all generated lines |
-| `major_lines()` | Iterator over major line attributes |
-| `minor_lines()` | Iterator over minor line attributes |
-| `invalidate_cache()` | Force regeneration on next render |
-| `cache_hit_rate()` | Cache efficiency (0.0–1.0) |
-| `cache_stats()` | `(hits, misses)` tuple |
+| `clear_grid_lines()`       | Remove all generated lines                        |
+| `total_line_count()`       | Count of all generated lines                      |
+| `major_lines()`            | Iterator over major line attributes               |
+| `minor_lines()`            | Iterator over minor line attributes               |
+| `invalidate_cache()`       | Force regeneration on next render                 |
+| `cache_hit_rate()`         | Cache efficiency (0.0–1.0)                        |
+| `cache_stats()`            | `(hits, misses)` tuple                            |
 
 #### Static Line Generation
 
@@ -402,15 +402,15 @@ let mut grid = GridSystem::new(GridConfiguration::scientific());
 let mut grid = GridSystem::with_defaults();
 ```
 
-| Method | Description |
-| --- | --- |
-| `new(config)` | Create with specific configuration |
-| `with_defaults()` | Create with default configuration |
-| `render_grid(...)` | Render using internal config |
-| `set_configuration(config)` | Update configuration |
-| `configuration()` | Get current configuration reference |
-| `total_line_count()` | Number of generated lines |
-| `is_grid_enabled()` | Whether any grid lines will render |
+| Method                      | Description                         |
+| --------------------------- | ----------------------------------- |
+| `new(config)`               | Create with specific configuration  |
+| `with_defaults()`           | Create with default configuration   |
+| `render_grid(...)`          | Render using internal config        |
+| `set_configuration(config)` | Update configuration                |
+| `configuration()`           | Get current configuration reference |
+| `total_line_count()`        | Number of generated lines           |
+| `is_grid_enabled()`         | Whether any grid lines will render  |
 
 ---
 
@@ -432,14 +432,14 @@ coordinator.render_axes_and_grid(
 )?;
 ```
 
-| Method | Description |
-| --- | --- |
-| `new(config)` | Create coordinator |
-| `render_axes_and_grid(...)` | Render grid (behind) then axes (front) |
-| `set_grid_configuration(config)` | Update grid config |
-| `grid_configuration()` | Get current config reference |
-| `total_grid_line_count()` | Number of grid lines |
-| `is_grid_enabled()` | Whether grid rendering is active |
+| Method                           | Description                            |
+| -------------------------------- | -------------------------------------- |
+| `new(config)`                    | Create coordinator                     |
+| `render_axes_and_grid(...)`      | Render grid (behind) then axes (front) |
+| `set_grid_configuration(config)` | Update grid config                     |
+| `grid_configuration()`           | Get current config reference           |
+| `total_grid_line_count()`        | Number of grid lines                   |
+| `is_grid_enabled()`              | Whether grid rendering is active       |
 
 ---
 
@@ -488,14 +488,14 @@ fn high_contrast_grid(self) -> Self;
 
 ### Choosing the Right Theme
 
-| Scenario | Recommended Theme | Why |
-| --- | --- | --- |
-| Web application (light) | `light_grid()` | Subtle on white backgrounds |
-| Dashboard (dark mode) | `dark_grid()` | Visible on dark backgrounds |
-| Scientific paper | `scientific_grid()` | Minor grids for precision |
-| Executive report | `business_grid()` | Clean horizontal-only look |
-| Design-focused | `minimal_grid()` | Nearly invisible support lines |
-| Accessible design | `high_contrast_grid()` | Maximum visibility for all users |
+| Scenario                | Recommended Theme      | Why                              |
+| ----------------------- | ---------------------- | -------------------------------- |
+| Web application (light) | `light_grid()`         | Subtle on white backgrounds      |
+| Dashboard (dark mode)   | `dark_grid()`          | Visible on dark backgrounds      |
+| Scientific paper        | `scientific_grid()`    | Minor grids for precision        |
+| Executive report        | `business_grid()`      | Clean horizontal-only look       |
+| Design-focused          | `minimal_grid()`       | Nearly invisible support lines   |
+| Accessible design       | `high_contrast_grid()` | Maximum visibility for all users |
 
 ### Custom Grid Styling
 
@@ -741,21 +741,21 @@ The Grid Line Rendering System is designed for high performance:
 
 #### Grid Line Count
 
-| Range | Performance Impact | Recommendation |
-| --- | --- | --- |
-| 1–20 | Negligible | Default range, optimal |
-| 20–50 | Negligible | Good for detailed views |
-| 50–100 | Minimal | Acceptable for dense data |
-| 100+ | May affect lower-end devices | Console warning emitted |
+| Range  | Performance Impact           | Recommendation            |
+| ------ | ---------------------------- | ------------------------- |
+| 1–20   | Negligible                   | Default range, optimal    |
+| 20–50  | Negligible                   | Good for detailed views   |
+| 50–100 | Minimal                      | Acceptable for dense data |
+| 100+   | May affect lower-end devices | Console warning emitted   |
 
 #### Configuration Choices
 
-| Configuration | Relative Cost | Use Case |
-| --- | --- | --- |
-| Major grids only | Baseline | Most visualizations |
-| Major + minor grids | ~1.5–2× baseline | Scientific precision |
-| One direction only | ~0.5× baseline | Business dashboards |
-| Custom dash patterns | Minimal extra cost | Styling flexibility |
+| Configuration        | Relative Cost      | Use Case             |
+| -------------------- | ------------------ | -------------------- |
+| Major grids only     | Baseline           | Most visualizations  |
+| Major + minor grids  | ~1.5–2× baseline   | Scientific precision |
+| One direction only   | ~0.5× baseline     | Business dashboards  |
+| Custom dash patterns | Minimal extra cost | Styling flexibility  |
 
 #### Caching Behavior
 
@@ -766,8 +766,8 @@ The `GridRenderer` caches generated geometry based on a fingerprint hash of:
 - Configuration flags (enabled state, line widths)
 
 **Cache hits** skip geometry regeneration entirely, making grid rendering
-virtually free for static views. The cache is automatically invalidated when
-any input changes.
+virtually free for static views. The cache is automatically invalidated when any
+input changes.
 
 Monitor cache performance:
 
@@ -785,11 +785,11 @@ renderer.invalidate_cache();
 
 ### Platform Considerations
 
-| Platform | Expected Performance |
-| --- | --- |
-| Native desktop (Vulkan/Metal/DX12) | Full performance |
-| WebAssembly (WebGPU) | 85–95% of native |
-| Mobile (native) | Full performance |
+| Platform                           | Expected Performance |
+| ---------------------------------- | -------------------- |
+| Native desktop (Vulkan/Metal/DX12) | Full performance     |
+| WebAssembly (WebGPU)               | 85–95% of native     |
+| Mobile (native)                    | Full performance     |
 
 ---
 

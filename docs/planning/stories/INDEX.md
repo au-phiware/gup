@@ -250,21 +250,21 @@ reorganisation._
 
 ### Axis and Grid System (Stories 89-98)
 
-| Story                                                            | Title                                       | Status      | Priority | Points |
-| ---------------------------------------------------------------- | ------------------------------------------- | ----------- | -------- | ------ |
-| [GUP-089](GUP-089_Core_Axis_System_Infrastructure.md)            | Core Axis System Infrastructure             | ✅ Complete | High     | 13     |
-| [GUP-090](GUP-090_Automatic_Tick_Generation_Algorithm.md)        | Automatic Tick Generation Algorithm         | ✅ Complete | High     | 8      |
-| [GUP-091](GUP-091_Grid_Line_Rendering_System.md)                 | Grid Line Rendering System                  | ✅ Complete | High     | 5      |
-| [GUP-092](GUP-092_Label_Formatting_and_Positioning.md)           | Label Formatting and Positioning (expanded) | ✅ Complete | Medium   | 10     |
-| [GUP-093](GUP-093_Scale_Axis_Integration_System.md)              | Scale-Axis Integration System               | ✅ Complete | Medium   | 6      |
-| [GUP-094](GUP-094_Axis_Performance_Optimization.md)              | Axis Performance Optimization               | ✅ Complete | Low      | 4      |
-| [GUP-095](GUP-095_Grid_Visual_Rendering_Integration.md)          | Grid Visual Rendering Integration           | ✅ Complete | High     | 8      |
-| [GUP-096](GUP-096_Grid_Performance_Benchmarking.md)              | Grid Performance Benchmarking               | ✅ Complete | Medium   | 5      |
-| [GUP-097](GUP-097_Chart_Builder_Grid_API_Enhancement.md)         | Chart Builder Grid API Enhancement          | ✅ Complete | Medium   | 6      |
+| Story                                                            | Title                                       | Status         | Priority | Points |
+| ---------------------------------------------------------------- | ------------------------------------------- | -------------- | -------- | ------ |
+| [GUP-089](GUP-089_Core_Axis_System_Infrastructure.md)            | Core Axis System Infrastructure             | ✅ Complete    | High     | 13     |
+| [GUP-090](GUP-090_Automatic_Tick_Generation_Algorithm.md)        | Automatic Tick Generation Algorithm         | ✅ Complete    | High     | 8      |
+| [GUP-091](GUP-091_Grid_Line_Rendering_System.md)                 | Grid Line Rendering System                  | ✅ Complete    | High     | 5      |
+| [GUP-092](GUP-092_Label_Formatting_and_Positioning.md)           | Label Formatting and Positioning (expanded) | ✅ Complete    | Medium   | 10     |
+| [GUP-093](GUP-093_Scale_Axis_Integration_System.md)              | Scale-Axis Integration System               | ✅ Complete    | Medium   | 6      |
+| [GUP-094](GUP-094_Axis_Performance_Optimization.md)              | Axis Performance Optimization               | ✅ Complete    | Low      | 4      |
+| [GUP-095](GUP-095_Grid_Visual_Rendering_Integration.md)          | Grid Visual Rendering Integration           | ✅ Complete    | High     | 8      |
+| [GUP-096](GUP-096_Grid_Performance_Benchmarking.md)              | Grid Performance Benchmarking               | ✅ Complete    | Medium   | 5      |
+| [GUP-097](GUP-097_Chart_Builder_Grid_API_Enhancement.md)         | Chart Builder Grid API Enhancement          | ✅ Complete    | Medium   | 6      |
 | [GUP-098](GUP-098_Grid_System_Documentation.md)                  | Grid System Documentation                   | 🚧 In Progress | Medium   | 4      |
-| [GUP-204](GUP-204_GPU_Instance_Rendering_Axis_Ticks.md)          | GPU Instance Rendering for Axis Ticks       | 📋 Planned  | Low      | 3      |
-| [GUP-205](GUP-205_SDF_Text_Rendering_Performance_Tuning.md)      | SDF Text Rendering Performance Tuning       | 📋 Planned  | Low      | 3      |
-| [GUP-206](GUP-206_Cross_Platform_Axis_Performance_Validation.md) | Cross-Platform Axis Performance Validation  | 📋 Planned  | Low      | 3      |
+| [GUP-204](GUP-204_GPU_Instance_Rendering_Axis_Ticks.md)          | GPU Instance Rendering for Axis Ticks       | 📋 Planned     | Low      | 3      |
+| [GUP-205](GUP-205_SDF_Text_Rendering_Performance_Tuning.md)      | SDF Text Rendering Performance Tuning       | 📋 Planned     | Low      | 3      |
+| [GUP-206](GUP-206_Cross_Platform_Axis_Performance_Validation.md) | Cross-Platform Axis Performance Validation  | 📋 Planned     | Low      | 3      |
 
 _Note: GUP-092 appears twice — once as the 8-pt story in the Post-GUP-021 table
 (basic label formatting, complete) and once here as the 10-pt expanded axis/grid

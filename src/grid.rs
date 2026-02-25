@@ -2045,7 +2045,9 @@ mod tests {
         let with = GridConfiguration::default().with_minor_grid();
         assert!(with.minor_grid.enabled);
 
-        let without = GridConfiguration::default().with_minor_grid().without_minor_grid();
+        let without = GridConfiguration::default()
+            .with_minor_grid()
+            .without_minor_grid();
         assert!(!without.minor_grid.enabled);
     }
 
@@ -2085,10 +2087,10 @@ mod tests {
 
         let line_count = renderer
             .generate_grid_lines(
-                &[20.0, 40.0, 60.0, 80.0], // horizontal ticks
-                &[25.0, 50.0, 75.0],        // vertical ticks
+                &[20.0, 40.0, 60.0, 80.0],       // horizontal ticks
+                &[25.0, 50.0, 75.0],             // vertical ticks
                 &[10.0, 30.0, 50.0, 70.0, 90.0], // horizontal minor
-                &[12.5, 37.5, 62.5, 87.5],        // vertical minor
+                &[12.5, 37.5, 62.5, 87.5],       // vertical minor
                 bounds,
                 &config,
             )
@@ -2185,13 +2187,8 @@ mod tests {
 
         let bounds = ChartBounds::new(0.0, 100.0, 0.0, 100.0);
         let mut lines = Vec::new();
-        GridRenderer::generate_horizontal_lines_static(
-            &[50.0],
-            bounds,
-            &config,
-            &mut lines,
-        )
-        .unwrap();
+        GridRenderer::generate_horizontal_lines_static(&[50.0], bounds, &config, &mut lines)
+            .unwrap();
 
         // The generated line should have effective alpha = 0.8 * 0.5 = 0.4
         assert_eq!(lines.len(), 1);
@@ -2215,24 +2212,14 @@ mod tests {
         // Ticks outside bounds should be filtered
         let ticks_outside = vec![50.0, 250.0]; // Both outside
         let mut lines = Vec::new();
-        GridRenderer::generate_horizontal_lines_static(
-            &ticks_outside,
-            bounds,
-            &config,
-            &mut lines,
-        )
-        .unwrap();
+        GridRenderer::generate_horizontal_lines_static(&ticks_outside, bounds, &config, &mut lines)
+            .unwrap();
         assert_eq!(lines.len(), 0);
 
         // Ticks inside bounds should be included
         let ticks_inside = vec![120.0, 150.0, 180.0];
-        GridRenderer::generate_horizontal_lines_static(
-            &ticks_inside,
-            bounds,
-            &config,
-            &mut lines,
-        )
-        .unwrap();
+        GridRenderer::generate_horizontal_lines_static(&ticks_inside, bounds, &config, &mut lines)
+            .unwrap();
         assert_eq!(lines.len(), 3);
     }
 
