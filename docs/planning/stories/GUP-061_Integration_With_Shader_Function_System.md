@@ -1,6 +1,6 @@
 # GUP-061: Integration with Existing Shader Function System
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
