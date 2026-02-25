@@ -42,22 +42,22 @@ epic and status.
 
 ### Future Improvements - Post GUP-021 (Stories 26+)
 
-| Story                                                        | Title                                      | Status      | Priority | Points |
-| ------------------------------------------------------------ | ------------------------------------------ | ----------- | -------- | ------ |
-| [GUP-026](GUP-026_Data_Source_Merge_Implementation.md)       | Data Source Merge Implementation           | ✅ Complete | Medium   | 5      |
-| [GUP-027](GUP-027_GPU_Blend_State_Integration.md)            | GPU Blend State Integration                | ✅ Complete | High     | 3      |
-| [GUP-028](GUP-028_Composition_Performance_Optimization.md)   | Composition Performance Optimization       | ✅ Complete | Medium   | 4      |
-| ~~[GUP-085](GUP-085_Line_Rectangle_Mark_Implementation.md)~~ | ~~Line and Rectangle Mark Impl.~~          | ⿻ Copy     | High     | 5      |
-| [GUP-086](GUP-086_Observable_Plot_Migration_Guide.md)        | Observable Plot Migration Guide            | ✅ Complete | Low      | 2      |
-| [GUP-087](GUP-087_Chart_Builder_Performance_Optimization.md) | Chart Builder Performance Optimization     | ✅ Complete | Medium   | 3      |
-| [GUP-088](GUP-088_External_Library_Integration_System.md)    | External Library Integration System        | ✅ Complete | High     | 5      |
-| [GUP-092](GUP-092_Label_Formatting_and_Positioning.md)       | Label Formatting and Positioning           | ✅ Complete | High     | 8      |
-| [GUP-099](GUP-099_GPU_Text_Rendering_Pipeline.md)            | GPU Text Rendering Pipeline Implementation | ✅ Complete | High     | 8      |
-| [GUP-100](GUP-100_Visual_Chart_Axis_Integration.md)          | Visual Chart Axis Integration              | ✅ Complete | Medium   | 8      |
-| [GUP-101](GUP-101_Label_Collision_Detection_Enhancement.md)  | Label Collision Detection Enhancement      | ✅ Complete | Medium   | 5      |
-| [GUP-102](GUP-102_Demo_GPU_Resource_Management_Fixes.md)     | Demo GPU Resource Management Fixes         | ✅ Complete | High     | 3      |
-| [GUP-103](GUP-103_Comprehensive_Chart_Examples_Suite.md)     | Comprehensive Chart Examples Suite         | ✅ Complete | Medium   | 8      |
-| [GUP-207](GUP-207_Fix_Preexisting_Doctest_Failures.md)       | Fix Pre-existing Doctest Failures          | 🚧 In Progress  | Medium   | 2      |
+| Story                                                        | Title                                      | Status         | Priority | Points |
+| ------------------------------------------------------------ | ------------------------------------------ | -------------- | -------- | ------ |
+| [GUP-026](GUP-026_Data_Source_Merge_Implementation.md)       | Data Source Merge Implementation           | ✅ Complete    | Medium   | 5      |
+| [GUP-027](GUP-027_GPU_Blend_State_Integration.md)            | GPU Blend State Integration                | ✅ Complete    | High     | 3      |
+| [GUP-028](GUP-028_Composition_Performance_Optimization.md)   | Composition Performance Optimization       | ✅ Complete    | Medium   | 4      |
+| ~~[GUP-085](GUP-085_Line_Rectangle_Mark_Implementation.md)~~ | ~~Line and Rectangle Mark Impl.~~          | ⿻ Copy        | High     | 5      |
+| [GUP-086](GUP-086_Observable_Plot_Migration_Guide.md)        | Observable Plot Migration Guide            | ✅ Complete    | Low      | 2      |
+| [GUP-087](GUP-087_Chart_Builder_Performance_Optimization.md) | Chart Builder Performance Optimization     | ✅ Complete    | Medium   | 3      |
+| [GUP-088](GUP-088_External_Library_Integration_System.md)    | External Library Integration System        | ✅ Complete    | High     | 5      |
+| [GUP-092](GUP-092_Label_Formatting_and_Positioning.md)       | Label Formatting and Positioning           | ✅ Complete    | High     | 8      |
+| [GUP-099](GUP-099_GPU_Text_Rendering_Pipeline.md)            | GPU Text Rendering Pipeline Implementation | ✅ Complete    | High     | 8      |
+| [GUP-100](GUP-100_Visual_Chart_Axis_Integration.md)          | Visual Chart Axis Integration              | ✅ Complete    | Medium   | 8      |
+| [GUP-101](GUP-101_Label_Collision_Detection_Enhancement.md)  | Label Collision Detection Enhancement      | ✅ Complete    | Medium   | 5      |
+| [GUP-102](GUP-102_Demo_GPU_Resource_Management_Fixes.md)     | Demo GPU Resource Management Fixes         | ✅ Complete    | High     | 3      |
+| [GUP-103](GUP-103_Comprehensive_Chart_Examples_Suite.md)     | Comprehensive Chart Examples Suite         | ✅ Complete    | Medium   | 8      |
+| [GUP-207](GUP-207_Fix_Preexisting_Doctest_Failures.md)       | Fix Pre-existing Doctest Failures          | ✅ Complete | Medium   | 2      |
 
 ### Post GUP-009 Stories - Mark System Enhancement (Stories 67+)
 

@@ -6,7 +6,7 @@
 **Theme**: Code Quality and Maintenance  
 **Priority**: Medium  
 **Story Points**: 2  
-**Status**: 🚧 In Progress
+**Status**: ✅ Complete (2025-07-17)
 
 ## Problem Statement
 
@@ -17,14 +17,14 @@ it harder to detect new doctest regressions.
 
 ## Acceptance Criteria
 
-- [ ] All doctests in `src/context.rs` pass (fix `new_headless()` → `headless()`
+- [x] All doctests in `src/context.rs` pass (fix `new_headless()` → `headless()`
       API change)
-- [ ] All doctests in `src/chart_builder/optimized_accessor.rs` pass (fix
+- [x] All doctests in `src/chart_builder/optimized_accessor.rs` pass (fix
       missing macro import)
-- [ ] All doctests in `src/mixable/merge.rs` pass (fix missing
+- [x] All doctests in `src/mixable/merge.rs` pass (fix missing
       `#[derive(Debug)]`)
-- [ ] `cargo test --doc` reports 0 failures
-- [ ] No regressions in existing tests
+- [x] `cargo test --doc` reports 0 failures
+- [x] No regressions in existing tests
 
 ## Technical Tasks
 
@@ -46,6 +46,36 @@ None — these are independent fixes.
 
 ## Definition of Done
 
-- [ ] All 6 failing doctests fixed
-- [ ] `cargo test --doc` passes with 0 failures
-- [ ] No regressions
+- [x] All 6 failing doctests fixed
+- [x] `cargo test --doc` passes with 0 failures
+- [x] No regressions
+
+## Implementation Summary
+
+### What was implemented
+
+Fixed all 6 pre-existing doctest compilation failures across 4 source files:
+
+1. **`src/context.rs`** (2 doctests): Updated `new_headless()` → `headless()`
+   with proper async wrapper (`async fn example()`) and dummy window type
+   implementing `HasWindowHandle`/`HasDisplayHandle` traits (replacing
+   `Arc::new(())` which doesn't implement these).
+2. **`src/mixable/merge.rs`** (1 doctest): Added missing `#[derive(Debug)]` to
+   `MyChart` struct in the `Mergeable` trait doctest.
+3. **`src/chart_builder/optimized_accessor.rs`** (1 doctest): Added missing
+   `use gup::field_accessor;` import for the `field_accessor!` macro.
+4. **`src/chart_builder.rs`** (2 doctests): Fixed `Circle` import path from
+   `gup::selection::Circle` to `gup::Circle` in both `generate_axis_geometry`
+   and `generate_axis_geometry_resolved` doctests.
+
+### Key files changed
+
+- `src/context.rs`
+- `src/mixable/merge.rs`
+- `src/chart_builder/optimized_accessor.rs`
+- `src/chart_builder.rs`
+
+### Test results
+
+- 106 doctests pass (105 ok + 1 compile-fail), 49 ignored, 0 failures
+- 1330+ unit/integration tests pass with 0 failures
