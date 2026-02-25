@@ -151,6 +151,8 @@ impl DebugApp {
                                 layout_engine,
                                 screen_width: 800.0,
                                 screen_height: 400.0,
+                                viewport_bounds: None,
+                                clipping_config: None,
                             };
 
                             if let Err(e) =

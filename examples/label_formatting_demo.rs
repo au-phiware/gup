@@ -321,6 +321,8 @@ impl DataVisualizationRenderer {
                         layout_engine,
                         screen_width: 1200.0,
                         screen_height: 800.0,
+                        viewport_bounds: None,
+                        clipping_config: None,
                     };
 
                     if let Err(e) =

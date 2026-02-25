@@ -39,6 +39,8 @@
 //!     //     layout_engine: &mut layout_engine,
 //!     //     screen_width: 800.0,
 //!     //     screen_height: 600.0,
+//!     //     viewport_bounds: None,
+//!     //     clipping_config: None,
 //!     // };
 //!
 //!     // Render the text within a frame

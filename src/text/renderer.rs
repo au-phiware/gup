@@ -66,6 +66,11 @@ pub struct TextRenderConfig<'a> {
     pub layout_engine: &'a mut TextLayoutEngine,
     pub screen_width: f32,
     pub screen_height: f32,
+    /// Optional viewport bounds for clipping detection.
+    /// When `None`, no clipping is applied (backward compatible).
+    pub viewport_bounds: Option<&'a ViewportBounds>,
+    /// Clipping strategy configuration. Only used when `viewport_bounds` is `Some`.
+    pub clipping_config: Option<&'a ClippingStrategyConfig>,
 }
 
 impl TextRenderer {
@@ -335,14 +340,31 @@ impl TextRenderer {
             )?;
         }
 
-        // Layout the text
-        let layout_result = config.layout_engine.layout_text(
-            config.text,
-            config.position,
-            config.style,
-            config.font_atlas,
-            None, // TODO: Collision constraints will be added in a future text layout story
-        )?;
+        // Layout the text — with or without clipping
+        let layout_result =
+            if let Some(viewport_bounds) = config.viewport_bounds {
+                let clipping_config = config
+                    .clipping_config
+                    .cloned()
+                    .unwrap_or_default();
+                config.layout_engine.layout_text_with_clipping(
+                    config.text,
+                    config.position,
+                    config.style,
+                    config.font_atlas,
+                    None,
+                    viewport_bounds,
+                    &clipping_config,
+                )?
+            } else {
+                config.layout_engine.layout_text(
+                    config.text,
+                    config.position,
+                    config.style,
+                    config.font_atlas,
+                    None,
+                )?
+            };
 
         // Add to internal batches for later rendering
         self.add_glyph_batch(&layout_result.glyphs)?;
@@ -382,14 +404,31 @@ impl TextRenderer {
                 .ensure_glyph(device, queue, ch, config.style.font_size)?;
         }
 
-        // Layout the text
-        let layout_result = config.layout_engine.layout_text(
-            config.text,
-            config.position,
-            config.style,
-            config.font_atlas,
-            None, // TODO: Collision constraints will be added in a future text layout story
-        )?;
+        // Layout the text — with or without clipping
+        let layout_result =
+            if let Some(viewport_bounds) = config.viewport_bounds {
+                let clipping_config = config
+                    .clipping_config
+                    .cloned()
+                    .unwrap_or_default();
+                config.layout_engine.layout_text_with_clipping(
+                    config.text,
+                    config.position,
+                    config.style,
+                    config.font_atlas,
+                    None,
+                    viewport_bounds,
+                    &clipping_config,
+                )?
+            } else {
+                config.layout_engine.layout_text(
+                    config.text,
+                    config.position,
+                    config.style,
+                    config.font_atlas,
+                    None,
+                )?
+            };
 
         if layout_result.glyphs.is_empty() {
             return Ok(layout_result.bounds);

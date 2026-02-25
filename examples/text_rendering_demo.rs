@@ -208,6 +208,8 @@ impl TextRenderingApp {
                                     layout_engine,
                                     screen_width,
                                     screen_height,
+                                    viewport_bounds: None,
+                                    clipping_config: None,
                                 };
 
                                 if text_renderer.queue_text(&frame, &mut config).is_err() {
@@ -239,6 +241,8 @@ impl TextRenderingApp {
                                     layout_engine,
                                     screen_width,
                                     screen_height,
+                                    viewport_bounds: None,
+                                    clipping_config: None,
                                 };
 
                                 if text_renderer.queue_text(&frame, &mut config).is_err() {

@@ -221,6 +221,8 @@ impl AxisRenderer {
                 layout_engine,
                 screen_width: viewport_size.0,
                 screen_height: viewport_size.1,
+                viewport_bounds: None,
+                clipping_config: None,
             };
 
             if let Err(e) = text_renderer.queue_text(frame, &mut text_config) {
