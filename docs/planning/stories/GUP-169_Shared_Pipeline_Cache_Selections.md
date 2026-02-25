@@ -1,6 +1,6 @@
 # GUP-169: Shared Pipeline Cache for Selections
 
-**Status**: 🚧 In Progress
+**Status**: ✅ Complete (2025-07-17)
 
 ## Story Overview
 
@@ -24,11 +24,11 @@ creation overhead is eliminated for repeated mark types
 
 ## Acceptance Criteria
 
-- [ ] `PipelineCache` struct holds `HashMap<TypeId, Arc<RenderPipeline>>`
-- [ ] `Selection::prepare_render()` accepts an optional `&mut PipelineCache`
-- [ ] Cache miss creates and caches the pipeline; cache hit returns Arc clone
-- [ ] Cache invalidation on device loss or surface format change
-- [ ] Benchmark shows reduced pipeline creation time for 100 Selections
+- [x] `PipelineCache` struct holds `HashMap<TypeId, Arc<RenderPipeline>>`
+- [x] `Selection::prepare_render()` accepts an optional `&mut PipelineCache`
+- [x] Cache miss creates and caches the pipeline; cache hit returns Arc clone
+- [x] Cache invalidation on device loss or surface format change
+- [x] Benchmark shows reduced pipeline creation time for 100 Selections
 
 ## Dependencies
 
@@ -43,6 +43,29 @@ creation overhead is eliminated for repeated mark types
 
 ## Definition of Done
 
-- [ ] All acceptance criteria met
-- [ ] No regression in existing tests
-- [ ] `mask all-fix` clean
+- [x] All acceptance criteria met
+- [x] No regression in existing tests
+- [x] `mask all-fix` clean
+
+## Implementation Summary
+
+### Key Files Changed
+
+- **`src/pipeline_cache.rs`** (new) — `PipelineCache` struct with
+  `HashMap<TypeId, Arc<RenderPipeline>>`, stats tracking, surface format
+  invalidation, and `get_or_create::<M>()` method.
+- **`src/selection.rs`** — `SelectionRenderState.pipeline` changed from
+  `wgpu::RenderPipeline` to `Arc<wgpu::RenderPipeline>`. `prepare_render()` and
+  `prepare_render_bound()` now accept `cache: Option<&mut PipelineCache>`.
+- **`src/lib.rs`** — Registered `pipeline_cache` module and exported
+  `PipelineCache`.
+- **`src/prelude.rs`** — Added `PipelineCache` to the prelude.
+- **`examples/boxplot_rendering_demo.rs`** — Updated caller to pass `None`.
+- **`examples/attr_binding_demo.rs`** — Updated callers to pass `None`.
+
+### Test Counts
+
+- 9 unit tests for `PipelineCache` (stats, invalidation, format tracking)
+- 6 GPU integration tests (10-selection sharing, mark type distinction, clear
+  rebuild, get_or_create, 100-selection reuse, benchmark)
+- Total: 15 new tests; 933 existing tests continue to pass
