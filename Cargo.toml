@@ -129,6 +129,10 @@ harness = false
 name = "compute_filter_benchmarks"
 harness = false
 
+[[bench]]
+name = "mark_performance_benchmarks"
+harness = false
+
 [[example]]
 name = "blend_modes_showcase"
 path = "examples/blend_modes_showcase.rs"
