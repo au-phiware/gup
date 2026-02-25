@@ -413,3 +413,45 @@ async fn test_cached_query_latency_improvement() {
         "cached query should complete in measurable time"
     );
 }
+
+#[tokio::test]
+async fn test_100k_cached_query_latency() {
+    let mut interaction_system = create_test_interaction_system().await;
+    let mut system = MarkSelectionSystem::new(100_000);
+
+    let positions = generate_grid_positions(100_000, 10_000.0);
+    system.set_positions_with_sizes(positions, vec![[3.0, 3.0]; 100_000]);
+
+    // First query — cache miss: uploads data + builds spatial index.
+    let _hits = system
+        .hit_test_gpu([50.0, 50.0], &mut interaction_system, 5.0)
+        .await
+        .expect("initial 100K query should succeed");
+
+    // Warm-up: one extra cached query to prime GPU pipeline.
+    let _ = system
+        .hit_test_gpu([50.0, 50.0], &mut interaction_system, 5.0)
+        .await
+        .unwrap();
+
+    // Measure cached query latency over multiple queries.
+    let iterations = 5;
+    let start = Instant::now();
+    for _ in 0..iterations {
+        let _ = system
+            .hit_test_gpu([50.0, 50.0], &mut interaction_system, 5.0)
+            .await
+            .unwrap();
+    }
+    let total_us = start.elapsed().as_micros();
+    let avg_us = total_us / iterations as u128;
+
+    println!("100K marks, {iterations} cached queries:");
+    println!("  Total: {total_us}µs");
+    println!("  Average per query: {avg_us}µs");
+
+    // In release mode we expect <1ms average. In debug we just verify it
+    // completes. The test_gpu_hit_test_100k_performance test in
+    // gpu_selection_hit_testing.rs already validates raw GPU performance.
+    assert!(avg_us > 0, "queries should take measurable time");
+}

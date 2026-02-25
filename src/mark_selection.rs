@@ -1456,6 +1456,43 @@ impl MarkSelectionSystem {
             .collect()
     }
 
+    /// Ensure element data is uploaded to the GPU, using the version-based
+    /// cache to skip redundant uploads. Returns `false` if there is no data
+    /// to upload (positions not set or empty).
+    async fn ensure_element_data_uploaded(
+        &self,
+        interaction_system: &mut InteractionSystem,
+    ) -> GupResult<bool> {
+        let positions = match &self.positions {
+            Some(p) => p,
+            None => return Ok(false),
+        };
+        if positions.is_empty() {
+            return Ok(false);
+        }
+
+        // Fast path: if the InteractionSystem already has our data cached,
+        // skip the CPU-side element construction entirely.
+        if self.element_data_version != 0
+            && interaction_system.cached_element_version() == self.element_data_version
+            && interaction_system.cached_element_count() == positions.len()
+        {
+            return Ok(true);
+        }
+
+        // Cache miss — build and upload element data.
+        let elements = self.build_element_data();
+        if elements.is_empty() {
+            return Ok(false);
+        }
+
+        interaction_system
+            .upload_element_data_cached(&elements, self.element_data_version)
+            .await?;
+
+        Ok(true)
+    }
+
     /// Perform a GPU-accelerated point hit test.
     ///
     /// Dispatches the query to `interaction_system` and returns mark IDs sorted
@@ -1476,19 +1513,12 @@ impl MarkSelectionSystem {
         interaction_system: &mut InteractionSystem,
         hit_radius: f32,
     ) -> GupResult<Vec<u32>> {
-        if self.positions.is_none() {
+        if !self
+            .ensure_element_data_uploaded(interaction_system)
+            .await?
+        {
             return Ok(self.hit_test(position, hit_radius));
         }
-
-        let elements = self.build_element_data();
-        if elements.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        // Upload with caching — only re-uploads if version changed.
-        interaction_system
-            .upload_element_data_cached(&elements, self.element_data_version)
-            .await?;
 
         // Query using cached GPU-resident data.
         let query_pos = Vec2::new(position[0], position[1]);
@@ -1510,19 +1540,12 @@ impl MarkSelectionSystem {
         rect: &Rect,
         interaction_system: &mut InteractionSystem,
     ) -> GupResult<Vec<u32>> {
-        if self.positions.is_none() {
+        if !self
+            .ensure_element_data_uploaded(interaction_system)
+            .await?
+        {
             return Ok(self.rect_hit_test(rect));
         }
-
-        let elements = self.build_element_data();
-        if elements.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        // Upload with caching.
-        interaction_system
-            .upload_element_data_cached(&elements, self.element_data_version)
-            .await?;
 
         // Query using cached GPU-resident data.
         let hits = interaction_system.query_region_cached(*rect).await?;
