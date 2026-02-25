@@ -41,9 +41,17 @@ struct InteractionResult {
     _padding1: u32,
 }
 
+struct HitTestConfig {
+    query_count: u32,      // Actual number of queries dispatched
+    _padding0: u32,
+    _padding1: u32,
+    _padding2: u32,
+}
+
 @group(0) @binding(0) var<storage, read> elements: array<ElementData>;
 @group(0) @binding(1) var<storage, read> queries: array<InteractionQuery>;
 @group(0) @binding(2) var<storage, read_write> results: array<InteractionResult>;
+@group(0) @binding(3) var<uniform> config: HitTestConfig;
 
 // Shared memory for query caching to reduce global memory accesses
 var<workgroup> shared_queries: array<InteractionQuery, 8>;
@@ -57,13 +65,13 @@ fn hit_test_main(@builtin(global_invocation_id) global_id: vec3<u32>, @builtin(l
     let local_thread_id = local_id.x;
 
     // Bounds checking
-    if (element_index >= arrayLength(&elements) || query_index >= arrayLength(&queries)) {
+    if (element_index >= arrayLength(&elements) || query_index >= config.query_count) {
         return;
     }
 
     // Cache frequently accessed queries in shared memory
     // Each workgroup loads up to 8 queries into shared memory
-    if (local_thread_id < 8u && query_index + local_thread_id < arrayLength(&queries)) {
+    if (local_thread_id < 8u && query_index + local_thread_id < config.query_count) {
         shared_queries[local_thread_id] = queries[query_index + local_thread_id];
     }
     workgroupBarrier();
@@ -79,7 +87,10 @@ fn hit_test_main(@builtin(global_invocation_id) global_id: vec3<u32>, @builtin(l
     }
 
     // Calculate result index for this element-query pair
-    let result_index = element_index * arrayLength(&queries) + query_index;
+    // Use config.query_count (actual queries dispatched) instead of
+    // arrayLength(&queries) (buffer capacity) so that single-query dispatches
+    // can test up to max_results candidates without index overflow.
+    let result_index = element_index * config.query_count + query_index;
     
     // Bounds check for results array
     if (result_index >= arrayLength(&results)) {

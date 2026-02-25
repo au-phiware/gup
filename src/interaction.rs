@@ -553,6 +553,20 @@ pub struct MortonQueryConfig {
     pub world_bounds_max: [f32; 2],
 }
 
+/// Configuration for the hit test compute shader.
+///
+/// Uploaded as a uniform buffer so the shader uses the actual query count
+/// for result indexing instead of `arrayLength(&queries)` (the buffer capacity).
+/// This allows single-query dispatches to test up to `max_results` candidates
+/// rather than being limited to `max_results / max_queries`.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct HitTestConfig {
+    /// Actual number of queries dispatched (not the buffer capacity).
+    pub query_count: u32,
+    pub _padding: [u32; 3],
+}
+
 /// GPU-accelerated interaction system for high-performance hit testing
 pub struct InteractionSystem {
     /// GPU compute pipeline for hit testing
@@ -570,6 +584,8 @@ pub struct InteractionSystem {
     element_buffer: Buffer,
     query_buffer: Buffer,
     result_buffer: Buffer,
+    /// Hit test config uniform (carries actual query count).
+    hit_test_config_buffer: Buffer,
 
     /// Spatial indexing buffers
     spatial_cells_buffer: Buffer,
@@ -729,6 +745,13 @@ impl InteractionSystem {
             mapped_at_creation: false,
         });
 
+        let hit_test_config_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("hit_test_config"),
+            size: std::mem::size_of::<HitTestConfig>() as u64,
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         // Spatial indexing buffers
         let spatial_cells_buffer = device.create_buffer(&BufferDescriptor {
             label: Some("spatial_cells"),
@@ -819,6 +842,7 @@ impl InteractionSystem {
             element_buffer,
             query_buffer,
             result_buffer,
+            hit_test_config_buffer,
             spatial_cells_buffer,
             element_indices_buffer,
             spatial_config_buffer,
@@ -1391,6 +1415,18 @@ impl InteractionSystem {
         self.queue
             .write_buffer(&self.hit_test_indirect_buffer, 0, &[0u8; 12]);
 
+        // Upload hit test config so the shader knows the actual query count
+        // (always 1 for the GPU-resident Morton query path).
+        let hit_test_config = HitTestConfig {
+            query_count: 1,
+            _padding: [0; 3],
+        };
+        self.queue.write_buffer(
+            &self.hit_test_config_buffer,
+            0,
+            bytemuck::bytes_of(&hit_test_config),
+        );
+
         // --- Encode all three passes in a single command encoder ---
         let mut encoder = self
             .device
@@ -1518,6 +1554,10 @@ impl InteractionSystem {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: self.result_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: self.hit_test_config_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -1676,6 +1716,14 @@ impl InteractionSystem {
         element_count: usize,
         query_count: usize,
     ) -> GupResult<()> {
+        // Upload the hit test config so the shader knows the actual query count.
+        let config = HitTestConfig {
+            query_count: query_count as u32,
+            _padding: [0; 3],
+        };
+        self.queue
+            .write_buffer(&self.hit_test_config_buffer, 0, bytemuck::bytes_of(&config));
+
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -1726,6 +1774,10 @@ impl InteractionSystem {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: self.result_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: self.hit_test_config_buffer.as_entire_binding(),
                 },
             ],
         });
