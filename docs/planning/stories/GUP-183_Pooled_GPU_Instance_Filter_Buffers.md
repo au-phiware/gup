@@ -1,7 +1,7 @@
 # GUP-183: Pooled GPU Instance Filter Buffers
 
 **Story ID**: GUP-183 **Title**: Pooled GPU Instance Filter Buffers **Status**:
-📋 Planned **Priority**: Medium **Effort**: — **Created**: 2026-07-19
+🚧 In Progress **Priority**: Medium **Effort**: — **Created**: 2026-07-19
 **Dependencies**: GUP-077 (Compute Shader Instance Sorting and Filtering)
 
 ## Overview
