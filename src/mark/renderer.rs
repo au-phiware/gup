@@ -358,6 +358,55 @@ impl MarkRenderer {
         self.render_marks::<M>(render_pass, pipeline, bind_group, instance_count)
     }
 
+    /// Render marks with dynamic attribute buffers bound.
+    ///
+    /// This method extends [`render_marks`] by also binding the dynamic attribute
+    /// bind group at the specified group index. The dynamic attribute buffers are
+    /// managed by a [`DynamicAttributeBufferManager`].
+    ///
+    /// # Arguments
+    ///
+    /// * `render_pass` - The active GPU render pass
+    /// * `pipeline` - The render pipeline
+    /// * `bind_group` - The primary bind group (group 0)
+    /// * `dynamic_attr_bind_group` - The dynamic attribute bind group
+    /// * `dynamic_attr_group_index` - The bind group slot for dynamic attributes (typically 1 or 2)
+    /// * `instance_count` - Number of instances to draw
+    pub fn render_marks_with_dynamic_attrs<M: Mark>(
+        &self,
+        render_pass: &mut RenderPass,
+        pipeline: &wgpu::RenderPipeline,
+        bind_group: &wgpu::BindGroup,
+        dynamic_attr_bind_group: &wgpu::BindGroup,
+        dynamic_attr_group_index: u32,
+        instance_count: u32,
+    ) -> GupResult<()> {
+        // Set pipeline and bind groups
+        render_pass.set_pipeline(pipeline);
+        render_pass.set_bind_group(0, bind_group, &[]);
+        render_pass.set_bind_group(dynamic_attr_group_index, dynamic_attr_bind_group, &[]);
+
+        // Set vertex buffer
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.buffer().slice(..));
+
+        // Render based on mark characteristics
+        if let Some(index_count) = M::index_count() {
+            if let Some(ref index_buffer) = self.index_buffer {
+                render_pass
+                    .set_index_buffer(index_buffer.buffer().slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(0..index_count as u32, 0, 0..instance_count);
+            } else {
+                return Err(crate::error::GupError::render_error(
+                    "Mark requires indexed rendering but no index buffer available".to_string(),
+                ));
+            }
+        } else {
+            render_pass.draw(0..M::vertex_count() as u32, 0..instance_count);
+        }
+
+        Ok(())
+    }
+
     // ------------------------------------------------------------------
     // Performance metrics
     // ------------------------------------------------------------------

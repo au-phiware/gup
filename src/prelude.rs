@@ -31,8 +31,9 @@ pub use crate::{BoxPlot, Circle, Line, Rectangle};
 
 // Advanced mark rendering
 pub use crate::mark::advanced_rendering::{
-    DynamicAttributeMap, DynamicAttributeValue, MarkBlendConfig, MarkViewport, MultiPassConfig,
-    RenderPassConfig, RenderStateManager,
+    DynamicAttributeBufferManager, DynamicAttributeMap, DynamicAttributeValue, MarkBlendConfig,
+    MarkViewport, MultiPassConfig, MultiPassRenderer, RenderPassConfig, RenderStateManager,
+    UploadStats,
 };
 
 // Mixable trait for composition

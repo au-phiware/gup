@@ -54,8 +54,9 @@ pub mod renderer;
 pub mod text;
 
 pub use advanced_rendering::{
-    DynamicAttributeMap, DynamicAttributeValue, MarkBlendConfig, MarkViewport, MultiPassConfig,
-    MultiPassRenderer, RenderPassConfig, RenderStateManager, RenderStateSnapshot, ScissorRect,
+    DynamicAttributeBufferManager, DynamicAttributeMap, DynamicAttributeValue, MarkBlendConfig,
+    MarkViewport, MultiPassConfig, MultiPassRenderer, RenderPassConfig, RenderStateManager,
+    RenderStateSnapshot, ScissorRect, UploadStats,
 };
 pub use batch_renderer::{
     BatchFrameStats, BatchRendererConfig, CullingManager, GeometryCache, InstanceAttributes,

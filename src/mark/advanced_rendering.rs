@@ -282,9 +282,10 @@ impl MarkBlendConfig {
     ) -> Option<wgpu::BlendState> {
         // Custom blend state always wins if the mark doesn't support overrides
         if let Some(custom) = &self.custom_blend_state
-            && !self.supports_override {
-                return Some(*custom);
-            }
+            && !self.supports_override
+        {
+            return Some(*custom);
+        }
 
         // Apply context override if available and supported
         let effective_mode = if self.supports_override {
@@ -489,6 +490,507 @@ impl DynamicAttributeMap {
             }
         }
         values
+    }
+
+    /// Collect only the dirty static values with their sorted index.
+    ///
+    /// Returns `(index, value)` pairs for static attributes that have been modified
+    /// since the last `clear_dirty()` call. The index is the position in the
+    /// sorted attribute list (matching `collect_static_values` ordering).
+    pub fn collect_dirty_static_values(&self) -> Vec<(usize, [f32; 4])> {
+        let mut static_names: Vec<_> = self
+            .mappings
+            .iter()
+            .filter(|(_, v)| matches!(v, DynamicAttributeValue::Static(_)))
+            .map(|(k, _)| k.clone())
+            .collect();
+        static_names.sort();
+
+        let mut result = Vec::new();
+        for (i, name) in static_names.iter().enumerate() {
+            if self.dirty_attributes.contains(name)
+                && let Some(DynamicAttributeValue::Static(v)) = self.mappings.get(name.as_str())
+            {
+                result.push((i, *v));
+            }
+        }
+        result
+    }
+
+    /// Collect per-instance data for a given attribute.
+    ///
+    /// Returns the per-instance values if the attribute exists and is PerInstance,
+    /// or `None` otherwise.
+    pub fn collect_per_instance_data(&self, name: &str) -> Option<&[[f32; 4]]> {
+        self.mappings.get(name).and_then(|v| v.as_per_instance())
+    }
+
+    /// Get all per-instance attribute names, sorted for deterministic ordering.
+    pub fn per_instance_attribute_names(&self) -> Vec<&str> {
+        let mut names: Vec<&str> = self
+            .mappings
+            .iter()
+            .filter(|(_, v)| matches!(v, DynamicAttributeValue::PerInstance(_)))
+            .map(|(k, _)| k.as_str())
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// Get the names of dirty per-instance attributes.
+    pub fn dirty_per_instance_attributes(&self) -> Vec<&str> {
+        let mut names: Vec<&str> = self
+            .dirty_attributes
+            .iter()
+            .filter(|name| {
+                self.mappings
+                    .get(name.as_str())
+                    .is_some_and(|v| matches!(v, DynamicAttributeValue::PerInstance(_)))
+            })
+            .map(|n| n.as_str())
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// Get all mappings (for iteration by the buffer manager).
+    pub fn mappings(&self) -> &HashMap<String, DynamicAttributeValue> {
+        &self.mappings
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Dynamic Attribute Buffer Manager
+// ---------------------------------------------------------------------------
+
+/// Tracks the state of a single GPU buffer managed by [`DynamicAttributeBufferManager`].
+#[derive(Debug)]
+struct ManagedBuffer {
+    /// The GPU buffer
+    buffer: wgpu::Buffer,
+    /// Capacity in elements (not bytes)
+    capacity: usize,
+    /// Current element count
+    len: usize,
+}
+
+/// Manages GPU buffer allocation and dirty-only uploads for [`DynamicAttributeMap`].
+///
+/// This manager automatically creates and resizes GPU buffers as attributes change,
+/// and only re-uploads data for attributes that have been modified since the last
+/// upload (dirty-only uploads). Static attributes go into a uniform buffer and
+/// per-instance attributes go into storage buffers.
+///
+/// # Buffer Layout
+///
+/// - **Uniform buffer** (binding 0 in the dynamic attribute bind group): packed
+///   `[f32; 4]` values for all `Static` attributes, sorted alphabetically by name.
+/// - **Storage buffers** (binding 1..N): one buffer per `PerInstance` attribute,
+///   sorted alphabetically by name.
+///
+/// # Usage
+///
+/// ```rust,ignore
+/// use gup::mark::advanced_rendering::{DynamicAttributeBufferManager, DynamicAttributeMap, DynamicAttributeValue};
+///
+/// let mut manager = DynamicAttributeBufferManager::new();
+/// let mut attrs = DynamicAttributeMap::new();
+///
+/// attrs.set("color", DynamicAttributeValue::from_color(1.0, 0.0, 0.0, 1.0));
+/// attrs.set("size", DynamicAttributeValue::from_scalar(5.0));
+///
+/// // Upload only dirty attributes to GPU
+/// manager.upload_dirty(&device, &queue, &mut attrs)?;
+///
+/// // Create a bind group for rendering
+/// let bind_group = manager.create_bind_group(&device, &layout);
+/// ```
+pub struct DynamicAttributeBufferManager {
+    /// Uniform buffer for static attributes (packed [f32; 4] values)
+    uniform_buffer: Option<ManagedBuffer>,
+    /// Storage buffers for per-instance data, keyed by attribute name
+    storage_buffers: HashMap<String, ManagedBuffer>,
+    /// Generation counter from the last successful upload
+    last_upload_generation: u64,
+    /// Upload statistics
+    stats: UploadStats,
+}
+
+/// Statistics about dynamic attribute GPU uploads.
+#[derive(Debug, Clone, Default)]
+pub struct UploadStats {
+    /// Number of full uniform buffer uploads
+    pub full_uploads: u64,
+    /// Number of partial (dirty-only) uploads
+    pub partial_uploads: u64,
+    /// Number of storage buffer uploads
+    pub storage_uploads: u64,
+    /// Number of buffer resizes
+    pub buffer_resizes: u64,
+    /// Total bytes uploaded
+    pub total_bytes_uploaded: u64,
+    /// Bytes saved by dirty-only uploads (vs full re-upload)
+    pub bytes_saved: u64,
+}
+
+impl DynamicAttributeBufferManager {
+    /// Create a new buffer manager with no pre-allocated buffers.
+    pub fn new() -> Self {
+        Self {
+            uniform_buffer: None,
+            storage_buffers: HashMap::new(),
+            last_upload_generation: 0,
+            stats: UploadStats::default(),
+        }
+    }
+
+    /// Upload only dirty attributes to the GPU.
+    ///
+    /// This is the primary method for updating dynamic attributes. It inspects
+    /// the dirty flags in the attribute map and only uploads changed values.
+    /// After a successful upload, the dirty flags are cleared.
+    ///
+    /// # Returns
+    ///
+    /// `true` if any data was uploaded, `false` if nothing was dirty.
+    pub fn upload_dirty(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        attrs: &mut DynamicAttributeMap,
+    ) -> GupResult<bool> {
+        if !attrs.is_dirty() {
+            return Ok(false);
+        }
+
+        let mut uploaded = false;
+
+        // --- Static attributes → uniform buffer ---
+        let static_values = attrs.collect_static_values();
+        if !static_values.is_empty() {
+            let dirty_statics = attrs.collect_dirty_static_values();
+
+            if dirty_statics.is_empty() {
+                // No dirty static attributes, skip
+            } else {
+                uploaded = true;
+                self.upload_static_attributes(device, queue, &static_values, &dirty_statics)?;
+            }
+        }
+
+        // --- Per-instance attributes → storage buffers ---
+        let dirty_per_instance = attrs.dirty_per_instance_attributes();
+        for name in &dirty_per_instance {
+            if let Some(data) = attrs.collect_per_instance_data(name) {
+                uploaded = true;
+                self.upload_per_instance_attribute(device, queue, name, data)?;
+            }
+        }
+
+        // Remove storage buffers for attributes that were removed
+        let current_per_instance: HashSet<String> = attrs
+            .per_instance_attribute_names()
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect();
+        self.storage_buffers
+            .retain(|name, _| current_per_instance.contains(name));
+
+        self.last_upload_generation = attrs.generation();
+        attrs.clear_dirty();
+
+        Ok(uploaded)
+    }
+
+    /// Force a full re-upload of all attributes (ignoring dirty flags).
+    ///
+    /// Useful after GPU device loss recovery or when first initializing.
+    pub fn upload_all(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        attrs: &mut DynamicAttributeMap,
+    ) -> GupResult<()> {
+        // Upload static attributes
+        let static_values = attrs.collect_static_values();
+        if !static_values.is_empty() {
+            // Build "all dirty" indices
+            let all_dirty: Vec<(usize, [f32; 4])> =
+                static_values.iter().copied().enumerate().collect();
+            self.upload_static_attributes(device, queue, &static_values, &all_dirty)?;
+            self.stats.full_uploads += 1;
+        }
+
+        // Upload per-instance attributes
+        for name in attrs.per_instance_attribute_names() {
+            if let Some(data) = attrs.collect_per_instance_data(name) {
+                self.upload_per_instance_attribute(device, queue, name, data)?;
+            }
+        }
+
+        self.last_upload_generation = attrs.generation();
+        attrs.clear_dirty();
+
+        Ok(())
+    }
+
+    /// Get the uniform buffer (for static attributes), if allocated.
+    pub fn uniform_buffer(&self) -> Option<&wgpu::Buffer> {
+        self.uniform_buffer.as_ref().map(|mb| &mb.buffer)
+    }
+
+    /// Get a storage buffer for a per-instance attribute by name.
+    pub fn storage_buffer(&self, name: &str) -> Option<&wgpu::Buffer> {
+        self.storage_buffers.get(name).map(|mb| &mb.buffer)
+    }
+
+    /// Get all storage buffer names (sorted for deterministic bind group ordering).
+    pub fn storage_buffer_names(&self) -> Vec<&str> {
+        let mut names: Vec<&str> = self.storage_buffers.keys().map(|s| s.as_str()).collect();
+        names.sort();
+        names
+    }
+
+    /// Create a bind group layout for the current set of dynamic attribute buffers.
+    ///
+    /// Binding 0 is the uniform buffer (if present), followed by storage buffers
+    /// for each per-instance attribute in alphabetical order.
+    pub fn create_bind_group_layout(&self, device: &wgpu::Device) -> wgpu::BindGroupLayout {
+        let mut entries = Vec::new();
+        let mut binding = 0u32;
+
+        // Uniform buffer for static attributes
+        if self.uniform_buffer.is_some() {
+            entries.push(wgpu::BindGroupLayoutEntry {
+                binding,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            });
+            binding += 1;
+        }
+
+        // Storage buffers for per-instance attributes (sorted)
+        let names = self.storage_buffer_names();
+        for _ in &names {
+            entries.push(wgpu::BindGroupLayoutEntry {
+                binding,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            });
+            binding += 1;
+        }
+
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("dynamic_attribute_bind_group_layout"),
+            entries: &entries,
+        })
+    }
+
+    /// Create a bind group referencing the current buffers.
+    ///
+    /// The layout must match the one from [`create_bind_group_layout`].
+    pub fn create_bind_group(
+        &self,
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+    ) -> Option<wgpu::BindGroup> {
+        // Need at least one buffer to create a bind group
+        if self.uniform_buffer.is_none() && self.storage_buffers.is_empty() {
+            return None;
+        }
+
+        let mut entries = Vec::new();
+        let mut binding = 0u32;
+
+        if let Some(ub) = &self.uniform_buffer {
+            entries.push(wgpu::BindGroupEntry {
+                binding,
+                resource: ub.buffer.as_entire_binding(),
+            });
+            binding += 1;
+        }
+
+        let names = self.storage_buffer_names();
+        for name in &names {
+            if let Some(sb) = self.storage_buffers.get(*name) {
+                entries.push(wgpu::BindGroupEntry {
+                    binding,
+                    resource: sb.buffer.as_entire_binding(),
+                });
+                binding += 1;
+            }
+        }
+
+        Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("dynamic_attribute_bind_group"),
+            layout,
+            entries: &entries,
+        }))
+    }
+
+    /// Get upload statistics.
+    pub fn stats(&self) -> &UploadStats {
+        &self.stats
+    }
+
+    /// Reset upload statistics.
+    pub fn reset_stats(&mut self) {
+        self.stats = UploadStats::default();
+    }
+
+    /// Get the generation counter from the last upload.
+    pub fn last_upload_generation(&self) -> u64 {
+        self.last_upload_generation
+    }
+
+    /// Whether any buffers have been allocated.
+    pub fn has_buffers(&self) -> bool {
+        self.uniform_buffer.is_some() || !self.storage_buffers.is_empty()
+    }
+
+    /// Get the total number of GPU buffers managed.
+    pub fn buffer_count(&self) -> usize {
+        let uniform = if self.uniform_buffer.is_some() { 1 } else { 0 };
+        uniform + self.storage_buffers.len()
+    }
+
+    // --- Internal helpers ---
+
+    fn upload_static_attributes(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        all_values: &[[f32; 4]],
+        dirty: &[(usize, [f32; 4])],
+    ) -> GupResult<()> {
+        let needed_capacity = all_values.len();
+        let element_bytes = std::mem::size_of::<[f32; 4]>();
+        let full_upload_bytes = std::mem::size_of_val(all_values) as u64;
+
+        // Check if we need to (re-)create the uniform buffer
+        let needs_recreate = match &self.uniform_buffer {
+            None => true,
+            Some(mb) => mb.capacity < needed_capacity,
+        };
+
+        if needs_recreate {
+            // Allocate with 1.5x headroom for future growth
+            let capacity = (needed_capacity as f64 * 1.5) as usize;
+            let buf_size = (capacity * element_bytes) as u64;
+            // Uniform buffers need 256-byte alignment
+            let aligned_size = buf_size.div_ceil(256) * 256;
+
+            let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("dynamic_attr_uniform_buffer"),
+                size: aligned_size,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+
+            self.uniform_buffer = Some(ManagedBuffer {
+                buffer,
+                capacity,
+                len: 0,
+            });
+            self.stats.buffer_resizes += 1;
+
+            // Full upload required after recreation
+            queue.write_buffer(
+                &self.uniform_buffer.as_ref().unwrap().buffer,
+                0,
+                bytemuck::cast_slice(all_values),
+            );
+            self.uniform_buffer.as_mut().unwrap().len = needed_capacity;
+            self.stats.full_uploads += 1;
+            self.stats.total_bytes_uploaded += full_upload_bytes;
+        } else {
+            // Partial (dirty-only) upload
+            let ub = self.uniform_buffer.as_mut().unwrap();
+
+            // If the attribute count changed (attributes added/removed), do a full upload
+            if ub.len != needed_capacity {
+                queue.write_buffer(&ub.buffer, 0, bytemuck::cast_slice(all_values));
+                ub.len = needed_capacity;
+                self.stats.full_uploads += 1;
+                self.stats.total_bytes_uploaded += full_upload_bytes;
+            } else {
+                // Write only dirty elements
+                for &(index, value) in dirty {
+                    let offset = (index * element_bytes) as u64;
+                    queue.write_buffer(&ub.buffer, offset, bytemuck::cast_slice(&[value]));
+                }
+                let partial_bytes = (dirty.len() * element_bytes) as u64;
+                self.stats.partial_uploads += 1;
+                self.stats.total_bytes_uploaded += partial_bytes;
+                self.stats.bytes_saved += full_upload_bytes - partial_bytes;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn upload_per_instance_attribute(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        name: &str,
+        data: &[[f32; 4]],
+    ) -> GupResult<()> {
+        let element_bytes = std::mem::size_of::<[f32; 4]>();
+        let data_bytes = std::mem::size_of_val(data) as u64;
+
+        let needs_recreate = match self.storage_buffers.get(name) {
+            None => true,
+            Some(mb) => mb.capacity < data.len(),
+        };
+
+        if needs_recreate {
+            let capacity = (data.len() as f64 * 1.5) as usize;
+            let buf_size = (capacity * element_bytes) as u64;
+            // Storage buffers need 4-byte alignment (already satisfied by f32)
+            let aligned_size = buf_size.max(16); // minimum 16 bytes
+
+            let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(&format!("dynamic_attr_storage_{name}")),
+                size: aligned_size,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+
+            self.storage_buffers.insert(
+                name.to_string(),
+                ManagedBuffer {
+                    buffer,
+                    capacity,
+                    len: 0,
+                },
+            );
+            self.stats.buffer_resizes += 1;
+        }
+
+        let sb = self.storage_buffers.get_mut(name).unwrap();
+        queue.write_buffer(&sb.buffer, 0, bytemuck::cast_slice(data));
+        sb.len = data.len();
+        self.stats.storage_uploads += 1;
+        self.stats.total_bytes_uploaded += data_bytes;
+
+        Ok(())
+    }
+}
+
+impl Default for DynamicAttributeBufferManager {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1138,5 +1640,160 @@ mod tests {
         let mut renderer = MultiPassRenderer::new();
         renderer.clear_cache();
         assert_eq!(renderer.cached_pipeline_count(), 0);
+    }
+
+    // --- DynamicAttributeMap new methods ---
+
+    #[test]
+    fn test_collect_dirty_static_values_empty() {
+        let map = DynamicAttributeMap::new();
+        let dirty = map.collect_dirty_static_values();
+        assert!(dirty.is_empty());
+    }
+
+    #[test]
+    fn test_collect_dirty_static_values_single() {
+        let mut map = DynamicAttributeMap::new();
+        map.set("alpha", DynamicAttributeValue::from_scalar(0.5));
+        let dirty = map.collect_dirty_static_values();
+        assert_eq!(dirty.len(), 1);
+        assert_eq!(dirty[0].0, 0); // index 0
+        assert_eq!(dirty[0].1[0], 0.5);
+    }
+
+    #[test]
+    fn test_collect_dirty_static_values_partial() {
+        let mut map = DynamicAttributeMap::new();
+        map.set("alpha", DynamicAttributeValue::from_scalar(0.5));
+        map.set(
+            "color",
+            DynamicAttributeValue::from_color(1.0, 0.0, 0.0, 1.0),
+        );
+        map.clear_dirty();
+
+        // Only update "color"
+        map.set(
+            "color",
+            DynamicAttributeValue::from_color(0.0, 1.0, 0.0, 1.0),
+        );
+        let dirty = map.collect_dirty_static_values();
+        assert_eq!(dirty.len(), 1);
+        assert_eq!(dirty[0].0, 1); // "color" is index 1 alphabetically
+        assert_eq!(dirty[0].1, [0.0, 1.0, 0.0, 1.0]);
+    }
+
+    #[test]
+    fn test_collect_dirty_static_skips_per_instance() {
+        let mut map = DynamicAttributeMap::new();
+        map.set("alpha", DynamicAttributeValue::from_scalar(0.5));
+        map.set(
+            "data",
+            DynamicAttributeValue::from_instances(vec![[1.0, 2.0, 3.0, 4.0]]),
+        );
+        let dirty = map.collect_dirty_static_values();
+        // Only "alpha" should be in the dirty statics
+        assert_eq!(dirty.len(), 1);
+        assert_eq!(dirty[0].0, 0);
+    }
+
+    #[test]
+    fn test_collect_per_instance_data() {
+        let mut map = DynamicAttributeMap::new();
+        let values = vec![[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0]];
+        map.set("colors", DynamicAttributeValue::from_instances(values));
+
+        let data = map.collect_per_instance_data("colors");
+        assert!(data.is_some());
+        assert_eq!(data.unwrap().len(), 2);
+
+        // Non-existent returns None
+        assert!(map.collect_per_instance_data("missing").is_none());
+    }
+
+    #[test]
+    fn test_per_instance_attribute_names() {
+        let mut map = DynamicAttributeMap::new();
+        map.set("alpha", DynamicAttributeValue::from_scalar(0.5));
+        map.set(
+            "sizes",
+            DynamicAttributeValue::from_instances(vec![[1.0; 4]]),
+        );
+        map.set(
+            "colors",
+            DynamicAttributeValue::from_instances(vec![[1.0, 0.0, 0.0, 1.0]]),
+        );
+
+        let names = map.per_instance_attribute_names();
+        assert_eq!(names, vec!["colors", "sizes"]); // sorted
+    }
+
+    #[test]
+    fn test_dirty_per_instance_attributes() {
+        let mut map = DynamicAttributeMap::new();
+        map.set(
+            "sizes",
+            DynamicAttributeValue::from_instances(vec![[1.0; 4]]),
+        );
+        map.set(
+            "colors",
+            DynamicAttributeValue::from_instances(vec![[1.0, 0.0, 0.0, 1.0]]),
+        );
+        map.clear_dirty();
+
+        // Only update "sizes"
+        map.set(
+            "sizes",
+            DynamicAttributeValue::from_instances(vec![[2.0; 4]]),
+        );
+        let dirty = map.dirty_per_instance_attributes();
+        assert_eq!(dirty, vec!["sizes"]);
+    }
+
+    #[test]
+    fn test_mappings_accessor() {
+        let mut map = DynamicAttributeMap::new();
+        map.set("x", DynamicAttributeValue::from_scalar(1.0));
+        map.set("y", DynamicAttributeValue::from_scalar(2.0));
+        assert_eq!(map.mappings().len(), 2);
+    }
+
+    // --- DynamicAttributeBufferManager unit tests ---
+
+    #[test]
+    fn test_buffer_manager_new() {
+        let manager = DynamicAttributeBufferManager::new();
+        assert!(!manager.has_buffers());
+        assert_eq!(manager.buffer_count(), 0);
+        assert_eq!(manager.last_upload_generation(), 0);
+    }
+
+    #[test]
+    fn test_buffer_manager_default() {
+        let manager = DynamicAttributeBufferManager::default();
+        assert!(!manager.has_buffers());
+    }
+
+    #[test]
+    fn test_upload_stats_default() {
+        let stats = UploadStats::default();
+        assert_eq!(stats.full_uploads, 0);
+        assert_eq!(stats.partial_uploads, 0);
+        assert_eq!(stats.storage_uploads, 0);
+        assert_eq!(stats.buffer_resizes, 0);
+        assert_eq!(stats.total_bytes_uploaded, 0);
+        assert_eq!(stats.bytes_saved, 0);
+    }
+
+    #[test]
+    fn test_buffer_manager_storage_buffer_names_empty() {
+        let manager = DynamicAttributeBufferManager::new();
+        assert!(manager.storage_buffer_names().is_empty());
+    }
+
+    #[test]
+    fn test_buffer_manager_no_buffers_no_bind_group() {
+        let manager = DynamicAttributeBufferManager::new();
+        assert!(manager.uniform_buffer().is_none());
+        assert!(manager.storage_buffer("missing").is_none());
     }
 }
