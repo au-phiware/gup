@@ -1336,4 +1336,145 @@ mod gpu_tests {
             assert!(cache.stats().avg_creation_time > Duration::ZERO);
         });
     }
+
+    /// Validate that the buffer pool handles multiple size classes correctly.
+    #[test]
+    fn gpu_buffer_pool_size_class_isolation() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter");
+                    return;
+                }
+            };
+
+            let mut pool = MarkBufferPool::new();
+
+            // Allocate buffers of different size classes
+            let buf_tiny = pool.acquire_instance_buffer::<Circle>(
+                &context.device,
+                10,
+                std::mem::size_of::<crate::mark::circle::CircleInstance>(),
+            );
+            let buf_small = pool.acquire_instance_buffer::<Circle>(
+                &context.device,
+                100,
+                std::mem::size_of::<crate::mark::circle::CircleInstance>(),
+            );
+            let buf_medium = pool.acquire_instance_buffer::<Circle>(
+                &context.device,
+                500,
+                std::mem::size_of::<crate::mark::circle::CircleInstance>(),
+            );
+
+            assert_eq!(pool.stats.misses, 3);
+
+            // Return all to pool
+            pool.return_buffer::<Circle>(buf_tiny, 10);
+            pool.return_buffer::<Circle>(buf_small, 100);
+            pool.return_buffer::<Circle>(buf_medium, 500);
+            assert_eq!(pool.pooled_count(), 3);
+
+            // Re-acquire in same size classes → all hits
+            let _b1 = pool.acquire_instance_buffer::<Circle>(
+                &context.device,
+                5,
+                std::mem::size_of::<crate::mark::circle::CircleInstance>(),
+            );
+            let _b2 = pool.acquire_instance_buffer::<Circle>(
+                &context.device,
+                200,
+                std::mem::size_of::<crate::mark::circle::CircleInstance>(),
+            );
+            let _b3 = pool.acquire_instance_buffer::<Circle>(
+                &context.device,
+                800,
+                std::mem::size_of::<crate::mark::circle::CircleInstance>(),
+            );
+
+            assert_eq!(pool.stats.hits, 3);
+            assert_eq!(pool.pooled_count(), 0);
+        });
+    }
+
+    /// Validate that pool stats track correctly across many acquire/return cycles.
+    #[test]
+    fn gpu_buffer_pool_stats_accuracy() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter");
+                    return;
+                }
+            };
+
+            let mut pool = MarkBufferPool::new();
+            let elem_size = std::mem::size_of::<crate::mark::circle::CircleInstance>();
+
+            // 10 acquire/return cycles
+            for _ in 0..10 {
+                let buf = pool.acquire_instance_buffer::<Circle>(&context.device, 100, elem_size);
+                pool.return_buffer::<Circle>(buf, 100);
+            }
+
+            // First cycle is a miss, remaining 9 are hits
+            assert_eq!(pool.stats.misses, 1);
+            assert_eq!(pool.stats.hits, 9);
+            assert_eq!(pool.stats.returns, 10);
+            assert!(pool.stats.hit_rate() > 85.0);
+        });
+    }
+
+    /// Validate linear scaling with the batch sorting system.
+    #[test]
+    fn test_sort_scaling_linear() {
+        // Sorting N batches should be approximately O(N log N)
+        // We verify that sorting 10x more batches doesn't take 100x longer
+        let small_batches = generate_test_batches(100);
+        let large_batches = generate_test_batches(10_000);
+
+        let start_small = std::time::Instant::now();
+        for _ in 0..100 {
+            let _ = sort_batches_by_state(&small_batches);
+        }
+        let small_time = start_small.elapsed();
+
+        let start_large = std::time::Instant::now();
+        for _ in 0..100 {
+            let _ = sort_batches_by_state(&large_batches);
+        }
+        let large_time = start_large.elapsed();
+
+        // 100x more items should be at most ~200x slower (N log N scaling)
+        // We use a generous 500x to avoid flaky tests
+        let ratio = large_time.as_nanos() as f64 / small_time.as_nanos().max(1) as f64;
+        assert!(
+            ratio < 500.0,
+            "Sorting 10K batches was {ratio:.0}x slower than 100 — expected sub-500x"
+        );
+    }
+
+    fn generate_test_batches(n: usize) -> Vec<SortedBatch> {
+        let types = [
+            std::any::TypeId::of::<u8>(),
+            std::any::TypeId::of::<u16>(),
+            std::any::TypeId::of::<u32>(),
+        ];
+        let blend_modes = [
+            BlendMode::AlphaBlending,
+            BlendMode::Additive,
+            BlendMode::Multiply,
+        ];
+        (0..n)
+            .map(|i| SortedBatch {
+                original_index: i,
+                mark_type_id: types[i % 3],
+                blend_mode: blend_modes[i % 3],
+                z_order: (i as f32 * 0.37).sin(),
+                instance_count: 100,
+            })
+            .collect()
+    }
 }
