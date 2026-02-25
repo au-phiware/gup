@@ -19,7 +19,11 @@
 use super::{Aabb, ElementPosition, SpatialQuery};
 
 /// A single entry in the sorted Morton key array.
-#[derive(Debug, Clone, Copy)]
+///
+/// This struct is GPU-compatible (`repr(C)` + `bytemuck::Pod`) so it can be
+/// uploaded directly to a storage buffer for GPU-side binary search.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct MortonEntry {
     /// 32-bit Z-order key.
     pub key: MortonKey,
@@ -28,7 +32,10 @@ pub struct MortonEntry {
 }
 
 /// A 32-bit Morton key encoding 2D position.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(C)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, bytemuck::Pod, bytemuck::Zeroable,
+)]
 pub struct MortonKey(pub u32);
 
 impl MortonKey {
@@ -127,10 +134,25 @@ impl MortonIndex {
     pub fn entries(&self) -> &[MortonEntry] {
         &self.entries
     }
+
+    /// Get the world-space bounds used for normalisation.
+    pub fn bounds(&self) -> &Aabb {
+        &self.bounds
+    }
+
+    /// Get the inverse width used for normalisation.
+    pub fn inv_width(&self) -> f32 {
+        self.inv_width
+    }
+
+    /// Get the inverse height used for normalisation.
+    pub fn inv_height(&self) -> f32 {
+        self.inv_height
+    }
 }
 
 /// Convert a world-space position to a Morton key.
-fn world_to_morton(point: [f32; 2], bounds: &Aabb, inv_w: f32, inv_h: f32) -> MortonKey {
+pub fn world_to_morton(point: [f32; 2], bounds: &Aabb, inv_w: f32, inv_h: f32) -> MortonKey {
     let nx = ((point[0] - bounds.min[0]) * inv_w).clamp(0.0, 1.0 - f32::EPSILON);
     let ny = ((point[1] - bounds.min[1]) * inv_h).clamp(0.0, 1.0 - f32::EPSILON);
     let gx = (nx * 65536.0) as u16;

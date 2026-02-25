@@ -29,7 +29,7 @@ mod hierarchical;
 mod morton;
 
 pub use hierarchical::{HierarchicalCell, HierarchicalGrid};
-pub use morton::{MortonIndex, MortonKey};
+pub use morton::{MortonEntry, MortonIndex, MortonKey, world_to_morton};
 
 /// Position and metadata for an element to be indexed.
 #[derive(Debug, Clone, Copy)]

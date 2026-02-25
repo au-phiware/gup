@@ -40,7 +40,9 @@
 
 use crate::RenderContext;
 use crate::error::{GupError, GupResult};
-use crate::spatial_index::{Aabb, ElementPosition, SpatialAlgorithm, SpatialIndex, SpatialQuery};
+use crate::spatial_index::{
+    Aabb, ElementPosition, MortonEntry, SpatialAlgorithm, SpatialIndex, SpatialQuery,
+};
 use futures_channel;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -526,6 +528,31 @@ pub struct SpatialCell {
     pub bounds_max: [f32; 2],
 }
 
+/// Configuration for GPU-side Morton range query.
+///
+/// This struct is uploaded as a uniform buffer to the `morton_query` compute
+/// shader. Layout matches the WGSL `MortonQueryConfig` struct.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct MortonQueryConfig {
+    /// Query type: 0 = point, 1 = region.
+    pub query_type: u32,
+    /// Search radius in grid cells for point queries.
+    pub search_radius: u32,
+    /// Total number of entries in the sorted Morton buffer.
+    pub entry_count: u32,
+    /// Maximum number of candidates to output.
+    pub max_candidates: u32,
+    /// Query position in world coordinates.
+    pub query_position: [f32; 2],
+    /// Query region half-extents (for region queries).
+    pub query_half_extent: [f32; 2],
+    /// World bounds min.
+    pub world_bounds_min: [f32; 2],
+    /// World bounds max.
+    pub world_bounds_max: [f32; 2],
+}
+
 /// GPU-accelerated interaction system for high-performance hit testing
 pub struct InteractionSystem {
     /// GPU compute pipeline for hit testing
@@ -548,6 +575,18 @@ pub struct InteractionSystem {
     spatial_cells_buffer: Buffer,
     element_indices_buffer: Buffer,
     spatial_config_buffer: Buffer,
+
+    /// GPU-side Morton range query resources
+    morton_query_pipeline: ComputePipeline,
+    morton_query_bind_group_layout: BindGroupLayout,
+    morton_entries_buffer: Buffer,
+    morton_query_config_buffer: Buffer,
+    morton_candidates_buffer: Buffer,
+    morton_candidate_count_buffer: Buffer,
+    /// Whether the GPU Morton entries buffer has been populated.
+    morton_gpu_index_built: bool,
+    /// Number of Morton entries currently on the GPU.
+    morton_gpu_entry_count: u32,
 
     /// CPU-side management
     event_handlers: HashMap<String, Vec<Box<dyn EventHandler>>>,
@@ -578,6 +617,7 @@ pub struct InteractionSystem {
     max_queries: usize,
     max_results: usize,
     max_spatial_cells: usize,
+    max_morton_candidates: usize,
 }
 
 impl InteractionSystem {
@@ -657,6 +697,7 @@ impl InteractionSystem {
         let max_queries = 32; // Process up to 32 queries simultaneously
         let max_results = 100_000; // Store up to 100K results
         let max_spatial_cells = 10_000; // 100x100 grid for spatial indexing
+        let max_morton_candidates = 100_000; // Up to 100K candidates from Morton query
 
         let element_buffer = device.create_buffer(&BufferDescriptor {
             label: Some("interaction_elements"),
@@ -701,6 +742,39 @@ impl InteractionSystem {
             mapped_at_creation: false,
         });
 
+        // GPU-side Morton range query resources
+        let (morton_query_pipeline, morton_query_bind_group_layout) =
+            Self::create_morton_query_pipeline(device).await?;
+
+        let morton_entries_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("morton_entries"),
+            size: (max_elements * std::mem::size_of::<MortonEntry>()) as u64,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let morton_query_config_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("morton_query_config"),
+            size: std::mem::size_of::<MortonQueryConfig>() as u64,
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let morton_candidates_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("morton_candidates"),
+            size: (max_morton_candidates * std::mem::size_of::<u32>()) as u64,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        // Candidate count buffer: 4 bytes for an atomic u32 counter.
+        let morton_candidate_count_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("morton_candidate_count"),
+            size: std::mem::size_of::<u32>() as u64,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
         // Default spatial configuration (will be updated based on data bounds)
         let spatial_config = SpatialIndexConfig {
             grid_size: [100, 100],   // 100x100 grid
@@ -720,6 +794,14 @@ impl InteractionSystem {
             spatial_cells_buffer,
             element_indices_buffer,
             spatial_config_buffer,
+            morton_query_pipeline,
+            morton_query_bind_group_layout,
+            morton_entries_buffer,
+            morton_query_config_buffer,
+            morton_candidates_buffer,
+            morton_candidate_count_buffer,
+            morton_gpu_index_built: false,
+            morton_gpu_entry_count: 0,
             event_handlers: HashMap::new(),
             active_queries: Vec::new(),
             next_query_id: 0,
@@ -735,6 +817,7 @@ impl InteractionSystem {
             max_queries,
             max_results,
             max_spatial_cells,
+            max_morton_candidates,
         })
     }
 
@@ -796,6 +879,87 @@ impl InteractionSystem {
         });
 
         Ok((build_pipeline, populate_pipeline))
+    }
+
+    /// Create the compute pipeline and bind group layout for GPU-side Morton
+    /// range queries.
+    async fn create_morton_query_pipeline(
+        device: &Device,
+    ) -> GupResult<(ComputePipeline, BindGroupLayout)> {
+        let shader_source = include_str!("shaders/morton_query.compute.wgsl");
+
+        let shader_module = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("morton_query_compute"),
+            source: ShaderSource::Wgsl(shader_source.into()),
+        });
+
+        // Explicit bind group layout for the Morton query shader.
+        let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some("morton_query_bind_group_layout"),
+            entries: &[
+                // binding 0: sorted Morton entries (storage, read-only)
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                // binding 1: query config (uniform)
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                // binding 2: candidate output (storage, read-write)
+                BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                // binding 3: candidate count (storage, read-write)
+                BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+            label: Some("morton_query_pipeline_layout"),
+            bind_group_layouts: &[&bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+        let pipeline = device.create_compute_pipeline(&ComputePipelineDescriptor {
+            label: Some("morton_query_pipeline"),
+            layout: Some(&pipeline_layout),
+            module: &shader_module,
+            entry_point: Some("morton_range_query"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            cache: None,
+        });
+
+        Ok((pipeline, bind_group_layout))
     }
 
     /// Query for elements at a specific point
@@ -965,7 +1129,12 @@ impl InteractionSystem {
         // Execute compute shader – when a spatial index is available, use it
         // to narrow candidates before GPU dispatch. Otherwise brute-force.
         if elements.len() > 1000 && self.spatial_index_built {
-            self.dispatcher_spatial_query(query, &elements).await?;
+            // Prefer GPU-side Morton query when the entries are on the GPU.
+            if self.morton_gpu_index_built {
+                self.dispatch_gpu_morton_query(query, &elements).await?;
+            } else {
+                self.dispatcher_spatial_query(query, &elements).await?;
+            }
         } else {
             self.dispatch_hit_test_compute(elements.len(), 1).await?;
         }
@@ -1030,6 +1199,225 @@ impl InteractionSystem {
         self.upload_element_data(&candidate_elements)?;
         self.dispatch_hit_test_compute(candidate_elements.len(), 1)
             .await
+    }
+
+    /// Dispatch a spatial query entirely on the GPU using Morton range search.
+    ///
+    /// The sorted Morton entries are already resident on the GPU. This method:
+    /// 1. Uploads the query configuration to a uniform buffer.
+    /// 2. Resets the candidate count to zero.
+    /// 3. Dispatches the `morton_range_query` compute shader which performs
+    ///    binary search on the sorted entries.
+    /// 4. Reads back the candidate element indices.
+    /// 5. Uploads only those candidates to the hit test pipeline and runs it.
+    ///
+    /// This eliminates the CPU roundtrip inherent in `dispatcher_spatial_query`.
+    async fn dispatch_gpu_morton_query(
+        &mut self,
+        query: GpuInteractionQuery,
+        elements: &[ElementData],
+    ) -> GupResult<()> {
+        // Require the GPU Morton index to have been built.
+        if !self.morton_gpu_index_built || self.morton_gpu_entry_count == 0 {
+            return self.dispatch_hit_test_compute(elements.len(), 1).await;
+        }
+
+        // Look up the Morton index bounds from the advanced spatial index.
+        let bounds = match &self.advanced_spatial_index {
+            Some(SpatialIndex::Morton(idx)) => *idx.bounds(),
+            _ => return self.dispatch_hit_test_compute(elements.len(), 1).await,
+        };
+
+        // Build query config.
+        let (qtype, half_ext) = if query.query_type == 0 {
+            (0u32, [0.0f32, 0.0f32])
+        } else {
+            (
+                1u32,
+                [query.region_size[0] * 0.5, query.region_size[1] * 0.5],
+            )
+        };
+
+        let config = MortonQueryConfig {
+            query_type: qtype,
+            search_radius: 512, // matches CPU-side radius
+            entry_count: self.morton_gpu_entry_count,
+            max_candidates: self.max_morton_candidates as u32,
+            query_position: query.position,
+            query_half_extent: half_ext,
+            world_bounds_min: bounds.min,
+            world_bounds_max: bounds.max,
+        };
+
+        // Upload config.
+        self.queue.write_buffer(
+            &self.morton_query_config_buffer,
+            0,
+            bytemuck::bytes_of(&config),
+        );
+
+        // Reset candidate count to zero.
+        self.queue
+            .write_buffer(&self.morton_candidate_count_buffer, 0, &[0u8; 4]);
+
+        // Dispatch Morton range query compute shader.
+        {
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("morton_query_encoder"),
+                });
+
+            {
+                let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                    label: Some("morton_query_pass"),
+                    timestamp_writes: None,
+                });
+
+                pass.set_pipeline(&self.morton_query_pipeline);
+
+                let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("morton_query_bind_group"),
+                    layout: &self.morton_query_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: self.morton_entries_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: self.morton_query_config_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: self.morton_candidates_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: self.morton_candidate_count_buffer.as_entire_binding(),
+                        },
+                    ],
+                });
+                pass.set_bind_group(0, &bind_group, &[]);
+                // Single workgroup is sufficient (only thread 0 does work).
+                pass.dispatch_workgroups(1, 1, 1);
+            }
+
+            self.queue.submit([encoder.finish()]);
+        }
+
+        // Read back candidate count.
+        let candidate_count = self.read_morton_candidate_count().await?;
+
+        if candidate_count == 0 {
+            return Ok(());
+        }
+
+        // Read back candidate indices.
+        let candidate_indices = self.read_morton_candidates(candidate_count).await?;
+
+        // Build reduced element list from candidates.
+        let candidate_elements: Vec<ElementData> = candidate_indices
+            .iter()
+            .filter_map(|&idx| elements.get(idx as usize).copied())
+            .collect();
+
+        if candidate_elements.is_empty() {
+            return Ok(());
+        }
+
+        // Upload only candidates and run hit test.
+        self.upload_element_data(&candidate_elements)?;
+        self.dispatch_hit_test_compute(candidate_elements.len(), 1)
+            .await
+    }
+
+    /// Read the Morton candidate count back from the GPU.
+    async fn read_morton_candidate_count(&self) -> GupResult<u32> {
+        let staging = self.device.create_buffer(&BufferDescriptor {
+            label: Some("morton_count_staging"),
+            size: std::mem::size_of::<u32>() as u64,
+            usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("morton_count_copy_encoder"),
+            });
+        encoder.copy_buffer_to_buffer(
+            &self.morton_candidate_count_buffer,
+            0,
+            &staging,
+            0,
+            std::mem::size_of::<u32>() as u64,
+        );
+        let sub_idx = self.queue.submit([encoder.finish()]);
+        let _ = self.device.poll(PollType::WaitForSubmissionIndex(sub_idx));
+
+        let slice = staging.slice(..);
+        let (sender, receiver) = futures_channel::oneshot::channel();
+        slice.map_async(wgpu::MapMode::Read, move |r| {
+            let _ = sender.send(r);
+        });
+        let _ = self.device.poll(PollType::Wait);
+        receiver
+            .await
+            .map_err(|_| GupError::render_error("Morton count readback cancelled".to_string()))?
+            .map_err(|e| GupError::render_error(format!("Morton count map failed: {e:?}")))?;
+
+        let data = slice.get_mapped_range();
+        let count = *bytemuck::from_bytes::<u32>(&data);
+        drop(data);
+        staging.unmap();
+
+        // Clamp to max to avoid OOB reads.
+        Ok(count.min(self.max_morton_candidates as u32))
+    }
+
+    /// Read Morton candidate indices from the GPU.
+    async fn read_morton_candidates(&self, count: u32) -> GupResult<Vec<u32>> {
+        if count == 0 {
+            return Ok(Vec::new());
+        }
+
+        let byte_size = (count as usize * std::mem::size_of::<u32>()) as u64;
+        let staging = self.device.create_buffer(&BufferDescriptor {
+            label: Some("morton_candidates_staging"),
+            size: byte_size,
+            usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("morton_candidates_copy_encoder"),
+            });
+        encoder.copy_buffer_to_buffer(&self.morton_candidates_buffer, 0, &staging, 0, byte_size);
+        let sub_idx = self.queue.submit([encoder.finish()]);
+        let _ = self.device.poll(PollType::WaitForSubmissionIndex(sub_idx));
+
+        let slice = staging.slice(..);
+        let (sender, receiver) = futures_channel::oneshot::channel();
+        slice.map_async(wgpu::MapMode::Read, move |r| {
+            let _ = sender.send(r);
+        });
+        let _ = self.device.poll(PollType::Wait);
+        receiver
+            .await
+            .map_err(|_| {
+                GupError::render_error("Morton candidates readback cancelled".to_string())
+            })?
+            .map_err(|e| GupError::render_error(format!("Morton candidates map failed: {e:?}")))?;
+
+        let data = slice.get_mapped_range();
+        let indices: Vec<u32> = bytemuck::cast_slice::<u8, u32>(&data).to_vec();
+        drop(data);
+        staging.unmap();
+
+        Ok(indices)
     }
 
     /// Extract element data from selections for GPU processing
@@ -1365,6 +1753,21 @@ impl InteractionSystem {
             adv_bounds,
         ));
 
+        // If the selected algorithm is Morton, upload the sorted entries to GPU
+        // so that GPU-side range queries can bypass the CPU.
+        self.morton_gpu_index_built = false;
+        self.morton_gpu_entry_count = 0;
+        if let Some(SpatialIndex::Morton(ref morton_idx)) = self.advanced_spatial_index {
+            let entries = morton_idx.entries();
+            if !entries.is_empty() && entries.len() <= self.max_elements {
+                let data = bytemuck::cast_slice(entries);
+                self.queue
+                    .write_buffer(&self.morton_entries_buffer, 0, data);
+                self.morton_gpu_entry_count = entries.len() as u32;
+                self.morton_gpu_index_built = true;
+            }
+        }
+
         Ok(())
     }
 
@@ -1472,6 +1875,8 @@ impl InteractionSystem {
         self.spatial_index_built = false;
         self.spatial_element_indices.clear();
         self.advanced_spatial_index = None;
+        self.morton_gpu_index_built = false;
+        self.morton_gpu_entry_count = 0;
     }
 
     /// Build the spatial index from raw element data (public for testing).
@@ -1507,6 +1912,16 @@ impl InteractionSystem {
         self.advanced_spatial_index
             .as_ref()
             .map_or(0, |idx| idx.memory_usage_bytes())
+    }
+
+    /// Returns `true` if the GPU-side Morton entries buffer has been populated.
+    pub fn is_gpu_morton_index_built(&self) -> bool {
+        self.morton_gpu_index_built
+    }
+
+    /// Returns the number of Morton entries currently on the GPU.
+    pub fn gpu_morton_entry_count(&self) -> u32 {
+        self.morton_gpu_entry_count
     }
 
     /// Register an event handler for a specific event type
