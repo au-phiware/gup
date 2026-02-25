@@ -273,7 +273,7 @@ system story. The expanded story is also complete._
 | ---------------------------------------------------------------------------------- | ------------------------------------------- | ----------- | -------- | ------ |
 | [GUP-104](GUP-104_SDF_Glyph_Texture_Upload.md)                                     | SDF Glyph Texture Upload                    | ✅ Complete | High     | —      |
 | [GUP-105](GUP-105_Text_Clipping_Detection_and_Viewport_Bounds_Management.md)       | Text Clipping Detection and Viewport Bounds | ✅ Complete | Medium   | 8      |
-| [GUP-106](GUP-106_System_Font_Loading.md)                                          | System Font Loading                         | 🚧 Active   | Medium   | —      |
+| [GUP-106](GUP-106_System_Font_Loading.md)                                          | System Font Loading                         | ✅ Complete | Medium   | —      |
 | [GUP-107](GUP-107_Text_Character_Positioning_Bug.md)                               | Text Character Positioning Bug              | ✅ Complete | Medium   | —      |
 | [GUP-108](GUP-108_Correct_SDF_Font_Atlas_Generation.md)                            | Correct SDF Font Atlas Generation           | ✅ Complete | High     | —      |
 | [GUP-109](GUP-109_TTF_Outline_Based_SDF_Generation_with_Performance_Comparison.md) | TTF Outline-Based SDF Generation            | 📋 Planned  | Medium   | —      |
@@ -398,9 +398,8 @@ system story. The expanded story is also complete._
 - **Axis/Grid complete**: GUP-089 ✅, GUP-090 ✅, GUP-091 ✅, GUP-092 ✅,
   GUP-093 ✅, GUP-095 ✅, GUP-097 ✅
 - **Axis/Grid planned**: GUP-094 📋, GUP-096 📋, GUP-098 📋
-- **Text complete**: GUP-104 ✅, GUP-105 ✅, GUP-107 ✅, GUP-108 ✅
-- **Text planned**: GUP-106 📋, GUP-109 📋, GUP-110 📋, GUP-199 📋, GUP-200 📋,
-  GUP-201 📋
+- **Text complete**: GUP-104 ✅, GUP-105 ✅, GUP-106 ✅, GUP-107 ✅, GUP-108 ✅
+- **Text planned**: GUP-109 📋, GUP-110 📋, GUP-199 📋, GUP-200 📋, GUP-201 📋
 
 ## Story Point Summary
 
