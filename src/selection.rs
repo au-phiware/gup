@@ -763,46 +763,6 @@ impl SelectionRenderState {
     }
 }
 
-/// Placeholder types for shader functions (will be properly implemented)
-pub struct PositionShaderFunction<F, T> {
-    _function: PhantomData<F>,
-    _data: PhantomData<T>,
-}
-
-impl<F, T> PositionShaderFunction<F, T>
-where
-    F: Fn(&T) -> [f32; 2] + Send + Sync + 'static,
-    T: Send + Sync + 'static,
-{
-    pub fn new(_function: F) -> Self {
-        Self {
-            _function: PhantomData,
-            _data: PhantomData,
-        }
-    }
-}
-
-pub struct ColorShaderFunction<F, T> {
-    _function: PhantomData<F>,
-    _data: PhantomData<T>,
-}
-
-impl<F, T> ColorShaderFunction<F, T>
-where
-    F: Fn(&T) -> [f32; 4] + Send + Sync + 'static,
-    T: Send + Sync + 'static,
-{
-    pub fn new(_function: F) -> Self {
-        Self {
-            _function: PhantomData,
-            _data: PhantomData,
-        }
-    }
-}
-
-// Note: Stub Line and LineAttributes types removed as they are no longer needed.
-// The Selection system will be properly implemented in the future.
-
 /// Implement Renderable trait for Selection to enable GPU interaction queries.
 ///
 /// This implementation extracts element data from the selection for hit testing.
