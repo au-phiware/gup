@@ -58,6 +58,12 @@ Comprehensive documentation for the GPU-accelerated grid line rendering system.
 Covers quick start, API reference, configuration guide with theme presets,
 tutorials, performance guide, and troubleshooting.
 
+### [📊 Mark System](./mark-system/README.md)
+
+Comprehensive documentation for the mark system: architecture overview,
+component relationships, API reference for Mark trait, MarkRegistry, and
+MarkRenderer, and a performance optimization guide.
+
 ### [🔲 Custom Mark Guide](./CUSTOM_MARK_GUIDE.md)
 
 Guide for building custom mark types and extending the mark system.
