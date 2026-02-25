@@ -2596,4 +2596,252 @@ mod tests {
             assert!(result.is_err());
         });
     }
+
+    // --- Unit tests for GPU shader function bindings (GUP-177) ---
+
+    #[test]
+    fn attr_shader_stores_binding() {
+        use crate::shader_function::LinearScale;
+
+        let data = vec![CircleAttributes::default()];
+        let mut selection: Selection<CircleAttributes, Circle> = Selection::from_data(data);
+
+        let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+        selection.attr_shader("radius", |a: &CircleAttributes| a.radius, scale);
+
+        assert!(selection.has_shader_bindings());
+        assert_eq!(selection.shader_bound_attributes(), vec!["radius"]);
+        // has_attr_bindings returns true for shader bindings too.
+        assert!(selection.has_attr_bindings());
+    }
+
+    #[test]
+    fn attr_shader_invalidates_render_state() {
+        use crate::shader_function::LinearScale;
+
+        let data = vec![CircleAttributes::default()];
+        let mut selection: Selection<CircleAttributes, Circle> = Selection::from_data(data);
+
+        // Initially no render state.
+        assert!(!selection.is_render_ready());
+
+        let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+        selection.attr_shader("radius", |a: &CircleAttributes| a.radius, scale);
+
+        // Still not render-ready (need prepare_render_*).
+        assert!(!selection.is_render_ready());
+    }
+
+    #[test]
+    fn shader_fn_info_captures_metadata() {
+        use crate::shader_function::LinearScale;
+
+        let scale = LinearScale::new(0.0, 100.0, -1.0, 1.0);
+        let info = shader_fn_info_from(&scale);
+
+        assert_eq!(info.function_name, "linear_scale");
+        assert_eq!(info.input_wgsl_type, "f32");
+        assert_eq!(info.output_wgsl_type, "f32");
+        assert!(!info.wgsl_code.is_empty());
+        assert!(!info.uniform_bytes.is_empty());
+        assert!(info.uniform_type_name.contains("LinearScale"));
+    }
+
+    #[test]
+    fn shader_fn_info_captures_color_map() {
+        use crate::shader_function::ColorMap;
+
+        let cm = ColorMap::new(
+            Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 1.0,
+                w: 1.0,
+            },
+            Vec4 {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+        );
+        let info = shader_fn_info_from(&cm);
+
+        assert_eq!(info.function_name, "color_map");
+        assert_eq!(info.input_wgsl_type, "f32");
+        assert_eq!(info.output_wgsl_type, "vec4<f32>");
+    }
+
+    #[test]
+    fn generate_shader_bound_vertex_wgsl_no_bindings() {
+        let original = "struct S {} @vertex fn vs_main() {}";
+        let result = generate_shader_bound_vertex_wgsl(original, &[]);
+        assert_eq!(result, original);
+    }
+
+    #[test]
+    fn generate_shader_bound_vertex_wgsl_injects_code() {
+        use crate::shader_function::LinearScale;
+
+        let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+        let info = shader_fn_info_from(&scale);
+
+        // Minimal vertex shader text resembling the circle shader.
+        let base_wgsl = r#"
+struct CircleInstance {
+    center: vec2<f32>,
+    radius: f32,
+}
+
+@group(0) @binding(0) var<storage, read> instances: array<CircleInstance>;
+
+@vertex
+fn vs_main() -> VertexOutput {
+    let instance = instances[input.instance_index];
+    let r = instance.radius;
+    return r;
+}
+"#;
+
+        let bindings: Vec<(&str, &ShaderFnInfo)> = vec![("radius", &info)];
+        let result = generate_shader_bound_vertex_wgsl(base_wgsl, &bindings);
+
+        // Should contain uniform binding at binding 1.
+        assert!(
+            result.contains("@group(0) @binding(1)"),
+            "Missing uniform binding: {result}"
+        );
+        // Should contain the shader function code.
+        assert!(
+            result.contains("linear_scale"),
+            "Missing shader function: {result}"
+        );
+        // Should contain the transformation variable.
+        assert!(
+            result.contains("_gup_radius"),
+            "Missing transformed variable: {result}"
+        );
+        // Original uses of instance.radius in the body (after the
+        // transformation) should be replaced with _gup_radius.
+        // But the transformation line itself reads from instance.radius.
+        // Count occurrences: should have exactly 1 (in the transformation line).
+        let count = result.matches("instance.radius").count();
+        assert_eq!(
+            count, 1,
+            "Expected 1 instance.radius (in transform line), found {count}: {result}"
+        );
+    }
+
+    #[test]
+    fn mixed_cpu_and_shader_bindings() {
+        use crate::shader_function::LinearScale;
+
+        let data = vec![ScatterPoint {
+            x: 0.0,
+            y: 0.0,
+            value: 50.0,
+        }];
+        let mut selection: Selection<ScatterPoint, Circle> = Selection::from_data(data);
+
+        // CPU binding for position.
+        selection.attr("center", |d: &ScatterPoint| [d.x, d.y]);
+        // GPU shader binding for radius.
+        let scale = LinearScale::new(0.0, 100.0, 0.01, 0.2);
+        selection.attr_shader("radius", |d: &ScatterPoint| d.value, scale);
+
+        assert_eq!(selection.bound_attributes(), vec!["center"]);
+        assert_eq!(selection.shader_bound_attributes(), vec!["radius"]);
+        assert!(selection.has_attr_bindings());
+    }
+
+    // --- GPU integration tests for shader function bindings ---
+
+    #[test]
+    fn gpu_shader_bound_circle_render() {
+        use crate::shader_function::LinearScale;
+
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let data = vec![
+                ScatterPoint {
+                    x: -0.3,
+                    y: 0.0,
+                    value: 50.0,
+                },
+                ScatterPoint {
+                    x: 0.3,
+                    y: 0.0,
+                    value: 80.0,
+                },
+            ];
+
+            let mut selection: Selection<ScatterPoint, Circle> = Selection::from_data(data);
+
+            // CPU binding for position + fill.
+            selection
+                .attr("center", |d: &ScatterPoint| [d.x, d.y])
+                .attr("fill_color", |_: &ScatterPoint| [1.0f32, 0.0, 0.0, 1.0]);
+
+            // GPU binding for radius.
+            let scale = LinearScale::new(0.0, 100.0, 0.02, 0.2);
+            selection.attr_shader("radius", |d: &ScatterPoint| d.value, scale);
+
+            selection
+                .prepare_render_bound(&context.device, &context.queue, None)
+                .expect("prepare_render_bound with shader fn");
+
+            assert!(selection.is_render_ready());
+
+            // Render to verify pipeline is valid.
+            let mut ctx = Arc::try_unwrap(context).expect("single owner");
+            let mut frame = ctx.begin_frame().expect("begin_frame");
+            {
+                let mut pass = frame.render_pass(Some(wgpu::Color::BLACK));
+                selection
+                    .render(&mut pass)
+                    .expect("render with shader fn bindings");
+            }
+            frame.finish().expect("finish frame");
+        });
+    }
+
+    #[test]
+    fn gpu_shader_bound_only_bindings() {
+        use crate::shader_function::LinearScale;
+
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let data = vec![ScatterPoint {
+                x: 0.0,
+                y: 0.0,
+                value: 75.0,
+            }];
+
+            let mut selection: Selection<ScatterPoint, Circle> = Selection::from_data(data);
+
+            // Only shader bindings (no CPU bindings).
+            let radius_scale = LinearScale::new(0.0, 100.0, 0.05, 0.3);
+            selection.attr_shader("radius", |d: &ScatterPoint| d.value, radius_scale);
+
+            selection
+                .prepare_render_bound(&context.device, &context.queue, None)
+                .expect("prepare with only shader bindings");
+
+            assert!(selection.is_render_ready());
+        });
+    }
 }
