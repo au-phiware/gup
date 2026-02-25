@@ -215,4 +215,99 @@ mod tests {
         let err = converter.convert_expr(&expr).unwrap_err();
         assert!(err.message.contains("to_string"));
     }
+
+    #[test]
+    fn pipeline_for_loop() {
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn sum_range(n: i32) -> i32 {
+                let mut sum = 0;
+                for i in 0..n {
+                    sum += i;
+                }
+                return sum;
+            }
+        };
+        let wgsl = transpile(&func, std::iter::empty::<String>());
+        assert!(
+            wgsl.contains("for (var i = 0; i < n; i++)"),
+            "got:\n{wgsl}"
+        );
+        assert!(wgsl.contains("sum += i;"), "got:\n{wgsl}");
+    }
+
+    #[test]
+    fn pipeline_while_loop() {
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn halve(x: f32) -> f32 {
+                let mut val = x;
+                while val > 1.0 {
+                    val = val / 2.0;
+                }
+                return val;
+            }
+        };
+        let wgsl = transpile(&func, std::iter::empty::<String>());
+        assert!(wgsl.contains("while (val > 1.0)"), "got:\n{wgsl}");
+    }
+
+    #[test]
+    fn pipeline_infinite_loop_break() {
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn decay(x: f32) -> f32 {
+                let mut val = x;
+                loop {
+                    val = val * 0.5;
+                    if val < 0.01 {
+                        break;
+                    }
+                }
+                return val;
+            }
+        };
+        let wgsl = transpile(&func, std::iter::empty::<String>());
+        assert!(wgsl.contains("loop {"), "got:\n{wgsl}");
+        assert!(wgsl.contains("break;"), "got:\n{wgsl}");
+    }
+
+    #[test]
+    fn pipeline_nested_control_flow() {
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn search(n: i32) -> i32 {
+                for i in 0..n {
+                    if i > 5 {
+                        return i;
+                    }
+                }
+                return -1;
+            }
+        };
+        let wgsl = transpile(&func, std::iter::empty::<String>());
+        assert!(
+            wgsl.contains("for (var i = 0; i < n; i++)"),
+            "got:\n{wgsl}"
+        );
+        assert!(wgsl.contains("if (i > 5)"), "got:\n{wgsl}");
+        assert!(wgsl.contains("return i;"), "got:\n{wgsl}");
+        assert!(wgsl.contains("return -1;"), "got:\n{wgsl}");
+    }
+
+    #[test]
+    fn pipeline_else_if_chain() {
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn classify(x: f32) -> i32 {
+                if x > 1.0 {
+                    return 2;
+                } else if x > 0.0 {
+                    return 1;
+                } else {
+                    return 0;
+                }
+            }
+        };
+        let wgsl = transpile(&func, std::iter::empty::<String>());
+        assert!(
+            wgsl.contains("} else if (x > 0.0) {"),
+            "Should generate else-if chain, got:\n{wgsl}"
+        );
+    }
 }

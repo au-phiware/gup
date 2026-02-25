@@ -45,7 +45,11 @@
 //! - Variable references and field access
 //! - `let` bindings (immutable and mutable)
 //! - `return` statements
-//! - `if`/`else` statements and expressions (→ WGSL `select()`)
+//! - `if`/`else`/`else if` statements and expressions (→ WGSL `select()`)
+//! - `for i in 0..n` loops (→ C-style `for` in WGSL)
+//! - `while condition` loops
+//! - `loop` (infinite loop with explicit `break`)
+//! - `break` and `continue` statements
 //! - Assignment statements
 //! - Array/vector indexing
 //! - Type-annotated let bindings
