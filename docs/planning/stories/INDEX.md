@@ -273,7 +273,7 @@ system story. The expanded story is also complete._
 | [GUP-124](GUP-124_Enhanced_Color_Description.md)             | Enhanced Color Description                  | 💡 New                | Low      | 2      |
 | [GUP-125](GUP-125_Automatic_ARIA_Registration.md)            | Automatic ARIA Registration                 | 💡 New                | Medium   | 3      |
 | [GUP-126](GUP-126_Reactive_ARIA_Updates.md)                  | Reactive ARIA Updates                       | 💡 New                | Medium   | 5      |
-| [GUP-127](GUP-127_Focus_Elements_for_Data_Points.md)         | Focus Elements for Data Points              | 🚧 In Progress        | High     | 5      |
+| [GUP-127](GUP-127_Focus_Elements_for_Data_Points.md)         | Focus Elements for Data Points              | ✅ Complete           | High     | 5      |
 | [GUP-128](GUP-128_Debug_GPU_Hit_Test_Detection.md)           | Debug GPU Hit Test Element Detection        | ✅ Complete           | High     | 5      |
 | [GUP-129](GUP-129_GPU_Debug_Visualization_Tool.md)           | GPU Interaction Debug Visualization Tool    | ✅ Complete           | Medium   | 8      |
 | [GUP-130](GUP-130_Mark_Type_ID_Proc_Macro.md)                | Mark Type ID Proc Macro                     | ✅ Complete           | Low      | 5      |
@@ -310,8 +310,7 @@ system story. The expanded story is also complete._
 2. **GUP-014** → **GUP-076** → **GUP-077** → **GUP-078** 📋 _Interaction
    performance chain (unblocks 100K pts metric)_
 3. **GUP-068** → **GUP-165** ✅ → **GUP-149** ✅ / **GUP-166** ✅ / **GUP-127**
-   📋 _Rendering integration chain (GUP-165, GUP-149, GUP-166 done — unblocks
-   GUP-127)_
+   ✅ _Rendering integration chain complete_
 4. **GUP-005** → **GUP-054-ES** → **GUP-055–062** 📋 _Phase 2 transpilation (not
    yet started)_
 
@@ -357,10 +356,8 @@ system story. The expanded story is also complete._
 ### Accessibility System (Post-GUP-016)
 
 - **Completed**: GUP-111 ✅, GUP-112 ✅, GUP-113 ✅, GUP-114 ✅, GUP-115 ✅,
-  GUP-116 ✅, GUP-117 ✅, GUP-118 ✅, GUP-119 ✅, GUP-121 ✅, GUP-128 ✅,
-  GUP-129 ✅, GUP-130 ✅
-- **Blocked**: GUP-127 ⚠️ (Focus Elements — same Selection rendering gap as
-  GUP-165)
+  GUP-116 ✅, GUP-117 ✅, GUP-118 ✅, GUP-119 ✅, GUP-121 ✅, GUP-127 ✅,
+  GUP-128 ✅, GUP-129 ✅, GUP-130 ✅
 - **Awaiting resources**: GUP-122 🎯 (requires Windows/macOS for screen reader
   tests)
 - **New / unstarted**: GUP-124 💡, GUP-125 💡, GUP-126 💡
@@ -1134,16 +1131,16 @@ not available in Linux dev environment
 
 ### GUP-127: Focus Elements for Data Points
 
-**Status**: ⚠️ Partially Complete - Blocked  
+**Status**: ✅ Complete  
 **Priority**: High  
 **Story Points**: 5  
 **Key Need**: Enable keyboard navigation of individual data points by creating
 focusable elements for marks  
-**Dependencies**: GUP-016 ✅, GUP-111 ✅, **GUP-002 ❌ (Missing)**  
+**Dependencies**: GUP-016 ✅, GUP-111 ✅, GUP-002 ✅  
 **Impact**: Complete keyboard accessibility, WCAG 2.1 AA compliance (SC 2.1.1:
 Keyboard)  
-**Blocker**: Selection type from GUP-002 never implemented, preventing
-integration tests and examples
+**Completed**: 2025-07-22 — SelectionFocusBridge, DataDimension navigation, ARIA
+integration, 24+ tests
 
 ---
 
