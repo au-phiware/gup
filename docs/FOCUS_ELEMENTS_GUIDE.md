@@ -1,244 +1,215 @@
 # Focus Elements for Data Points - Usage Guide
 
-This document explains how to use the focus element system created for GUP-127.
+This document explains how to use the focus element system (GUP-127) for
+keyboard-accessible data point navigation.
 
 ## Overview
 
-GUP-127 implements keyboard navigation for data points by providing:
+GUP-127 provides keyboard navigation for data points with:
 
-1. **FocusElementHelper** - Converts mark positions into focusable elements
-2. **FocusRingRenderer** - GPU-accelerated focus ring visualization
-3. **Integration with FocusManager** - Enables keyboard navigation (Tab, Arrow
-   keys)
+1. **SelectionFocusBridge** — Maps Selection data to focusable elements
+2. **MarkFocusHelper** — Low-level position-to-focusable-element conversion
+3. **FocusRingRenderer** — GPU-accelerated focus ring visualization
+4. **DataDimension navigation** — Sort-based exploration of data dimensions
+5. **ARIA integration** — Screen reader support via ARIA tree nodes
 
 ## Architecture
 
-### Components
-
+```text
+Selection<T, M>  ─────────────────────────────────────┐
+       │                                               │
+       │ register_focus_elements()                     │
+       ▼                                               ▼
+SelectionFocusBridge ── sync_focus_elements ──► FocusManager
+       │                                         │         │
+       │ sync_focus_elements_with_aria           │         │
+       ▼                                         ▼         ▼
+   AriaTree                               Sequential  Spatial
+  (DataPoint nodes)                        (Tab)      (Arrow)
+                                                │
+                                                ▼
+                                         FocusRingRenderer
 ```
-MarkFocusHelper --> FocusableElement --> FocusManager --> KeyEvent
-                                               |
-                                               v
-                                        Spatial/Sequential
-                                           Navigation
-                                               |
-                                               v
-                                        FocusRingRenderer
-```
 
-## Usage Example
-
-### 1. Setting Up Focus Elements
+## Quick Start with Selection
 
 ```rust
-use gup::accessibility::{
-    FocusManager, MarkFocusHelper, FocusElementConfig,
-    FocusRingRenderer, FocusRingStyle, KeyEvent,
+use gup::accessibility::selection_focus::{
+    SelectionFocusBridge, FocusPointDescriptor,
 };
-use gup::interaction::Vec2;
+use gup::accessibility::FocusManager;
+use gup::selection::Selection;
+use gup::mark::Circle;
 
-// Create focus manager
-let mut focus_manager = FocusManager::new();
-focus_manager.set_navigation_mode(NavigationMode::Spatial);
+// Create a Selection with data.
+let selection: Selection<MyData, Circle> = Selection::from_data(data);
 
-// Create focus helper with configuration
-let config = FocusElementConfig {
-    target_size: 20.0,        // Size of focus target in pixels
-    max_elements: 1000,       // Limit for performance
-    include_offscreen: false, // Only visible elements
-};
-let focus_helper = MarkFocusHelper::with_config(config);
+// Create the bridge and focus manager.
+let mut bridge = SelectionFocusBridge::new(Default::default());
+let mut fm = FocusManager::new();
 
-// Register mark positions as focusable elements
-let mark_positions = vec![
-    (Vec2::new(100.0, 100.0), 0, "Data point 1: value=42".to_string()),
-    (Vec2::new(200.0, 150.0), 1, "Data point 2: value=67".to_string()),
-    (Vec2::new(150.0, 200.0), 2, "Data point 3: value=89".to_string()),
-];
-
-let count = focus_helper.register_mark_positions(&mut focus_manager, &mark_positions);
-println!("Registered {} focusable elements", count);
+// Register data points as focusable elements.
+selection.register_focus_elements(&mut bridge, &mut fm, |item, idx| {
+    FocusPointDescriptor {
+        position: [item.x, item.y],
+        label: format!("Point {}: value={:.1}", idx, item.value),
+        value: Some(item.value as f64),
+    }
+});
 ```
 
-### 2. Handling Keyboard Input
+## Handling Keyboard Input
 
 ```rust
+use gup::accessibility::keyboard::{KeyEvent, AccessibilityAction};
+
 // In your event loop:
-match key_event {
-    KeyEvent::Tab => {
-        focus_manager.handle_key_input(KeyEvent::Tab);
-
-        // Get description of focused element for screen readers
-        if let Some(desc) = focus_manager.describe_current_focus() {
-            println!("Focused: {}", desc);
+if let Some(action) = fm.handle_key_input(key_event) {
+    match action {
+        AccessibilityAction::FocusChanged => {
+            if let Some(desc) = fm.describe_current_focus() {
+                println!("Focused: {}", desc);
+            }
         }
+        AccessibilityAction::DimensionCycleRequested { forward } => {
+            // Cycle the active dimension and re-sort.
+            let next = if forward { next_dimension } else { prev_dimension };
+            bridge.sort_by_dimension(&mut fm, next);
+        }
+        _ => {}
     }
-    KeyEvent::ArrowRight | KeyEvent::ArrowLeft |
-    KeyEvent::ArrowUp | KeyEvent::ArrowDown => {
-        focus_manager.handle_key_input(key_event);
-    }
-    _ => {}
 }
 ```
 
-### 3. Rendering Focus Rings
+## Data Dimension Navigation
+
+Sort focus elements by data dimensions so sequential navigation follows a
+meaningful order:
 
 ```rust
-// Create focus ring renderer
-let mut focus_ring_renderer = FocusRingRenderer::with_style(
+use gup::accessibility::selection_focus::DataDimension;
+
+// Sort by X position (left to right).
+bridge.sort_by_dimension(&mut fm, DataDimension::X);
+
+// Sort by Y position (top to bottom).
+bridge.sort_by_dimension(&mut fm, DataDimension::Y);
+
+// Sort by numeric value.
+bridge.sort_by_dimension(&mut fm, DataDimension::Value);
+```
+
+In `DataDimension` navigation mode, Arrow Up/Down emit `DimensionCycleRequested`
+events so the application can switch the active dimension.
+
+## ARIA Integration
+
+Register focus elements with an ARIA tree for screen reader support:
+
+```rust
+use gup::accessibility::AccessibilitySystem;
+
+let mut system = AccessibilitySystem::new();
+let chart_id = system.aria_tree.create_chart_node(
+    "Sales Chart".to_string(),
+    Some("Q4 2024 revenue by region".to_string()),
+);
+
+bridge.sync_focus_elements_with_aria(
+    selection.data(),
+    &mut system.focus_manager,
+    &mut system.aria_tree,
+    chart_id,
+    |item, idx| FocusPointDescriptor {
+        position: [item.x, item.y],
+        label: format!("Region {}: ${:.0}k", item.region, item.revenue),
+        value: Some(item.revenue),
+    },
+);
+```
+
+## Rendering Focus Rings
+
+```rust
+use gup::accessibility::FocusRingRenderer;
+use gup::accessibility::FocusRingStyle;
+
+let mut renderer = FocusRingRenderer::with_style(
     FocusRingStyle::high_contrast() // WCAG AAA compliant
 );
 
 // In your render loop:
-focus_ring_renderer.update(delta_time);
+renderer.update(delta_time);
 
-let mut render_pass = frame.render_pass(Some(clear_color));
-
-// Render your visualization...
-// renderer.render(&mut render_pass);
-
-// Render focus ring around focused element
-if let Some(focused) = focus_manager.get_focused_element() {
-    focus_ring_renderer.render_focus_ring(
-        device,
-        &mut render_pass,
-        focused.bounds,
-    )?;
+if let Some(focused) = fm.get_focused_element() {
+    renderer.render_focus_ring(device, &mut render_pass, focused.bounds)?;
 }
 ```
 
-### 4. Custom Focus Ring Styles
+### Focus Ring Styles
 
 ```rust
-// Default style - subtle blue ring
-let default_style = FocusRingStyle::default();
+let default_style = FocusRingStyle::default();       // Blue, 2px
+let high_contrast = FocusRingStyle::high_contrast();  // Yellow, 3px
+let animated = FocusRingStyle::animated();             // Dashed, animated
 
-// High contrast - yellow ring, WCAG AAA compliant
-let high_contrast = FocusRingStyle::high_contrast();
-
-// Animated - dashed ring with animation
-let animated = FocusRingStyle::animated();
-
-// Custom style
 let custom = FocusRingStyle {
     color: [1.0, 0.0, 0.0, 1.0], // Red
     width: 3.0,
-    dash_pattern: vec![10.0, 5.0], // Dashed
+    dash_pattern: vec![10.0, 5.0],
     animation_speed: 0.5,
 };
-
-focus_ring_renderer.set_style(custom);
 ```
 
-## Integration with Mark Renderers
+## Handling Data Changes
 
-The focus system is designed to work with any mark renderer. The key steps are:
-
-1. Extract mark center positions after rendering
-2. Convert positions to focusable elements
-3. Register with FocusManager
-4. Render focus rings in same coordinate space
-
-### Example: Circle Marks
+When the underlying data changes, re-sync the focus elements:
 
 ```rust
-// After rendering circles, extract their positions
-let circle_positions: Vec<(Vec2, usize, String)> = circles
-    .iter()
-    .enumerate()
-    .map(|(i, circle)| {
-        let pos = Vec2::new(circle.center[0], circle.center[1]);
-        let desc = format!("Circle {}: x={:.1}, y={:.1}",
-                          i + 1, pos.x, pos.y);
-        (pos, i, desc)
-    })
-    .collect();
-
-// Register as focusable
-focus_helper.register_mark_positions(&mut focus_manager, &circle_positions);
+// After calling selection.set_data(new_data):
+if bridge.needs_sync(selection.len()) {
+    selection.register_focus_elements(&mut bridge, &mut fm, descriptor_fn);
+}
 ```
 
-## Accessibility Features
+## Performance
 
-### WCAG 2.1 AA Compliance
-
-- **SC 2.1.1 (Keyboard)**: All data points navigable via keyboard
-- **SC 2.4.7 (Focus Visible)**: Clear focus indicators
-- **SC 1.4.11 (Non-text Contrast)**: High contrast focus rings available
-
-### Navigation Modes
-
-1. **Sequential (Tab/Shift+Tab)**: Navigate in data order
-2. **Spatial (Arrow keys)**: Navigate based on visual position
-3. **Data dimension**: Navigate along data axes (future)
-
-### Screen Reader Support
-
-Focus element descriptions are automatically announced:
-
-- "Data point 1 of 100: Circle at position (10.00, 20.00), value 42"
-- Works with NVDA, JAWS, VoiceOver
-
-## Performance Considerations
+- **Registration**: <50ms for 1000 elements
+- **Navigation**: <0.1ms per key event for 1000 elements
+- **Max elements**: Configurable (default 1000) to prevent degradation
+- **Focus ring rendering**: Single GPU draw call via instanced rendering
 
 ### Large Datasets
 
-For datasets with 10,000+ points:
-
 ```rust
-let config = FocusElementConfig {
-    max_elements: 1000,  // Limit focus elements
-    include_offscreen: false, // Only visible points
+use gup::accessibility::selection_focus::SelectionFocusConfig;
+use gup::accessibility::FocusElementConfig;
+
+let config = SelectionFocusConfig {
+    element_config: FocusElementConfig {
+        max_elements: 500,
+        include_offscreen: false,
+        ..Default::default()
+    },
     ..Default::default()
 };
 ```
 
-The system automatically:
+## WCAG 2.1 AA Compliance
 
-- Limits focusable elements to prevent DOM bloat
-- Skips off-screen elements
-- Uses GPU rendering for focus rings (no DOM overhead)
-
-### Focus Ring Rendering
-
-- Single GPU draw call for all focus rings
-- Instanced rendering for multiple selections
-- <1ms overhead per frame
-
-## Known Limitations
-
-1. **Selection Type Not Implemented**: The full integration with
-   `Selection<T, M>` cannot be demonstrated because the Selection type from
-   GUP-002 has not been implemented yet.
-
-2. **Coordinate Space**: Focus elements assume screen coordinates. For complex
-   projections (geographic, 3D), coordinate transformation is required.
-
-3. **Dynamic Data**: Currently requires manual re-registration when data
-   changes. Reactive updates planned for future.
-
-## Future Enhancements
-
-See follow-up stories:
-
-- **GUP-128**: Reactive focus element updates
-- **GUP-129**: Focus pooling for million-point datasets
-- **GUP-130**: Touch target expansion for mobile
+- **SC 2.1.1 (Keyboard)**: All data points navigable via keyboard
+- **SC 2.4.7 (Focus Visible)**: Clear focus ring indicators
+- **SC 1.4.11 (Non-text Contrast)**: High contrast focus rings available
 
 ## Testing
 
-Unit tests are provided for:
-
-- Focus element creation
-- Focus ring styles
-- Helper configuration
-- Max element limiting
-
-Run tests with:
-
 ```bash
+# Unit tests
+cargo test accessibility::selection_focus -- --test-threads=1
 cargo test accessibility::focus_elements -- --test-threads=1
 cargo test accessibility::focus_ring -- --test-threads=1
-```
+cargo test accessibility::keyboard -- --test-threads=1
 
-Note: Integration tests blocked by Selection type not being implemented.
+# Integration tests
+cargo test --test accessibility_integration -- --test-threads=1
+```
