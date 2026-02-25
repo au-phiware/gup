@@ -51,7 +51,7 @@ pub mod renderer;
 pub mod text;
 
 pub use batch_renderer::{
-    BatchFrameStats, BatchRendererConfig, CullingManager, InstanceAttributes,
+    BatchFrameStats, BatchRendererConfig, CullingManager, GeometryCache, InstanceAttributes,
     InstancedBatchRenderer, LodLevel, RenderBatch, Viewport2D,
 };
 pub use boxplot::{BoxPlot, BoxPlotAttributes, BoxPlotInstance, BoxPlotOrientation, BoxPlotVertex};

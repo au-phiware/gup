@@ -347,6 +347,153 @@ pub struct BatchFrameStats {
 }
 
 // ---------------------------------------------------------------------------
+// Geometry cache
+// ---------------------------------------------------------------------------
+
+/// Cached geometry entry for a single mark type.
+struct GeometryCacheEntry {
+    vertex_buffer: GpuBuffer<u8>,
+    index_buffer: Option<GpuBuffer<u32>>,
+    /// Number of frames since this entry was last used.
+    frames_since_use: u32,
+}
+
+/// Cache for mark geometry (vertex + index buffers).
+///
+/// Geometry for each mark type is uploaded once and reused across frames.
+/// Entries that go unused for many frames can be evicted to free GPU memory.
+pub struct GeometryCache {
+    entries: HashMap<TypeId, GeometryCacheEntry>,
+    /// Number of frames after which unused entries are evicted.
+    max_idle_frames: u32,
+    /// Statistics: number of cache hits.
+    pub hits: u64,
+    /// Statistics: number of cache misses (new uploads).
+    pub misses: u64,
+}
+
+impl GeometryCache {
+    /// Create a new geometry cache.
+    pub fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
+            max_idle_frames: 300, // ~5 seconds at 60 fps
+            hits: 0,
+            misses: 0,
+        }
+    }
+
+    /// Set the maximum number of idle frames before eviction.
+    pub fn set_max_idle_frames(&mut self, frames: u32) {
+        self.max_idle_frames = frames;
+    }
+
+    /// Ensure geometry for mark type `M` is cached.
+    ///
+    /// Returns `true` if the geometry was already cached (hit),
+    /// `false` if it was freshly uploaded (miss).
+    pub fn ensure<M: Mark>(&mut self, device: &Device, queue: &Queue) -> GupResult<bool> {
+        let type_id = TypeId::of::<M>();
+        if let Some(entry) = self.entries.get_mut(&type_id) {
+            entry.frames_since_use = 0;
+            self.hits += 1;
+            return Ok(true);
+        }
+
+        // Upload vertex data
+        let vertices = M::generate_vertices();
+        let vertex_bytes: &[u8] = bytemuck::cast_slice(&vertices);
+        let mut vb = GpuBuffer::<u8>::new(device, BufferType::Vertex, vertex_bytes.len());
+        vb.upload(device, queue, vertex_bytes)?;
+
+        // Upload index data
+        let ib = if let Some(indices) = M::generate_indices() {
+            let count = indices.len();
+            let mut buf = GpuBuffer::<u32>::new(device, BufferType::Storage, count);
+            buf.upload(device, queue, &indices)?;
+            Some(buf)
+        } else {
+            None
+        };
+
+        self.entries.insert(
+            type_id,
+            GeometryCacheEntry {
+                vertex_buffer: vb,
+                index_buffer: ib,
+                frames_since_use: 0,
+            },
+        );
+
+        self.misses += 1;
+        Ok(false)
+    }
+
+    /// Get the vertex buffer for a mark type (None if not cached).
+    pub fn vertex_buffer(&self, type_id: TypeId) -> Option<&GpuBuffer<u8>> {
+        self.entries.get(&type_id).map(|e| &e.vertex_buffer)
+    }
+
+    /// Get the index buffer for a mark type (None if not cached or mark is non-indexed).
+    pub fn index_buffer(&self, type_id: TypeId) -> Option<&GpuBuffer<u32>> {
+        self.entries
+            .get(&type_id)
+            .and_then(|e| e.index_buffer.as_ref())
+    }
+
+    /// Whether geometry for a mark type is cached.
+    pub fn contains(&self, type_id: TypeId) -> bool {
+        self.entries.contains_key(&type_id)
+    }
+
+    /// Number of cached mark types.
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Whether the cache is empty.
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Cache hit rate as a percentage (0..100).
+    pub fn hit_rate(&self) -> f32 {
+        let total = self.hits + self.misses;
+        if total == 0 {
+            0.0
+        } else {
+            (self.hits as f32 / total as f32) * 100.0
+        }
+    }
+
+    /// Advance the frame counter and evict idle entries.
+    ///
+    /// Call once per frame. Returns the number of evicted entries.
+    pub fn tick_frame(&mut self) -> usize {
+        let max = self.max_idle_frames;
+        let before = self.entries.len();
+        self.entries.retain(|_, entry| {
+            entry.frames_since_use += 1;
+            entry.frames_since_use <= max
+        });
+        before - self.entries.len()
+    }
+
+    /// Clear the entire cache.
+    pub fn clear(&mut self) {
+        self.entries.clear();
+        self.hits = 0;
+        self.misses = 0;
+    }
+}
+
+impl Default for GeometryCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Instanced batch renderer
 // ---------------------------------------------------------------------------
 
@@ -921,6 +1068,119 @@ mod tests {
         assert_eq!(bytes.len(), std::mem::size_of::<InstanceAttributes>());
         // 16 * 4 (transform) + 4 * 4 (color) + 4 * 4 (custom) = 96 bytes
         assert_eq!(std::mem::size_of::<InstanceAttributes>(), 96);
+    }
+
+    // ------------------------------------------------------------------
+    // GeometryCache unit tests
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn test_geometry_cache_new() {
+        let cache = GeometryCache::new();
+        assert!(cache.is_empty());
+        assert_eq!(cache.len(), 0);
+        assert_eq!(cache.hit_rate(), 0.0);
+    }
+
+    #[test]
+    fn test_geometry_cache_tick_eviction() {
+        let mut cache = GeometryCache::new();
+        cache.set_max_idle_frames(3);
+
+        // Simulate entries by directly testing frame counting
+        // (GPU-dependent ensure() tested below)
+        assert_eq!(cache.tick_frame(), 0);
+    }
+
+    // ------------------------------------------------------------------
+    // GeometryCache GPU integration tests
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn test_geometry_cache_ensure_circle() -> GupResult<()> {
+        let ctx = create_test_context().await?;
+        let device = &ctx.device;
+        let queue = &ctx.queue;
+
+        let mut cache = GeometryCache::new();
+
+        // First call should be a miss
+        let hit = cache.ensure::<Circle>(device, queue)?;
+        assert!(!hit);
+        assert_eq!(cache.len(), 1);
+        assert_eq!(cache.misses, 1);
+        assert_eq!(cache.hits, 0);
+
+        // Second call should be a hit
+        let hit = cache.ensure::<Circle>(device, queue)?;
+        assert!(hit);
+        assert_eq!(cache.len(), 1);
+        assert_eq!(cache.misses, 1);
+        assert_eq!(cache.hits, 1);
+        assert_eq!(cache.hit_rate(), 50.0);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_geometry_cache_multiple_types() -> GupResult<()> {
+        use crate::mark::Rectangle;
+
+        let ctx = create_test_context().await?;
+        let device = &ctx.device;
+        let queue = &ctx.queue;
+
+        let mut cache = GeometryCache::new();
+        cache.ensure::<Circle>(device, queue)?;
+        cache.ensure::<Rectangle>(device, queue)?;
+
+        assert_eq!(cache.len(), 2);
+        assert!(cache.contains(TypeId::of::<Circle>()));
+        assert!(cache.contains(TypeId::of::<Rectangle>()));
+        assert!(cache.vertex_buffer(TypeId::of::<Circle>()).is_some());
+        assert!(cache.index_buffer(TypeId::of::<Circle>()).is_some());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_geometry_cache_eviction() -> GupResult<()> {
+        let ctx = create_test_context().await?;
+        let device = &ctx.device;
+        let queue = &ctx.queue;
+
+        let mut cache = GeometryCache::new();
+        cache.set_max_idle_frames(2);
+        cache.ensure::<Circle>(device, queue)?;
+
+        // Tick 3 times without accessing Circle → should evict
+        cache.tick_frame();
+        assert_eq!(cache.len(), 1);
+        cache.tick_frame();
+        assert_eq!(cache.len(), 1);
+        let evicted = cache.tick_frame();
+        assert_eq!(evicted, 1);
+        assert_eq!(cache.len(), 0);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_geometry_cache_clear() -> GupResult<()> {
+        let ctx = create_test_context().await?;
+        let device = &ctx.device;
+        let queue = &ctx.queue;
+
+        let mut cache = GeometryCache::new();
+        cache.ensure::<Circle>(device, queue)?;
+        assert_eq!(cache.len(), 1);
+
+        cache.clear();
+        assert_eq!(cache.len(), 0);
+        assert_eq!(cache.hits, 0);
+        assert_eq!(cache.misses, 0);
+
+        Ok(())
     }
 
     // ------------------------------------------------------------------
