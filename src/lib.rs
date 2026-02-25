@@ -64,6 +64,9 @@
 //! - [`accessibility`] - Screen reader and keyboard navigation support
 //! - [`prelude`] - Commonly used imports
 
+// Allow `gup::` paths in proc macro-generated code from within this crate.
+extern crate self as gup;
+
 pub mod accessibility;
 pub mod async_mixable;
 pub mod axis;
@@ -97,6 +100,18 @@ pub mod test_utils;
 pub mod text;
 pub mod tick_generator;
 pub mod visual_test_utils;
+
+/// Hidden module for procedural macro support.
+///
+/// This module re-exports types that the `#[derive(Mark)]` macro needs
+/// to reference in generated code. Do not use directly.
+#[doc(hidden)]
+pub mod __private {
+    pub use crate::error::GupError;
+    pub use crate::mark::Mark;
+    pub use crate::shader_pipeline::ComposableShaderPipeline;
+}
+
 // Export accessibility system components
 pub use accessibility::high_contrast::{
     AccessibilityOverrides, Color as AccessibilityColor, calculate_contrast_ratio,

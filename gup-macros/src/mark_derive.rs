@@ -133,7 +133,7 @@ pub fn derive_mark_impl(input: DeriveInput) -> Result<TokenStream> {
             pub position: [f32; 2],
         }
 
-        impl crate::mark::Mark for #name {
+        impl ::gup::mark::Mark for #name {
             type Vertex = #vertex_name;
             type AttributeValue = #name;
 
@@ -155,14 +155,14 @@ pub fn derive_mark_impl(input: DeriveInput) -> Result<TokenStream> {
 
             fn get_attribute_type(
                 attribute_name: &str,
-            ) -> crate::error::GupResult<&'static str> {
+            ) -> ::gup::error::GupResult<&'static str> {
                 match attribute_name {
                     #(#attr_type_arms)*
                     // Fall back to common defaults
                     "position" => Ok("vec2<f32>"),
                     "color" => Ok("vec4<f32>"),
                     "size" | "radius" => Ok("f32"),
-                    _ => Err(crate::error::GupError::validation_error(
+                    _ => Err(::gup::error::GupError::validation_error(
                         format!("Unknown attribute for {}: {}", stringify!(#name), attribute_name),
                     )),
                 }

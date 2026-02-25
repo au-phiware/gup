@@ -143,6 +143,10 @@ name = "grid_performance_benchmarks"
 harness = false
 
 [[example]]
+name = "custom_mark_demo"
+path = "examples/custom_mark_demo.rs"
+
+[[example]]
 name = "blend_modes_showcase"
 path = "examples/blend_modes_showcase.rs"
 
