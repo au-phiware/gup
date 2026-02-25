@@ -1,7 +1,7 @@
 # GUP-175: GPU-Side Morton Range Query
 
-**Priority**: Medium **Complexity**: High **Created**: 2025-08-06 **Status**: 📋
-Planned
+**Priority**: Medium **Complexity**: High **Created**: 2025-08-06 **Status**: 🚧
+In Progress
 
 ## Overview
 
