@@ -656,6 +656,11 @@ pub struct InteractionSystem {
     cached_element_version: u64,
     /// Number of elements currently cached on the GPU.
     cached_element_count: usize,
+
+    /// Number of result slots written by the last compute dispatch (GUP-197).
+    /// Used to limit the staging buffer copy size in `download_results()`.
+    /// A value of 0 means "copy the full buffer" (conservative fallback).
+    last_dispatch_result_slots: usize,
 }
 
 impl InteractionSystem {
@@ -899,6 +904,7 @@ impl InteractionSystem {
             max_morton_candidates,
             cached_element_version: 0,
             cached_element_count: 0,
+            last_dispatch_result_slots: 0,
         })
     }
 
@@ -1582,6 +1588,11 @@ impl InteractionSystem {
         }
 
         self.queue.submit([encoder.finish()]);
+
+        // For the indirect path we don't know the exact candidate count, but
+        // it is bounded by max_morton_candidates (GUP-197).
+        self.last_dispatch_result_slots = self.max_morton_candidates;
+
         Ok(())
     }
 
@@ -1863,6 +1874,10 @@ impl InteractionSystem {
 
         self.queue.submit([encoder.finish()]);
 
+        // For the indirect path we don't know the exact candidate count, but
+        // it is bounded by max_morton_candidates (GUP-197).
+        self.last_dispatch_result_slots = self.max_morton_candidates;
+
         Ok(())
     }
 
@@ -2044,10 +2059,13 @@ impl InteractionSystem {
 
     /// Dispatch the hit test compute shader
     async fn dispatch_hit_test_compute(
-        &self,
+        &mut self,
         element_count: usize,
         query_count: usize,
     ) -> GupResult<()> {
+        // Track result slots for optimised readback copy size (GUP-197).
+        self.last_dispatch_result_slots = element_count * query_count;
+
         // Upload the hit test config so the shader knows the actual query count.
         let config = HitTestConfig {
             query_count: query_count as u32,
@@ -2120,9 +2138,22 @@ impl InteractionSystem {
     /// Download results from GPU using the persistent staging buffer (GUP-197).
     ///
     /// Reuses a pre-allocated staging buffer instead of creating a new one per
-    /// query, eliminating the per-query buffer allocation overhead (~3-4ms).
+    /// query, eliminating the per-query buffer allocation overhead. Only the
+    /// portion of the result buffer that was actually written is copied, and
+    /// the copy and map are combined into a single poll cycle.
     async fn download_results(&mut self) -> GupResult<Vec<InteractionResult>> {
+        let result_entry_size = std::mem::size_of::<InteractionResult>() as u64;
         let staging_size = self.result_staging_buffer.size();
+
+        // Only copy the portion of the result buffer that was actually written.
+        // `last_dispatch_result_slots` is set by dispatch methods; 0 means
+        // "copy everything" as a conservative fallback.
+        let copy_size = if self.last_dispatch_result_slots > 0 {
+            let needed = self.last_dispatch_result_slots as u64 * result_entry_size;
+            needed.min(staging_size)
+        } else {
+            staging_size
+        };
 
         // Copy from result buffer to the persistent staging buffer
         let mut encoder = self
@@ -2136,29 +2167,24 @@ impl InteractionSystem {
             0,
             &self.result_staging_buffer,
             0,
-            staging_size,
+            copy_size,
         );
 
-        let submission_index = self.queue.submit([encoder.finish()]);
+        self.queue.submit([encoder.finish()]);
 
-        // Wait for the copy operation to complete
-        let _ = self
-            .device
-            .poll(PollType::WaitForSubmissionIndex(submission_index));
+        // Request the map immediately after the copy submission.
+        // The map will not complete until the copy is finished.
+        // Only map the region we actually copied.
+        let buffer_slice = self.result_staging_buffer.slice(..copy_size);
 
-        // Map the buffer and wait for it to be mapped
-        let buffer_slice = self.result_staging_buffer.slice(..);
-
-        // Create a channel to wait for the mapping completion
         let (sender, receiver) = futures_channel::oneshot::channel();
         buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
             let _ = sender.send(result);
         });
 
-        // Poll the device until the mapping is complete
+        // Single poll to wait for both copy and map to complete.
         let _ = self.device.poll(PollType::Wait);
 
-        // Wait for the mapping to complete
         receiver
             .await
             .map_err(|_| {
