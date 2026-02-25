@@ -365,6 +365,11 @@ impl TextLayoutEngine {
         viewport_bounds: &ViewportBounds,
         clipping_config: &ClippingStrategyConfig,
     ) -> GupResult<LayoutResult> {
+        // Empty text needs no clipping
+        if text.is_empty() {
+            return self.layout_text(text, position, style, font_atlas, constraints);
+        }
+
         // Perform initial layout
         let initial_result = self.layout_text_inner(text, position, style, font_atlas, constraints)?;
 
