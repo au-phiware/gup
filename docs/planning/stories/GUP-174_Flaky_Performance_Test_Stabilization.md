@@ -95,3 +95,70 @@ assertions across 15 files, following the pattern established by GUP-187.
 - 1,227 library/integration tests pass (0 failures, 4 ignored)
 - All 15 modified test files compile and pass
 - Tests verified stable across 3 consecutive runs
+
+## Retrospective
+
+**Completed**: 2025-08-07
+
+### Key Technical Learnings
+
+#### Debug vs Release Performance Gap
+
+- **Challenge**: Debug builds are 3-10x slower than release for CPU-bound
+  operations due to missing optimizations, bounds checking, and debug
+  assertions. Tests with tight thresholds (e.g., <1ms, <500μs) fail reliably in
+  debug mode.
+- **Solution**: Applied `#[cfg(debug_assertions)]` /
+  `#[cfg(not(debug_assertions))]` conditional thresholds consistently across all
+  timing-sensitive tests. Debug thresholds are typically 3-5x the release
+  threshold.
+- **Pattern**: For any new performance test, always define separate thresholds:
+
+  ```rust
+  #[cfg(debug_assertions)]
+  let threshold_ms: u128 = GENEROUS_VALUE;
+  #[cfg(not(debug_assertions))]
+  let threshold_ms: u128 = TIGHT_VALUE;
+  ```
+
+#### Relative Performance Comparisons Are Inherently Flaky
+
+- **Challenge**: The pipeline cache benchmark compared cached vs uncached
+  timings with a strict `cached < uncached` assertion. Under system load, the
+  cached path can occasionally be slower due to OS scheduling noise.
+- **Solution**: Added a 10% tolerance factor to the comparison. This still
+  validates that caching provides a benefit while tolerating measurement noise.
+- **Pattern**: For relative comparisons, always add a tolerance:
+  `cached < uncached * 1.1` rather than `cached < uncached`.
+
+### Architectural Decisions
+
+#### Consistent Pattern Over Central Infrastructure
+
+- **Decision**: Used inline `#[cfg(debug_assertions)]` blocks at each test site
+  rather than creating a central threshold helper/macro.
+- **Reasoning**: Each test has unique semantics and threshold rationale. A
+  central facility would abstract away important context. The inline pattern is
+  also what GUP-187 established, maintaining consistency.
+- **Trade-off**: Slight repetition across test files, but each threshold is
+  self-documenting with its own comment.
+- **Future**: If the project grows to 100+ performance tests, a
+  `perf_threshold!()` macro could reduce boilerplate.
+
+### Development Workflow Insights
+
+- The audit phase (grepping for all timing assertions) was the most important
+  step. A systematic `grep` for `elapsed.*<`, `duration.*<`, `as_millis.*<`,
+  `as_micros.*<` patterns across all `.rs` files ensured nothing was missed.
+- 30+ timing assertions were found across 15 files — more than initially
+  expected. The scope extended beyond `src/` into `tests/` directory.
+- The `shader_ast/benchmarks.rs` file used a `BenchmarkResult.passed` pattern
+  rather than direct assertions, requiring a different approach (a
+  `benchmark_threshold_ms()` helper function).
+- Pre-existing doctest compilation failures (6) were observed but are unrelated
+  to this story.
+
+### Follow-up Stories
+
+No new stories identified. The pre-existing doctest failures are a known issue
+tracked separately.
