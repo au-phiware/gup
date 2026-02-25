@@ -393,3 +393,86 @@ This implementation enables:
 - Platform-specific function variants for different GPU architectures
 - Integration with GPU profiling tools for function performance analysis
 - Support for newer WGSL built-in functions as they become available
+
+## Retrospective
+
+**Completed**: 2025-07-18
+
+### Key Technical Learnings
+
+#### Registry-Based Function Resolution
+
+- **Challenge**: WGSL built-in functions are heavily overloaded (e.g., `abs`
+  works on f32, i32, u32, and all vector variants). Needed a system that handles
+  this cleanly without massive match arms.
+- **Solution**: Created `ParamPattern` enum with variants like
+  `AnyFloatScalarOrVec`, `AnyNumericScalarOrVec` that concisely express type
+  families. Combined with `ReturnTypeRule` for flexible return type computation.
+- **Pattern**: Enum-based pattern matching for type families is much cleaner
+  than individual type enumeration. A single `ParamPattern::AnyFloatScalarOrVec`
+  replaces listing 5+ concrete types.
+
+#### Dual-Layer Architecture (Registry + Converter)
+
+- **Challenge**: The story calls for a function registry, but the existing
+  converter already handles ~30 functions via match arms. Need to add the
+  registry without breaking the converter.
+- **Solution**: The registry provides type-safe resolution and metadata
+  (categories, overloads, error messages), while the converter retains its
+  simple match-based dispatch for transpilation. The registry is available for
+  future use when the converter needs validation or error reporting.
+- **Pattern**: Layer new capabilities alongside existing working code rather
+  than rewriting. The registry enhances the system without replacing what works.
+
+#### Method-to-Function Mapping Patterns
+
+- **Challenge**: Rust method syntax (`.sin()`, `.dot(b)`) maps to WGSL free
+  functions (`sin(x)`, `dot(a, b)`) with varying arity.
+- **Solution**: Organized method mappings by arity — unary (receiver only),
+  binary (receiver + 1 arg), ternary (receiver + 2 args). Special cases like
+  `length_squared` → `dot(v, v)` handled individually.
+- **Pattern**: Group method mappings by arity for clean match arms with shared
+  handling logic.
+
+### Architectural Decisions
+
+#### Registry as Metadata System, Not Dispatcher
+
+- **Decision**: Keep the registry as a queryable metadata system rather than
+  making it the primary dispatch mechanism for the converter.
+- **Reasoning**: The converter's match-based dispatch is already fast and well-
+  tested. Replacing it with registry lookups would add indirection without clear
+  benefit at this stage.
+- **Trade-off**: Some duplication between registry entries and converter match
+  arms. But the registry adds unique value: overload resolution, category
+  queries, error suggestions, and parameter count validation.
+- **Future**: GUP-060 and GUP-061 can integrate the registry more deeply,
+  potentially using it as the single source of truth for function resolution.
+
+#### Comprehensive WGSL Coverage
+
+- **Decision**: Register all WGSL built-in functions, including texture, atomic,
+  and barrier operations that aren't yet transpilable from Rust syntax.
+- **Reasoning**: The registry serves as documentation and future-proofing. When
+  the transpiler learns to handle texture types and atomics, the function
+  signatures are already defined.
+- **Trade-off**: Some registered functions can't yet be used through the
+  transpilation pipeline (texture sampling requires special type support).
+- **Future**: GUP-061 integration story can wire these up end-to-end.
+
+### Development Workflow Insights
+
+- The existing test infrastructure (transpile_expr helper, syn::parse_str) made
+  it very easy to add tests incrementally.
+- Building the registry with builder-pattern helpers (register_unary_float,
+  register_binary_numeric) dramatically reduced registration boilerplate.
+- Running `cargo test -p gup-macros` during development was fast (~2s) since the
+  proc macro crate is small compared to the full project.
+- The 3-increment approach (registry → converter extensions → utility methods)
+  kept each commit focused and reviewable.
+
+### Follow-up Stories
+
+No new stories identified. The existing planned stories GUP-060 (Optimization
+and Error Reporting) and GUP-061 (Integration with Shader Function System) are
+the natural next steps that will build on this registry.
