@@ -1325,6 +1325,19 @@ impl ComposableShaderPipeline {
         self.uniform_buffers.len()
     }
 
+    /// Flush pending writes from a [`UniformBatcher`] into this pipeline's
+    /// uniform buffers.
+    ///
+    /// Returns the number of writes performed.
+    pub fn flush_batcher(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        batcher: &mut UniformBatcher,
+    ) -> GupResult<usize> {
+        batcher.flush(device, queue, &mut self.uniform_buffers)
+    }
+
     /// Get the number of functions with uniforms (for testing).
     pub fn functions_with_uniforms_count(&self) -> usize {
         self.functions.iter().filter(|f| f.has_uniforms()).count()

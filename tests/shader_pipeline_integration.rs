@@ -317,3 +317,188 @@ async fn test_automatic_uniform_struct_generation() {
         source: wgpu::ShaderSource::Wgsl(vertex_shader.into()),
     });
 }
+
+// ---------------------------------------------------------------------------
+// GPU tests for performance optimization types (GUP-054)
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_uniform_buffer_pool_acquire_and_release() {
+    let context = create_test_context().await;
+    let device = &context.device;
+
+    let mut pool = UniformBufferPool::new(8);
+
+    // Acquire three buffers of different sizes.
+    let b1 = pool.acquire(device, 16); // 16 bytes → bucket 256
+    let b2 = pool.acquire(device, 32); // 32 bytes → bucket 256
+    let b3 = pool.acquire(device, 300); // 300 bytes → bucket 512
+
+    assert_eq!(pool.stats().total_created, 3);
+    assert_eq!(pool.stats().total_reused, 0);
+
+    // Return the first two to the pool (same 256-byte bucket).
+    pool.release(b1);
+    pool.release(b2);
+    assert_eq!(pool.idle_count(), 2);
+
+    // The next acquire of ≤256 bytes should reuse a pooled buffer.
+    let _b4 = pool.acquire(device, 16);
+    assert_eq!(pool.stats().total_reused, 1);
+    assert_eq!(pool.idle_count(), 1);
+
+    // Acquiring a 512-byte-class buffer creates a new one (b3 not returned).
+    let _b5 = pool.acquire(device, 300);
+    assert_eq!(pool.stats().total_created, 4);
+
+    // Return b3 then reuse it.
+    pool.release(b3);
+    let _b6 = pool.acquire(device, 260);
+    assert_eq!(pool.stats().total_reused, 2);
+}
+
+#[tokio::test]
+async fn test_uniform_buffer_pool_clear() {
+    let context = create_test_context().await;
+    let device = &context.device;
+
+    let mut pool = UniformBufferPool::new(8);
+    let b = pool.acquire(device, 16);
+    pool.release(b);
+    assert_eq!(pool.idle_count(), 1);
+
+    pool.clear();
+    assert_eq!(pool.idle_count(), 0);
+    assert_eq!(pool.bucket_count(), 0);
+}
+
+#[tokio::test]
+async fn test_uniform_buffer_pool_bucket_limit() {
+    let context = create_test_context().await;
+    let device = &context.device;
+
+    // Pool with max 2 per bucket.
+    let mut pool = UniformBufferPool::new(2);
+
+    let b1 = pool.acquire(device, 16);
+    let b2 = pool.acquire(device, 16);
+    let b3 = pool.acquire(device, 16);
+
+    pool.release(b1);
+    pool.release(b2);
+    pool.release(b3); // Should be dropped (pool full for this bucket).
+
+    assert_eq!(pool.idle_count(), 2);
+}
+
+#[tokio::test]
+async fn test_uniform_batcher_flush() {
+    let context = create_test_context().await;
+    let device = &context.device;
+    let queue = &context.queue;
+
+    let mut pipeline = ComposableShaderPipeline::new();
+    let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+    pipeline.add_function(scale);
+    pipeline.create_uniform_buffers(device).unwrap();
+
+    // Stage and flush
+    let mut batcher = UniformBatcher::new();
+    pipeline.stage_uniforms(&mut batcher);
+    assert_eq!(batcher.pending_count(), 1);
+
+    let written = pipeline.flush_batcher(device, queue, &mut batcher).unwrap();
+    assert_eq!(written, 1);
+    assert_eq!(batcher.pending_count(), 0);
+}
+
+#[tokio::test]
+async fn test_create_uniform_buffers_pooled() {
+    let context = create_test_context().await;
+    let device = &context.device;
+
+    let mut pool = UniformBufferPool::new(8);
+    let mut pipeline = ComposableShaderPipeline::new();
+    pipeline.add_function(LinearScale::new(0.0, 1.0, 0.0, 1.0));
+    pipeline.add_function(ColorMap::new(
+        vec4![0.0, 0.0, 0.0, 1.0],
+        vec4![1.0, 1.0, 1.0, 1.0],
+    ));
+
+    // First round — creates from the pool (all new allocations).
+    pipeline
+        .create_uniform_buffers_pooled(device, &mut pool)
+        .unwrap();
+    assert_eq!(pipeline.uniform_buffer_count(), 2);
+    assert_eq!(pool.stats().total_created, 2);
+    assert_eq!(pool.stats().total_reused, 0);
+
+    // Second round — returns old buffers then reacquires.
+    pipeline
+        .create_uniform_buffers_pooled(device, &mut pool)
+        .unwrap();
+    assert_eq!(pipeline.uniform_buffer_count(), 2);
+    // Both buffers should have been reused.
+    assert_eq!(pool.stats().total_reused, 2);
+}
+
+#[tokio::test]
+async fn test_bind_group_cache_integration() {
+    let context = create_test_context().await;
+    let device = &context.device;
+
+    let mut pipeline = ComposableShaderPipeline::new();
+    pipeline.add_function(LinearScale::new(0.0, 1.0, 0.0, 1.0));
+    pipeline.create_uniform_buffers(device).unwrap();
+
+    let mut bg_cache = BindGroupCache::new();
+
+    // First call — cache miss.
+    let _bg1 = pipeline
+        .create_bind_group_cached(device, &mut bg_cache)
+        .unwrap();
+    assert_eq!(bg_cache.stats().misses, 1);
+    assert_eq!(bg_cache.stats().hits, 0);
+    assert_eq!(bg_cache.len(), 1);
+
+    // Second call — cache hit.
+    let _bg2 = pipeline
+        .create_bind_group_cached(device, &mut bg_cache)
+        .unwrap();
+    assert_eq!(bg_cache.stats().hits, 1);
+}
+
+#[tokio::test]
+async fn test_uniform_update_timing() {
+    let context = create_test_context().await;
+    let device = &context.device;
+    let queue = &context.queue;
+
+    let mut pipeline = ComposableShaderPipeline::new();
+    pipeline.add_function(LinearScale::new(0.0, 100.0, 0.0, 1.0));
+    pipeline.add_function(ColorMap::new(
+        vec4![0.0, 0.0, 0.0, 1.0],
+        vec4![1.0, 1.0, 1.0, 1.0],
+    ));
+    pipeline.create_uniform_buffers(device).unwrap();
+
+    // Measure 100 uniform updates.
+    let start = Instant::now();
+    for _ in 0..100 {
+        pipeline.update_uniforms(device, queue).unwrap();
+    }
+    let elapsed = start.elapsed();
+
+    // Each update should be well under 0.1ms (100µs) in release builds.
+    // In debug builds with GPU overhead, allow up to 2ms.
+    let per_update = elapsed / 100;
+    eprintln!(
+        "Uniform update: {:?} per update ({:?} total for 100)",
+        per_update, elapsed
+    );
+    assert!(
+        per_update < std::time::Duration::from_millis(2),
+        "Uniform update took {:?}, expected < 2ms",
+        per_update
+    );
+}
