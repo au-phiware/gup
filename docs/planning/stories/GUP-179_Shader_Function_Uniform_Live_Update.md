@@ -1,6 +1,6 @@
 # GUP-179: Shader Function Uniform Live Update
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
