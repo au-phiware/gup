@@ -116,3 +116,98 @@ runtime without manual buffer management
 - 33 new tests total
 - All 1197 existing library tests continue to pass (1 pre-existing flaky test:
   GUP-187)
+
+## Retrospective
+
+**Completed**: 2025-07-23
+
+### Key Technical Learnings
+
+#### Uniform Buffer Alignment Requirements
+
+- **Challenge**: Uniform buffers in wgpu require 256-byte alignment, which is
+  much larger than the 16-byte `[f32; 4]` elements. A naïve allocation would
+  waste GPU memory.
+- **Solution**: Used `div_ceil(size, 256) * 256` for uniform buffer sizing with
+  1.5x growth factor to amortize reallocations. Storage buffers only need 4-byte
+  alignment (natural for `f32`), so they are more memory-efficient for
+  per-instance data.
+- **Pattern**: Always check `BufferType::alignment()` when creating GPU buffers.
+  Uniform buffers should hold small, infrequently-changing data; storage buffers
+  are better for large per-instance arrays.
+
+#### Dirty-Only Partial Writes vs Full Uploads
+
+- **Challenge**: The story required >50% bandwidth savings from dirty-only
+  uploads. Implementing per-element `queue.write_buffer()` calls for each dirty
+  static attribute risks overhead from multiple small writes.
+- **Solution**: For static attributes in the uniform buffer, individual
+  `write_buffer` calls per dirty element work well because there are typically
+  few static attributes (< 100). When the attribute count changes (add/remove),
+  a full re-upload is triggered instead. For per-instance storage buffers, the
+  entire buffer is re-written on each dirty upload since partial writes within
+  per-instance arrays are harder to track efficiently.
+- **Pattern**: Dirty tracking at the attribute-name level is the right
+  granularity. Finer-grained tracking (per-element within per-instance arrays)
+  would add complexity without proportional benefit for typical visualization
+  workloads.
+
+#### Buffer Manager as Standalone vs Embedded
+
+- **Challenge**: The buffer manager could have been embedded inside
+  `DynamicAttributeMap` or `MarkRenderer`. Where does it belong?
+- **Solution**: Kept `DynamicAttributeBufferManager` as a standalone struct. It
+  takes `&wgpu::Device` and `&wgpu::Queue` as method parameters rather than
+  owning them. This follows the existing pattern where GPU resources are passed
+  through rather than stored.
+- **Pattern**: GPU buffer managers should be independent of the data structures
+  they serve. This allows the same `DynamicAttributeMap` to be used without GPU
+  buffers (for testing, serialization) and lets the buffer manager be composed
+  flexibly.
+
+### Architectural Decisions
+
+#### Extending `advanced_rendering.rs` vs New Module
+
+- **Decision**: Added `DynamicAttributeBufferManager` directly to
+  `advanced_rendering.rs` alongside the existing `DynamicAttributeMap`.
+- **Reasoning**: The buffer manager is tightly coupled to `DynamicAttributeMap`
+  and `DynamicAttributeValue` — it reads their fields via public methods.
+  Keeping them in the same module maintains locality and simplifies imports.
+- **Trade-off**: The file grows larger (~1800 lines with tests), but remains
+  coherent since all dynamic attribute types are together.
+- **Future**: If the buffer manager gains more complexity (e.g., buffer pooling,
+  async readback), extracting to a submodule would make sense.
+
+#### Storage Buffer Per Attribute vs Interleaved
+
+- **Decision**: One storage buffer per per-instance attribute (e.g., "colors"
+  gets its own buffer, "sizes" gets its own buffer).
+- **Reasoning**: This matches the WGSL binding model where each buffer is a
+  separate binding. It also simplifies dirty tracking — only the changed
+  attribute's buffer needs re-upload.
+- **Trade-off**: More bind group entries and potentially more GPU buffer
+  objects. An interleaved approach would pack all per-instance data into one
+  buffer but would require stride/offset management and make partial updates
+  harder.
+- **Future**: If GPU buffer count becomes a bottleneck, interleaving could be
+  added as an optimization.
+
+### Development Workflow Insights
+
+- The implementation was straightforward because `DynamicAttributeMap` already
+  had well-designed dirty tracking (generation counters, dirty set) from
+  GUP-069. Adding `collect_dirty_static_values()` and
+  `dirty_per_instance_attributes()` was natural.
+- Writing GPU integration tests first helped validate the API design before
+  committing to the internal buffer management logic.
+- Disk space constraints (10GB `/home` partition) made full test runs
+  impossible. Running `cargo test --lib` and specific integration tests with
+  `CARGO_TARGET_DIR=/tmp/gup-target` was the practical workaround.
+
+### Follow-up Stories
+
+1. **GUP-192: Dynamic Attribute Readback Pipeline** — Add async GPU-to-CPU
+   readback for dynamic attribute buffers to enable debugging, validation, and
+   CPU-side post-processing of GPU-computed attribute values. The current
+   implementation only supports upload (CPU→GPU), not download (GPU→CPU).
