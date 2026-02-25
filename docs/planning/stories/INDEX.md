@@ -158,6 +158,8 @@ reorganisation._
 | [GUP-171](GUP-171_BoxPlot_Pixel_Space_Strokes.md)           | BoxPlot Pixel-Space Stroke Widths        | 📋 Planned  | Low      | 3      |
 | [GUP-177](GUP-177_GPU_Shader_Function_Attribute_Binding.md) | GPU Shader Function Attribute Binding    | ✅ Complete | Medium   | 8      |
 | [GUP-178](GUP-178_MarkInstanceBuilder_Line_BoxPlot.md)      | MarkInstanceBuilder for Line and BoxPlot | 📋 Planned  | Low      | 3      |
+| [GUP-179](GUP-179_Shader_Function_Uniform_Live_Update.md)   | Shader Function Uniform Live Update      | 📋 Planned  | Medium   | 5      |
+| [GUP-180](GUP-180_FunctionChain_Binding_Support.md)         | FunctionChain Binding Support            | 📋 Planned  | Low      | 3      |
 
 ### Post GUP-014 Stories - Interaction Performance (Stories 76-79)
 
