@@ -2,7 +2,7 @@
 
 **Story ID**: GUP-073  
 **Title**: Advanced Shader Composition  
-**Status**: Planned  
+**Status**: 🚧 In Progress  
 **Priority**: Medium  
 **Effort**: 8 story points  
 **Created**: 2025-08-04  

@@ -73,7 +73,7 @@ epic and status.
 | [GUP-070](GUP-070_Mark_Performance_Optimization.md)         | Mark Performance Optimization                  | ✅ Complete | Medium   | —      |
 | [GUP-071](GUP-071_Custom_Mark_Development_Kit.md)           | Custom Mark Development Kit                    | 📋 Planned  | Low      | —      |
 | [GUP-072](GUP-072_Mark_System_Documentation.md)             | Mark System Documentation                      | 📋 Planned  | Low      | —      |
-| [GUP-073](GUP-073_Advanced_Shader_Composition.md)           | Advanced Shader Composition                    | 📋 Planned  | Medium   | —      |
+| [GUP-073](GUP-073_Advanced_Shader_Composition.md)           | Advanced Shader Composition                    | 🚧 In Progress | Medium   | —      |
 | [GUP-074](GUP-074_Mark_Performance_Optimization.md)         | Mark Performance Optimization (GPU Instancing) | ✅ Complete | High     | 5      |
 | [GUP-075](GUP-075_Interactive_Mark_Selection.md)            | Interactive Mark Selection                     | ✅ Complete | Medium   | 6      |
 | [GUP-076](GUP-076_GPU_Occlusion_Culling.md)                 | GPU Occlusion Culling for Dense Datasets       | 📋 Planned  | Low      | —      |
