@@ -42,6 +42,7 @@ mod convert;
 mod pipeline_tests;
 #[allow(dead_code, unused_imports)]
 pub mod type_map;
+mod type_map_integration_tests;
 
 // Re-exports are used by pipeline_tests and future integration.
 #[allow(unused_imports)]
