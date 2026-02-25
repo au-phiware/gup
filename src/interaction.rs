@@ -1887,6 +1887,102 @@ impl InteractionSystem {
         self.build_spatial_index(elements).await
     }
 
+    /// Dispatch a GPU-side Morton query and return the candidate element
+    /// indices. Public for testing and benchmarking.
+    ///
+    /// Requires the GPU Morton index to have been built first via
+    /// `build_spatial_index_from_elements` with a Morton-compatible algorithm.
+    pub async fn gpu_morton_query(&mut self, query: GpuInteractionQuery) -> GupResult<Vec<u32>> {
+        if !self.morton_gpu_index_built || self.morton_gpu_entry_count == 0 {
+            return Err(GupError::render_error(
+                "GPU Morton index not built".to_string(),
+            ));
+        }
+
+        let bounds = match &self.advanced_spatial_index {
+            Some(SpatialIndex::Morton(idx)) => *idx.bounds(),
+            _ => {
+                return Err(GupError::render_error(
+                    "Advanced spatial index is not Morton".to_string(),
+                ));
+            }
+        };
+
+        let (qtype, half_ext) = if query.query_type == 0 {
+            (0u32, [0.0f32, 0.0f32])
+        } else {
+            (
+                1u32,
+                [query.region_size[0] * 0.5, query.region_size[1] * 0.5],
+            )
+        };
+
+        let config = MortonQueryConfig {
+            query_type: qtype,
+            search_radius: 512,
+            entry_count: self.morton_gpu_entry_count,
+            max_candidates: self.max_morton_candidates as u32,
+            query_position: query.position,
+            query_half_extent: half_ext,
+            world_bounds_min: bounds.min,
+            world_bounds_max: bounds.max,
+        };
+
+        self.queue.write_buffer(
+            &self.morton_query_config_buffer,
+            0,
+            bytemuck::bytes_of(&config),
+        );
+        self.queue
+            .write_buffer(&self.morton_candidate_count_buffer, 0, &[0u8; 4]);
+
+        {
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("morton_query_test_encoder"),
+                });
+            {
+                let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                    label: Some("morton_query_test_pass"),
+                    timestamp_writes: None,
+                });
+                pass.set_pipeline(&self.morton_query_pipeline);
+                let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("morton_query_test_bind_group"),
+                    layout: &self.morton_query_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: self.morton_entries_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: self.morton_query_config_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: self.morton_candidates_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: self.morton_candidate_count_buffer.as_entire_binding(),
+                        },
+                    ],
+                });
+                pass.set_bind_group(0, &bind_group, &[]);
+                pass.dispatch_workgroups(1, 1, 1);
+            }
+            self.queue.submit([encoder.finish()]);
+        }
+
+        let count = self.read_morton_candidate_count().await?;
+        if count == 0 {
+            return Ok(Vec::new());
+        }
+        self.read_morton_candidates(count).await
+    }
+
     /// Set the spatial algorithm to use. Invalidates any existing index.
     pub fn set_spatial_algorithm(&mut self, algorithm: SpatialAlgorithm) {
         if self.spatial_algorithm != algorithm {
