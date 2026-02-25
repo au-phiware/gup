@@ -1896,4 +1896,371 @@ mod tests {
         let rate = renderer.cache_hit_rate();
         assert!((rate - 0.75).abs() < 0.001);
     }
+
+    // =========================================================================
+    // Documentation validation tests
+    //
+    // These tests verify that all patterns documented in docs/GRID_SYSTEM.md
+    // work correctly. If any of these fail, the documentation needs updating.
+    // =========================================================================
+
+    #[test]
+    fn test_doc_color_construction_patterns() {
+        // Direct constructor
+        let c1 = Color::new(0.8, 0.8, 0.8, 0.7);
+        assert_eq!(c1.r, 0.8);
+        assert_eq!(c1.a, 0.7);
+
+        // From hex string
+        let c2 = Color::from_hex("#cccccc").unwrap();
+        assert!((c2.r - 0.8).abs() < 0.01);
+
+        // Short hex
+        let c3 = Color::from_hex("#ccc").unwrap();
+        assert!((c3.r - 0.8).abs() < 0.01);
+
+        // From RGB tuple
+        let c4: Color = (0.8, 0.8, 0.8).into();
+        assert_eq!(c4.a, 1.0); // Alpha defaults to 1.0
+
+        // From RGBA tuple
+        let c5: Color = (0.8, 0.8, 0.8, 0.7).into();
+        assert_eq!(c5.a, 0.7);
+
+        // From array
+        let c6: Color = [0.8, 0.8, 0.8, 0.7].into();
+        assert_eq!(c6.a, 0.7);
+
+        // From &str (hex)
+        let c7: Color = "#cccccc".into();
+        assert!((c7.r - 0.8).abs() < 0.01);
+
+        // Conversion back to array
+        let rgba: [f32; 4] = c1.to_rgba();
+        assert_eq!(rgba, [0.8, 0.8, 0.8, 0.7]);
+
+        let rgba_into: [f32; 4] = c1.into();
+        assert_eq!(rgba_into, [0.8, 0.8, 0.8, 0.7]);
+    }
+
+    #[test]
+    fn test_doc_color_presets() {
+        // All presets should be accessible
+        let _ = Color::LIGHT_GRID;
+        let _ = Color::DARK_GRID;
+        let _ = Color::SUBTLE_GRID;
+        let _ = Color::HIGH_CONTRAST_GRID;
+
+        // Verify preset values match documentation
+        assert_eq!(Color::LIGHT_GRID.r, 0.9);
+        assert_eq!(Color::LIGHT_GRID.a, 0.7);
+        assert_eq!(Color::DARK_GRID.r, 0.3);
+        assert_eq!(Color::DARK_GRID.a, 0.8);
+        assert_eq!(Color::HIGH_CONTRAST_GRID.r, 0.0);
+        assert_eq!(Color::HIGH_CONTRAST_GRID.a, 0.8);
+    }
+
+    #[test]
+    fn test_doc_grid_line_config_builder_pattern() {
+        let config = GridLineConfig::default()
+            .with_color([0.5, 0.5, 0.5, 1.0])
+            .with_line_width(1.0)
+            .with_opacity(0.8)
+            .with_dash_pattern(vec![5.0, 3.0]);
+
+        assert_eq!(config.color, [0.5, 0.5, 0.5, 1.0]);
+        assert_eq!(config.line_width, 1.0);
+        assert_eq!(config.opacity, 0.8);
+        assert_eq!(config.dash_pattern, Some(vec![5.0, 3.0]));
+        assert!(config.enabled);
+    }
+
+    #[test]
+    fn test_doc_grid_line_config_defaults_match_docs() {
+        // Major defaults documented in GRID_SYSTEM.md
+        let major = GridLineConfig::default();
+        assert!(major.enabled);
+        assert_eq!(major.color, [0.8, 0.8, 0.8, 1.0]);
+        assert_eq!(major.line_width, 0.5);
+        assert_eq!(major.opacity, 0.6);
+        assert!(major.dash_pattern.is_none());
+
+        // Minor defaults documented in GRID_SYSTEM.md
+        let minor = GridLineConfig::minor_default();
+        assert!(!minor.enabled);
+        assert_eq!(minor.color, [0.9, 0.9, 0.9, 1.0]);
+        assert_eq!(minor.line_width, 0.25);
+        assert_eq!(minor.opacity, 0.3);
+        assert!(minor.dash_pattern.is_none());
+    }
+
+    #[test]
+    fn test_doc_all_theme_presets() {
+        // Verify all 6 themes exist and have expected properties
+        let light = GridConfiguration::light_theme();
+        assert!(light.major_grid.enabled);
+        assert!(!light.minor_grid.enabled);
+        assert!(light.show_horizontal && light.show_vertical);
+
+        let dark = GridConfiguration::dark_theme();
+        assert!(dark.major_grid.enabled);
+        assert!(!dark.minor_grid.enabled);
+        assert!(dark.show_horizontal && dark.show_vertical);
+
+        let sci = GridConfiguration::scientific();
+        assert!(sci.major_grid.enabled);
+        assert!(sci.minor_grid.enabled); // Scientific enables minor grids
+        assert!(sci.show_horizontal && sci.show_vertical);
+
+        let biz = GridConfiguration::business();
+        assert!(biz.major_grid.enabled);
+        assert!(!biz.minor_grid.enabled);
+        assert!(biz.show_horizontal);
+        assert!(!biz.show_vertical); // Business is horizontal-only
+
+        let min = GridConfiguration::minimal();
+        assert!(min.major_grid.enabled);
+        assert!(!min.minor_grid.enabled);
+        assert_eq!(min.major_grid.line_width, 0.25); // Thinnest
+
+        let hc = GridConfiguration::high_contrast();
+        assert!(hc.major_grid.enabled);
+        assert!(hc.minor_grid.enabled); // High contrast enables minor grids
+        assert_eq!(hc.major_grid.line_width, 1.0); // Thickest
+    }
+
+    #[test]
+    fn test_doc_grid_configuration_builders() {
+        // Horizontal-only
+        let h = GridConfiguration::horizontal_only();
+        assert!(h.show_horizontal);
+        assert!(!h.show_vertical);
+
+        // Vertical-only
+        let v = GridConfiguration::vertical_only();
+        assert!(!v.show_horizontal);
+        assert!(v.show_vertical);
+
+        // Enable/disable minor grids
+        let with = GridConfiguration::default().with_minor_grid();
+        assert!(with.minor_grid.enabled);
+
+        let without = GridConfiguration::default().with_minor_grid().without_minor_grid();
+        assert!(!without.minor_grid.enabled);
+    }
+
+    #[test]
+    fn test_doc_chart_bounds_usage() {
+        let bounds = ChartBounds::new(50.0, 750.0, 50.0, 550.0);
+
+        assert_eq!(bounds.width(), 700.0);
+        assert_eq!(bounds.height(), 500.0);
+
+        let center = bounds.center();
+        assert_eq!(center.x, 400.0);
+        assert_eq!(center.y, 300.0);
+
+        // Point inside bounds
+        assert!(bounds.contains(Vec2 { x: 400.0, y: 300.0 }));
+        // Point outside bounds
+        assert!(!bounds.contains(Vec2 { x: 0.0, y: 0.0 }));
+    }
+
+    #[test]
+    fn test_doc_grid_system_runtime_update() {
+        let mut grid = GridSystem::new(GridConfiguration::scientific());
+        assert!(grid.is_grid_enabled());
+
+        // Switch to business theme at runtime
+        grid.set_configuration(GridConfiguration::business());
+        assert!(grid.is_grid_enabled());
+        assert!(!grid.configuration().show_vertical);
+    }
+
+    #[test]
+    fn test_doc_grid_renderer_line_inspection() {
+        let bounds = ChartBounds::new(0.0, 100.0, 0.0, 100.0);
+        let config = GridConfiguration::scientific();
+        let mut renderer = GridRenderer::new();
+
+        let line_count = renderer
+            .generate_grid_lines(
+                &[20.0, 40.0, 60.0, 80.0], // horizontal ticks
+                &[25.0, 50.0, 75.0],        // vertical ticks
+                &[10.0, 30.0, 50.0, 70.0, 90.0], // horizontal minor
+                &[12.5, 37.5, 62.5, 87.5],        // vertical minor
+                bounds,
+                &config,
+            )
+            .unwrap();
+
+        assert!(line_count > 0);
+        assert_eq!(renderer.total_line_count(), line_count);
+
+        // Inspect major and minor lines
+        let major_count = renderer.major_lines().count();
+        let minor_count = renderer.minor_lines().count();
+        assert!(major_count > 0);
+        assert!(minor_count > 0);
+        assert_eq!(major_count + minor_count, line_count);
+    }
+
+    #[test]
+    fn test_doc_grid_renderer_caching() {
+        let bounds = ChartBounds::new(0.0, 100.0, 0.0, 100.0);
+        let config = GridConfiguration::default();
+        let mut renderer = GridRenderer::new();
+
+        let ticks = vec![25.0, 50.0, 75.0];
+
+        // First call: cache miss
+        renderer
+            .generate_grid_lines(&ticks, &ticks, &[], &[], bounds, &config)
+            .unwrap();
+        let (hits, misses) = renderer.cache_stats();
+        assert_eq!(hits, 0);
+        assert_eq!(misses, 1);
+
+        // Second call with same inputs: cache hit
+        renderer
+            .generate_grid_lines(&ticks, &ticks, &[], &[], bounds, &config)
+            .unwrap();
+        let (hits, misses) = renderer.cache_stats();
+        assert_eq!(hits, 1);
+        assert_eq!(misses, 1);
+        assert!((renderer.cache_hit_rate() - 0.5).abs() < 0.001);
+
+        // After invalidation: cache miss again
+        renderer.invalidate_cache();
+        renderer
+            .generate_grid_lines(&ticks, &ticks, &[], &[], bounds, &config)
+            .unwrap();
+        let (hits, misses) = renderer.cache_stats();
+        assert_eq!(hits, 1);
+        assert_eq!(misses, 2);
+    }
+
+    #[test]
+    fn test_doc_static_line_generation() {
+        let bounds = ChartBounds::new(0.0, 800.0, 0.0, 600.0);
+        let config = GridLineConfig::default();
+        let y_ticks = vec![100.0, 200.0, 300.0, 400.0, 500.0];
+
+        let mut lines = Vec::new();
+        GridRenderer::generate_horizontal_lines_static(&y_ticks, bounds, &config, &mut lines)
+            .unwrap();
+        assert_eq!(lines.len(), 5);
+
+        // Each horizontal line spans the full width
+        for line in &lines {
+            assert_eq!(line.start.x, 0.0);
+            assert_eq!(line.end.x, 800.0);
+            assert_eq!(line.start.y, line.end.y); // Horizontal
+        }
+
+        let x_ticks = vec![100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0];
+        let mut vlines = Vec::new();
+        GridRenderer::generate_vertical_lines_static(&x_ticks, bounds, &config, &mut vlines)
+            .unwrap();
+        assert_eq!(vlines.len(), 7);
+
+        // Each vertical line spans the full height
+        for line in &vlines {
+            assert_eq!(line.start.y, 0.0);
+            assert_eq!(line.end.y, 600.0);
+            assert_eq!(line.start.x, line.end.x); // Vertical
+        }
+    }
+
+    #[test]
+    fn test_doc_effective_opacity() {
+        // Document: effective_alpha = color[3] * opacity
+        let config = GridLineConfig {
+            enabled: true,
+            color: [0.5, 0.5, 0.5, 0.8],
+            line_width: 0.5,
+            opacity: 0.5,
+            dash_pattern: None,
+        };
+
+        let bounds = ChartBounds::new(0.0, 100.0, 0.0, 100.0);
+        let mut lines = Vec::new();
+        GridRenderer::generate_horizontal_lines_static(
+            &[50.0],
+            bounds,
+            &config,
+            &mut lines,
+        )
+        .unwrap();
+
+        // The generated line should have effective alpha = 0.8 * 0.5 = 0.4
+        assert_eq!(lines.len(), 1);
+        let effective_alpha = lines[0].color.w;
+        assert!((effective_alpha - 0.4).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_doc_axis_grid_coordinator_defaults() {
+        let coordinator = AxisGridCoordinator::default();
+        assert!(coordinator.is_grid_enabled());
+        assert_eq!(coordinator.total_grid_line_count(), 0);
+    }
+
+    #[test]
+    fn test_doc_grid_lines_clipped_to_bounds() {
+        // Grid lines should only appear within bounds
+        let bounds = ChartBounds::new(100.0, 200.0, 100.0, 200.0);
+        let config = GridLineConfig::default();
+
+        // Ticks outside bounds should be filtered
+        let ticks_outside = vec![50.0, 250.0]; // Both outside
+        let mut lines = Vec::new();
+        GridRenderer::generate_horizontal_lines_static(
+            &ticks_outside,
+            bounds,
+            &config,
+            &mut lines,
+        )
+        .unwrap();
+        assert_eq!(lines.len(), 0);
+
+        // Ticks inside bounds should be included
+        let ticks_inside = vec![120.0, 150.0, 180.0];
+        GridRenderer::generate_horizontal_lines_static(
+            &ticks_inside,
+            bounds,
+            &config,
+            &mut lines,
+        )
+        .unwrap();
+        assert_eq!(lines.len(), 3);
+    }
+
+    #[test]
+    fn test_doc_custom_grid_configuration() {
+        // Verify the custom configuration pattern from the docs
+        let config = GridConfiguration {
+            major_grid: GridLineConfig {
+                enabled: true,
+                color: [0.3, 0.3, 0.3, 1.0],
+                line_width: 1.0,
+                opacity: 0.6,
+                dash_pattern: None,
+            },
+            minor_grid: GridLineConfig {
+                enabled: true,
+                color: [0.7, 0.7, 0.7, 1.0],
+                line_width: 0.5,
+                opacity: 0.4,
+                dash_pattern: None,
+            },
+            show_horizontal: true,
+            show_vertical: true,
+        };
+
+        assert!(config.major_grid.enabled);
+        assert!(config.minor_grid.enabled);
+        assert_eq!(config.major_grid.line_width, 1.0);
+        assert_eq!(config.minor_grid.opacity, 0.4);
+    }
 }
