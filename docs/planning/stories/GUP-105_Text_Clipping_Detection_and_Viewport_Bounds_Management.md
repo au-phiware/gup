@@ -6,7 +6,7 @@
 **Theme**: Advanced Text Layout and Rendering  
 **Priority**: Medium  
 **Story Points**: 8  
-**Status**: 📋 Planned  
+**Status**: 🚧 In Progress  
 **Dependencies**: GUP-099 (GPU Text Rendering), GUP-104 (SDF Glyph Texture
 Upload)
 
