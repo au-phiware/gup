@@ -584,7 +584,7 @@ impl GridRenderer {
     ///
     /// Creates horizontal lines that span the full width of the chart area
     /// at positions specified by the vertical axis tick marks.
-    fn generate_horizontal_lines_static(
+    pub fn generate_horizontal_lines_static(
         y_ticks: &[f64],
         bounds: ChartBounds,
         config: &GridLineConfig,
@@ -625,7 +625,7 @@ impl GridRenderer {
     ///
     /// Creates vertical lines that span the full height of the chart area
     /// at positions specified by the horizontal axis tick marks.
-    fn generate_vertical_lines_static(
+    pub fn generate_vertical_lines_static(
         x_ticks: &[f64],
         bounds: ChartBounds,
         config: &GridLineConfig,
@@ -735,7 +735,7 @@ impl GridRenderer {
     */
 
     /// Clear all generated grid lines.
-    fn clear_grid_lines(&mut self) {
+    pub fn clear_grid_lines(&mut self) {
         self.major_horizontal_lines.clear();
         self.major_vertical_lines.clear();
         self.minor_horizontal_lines.clear();
@@ -855,6 +855,94 @@ impl GridRenderer {
             config,
         )
     }
+
+    /// Generate all grid lines without rendering, returning the total count.
+    ///
+    /// This method is useful for benchmarking pure grid line generation
+    /// performance without requiring a GPU context.
+    #[allow(clippy::too_many_arguments)]
+    pub fn generate_grid_lines(
+        &mut self,
+        horizontal_ticks: &[f64],
+        vertical_ticks: &[f64],
+        horizontal_minor_ticks: &[f64],
+        vertical_minor_ticks: &[f64],
+        chart_bounds: ChartBounds,
+        config: &GridConfiguration,
+    ) -> GupResult<usize> {
+        // Compute a fingerprint of the current inputs
+        let fingerprint = Self::compute_fingerprint(
+            horizontal_ticks,
+            vertical_ticks,
+            horizontal_minor_ticks,
+            vertical_minor_ticks,
+            chart_bounds,
+            config,
+        );
+
+        // Check cache
+        if self.cache_fingerprint == Some(fingerprint) {
+            self.cache_hits += 1;
+            return Ok(self.total_line_count());
+        }
+
+        self.cache_misses += 1;
+
+        // Clear previous grid lines
+        self.clear_grid_lines();
+
+        // Generate major grid lines
+        if config.major_grid.enabled {
+            if config.show_horizontal {
+                Self::generate_horizontal_lines_static(
+                    vertical_ticks,
+                    chart_bounds,
+                    &config.major_grid,
+                    &mut self.major_horizontal_lines,
+                )?;
+            }
+
+            if config.show_vertical {
+                Self::generate_vertical_lines_static(
+                    horizontal_ticks,
+                    chart_bounds,
+                    &config.major_grid,
+                    &mut self.major_vertical_lines,
+                )?;
+            }
+        }
+
+        // Generate minor grid lines
+        if config.minor_grid.enabled {
+            if config.show_horizontal {
+                Self::generate_horizontal_lines_static(
+                    vertical_minor_ticks,
+                    chart_bounds,
+                    &config.minor_grid,
+                    &mut self.minor_horizontal_lines,
+                )?;
+            }
+
+            if config.show_vertical {
+                Self::generate_vertical_lines_static(
+                    horizontal_minor_ticks,
+                    chart_bounds,
+                    &config.minor_grid,
+                    &mut self.minor_vertical_lines,
+                )?;
+            }
+        }
+
+        // Store fingerprint for caching
+        self.cache_fingerprint = Some(fingerprint);
+
+        Ok(self.total_line_count())
+    }
+
+    /// Return current cache hit and miss counts for diagnostics.
+    pub fn cache_stats(&self) -> (u64, u64) {
+        (self.cache_hits, self.cache_misses)
+    }
 }
 
 impl Default for GridRenderer {
@@ -872,7 +960,7 @@ pub struct GridSystem {
     /// Grid appearance and behavior configuration
     pub config: GridConfiguration,
     /// Grid line renderer
-    renderer: GridRenderer,
+    pub renderer: GridRenderer,
 }
 
 impl GridSystem {

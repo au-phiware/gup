@@ -138,6 +138,10 @@ harness = false
 name = "mark_performance_benchmarks"
 harness = false
 
+[[bench]]
+name = "grid_performance_benchmarks"
+harness = false
+
 [[example]]
 name = "blend_modes_showcase"
 path = "examples/blend_modes_showcase.rs"
