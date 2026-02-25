@@ -122,7 +122,7 @@ _Initiative doc:
 | [GUP-055](GUP-055_Rust_AST_Parsing_Research.md)               | Rust AST Parsing Research and Prototype   | ✅ Complete | High     | 8      |
 | [GUP-056](GUP-056_Type_System_Mapping.md)                     | Rust-to-WGSL Type System Mapping          | ✅ Complete | High     | 8      |
 | [GUP-057](GUP-057_Expression_Transpilation.md)                | Expression and Operator Transpilation     | ✅ Complete | High     | 13     |
-| [GUP-058](GUP-058_Control_Flow_Handling.md)                   | Control Flow and Statement Transpilation  | 🚧 In Progress | High     | 10     |
+| [GUP-058](GUP-058_Control_Flow_Handling.md)                   | Control Flow and Statement Transpilation  | ✅ Complete | High     | 10     |
 | [GUP-059](GUP-059_Built_in_Function_Library.md)               | Built-in Function Library                 | 📋 Planned  | Medium   | 8      |
 | [GUP-060](GUP-060_Optimization_Error_Reporting.md)            | Optimization Engine and Error Reporting   | 📋 Planned  | Medium   | 13     |
 | [GUP-061](GUP-061_Integration_With_Shader_Function_System.md) | Integration with Shader Function System   | 📋 Planned  | High     | 8      |
