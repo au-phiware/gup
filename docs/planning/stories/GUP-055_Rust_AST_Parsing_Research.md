@@ -211,3 +211,100 @@ This research lays the foundation for:
 - 53 transpile-related tests in gup-macros (AST, converter, codegen, pipeline)
 - 8 WGSL validation tests in main crate
 - All 1379+ existing tests continue to pass
+
+## Retrospective
+
+**Completed**: 2025-07-18
+
+### Key Technical Learnings
+
+#### Proc Macro Crate Constraints
+
+- **Challenge**: Proc macro crates cannot export non-proc-macro items (`pub mod`
+  is forbidden). The transpile module needed to be `pub(crate)` only, meaning
+  integration tests in the main crate cannot directly use it.
+- **Solution**: Unit tests and pipeline tests live inside gup-macros. WGSL
+  validation tests in the main crate use hand-crafted WGSL strings that
+  represent transpiler output. This separates "does the transpiler produce
+  correct AST?" (gup-macros tests) from "does the output compile?" (main crate
+  tests).
+- **Pattern**: For proc macro prototypes, test internally with unit/pipeline
+  tests and validate output artifacts externally.
+
+#### Rust 2024 Edition Reserved Keywords
+
+- **Challenge**: The `gen` identifier is a reserved keyword in Rust 2024
+  edition. Using `let gen = WgslCodeGen::new()` causes compile errors.
+- **Solution**: Renamed variable to `codegen`. Simple but easy to miss.
+- **Pattern**: When writing new code in edition 2024, avoid identifiers `gen`,
+  `async`, `await`, `try` — use more descriptive names.
+
+#### Existing shader_ast Infrastructure
+
+- **Challenge**: The project already has a comprehensive `shader_ast` module
+  (WGSL parser, AST types, optimizer, generator) which could seem redundant with
+  the transpiler AST.
+- **Solution**: The existing module parses WGSL text → AST (for optimization).
+  The transpiler converts Rust syn AST → WGSL text (for generation). They serve
+  different purposes and the pipeline flows: Rust → transpiler → WGSL text →
+  shader_ast → optimized WGSL.
+- **Pattern**: Understand the existing infrastructure before building. The two
+  ASTs complement each other rather than duplicating.
+
+#### wgpu v26 API Changes
+
+- **Challenge**: `Adapter::request_device()` no longer takes a `trace_path`
+  parameter in wgpu v26.
+- **Solution**: Remove the `None` second argument.
+- **Pattern**: Always check API signatures when writing tests against wgpu — the
+  API evolves between major versions.
+
+### Architectural Decisions
+
+#### Lightweight AST Duplication
+
+- **Decision**: Define WGSL AST types in gup-macros that mirror
+  `shader_ast::types` rather than extracting a shared crate.
+- **Reasoning**: Avoids workspace management complexity and keeps the prototype
+  self-contained. The AST types are ~260 lines of simple enums/structs.
+- **Trade-off**: Small code duplication (types must stay in sync manually).
+- **Future**: If the transpiler matures to production, consider extracting
+  `gup-ast-types` as a shared crate.
+
+#### Direct WGSL Text Output
+
+- **Decision**: Generate WGSL text strings rather than naga IR.
+- **Reasoning**: WGSL text is human-readable, debuggable, and validated by
+  wgpu's built-in naga integration. Building a naga IR frontend would be
+  disproportionate effort for a prototype.
+- **Trade-off**: Extra text parse step if AST-level optimization is desired.
+- **Future**: The existing `shader_ast::parser` can parse the generated WGSL for
+  optimization, making this a viable production path.
+
+#### Method-to-Function Mapping
+
+- **Decision**: Translate Rust method calls (`.abs()`, `.sqrt()`, etc.) to WGSL
+  function calls (`abs(x)`, `sqrt(x)`) via an explicit match table.
+- **Reasoning**: This matches Rust developer expectations while producing valid
+  WGSL. The alternative (requiring function call syntax) is less ergonomic.
+- **Trade-off**: Must maintain the method mapping table manually.
+- **Future**: GUP-059 will centralise this into a comprehensive built-in
+  function registry.
+
+### Development Workflow Insights
+
+- The prototype was straightforward to implement because the existing
+  `wgsl_function.rs` macro code provided a clear reference for what expression
+  types and type mappings are needed.
+- Testing in layers (unit → pipeline → WGSL validation) caught issues at the
+  right level. Unit tests are fast and precise; validation tests confirm
+  real-world correctness.
+- `mask all-fix` is essential before every commit — markdown formatting in
+  particular catches many issues.
+- The pre-existing test failure in `test_is_uniform_compatible_type` (custom
+  types returning `true`) is unrelated to this story but was noted.
+
+### Follow-up Stories
+
+The existing stories GUP-056 through GUP-062 already cover the follow-up work.
+No new stories were identified; the story sequence is well-planned.
