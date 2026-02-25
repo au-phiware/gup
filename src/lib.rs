@@ -180,9 +180,9 @@ pub use selection::{
 
 // Export interactive mark selection system
 pub use mark_selection::{
-    BitSet, KeyModifiers, SelectionEvent, SelectionMode, SelectionOperation, SelectionState,
-    SelectionStatistics, SelectionStyle, SelectionTool, SelectionToolKind, ToolResult, ToolState,
-    point_in_polygon,
+    BitSet, KeyModifiers, MarkSelectionSystem, SelectionEvent, SelectionMode, SelectionOperation,
+    SelectionState, SelectionStatistics, SelectionStyle, SelectionTool, SelectionToolKind,
+    ToolResult, ToolState, point_in_polygon,
 };
 
 // Export chart builder system (Observable Plot-style API)

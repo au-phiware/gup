@@ -972,6 +972,341 @@ pub enum SelectionEvent {
 }
 
 // ---------------------------------------------------------------------------
+// MarkSelectionSystem — ties selection state, tools, and interaction together
+// ---------------------------------------------------------------------------
+
+/// High-level system that integrates [`SelectionState`], [`SelectionTool`],
+/// and the existing GPU interaction system to provide a complete interactive
+/// mark selection workflow.
+///
+/// # Usage
+///
+/// ```rust
+/// use gup::mark_selection::{
+///     MarkSelectionSystem, SelectionMode, SelectionStyle, SelectionToolKind,
+/// };
+///
+/// let mut system = MarkSelectionSystem::new(10_000);
+/// system.set_tool(SelectionToolKind::Rectangle);
+///
+/// // Process mouse events
+/// system.on_mouse_down([100.0, 200.0]);
+/// system.on_mouse_move([150.0, 250.0]);
+///
+/// // Finish selection with hit IDs
+/// let hit_ids = vec![5, 12, 27];
+/// system.on_mouse_up([150.0, 250.0], &hit_ids);
+///
+/// assert_eq!(system.state().count(), 3);
+/// ```
+#[derive(Debug, Clone)]
+pub struct MarkSelectionSystem {
+    /// Selection state (bitset, undo/redo).
+    state: SelectionState,
+    /// Active selection tool.
+    tool: SelectionTool,
+    /// Visual style for selection feedback.
+    style: SelectionStyle,
+    /// Current keyboard modifiers.
+    modifiers: KeyModifiers,
+    /// Events emitted since last drain.
+    pending_events: Vec<SelectionEvent>,
+}
+
+impl MarkSelectionSystem {
+    /// Create a new system for `mark_count` marks.
+    pub fn new(mark_count: usize) -> Self {
+        Self {
+            state: SelectionState::new(mark_count),
+            tool: SelectionTool::point(),
+            style: SelectionStyle::default(),
+            modifiers: KeyModifiers::default(),
+            pending_events: Vec::new(),
+        }
+    }
+
+    /// Create a new system with a custom style.
+    pub fn with_style(mark_count: usize, style: SelectionStyle) -> Self {
+        let mut system = Self::new(mark_count);
+        system.style = style;
+        system
+    }
+
+    /// Get the selection state.
+    pub fn state(&self) -> &SelectionState {
+        &self.state
+    }
+
+    /// Get a mutable reference to the selection state.
+    pub fn state_mut(&mut self) -> &mut SelectionState {
+        &mut self.state
+    }
+
+    /// Get the current selection style.
+    pub fn style(&self) -> &SelectionStyle {
+        &self.style
+    }
+
+    /// Set the selection style.
+    pub fn set_style(&mut self, style: SelectionStyle) {
+        self.style = style;
+    }
+
+    /// Get the current tool kind.
+    pub fn tool_kind(&self) -> &SelectionToolKind {
+        &self.tool.kind
+    }
+
+    /// Set the active selection tool.
+    pub fn set_tool(&mut self, kind: SelectionToolKind) {
+        self.tool.cancel();
+        self.tool = SelectionTool::new(kind);
+    }
+
+    /// Update keyboard modifiers (call from input handler).
+    pub fn set_modifiers(&mut self, modifiers: KeyModifiers) {
+        self.modifiers = modifiers;
+    }
+
+    /// Get the current keyboard modifiers.
+    pub fn modifiers(&self) -> KeyModifiers {
+        self.modifiers
+    }
+
+    /// Get the effective selection mode considering current modifiers.
+    pub fn effective_mode(&self) -> SelectionMode {
+        self.modifiers.effective_mode(self.state.mode())
+    }
+
+    // -- Input event handling --
+
+    /// Handle a mouse-down / touch-start event.
+    pub fn on_mouse_down(&mut self, position: [f32; 2]) {
+        let pos = Vec2::new(position[0], position[1]);
+        self.tool.begin(pos);
+    }
+
+    /// Handle a mouse-move / touch-move event.
+    pub fn on_mouse_move(&mut self, position: [f32; 2]) {
+        let pos = Vec2::new(position[0], position[1]);
+        if self.tool.is_active() {
+            self.tool.update(pos);
+        }
+    }
+
+    /// Handle a mouse-up / touch-end event.
+    ///
+    /// `hit_ids` are the mark IDs that fall within the tool's selection area.
+    /// For point tools, this should be the IDs returned by a hit test at the
+    /// mouse position. For rectangle/lasso tools, these are the IDs within
+    /// the completed shape.
+    pub fn on_mouse_up(&mut self, _position: [f32; 2], hit_ids: &[u32]) {
+        let mode = self.effective_mode();
+        let additive = matches!(mode, SelectionMode::Additive | SelectionMode::Toggle);
+
+        match self.tool.kind.clone() {
+            SelectionToolKind::Point => {
+                if let Some(&first) = hit_ids.first() {
+                    match mode {
+                        SelectionMode::Single => self.state.click(first),
+                        SelectionMode::Toggle => self.state.toggle(first),
+                        SelectionMode::Additive => self.state.select(first),
+                        SelectionMode::Subtractive => self.state.deselect(first),
+                    }
+                } else if matches!(mode, SelectionMode::Single) {
+                    self.state.clear();
+                    self.pending_events.push(SelectionEvent::Cleared);
+                }
+            }
+            SelectionToolKind::Rectangle => {
+                self.tool.finish();
+                if !hit_ids.is_empty() {
+                    self.state.rect_select(hit_ids, additive);
+                } else if !additive {
+                    self.state.clear();
+                    self.pending_events.push(SelectionEvent::Cleared);
+                }
+            }
+            SelectionToolKind::Lasso => {
+                self.tool.finish();
+                if !hit_ids.is_empty() {
+                    self.state.lasso_select(hit_ids, additive);
+                } else if !additive {
+                    self.state.clear();
+                    self.pending_events.push(SelectionEvent::Cleared);
+                }
+            }
+        }
+
+        self.pending_events.push(SelectionEvent::Changed {
+            count: self.state.count(),
+        });
+    }
+
+    /// Handle a hover event at a specific mark ID.
+    pub fn on_hover(&mut self, id: Option<u32>) {
+        if self.state.hover() != id {
+            self.state.set_hover(id);
+            self.pending_events
+                .push(SelectionEvent::HoverChanged { id });
+        }
+    }
+
+    /// Cancel the current tool operation (e.g., on Escape key).
+    pub fn cancel(&mut self) {
+        self.tool.cancel();
+    }
+
+    /// Undo the last selection operation.
+    pub fn undo(&mut self) -> bool {
+        let result = self.state.undo();
+        if result {
+            self.pending_events.push(SelectionEvent::Changed {
+                count: self.state.count(),
+            });
+        }
+        result
+    }
+
+    /// Redo the last undone operation.
+    pub fn redo(&mut self) -> bool {
+        let result = self.state.redo();
+        if result {
+            self.pending_events.push(SelectionEvent::Changed {
+                count: self.state.count(),
+            });
+        }
+        result
+    }
+
+    /// Drain pending events.
+    pub fn drain_events(&mut self) -> Vec<SelectionEvent> {
+        std::mem::take(&mut self.pending_events)
+    }
+
+    // -- Query helpers --
+
+    /// Get the current drag rectangle (for rendering feedback).
+    pub fn current_drag_rect(&self) -> Option<Rect> {
+        self.tool.current_rect()
+    }
+
+    /// Get the current lasso path (for rendering feedback).
+    pub fn current_lasso_points(&self) -> Option<&[Vec2]> {
+        self.tool.current_lasso_points()
+    }
+
+    /// Returns `true` if the tool is currently active (dragging).
+    pub fn is_tool_active(&self) -> bool {
+        self.tool.is_active()
+    }
+
+    /// Filter a list of mark positions to only those within the lasso path.
+    ///
+    /// `positions` should be indexed by mark ID (i.e., `positions[id]` is
+    /// the position of mark `id`).
+    pub fn filter_by_lasso(path: &[Vec2], positions: &[[f32; 2]]) -> Vec<u32> {
+        positions
+            .iter()
+            .enumerate()
+            .filter(|(_, pos)| point_in_polygon(Vec2::new(pos[0], pos[1]), path))
+            .map(|(i, _)| i as u32)
+            .collect()
+    }
+
+    /// Filter mark positions to those within a rectangle.
+    pub fn filter_by_rect(rect: &Rect, positions: &[[f32; 2]]) -> Vec<u32> {
+        positions
+            .iter()
+            .enumerate()
+            .filter(|(_, pos)| {
+                pos[0] >= rect.min.x
+                    && pos[0] <= rect.max.x
+                    && pos[1] >= rect.min.y
+                    && pos[1] <= rect.max.y
+            })
+            .map(|(i, _)| i as u32)
+            .collect()
+    }
+
+    /// Get statistics about the selection system.
+    pub fn statistics(&self) -> SelectionStatistics {
+        self.state.statistics()
+    }
+
+    /// Resize to accommodate a new mark count.
+    pub fn resize(&mut self, new_mark_count: usize) {
+        self.state.resize(new_mark_count);
+    }
+
+    /// Export the currently selected mark indices.
+    pub fn export_selected(&self) -> Vec<u32> {
+        self.state.serialize()
+    }
+
+    /// Import a set of selected mark indices.
+    pub fn import_selected(&mut self, ids: &[u32]) {
+        self.state.deserialize(ids);
+        self.pending_events.push(SelectionEvent::Changed {
+            count: self.state.count(),
+        });
+    }
+
+    /// Apply selection as a filter: returns the indices of selected marks.
+    ///
+    /// This is useful for extracting selected data from a dataset.
+    pub fn selected_indices(&self) -> Vec<usize> {
+        self.state.selected_ids().map(|id| id as usize).collect()
+    }
+
+    /// Apply selection style to get the effective opacity for a mark.
+    ///
+    /// Returns the opacity multiplier: 1.0 for selected/hovered marks,
+    /// `unselected_opacity` for non-selected marks when a selection exists.
+    pub fn mark_opacity(&self, mark_id: u32) -> f32 {
+        if self.state.is_empty() {
+            // No selection active — all marks at full opacity
+            return 1.0;
+        }
+        if self.state.is_selected(mark_id) || self.state.hover() == Some(mark_id) {
+            1.0
+        } else {
+            self.style.unselected_opacity
+        }
+    }
+
+    /// Apply selection style to get the effective scale for a mark.
+    pub fn mark_scale(&self, mark_id: u32) -> f32 {
+        if self.state.hover() == Some(mark_id) {
+            self.style.hover_scale
+        } else if self.state.is_selected(mark_id) {
+            self.style.selected_scale
+        } else {
+            1.0
+        }
+    }
+
+    /// Apply selection style to get the outline properties for a mark.
+    ///
+    /// Returns `(outline_color, outline_width)` or `None` if no outline.
+    pub fn mark_outline(&self, mark_id: u32) -> Option<([f32; 4], f32)> {
+        if self.state.hover() == Some(mark_id) {
+            Some((
+                self.style.hover_outline_color,
+                self.style.hover_outline_width,
+            ))
+        } else if self.state.is_selected(mark_id) {
+            Some((
+                self.style.selected_outline_color,
+                self.style.selected_outline_width,
+            ))
+        } else {
+            None
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1408,5 +1743,196 @@ mod tests {
 
         let outline = SelectionStyle::outline();
         assert!(outline.selected_outline_width > 0.0);
+    }
+
+    // -- MarkSelectionSystem tests --
+
+    #[test]
+    fn test_system_point_click() {
+        let mut system = MarkSelectionSystem::new(100);
+        system.on_mouse_down([50.0, 50.0]);
+        system.on_mouse_up([50.0, 50.0], &[5]);
+        assert_eq!(system.state().count(), 1);
+        assert!(system.state().is_selected(5));
+    }
+
+    #[test]
+    fn test_system_point_click_empty() {
+        let mut system = MarkSelectionSystem::new(100);
+        system.state_mut().select(5);
+        // Click on empty space in single mode → clears selection
+        system.on_mouse_down([50.0, 50.0]);
+        system.on_mouse_up([50.0, 50.0], &[]);
+        assert_eq!(system.state().count(), 0);
+    }
+
+    #[test]
+    fn test_system_rect_select() {
+        let mut system = MarkSelectionSystem::new(100);
+        system.set_tool(SelectionToolKind::Rectangle);
+        system.on_mouse_down([10.0, 10.0]);
+        system.on_mouse_move([50.0, 50.0]);
+        system.on_mouse_up([50.0, 50.0], &[3, 7, 12]);
+        assert_eq!(system.state().count(), 3);
+    }
+
+    #[test]
+    fn test_system_modifiers() {
+        let mut system = MarkSelectionSystem::new(100);
+        system.on_mouse_down([10.0, 10.0]);
+        system.on_mouse_up([10.0, 10.0], &[5]);
+
+        // Shift+click → additive
+        system.set_modifiers(KeyModifiers {
+            ctrl: false,
+            shift: true,
+            alt: false,
+        });
+        system.on_mouse_down([20.0, 20.0]);
+        system.on_mouse_up([20.0, 20.0], &[10]);
+        assert_eq!(system.state().count(), 2);
+        assert!(system.state().is_selected(5));
+        assert!(system.state().is_selected(10));
+    }
+
+    #[test]
+    fn test_system_hover() {
+        let mut system = MarkSelectionSystem::new(100);
+        system.on_hover(Some(42));
+        assert_eq!(system.state().hover(), Some(42));
+
+        let events = system.drain_events();
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            events[0],
+            SelectionEvent::HoverChanged { id: Some(42) }
+        ));
+    }
+
+    #[test]
+    fn test_system_undo_redo() {
+        let mut system = MarkSelectionSystem::new(100);
+        system.on_mouse_down([10.0, 10.0]);
+        system.on_mouse_up([10.0, 10.0], &[5]);
+        assert_eq!(system.state().count(), 1);
+
+        assert!(system.undo());
+        assert_eq!(system.state().count(), 0);
+
+        assert!(system.redo());
+        assert_eq!(system.state().count(), 1);
+    }
+
+    #[test]
+    fn test_system_filter_by_rect() {
+        let positions = vec![
+            [5.0, 5.0],
+            [15.0, 15.0],
+            [25.0, 25.0],
+            [35.0, 35.0],
+            [50.0, 50.0],
+        ];
+        let rect = Rect::new(Vec2::new(10.0, 10.0), Vec2::new(40.0, 40.0));
+        let ids = MarkSelectionSystem::filter_by_rect(&rect, &positions);
+        assert_eq!(ids, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn test_system_filter_by_lasso() {
+        let lasso = vec![
+            Vec2::new(0.0, 0.0),
+            Vec2::new(20.0, 0.0),
+            Vec2::new(20.0, 20.0),
+            Vec2::new(0.0, 20.0),
+        ];
+        let positions = vec![[10.0, 10.0], [30.0, 30.0], [5.0, 5.0]];
+        let ids = MarkSelectionSystem::filter_by_lasso(&lasso, &positions);
+        assert_eq!(ids, vec![0, 2]);
+    }
+
+    #[test]
+    fn test_system_mark_opacity() {
+        let mut system = MarkSelectionSystem::new(100);
+        // No selection → all opaque
+        assert_eq!(system.mark_opacity(5), 1.0);
+
+        system.state_mut().select(5);
+        assert_eq!(system.mark_opacity(5), 1.0);
+        assert_eq!(system.mark_opacity(10), system.style().unselected_opacity);
+    }
+
+    #[test]
+    fn test_system_mark_scale() {
+        let mut system = MarkSelectionSystem::new(100);
+        system.state_mut().select(5);
+        system.state_mut().set_hover(Some(10));
+
+        assert_eq!(system.mark_scale(5), system.style().selected_scale);
+        assert_eq!(system.mark_scale(10), system.style().hover_scale);
+        assert_eq!(system.mark_scale(20), 1.0);
+    }
+
+    #[test]
+    fn test_system_mark_outline() {
+        let mut system = MarkSelectionSystem::new(100);
+        system.state_mut().select(5);
+        system.state_mut().set_hover(Some(10));
+
+        let outline = system.mark_outline(5).unwrap();
+        assert_eq!(outline.0, system.style().selected_outline_color);
+
+        let hover_outline = system.mark_outline(10).unwrap();
+        assert_eq!(hover_outline.0, system.style().hover_outline_color);
+
+        assert!(system.mark_outline(20).is_none());
+    }
+
+    #[test]
+    fn test_system_export_import() {
+        let mut system = MarkSelectionSystem::new(100);
+        system.state_mut().select(5);
+        system.state_mut().select(10);
+
+        let exported = system.export_selected();
+        assert_eq!(exported, vec![5, 10]);
+
+        let mut system2 = MarkSelectionSystem::new(100);
+        system2.import_selected(&exported);
+        assert_eq!(system2.state().count(), 2);
+        assert!(system2.state().is_selected(5));
+        assert!(system2.state().is_selected(10));
+    }
+
+    #[test]
+    fn test_system_drain_events() {
+        let mut system = MarkSelectionSystem::new(100);
+        system.on_mouse_down([10.0, 10.0]);
+        system.on_mouse_up([10.0, 10.0], &[5]);
+
+        let events = system.drain_events();
+        assert!(!events.is_empty());
+
+        // Second drain should be empty
+        let events2 = system.drain_events();
+        assert!(events2.is_empty());
+    }
+
+    #[test]
+    fn test_system_cancel() {
+        let mut system = MarkSelectionSystem::new(100);
+        system.set_tool(SelectionToolKind::Rectangle);
+        system.on_mouse_down([10.0, 10.0]);
+        assert!(system.is_tool_active());
+        system.cancel();
+        assert!(!system.is_tool_active());
+    }
+
+    #[test]
+    fn test_system_resize() {
+        let mut system = MarkSelectionSystem::new(50);
+        system.state_mut().select(10);
+        system.resize(100);
+        assert!(system.state().is_selected(10));
+        assert_eq!(system.state().mark_count(), 100);
     }
 }
