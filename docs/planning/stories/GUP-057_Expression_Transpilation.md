@@ -5,7 +5,8 @@
 **Title**: Implement Rust Expression and Operator Transpilation to WGSL  
 **Epic**: Phase 2 Initiative 3 - Rust-to-WGSL Transpilation  
 **Priority**: High  
-**Story Points**: 13
+**Story Points**: 13  
+**Status**: 🚧 In Progress
 
 ## Context
 
