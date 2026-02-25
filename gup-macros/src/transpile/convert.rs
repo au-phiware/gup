@@ -13,6 +13,7 @@ use proc_macro2::Span;
 use syn::{BinOp, Expr, FnArg, Pat, Stmt, Type};
 
 use super::ast::*;
+use super::type_map::TypeMapper;
 
 /// Errors that can occur during Rust-to-WGSL transpilation.
 #[derive(Debug, Clone)]
@@ -45,10 +46,13 @@ impl std::fmt::Display for TranspileError {
 ///
 /// The converter maintains a set of known uniform parameter names so that
 /// bare references to uniform fields are translated to `uniforms.field`
-/// access in WGSL.
+/// access in WGSL. It delegates type mapping to [`TypeMapper`] for
+/// comprehensive type support and clear error diagnostics.
 pub struct RustToWgsl {
     /// Names of parameters that should be accessed via `uniforms.` prefix.
     uniform_params: HashSet<String>,
+    /// Type mapper for Rust → WGSL type conversion.
+    type_mapper: TypeMapper,
 }
 
 impl RustToWgsl {
@@ -59,11 +63,22 @@ impl RustToWgsl {
     pub fn new(uniform_params: impl IntoIterator<Item = String>) -> Self {
         Self {
             uniform_params: uniform_params.into_iter().collect(),
+            type_mapper: TypeMapper::new(),
         }
     }
 
+    /// Return a reference to the underlying type mapper.
+    pub fn type_mapper(&self) -> &TypeMapper {
+        &self.type_mapper
+    }
+
+    /// Return a mutable reference to the underlying type mapper.
+    pub fn type_mapper_mut(&mut self) -> &mut TypeMapper {
+        &mut self.type_mapper
+    }
+
     /// Convert a complete `syn::ItemFn` into a [`WgslFunction`].
-    pub fn convert_function(&self, func: &syn::ItemFn) -> Result<WgslFunction, TranspileError> {
+    pub fn convert_function(&mut self, func: &syn::ItemFn) -> Result<WgslFunction, TranspileError> {
         let name = func.sig.ident.to_string();
 
         // Convert parameters
@@ -106,63 +121,18 @@ impl RustToWgsl {
     }
 
     /// Convert a Rust type to a WGSL type.
-    pub fn convert_type(&self, ty: &Type) -> Result<WgslType, TranspileError> {
-        match ty {
-            Type::Path(type_path) => {
-                let path = &type_path.path;
-                if path.segments.len() == 1 {
-                    let ident = path.segments[0].ident.to_string();
-                    match ident.as_str() {
-                        "f32" => Ok(WgslType::Scalar(ScalarType::F32)),
-                        "i32" => Ok(WgslType::Scalar(ScalarType::I32)),
-                        "u32" => Ok(WgslType::Scalar(ScalarType::U32)),
-                        "bool" => Ok(WgslType::Scalar(ScalarType::Bool)),
-                        "Vec2" => Ok(WgslType::Vector(ScalarType::F32, 2)),
-                        "Vec3" => Ok(WgslType::Vector(ScalarType::F32, 3)),
-                        "Vec4" => Ok(WgslType::Vector(ScalarType::F32, 4)),
-                        "Mat2" => Ok(WgslType::Matrix(ScalarType::F32, 2, 2)),
-                        "Mat3" => Ok(WgslType::Matrix(ScalarType::F32, 3, 3)),
-                        "Mat4" => Ok(WgslType::Matrix(ScalarType::F32, 4, 4)),
-                        // Treat unknown identifiers as struct types
-                        other => Ok(WgslType::Struct(other.to_string())),
-                    }
-                } else {
-                    Err(TranspileError::new(
-                        "Multi-segment type paths are not supported in WGSL",
-                        path.segments[0].ident.span(),
-                    ))
-                }
-            }
-            Type::Array(arr) => {
-                let elem = self.convert_type(&arr.elem)?;
-                if let Expr::Lit(syn::ExprLit {
-                    lit: syn::Lit::Int(lit_int),
-                    ..
-                }) = &arr.len
-                {
-                    let size: u32 = lit_int
-                        .base10_parse()
-                        .map_err(|_| TranspileError::new("Invalid array length", lit_int.span()))?;
-                    Ok(WgslType::Array(Box::new(elem), size))
-                } else {
-                    Err(TranspileError::new(
-                        "Only literal array lengths are supported",
-                        Span::call_site(),
-                    ))
-                }
-            }
-            _ => Err(TranspileError::new(
-                format!(
-                    "Unsupported type for WGSL conversion: {}",
-                    quote::quote!(#ty)
-                ),
-                Span::call_site(),
-            )),
-        }
+    ///
+    /// Delegates to [`TypeMapper`] for comprehensive type support and
+    /// clear error diagnostics.
+    pub fn convert_type(&mut self, ty: &Type) -> Result<WgslType, TranspileError> {
+        self.type_mapper
+            .map_rust_type(ty)
+            .map(|info| info.wgsl_type)
+            .map_err(|e| TranspileError::new(e.message, e.span))
     }
 
     /// Convert a block of statements.
-    fn convert_block(&self, block: &syn::Block) -> Result<Vec<WgslStatement>, TranspileError> {
+    fn convert_block(&mut self, block: &syn::Block) -> Result<Vec<WgslStatement>, TranspileError> {
         let mut stmts = Vec::with_capacity(block.stmts.len());
         for (i, stmt) in block.stmts.iter().enumerate() {
             let is_last = i == block.stmts.len() - 1;
@@ -172,7 +142,11 @@ impl RustToWgsl {
     }
 
     /// Convert a single statement.
-    fn convert_stmt(&self, stmt: &Stmt, is_last: bool) -> Result<WgslStatement, TranspileError> {
+    fn convert_stmt(
+        &mut self,
+        stmt: &Stmt,
+        is_last: bool,
+    ) -> Result<WgslStatement, TranspileError> {
         match stmt {
             Stmt::Local(local) => {
                 let name = extract_pat_name(&local.pat)?;
@@ -231,7 +205,7 @@ impl RustToWgsl {
     }
 
     /// Convert a Rust expression to a WGSL expression.
-    pub fn convert_expr(&self, expr: &Expr) -> Result<WgslExpr, TranspileError> {
+    pub fn convert_expr(&mut self, expr: &Expr) -> Result<WgslExpr, TranspileError> {
         match expr {
             // --- Identifiers ---
             Expr::Path(ep) => {
@@ -329,6 +303,7 @@ impl RustToWgsl {
                         let name = ident.to_string();
                         // Map Rust type constructors to WGSL
                         return match name.as_str() {
+                            // Float vectors
                             "Vec2" => Ok(WgslExpr::TypeConstructor(
                                 WgslType::Vector(ScalarType::F32, 2),
                                 args,
@@ -339,6 +314,45 @@ impl RustToWgsl {
                             )),
                             "Vec4" => Ok(WgslExpr::TypeConstructor(
                                 WgslType::Vector(ScalarType::F32, 4),
+                                args,
+                            )),
+                            // Integer vectors
+                            "IVec2" => Ok(WgslExpr::TypeConstructor(
+                                WgslType::Vector(ScalarType::I32, 2),
+                                args,
+                            )),
+                            "IVec3" => Ok(WgslExpr::TypeConstructor(
+                                WgslType::Vector(ScalarType::I32, 3),
+                                args,
+                            )),
+                            "IVec4" => Ok(WgslExpr::TypeConstructor(
+                                WgslType::Vector(ScalarType::I32, 4),
+                                args,
+                            )),
+                            // Unsigned integer vectors
+                            "UVec2" => Ok(WgslExpr::TypeConstructor(
+                                WgslType::Vector(ScalarType::U32, 2),
+                                args,
+                            )),
+                            "UVec3" => Ok(WgslExpr::TypeConstructor(
+                                WgslType::Vector(ScalarType::U32, 3),
+                                args,
+                            )),
+                            "UVec4" => Ok(WgslExpr::TypeConstructor(
+                                WgslType::Vector(ScalarType::U32, 4),
+                                args,
+                            )),
+                            // Boolean vectors
+                            "BVec2" => Ok(WgslExpr::TypeConstructor(
+                                WgslType::Vector(ScalarType::Bool, 2),
+                                args,
+                            )),
+                            "BVec3" => Ok(WgslExpr::TypeConstructor(
+                                WgslType::Vector(ScalarType::Bool, 3),
+                                args,
+                            )),
+                            "BVec4" => Ok(WgslExpr::TypeConstructor(
+                                WgslType::Vector(ScalarType::Bool, 4),
                                 args,
                             )),
                             _ => Ok(WgslExpr::Call(name, args)),
@@ -601,7 +615,7 @@ mod tests {
 
     #[test]
     fn convert_simple_arithmetic() {
-        let converter = RustToWgsl::new(std::iter::empty::<String>());
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
         let expr: Expr = parse_quote!(a + b);
         let result = converter.convert_expr(&expr).unwrap();
         assert_eq!(
@@ -616,7 +630,7 @@ mod tests {
 
     #[test]
     fn convert_nested_arithmetic() {
-        let converter = RustToWgsl::new(std::iter::empty::<String>());
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
         let expr: Expr = parse_quote!(a * b + c);
         let result = converter.convert_expr(&expr).unwrap();
         // Should parse as (a * b) + c
@@ -625,7 +639,7 @@ mod tests {
 
     #[test]
     fn convert_float_literal() {
-        let converter = RustToWgsl::new(std::iter::empty::<String>());
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
         let expr: Expr = parse_quote!(1.5);
         let result = converter.convert_expr(&expr).unwrap();
         assert_eq!(result, WgslExpr::Literal(Literal::Float(1.5)));
@@ -633,7 +647,7 @@ mod tests {
 
     #[test]
     fn convert_int_literal() {
-        let converter = RustToWgsl::new(std::iter::empty::<String>());
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
         let expr: Expr = parse_quote!(42);
         let result = converter.convert_expr(&expr).unwrap();
         assert_eq!(result, WgslExpr::Literal(Literal::Int(42)));
@@ -641,7 +655,7 @@ mod tests {
 
     #[test]
     fn convert_uniform_access() {
-        let converter = RustToWgsl::new(["scale".to_string()]);
+        let mut converter = RustToWgsl::new(["scale".to_string()]);
         let expr: Expr = parse_quote!(scale);
         let result = converter.convert_expr(&expr).unwrap();
         assert_eq!(
@@ -655,7 +669,7 @@ mod tests {
 
     #[test]
     fn convert_uniform_field_access() {
-        let converter = RustToWgsl::new(["config".to_string()]);
+        let mut converter = RustToWgsl::new(["config".to_string()]);
         let expr: Expr = parse_quote!(config.min_val);
         let result = converter.convert_expr(&expr).unwrap();
         assert_eq!(
@@ -672,7 +686,7 @@ mod tests {
 
     #[test]
     fn convert_function_call() {
-        let converter = RustToWgsl::new(std::iter::empty::<String>());
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
         let expr: Expr = parse_quote!(clamp(x, 0.0, 1.0));
         let result = converter.convert_expr(&expr).unwrap();
         assert!(matches!(result, WgslExpr::Call(name, args) if name == "clamp" && args.len() == 3));
@@ -680,7 +694,7 @@ mod tests {
 
     #[test]
     fn convert_method_to_function() {
-        let converter = RustToWgsl::new(std::iter::empty::<String>());
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
         let expr: Expr = parse_quote!(x.abs());
         let result = converter.convert_expr(&expr).unwrap();
         assert_eq!(
@@ -691,7 +705,7 @@ mod tests {
 
     #[test]
     fn convert_vec_constructor() {
-        let converter = RustToWgsl::new(std::iter::empty::<String>());
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
         let expr: Expr = parse_quote!(Vec3(1.0, 2.0, 3.0));
         let result = converter.convert_expr(&expr).unwrap();
         assert!(
@@ -701,7 +715,7 @@ mod tests {
 
     #[test]
     fn convert_type_cast() {
-        let converter = RustToWgsl::new(std::iter::empty::<String>());
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
         let expr: Expr = parse_quote!(x as f32);
         let result = converter.convert_expr(&expr).unwrap();
         assert!(matches!(
@@ -712,7 +726,7 @@ mod tests {
 
     #[test]
     fn convert_unary_negate() {
-        let converter = RustToWgsl::new(std::iter::empty::<String>());
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
         let expr: Expr = parse_quote!(-x);
         let result = converter.convert_expr(&expr).unwrap();
         assert_eq!(
@@ -723,7 +737,7 @@ mod tests {
 
     #[test]
     fn convert_comparison() {
-        let converter = RustToWgsl::new(std::iter::empty::<String>());
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
         let expr: Expr = parse_quote!(a > b);
         let result = converter.convert_expr(&expr).unwrap();
         assert!(matches!(result, WgslExpr::Binary(_, BinaryOp::Greater, _)));
@@ -731,7 +745,7 @@ mod tests {
 
     #[test]
     fn convert_bool_literal() {
-        let converter = RustToWgsl::new(std::iter::empty::<String>());
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
         let expr: Expr = parse_quote!(true);
         let result = converter.convert_expr(&expr).unwrap();
         assert_eq!(result, WgslExpr::Literal(Literal::Bool(true)));
@@ -739,7 +753,7 @@ mod tests {
 
     #[test]
     fn convert_index_access() {
-        let converter = RustToWgsl::new(std::iter::empty::<String>());
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
         let expr: Expr = parse_quote!(arr[i]);
         let result = converter.convert_expr(&expr).unwrap();
         assert!(matches!(result, WgslExpr::IndexAccess(_, _)));
@@ -747,7 +761,7 @@ mod tests {
 
     #[test]
     fn convert_type_f32() {
-        let converter = RustToWgsl::new(std::iter::empty::<String>());
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
         let ty: Type = parse_quote!(f32);
         assert_eq!(
             converter.convert_type(&ty).unwrap(),
@@ -757,7 +771,7 @@ mod tests {
 
     #[test]
     fn convert_type_vec3() {
-        let converter = RustToWgsl::new(std::iter::empty::<String>());
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
         let ty: Type = parse_quote!(Vec3);
         assert_eq!(
             converter.convert_type(&ty).unwrap(),
@@ -767,7 +781,7 @@ mod tests {
 
     #[test]
     fn convert_type_array() {
-        let converter = RustToWgsl::new(std::iter::empty::<String>());
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
         let ty: Type = parse_quote!([f32; 4]);
         assert_eq!(
             converter.convert_type(&ty).unwrap(),
@@ -777,7 +791,7 @@ mod tests {
 
     #[test]
     fn convert_function_simple() {
-        let converter = RustToWgsl::new(["scale".to_string(), "offset".to_string()]);
+        let mut converter = RustToWgsl::new(["scale".to_string(), "offset".to_string()]);
         let func: syn::ItemFn = parse_quote! {
             fn transform(value: f32, scale: f32, offset: f32) -> f32 {
                 return value * scale + offset;
@@ -794,7 +808,7 @@ mod tests {
 
     #[test]
     fn unsupported_closure_error() {
-        let converter = RustToWgsl::new(std::iter::empty::<String>());
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
         let expr: Expr = parse_quote!(|x| x + 1);
         let result = converter.convert_expr(&expr);
         assert!(result.is_err());

@@ -12,7 +12,7 @@ mod tests {
 
     /// Helper to run the full transpile pipeline on a Rust function.
     fn transpile(func: &syn::ItemFn, uniform_params: impl IntoIterator<Item = String>) -> String {
-        let converter = RustToWgsl::new(uniform_params);
+        let mut converter = RustToWgsl::new(uniform_params);
         let wgsl_func = converter.convert_function(func).unwrap();
         let mut codegen = WgslCodeGen::new();
         codegen.generate_function(&wgsl_func)
@@ -193,14 +193,14 @@ mod tests {
 
     #[test]
     fn pipeline_error_on_closure() {
-        let converter = RustToWgsl::new(std::iter::empty::<String>());
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
         let expr: syn::Expr = syn::parse_quote!(|x| x + 1);
         assert!(converter.convert_expr(&expr).is_err());
     }
 
     #[test]
     fn pipeline_error_on_match() {
-        let converter = RustToWgsl::new(std::iter::empty::<String>());
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
         let expr: syn::Expr = syn::parse_quote!(match x {
             0 => 1,
             _ => 2,
@@ -210,7 +210,7 @@ mod tests {
 
     #[test]
     fn pipeline_error_on_unsupported_method() {
-        let converter = RustToWgsl::new(std::iter::empty::<String>());
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
         let expr: syn::Expr = syn::parse_quote!(x.to_string());
         let err = converter.convert_expr(&expr).unwrap_err();
         assert!(err.message.contains("to_string"));
