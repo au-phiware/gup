@@ -67,15 +67,17 @@ epic and status.
 
 ### Post GUP-068/011 Follow-up Stories - Advanced Mark System (Stories 69-75)
 
-| Story                                                  | Title                                          | Status      | Priority | Points |
-| ------------------------------------------------------ | ---------------------------------------------- | ----------- | -------- | ------ |
-| [GUP-069](GUP-069_Advanced_Mark_Rendering_Features.md) | Advanced Mark Rendering Features               | 📋 Planned  | Medium   | —      |
-| [GUP-070](GUP-070_Mark_Performance_Optimization.md)    | Mark Performance Optimization                  | 📋 Planned  | Medium   | —      |
-| [GUP-071](GUP-071_Custom_Mark_Development_Kit.md)      | Custom Mark Development Kit                    | 📋 Planned  | Low      | —      |
-| [GUP-072](GUP-072_Mark_System_Documentation.md)        | Mark System Documentation                      | 📋 Planned  | Low      | —      |
-| [GUP-073](GUP-073_Advanced_Shader_Composition.md)      | Advanced Shader Composition                    | 📋 Planned  | Medium   | —      |
-| [GUP-074](GUP-074_Mark_Performance_Optimization.md)    | Mark Performance Optimization (GPU Instancing) | ✅ Complete | High     | 5      |
-| [GUP-075](GUP-075_Interactive_Mark_Selection.md)       | Interactive Mark Selection                     | 📋 Planned  | Medium   | —      |
+| Story                                                   | Title                                          | Status      | Priority | Points |
+| ------------------------------------------------------- | ---------------------------------------------- | ----------- | -------- | ------ |
+| [GUP-069](GUP-069_Advanced_Mark_Rendering_Features.md)  | Advanced Mark Rendering Features               | 📋 Planned  | Medium   | —      |
+| [GUP-070](GUP-070_Mark_Performance_Optimization.md)     | Mark Performance Optimization                  | 📋 Planned  | Medium   | —      |
+| [GUP-071](GUP-071_Custom_Mark_Development_Kit.md)       | Custom Mark Development Kit                    | 📋 Planned  | Low      | —      |
+| [GUP-072](GUP-072_Mark_System_Documentation.md)         | Mark System Documentation                      | 📋 Planned  | Low      | —      |
+| [GUP-073](GUP-073_Advanced_Shader_Composition.md)       | Advanced Shader Composition                    | 📋 Planned  | Medium   | —      |
+| [GUP-074](GUP-074_Mark_Performance_Optimization.md)     | Mark Performance Optimization (GPU Instancing) | ✅ Complete | High     | 5      |
+| [GUP-075](GUP-075_Interactive_Mark_Selection.md)        | Interactive Mark Selection                     | 📋 Planned  | Medium   | —      |
+| [GUP-076](GUP-076_GPU_Occlusion_Culling.md)             | GPU Occlusion Culling for Dense Datasets       | 📋 Planned  | Low      | —      |
+| [GUP-077](GUP-077_Compute_Shader_Instance_Filtering.md) | Compute Shader Instance Sorting and Filtering  | 📋 Planned  | Medium   | —      |
 
 ### Post GUP-005 Stories - Shader Function System Enhancement (Stories 51+)
 

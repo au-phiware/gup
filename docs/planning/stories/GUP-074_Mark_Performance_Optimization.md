@@ -262,3 +262,102 @@ impl CullingManager {
 - Temporal coherence optimizations for animated data
 - Multi-GPU rendering for datasets >10M points
 - Integration with spatial indexing structures (octrees, R-trees)
+
+## Retrospective
+
+**Completed**: 2026-02-25
+
+### Key Technical Learnings
+
+#### GpuBuffer lacks Debug trait
+
+- **Challenge**: `GpuBuffer<T>` doesn't implement `Debug` because wgpu's
+  `Buffer` type doesn't. This prevented `#[derive(Debug)]` on structs containing
+  `GpuBuffer`.
+- **Solution**: Removed `#[derive(Debug)]` from internal cache entry structs
+  (they're private), kept `Debug` on public types where possible.
+- **Pattern**: For structs wrapping wgpu resources, implement custom Debug or
+  keep them non-Debug.
+
+#### Existing instancing infrastructure
+
+- **Challenge**: The codebase already had extensive instancing support: marks
+  have instance types (`CircleInstance`, `RectangleInstance`), the
+  `MarkRenderer` manages instance buffers, and the `BufferPool` handles buffer
+  reuse. The story's original framing assumed less infrastructure existed.
+- **Solution**: Built the `InstancedBatchRenderer` as a higher-level coordinator
+  that wraps and extends existing primitives rather than replacing them. Added
+  `GeometryCache` and `CullingManager` as independently useful components.
+- **Pattern**: Check existing infrastructure before designing new systems — the
+  project's buffer, pipeline, and mark subsystems are more mature than initial
+  planning docs suggest.
+
+#### Mark module imports require careful paths
+
+- **Challenge**: The `mark` module re-exports many types from sub-modules. In
+  test code within `mark/batch_renderer.rs`, short paths like `use Circle`
+  failed because the crate root re-export conflicts with sub-module paths.
+- **Solution**: Use explicit paths like `use crate::mark::Circle` and
+  `use crate::mark::circle::CircleInstance`.
+- **Pattern**: In sub-module test blocks, prefer `crate::mark::<Type>` over
+  short re-export paths.
+
+### Architectural Decisions
+
+#### Batch renderer as a separate module vs extending MarkRenderer
+
+- **Decision**: Created `batch_renderer` as a new module alongside the existing
+  `renderer` module.
+- **Reasoning**: The existing `MarkRenderer` is a simple, focused struct used by
+  many parts of the codebase. Adding batch processing, culling, and statistics
+  tracking would have bloated it beyond its original purpose.
+- **Trade-off**: Two renderers to choose from; users need to know which to use.
+- **Future**: The `InstancedBatchRenderer` can eventually subsume
+  `MarkRenderer`, or they can coexist with the batch renderer being the
+  "advanced" option.
+
+#### GeometryCache separate from InstancedBatchRenderer
+
+- **Decision**: `GeometryCache` is a standalone public type, not embedded in
+  `InstancedBatchRenderer`.
+- **Reasoning**: Geometry caching is useful independently (e.g. the existing
+  `MarkRenderer` could use it). Keeping it separate follows the project's
+  preference for composable components.
+- **Trade-off**: Slightly more wiring for users who want both.
+- **Future**: Could be integrated into `MarkRegistry` for automatic geometry
+  management.
+
+#### Occlusion culling deferred
+
+- **Decision**: GPU occlusion queries were not implemented.
+- **Reasoning**: wgpu occlusion queries require `QuerySet`, async readback, and
+  multi-pass rendering. The complexity is substantial and the payoff is marginal
+  for 2D visualization (most overlap is handled by frustum culling + LOD).
+- **Trade-off**: Dense overlapping datasets won't benefit from occlusion
+  culling.
+- **Future**: A compute-shader-based approach (testing instance bounds against a
+  depth buffer) would be more practical than hardware occlusion queries.
+
+### Development Workflow Insights
+
+- The `mask all-fix` pre-commit hook catches clippy warnings as errors (via
+  `-D warnings`), which is strict but catches real issues (dead code, unused
+  imports) early.
+- GPU tests with `--test-threads=1` take about 1 second for the 38 batch
+  renderer tests — headless GPU context creation is fast.
+- The `prettier` formatter for markdown must be run on any `.md` file changes,
+  including the INDEX.md table; it's easy to forget and the pre-commit hook
+  catches it.
+- The flaky `test_performance_500_labels` test in `label::positioner` fails
+  intermittently under load — not related to this story but worth noting.
+
+### Follow-up Stories
+
+1. **GUP-076: GPU Occlusion Culling for Dense Datasets** — Implement
+   compute-shader-based occlusion culling using a hierarchical Z-buffer for
+   dense point clouds where frustum culling alone is insufficient. Would benefit
+   datasets with >100K overlapping marks.
+2. **GUP-077: Compute Shader Instance Sorting and Filtering** — Move instance
+   culling and LOD classification to a compute shader for >1M instance datasets
+   where CPU-side filtering becomes a bottleneck. Build on the
+   `InstanceAttributes` common format.
