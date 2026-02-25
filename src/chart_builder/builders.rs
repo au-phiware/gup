@@ -24,7 +24,7 @@ use super::ChartBuilderError;
 use super::accessor::{AccessorValue, FieldAccessor};
 use crate::error::GupResult;
 use crate::grid::{Color, GridConfiguration, GridLineConfig};
-use crate::selection::{ColorShaderFunction, PositionShaderFunction, Selection};
+use crate::selection::Selection;
 use std::marker::PhantomData;
 
 /// Base trait for all chart builders providing common configuration methods.
@@ -393,19 +393,19 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
     }
 }
 
-/// Helper trait for converting accessor values to shader functions.
+/// Helper trait for converting accessor values to attribute binding closures.
 pub trait AccessorToShaderFunction<T> {
-    /// Convert an accessor value to a position shader function.
+    /// Convert an accessor value to a position binding closure.
     fn to_position_shader(
         &self,
         accessor: AccessorFunction<T>,
-    ) -> PositionShaderFunction<impl Fn(&T) -> [f32; 2] + Send + Sync + 'static, T>;
+    ) -> Box<dyn Fn(&T) -> [f32; 2] + Send + Sync>;
 
-    /// Convert an accessor value to a color shader function.
+    /// Convert an accessor value to a colour binding closure.
     fn to_color_shader(
         &self,
         accessor: AccessorFunction<T>,
-    ) -> ColorShaderFunction<impl Fn(&T) -> [f32; 4] + Send + Sync + 'static, T>;
+    ) -> Box<dyn Fn(&T) -> [f32; 4] + Send + Sync>;
 }
 
 /// Type-erased accessor function for dynamic dispatch.
@@ -526,11 +526,11 @@ where
         let _x_field = x_acc.field_name().unwrap_or("x").to_string();
         let _y_field = y_acc.field_name().unwrap_or("y").to_string();
 
-        let position_shader = PositionShaderFunction::<_, T>::new(move |_data: &T| {
+        let position_shader = move |_data: &T| {
             // In a real implementation, this would use the actual accessor functions
             // For now, provide a placeholder that compiles
-            [0.0, 0.0] // This would extract actual values from data fields
-        });
+            [0.0f32, 0.0]
+        };
 
         selection.attr("position", position_shader);
     }
@@ -539,11 +539,11 @@ where
     if let Some(color_acc) = color_accessor {
         let _color_field = color_acc.field_name().unwrap_or("color").to_string();
 
-        let color_shader = ColorShaderFunction::<_, T>::new(move |_data: &T| {
+        let color_shader = move |_data: &T| {
             // In a real implementation, this would use the actual accessor function
             // For now, provide a default color
-            [1.0, 0.0, 0.0, 1.0] // Red default
-        });
+            [1.0f32, 0.0, 0.0, 1.0]
+        };
 
         selection.attr("color", color_shader);
     }

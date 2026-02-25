@@ -66,7 +66,7 @@ async fn async_main() -> GupResult<()> {
 fn example_two_way_parallel(context: &Arc<RenderContext>, data: &[DataPoint]) -> GupResult<()> {
     let mut selection = Selection::<DataPoint, Circle>::new(data.to_vec(), context.clone())?;
 
-    // Create shader functions
+    // Create shader functions for WGSL generation demonstration
     let position_scale = LinearScale::new(0.0, 100.0, 0.0, 800.0); // Maps value -> X position
     let color_map = ColorMap::new(
         vec4![0.0, 0.0, 1.0, 1.0], // Blue for low values
@@ -87,9 +87,17 @@ fn example_two_way_parallel(context: &Arc<RenderContext>, data: &[DataPoint]) ->
         wgsl.contains("parallel_composed")
     );
 
-    // Bind both attributes in a single call
+    // Bind both attributes via the CPU closure-based pipeline
     let start = Instant::now();
-    selection.attr_parallel(parallel, ["position", "color"]);
+    selection.attr_parallel(
+        |d: &DataPoint| {
+            let pos = [d.value / 100.0 * 800.0, 300.0];
+            let t = d.value / 100.0;
+            let color = [t, 0.0, 1.0 - t, 1.0];
+            (pos, color)
+        },
+        ["position", "color"],
+    );
     let elapsed = start.elapsed();
 
     println!("  ✓ Bound position and color in {:?}", elapsed);
@@ -98,24 +106,30 @@ fn example_two_way_parallel(context: &Arc<RenderContext>, data: &[DataPoint]) ->
     Ok(())
 }
 
-/// Demonstrates 3-way parallel composition using nested ParallelOutput
+/// Demonstrates 3-way parallel composition using nested closures
 fn example_three_way_parallel(context: &Arc<RenderContext>, data: &[DataPoint]) -> GupResult<()> {
     let mut selection = Selection::<DataPoint, Circle>::new(data.to_vec(), context.clone())?;
 
-    // Create three shader functions
+    // Demonstrate WGSL shader composition (GPU-side)
     let x_scale = LinearScale::new(0.0, 100.0, 0.0, 800.0); // value -> X
     let y_scale = LinearScale::new(20.0, 50.0, 0.0, 600.0); // temperature -> Y
     let color_map = ColorMap::new(vec4![0.0, 0.0, 1.0, 1.0], vec4![1.0, 0.0, 0.0, 1.0]);
 
-    // First parallel: x and y positions
+    // GPU shader composition for reference
     let xy_parallel = x_scale.parallel(y_scale);
+    let _triple_parallel = xy_parallel.parallel(color_map);
 
-    // Second parallel: (x, y) and color
-    let triple_parallel = xy_parallel.parallel(color_map);
-
-    // Bind all three attributes
+    // CPU attribute binding with 3-way parallel closure
     let start = Instant::now();
-    selection.attr_parallel(triple_parallel, ["x", "y", "color"]);
+    selection.attr_parallel(
+        |d: &DataPoint| {
+            let x = d.value / 100.0 * 800.0;
+            let y = (d.temperature - 20.0) / 30.0 * 600.0;
+            let t = d.value / 100.0;
+            ([x, y], [t, 0.0, 1.0 - t, 1.0], d.value * 0.05)
+        },
+        ["position", "color", "radius"],
+    );
     let elapsed = start.elapsed();
 
     println!("  ✓ Bound x, y, and color in {:?}", elapsed);
@@ -129,30 +143,35 @@ fn example_three_way_parallel(context: &Arc<RenderContext>, data: &[DataPoint]) 
 fn performance_comparison(context: &Arc<RenderContext>, data: &[DataPoint]) -> GupResult<()> {
     const ITERATIONS: usize = 100;
 
-    // Scenario 1: Parallel binding (simulated)
+    // Scenario 1: Parallel binding (single closure computes both attributes)
     let mut parallel_times = Vec::with_capacity(ITERATIONS);
     for _ in 0..ITERATIONS {
-        let position_scale = LinearScale::new(0.0, 100.0, 0.0, 800.0);
-        let color_map = ColorMap::new(vec4![0.0, 0.0, 1.0, 1.0], vec4![1.0, 0.0, 0.0, 1.0]);
-        let parallel = position_scale.parallel(color_map);
-
         let mut selection = Selection::<DataPoint, Circle>::new(data.to_vec(), context.clone())?;
         let start = Instant::now();
-        selection.attr_parallel(parallel, ["position", "color"]);
+        selection.attr_parallel(
+            |d: &DataPoint| {
+                let pos = [d.value / 100.0, d.temperature / 50.0];
+                let t = d.value / 100.0;
+                (pos, [t, 0.0, 1.0 - t, 1.0])
+            },
+            ["position", "color"],
+        );
         parallel_times.push(start.elapsed());
     }
 
-    // Scenario 2: Sequential binding
+    // Scenario 2: Sequential binding (separate closures)
     let mut sequential_times = Vec::with_capacity(ITERATIONS);
     for _ in 0..ITERATIONS {
-        let position_scale = LinearScale::new(0.0, 100.0, 0.0, 800.0);
-        let color_map = ColorMap::new(vec4![0.0, 0.0, 1.0, 1.0], vec4![1.0, 0.0, 0.0, 1.0]);
-
         let mut selection = Selection::<DataPoint, Circle>::new(data.to_vec(), context.clone())?;
         let start = Instant::now();
         selection
-            .attr("position", position_scale)
-            .attr("color", color_map);
+            .attr("position", |d: &DataPoint| {
+                [d.value / 100.0, d.temperature / 50.0]
+            })
+            .attr("color", |d: &DataPoint| {
+                let t = d.value / 100.0;
+                [t, 0.0, 1.0 - t, 1.0]
+            });
         sequential_times.push(start.elapsed());
     }
 

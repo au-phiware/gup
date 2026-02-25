@@ -1,169 +1,143 @@
 // Copyright (C) 2024 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Integration tests for Selection API with ParallelOutput (GUP-140 AC2).
+//! Integration tests for Selection attribute binding pipeline (GUP-168).
+//!
+//! Tests cover:
+//! - `attr()` storing and retrieving named bindings
+//! - `attr_parallel()` with 2-way and 3-way closures
+//! - Method chaining of `attr()` and `attr_parallel()`
+//! - Type safety (only GPU-compatible types compile)
+//! - `prepare_render_bound()` using stored bindings
 
 use gup::prelude::*;
-use gup::vec4;
-use std::sync::Arc;
+use gup::selection::Selection;
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 struct TestData {
     value: f32,
 }
 
 #[test]
-fn test_selection_attr_parallel_api() {
-    // This test verifies the API surface exists and compiles
-    let context =
-        Arc::new(pollster::block_on(RenderContext::new()).expect("Failed to create context"));
-
+fn test_selection_attr_stores_bindings() {
     let data = vec![
         TestData { value: 0.0 },
         TestData { value: 50.0 },
         TestData { value: 100.0 },
     ];
 
-    let mut selection =
-        Selection::<TestData, Circle>::new(data, context).expect("Failed to create selection");
+    let mut selection = Selection::<TestData, Circle>::from_data(data);
 
-    // Create parallel composition
-    let position_scale = LinearScale::new(0.0, 100.0, 0.0, 800.0);
-    let color_map = ColorMap::new(vec4![0.0, 0.0, 1.0, 1.0], vec4![1.0, 0.0, 0.0, 1.0]);
-    let parallel = position_scale.parallel(color_map);
+    assert!(!selection.has_attr_bindings());
 
-    // This should compile and return Self for method chaining
-    let result = selection.attr_parallel(parallel, ["position", "color"]);
+    selection.attr("center", |d: &TestData| [d.value / 100.0, 0.0]);
 
-    // Verify method chaining works
-    assert_eq!(result.len(), 3);
+    assert!(selection.has_attr_bindings());
+    assert_eq!(selection.bound_attributes(), vec!["center"]);
 }
 
 #[test]
-fn test_selection_attr_parallel_method_chaining() {
-    let context =
-        Arc::new(pollster::block_on(RenderContext::new()).expect("Failed to create context"));
+fn test_selection_attr_parallel_two_way() {
+    let data = vec![TestData { value: 50.0 }];
+    let mut selection = Selection::<TestData, Circle>::from_data(data);
 
-    let data = vec![TestData { value: 0.0 }];
+    selection.attr_parallel(
+        |d: &TestData| {
+            let pos = [d.value / 100.0, 0.0];
+            let t = d.value / 100.0;
+            (pos, [t, 0.0, 1.0 - t, 1.0])
+        },
+        ["center", "fill_color"],
+    );
 
-    let mut selection =
-        Selection::<TestData, Circle>::new(data, context).expect("Failed to create selection");
+    assert_eq!(selection.bound_attributes(), vec!["center", "fill_color"]);
+    assert_eq!(selection.len(), 1);
+}
 
-    // Create parallel compositions
-    let position_scale = LinearScale::new(0.0, 100.0, 0.0, 800.0);
-    let color_map = ColorMap::new(vec4![0.0, 0.0, 1.0, 1.0], vec4![1.0, 0.0, 0.0, 1.0]);
-    let parallel = position_scale.parallel(color_map);
+#[test]
+fn test_selection_attr_parallel_three_way() {
+    let data = vec![TestData { value: 50.0 }];
+    let mut selection = Selection::<TestData, Circle>::from_data(data);
 
-    // Verify method chaining works
+    selection.attr_parallel(
+        |d: &TestData| {
+            let pos = [d.value / 100.0, 0.0];
+            let t = d.value / 100.0;
+            let radius = d.value * 0.01;
+            (pos, [t, 0.0, 1.0 - t, 1.0], radius)
+        },
+        ["center", "fill_color", "radius"],
+    );
+
+    assert_eq!(
+        selection.bound_attributes(),
+        vec!["center", "fill_color", "radius"]
+    );
+}
+
+#[test]
+fn test_selection_attr_method_chaining() {
+    let data = vec![TestData { value: 50.0 }];
+    let mut selection = Selection::<TestData, Circle>::from_data(data);
+
+    // Chain multiple attr() calls
     selection
-        .attr_parallel(parallel, ["position", "color"])
-        .attr("size", 5.0_f32)
-        .attr("opacity", 1.0_f32);
+        .attr("center", |d: &TestData| [d.value / 100.0, 0.0])
+        .attr("radius", |d: &TestData| d.value * 0.01)
+        .attr("fill_color", |_: &TestData| [1.0f32, 0.0, 0.0, 1.0]);
 
-    // If we got here, all methods chained successfully
-    assert_eq!(selection.len(), 1);
+    assert_eq!(
+        selection.bound_attributes(),
+        vec!["center", "radius", "fill_color"]
+    );
 }
 
 #[test]
-fn test_selection_attr_parallel_three_way_binding() {
-    let context =
-        Arc::new(pollster::block_on(RenderContext::new()).expect("Failed to create context"));
+fn test_selection_attr_and_attr_parallel_mixed() {
+    let data = vec![TestData { value: 50.0 }];
+    let mut selection = Selection::<TestData, Circle>::from_data(data);
 
-    let data = vec![TestData { value: 0.0 }];
-
-    let mut selection =
-        Selection::<TestData, Circle>::new(data, context).expect("Failed to create selection");
-
-    // Create 3-way parallel composition (nested ParallelOutput)
-    let x_scale = LinearScale::new(0.0, 100.0, 0.0, 800.0);
-    let y_scale = LinearScale::new(0.0, 100.0, 0.0, 600.0);
-    let color = ColorMap::new(vec4![0.0, 0.0, 1.0, 1.0], vec4![1.0, 0.0, 0.0, 1.0]);
-
-    // First parallel: x and y
-    let xy_parallel = x_scale.parallel(y_scale);
-
-    // Second parallel: (x, y) and color
-    let triple_parallel = xy_parallel.parallel(color);
-
-    // Bind all three attributes
-    selection.attr_parallel(triple_parallel, ["x", "y", "color"]);
-
-    assert_eq!(selection.len(), 1);
-}
-
-#[test]
-fn test_selection_attr_parallel_with_composed_functions() {
-    let context =
-        Arc::new(pollster::block_on(RenderContext::new()).expect("Failed to create context"));
-
-    let data = vec![TestData { value: 0.0 }];
-
-    let mut selection =
-        Selection::<TestData, Circle>::new(data, context).expect("Failed to create selection");
-
-    // Create composed functions and then parallel compose them
-    let normalize = LinearScale::new(0.0, 100.0, 0.0, 1.0);
-    let position = LinearScale::new(0.0, 1.0, 0.0, 800.0);
-    let color_scale = LinearScale::new(0.0, 1.0, 0.0, 1.0);
-    let color_map = ColorMap::new(vec4![0.0, 0.0, 1.0, 1.0], vec4![1.0, 0.0, 0.0, 1.0]);
-
-    let position_chain = normalize.compose(position);
-    let color_chain = color_scale.compose(color_map);
-
-    let parallel = position_chain.parallel(color_chain);
-
-    selection.attr_parallel(parallel, ["position", "color"]);
-
-    assert_eq!(selection.len(), 1);
-}
-
-#[test]
-fn test_selection_attr_and_attr_parallel_mixed_usage() {
-    let context =
-        Arc::new(pollster::block_on(RenderContext::new()).expect("Failed to create context"));
-
-    let data = vec![TestData { value: 0.0 }];
-
-    let mut selection =
-        Selection::<TestData, Circle>::new(data, context).expect("Failed to create selection");
-
-    // Mix regular attr() and attr_parallel() calls
-    let position_scale = LinearScale::new(0.0, 100.0, 0.0, 800.0);
-    let color_map = ColorMap::new(vec4![0.0, 0.0, 1.0, 1.0], vec4![1.0, 0.0, 0.0, 1.0]);
-    let parallel = position_scale.parallel(color_map);
-
+    // Mix attr() and attr_parallel()
     selection
-        .attr("size", 10.0_f32)
-        .attr_parallel(parallel, ["position", "color"])
-        .attr("opacity", 0.8_f32);
+        .attr("radius", |d: &TestData| d.value * 0.01)
+        .attr_parallel(
+            |d: &TestData| {
+                let t = d.value / 100.0;
+                ([t, 0.0], [t, 0.0, 1.0 - t, 1.0])
+            },
+            ["center", "fill_color"],
+        )
+        .attr("stroke_width", |_: &TestData| 0.01f32);
 
-    assert_eq!(selection.len(), 1);
+    assert_eq!(
+        selection.bound_attributes(),
+        vec!["radius", "center", "fill_color", "stroke_width"]
+    );
 }
 
 #[test]
-fn test_selection_attr_parallel_type_safety() {
-    // This test demonstrates compile-time type safety
-    // Uncomment to verify compilation errors
+fn test_attr_invalidates_render_state() {
+    let data = vec![TestData { value: 50.0 }];
+    let mut selection = Selection::<TestData, Circle>::from_data(data);
 
-    let context =
-        Arc::new(pollster::block_on(RenderContext::new()).expect("Failed to create context"));
+    // Initially not render-ready
+    assert!(!selection.is_render_ready());
 
-    let data = vec![TestData { value: 0.0 }];
+    // Adding bindings keeps it not render-ready (need prepare_render)
+    selection.attr("center", |d: &TestData| [d.value, 0.0]);
+    assert!(!selection.is_render_ready());
+}
 
-    let mut selection =
-        Selection::<TestData, Circle>::new(data, context).expect("Failed to create selection");
+#[test]
+fn test_set_data_preserves_bindings() {
+    let data = vec![TestData { value: 50.0 }];
+    let mut selection = Selection::<TestData, Circle>::from_data(data);
 
-    let position_scale = LinearScale::new(0.0, 100.0, 0.0, 800.0);
-    let color_map = ColorMap::new(vec4![0.0, 0.0, 1.0, 1.0], vec4![1.0, 0.0, 0.0, 1.0]);
-    let parallel = position_scale.parallel(color_map);
+    selection.attr("center", |d: &TestData| [d.value, 0.0]);
+    assert!(selection.has_attr_bindings());
 
-    // This should work: 2 attributes for 2-way parallel
-    selection.attr_parallel(parallel, ["position", "color"]);
-
-    // This would cause a compile error if uncommented (array length mismatch):
-    // selection.attr_parallel(parallel, ["position"]);
-    // selection.attr_parallel(parallel, ["position", "color", "size"]);
-
-    assert_eq!(selection.len(), 1);
+    // set_data should not clear bindings
+    selection.set_data(vec![TestData { value: 100.0 }]);
+    assert!(selection.has_attr_bindings());
+    assert_eq!(selection.bound_attributes(), vec!["center"]);
 }

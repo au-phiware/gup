@@ -122,9 +122,8 @@ pub use crate::shader_function::{
     parallel_output_extraction,
 };
 
-// Legacy aliases for compatibility
-pub use crate::shader_function::ComposableShaderFunction as ColorShaderFunction;
-pub use crate::shader_function::ComposableShaderFunction as PositionShaderFunction;
+// Attribute binding types
+pub use crate::selection::{AttrValue, IntoAttrValue, IntoAttrValues, MarkInstanceBuilder};
 
 // Text rendering system
 pub use crate::text::{

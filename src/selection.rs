@@ -30,6 +30,137 @@ use std::sync::{Arc, Mutex};
 use wgpu::util::DeviceExt;
 use wgpu::{Device, Queue, RenderPass};
 
+// ---------------------------------------------------------------------------
+// Attribute binding types
+// ---------------------------------------------------------------------------
+
+/// A type-erased attribute value for use in declarative attribute bindings.
+///
+/// `AttrValue` represents the set of GPU-compatible scalar and vector types
+/// that can be bound to mark attributes. It is produced by closures stored
+/// via [`Selection::attr`] and consumed by [`MarkInstanceBuilder`]
+/// implementations when constructing GPU instance data.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum AttrValue {
+    /// A single floating-point value (e.g., radius, stroke width).
+    Float(f32),
+    /// A 2-component vector (e.g., position, size).
+    Vec2([f32; 2]),
+    /// A 4-component vector (e.g., RGBA colour).
+    Vec4([f32; 4]),
+}
+
+/// Trait for types that can be converted into an [`AttrValue`].
+///
+/// Implementing this trait for a type allows it to be used as the return value
+/// of attribute binding closures passed to [`Selection::attr`]. Only types
+/// that are valid GPU attribute values should implement this trait, which
+/// provides compile-time safety — attempting to bind an unsupported type
+/// (e.g., `String`) will produce a compiler error.
+pub trait IntoAttrValue: Send + Sync + 'static {
+    /// Convert this value into an [`AttrValue`].
+    fn into_attr_value(self) -> AttrValue;
+}
+
+impl IntoAttrValue for f32 {
+    fn into_attr_value(self) -> AttrValue {
+        AttrValue::Float(self)
+    }
+}
+
+impl IntoAttrValue for [f32; 2] {
+    fn into_attr_value(self) -> AttrValue {
+        AttrValue::Vec2(self)
+    }
+}
+
+impl IntoAttrValue for [f32; 4] {
+    fn into_attr_value(self) -> AttrValue {
+        AttrValue::Vec4(self)
+    }
+}
+
+impl IntoAttrValue for crate::shader_function::Vec2 {
+    fn into_attr_value(self) -> AttrValue {
+        AttrValue::Vec2([self.x, self.y])
+    }
+}
+
+impl IntoAttrValue for crate::shader_function::Vec4 {
+    fn into_attr_value(self) -> AttrValue {
+        AttrValue::Vec4([self.x, self.y, self.z, self.w])
+    }
+}
+
+/// A named attribute binding that extracts a value from data item `T`.
+struct AttributeBinding<T> {
+    name: String,
+    extractor: Box<dyn Fn(&T) -> AttrValue + Send + Sync>,
+}
+
+/// Trait for extracting multiple attribute values from a single closure.
+///
+/// This trait enables [`Selection::attr_parallel`] to accept closures that
+/// return tuples of attribute values. Each tuple element is mapped to a
+/// corresponding attribute name.
+pub trait IntoAttrValues<T, const N: usize>: Send + Sync + 'static {
+    /// Extract `N` attribute values from a data item.
+    fn extract(&self, data: &T) -> [AttrValue; N];
+}
+
+impl<T, V1, V2, F> IntoAttrValues<T, 2> for F
+where
+    F: Fn(&T) -> (V1, V2) + Send + Sync + 'static,
+    V1: IntoAttrValue,
+    V2: IntoAttrValue,
+{
+    fn extract(&self, data: &T) -> [AttrValue; 2] {
+        let (v1, v2) = self(data);
+        [v1.into_attr_value(), v2.into_attr_value()]
+    }
+}
+
+impl<T, V1, V2, V3, F> IntoAttrValues<T, 3> for F
+where
+    F: Fn(&T) -> (V1, V2, V3) + Send + Sync + 'static,
+    V1: IntoAttrValue,
+    V2: IntoAttrValue,
+    V3: IntoAttrValue,
+{
+    fn extract(&self, data: &T) -> [AttrValue; 3] {
+        let (v1, v2, v3) = self(data);
+        [
+            v1.into_attr_value(),
+            v2.into_attr_value(),
+            v3.into_attr_value(),
+        ]
+    }
+}
+
+/// Trait for mark types that can build GPU instances from named attribute
+/// bindings.
+///
+/// Implement this trait for a mark's associated `Instance` type to enable
+/// [`Selection::prepare_render_bound`], which constructs instances
+/// automatically from attribute closures instead of requiring a manual mapper.
+///
+/// # Default values
+///
+/// [`default_instance`](MarkInstanceBuilder::default_instance) provides
+/// sensible defaults for every field so that users only need to bind the
+/// attributes they care about.
+pub trait MarkInstanceBuilder: Mark {
+    /// The GPU-ready instance type produced by this builder.
+    type Instance: bytemuck::Pod + bytemuck::Zeroable;
+
+    /// Build an instance by overlaying the given attribute values on top of
+    /// the default instance.
+    fn build_instance(attrs: &[(&str, AttrValue)]) -> Self::Instance;
+
+    /// Return a default instance with sensible placeholder values.
+    fn default_instance() -> Self::Instance;
+}
+
 /// Mark types should implement the mark::Mark trait
 pub use crate::mark::Mark;
 
@@ -88,6 +219,9 @@ pub struct Selection<T, M: Mark> {
     _mark: PhantomData<M>,
     /// GPU render state, lazily initialised via prepare_render()
     render_state: Option<SelectionRenderState>,
+    /// Named attribute bindings stored via [`attr`](Self::attr) /
+    /// [`attr_parallel`](Self::attr_parallel).
+    attr_bindings: Vec<AttributeBinding<T>>,
 }
 
 impl<T, M: Mark> std::fmt::Debug for Selection<T, M> {
@@ -114,6 +248,7 @@ impl<T, M: Mark> Selection<T, M> {
             event_handlers: Arc::new(Mutex::new(HashMap::new())),
             _mark: PhantomData,
             render_state: None,
+            attr_bindings: Vec::new(),
         })
     }
 
@@ -131,6 +266,7 @@ impl<T, M: Mark> Selection<T, M> {
             event_handlers: Arc::new(Mutex::new(HashMap::new())),
             _mark: PhantomData,
             render_state: None,
+            attr_bindings: Vec::new(),
         }
     }
 
@@ -186,61 +322,100 @@ impl<T, M: Mark> Selection<T, M> {
         }
     }
 
-    /// Set an attribute on the selection.
-    pub fn attr<V>(&mut self, _name: &str, _value: V) -> &mut Self
-    where
-        V: Send + Sync + 'static,
-    {
-        // Placeholder implementation
-        self
-    }
-
-    /// Set multiple attributes from a parallel composition.
+    /// Bind a named attribute to a closure that extracts a value from each data item.
     ///
-    /// This method enables efficient multi-attribute binding where a single shader
-    /// function computes multiple outputs (e.g., position and color) from the same
-    /// input data.
-    ///
-    /// # Arguments
-    ///
-    /// * `parallel_function` - A ParallelComposition that computes multiple outputs
-    /// * `attribute_names` - Array of attribute names matching the outputs (e.g., ["position", "color"])
+    /// The closure `binding` is called once per data item when
+    /// [`prepare_render_bound`](Self::prepare_render_bound) is invoked, and
+    /// the returned value is fed into the mark's
+    /// [`MarkInstanceBuilder`] to construct GPU instance data.
     ///
     /// # Type Safety
     ///
-    /// The compiler ensures that the parallel function outputs are compatible with
-    /// the mark's attribute types.
+    /// The return type `V` must implement [`IntoAttrValue`], which is only
+    /// implemented for GPU-compatible types (`f32`, `[f32; 2]`, `[f32; 4]`,
+    /// [`Vec2`](crate::shader_function::Vec2),
+    /// [`Vec4`](crate::shader_function::Vec4)).
+    /// Attempting to bind an unsupported type produces a compile-time error.
     ///
     /// # Examples
     ///
     /// ```rust,ignore
-    /// use gup::prelude::*;
+    /// selection
+    ///     .attr("center", |d: &MyData| [d.x, d.y])
+    ///     .attr("radius", |d: &MyData| d.size * 0.1)
+    ///     .attr("fill_color", |d: &MyData| [d.r, d.g, d.b, 1.0]);
+    /// ```
+    pub fn attr<V, F>(&mut self, name: &str, binding: F) -> &mut Self
+    where
+        F: Fn(&T) -> V + Send + Sync + 'static,
+        V: IntoAttrValue,
+    {
+        self.attr_bindings.push(AttributeBinding {
+            name: name.to_string(),
+            extractor: Box::new(move |t| binding(t).into_attr_value()),
+        });
+        // Invalidate GPU state — new bindings require re-upload.
+        self.render_state = None;
+        self
+    }
+
+    /// Bind multiple attributes from a single closure that returns a tuple.
     ///
-    /// // Create parallel composition: data -> (position, color)
-    /// let position_fn = LinearScale::new(0.0, 100.0, 0.0, 800.0);
-    /// let color_fn = ColorMap::new(min_color, max_color);
-    /// let parallel = position_fn.parallel(color_fn);
+    /// This is more efficient than separate [`attr`](Self::attr) calls when
+    /// multiple attributes are computed from the same data — the closure is
+    /// called only once per data item.
     ///
-    /// // Bind both attributes in single call
-    /// selection.attr_parallel(parallel, ["position", "color"]);
+    /// # Arguments
+    ///
+    /// * `parallel_function` — A closure returning a tuple of values.
+    ///   Tuples of 2 and 3 elements are supported; each element must
+    ///   implement [`IntoAttrValue`].
+    /// * `attribute_names` — An array of attribute names corresponding
+    ///   positionally to the tuple elements.
+    ///
+    /// # Type Safety
+    ///
+    /// The compiler verifies that each tuple element is a valid GPU attribute
+    /// type. Binding a closure that returns `(String, bool)` will fail to
+    /// compile.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// // Bind position and colour in one pass over the data.
+    /// selection.attr_parallel(
+    ///     |d: &MyData| ([d.x, d.y], [d.r, d.g, d.b, 1.0]),
+    ///     ["center", "fill_color"],
+    /// );
     /// ```
     ///
     /// ```rust,ignore
-    /// // 3-way parallel binding (position XY + color + size)
-    /// let xy_and_color = x_scale.parallel(color_fn);
-    /// let all_three = xy_and_color.parallel(size_fn);
-    /// selection.attr_parallel(all_three, ["position", "color", "size"]);
+    /// // Three-way parallel binding: position, colour, and radius.
+    /// selection.attr_parallel(
+    ///     |d: &MyData| ([d.x, d.y], [d.r, d.g, d.b, 1.0], d.size),
+    ///     ["center", "fill_color", "radius"],
+    /// );
     /// ```
     pub fn attr_parallel<P, const N: usize>(
         &mut self,
-        _parallel_function: P,
-        _attribute_names: [&str; N],
+        parallel_function: P,
+        attribute_names: [&str; N],
     ) -> &mut Self
     where
-        P: Send + Sync + 'static,
+        P: IntoAttrValues<T, N>,
     {
-        // Placeholder implementation - will be integrated with mark rendering system
-        // when the full attribute binding pipeline is implemented
+        // Wrap the parallel function in an Arc so it can be shared across
+        // the N per-attribute closures.
+        let shared = Arc::new(parallel_function);
+        for (idx, name) in attribute_names.iter().enumerate() {
+            let f = Arc::clone(&shared);
+            self.attr_bindings.push(AttributeBinding {
+                name: name.to_string(),
+                extractor: Box::new(move |t| f.extract(t)[idx]),
+            });
+        }
+        // Invalidate GPU state.
+        self.render_state = None;
         self
     }
 
@@ -304,6 +479,78 @@ impl<T, M: Mark> Selection<T, M> {
         let instance_bytes: &[u8] = bytemuck::cast_slice(&instances);
         let instance_count = instances.len() as u32;
 
+        self.upload_instances(device, queue, instance_bytes, instance_count)
+    }
+
+    /// Prepare GPU resources using the attribute bindings stored via
+    /// [`attr`](Self::attr) / [`attr_parallel`](Self::attr_parallel).
+    ///
+    /// This method replaces the manual `mapper` closure required by
+    /// [`prepare_render`](Self::prepare_render). Instead, it evaluates the
+    /// stored attribute bindings for each data item and uses the mark's
+    /// [`MarkInstanceBuilder`] to construct GPU instance data.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no attribute bindings have been set, or if GPU
+    /// resource creation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// selection
+    ///     .attr("center", |d: &MyData| [d.x, d.y])
+    ///     .attr("radius", |d: &MyData| d.size * 0.1)
+    ///     .attr("fill_color", |d: &MyData| [d.r, d.g, d.b, 1.0])
+    ///     .prepare_render_bound(&device, &queue)?;
+    /// ```
+    pub fn prepare_render_bound(&mut self, device: &Device, queue: &Queue) -> GupResult<()>
+    where
+        M: MarkInstanceBuilder,
+    {
+        if self.attr_bindings.is_empty() {
+            return Err(crate::error::GupError::validation_error(
+                "No attribute bindings set — call attr() before prepare_render_bound()".to_string(),
+            ));
+        }
+
+        let bindings = &self.attr_bindings;
+        let instances: Vec<M::Instance> = self
+            .data
+            .iter()
+            .map(|t| {
+                let attr_values: Vec<(&str, AttrValue)> = bindings
+                    .iter()
+                    .map(|b| (b.name.as_str(), (b.extractor)(t)))
+                    .collect();
+                M::build_instance(&attr_values)
+            })
+            .collect();
+
+        let instance_bytes: &[u8] = bytemuck::cast_slice(&instances);
+        let instance_count = instances.len() as u32;
+
+        self.upload_instances(device, queue, instance_bytes, instance_count)
+    }
+
+    /// Get the names of currently bound attributes.
+    pub fn bound_attributes(&self) -> Vec<&str> {
+        self.attr_bindings.iter().map(|b| b.name.as_str()).collect()
+    }
+
+    /// Returns `true` if any attribute bindings have been set.
+    pub fn has_attr_bindings(&self) -> bool {
+        !self.attr_bindings.is_empty()
+    }
+
+    /// Internal helper: upload pre-computed instance bytes to the GPU.
+    fn upload_instances(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        instance_bytes: &[u8],
+        instance_count: u32,
+    ) -> GupResult<()> {
         if let Some(ref mut state) = self.render_state {
             // Re-use existing pipeline and vertex buffers.
             // If the instance buffer is too small, reallocate.
