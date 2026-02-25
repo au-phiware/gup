@@ -22,7 +22,50 @@
 //! performance and generated shaders for flexibility, while integrating seamlessly
 //! with the shader function system.
 //!
-//! ## Mark-Shader Integration
+//! # System Overview
+//!
+//! The mark system consists of three core components:
+//!
+//! - [`Mark`] — Trait defining geometry, shaders, and attributes for a visual
+//!   primitive.
+//! - [`MarkRegistry`] — Type-safe runtime registry with pipeline caching.
+//! - [`MarkRenderer`] — GPU buffer manager handling vertex, instance, and index
+//!   data.
+//!
+//! # Built-in Marks
+//!
+//! | Mark | Module | Description |
+//! |------|--------|-------------|
+//! | [`Circle`] | [`circle`] | SDF circle with fill/stroke |
+//! | [`Rectangle`] | [`rectangle`] | Rounded rectangle |
+//! | [`Line`] | [`mod@line`] | Styled line (solid, dashed, dotted) |
+//! | [`BoxPlot`] | [`boxplot`] | Statistical box-and-whisker |
+//! | [`Text`] | [`text`] | SDF text glyph rendering |
+//! | [`Path`] | [`path`] | SVG-like path with GPU tessellation |
+//! | [`CompositeMark`] | [`composite`] | Grouped sub-marks |
+//!
+//! # Quick Start
+//!
+//! ```rust,no_run
+//! use gup::mark::{Circle, Mark, MarkRegistry, MarkRenderer};
+//! use gup::GupContext;
+//! use std::sync::Arc;
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let context = Arc::new(GupContext::headless().await?);
+//! let mut registry = MarkRegistry::new();
+//! registry.register::<Circle>();
+//!
+//! let mut renderer = MarkRenderer::new(&context.device);
+//! let vertices = Circle::generate_vertices();
+//! renderer.upload_vertices(&context.device, &context.queue, &vertices)?;
+//!
+//! let pipeline = registry.get_pipeline::<Circle>(&context.device)?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Mark-Shader Integration
 //!
 //! The integration system enables marks to use composed shader functions for
 //! attribute mapping with compile-time type safety and GPU performance:
@@ -38,6 +81,13 @@
 //!             .compose(color_interpolation) // f32 -> Vec4
 //!     );
 //! ```
+//!
+//! # Further Reading
+//!
+//! - Architecture and design: `docs/mark-system/architecture.md`
+//! - Full API reference: `docs/mark-system/api-reference.md`
+//! - Performance guide: `docs/mark-system/performance.md`
+//! - Custom mark guide: `docs/CUSTOM_MARK_GUIDE.md`
 
 pub mod advanced_rendering;
 pub mod batch_renderer;
