@@ -414,3 +414,90 @@ competitive positioning.
 
 **Technical Value**: Creates comprehensive performance monitoring infrastructure
 that supports ongoing optimization efforts and prevents performance regressions.
+
+## Retrospective
+
+**Completed**: 2025-08-18
+
+### Key Technical Learnings
+
+#### Grid Generation Is Extremely Fast
+
+- **Challenge**: Setting appropriate performance thresholds for validation tests
+  that work in both development and CI environments.
+- **Solution**: The grid generation code is so fast (~280ns for 20 lines) that
+  the original 50µs target was exceeded by 178×. Validation tests use generous
+  margins (500µs) to account for CI variance while still catching real
+  regressions.
+- **Pattern**: For CPU-only data structure generation (no GPU involved), set
+  validation thresholds 5-10× above expected to avoid CI flakiness while still
+  providing value.
+
+#### Cache Fingerprint Dominates Small-Grid Cost
+
+- **Challenge**: Understanding why cache hits for 20 lines only saved ~25% while
+  100-line hits saved ~36%.
+- **Solution**: For small line counts, the fingerprint computation (hashing tick
+  positions) is a significant fraction of total cost. For larger counts, the
+  actual line generation dominates, making caching more beneficial.
+- **Pattern**: Fingerprint-based caching has diminishing returns for very cheap
+  operations; it's most valuable when the protected work is expensive relative
+  to the hash.
+
+#### Public API Design for Benchmarking
+
+- **Challenge**: Grid line generation methods
+  (`generate_horizontal_lines_static`, `generate_vertical_lines_static`) were
+  private, preventing external benchmark access.
+- **Solution**: Made the methods public and added `generate_grid_lines()` as a
+  complete generation-without-rendering method. This also benefits users who
+  want to inspect generated grid lines.
+- **Pattern**: When adding benchmarks, consider whether the public API is
+  sufficient for external measurement. Adding `pub` to well-tested internal
+  methods is lower risk than creating wrapper APIs.
+
+### Architectural Decisions
+
+#### Separate Benchmark File vs Extending Existing
+
+- **Decision**: Created a new `grid_performance_benchmarks.rs` rather than
+  extending `axis_performance_benchmarks.rs`.
+- **Reasoning**: The axis benchmarks already had a grid fingerprint benchmark,
+  but adding 10 groups to it would have made it unwieldy. A dedicated file
+  provides clear ownership and organization.
+- **Trade-off**: Slight duplication in helper functions (`make_ticks`,
+  `standard_bounds`), but cleaner separation of concerns.
+- **Future**: If more benchmark files share helpers, consider a `benches/common`
+  module.
+
+#### Validation Tests vs Criterion Benchmarks
+
+- **Decision**: Created both criterion benchmarks (statistical, detailed) and
+  simpler assertion-based validation tests.
+- **Reasoning**: Criterion benchmarks provide detailed statistical analysis and
+  HTML reports but don't fail CI on regression. Validation tests provide hard
+  pass/fail guarantees with generous thresholds.
+- **Trade-off**: Two layers of testing, but they serve different purposes:
+  benchmarks for analysis, tests for guardrails.
+- **Future**: Could add a criterion custom comparison that fails on regression,
+  but the separate test approach is simpler and more robust.
+
+### Development Workflow Insights
+
+- The story was straightforward because the grid system's API was well-designed
+  with clear separation between generation and rendering.
+- Running criterion benchmarks takes ~10 minutes for the full suite, so it's
+  worth running individual benchmark groups during development:
+  `cargo bench --bench grid_performance_benchmarks -- grid_cache`
+- The pre-existing doctest failures in `chart_builder.rs`, `context.rs`, and
+  `mixable/merge.rs` are unrelated to this story and should be tracked
+  separately.
+- Cross-platform (WebAssembly) benchmarks were deliberately left unchecked since
+  that requires a browser-based benchmark runner which is out of scope for
+  CPU-side grid generation validation.
+
+### Follow-up Stories
+
+1. **GUP-098: Grid System Documentation** — Already planned. Should reference
+   the performance report from this story for concrete performance claims in API
+   documentation.
