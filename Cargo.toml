@@ -47,6 +47,7 @@ lru = "0.12"
 
 # Web dashboard dependencies (optional, feature-gated)
 tiny_http = { version = "0.12", optional = true }
+fontdb = "0.23"
 
 [dependencies.web-sys]
 version = "0.3"

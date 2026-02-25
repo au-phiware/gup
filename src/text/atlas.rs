@@ -6,6 +6,7 @@
 use super::*;
 use crate::error::{GupError, GupResult};
 use std::collections::HashMap;
+use std::sync::Arc;
 use wgpu::{
     Device, Extent3d, Origin3d, Queue, TexelCopyBufferLayout, TexelCopyTextureInfo, Texture,
     TextureAspect, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
@@ -20,9 +21,9 @@ pub struct FontAtlas {
     glyph_info: HashMap<char, GlyphInfo>,
     /// Font metrics (line height, baseline, etc.)
     font_metrics: FontMetrics,
-    /// Font data for ttf_parser (kept for potential future use)
+    /// Font data (kept alive for ttf_parser reference and for potential reuse)
     #[allow(dead_code)]
-    font_data: Vec<u8>,
+    font_data: Arc<Vec<u8>>,
     /// ttf_parser face instance
     font: ttf_parser::Face<'static>,
     /// MSDF generator
@@ -33,19 +34,83 @@ pub struct FontAtlas {
     current_row_height: u32,
     /// Size of the atlas texture
     atlas_size: u32,
+    /// Whether this atlas is using the embedded fallback font
+    is_fallback_font: bool,
+    /// The resolved font family name
+    font_family: String,
 }
 
 impl FontAtlas {
     /// Create a new font atlas using the embedded default font.
     pub fn new(device: &Device, queue: &Queue, font_size: f32) -> GupResult<Self> {
-        // Use embedded font. System font loading will be implemented in GUP-106.
-        let font_data = Self::get_default_font_data();
-        let font = ttf_parser::Face::parse(font_data, 0)
+        let resolved = FontDatabase::embedded_fallback();
+        Self::from_resolved(device, queue, font_size, resolved)
+    }
+
+    /// Create a font atlas for a specific font specification.
+    ///
+    /// Uses the provided `FontDatabase` to resolve the font specification
+    /// to font data. Falls back to the embedded default font if the
+    /// requested font is not found on the system.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use gup::text::{FontAtlas, FontSpec, FontDatabase};
+    /// use gup::text::font::FontWeight;
+    ///
+    /// let font_db = FontDatabase::new();
+    /// let spec = FontSpec::new("Arial").with_weight(FontWeight::Bold);
+    /// let atlas = FontAtlas::with_font(device, queue, 16.0, &spec, &font_db)?;
+    /// ```
+    pub fn with_font(
+        device: &Device,
+        queue: &Queue,
+        font_size: f32,
+        spec: &FontSpec,
+        font_db: &FontDatabase,
+    ) -> GupResult<Self> {
+        let resolved = font_db.resolve(spec)?;
+        Self::from_resolved(device, queue, font_size, resolved)
+    }
+
+    /// Create a font atlas from raw font data bytes (TTF or OTF).
+    ///
+    /// This bypasses system font lookup entirely and uses the provided
+    /// font data directly.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the font data cannot be parsed.
+    pub fn from_data(
+        device: &Device,
+        queue: &Queue,
+        font_size: f32,
+        data: Vec<u8>,
+    ) -> GupResult<Self> {
+        let resolved = FontDatabase::resolve_from_data(data)?;
+        Self::from_resolved(device, queue, font_size, resolved)
+    }
+
+    /// Internal: Create a font atlas from a resolved font.
+    fn from_resolved(
+        device: &Device,
+        queue: &Queue,
+        font_size: f32,
+        resolved: ResolvedFont,
+    ) -> GupResult<Self> {
+        // Leak the Arc data to get a &'static [u8] for ttf_parser.
+        // This is safe because we keep the Arc alive in font_data.
+        let font_data = resolved.data;
+        let font_data_ref: &'static [u8] =
+            unsafe { std::slice::from_raw_parts(font_data.as_ptr(), font_data.len()) };
+
+        let font = ttf_parser::Face::parse(font_data_ref, 0)
             .map_err(|e| GupError::resource_error(format!("Failed to parse font: {e:?}")))?;
 
         let atlas_size = sdf::ATLAS_SIZE;
 
-        // Create MSDF generator with default config
+        // Create MSDF generator
         let msdf_config = MsdfConfig::default();
         let msdf_generator = MsdfGenerator::new(font_data.to_vec(), msdf_config)?;
 
@@ -82,13 +147,15 @@ impl FontAtlas {
             atlas_texture,
             glyph_info: HashMap::new(),
             font_metrics,
-            font_data: font_data.to_vec(),
+            font_data,
             font,
             msdf_generator,
             current_x: 0,
             current_y: 0,
             current_row_height: 0,
             atlas_size,
+            is_fallback_font: resolved.is_fallback,
+            font_family: resolved.family,
         };
 
         // Pre-cache common ASCII characters
@@ -129,6 +196,16 @@ impl FontAtlas {
     /// Get the atlas texture size in pixels (always square).
     pub fn atlas_size(&self) -> u32 {
         self.atlas_size
+    }
+
+    /// Check whether this atlas is using the embedded fallback font.
+    pub fn is_fallback_font(&self) -> bool {
+        self.is_fallback_font
+    }
+
+    /// Get the resolved font family name.
+    pub fn font_family(&self) -> &str {
+        &self.font_family
     }
 
     /// Ensure a glyph is available in the atlas, loading it if necessary.
@@ -399,17 +476,13 @@ impl FontAtlas {
             line_gap,
         }
     }
-
-    /// Get default font data - Squada One embedded font.
-    fn get_default_font_data() -> &'static [u8] {
-        // Embed Squada One font data directly into the binary
-        include_bytes!("../../assets/fonts/default.ttf")
-    }
 }
 
 impl std::fmt::Debug for FontAtlas {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("FontAtlas")
+            .field("font_family", &self.font_family)
+            .field("is_fallback_font", &self.is_fallback_font)
             .field("glyph_count", &self.glyph_info.len())
             .field("font_metrics", &self.font_metrics)
             .field("atlas_size", &self.atlas_size)
@@ -451,13 +524,15 @@ mod tests {
             atlas_texture: unsafe { std::mem::zeroed() }, // Placeholder
             glyph_info: HashMap::new(),
             font_metrics: FontMetrics::default(),
-            font_data: Vec::new(),                         // Placeholder
-            font: unsafe { std::mem::zeroed() },           // Placeholder
+            font_data: Arc::new(Vec::new()),     // Placeholder
+            font: unsafe { std::mem::zeroed() }, // Placeholder
             msdf_generator: unsafe { std::mem::zeroed() }, // Placeholder
             current_x: 0,
             current_y: 0,
             current_row_height: 0,
             atlas_size: 1024,
+            is_fallback_font: true,
+            font_family: String::new(),
         };
 
         // Use MockFontAtlas for SDF generation testing
