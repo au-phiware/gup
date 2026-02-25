@@ -401,3 +401,78 @@ ensuring developers always have current, accurate guidance for mark development.
 - All 443 tests pass (110 doc tests, 333 unit/integration tests)
 - All examples compile
 - `mask all-fix` passes cleanly
+
+## Retrospective
+
+**Completed**: 2025-07-18
+
+### Key Technical Learnings
+
+#### Documentation Structure for GPU Systems
+
+- **Challenge**: The mark system spans multiple abstraction levels (trait
+  hierarchy, type erasure, GPU pipelines, shader integration) and needed
+  documentation that serves both newcomers and experienced users.
+- **Solution**: Three-document structure — README for orientation, architecture
+  for deep understanding, API reference for lookup, performance for
+  optimization. Each document serves a different reading mode.
+- **Pattern**: For complex systems, separate "how it works" (architecture) from
+  "what to call" (API reference) from "how to make it fast" (performance). The
+  README connects them all.
+
+#### Rustdoc Module Documentation
+
+- **Challenge**: The `line` name in `src/mark.rs` module docs was ambiguous
+  between the `line` module and the `line!` macro, causing a doc warning.
+- **Solution**: Used the `mod@line` syntax to disambiguate the intra-doc link.
+- **Pattern**: When linking to modules in rustdoc, use `mod@name` prefix if the
+  name collides with a macro.
+
+### Architectural Decisions
+
+#### Flat Directory Under docs/mark-system/ (Not Nested API Subdirs)
+
+- **Decision**: Used 3 top-level files (architecture, api-reference,
+  performance) instead of the story's proposed nested structure
+  (api-reference/mark-trait.md, api-reference/mark-registry.md, etc.).
+- **Reasoning**: The current mark system API is compact enough that a single API
+  reference file is more navigable than scattered files. The developer guide
+  category was already well-served by the existing CUSTOM_MARK_GUIDE.md.
+- **Trade-off**: Less granular linking, but easier maintenance and no
+  redundancy.
+- **Future**: If the API grows significantly, the single api-reference.md can be
+  split into per-type files.
+
+#### Cross-Reference Instead of Duplicate
+
+- **Decision**: Referenced the existing CUSTOM_MARK_GUIDE.md rather than
+  duplicating its content into a new guides/ subdirectory.
+- **Reasoning**: The custom mark guide is comprehensive (657 lines) and
+  well-maintained. Duplicating would create a maintenance burden.
+- **Trade-off**: Slightly scattered documentation locations.
+- **Future**: Could consolidate into docs/mark-system/ if the guide grows.
+
+### Development Workflow Insights
+
+- Documentation-only stories are fast but still benefit from the
+  code-test-commit loop: write a doc file, run `mask all-fix` to catch markdown
+  issues, commit.
+- The `mdl` markdown linter and `prettier` formatter caught formatting
+  inconsistencies automatically, which is valuable for documentation quality.
+- Reading the actual source code (mark.rs, renderer.rs, circle.rs) before
+  writing documentation ensured accuracy. The doc comments in the source served
+  as the primary source of truth for API behavior.
+- The story's proposed example .rs files in docs/mark-system/examples/ were not
+  implemented because the existing examples/ directory already has
+  `custom_mark_demo.rs` and `multi_mark_pattern_showcase.rs` which serve the
+  same purpose.
+
+### Follow-up Stories
+
+No new stories identified. The existing planned stories cover the remaining
+documentation gaps:
+
+- GUP-185 (Multi-Pass Mark Examples) would add the examples that this
+  documentation references.
+- GUP-188 (Automatic Draw Call Metrics) would provide the runtime metrics
+  instrumentation that the performance guide describes.
