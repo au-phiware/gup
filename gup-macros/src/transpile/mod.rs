@@ -31,10 +31,20 @@
 //! - Type casts (`as f32`, etc.)
 //! - Unary negation and logical not
 
+// This module is a prototype used by tests; suppress dead-code warnings.
+// #![allow(...)] only works at the crate root, so we allow on the items inside.
+#[allow(dead_code, unused_imports)]
 mod ast;
+#[allow(dead_code, unused_imports)]
 mod codegen;
+#[allow(dead_code, unused_imports)]
 mod convert;
+mod pipeline_tests;
 
+// Re-exports are used by pipeline_tests and future integration.
+#[allow(unused_imports)]
 pub use ast::*;
+#[allow(unused_imports)]
 pub use codegen::WgslCodeGen;
+#[allow(unused_imports)]
 pub use convert::{RustToWgsl, TranspileError};
