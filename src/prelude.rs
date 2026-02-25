@@ -23,6 +23,7 @@ pub use crate::chart_builder::{
 };
 
 // Selection API (low-level)
+pub use crate::pipeline_cache::PipelineCache;
 pub use crate::selection::{Mark, Selection};
 
 // Mark types
