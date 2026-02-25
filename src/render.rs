@@ -581,34 +581,7 @@ impl RenderContext {
         };
 
         // Convert BlendMode to wgpu BlendState
-        let blend_state = match blend_mode {
-            BlendMode::None => None,
-            BlendMode::AlphaBlending => Some(BlendState::ALPHA_BLENDING),
-            BlendMode::Additive => Some(BlendState {
-                color: BlendComponent {
-                    src_factor: BlendFactor::One,
-                    dst_factor: BlendFactor::One,
-                    operation: BlendOperation::Add,
-                },
-                alpha: BlendComponent {
-                    src_factor: BlendFactor::One,
-                    dst_factor: BlendFactor::One,
-                    operation: BlendOperation::Add,
-                },
-            }),
-            BlendMode::Multiply => Some(BlendState {
-                color: BlendComponent {
-                    src_factor: BlendFactor::Dst,
-                    dst_factor: BlendFactor::Zero,
-                    operation: BlendOperation::Add,
-                },
-                alpha: BlendComponent {
-                    src_factor: BlendFactor::One,
-                    dst_factor: BlendFactor::OneMinusSrcAlpha,
-                    operation: BlendOperation::Add,
-                },
-            }),
-        };
+        let blend_state = crate::mark::advanced_rendering::blend_mode_to_wgpu(blend_mode);
 
         let render_pipeline = self
             .device
