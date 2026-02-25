@@ -5,7 +5,8 @@
 **Title**: Implement Comprehensive Type System Mapping Between Rust and WGSL  
 **Epic**: Phase 2 Initiative 2 - Rust-to-WGSL Transpilation  
 **Priority**: High  
-**Story Points**: 8
+**Story Points**: 8  
+**Status**: 🚧 In Progress
 
 ## Context
 
