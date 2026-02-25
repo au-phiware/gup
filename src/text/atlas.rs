@@ -66,7 +66,9 @@ impl FontAtlas {
                 sample_count: 1,
                 dimension: TextureDimension::D2,
                 format: TextureFormat::Rgba8Unorm, // RGBA for 3-channel MSDF + alpha
-                usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+                usage: TextureUsages::TEXTURE_BINDING
+                    | TextureUsages::COPY_DST
+                    | TextureUsages::COPY_SRC,
                 view_formats: &[],
             },
             wgpu::util::TextureDataOrder::LayerMajor,

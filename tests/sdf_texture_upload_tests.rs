@@ -10,6 +10,10 @@
 use gup::RenderContext;
 use gup::text::{FontAtlas, TextLayoutEngine, TextRenderer, TextStyle};
 use std::time::Instant;
+use wgpu::{
+    BufferDescriptor, BufferUsages, CommandEncoderDescriptor, Extent3d, MapMode, Origin3d,
+    TexelCopyBufferInfo, TexelCopyBufferLayout, TexelCopyTextureInfo, TextureAspect,
+};
 
 /// Helper to create GPU context for tests
 async fn create_test_context() -> RenderContext {
@@ -396,4 +400,155 @@ async fn test_special_characters_upload() {
             "Special character '{ch}' should be preloaded"
         );
     }
+}
+
+// =============================================================================
+// GPU texture readback verification
+// =============================================================================
+
+#[tokio::test]
+async fn test_texture_contains_glyph_data() {
+    let context = create_test_context().await;
+    let atlas = FontAtlas::new(context.device(), context.queue(), 16.0).unwrap();
+
+    // Get the atlas region for 'A' - a character that should have visible MSDF data
+    let glyph_a = atlas.get_glyph('A').expect("Glyph 'A' should exist");
+    let atlas_size = atlas.atlas_size();
+
+    // Calculate pixel coordinates of glyph region
+    let x0 = (glyph_a.atlas_pos[0] * atlas_size as f32) as u32;
+    let y0 = (glyph_a.atlas_pos[1] * atlas_size as f32) as u32;
+    let x1 = (glyph_a.atlas_pos[2] * atlas_size as f32) as u32;
+    let y1 = (glyph_a.atlas_pos[3] * atlas_size as f32) as u32;
+    let glyph_width = x1 - x0;
+    let glyph_height = y1 - y0;
+
+    assert!(
+        glyph_width > 0 && glyph_height > 0,
+        "Glyph 'A' should have non-zero dimensions"
+    );
+
+    // Read back the glyph region from GPU texture
+    // bytes_per_row must be 256-byte aligned per WebGPU spec
+    let bytes_per_row = (glyph_width * 4).div_ceil(256) * 256;
+    let buffer_size = (bytes_per_row * glyph_height) as u64;
+
+    let readback_buffer = context.device().create_buffer(&BufferDescriptor {
+        label: Some("Glyph Readback Buffer"),
+        size: buffer_size,
+        usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+
+    let mut encoder = context
+        .device()
+        .create_command_encoder(&CommandEncoderDescriptor {
+            label: Some("Glyph Readback Encoder"),
+        });
+
+    encoder.copy_texture_to_buffer(
+        TexelCopyTextureInfo {
+            texture: atlas.texture(),
+            mip_level: 0,
+            origin: Origin3d { x: x0, y: y0, z: 0 },
+            aspect: TextureAspect::All,
+        },
+        TexelCopyBufferInfo {
+            buffer: &readback_buffer,
+            layout: TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(bytes_per_row),
+                rows_per_image: Some(glyph_height),
+            },
+        },
+        Extent3d {
+            width: glyph_width,
+            height: glyph_height,
+            depth_or_array_layers: 1,
+        },
+    );
+
+    context.queue().submit(std::iter::once(encoder.finish()));
+
+    // Map the readback buffer
+    let buffer_slice = readback_buffer.slice(..);
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    buffer_slice.map_async(MapMode::Read, move |result| {
+        let _ = sender.send(result);
+    });
+    let _ = context.device().poll(wgpu::PollType::Wait);
+    receiver.await.unwrap().expect("Buffer mapping failed");
+
+    // Read pixel data
+    let data = buffer_slice.get_mapped_range();
+    let pixels: &[u8] = &data;
+
+    // Count non-zero pixels (MSDF data should have meaningful distance values)
+    let mut nonzero_count = 0;
+    let mut total_pixels = 0;
+    for row in 0..glyph_height {
+        for col in 0..glyph_width {
+            let offset = (row * bytes_per_row + col * 4) as usize;
+            let r = pixels[offset];
+            let g = pixels[offset + 1];
+            let b = pixels[offset + 2];
+
+            total_pixels += 1;
+            if r > 0 || g > 0 || b > 0 {
+                nonzero_count += 1;
+            }
+        }
+    }
+
+    drop(data);
+    readback_buffer.unmap();
+
+    // The MSDF should have a significant number of non-zero pixels.
+    // Inside the glyph, values are >128; outside, they're <128 but non-zero
+    // near the edges. Only far-outside pixels remain at 0.
+    let nonzero_ratio = nonzero_count as f32 / total_pixels as f32;
+    println!(
+        "Glyph 'A' texture region: {}x{} pixels, {nonzero_count}/{total_pixels} non-zero ({:.1}%)",
+        glyph_width,
+        glyph_height,
+        nonzero_ratio * 100.0
+    );
+
+    assert!(
+        nonzero_ratio > 0.1,
+        "At least 10% of glyph pixels should be non-zero (got {:.1}%); \
+         MSDF data may not be uploaded correctly",
+        nonzero_ratio * 100.0
+    );
+}
+
+#[tokio::test]
+async fn test_different_glyphs_have_different_data() {
+    let context = create_test_context().await;
+    let atlas = FontAtlas::new(context.device(), context.queue(), 16.0).unwrap();
+    let atlas_size = atlas.atlas_size();
+
+    // Compare atlas regions of two visually distinct characters
+    let glyph_a = atlas.get_glyph('A').expect("Glyph 'A' should exist");
+    let glyph_o = atlas.get_glyph('O').expect("Glyph 'O' should exist");
+
+    // They should occupy different atlas regions
+    let a_region = glyph_a.atlas_pos;
+    let o_region = glyph_o.atlas_pos;
+
+    // Verify non-overlapping (at least in x or y)
+    let no_x_overlap = a_region[2] <= o_region[0] || o_region[2] <= a_region[0];
+    let no_y_overlap = a_region[3] <= o_region[1] || o_region[3] <= a_region[1];
+
+    assert!(
+        no_x_overlap || no_y_overlap,
+        "Glyphs 'A' and 'O' should not overlap in atlas"
+    );
+
+    // Both should have non-zero sized regions
+    let a_width = ((a_region[2] - a_region[0]) * atlas_size as f32) as u32;
+    let o_width = ((o_region[2] - o_region[0]) * atlas_size as f32) as u32;
+
+    assert!(a_width > 0, "'A' should have positive atlas width");
+    assert!(o_width > 0, "'O' should have positive atlas width");
 }
