@@ -40,6 +40,8 @@ mod codegen;
 #[allow(dead_code, unused_imports)]
 mod convert;
 mod pipeline_tests;
+#[allow(dead_code, unused_imports)]
+pub mod type_map;
 
 // Re-exports are used by pipeline_tests and future integration.
 #[allow(unused_imports)]
@@ -48,3 +50,5 @@ pub use ast::*;
 pub use codegen::WgslCodeGen;
 #[allow(unused_imports)]
 pub use convert::{RustToWgsl, TranspileError};
+#[allow(unused_imports)]
+pub use type_map::{TypeMapper, TypeMappingError, TypeMappingErrorKind, WgslTypeInfo};
