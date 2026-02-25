@@ -2,7 +2,7 @@
 
 **Story ID**: GUP-075  
 **Title**: Interactive Mark Selection  
-**Status**: Planned  
+**Status**: 🚧 In Progress  
 **Priority**: Medium  
 **Effort**: 6 story points  
 **Created**: 2025-08-04  
