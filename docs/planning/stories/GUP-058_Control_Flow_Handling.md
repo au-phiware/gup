@@ -6,7 +6,8 @@
 WGSL  
 **Epic**: Phase 2 Initiative 4 - Rust-to-WGSL Transpilation  
 **Priority**: High  
-**Story Points**: 10
+**Story Points**: 10  
+**Status**: 🚧 In Progress
 
 ## Context
 
