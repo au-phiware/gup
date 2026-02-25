@@ -188,6 +188,7 @@ reorganisation._
 | [GUP-182](GUP-182_Touch_Selection_Support.md)              | Touch Selection Support               | 📋 Planned  | Low      | 3      |
 | [GUP-183](GUP-183_Pooled_GPU_Instance_Filter_Buffers.md)   | Pooled GPU Instance Filter Buffers    | 📋 Planned  | Medium   | —      |
 | [GUP-184](GUP-184_GPU_Radix_Sort_Z_Order.md)               | GPU Radix Sort for Z-Order            | 📋 Planned  | Low      | —      |
+| [GUP-193](GUP-193_GPU_Resident_Candidate_Pipeline.md)      | GPU-Resident Candidate Pipeline       | 📋 Planned  | Medium   | —      |
 
 ### Post GUP-015 Stories - Advanced Debug Infrastructure (Stories 80+)
 
