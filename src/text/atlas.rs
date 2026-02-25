@@ -757,4 +757,73 @@ mod tests {
         assert_eq!(mem::align_of::<GlyphInfo>(), 4);
         assert_eq!(mem::align_of::<FontMetrics>(), 4);
     }
+
+    #[tokio::test]
+    async fn test_font_atlas_default_is_fallback() {
+        let context = RenderContext::new().await.unwrap();
+        let atlas = FontAtlas::new(context.device(), context.queue(), 16.0).unwrap();
+        assert!(atlas.is_fallback_font());
+        assert_eq!(atlas.font_family(), "Squada One");
+    }
+
+    #[tokio::test]
+    async fn test_font_atlas_with_font_fallback() {
+        let context = RenderContext::new().await.unwrap();
+        let font_db = FontDatabase::empty();
+        let spec = FontSpec::new("NonExistentFont12345");
+        let atlas =
+            FontAtlas::with_font(context.device(), context.queue(), 16.0, &spec, &font_db).unwrap();
+        // With empty database, should fall back to embedded font
+        assert!(atlas.is_fallback_font());
+        assert_eq!(atlas.font_family(), "Squada One");
+        assert!(atlas.glyph_count() > 0); // Should have preloaded ASCII
+    }
+
+    #[tokio::test]
+    async fn test_font_atlas_from_data() {
+        let context = RenderContext::new().await.unwrap();
+        let data = include_bytes!("../../assets/fonts/default.ttf").to_vec();
+        let atlas = FontAtlas::from_data(context.device(), context.queue(), 16.0, data).unwrap();
+        assert!(!atlas.is_fallback_font());
+        assert!(atlas.glyph_count() > 0);
+    }
+
+    #[tokio::test]
+    async fn test_font_atlas_from_invalid_data() {
+        let context = RenderContext::new().await.unwrap();
+        let data = vec![0u8; 100]; // Invalid font data
+        let result = FontAtlas::from_data(context.device(), context.queue(), 16.0, data);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_font_atlas_with_system_font() {
+        let context = RenderContext::new().await.unwrap();
+        let font_db = FontDatabase::new();
+
+        // Try loading a common system font - may or may not be available
+        let spec = FontSpec::new("DejaVu Sans");
+        let atlas =
+            FontAtlas::with_font(context.device(), context.queue(), 16.0, &spec, &font_db).unwrap();
+
+        // Should succeed regardless (falls back to embedded font)
+        assert!(atlas.glyph_count() > 0);
+
+        if font_db.has_family("DejaVu Sans") {
+            assert!(!atlas.is_fallback_font());
+        } else {
+            assert!(atlas.is_fallback_font());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_font_atlas_debug() {
+        let context = RenderContext::new().await.unwrap();
+        let atlas = FontAtlas::new(context.device(), context.queue(), 16.0).unwrap();
+        let debug_str = format!("{atlas:?}");
+        assert!(debug_str.contains("FontAtlas"));
+        assert!(debug_str.contains("font_family"));
+        assert!(debug_str.contains("Squada One"));
+        assert!(debug_str.contains("is_fallback_font"));
+    }
 }
