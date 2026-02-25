@@ -2,11 +2,8 @@
 
 ## Story Overview
 
-**Epic**: Phase 2 - High-Level Convenience APIs
-**Theme**: Text Rendering
-**Priority**: Low
-**Story Points**: 3
-**Status**: 📋 Planned
+**Epic**: Phase 2 - High-Level Convenience APIs **Theme**: Text Rendering
+**Priority**: Low **Story Points**: 3 **Status**: 📋 Planned
 
 ## Overview
 

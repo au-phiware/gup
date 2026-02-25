@@ -8,8 +8,8 @@
 generics, traits, enums with data, Option/Result, references, lifetimes, and
 closures. WGSL has scalars, vectors, matrices, arrays, and structs.
 
-**Assessment**: This is manageable by restricting the supported Rust subset.
-The prototype demonstrates that the core data types (f32, i32, u32, bool, Vec2,
+**Assessment**: This is manageable by restricting the supported Rust subset. The
+prototype demonstrates that the core data types (f32, i32, u32, bool, Vec2,
 Vec3, Vec4, Mat types) map cleanly. Custom structs can be mapped 1:1 when they
 contain only WGSL-compatible fields.
 
@@ -19,12 +19,13 @@ for unsupported types rather than generating incorrect code.
 ### 1.2 Expression Semantics
 
 **Challenge**: Some Rust expressions have subtly different semantics from WGSL:
+
 - Rust's integer division truncates toward zero; WGSL's `/` for integers also
   truncates toward zero — compatible.
 - Rust's `%` is remainder (sign follows dividend); WGSL's `%` is also remainder
   — compatible.
-- Rust's `as` casts may truncate or saturate; WGSL type constructors may
-  behave differently for out-of-range values.
+- Rust's `as` casts may truncate or saturate; WGSL type constructors may behave
+  differently for out-of-range values.
 
 **Assessment**: For the common case (f32 arithmetic, standard math functions),
 semantics are equivalent. Edge cases around integer overflow and cast behavior
@@ -35,8 +36,10 @@ can be documented as known differences.
 ### 1.3 Control Flow Translation
 
 **Challenge**: Rust's control flow has several GPU-incompatible constructs:
+
 - `match` expressions → must be lowered to if/else chains
-- `loop`/`while` → map to WGSL `loop`/`while` with care around `break`/`continue`
+- `loop`/`while` → map to WGSL `loop`/`while` with care around
+  `break`/`continue`
 - `?` operator → not applicable (no error handling on GPU)
 - Early returns → supported in WGSL via `return`
 - `for x in iterator` → must be lowered to indexed loop
@@ -55,9 +58,9 @@ match require additional work in GUP-058.
 main `gup` crate, but the transpiler lives in `gup-macros`.
 
 **Assessment**: The prototype solves this by defining lightweight AST types in
-gup-macros that mirror `shader_ast::types`. This duplication is manageable
-(~200 lines of enum/struct definitions). A future shared `gup-ast-types` crate
-could eliminate the duplication if it becomes a maintenance burden.
+gup-macros that mirror `shader_ast::types`. This duplication is manageable (~200
+lines of enum/struct definitions). A future shared `gup-ast-types` crate could
+eliminate the duplication if it becomes a maintenance burden.
 
 **Risk level**: Low. The duplication is small and the types are stable.
 
@@ -77,67 +80,67 @@ the exact unsupported expression.
 
 ### Tier 1: Fully Supported (Prototype-proven)
 
-| Feature                  | WGSL Output                   | Tested |
-| ------------------------ | ----------------------------- | ------ |
-| Arithmetic (`+`,`-`,`*`,`/`,`%`) | Same operators        | ✅     |
-| Comparisons (`==`,`!=`,`<`,`>`,`<=`,`>=`) | Same operators | ✅     |
-| Logical (`&&`, `\|\|`, `!`) | Same operators             | ✅     |
-| Bitwise (`&`, `\|`, `^`, `<<`, `>>`) | Same operators     | ✅     |
-| `let` bindings           | `let` declarations            | ✅     |
-| `let mut` bindings       | `var` declarations            | ✅     |
-| `return` statements      | `return` statements           | ✅     |
-| Float/int/bool literals  | Same                          | ✅     |
-| Variable references      | Same                          | ✅     |
-| Field access             | Same                          | ✅     |
-| Function calls           | Same                          | ✅     |
-| Type constructors        | WGSL constructors             | ✅     |
-| Type casts (`as f32`)    | `f32(x)` constructors         | ✅     |
-| Unary negation           | `-x`                          | ✅     |
-| Parenthesised exprs      | `(expr)`                      | ✅     |
-| Method→function mapping  | `x.abs()` → `abs(x)`         | ✅     |
+| Feature                                   | WGSL Output           | Tested |
+| ----------------------------------------- | --------------------- | ------ |
+| Arithmetic (`+`,`-`,`*`,`/`,`%`)          | Same operators        | ✅     |
+| Comparisons (`==`,`!=`,`<`,`>`,`<=`,`>=`) | Same operators        | ✅     |
+| Logical (`&&`, `\|\|`, `!`)               | Same operators        | ✅     |
+| Bitwise (`&`, `\|`, `^`, `<<`, `>>`)      | Same operators        | ✅     |
+| `let` bindings                            | `let` declarations    | ✅     |
+| `let mut` bindings                        | `var` declarations    | ✅     |
+| `return` statements                       | `return` statements   | ✅     |
+| Float/int/bool literals                   | Same                  | ✅     |
+| Variable references                       | Same                  | ✅     |
+| Field access                              | Same                  | ✅     |
+| Function calls                            | Same                  | ✅     |
+| Type constructors                         | WGSL constructors     | ✅     |
+| Type casts (`as f32`)                     | `f32(x)` constructors | ✅     |
+| Unary negation                            | `-x`                  | ✅     |
+| Parenthesised exprs                       | `(expr)`              | ✅     |
+| Method→function mapping                   | `x.abs()` → `abs(x)`  | ✅     |
 
 ### Tier 2: Feasible with Additional Work
 
-| Feature                  | WGSL Output                   | Story  |
-| ------------------------ | ----------------------------- | ------ |
-| `if`/`else` statements   | `if (cond) { } else { }`     | GUP-058 |
-| `for` loops (range)      | `for (var i=0; i<n; i++)`    | GUP-058 |
-| `while` loops            | `while (cond) { }`           | GUP-058 |
-| `match` (simple)         | if/else chain                 | GUP-058 |
-| Struct literals          | WGSL struct constructors      | GUP-056 |
-| Nested struct access     | `a.b.c`                       | GUP-057 |
-| Array indexing           | `arr[i]`                      | ✅     |
-| Multiple return values   | Struct return                  | GUP-056 |
+| Feature                | WGSL Output               | Story   |
+| ---------------------- | ------------------------- | ------- |
+| `if`/`else` statements | `if (cond) { } else { }`  | GUP-058 |
+| `for` loops (range)    | `for (var i=0; i<n; i++)` | GUP-058 |
+| `while` loops          | `while (cond) { }`        | GUP-058 |
+| `match` (simple)       | if/else chain             | GUP-058 |
+| Struct literals        | WGSL struct constructors  | GUP-056 |
+| Nested struct access   | `a.b.c`                   | GUP-057 |
+| Array indexing         | `arr[i]`                  | ✅      |
+| Multiple return values | Struct return             | GUP-056 |
 
 ### Tier 3: Not Supported (Must Error)
 
-| Feature           | Reason                              |
-| ----------------- | ----------------------------------- |
-| Closures          | No GPU equivalent                   |
-| Trait methods      | No dynamic dispatch on GPU         |
-| Pattern matching  | Complex patterns require analysis   |
-| References        | GPU memory model is different       |
-| Generics          | WGSL has limited generic support    |
-| Iterators         | No iterator protocol on GPU         |
-| String operations | No strings on GPU                   |
-| Heap allocation   | No heap on GPU                      |
-| `async`/`await`   | No async on GPU                    |
+| Feature           | Reason                            |
+| ----------------- | --------------------------------- |
+| Closures          | No GPU equivalent                 |
+| Trait methods     | No dynamic dispatch on GPU        |
+| Pattern matching  | Complex patterns require analysis |
+| References        | GPU memory model is different     |
+| Generics          | WGSL has limited generic support  |
+| Iterators         | No iterator protocol on GPU       |
+| String operations | No strings on GPU                 |
+| Heap allocation   | No heap on GPU                    |
+| `async`/`await`   | No async on GPU                   |
 
 ## 3. Compatibility Matrix
 
 ### WGSL Targets
 
-| Feature                   | Desktop (Vulkan) | Desktop (Metal) | Web (WebGPU) | Notes                 |
-| ------------------------- | :--------------: | :-------------: | :----------: | --------------------- |
-| f32 arithmetic            |        ✅        |       ✅        |      ✅      | Universal             |
-| i32/u32 arithmetic        |        ✅        |       ✅        |      ✅      | Universal             |
-| vec2/3/4 operations       |        ✅        |       ✅        |      ✅      | Universal             |
-| Matrix operations         |        ✅        |       ✅        |      ✅      | Universal             |
-| Built-in math functions   |        ✅        |       ✅        |      ✅      | abs,sqrt,clamp,etc.   |
-| Struct types              |        ✅        |       ✅        |      ✅      | Universal             |
-| Fixed-size arrays         |        ✅        |       ✅        |      ✅      | Universal             |
-| Control flow (if/for)     |        ✅        |       ✅        |      ✅      | Universal             |
-| Type casts                |        ✅        |       ✅        |      ✅      | Via constructors      |
+| Feature                 | Desktop (Vulkan) | Desktop (Metal) | Web (WebGPU) | Notes               |
+| ----------------------- | :--------------: | :-------------: | :----------: | ------------------- |
+| f32 arithmetic          |        ✅        |       ✅        |      ✅      | Universal           |
+| i32/u32 arithmetic      |        ✅        |       ✅        |      ✅      | Universal           |
+| vec2/3/4 operations     |        ✅        |       ✅        |      ✅      | Universal           |
+| Matrix operations       |        ✅        |       ✅        |      ✅      | Universal           |
+| Built-in math functions |        ✅        |       ✅        |      ✅      | abs,sqrt,clamp,etc. |
+| Struct types            |        ✅        |       ✅        |      ✅      | Universal           |
+| Fixed-size arrays       |        ✅        |       ✅        |      ✅      | Universal           |
+| Control flow (if/for)   |        ✅        |       ✅        |      ✅      | Universal           |
+| Type casts              |        ✅        |       ✅        |      ✅      | Via constructors    |
 
 All Tier 1 and Tier 2 features target standard WGSL, which is universally
 supported across backends. No backend-specific code generation is needed.
@@ -147,14 +150,15 @@ supported across backends. No backend-specific code generation is needed.
 ### 4.1 Compile-time Overhead
 
 The transpilation pipeline adds three phases to macro expansion:
+
 1. **syn parsing**: Already happens (existing `#[wgsl_function]` uses syn)
 2. **AST conversion**: O(n) walk of the expression tree, negligible
 3. **WGSL generation**: O(n) string building, negligible
 
 **Measured overhead** (from prototype benchmarks in unit tests): The full
 pipeline (parse + convert + generate) for a typical 5-line function completes in
-<1ms. For a complex 20-expression function, <5ms. This is negligible compared
-to rustc compilation time.
+<1ms. For a complex 20-expression function, <5ms. This is negligible compared to
+rustc compilation time.
 
 ### 4.2 Generated Code Quality
 
@@ -198,4 +202,4 @@ leveraging the existing `shader_ast::optimizer`.
 2. **Feature gating**: New transpilation features can be added behind feature
    flags during development
 3. **Comprehensive testing**: The prototype establishes a pattern of unit tests
-   + WGSL validation tests that should continue for all additions
+   - WGSL validation tests that should continue for all additions

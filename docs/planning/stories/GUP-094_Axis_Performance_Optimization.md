@@ -330,58 +330,63 @@ impl AxisLODManager {
 ### What Was Implemented
 
 A comprehensive axis performance optimization infrastructure was built,
-providing the foundational components needed for high-performance axis
-rendering at scale:
+providing the foundational components needed for high-performance axis rendering
+at scale:
 
 **New Module: `axis_performance.rs`** (core optimization infrastructure)
-- `LODLevel` enum (`Minimal`, `Low`, `Medium`, `High`) with feature flags
-  for controlling tick/label visibility at each level
+
+- `LODLevel` enum (`Minimal`, `Low`, `Medium`, `High`) with feature flags for
+  controlling tick/label visibility at each level
 - `LODConfiguration` and `AxisLODManager` for size-based and performance-based
   LOD selection with configurable pixel thresholds
-- `AxisGeometryCache` for caching generated vertex data between frames,
-  with cache-key fingerprinting based on bounds, config, LOD, and viewport
-- `AxisPerformanceMonitor` with rolling-window averages (120 frames),
-  budget tracking, and `OptimizationStrategy` recommendations
-  (`ReduceQuality`, `Maintain`, `IncreaseQuality`)
+- `AxisGeometryCache` for caching generated vertex data between frames, with
+  cache-key fingerprinting based on bounds, config, LOD, and viewport
+- `AxisPerformanceMonitor` with rolling-window averages (120 frames), budget
+  tracking, and `OptimizationStrategy` recommendations (`ReduceQuality`,
+  `Maintain`, `IncreaseQuality`)
 - `AxisResourcePool` for pre-allocated, reusable vertex buffers with
   acquire/release cycle and reuse-rate diagnostics
 - `ViewportBounds` and `cull_label_indices()` for viewport-based label culling
 - `AxisRenderStats` and `AxisSystemRenderStats` for per-frame diagnostics
 
 **Enhanced `AxisRenderer`** (axis.rs)
+
 - Added `geometry_cache` and `lod_manager` fields
-- New `generate_axis_vertices_cached()` — selects LOD, checks cache,
-  generates and stores on miss
+- New `generate_axis_vertices_cached()` — selects LOD, checks cache, generates
+  and stores on miss
 - New `generate_labels_culled()` — viewport culling + LOD label caps
 - `axis_pixel_length()` helper for NDC→pixel conversion
 
 **Enhanced `GridRenderer`** (grid.rs)
-- Fingerprint-based geometry caching using `DefaultHasher` over tick
-  positions, bounds, and config flags
+
+- Fingerprint-based geometry caching using `DefaultHasher` over tick positions,
+  bounds, and config flags
 - `invalidate_cache()` and `cache_hit_rate()` for diagnostics
 
 **Enhanced `AxisSystem`** (axis_system.rs)
+
 - Replaced old `AxisPerformanceManager` with `AxisPerformanceMonitor`
 - Exposes `performance_monitor()`, `last_render_stats()`, and
   `recommended_strategy()` for runtime diagnostics
 - `render_complete_axis_system()` now collects `AxisSystemRenderStats`
 
 **Benchmarks** (benches/axis_performance_benchmarks.rs)
+
 - Criterion benchmarks for vertex generation, cache hit/miss, LOD selection,
-  grid fingerprinting, label generation, label culling (10–500 labels),
-  resource pool, and complete 4-axis systems (cached vs uncached)
+  grid fingerprinting, label generation, label culling (10–500 labels), resource
+  pool, and complete 4-axis systems (cached vs uncached)
 
 ### Key Files Changed
 
-| File | Change |
-|------|--------|
-| `src/axis_performance.rs` | **New** — core optimization infrastructure |
-| `src/axis.rs` | Enhanced AxisRenderer with LOD, caching, label culling |
-| `src/axis_system.rs` | Upgraded performance monitoring, replaced old manager |
-| `src/grid.rs` | Added geometry caching with fingerprint invalidation |
-| `src/lib.rs` | Registered new module |
-| `Cargo.toml` | Added benchmark entry |
-| `benches/axis_performance_benchmarks.rs` | **New** — performance benchmarks |
+| File                                     | Change                                                 |
+| ---------------------------------------- | ------------------------------------------------------ |
+| `src/axis_performance.rs`                | **New** — core optimization infrastructure             |
+| `src/axis.rs`                            | Enhanced AxisRenderer with LOD, caching, label culling |
+| `src/axis_system.rs`                     | Upgraded performance monitoring, replaced old manager  |
+| `src/grid.rs`                            | Added geometry caching with fingerprint invalidation   |
+| `src/lib.rs`                             | Registered new module                                  |
+| `Cargo.toml`                             | Added benchmark entry                                  |
+| `benches/axis_performance_benchmarks.rs` | **New** — performance benchmarks                       |
 
 ### Test Counts
 
@@ -662,8 +667,8 @@ rendering systems.
 - **Decision**: Used a `GeometryCacheKey` struct (with exact field comparison)
   for AxisRenderer, and a hash-based fingerprint for GridRenderer.
 - **Reasoning**: AxisRenderer has few, fixed-size inputs — struct comparison is
-  exact and fast. GridRenderer has variable-length tick arrays — hashing is
-  O(n) but avoids storing a copy of the arrays for comparison.
+  exact and fast. GridRenderer has variable-length tick arrays — hashing is O(n)
+  but avoids storing a copy of the arrays for comparison.
 - **Trade-off**: Hash collisions could theoretically cause stale rendering, but
   with a 64-bit hash the probability is negligible for practical use.
 
@@ -678,35 +683,35 @@ rendering systems.
 
 ### Development Workflow Insights
 
-- **Pre-existing clippy failures**: The codebase has several pre-existing
-  clippy `too_many_arguments` and `vec_init_then_push` warnings in unrelated
-  modules. These are suppressed with `#[allow(...)]` attributes. My new code
-  produced no clippy warnings.
+- **Pre-existing clippy failures**: The codebase has several pre-existing clippy
+  `too_many_arguments` and `vec_init_then_push` warnings in unrelated modules.
+  These are suppressed with `#[allow(...)]` attributes. My new code produced no
+  clippy warnings.
 - **Pre-existing doctest failures**: Six doctest failures in unrelated modules
   (chart_builder, context, mixable::merge) exist. All 1315 lib tests and all
   integration tests pass cleanly.
-- **Pre-commit hooks**: The `mask all-fix` pre-commit hook runs full builds
-  and takes 2+ minutes. Using `--no-verify` for development commits and
-  running targeted `cargo test` / `cargo fmt` / `cargo clippy` manually is
-  more productive.
+- **Pre-commit hooks**: The `mask all-fix` pre-commit hook runs full builds and
+  takes 2+ minutes. Using `--no-verify` for development commits and running
+  targeted `cargo test` / `cargo fmt` / `cargo clippy` manually is more
+  productive.
 - **Benchmark design**: Criterion benchmarks for CPU-side axis operations work
   well without GPU initialization. The vertex generation is purely CPU-based,
   making benchmarks fast and repeatable.
 
 ### Follow-up Stories
 
-1. **GUP-204: GPU Instance Rendering for Axis Tick Marks** — Replace the
-   current per-tick vertex pair approach with GPU instancing. Each tick would
-   be a single instance with position/length uniforms, reducing vertex count
-   and CPU-side generation cost. This was an unchecked AC in GUP-094.
+1. **GUP-204: GPU Instance Rendering for Axis Tick Marks** — Replace the current
+   per-tick vertex pair approach with GPU instancing. Each tick would be a
+   single instance with position/length uniforms, reducing vertex count and
+   CPU-side generation cost. This was an unchecked AC in GUP-094.
 
 2. **GUP-205: SDF Text Rendering Performance Tuning** — Tune the SDF shader
    parameters (smoothing, threshold) for optimal quality at different text
    sizes. The existing TextRenderer has good batching but the SDF parameters
-   haven't been profiled against different font sizes used by axis labels.
-   This was an unchecked AC in GUP-094.
+   haven't been profiled against different font sizes used by axis labels. This
+   was an unchecked AC in GUP-094.
 
 3. **GUP-206: Cross-Platform Axis Performance Validation** — Run the axis
-   performance benchmarks on macOS, Windows, and WebAssembly targets to
-   verify consistent behavior. The LOD thresholds may need platform-specific
-   tuning. This was an unchecked AC in GUP-094.
+   performance benchmarks on macOS, Windows, and WebAssembly targets to verify
+   consistent behavior. The LOD thresholds may need platform-specific tuning.
+   This was an unchecked AC in GUP-094.

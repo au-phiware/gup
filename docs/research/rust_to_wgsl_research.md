@@ -82,21 +82,21 @@ text directly and validate with naga.
 
 **Relevance to Gup**: syn is the ideal foundation for our transpiler. The
 `#[wgsl_function]` macro already uses syn for parsing. The gap is in the
-**translation layer** — converting `syn::Expr` variants systematically into
-WGSL constructs.
+**translation layer** — converting `syn::Expr` variants systematically into WGSL
+constructs.
 
 ### 1.4 Comparison Matrix
 
-| Criterion          | rust-gpu      | naga IR       | syn + custom  |
-| ------------------ | ------------- | ------------- | ------------- |
-| Setup complexity   | Very High     | Medium        | **Low**       |
-| Rust coverage      | **Full**      | N/A           | Subset        |
-| Build time impact  | Very High     | Medium        | **Minimal**   |
-| WGSL output        | Indirect      | **Direct**    | **Direct**    |
-| Validation         | Strong        | **Strongest** | Good (+ naga) |
-| Maintenance burden | High          | Low           | **Medium**    |
-| Library-friendly   | No            | Partial       | **Yes**       |
-| Existing in Gup    | No            | Via wgpu      | **Yes**       |
+| Criterion          | rust-gpu  | naga IR       | syn + custom  |
+| ------------------ | --------- | ------------- | ------------- |
+| Setup complexity   | Very High | Medium        | **Low**       |
+| Rust coverage      | **Full**  | N/A           | Subset        |
+| Build time impact  | Very High | Medium        | **Minimal**   |
+| WGSL output        | Indirect  | **Direct**    | **Direct**    |
+| Validation         | Strong    | **Strongest** | Good (+ naga) |
+| Maintenance burden | High      | Low           | **Medium**    |
+| Library-friendly   | No        | Partial       | **Yes**       |
+| Existing in Gup    | No        | Via wgpu      | **Yes**       |
 
 ## 2. Transpilation Strategies
 
@@ -153,8 +153,8 @@ let shader = wgsl! {
 };
 ```
 
-**Pros**: Maximum control over semantics, no parsing ambiguity.
-**Cons**: Different syntax from standard Rust, learning curve, poor IDE support.
+**Pros**: Maximum control over semantics, no parsing ambiguity. **Cons**:
+Different syntax from standard Rust, learning curve, poor IDE support.
 
 **Assessment**: Not recommended — it sacrifices the primary goal of "write
 natural Rust syntax."
@@ -163,8 +163,8 @@ natural Rust syntax."
 
 ### 3.1 Well-Supported (Direct Mapping)
 
-| Rust Construct              | WGSL Equivalent         | Complexity |
-| --------------------------- | ----------------------- | ---------- |
+| Rust Construct             | WGSL Equivalent         | Complexity |
+| -------------------------- | ----------------------- | ---------- |
 | `let x = expr;`            | `let x = expr;`         | Trivial    |
 | `let mut x = expr;`        | `var x = expr;`         | Trivial    |
 | `x + y`, `x * y`, etc.     | `x + y`, `x * y`        | Trivial    |
@@ -172,33 +172,33 @@ natural Rust syntax."
 | `if cond { } else { }`     | `if (cond) { } else {}` | Simple     |
 | `expr.field`               | `expr.field`            | Simple     |
 | `func(args)`               | `func(args)`            | Simple     |
-| `-x`, `!x`                 | `-x`, `!x`             | Trivial    |
-| `(expr)`                   | `(expr)`               | Trivial    |
+| `-x`, `!x`                 | `-x`, `!x`              | Trivial    |
+| `(expr)`                   | `(expr)`                | Trivial    |
 | Float/int/bool literals    | Same                    | Trivial    |
-| `x as f32` (numeric casts) | `f32(x)`               | Simple     |
+| `x as f32` (numeric casts) | `f32(x)`                | Simple     |
 | `for` loops                | `for` loops             | Moderate   |
 
 ### 3.2 Requires Translation
 
-| Rust Construct        | WGSL Equivalent                 | Complexity |
-| --------------------- | ------------------------------- | ---------- |
-| `x.abs()`             | `abs(x)`                        | Moderate   |
-| `x.min(y)`            | `min(x, y)`                     | Moderate   |
-| `x.sqrt()`            | `sqrt(x)`                       | Moderate   |
-| `Vec2 { x, y }`       | `vec2<f32>(x, y)`               | Moderate   |
-| `array[i]`            | `array[i]`                      | Simple     |
-| Tuple struct access   | Member access                   | Moderate   |
-| Type aliases          | N/A (inline)                    | Moderate   |
+| Rust Construct      | WGSL Equivalent   | Complexity |
+| ------------------- | ----------------- | ---------- |
+| `x.abs()`           | `abs(x)`          | Moderate   |
+| `x.min(y)`          | `min(x, y)`       | Moderate   |
+| `x.sqrt()`          | `sqrt(x)`         | Moderate   |
+| `Vec2 { x, y }`     | `vec2<f32>(x, y)` | Moderate   |
+| `array[i]`          | `array[i]`        | Simple     |
+| Tuple struct access | Member access     | Moderate   |
+| Type aliases        | N/A (inline)      | Moderate   |
 
 ### 3.3 Unsupported (Must Error)
 
 | Rust Construct       | Reason                                  |
 | -------------------- | --------------------------------------- |
 | Closures             | No GPU equivalent                       |
-| Trait methods         | No trait dispatch on GPU                |
+| Trait methods        | No trait dispatch on GPU                |
 | Heap allocation      | No heap on GPU                          |
 | String operations    | No strings on GPU                       |
-| References/borrowing | GPU memory model is different            |
+| References/borrowing | GPU memory model is different           |
 | Pattern matching     | No direct WGSL equivalent (use if/else) |
 | Iterators            | No iterator protocol on GPU             |
 | `async`/`await`      | No async on GPU                         |
@@ -208,9 +208,9 @@ natural Rust syntax."
 
 ### 4.1 Compile-Time Overhead
 
-Proc macro transpilation adds compile-time cost. Measurements with the
-current `#[wgsl_function]` macro show negligible overhead (<10ms per function).
-Adding an AST intermediate step should add minimal additional cost since:
+Proc macro transpilation adds compile-time cost. Measurements with the current
+`#[wgsl_function]` macro show negligible overhead (<10ms per function). Adding
+an AST intermediate step should add minimal additional cost since:
 
 - AST construction is O(n) in expression tree size
 - Typical shader functions have <50 AST nodes
@@ -218,8 +218,8 @@ Adding an AST intermediate step should add minimal additional cost since:
 
 ### 4.2 Generated WGSL Quality
 
-Direct transpilation from Rust produces WGSL that is semantically equivalent
-to hand-written code. The existing `shader_ast::optimizer` can then apply:
+Direct transpilation from Rust produces WGSL that is semantically equivalent to
+hand-written code. The existing `shader_ast::optimizer` can then apply:
 
 - **Constant folding**: Evaluate compile-time-known expressions
 - **Dead code elimination**: Remove unreachable branches

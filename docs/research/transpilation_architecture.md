@@ -4,8 +4,8 @@
 
 The transpilation system converts Rust functions annotated with
 `#[wgsl_function]` into valid WGSL shader code at compile time. It is designed
-as a modular pipeline with clear interfaces between phases, enabling
-incremental feature additions and independent testing of each component.
+as a modular pipeline with clear interfaces between phases, enabling incremental
+feature additions and independent testing of each component.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -62,13 +62,13 @@ gup-macros/src/transpile/
 
 Each phase has a clear input/output contract:
 
-| Phase     | Input              | Output             | Module       |
-| --------- | ------------------ | ------------------ | ------------ |
-| Parse     | Rust source tokens | `syn::ItemFn`      | syn          |
-| Convert   | `syn::ItemFn`      | `WgslFunction`     | convert.rs   |
-| Optimise  | `WgslFunction`     | `WgslFunction`     | optimizer.rs |
-| Generate  | `WgslFunction`     | `String` (WGSL)    | codegen.rs   |
-| Emit      | `String` (WGSL)    | `TokenStream`      | quote!       |
+| Phase    | Input              | Output          | Module       |
+| -------- | ------------------ | --------------- | ------------ |
+| Parse    | Rust source tokens | `syn::ItemFn`   | syn          |
+| Convert  | `syn::ItemFn`      | `WgslFunction`  | convert.rs   |
+| Optimise | `WgslFunction`     | `WgslFunction`  | optimizer.rs |
+| Generate | `WgslFunction`     | `String` (WGSL) | codegen.rs   |
+| Emit     | `String` (WGSL)    | `TokenStream`   | quote!       |
 
 ### 2.3 AST Type Hierarchy
 
@@ -122,8 +122,8 @@ To support a new Rust expression type:
 
 ### 3.2 Adding New Built-in Functions
 
-The method-to-function mapping in `convert.rs` uses a match statement. To add
-a new built-in:
+The method-to-function mapping in `convert.rs` uses a match statement. To add a
+new built-in:
 
 1. Add the method name to the appropriate match arm in
    `RustToWgsl::convert_expr()` (method call case)
@@ -154,24 +154,26 @@ system. No existing code needs to change. The integration path is:
 
 2. **Phase B (GUP-061)**: Wire the transpiler into `#[wgsl_function]` as an
    alternative code path. Add a macro attribute to opt in:
+
    ```rust
    #[wgsl_function(transpile)]  // Uses new transpiler
    fn my_func(value: f32) -> f32 { ... }
    ```
 
-3. **Phase C (future)**: Make transpiler the default, with string-based
-   system as fallback for constructs not yet supported.
+3. **Phase C (future)**: Make transpiler the default, with string-based system
+   as fallback for constructs not yet supported.
 
-4. **Phase D (future)**: Deprecate string-based system once transpiler
-   reaches feature parity.
+4. **Phase D (future)**: Deprecate string-based system once transpiler reaches
+   feature parity.
 
 ### 4.2 Connection to shader_ast
 
-The existing `shader_ast` module (WGSL parser, optimizer, generator) operates
-on WGSL text and its own AST. The transpiler's WGSL AST is a lightweight
-mirror of `shader_ast::types` designed to avoid circular dependencies.
+The existing `shader_ast` module (WGSL parser, optimizer, generator) operates on
+WGSL text and its own AST. The transpiler's WGSL AST is a lightweight mirror of
+`shader_ast::types` designed to avoid circular dependencies.
 
 Future integration options:
+
 - **Option A**: Extract shared types into `gup-ast-types` crate used by both
   `gup-macros` and `gup`
 - **Option B**: Generate WGSL text from the transpiler, then parse it with
@@ -206,16 +208,17 @@ compatibility.
 
 ### 5.1 Test Layers
 
-| Layer              | What it tests                    | Where                      |
-| ------------------ | -------------------------------- | -------------------------- |
-| Unit tests         | Individual conversion functions  | `convert.rs`, `codegen.rs` |
-| Pipeline tests     | Full Rust → WGSL pipeline        | `pipeline_tests.rs`        |
-| Validation tests   | Generated WGSL compiles (naga)   | `tests/transpile_*.rs`     |
-| Integration tests  | Works with shader function trait | Future (GUP-061)           |
+| Layer             | What it tests                    | Where                      |
+| ----------------- | -------------------------------- | -------------------------- |
+| Unit tests        | Individual conversion functions  | `convert.rs`, `codegen.rs` |
+| Pipeline tests    | Full Rust → WGSL pipeline        | `pipeline_tests.rs`        |
+| Validation tests  | Generated WGSL compiles (naga)   | `tests/transpile_*.rs`     |
+| Integration tests | Works with shader function trait | Future (GUP-061)           |
 
 ### 5.2 Test Patterns
 
 Every new feature should include:
+
 1. A unit test in the converter module
 2. A pipeline test demonstrating the full flow
 3. A WGSL validation test confirming the output compiles
@@ -250,11 +253,11 @@ GUP-055 (Research + Prototype) ← YOU ARE HERE
 
 ## 7. Design Decisions Log
 
-| # | Decision | Reasoning | Trade-off |
-|---|----------|-----------|-----------|
-| 1 | Lightweight AST in gup-macros | Avoids circular dependency | Small type duplication |
-| 2 | Direct WGSL text output | Simplicity, no shared crate needed | Text round-trip if AST optimisation needed |
-| 3 | Method→function mapping in converter | Rust idioms feel natural | Requires explicit listing of supported methods |
-| 4 | Uniform param rewriting | Consistent with existing system | Extra complexity in converter |
-| 5 | TranspileError with Span | Good IDE error experience | Slightly more complex error handling |
-| 6 | Separate pipeline_tests module | Clean test organisation | Additional file to maintain |
+| #   | Decision                             | Reasoning                          | Trade-off                                      |
+| --- | ------------------------------------ | ---------------------------------- | ---------------------------------------------- |
+| 1   | Lightweight AST in gup-macros        | Avoids circular dependency         | Small type duplication                         |
+| 2   | Direct WGSL text output              | Simplicity, no shared crate needed | Text round-trip if AST optimisation needed     |
+| 3   | Method→function mapping in converter | Rust idioms feel natural           | Requires explicit listing of supported methods |
+| 4   | Uniform param rewriting              | Consistent with existing system    | Extra complexity in converter                  |
+| 5   | TranspileError with Span             | Good IDE error experience          | Slightly more complex error handling           |
+| 6   | Separate pipeline_tests module       | Clean test organisation            | Additional file to maintain                    |

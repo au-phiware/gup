@@ -84,7 +84,12 @@ impl WgslCodeGen {
             format!(" -> {}", func.return_type)
         };
 
-        self.write_line(&format!("fn {}({}){} {{", func.name, params.join(", "), ret));
+        self.write_line(&format!(
+            "fn {}({}){} {{",
+            func.name,
+            params.join(", "),
+            ret
+        ));
         self.indent_level += 1;
 
         for stmt in &func.body {
@@ -121,10 +126,7 @@ impl WgslCodeGen {
                 mutable,
             } => {
                 let keyword = if *mutable { "var" } else { "let" };
-                let type_ann = ty
-                    .as_ref()
-                    .map(|t| format!(": {t}"))
-                    .unwrap_or_default();
+                let type_ann = ty.as_ref().map(|t| format!(": {t}")).unwrap_or_default();
                 let expr = self.generate_expr(value);
                 self.write_line(&format!("{keyword} {name}{type_ann} = {expr};"));
             }
@@ -186,13 +188,11 @@ impl WgslCodeGen {
                 format!("{op}{inner}")
             }
             WgslExpr::Call(name, args) => {
-                let args_str: Vec<String> =
-                    args.iter().map(|a| self.generate_expr(a)).collect();
+                let args_str: Vec<String> = args.iter().map(|a| self.generate_expr(a)).collect();
                 format!("{name}({})", args_str.join(", "))
             }
             WgslExpr::TypeConstructor(ty, args) => {
-                let args_str: Vec<String> =
-                    args.iter().map(|a| self.generate_expr(a)).collect();
+                let args_str: Vec<String> = args.iter().map(|a| self.generate_expr(a)).collect();
                 format!("{ty}({})", args_str.join(", "))
             }
             WgslExpr::MemberAccess(base, field) => {
@@ -497,10 +497,7 @@ mod tests {
     #[test]
     fn generate_unary_negate() {
         let codegen = WgslCodeGen::new();
-        let expr = WgslExpr::Unary(
-            UnaryOp::Negate,
-            Box::new(WgslExpr::Ident("x".to_string())),
-        );
+        let expr = WgslExpr::Unary(UnaryOp::Negate, Box::new(WgslExpr::Ident("x".to_string())));
         assert_eq!(codegen.generate_expr(&expr), "-x");
     }
 
@@ -523,6 +520,9 @@ mod tests {
         // Integer-valued float should still have .0
         let expr = WgslExpr::Literal(Literal::Float(42.0));
         let result = codegen.generate_expr(&expr);
-        assert!(result.contains('.'), "Float '42' should render as '42.0' but got '{result}'");
+        assert!(
+            result.contains('.'),
+            "Float '42' should render as '42.0' but got '{result}'"
+        );
     }
 }

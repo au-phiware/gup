@@ -11,10 +11,7 @@ mod tests {
     use crate::transpile::{RustToWgsl, WgslCodeGen};
 
     /// Helper to run the full transpile pipeline on a Rust function.
-    fn transpile(
-        func: &syn::ItemFn,
-        uniform_params: impl IntoIterator<Item = String>,
-    ) -> String {
+    fn transpile(func: &syn::ItemFn, uniform_params: impl IntoIterator<Item = String>) -> String {
         let converter = RustToWgsl::new(uniform_params);
         let wgsl_func = converter.convert_function(func).unwrap();
         let mut codegen = WgslCodeGen::new();
@@ -40,10 +37,7 @@ mod tests {
                 return value * scale + offset;
             }
         };
-        let wgsl = transpile(
-            &func,
-            ["scale".to_string(), "offset".to_string()],
-        );
+        let wgsl = transpile(&func, ["scale".to_string(), "offset".to_string()]);
         assert!(
             wgsl.contains("uniforms: ScaleOffsetUniforms"),
             "Should have uniforms param, got:\n{wgsl}"
@@ -207,7 +201,10 @@ mod tests {
     #[test]
     fn pipeline_error_on_match() {
         let converter = RustToWgsl::new(std::iter::empty::<String>());
-        let expr: syn::Expr = syn::parse_quote!(match x { 0 => 1, _ => 2 });
+        let expr: syn::Expr = syn::parse_quote!(match x {
+            0 => 1,
+            _ => 2,
+        });
         assert!(converter.convert_expr(&expr).is_err());
     }
 
