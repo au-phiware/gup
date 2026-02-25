@@ -210,10 +210,7 @@ fn mixed_pipeline_functions_produce_valid_wgsl() {
         !transpiled_wgsl.is_empty(),
         "Transpiled WGSL should not be empty"
     );
-    assert!(
-        !manual_wgsl.is_empty(),
-        "Manual WGSL should not be empty"
-    );
+    assert!(!manual_wgsl.is_empty(), "Manual WGSL should not be empty");
 
     // Both should contain valid function definitions.
     assert!(transpiled_wgsl.contains("fn double_value"));

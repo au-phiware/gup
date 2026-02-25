@@ -1,6 +1,6 @@
 # GUP-061: Integration with Existing Shader Function System
 
-**Status**: 🚧 In Progress
+**Status**: ✅ Complete (2025-07-27)
 
 ## Story Overview
 
@@ -29,31 +29,31 @@ calling code **So that** I can migrate incrementally at my own pace
 
 ### AC1: Transpiled Functions Implement ShaderFunction
 
-- [ ] A function defined with the new Rust-syntax transpiler implements
+- [x] A function defined with the new Rust-syntax transpiler implements
       `ShaderFunction` (same trait as `#[wgsl_function]`)
-- [ ] `function_name()`, `wgsl_function()`, and `create_uniforms()` all work
+- [x] `function_name()`, `wgsl_function()`, and `create_uniforms()` all work
       correctly for transpiled functions
-- [ ] Transpiled functions can be passed to `ShaderPipeline::add_function()`
+- [x] Transpiled functions can be passed to `ShaderPipeline::add_function()`
 
 ### AC2: Mixed Pipeline Support
 
-- [ ] A `ShaderPipeline` can hold both string-based and transpiled functions in
+- [x] A `ShaderPipeline` can hold both string-based and transpiled functions in
       the same pipeline
-- [ ] The generated WGSL from a mixed pipeline compiles successfully on the GPU
-- [ ] No performance regression vs. all-string pipelines
+- [x] The generated WGSL from a mixed pipeline compiles successfully on the GPU
+- [x] No performance regression vs. all-string pipelines
 
 ### AC3: Backward Compatibility
 
-- [ ] All existing `#[wgsl_function]` usages compile without modification
-- [ ] All existing tests pass without changes
-- [ ] The transpiler is an opt-in addition, not a forced migration
+- [x] All existing `#[wgsl_function]` usages compile without modification
+- [x] All existing tests pass without changes
+- [x] The transpiler is an opt-in addition, not a forced migration
 
 ### AC4: Migration Guide
 
-- [ ] Document the equivalence between `#[wgsl_function]` and new Rust-syntax
+- [x] Document the equivalence between `#[wgsl_function]` and new Rust-syntax
       approach
-- [ ] Provide before/after examples for common function patterns
-- [ ] Note any features supported by one approach but not the other
+- [x] Provide before/after examples for common function patterns
+- [x] Note any features supported by one approach but not the other
 
 ## Technical Requirements
 
@@ -65,9 +65,9 @@ calling code **So that** I can migrate incrementally at my own pace
 
 ## Dependencies
 
-- **Requires**: GUP-056 (Type System Mapping) 📋
-- **Requires**: GUP-057 (Expression Transpilation) 📋
-- **Requires**: GUP-058 (Control Flow Handling) 📋
+- **Requires**: GUP-056 (Type System Mapping) ✅
+- **Requires**: GUP-057 (Expression Transpilation) ✅
+- **Requires**: GUP-058 (Control Flow Handling) ✅
 - **Requires**: GUP-005 (Shader Function Trait) ✅
 - **Requires**: GUP-051 (WGSL Code Generation Templates) ✅
 - **Blocks**: GUP-062 (Community Validation) — needs working end-to-end path
@@ -92,10 +92,38 @@ extension, add optional methods with default implementations.
 
 ## Definition of Done
 
-- [ ] AC1–AC4 acceptance criteria checked off
-- [ ] `mask test` passes (all existing tests green)
-- [ ] `mask all-fix` clean
-- [ ] Retrospective written
+- [x] AC1–AC4 acceptance criteria checked off
+- [x] `mask test` passes (all existing tests green)
+- [x] `mask all-fix` clean
+- [x] Retrospective written
+
+## Implementation Summary
+
+### What Was Implemented
+
+A `#[shader_fn]` proc macro attribute that transpiles Rust function bodies to
+WGSL using the existing transpilation pipeline (`RustToWgsl` + `WgslCodeGen`)
+and generates the same output as `#[wgsl_function]`: a configuration struct, a
+GPU uniform struct, and a `ComposableShaderFunction` trait implementation.
+
+### Key Files Changed
+
+| File                                | Change                                         |
+| ----------------------------------- | ---------------------------------------------- |
+| `gup-macros/src/shader_fn.rs`       | New — `#[shader_fn]` proc macro implementation |
+| `gup-macros/src/lib.rs`             | Added `shader_fn` proc macro entry point       |
+| `src/lib.rs`                        | Updated macro documentation comments           |
+| `tests/shader_fn_integration.rs`    | New — 21 integration tests (AC1–AC3)           |
+| `docs/SHADER_FN_MIGRATION_GUIDE.md` | New — migration guide (AC4)                    |
+
+### Test Counts
+
+- 7 unit tests in `gup-macros/src/shader_fn.rs`
+- 21 integration tests in `tests/shader_fn_integration.rs`
+  - 14 trait implementation tests (AC1)
+  - 5 GPU compilation validation tests
+  - 2 pipeline integration tests (AC2)
+- All 1379+ existing tests continue to pass (AC3)
 
 ---
 

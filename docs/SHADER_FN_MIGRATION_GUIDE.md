@@ -4,10 +4,10 @@
 
 Gup provides two macro-based approaches for defining GPU shader functions:
 
-| Approach | Macro | Body Syntax | Status |
-|----------|-------|-------------|--------|
-| **WGSL-native** | `#[wgsl_function]` | WGSL in Rust function bodies | Stable |
-| **Rust-transpiled** | `#[shader_fn]` | Idiomatic Rust, transpiled to WGSL | New |
+| Approach            | Macro              | Body Syntax                        | Status |
+| ------------------- | ------------------ | ---------------------------------- | ------ |
+| **WGSL-native**     | `#[wgsl_function]` | WGSL in Rust function bodies       | Stable |
+| **Rust-transpiled** | `#[shader_fn]`     | Idiomatic Rust, transpiled to WGSL | New    |
 
 Both produce types implementing `ComposableShaderFunction`, making them fully
 interchangeable. You can mix functions from either approach in the same
@@ -71,6 +71,7 @@ fn linear_scale(value: f32, domain_min: f32, domain_max: f32,
 ```
 
 Both generate:
+
 - `LinearScale` struct with `domain_min`, `domain_max`, `range_min`, `range_max`
   fields
 - `LinearScaleUniforms` GPU uniform struct
@@ -99,21 +100,21 @@ fn safe_sqrt(value: f32) -> f32 {
 
 Supported method mappings include:
 
-| Rust method | WGSL function |
-|-------------|---------------|
-| `.abs()` | `abs(x)` |
-| `.sqrt()` | `sqrt(x)` |
+| Rust method                  | WGSL function                |
+| ---------------------------- | ---------------------------- |
+| `.abs()`                     | `abs(x)`                     |
+| `.sqrt()`                    | `sqrt(x)`                    |
 | `.sin()`, `.cos()`, `.tan()` | `sin(x)`, `cos(x)`, `tan(x)` |
-| `.length()` | `length(x)` |
-| `.normalize()` | `normalize(x)` |
-| `.dot(other)` | `dot(x, other)` |
-| `.cross(other)` | `cross(x, other)` |
-| `.clamp(lo, hi)` | `clamp(x, lo, hi)` |
-| `.min(other)` | `min(x, other)` |
-| `.max(other)` | `max(x, other)` |
-| `.to_f32()` | `f32(x)` |
-| `.to_i32()` | `i32(x)` |
-| `.to_u32()` | `u32(x)` |
+| `.length()`                  | `length(x)`                  |
+| `.normalize()`               | `normalize(x)`               |
+| `.dot(other)`                | `dot(x, other)`              |
+| `.cross(other)`              | `cross(x, other)`            |
+| `.clamp(lo, hi)`             | `clamp(x, lo, hi)`           |
+| `.min(other)`                | `min(x, other)`              |
+| `.max(other)`                | `max(x, other)`              |
+| `.to_f32()`                  | `f32(x)`                     |
+| `.to_i32()`                  | `i32(x)`                     |
+| `.to_u32()`                  | `u32(x)`                     |
 
 ### Control Flow
 
@@ -253,36 +254,38 @@ pipeline.add_function(ClampPositive::new());
 
 ## Feature Comparison
 
-| Feature | `#[wgsl_function]` | `#[shader_fn]` |
-|---------|---------------------|----------------|
-| Arithmetic expressions | ✅ | ✅ |
-| Comparison/logical ops | ✅ | ✅ |
-| `let` bindings | ✅ | ✅ (including `let mut`) |
-| `if`/`else` | ✅ | ✅ |
-| `for` loops | ✅ (WGSL syntax) | ✅ (`for i in 0..n`) |
-| `while`/`loop` | ✅ (WGSL syntax) | ✅ |
-| `break`/`continue` | ✅ | ✅ |
-| Built-in functions | ✅ (WGSL names) | ✅ (Rust method syntax too) |
-| Vector constructors | ✅ (WGSL syntax) | ✅ (`Vec3(x, y, z)`) |
-| Type casts | ✅ (WGSL syntax) | ✅ (`x as f32`) |
-| Uniform parameters | ✅ | ✅ |
-| Custom struct types | ✅ | ✅ |
-| Pipeline composition | ✅ | ✅ |
-| IDE autocompletion | Partial | ✅ |
-| `match` expressions | ❌ | ❌ |
-| Closures | ❌ | ❌ |
-| Generics | ❌ | ❌ |
+| Feature                | `#[wgsl_function]` | `#[shader_fn]`              |
+| ---------------------- | ------------------ | --------------------------- |
+| Arithmetic expressions | ✅                 | ✅                          |
+| Comparison/logical ops | ✅                 | ✅                          |
+| `let` bindings         | ✅                 | ✅ (including `let mut`)    |
+| `if`/`else`            | ✅                 | ✅                          |
+| `for` loops            | ✅ (WGSL syntax)   | ✅ (`for i in 0..n`)        |
+| `while`/`loop`         | ✅ (WGSL syntax)   | ✅                          |
+| `break`/`continue`     | ✅                 | ✅                          |
+| Built-in functions     | ✅ (WGSL names)    | ✅ (Rust method syntax too) |
+| Vector constructors    | ✅ (WGSL syntax)   | ✅ (`Vec3(x, y, z)`)        |
+| Type casts             | ✅ (WGSL syntax)   | ✅ (`x as f32`)             |
+| Uniform parameters     | ✅                 | ✅                          |
+| Custom struct types    | ✅                 | ✅                          |
+| Pipeline composition   | ✅                 | ✅                          |
+| IDE autocompletion     | Partial            | ✅                          |
+| `match` expressions    | ❌                 | ❌                          |
+| Closures               | ❌                 | ❌                          |
+| Generics               | ❌                 | ❌                          |
 
 ---
 
 ## When to Use Which
 
 **Use `#[wgsl_function]`** when:
+
 - You need precise control over the generated WGSL
 - You're porting existing WGSL code
 - You want to use WGSL-specific features
 
 **Use `#[shader_fn]`** when:
+
 - You prefer writing idiomatic Rust
 - You want IDE support (autocompletion, type checking on Rust syntax)
 - You're iterating on logic and want Rust compile errors instead of WGSL errors
