@@ -127,6 +127,8 @@ _Initiative doc:
 | [GUP-060](GUP-060_Optimization_Error_Reporting.md)            | Optimization Engine and Error Reporting   | 📋 Planned  | Medium   | 13     |
 | [GUP-061](GUP-061_Integration_With_Shader_Function_System.md) | Integration with Shader Function System   | 📋 Planned  | High     | 8      |
 | [GUP-062](GUP-062_Community_Validation_Prototyping.md)        | Community Validation and Proof-of-Concept | 📋 Planned  | High     | 13     |
+| [GUP-210](GUP-210_Switch_Statement_Transpilation.md)          | Switch Statement Transpilation            | 📋 Planned  | Low      | 5      |
+| [GUP-211](GUP-211_Fix_Preexisting_wgsl_function_Test.md)      | Fix Pre-existing wgsl_function Test       | 📋 Planned  | Medium   | 1      |
 
 _Note: GUP-054 here is the Phase 2 research story (Existing Solutions Analysis).
 GUP-054 in the Post-GUP-005/007 tables above refers to the Phase 1 Shader

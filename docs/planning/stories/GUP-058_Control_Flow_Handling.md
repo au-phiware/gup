@@ -442,3 +442,86 @@ This implementation enables:
 - GUP-060: Advanced optimization passes for control flow patterns
 - Support for more complex pattern matching in future versions
 - Integration with GPU profiling and optimization tools
+
+## Retrospective
+
+**Completed**: 2025-07-21
+
+### Key Technical Learnings
+
+#### For-Loop Range Extraction
+
+- **Challenge**: Rust's `for i in 0..n` has no direct WGSL equivalent; WGSL uses
+  C-style `for (var i = 0; i < n; i++)` syntax.
+- **Solution**: Extract start and end from `syn::ExprRange`, build separate
+  initialiser, condition, and update expressions in the `WgslStatement::For` AST
+  node.
+- **Pattern**: Whenever Rust and WGSL syntactic models diverge, decompose the
+  Rust construct into its semantic components and reconstruct in WGSL's syntax.
+
+#### Else-If Chain Codegen
+
+- **Challenge**: The converter naturally produces nested `WgslStatement::If`
+  inside an else body (matching Rust's internal AST representation), but WGSL
+  should render as `} else if (cond) {` rather than `} else { if (cond) { } }`.
+- **Solution**: Added a special case in `generate_stmt` that detects when an
+  else body is a single `If` statement and emits it as `else if` instead of
+  nested blocks.
+- **Pattern**: AST shape and rendered text don't always align — codegen is the
+  right place to flatten nested structures into idiomatic output.
+
+#### Statement vs Expression Dispatch
+
+- **Challenge**: Loops, break, and continue are expressions in Rust's AST
+  (`syn::Expr::ForLoop`, `syn::Expr::Break`, etc.) but must be handled as
+  statements in WGSL.
+- **Solution**: Added early dispatch in `convert_stmt` to catch loop/break/
+  continue expressions before they reach `convert_expr`, where they would
+  produce errors.
+- **Pattern**: Control flow constructs need statement-level handling even when
+  `syn` models them as expressions. Check for these in the statement converter
+  first.
+
+### Architectural Decisions
+
+#### Flat For-Loop AST Representation
+
+- **Decision**: Used a flat
+  `For { var_name, initialiser, condition, update, body }` AST node rather than
+  a more abstract loop representation.
+- **Reasoning**: Maps directly to WGSL's `for` syntax, making code generation
+  straightforward.
+- **Trade-off**: Less flexibility for alternative loop representations (e.g.,
+  iterators), but WGSL only supports C-style for-loops anyway.
+- **Future**: If WGSL adds range-based loops, the AST could be extended.
+
+#### Error-on-Match Rather Than If-Else Conversion
+
+- **Decision**: Match expressions produce a clear error rather than being
+  silently converted to if-else chains.
+- **Reasoning**: Automatic match-to-if conversion could produce incorrect
+  semantics for complex patterns, exhaustiveness checks, or wildcard arms.
+  Better to fail explicitly so the developer rewrites the logic.
+- **Trade-off**: Users must manually rewrite match as if-else for WGSL.
+- **Future**: GUP-060 could add match→switch conversion for integer matches.
+
+### Development Workflow Insights
+
+- The existing transpilation architecture (3-phase: parse→convert→codegen) made
+  adding control flow very clean. Each phase had a well-defined extension point.
+- The AST enum approach means adding new statement types is just adding variants
+  and matching on them — no trait objects or dynamic dispatch needed.
+- Running `cargo test -p gup-macros -- --test-threads=1 control_flow` gave rapid
+  feedback during development (sub-second test runs).
+- There was a pre-existing test failure (`test_is_uniform_compatible_type`) that
+  is unrelated to this story. It should be tracked and fixed separately.
+
+### Follow-up Stories
+
+1. **GUP-210: Switch Statement Transpilation** — Add support for converting
+   simple Rust match expressions on integers to WGSL switch statements. This
+   would enable pattern matching support noted in AC1.
+
+2. **GUP-211: Fix Pre-existing wgsl_function Test Failure** — The
+   `test_is_uniform_compatible_type` test in `wgsl_function.rs:1256` has been
+   failing. This should be investigated and fixed to maintain test suite health.
