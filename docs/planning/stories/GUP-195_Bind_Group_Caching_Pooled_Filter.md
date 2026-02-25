@@ -1,8 +1,8 @@
 # GUP-195: Bind Group Caching for Pooled Filter
 
 **Story ID**: GUP-195 **Title**: Bind Group Caching for Pooled Filter
-**Status**: 📋 Planned **Priority**: Low **Effort**: — **Created**: 2025-07-24
-**Dependencies**: GUP-183 (Pooled GPU Instance Filter Buffers)
+**Status**: 🚧 In Progress **Priority**: Low **Effort**: — **Created**:
+2025-07-24 **Dependencies**: GUP-183 (Pooled GPU Instance Filter Buffers)
 
 ## Overview
 
