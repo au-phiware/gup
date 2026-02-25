@@ -1910,4 +1910,440 @@ mod tests {
 
         assert!(result.is_err(), "Zero instances should return error");
     }
+
+    // ---------------------------------------------------------------
+    // Bind group caching tests (GUP-195)
+    // ---------------------------------------------------------------
+
+    #[tokio::test]
+    async fn test_bind_group_cache_populated_after_first_dispatch() {
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let filter = ComputeInstanceFilter::new(&ctx.device).unwrap();
+        let mut pooled = PooledComputeInstanceFilter::new(&ctx.device, filter, 256);
+
+        // No cached bind group before first dispatch.
+        assert!(
+            !pooled.has_cached_bind_group(),
+            "No cache before first dispatch"
+        );
+
+        let instances: Vec<InstanceAttributes> = (0..4)
+            .map(|i| {
+                let x = (i as f32 - 1.5) * 0.3;
+                InstanceAttributes::from_circle([x, 0.0], 0.1, [1.0, 0.0, 0.0, 1.0])
+            })
+            .collect();
+
+        let input_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &input_buf, &instances);
+
+        let viewport = Viewport2D::default();
+        let thresholds = [4.0, 1.0, 0.25];
+
+        let _result = pooled
+            .dispatch(
+                &ctx.device,
+                &ctx.queue,
+                &input_buf,
+                4,
+                6,
+                &viewport,
+                &thresholds,
+            )
+            .await
+            .unwrap();
+
+        // Bind group should be cached after first dispatch.
+        assert!(
+            pooled.has_cached_bind_group(),
+            "Cache populated after first dispatch"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_bind_group_cache_hit_same_buffer() {
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let filter = ComputeInstanceFilter::new(&ctx.device).unwrap();
+        let mut pooled = PooledComputeInstanceFilter::new(&ctx.device, filter, 256);
+
+        let instances: Vec<InstanceAttributes> = (0..8)
+            .map(|i| {
+                let x = (i as f32 - 3.5) * 0.2;
+                InstanceAttributes::from_circle([x, 0.0], 0.08, [0.0, 1.0, 1.0, 1.0])
+            })
+            .collect();
+
+        let input_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &input_buf, &instances);
+
+        let viewport = Viewport2D::default();
+        let thresholds = [4.0, 1.0, 0.25];
+
+        // First dispatch — populates cache.
+        let result1 = pooled
+            .dispatch(
+                &ctx.device,
+                &ctx.queue,
+                &input_buf,
+                8,
+                6,
+                &viewport,
+                &thresholds,
+            )
+            .await
+            .unwrap();
+
+        assert!(pooled.has_cached_bind_group());
+
+        // Second dispatch with SAME buffer — should be a cache hit.
+        let result2 = pooled
+            .dispatch(
+                &ctx.device,
+                &ctx.queue,
+                &input_buf,
+                8,
+                6,
+                &viewport,
+                &thresholds,
+            )
+            .await
+            .unwrap();
+
+        // Cache still populated.
+        assert!(pooled.has_cached_bind_group());
+
+        // Results should still be correct.
+        let args1 = ComputeInstanceFilter::read_draw_indirect(
+            &ctx.device,
+            &ctx.queue,
+            &result1.draw_indirect_buffer,
+        )
+        .await
+        .unwrap();
+
+        let args2 = ComputeInstanceFilter::read_draw_indirect(
+            &ctx.device,
+            &ctx.queue,
+            &result2.draw_indirect_buffer,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(args1[1], 8, "First dispatch: all 8 visible");
+        assert_eq!(args2[1], 8, "Second dispatch: all 8 visible");
+    }
+
+    #[tokio::test]
+    async fn test_bind_group_cache_invalidated_on_buffer_change() {
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let filter = ComputeInstanceFilter::new(&ctx.device).unwrap();
+        let mut pooled = PooledComputeInstanceFilter::new(&ctx.device, filter, 256);
+
+        let viewport = Viewport2D::default();
+        let thresholds = [4.0, 1.0, 0.25];
+
+        // Dispatch 1: with buffer A.
+        let instances_a: Vec<InstanceAttributes> = (0..4)
+            .map(|i| {
+                let x = (i as f32 - 1.5) * 0.3;
+                InstanceAttributes::from_circle([x, 0.0], 0.1, [1.0, 0.0, 0.0, 1.0])
+            })
+            .collect();
+        let buf_a = create_instance_buffer(&ctx.device, &instances_a);
+        upload_instances(&ctx.queue, &buf_a, &instances_a);
+
+        let _r1 = pooled
+            .dispatch(
+                &ctx.device,
+                &ctx.queue,
+                &buf_a,
+                4,
+                6,
+                &viewport,
+                &thresholds,
+            )
+            .await
+            .unwrap();
+        assert!(pooled.has_cached_bind_group());
+
+        // Dispatch 2: with a DIFFERENT buffer B — cache should be invalidated
+        // and a new bind group created.
+        let instances_b: Vec<InstanceAttributes> = (0..4)
+            .map(|i| {
+                let x = (i as f32 - 1.5) * 0.2;
+                InstanceAttributes::from_circle([x, 0.0], 0.05, [0.0, 1.0, 0.0, 1.0])
+            })
+            .collect();
+        let buf_b = create_instance_buffer(&ctx.device, &instances_b);
+        upload_instances(&ctx.queue, &buf_b, &instances_b);
+
+        let result = pooled
+            .dispatch(
+                &ctx.device,
+                &ctx.queue,
+                &buf_b,
+                4,
+                6,
+                &viewport,
+                &thresholds,
+            )
+            .await
+            .unwrap();
+
+        // Cache is populated again (with buffer B's bind group).
+        assert!(pooled.has_cached_bind_group());
+
+        // Result should be correct with buffer B's data.
+        let args = ComputeInstanceFilter::read_draw_indirect(
+            &ctx.device,
+            &ctx.queue,
+            &result.draw_indirect_buffer,
+        )
+        .await
+        .unwrap();
+        assert_eq!(args[1], 4, "All 4 instances from buffer B visible");
+    }
+
+    #[tokio::test]
+    async fn test_bind_group_cache_invalidated_on_grow() {
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let filter = ComputeInstanceFilter::new(&ctx.device).unwrap();
+        let mut pooled = PooledComputeInstanceFilter::new(&ctx.device, filter, 4);
+
+        let viewport = Viewport2D::default();
+        let thresholds = [4.0, 1.0, 0.25];
+
+        // Dispatch with 4 instances — fits in initial capacity.
+        let instances_small: Vec<InstanceAttributes> = (0..4)
+            .map(|i| {
+                let x = (i as f32 - 1.5) * 0.3;
+                InstanceAttributes::from_circle([x, 0.0], 0.1, [1.0, 0.0, 0.0, 1.0])
+            })
+            .collect();
+        let input_buf = create_instance_buffer(&ctx.device, &instances_small);
+        upload_instances(&ctx.queue, &input_buf, &instances_small);
+
+        let _r1 = pooled
+            .dispatch(
+                &ctx.device,
+                &ctx.queue,
+                &input_buf,
+                4,
+                6,
+                &viewport,
+                &thresholds,
+            )
+            .await
+            .unwrap();
+        assert!(pooled.has_cached_bind_group());
+        assert_eq!(pooled.capacity(), 4);
+
+        // Dispatch with 16 instances — triggers grow, which should
+        // invalidate the cached bind group.
+        let instances_big: Vec<InstanceAttributes> = (0..16)
+            .map(|i| {
+                let x = (i as f32 / 16.0) * 1.8 - 0.9;
+                InstanceAttributes::from_circle([x, 0.0], 0.05, [1.0, 0.0, 0.0, 1.0])
+            })
+            .collect();
+        let input_buf_big = create_instance_buffer(&ctx.device, &instances_big);
+        upload_instances(&ctx.queue, &input_buf_big, &instances_big);
+
+        let result = pooled
+            .dispatch(
+                &ctx.device,
+                &ctx.queue,
+                &input_buf_big,
+                16,
+                6,
+                &viewport,
+                &thresholds,
+            )
+            .await
+            .unwrap();
+
+        // Capacity grew and cache was rebuilt.
+        assert!(pooled.capacity() >= 16);
+        assert!(pooled.has_cached_bind_group());
+
+        let args = ComputeInstanceFilter::read_draw_indirect(
+            &ctx.device,
+            &ctx.queue,
+            &result.draw_indirect_buffer,
+        )
+        .await
+        .unwrap();
+        assert_eq!(args[1], 16, "All 16 visible after grow");
+    }
+
+    #[tokio::test]
+    async fn test_bind_group_explicit_invalidation() {
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let filter = ComputeInstanceFilter::new(&ctx.device).unwrap();
+        let mut pooled = PooledComputeInstanceFilter::new(&ctx.device, filter, 256);
+
+        let instances: Vec<InstanceAttributes> = (0..4)
+            .map(|i| {
+                let x = (i as f32 - 1.5) * 0.3;
+                InstanceAttributes::from_circle([x, 0.0], 0.1, [1.0, 0.0, 0.0, 1.0])
+            })
+            .collect();
+        let input_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &input_buf, &instances);
+
+        let viewport = Viewport2D::default();
+        let thresholds = [4.0, 1.0, 0.25];
+
+        let _r1 = pooled
+            .dispatch(
+                &ctx.device,
+                &ctx.queue,
+                &input_buf,
+                4,
+                6,
+                &viewport,
+                &thresholds,
+            )
+            .await
+            .unwrap();
+        assert!(pooled.has_cached_bind_group());
+
+        // Explicitly invalidate.
+        pooled.invalidate_bind_group_cache();
+        assert!(!pooled.has_cached_bind_group());
+
+        // Next dispatch recreates the bind group.
+        let result = pooled
+            .dispatch(
+                &ctx.device,
+                &ctx.queue,
+                &input_buf,
+                4,
+                6,
+                &viewport,
+                &thresholds,
+            )
+            .await
+            .unwrap();
+        assert!(pooled.has_cached_bind_group());
+
+        let args = ComputeInstanceFilter::read_draw_indirect(
+            &ctx.device,
+            &ctx.queue,
+            &result.draw_indirect_buffer,
+        )
+        .await
+        .unwrap();
+        assert_eq!(args[1], 4, "Correct after explicit invalidation");
+    }
+
+    #[tokio::test]
+    async fn test_bind_group_cache_correctness_across_multiple_dispatches() {
+        // Verify that using cached bind groups produces correct results
+        // over many dispatches (catches any stale-state bugs).
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let filter = ComputeInstanceFilter::new(&ctx.device).unwrap();
+        let mut pooled = PooledComputeInstanceFilter::new(&ctx.device, filter, 256);
+
+        let viewport = Viewport2D::default();
+        let thresholds = [4.0, 1.0, 0.25];
+
+        // Create instances with 2 visible and 2 culled (far offscreen).
+        let instances: Vec<InstanceAttributes> = vec![
+            InstanceAttributes::from_circle([0.0, 0.0], 0.1, [1.0, 0.0, 0.0, 1.0]),
+            InstanceAttributes::from_circle([5.0, 5.0], 0.05, [0.0, 1.0, 0.0, 1.0]),
+            InstanceAttributes::from_circle([0.3, 0.3], 0.1, [0.0, 0.0, 1.0, 1.0]),
+            InstanceAttributes::from_circle([-5.0, -5.0], 0.05, [1.0, 1.0, 0.0, 1.0]),
+        ];
+        let input_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &input_buf, &instances);
+
+        // Run 5 dispatches with the same buffer — all should use cached
+        // bind group after the first.
+        for i in 0..5 {
+            let result = pooled
+                .dispatch(
+                    &ctx.device,
+                    &ctx.queue,
+                    &input_buf,
+                    4,
+                    6,
+                    &viewport,
+                    &thresholds,
+                )
+                .await
+                .unwrap();
+
+            let args = ComputeInstanceFilter::read_draw_indirect(
+                &ctx.device,
+                &ctx.queue,
+                &result.draw_indirect_buffer,
+            )
+            .await
+            .unwrap();
+            assert_eq!(args[1], 2, "Dispatch {i}: expected 2 visible");
+        }
+
+        assert!(pooled.has_cached_bind_group());
+    }
+
+    #[tokio::test]
+    async fn test_bind_group_cache_reserve_invalidates() {
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let filter = ComputeInstanceFilter::new(&ctx.device).unwrap();
+        let mut pooled = PooledComputeInstanceFilter::new(&ctx.device, filter, 4);
+
+        let instances: Vec<InstanceAttributes> = (0..4)
+            .map(|i| {
+                let x = (i as f32 - 1.5) * 0.3;
+                InstanceAttributes::from_circle([x, 0.0], 0.1, [1.0, 0.0, 0.0, 1.0])
+            })
+            .collect();
+        let input_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &input_buf, &instances);
+
+        let viewport = Viewport2D::default();
+        let thresholds = [4.0, 1.0, 0.25];
+
+        // Populate cache.
+        let _r = pooled
+            .dispatch(
+                &ctx.device,
+                &ctx.queue,
+                &input_buf,
+                4,
+                6,
+                &viewport,
+                &thresholds,
+            )
+            .await
+            .unwrap();
+        assert!(pooled.has_cached_bind_group());
+
+        // Reserve with larger capacity — should invalidate cache.
+        pooled.reserve(&ctx.device, 512);
+        assert!(!pooled.has_cached_bind_group());
+        assert!(pooled.capacity() >= 512);
+    }
 }
