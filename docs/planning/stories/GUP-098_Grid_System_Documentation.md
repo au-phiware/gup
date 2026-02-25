@@ -423,3 +423,74 @@ professionalism.
 **Technical Value**: Establishes comprehensive documentation patterns that can
 be applied to other library features, improving overall developer experience and
 reducing maintenance overhead.
+
+## Retrospective
+
+**Completed**: 2025-07-18
+
+### Key Technical Learnings
+
+#### Documentation Validation Tests
+
+- **Challenge**: Documentation easily drifts from implementation. Code examples
+  in markdown can't be automatically tested by the compiler.
+- **Solution**: Added 15 dedicated tests in `src/grid.rs` that verify every
+  pattern documented in `docs/GRID_SYSTEM.md`. Each test is named `test_doc_*`
+  and checks specific values, defaults, and behaviors.
+- **Pattern**: For any comprehensive documentation file, add corresponding
+  `test_doc_*` tests that validate the documented behavior. When the API
+  changes, tests fail and flag documentation that needs updating.
+
+#### Effective Opacity Documentation
+
+- **Challenge**: The grid line opacity involves two multiplied values
+  (`color[3] * opacity`), which is not immediately obvious to users.
+- **Solution**: Documented the formula explicitly in the Configuration Guide and
+  added a `test_doc_effective_opacity` test that verifies the rendered line
+  alpha equals the product of the color's alpha and the opacity field.
+- **Pattern**: Document non-obvious computed values with explicit formulas and
+  verify them with tests.
+
+### Architectural Decisions
+
+#### Single Documentation File vs Module Docs
+
+- **Decision**: Created a standalone `docs/GRID_SYSTEM.md` rather than embedding
+  all documentation in Rustdoc module comments.
+- **Reasoning**: Rustdoc is excellent for API reference but awkward for
+  tutorials, troubleshooting guides, and performance tables. A standalone
+  markdown file supports richer formatting, is accessible without building docs,
+  and can be read alongside the source.
+- **Trade-off**: Documentation lives in two places (Rustdoc + markdown). Added
+  cross-references between them.
+- **Future**: This pattern can be applied to other major subsystems (text
+  rendering, accessibility, mark system).
+
+#### Theme Comparison Table
+
+- **Decision**: Documented all 6 grid themes in a single comparison table
+  showing major color, width, minor grid state, direction, and recommended use
+  case.
+- **Reasoning**: Users choosing a theme need to compare options quickly. A table
+  is far more efficient than reading 6 separate descriptions.
+- **Trade-off**: Table format is dense but scannable.
+- **Future**: Apply this pattern to other configuration comparison docs.
+
+### Development Workflow Insights
+
+- **Documentation-first testing**: Writing the documentation before the
+  validation tests made it clear which patterns needed verification. This is the
+  inverse of TDD — "Documentation-Driven Testing."
+- **`mask all-fix` catches markdown formatting**: The prettier/mdl pipeline
+  reformats markdown tables and lists. Running it early avoids large diffs
+  later.
+- **Pre-existing doctest failures**: 6 doctests in unrelated modules
+  (`context.rs`, `optimized_accessor.rs`, `merge.rs`) fail due to API drift.
+  These were not caused by this story but should be addressed.
+
+### Follow-up Stories
+
+1. **GUP-207: Fix Pre-existing Doctest Failures** — Six doctests in
+   `context.rs`, `chart_builder/optimized_accessor.rs`, and `mixable/merge.rs`
+   fail due to API changes. These should be fixed to maintain documentation
+   accuracy.

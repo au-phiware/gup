@@ -57,6 +57,7 @@ epic and status.
 | [GUP-101](GUP-101_Label_Collision_Detection_Enhancement.md)  | Label Collision Detection Enhancement      | ✅ Complete | Medium   | 5      |
 | [GUP-102](GUP-102_Demo_GPU_Resource_Management_Fixes.md)     | Demo GPU Resource Management Fixes         | ✅ Complete | High     | 3      |
 | [GUP-103](GUP-103_Comprehensive_Chart_Examples_Suite.md)     | Comprehensive Chart Examples Suite         | ✅ Complete | Medium   | 8      |
+| [GUP-207](GUP-207_Fix_Preexisting_Doctest_Failures.md)       | Fix Pre-existing Doctest Failures          | 📋 Planned  | Medium   | 2      |
 
 ### Post GUP-009 Stories - Mark System Enhancement (Stories 67+)
 
