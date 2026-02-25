@@ -481,6 +481,102 @@ impl<T, M: Mark> Selection<T, M> {
             .collect()
     }
 
+    /// Update the shader function parameters for a named GPU-bound attribute
+    /// **without** re-uploading instance data.
+    ///
+    /// This is the key performance feature for interactive re-mapping: when the
+    /// user adjusts a scale domain/range or a colour palette, only the small
+    /// uniform buffer (typically 16–64 bytes) is written to the GPU.  The
+    /// instance storage buffer — which may hold megabytes of raw data for large
+    /// datasets — is left untouched.
+    ///
+    /// # Arguments
+    ///
+    /// * `name`  — Attribute name that was previously bound via
+    ///   [`attr_shader`](Self::attr_shader).
+    /// * `new_shader_fn` — A new shader function instance with updated
+    ///   parameters.  It must be the *same function type* (same WGSL code,
+    ///   same input/output types) — only the uniform values may differ.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - `name` does not match any GPU-bound attribute.
+    /// - The render state has not been initialised (call
+    ///   [`prepare_render_bound`](Self::prepare_render_bound) at least once
+    ///   first).
+    /// - The new shader function's output type differs from the original
+    ///   binding.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// // Initial binding.
+    /// let scale = LinearScale::new(0.0, 100.0, 0.01, 0.2);
+    /// selection.attr_shader("radius", |d: &MyData| d.value, scale);
+    /// selection.prepare_render_bound(&device, &queue, None)?;
+    ///
+    /// // Later: change the scale range without touching instance data.
+    /// let new_scale = LinearScale::new(0.0, 100.0, 0.05, 0.5);
+    /// selection.update_shader_uniforms("radius", new_scale, &queue)?;
+    /// ```
+    pub fn update_shader_uniforms<S>(
+        &mut self,
+        name: &str,
+        new_shader_fn: S,
+        queue: &Queue,
+    ) -> GupResult<()>
+    where
+        S: ComposableShaderFunction + 'static,
+        S::Uniforms: ShaderUniform,
+    {
+        // 1. Find the binding index for `name`.
+        let binding_index = self
+            .shader_attr_bindings
+            .iter()
+            .position(|b| b.name == name)
+            .ok_or_else(|| {
+                crate::error::GupError::validation_error(format!(
+                    "No GPU shader binding found for attribute '{name}'"
+                ))
+            })?;
+
+        // 2. Validate the new shader function matches the original.
+        let existing = &self.shader_attr_bindings[binding_index].shader_fn;
+        let new_info = shader_fn_info_from(&new_shader_fn);
+
+        if new_info.output_wgsl_type != existing.output_wgsl_type {
+            return Err(crate::error::GupError::validation_error(format!(
+                "Shader function output type mismatch for attribute '{name}': \
+                 existing '{}', new '{}'",
+                existing.output_wgsl_type, new_info.output_wgsl_type,
+            )));
+        }
+
+        // 3. Ensure render state is initialised.
+        let state = self.render_state.as_ref().ok_or_else(|| {
+            crate::error::GupError::validation_error(
+                "Cannot update shader uniforms before prepare_render_bound() has been called"
+                    .to_string(),
+            )
+        })?;
+
+        // 4. Write the new uniform bytes to the GPU buffer.
+        if let Some(buf) = state.uniform_buffers.get(binding_index)
+            && !new_info.uniform_bytes.is_empty()
+        {
+            queue.write_buffer(buf, 0, &new_info.uniform_bytes);
+        }
+
+        // 5. Update the stored binding so that future prepare_render_shader_bound
+        //    calls (e.g., after data changes) use the latest parameters.
+        self.shader_attr_bindings[binding_index]
+            .shader_fn
+            .uniform_bytes = new_info.uniform_bytes;
+
+        Ok(())
+    }
+
     /// Bind multiple attributes from a single closure that returns a tuple.
     ///
     /// This is more efficient than separate [`attr`](Self::attr) calls when
@@ -2983,6 +3079,329 @@ fn vs_main() -> VertexOutput {
             // Verify both produce valid render state.
             assert!(sel_cpu.is_render_ready());
             assert!(sel_gpu.is_render_ready());
+        });
+    }
+
+    // --- update_shader_uniforms tests ---
+
+    #[test]
+    fn update_shader_uniforms_unit_not_found() {
+        use crate::shader_function::LinearScale;
+
+        let data = vec![ScatterPoint {
+            x: 0.0,
+            y: 0.0,
+            value: 50.0,
+        }];
+        let mut selection: Selection<ScatterPoint, Circle> = Selection::from_data(data);
+        let scale = LinearScale::new(0.0, 100.0, 0.01, 0.2);
+        selection.attr_shader("radius", |d: &ScatterPoint| d.value, scale);
+
+        // Verify the method API: shader binding is stored, but not CPU bindings.
+        assert!(selection.shader_bound_attributes().contains(&"radius"));
+        assert!(!selection.shader_bound_attributes().contains(&"nonexistent"));
+    }
+
+    #[test]
+    fn gpu_update_shader_uniforms_basic() {
+        use crate::shader_function::LinearScale;
+
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let data = vec![
+                ScatterPoint {
+                    x: -0.3,
+                    y: 0.0,
+                    value: 50.0,
+                },
+                ScatterPoint {
+                    x: 0.3,
+                    y: 0.0,
+                    value: 80.0,
+                },
+            ];
+
+            let mut selection: Selection<ScatterPoint, Circle> = Selection::from_data(data);
+            selection
+                .attr("center", |d: &ScatterPoint| [d.x, d.y])
+                .attr("fill_color", |_: &ScatterPoint| [1.0f32, 0.0, 0.0, 1.0]);
+
+            let scale = LinearScale::new(0.0, 100.0, 0.02, 0.2);
+            selection.attr_shader("radius", |d: &ScatterPoint| d.value, scale);
+
+            // First: full pipeline creation.
+            selection
+                .prepare_render_bound(&context.device, &context.queue, None)
+                .expect("initial prepare_render_bound");
+
+            assert!(selection.is_render_ready());
+
+            // Now: update only the uniform (different range).
+            let new_scale = LinearScale::new(0.0, 100.0, 0.05, 0.5);
+            selection
+                .update_shader_uniforms("radius", new_scale, &context.queue)
+                .expect("update_shader_uniforms should succeed");
+
+            // Render to verify the pipeline is still valid.
+            let mut ctx = Arc::try_unwrap(context).expect("single owner");
+            let mut frame = ctx.begin_frame().expect("begin_frame");
+            {
+                let mut pass = frame.render_pass(Some(wgpu::Color::BLACK));
+                selection
+                    .render(&mut pass)
+                    .expect("render after uniform update");
+            }
+            frame.finish().expect("finish frame");
+        });
+    }
+
+    #[test]
+    fn gpu_update_shader_uniforms_not_found_error() {
+        use crate::shader_function::LinearScale;
+
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let data = vec![ScatterPoint {
+                x: 0.0,
+                y: 0.0,
+                value: 50.0,
+            }];
+
+            let mut selection: Selection<ScatterPoint, Circle> = Selection::from_data(data);
+            selection
+                .attr("center", |d: &ScatterPoint| [d.x, d.y])
+                .attr("fill_color", |_: &ScatterPoint| [1.0f32, 0.0, 0.0, 1.0]);
+
+            let scale = LinearScale::new(0.0, 100.0, 0.02, 0.2);
+            selection.attr_shader("radius", |d: &ScatterPoint| d.value, scale);
+
+            selection
+                .prepare_render_bound(&context.device, &context.queue, None)
+                .expect("prepare_render_bound");
+
+            // Try to update a non-existent attribute.
+            let new_scale = LinearScale::new(0.0, 100.0, 0.05, 0.5);
+            let result = selection.update_shader_uniforms("nonexistent", new_scale, &context.queue);
+            assert!(result.is_err(), "Should error for unknown attribute");
+            let err_msg = format!("{}", result.unwrap_err());
+            assert!(
+                err_msg.contains("No GPU shader binding found"),
+                "Error should mention missing binding: {err_msg}"
+            );
+        });
+    }
+
+    #[test]
+    fn gpu_update_shader_uniforms_not_gpu_bound_error() {
+        use crate::shader_function::LinearScale;
+
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let data = vec![ScatterPoint {
+                x: 0.0,
+                y: 0.0,
+                value: 50.0,
+            }];
+
+            let mut selection: Selection<ScatterPoint, Circle> = Selection::from_data(data);
+            // "center" is CPU-bound, not GPU-bound.
+            selection
+                .attr("center", |d: &ScatterPoint| [d.x, d.y])
+                .attr("fill_color", |_: &ScatterPoint| [1.0f32, 0.0, 0.0, 1.0]);
+
+            let scale = LinearScale::new(0.0, 100.0, 0.02, 0.2);
+            selection.attr_shader("radius", |d: &ScatterPoint| d.value, scale);
+
+            selection
+                .prepare_render_bound(&context.device, &context.queue, None)
+                .expect("prepare_render_bound");
+
+            // Try to update "center" which is a CPU binding, not a shader binding.
+            let center_scale = LinearScale::new(-1.0, 1.0, -0.5, 0.5);
+            let result = selection.update_shader_uniforms("center", center_scale, &context.queue);
+            assert!(result.is_err(), "Should error for CPU-bound attribute");
+        });
+    }
+
+    #[test]
+    fn gpu_update_shader_uniforms_before_prepare_error() {
+        use crate::shader_function::LinearScale;
+
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let data = vec![ScatterPoint {
+                x: 0.0,
+                y: 0.0,
+                value: 50.0,
+            }];
+
+            let mut selection: Selection<ScatterPoint, Circle> = Selection::from_data(data);
+            let scale = LinearScale::new(0.0, 100.0, 0.02, 0.2);
+            selection.attr_shader("radius", |d: &ScatterPoint| d.value, scale);
+
+            // Don't call prepare_render_bound — render state is None.
+            let new_scale = LinearScale::new(0.0, 100.0, 0.05, 0.5);
+            let result = selection.update_shader_uniforms("radius", new_scale, &context.queue);
+            assert!(
+                result.is_err(),
+                "Should error when render state not initialised"
+            );
+            let err_msg = format!("{}", result.unwrap_err());
+            assert!(
+                err_msg.contains("prepare_render_bound"),
+                "Error should mention prepare_render_bound: {err_msg}"
+            );
+        });
+    }
+
+    #[test]
+    fn gpu_update_shader_uniforms_type_mismatch_error() {
+        use crate::shader_function::{ColorMap, LinearScale};
+
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let data = vec![ScatterPoint {
+                x: 0.0,
+                y: 0.0,
+                value: 50.0,
+            }];
+
+            let mut selection: Selection<ScatterPoint, Circle> = Selection::from_data(data);
+            selection
+                .attr("center", |d: &ScatterPoint| [d.x, d.y])
+                .attr("fill_color", |_: &ScatterPoint| [1.0f32, 0.0, 0.0, 1.0]);
+
+            let scale = LinearScale::new(0.0, 100.0, 0.02, 0.2);
+            selection.attr_shader("radius", |d: &ScatterPoint| d.value, scale);
+
+            selection
+                .prepare_render_bound(&context.device, &context.queue, None)
+                .expect("prepare_render_bound");
+
+            // Try updating with a ColorMap (outputs vec4<f32>) — type mismatch
+            // with the radius attribute which expects f32.
+            let color_map = ColorMap::new(
+                Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 1.0,
+                    w: 1.0,
+                },
+                Vec4 {
+                    x: 1.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0,
+                },
+            );
+            let result = selection.update_shader_uniforms("radius", color_map, &context.queue);
+            assert!(result.is_err(), "Should reject type-mismatched update");
+            let err_msg = format!("{}", result.unwrap_err());
+            assert!(
+                err_msg.contains("mismatch"),
+                "Error should mention type mismatch: {err_msg}"
+            );
+        });
+    }
+
+    #[test]
+    fn gpu_update_shader_uniforms_performance() {
+        use crate::shader_function::LinearScale;
+        use std::time::Instant;
+
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU perf test — no adapter available");
+                    return;
+                }
+            };
+
+            const N: usize = 100_000;
+            let data: Vec<ScatterPoint> = (0..N)
+                .map(|i| {
+                    let t = i as f32 / N as f32;
+                    ScatterPoint {
+                        x: -1.0 + 2.0 * t,
+                        y: (t * std::f32::consts::TAU).sin() * 0.8,
+                        value: t * 100.0,
+                    }
+                })
+                .collect();
+
+            let mut selection: Selection<ScatterPoint, Circle> = Selection::from_data(data);
+            let scale = LinearScale::new(0.0, 100.0, 0.001, 0.01);
+            selection
+                .attr("center", |d: &ScatterPoint| [d.x, d.y])
+                .attr("fill_color", |_: &ScatterPoint| [0.0f32, 0.0, 1.0, 1.0]);
+            selection.attr_shader("radius", |d: &ScatterPoint| d.value, scale);
+
+            // Full prepare (uploads instance data + creates pipeline).
+            let prepare_start = Instant::now();
+            selection
+                .prepare_render_bound(&context.device, &context.queue, None)
+                .expect("initial prepare");
+            let prepare_elapsed = prepare_start.elapsed();
+
+            // Uniform-only update.
+            let new_scale = LinearScale::new(0.0, 100.0, 0.005, 0.02);
+            let update_start = Instant::now();
+            selection
+                .update_shader_uniforms("radius", new_scale, &context.queue)
+                .expect("uniform update");
+            let update_elapsed = update_start.elapsed();
+
+            eprintln!(
+                "100K points: full prepare = {:?}, uniform update = {:?} (speedup = {:.1}x)",
+                prepare_elapsed,
+                update_elapsed,
+                prepare_elapsed.as_secs_f64() / update_elapsed.as_secs_f64()
+            );
+
+            // Uniform update should be under 1ms.
+            assert!(
+                update_elapsed.as_millis() < 1 || update_elapsed.as_micros() < 1000,
+                "Uniform update took too long: {update_elapsed:?} (should be <1ms)"
+            );
+
+            // Verify render still works.
+            assert!(selection.is_render_ready());
         });
     }
 }
