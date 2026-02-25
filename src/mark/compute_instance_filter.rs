@@ -1432,4 +1432,368 @@ mod tests {
             "All 256 instances in 1 workgroup should be visible"
         );
     }
+
+    // ------------------------------------------------------------------
+    // PooledComputeInstanceFilter tests
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn test_pooled_filter_creation() {
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let filter = ComputeInstanceFilter::new(&ctx.device).unwrap();
+        let pooled = PooledComputeInstanceFilter::new(&ctx.device, filter, 1024);
+        assert_eq!(pooled.capacity(), 1024);
+    }
+
+    #[tokio::test]
+    async fn test_pooled_filter_all_visible() {
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let filter = ComputeInstanceFilter::new(&ctx.device).unwrap();
+        let mut pooled = PooledComputeInstanceFilter::new(&ctx.device, filter, 256);
+
+        let instances: Vec<InstanceAttributes> = (0..4)
+            .map(|i| {
+                let x = (i as f32 - 1.5) * 0.3;
+                InstanceAttributes::from_circle([x, 0.0], 0.1, [1.0, 0.0, 0.0, 1.0])
+            })
+            .collect();
+
+        let input_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &input_buf, &instances);
+
+        let viewport = Viewport2D::default();
+        let thresholds = [4.0, 1.0, 0.25];
+
+        let result = pooled
+            .dispatch(
+                &ctx.device,
+                &ctx.queue,
+                &input_buf,
+                4,
+                6,
+                &viewport,
+                &thresholds,
+            )
+            .await
+            .unwrap();
+
+        let args = ComputeInstanceFilter::read_draw_indirect(
+            &ctx.device,
+            &ctx.queue,
+            &result.draw_indirect_buffer,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(args[0], 6, "vertex_count");
+        assert_eq!(args[1], 4, "instance_count (all visible)");
+    }
+
+    #[tokio::test]
+    async fn test_pooled_filter_reuse_across_dispatches() {
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let filter = ComputeInstanceFilter::new(&ctx.device).unwrap();
+        let mut pooled = PooledComputeInstanceFilter::new(&ctx.device, filter, 256);
+
+        let viewport = Viewport2D::default();
+        let thresholds = [4.0, 1.0, 0.25];
+
+        // Dispatch 1: 4 circles, 2 visible.
+        let instances_1 = vec![
+            InstanceAttributes::from_circle([0.0, 0.0], 0.1, [1.0, 0.0, 0.0, 1.0]),
+            InstanceAttributes::from_circle([5.0, 5.0], 0.05, [0.0, 1.0, 0.0, 1.0]),
+            InstanceAttributes::from_circle([0.5, 0.5], 0.1, [0.0, 0.0, 1.0, 1.0]),
+            InstanceAttributes::from_circle([-5.0, -5.0], 0.05, [1.0, 1.0, 0.0, 1.0]),
+        ];
+
+        let input_buf_1 = create_instance_buffer(&ctx.device, &instances_1);
+        upload_instances(&ctx.queue, &input_buf_1, &instances_1);
+
+        let result_1 = pooled
+            .dispatch(
+                &ctx.device,
+                &ctx.queue,
+                &input_buf_1,
+                4,
+                6,
+                &viewport,
+                &thresholds,
+            )
+            .await
+            .unwrap();
+
+        let args_1 = ComputeInstanceFilter::read_draw_indirect(
+            &ctx.device,
+            &ctx.queue,
+            &result_1.draw_indirect_buffer,
+        )
+        .await
+        .unwrap();
+        assert_eq!(args_1[1], 2, "Dispatch 1: 2 visible");
+
+        // Dispatch 2: 8 circles, all visible — reuses same buffers.
+        let instances_2: Vec<InstanceAttributes> = (0..8)
+            .map(|i| {
+                let x = (i as f32 - 3.5) * 0.2;
+                InstanceAttributes::from_circle([x, 0.0], 0.08, [0.0, 1.0, 1.0, 1.0])
+            })
+            .collect();
+
+        let input_buf_2 = create_instance_buffer(&ctx.device, &instances_2);
+        upload_instances(&ctx.queue, &input_buf_2, &instances_2);
+
+        // Capacity should not have changed.
+        assert_eq!(pooled.capacity(), 256);
+
+        let result_2 = pooled
+            .dispatch(
+                &ctx.device,
+                &ctx.queue,
+                &input_buf_2,
+                8,
+                6,
+                &viewport,
+                &thresholds,
+            )
+            .await
+            .unwrap();
+
+        let args_2 = ComputeInstanceFilter::read_draw_indirect(
+            &ctx.device,
+            &ctx.queue,
+            &result_2.draw_indirect_buffer,
+        )
+        .await
+        .unwrap();
+        assert_eq!(args_2[1], 8, "Dispatch 2: all 8 visible");
+        assert_eq!(pooled.capacity(), 256, "Capacity unchanged");
+    }
+
+    #[tokio::test]
+    async fn test_pooled_filter_auto_grow() {
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let filter = ComputeInstanceFilter::new(&ctx.device).unwrap();
+        // Start very small.
+        let mut pooled = PooledComputeInstanceFilter::new(&ctx.device, filter, 4);
+        assert_eq!(pooled.capacity(), 4);
+
+        // Dispatch with 16 instances — exceeds capacity, triggers growth.
+        let instances: Vec<InstanceAttributes> = (0..16)
+            .map(|i| {
+                let x = (i as f32 / 16.0) * 1.8 - 0.9;
+                InstanceAttributes::from_circle([x, 0.0], 0.05, [1.0, 0.0, 0.0, 1.0])
+            })
+            .collect();
+
+        let input_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &input_buf, &instances);
+
+        let viewport = Viewport2D::default();
+        let thresholds = [4.0, 1.0, 0.25];
+
+        let result = pooled
+            .dispatch(
+                &ctx.device,
+                &ctx.queue,
+                &input_buf,
+                16,
+                6,
+                &viewport,
+                &thresholds,
+            )
+            .await
+            .unwrap();
+
+        // Capacity should have grown to next power of two.
+        assert_eq!(pooled.capacity(), 16);
+
+        let args = ComputeInstanceFilter::read_draw_indirect(
+            &ctx.device,
+            &ctx.queue,
+            &result.draw_indirect_buffer,
+        )
+        .await
+        .unwrap();
+        assert_eq!(args[0], 6, "vertex_count");
+        assert_eq!(args[1], 16, "All 16 visible after grow");
+    }
+
+    #[tokio::test]
+    async fn test_pooled_filter_reserve() {
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let filter = ComputeInstanceFilter::new(&ctx.device).unwrap();
+        let mut pooled = PooledComputeInstanceFilter::new(&ctx.device, filter, 4);
+        assert_eq!(pooled.capacity(), 4);
+
+        // Reserve more than current capacity.
+        pooled.reserve(&ctx.device, 1000);
+        assert_eq!(pooled.capacity(), 1024, "Should round to next power of two");
+
+        // Reserve less than current — no change.
+        pooled.reserve(&ctx.device, 512);
+        assert_eq!(pooled.capacity(), 1024, "Should not shrink");
+    }
+
+    #[tokio::test]
+    async fn test_pooled_filter_correctness_matches_unpooled() {
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+
+        let count = 512u32;
+        let instances: Vec<InstanceAttributes> = (0..count)
+            .map(|i| {
+                let t = i as f32 / count as f32;
+                let x = (t * 37.0).sin() * 1.5;
+                let y = (t * 53.0).cos() * 1.5;
+                let r = 0.001 + (t * 19.0).sin().abs() * 0.05;
+                InstanceAttributes::from_circle([x, y], r, [t, 1.0 - t, 0.5, 1.0])
+            })
+            .collect();
+
+        let viewport = Viewport2D::default();
+        let thresholds = [4.0, 1.0, 0.25];
+
+        // Unpooled.
+        let filter = ComputeInstanceFilter::new(&ctx.device).unwrap();
+        let input_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &input_buf, &instances);
+
+        let unpooled_result = filter
+            .dispatch(
+                &ctx.device,
+                &ctx.queue,
+                &input_buf,
+                count,
+                6,
+                &viewport,
+                &thresholds,
+            )
+            .await
+            .unwrap();
+
+        let unpooled_args = ComputeInstanceFilter::read_draw_indirect(
+            &ctx.device,
+            &ctx.queue,
+            &unpooled_result.draw_indirect_buffer,
+        )
+        .await
+        .unwrap();
+
+        // Pooled.
+        let filter2 = ComputeInstanceFilter::new(&ctx.device).unwrap();
+        let mut pooled = PooledComputeInstanceFilter::new(&ctx.device, filter2, count);
+
+        let input_buf2 = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &input_buf2, &instances);
+
+        let pooled_result = pooled
+            .dispatch(
+                &ctx.device,
+                &ctx.queue,
+                &input_buf2,
+                count,
+                6,
+                &viewport,
+                &thresholds,
+            )
+            .await
+            .unwrap();
+
+        let pooled_args = ComputeInstanceFilter::read_draw_indirect(
+            &ctx.device,
+            &ctx.queue,
+            &pooled_result.draw_indirect_buffer,
+        )
+        .await
+        .unwrap();
+
+        // Results should match.
+        assert_eq!(
+            unpooled_args, pooled_args,
+            "Pooled and unpooled should produce identical draw-indirect params"
+        );
+
+        // Also compare output instances.
+        let visible_count = unpooled_args[1];
+
+        let unpooled_output = ComputeInstanceFilter::read_output_instances(
+            &ctx.device,
+            &ctx.queue,
+            &unpooled_result.output_buffer,
+            visible_count,
+        )
+        .await
+        .unwrap();
+
+        let pooled_output = ComputeInstanceFilter::read_output_instances(
+            &ctx.device,
+            &ctx.queue,
+            &pooled_result.output_buffer,
+            visible_count,
+        )
+        .await
+        .unwrap();
+
+        for (i, (u, p)) in unpooled_output.iter().zip(pooled_output.iter()).enumerate() {
+            let u_pos = u.position();
+            let p_pos = p.position();
+            assert!(
+                (u_pos[0] - p_pos[0]).abs() < 1e-5 && (u_pos[1] - p_pos[1]).abs() < 1e-5,
+                "Instance {i}: unpooled {:?} != pooled {:?}",
+                u_pos,
+                p_pos
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_pooled_filter_zero_instances_error() {
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let filter = ComputeInstanceFilter::new(&ctx.device).unwrap();
+        let mut pooled = PooledComputeInstanceFilter::new(&ctx.device, filter, 256);
+
+        let input_buf = ctx.device.create_buffer(&BufferDescriptor {
+            label: Some("empty"),
+            size: 96,
+            usage: BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+
+        let viewport = Viewport2D::default();
+        let thresholds = [4.0, 1.0, 0.25];
+
+        let result = pooled
+            .dispatch(
+                &ctx.device,
+                &ctx.queue,
+                &input_buf,
+                0,
+                6,
+                &viewport,
+                &thresholds,
+            )
+            .await;
+
+        assert!(result.is_err(), "Zero instances should return error");
+    }
 }
