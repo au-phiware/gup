@@ -996,4 +996,172 @@ mod tests {
             );
         }
     }
+
+    #[tokio::test]
+    async fn test_large_scale_1k_correctness() {
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let filter = ComputeInstanceFilter::new(&ctx.device).unwrap();
+
+        // 1024 instances — 4 workgroups, mix of visible and culled.
+        let count = 1024u32;
+        let instances: Vec<InstanceAttributes> = (0..count)
+            .map(|i| {
+                let t = i as f32 / count as f32;
+                let x = (t * 37.0).sin() * 1.5; // some exceed [-1,1]
+                let y = (t * 53.0).cos() * 1.5;
+                let r = 0.001 + (t * 19.0).sin().abs() * 0.05;
+                InstanceAttributes::from_circle([x, y], r, [t, 1.0 - t, 0.5, 1.0])
+            })
+            .collect();
+
+        let input_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &input_buf, &instances);
+
+        let viewport = Viewport2D::default();
+        let thresholds = [4.0, 1.0, 0.25];
+
+        // CPU reference.
+        use super::super::CullingManager;
+        use crate::mark::batch_renderer::BatchRendererConfig;
+        let cfg = BatchRendererConfig {
+            lod_thresholds: thresholds,
+            ..Default::default()
+        };
+        let cm = CullingManager::new(&cfg);
+        let cpu_count: usize = instances
+            .iter()
+            .filter(|inst| {
+                let pos = inst.position();
+                let radius = inst.scale()[0].max(inst.scale()[1]);
+                cm.is_visible(pos[0], pos[1], radius)
+                    && cm.compute_lod(radius) != super::super::LodLevel::Culled
+            })
+            .count();
+
+        // GPU path.
+        let result = filter
+            .dispatch(
+                &ctx.device,
+                &ctx.queue,
+                &input_buf,
+                count,
+                6,
+                &viewport,
+                &thresholds,
+            )
+            .await
+            .unwrap();
+
+        let args = ComputeInstanceFilter::read_draw_indirect(
+            &ctx.device,
+            &ctx.queue,
+            &result.draw_indirect_buffer,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            args[1] as usize, cpu_count,
+            "GPU visible count ({}) should match CPU count ({}) for {} instances",
+            args[1], cpu_count, count
+        );
+    }
+
+    #[tokio::test]
+    async fn test_single_instance() {
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let filter = ComputeInstanceFilter::new(&ctx.device).unwrap();
+
+        let instances = vec![InstanceAttributes::from_circle(
+            [0.0, 0.0],
+            0.1,
+            [1.0, 0.0, 0.0, 1.0],
+        )];
+
+        let input_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &input_buf, &instances);
+
+        let viewport = Viewport2D::default();
+        let thresholds = [4.0, 1.0, 0.25];
+
+        let result = filter
+            .dispatch(
+                &ctx.device,
+                &ctx.queue,
+                &input_buf,
+                1,
+                6,
+                &viewport,
+                &thresholds,
+            )
+            .await
+            .unwrap();
+
+        let args = ComputeInstanceFilter::read_draw_indirect(
+            &ctx.device,
+            &ctx.queue,
+            &result.draw_indirect_buffer,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(args[0], 6, "vertex_count");
+        assert_eq!(args[1], 1, "Single visible instance");
+    }
+
+    #[tokio::test]
+    async fn test_exactly_256_instances() {
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let filter = ComputeInstanceFilter::new(&ctx.device).unwrap();
+
+        // Exactly one workgroup, all visible.
+        let count = 256u32;
+        let instances: Vec<InstanceAttributes> = (0..count)
+            .map(|i| {
+                let x = (i as f32 / count as f32) * 1.8 - 0.9;
+                InstanceAttributes::from_circle([x, 0.0], 0.05, [1.0, 0.0, 0.0, 1.0])
+            })
+            .collect();
+
+        let input_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &input_buf, &instances);
+
+        let viewport = Viewport2D::default();
+        let thresholds = [4.0, 1.0, 0.25];
+
+        let result = filter
+            .dispatch(
+                &ctx.device,
+                &ctx.queue,
+                &input_buf,
+                count,
+                6,
+                &viewport,
+                &thresholds,
+            )
+            .await
+            .unwrap();
+
+        let args = ComputeInstanceFilter::read_draw_indirect(
+            &ctx.device,
+            &ctx.queue,
+            &result.draw_indirect_buffer,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            args[1], count,
+            "All 256 instances in 1 workgroup should be visible"
+        );
+    }
 }
