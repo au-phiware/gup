@@ -273,3 +273,364 @@ fn test_accessibility_disabled_mode() {
     let desc = system.describe_current_focus();
     assert!(desc.is_none());
 }
+
+// --- Selection focus integration tests ---
+
+#[test]
+fn test_selection_focus_bridge_with_circle_selection() {
+    use gup::accessibility::selection_focus::{
+        DataDimension, FocusPointDescriptor, SelectionFocusBridge,
+    };
+    use gup::mark::Circle;
+    use gup::mark::circle::CircleAttributes;
+    use gup::prelude::Selection;
+    use gup::shader_function::{Vec2 as SfVec2, Vec4};
+
+    let data = vec![
+        CircleAttributes {
+            center: SfVec2 { x: 0.0, y: 0.0 },
+            radius: 0.1,
+            fill_color: Vec4 {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+            stroke_width: 0.0,
+            stroke_color: Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 0.0,
+            },
+        },
+        CircleAttributes {
+            center: SfVec2 { x: 0.5, y: 0.3 },
+            radius: 0.2,
+            fill_color: Vec4 {
+                x: 0.0,
+                y: 1.0,
+                z: 0.0,
+                w: 1.0,
+            },
+            stroke_width: 0.0,
+            stroke_color: Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 0.0,
+            },
+        },
+        CircleAttributes {
+            center: SfVec2 { x: -0.3, y: 0.7 },
+            radius: 0.15,
+            fill_color: Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 1.0,
+                w: 1.0,
+            },
+            stroke_width: 0.0,
+            stroke_color: Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 0.0,
+            },
+        },
+    ];
+
+    let selection: Selection<CircleAttributes, Circle> = Selection::from_data(data);
+
+    let mut bridge = SelectionFocusBridge::new(Default::default());
+    let mut fm = FocusManager::new();
+
+    let count =
+        selection.register_focus_elements(&mut bridge, &mut fm, |attr, idx| FocusPointDescriptor {
+            position: [attr.center.x, attr.center.y],
+            label: format!("Circle {}: r={:.2}", idx, attr.radius),
+            value: Some(attr.radius as f64),
+        });
+
+    assert_eq!(count, 3);
+
+    // Sequential navigation through all points.
+    fm.handle_key_input(KeyEvent::Tab);
+    assert!(fm.describe_current_focus().unwrap().contains("Circle 0"));
+
+    fm.handle_key_input(KeyEvent::Tab);
+    assert!(fm.describe_current_focus().unwrap().contains("Circle 1"));
+
+    fm.handle_key_input(KeyEvent::Tab);
+    assert!(fm.describe_current_focus().unwrap().contains("Circle 2"));
+
+    // Wrap around.
+    fm.handle_key_input(KeyEvent::Tab);
+    assert!(fm.describe_current_focus().unwrap().contains("Circle 0"));
+
+    // Sort by value (radius) and verify order: 0.1, 0.15, 0.2
+    bridge.sort_by_dimension(&mut fm, DataDimension::Value);
+
+    fm.handle_key_input(KeyEvent::Tab);
+    let first = fm.describe_current_focus().unwrap();
+    assert!(
+        first.contains("r=0.10"),
+        "First by value should have r=0.10, got: {first}"
+    );
+}
+
+#[test]
+fn test_selection_focus_with_aria() {
+    use gup::accessibility::AriaRole;
+    use gup::accessibility::selection_focus::{FocusPointDescriptor, SelectionFocusBridge};
+    use gup::mark::Circle;
+    use gup::mark::circle::CircleAttributes;
+    use gup::prelude::Selection;
+    use gup::shader_function::{Vec2 as SfVec2, Vec4};
+
+    let mut system = AccessibilitySystem::new();
+    let chart_id = system
+        .aria_tree
+        .create_chart_node("Focus Test Chart".to_string(), None);
+
+    let data = vec![
+        CircleAttributes {
+            center: SfVec2 { x: 0.0, y: 0.0 },
+            radius: 0.1,
+            fill_color: Vec4 {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+            stroke_width: 0.0,
+            stroke_color: Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 0.0,
+            },
+        },
+        CircleAttributes {
+            center: SfVec2 { x: 0.5, y: 0.5 },
+            radius: 0.2,
+            fill_color: Vec4 {
+                x: 0.0,
+                y: 1.0,
+                z: 0.0,
+                w: 1.0,
+            },
+            stroke_width: 0.0,
+            stroke_color: Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 0.0,
+            },
+        },
+    ];
+
+    let selection: Selection<CircleAttributes, Circle> = Selection::from_data(data);
+
+    let mut bridge = SelectionFocusBridge::new(Default::default());
+
+    let count = bridge.sync_focus_elements_with_aria(
+        selection.data(),
+        &mut system.focus_manager,
+        &mut system.aria_tree,
+        chart_id,
+        |attr, idx| FocusPointDescriptor {
+            position: [attr.center.x, attr.center.y],
+            label: format!("Point {}", idx),
+            value: None,
+        },
+    );
+
+    assert_eq!(count, 2);
+
+    // Verify ARIA nodes were created.
+    assert_eq!(bridge.aria_node_ids().len(), 2);
+    for node_id in bridge.aria_node_ids() {
+        let node = system.aria_tree.get_node(*node_id).unwrap();
+        assert_eq!(node.role, AriaRole::DataPoint);
+    }
+
+    // Verify keyboard navigation works with the accessibility system.
+    system.focus_manager.handle_key_input(KeyEvent::Tab);
+    let desc = system.describe_current_focus().unwrap();
+    assert!(desc.contains("Point 0"));
+}
+
+#[test]
+fn test_focus_updates_on_data_change() {
+    use gup::accessibility::selection_focus::{FocusPointDescriptor, SelectionFocusBridge};
+    use gup::mark::Circle;
+    use gup::mark::circle::CircleAttributes;
+    use gup::prelude::Selection;
+    use gup::shader_function::{Vec2 as SfVec2, Vec4};
+
+    fn make_circle(x: f32, y: f32) -> CircleAttributes {
+        CircleAttributes {
+            center: SfVec2 { x, y },
+            radius: 0.1,
+            fill_color: Vec4 {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+            stroke_width: 0.0,
+            stroke_color: Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 0.0,
+            },
+        }
+    }
+
+    let mut selection: Selection<CircleAttributes, Circle> =
+        Selection::from_data(vec![make_circle(0.0, 0.0), make_circle(0.5, 0.5)]);
+
+    let mut bridge = SelectionFocusBridge::new(Default::default());
+    let mut fm = FocusManager::new();
+
+    selection.register_focus_elements(&mut bridge, &mut fm, |attr, idx| FocusPointDescriptor {
+        position: [attr.center.x, attr.center.y],
+        label: format!("Point {}", idx),
+        value: None,
+    });
+
+    assert_eq!(bridge.last_sync_count(), 2);
+    assert!(!bridge.needs_sync(2));
+
+    // Simulate data change.
+    selection.set_data(vec![
+        make_circle(0.0, 0.0),
+        make_circle(0.5, 0.5),
+        make_circle(1.0, 1.0),
+    ]);
+
+    // Bridge detects the change.
+    assert!(bridge.needs_sync(selection.len()));
+
+    // Re-sync.
+    let count =
+        selection.register_focus_elements(&mut bridge, &mut fm, |attr, idx| FocusPointDescriptor {
+            position: [attr.center.x, attr.center.y],
+            label: format!("Updated Point {}", idx),
+            value: None,
+        });
+
+    assert_eq!(count, 3);
+    assert!(!bridge.needs_sync(3));
+
+    // Verify new labels.
+    fm.handle_key_input(KeyEvent::Tab);
+    assert!(
+        fm.describe_current_focus()
+            .unwrap()
+            .contains("Updated Point 0")
+    );
+}
+
+#[test]
+fn test_data_dimension_navigation_with_selection() {
+    use gup::accessibility::NavigationMode;
+    use gup::accessibility::keyboard::AccessibilityAction;
+    use gup::accessibility::selection_focus::{
+        FocusPointDescriptor, SelectionFocusBridge, SelectionFocusConfig,
+    };
+
+    // Use DataDimension navigation mode.
+    let config = SelectionFocusConfig {
+        default_navigation_mode: NavigationMode::DataDimension,
+        ..Default::default()
+    };
+
+    let mut bridge = SelectionFocusBridge::new(config);
+    let mut fm = FocusManager::new();
+
+    let data = vec![
+        (100.0_f32, 200.0_f32, 5.0_f64),
+        (50.0, 300.0, 2.0),
+        (200.0, 100.0, 8.0),
+    ];
+
+    bridge.sync_focus_elements(&data, &mut fm, |item, idx| FocusPointDescriptor {
+        position: [item.0, item.1],
+        label: format!("Item {} at ({}, {})", idx, item.0, item.1),
+        value: Some(item.2),
+    });
+
+    fm.set_focus(0);
+
+    // Arrow Right moves sequentially.
+    let action = fm.handle_key_input(KeyEvent::ArrowRight);
+    assert_eq!(action, Some(AccessibilityAction::FocusChanged));
+
+    // Arrow Down requests dimension cycle.
+    let action = fm.handle_key_input(KeyEvent::ArrowDown);
+    assert_eq!(
+        action,
+        Some(AccessibilityAction::DimensionCycleRequested { forward: true })
+    );
+}
+
+#[test]
+fn test_focus_ring_style_variants() {
+    use gup::accessibility::FocusRingStyle;
+
+    let default_style = FocusRingStyle::default();
+    assert_eq!(default_style.width, 2.0);
+    assert_eq!(default_style.animation_speed, 0.0);
+
+    let hc = FocusRingStyle::high_contrast();
+    assert_eq!(hc.width, 3.0);
+    assert_eq!(hc.color, [1.0, 1.0, 0.0, 1.0]);
+
+    let animated = FocusRingStyle::animated();
+    assert!(animated.animation_speed > 0.0);
+    assert!(!animated.dash_pattern.is_empty());
+}
+
+#[test]
+fn test_performance_1000_focus_elements() {
+    use gup::accessibility::selection_focus::{FocusPointDescriptor, SelectionFocusBridge};
+    use std::time::Instant;
+
+    let data: Vec<(f32, f32)> = (0..1000)
+        .map(|i| (i as f32, (i * 7 % 500) as f32))
+        .collect();
+
+    let mut bridge = SelectionFocusBridge::new(Default::default());
+    let mut fm = FocusManager::new();
+
+    let start = Instant::now();
+    let count = bridge.sync_focus_elements(&data, &mut fm, |item, idx| FocusPointDescriptor {
+        position: [item.0, item.1],
+        label: format!("Point {}", idx),
+        value: Some(item.0 as f64),
+    });
+    let elapsed = start.elapsed();
+
+    assert_eq!(count, 1000);
+    assert!(
+        elapsed.as_millis() < 50,
+        "Registering 1000 focus elements took {}ms (should be <50ms)",
+        elapsed.as_millis()
+    );
+
+    // Test that navigation is fast.
+    let nav_start = Instant::now();
+    for _ in 0..100 {
+        fm.handle_key_input(KeyEvent::Tab);
+    }
+    let nav_elapsed = nav_start.elapsed();
+
+    assert!(
+        nav_elapsed.as_millis() < 10,
+        "100 Tab navigations took {}ms (should be <10ms)",
+        nav_elapsed.as_millis()
+    );
+}
