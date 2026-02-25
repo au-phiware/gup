@@ -228,10 +228,7 @@ mod tests {
             }
         };
         let wgsl = transpile(&func, std::iter::empty::<String>());
-        assert!(
-            wgsl.contains("for (var i = 0; i < n; i++)"),
-            "got:\n{wgsl}"
-        );
+        assert!(wgsl.contains("for (var i = 0; i < n; i++)"), "got:\n{wgsl}");
         assert!(wgsl.contains("sum += i;"), "got:\n{wgsl}");
     }
 
@@ -282,10 +279,7 @@ mod tests {
             }
         };
         let wgsl = transpile(&func, std::iter::empty::<String>());
-        assert!(
-            wgsl.contains("for (var i = 0; i < n; i++)"),
-            "got:\n{wgsl}"
-        );
+        assert!(wgsl.contains("for (var i = 0; i < n; i++)"), "got:\n{wgsl}");
         assert!(wgsl.contains("if (i > 5)"), "got:\n{wgsl}");
         assert!(wgsl.contains("return i;"), "got:\n{wgsl}");
         assert!(wgsl.contains("return -1;"), "got:\n{wgsl}");

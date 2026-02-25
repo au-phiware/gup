@@ -6,7 +6,8 @@
 Transpilation  
 **Epic**: Phase 2 Initiative 5 - Rust-to-WGSL Transpilation  
 **Priority**: Medium  
-**Story Points**: 8
+**Story Points**: 8  
+**Status**: 🚧 In Progress
 
 ## Context
 

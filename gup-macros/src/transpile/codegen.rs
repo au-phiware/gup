@@ -638,10 +638,7 @@ mod tests {
             ],
         };
         let wgsl = generate_function_wgsl(&func);
-        assert!(
-            wgsl.contains("for (var i = 0; i < n; i++)"),
-            "got:\n{wgsl}"
-        );
+        assert!(wgsl.contains("for (var i = 0; i < n; i++)"), "got:\n{wgsl}");
         assert!(wgsl.contains("sum += i;"), "got:\n{wgsl}");
     }
 
