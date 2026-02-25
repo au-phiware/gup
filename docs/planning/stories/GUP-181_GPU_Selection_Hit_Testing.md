@@ -1,6 +1,6 @@
 # GUP-181: GPU-Accelerated Selection Hit Testing
 
-**Status**: 📋 Planned **Priority**: Medium **Effort**: 5 **Dependencies**:
+**Status**: 🚧 In Progress **Priority**: Medium **Effort**: 5 **Dependencies**:
 GUP-075 (Interactive Mark Selection), GUP-012 (GPU Interaction System)
 
 ## Overview
