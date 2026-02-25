@@ -93,8 +93,8 @@ fn world_to_grid(world_pos: vec2<f32>) -> vec2<u32> {
 
 // --- Binary search ---
 
-// Find the first index where entries[i].key >= target (lower bound).
-fn lower_bound(target: u32, count: u32) -> u32 {
+// Find the first index where entries[i].key >= key_val (lower bound).
+fn lower_bound(key_val: u32, count: u32) -> u32 {
     var lo: u32 = 0u;
     var hi: u32 = count;
     loop {
@@ -102,7 +102,7 @@ fn lower_bound(target: u32, count: u32) -> u32 {
             break;
         }
         let mid = lo + (hi - lo) / 2u;
-        if morton_entries[mid].key < target {
+        if morton_entries[mid].key < key_val {
             lo = mid + 1u;
         } else {
             hi = mid;
@@ -111,8 +111,8 @@ fn lower_bound(target: u32, count: u32) -> u32 {
     return lo;
 }
 
-// Find the first index where entries[i].key > target (upper bound).
-fn upper_bound(target: u32, count: u32) -> u32 {
+// Find the first index where entries[i].key > key_val (upper bound).
+fn upper_bound(key_val: u32, count: u32) -> u32 {
     var lo: u32 = 0u;
     var hi: u32 = count;
     loop {
@@ -120,7 +120,7 @@ fn upper_bound(target: u32, count: u32) -> u32 {
             break;
         }
         let mid = lo + (hi - lo) / 2u;
-        if morton_entries[mid].key <= target {
+        if morton_entries[mid].key <= key_val {
             lo = mid + 1u;
         } else {
             hi = mid;
