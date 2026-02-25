@@ -174,7 +174,9 @@ pub use mark::boxplot::{
     BoxPlot, BoxPlotAttributes, BoxPlotInstance, BoxPlotOrientation, BoxPlotVertex,
 };
 pub use mark::circle::{Circle, CircleAttributes, CircleInstance, CircleVertex};
-pub use mark::compute_instance_filter::{ComputeInstanceFilter, FilterConfig, FilterResult};
+pub use mark::compute_instance_filter::{
+    ComputeInstanceFilter, FilterConfig, FilterResult, PooledComputeInstanceFilter,
+};
 pub use mark::line::{Line, LineAttributes, LineStyle, LineVertex};
 pub use mark::rectangle::{Rectangle, RectangleAttributes, RectangleInstance, RectangleVertex};
 pub use mark::{Mark, MarkInfo, MarkInfoImpl, MarkRegistry};

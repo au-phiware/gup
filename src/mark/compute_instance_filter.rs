@@ -329,7 +329,6 @@ impl ComputeInstanceFilter {
             mapped_at_creation: false,
         }));
 
-        // visibility[0..instance_count] = per-instance flags
         let visibility_buffer = device.create_buffer(&BufferDescriptor {
             label: Some("filter_visibility"),
             size: instance_count as u64 * 4,
@@ -337,8 +336,6 @@ impl ComputeInstanceFilter {
             mapped_at_creation: false,
         });
 
-        // prefix_sums[0..instance_count] = per-instance offsets
-        // prefix_sums[instance_count..instance_count+num_workgroups] = block sums
         let prefix_size = (instance_count + num_workgroups) as u64 * 4;
         let prefix_sums_buffer = device.create_buffer(&BufferDescriptor {
             label: Some("filter_prefix_sums"),
@@ -354,18 +351,74 @@ impl ComputeInstanceFilter {
             mapped_at_creation: false,
         }));
 
-        let config =
-            FilterConfig::from_viewport(viewport, lod_thresholds, instance_count, vertex_count);
         let config_buffer = device.create_buffer(&BufferDescriptor {
             label: Some("filter_config"),
             size: std::mem::size_of::<FilterConfig>() as u64,
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        queue.write_buffer(&config_buffer, 0, bytemuck::bytes_of(&config));
 
-        // --- Create bind group ---
+        // --- Encode & submit ---
 
+        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+            label: Some("instance_filter_encoder"),
+        });
+
+        self.encode(
+            device,
+            queue,
+            &mut encoder,
+            input_buffer,
+            &output_buffer,
+            &visibility_buffer,
+            &prefix_sums_buffer,
+            &draw_indirect_buffer,
+            &config_buffer,
+            instance_count,
+            vertex_count,
+            viewport,
+            lod_thresholds,
+        );
+
+        queue.submit([encoder.finish()]);
+
+        Ok(FilterResult {
+            output_buffer,
+            draw_indirect_buffer,
+        })
+    }
+
+    /// Encode the filter pipeline into the given command encoder using
+    /// pre-existing buffers.
+    ///
+    /// This is the core implementation shared by both the allocating
+    /// [`dispatch`](Self::dispatch) path and
+    /// [`PooledComputeInstanceFilter::dispatch`].
+    #[allow(clippy::too_many_arguments)]
+    fn encode(
+        &self,
+        device: &Device,
+        queue: &Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        input_buffer: &Buffer,
+        output_buffer: &Buffer,
+        visibility_buffer: &Buffer,
+        prefix_sums_buffer: &Buffer,
+        draw_indirect_buffer: &Buffer,
+        config_buffer: &Buffer,
+        instance_count: u32,
+        vertex_count: u32,
+        viewport: &Viewport2D,
+        lod_thresholds: &[f32; 3],
+    ) {
+        let num_workgroups = instance_count.div_ceil(WORKGROUP_SIZE);
+
+        // Upload config.
+        let config =
+            FilterConfig::from_viewport(viewport, lod_thresholds, instance_count, vertex_count);
+        queue.write_buffer(config_buffer, 0, bytemuck::bytes_of(&config));
+
+        // Bind group.
         let bind_group = device.create_bind_group(&BindGroupDescriptor {
             label: Some("instance_filter_bg"),
             layout: &self.bind_group_layout,
@@ -397,12 +450,7 @@ impl ComputeInstanceFilter {
             ],
         });
 
-        // --- Encode all passes into a single command buffer ---
-
-        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
-            label: Some("instance_filter_encoder"),
-        });
-
+        // Compute passes.
         {
             let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
                 label: Some("cull_and_classify"),
@@ -413,7 +461,6 @@ impl ComputeInstanceFilter {
             pass.dispatch_workgroups(num_workgroups, 1, 1);
         }
 
-        // Prefix sum pass 1: per-workgroup scan.
         {
             let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
                 label: Some("prefix_sum_workgroup"),
@@ -424,8 +471,6 @@ impl ComputeInstanceFilter {
             pass.dispatch_workgroups(num_workgroups, 1, 1);
         }
 
-        // Prefix sum pass 2: scan block totals (single workgroup).
-        // Always dispatch — this pass writes the draw_indirect parameters.
         {
             let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
                 label: Some("prefix_sum_blocks"),
@@ -436,7 +481,6 @@ impl ComputeInstanceFilter {
             pass.dispatch_workgroups(1, 1, 1);
         }
 
-        // Prefix sum pass 3: add block offsets back.
         if num_workgroups > 1 {
             let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
                 label: Some("prefix_sum_add_offsets"),
@@ -447,7 +491,6 @@ impl ComputeInstanceFilter {
             pass.dispatch_workgroups(num_workgroups, 1, 1);
         }
 
-        // Compact pass: scatter visible instances.
         {
             let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
                 label: Some("compact_instances"),
@@ -457,13 +500,6 @@ impl ComputeInstanceFilter {
             pass.set_bind_group(0, &bind_group, &[]);
             pass.dispatch_workgroups(num_workgroups, 1, 1);
         }
-
-        queue.submit([encoder.finish()]);
-
-        Ok(FilterResult {
-            output_buffer,
-            draw_indirect_buffer,
-        })
     }
 
     /// Read back the draw-indirect parameters from the GPU.
@@ -556,6 +592,238 @@ impl ComputeInstanceFilter {
         staging.unmap();
 
         Ok(result)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Pooled compute instance filter
+// ---------------------------------------------------------------------------
+
+/// Pre-allocated GPU buffer pool for [`ComputeInstanceFilter`].
+///
+/// Eliminates per-dispatch buffer allocation by pre-allocating the output,
+/// visibility, prefix-sum, draw-indirect, and config buffers for a
+/// configurable maximum instance count. Buffers are reused across
+/// [`dispatch`](Self::dispatch) calls; if the instance count exceeds the
+/// current capacity the buffers are automatically grown.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// let filter = ComputeInstanceFilter::new(&device)?;
+/// let mut pooled = PooledComputeInstanceFilter::new(&device, filter, 100_000);
+///
+/// loop {
+///     // Steady-state: zero buffer allocations per frame.
+///     let result = pooled.dispatch(
+///         &device, &queue,
+///         &instance_buffer,
+///         instance_count, vertex_count,
+///         &viewport, &lod_thresholds,
+///     ).await?;
+///     // result.output_buffer and result.draw_indirect_buffer are
+///     // borrowed from the pool — valid until the next dispatch().
+/// }
+/// ```
+pub struct PooledComputeInstanceFilter {
+    /// Underlying pipeline (pipelines + bind group layout).
+    inner: ComputeInstanceFilter,
+    /// Dense buffer of visible [`InstanceAttributes`].
+    output_buffer: Arc<Buffer>,
+    /// Per-instance binary visibility flags.
+    visibility_buffer: Buffer,
+    /// Prefix-sum offsets + block totals.
+    prefix_sums_buffer: Buffer,
+    /// `DrawIndirect` parameter buffer.
+    draw_indirect_buffer: Arc<Buffer>,
+    /// Uniform config buffer (always 48 bytes).
+    config_buffer: Buffer,
+    /// Current maximum instance capacity.
+    capacity: u32,
+}
+
+impl PooledComputeInstanceFilter {
+    /// Create a new pooled filter with pre-allocated buffers for up to
+    /// `max_instances` instances.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `max_instances` is zero.
+    pub fn new(device: &Device, inner: ComputeInstanceFilter, max_instances: u32) -> Self {
+        assert!(max_instances > 0, "max_instances must be > 0");
+        let (
+            output_buffer,
+            visibility_buffer,
+            prefix_sums_buffer,
+            draw_indirect_buffer,
+            config_buffer,
+        ) = Self::allocate_buffers(device, max_instances);
+
+        Self {
+            inner,
+            output_buffer,
+            visibility_buffer,
+            prefix_sums_buffer,
+            draw_indirect_buffer,
+            config_buffer,
+            capacity: max_instances,
+        }
+    }
+
+    /// Current buffer capacity in instances.
+    pub fn capacity(&self) -> u32 {
+        self.capacity
+    }
+
+    /// Access the underlying [`ComputeInstanceFilter`].
+    pub fn inner(&self) -> &ComputeInstanceFilter {
+        &self.inner
+    }
+
+    /// Run the full filter pipeline, reusing pre-allocated buffers.
+    ///
+    /// If `instance_count` exceeds the current [`capacity`](Self::capacity),
+    /// the internal buffers are grown to fit. Otherwise no GPU allocations
+    /// are performed.
+    ///
+    /// The returned [`FilterResult`] borrows the pool's buffers via
+    /// `Arc` — they remain valid until the next call to `dispatch` (or
+    /// [`reserve`](Self::reserve)).
+    #[allow(clippy::too_many_arguments)]
+    pub async fn dispatch(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        input_buffer: &Buffer,
+        instance_count: u32,
+        vertex_count: u32,
+        viewport: &Viewport2D,
+        lod_thresholds: &[f32; 3],
+    ) -> GupResult<FilterResult> {
+        if instance_count == 0 {
+            return Err(GupError::invalid_operation(
+                "Cannot filter zero instances".to_string(),
+            ));
+        }
+
+        if instance_count > MAX_INSTANCES {
+            return Err(GupError::invalid_operation(format!(
+                "Instance count {instance_count} exceeds maximum {MAX_INSTANCES}"
+            )));
+        }
+
+        // Grow buffers if needed.
+        if instance_count > self.capacity {
+            self.grow(device, instance_count);
+        }
+
+        // --- Encode & submit ---
+
+        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+            label: Some("pooled_instance_filter_encoder"),
+        });
+
+        self.inner.encode(
+            device,
+            queue,
+            &mut encoder,
+            input_buffer,
+            &self.output_buffer,
+            &self.visibility_buffer,
+            &self.prefix_sums_buffer,
+            &self.draw_indirect_buffer,
+            &self.config_buffer,
+            instance_count,
+            vertex_count,
+            viewport,
+            lod_thresholds,
+        );
+
+        queue.submit([encoder.finish()]);
+
+        Ok(FilterResult {
+            output_buffer: Arc::clone(&self.output_buffer),
+            draw_indirect_buffer: Arc::clone(&self.draw_indirect_buffer),
+        })
+    }
+
+    /// Ensure the pool can hold at least `min_instances` without
+    /// reallocating during [`dispatch`](Self::dispatch).
+    pub fn reserve(&mut self, device: &Device, min_instances: u32) {
+        if min_instances > self.capacity {
+            self.grow(device, min_instances);
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Internal helpers
+    // ---------------------------------------------------------------
+
+    /// Grow buffers to hold at least `new_min` instances.
+    fn grow(&mut self, device: &Device, new_min: u32) {
+        // Round up to next power-of-two to amortise future growth.
+        let new_capacity = new_min.next_power_of_two().min(MAX_INSTANCES);
+        let (output, visibility, prefix_sums, draw_indirect, config) =
+            Self::allocate_buffers(device, new_capacity);
+        self.output_buffer = output;
+        self.visibility_buffer = visibility;
+        self.prefix_sums_buffer = prefix_sums;
+        self.draw_indirect_buffer = draw_indirect;
+        self.config_buffer = config;
+        self.capacity = new_capacity;
+    }
+
+    /// Allocate a full set of transient buffers for `cap` instances.
+    fn allocate_buffers(
+        device: &Device,
+        cap: u32,
+    ) -> (Arc<Buffer>, Buffer, Buffer, Arc<Buffer>, Buffer) {
+        let instance_size = std::mem::size_of::<InstanceAttributes>() as u64;
+        let num_workgroups = cap.div_ceil(WORKGROUP_SIZE);
+
+        let output_buffer = Arc::new(device.create_buffer(&BufferDescriptor {
+            label: Some("pooled_filter_output_instances"),
+            size: cap as u64 * instance_size,
+            usage: BufferUsages::STORAGE | BufferUsages::VERTEX | BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        }));
+
+        let visibility_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("pooled_filter_visibility"),
+            size: cap as u64 * 4,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        let prefix_size = (cap + num_workgroups) as u64 * 4;
+        let prefix_sums_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("pooled_filter_prefix_sums"),
+            size: prefix_size,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        let draw_indirect_buffer = Arc::new(device.create_buffer(&BufferDescriptor {
+            label: Some("pooled_filter_draw_indirect"),
+            size: 16,
+            usage: BufferUsages::STORAGE | BufferUsages::INDIRECT | BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        }));
+
+        let config_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("pooled_filter_config"),
+            size: std::mem::size_of::<FilterConfig>() as u64,
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        (
+            output_buffer,
+            visibility_buffer,
+            prefix_sums_buffer,
+            draw_indirect_buffer,
+            config_buffer,
+        )
     }
 }
 
