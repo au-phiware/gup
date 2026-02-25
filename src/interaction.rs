@@ -604,6 +604,11 @@ pub struct InteractionSystem {
     /// Number of Morton entries currently on the GPU.
     morton_gpu_entry_count: u32,
 
+    /// Persistent staging buffer for result readback (GUP-197).
+    /// Created once and reused across queries to eliminate per-query buffer
+    /// allocation overhead.
+    result_staging_buffer: Buffer,
+
     /// GPU-resident candidate pipeline resources (GUP-193).
     /// Gather compute pipeline that compacts candidates on the GPU.
     gather_pipeline: ComputePipeline,
@@ -640,6 +645,7 @@ pub struct InteractionSystem {
     /// Buffer capacities
     max_elements: usize,
     max_queries: usize,
+    #[allow(dead_code)]
     max_results: usize,
     max_spatial_cells: usize,
     max_morton_candidates: usize,
@@ -752,6 +758,15 @@ impl InteractionSystem {
             mapped_at_creation: false,
         });
 
+        // Persistent staging buffer for result readback (GUP-197).
+        // Created once and reused across queries to avoid per-query allocation.
+        let result_staging_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("result_staging_persistent"),
+            size: (max_results * std::mem::size_of::<InteractionResult>()) as u64,
+            usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
         let hit_test_config_buffer = device.create_buffer(&BufferDescriptor {
             label: Some("hit_test_config"),
             size: std::mem::size_of::<HitTestConfig>() as u64,
@@ -849,6 +864,7 @@ impl InteractionSystem {
             element_buffer,
             query_buffer,
             result_buffer,
+            result_staging_buffer,
             hit_test_config_buffer,
             spatial_cells_buffer,
             element_indices_buffer,
@@ -2101,17 +2117,14 @@ impl InteractionSystem {
         Ok(bind_group)
     }
 
-    /// Download results from GPU
-    async fn download_results(&self) -> GupResult<Vec<InteractionResult>> {
-        // Create staging buffer for CPU readback
-        let staging_buffer = self.device.create_buffer(&BufferDescriptor {
-            label: Some("result_staging"),
-            size: (self.max_results * std::mem::size_of::<InteractionResult>()) as u64,
-            usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
+    /// Download results from GPU using the persistent staging buffer (GUP-197).
+    ///
+    /// Reuses a pre-allocated staging buffer instead of creating a new one per
+    /// query, eliminating the per-query buffer allocation overhead (~3-4ms).
+    async fn download_results(&mut self) -> GupResult<Vec<InteractionResult>> {
+        let staging_size = self.result_staging_buffer.size();
 
-        // Copy from result buffer to staging buffer
+        // Copy from result buffer to the persistent staging buffer
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -2121,9 +2134,9 @@ impl InteractionSystem {
         encoder.copy_buffer_to_buffer(
             &self.result_buffer,
             0,
-            &staging_buffer,
+            &self.result_staging_buffer,
             0,
-            staging_buffer.size(),
+            staging_size,
         );
 
         let submission_index = self.queue.submit([encoder.finish()]);
@@ -2134,7 +2147,7 @@ impl InteractionSystem {
             .poll(PollType::WaitForSubmissionIndex(submission_index));
 
         // Map the buffer and wait for it to be mapped
-        let buffer_slice = staging_buffer.slice(..);
+        let buffer_slice = self.result_staging_buffer.slice(..);
 
         // Create a channel to wait for the mapping completion
         let (sender, receiver) = futures_channel::oneshot::channel();
@@ -2164,7 +2177,7 @@ impl InteractionSystem {
             .collect();
 
         drop(data);
-        staging_buffer.unmap();
+        self.result_staging_buffer.unmap();
 
         Ok(hits)
     }
