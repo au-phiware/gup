@@ -1,8 +1,8 @@
 # GUP-186: Dynamic Attribute GPU Upload Pipeline
 
-**Status**: 📋 Planned **Priority**: Medium **Category**: Feature Enhancement
-**Estimated Effort**: 2 days **Dependencies**: GUP-069 (Advanced Mark Rendering
-Features)
+**Status**: 🚧 In Progress **Priority**: Medium **Category**: Feature
+Enhancement **Estimated Effort**: 2 days **Dependencies**: GUP-069 (Advanced
+Mark Rendering Features)
 
 ## Overview
 
