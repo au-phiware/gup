@@ -80,6 +80,8 @@ epic and status.
 | [GUP-077](GUP-077_Compute_Shader_Instance_Filtering.md)     | Compute Shader Instance Sorting and Filtering  | ✅ Complete | Medium   | —      |
 | [GUP-185](GUP-185_Multi_Pass_Mark_Examples.md)              | Multi-Pass Mark Examples                       | 📋 Planned  | Low      | —      |
 | [GUP-186](GUP-186_Dynamic_Attribute_GPU_Upload_Pipeline.md) | Dynamic Attribute GPU Upload Pipeline          | 📋 Planned  | Medium   | —      |
+| [GUP-187](GUP-187_Flaky_Label_Performance_Test_Fix.md)      | Flaky Label Performance Test Fix               | 📋 Planned  | Low      | —      |
+| [GUP-188](GUP-188_Automatic_Draw_Call_Metrics.md)           | Automatic Draw Call Metrics in MarkRenderer    | 📋 Planned  | Low      | —      |
 
 ### Post GUP-005 Stories - Shader Function System Enhancement (Stories 51+)
 
