@@ -259,7 +259,7 @@ reorganisation._
 | [GUP-093](GUP-093_Scale_Axis_Integration_System.md)       | Scale-Axis Integration System               | ✅ Complete    | Medium   | 6      |
 | [GUP-094](GUP-094_Axis_Performance_Optimization.md)       | Axis Performance Optimization               | ✅ Complete    | Low      | 4      |
 | [GUP-095](GUP-095_Grid_Visual_Rendering_Integration.md)   | Grid Visual Rendering Integration           | ✅ Complete    | High     | 8      |
-| [GUP-096](GUP-096_Grid_Performance_Benchmarking.md)       | Grid Performance Benchmarking               | 📋 Planned     | Medium   | 5      |
+| [GUP-096](GUP-096_Grid_Performance_Benchmarking.md)       | Grid Performance Benchmarking               | 🚧 In Progress | Medium   | 5      |
 | [GUP-097](GUP-097_Chart_Builder_Grid_API_Enhancement.md)  | Chart Builder Grid API Enhancement          | ✅ Complete    | Medium   | 6      |
 | [GUP-098](GUP-098_Grid_System_Documentation.md)           | Grid System Documentation                   | 📋 Planned     | Medium   | 4      |
 | [GUP-204](GUP-204_GPU_Instance_Rendering_Axis_Ticks.md)   | GPU Instance Rendering for Axis Ticks       | 📋 Planned     | Low      | 3      |
@@ -402,7 +402,7 @@ system story. The expanded story is also complete._
 
 - **Axis/Grid complete**: GUP-089 ✅, GUP-090 ✅, GUP-091 ✅, GUP-092 ✅,
   GUP-093 ✅, GUP-095 ✅, GUP-097 ✅
-- **Axis/Grid planned**: GUP-094 📋, GUP-096 📋, GUP-098 📋
+- **Axis/Grid planned**: GUP-094 📋, GUP-096 🚧, GUP-098 📋
 - **Text complete**: GUP-104 ✅, GUP-105 ✅, GUP-106 ✅, GUP-107 ✅, GUP-108 ✅
 - **Text planned**: GUP-109 📋, GUP-110 📋, GUP-199 📋, GUP-200 📋, GUP-201 📋,
   GUP-202 📋, GUP-203 📋
