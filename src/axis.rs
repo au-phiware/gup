@@ -31,7 +31,7 @@
 //! # }
 //! ```
 
-use crate::axis_performance::{AxisGeometryCache, AxisLODManager, LODConfiguration, LODLevel};
+use crate::axis_performance::{AxisGeometryCache, AxisLODManager, LODConfiguration};
 use crate::error::GupResult;
 use crate::label::{LabelFormatter, NumericFormatter};
 use crate::render::{RenderContext, Vertex};

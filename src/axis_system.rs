@@ -56,6 +56,9 @@
 //! ```
 
 use crate::axis::{Axis, AxisBounds, AxisConfiguration as AxisConfig, AxisPosition, LinearAxis};
+use crate::axis_performance::{
+    AxisPerformanceMonitor, AxisSystemRenderStats, OptimizationStrategy, PerformanceBudget,
+};
 use crate::error::{GupError, GupResult};
 use crate::grid::{ChartBounds, GridConfiguration, GridSystem};
 use crate::label::{AxisInfo, LabelConstraints, LabelFormatter, LabelPositioner};
@@ -77,12 +80,14 @@ pub struct AxisSystem {
     formatters: HashMap<AxisId, Box<dyn LabelFormatter>>,
     /// Layout coordinator
     layout_manager: AxisLayoutManager,
-    /// Performance coordinator
-    performance_manager: AxisPerformanceManager,
+    /// Enhanced performance monitor with rolling averages and adaptive strategy
+    performance_monitor: AxisPerformanceMonitor,
     /// Data analyzer for scale detection
     data_analyzer: DataAnalyzer,
     /// Scale factory for creating scales
     scale_factory: ScaleFactory,
+    /// Per-frame render statistics (updated on each render call)
+    last_render_stats: Option<AxisSystemRenderStats>,
 }
 
 impl AxisSystem {
@@ -93,10 +98,34 @@ impl AxisSystem {
             axes: HashMap::new(),
             formatters: HashMap::new(),
             layout_manager: AxisLayoutManager::new(),
-            performance_manager: AxisPerformanceManager::new(),
+            performance_monitor: AxisPerformanceMonitor::default(),
             data_analyzer: DataAnalyzer::new(),
             scale_factory: ScaleFactory::new(),
+            last_render_stats: None,
         }
+    }
+
+    /// Create a new axis system with a specific performance budget.
+    pub fn with_budget(budget: PerformanceBudget) -> Self {
+        Self {
+            performance_monitor: AxisPerformanceMonitor::new(budget),
+            ..Self::new()
+        }
+    }
+
+    /// Access the performance monitor for diagnostics.
+    pub fn performance_monitor(&self) -> &AxisPerformanceMonitor {
+        &self.performance_monitor
+    }
+
+    /// Access the most recent per-frame render statistics.
+    pub fn last_render_stats(&self) -> Option<&AxisSystemRenderStats> {
+        self.last_render_stats.as_ref()
+    }
+
+    /// Get the recommended optimization strategy based on recent performance.
+    pub fn recommended_strategy(&self) -> OptimizationStrategy {
+        self.performance_monitor.recommended_strategy()
     }
 
     /// Automatically configure axes based on data analysis.
@@ -141,7 +170,7 @@ impl AxisSystem {
             scales: self.get_scale_configurations(),
             show_grid: true,
             grid_config: GridConfiguration::default(),
-            performance_budget: self.performance_manager.calculate_budget(),
+            performance_budget: self.performance_monitor.budget().target_render_time,
         })
     }
 
@@ -153,6 +182,7 @@ impl AxisSystem {
         config: &AxisConfiguration,
     ) -> GupResult<()> {
         let start_time = std::time::Instant::now();
+        let mut stats = AxisSystemRenderStats::new();
 
         // 1. Generate tick positions from scales
         let tick_positions = self.generate_all_tick_positions(chart_bounds)?;
@@ -173,14 +203,18 @@ impl AxisSystem {
         // 4. Render formatted labels
         self.render_formatted_labels(context, &tick_positions, chart_bounds)?;
 
-        // 5. Track performance
+        // 5. Track performance with enhanced monitor
         let elapsed = start_time.elapsed();
-        self.performance_manager.record_render_time(elapsed);
+        stats.total_render_time = elapsed;
+        self.performance_monitor.record_render_time(elapsed);
+        self.last_render_stats = Some(stats);
 
         if elapsed > config.performance_budget {
             eprintln!(
-                "Warning: Axis rendering took {:?}, exceeds budget of {:?}",
-                elapsed, config.performance_budget
+                "Warning: Axis rendering took {:?}, exceeds budget of {:?} (strategy: {:?})",
+                elapsed,
+                config.performance_budget,
+                self.performance_monitor.recommended_strategy(),
             );
         }
 
@@ -729,46 +763,8 @@ impl AxisLayoutManager {
     }
 }
 
-/// Performance manager for tracking axis rendering performance.
-#[derive(Debug)]
-struct AxisPerformanceManager {
-    target_render_time: std::time::Duration,
-    recent_render_times: Vec<std::time::Duration>,
-}
-
-impl AxisPerformanceManager {
-    fn new() -> Self {
-        Self {
-            target_render_time: std::time::Duration::from_millis(2), // 2ms target
-            recent_render_times: Vec::new(),
-        }
-    }
-
-    fn calculate_budget(&self) -> std::time::Duration {
-        self.target_render_time
-    }
-
-    fn record_render_time(&mut self, elapsed: std::time::Duration) {
-        self.recent_render_times.push(elapsed);
-
-        // Keep only recent times (last 10 renders)
-        if self.recent_render_times.len() > 10 {
-            self.recent_render_times.remove(0);
-        }
-    }
-
-    #[allow(dead_code)]
-    fn average_render_time(&self) -> std::time::Duration {
-        if self.recent_render_times.is_empty() {
-            return std::time::Duration::from_millis(0);
-        }
-
-        let total: std::time::Duration = self.recent_render_times.iter().sum();
-        total / self.recent_render_times.len() as u32
-    }
-}
-
 // Note: Future enhancement could add scale integration directly to the Axis trait
+// Performance monitoring is now handled by AxisPerformanceMonitor from axis_performance module.
 
 #[cfg(test)]
 mod tests {
@@ -875,18 +871,17 @@ mod tests {
     }
 
     #[test]
-    fn test_performance_manager() {
-        let mut manager = AxisPerformanceManager::new();
+    fn test_performance_monitor() {
+        let mut monitor = AxisPerformanceMonitor::default();
 
         let render_time = std::time::Duration::from_millis(1);
-        manager.record_render_time(render_time);
+        monitor.record_render_time(render_time);
 
-        assert_eq!(manager.recent_render_times.len(), 1);
-        assert_eq!(manager.recent_render_times[0], render_time);
+        assert_eq!(monitor.sample_count(), 1);
+        assert_eq!(monitor.last_render_time(), Some(render_time));
 
-        // Test budget calculation
-        let budget = manager.calculate_budget();
-        assert!(budget.as_millis() >= 1);
+        // Test budget is within budget at 1ms
+        assert!(monitor.is_within_budget());
     }
 
     #[test]
