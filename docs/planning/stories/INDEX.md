@@ -193,6 +193,7 @@ reorganisation._
 | [GUP-195](GUP-195_Bind_Group_Caching_Pooled_Filter.md)     | Bind Group Caching for Pooled Filter  | ✅ Complete | Low      | —      |
 | [GUP-196](GUP-196_Hit_Test_Result_Buffer_Query_Count.md)   | Hit Test Result Buffer Query Count    | ✅ Complete | Medium   | 2      |
 | [GUP-197](GUP-197_Result_Buffer_Readback_Optimization.md)  | Result Buffer Readback Optimization   | ✅ Complete | Low      | 5      |
+| [GUP-198](GUP-198_Non_Blocking_Query_API.md)               | Non-Blocking Query API                | 📋 Planned  | Low      | 8      |
 
 ### Post GUP-015 Stories - Advanced Debug Infrastructure (Stories 80+)
 

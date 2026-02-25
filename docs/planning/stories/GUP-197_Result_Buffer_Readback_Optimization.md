@@ -100,3 +100,90 @@ sub-millisecond latency.
 
 - 7 new tests in `tests/result_buffer_readback_tests.rs`
 - 45 existing interaction tests pass without regression
+
+## Retrospective
+
+**Completed**: 2025-08-10
+
+### Key Technical Learnings
+
+#### GPU Synchronisation is the True Bottleneck
+
+- **Challenge**: The original assumption was that per-query buffer allocation
+  was the dominant latency source at 3-4ms. In reality, the GPU driver
+  synchronisation (`device.poll(PollType::Wait)`) imposes a minimum latency
+  floor of ~2-3ms regardless of buffer management strategy.
+- **Solution**: Three complementary optimisations: persistent buffer (eliminates
+  allocation), copy-size tracking (reduces data transfer), and single-poll
+  readback (eliminates one round-trip). Together these brought latency from
+  ~3.9ms to ~2.4ms for 100K marks and ~429µs for 1K marks.
+- **Pattern**: When optimising GPU readback, the biggest wins come from reducing
+  the _amount of data copied_, not the buffer lifecycle. The
+  `copy_buffer_to_buffer`
+  - `map_async` + `poll` cycle has a fixed overhead that dominates small copies.
+
+#### Copy-Size Optimisation Was the Highest-Impact Change
+
+- **Challenge**: The original code always copied the full 3.2MB result buffer
+  (100K × 32 bytes) even when only a small number of results were written.
+- **Solution**: Added `last_dispatch_result_slots` tracking in each dispatch
+  method so `download_results()` copies only `slots × entry_size` bytes. For a
+  1K-element query this reduces the copy from 3.2MB to 32KB (100× reduction).
+- **Pattern**: Track the "high-water mark" of GPU output at the dispatch site,
+  not the readback site. This avoids needing an additional GPU readback to learn
+  the result count.
+
+#### Single-Poll Readback Works Reliably
+
+- **Challenge**: The original code polled twice: once for the copy submission
+  (`PollType::WaitForSubmissionIndex`) and once for the map (`PollType::Wait`).
+  This meant two CPU-GPU synchronisation round-trips.
+- **Solution**: Submit the copy, call `map_async` immediately, then poll once.
+  The wgpu runtime correctly sequences the map after the copy completes.
+- **Pattern**: `map_async` callbacks are not invoked until all prior submissions
+  on the same device have completed. There is no need to wait for a specific
+  submission before requesting the map.
+
+### Architectural Decisions
+
+#### Persistent Buffer Over Double-Buffering
+
+- **Decision**: Use a single persistent staging buffer instead of
+  double-buffering (two alternating buffers).
+- **Reasoning**: The current query API is synchronous — each query waits for its
+  readback before returning. Double-buffering only helps when the CPU can do
+  useful work while one buffer is being mapped, which requires a pipelined /
+  non-blocking API.
+- **Trade-off**: Simplicity at the cost of not enabling future non-blocking
+  readback without refactoring.
+- **Future**: A non-blocking / pipelined query API (e.g. returning a future that
+  resolves when mapping completes) would benefit from double-buffering.
+
+#### Copy-Size Tracking Over Atomic Counter Readback
+
+- **Decision**: Track result slot counts on the CPU side via
+  `last_dispatch_result_slots` rather than reading a GPU atomic counter.
+- **Reasoning**: Reading an atomic counter requires its own readback, adding
+  latency. CPU-side tracking is free and covers all dispatch paths.
+- **Trade-off**: For indirect dispatches (Morton path), the exact candidate
+  count is unknown so we fall back to `max_morton_candidates` as the upper
+  bound. This is still much smaller than `max_results`.
+- **Future**: If indirect dispatch result counts become important, a two-stage
+  readback (count first, then data) could be added.
+
+### Development Workflow Insights
+
+- The `&self` → `&mut self` change on `dispatch_hit_test_compute` was safe
+  because all callers already take `&mut self`. Checking call sites before
+  changing method receiver types is a good habit.
+- Release-mode benchmarks are essential for GPU code — debug-mode overhead can
+  be 2-5× higher due to validation layers and unoptimised code.
+- The `mapped_at_creation: false` approach for the persistent buffer is the
+  correct choice since the buffer is used for GPU→CPU copies, not CPU writes.
+
+### Follow-up Stories
+
+1. **GUP-198: Non-Blocking Query API** — Provide a pipelined query interface
+   that returns a future/handle instead of blocking on readback. This would
+   enable double-buffering and allow the CPU to overlap work with GPU readback,
+   potentially achieving true sub-millisecond perceived latency.
