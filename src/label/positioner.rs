@@ -1216,7 +1216,7 @@ mod tests {
         assert!((w - 48.0).abs() < 0.01);
     }
 
-    // -- Performance: 500 labels < 1ms --
+    // -- Performance: 500 labels --
 
     #[test]
     fn test_performance_500_labels() {
@@ -1240,11 +1240,20 @@ mod tests {
         let elapsed = start.elapsed();
 
         assert!(!layout.positions.is_empty());
-        // Target: < 10ms (generous for CI; typically < 1ms on modern hardware)
+
+        // Debug builds are significantly slower; use a generous threshold to
+        // avoid flaky CI failures while still catching real regressions.
+        // Typically < 1ms on modern hardware in release mode.
+        #[cfg(debug_assertions)]
+        let threshold_ms: u128 = 50;
+        #[cfg(not(debug_assertions))]
+        let threshold_ms: u128 = 10;
+
         assert!(
-            elapsed.as_millis() < 10,
-            "500 labels took {}ms (target < 10ms)",
-            elapsed.as_millis()
+            elapsed.as_millis() < threshold_ms,
+            "500 labels took {}ms (target < {}ms)",
+            elapsed.as_millis(),
+            threshold_ms,
         );
     }
 }
