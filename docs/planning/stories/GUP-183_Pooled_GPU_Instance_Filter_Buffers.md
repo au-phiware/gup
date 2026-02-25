@@ -112,3 +112,78 @@ pipeline to reuse buffers across frames so that per-frame overhead is minimized.
 Buffer allocation overhead was eliminated entirely. The remaining time is
 irreducible GPU compute work (command encoding, queue submission, and shader
 execution).
+
+## Retrospective
+
+**Completed**: 2025-07-24
+
+### Key Technical Learnings
+
+#### Buffer Allocation Dominates GPU Pipeline Overhead at Scale
+
+- **Challenge**: At 1M instances, the GPU filter dispatch took ~64ms — far
+  slower than the CPU path (~6ms). The hypothesis was that per-frame buffer
+  allocation was the bottleneck.
+- **Solution**: Pre-allocate all 5 transient GPU buffers (output instances,
+  visibility flags, prefix sums, draw indirect, config uniform) and reuse them
+  across dispatch calls. Grow with `next_power_of_two` amortization.
+- **Pattern**: GPU buffer allocation is expensive — order of magnitude more than
+  CPU malloc. Pre-allocating and pooling GPU buffers is essential for any
+  per-frame GPU pipeline.
+
+#### Refactoring for Shared Encode Logic
+
+- **Challenge**: The original `dispatch()` method tightly coupled buffer
+  allocation with compute pass encoding. Adding a pooled path required
+  duplicating all the bind group creation and compute pass logic.
+- **Solution**: Extract an `encode()` helper that takes pre-existing buffers and
+  a command encoder, then call it from both `dispatch()` (allocating) and
+  `PooledComputeInstanceFilter::dispatch()` (reusing).
+- **Pattern**: When adding a zero-allocation hot path alongside an existing
+  allocating path, extract the core work into a shared function that accepts
+  externally-owned resources.
+
+### Architectural Decisions
+
+#### Wrapper Pattern Over Modification
+
+- **Decision**: Created a new `PooledComputeInstanceFilter` struct that wraps
+  `ComputeInstanceFilter` rather than modifying the original type.
+- **Reasoning**: The original type's API is used in benchmarks and tests; adding
+  mutable buffer state to it would change its semantics. A wrapper preserves
+  backward compatibility while adding the pooling concern.
+- **Trade-off**: Slight indirection (wrapper delegates to inner), but the inner
+  type remains simple and stateless (just pipelines + bind group layout).
+- **Future**: If the pooled path proves universal, the inner type could be made
+  private and the pooled version could become the only public API.
+
+#### Power-of-Two Growth Strategy
+
+- **Decision**: When capacity is exceeded, grow to
+  `new_min.next_power_of_two()`.
+- **Reasoning**: Amortises growth cost — doubling ensures O(log n) reallocations
+  over the lifetime of the pool, matching `Vec`'s growth strategy.
+- **Trade-off**: Up to 2× memory over-allocation in the worst case. For GPU
+  buffers at 96 bytes/instance, 1M instances = 96MB — doubling to 2M adds 96MB
+  which is within typical GPU memory budgets.
+- **Future**: Could add `shrink_to_fit()` for memory-constrained scenarios.
+
+### Development Workflow Insights
+
+- The refactoring was clean because the original `dispatch()` had a clear
+  separation between "allocate buffers" and "encode compute passes" phases. This
+  made extraction of `encode()` straightforward.
+- GPU benchmark results showed the speedup scales with instance count (2.6× at
+  100K, 5.9× at 1M), confirming that allocation overhead is proportional to
+  buffer sizes.
+- The 10× improvement target in the AC was optimistic — it assumed allocation
+  was >90% of dispatch time, but GPU compute work (shader execution, queue
+  submission) accounts for a significant floor. The ~6× result reflects complete
+  elimination of the allocation portion.
+
+### Follow-up Stories
+
+1. **GUP-195: Bind Group Caching for Pooled Filter** — The pooled path still
+   creates a new bind group per dispatch because the input buffer changes. If
+   the input buffer is also pooled (common in streaming scenarios), the bind
+   group could be cached, further reducing per-frame overhead.

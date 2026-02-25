@@ -190,6 +190,7 @@ reorganisation._
 | [GUP-184](GUP-184_GPU_Radix_Sort_Z_Order.md)               | GPU Radix Sort for Z-Order            | 📋 Planned  | Low      | —      |
 | [GUP-193](GUP-193_GPU_Resident_Candidate_Pipeline.md)      | GPU-Resident Candidate Pipeline       | 📋 Planned  | Medium   | —      |
 | [GUP-194](GUP-194_GPU_Resident_Selection_Data_Cache.md)    | GPU-Resident Selection Data Cache     | 📋 Planned  | Medium   | 5      |
+| [GUP-195](GUP-195_Bind_Group_Caching_Pooled_Filter.md)     | Bind Group Caching for Pooled Filter  | 📋 Planned  | Low      | —      |
 
 ### Post GUP-015 Stories - Advanced Debug Infrastructure (Stories 80+)
 
