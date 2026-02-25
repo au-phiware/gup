@@ -156,7 +156,7 @@ reorganisation._
 | [GUP-169](GUP-169_Shared_Pipeline_Cache_Selections.md)      | Shared Pipeline Cache for Selections     | ✅ Complete | Low      | 3      |
 | [GUP-170](GUP-170_BoxPlot_Notch_Rendering.md)               | BoxPlot Notch Rendering                  | 📋 Planned  | Low      | 2      |
 | [GUP-171](GUP-171_BoxPlot_Pixel_Space_Strokes.md)           | BoxPlot Pixel-Space Stroke Widths        | 📋 Planned  | Low      | 3      |
-| [GUP-177](GUP-177_GPU_Shader_Function_Attribute_Binding.md) | GPU Shader Function Attribute Binding    | 🚧 Active   | Medium   | 8      |
+| [GUP-177](GUP-177_GPU_Shader_Function_Attribute_Binding.md) | GPU Shader Function Attribute Binding    | ✅ Complete | Medium   | 8      |
 | [GUP-178](GUP-178_MarkInstanceBuilder_Line_BoxPlot.md)      | MarkInstanceBuilder for Line and BoxPlot | 📋 Planned  | Low      | 3      |
 
 ### Post GUP-014 Stories - Interaction Performance (Stories 76-79)
