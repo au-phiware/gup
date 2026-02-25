@@ -346,6 +346,24 @@ pub struct BatchFrameStats {
     pub buffer_upload_us: u64,
 }
 
+impl BatchFrameStats {
+    /// Convert to the comprehensive [`MarkPerformanceMetrics`] format.
+    pub fn to_performance_metrics(&self) -> super::performance_opt::MarkPerformanceMetrics {
+        super::performance_opt::MarkPerformanceMetrics {
+            vertex_processing_time: std::time::Duration::from_micros(self.buffer_upload_us),
+            instance_batching_time: std::time::Duration::from_micros(self.batch_prepare_us),
+            pipeline_transition_time: std::time::Duration::ZERO,
+            memory_allocation_count: 0,
+            pool_hits: self.cache_hits as u64,
+            pool_misses: self.cache_misses as u64,
+            draw_calls: self.draw_calls,
+            total_instances: self.total_instances,
+            pipeline_switches: self.pipeline_switches,
+            cache_hit_rates: std::collections::HashMap::new(),
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Geometry cache
 // ---------------------------------------------------------------------------
@@ -931,6 +949,39 @@ impl InstancedBatchRenderer {
         // CPU fallback.
         self.submit_with_culling::<M, I>(device, queue, instances, centers, radii)?;
         Ok(None)
+    }
+
+    // ------------------------------------------------------------------
+    // Sorted rendering
+    // ------------------------------------------------------------------
+
+    /// Compute an optimal rendering order for the queued batches.
+    ///
+    /// Returns a vector of indices into [`queued_batches()`] sorted to
+    /// minimise GPU pipeline state transitions. Batches sharing the same
+    /// `mark_type_id` are grouped together, and within each group batches
+    /// are ordered by `z_order` (back-to-front for correct alpha blending).
+    ///
+    /// Use the returned order with [`render_batches_sorted`] for optimal
+    /// rendering performance.
+    pub fn sorted_batch_order(&self) -> Vec<usize> {
+        use super::performance_opt::{SortedBatch, sort_batches_by_state};
+        use crate::mixable::BlendMode;
+
+        let sorted_batches: Vec<SortedBatch> = self
+            .batches
+            .iter()
+            .enumerate()
+            .map(|(i, batch)| SortedBatch {
+                original_index: i,
+                mark_type_id: batch.mark_type_id,
+                blend_mode: BlendMode::AlphaBlending, // default
+                z_order: batch.z_order,
+                instance_count: batch.instance_count,
+            })
+            .collect();
+
+        sort_batches_by_state(&sorted_batches)
     }
 }
 
