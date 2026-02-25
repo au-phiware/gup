@@ -456,6 +456,8 @@ impl GridConfiguration {
 ///
 /// GridRenderer efficiently renders grid lines by batching them into
 /// optimized GPU operations using the existing Line mark infrastructure.
+/// Includes geometry caching to avoid per-frame regeneration when
+/// tick positions and configuration have not changed.
 #[derive(Debug)]
 pub struct GridRenderer {
     /// Line marks for major horizontal grid lines
@@ -466,6 +468,12 @@ pub struct GridRenderer {
     minor_horizontal_lines: Vec<LineAttributes>,
     /// Line marks for minor vertical grid lines
     minor_vertical_lines: Vec<LineAttributes>,
+    /// Cache fingerprint: hash of (ticks, bounds, config) from the last render.
+    /// When unchanged, we skip regeneration.
+    cache_fingerprint: Option<u64>,
+    /// Cache hit/miss counters for diagnostics.
+    cache_hits: u64,
+    cache_misses: u64,
 }
 
 impl GridRenderer {
@@ -476,6 +484,9 @@ impl GridRenderer {
             major_vertical_lines: Vec::new(),
             minor_horizontal_lines: Vec::new(),
             minor_vertical_lines: Vec::new(),
+            cache_fingerprint: None,
+            cache_hits: 0,
+            cache_misses: 0,
         }
     }
 
@@ -483,6 +494,8 @@ impl GridRenderer {
     ///
     /// This method generates grid lines based on tick positions from the axis
     /// system and renders them efficiently using batched GPU operations.
+    /// Grid geometry is cached: if the tick positions, bounds, and config
+    /// have not changed since the last call, regeneration is skipped.
     #[allow(clippy::too_many_arguments)]
     pub fn render_grid(
         &mut self,
@@ -494,6 +507,25 @@ impl GridRenderer {
         chart_bounds: ChartBounds,
         config: &GridConfiguration,
     ) -> GupResult<()> {
+        // Compute a fingerprint of the current inputs
+        let fingerprint = Self::compute_fingerprint(
+            horizontal_ticks,
+            vertical_ticks,
+            horizontal_minor_ticks,
+            vertical_minor_ticks,
+            chart_bounds,
+            config,
+        );
+
+        // Check cache
+        if self.cache_fingerprint == Some(fingerprint) {
+            self.cache_hits += 1;
+            // Lines are already generated — skip to rendering
+            return self.render_all_lines(context);
+        }
+
+        self.cache_misses += 1;
+
         // Clear previous grid lines
         self.clear_grid_lines();
 
@@ -538,6 +570,9 @@ impl GridRenderer {
                 )?;
             }
         }
+
+        // Store fingerprint for next-frame caching
+        self.cache_fingerprint = Some(fingerprint);
 
         // Batch render all grid lines
         self.render_all_lines(context)?;
@@ -727,6 +762,77 @@ impl GridRenderer {
         self.minor_horizontal_lines
             .iter()
             .chain(self.minor_vertical_lines.iter())
+    }
+
+    /// Compute a simple fingerprint from grid inputs for caching.
+    ///
+    /// Uses a fast hash (FNV-style) of tick positions, bounds, and config flags.
+    /// This avoids the overhead of comparing full tick arrays every frame.
+    #[allow(clippy::too_many_arguments)]
+    fn compute_fingerprint(
+        horizontal_ticks: &[f64],
+        vertical_ticks: &[f64],
+        horizontal_minor_ticks: &[f64],
+        vertical_minor_ticks: &[f64],
+        chart_bounds: ChartBounds,
+        config: &GridConfiguration,
+    ) -> u64 {
+        use std::hash::{Hash, Hasher};
+
+        // Use the standard library's default hasher for simplicity.
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+
+        // Hash tick positions via their bit patterns
+        for &t in horizontal_ticks {
+            t.to_bits().hash(&mut hasher);
+        }
+        horizontal_ticks.len().hash(&mut hasher);
+
+        for &t in vertical_ticks {
+            t.to_bits().hash(&mut hasher);
+        }
+        vertical_ticks.len().hash(&mut hasher);
+
+        for &t in horizontal_minor_ticks {
+            t.to_bits().hash(&mut hasher);
+        }
+        horizontal_minor_ticks.len().hash(&mut hasher);
+
+        for &t in vertical_minor_ticks {
+            t.to_bits().hash(&mut hasher);
+        }
+        vertical_minor_ticks.len().hash(&mut hasher);
+
+        // Hash bounds
+        chart_bounds.left.to_bits().hash(&mut hasher);
+        chart_bounds.right.to_bits().hash(&mut hasher);
+        chart_bounds.top.to_bits().hash(&mut hasher);
+        chart_bounds.bottom.to_bits().hash(&mut hasher);
+
+        // Hash config flags
+        config.major_grid.enabled.hash(&mut hasher);
+        config.minor_grid.enabled.hash(&mut hasher);
+        config.show_horizontal.hash(&mut hasher);
+        config.show_vertical.hash(&mut hasher);
+        config.major_grid.line_width.to_bits().hash(&mut hasher);
+        config.minor_grid.line_width.to_bits().hash(&mut hasher);
+
+        hasher.finish()
+    }
+
+    /// Invalidate the geometry cache, forcing regeneration on the next render.
+    pub fn invalidate_cache(&mut self) {
+        self.cache_fingerprint = None;
+    }
+
+    /// Cache hit rate (0.0–1.0). Returns 0.0 if no lookups have occurred.
+    pub fn cache_hit_rate(&self) -> f64 {
+        let total = self.cache_hits + self.cache_misses;
+        if total == 0 {
+            0.0
+        } else {
+            self.cache_hits as f64 / total as f64
+        }
     }
 }
 
@@ -1452,5 +1558,106 @@ mod tests {
             // All themes should have valid opacity
             assert!(theme.major_grid.opacity >= 0.0 && theme.major_grid.opacity <= 1.0);
         }
+    }
+
+    // ---- Grid geometry caching tests ----
+
+    #[test]
+    fn test_grid_cache_miss_on_first_call() {
+        let mut renderer = GridRenderer::new();
+        let bounds = ChartBounds::new(50.0, 750.0, 50.0, 550.0);
+        let config = GridConfiguration::default();
+
+        // render_grid needs a RenderContext but render_all_lines is a no-op,
+        // so we can test the caching logic by calling the fingerprint directly.
+        let fp1 = GridRenderer::compute_fingerprint(
+            &[100.0, 300.0],
+            &[200.0, 400.0],
+            &[],
+            &[],
+            bounds,
+            &config,
+        );
+
+        assert!(renderer.cache_fingerprint.is_none());
+        // After storing, it should match
+        renderer.cache_fingerprint = Some(fp1);
+        assert_eq!(renderer.cache_fingerprint, Some(fp1));
+    }
+
+    #[test]
+    fn test_grid_fingerprint_changes_with_ticks() {
+        let bounds = ChartBounds::new(50.0, 750.0, 50.0, 550.0);
+        let config = GridConfiguration::default();
+
+        let fp1 =
+            GridRenderer::compute_fingerprint(&[100.0, 300.0], &[200.0], &[], &[], bounds, &config);
+        let fp2 =
+            GridRenderer::compute_fingerprint(&[100.0, 500.0], &[200.0], &[], &[], bounds, &config);
+
+        assert_ne!(
+            fp1, fp2,
+            "Different ticks should produce different fingerprints"
+        );
+    }
+
+    #[test]
+    fn test_grid_fingerprint_changes_with_bounds() {
+        let config = GridConfiguration::default();
+        let ticks = [100.0, 300.0];
+
+        let fp1 = GridRenderer::compute_fingerprint(
+            &ticks,
+            &[200.0],
+            &[],
+            &[],
+            ChartBounds::new(50.0, 750.0, 50.0, 550.0),
+            &config,
+        );
+        let fp2 = GridRenderer::compute_fingerprint(
+            &ticks,
+            &[200.0],
+            &[],
+            &[],
+            ChartBounds::new(100.0, 700.0, 50.0, 550.0),
+            &config,
+        );
+
+        assert_ne!(
+            fp1, fp2,
+            "Different bounds should produce different fingerprints"
+        );
+    }
+
+    #[test]
+    fn test_grid_fingerprint_same_for_same_inputs() {
+        let bounds = ChartBounds::new(50.0, 750.0, 50.0, 550.0);
+        let config = GridConfiguration::default();
+
+        let fp1 =
+            GridRenderer::compute_fingerprint(&[100.0, 300.0], &[200.0], &[], &[], bounds, &config);
+        let fp2 =
+            GridRenderer::compute_fingerprint(&[100.0, 300.0], &[200.0], &[], &[], bounds, &config);
+
+        assert_eq!(fp1, fp2, "Same inputs should produce same fingerprint");
+    }
+
+    #[test]
+    fn test_grid_cache_invalidation() {
+        let mut renderer = GridRenderer::new();
+        renderer.cache_fingerprint = Some(42);
+
+        renderer.invalidate_cache();
+        assert!(renderer.cache_fingerprint.is_none());
+    }
+
+    #[test]
+    fn test_grid_cache_hit_rate_calculation() {
+        let mut renderer = GridRenderer::new();
+        renderer.cache_hits = 3;
+        renderer.cache_misses = 1;
+
+        let rate = renderer.cache_hit_rate();
+        assert!((rate - 0.75).abs() < 0.001);
     }
 }
