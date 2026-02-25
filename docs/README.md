@@ -50,6 +50,22 @@ The [`archive/`](./archive/) directory contains earlier versions of documents
 that have been superseded by the core documentation above. These provide
 historical context and show the evolution of Gup's design.
 
+## Feature Guides
+
+### [📐 Grid System](./GRID_SYSTEM.md)
+
+Comprehensive documentation for the GPU-accelerated grid line rendering system.
+Covers quick start, API reference, configuration guide with theme presets,
+tutorials, performance guide, and troubleshooting.
+
+### [🔲 Custom Mark Guide](./CUSTOM_MARK_GUIDE.md)
+
+Guide for building custom mark types and extending the mark system.
+
+### [🔤 Text Rendering Architecture](./text-rendering-architecture.md)
+
+Technical details of the SDF-based GPU text rendering pipeline.
+
 ## Quick Navigation
 
 **New to Gup?** Start with [Mission and Goals](./MISSION_AND_GOALS.md) to
