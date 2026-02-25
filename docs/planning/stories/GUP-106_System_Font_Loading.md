@@ -1,6 +1,6 @@
 # GUP-106: System Font Loading
 
-**Status**: Planned  
+**Status**: 🚧 In Progress  
 **Priority**: Medium  
 **Complexity**: Medium  
 **Created**: 2025-08-19
