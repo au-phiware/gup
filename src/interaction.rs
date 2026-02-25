@@ -1327,31 +1327,31 @@ impl InteractionSystem {
             .await
     }
 
-    /// Dispatch a spatial query entirely on the GPU using Morton range search.
+    /// Dispatch a spatial query entirely on the GPU using Morton range search
+    /// and a GPU-resident gather pipeline (GUP-193).
     ///
     /// The sorted Morton entries are already resident on the GPU. This method:
     /// 1. Uploads the query configuration to a uniform buffer.
     /// 2. Resets the candidate count to zero.
-    /// 3. Dispatches the `morton_range_query` compute shader which performs
-    ///    binary search on the sorted entries.
-    /// 4. Reads back the candidate element indices.
-    /// 5. Uploads only those candidates to the hit test pipeline and runs it.
-    ///
-    /// This eliminates the CPU roundtrip inherent in `dispatcher_spatial_query`.
+    /// 3. Encodes three compute passes in a single command encoder:
+    ///    a. Morton range query — binary search on sorted entries.
+    ///    b. Gather — compacts candidate elements and writes indirect args.
+    ///    c. Hit test — dispatched indirectly using the gather output.
+    /// 4. No GPU→CPU→GPU readback occurs in the query hot path.
     async fn dispatch_gpu_morton_query(
         &mut self,
         query: GpuInteractionQuery,
-        elements: &[ElementData],
+        _elements: &[ElementData],
     ) -> GupResult<()> {
         // Require the GPU Morton index to have been built.
         if !self.morton_gpu_index_built || self.morton_gpu_entry_count == 0 {
-            return self.dispatch_hit_test_compute(elements.len(), 1).await;
+            return self.dispatch_hit_test_compute(_elements.len(), 1).await;
         }
 
         // Look up the Morton index bounds from the advanced spatial index.
         let bounds = match &self.advanced_spatial_index {
             Some(SpatialIndex::Morton(idx)) => *idx.bounds(),
-            _ => return self.dispatch_hit_test_compute(elements.len(), 1).await,
+            _ => return self.dispatch_hit_test_compute(_elements.len(), 1).await,
         };
 
         // Build query config.
@@ -1386,76 +1386,143 @@ impl InteractionSystem {
         self.queue
             .write_buffer(&self.morton_candidate_count_buffer, 0, &[0u8; 4]);
 
-        // Dispatch Morton range query compute shader.
+        // Also zero the indirect dispatch buffer so a zero-candidate query
+        // dispatches zero workgroups for the hit test.
+        self.queue
+            .write_buffer(&self.hit_test_indirect_buffer, 0, &[0u8; 12]);
+
+        // --- Encode all three passes in a single command encoder ---
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("gpu_resident_query_encoder"),
+            });
+
+        // Pass 1: Morton range query — binary search on sorted entries.
         {
-            let mut encoder = self
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("morton_query_encoder"),
-                });
+            let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("morton_query_pass"),
+                timestamp_writes: None,
+            });
 
-            {
-                let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                    label: Some("morton_query_pass"),
-                    timestamp_writes: None,
-                });
+            pass.set_pipeline(&self.morton_query_pipeline);
 
-                pass.set_pipeline(&self.morton_query_pipeline);
-
-                let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("morton_query_bind_group"),
-                    layout: &self.morton_query_bind_group_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: self.morton_entries_buffer.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: self.morton_query_config_buffer.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 2,
-                            resource: self.morton_candidates_buffer.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 3,
-                            resource: self.morton_candidate_count_buffer.as_entire_binding(),
-                        },
-                    ],
-                });
-                pass.set_bind_group(0, &bind_group, &[]);
-                // Single workgroup is sufficient (only thread 0 does work).
-                pass.dispatch_workgroups(1, 1, 1);
-            }
-
-            self.queue.submit([encoder.finish()]);
+            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("morton_query_bind_group"),
+                layout: &self.morton_query_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.morton_entries_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: self.morton_query_config_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.morton_candidates_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: self.morton_candidate_count_buffer.as_entire_binding(),
+                    },
+                ],
+            });
+            pass.set_bind_group(0, &bind_group, &[]);
+            pass.dispatch_workgroups(1, 1, 1);
         }
 
-        // Read back candidate count.
-        let candidate_count = self.read_morton_candidate_count().await?;
+        // Pass 2: Gather — compact candidate elements and write indirect args.
+        {
+            let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("gather_candidates_pass"),
+                timestamp_writes: None,
+            });
 
-        if candidate_count == 0 {
-            return Ok(());
+            pass.set_pipeline(&self.gather_pipeline);
+
+            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("gather_bind_group"),
+                layout: &self.gather_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.element_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: self.morton_candidates_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.morton_candidate_count_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: self.gathered_element_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: self.hit_test_indirect_buffer.as_entire_binding(),
+                    },
+                ],
+            });
+            pass.set_bind_group(0, &bind_group, &[]);
+
+            // Dispatch enough workgroups to cover all possible candidates.
+            let gather_workgroup_size = 256;
+            let gather_dispatch_x =
+                (self.max_morton_candidates as u32).div_ceil(gather_workgroup_size);
+            pass.dispatch_workgroups(gather_dispatch_x, 1, 1);
         }
 
-        // Read back candidate indices.
-        let candidate_indices = self.read_morton_candidates(candidate_count).await?;
+        // Pass 3: Hit test — dispatched indirectly using gather output.
+        {
+            let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("hit_test_indirect_pass"),
+                timestamp_writes: None,
+            });
 
-        // Build reduced element list from candidates.
-        let candidate_elements: Vec<ElementData> = candidate_indices
-            .iter()
-            .filter_map(|&idx| elements.get(idx as usize).copied())
-            .collect();
+            pass.set_pipeline(&self.hit_test_pipeline);
 
-        if candidate_elements.is_empty() {
-            return Ok(());
+            // Bind the gathered (compacted) element buffer instead of the
+            // full element buffer so the hit test operates on candidates only.
+            let bind_group = self.create_gathered_hit_test_bind_group()?;
+            pass.set_bind_group(0, &bind_group, &[]);
+            pass.dispatch_workgroups_indirect(&self.hit_test_indirect_buffer, 0);
         }
 
-        // Upload only candidates and run hit test.
-        self.upload_element_data(&candidate_elements)?;
-        self.dispatch_hit_test_compute(candidate_elements.len(), 1)
-            .await
+        self.queue.submit([encoder.finish()]);
+
+        Ok(())
+    }
+
+    /// Create a hit test bind group that reads from the gathered (compacted)
+    /// element buffer instead of the full element buffer.
+    fn create_gathered_hit_test_bind_group(&self) -> GupResult<wgpu::BindGroup> {
+        let bind_group_layout = self.hit_test_pipeline.get_bind_group_layout(0);
+
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("gathered_hit_test_bind_group"),
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.gathered_element_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: self.query_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: self.result_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        Ok(bind_group)
     }
 
     /// Read the Morton candidate count back from the GPU.
