@@ -418,10 +418,158 @@ fn bench_wgsl_generation(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark uniform buffer pool performance
+fn bench_uniform_buffer_pool(c: &mut Criterion) {
+    let context = GpuBenchmarkContext::new().block_on();
+    let mut group = c.benchmark_group("uniform_buffer_pool");
+
+    // Benchmark: allocate-then-release cycle (no pool)
+    group.bench_function("allocate_no_pool", |b| {
+        b.iter(|| {
+            for _ in 0..100 {
+                let buf = gup::buffer::GpuBuffer::<u8>::new(
+                    &context.device,
+                    gup::buffer::BufferType::Uniform,
+                    256,
+                );
+                black_box(&buf);
+            }
+        });
+    });
+
+    // Benchmark: acquire-then-release cycle (with pool)
+    group.bench_function("acquire_with_pool", |b| {
+        let mut pool = gup::UniformBufferPool::new(16);
+        b.iter(|| {
+            let mut buffers = Vec::with_capacity(100);
+            for _ in 0..100 {
+                buffers.push(pool.acquire(&context.device, 16));
+            }
+            for buf in buffers {
+                pool.release(buf);
+            }
+            black_box(pool.stats());
+        });
+    });
+
+    group.finish();
+}
+
+/// Benchmark uniform batcher vs direct updates
+fn bench_uniform_batching(c: &mut Criterion) {
+    let context = GpuBenchmarkContext::new().block_on();
+    let mut group = c.benchmark_group("uniform_batching");
+
+    // Direct uniform updates
+    group.bench_function("direct_update_10_pipelines", |b| {
+        let mut pipelines: Vec<gup::ComposableShaderPipeline> = (0..10)
+            .map(|i| {
+                let mut p = gup::ComposableShaderPipeline::new();
+                p.add_function(LinearScale::new(0.0, i as f32 * 10.0, 0.0, 1.0));
+                p.create_uniform_buffers(&context.device).unwrap();
+                p
+            })
+            .collect();
+
+        b.iter(|| {
+            for p in &mut pipelines {
+                p.update_uniforms(&context.device, &context.queue).unwrap();
+            }
+        });
+    });
+
+    // Batched uniform updates
+    group.bench_function("batched_update_10_pipelines", |b| {
+        let mut pipelines: Vec<gup::ComposableShaderPipeline> = (0..10)
+            .map(|i| {
+                let mut p = gup::ComposableShaderPipeline::new();
+                p.add_function(LinearScale::new(0.0, i as f32 * 10.0, 0.0, 1.0));
+                p.create_uniform_buffers(&context.device).unwrap();
+                p
+            })
+            .collect();
+
+        b.iter(|| {
+            let mut batcher = gup::UniformBatcher::new();
+            for p in &pipelines {
+                p.stage_uniforms(&mut batcher);
+            }
+            for p in &mut pipelines {
+                p.flush_batcher(&context.device, &context.queue, &mut batcher)
+                    .unwrap();
+            }
+        });
+    });
+
+    group.finish();
+}
+
+/// Benchmark pipeline creation time for complex compositions
+fn bench_pipeline_creation(c: &mut Criterion) {
+    let context = GpuBenchmarkContext::new().block_on();
+    let mut group = c.benchmark_group("pipeline_creation");
+
+    for func_count in [1, 3, 5] {
+        group.bench_with_input(
+            BenchmarkId::from_parameter(func_count),
+            &func_count,
+            |b, &n| {
+                b.iter(|| {
+                    let mut pipeline = gup::ComposableShaderPipeline::new();
+                    for i in 0..n {
+                        pipeline.add_function(LinearScale::new(
+                            0.0,
+                            (i + 1) as f32 * 10.0,
+                            0.0,
+                            1.0,
+                        ));
+                    }
+                    pipeline.map_attribute("color", "linear_scale");
+                    let vs = pipeline.generate_vertex_shader();
+                    let fs = pipeline.generate_fragment_shader();
+                    black_box((&vs, &fs));
+
+                    // Create the render pipeline (GPU compilation).
+                    let _rp = pipeline.create_render_pipeline(&context.device).unwrap();
+                });
+            },
+        );
+    }
+
+    group.finish();
+}
+
+/// Benchmark memory usage estimation
+fn bench_memory_profiling(c: &mut Criterion) {
+    let mut group = c.benchmark_group("memory_profiling");
+
+    group.bench_function("shader_generation_memory", |b| {
+        b.iter(|| {
+            let mut pipeline = gup::ComposableShaderPipeline::new();
+            for i in 0..5 {
+                pipeline.add_function(LinearScale::new(0.0, (i + 1) as f32 * 10.0, 0.0, 1.0));
+            }
+            pipeline.map_attribute("size", "linear_scale");
+
+            let vs = pipeline.generate_vertex_shader();
+            let fs = pipeline.generate_fragment_shader();
+
+            // Return sizes as a proxy for memory profiling.
+            black_box((vs.len(), fs.len()));
+        });
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_composed_vs_hand_optimized,
     bench_composition_depth,
-    bench_wgsl_generation
+    bench_wgsl_generation,
+    bench_uniform_buffer_pool,
+    bench_uniform_batching,
+    bench_pipeline_creation,
+    bench_memory_profiling,
 );
 criterion_main!(benches);
