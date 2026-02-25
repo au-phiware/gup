@@ -125,6 +125,18 @@ impl Default for TextMargins {
     }
 }
 
+impl TextMargins {
+    /// Create zero margins.
+    pub fn zero() -> Self {
+        Self {
+            top: 0.0,
+            right: 0.0,
+            bottom: 0.0,
+            left: 0.0,
+        }
+    }
+}
+
 impl Default for ClippingStrategyConfig {
     fn default() -> Self {
         Self {
@@ -333,8 +345,379 @@ impl TextLayoutEngine {
         Ok(LayoutResult {
             glyphs,
             bounds: final_bounds,
-            clipped: false, // TODO: Clipping detection will be added in a future text layout story
+            clipped: false,
         })
+    }
+
+    /// Layout text with viewport boundary awareness and automatic clipping strategies.
+    ///
+    /// This extends `layout_text` by checking whether the positioned text fits
+    /// within the given viewport bounds. When text overflows, the configured
+    /// clipping strategies are applied in order (primary first, then fallbacks)
+    /// until the text fits or all strategies are exhausted.
+    pub fn layout_text_with_clipping(
+        &mut self,
+        text: &str,
+        position: Vec2,
+        style: &TextStyle,
+        font_atlas: &FontAtlas,
+        constraints: Option<&LayoutConstraints>,
+        viewport_bounds: &ViewportBounds,
+        clipping_config: &ClippingStrategyConfig,
+    ) -> GupResult<LayoutResult> {
+        // Perform initial layout
+        let initial_result = self.layout_text_inner(text, position, style, font_atlas, constraints)?;
+
+        // Check for clipping
+        let clipping_result = viewport_bounds.detect_clipping(&initial_result.bounds);
+
+        match clipping_result {
+            ClippingResult::NoClipping => {
+                self.collision_grid.add_bounds(&initial_result.bounds);
+                Ok(initial_result)
+            }
+            ClippingResult::CompletelyClipped => {
+                // Below minimum visible threshold → hide
+                Ok(LayoutResult {
+                    glyphs: Vec::new(),
+                    bounds: initial_result.bounds,
+                    clipped: true,
+                })
+            }
+            ClippingResult::PartialClipping {
+                visible_percentage, ..
+            } => {
+                // Below minimum visible threshold → hide
+                if visible_percentage < clipping_config.minimum_visible_percentage {
+                    return Ok(LayoutResult {
+                        glyphs: Vec::new(),
+                        bounds: initial_result.bounds,
+                        clipped: true,
+                    });
+                }
+
+                // Try primary strategy, then fallbacks
+                let strategies = std::iter::once(&clipping_config.primary_strategy)
+                    .chain(clipping_config.fallback_strategies.iter());
+
+                for strategy in strategies {
+                    if let Some(result) = self.apply_strategy(
+                        text,
+                        position,
+                        style,
+                        font_atlas,
+                        constraints,
+                        viewport_bounds,
+                        strategy,
+                    )? {
+                        self.collision_grid.add_bounds(&result.bounds);
+                        return Ok(result);
+                    }
+                }
+
+                // All strategies exhausted — return original with clipped flag
+                self.collision_grid.add_bounds(&initial_result.bounds);
+                Ok(LayoutResult {
+                    clipped: true,
+                    ..initial_result
+                })
+            }
+        }
+    }
+
+    /// Internal layout without collision-grid registration (used by clipping retry loop).
+    fn layout_text_inner(
+        &mut self,
+        text: &str,
+        position: Vec2,
+        style: &TextStyle,
+        font_atlas: &FontAtlas,
+        constraints: Option<&LayoutConstraints>,
+    ) -> GupResult<LayoutResult> {
+        let normalized_text: String = text.nfc().collect();
+        let text_bounds = self.measure_text(&normalized_text, style, font_atlas)?;
+        let adjusted_position = self.apply_anchor(position, &text_bounds, style.anchor);
+
+        let final_position = if let Some(constraints) = constraints {
+            if constraints.avoid_collisions {
+                self.find_collision_free_position(adjusted_position, &text_bounds, constraints)?
+            } else {
+                adjusted_position
+            }
+        } else {
+            adjusted_position
+        };
+
+        let glyphs = self.position_glyphs(&normalized_text, final_position, style, font_atlas)?;
+        let final_bounds = self.calculate_glyph_bounds(&glyphs);
+
+        Ok(LayoutResult {
+            glyphs,
+            bounds: final_bounds,
+            clipped: false,
+        })
+    }
+
+    /// Apply a single clipping strategy and return a layout result if it fits.
+    fn apply_strategy(
+        &mut self,
+        text: &str,
+        position: Vec2,
+        style: &TextStyle,
+        font_atlas: &FontAtlas,
+        constraints: Option<&LayoutConstraints>,
+        viewport_bounds: &ViewportBounds,
+        strategy: &ClippingStrategy,
+    ) -> GupResult<Option<LayoutResult>> {
+        match strategy {
+            ClippingStrategy::TruncateWithEllipsis {
+                ellipsis_text,
+                preserve_words,
+            } => self.apply_truncation(
+                text,
+                position,
+                style,
+                font_atlas,
+                constraints,
+                viewport_bounds,
+                ellipsis_text,
+                *preserve_words,
+            ),
+            ClippingStrategy::DynamicFontScaling {
+                min_font_size,
+                scale_factor,
+            } => self.apply_font_scaling(
+                text,
+                position,
+                style,
+                font_atlas,
+                constraints,
+                viewport_bounds,
+                *min_font_size,
+                *scale_factor,
+            ),
+            ClippingStrategy::RepositionText {
+                prefer_directions,
+                max_offset_distance,
+            } => self.apply_reposition(
+                text,
+                position,
+                style,
+                font_atlas,
+                constraints,
+                viewport_bounds,
+                prefer_directions,
+                *max_offset_distance,
+            ),
+            ClippingStrategy::HideIfClipped {
+                min_visible_threshold,
+            } => {
+                let result =
+                    self.layout_text_inner(text, position, style, font_atlas, constraints)?;
+                let clip = viewport_bounds.detect_clipping(&result.bounds);
+                if clip.visible_percentage() < *min_visible_threshold {
+                    Ok(Some(LayoutResult {
+                        glyphs: Vec::new(),
+                        bounds: result.bounds,
+                        clipped: true,
+                    }))
+                } else {
+                    Ok(None) // Not hidden — let next strategy try
+                }
+            }
+        }
+    }
+
+    /// Truncate text with ellipsis to fit within viewport bounds.
+    fn apply_truncation(
+        &mut self,
+        text: &str,
+        position: Vec2,
+        style: &TextStyle,
+        font_atlas: &FontAtlas,
+        constraints: Option<&LayoutConstraints>,
+        viewport_bounds: &ViewportBounds,
+        ellipsis: &str,
+        preserve_words: bool,
+    ) -> GupResult<Option<LayoutResult>> {
+        let effective = viewport_bounds.effective_bounds();
+        let anchor_offset = style.anchor.offset();
+        // Estimate anchor-adjusted left edge
+        let text_bounds = self.measure_text(text, style, font_atlas)?;
+        let text_left = position.x - text_bounds.width() * anchor_offset.x;
+        let available_width = (effective.right - text_left).max(0.0);
+
+        if available_width <= 0.0 {
+            return Ok(None);
+        }
+
+        // Measure the ellipsis width
+        let ellipsis_bounds = self.measure_text(ellipsis, style, font_atlas)?;
+        let ellipsis_width = ellipsis_bounds.width();
+        let target_width = available_width - ellipsis_width;
+
+        if target_width <= 0.0 {
+            return Ok(None);
+        }
+
+        // Binary search for truncation point (by character count)
+        let chars: Vec<char> = text.chars().collect();
+        let char_count = chars.len();
+
+        let mut lo: usize = 0;
+        let mut hi: usize = char_count;
+        let mut best_fit: usize = 0;
+
+        while lo <= hi {
+            let mid = (lo + hi) / 2;
+            let slice: String = chars[..mid].iter().collect();
+            let slice_bounds = self.measure_text(&slice, style, font_atlas)?;
+            if slice_bounds.width() <= target_width {
+                best_fit = mid;
+                if mid == char_count {
+                    break;
+                }
+                lo = mid + 1;
+            } else {
+                if mid == 0 {
+                    break;
+                }
+                hi = mid - 1;
+            }
+        }
+
+        // If the full text fits, no truncation needed
+        if best_fit >= char_count {
+            return Ok(None);
+        }
+
+        // Word boundary adjustment
+        let truncate_at = if preserve_words {
+            Self::adjust_for_word_boundary(&chars, best_fit)
+        } else {
+            best_fit
+        };
+
+        if truncate_at == 0 {
+            return Ok(None);
+        }
+
+        let truncated: String = chars[..truncate_at].iter().collect();
+        let display_text = format!("{}{}", truncated.trim_end(), ellipsis);
+
+        let result =
+            self.layout_text_inner(&display_text, position, style, font_atlas, constraints)?;
+
+        Ok(Some(LayoutResult {
+            clipped: true,
+            ..result
+        }))
+    }
+
+    /// Adjust truncation point to the nearest prior word boundary.
+    fn adjust_for_word_boundary(chars: &[char], truncate_at: usize) -> usize {
+        if truncate_at >= chars.len() {
+            return truncate_at;
+        }
+        // Search backward for whitespace
+        for i in (0..truncate_at).rev() {
+            if chars[i].is_whitespace() {
+                return i;
+            }
+        }
+        // No whitespace found — keep original point
+        truncate_at
+    }
+
+    /// Apply dynamic font scaling to fit text within viewport bounds.
+    fn apply_font_scaling(
+        &mut self,
+        text: &str,
+        position: Vec2,
+        style: &TextStyle,
+        font_atlas: &FontAtlas,
+        constraints: Option<&LayoutConstraints>,
+        viewport_bounds: &ViewportBounds,
+        min_font_size: f32,
+        scale_factor: f32,
+    ) -> GupResult<Option<LayoutResult>> {
+        let mut current_size = style.font_size;
+        let reduction = (style.font_size * scale_factor).max(0.5);
+
+        while current_size >= min_font_size {
+            let scaled_style = TextStyle {
+                font_size: current_size,
+                ..style.clone()
+            };
+            let result = self.layout_text_inner(
+                text,
+                position,
+                &scaled_style,
+                font_atlas,
+                constraints,
+            )?;
+            let clip = viewport_bounds.detect_clipping(&result.bounds);
+            if !clip.is_clipped() {
+                return Ok(Some(LayoutResult {
+                    clipped: true, // Mark as clipped because we changed the font size
+                    ..result
+                }));
+            }
+            current_size -= reduction;
+        }
+        Ok(None) // Could not fit even at minimum font size
+    }
+
+    /// Apply text repositioning to keep text within viewport bounds.
+    fn apply_reposition(
+        &mut self,
+        text: &str,
+        position: Vec2,
+        style: &TextStyle,
+        font_atlas: &FontAtlas,
+        constraints: Option<&LayoutConstraints>,
+        viewport_bounds: &ViewportBounds,
+        prefer_directions: &[Vec2],
+        max_offset: f32,
+    ) -> GupResult<Option<LayoutResult>> {
+        let step = 4.0f32;
+        let steps = (max_offset / step).ceil() as usize;
+
+        // Try each preferred direction at increasing distances
+        for direction in prefer_directions {
+            let len = (direction.x * direction.x + direction.y * direction.y).sqrt();
+            if len < f32::EPSILON {
+                continue;
+            }
+            let norm = Vec2 {
+                x: direction.x / len,
+                y: direction.y / len,
+            };
+
+            for s in 1..=steps {
+                let dist = s as f32 * step;
+                let offset_pos = Vec2 {
+                    x: position.x + norm.x * dist,
+                    y: position.y + norm.y * dist,
+                };
+                let result = self.layout_text_inner(
+                    text,
+                    offset_pos,
+                    style,
+                    font_atlas,
+                    constraints,
+                )?;
+                let clip = viewport_bounds.detect_clipping(&result.bounds);
+                if !clip.is_clipped() {
+                    return Ok(Some(LayoutResult {
+                        clipped: true, // Mark as clipped because position was adjusted
+                        ..result
+                    }));
+                }
+            }
+        }
+
+        Ok(None)
     }
 
     /// Measure text without rendering to get bounds.
@@ -1153,5 +1536,112 @@ mod tests {
         let text = TextBounds::new(0.0, 0.0, 10.0, 10.0);
         let result = vb.detect_clipping(&text);
         assert!(result.is_completely_clipped());
+    }
+
+    // === Clipping Strategy Unit Tests ===
+
+    #[test]
+    fn test_adjust_for_word_boundary_finds_space() {
+        let chars: Vec<char> = "Hello World".chars().collect();
+        // Truncation at index 8 ('o') → should snap back to index 5 (the space)
+        let adjusted = TextLayoutEngine::adjust_for_word_boundary(&chars, 8);
+        assert_eq!(adjusted, 5);
+    }
+
+    #[test]
+    fn test_adjust_for_word_boundary_no_space() {
+        let chars: Vec<char> = "Helloworld".chars().collect();
+        let adjusted = TextLayoutEngine::adjust_for_word_boundary(&chars, 5);
+        // No whitespace → keeps original
+        assert_eq!(adjusted, 5);
+    }
+
+    #[test]
+    fn test_adjust_for_word_boundary_at_end() {
+        let chars: Vec<char> = "Hello".chars().collect();
+        let adjusted = TextLayoutEngine::adjust_for_word_boundary(&chars, 10);
+        assert_eq!(adjusted, 10);
+    }
+
+    #[test]
+    fn test_clipping_result_helpers() {
+        let no_clip = ClippingResult::NoClipping;
+        assert!(!no_clip.is_clipped());
+        assert!(!no_clip.is_completely_clipped());
+        assert!((no_clip.visible_percentage() - 1.0).abs() < f32::EPSILON);
+
+        let complete = ClippingResult::CompletelyClipped;
+        assert!(complete.is_clipped());
+        assert!(complete.is_completely_clipped());
+        assert!((complete.visible_percentage()).abs() < f32::EPSILON);
+
+        let partial = ClippingResult::PartialClipping {
+            clipped_edges: vec![ClippedEdge::Right {
+                overflow_pixels: 10.0,
+            }],
+            visible_percentage: 0.7,
+        };
+        assert!(partial.is_clipped());
+        assert!(!partial.is_completely_clipped());
+        assert!((partial.visible_percentage() - 0.7).abs() < f32::EPSILON);
+        assert!(partial.is_clipped_right());
+    }
+
+    #[test]
+    fn test_clipping_strategy_config_default() {
+        let config = ClippingStrategyConfig::default();
+        assert!(matches!(
+            config.primary_strategy,
+            ClippingStrategy::TruncateWithEllipsis { .. }
+        ));
+        assert_eq!(config.fallback_strategies.len(), 2);
+        assert!((config.minimum_visible_percentage - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_text_margins_zero() {
+        let m = TextMargins::zero();
+        assert!((m.top).abs() < f32::EPSILON);
+        assert!((m.right).abs() < f32::EPSILON);
+        assert!((m.bottom).abs() < f32::EPSILON);
+        assert!((m.left).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_clipping_detection_performance() {
+        // Verify clipping detection completes in <1ms for 100 text elements
+        use std::time::Instant;
+
+        let vb = ViewportBounds::from_screen(800.0, 600.0)
+            .with_margins(TextMargins::zero());
+
+        let labels: Vec<TextBounds> = (0..100)
+            .map(|i| {
+                let x = (i % 20) as f32 * 45.0;
+                let y = (i / 20) as f32 * 25.0;
+                TextBounds::new(x, y, x + 120.0, y + 18.0)
+            })
+            .collect();
+
+        let start = Instant::now();
+        for label in &labels {
+            let _result = vb.detect_clipping(label);
+        }
+        let duration = start.elapsed();
+
+        // Should be well under 1ms even in debug
+        #[cfg(debug_assertions)]
+        let threshold_ms: u128 = 10;
+        #[cfg(not(debug_assertions))]
+        let threshold_ms: u128 = 1;
+
+        println!(
+            "Clipping detection for 100 labels took: {:?} (threshold: {}ms)",
+            duration, threshold_ms
+        );
+        assert!(
+            duration.as_millis() < threshold_ms,
+            "Clipping detection too slow: {duration:?}"
+        );
     }
 }
