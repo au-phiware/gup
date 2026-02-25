@@ -58,6 +58,8 @@ pub struct MarkRenderer {
     vertex_buffer: GpuBuffer<u8>,
     instance_buffer: GpuBuffer<u8>,
     index_buffer: Option<GpuBuffer<u32>>,
+    /// Running performance counters.
+    metrics: super::performance_opt::MarkPerformanceMetrics,
 }
 
 impl MarkRenderer {
@@ -67,6 +69,7 @@ impl MarkRenderer {
             vertex_buffer: GpuBuffer::new(device, BufferType::Vertex, 4096), // 4KB initial capacity
             instance_buffer: GpuBuffer::new(device, BufferType::Instance, 8192), // 8KB initial capacity
             index_buffer: Some(GpuBuffer::new(device, BufferType::Storage, 2048)), // 2KB for indices
+            metrics: Default::default(),
         }
     }
 
@@ -82,6 +85,7 @@ impl MarkRenderer {
             instance_buffer: GpuBuffer::new(device, BufferType::Instance, instance_capacity),
             index_buffer: index_capacity
                 .map(|cap| GpuBuffer::new(device, BufferType::Storage, cap)),
+            metrics: Default::default(),
         }
     }
 
@@ -352,6 +356,34 @@ impl MarkRenderer {
 
         // Delegate to standard render
         self.render_marks::<M>(render_pass, pipeline, bind_group, instance_count)
+    }
+
+    // ------------------------------------------------------------------
+    // Performance metrics
+    // ------------------------------------------------------------------
+
+    /// Get current performance metrics.
+    ///
+    /// Returns a snapshot of the accumulated performance counters since the
+    /// last call to [`reset_performance_counters`].
+    pub fn get_performance_metrics(&self) -> &super::performance_opt::MarkPerformanceMetrics {
+        &self.metrics
+    }
+
+    /// Get a mutable reference to the metrics for external accumulation.
+    ///
+    /// Call this to update metrics from outside the renderer (e.g. after
+    /// buffer uploads or draw calls).
+    pub fn metrics_mut(&mut self) -> &mut super::performance_opt::MarkPerformanceMetrics {
+        &mut self.metrics
+    }
+
+    /// Reset all performance counters to zero.
+    ///
+    /// Call at the start of each frame to get per-frame metrics, or
+    /// leave running for cumulative statistics.
+    pub fn reset_performance_counters(&mut self) {
+        self.metrics = Default::default();
     }
 }
 
