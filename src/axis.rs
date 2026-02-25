@@ -950,6 +950,68 @@ impl AxisRenderer {
             .collect()
     }
 
+    /// Generate label data with viewport culling and LOD-based limiting.
+    ///
+    /// This is the performance-optimized label generation path that:
+    /// 1. Generates candidate labels the same way as [`generate_label_data`].
+    /// 2. Culls labels whose screen position falls outside the viewport.
+    /// 3. Caps the label count based on the current LOD level.
+    ///
+    /// Returns `(visible_labels, culled_count)`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn generate_labels_culled(
+        &self,
+        bounds: &AxisBounds,
+        config: &AxisConfiguration,
+        position: AxisPosition,
+        scale: Option<&dyn Scale>,
+        viewport_size: (f32, f32),
+        formatter: Option<&dyn LabelFormatter>,
+        viewport_bounds: &crate::axis_performance::ViewportBounds,
+        lod: crate::axis_performance::LODLevel,
+    ) -> (Vec<AxisLabel>, usize) {
+        // Generate all candidate labels
+        let all_labels =
+            self.generate_label_data(bounds, config, position, scale, viewport_size, formatter);
+
+        // Cull labels outside viewport
+        let margin = 20.0; // Allow labels slightly outside viewport
+        let screen_positions: Vec<[f32; 2]> = all_labels
+            .iter()
+            .map(|l| [l.screen_position.x, l.screen_position.y])
+            .collect();
+
+        let visible_indices =
+            crate::axis_performance::cull_label_indices(&screen_positions, viewport_bounds, margin);
+
+        let mut visible: Vec<AxisLabel> = visible_indices
+            .iter()
+            .map(|&i| all_labels[i].clone())
+            .collect();
+
+        let culled = all_labels.len() - visible.len();
+
+        // Apply LOD label cap
+        if let Some(max) = lod.max_labels() {
+            if visible.len() > max && max > 0 {
+                // Keep evenly spaced subset
+                let step = visible.len() as f32 / max as f32;
+                let mut kept = Vec::with_capacity(max);
+                for i in 0..max {
+                    let idx = (i as f32 * step) as usize;
+                    if idx < visible.len() {
+                        kept.push(visible[idx].clone());
+                    }
+                }
+                visible = kept;
+            } else if max == 0 {
+                visible.clear();
+            }
+        }
+
+        (visible, culled)
+    }
+
     // ---- internal helpers ----
 
     /// Append the axis line as two vertices.
@@ -1926,6 +1988,107 @@ mod tests {
         assert!(
             lookups >= 2,
             "Should have at least 2 lookups after invalidation"
+        );
+    }
+
+    // ---- Tests for label culling ----
+
+    #[test]
+    fn test_generate_labels_culled_all_visible() {
+        use crate::axis_performance::{LODLevel, ViewportBounds};
+
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let config = AxisConfiguration::default();
+        let viewport = ViewportBounds::from_size(800.0, 600.0);
+
+        let (labels, culled) = renderer.generate_labels_culled(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+            None,
+            &viewport,
+            LODLevel::High,
+        );
+
+        assert_eq!(labels.len(), 6, "All 6 labels should be visible");
+        assert_eq!(culled, 0, "No labels should be culled");
+    }
+
+    #[test]
+    fn test_generate_labels_culled_lod_limits() {
+        use crate::axis_performance::{LODLevel, ViewportBounds};
+
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let config = AxisConfiguration::default();
+        let viewport = ViewportBounds::from_size(800.0, 600.0);
+
+        // Low LOD caps at 5 labels
+        let (labels_low, _) = renderer.generate_labels_culled(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+            None,
+            &viewport,
+            LODLevel::Low,
+        );
+        assert!(
+            labels_low.len() <= 5,
+            "Low LOD should cap labels at 5, got {}",
+            labels_low.len()
+        );
+
+        // Minimal LOD shows no labels
+        let (labels_minimal, _) = renderer.generate_labels_culled(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+            None,
+            &viewport,
+            LODLevel::Minimal,
+        );
+        assert!(
+            labels_minimal.is_empty(),
+            "Minimal LOD should show no labels"
+        );
+    }
+
+    #[test]
+    fn test_generate_labels_culled_tiny_viewport() {
+        use crate::axis_performance::{LODLevel, ViewportBounds};
+
+        let renderer = AxisRenderer::new();
+        // Axis spans full NDC range
+        let bounds = AxisBounds::new(Vec2 { x: -1.0, y: -1.0 }, Vec2 { x: 1.0, y: -1.0 }, 50.0);
+        let config = AxisConfiguration::default();
+        // Tiny viewport that only covers a portion
+        let viewport = ViewportBounds::new(350.0, 250.0, 450.0, 350.0);
+
+        let (labels, culled) = renderer.generate_labels_culled(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+            None,
+            &viewport,
+            LODLevel::High,
+        );
+
+        assert!(
+            culled > 0,
+            "Some labels should be culled when viewport is tiny"
+        );
+        assert!(
+            labels.len() < 6,
+            "Fewer than 6 labels should be visible in tiny viewport"
         );
     }
 }
