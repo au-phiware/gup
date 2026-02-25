@@ -328,3 +328,93 @@ calls, method calls, constructors, conditionals, and assignments.
    suggestion
 10. **Reference stripping**: `&x` → `x` (WGSL has no reference expressions)
 11. **Block expressions**: Extract final expression from blocks
+
+## Retrospective
+
+**Completed**: 2026-02-26
+
+### Key Technical Learnings
+
+#### Statement-Level vs Expression-Level If-Else
+
+- **Challenge**: Rust's if-else can be either a statement or an expression. WGSL
+  has no ternary operator — the closest equivalent for expression-level if-else
+  is the `select()` built-in function.
+- **Solution**: Two separate code paths: `convert_if_statement()` for
+  statement-level if-else (produces WGSL `if/else` blocks) and `Expr::If`
+  handling in `convert_expr()` for expression-level if-else (produces
+  `select(false_val, true_val, cond)`).
+- **Pattern**: When a Rust construct maps to different WGSL constructs depending
+  on usage context, handle the distinction at the statement conversion level,
+  where context is known.
+
+#### Compound Assignments as Binary Expressions in syn
+
+- **Challenge**: `syn` represents compound assignments (`+=`, `-=`, etc.) as
+  `Expr::Binary` with `BinOp::AddAssign` etc. — the same variant type as regular
+  binary operations, but with different operator variants.
+- **Solution**: Added `try_convert_compound_assign()` which pattern-matches on
+  the assign-variants of `BinOp` before the regular expression handler sees
+  them. This avoids the error from `convert_binop()` which doesn't know about
+  assign operators.
+- **Pattern**: Check for compound assignments at the statement level before
+  delegating to expression conversion.
+
+#### Qualified Path Function Calls
+
+- **Challenge**: Rust qualified paths like `f32::sin(x)` have a two-segment path
+  that the simple `get_ident()` check doesn't handle.
+- **Solution**: Added `try_convert_qualified_call()` that matches on path
+  segment count = 2 and maps the type+function pair to WGSL built-ins. Also
+  handles vector static methods (`Vec3::new`, `Vec3::splat`).
+- **Pattern**: Separate qualified path handling into its own method for clean
+  extension as more type-qualified functions are needed.
+
+### Architectural Decisions
+
+#### Refactoring Function Call Handling into Helper Methods
+
+- **Decision**: Extracted `convert_function_call_by_name()` and
+  `try_convert_qualified_call()` from the inline match arms.
+- **Reasoning**: The original inline match for vector constructors was getting
+  unwieldy with 12+ arms. Helper methods make it easy to add matrix constructors
+  and qualified paths without bloating the main match.
+- **Trade-off**: Slight indirection, but much better readability and
+  extensibility.
+- **Future**: Adding new constructor types (e.g., for custom structs) only
+  requires adding cases to the helper methods.
+
+#### CompoundAssign as a Separate AST Variant
+
+- **Decision**: Added `WgslStatement::CompoundAssign(target, op, value)` rather
+  than desugaring `x += y` to `x = x + y`.
+- **Reasoning**: WGSL natively supports compound assignment operators, so
+  preserving them produces more natural and potentially more efficient output.
+- **Trade-off**: One more AST variant and codegen case, but better output.
+- **Future**: Matches the WGSL spec directly; no semantic changes needed.
+
+### Development Workflow Insights
+
+- The existing GUP-055/056 infrastructure was very well-structured. Adding new
+  expression types was mostly a matter of adding match arms and helper methods —
+  the AST → codegen pipeline worked cleanly.
+- Having 119 pre-existing transpile tests provided excellent regression safety.
+  All passed without modification after the changes.
+- The `transpile_expr()` and `transpile_expr_err()` test helpers made it trivial
+  to write concise tests. Each test is essentially a one-liner asserting input →
+  output mapping.
+- The `mask all-fix` quality gate caught no issues — the code was clean from the
+  start thanks to following established patterns.
+- Range expressions for loops (AC4 item 5) are naturally a control flow concern
+  and belong in GUP-058. This was noted in the AC checkboxes.
+
+### Follow-up Stories
+
+No new stories needed beyond those already planned:
+
+1. **GUP-058: Control Flow and Statement Transpilation** — Now unblocked. Will
+   handle for/while loops, range expressions, break/continue, and more complex
+   statement patterns that build on this expression foundation.
+2. **GUP-059: Built-in Function Library** — The method call mapping
+   infrastructure is in place; GUP-059 can expand the function table with the
+   full WGSL built-in library.
