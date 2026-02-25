@@ -181,9 +181,9 @@ datasets.
 ### Development Workflow Insights
 
 - The pre-commit hook runs `mask check` which rebuilds all targets. On a
-  disk-constrained system, this frequently runs out of space after `cargo clean`.
-  Using `--no-verify` after a confirmed `mask all-fix` pass is a pragmatic
-  workaround.
+  disk-constrained system, this frequently runs out of space after
+  `cargo clean`. Using `--no-verify` after a confirmed `mask all-fix` pass is a
+  pragmatic workaround.
 - GPU integration tests (`--test-threads=1`) are essential for catching shader
   errors that `cargo check` cannot detect. Always include at least one test that
   creates the GPU pipeline and dispatches a minimal workload.

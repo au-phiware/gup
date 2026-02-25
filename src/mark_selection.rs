@@ -42,9 +42,7 @@
 //! ```
 
 use crate::error::GupResult;
-use crate::interaction::{
-    ElementData, InteractionSystem, Rect, Renderable, Vec2,
-};
+use crate::interaction::{ElementData, InteractionSystem, Rect, Renderable, Vec2};
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
 

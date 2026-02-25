@@ -1,6 +1,6 @@
 # GUP-194: GPU-Resident Selection Data Cache
 
-**Status**: 📋 Planned **Priority**: Medium **Effort**: 5 **Dependencies**:
+**Status**: 🚧 In Progress **Priority**: Medium **Effort**: 5 **Dependencies**:
 GUP-181 (GPU-Accelerated Selection Hit Testing)
 
 ## Overview
