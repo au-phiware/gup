@@ -1,6 +1,6 @@
 # GUP-181: GPU-Accelerated Selection Hit Testing
 
-**Status**: 🚧 In Progress **Priority**: Medium **Effort**: 5 **Dependencies**:
+**Status**: ✅ Complete **Priority**: Medium **Effort**: 5 **Dependencies**:
 GUP-075 (Interactive Mark Selection), GUP-012 (GPU Interaction System)
 
 ## Overview
@@ -29,21 +29,23 @@ interactions remain responsive at <1ms.
 
 ## Acceptance Criteria
 
-1. `MarkSelectionSystem` can optionally hold a reference to `InteractionSystem`
-2. Point hit tests are dispatched to GPU when `InteractionSystem` is available
-3. Rectangle and lasso selections use spatial index for candidate filtering
-4. Hit testing latency stays under 1ms for 100K points
-5. Fallback to CPU hit testing when GPU is not available
-6. Integration example demonstrating large-dataset selection
+1. [x] `MarkSelectionSystem` can optionally hold a reference to
+       `InteractionSystem`
+2. [x] Point hit tests are dispatched to GPU when `InteractionSystem` is
+       available
+3. [x] Rectangle and lasso selections use spatial index for candidate filtering
+4. [x] Hit testing latency stays under 1ms for 100K points
+5. [x] Fallback to CPU hit testing when GPU is not available
+6. [x] Integration example demonstrating large-dataset selection
 
 ## Technical Tasks
 
-- [ ] Add optional `InteractionSystem` integration to `MarkSelectionSystem`
-- [ ] Wire up `query_point` for hover and click events
-- [ ] Wire up `query_region` for rectangle selection
-- [ ] Implement async hit test result handling in event loop
-- [ ] Add benchmark test for 100K-point selection latency
-- [ ] Create large-dataset selection example
+- [x] Add optional `InteractionSystem` integration to `MarkSelectionSystem`
+- [x] Wire up `query_point` for hover and click events
+- [x] Wire up `query_region` for rectangle selection
+- [x] Implement async hit test result handling in event loop
+- [x] Add benchmark test for 100K-point selection latency
+- [x] Create large-dataset selection example
 
 ## Testing Strategy
 
@@ -60,8 +62,42 @@ interactions remain responsive at <1ms.
 
 ## Definition of Done
 
-- [ ] GPU-accelerated hit testing works for point/rect/lasso tools
-- [ ] Performance target: <1ms for 100K marks
-- [ ] CPU fallback works when no InteractionSystem is available
-- [ ] All tests pass
-- [ ] Example demonstrates large-dataset selection
+- [x] GPU-accelerated hit testing works for point/rect/lasso tools
+- [x] Performance target: <1ms for 100K marks
+- [x] CPU fallback works when no InteractionSystem is available
+- [x] All tests pass
+- [x] Example demonstrates large-dataset selection
+
+## Implementation Summary
+
+### What Was Implemented
+
+- **GPU hit testing integration**: `MarkSelectionSystem` now supports
+  GPU-accelerated point, rectangle, and lasso hit testing via
+  `InteractionSystem`
+- **Position tracking**: `set_positions()` and `set_positions_with_sizes()`
+  register mark positions for both CPU and GPU hit testing
+- **CPU fallback**: `hit_test()`, `rect_hit_test()`, and `lasso_hit_test()`
+  provide CPU-based alternatives
+- **GPU methods**: `hit_test_gpu()`, `rect_hit_test_gpu()`, and
+  `lasso_hit_test_gpu()` dispatch to GPU compute shaders
+- **Auto-fallback**: `hit_test_auto()`, `rect_hit_test_auto()`, and
+  `lasso_hit_test_auto()` select GPU or CPU automatically
+- **Lasso optimisation**: GPU lasso queries use bounding-rect candidate
+  filtering then CPU point-in-polygon refinement
+- **ElementDataRenderable adapter**: Bridges `MarkSelectionSystem` position data
+  to the `Renderable` trait required by `InteractionSystem`
+
+### Key Files Changed
+
+| File                                 | Changes                                                                                                                           |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| `src/mark_selection.rs`              | +483 lines: position tracking, CPU/GPU hit testing, `ElementDataRenderable` adapter, 10 new unit tests                            |
+| `tests/gpu_selection_hit_testing.rs` | New file: 13 GPU integration tests covering point/rect/lasso, CPU fallback, auto-switching, 100K benchmarks, CPU↔GPU consistency |
+| `examples/gpu_selection_demo.rs`     | New file: 50K-mark interactive demo with GPU hit testing, all three selection tools, timing display                               |
+
+### Test Counts
+
+- 10 new unit tests in `mark_selection.rs` (56 total in module)
+- 13 new GPU integration tests in `gpu_selection_hit_testing.rs`
+- All 1207+ existing tests continue to pass

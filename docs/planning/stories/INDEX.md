@@ -184,7 +184,7 @@ reorganisation._
 | [GUP-174](GUP-174_Flaky_Performance_Test_Stabilization.md) | Flaky Performance Test Stabilization  | 📋 Planned  | Low      | —      |
 | [GUP-175](GUP-175_GPU_Side_Morton_Range_Query.md)          | GPU-Side Morton Range Query           | ✅ Complete | Medium   | —      |
 | [GUP-176](GUP-176_Spatial_Index_Adaptive_Grid_Size.md)     | Spatial Index Adaptive Grid Size      | 📋 Planned  | Low      | —      |
-| [GUP-181](GUP-181_GPU_Selection_Hit_Testing.md)            | GPU-Accelerated Selection Hit Testing | 🚧 In Progress | Medium   | 5      |
+| [GUP-181](GUP-181_GPU_Selection_Hit_Testing.md)            | GPU-Accelerated Selection Hit Testing | ✅ Complete | Medium   | 5      |
 | [GUP-182](GUP-182_Touch_Selection_Support.md)              | Touch Selection Support               | 📋 Planned  | Low      | 3      |
 | [GUP-183](GUP-183_Pooled_GPU_Instance_Filter_Buffers.md)   | Pooled GPU Instance Filter Buffers    | 📋 Planned  | Medium   | —      |
 | [GUP-184](GUP-184_GPU_Radix_Sort_Z_Order.md)               | GPU Radix Sort for Z-Order            | 📋 Planned  | Low      | —      |
