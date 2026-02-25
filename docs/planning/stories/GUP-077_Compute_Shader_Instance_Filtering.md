@@ -1,7 +1,7 @@
 # GUP-077: Compute Shader Instance Sorting and Filtering
 
 **Story ID**: GUP-077 **Title**: Compute Shader Instance Sorting and Filtering
-**Status**: 📋 Planned **Priority**: Medium **Effort**: — **Created**:
+**Status**: 🚧 In Progress **Priority**: Medium **Effort**: — **Created**:
 2026-02-25 **Dependencies**: GUP-074 (Mark Performance Optimization)
 
 ## Overview
