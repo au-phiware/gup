@@ -602,4 +602,170 @@ mod tests {
             "Float '42' should render as '42.0' but got '{result}'"
         );
     }
+
+    #[test]
+    fn generate_for_loop() {
+        let func = WgslFunction {
+            name: "test".to_string(),
+            params: vec![WgslParam {
+                name: "n".to_string(),
+                ty: WgslType::Scalar(ScalarType::I32),
+            }],
+            return_type: WgslType::Scalar(ScalarType::I32),
+            body: vec![
+                WgslStatement::Let {
+                    name: "sum".to_string(),
+                    ty: None,
+                    value: WgslExpr::Literal(Literal::Int(0)),
+                    mutable: true,
+                },
+                WgslStatement::For {
+                    var_name: "i".to_string(),
+                    initialiser: WgslExpr::Literal(Literal::Int(0)),
+                    condition: WgslExpr::Binary(
+                        Box::new(WgslExpr::Ident("i".to_string())),
+                        BinaryOp::Less,
+                        Box::new(WgslExpr::Ident("n".to_string())),
+                    ),
+                    update: WgslExpr::Ident("i".to_string()),
+                    body: vec![WgslStatement::CompoundAssign(
+                        WgslExpr::Ident("sum".to_string()),
+                        BinaryOp::Add,
+                        WgslExpr::Ident("i".to_string()),
+                    )],
+                },
+                WgslStatement::Return(Some(WgslExpr::Ident("sum".to_string()))),
+            ],
+        };
+        let wgsl = generate_function_wgsl(&func);
+        assert!(
+            wgsl.contains("for (var i = 0; i < n; i++)"),
+            "got:\n{wgsl}"
+        );
+        assert!(wgsl.contains("sum += i;"), "got:\n{wgsl}");
+    }
+
+    #[test]
+    fn generate_while_loop() {
+        let func = WgslFunction {
+            name: "test".to_string(),
+            params: vec![],
+            return_type: WgslType::Void,
+            body: vec![WgslStatement::While {
+                condition: WgslExpr::Binary(
+                    Box::new(WgslExpr::Ident("x".to_string())),
+                    BinaryOp::Greater,
+                    Box::new(WgslExpr::Literal(Literal::Float(0.0))),
+                ),
+                body: vec![WgslStatement::CompoundAssign(
+                    WgslExpr::Ident("x".to_string()),
+                    BinaryOp::Sub,
+                    WgslExpr::Literal(Literal::Float(1.0)),
+                )],
+            }],
+        };
+        let wgsl = generate_function_wgsl(&func);
+        assert!(wgsl.contains("while (x > 0.0)"), "got:\n{wgsl}");
+    }
+
+    #[test]
+    fn generate_infinite_loop() {
+        let func = WgslFunction {
+            name: "test".to_string(),
+            params: vec![],
+            return_type: WgslType::Void,
+            body: vec![WgslStatement::Loop {
+                body: vec![WgslStatement::Break],
+            }],
+        };
+        let wgsl = generate_function_wgsl(&func);
+        assert!(wgsl.contains("loop {"), "got:\n{wgsl}");
+        assert!(wgsl.contains("break;"), "got:\n{wgsl}");
+    }
+
+    #[test]
+    fn generate_break_continue() {
+        let func = WgslFunction {
+            name: "test".to_string(),
+            params: vec![],
+            return_type: WgslType::Void,
+            body: vec![WgslStatement::For {
+                var_name: "i".to_string(),
+                initialiser: WgslExpr::Literal(Literal::Int(0)),
+                condition: WgslExpr::Binary(
+                    Box::new(WgslExpr::Ident("i".to_string())),
+                    BinaryOp::Less,
+                    Box::new(WgslExpr::Literal(Literal::Int(10))),
+                ),
+                update: WgslExpr::Ident("i".to_string()),
+                body: vec![
+                    WgslStatement::If {
+                        condition: WgslExpr::Binary(
+                            Box::new(WgslExpr::Ident("i".to_string())),
+                            BinaryOp::Equal,
+                            Box::new(WgslExpr::Literal(Literal::Int(3))),
+                        ),
+                        body: vec![WgslStatement::Continue],
+                        else_body: None,
+                    },
+                    WgslStatement::If {
+                        condition: WgslExpr::Binary(
+                            Box::new(WgslExpr::Ident("i".to_string())),
+                            BinaryOp::Equal,
+                            Box::new(WgslExpr::Literal(Literal::Int(7))),
+                        ),
+                        body: vec![WgslStatement::Break],
+                        else_body: None,
+                    },
+                ],
+            }],
+        };
+        let wgsl = generate_function_wgsl(&func);
+        assert!(wgsl.contains("continue;"), "got:\n{wgsl}");
+        assert!(wgsl.contains("break;"), "got:\n{wgsl}");
+    }
+
+    #[test]
+    fn generate_else_if_chain() {
+        let func = WgslFunction {
+            name: "classify".to_string(),
+            params: vec![WgslParam {
+                name: "x".to_string(),
+                ty: WgslType::Scalar(ScalarType::F32),
+            }],
+            return_type: WgslType::Scalar(ScalarType::I32),
+            body: vec![WgslStatement::If {
+                condition: WgslExpr::Binary(
+                    Box::new(WgslExpr::Ident("x".to_string())),
+                    BinaryOp::Greater,
+                    Box::new(WgslExpr::Literal(Literal::Float(1.0))),
+                ),
+                body: vec![WgslStatement::Return(Some(WgslExpr::Literal(
+                    Literal::Int(2),
+                )))],
+                else_body: Some(vec![WgslStatement::If {
+                    condition: WgslExpr::Binary(
+                        Box::new(WgslExpr::Ident("x".to_string())),
+                        BinaryOp::Greater,
+                        Box::new(WgslExpr::Literal(Literal::Float(0.0))),
+                    ),
+                    body: vec![WgslStatement::Return(Some(WgslExpr::Literal(
+                        Literal::Int(1),
+                    )))],
+                    else_body: Some(vec![WgslStatement::Return(Some(WgslExpr::Literal(
+                        Literal::Int(0),
+                    )))]),
+                }]),
+            }],
+        };
+        let wgsl = generate_function_wgsl(&func);
+        assert!(
+            wgsl.contains("} else if (x > 0.0) {"),
+            "Should generate else-if, got:\n{wgsl}"
+        );
+        assert!(
+            wgsl.contains("} else {"),
+            "Should generate else, got:\n{wgsl}"
+        );
+    }
 }
