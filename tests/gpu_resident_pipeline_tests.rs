@@ -189,13 +189,6 @@ async fn test_gpu_resident_large_dataset() {
     system.set_spatial_algorithm(SpatialAlgorithm::Morton);
 
     // Test with 5K elements to verify at scale.
-    //
-    // NOTE: The hit test shader indexes results as
-    //   element_index * arrayLength(&queries) + query_index
-    // where arrayLength(&queries) = max_queries (32). With max_results =
-    // 100K, at most ~3125 candidate elements can store results. Using 5K
-    // elements with a small spread keeps the Morton candidate set small
-    // enough to stay within the result buffer.
     let elements = make_circle_grid(5_000, 300.0);
     let renderable = MockRenderable::from_element_data(&elements);
 
@@ -310,5 +303,117 @@ async fn test_gpu_resident_query_latency() {
         avg_latency.as_millis() < 500,
         "GPU-resident query should complete in < 500ms, took {:?}",
         avg_latency
+    );
+}
+
+// --- GUP-196: Large Candidate Count Test ---
+
+/// Verify that single-query dispatches with >3125 candidates produce correct
+/// results. Before GUP-196 the hit test shader used `arrayLength(&queries)`
+/// (the buffer capacity = 32) for result indexing, which limited candidates
+/// to 100K / 32 = 3125. With the actual query count passed via a uniform,
+/// single-query dispatches can test up to 100K candidates.
+#[tokio::test]
+async fn test_single_query_exceeds_old_candidate_limit() {
+    let mut system = create_test_interaction_system().await;
+
+    // Use brute-force path (no spatial index) to guarantee all elements
+    // are dispatched as candidates to the hit test shader.
+    system.set_spatial_algorithm(SpatialAlgorithm::Auto);
+
+    // Create 5000 circles (>3125) all clustered around (50, 50) so that
+    // they all register as hits for a region query covering the cluster.
+    let count = 5_000usize;
+    let elements: Vec<ElementData> = (0..count)
+        .map(|i| {
+            let row = i / 100;
+            let col = i % 100;
+            ElementData {
+                position: [col as f32 * 0.5, row as f32 * 0.5],
+                size: [1.0, 1.0], // radius = 1 for circles
+                mark_type: 0,     // Circle
+                element_id: i as u32,
+                selection_id: 0,
+                _padding: 0,
+            }
+        })
+        .collect();
+    let renderable = MockRenderable::from_element_data(&elements);
+
+    // Region query that covers the entire cluster.
+    let region = Rect::new(Vec2::new(-1.0, -1.0), Vec2::new(60.0, 60.0));
+    let hits = system
+        .query_region(region, &[&renderable])
+        .await
+        .expect("region query with >3125 candidates should succeed");
+
+    println!(
+        "Single-query dispatch with {} candidates: {} hits",
+        count,
+        hits.len()
+    );
+
+    // With the old indexing (element * 32 + 0), elements with index ≥3125
+    // would overflow the 100K result buffer and be silently dropped. With
+    // the fix (element * 1 + 0), all 5000 elements should produce results.
+    assert!(
+        hits.len() > 3125,
+        "Should find more than 3125 hits (found {}); \
+         the old result indexing limit should be gone",
+        hits.len()
+    );
+
+    // Verify we find the vast majority of elements (allowing a small margin
+    // for elements exactly on the boundary of the query region).
+    assert!(
+        hits.len() >= count - 10,
+        "Expected ~{} hits but got {}; some results may have been dropped",
+        count,
+        hits.len()
+    );
+}
+
+/// Verify batch (multi-query) dispatches still work correctly with the
+/// uniform query count. This ensures we didn't break the multi-query path.
+#[tokio::test]
+async fn test_batch_query_still_works() {
+    let mut system = create_test_interaction_system().await;
+
+    // Create a small set of well-separated circles.
+    let elements: Vec<ElementData> = (0..100)
+        .map(|i| ElementData {
+            position: [(i % 10) as f32 * 50.0, (i / 10) as f32 * 50.0],
+            size: [10.0, 10.0],
+            mark_type: 0,
+            element_id: i as u32,
+            selection_id: 0,
+            _padding: 0,
+        })
+        .collect();
+    let renderable = MockRenderable::from_element_data(&elements);
+
+    // Batch of 3 queries at known positions.
+    let queries = vec![
+        gup::interaction::GpuInteractionQuery::point(Vec2::new(0.0, 0.0), 100),
+        gup::interaction::GpuInteractionQuery::point(Vec2::new(450.0, 450.0), 100),
+        gup::interaction::GpuInteractionQuery::point(Vec2::new(9999.0, 9999.0), 100),
+    ];
+
+    let batch_results = system
+        .query_batch(&queries, &[&renderable])
+        .await
+        .expect("batch query should succeed");
+
+    assert_eq!(
+        batch_results.len(),
+        3,
+        "Should return one result set per query"
+    );
+
+    println!(
+        "Batch query results: q0={} hits, q1={} hits, q2={} hits",
+        batch_results[0].len(),
+        batch_results[1].len(),
+        batch_results[2].len(),
     );
 }
