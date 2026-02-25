@@ -89,3 +89,73 @@ re-uploading instance data. The method:
 | `gpu_update_shader_uniforms_before_prepare_error` | GPU        | Error when render state uninitialised |
 | `gpu_update_shader_uniforms_type_mismatch_error`  | GPU        | Error for mismatched output types     |
 | `gpu_update_shader_uniforms_performance`          | GPU + Perf | <1ms for 100K points vs full prepare  |
+
+## Retrospective
+
+**Completed**: 2026-02-25
+
+### Key Technical Learnings
+
+#### Uniform Buffer Architecture Was Already Well-Prepared
+
+- **Challenge**: Understanding how to surgically update a single uniform buffer
+  without disturbing the rest of the render state.
+- **Solution**: GUP-177's `SelectionRenderState` already stored
+  `uniform_buffers: Vec<wgpu::Buffer>` with each buffer indexed 1:1 with the
+  shader binding position. This made the update trivial — just
+  `queue.write_buffer(buf, 0, &new_bytes)`.
+- **Pattern**: When designing GPU state structs, store auxiliary buffers in
+  indexed collections so they can be individually updated later.
+
+#### Type-Erased Shader Function Metadata Enables Safe Updates
+
+- **Challenge**: The `update_shader_uniforms` method accepts a different
+  concrete shader function type than the original binding. We need to ensure the
+  output type matches without knowing the concrete type at compile time.
+- **Solution**: Compare `output_wgsl_type` strings from `ShaderFnInfo`. This
+  reuses the same type-erased metadata pattern established in GUP-177. The WGSL
+  type name acts as a runtime type check.
+- **Pattern**: When dealing with type-erased GPU bindings, store enough metadata
+  (type names, sizes) to perform runtime validation on updates.
+
+### Architectural Decisions
+
+#### Method Takes `&Queue` Rather Than `(&Device, &Queue)`
+
+- **Decision**: `update_shader_uniforms` only requires `&Queue`, not `&Device`.
+- **Reasoning**: The method only writes to existing buffers — it never allocates
+  new GPU resources. Requiring only `&Queue` makes the API lighter and clearly
+  communicates that this is a data-only operation.
+- **Trade-off**: If a future extension needs to resize the uniform buffer, the
+  signature would need to change. However, uniform buffers are fixed-size
+  (determined by the shader function's `Uniforms` type), so this is unlikely.
+- **Future**: This clean separation between "allocate" (`prepare_render_bound`)
+  and "update" (`update_shader_uniforms`) is a good pattern for other live
+  update scenarios.
+
+#### Store Updated Bytes Back Into ShaderAttributeBinding
+
+- **Decision**: After writing to the GPU, also update
+  `shader_attr_bindings[i].shader_fn.uniform_bytes` in-memory.
+- **Reasoning**: If the user later calls `prepare_render_bound()` again (e.g.,
+  after changing data), the most recent uniform parameters should be used
+  instead of the original values.
+- **Trade-off**: Slight memory overhead of keeping CPU-side copy of uniform
+  bytes, but these are tiny (16–64 bytes per binding).
+
+### Development Workflow Insights
+
+- This story was exceptionally straightforward — the architecture from GUP-177
+  was specifically designed to enable this use case. The uniform buffers were
+  already stored, indexed, and writable.
+- The implementation required only ~40 lines of production code plus ~330 lines
+  of comprehensive tests. The high test-to-code ratio reflects the story's focus
+  on API correctness and error handling.
+- All 7 tests passed on the first run — a sign that the underlying architecture
+  was solid.
+
+### Follow-up Stories
+
+No new stories were identified during implementation. The existing follow-up
+stories from GUP-177 (GUP-180: FunctionChain Binding Support) remains the
+natural next step for the shader function binding system.
