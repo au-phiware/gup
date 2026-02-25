@@ -429,6 +429,114 @@ impl<M: Mark> MarkInfoImpl<M> {
         Ok(pipeline)
     }
 
+    /// Create render pipeline for a specific multi-pass configuration.
+    ///
+    /// This enables per-pass customization of blend state, polygon mode,
+    /// and shader entry points.
+    pub fn create_render_pipeline_for_pass(
+        &self,
+        device: &Device,
+        pass_config: &advanced_rendering::RenderPassConfig,
+    ) -> GupResult<RenderPipeline> {
+        // Determine shader sources (manual vs generated)
+        let (vertex_source, fragment_source) =
+            if M::VERTEX_SHADER.is_some() && M::FRAGMENT_SHADER.is_some() {
+                (
+                    M::VERTEX_SHADER.unwrap().to_string(),
+                    M::FRAGMENT_SHADER.unwrap().to_string(),
+                )
+            } else {
+                let pipeline = ComposableShaderPipeline::new();
+                let vertex_shader = M::generate_vertex_shader(&pipeline);
+                let fragment_shader = M::generate_fragment_shader(&pipeline);
+                (vertex_shader, fragment_shader)
+            };
+
+        let vertex_module = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some(&format!(
+                "{}_{}_vertex",
+                self.type_name(),
+                pass_config.label
+            )),
+            source: ShaderSource::Wgsl(vertex_source.into()),
+        });
+
+        let fragment_module = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some(&format!(
+                "{}_{}_fragment",
+                self.type_name(),
+                pass_config.label
+            )),
+            source: ShaderSource::Wgsl(fragment_source.into()),
+        });
+
+        let bind_group_layout = self.create_bind_group_layout(device)?;
+
+        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+            label: Some(&format!(
+                "{}_{}_pipeline_layout",
+                self.type_name(),
+                pass_config.label
+            )),
+            bind_group_layouts: &[&bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+        // Resolve entry points (pass config can override defaults)
+        let vs_entry = pass_config
+            .vertex_entry_point
+            .as_deref()
+            .unwrap_or("vs_main");
+        let fs_entry = pass_config
+            .fragment_entry_point
+            .as_deref()
+            .unwrap_or("fs_main");
+
+        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+            label: Some(&format!(
+                "{}_{}_pipeline",
+                self.type_name(),
+                pass_config.label
+            )),
+            layout: Some(&pipeline_layout),
+            vertex: VertexState {
+                module: &vertex_module,
+                entry_point: Some(vs_entry),
+                buffers: &[self.create_vertex_buffer_layout()],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(FragmentState {
+                module: &fragment_module,
+                entry_point: Some(fs_entry),
+                targets: &[Some(ColorTargetState {
+                    format: TextureFormat::Bgra8UnormSrgb,
+                    blend: pass_config.blend_state,
+                    write_mask: ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: PrimitiveState {
+                topology: PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: FrontFace::Ccw,
+                cull_mode: None,
+                unclipped_depth: false,
+                polygon_mode: pass_config.polygon_mode,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+            cache: None,
+        });
+
+        Ok(pipeline)
+    }
+
     /// Create render pipeline with pattern support for accessibility.
     fn create_render_pipeline_with_patterns_impl(
         &self,
@@ -836,6 +944,92 @@ impl MarkRegistry {
                 "Failed to downcast mark info".to_string(),
             ))
         }
+    }
+
+    /// Get or create a render pipeline for a mark type with a specific blend config.
+    ///
+    /// This method resolves the effective blend state from the [`MarkBlendConfig`]
+    /// and creates a pipeline with that blend state. The pipeline is cached using
+    /// a composite key of (mark type, blend mode).
+    ///
+    /// # Arguments
+    ///
+    /// * `device` - The wgpu device for pipeline creation
+    /// * `blend_config` - Blend configuration for this mark
+    /// * `context_blend` - Optional context-level blend mode override
+    pub fn get_pipeline_with_blend<M: Mark>(
+        &mut self,
+        device: &Device,
+        blend_config: &advanced_rendering::MarkBlendConfig,
+        context_blend: Option<crate::mixable::BlendMode>,
+    ) -> GupResult<Arc<RenderPipeline>> {
+        // For marks that use default alpha blending and no override, use regular pipeline
+        let resolved = blend_config.resolve_blend_state(context_blend);
+        let is_default_alpha = matches!(
+            resolved,
+            Some(ref s)
+                if s.color.src_factor == wgpu::BlendFactor::SrcAlpha
+                    && s.color.dst_factor == wgpu::BlendFactor::OneMinusSrcAlpha
+        );
+
+        if is_default_alpha || resolved.is_none() {
+            // Standard pipeline path
+            return self.get_pipeline::<M>(device);
+        }
+
+        // For non-standard blend states, create a fresh pipeline with the resolved blend
+        let type_id = TypeId::of::<M>();
+        let mark_info = self.marks.get(&type_id).ok_or_else(|| {
+            crate::error::GupError::render_error(format!(
+                "Mark type {} not registered",
+                std::any::type_name::<M>()
+            ))
+        })?;
+
+        let pipeline = mark_info.create_render_pipeline(device)?;
+        Ok(Arc::new(pipeline))
+    }
+
+    /// Create pipelines for multi-pass mark rendering.
+    ///
+    /// Creates one pipeline per pass in the [`MultiPassConfig`], each with its
+    /// own blend state and polygon mode. Useful for marks that need multiple
+    /// draw calls (e.g., fill + outline, base + shadow).
+    pub fn create_multi_pass_pipelines<M: Mark>(
+        &self,
+        device: &Device,
+        config: &advanced_rendering::MultiPassConfig,
+    ) -> GupResult<Vec<RenderPipeline>> {
+        let type_id = TypeId::of::<M>();
+        let mark_info_impl = self.marks.get(&type_id).ok_or_else(|| {
+            crate::error::GupError::render_error(format!(
+                "Mark type {} not registered",
+                std::any::type_name::<M>()
+            ))
+        })?;
+
+        let mark_info_impl = mark_info_impl
+            .as_any()
+            .downcast_ref::<MarkInfoImpl<M>>()
+            .ok_or_else(|| {
+                crate::error::GupError::render_error("Failed to downcast mark info".to_string())
+            })?;
+
+        let mut pipelines = Vec::with_capacity(config.pass_count());
+
+        for (i, pass_config) in config.passes().iter().enumerate() {
+            let pipeline = mark_info_impl
+                .create_render_pipeline_for_pass(device, pass_config)
+                .map_err(|e| {
+                    crate::error::GupError::render_error(format!(
+                        "Failed to create pipeline for pass {i} '{}': {e}",
+                        pass_config.label,
+                    ))
+                })?;
+            pipelines.push(pipeline);
+        }
+
+        Ok(pipelines)
     }
 }
 

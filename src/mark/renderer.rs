@@ -273,6 +273,86 @@ impl MarkRenderer {
     pub fn index_buffer(&self) -> Option<&GpuBuffer<u32>> {
         self.index_buffer.as_ref()
     }
+
+    /// Render mark instances using multiple pipelines (multi-pass rendering).
+    ///
+    /// Each pipeline in `pipelines` corresponds to a pass in the multi-pass
+    /// configuration. All passes are issued within the same render pass,
+    /// following the single render pass per frame pattern.
+    ///
+    /// # Arguments
+    ///
+    /// * `render_pass` - The active GPU render pass
+    /// * `config` - Multi-pass configuration describing each pass
+    /// * `pipelines` - One pipeline per pass (must match `config.pass_count()`)
+    /// * `bind_group` - Shared bind group for all passes
+    /// * `instance_count` - Number of instances to draw per pass
+    pub fn render_marks_multi_pass<M: Mark>(
+        &self,
+        render_pass: &mut RenderPass<'_>,
+        config: &super::advanced_rendering::MultiPassConfig,
+        pipelines: &[wgpu::RenderPipeline],
+        bind_group: &wgpu::BindGroup,
+        instance_count: u32,
+    ) -> GupResult<()> {
+        if pipelines.len() != config.pass_count() {
+            return Err(crate::error::GupError::render_error(format!(
+                "Pipeline count ({}) doesn't match pass count ({})",
+                pipelines.len(),
+                config.pass_count()
+            )));
+        }
+
+        for (i, (pass_config, pipeline)) in config.passes().iter().zip(pipelines.iter()).enumerate()
+        {
+            render_pass.set_pipeline(pipeline);
+            render_pass.set_bind_group(0, bind_group, &[]);
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.buffer().slice(..));
+
+            if let Some(stencil_ref) = pass_config.stencil_reference {
+                render_pass.set_stencil_reference(stencil_ref);
+            }
+
+            if let Some(index_count) = M::index_count() {
+                if let Some(ref index_buffer) = self.index_buffer {
+                    render_pass.set_index_buffer(
+                        index_buffer.buffer().slice(..),
+                        wgpu::IndexFormat::Uint32,
+                    );
+                    render_pass.draw_indexed(0..index_count as u32, 0, 0..instance_count);
+                } else {
+                    return Err(crate::error::GupError::render_error(format!(
+                        "Mark requires indexed rendering but no index buffer (pass {i} '{}')",
+                        pass_config.label,
+                    )));
+                }
+            } else {
+                render_pass.draw(0..M::vertex_count() as u32, 0..instance_count);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Render marks with state isolation using a [`RenderStateManager`].
+    ///
+    /// This method saves the current render state, applies the mark-specific
+    /// viewport/scissor configuration, renders, then restores the previous state.
+    /// This prevents mark types from interfering with each other in compositions.
+    pub fn render_marks_with_state<M: Mark>(
+        &self,
+        render_pass: &mut RenderPass<'_>,
+        pipeline: &wgpu::RenderPipeline,
+        bind_group: &wgpu::BindGroup,
+        instance_count: u32,
+        state_manager: &super::advanced_rendering::RenderStateManager,
+    ) -> GupResult<()> {
+        // Apply state (viewport/scissor) before rendering
+        state_manager.apply_to_render_pass(render_pass);
+
+        // Delegate to standard render
+        self.render_marks::<M>(render_pass, pipeline, bind_group, instance_count)
+    }
 }
 
 impl Default for MarkRenderer {
