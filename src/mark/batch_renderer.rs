@@ -855,6 +855,83 @@ impl InstancedBatchRenderer {
     pub fn instance_buffer<M: Mark>(&self) -> Option<&GpuBuffer<u8>> {
         self.instance_buffers.get(&TypeId::of::<M>())
     }
+
+    /// Submit instances with GPU compute shader culling.
+    ///
+    /// Uses [`ComputeInstanceFilter`] to cull and compact instances on
+    /// the GPU, producing a [`FilterResult`] that can be used with
+    /// `draw_indirect`. Falls back to the CPU [`submit_with_culling`]
+    /// path if `gpu_filter` is `None`.
+    ///
+    /// Returns the [`FilterResult`] for use in render passes when the
+    /// GPU path is used, or `None` when falling back to CPU culling.
+    ///
+    /// [`ComputeInstanceFilter`]: super::compute_instance_filter::ComputeInstanceFilter
+    pub async fn submit_with_gpu_culling<M, I>(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        instances: &[I],
+        centers: &[[f32; 2]],
+        radii: &[f32],
+        gpu_filter: Option<&super::compute_instance_filter::ComputeInstanceFilter>,
+    ) -> GupResult<Option<super::compute_instance_filter::FilterResult>>
+    where
+        M: Mark,
+        I: bytemuck::Pod + bytemuck::Zeroable + Copy,
+    {
+        if instances.is_empty() {
+            return Ok(None);
+        }
+
+        // Try GPU path if a filter is available.
+        if let Some(filter) = gpu_filter {
+            // Convert instances to InstanceAttributes for the compute shader.
+            let attrs: Vec<InstanceAttributes> = centers
+                .iter()
+                .zip(radii.iter())
+                .enumerate()
+                .map(|(i, (center, &radius))| {
+                    let inst_bytes: &[u8] = bytemuck::bytes_of(&instances[i]);
+                    // If the instance type is already InstanceAttributes, use it directly.
+                    if inst_bytes.len() == std::mem::size_of::<InstanceAttributes>() {
+                        *bytemuck::from_bytes(inst_bytes)
+                    } else {
+                        // Fallback: construct from center/radius.
+                        InstanceAttributes::from_circle(*center, radius, [1.0, 1.0, 1.0, 1.0])
+                    }
+                })
+                .collect();
+
+            let attr_bytes: &[u8] = bytemuck::cast_slice(&attrs);
+            let input_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("gpu_cull_input"),
+                size: attr_bytes.len() as u64,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            queue.write_buffer(&input_buffer, 0, attr_bytes);
+
+            let vertex_count = M::vertex_count() as u32;
+            let result = filter
+                .dispatch(
+                    device,
+                    queue,
+                    &input_buffer,
+                    instances.len() as u32,
+                    vertex_count,
+                    self.culling.viewport(),
+                    &self.config.lod_thresholds,
+                )
+                .await?;
+
+            return Ok(Some(result));
+        }
+
+        // CPU fallback.
+        self.submit_with_culling::<M, I>(device, queue, instances, centers, radii)?;
+        Ok(None)
+    }
 }
 
 #[cfg(test)]
@@ -1474,5 +1551,102 @@ mod tests {
         let stats = renderer.end_frame();
         assert_eq!(stats.culled_instances, 2);
         Ok(())
+    }
+
+    // ------------------------------------------------------------------
+    // GPU-accelerated culling integration tests
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn test_gpu_culling_path() {
+        use crate::mark::compute_instance_filter::ComputeInstanceFilter;
+
+        let ctx = match crate::context::GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let device = &ctx.device;
+        let queue = &ctx.queue;
+
+        let filter = ComputeInstanceFilter::new(device).unwrap();
+        let mut renderer = InstancedBatchRenderer::new(BatchRendererConfig::default());
+        renderer.begin_frame();
+
+        // 4 circle instances: 2 visible, 2 outside.
+        let instances = [
+            InstanceAttributes::from_circle([0.0, 0.0], 0.1, [1.0, 0.0, 0.0, 1.0]),
+            InstanceAttributes::from_circle([5.0, 5.0], 0.1, [0.0, 1.0, 0.0, 1.0]),
+            InstanceAttributes::from_circle([0.5, -0.5], 0.1, [0.0, 0.0, 1.0, 1.0]),
+            InstanceAttributes::from_circle([-5.0, -5.0], 0.1, [1.0, 1.0, 0.0, 1.0]),
+        ];
+        let centers: Vec<[f32; 2]> = instances.iter().map(|i| i.position()).collect();
+        let radii: Vec<f32> = instances.iter().map(|i| i.scale()[0]).collect();
+
+        let result = renderer
+            .submit_with_gpu_culling::<Circle, _>(
+                device,
+                queue,
+                &instances,
+                &centers,
+                &radii,
+                Some(&filter),
+            )
+            .await
+            .unwrap();
+
+        // GPU path should return Some(FilterResult).
+        assert!(result.is_some(), "GPU path should return FilterResult");
+
+        let filter_result = result.unwrap();
+        let args = ComputeInstanceFilter::read_draw_indirect(
+            device,
+            queue,
+            &filter_result.draw_indirect_buffer,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            args[1], 2,
+            "Only 2 instances should be visible via GPU path"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_cpu_fallback_when_no_filter() {
+        let ctx = match crate::context::GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let device = &ctx.device;
+        let queue = &ctx.queue;
+
+        let mut renderer = InstancedBatchRenderer::new(BatchRendererConfig::default());
+        renderer.begin_frame();
+
+        let instances = [
+            InstanceAttributes::from_circle([0.0, 0.0], 0.1, [1.0, 0.0, 0.0, 1.0]),
+            InstanceAttributes::from_circle([5.0, 5.0], 0.1, [0.0, 1.0, 0.0, 1.0]),
+        ];
+        let centers: Vec<[f32; 2]> = instances.iter().map(|i| i.position()).collect();
+        let radii: Vec<f32> = instances.iter().map(|i| i.scale()[0]).collect();
+
+        // Pass None for filter → CPU fallback.
+        let result = renderer
+            .submit_with_gpu_culling::<Circle, _>(
+                device, queue, &instances, &centers, &radii, None, // no GPU filter
+            )
+            .await
+            .unwrap();
+
+        // CPU fallback returns None.
+        assert!(result.is_none(), "CPU fallback should return None");
+
+        // But CPU culling should have happened internally.
+        let stats = renderer.end_frame();
+        assert_eq!(
+            stats.culled_instances, 1,
+            "CPU fallback should cull 1 instance"
+        );
     }
 }
