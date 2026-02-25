@@ -6,7 +6,7 @@
 **Theme**: Automatic Scale and Axis System  
 **Priority**: Low  
 **Story Points**: 4  
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Problem Statement
 

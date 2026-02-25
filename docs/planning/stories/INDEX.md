@@ -257,7 +257,7 @@ reorganisation._
 | [GUP-091](GUP-091_Grid_Line_Rendering_System.md)          | Grid Line Rendering System                  | ✅ Complete | High     | 5      |
 | [GUP-092](GUP-092_Label_Formatting_and_Positioning.md)    | Label Formatting and Positioning (expanded) | ✅ Complete | Medium   | 10     |
 | [GUP-093](GUP-093_Scale_Axis_Integration_System.md)       | Scale-Axis Integration System               | ✅ Complete | Medium   | 6      |
-| [GUP-094](GUP-094_Axis_Performance_Optimization.md)       | Axis Performance Optimization               | 📋 Planned  | Low      | 4      |
+| [GUP-094](GUP-094_Axis_Performance_Optimization.md)       | Axis Performance Optimization               | 🚧 In Progress | Low      | 4      |
 | [GUP-095](GUP-095_Grid_Visual_Rendering_Integration.md)   | Grid Visual Rendering Integration           | ✅ Complete | High     | 8      |
 | [GUP-096](GUP-096_Grid_Performance_Benchmarking.md)       | Grid Performance Benchmarking               | 📋 Planned  | Medium   | 5      |
 | [GUP-097](GUP-097_Chart_Builder_Grid_API_Enhancement.md)  | Chart Builder Grid API Enhancement          | ✅ Complete | Medium   | 6      |
