@@ -239,3 +239,93 @@ fn existing_wgsl_function_still_works() {
     let wgsl = LegacyScale::wgsl_function();
     assert!(wgsl.contains("fn legacy_scale"));
 }
+
+// ---------------------------------------------------------------------------
+// GPU Compilation Validation
+// ---------------------------------------------------------------------------
+
+/// Validate that a WGSL string compiles with wgpu/naga.
+async fn validate_wgsl_compiles(label: &str, wgsl: &str) {
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::all(),
+        ..Default::default()
+    });
+    let adapter = instance
+        .request_adapter(&wgpu::RequestAdapterOptions::default())
+        .await
+        .expect("No GPU adapter available");
+    let (device, _queue) = adapter
+        .request_device(&wgpu::DeviceDescriptor::default())
+        .await
+        .expect("Failed to create device");
+
+    // Wrap in a compute entry point for validation.
+    let validation_wgsl = format!(
+        "{wgsl}\n\n@compute @workgroup_size(1)\nfn main() {{\n    // validation entry point\n}}"
+    );
+
+    let _module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some(label),
+        source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(&validation_wgsl)),
+    });
+}
+
+#[tokio::test]
+async fn transpiled_simple_function_compiles_on_gpu() {
+    let wgsl = DoubleValue::wgsl_function();
+    validate_wgsl_compiles("double_value", wgsl).await;
+}
+
+#[tokio::test]
+async fn transpiled_uniform_function_compiles_on_gpu() {
+    let wgsl = ScaleOffset::wgsl_function();
+    validate_wgsl_compiles("scale_offset", wgsl).await;
+}
+
+#[tokio::test]
+async fn transpiled_builtin_calls_compile_on_gpu() {
+    let wgsl = SafeSqrt::wgsl_function();
+    validate_wgsl_compiles("safe_sqrt", wgsl).await;
+}
+
+#[tokio::test]
+async fn transpiled_control_flow_compiles_on_gpu() {
+    let wgsl = Classify::wgsl_function();
+    validate_wgsl_compiles("classify", wgsl).await;
+}
+
+#[tokio::test]
+async fn transpiled_for_loop_compiles_on_gpu() {
+    let wgsl = SumRange::wgsl_function();
+    validate_wgsl_compiles("sum_range", wgsl).await;
+}
+
+// ---------------------------------------------------------------------------
+// AC2: Mixed pipeline — add both transpiled and manual functions
+// ---------------------------------------------------------------------------
+
+#[test]
+fn transpiled_function_works_with_pipeline_add_function() {
+    use gup::shader_pipeline::ComposableShaderPipeline;
+
+    let mut pipeline = ComposableShaderPipeline::new();
+    pipeline.add_function(DoubleValue::new());
+    pipeline.add_function(ScaleOffset::new(2.0, 1.0));
+    assert_eq!(pipeline.function_count(), 2);
+}
+
+#[test]
+fn mixed_pipeline_transpiled_and_manual_functions() {
+    use gup::shader_pipeline::ComposableShaderPipeline;
+
+    let mut pipeline = ComposableShaderPipeline::new();
+
+    // Transpiled function.
+    pipeline.add_function(DoubleValue::new());
+
+    // Manually written wgsl_function.
+    pipeline.add_function(NegateValue::new());
+
+    // Both added successfully.
+    assert_eq!(pipeline.function_count(), 2);
+}
