@@ -403,7 +403,25 @@ impl RustToWgsl {
                     | "cos" | "tan" | "asin" | "acos" | "atan" | "exp" | "exp2" | "log"
                     | "log2" | "length" | "normalize" | "trunc" | "sinh" | "cosh" | "tanh"
                     | "asinh" | "acosh" | "atanh" | "saturate" | "degrees" | "radians"
-                    | "inversesqrt" => Ok(WgslExpr::Call(method, vec![receiver])),
+                    | "inversesqrt"
+                    // Fragment shader derivative functions
+                    | "dpdx" | "dpdy" | "fwidth"
+                    | "dpdxCoarse" | "dpdyCoarse" | "fwidthCoarse"
+                    | "dpdxFine" | "dpdyFine" | "fwidthFine"
+                    // Matrix operations
+                    | "transpose" | "determinant"
+                    // Bit manipulation
+                    | "countOneBits" | "countLeadingZeros" | "countTrailingZeros"
+                    | "firstLeadingBit" | "firstTrailingBit" | "reverseBits"
+                    => Ok(WgslExpr::Call(method, vec![receiver])),
+
+                    // Special case: length_squared maps to dot(v, v)
+                    "length_squared" if args.is_empty() => {
+                        Ok(WgslExpr::Call(
+                            "dot".to_string(),
+                            vec![receiver.clone(), receiver],
+                        ))
+                    }
 
                     // Two-argument WGSL functions (receiver + one arg)
                     "min" | "max" | "pow" | "atan2" | "step" | "distance" | "dot" | "cross"
@@ -414,6 +432,12 @@ impl RustToWgsl {
 
                     // Three-argument WGSL functions
                     "clamp" | "mix" | "smoothstep" | "fma" | "refract" | "faceforward" => {
+                        args.insert(0, receiver);
+                        Ok(WgslExpr::Call(method, args))
+                    }
+
+                    // Four-argument WGSL functions
+                    "extractBits" | "insertBits" => {
                         args.insert(0, receiver);
                         Ok(WgslExpr::Call(method, args))
                     }
@@ -446,7 +470,9 @@ impl RustToWgsl {
                         format!(
                             "Method '{method}' has no WGSL equivalent. \
                              Supported methods: abs, sqrt, sin, cos, min, max, \
-                             clamp, mix, length, normalize, dot, cross, pow, etc."
+                             clamp, mix, length, normalize, dot, cross, pow, \
+                             reflect, refract, faceforward, dpdx, dpdy, fwidth, \
+                             transpose, determinant, length_squared, etc."
                         ),
                         mc.method.span(),
                     )),
@@ -720,12 +746,14 @@ impl RustToWgsl {
             | "asinh" | "acosh" | "atanh" => Some(func_name),
             // Math
             "abs" | "sqrt" | "floor" | "ceil" | "round" | "fract" | "sign" | "exp" | "exp2"
-            | "log" | "log2" | "trunc" => Some(func_name),
+            | "log" | "log2" | "trunc" | "inversesqrt" => Some(func_name),
             // Min/max
             "min" | "max" | "clamp" => Some(func_name),
             // Power
-            "pow" | "atan2" => Some(func_name),
-            // Not directly available — generate as WGSL built-in anyway
+            "pow" | "atan2" | "ldexp" => Some(func_name),
+            // Interpolation
+            "mix" | "step" | "smoothstep" | "fma" => Some(func_name),
+            // Float-specific
             "saturate" | "radians" | "degrees" => Some(func_name),
             _ => None,
         };
@@ -763,6 +791,51 @@ impl RustToWgsl {
             "one" | "ONE" => Ok(Some(WgslExpr::TypeConstructor(
                 WgslType::Vector(scalar, dim),
                 vec![WgslExpr::Literal(Literal::Float(1.0))],
+            ))),
+            // Unit axis vectors: Vec3::X → vec3<f32>(1.0, 0.0, 0.0)
+            "X" if dim >= 2 => {
+                let mut components = vec![WgslExpr::Literal(Literal::Float(1.0))];
+                for _ in 1..dim {
+                    components.push(WgslExpr::Literal(Literal::Float(0.0)));
+                }
+                Ok(Some(WgslExpr::TypeConstructor(
+                    WgslType::Vector(scalar, dim),
+                    components,
+                )))
+            }
+            "Y" if dim >= 2 => {
+                let mut components = vec![WgslExpr::Literal(Literal::Float(0.0))];
+                components.push(WgslExpr::Literal(Literal::Float(1.0)));
+                for _ in 2..dim {
+                    components.push(WgslExpr::Literal(Literal::Float(0.0)));
+                }
+                Ok(Some(WgslExpr::TypeConstructor(
+                    WgslType::Vector(scalar, dim),
+                    components,
+                )))
+            }
+            "Z" if dim >= 3 => {
+                let mut components = vec![
+                    WgslExpr::Literal(Literal::Float(0.0)),
+                    WgslExpr::Literal(Literal::Float(0.0)),
+                    WgslExpr::Literal(Literal::Float(1.0)),
+                ];
+                for _ in 3..dim {
+                    components.push(WgslExpr::Literal(Literal::Float(0.0)));
+                }
+                Ok(Some(WgslExpr::TypeConstructor(
+                    WgslType::Vector(scalar, dim),
+                    components,
+                )))
+            }
+            "W" if dim >= 4 => Ok(Some(WgslExpr::TypeConstructor(
+                WgslType::Vector(scalar, dim),
+                vec![
+                    WgslExpr::Literal(Literal::Float(0.0)),
+                    WgslExpr::Literal(Literal::Float(0.0)),
+                    WgslExpr::Literal(Literal::Float(0.0)),
+                    WgslExpr::Literal(Literal::Float(1.0)),
+                ],
             ))),
             _ => Ok(None),
         }

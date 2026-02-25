@@ -411,4 +411,131 @@ mod tests {
             reg.function_count()
         );
     }
+
+    // ===================================================================
+    // New method mappings — derivative, matrix, bit manipulation
+    // ===================================================================
+
+    #[test]
+    fn derivative_method_calls() {
+        assert_eq!(transpile_expr("p.dpdx()"), "dpdx(p)");
+        assert_eq!(transpile_expr("p.dpdy()"), "dpdy(p)");
+        assert_eq!(transpile_expr("p.fwidth()"), "fwidth(p)");
+    }
+
+    #[test]
+    fn derivative_coarse_fine() {
+        assert_eq!(transpile_expr("p.dpdxCoarse()"), "dpdxCoarse(p)");
+        assert_eq!(transpile_expr("p.dpdyCoarse()"), "dpdyCoarse(p)");
+        assert_eq!(transpile_expr("p.fwidthCoarse()"), "fwidthCoarse(p)");
+        assert_eq!(transpile_expr("p.dpdxFine()"), "dpdxFine(p)");
+        assert_eq!(transpile_expr("p.dpdyFine()"), "dpdyFine(p)");
+        assert_eq!(transpile_expr("p.fwidthFine()"), "fwidthFine(p)");
+    }
+
+    #[test]
+    fn matrix_method_calls() {
+        assert_eq!(transpile_expr("m.transpose()"), "transpose(m)");
+        assert_eq!(transpile_expr("m.determinant()"), "determinant(m)");
+    }
+
+    #[test]
+    fn bit_manipulation_method_calls() {
+        assert_eq!(transpile_expr("x.countOneBits()"), "countOneBits(x)");
+        assert_eq!(
+            transpile_expr("x.countLeadingZeros()"),
+            "countLeadingZeros(x)"
+        );
+        assert_eq!(
+            transpile_expr("x.countTrailingZeros()"),
+            "countTrailingZeros(x)"
+        );
+        assert_eq!(transpile_expr("x.firstLeadingBit()"), "firstLeadingBit(x)");
+        assert_eq!(
+            transpile_expr("x.firstTrailingBit()"),
+            "firstTrailingBit(x)"
+        );
+        assert_eq!(transpile_expr("x.reverseBits()"), "reverseBits(x)");
+    }
+
+    #[test]
+    fn length_squared_method() {
+        assert_eq!(transpile_expr("v.length_squared()"), "dot(v, v)");
+    }
+
+    #[test]
+    fn vector_unit_axis_constants() {
+        assert_eq!(transpile_expr("Vec3::X()"), "vec3<f32>(1.0, 0.0, 0.0)");
+        assert_eq!(transpile_expr("Vec3::Y()"), "vec3<f32>(0.0, 1.0, 0.0)");
+        assert_eq!(transpile_expr("Vec3::Z()"), "vec3<f32>(0.0, 0.0, 1.0)");
+    }
+
+    #[test]
+    fn vector_unit_axis_vec4() {
+        assert_eq!(transpile_expr("Vec4::W()"), "vec4<f32>(0.0, 0.0, 0.0, 1.0)");
+    }
+
+    #[test]
+    fn qualified_extended_functions() {
+        assert_eq!(transpile_expr("f32::inversesqrt(x)"), "inversesqrt(x)");
+        assert_eq!(transpile_expr("f32::ldexp(x, n)"), "ldexp(x, n)");
+        assert_eq!(transpile_expr("f32::fma(a, b, c)"), "fma(a, b, c)");
+        assert_eq!(transpile_expr("f32::mix(a, b, t)"), "mix(a, b, t)");
+        assert_eq!(
+            transpile_expr("f32::smoothstep(lo, hi, x)"),
+            "smoothstep(lo, hi, x)"
+        );
+        assert_eq!(transpile_expr("f32::step(edge, x)"), "step(edge, x)");
+    }
+
+    #[test]
+    fn extract_insert_bits() {
+        assert_eq!(
+            transpile_expr("x.extractBits(offset, count)"),
+            "extractBits(x, offset, count)"
+        );
+        assert_eq!(
+            transpile_expr("x.insertBits(newbits, offset, count)"),
+            "insertBits(x, newbits, offset, count)"
+        );
+    }
+
+    // ===================================================================
+    // Complex GPU shader pipeline tests
+    // ===================================================================
+
+    #[test]
+    fn fragment_shader_sdf_pipeline() {
+        let wgsl = transpile_fn(
+            r#"
+            fn sdf_circle(uv: Vec2, center: Vec2, radius: f32) -> f32 {
+                let d = uv.distance(center);
+                let edge = d.smoothstep(radius, radius + radius.fwidth());
+                return 1.0 - edge
+            }
+        "#,
+        );
+        assert!(wgsl.contains("distance(uv, center)"), "got:\n{wgsl}");
+        assert!(wgsl.contains("fwidth(radius)"), "got:\n{wgsl}");
+        assert!(wgsl.contains("smoothstep(d"), "got:\n{wgsl}");
+    }
+
+    #[test]
+    fn lighting_calculation_pipeline() {
+        let wgsl = transpile_fn(
+            r#"
+            fn phong(normal: Vec3, light_dir: Vec3, roughness: f32) -> f32 {
+                let n_dot_l = normal.dot(light_dir).max(0.0);
+                let reflect_dir = light_dir.reflect(normal);
+                let spec = reflect_dir.length().pow(32.0 * (1.0 - roughness));
+                return n_dot_l * 0.8 + spec * 0.2
+            }
+        "#,
+        );
+        assert!(
+            wgsl.contains("max(dot(normal, light_dir), 0.0)"),
+            "got:\n{wgsl}"
+        );
+        assert!(wgsl.contains("reflect(light_dir, normal)"), "got:\n{wgsl}");
+    }
 }
