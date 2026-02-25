@@ -100,3 +100,85 @@ interactions remain responsive at sub-millisecond latency.
 - **Cached query (sparse grid)**: ~3.9ms avg (GPU compute + buffer readback)
 - **Cached query eliminates**: CPU-side 100K-element Vec allocation + GPU upload
   on every query
+
+## Retrospective
+
+**Completed**: 2025-08-10
+
+### Key Technical Learnings
+
+#### Version-based cache invalidation is simpler than dirty flags
+
+- **Challenge**: Designing a cache invalidation strategy that's correct and
+  efficient across multiple MarkSelectionSystems sharing one InteractionSystem.
+- **Solution**: Monotonically increasing version counter in MarkSelectionSystem,
+  compared against InteractionSystem's cached version. Version 0 is treated as
+  "never cached" to avoid false cache hits from default initialization.
+- **Pattern**: Version counters are superior to boolean dirty flags because they
+  naturally handle the case where the cache is populated by system A and then
+  system B queries — the version mismatch correctly triggers a re-upload.
+
+#### CPU-side allocation dominates cached query overhead
+
+- **Challenge**: Initial caching implementation still called
+  `build_element_data()` on every query, allocating a 100K-element Vec.
+- **Solution**: Added `ensure_element_data_uploaded()` helper that checks
+  `InteractionSystem.cached_element_version()` before building the Vec, skipping
+  CPU allocation entirely on cache hits.
+- **Pattern**: When implementing caching, audit the full call chain — the cache
+  check must be upstream of ALL expensive operations, not just the most obvious
+  one (GPU upload).
+
+#### GPU result readback is the remaining bottleneck
+
+- **Challenge**: Even with cached element data, queries take ~3.9ms for 100K
+  marks due to async GPU buffer mapping in `download_results()`.
+- **Solution**: This is inherent to the wgpu API's async model. True
+  sub-millisecond latency would require a persistent mapped result buffer or
+  compute-to-host copy optimization.
+- **Pattern**: For real-time hover feedback, consider a polling-based approach
+  where the result buffer is mapped once and reused, avoiding per-query mapping
+  overhead.
+
+### Architectural Decisions
+
+#### Cached query methods alongside existing query methods
+
+- **Decision**: Added `query_point_cached()` / `query_region_cached()` as new
+  methods rather than modifying existing `query_point()` / `query_region()`.
+- **Reasoning**: The existing methods accept `&[&dyn Renderable]` and handle
+  their own data extraction. The cached methods assume data is already uploaded.
+  Having separate methods makes the contract explicit.
+- **Trade-off**: Two parallel APIs. Callers must choose which path to use.
+- **Future**: Could unify behind a single API that accepts an optional version
+  hint.
+
+#### Morton query path duplicated for cached variant
+
+- **Decision**: Created `dispatch_gpu_morton_query_cached()` which duplicates
+  the bind group creation and three-pass encoding from
+  `dispatch_gpu_morton_query()`.
+- **Reasoning**: The existing method requires a `&[ElementData]` parameter for
+  its fallback path. The cached variant uses `self.cached_element_count`
+  instead.
+- **Trade-off**: ~80 lines of duplicated pipeline encoding code.
+- **Future**: Could be refactored into a shared helper that accepts element
+  count as a parameter.
+
+### Development Workflow Insights
+
+- The pre-commit hooks (mask check, clippy, prettier) add ~40s per commit but
+  catch issues early. Worth the cost.
+- The flaky `test_performance_500_labels` test (GUP-187) fails intermittently
+  and adds noise to test runs. Should be stabilized.
+- GPU tests with `--test-threads=1` are essential — parallel GPU tests cause
+  resource contention.
+- Release-mode benchmarks are critical for performance stories. Debug-mode
+  timings can be 10-20x slower and give misleading results.
+
+### Follow-up Stories
+
+1. **GUP-197: Result Buffer Readback Optimization** — The `download_results()`
+   method creates a new staging buffer on every call. A persistent mapped
+   staging buffer would eliminate per-query allocation and mapping overhead,
+   potentially reducing cached query latency from ~4ms to <1ms.

@@ -192,6 +192,7 @@ reorganisation._
 | [GUP-194](GUP-194_GPU_Resident_Selection_Data_Cache.md)    | GPU-Resident Selection Data Cache     | ✅ Complete | Medium   | 5      |
 | [GUP-195](GUP-195_Bind_Group_Caching_Pooled_Filter.md)     | Bind Group Caching for Pooled Filter  | 📋 Planned  | Low      | —      |
 | [GUP-196](GUP-196_Hit_Test_Result_Buffer_Query_Count.md)   | Hit Test Result Buffer Query Count    | ✅ Complete | Medium   | 2      |
+| [GUP-197](GUP-197_Result_Buffer_Readback_Optimization.md)  | Result Buffer Readback Optimization   | 📋 Planned  | Low      | 5      |
 
 ### Post GUP-015 Stories - Advanced Debug Infrastructure (Stories 80+)
 
