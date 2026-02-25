@@ -37,6 +37,7 @@ pub mod mark_positions;
 pub mod pattern_renderer;
 pub mod platform;
 pub mod position_sync;
+pub mod selection_focus;
 pub mod sonification;
 pub mod texture_pattern_generator;
 pub mod texture_pattern_renderer;
@@ -56,6 +57,7 @@ pub use mark_positions::*;
 pub use pattern_renderer::*;
 pub use platform::*;
 pub use position_sync::*;
+pub use selection_focus::*;
 pub use sonification::*;
 pub use web_overlay::*;
 
