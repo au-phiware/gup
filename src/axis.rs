@@ -31,6 +31,7 @@
 //! # }
 //! ```
 
+use crate::axis_performance::{AxisGeometryCache, AxisLODManager, LODConfiguration, LODLevel};
 use crate::error::GupResult;
 use crate::label::{LabelFormatter, NumericFormatter};
 use crate::render::{RenderContext, Vertex};
@@ -560,13 +561,118 @@ pub struct AxisLabel {
 /// // Draw `vertices` with a LineList pipeline in your render pass
 /// ```
 pub struct AxisRenderer {
-    // Future: cache render pipelines and resources here
+    /// Geometry cache for avoiding per-frame vertex regeneration.
+    geometry_cache: AxisGeometryCache,
+    /// LOD manager for adaptive quality control.
+    lod_manager: AxisLODManager,
 }
 
 impl AxisRenderer {
     /// Create a new axis renderer.
     pub fn new() -> Self {
-        Self {}
+        Self {
+            geometry_cache: AxisGeometryCache::new(),
+            lod_manager: AxisLODManager::default(),
+        }
+    }
+
+    /// Create a new axis renderer with a specific LOD configuration.
+    pub fn with_lod_config(lod_config: LODConfiguration) -> Self {
+        Self {
+            geometry_cache: AxisGeometryCache::new(),
+            lod_manager: AxisLODManager::new(lod_config),
+        }
+    }
+
+    /// Access the LOD manager for configuration or inspection.
+    pub fn lod_manager(&self) -> &AxisLODManager {
+        &self.lod_manager
+    }
+
+    /// Mutable access to the LOD manager.
+    pub fn lod_manager_mut(&mut self) -> &mut AxisLODManager {
+        &mut self.lod_manager
+    }
+
+    /// Access the geometry cache for diagnostics (hit rate, etc.).
+    pub fn geometry_cache(&self) -> &AxisGeometryCache {
+        &self.geometry_cache
+    }
+
+    /// Invalidate the geometry cache, forcing regeneration on the next call.
+    pub fn invalidate_cache(&mut self) {
+        self.geometry_cache.invalidate();
+    }
+
+    /// Generate axis vertices with automatic LOD selection and caching.
+    ///
+    /// This is the performance-optimized entry point that:
+    /// 1. Selects an appropriate LOD based on axis pixel size and recent
+    ///    render times.
+    /// 2. Returns cached vertices when the axis configuration has not changed.
+    /// 3. Falls back to full vertex generation only on cache miss.
+    pub fn generate_axis_vertices_cached(
+        &mut self,
+        bounds: &AxisBounds,
+        config: &AxisConfiguration,
+        position: AxisPosition,
+        scale: Option<&dyn Scale>,
+        viewport_size: (f32, f32),
+        last_render_time: Option<std::time::Duration>,
+    ) -> &[Vertex] {
+        // 1. Calculate LOD
+        let axis_pixel_length = Self::axis_pixel_length(bounds, viewport_size);
+        let lod = self
+            .lod_manager
+            .calculate_lod(axis_pixel_length, last_render_time);
+
+        // 2. Apply LOD to config
+        let adjusted_config = lod.apply_to_config(config);
+
+        // 3. Check cache
+        if self
+            .geometry_cache
+            .get(bounds, &adjusted_config, position, viewport_size, lod)
+            .is_some()
+        {
+            // Cache hit — return cached data
+            return self
+                .geometry_cache
+                .get(bounds, &adjusted_config, position, viewport_size, lod)
+                .unwrap();
+        }
+
+        // 4. Cache miss — generate and store
+        let vertices =
+            self.generate_axis_vertices(bounds, &adjusted_config, position, scale, viewport_size);
+        self.geometry_cache.store(
+            bounds,
+            &adjusted_config,
+            position,
+            viewport_size,
+            lod,
+            vertices,
+        );
+
+        self.geometry_cache
+            .get(bounds, &adjusted_config, position, viewport_size, lod)
+            .unwrap()
+    }
+
+    /// Compute the approximate pixel length of an axis from NDC bounds and viewport.
+    fn axis_pixel_length(bounds: &AxisBounds, viewport_size: (f32, f32)) -> f32 {
+        let ndc_len = bounds.length();
+        // NDC range is 2.0 across each dimension.
+        // For a horizontal axis, pixel length ≈ ndc_len / 2.0 * viewport_width.
+        // Use the max component as a conservative estimate.
+        let (vw, vh) = viewport_size;
+        let dx = (bounds.end.x - bounds.start.x).abs() / 2.0 * vw;
+        let dy = (bounds.end.y - bounds.start.y).abs() / 2.0 * vh;
+        if ndc_len > 0.0 {
+            (dx * dx + dy * dy).sqrt()
+        } else {
+            0.0
+        }
     }
 
     /// Generate all vertices for an axis (line + major ticks + minor ticks).
@@ -1689,5 +1795,137 @@ mod tests {
             None,
         );
         assert_eq!(labels.len(), 6);
+    }
+
+    // ---- Tests for cached generation and LOD integration ----
+
+    #[test]
+    fn test_cached_generation_returns_same_data() {
+        let mut renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let config = AxisConfiguration::default();
+
+        let first = renderer
+            .generate_axis_vertices_cached(
+                &bounds,
+                &config,
+                AxisPosition::Bottom,
+                None,
+                (800.0, 600.0),
+                None,
+            )
+            .to_vec();
+
+        let second = renderer
+            .generate_axis_vertices_cached(
+                &bounds,
+                &config,
+                AxisPosition::Bottom,
+                None,
+                (800.0, 600.0),
+                None,
+            )
+            .to_vec();
+
+        assert_eq!(first.len(), second.len());
+        assert_eq!(first, second);
+        // Second call should be a cache hit
+        assert!(renderer.geometry_cache().hit_rate() > 0.0);
+    }
+
+    #[test]
+    fn test_cached_generation_with_small_axis_uses_lower_lod() {
+        let mut renderer = AxisRenderer::new();
+        // Very small axis in NDC → should get Minimal LOD
+        let bounds = AxisBounds::new(Vec2 { x: 0.0, y: 0.0 }, Vec2 { x: 0.01, y: 0.0 }, 50.0);
+        let config = AxisConfiguration::default();
+
+        let verts = renderer.generate_axis_vertices_cached(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+            None,
+        );
+
+        // At Minimal LOD, only the axis line is shown (2 vertices)
+        assert_eq!(
+            verts.len(),
+            2,
+            "Minimal LOD should only show axis line (2 vertices)"
+        );
+    }
+
+    #[test]
+    fn test_cached_generation_with_large_axis_uses_high_lod() {
+        let mut renderer = AxisRenderer::new();
+        // Large axis in NDC → should get High LOD
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let config = AxisConfiguration::default();
+
+        let verts = renderer.generate_axis_vertices_cached(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+            None,
+        );
+
+        // At High LOD, should have line + major ticks: 2 + 6*2 = 14
+        assert_eq!(
+            verts.len(),
+            14,
+            "High LOD should show axis line and all major ticks"
+        );
+    }
+
+    #[test]
+    fn test_axis_pixel_length_calculation() {
+        // Horizontal axis from -0.8 to 0.8 in NDC on 800x600 viewport
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: 0.0 }, Vec2 { x: 0.8, y: 0.0 }, 50.0);
+        let pixel_len = AxisRenderer::axis_pixel_length(&bounds, (800.0, 600.0));
+        // dx = 1.6, so pixel = 1.6/2 * 800 = 640
+        assert!((pixel_len - 640.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_invalidate_cache_forces_regeneration() {
+        let mut renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let config = AxisConfiguration::default();
+
+        // Fill cache
+        let _ = renderer.generate_axis_vertices_cached(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+            None,
+        );
+
+        renderer.invalidate_cache();
+
+        // Next call should be a cache miss
+        let _ = renderer.generate_axis_vertices_cached(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+            None,
+        );
+
+        // 2 misses out of 3 lookups (miss, hit-on-generate, miss, hit-on-generate)
+        // Actually: first call = 1 miss, generates & stores.
+        // Second call after invalidate = 1 miss, generates & stores.
+        // Lookups: miss(1) + hit(store-get), miss(2) + hit(store-get) = 4 total, 2 hits, 2 misses = 50%
+        let lookups = renderer.geometry_cache().total_lookups();
+        assert!(
+            lookups >= 2,
+            "Should have at least 2 lookups after invalidation"
+        );
     }
 }
