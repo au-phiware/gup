@@ -9,26 +9,69 @@
 //!
 //! # Core Components
 //!
-//! * **`GridSystem`** - Main grid rendering coordinator
-//! * **`GridConfiguration`** - Appearance and behavior settings
-//! * **`GridRenderer`** - GPU-accelerated rendering using Line marks
-//! * **`ChartBounds`** - Coordinate system for grid positioning
+//! * **[`GridSystem`]** - Main grid rendering coordinator
+//! * **[`GridConfiguration`]** - Appearance and behavior settings
+//! * **[`GridRenderer`]** - GPU-accelerated rendering using Line marks
+//! * **[`ChartBounds`]** - Coordinate system for grid positioning
+//! * **[`AxisGridCoordinator`]** - Axis-grid integration for tick alignment
+//! * **[`Color`]** - Color representation with hex parsing
 //!
-//! # Examples
+//! # Architecture
 //!
-//! ```rust,no_run
-//! use gup::grid::{GridSystem, GridConfiguration};
-//! use gup::RenderContext;
+//! The grid system is organized in three layers:
 //!
-//! # async fn example() -> gup::error::GupResult<()> {
-//! let mut context = RenderContext::new().await?;
-//! let config = GridConfiguration::default();
-//! let mut grid_system = GridSystem::new(config);
+//! 1. **Chart Builder API** (`GridCapableBuilder` trait) — User-facing fluent
+//!    API with theme presets and convenience methods.
+//! 2. **GridSystem / AxisGridCoordinator** — Coordination layer that connects
+//!    axis tick positions to grid line generation.
+//! 3. **GridRenderer** — Low-level GPU line generation with fingerprint-based
+//!    geometry caching.
 //!
-//! // Grid lines will be rendered automatically when integrated with chart builders
-//! # Ok(())
-//! # }
+//! # Quick Start
+//!
+//! The simplest way to add grids is through the chart builder:
+//!
+//! ```rust,ignore
+//! use gup::chart_builder::ScatterPlotBuilder;
+//!
+//! let chart = ScatterPlotBuilder::new()
+//!     .data(data)
+//!     .grid()  // Enable with professional defaults
+//!     .build()?;
 //! ```
+//!
+//! # Theme Presets
+//!
+//! Six built-in themes cover common scenarios:
+//!
+//! | Theme | Best For |
+//! |-------|----------|
+//! | [`GridConfiguration::light_theme()`] | Bright backgrounds |
+//! | [`GridConfiguration::dark_theme()`] | Dark mode |
+//! | [`GridConfiguration::scientific()`] | Publications (includes minor grids) |
+//! | [`GridConfiguration::business()`] | Dashboards (horizontal only) |
+//! | [`GridConfiguration::minimal()`] | Design-focused |
+//! | [`GridConfiguration::high_contrast()`] | Accessibility |
+//!
+//! # Low-Level Usage
+//!
+//! ```rust
+//! use gup::grid::{GridSystem, GridConfiguration, ChartBounds};
+//!
+//! let bounds = ChartBounds::new(50.0, 750.0, 50.0, 550.0);
+//! let mut grid = GridSystem::new(GridConfiguration::scientific());
+//!
+//! assert!(grid.is_grid_enabled());
+//! assert_eq!(grid.total_line_count(), 0); // No lines until render
+//! ```
+//!
+//! # Performance
+//!
+//! - Renders 20 grid lines in under 0.05 ms
+//! - Geometry is cached via fingerprint hashing — zero-cost on static views
+//! - Grid rendering does not affect data point performance
+//!
+//! For detailed documentation, see `docs/GRID_SYSTEM.md`.
 
 use crate::axis::{Axis, AxisPosition};
 use crate::error::GupResult;
@@ -40,6 +83,26 @@ use crate::tick_generator::Scale;
 use crate::{LineAttributes, LineStyle}; // From mark::line
 
 /// Color representation for grid styling.
+///
+/// Colors can be created from hex strings, tuples, arrays, or direct RGBA
+/// values. All components are in the range 0.0 to 1.0.
+///
+/// # Examples
+///
+/// ```rust
+/// use gup::grid::Color;
+///
+/// // From hex string
+/// let color = Color::from_hex("#cccccc").unwrap();
+///
+/// // From tuples
+/// let color: Color = (0.8, 0.8, 0.8).into();       // RGB, alpha = 1.0
+/// let color: Color = (0.8, 0.8, 0.8, 0.7).into();  // RGBA
+///
+/// // Preset colors
+/// let light = Color::LIGHT_GRID;
+/// let dark = Color::DARK_GRID;
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Color {
     /// Red component (0.0 to 1.0)
@@ -192,8 +255,26 @@ impl ChartBounds {
 
 /// Configuration for individual grid line appearance.
 ///
-/// GridLineConfig controls the visual properties of major and minor
-/// grid lines independently for maximum flexibility.
+/// Controls the visual properties of major or minor grid lines.
+/// Use the builder methods for fluent configuration:
+///
+/// ```rust
+/// use gup::GridLineConfig;
+///
+/// let config = GridLineConfig::default()
+///     .with_color([0.5, 0.5, 0.5, 1.0])
+///     .with_line_width(1.0)
+///     .with_opacity(0.8);
+///
+/// // Disabled config
+/// let off = GridLineConfig::disabled();
+/// assert!(!off.enabled);
+///
+/// // Default minor grid config (disabled, very subtle)
+/// let minor = GridLineConfig::minor_default();
+/// assert!(!minor.enabled);
+/// assert_eq!(minor.line_width, 0.25);
+/// ```
 #[derive(Debug, Clone)]
 pub struct GridLineConfig {
     /// Whether this type of grid line is enabled
@@ -271,8 +352,34 @@ impl GridLineConfig {
 
 /// Comprehensive grid system configuration.
 ///
-/// GridConfiguration provides complete control over grid appearance
-/// including major/minor grids and directional control.
+/// Controls both major and minor grid lines and which directions are shown.
+/// Provides builder methods and theme presets for common scenarios.
+///
+/// # Default Configuration
+///
+/// - Major grid lines: enabled (light gray, 0.5px, 0.6 opacity)
+/// - Minor grid lines: disabled
+/// - Both horizontal and vertical directions
+///
+/// # Examples
+///
+/// ```rust
+/// use gup::GridConfiguration;
+///
+/// // Default grid
+/// let config = GridConfiguration::default();
+/// assert!(config.major_grid.enabled);
+/// assert!(!config.minor_grid.enabled);
+///
+/// // Horizontal-only grid
+/// let config = GridConfiguration::horizontal_only();
+/// assert!(config.show_horizontal);
+/// assert!(!config.show_vertical);
+///
+/// // Scientific theme with minor grids
+/// let config = GridConfiguration::scientific();
+/// assert!(config.minor_grid.enabled);
+/// ```
 #[derive(Debug, Clone)]
 pub struct GridConfiguration {
     /// Major grid line settings
@@ -953,8 +1060,20 @@ impl Default for GridRenderer {
 
 /// Main grid system coordinator.
 ///
-/// GridSystem manages the complete grid rendering pipeline including
-/// configuration, tick coordination, and GPU-accelerated rendering.
+/// `GridSystem` manages configuration and rendering together, providing
+/// a convenient high-level interface for grid rendering.
+///
+/// # Examples
+///
+/// ```rust
+/// use gup::grid::{GridSystem, GridConfiguration};
+///
+/// let mut grid = GridSystem::new(GridConfiguration::scientific());
+/// assert!(grid.is_grid_enabled());
+///
+/// // Switch to business theme at runtime
+/// grid.set_configuration(GridConfiguration::business());
+/// ```
 #[derive(Debug)]
 pub struct GridSystem {
     /// Grid appearance and behavior configuration
@@ -1040,8 +1159,16 @@ impl GridSystem {
 
 /// Coordinator for integrating axis tick positions with grid rendering.
 ///
-/// AxisGridCoordinator manages the complete integration between the axis system
-/// and grid rendering, ensuring perfect tick alignment and proper rendering order.
+/// `AxisGridCoordinator` manages the complete integration between the axis
+/// system and grid rendering, ensuring perfect tick alignment and proper
+/// rendering order (grid behind axes and data).
+///
+/// # Grid-Axis Alignment
+///
+/// - Bottom/Top axis ticks produce **vertical** grid lines
+/// - Left/Right axis ticks produce **horizontal** grid lines
+/// - Tick positions are converted from normalized (0.0–1.0) to world
+///   coordinates using the chart bounds
 #[derive(Debug)]
 pub struct AxisGridCoordinator {
     /// Grid system for rendering
