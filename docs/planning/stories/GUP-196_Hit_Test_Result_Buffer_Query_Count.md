@@ -1,7 +1,7 @@
 # GUP-196: Hit Test Result Buffer Query Count
 
-**Priority**: Medium **Complexity**: Low **Created**: 2025-08-08 **Status**: 📋
-Planned
+**Priority**: Medium **Complexity**: Low **Created**: 2025-08-08 **Status**: 🚧
+In Progress
 
 ## Overview
 
