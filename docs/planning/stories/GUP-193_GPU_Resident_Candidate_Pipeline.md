@@ -1,7 +1,7 @@
 # GUP-193: GPU-Resident Candidate Pipeline
 
-**Priority**: Medium **Complexity**: High **Created**: 2025-08-07 **Status**: 📋
-Planned
+**Priority**: Medium **Complexity**: High **Created**: 2025-08-07 **Status**: 🚧 In
+Progress
 
 ## Overview
 
@@ -20,8 +20,8 @@ path on the GPU.
 
 ## User Story
 
-As a developer building interactive visualisations with million-point datasets, I
-want spatial query candidates to stay GPU-resident so that the full query
+As a developer building interactive visualisations with million-point datasets,
+I want spatial query candidates to stay GPU-resident so that the full query
 pipeline executes without CPU round-trips.
 
 ## Acceptance Criteria
