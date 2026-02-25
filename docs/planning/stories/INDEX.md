@@ -152,7 +152,7 @@ reorganisation._
 | [GUP-165](GUP-165_Selection_API_Render_Integration.md)     | Selection API Render Integration         | ✅ Complete | High     | 13     |
 | [GUP-166](GUP-166_Unified_BoxPlot_Mark_Renderer.md)        | Unified BoxPlot Mark Renderer            | ✅ Complete | Medium   | 5      |
 | [GUP-167](GUP-167_GpuBufferPool_Selection_Integration.md)  | GpuBufferPool Selection Integration      | 📋 Planned  | Low      | 3      |
-| [GUP-168](GUP-168_Selection_Attribute_Binding_Pipeline.md) | Selection Attribute Binding Pipeline     | 📋 Planned  | Medium   | 8      |
+| [GUP-168](GUP-168_Selection_Attribute_Binding_Pipeline.md) | Selection Attribute Binding Pipeline     | 🚧 In Progress | Medium   | 8      |
 | [GUP-169](GUP-169_Shared_Pipeline_Cache_Selections.md)     | Shared Pipeline Cache for Selections     | 📋 Planned  | Low      | 3      |
 | [GUP-170](GUP-170_BoxPlot_Notch_Rendering.md)              | BoxPlot Notch Rendering                  | 📋 Planned  | Low      | 2      |
 | [GUP-171](GUP-171_BoxPlot_Pixel_Space_Strokes.md)          | BoxPlot Pixel-Space Stroke Widths        | 📋 Planned  | Low      | 3      |

@@ -1,6 +1,6 @@
 # GUP-168: Selection Attribute Binding Pipeline
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
