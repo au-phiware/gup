@@ -702,6 +702,20 @@ impl<T, M: Mark> Selection<T, M> {
             ));
         }
 
+        // Type safety: validate shader function output matches attribute type.
+        for sb in &self.shader_attr_bindings {
+            if !M::is_attribute_compatible(&sb.name, sb.shader_fn.output_wgsl_type) {
+                let expected = M::get_attribute_type(&sb.name)
+                    .unwrap_or("(unknown)")
+                    .to_string();
+                return Err(crate::error::GupError::validation_error(format!(
+                    "Shader function output type '{}' is not compatible with attribute '{}' \
+                     (expected '{}')",
+                    sb.shader_fn.output_wgsl_type, sb.name, expected,
+                )));
+            }
+        }
+
         // 1. Build instance data: CPU bindings produce final values; GPU
         //    bindings produce raw input values (the shader function will
         //    transform them on the GPU).
@@ -2842,6 +2856,132 @@ fn vs_main() -> VertexOutput {
                 .expect("prepare with only shader bindings");
 
             assert!(selection.is_render_ready());
+        });
+    }
+
+    #[test]
+    fn gpu_shader_binding_type_mismatch_rejected() {
+        use crate::shader_function::ColorMap;
+
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let data = vec![ScatterPoint {
+                x: 0.0,
+                y: 0.0,
+                value: 0.5,
+            }];
+
+            let mut selection: Selection<ScatterPoint, Circle> = Selection::from_data(data);
+
+            // ColorMap outputs vec4<f32>, but "radius" expects f32 — type mismatch.
+            let color_map = ColorMap::new(
+                Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 1.0,
+                    w: 1.0,
+                },
+                Vec4 {
+                    x: 1.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0,
+                },
+            );
+            selection.attr_shader("radius", |d: &ScatterPoint| d.value, color_map);
+
+            let result = selection.prepare_render_bound(&context.device, &context.queue, None);
+            assert!(result.is_err(), "Should reject type-mismatched shader fn");
+            let err_msg = format!("{}", result.unwrap_err());
+            assert!(
+                err_msg.contains("not compatible"),
+                "Error should mention incompatibility: {err_msg}"
+            );
+        });
+    }
+
+    #[test]
+    fn gpu_shader_binding_performance_100k() {
+        use crate::shader_function::LinearScale;
+        use std::time::Instant;
+
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU perf test — no adapter available");
+                    return;
+                }
+            };
+
+            const N: usize = 100_000;
+            let data: Vec<ScatterPoint> = (0..N)
+                .map(|i| {
+                    let t = i as f32 / N as f32;
+                    ScatterPoint {
+                        x: -1.0 + 2.0 * t,
+                        y: (t * 6.28).sin() * 0.8,
+                        value: t * 100.0,
+                    }
+                })
+                .collect();
+
+            // --- CPU closure binding ---
+            let mut sel_cpu: Selection<ScatterPoint, Circle> = Selection::from_data(data.clone());
+            sel_cpu
+                .attr("center", |d: &ScatterPoint| [d.x, d.y])
+                .attr("radius", |d: &ScatterPoint| {
+                    // Manual CPU-side linear scale: domain [0,100] → range [0.001, 0.01]
+                    let normalised = d.value / 100.0;
+                    0.001 + normalised * 0.009
+                })
+                .attr("fill_color", |_: &ScatterPoint| [1.0f32, 0.0, 0.0, 1.0]);
+
+            let cpu_start = Instant::now();
+            sel_cpu
+                .prepare_render_bound(&context.device, &context.queue, None)
+                .expect("CPU prepare");
+            let cpu_elapsed = cpu_start.elapsed();
+
+            // --- GPU shader function binding ---
+            let mut sel_gpu: Selection<ScatterPoint, Circle> = Selection::from_data(data);
+            let radius_scale = LinearScale::new(0.0, 100.0, 0.001, 0.01);
+            sel_gpu
+                .attr("center", |d: &ScatterPoint| [d.x, d.y])
+                .attr("fill_color", |_: &ScatterPoint| [0.0f32, 0.0, 1.0, 1.0]);
+            sel_gpu.attr_shader("radius", |d: &ScatterPoint| d.value, radius_scale);
+
+            let gpu_start = Instant::now();
+            sel_gpu
+                .prepare_render_bound(&context.device, &context.queue, None)
+                .expect("GPU prepare");
+            let gpu_elapsed = gpu_start.elapsed();
+
+            eprintln!(
+                "100K points: CPU closure = {:?}, GPU shader fn = {:?}",
+                cpu_elapsed, gpu_elapsed
+            );
+
+            // Both should complete in reasonable time (< 5 seconds).
+            assert!(
+                cpu_elapsed.as_secs() < 5,
+                "CPU binding took too long: {cpu_elapsed:?}"
+            );
+            assert!(
+                gpu_elapsed.as_secs() < 5,
+                "GPU binding took too long: {gpu_elapsed:?}"
+            );
+
+            // Verify both produce valid render state.
+            assert!(sel_cpu.is_render_ready());
+            assert!(sel_gpu.is_render_ready());
         });
     }
 }
