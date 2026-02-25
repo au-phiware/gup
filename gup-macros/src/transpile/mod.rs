@@ -31,18 +31,42 @@
 //!
 //! ## Supported Rust Subset
 //!
+//! ### Operators
+//!
 //! - Arithmetic expressions (`+`, `-`, `*`, `/`, `%`)
 //! - Comparison operators (`==`, `!=`, `<`, `<=`, `>`, `>=`)
 //! - Logical operators (`&&`, `||`, `!`)
+//! - Bitwise operators (`&`, `|`, `^`, `<<`, `>>`)
+//! - Compound assignments (`+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, etc.)
+//! - Unary negation and logical not
+//!
+//! ### Variables and Statements
+//!
 //! - Variable references and field access
 //! - `let` bindings (immutable and mutable)
 //! - `return` statements
-//! - `if`/`else` expressions
+//! - `if`/`else` statements and expressions (→ WGSL `select()`)
+//! - Assignment statements
+//! - Array/vector indexing
+//! - Type-annotated let bindings
+//!
+//! ### Functions and Calls
+//!
 //! - Function calls (with Rust→WGSL name mapping)
-//! - Method calls on known types (`.abs()`, `.sqrt()`, etc.)
+//! - Method calls on known types (`.abs()`, `.sqrt()`, `.length()`, etc.)
+//! - Qualified path calls (`f32::sin(x)`, `Vec3::new(...)`)
+//! - Vector/matrix constructor calls
+//! - Static methods (`Vec3::splat(v)`, `Vec3::zero()`)
+//! - Conversion methods (`.to_f32()`, `.to_i32()`, `.to_u32()`)
+//!
+//! ### Expressions
+//!
 //! - Numeric literals (f32, i32, u32)
+//! - Boolean literals
 //! - Type casts (`as f32`, etc.)
-//! - Unary negation and logical not
+//! - Reference stripping (`&x` → `x`)
+//! - Parenthesised expressions
+//! - Block expressions
 
 // This module is a prototype used by tests; suppress dead-code warnings.
 // #![allow(...)] only works at the crate root, so we allow on the items inside.
