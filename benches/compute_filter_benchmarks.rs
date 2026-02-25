@@ -3,9 +3,10 @@
 
 //! Performance benchmarks comparing CPU vs GPU instance filtering.
 //!
-//! Measures end-to-end time for frustum culling + LOD classification
-//! + stream compaction at 100K, 1M, and 10M instance scales using both
-//! the CPU [`CullingManager`] and the GPU [`ComputeInstanceFilter`].
+//! Measures end-to-end time for frustum culling, LOD classification,
+//! and stream compaction at 100K, 1M, and 10M instance scales using
+//! the CPU [`CullingManager`], the GPU [`ComputeInstanceFilter`], and
+//! the pooled [`PooledComputeInstanceFilter`].
 //!
 //! GPU benchmarks include dispatch + readback so that the numbers are
 //! directly comparable to the CPU path.
@@ -18,7 +19,7 @@ use gup::context::GupContext;
 use gup::mark::batch_renderer::{
     BatchRendererConfig, CullingManager, InstanceAttributes, Viewport2D,
 };
-use gup::mark::compute_instance_filter::ComputeInstanceFilter;
+use gup::mark::compute_instance_filter::{ComputeInstanceFilter, PooledComputeInstanceFilter};
 use std::hint::black_box;
 use wgpu::{BufferDescriptor, BufferUsages};
 
@@ -65,7 +66,7 @@ fn bench_cpu_culling(c: &mut Criterion) {
 }
 
 // ---------------------------------------------------------------------------
-// GPU culling benchmark
+// GPU culling benchmark (per-dispatch allocation)
 // ---------------------------------------------------------------------------
 
 fn bench_gpu_culling(c: &mut Criterion) {
@@ -127,5 +128,81 @@ fn bench_gpu_culling(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_cpu_culling, bench_gpu_culling);
+// ---------------------------------------------------------------------------
+// GPU culling benchmark (pooled / pre-allocated buffers)
+// ---------------------------------------------------------------------------
+
+fn bench_gpu_culling_pooled(c: &mut Criterion) {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let ctx = match rt.block_on(GupContext::headless()) {
+        Ok(c) => c,
+        Err(_) => {
+            eprintln!("No GPU available — skipping pooled GPU benchmarks");
+            return;
+        }
+    };
+    let device = &ctx.device;
+    let queue = &ctx.queue;
+
+    let viewport = Viewport2D::default();
+    let thresholds = [4.0f32, 1.0, 0.25];
+
+    let mut group = c.benchmark_group("instance_filter_gpu_pooled");
+
+    for &size in &[100_000usize, 1_000_000] {
+        let instances = generate_instances(size);
+        let attr_bytes: &[u8] = bytemuck::cast_slice(&instances);
+
+        let input_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("bench_pooled_input"),
+            size: attr_bytes.len() as u64,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        queue.write_buffer(&input_buffer, 0, attr_bytes);
+
+        let filter = ComputeInstanceFilter::new(device).unwrap();
+        let mut pooled = PooledComputeInstanceFilter::new(device, filter, size as u32);
+
+        // Warm up: first dispatch to ensure buffers are created.
+        rt.block_on(pooled.dispatch(
+            device,
+            queue,
+            &input_buffer,
+            size as u32,
+            6,
+            &viewport,
+            &thresholds,
+        ))
+        .unwrap();
+
+        group.bench_with_input(
+            BenchmarkId::new("dispatch_filter_pooled", size),
+            &size,
+            |b, _| {
+                b.iter(|| {
+                    let result = rt.block_on(pooled.dispatch(
+                        device,
+                        queue,
+                        black_box(&input_buffer),
+                        size as u32,
+                        6,
+                        &viewport,
+                        &thresholds,
+                    ));
+                    black_box(result.unwrap());
+                });
+            },
+        );
+    }
+
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    bench_cpu_culling,
+    bench_gpu_culling,
+    bench_gpu_culling_pooled
+);
 criterion_main!(benches);
