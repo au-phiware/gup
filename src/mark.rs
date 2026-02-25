@@ -39,6 +39,7 @@
 //!     );
 //! ```
 
+pub mod advanced_rendering;
 pub mod batch_renderer;
 pub mod boxplot;
 pub mod circle;
@@ -51,6 +52,10 @@ pub mod rectangle;
 pub mod renderer;
 pub mod text;
 
+pub use advanced_rendering::{
+    DynamicAttributeMap, DynamicAttributeValue, MarkBlendConfig, MarkViewport, MultiPassConfig,
+    MultiPassRenderer, RenderPassConfig, RenderStateManager, RenderStateSnapshot, ScissorRect,
+};
 pub use batch_renderer::{
     BatchFrameStats, BatchRendererConfig, CullingManager, GeometryCache, InstanceAttributes,
     InstancedBatchRenderer, LodLevel, RenderBatch, Viewport2D,
