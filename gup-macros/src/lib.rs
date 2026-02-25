@@ -20,6 +20,7 @@ use proc_macro::TokenStream;
 use quote::{ToTokens, quote};
 use syn::{Data, DeriveInput, Fields, parse_macro_input};
 
+mod mark_derive;
 mod mark_type_id;
 mod mixable_derive;
 mod wgsl_function;
@@ -315,6 +316,67 @@ pub fn derive_mark_type_id(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
     match mark_type_id::derive_mark_type_id_impl(input) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
+}
+
+/// Derive macro for automatically implementing the `Mark` trait.
+///
+/// This macro generates a complete `Mark` trait implementation from an annotated
+/// struct, including a GPU-compatible vertex type, base geometry generation, and
+/// attribute type validation. It supports common mark patterns with minimal
+/// boilerplate.
+///
+/// # Container Attributes
+///
+/// - `#[mark(primitive = "quad")]` - Generate quad geometry (4 vertices, 6 indices).
+///   This is the default.
+/// - `#[mark(primitive = "triangle")]` - Generate triangle geometry (3 vertices).
+///
+/// # Field Types
+///
+/// Fields are mapped to WGSL types for attribute validation:
+/// - `f32` → `f32`
+/// - `Vec2` → `vec2<f32>`
+/// - `Vec3` → `vec3<f32>`
+/// - `Vec4` → `vec4<f32>`
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use gup_macros::Mark;
+/// use gup::shader_function::{Vec2, Vec4};
+///
+/// #[derive(Debug, Clone, Mark)]
+/// #[mark(primitive = "quad")]
+/// pub struct Diamond {
+///     pub center: Vec2,
+///     pub size: f32,
+///     pub color: Vec4,
+///     pub angle: f32,
+/// }
+///
+/// // This generates:
+/// // - `DiamondVertex` struct with `position: [f32; 2]`
+/// // - `impl Mark for Diamond` with quad geometry
+/// // - Attribute type validation for all fields
+/// ```
+///
+/// # Generated Items
+///
+/// For a struct named `Foo`, the macro generates:
+/// - `FooVertex` - A `#[repr(C)]` GPU vertex type with a `position: [f32; 2]` field
+/// - `impl Mark for Foo` with:
+///   - `type Vertex = FooVertex`
+///   - `type AttributeValue = Foo`
+///   - Geometry generation matching the selected primitive
+///   - `get_attribute_type()` returning correct WGSL types for all fields
+#[proc_macro_derive(Mark, attributes(mark))]
+pub fn derive_mark(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    match mark_derive::derive_mark_impl(input) {
         Ok(tokens) => tokens.into(),
         Err(error) => error.to_compile_error().into(),
     }
