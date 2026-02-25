@@ -1,8 +1,9 @@
 # GUP-189: AST Integration with ComposableShaderPipeline
 
 **Story ID**: GUP-189 **Title**: AST Integration with ComposableShaderPipeline
-**Status**: ✅ Complete **Completed**: 2025-08-08 **Priority**: Medium **Effort**: 5 story points
-**Created**: 2025-08-07 **Dependencies**: GUP-073 (Advanced Shader Composition)
+**Status**: ✅ Complete **Completed**: 2025-08-08 **Priority**: Medium
+**Effort**: 5 story points **Created**: 2025-08-07 **Dependencies**: GUP-073
+(Advanced Shader Composition)
 
 ## Overview
 
@@ -75,8 +76,8 @@ optimizations without changing my code.
 - Added `use_ast_analysis` field to `OptimizationConfig` (default: `false` for
   backward compatibility)
 - Refactored `optimize_shader()` to delegate to AST-based optimizer
-  (`parse_wgsl` → `optimize` → `generate_wgsl_minimal`) when
-  `use_ast_analysis` is true
+  (`parse_wgsl` → `optimize` → `generate_wgsl_minimal`) when `use_ast_analysis`
+  is true
 - Implemented graceful fallback: if AST parsing fails, the string-based
   optimization path is used automatically
 - Improved the `optimize()` function in `shader_ast::optimizer` to re-run
@@ -85,11 +86,11 @@ optimizations without changing my code.
 
 ### Key Files Changed
 
-| File                                        | Change                                           |
-| ------------------------------------------- | ------------------------------------------------ |
-| `src/shader_pipeline.rs`                    | Added `use_ast_analysis`, AST delegation, 7 new tests |
-| `src/shader_ast/optimizer.rs`               | Re-run DCE after inlining                        |
-| `tests/shader_pipeline_performance_tests.rs` | 4 new integration tests, updated struct literals |
+| File                                         | Change                                                |
+| -------------------------------------------- | ----------------------------------------------------- |
+| `src/shader_pipeline.rs`                     | Added `use_ast_analysis`, AST delegation, 7 new tests |
+| `src/shader_ast/optimizer.rs`                | Re-run DCE after inlining                             |
+| `tests/shader_pipeline_performance_tests.rs` | 4 new integration tests, updated struct literals      |
 
 ### Test Counts
 
@@ -98,3 +99,75 @@ optimizations without changing my code.
 - **All 23 shader_pipeline tests pass**
 - **All 58 shader_ast tests pass**
 - **All 14 performance tests pass**
+
+## Retrospective
+
+**Completed**: 2025-08-08
+
+### Key Technical Learnings
+
+#### AST Optimizer Pass Ordering Matters
+
+- **Challenge**: After function inlining, the inlined functions become dead code
+  but DCE had already run before the inlining pass, so dead functions persisted
+  in the output.
+- **Solution**: Added a second DCE pass after inlining when inlining actually
+  changed anything. This is gated behind `inlining_result.changed` to avoid
+  unnecessary work.
+- **Pattern**: Optimization pass pipelines should be iterative — later passes
+  can create new optimization opportunities for earlier passes. A common
+  approach is to run the full pipeline in a loop until a fixpoint, but running
+  DCE once after inlining was sufficient here.
+
+#### Graceful Fallback is Essential for Parser Integration
+
+- **Challenge**: The WGSL parser in `shader_ast` handles a subset of WGSL. The
+  generated shaders from `ComposableShaderPipeline` use constructs (like
+  `var<uniform>` bindings) that the parser may not fully support.
+- **Solution**: Wrapped AST parsing in a `match` and fall back to the existing
+  string-based optimizer on parse error. Logging at debug level so users can
+  diagnose when fallback occurs.
+- **Pattern**: When integrating a new system alongside an existing one, always
+  keep the old system as a fallback and make the new one opt-in. This allows
+  incremental adoption without risk.
+
+### Architectural Decisions
+
+#### Opt-In Rather Than Default-On
+
+- **Decision**: `use_ast_analysis` defaults to `false`
+- **Reasoning**: The AST parser handles a subset of WGSL, so enabling it by
+  default could surprise users with different output. As parser coverage
+  improves, the default can change.
+- **Trade-off**: Users must explicitly opt in to get AST-based optimization.
+- **Future**: Once the parser handles all generated WGSL, flip the default to
+  `true` and eventually deprecate the string-based path.
+
+#### Config Mapping from OptimizationConfig to AstOptimizationConfig
+
+- **Decision**: Map `OptimizationConfig` fields to `AstOptimizationConfig`
+  fields inline in `optimize_shader_ast()`.
+- **Reasoning**: The two configs have different field names and semantics (e.g.,
+  `inline_threshold` vs `inline_max_statements`). A manual mapping keeps both
+  APIs stable while bridging them.
+- **Trade-off**: Two config types must be kept in sync conceptually.
+- **Future**: Could unify into a single config type once the string-based path
+  is removed.
+
+### Development Workflow Insights
+
+- The implementation was straightforward — the AST system from GUP-073 was
+  well-designed with clean `parse_wgsl` / `optimize` / `generate_wgsl_minimal`
+  entry points.
+- Disk space became a constraint during full-suite testing (`cargo test`
+  compiles all examples and integration tests). Running `cargo test --lib` was
+  sufficient for validating the core changes.
+- The pre-existing flaky test `test_performance_500_labels` (GUP-187) was the
+  only failure and is unrelated to this work.
+
+### Follow-up Stories
+
+1. **GUP-191: Enable AST Optimization by Default** — Once the WGSL parser
+   coverage is extended to handle all generated shader constructs (struct
+   definitions, `var<uniform>` bindings, etc.), flip `use_ast_analysis` default
+   to `true` and deprecate the string-based optimization path.
