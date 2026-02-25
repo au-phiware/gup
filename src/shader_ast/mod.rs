@@ -30,6 +30,7 @@
 //! let wgsl = generate_wgsl(&module);
 //! ```
 
+pub mod benchmarks;
 pub mod generator;
 pub mod optimizer;
 pub mod parser;
