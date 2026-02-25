@@ -2,7 +2,7 @@
 
 **Story ID**: GUP-074  
 **Title**: Mark Performance Optimization  
-**Status**: Planned  
+**Status**: 🚧 In Progress  
 **Priority**: High  
 **Effort**: 5 story points  
 **Created**: 2025-08-04  
