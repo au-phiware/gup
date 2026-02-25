@@ -166,53 +166,34 @@ impl App {
 
     /// Rebuild instances reflecting current selection visual state.
     fn rebuild_instances(&mut self) {
-        let instances: Vec<CircleInstance> = self
-            .data
-            .iter()
-            .enumerate()
-            .map(|(i, d)| {
-                let id = i as u32;
-                let opacity = self.sel_sys.mark_opacity(id);
-                let scale = self.sel_sys.mark_scale(id);
-                let outline = self.sel_sys.mark_outline(id);
-                let mut color = d.color;
-                color[3] *= opacity;
-                let (sc, sw) = outline
-                    .map(|(c, w)| (c, w * 0.002))
-                    .unwrap_or(([0.0; 4], 0.0));
-                CircleInstance {
-                    center: [d.x, d.y],
-                    radius: d.radius * scale,
-                    _pad0: 0.0,
-                    fill_color: color,
-                    stroke_width: sw,
-                    _pad1: [0.0; 3],
-                    stroke_color: sc,
-                }
-            })
-            .collect();
-
         if let (Some(ctx), Some(sel)) = (&self.context, &mut self.selection) {
-            let inst = instances.clone();
+            // The mapper is called for data[0], data[1], ... in order.
+            // Use a Cell counter to track the current index.
+            let index = std::cell::Cell::new(0u32);
+            let sel_sys = &self.sel_sys;
             let _ = sel.prepare_render(
                 &ctx.device,
                 &ctx.queue,
                 |d: &DataPoint| {
-                    inst.iter()
-                        .find(|ci| {
-                            (ci.center[0] - d.x).abs() < f32::EPSILON
-                                && (ci.center[1] - d.y).abs() < f32::EPSILON
-                        })
-                        .copied()
-                        .unwrap_or(CircleInstance {
-                            center: [d.x, d.y],
-                            radius: d.radius,
-                            _pad0: 0.0,
-                            fill_color: d.color,
-                            stroke_width: 0.0,
-                            _pad1: [0.0; 3],
-                            stroke_color: [0.0; 4],
-                        })
+                    let id = index.get();
+                    index.set(id + 1);
+                    let opacity = sel_sys.mark_opacity(id);
+                    let scale = sel_sys.mark_scale(id);
+                    let outline = sel_sys.mark_outline(id);
+                    let mut color = d.color;
+                    color[3] *= opacity;
+                    let (sc, sw) = outline
+                        .map(|(c, w)| (c, w * 0.002))
+                        .unwrap_or(([0.0; 4], 0.0));
+                    CircleInstance {
+                        center: [d.x, d.y],
+                        radius: d.radius * scale,
+                        _pad0: 0.0,
+                        fill_color: color,
+                        stroke_width: sw,
+                        _pad1: [0.0; 3],
+                        stroke_color: sc,
+                    }
                 },
                 Some(&mut self.cache),
             );
