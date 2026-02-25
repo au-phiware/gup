@@ -5,7 +5,8 @@
 **Title**: Technical Feasibility Assessment and Architecture Design  
 **Epic**: Phase 2 Initiative 2 - Rust-to-WGSL Transpilation Research  
 **Priority**: High  
-**Story Points**: 8
+**Story Points**: 8  
+**Status**: 🚧 In Progress
 
 ## Context
 
