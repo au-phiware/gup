@@ -219,7 +219,8 @@ pub use chart_builder::{
 
 // Note: Procedural macros from gup_macros must be imported directly due to Rust limitations
 // Available macros:
-// - `use gup_macros::wgsl_function;` - WGSL shader function generation
+// - `use gup_macros::wgsl_function;` - WGSL shader function generation (write WGSL syntax)
+// - `use gup_macros::shader_fn;`     - Rust-to-WGSL transpiled shader function generation
 // - `use gup_macros::Mixable;` - Automatic Mixable trait derivation
 
 #[cfg(target_arch = "wasm32")]
