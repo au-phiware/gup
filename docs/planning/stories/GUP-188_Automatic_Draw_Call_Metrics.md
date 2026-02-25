@@ -1,10 +1,8 @@
 # GUP-188: Automatic Draw Call Metrics in MarkRenderer
 
-**Status**: 📋 Planned
-**Priority**: Low
-**Category**: Performance / Developer Experience
-**Estimated Effort**: 0.5 days
-**Dependencies**: GUP-070 (Mark Performance Optimization)
+**Status**: 📋 Planned **Priority**: Low **Category**: Performance / Developer
+Experience **Estimated Effort**: 0.5 days **Dependencies**: GUP-070 (Mark
+Performance Optimization)
 
 ## Overview
 
@@ -22,9 +20,9 @@ metrics struct. Users who want per-frame metrics must manually call
 
 ## User Story
 
-**As a** visualization developer using the mark renderer
-**I want** draw call and instance metrics to be tracked automatically
-**So that** I can monitor rendering performance without manual bookkeeping
+**As a** visualization developer using the mark renderer **I want** draw call
+and instance metrics to be tracked automatically **So that** I can monitor
+rendering performance without manual bookkeeping
 
 ## Acceptance Criteria
 

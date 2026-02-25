@@ -260,3 +260,97 @@ A complete AST-based WGSL shader composition system in the `shader_ast` module:
 - optimizer: 7 tests
 - pipeline: 8 tests
 - benchmarks: 7 tests
+
+## Retrospective
+
+**Completed**: 2025-08-07
+
+### Key Technical Learnings
+
+#### WGSL Parser Subset Design
+
+- **Challenge**: Deciding how much of WGSL to support. Full WGSL is complex
+  (textures, samplers, compute workgroups, etc.) but shader functions only use a
+  subset.
+- **Solution**: Focused on the constructs used in Gup's shader function system:
+  functions, structs, global var declarations, and common expression/statement
+  forms. Supports attributes, type constructors, and member access which covers
+  all current shader functions.
+- **Pattern**: When building a DSL parser for a subset, start with the minimum
+  needed for existing code, then expand. The parser handles all current
+  `wgsl_function!` macro output.
+
+#### AST-Based Optimization vs String-Based
+
+- **Challenge**: The existing `shader_pipeline.rs` had string-based
+  optimizations (e.g., replacing `"1.0 * "` with `""`) which were fragile and
+  limited.
+- **Solution**: AST-based optimization operates on the semantic structure,
+  enabling proper dead code elimination (BFS from entry points), constant
+  folding (evaluating literal arithmetic), and function inlining (parameter
+  substitution).
+- **Pattern**: String-based transformations are fine for simple cases but break
+  down when you need semantic understanding. AST-based approaches are more
+  robust and composable — each pass is independent and can run in any order.
+
+#### Type Promotion System
+
+- **Challenge**: Shader functions in Gup compose f32 → f32, f32 → vec4, etc.
+  Need to catch incompatible chains early but allow reasonable promotions.
+- **Solution**: `WgslType::can_promote_to()` implements the promotion rules (f32
+  → vecN, smaller vec → larger vec) and `TypeChecker::check_compatibility` uses
+  this plus suggestion generation for helpful error messages.
+- **Pattern**: Type promotion rules should be explicit and well-documented. The
+  suggestion system that tells users "use value.xy to truncate" is especially
+  valuable for GPU shader development.
+
+### Architectural Decisions
+
+#### New Module vs Extending shader_pipeline.rs
+
+- **Decision**: Created a new `shader_ast` module rather than modifying the
+  existing `shader_pipeline.rs`.
+- **Reasoning**: The existing string-based pipeline is well-tested and used
+  throughout the codebase. Adding AST alongside preserves backward compatibility
+  and allows gradual migration.
+- **Trade-off**: Some code duplication between the two approaches. The
+  `AstShaderPipeline` doesn't replace `ComposableShaderPipeline` but provides an
+  alternative path.
+- **Future**: The string-based pipeline can gradually delegate to the AST system
+  for optimization, eventually becoming a thin wrapper.
+
+#### Function-Based Optimizations vs Trait Objects
+
+- **Decision**: Used standalone functions (`dead_code_elimination()`,
+  `constant_folding()`, `function_inlining()`) rather than a
+  `Box<dyn OptimizationPass>` trait object approach.
+- **Reasoning**: Follows the project convention of "enum over trait objects for
+  known sets." The optimization passes are a finite, known set and function
+  dispatch is simpler and more performant.
+- **Trade-off**: Less extensible for external users adding custom passes, but
+  this isn't needed yet.
+- **Future**: Could add an enum-based `OptimizationPass` if external
+  extensibility becomes needed.
+
+### Development Workflow Insights
+
+- **Disk space**: The build artifacts for this project can consume 30+ GB.
+  Running `cargo clean` before large test runs is important on constrained
+  systems.
+- **Incremental development**: Building the parser first, then the generator,
+  then adding type checking and optimization as separate passes worked well.
+  Each piece could be tested independently.
+- **Pre-existing test failures**: The `test_performance_500_labels` test is
+  flaky (GUP-187 is already planned for it). Not related to this story.
+- **`gen` is a reserved keyword in Rust 2024**: Using `gen` as a variable name
+  caused a compilation error. Renamed to `generator`.
+
+### Follow-up Stories
+
+1. **GUP-189: AST Integration with ComposableShaderPipeline** — Wire the AST
+   optimizer into the existing `ComposableShaderPipeline.optimize_shader()`
+   method so existing pipeline users get AST-based optimizations transparently.
+
+2. **GUP-190: WGSL Compute Shader AST Support** — Extend the parser and AST
+   types to handle compute shader constructs (workgroup attributes, storage
+   buffers, compute-specific builtins) for composing compute shaders.

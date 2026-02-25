@@ -372,8 +372,8 @@ This optimization work enables:
 - **Solution**: Aligned implementation to the actual enum variant names. No
   `Screen` blend mode exists yet, so the cache handles only the four existing
   variants.
-- **Pattern**: Always check the actual codebase types before implementing against
-  a story spec. Story pseudo-code is aspirational, not contractual.
+- **Pattern**: Always check the actual codebase types before implementing
+  against a story spec. Story pseudo-code is aspirational, not contractual.
 
 #### Buffer Pool Size Classes
 
@@ -408,14 +408,14 @@ This optimization work enables:
   don't need metrics.
 - **Trade-off**: Callers must manually accumulate draw call counts rather than
   getting automatic tracking.
-- **Future**: Could add a `render_marks_tracked()` variant that takes `&mut self`
-  and automatically increments counters.
+- **Future**: Could add a `render_marks_tracked()` variant that takes
+  `&mut self` and automatically increments counters.
 
 ### Development Workflow Insights
 
-- **Disk space**: The full test suite (`cargo test`) builds all integration tests
-  into separate binaries, consuming >40GB of build artifacts. Running `cargo test
-  --lib` or filtering tests avoids disk exhaustion.
+- **Disk space**: The full test suite (`cargo test`) builds all integration
+  tests into separate binaries, consuming >40GB of build artifacts. Running
+  `cargo test --lib` or filtering tests avoids disk exhaustion.
 - **Pre-existing flaky test**: `label::positioner::test_performance_500_labels`
   fails intermittently with 12ms vs 10ms target. This is unrelated to GUP-070
   and should be fixed or relaxed in a separate story.
@@ -428,7 +428,8 @@ This optimization work enables:
 
 1. **GUP-187: Flaky Label Performance Test Fix** — The
    `test_performance_500_labels` test has an overly tight 10ms target that fails
-   under load. Should increase the threshold or convert to a benchmark-only check.
+   under load. Should increase the threshold or convert to a benchmark-only
+   check.
 2. **GUP-188: Automatic Draw Call Metrics in MarkRenderer** — Add a
    `render_marks_tracked(&mut self, ...)` variant that automatically increments
    `MarkPerformanceMetrics` counters, eliminating manual accumulation.

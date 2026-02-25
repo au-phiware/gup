@@ -1,10 +1,7 @@
 # GUP-187: Flaky Label Performance Test Fix
 
-**Status**: 📋 Planned
-**Priority**: Low
-**Category**: Testing / Quality
-**Estimated Effort**: 0.5 days
-**Dependencies**: None
+**Status**: 📋 Planned **Priority**: Low **Category**: Testing / Quality
+**Estimated Effort**: 0.5 days **Dependencies**: None
 
 ## Overview
 
@@ -22,8 +19,7 @@ test suite. The test failed 1 out of ~5 runs, always with the same assertion:
 
 ## User Story
 
-**As a** developer running the test suite
-**I want** all tests to pass reliably
+**As a** developer running the test suite **I want** all tests to pass reliably
 **So that** CI stays green and flaky failures don't mask real regressions
 
 ## Acceptance Criteria
@@ -41,7 +37,8 @@ test suite. The test failed 1 out of ~5 runs, always with the same assertion:
 ## Testing Strategy
 
 - Run the test 100 times in a loop to verify no flaky failures
-- Validate that actual performance regressions (e.g. 500ms) would still be caught
+- Validate that actual performance regressions (e.g. 500ms) would still be
+  caught
 
 ## Risk Assessment
 
