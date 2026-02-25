@@ -62,6 +62,7 @@ mod tests {
             enable_inlining: true,
             enable_constant_folding: true,
             enable_dead_code_elimination: true,
+            use_ast_analysis: false,
             inlining: config,
         };
 
@@ -223,6 +224,7 @@ mod tests {
             enable_inlining: true,
             enable_constant_folding: true,
             enable_dead_code_elimination: true,
+            use_ast_analysis: false,
             inlining: inlining_config,
         };
 

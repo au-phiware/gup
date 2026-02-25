@@ -143,6 +143,13 @@ pub struct OptimizationConfig {
     pub enable_constant_folding: bool,
     /// Enable dead code elimination
     pub enable_dead_code_elimination: bool,
+    /// Use AST-based optimization passes instead of string-based ones.
+    ///
+    /// When enabled, `optimize_shader()` parses the WGSL source into an AST,
+    /// runs dead-code elimination, constant folding, and function inlining on
+    /// the AST, then regenerates WGSL text.  Falls back to string-based
+    /// optimizations if AST parsing fails.
+    pub use_ast_analysis: bool,
     /// Inlining configuration
     pub inlining: InliningConfig,
 }
@@ -153,6 +160,7 @@ impl Default for OptimizationConfig {
             enable_inlining: true,
             enable_constant_folding: true,
             enable_dead_code_elimination: true,
+            use_ast_analysis: false,
             inlining: InliningConfig::default(),
         }
     }
@@ -954,7 +962,24 @@ impl ComposableShaderPipeline {
     }
 
     /// Optimize shader source by removing unused code and performing optimizations.
+    ///
+    /// When `OptimizationConfig.use_ast_analysis` is true, parses the shader
+    /// into an AST and runs AST-based optimization passes.  Falls back to
+    /// string-based optimizations if AST parsing fails.
     pub fn optimize_shader(&self, shader_source: &str) -> String {
+        if self.optimization_config.use_ast_analysis {
+            if let Some(optimized) = self.optimize_shader_ast(shader_source) {
+                return optimized;
+            }
+            // AST parsing failed — fall back to string-based optimizations.
+            log::debug!("AST optimization failed, falling back to string-based optimizations");
+        }
+
+        self.optimize_shader_string(shader_source)
+    }
+
+    /// String-based optimization pipeline (the original implementation).
+    fn optimize_shader_string(&self, shader_source: &str) -> String {
         let mut optimized = shader_source.to_string();
 
         // Apply optimizations based on configuration
@@ -971,6 +996,44 @@ impl ComposableShaderPipeline {
         }
 
         optimized
+    }
+
+    /// AST-based optimization pipeline.
+    ///
+    /// Returns `None` if the source cannot be parsed, allowing the caller
+    /// to fall back to the string-based path.
+    fn optimize_shader_ast(&self, shader_source: &str) -> Option<String> {
+        use crate::shader_ast::{
+            AstOptimizationConfig, generate_wgsl_minimal, optimize, parse_wgsl,
+        };
+
+        let mut module = match parse_wgsl(shader_source) {
+            Ok(m) => m,
+            Err(e) => {
+                log::debug!("AST parse error: {}", e.message);
+                return None;
+            }
+        };
+
+        let ast_config = AstOptimizationConfig {
+            enable_dead_code_elimination: self.optimization_config.enable_dead_code_elimination,
+            enable_constant_folding: self.optimization_config.enable_constant_folding,
+            enable_function_inlining: self.optimization_config.enable_inlining,
+            inline_max_statements: self.optimization_config.inlining.inline_threshold,
+            inline_max_call_sites: self.optimization_config.inlining.call_count_threshold,
+        };
+
+        let results = optimize(&mut module, &ast_config);
+
+        if log::log_enabled!(log::Level::Debug) {
+            for r in &results {
+                if r.changed {
+                    log::debug!("AST optimization: {}", r.description);
+                }
+            }
+        }
+
+        Some(generate_wgsl_minimal(&module))
     }
 
     /// Get profiling report if profiling is enabled.
