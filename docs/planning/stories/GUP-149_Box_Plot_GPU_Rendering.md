@@ -350,3 +350,41 @@ infrastructure arrived.
 
 All 35 boxplot-related tests pass, the demo performs actual GPU draw calls, and
 100 box plots render at ≥60 FPS.
+
+### Completion Retrospective (2025-02-25)
+
+#### Key Technical Learnings
+
+##### Phased Story Completion Works
+
+- **Challenge**: GUP-149 was blocked on infrastructure (GUP-165, GUP-166) for
+  over a month. How to handle long-lived blocked stories?
+- **Solution**: Complete what you can (statistical foundation + tests), document
+  blockers clearly, then close when blockers are resolved.
+- **Pattern**: Stories that depend on infrastructure can be split into phases:
+  (A) testable foundation, (B) infrastructure (separate stories), (C)
+  integration verification. This keeps each phase focused and independently
+  valuable.
+
+##### Visual Verification Challenges
+
+- **Challenge**: Verifying GPU rendering output in automated/headless-like
+  environments is difficult. The niri compositor's scrolling layout prevented
+  capturing the boxplot window from a non-interactive shell session.
+- **Workaround**: Relied on GPU integration tests
+  (`gpu_prepare_and_render_boxplot_selection`, etc.) which actually create wgpu
+  devices and execute rendering pipelines. The demo window was confirmed visible
+  via `niri msg windows`.
+- **Pattern**: GPU rendering tests are more reliable for CI/verification than
+  screenshot-based visual tests. Invest in GPU integration tests over visual
+  regression tests for automated verification.
+
+#### Development Workflow Insights
+
+- **Story closure is cheap when blockers are resolved**: All the real work was
+  done in GUP-147 (statistical foundation), GUP-165 (Selection API rendering),
+  and GUP-166 (unified BoxPlot mark). Closing GUP-149 was purely documentation
+  and verification — no new code needed.
+- **Pre-existing flaky test**: `test_performance_500_labels` fails
+  intermittently (10ms == target of <10ms boundary condition). This is tracked
+  by GUP-174 (Flaky Performance Test Stabilization).
