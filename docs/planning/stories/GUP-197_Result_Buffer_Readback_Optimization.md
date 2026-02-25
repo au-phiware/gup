@@ -1,7 +1,7 @@
 # GUP-197: Result Buffer Readback Optimization
 
-**Status**: 📋 Planned **Priority**: Low **Effort**: 5 **Dependencies**: GUP-194
-(GPU-Resident Selection Data Cache)
+**Status**: 🚧 In Progress **Priority**: Low **Effort**: 5 **Dependencies**:
+GUP-194 (GPU-Resident Selection Data Cache)
 
 ## Overview
 
