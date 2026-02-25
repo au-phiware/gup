@@ -248,7 +248,8 @@ fn is_custom_type(ty: &Type) -> bool {
                 let type_name = path.segments[0].ident.to_string();
                 !matches!(
                     type_name.as_str(),
-                    "f32" | "i32"
+                    "f32"
+                        | "i32"
                         | "u32"
                         | "bool"
                         | "Vec2"
@@ -275,5 +276,107 @@ fn is_custom_type(ty: &Type) -> bool {
             }
         }
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper: parse a function and expand it, returning the token stream string.
+    fn expand(input: proc_macro2::TokenStream) -> std::result::Result<String, String> {
+        let func: ItemFn = syn::parse2(input).map_err(|e| e.to_string())?;
+        let tokens = expand_shader_fn(func).map_err(|e| e.to_string())?;
+        Ok(tokens.to_string())
+    }
+
+    #[test]
+    fn simple_function_expands() {
+        let tokens = expand(quote! {
+            fn my_func(value: f32) -> f32 {
+                return value * 2.0;
+            }
+        })
+        .unwrap();
+
+        assert!(tokens.contains("MyFunc"), "Should generate MyFunc struct");
+        assert!(
+            tokens.contains("MyFuncUniforms"),
+            "Should generate uniforms struct"
+        );
+        assert!(
+            tokens.contains("ComposableShaderFunction"),
+            "Should implement trait"
+        );
+        assert!(tokens.contains("my_func"), "Should contain function name");
+    }
+
+    #[test]
+    fn function_with_uniforms_expands() {
+        let tokens = expand(quote! {
+            fn scale_offset(value: f32, scale: f32, offset: f32) -> f32 {
+                return value * scale + offset;
+            }
+        })
+        .unwrap();
+
+        assert!(
+            tokens.contains("ScaleOffset"),
+            "Should generate ScaleOffset struct, got: {tokens}"
+        );
+        assert!(
+            tokens.contains("ScaleOffsetUniforms"),
+            "Should generate uniforms struct"
+        );
+    }
+
+    #[test]
+    fn error_on_no_params() {
+        let result = expand(quote! {
+            fn bad() -> f32 {
+                return 1.0;
+            }
+        });
+        assert!(result.is_err(), "Should fail for function with no params");
+    }
+
+    #[test]
+    fn error_on_no_return_type() {
+        let result = expand(quote! {
+            fn bad(value: f32) {
+                return;
+            }
+        });
+        assert!(
+            result.is_err(),
+            "Should fail for function with no return type"
+        );
+    }
+
+    #[test]
+    fn error_on_generic_function() {
+        let result = expand(quote! {
+            fn bad<T>(value: T) -> T {
+                return value;
+            }
+        });
+        assert!(result.is_err(), "Should fail for generic functions");
+    }
+
+    #[test]
+    fn error_on_async_function() {
+        let result = expand(quote! {
+            async fn bad(value: f32) -> f32 {
+                return value;
+            }
+        });
+        assert!(result.is_err(), "Should fail for async functions");
+    }
+
+    #[test]
+    fn pascal_case_conversion() {
+        assert_eq!(pascal_case("linear_scale"), "LinearScale");
+        assert_eq!(pascal_case("my_func"), "MyFunc");
+        assert_eq!(pascal_case("simple"), "Simple");
     }
 }
