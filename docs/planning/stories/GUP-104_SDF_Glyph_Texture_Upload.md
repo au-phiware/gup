@@ -218,6 +218,7 @@ workarounds if needed
 ---
 
 **Story Created:** 2025-08-16  
+**Status:** 🚧 In Progress  
 **Estimated Effort:** 1-2 days  
 **Priority:** Medium (blocks visual text rendering)  
 **Dependencies:** GUP-099 (completed)

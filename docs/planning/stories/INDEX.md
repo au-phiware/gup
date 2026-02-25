@@ -271,7 +271,7 @@ system story. The expanded story is also complete._
 
 | Story                                                                              | Title                                       | Status      | Priority | Points |
 | ---------------------------------------------------------------------------------- | ------------------------------------------- | ----------- | -------- | ------ |
-| [GUP-104](GUP-104_SDF_Glyph_Texture_Upload.md)                                     | SDF Glyph Texture Upload                    | 📋 Planned  | High     | —      |
+| [GUP-104](GUP-104_SDF_Glyph_Texture_Upload.md)                                     | SDF Glyph Texture Upload                    | 🚧 In Progress | High     | —      |
 | [GUP-105](GUP-105_Text_Clipping_Detection_and_Viewport_Bounds_Management.md)       | Text Clipping Detection and Viewport Bounds | 📋 Planned  | Medium   | 8      |
 | [GUP-106](GUP-106_System_Font_Loading.md)                                          | System Font Loading                         | 📋 Planned  | Medium   | —      |
 | [GUP-107](GUP-107_Text_Character_Positioning_Bug.md)                               | Text Character Positioning Bug              | ✅ Complete | Medium   | —      |
