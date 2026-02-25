@@ -529,4 +529,65 @@ mod gpu_tests {
             assert_eq!(cache.len(), 1);
         });
     }
+
+    /// Timed comparison: 100 Selections with vs without a cache.
+    #[test]
+    fn gpu_benchmark_cached_vs_uncached() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU benchmark — no adapter");
+                    return;
+                }
+            };
+
+            // --- Uncached path ---
+            let uncached_start = std::time::Instant::now();
+            for i in 0..100 {
+                let data = vec![circle_attrs(i as f32 * 0.01, 0.0)];
+                let mut sel: Selection<CircleAttributes, Circle> = Selection::from_data(data);
+                sel.prepare_render(
+                    &context.device,
+                    &context.queue,
+                    |a| CircleInstance::from(a),
+                    None,
+                )
+                .expect("uncached prepare");
+            }
+            let uncached_elapsed = uncached_start.elapsed();
+
+            // --- Cached path ---
+            let mut cache = PipelineCache::new();
+            let cached_start = std::time::Instant::now();
+            for i in 0..100 {
+                let data = vec![circle_attrs(i as f32 * 0.01, 0.0)];
+                let mut sel: Selection<CircleAttributes, Circle> = Selection::from_data(data);
+                sel.prepare_render(
+                    &context.device,
+                    &context.queue,
+                    |a| CircleInstance::from(a),
+                    Some(&mut cache),
+                )
+                .expect("cached prepare");
+            }
+            let cached_elapsed = cached_start.elapsed();
+
+            eprintln!(
+                "Pipeline creation benchmark (100 Selections):\n  \
+                 uncached: {:?}\n  cached:   {:?}\n  speedup:  {:.1}×",
+                uncached_elapsed,
+                cached_elapsed,
+                uncached_elapsed.as_secs_f64() / cached_elapsed.as_secs_f64()
+            );
+
+            // The cached path should be faster since it creates only 1 pipeline.
+            assert!(
+                cached_elapsed < uncached_elapsed,
+                "Cached path ({:?}) should be faster than uncached ({:?})",
+                cached_elapsed,
+                uncached_elapsed
+            );
+        });
+    }
 }
