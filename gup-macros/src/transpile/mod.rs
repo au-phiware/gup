@@ -74,6 +74,7 @@
 mod ast;
 #[allow(dead_code, unused_imports)]
 mod codegen;
+mod control_flow_tests;
 #[allow(dead_code, unused_imports)]
 mod convert;
 mod expression_tests;

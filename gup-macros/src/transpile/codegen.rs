@@ -152,6 +152,33 @@ impl WgslCodeGen {
                 self.indent_level -= 1;
 
                 if let Some(else_stmts) = else_body {
+                    // Check if else body is a single nested If (else-if chain)
+                    if else_stmts.len() == 1 {
+                        if let WgslStatement::If {
+                            condition: nested_cond,
+                            body: nested_body,
+                            else_body: nested_else,
+                        } = &else_stmts[0]
+                        {
+                            let nested_cond_str = self.generate_expr(nested_cond);
+                            self.write_line(&format!("}} else if ({nested_cond_str}) {{"));
+                            self.indent_level += 1;
+                            for s in nested_body {
+                                self.generate_stmt(s);
+                            }
+                            self.indent_level -= 1;
+                            if let Some(final_else) = nested_else {
+                                self.write_line("} else {");
+                                self.indent_level += 1;
+                                for s in final_else {
+                                    self.generate_stmt(s);
+                                }
+                                self.indent_level -= 1;
+                            }
+                            self.write_line("}");
+                            return;
+                        }
+                    }
                     self.write_line("} else {");
                     self.indent_level += 1;
                     for s in else_stmts {
@@ -160,6 +187,51 @@ impl WgslCodeGen {
                     self.indent_level -= 1;
                 }
                 self.write_line("}");
+            }
+            WgslStatement::For {
+                var_name,
+                initialiser,
+                condition,
+                update,
+                body,
+            } => {
+                let init = self.generate_expr(initialiser);
+                let cond = self.generate_expr(condition);
+                let upd = self.generate_expr(update);
+                self.write_line(&format!(
+                    "for (var {var_name} = {init}; {cond}; {upd}++) {{"
+                ));
+                self.indent_level += 1;
+                for s in body {
+                    self.generate_stmt(s);
+                }
+                self.indent_level -= 1;
+                self.write_line("}");
+            }
+            WgslStatement::While { condition, body } => {
+                let cond = self.generate_expr(condition);
+                self.write_line(&format!("while ({cond}) {{"));
+                self.indent_level += 1;
+                for s in body {
+                    self.generate_stmt(s);
+                }
+                self.indent_level -= 1;
+                self.write_line("}");
+            }
+            WgslStatement::Loop { body } => {
+                self.write_line("loop {");
+                self.indent_level += 1;
+                for s in body {
+                    self.generate_stmt(s);
+                }
+                self.indent_level -= 1;
+                self.write_line("}");
+            }
+            WgslStatement::Break => {
+                self.write_line("break;");
+            }
+            WgslStatement::Continue => {
+                self.write_line("continue;");
             }
             WgslStatement::Expression(e) => {
                 let expr = self.generate_expr(e);

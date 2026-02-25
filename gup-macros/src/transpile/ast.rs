@@ -175,6 +175,25 @@ pub enum WgslStatement {
         body: Vec<WgslStatement>,
         else_body: Option<Vec<WgslStatement>>,
     },
+    /// For loop: `for (var i = init; i < limit; i++) { body }`.
+    For {
+        var_name: String,
+        initialiser: WgslExpr,
+        condition: WgslExpr,
+        update: WgslExpr,
+        body: Vec<WgslStatement>,
+    },
+    /// While loop: `while (condition) { body }`.
+    While {
+        condition: WgslExpr,
+        body: Vec<WgslStatement>,
+    },
+    /// Infinite loop: `loop { body }`.
+    Loop { body: Vec<WgslStatement> },
+    /// Break statement.
+    Break,
+    /// Continue statement.
+    Continue,
     /// Expression statement (e.g. function call as statement).
     Expression(WgslExpr),
     /// Assignment: `target = value;`.

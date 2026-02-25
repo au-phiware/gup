@@ -187,6 +187,31 @@ impl RustToWgsl {
                     return Ok(compound);
                 }
 
+                // Handle for loop
+                if let Expr::ForLoop(for_loop) = expr {
+                    return self.convert_for_loop(for_loop);
+                }
+
+                // Handle while loop
+                if let Expr::While(while_loop) = expr {
+                    return self.convert_while_loop(while_loop);
+                }
+
+                // Handle infinite loop
+                if let Expr::Loop(loop_expr) = expr {
+                    return self.convert_loop(loop_expr);
+                }
+
+                // Handle break
+                if let Expr::Break(_) = expr {
+                    return Ok(WgslStatement::Break);
+                }
+
+                // Handle continue
+                if let Expr::Continue(_) = expr {
+                    return Ok(WgslStatement::Continue);
+                }
+
                 if semi.is_some() {
                     // Check for return statements
                     if let Expr::Return(ret) = expr {
@@ -200,6 +225,26 @@ impl RustToWgsl {
                     // Check for if-else as a statement (not expression)
                     if let Expr::If(if_expr) = expr {
                         return self.convert_if_statement(if_expr);
+                    }
+                    // Handle for loop with semicolon
+                    if let Expr::ForLoop(for_loop) = expr {
+                        return self.convert_for_loop(for_loop);
+                    }
+                    // Handle while loop with semicolon
+                    if let Expr::While(while_loop) = expr {
+                        return self.convert_while_loop(while_loop);
+                    }
+                    // Handle loop with semicolon
+                    if let Expr::Loop(loop_expr) = expr {
+                        return self.convert_loop(loop_expr);
+                    }
+                    // Handle break with semicolon
+                    if let Expr::Break(_) = expr {
+                        return Ok(WgslStatement::Break);
+                    }
+                    // Handle continue with semicolon
+                    if let Expr::Continue(_) = expr {
+                        return Ok(WgslStatement::Continue);
                     }
                     // Expression with semicolon — regular statement
                     let wgsl_expr = self.convert_expr(expr)?;
@@ -775,6 +820,79 @@ impl RustToWgsl {
             }
             _ => Ok(None),
         }
+    }
+
+    /// Convert a Rust for-loop to a WGSL for statement.
+    ///
+    /// Supports `for i in 0..n` → `for (var i = 0; i < n; i++)`.
+    fn convert_for_loop(
+        &mut self,
+        for_loop: &syn::ExprForLoop,
+    ) -> Result<WgslStatement, TranspileError> {
+        let var_name = extract_pat_name(&for_loop.pat)?;
+
+        // Extract range bounds from the iterator expression
+        let (init, limit) = self.extract_range_bounds(&for_loop.expr)?;
+
+        let body = self.convert_block(&for_loop.body)?;
+
+        Ok(WgslStatement::For {
+            var_name: var_name.clone(),
+            initialiser: init,
+            condition: WgslExpr::Binary(
+                Box::new(WgslExpr::Ident(var_name.clone())),
+                BinaryOp::Less,
+                Box::new(limit),
+            ),
+            update: WgslExpr::Ident(var_name),
+            body,
+        })
+    }
+
+    /// Extract the start and end expressions from a range expression (`start..end`).
+    fn extract_range_bounds(
+        &mut self,
+        expr: &Expr,
+    ) -> Result<(WgslExpr, WgslExpr), TranspileError> {
+        if let Expr::Range(range) = expr {
+            let start = if let Some(start) = &range.start {
+                self.convert_expr(start)?
+            } else {
+                WgslExpr::Literal(Literal::Int(0))
+            };
+            let end = if let Some(end) = &range.end {
+                self.convert_expr(end)?
+            } else {
+                return Err(TranspileError::new(
+                    "Range expressions must have an upper bound for WGSL for-loops",
+                    Span::call_site(),
+                ));
+            };
+            Ok((start, end))
+        } else {
+            Err(TranspileError::new(
+                "Only range expressions (e.g. 0..n) are supported as \
+                 for-loop iterators in WGSL. Use `for i in 0..n { ... }`.",
+                Span::call_site(),
+            ))
+        }
+    }
+
+    /// Convert a Rust while-loop to a WGSL while statement.
+    fn convert_while_loop(
+        &mut self,
+        while_loop: &syn::ExprWhile,
+    ) -> Result<WgslStatement, TranspileError> {
+        let condition = self.convert_expr(&while_loop.cond)?;
+        let body = self.convert_block(&while_loop.body)?;
+
+        Ok(WgslStatement::While { condition, body })
+    }
+
+    /// Convert a Rust infinite `loop` to a WGSL `loop` statement.
+    fn convert_loop(&mut self, loop_expr: &syn::ExprLoop) -> Result<WgslStatement, TranspileError> {
+        let body = self.convert_block(&loop_expr.body)?;
+        Ok(WgslStatement::Loop { body })
     }
 
     /// Convert an if expression used as a statement (not as an expression/select).
