@@ -25,6 +25,10 @@ pub struct TextStyle {
     pub letter_spacing: f32,
     /// Line spacing multiplier
     pub line_spacing: f32,
+    /// Optional font family name (e.g., "Arial", "Times New Roman").
+    /// When set, used with `FontDatabase` to resolve the font.
+    /// When `None`, uses the embedded default font.
+    pub font_family: Option<String>,
 }
 
 impl Default for TextStyle {
@@ -43,6 +47,7 @@ impl Default for TextStyle {
             weight: 0.5, // Normal weight
             letter_spacing: 1.0,
             line_spacing: 1.0,
+            font_family: None,
         }
     }
 }
@@ -124,6 +129,16 @@ impl TextStyle {
     /// Disable anti-aliasing.
     pub fn without_antialiasing(mut self) -> Self {
         self.antialiased = false;
+        self
+    }
+
+    /// Set the font family name.
+    ///
+    /// The font family is resolved through the `FontDatabase` when
+    /// creating a `FontAtlas`. If the font is not found on the system,
+    /// the embedded default font is used as a fallback.
+    pub fn with_font_family(mut self, family: &str) -> Self {
+        self.font_family = Some(family.to_string());
         self
     }
 
