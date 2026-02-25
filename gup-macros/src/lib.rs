@@ -23,6 +23,7 @@ use syn::{Data, DeriveInput, Fields, parse_macro_input};
 mod mark_derive;
 mod mark_type_id;
 mod mixable_derive;
+pub(crate) mod transpile;
 mod wgsl_function;
 mod wgsl_struct;
 
