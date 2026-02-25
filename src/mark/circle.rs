@@ -21,6 +21,7 @@
 //! transformations.
 
 use crate::mark::Mark;
+use crate::selection::{AttrValue, MarkInstanceBuilder};
 use crate::shader_function::{Vec2, Vec4};
 use crate::shader_pipeline::ComposableShaderPipeline;
 use std::collections::HashMap;
@@ -449,6 +450,49 @@ impl Default for CircleAttributes {
     }
 }
 
+impl MarkInstanceBuilder for Circle {
+    type Instance = CircleInstance;
+
+    fn default_instance() -> Self::Instance {
+        CircleInstance::from(&CircleAttributes::default())
+    }
+
+    fn build_instance(attrs: &[(&str, AttrValue)]) -> Self::Instance {
+        let mut instance = Self::default_instance();
+        for &(name, value) in attrs {
+            match name {
+                "center" | "position" => {
+                    if let AttrValue::Vec2(v) = value {
+                        instance.center = v;
+                    }
+                }
+                "radius" | "size" => {
+                    if let AttrValue::Float(v) = value {
+                        instance.radius = v;
+                    }
+                }
+                "fill_color" | "color" => {
+                    if let AttrValue::Vec4(v) = value {
+                        instance.fill_color = v;
+                    }
+                }
+                "stroke_width" => {
+                    if let AttrValue::Float(v) = value {
+                        instance.stroke_width = v;
+                    }
+                }
+                "stroke_color" => {
+                    if let AttrValue::Vec4(v) = value {
+                        instance.stroke_color = v;
+                    }
+                }
+                _ => {} // Ignore unknown attributes
+            }
+        }
+        instance
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -565,5 +609,62 @@ mod tests {
         assert_eq!(attrs.radius, 10.0);
         assert_eq!(attrs.fill_color.w, 0.8); // Alpha
         assert_eq!(attrs.stroke_width, 1.5);
+    }
+
+    #[test]
+    fn test_circle_mark_instance_builder_default() {
+        let instance = Circle::default_instance();
+        assert_eq!(instance.center, [0.0, 0.0]);
+        assert_eq!(instance.radius, 5.0);
+        assert_eq!(instance.fill_color, [1.0, 1.0, 1.0, 1.0]);
+        assert_eq!(instance.stroke_width, 1.0);
+        assert_eq!(instance.stroke_color, [0.0, 0.0, 0.0, 1.0]);
+    }
+
+    #[test]
+    fn test_circle_mark_instance_builder_with_attrs() {
+        use crate::selection::AttrValue;
+
+        let instance = Circle::build_instance(&[
+            ("center", AttrValue::Vec2([0.5, -0.3])),
+            ("radius", AttrValue::Float(0.1)),
+            ("fill_color", AttrValue::Vec4([1.0, 0.0, 0.0, 1.0])),
+        ]);
+
+        assert_eq!(instance.center, [0.5, -0.3]);
+        assert_eq!(instance.radius, 0.1);
+        assert_eq!(instance.fill_color, [1.0, 0.0, 0.0, 1.0]);
+        // Unset attributes should use defaults
+        assert_eq!(instance.stroke_width, 1.0);
+        assert_eq!(instance.stroke_color, [0.0, 0.0, 0.0, 1.0]);
+    }
+
+    #[test]
+    fn test_circle_mark_instance_builder_aliases() {
+        use crate::selection::AttrValue;
+
+        // "position" should work as alias for "center"
+        let instance = Circle::build_instance(&[
+            ("position", AttrValue::Vec2([0.2, 0.4])),
+            ("color", AttrValue::Vec4([0.0, 1.0, 0.0, 0.5])),
+            ("size", AttrValue::Float(0.3)),
+        ]);
+
+        assert_eq!(instance.center, [0.2, 0.4]);
+        assert_eq!(instance.fill_color, [0.0, 1.0, 0.0, 0.5]);
+        assert_eq!(instance.radius, 0.3);
+    }
+
+    #[test]
+    fn test_circle_mark_instance_builder_unknown_attrs_ignored() {
+        use crate::selection::AttrValue;
+
+        // Unknown attributes should not cause errors
+        let instance = Circle::build_instance(&[
+            ("center", AttrValue::Vec2([0.1, 0.2])),
+            ("unknown_field", AttrValue::Float(99.0)),
+        ]);
+
+        assert_eq!(instance.center, [0.1, 0.2]);
     }
 }

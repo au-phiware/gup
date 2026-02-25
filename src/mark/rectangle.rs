@@ -21,6 +21,7 @@
 //! attribute transformations.
 
 use crate::mark::Mark;
+use crate::selection::{AttrValue, MarkInstanceBuilder};
 use crate::shader_function::{Vec2, Vec4};
 use crate::shader_pipeline::ComposableShaderPipeline;
 use std::collections::HashMap;
@@ -484,6 +485,54 @@ impl Default for RectangleAttributes {
     }
 }
 
+impl MarkInstanceBuilder for Rectangle {
+    type Instance = RectangleInstance;
+
+    fn default_instance() -> Self::Instance {
+        RectangleInstance::from(&RectangleAttributes::default())
+    }
+
+    fn build_instance(attrs: &[(&str, AttrValue)]) -> Self::Instance {
+        let mut instance = Self::default_instance();
+        for &(name, value) in attrs {
+            match name {
+                "center" | "position" => {
+                    if let AttrValue::Vec2(v) = value {
+                        instance.center = v;
+                    }
+                }
+                "size" => {
+                    if let AttrValue::Vec2(v) = value {
+                        instance.size = v;
+                    }
+                }
+                "fill_color" | "color" => {
+                    if let AttrValue::Vec4(v) = value {
+                        instance.fill_color = v;
+                    }
+                }
+                "stroke_width" => {
+                    if let AttrValue::Float(v) = value {
+                        instance.stroke_width = v;
+                    }
+                }
+                "stroke_color" => {
+                    if let AttrValue::Vec4(v) = value {
+                        instance.stroke_color = v;
+                    }
+                }
+                "corner_radius" => {
+                    if let AttrValue::Float(v) = value {
+                        instance.corner_radius = v;
+                    }
+                }
+                _ => {} // Ignore unknown attributes
+            }
+        }
+        instance
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -729,5 +778,49 @@ mod tests {
             Rectangle::generate_fragment_shader_with_functions(&pipeline, &attribute_functions);
         assert!(fragment_shader.contains("fs_main"));
         assert!(fragment_shader.contains("sdf_rounded_rectangle"));
+    }
+
+    #[test]
+    fn test_rectangle_mark_instance_builder_default() {
+        let instance = Rectangle::default_instance();
+        assert_eq!(instance.center, [0.0, 0.0]);
+        assert_eq!(instance.size, [10.0, 10.0]);
+        assert_eq!(instance.fill_color, [1.0, 1.0, 1.0, 1.0]);
+        assert_eq!(instance.stroke_width, 1.0);
+        assert_eq!(instance.stroke_color, [0.0, 0.0, 0.0, 1.0]);
+        assert_eq!(instance.corner_radius, 0.0);
+    }
+
+    #[test]
+    fn test_rectangle_mark_instance_builder_with_attrs() {
+        use crate::selection::AttrValue;
+
+        let instance = Rectangle::build_instance(&[
+            ("center", AttrValue::Vec2([0.3, 0.4])),
+            ("size", AttrValue::Vec2([0.5, 0.8])),
+            ("fill_color", AttrValue::Vec4([0.0, 0.0, 1.0, 1.0])),
+            ("corner_radius", AttrValue::Float(0.05)),
+        ]);
+
+        assert_eq!(instance.center, [0.3, 0.4]);
+        assert_eq!(instance.size, [0.5, 0.8]);
+        assert_eq!(instance.fill_color, [0.0, 0.0, 1.0, 1.0]);
+        assert_eq!(instance.corner_radius, 0.05);
+        // Unset attributes use defaults
+        assert_eq!(instance.stroke_width, 1.0);
+    }
+
+    #[test]
+    fn test_rectangle_mark_instance_builder_aliases() {
+        use crate::selection::AttrValue;
+
+        // "position" and "color" should work as aliases
+        let instance = Rectangle::build_instance(&[
+            ("position", AttrValue::Vec2([0.1, 0.2])),
+            ("color", AttrValue::Vec4([1.0, 0.0, 0.0, 0.5])),
+        ]);
+
+        assert_eq!(instance.center, [0.1, 0.2]);
+        assert_eq!(instance.fill_color, [1.0, 0.0, 0.0, 0.5]);
     }
 }

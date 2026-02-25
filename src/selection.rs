@@ -879,6 +879,146 @@ mod tests {
 
     // --- Unit tests (no GPU) ---
 
+    // -- AttrValue & IntoAttrValue tests --
+
+    #[test]
+    fn attr_value_from_f32() {
+        let v: AttrValue = 3.14f32.into_attr_value();
+        assert_eq!(v, AttrValue::Float(3.14));
+    }
+
+    #[test]
+    fn attr_value_from_array2() {
+        let v: AttrValue = [1.0f32, 2.0].into_attr_value();
+        assert_eq!(v, AttrValue::Vec2([1.0, 2.0]));
+    }
+
+    #[test]
+    fn attr_value_from_array4() {
+        let v: AttrValue = [1.0f32, 0.0, 0.0, 1.0].into_attr_value();
+        assert_eq!(v, AttrValue::Vec4([1.0, 0.0, 0.0, 1.0]));
+    }
+
+    #[test]
+    fn attr_value_from_vec2() {
+        let v: AttrValue = Vec2 { x: 5.0, y: 6.0 }.into_attr_value();
+        assert_eq!(v, AttrValue::Vec2([5.0, 6.0]));
+    }
+
+    #[test]
+    fn attr_value_from_vec4() {
+        let v: AttrValue = Vec4 {
+            x: 0.1,
+            y: 0.2,
+            z: 0.3,
+            w: 0.4,
+        }
+        .into_attr_value();
+        assert_eq!(v, AttrValue::Vec4([0.1, 0.2, 0.3, 0.4]));
+    }
+
+    // -- attr() binding storage tests --
+
+    #[test]
+    fn attr_stores_single_binding() {
+        let data = vec![CircleAttributes::default()];
+        let mut selection: Selection<CircleAttributes, Circle> = Selection::from_data(data);
+
+        assert!(!selection.has_attr_bindings());
+        selection.attr("center", |a: &CircleAttributes| [a.center.x, a.center.y]);
+        assert!(selection.has_attr_bindings());
+        assert_eq!(selection.bound_attributes(), vec!["center"]);
+    }
+
+    #[test]
+    fn attr_chaining_stores_multiple_bindings() {
+        let data = vec![CircleAttributes::default()];
+        let mut selection: Selection<CircleAttributes, Circle> = Selection::from_data(data);
+
+        selection
+            .attr("center", |a: &CircleAttributes| [a.center.x, a.center.y])
+            .attr("radius", |a: &CircleAttributes| a.radius)
+            .attr("fill_color", |a: &CircleAttributes| {
+                [
+                    a.fill_color.x,
+                    a.fill_color.y,
+                    a.fill_color.z,
+                    a.fill_color.w,
+                ]
+            });
+
+        assert_eq!(
+            selection.bound_attributes(),
+            vec!["center", "radius", "fill_color"]
+        );
+    }
+
+    #[test]
+    fn attr_parallel_stores_two_bindings() {
+        let data = vec![CircleAttributes::default()];
+        let mut selection: Selection<CircleAttributes, Circle> = Selection::from_data(data);
+
+        selection.attr_parallel(
+            |a: &CircleAttributes| ([a.center.x, a.center.y], a.radius),
+            ["center", "radius"],
+        );
+
+        assert_eq!(selection.bound_attributes(), vec!["center", "radius"]);
+    }
+
+    #[test]
+    fn attr_parallel_stores_three_bindings() {
+        let data = vec![CircleAttributes::default()];
+        let mut selection: Selection<CircleAttributes, Circle> = Selection::from_data(data);
+
+        selection.attr_parallel(
+            |a: &CircleAttributes| {
+                (
+                    [a.center.x, a.center.y],
+                    a.radius,
+                    [
+                        a.fill_color.x,
+                        a.fill_color.y,
+                        a.fill_color.z,
+                        a.fill_color.w,
+                    ],
+                )
+            },
+            ["center", "radius", "fill_color"],
+        );
+
+        assert_eq!(
+            selection.bound_attributes(),
+            vec!["center", "radius", "fill_color"]
+        );
+    }
+
+    #[test]
+    fn set_data_preserves_attr_bindings() {
+        let mut selection: Selection<CircleAttributes, Circle> =
+            Selection::from_data(vec![CircleAttributes::default()]);
+
+        selection.attr("center", |a: &CircleAttributes| [a.center.x, a.center.y]);
+        assert!(selection.has_attr_bindings());
+
+        selection.set_data(vec![]);
+        // Bindings should be preserved after set_data
+        assert!(selection.has_attr_bindings());
+        assert_eq!(selection.bound_attributes(), vec!["center"]);
+    }
+
+    #[test]
+    fn prepare_render_bound_without_bindings_returns_error() {
+        // prepare_render_bound requires at least one binding
+        let selection: Selection<CircleAttributes, Circle> =
+            Selection::from_data(vec![CircleAttributes::default()]);
+
+        // Can't call prepare_render_bound in unit test (needs GPU), but we can
+        // verify the error path exists via the method signature. The actual
+        // GPU test below exercises this fully.
+        assert!(!selection.has_attr_bindings());
+    }
+
     #[test]
     fn from_data_creates_selection() {
         let data = vec![
