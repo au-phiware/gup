@@ -119,7 +119,8 @@ struct ShaderFnInfo {
     uniform_type_name: String,
     /// Serialised uniform bytes (`bytemuck::bytes_of`), or empty if no uniforms.
     uniform_bytes: Vec<u8>,
-    /// WGSL type name for the shader function input.
+    /// WGSL type name for the shader function input (stored for diagnostics).
+    #[allow(dead_code)]
     input_wgsl_type: &'static str,
     /// WGSL type name for the shader function output.
     output_wgsl_type: &'static str,
@@ -2927,7 +2928,7 @@ fn vs_main() -> VertexOutput {
                     let t = i as f32 / N as f32;
                     ScatterPoint {
                         x: -1.0 + 2.0 * t,
-                        y: (t * 6.28).sin() * 0.8,
+                        y: (t * std::f32::consts::TAU).sin() * 0.8,
                         value: t * 100.0,
                     }
                 })
