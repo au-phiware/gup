@@ -179,6 +179,8 @@ pub enum WgslStatement {
     Expression(WgslExpr),
     /// Assignment: `target = value;`.
     Assign(WgslExpr, WgslExpr),
+    /// Compound assignment: `target op= value;` (e.g., `x += 1;`).
+    CompoundAssign(WgslExpr, BinaryOp, WgslExpr),
 }
 
 /// A function parameter.

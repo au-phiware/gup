@@ -170,6 +170,11 @@ impl WgslCodeGen {
                 let v = self.generate_expr(value);
                 self.write_line(&format!("{t} = {v};"));
             }
+            WgslStatement::CompoundAssign(target, op, value) => {
+                let t = self.generate_expr(target);
+                let v = self.generate_expr(value);
+                self.write_line(&format!("{t} {op}= {v};"));
+            }
         }
     }
 

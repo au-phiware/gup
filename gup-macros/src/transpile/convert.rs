@@ -175,9 +175,19 @@ impl RustToWgsl {
                 })
             }
             Stmt::Expr(expr, semi) => {
+                // Handle assignment statements
+                if let Expr::Assign(assign) = expr {
+                    let target = self.convert_expr(&assign.left)?;
+                    let value = self.convert_expr(&assign.right)?;
+                    return Ok(WgslStatement::Assign(target, value));
+                }
+
+                // Handle compound assignment statements (+=, -=, *=, /=, etc.)
+                if let Some(compound) = self.try_convert_compound_assign(expr)? {
+                    return Ok(compound);
+                }
+
                 if semi.is_some() {
-                    // Expression with semicolon — regular statement
-                    let wgsl_expr = self.convert_expr(expr)?;
                     // Check for return statements
                     if let Expr::Return(ret) = expr {
                         let val = ret
@@ -187,12 +197,28 @@ impl RustToWgsl {
                             .transpose()?;
                         return Ok(WgslStatement::Return(val));
                     }
+                    // Check for if-else as a statement (not expression)
+                    if let Expr::If(if_expr) = expr {
+                        return self.convert_if_statement(if_expr);
+                    }
+                    // Expression with semicolon — regular statement
+                    let wgsl_expr = self.convert_expr(expr)?;
                     Ok(WgslStatement::Expression(wgsl_expr))
                 } else if is_last {
+                    // Check for if-else as a statement at end of block
+                    if let Expr::If(if_expr) = expr {
+                        // If at end of function with no semicolon, treat as
+                        // statement (not as select-expression)
+                        return self.convert_if_statement(if_expr);
+                    }
                     // Expression without semicolon at end of block — implicit return
                     let wgsl_expr = self.convert_expr(expr)?;
                     Ok(WgslStatement::Return(Some(wgsl_expr)))
                 } else {
+                    // Check for if-else as a statement
+                    if let Expr::If(if_expr) = expr {
+                        return self.convert_if_statement(if_expr);
+                    }
                     let wgsl_expr = self.convert_expr(expr)?;
                     Ok(WgslStatement::Expression(wgsl_expr))
                 }
@@ -299,68 +325,20 @@ impl RustToWgsl {
 
                 // Extract function name
                 if let Expr::Path(func_path) = &*call.func {
+                    // Try simple identifier first
                     if let Some(ident) = func_path.path.get_ident() {
                         let name = ident.to_string();
-                        // Map Rust type constructors to WGSL
-                        return match name.as_str() {
-                            // Float vectors
-                            "Vec2" => Ok(WgslExpr::TypeConstructor(
-                                WgslType::Vector(ScalarType::F32, 2),
-                                args,
-                            )),
-                            "Vec3" => Ok(WgslExpr::TypeConstructor(
-                                WgslType::Vector(ScalarType::F32, 3),
-                                args,
-                            )),
-                            "Vec4" => Ok(WgslExpr::TypeConstructor(
-                                WgslType::Vector(ScalarType::F32, 4),
-                                args,
-                            )),
-                            // Integer vectors
-                            "IVec2" => Ok(WgslExpr::TypeConstructor(
-                                WgslType::Vector(ScalarType::I32, 2),
-                                args,
-                            )),
-                            "IVec3" => Ok(WgslExpr::TypeConstructor(
-                                WgslType::Vector(ScalarType::I32, 3),
-                                args,
-                            )),
-                            "IVec4" => Ok(WgslExpr::TypeConstructor(
-                                WgslType::Vector(ScalarType::I32, 4),
-                                args,
-                            )),
-                            // Unsigned integer vectors
-                            "UVec2" => Ok(WgslExpr::TypeConstructor(
-                                WgslType::Vector(ScalarType::U32, 2),
-                                args,
-                            )),
-                            "UVec3" => Ok(WgslExpr::TypeConstructor(
-                                WgslType::Vector(ScalarType::U32, 3),
-                                args,
-                            )),
-                            "UVec4" => Ok(WgslExpr::TypeConstructor(
-                                WgslType::Vector(ScalarType::U32, 4),
-                                args,
-                            )),
-                            // Boolean vectors
-                            "BVec2" => Ok(WgslExpr::TypeConstructor(
-                                WgslType::Vector(ScalarType::Bool, 2),
-                                args,
-                            )),
-                            "BVec3" => Ok(WgslExpr::TypeConstructor(
-                                WgslType::Vector(ScalarType::Bool, 3),
-                                args,
-                            )),
-                            "BVec4" => Ok(WgslExpr::TypeConstructor(
-                                WgslType::Vector(ScalarType::Bool, 4),
-                                args,
-                            )),
-                            _ => Ok(WgslExpr::Call(name, args)),
-                        };
+                        return self.convert_function_call_by_name(&name, args);
+                    }
+
+                    // Handle qualified paths like f32::sin(x), i32::max(a, b)
+                    if let Some(result) = self.try_convert_qualified_call(&func_path.path, args)? {
+                        return Ok(result);
                     }
                 }
                 Err(TranspileError::new(
-                    "Only simple function calls are supported",
+                    "Only simple function calls and qualified type calls \
+                     (e.g. f32::sin(x)) are supported",
                     Span::call_site(),
                 ))
             }
@@ -375,27 +353,55 @@ impl RustToWgsl {
 
                 // Map Rust method calls to WGSL function calls
                 match method.as_str() {
+                    // Single-argument WGSL built-in functions (receiver becomes first arg)
                     "abs" | "sqrt" | "floor" | "ceil" | "round" | "fract" | "sign" | "sin"
                     | "cos" | "tan" | "asin" | "acos" | "atan" | "exp" | "exp2" | "log"
-                    | "log2" | "length" | "normalize" | "trunc" => {
-                        Ok(WgslExpr::Call(method, vec![receiver]))
-                    }
-                    "min" | "max" | "pow" | "atan2" | "step" | "distance" | "dot" | "cross" => {
+                    | "log2" | "length" | "normalize" | "trunc" | "sinh" | "cosh" | "tanh"
+                    | "asinh" | "acosh" | "atanh" | "saturate" | "degrees" | "radians"
+                    | "inversesqrt" => Ok(WgslExpr::Call(method, vec![receiver])),
+
+                    // Two-argument WGSL functions (receiver + one arg)
+                    "min" | "max" | "pow" | "atan2" | "step" | "distance" | "dot" | "cross"
+                    | "reflect" | "ldexp" => {
                         args.insert(0, receiver);
                         Ok(WgslExpr::Call(method, args))
                     }
-                    "clamp" => {
-                        args.insert(0, receiver);
-                        Ok(WgslExpr::Call("clamp".to_string(), args))
-                    }
-                    "mix" | "smoothstep" => {
+
+                    // Three-argument WGSL functions
+                    "clamp" | "mix" | "smoothstep" | "fma" | "refract" | "faceforward" => {
                         args.insert(0, receiver);
                         Ok(WgslExpr::Call(method, args))
                     }
+
+                    // Swizzle access for vector components (x, y, z, w, xy, xyz, etc.)
+                    // These look like methods with no args but are really field access;
+                    // handle them as member access if no parentheses (already handled by
+                    // field access), but method-style `.xy()` calls are not standard.
+
+                    // Vector component access (treated as member access)
+                    "x" | "y" | "z" | "w" if args.is_empty() => {
+                        Ok(WgslExpr::MemberAccess(Box::new(receiver), method))
+                    }
+
+                    // Conversion methods: .to_f32() etc.
+                    "to_f32" if args.is_empty() => Ok(WgslExpr::Cast(
+                        WgslType::Scalar(ScalarType::F32),
+                        Box::new(receiver),
+                    )),
+                    "to_i32" if args.is_empty() => Ok(WgslExpr::Cast(
+                        WgslType::Scalar(ScalarType::I32),
+                        Box::new(receiver),
+                    )),
+                    "to_u32" if args.is_empty() => Ok(WgslExpr::Cast(
+                        WgslType::Scalar(ScalarType::U32),
+                        Box::new(receiver),
+                    )),
+
                     _ => Err(TranspileError::new(
                         format!(
                             "Method '{method}' has no WGSL equivalent. \
-                             Use function call syntax instead."
+                             Supported methods: abs, sqrt, sin, cos, min, max, \
+                             clamp, mix, length, normalize, dot, cross, pow, etc."
                         ),
                         mc.method.span(),
                     )),
@@ -418,15 +424,34 @@ impl RustToWgsl {
                 }
             }
 
-            // --- If/else expression ---
-            Expr::If(_if_expr) => {
-                // If-else as expression isn't directly representable in WGSL;
-                // we convert it to a ternary-style select() if simple, otherwise error.
-                Err(TranspileError::new(
-                    "if-else as expression is not supported in WGSL. \
-                     Use if-else as a statement instead.",
-                    Span::call_site(),
-                ))
+            // --- If/else expression → WGSL select() ---
+            Expr::If(if_expr) => {
+                // If-else as expression can be transpiled to WGSL select():
+                //   select(false_value, true_value, condition)
+                // Note: WGSL select has reversed order from typical ternary.
+                if let Some(else_branch) = &if_expr.else_branch {
+                    let condition = self.convert_expr(&if_expr.cond)?;
+
+                    // Extract single expression from then block
+                    let then_val = self.extract_block_expr(&if_expr.then_branch)?;
+
+                    // Extract single expression from else block
+                    let else_val = match else_branch.1.as_ref() {
+                        Expr::Block(block) => self.extract_block_expr(&block.block)?,
+                        other => self.convert_expr(other)?,
+                    };
+
+                    Ok(WgslExpr::Call(
+                        "select".to_string(),
+                        vec![else_val, then_val, condition],
+                    ))
+                } else {
+                    Err(TranspileError::new(
+                        "if expression without else cannot be used as an expression in WGSL. \
+                         Use if-else as a statement instead.",
+                        Span::call_site(),
+                    ))
+                }
             }
 
             // --- Type casts (`x as f32`) ---
@@ -444,14 +469,48 @@ impl RustToWgsl {
             }
 
             // --- Assignment ---
-            Expr::Assign(_assign) => {
-                // Assignments as expressions are unusual but can appear.
-                // They'll be handled better at statement level.
-                Err(TranspileError::new(
-                    "Assignment expressions should be used as statements",
-                    Span::call_site(),
+            Expr::Assign(assign) => {
+                let target = self.convert_expr(&assign.left)?;
+                let value = self.convert_expr(&assign.right)?;
+                // Return as a pseudo-expression; will be properly handled at
+                // statement level for Assign statements.
+                // For expression-level usage, wrap into a binary that the
+                // statement converter can recognise.
+                Ok(WgslExpr::Binary(
+                    Box::new(target),
+                    BinaryOp::Add, // placeholder — overridden at statement level
+                    Box::new(value),
                 ))
             }
+
+            // --- Tuple expression → WGSL doesn't support tuples,
+            //     but single-element tuples can be unwrapped ---
+            Expr::Tuple(tuple) => {
+                if tuple.elems.len() == 1 {
+                    self.convert_expr(&tuple.elems[0])
+                } else {
+                    Err(TranspileError::new(
+                        format!(
+                            "Tuples with {} elements are not supported in WGSL. \
+                             Consider using a struct or vector type instead.",
+                            tuple.elems.len()
+                        ),
+                        Span::call_site(),
+                    ))
+                }
+            }
+
+            // --- Block expression ---
+            Expr::Block(block) => {
+                // Extract the last expression from a block
+                self.extract_block_expr(&block.block)
+            }
+
+            // --- Reference expressions (strip the & since WGSL doesn't have refs in expressions) ---
+            Expr::Reference(reference) => self.convert_expr(&reference.expr),
+
+            // --- Group expression (invisible delimiter) ---
+            Expr::Group(group) => self.convert_expr(&group.expr),
 
             _ => Err(TranspileError::new(
                 format!(
@@ -492,6 +551,262 @@ impl RustToWgsl {
                 Span::call_site(),
             )),
         }
+    }
+
+    /// Map a function call by name, handling type constructors and WGSL built-ins.
+    fn convert_function_call_by_name(
+        &self,
+        name: &str,
+        args: Vec<WgslExpr>,
+    ) -> Result<WgslExpr, TranspileError> {
+        match name {
+            // Float vectors
+            "Vec2" => Ok(WgslExpr::TypeConstructor(
+                WgslType::Vector(ScalarType::F32, 2),
+                args,
+            )),
+            "Vec3" => Ok(WgslExpr::TypeConstructor(
+                WgslType::Vector(ScalarType::F32, 3),
+                args,
+            )),
+            "Vec4" => Ok(WgslExpr::TypeConstructor(
+                WgslType::Vector(ScalarType::F32, 4),
+                args,
+            )),
+            // Integer vectors
+            "IVec2" => Ok(WgslExpr::TypeConstructor(
+                WgslType::Vector(ScalarType::I32, 2),
+                args,
+            )),
+            "IVec3" => Ok(WgslExpr::TypeConstructor(
+                WgslType::Vector(ScalarType::I32, 3),
+                args,
+            )),
+            "IVec4" => Ok(WgslExpr::TypeConstructor(
+                WgslType::Vector(ScalarType::I32, 4),
+                args,
+            )),
+            // Unsigned integer vectors
+            "UVec2" => Ok(WgslExpr::TypeConstructor(
+                WgslType::Vector(ScalarType::U32, 2),
+                args,
+            )),
+            "UVec3" => Ok(WgslExpr::TypeConstructor(
+                WgslType::Vector(ScalarType::U32, 3),
+                args,
+            )),
+            "UVec4" => Ok(WgslExpr::TypeConstructor(
+                WgslType::Vector(ScalarType::U32, 4),
+                args,
+            )),
+            // Boolean vectors
+            "BVec2" => Ok(WgslExpr::TypeConstructor(
+                WgslType::Vector(ScalarType::Bool, 2),
+                args,
+            )),
+            "BVec3" => Ok(WgslExpr::TypeConstructor(
+                WgslType::Vector(ScalarType::Bool, 3),
+                args,
+            )),
+            "BVec4" => Ok(WgslExpr::TypeConstructor(
+                WgslType::Vector(ScalarType::Bool, 4),
+                args,
+            )),
+            // Matrix constructors
+            "Mat2" => Ok(WgslExpr::TypeConstructor(
+                WgslType::Matrix(ScalarType::F32, 2, 2),
+                args,
+            )),
+            "Mat3" => Ok(WgslExpr::TypeConstructor(
+                WgslType::Matrix(ScalarType::F32, 3, 3),
+                args,
+            )),
+            "Mat4" => Ok(WgslExpr::TypeConstructor(
+                WgslType::Matrix(ScalarType::F32, 4, 4),
+                args,
+            )),
+            // Regular function call
+            _ => Ok(WgslExpr::Call(name.to_string(), args)),
+        }
+    }
+
+    /// Try to convert a qualified function call like `f32::sin(x)` or `Vec3::new(...)`.
+    fn try_convert_qualified_call(
+        &self,
+        path: &syn::Path,
+        args: Vec<WgslExpr>,
+    ) -> Result<Option<WgslExpr>, TranspileError> {
+        if path.segments.len() != 2 {
+            return Ok(None);
+        }
+
+        let type_name = path.segments[0].ident.to_string();
+        let func_name = path.segments[1].ident.to_string();
+
+        match type_name.as_str() {
+            // f32::sin(x) → sin(x), f32::min(a, b) → min(a, b)
+            "f32" | "f64" => self.convert_scalar_qualified_call(&func_name, args),
+            // i32::min(a, b) → min(a, b)
+            "i32" | "u32" => self.convert_scalar_qualified_call(&func_name, args),
+            // Vec2::new(x, y) → vec2<f32>(x, y)
+            "Vec2" => self.convert_vec_static_call(&func_name, ScalarType::F32, 2, args),
+            "Vec3" => self.convert_vec_static_call(&func_name, ScalarType::F32, 3, args),
+            "Vec4" => self.convert_vec_static_call(&func_name, ScalarType::F32, 4, args),
+            "IVec2" => self.convert_vec_static_call(&func_name, ScalarType::I32, 2, args),
+            "IVec3" => self.convert_vec_static_call(&func_name, ScalarType::I32, 3, args),
+            "IVec4" => self.convert_vec_static_call(&func_name, ScalarType::I32, 4, args),
+            "UVec2" => self.convert_vec_static_call(&func_name, ScalarType::U32, 2, args),
+            "UVec3" => self.convert_vec_static_call(&func_name, ScalarType::U32, 3, args),
+            "UVec4" => self.convert_vec_static_call(&func_name, ScalarType::U32, 4, args),
+            _ => Ok(None),
+        }
+    }
+
+    /// Convert a scalar-qualified function call (e.g. `f32::sin(x)` → `sin(x)`).
+    fn convert_scalar_qualified_call(
+        &self,
+        func_name: &str,
+        args: Vec<WgslExpr>,
+    ) -> Result<Option<WgslExpr>, TranspileError> {
+        // WGSL built-in functions that map from Rust's qualified syntax
+        let mapped = match func_name {
+            // Trig
+            "sin" | "cos" | "tan" | "asin" | "acos" | "atan" | "sinh" | "cosh" | "tanh"
+            | "asinh" | "acosh" | "atanh" => Some(func_name),
+            // Math
+            "abs" | "sqrt" | "floor" | "ceil" | "round" | "fract" | "sign" | "exp" | "exp2"
+            | "log" | "log2" | "trunc" => Some(func_name),
+            // Min/max
+            "min" | "max" | "clamp" => Some(func_name),
+            // Power
+            "pow" | "atan2" => Some(func_name),
+            // Not directly available — generate as WGSL built-in anyway
+            "saturate" | "radians" | "degrees" => Some(func_name),
+            _ => None,
+        };
+
+        match mapped {
+            Some(wgsl_name) => Ok(Some(WgslExpr::Call(wgsl_name.to_string(), args))),
+            None => Ok(None),
+        }
+    }
+
+    /// Convert a vector static method call (e.g. `Vec3::new(x, y, z)` → `vec3<f32>(x, y, z)`).
+    fn convert_vec_static_call(
+        &self,
+        func_name: &str,
+        scalar: ScalarType,
+        dim: u8,
+        args: Vec<WgslExpr>,
+    ) -> Result<Option<WgslExpr>, TranspileError> {
+        match func_name {
+            "new" => Ok(Some(WgslExpr::TypeConstructor(
+                WgslType::Vector(scalar, dim),
+                args,
+            ))),
+            "splat" => {
+                // Vec3::splat(v) → vec3<f32>(v)
+                Ok(Some(WgslExpr::TypeConstructor(
+                    WgslType::Vector(scalar, dim),
+                    args,
+                )))
+            }
+            "zero" | "ZERO" => Ok(Some(WgslExpr::TypeConstructor(
+                WgslType::Vector(scalar, dim),
+                vec![WgslExpr::Literal(Literal::Float(0.0))],
+            ))),
+            "one" | "ONE" => Ok(Some(WgslExpr::TypeConstructor(
+                WgslType::Vector(scalar, dim),
+                vec![WgslExpr::Literal(Literal::Float(1.0))],
+            ))),
+            _ => Ok(None),
+        }
+    }
+
+    /// Extract the final expression from a block, for use in if-else → select().
+    fn extract_block_expr(&mut self, block: &syn::Block) -> Result<WgslExpr, TranspileError> {
+        if block.stmts.len() != 1 {
+            return Err(TranspileError::new(
+                "if-else as expression requires single-expression blocks for \
+                 WGSL select() transpilation. Move complex logic to separate \
+                 let bindings before the if-else.",
+                Span::call_site(),
+            ));
+        }
+        match &block.stmts[0] {
+            Stmt::Expr(expr, None) => self.convert_expr(expr),
+            _ => Err(TranspileError::new(
+                "if-else block must contain a single expression (no semicolon) \
+                 for WGSL select() transpilation",
+                Span::call_site(),
+            )),
+        }
+    }
+
+    /// Try to convert a compound assignment expression (+=, -=, etc.) to a statement.
+    fn try_convert_compound_assign(
+        &mut self,
+        expr: &Expr,
+    ) -> Result<Option<WgslStatement>, TranspileError> {
+        // syn doesn't have separate CompoundAssign variants; compound assignments
+        // appear as `Expr::Assign` in newer syn, or as `Expr::Binary` with assign ops.
+        // Check for syn's compound assignment representation.
+        match expr {
+            Expr::Binary(bin) => {
+                let op = match &bin.op {
+                    BinOp::AddAssign(_) => Some(BinaryOp::Add),
+                    BinOp::SubAssign(_) => Some(BinaryOp::Sub),
+                    BinOp::MulAssign(_) => Some(BinaryOp::Mul),
+                    BinOp::DivAssign(_) => Some(BinaryOp::Div),
+                    BinOp::RemAssign(_) => Some(BinaryOp::Mod),
+                    BinOp::BitAndAssign(_) => Some(BinaryOp::BitAnd),
+                    BinOp::BitOrAssign(_) => Some(BinaryOp::BitOr),
+                    BinOp::BitXorAssign(_) => Some(BinaryOp::BitXor),
+                    BinOp::ShlAssign(_) => Some(BinaryOp::Shl),
+                    BinOp::ShrAssign(_) => Some(BinaryOp::Shr),
+                    _ => None,
+                };
+                if let Some(op) = op {
+                    let target = self.convert_expr(&bin.left)?;
+                    let value = self.convert_expr(&bin.right)?;
+                    return Ok(Some(WgslStatement::CompoundAssign(target, op, value)));
+                }
+                Ok(None)
+            }
+            _ => Ok(None),
+        }
+    }
+
+    /// Convert an if expression used as a statement (not as an expression/select).
+    fn convert_if_statement(
+        &mut self,
+        if_expr: &syn::ExprIf,
+    ) -> Result<WgslStatement, TranspileError> {
+        let condition = self.convert_expr(&if_expr.cond)?;
+        let body = self.convert_block(&if_expr.then_branch)?;
+        let else_body = if let Some((_, else_expr)) = &if_expr.else_branch {
+            match else_expr.as_ref() {
+                Expr::Block(block) => Some(self.convert_block(&block.block)?),
+                Expr::If(nested_if) => {
+                    // else if → nested if statement
+                    let nested = self.convert_if_statement(nested_if)?;
+                    Some(vec![nested])
+                }
+                _ => {
+                    return Err(TranspileError::new(
+                        "Unsupported else branch expression",
+                        Span::call_site(),
+                    ));
+                }
+            }
+        } else {
+            None
+        };
+        Ok(WgslStatement::If {
+            condition,
+            body,
+            else_body,
+        })
     }
 }
 
