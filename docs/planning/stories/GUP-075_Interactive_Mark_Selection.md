@@ -302,3 +302,94 @@ pub struct MarkStyle {
 - **Touch support for mobile** (AC 4.4): Requires platform testing on
   touch-enabled devices. The `GestureRecognizer` from GUP-012 provides the
   foundation; integration is straightforward when needed.
+
+## Retrospective
+
+**Completed**: 2025-02-25
+
+### Key Technical Learnings
+
+#### Bitset-based Selection for Large Datasets
+
+- **Challenge**: Tracking selection state for potentially millions of marks
+  without excessive memory or CPU overhead.
+- **Solution**: Custom `BitSet` implementation using `Vec<u64>` with
+  `trailing_zeros` for fast iteration, `count_ones` for O(n/64) popcount, and
+  set operations (union, intersect) for batch selection.
+- **Pattern**: When you need per-element boolean state for large collections, a
+  bitset is dramatically more efficient than `HashSet<u32>` or `Vec<bool>`. For
+  1M marks: bitset = 122 KB, HashSet = ~16 MB, Vec<bool> = 1 MB.
+
+#### Undo/Redo with Snapshot-based Operations
+
+- **Challenge**: Supporting undo for destructive operations like "clear all" or
+  "rectangle select (non-additive)" where the previous state must be fully
+  restored.
+- **Solution**: Hybrid approach — simple ops (select/deselect/toggle) store only
+  affected IDs; destructive ops (clear, select-all, rect-select, lasso-select)
+  snapshot the entire previous bitset.
+- **Pattern**: For undo systems, use the lightest representation that allows
+  exact reversal. Toggle operations are their own inverse, so storing just the
+  IDs is sufficient.
+
+#### Visual Style as Data Queries
+
+- **Challenge**: Applying selection visual feedback (opacity dimming, hover
+  scaling, outline highlighting) without coupling the selection system to the
+  GPU rendering pipeline.
+- **Solution**: `MarkSelectionSystem` exposes pure query methods
+  (`mark_opacity`, `mark_scale`, `mark_outline`) that return style values per
+  mark ID. The rendering code calls these during instance construction.
+- **Pattern**: Keep the selection system as a pure data layer that answers
+  questions about visual state. The GPU rendering layer consumes these answers
+  without the selection system knowing anything about wgpu.
+
+### Architectural Decisions
+
+#### Separate Module vs Extending Selection<T, M>
+
+- **Decision**: Created `mark_selection.rs` as an independent module rather than
+  extending the existing `Selection<T, M>` generic type.
+- **Reasoning**: `Selection<T, M>` is parameterized by data type `T` and mark
+  type `M`, making it strongly coupled to the GPU rendering pipeline. Selection
+  state (which marks are selected) is orthogonal to data type and mark type.
+- **Trade-off**: Users must coordinate two systems (`Selection` for rendering,
+  `MarkSelectionSystem` for selection state) rather than one unified API.
+- **Future**: A future integration story could add convenience methods to
+  `Selection<T, M>` that delegate to an internally-held `MarkSelectionSystem`.
+
+#### CPU-side Hit Testing in the Example
+
+- **Decision**: The interactive demo uses simple CPU-side distance checks for
+  hit testing rather than the GPU `InteractionSystem`.
+- **Reasoning**: For the 200-point demo, CPU hit testing is sub-microsecond. The
+  GPU interaction system requires async buffer readback which adds complexity to
+  the synchronous winit event loop. The selection system is designed to be
+  agnostic about _how_ hit IDs are determined.
+- **Trade-off**: The demo doesn't exercise the GPU hit testing path.
+- **Future**: A follow-up story should integrate `MarkSelectionSystem` with
+  `InteractionSystem` for large-dataset hit testing.
+
+### Development Workflow Insights
+
+- The pre-commit hooks (cargo clippy + prettier + mdl) add ~40s per commit but
+  catch real issues. Running `prettier --write` on markdown before committing
+  saves a retry cycle.
+- The `GupContext` has public `device` and `queue` fields (as `Arc<Device>` and
+  `Arc<Queue>`), which simplifies access patterns in examples. However, the
+  `Arc::try_unwrap` dance for `begin_frame()` remains awkward and should be
+  addressed in a future context API improvement.
+- All 46 unit tests run in <100ms since they don't require GPU resources — the
+  selection system is purely CPU-side data management.
+
+### Follow-up Stories
+
+1. **GUP-181: GPU-Accelerated Selection Hit Testing** — Integrate
+   `MarkSelectionSystem` with `InteractionSystem` for GPU-based hit testing on
+   datasets with 10K+ marks. The selection system accepts hit IDs from any
+   source; this story would wire up the GPU compute path.
+
+2. **GUP-182: Touch Selection Support** — Implement touch gesture integration
+   for the mark selection system, building on the `GestureRecognizer` from
+   GUP-012. Covers pinch-to-select, long-press for toggle, and touch-friendly
+   handle sizes.
