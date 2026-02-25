@@ -110,6 +110,25 @@ impl FontAtlas {
         self.glyph_info.get(&character)
     }
 
+    /// Get the number of glyphs currently loaded in the atlas.
+    pub fn glyph_count(&self) -> usize {
+        self.glyph_info.len()
+    }
+
+    /// Get atlas texture utilization as a fraction (0.0 to 1.0).
+    ///
+    /// This measures how much of the atlas vertical space has been consumed.
+    /// Useful for monitoring atlas capacity and deciding when to resize.
+    pub fn atlas_utilization(&self) -> f32 {
+        let used_height = self.current_y + self.current_row_height;
+        used_height as f32 / self.atlas_size as f32
+    }
+
+    /// Get the atlas texture size in pixels (always square).
+    pub fn atlas_size(&self) -> u32 {
+        self.atlas_size
+    }
+
     /// Ensure a glyph is available in the atlas, loading it if necessary.
     pub fn ensure_glyph(
         &mut self,
@@ -180,6 +199,40 @@ impl FontAtlas {
         // Upload MSDF data to texture (RGBA format)
         let upload_x = self.current_x;
         let upload_y = self.current_y;
+
+        // Validate texture upload parameters before calling write_texture
+        // (write_texture panics on invalid arguments, so we validate first)
+        let expected_size = (glyph_width * glyph_height * 4) as usize;
+        if rgba_pixels.len() != expected_size {
+            return Err(GupError::resource_error(format!(
+                "MSDF bitmap size mismatch for '{}': expected {} bytes ({}x{}x4), got {}",
+                character,
+                expected_size,
+                glyph_width,
+                glyph_height,
+                rgba_pixels.len()
+            )));
+        }
+
+        if upload_x + glyph_width > self.atlas_size || upload_y + glyph_height > self.atlas_size {
+            return Err(GupError::resource_error(format!(
+                "Glyph '{}' would exceed atlas bounds: upload at ({}, {}), size {}x{}, atlas {}x{}",
+                character,
+                upload_x,
+                upload_y,
+                glyph_width,
+                glyph_height,
+                self.atlas_size,
+                self.atlas_size
+            )));
+        }
+
+        if glyph_width == 0 || glyph_height == 0 {
+            return Err(GupError::resource_error(format!(
+                "Glyph '{}' has zero-sized MSDF bitmap: {}x{}",
+                character, glyph_width, glyph_height
+            )));
+        }
 
         queue.write_texture(
             TexelCopyTextureInfo {
