@@ -158,6 +158,19 @@ impl TextBounds {
         self.right = self.right.max(other.right);
         self.bottom = self.bottom.max(other.bottom);
     }
+
+    /// Check if this bounds fully contains another bounds.
+    pub fn contains(&self, other: &TextBounds) -> bool {
+        self.left <= other.left
+            && self.top <= other.top
+            && self.right >= other.right
+            && self.bottom >= other.bottom
+    }
+
+    /// Check if this bounds contains a point.
+    pub fn contains_point(&self, x: f32, y: f32) -> bool {
+        x >= self.left && x <= self.right && y >= self.top && y <= self.bottom
+    }
 }
 
 impl Default for TextBounds {

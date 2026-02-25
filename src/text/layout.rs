@@ -39,6 +39,39 @@ pub enum ClippingResult {
     CompletelyClipped,
 }
 
+impl ClippingResult {
+    /// Returns `true` if any clipping was detected.
+    pub fn is_clipped(&self) -> bool {
+        !matches!(self, ClippingResult::NoClipping)
+    }
+
+    /// Returns `true` if the text is completely invisible.
+    pub fn is_completely_clipped(&self) -> bool {
+        matches!(self, ClippingResult::CompletelyClipped)
+    }
+
+    /// Returns the visible percentage (1.0 = fully visible, 0.0 = invisible).
+    pub fn visible_percentage(&self) -> f32 {
+        match self {
+            ClippingResult::NoClipping => 1.0,
+            ClippingResult::PartialClipping {
+                visible_percentage, ..
+            } => *visible_percentage,
+            ClippingResult::CompletelyClipped => 0.0,
+        }
+    }
+
+    /// Returns `true` if clipping occurs on the right edge.
+    pub fn is_clipped_right(&self) -> bool {
+        match self {
+            ClippingResult::PartialClipping { clipped_edges, .. } => {
+                clipped_edges.iter().any(|e| matches!(e, ClippedEdge::Right { .. }))
+            }
+            _ => false,
+        }
+    }
+}
+
 /// Specific edge where text is clipped.
 #[derive(Debug, Clone)]
 pub enum ClippedEdge {
@@ -131,6 +164,96 @@ impl ViewportBounds {
             container_bounds: Some(container),
             text_margins: TextMargins::default(),
         }
+    }
+
+    /// Set custom text margins.
+    pub fn with_margins(mut self, margins: TextMargins) -> Self {
+        self.text_margins = margins;
+        self
+    }
+
+    /// Get the effective bounding area accounting for margins.
+    pub fn effective_bounds(&self) -> TextBounds {
+        let base = self.container_bounds.unwrap_or(self.viewport_rect);
+        TextBounds::new(
+            base.left + self.text_margins.left,
+            base.top + self.text_margins.top,
+            base.right - self.text_margins.right,
+            base.bottom - self.text_margins.bottom,
+        )
+    }
+
+    /// Detect whether text extends beyond the effective bounds.
+    pub fn detect_clipping(&self, text_bounds: &TextBounds) -> ClippingResult {
+        let container = self.effective_bounds();
+
+        // Degenerate container → everything is clipped.
+        if container.width() <= 0.0 || container.height() <= 0.0 {
+            return ClippingResult::CompletelyClipped;
+        }
+
+        let mut clipped_edges = Vec::new();
+
+        if text_bounds.left < container.left {
+            clipped_edges.push(ClippedEdge::Left {
+                overflow_pixels: container.left - text_bounds.left,
+            });
+        }
+        if text_bounds.right > container.right {
+            clipped_edges.push(ClippedEdge::Right {
+                overflow_pixels: text_bounds.right - container.right,
+            });
+        }
+        if text_bounds.top < container.top {
+            clipped_edges.push(ClippedEdge::Top {
+                overflow_pixels: container.top - text_bounds.top,
+            });
+        }
+        if text_bounds.bottom > container.bottom {
+            clipped_edges.push(ClippedEdge::Bottom {
+                overflow_pixels: text_bounds.bottom - container.bottom,
+            });
+        }
+
+        if clipped_edges.is_empty() {
+            return ClippingResult::NoClipping;
+        }
+
+        // Calculate visible percentage from the intersection area.
+        let total_area = text_bounds.width() * text_bounds.height();
+        if total_area <= 0.0 {
+            return ClippingResult::CompletelyClipped;
+        }
+
+        let visible_left = text_bounds.left.max(container.left);
+        let visible_right = text_bounds.right.min(container.right);
+        let visible_top = text_bounds.top.max(container.top);
+        let visible_bottom = text_bounds.bottom.min(container.bottom);
+
+        let visible_width = (visible_right - visible_left).max(0.0);
+        let visible_height = (visible_bottom - visible_top).max(0.0);
+        let visible_area = visible_width * visible_height;
+
+        if visible_area <= 0.0 {
+            ClippingResult::CompletelyClipped
+        } else {
+            ClippingResult::PartialClipping {
+                clipped_edges,
+                visible_percentage: visible_area / total_area,
+            }
+        }
+    }
+
+    /// Calculate the available width at a given position.
+    pub fn available_width_at(&self, x: f32) -> f32 {
+        let container = self.effective_bounds();
+        (container.right - x).max(0.0)
+    }
+
+    /// Calculate the available height at a given position.
+    pub fn available_height_at(&self, y: f32) -> f32 {
+        let container = self.effective_bounds();
+        (container.bottom - y).max(0.0)
     }
 }
 
@@ -903,5 +1026,132 @@ mod tests {
         fn metrics(&self) -> &FontMetrics {
             &self.font_metrics
         }
+    }
+
+    // === Viewport Bounds & Clipping Detection Tests ===
+
+    #[test]
+    fn test_viewport_bounds_from_screen() {
+        let vb = ViewportBounds::from_screen(800.0, 600.0);
+        assert_eq!(vb.viewport_rect, TextBounds::new(0.0, 0.0, 800.0, 600.0));
+        assert!(vb.container_bounds.is_none());
+    }
+
+    #[test]
+    fn test_viewport_bounds_from_container() {
+        let container = TextBounds::new(50.0, 50.0, 400.0, 300.0);
+        let vb = ViewportBounds::from_container(container);
+        assert_eq!(vb.container_bounds, Some(container));
+    }
+
+    #[test]
+    fn test_effective_bounds_with_margins() {
+        let vb = ViewportBounds::from_screen(800.0, 600.0)
+            .with_margins(TextMargins {
+                top: 10.0,
+                right: 20.0,
+                bottom: 10.0,
+                left: 20.0,
+            });
+        let eff = vb.effective_bounds();
+        assert_eq!(eff.left, 20.0);
+        assert_eq!(eff.top, 10.0);
+        assert_eq!(eff.right, 780.0);
+        assert_eq!(eff.bottom, 590.0);
+    }
+
+    #[test]
+    fn test_detect_clipping_no_clip() {
+        let vb = ViewportBounds::from_screen(800.0, 600.0);
+        let text = TextBounds::new(100.0, 100.0, 200.0, 130.0);
+        let result = vb.detect_clipping(&text);
+        assert!(!result.is_clipped());
+        assert!((result.visible_percentage() - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_detect_clipping_right_edge() {
+        let vb = ViewportBounds::from_screen(800.0, 600.0)
+            .with_margins(TextMargins::default());
+        // Text extends past right margin (effective right = 796.0)
+        let text = TextBounds::new(750.0, 100.0, 850.0, 130.0);
+        let result = vb.detect_clipping(&text);
+        assert!(result.is_clipped());
+        assert!(result.is_clipped_right());
+        assert!(!result.is_completely_clipped());
+    }
+
+    #[test]
+    fn test_detect_clipping_completely_outside() {
+        let vb = ViewportBounds::from_screen(800.0, 600.0);
+        let text = TextBounds::new(900.0, 700.0, 1000.0, 730.0);
+        let result = vb.detect_clipping(&text);
+        assert!(result.is_completely_clipped());
+        assert!((result.visible_percentage()).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_detect_clipping_partial_visible_percentage() {
+        let vb = ViewportBounds::from_screen(100.0, 100.0)
+            .with_margins(TextMargins {
+                top: 0.0,
+                right: 0.0,
+                bottom: 0.0,
+                left: 0.0,
+            });
+        // Text: 100px wide, 10px tall. 50px overflows right.
+        let text = TextBounds::new(50.0, 10.0, 150.0, 20.0);
+        let result = vb.detect_clipping(&text);
+        match result {
+            ClippingResult::PartialClipping {
+                visible_percentage, ..
+            } => {
+                assert!((visible_percentage - 0.5).abs() < 0.01);
+            }
+            other => panic!("Expected PartialClipping, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_detect_clipping_multiple_edges() {
+        let vb = ViewportBounds::from_container(TextBounds::new(10.0, 10.0, 90.0, 90.0))
+            .with_margins(TextMargins {
+                top: 0.0,
+                right: 0.0,
+                bottom: 0.0,
+                left: 0.0,
+            });
+        // Text extends past both left and right
+        let text = TextBounds::new(0.0, 20.0, 100.0, 40.0);
+        let result = vb.detect_clipping(&text);
+        match result {
+            ClippingResult::PartialClipping { clipped_edges, .. } => {
+                assert_eq!(clipped_edges.len(), 2);
+            }
+            other => panic!("Expected PartialClipping, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_available_width_and_height() {
+        let vb = ViewportBounds::from_screen(800.0, 600.0)
+            .with_margins(TextMargins {
+                top: 0.0,
+                right: 0.0,
+                bottom: 0.0,
+                left: 0.0,
+            });
+        assert!((vb.available_width_at(100.0) - 700.0).abs() < f32::EPSILON);
+        assert!((vb.available_height_at(100.0) - 500.0).abs() < f32::EPSILON);
+        // Beyond edge
+        assert!((vb.available_width_at(900.0)).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_degenerate_container() {
+        let vb = ViewportBounds::from_screen(0.0, 0.0);
+        let text = TextBounds::new(0.0, 0.0, 10.0, 10.0);
+        let result = vb.detect_clipping(&text);
+        assert!(result.is_completely_clipped());
     }
 }
