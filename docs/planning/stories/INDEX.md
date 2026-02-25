@@ -257,26 +257,26 @@ system story. The expanded story is also complete._
 
 ### Post GUP-016 Stories - Accessibility System (Stories 111-130)
 
-| Story                                                        | Title                                       | Status                          | Priority | Points |
-| ------------------------------------------------------------ | ------------------------------------------- | ------------------------------- | -------- | ------ |
-| [GUP-111](GUP-111_Automatic_ARIA_Generation.md)              | Automatic ARIA Generation from Selections   | ✅ Complete                     | Medium   | 3      |
-| [GUP-112](GUP-112_Platform_Accessibility_Integration.md)     | Platform-Specific Accessibility Integration | ✅ Complete                     | High     | 5      |
-| [GUP-113](GUP-113_Pattern_Rendering.md)                      | Pattern-Based Rendering Implementation      | ✅ Complete                     | Medium   | 3      |
-| [GUP-114](GUP-114_macOS_NSAccessibility_Integration.md)      | macOS NSAccessibility Integration           | ✅ Complete                     | Medium   | 8      |
-| [GUP-115](GUP-115_Windows_UI_Automation_Integration.md)      | Windows UI Automation Integration           | ✅ Complete                     | Medium   | 8      |
-| [GUP-116](GUP-116_Linux_AT-SPI2_Integration.md)              | Linux AT-SPI2 Integration                   | ✅ Complete                     | Medium   | 8      |
-| [GUP-117](GUP-117_Web_Accessibility_DOM_Overlay.md)          | Web Accessibility DOM Overlay               | ✅ Complete                     | High     | 5      |
-| [GUP-118](GUP-118_Visualization_Position_Synchronization.md) | Visualization Position Synchronization      | ✅ Complete                     | Medium   | 5      |
-| [GUP-119](GUP-119_Interactive_Event_Forwarding.md)           | Interactive Event Forwarding                | ✅ Complete                     | Medium   | 3      |
-| [GUP-121](GUP-121_Screen_Reader_Manual_Testing.md)           | Screen Reader Manual Testing Infrastructure | ✅ Complete                     | High     | 3      |
-| [GUP-122](GUP-122_Manual_Screen_Reader_Testing_Execution.md) | Manual Screen Reader Testing Execution      | 🎯 Awaiting Resources           | High     | 5      |
-| [GUP-124](GUP-124_Enhanced_Color_Description.md)             | Enhanced Color Description                  | 💡 New                          | Low      | 2      |
-| [GUP-125](GUP-125_Automatic_ARIA_Registration.md)            | Automatic ARIA Registration                 | 💡 New                          | Medium   | 3      |
-| [GUP-126](GUP-126_Reactive_ARIA_Updates.md)                  | Reactive ARIA Updates                       | 💡 New                          | Medium   | 5      |
-| [GUP-127](GUP-127_Focus_Elements_for_Data_Points.md)         | Focus Elements for Data Points              | ⚠️ Partially Complete — Blocked | High     | 5      |
-| [GUP-128](GUP-128_Debug_GPU_Hit_Test_Detection.md)           | Debug GPU Hit Test Element Detection        | ✅ Complete                     | High     | 5      |
-| [GUP-129](GUP-129_GPU_Debug_Visualization_Tool.md)           | GPU Interaction Debug Visualization Tool    | ✅ Complete                     | Medium   | 8      |
-| [GUP-130](GUP-130_Mark_Type_ID_Proc_Macro.md)                | Mark Type ID Proc Macro                     | ✅ Complete                     | Low      | 5      |
+| Story                                                        | Title                                       | Status                | Priority | Points |
+| ------------------------------------------------------------ | ------------------------------------------- | --------------------- | -------- | ------ |
+| [GUP-111](GUP-111_Automatic_ARIA_Generation.md)              | Automatic ARIA Generation from Selections   | ✅ Complete           | Medium   | 3      |
+| [GUP-112](GUP-112_Platform_Accessibility_Integration.md)     | Platform-Specific Accessibility Integration | ✅ Complete           | High     | 5      |
+| [GUP-113](GUP-113_Pattern_Rendering.md)                      | Pattern-Based Rendering Implementation      | ✅ Complete           | Medium   | 3      |
+| [GUP-114](GUP-114_macOS_NSAccessibility_Integration.md)      | macOS NSAccessibility Integration           | ✅ Complete           | Medium   | 8      |
+| [GUP-115](GUP-115_Windows_UI_Automation_Integration.md)      | Windows UI Automation Integration           | ✅ Complete           | Medium   | 8      |
+| [GUP-116](GUP-116_Linux_AT-SPI2_Integration.md)              | Linux AT-SPI2 Integration                   | ✅ Complete           | Medium   | 8      |
+| [GUP-117](GUP-117_Web_Accessibility_DOM_Overlay.md)          | Web Accessibility DOM Overlay               | ✅ Complete           | High     | 5      |
+| [GUP-118](GUP-118_Visualization_Position_Synchronization.md) | Visualization Position Synchronization      | ✅ Complete           | Medium   | 5      |
+| [GUP-119](GUP-119_Interactive_Event_Forwarding.md)           | Interactive Event Forwarding                | ✅ Complete           | Medium   | 3      |
+| [GUP-121](GUP-121_Screen_Reader_Manual_Testing.md)           | Screen Reader Manual Testing Infrastructure | ✅ Complete           | High     | 3      |
+| [GUP-122](GUP-122_Manual_Screen_Reader_Testing_Execution.md) | Manual Screen Reader Testing Execution      | 🎯 Awaiting Resources | High     | 5      |
+| [GUP-124](GUP-124_Enhanced_Color_Description.md)             | Enhanced Color Description                  | 💡 New                | Low      | 2      |
+| [GUP-125](GUP-125_Automatic_ARIA_Registration.md)            | Automatic ARIA Registration                 | 💡 New                | Medium   | 3      |
+| [GUP-126](GUP-126_Reactive_ARIA_Updates.md)                  | Reactive ARIA Updates                       | 💡 New                | Medium   | 5      |
+| [GUP-127](GUP-127_Focus_Elements_for_Data_Points.md)         | Focus Elements for Data Points              | 🚧 In Progress        | High     | 5      |
+| [GUP-128](GUP-128_Debug_GPU_Hit_Test_Detection.md)           | Debug GPU Hit Test Element Detection        | ✅ Complete           | High     | 5      |
+| [GUP-129](GUP-129_GPU_Debug_Visualization_Tool.md)           | GPU Interaction Debug Visualization Tool    | ✅ Complete           | Medium   | 8      |
+| [GUP-130](GUP-130_Mark_Type_ID_Proc_Macro.md)                | Mark Type ID Proc Macro                     | ✅ Complete           | Low      | 5      |
 
 ### Post GUP-113 Stories - Pattern Rendering (Stories 155-164)
 
