@@ -90,7 +90,13 @@ async fn test_truncation_with_ellipsis() {
     assert!(result.clipped, "Long text should be clipped");
     // The truncated text should produce fewer glyphs than the original
     let full_result = engine
-        .layout_text("Hello World Foo Bar", Vec2 { x: 5.0, y: 5.0 }, &style, &font_atlas, None)
+        .layout_text(
+            "Hello World Foo Bar",
+            Vec2 { x: 5.0, y: 5.0 },
+            &style,
+            &font_atlas,
+            None,
+        )
         .unwrap();
     assert!(
         result.glyphs.len() < full_result.glyphs.len() + 10,
@@ -129,7 +135,10 @@ async fn test_truncation_preserves_word_boundaries() {
         .unwrap();
 
     assert!(result.clipped, "Text should be clipped");
-    assert!(!result.glyphs.is_empty(), "Should still produce some glyphs");
+    assert!(
+        !result.glyphs.is_empty(),
+        "Should still produce some glyphs"
+    );
 }
 
 // =============================================================================
@@ -217,7 +226,10 @@ async fn test_reposition_text() {
         .unwrap();
 
     // Should have repositioned the text
-    assert!(!result.glyphs.is_empty(), "Text should be repositioned, not hidden");
+    assert!(
+        !result.glyphs.is_empty(),
+        "Text should be repositioned, not hidden"
+    );
 }
 
 // =============================================================================
@@ -255,7 +267,10 @@ async fn test_hide_if_clipped() {
         .unwrap();
 
     assert!(result.clipped, "Text should be marked as clipped");
-    assert!(result.glyphs.is_empty(), "Hidden text should produce no glyphs");
+    assert!(
+        result.glyphs.is_empty(),
+        "Hidden text should produce no glyphs"
+    );
 }
 
 // =============================================================================
@@ -360,7 +375,10 @@ async fn test_custom_container_bounds() {
         )
         .unwrap();
 
-    assert!(!result_inside.clipped, "Text inside container should not be clipped");
+    assert!(
+        !result_inside.clipped,
+        "Text inside container should not be clipped"
+    );
 
     // Text positioned outside the container should be clipped
     engine.clear();
@@ -495,5 +513,8 @@ async fn test_clipping_empty_text() {
         )
         .unwrap();
 
-    assert!(!result.clipped, "Empty text should not be marked as clipped");
+    assert!(
+        !result.clipped,
+        "Empty text should not be marked as clipped"
+    );
 }

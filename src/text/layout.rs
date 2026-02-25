@@ -64,9 +64,9 @@ impl ClippingResult {
     /// Returns `true` if clipping occurs on the right edge.
     pub fn is_clipped_right(&self) -> bool {
         match self {
-            ClippingResult::PartialClipping { clipped_edges, .. } => {
-                clipped_edges.iter().any(|e| matches!(e, ClippedEdge::Right { .. }))
-            }
+            ClippingResult::PartialClipping { clipped_edges, .. } => clipped_edges
+                .iter()
+                .any(|e| matches!(e, ClippedEdge::Right { .. })),
             _ => false,
         }
     }
@@ -371,7 +371,8 @@ impl TextLayoutEngine {
         }
 
         // Perform initial layout
-        let initial_result = self.layout_text_inner(text, position, style, font_atlas, constraints)?;
+        let initial_result =
+            self.layout_text_inner(text, position, style, font_atlas, constraints)?;
 
         // Check for clipping
         let clipping_result = viewport_bounds.detect_clipping(&initial_result.bounds);
@@ -654,13 +655,8 @@ impl TextLayoutEngine {
                 font_size: current_size,
                 ..style.clone()
             };
-            let result = self.layout_text_inner(
-                text,
-                position,
-                &scaled_style,
-                font_atlas,
-                constraints,
-            )?;
+            let result =
+                self.layout_text_inner(text, position, &scaled_style, font_atlas, constraints)?;
             let clip = viewport_bounds.detect_clipping(&result.bounds);
             if !clip.is_clipped() {
                 return Ok(Some(LayoutResult {
@@ -705,13 +701,8 @@ impl TextLayoutEngine {
                     x: position.x + norm.x * dist,
                     y: position.y + norm.y * dist,
                 };
-                let result = self.layout_text_inner(
-                    text,
-                    offset_pos,
-                    style,
-                    font_atlas,
-                    constraints,
-                )?;
+                let result =
+                    self.layout_text_inner(text, offset_pos, style, font_atlas, constraints)?;
                 let clip = viewport_bounds.detect_clipping(&result.bounds);
                 if !clip.is_clipped() {
                     return Ok(Some(LayoutResult {
@@ -1434,13 +1425,12 @@ mod tests {
 
     #[test]
     fn test_effective_bounds_with_margins() {
-        let vb = ViewportBounds::from_screen(800.0, 600.0)
-            .with_margins(TextMargins {
-                top: 10.0,
-                right: 20.0,
-                bottom: 10.0,
-                left: 20.0,
-            });
+        let vb = ViewportBounds::from_screen(800.0, 600.0).with_margins(TextMargins {
+            top: 10.0,
+            right: 20.0,
+            bottom: 10.0,
+            left: 20.0,
+        });
         let eff = vb.effective_bounds();
         assert_eq!(eff.left, 20.0);
         assert_eq!(eff.top, 10.0);
@@ -1459,8 +1449,7 @@ mod tests {
 
     #[test]
     fn test_detect_clipping_right_edge() {
-        let vb = ViewportBounds::from_screen(800.0, 600.0)
-            .with_margins(TextMargins::default());
+        let vb = ViewportBounds::from_screen(800.0, 600.0).with_margins(TextMargins::default());
         // Text extends past right margin (effective right = 796.0)
         let text = TextBounds::new(750.0, 100.0, 850.0, 130.0);
         let result = vb.detect_clipping(&text);
@@ -1480,13 +1469,12 @@ mod tests {
 
     #[test]
     fn test_detect_clipping_partial_visible_percentage() {
-        let vb = ViewportBounds::from_screen(100.0, 100.0)
-            .with_margins(TextMargins {
-                top: 0.0,
-                right: 0.0,
-                bottom: 0.0,
-                left: 0.0,
-            });
+        let vb = ViewportBounds::from_screen(100.0, 100.0).with_margins(TextMargins {
+            top: 0.0,
+            right: 0.0,
+            bottom: 0.0,
+            left: 0.0,
+        });
         // Text: 100px wide, 10px tall. 50px overflows right.
         let text = TextBounds::new(50.0, 10.0, 150.0, 20.0);
         let result = vb.detect_clipping(&text);
@@ -1522,13 +1510,12 @@ mod tests {
 
     #[test]
     fn test_available_width_and_height() {
-        let vb = ViewportBounds::from_screen(800.0, 600.0)
-            .with_margins(TextMargins {
-                top: 0.0,
-                right: 0.0,
-                bottom: 0.0,
-                left: 0.0,
-            });
+        let vb = ViewportBounds::from_screen(800.0, 600.0).with_margins(TextMargins {
+            top: 0.0,
+            right: 0.0,
+            bottom: 0.0,
+            left: 0.0,
+        });
         assert!((vb.available_width_at(100.0) - 700.0).abs() < f32::EPSILON);
         assert!((vb.available_height_at(100.0) - 500.0).abs() < f32::EPSILON);
         // Beyond edge
@@ -1617,8 +1604,7 @@ mod tests {
         // Verify clipping detection completes in <1ms for 100 text elements
         use std::time::Instant;
 
-        let vb = ViewportBounds::from_screen(800.0, 600.0)
-            .with_margins(TextMargins::zero());
+        let vb = ViewportBounds::from_screen(800.0, 600.0).with_margins(TextMargins::zero());
 
         let labels: Vec<TextBounds> = (0..100)
             .map(|i| {

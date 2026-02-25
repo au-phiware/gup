@@ -341,30 +341,26 @@ impl TextRenderer {
         }
 
         // Layout the text — with or without clipping
-        let layout_result =
-            if let Some(viewport_bounds) = config.viewport_bounds {
-                let clipping_config = config
-                    .clipping_config
-                    .cloned()
-                    .unwrap_or_default();
-                config.layout_engine.layout_text_with_clipping(
-                    config.text,
-                    config.position,
-                    config.style,
-                    config.font_atlas,
-                    None,
-                    viewport_bounds,
-                    &clipping_config,
-                )?
-            } else {
-                config.layout_engine.layout_text(
-                    config.text,
-                    config.position,
-                    config.style,
-                    config.font_atlas,
-                    None,
-                )?
-            };
+        let layout_result = if let Some(viewport_bounds) = config.viewport_bounds {
+            let clipping_config = config.clipping_config.cloned().unwrap_or_default();
+            config.layout_engine.layout_text_with_clipping(
+                config.text,
+                config.position,
+                config.style,
+                config.font_atlas,
+                None,
+                viewport_bounds,
+                &clipping_config,
+            )?
+        } else {
+            config.layout_engine.layout_text(
+                config.text,
+                config.position,
+                config.style,
+                config.font_atlas,
+                None,
+            )?
+        };
 
         // Add to internal batches for later rendering
         self.add_glyph_batch(&layout_result.glyphs)?;
@@ -405,30 +401,26 @@ impl TextRenderer {
         }
 
         // Layout the text — with or without clipping
-        let layout_result =
-            if let Some(viewport_bounds) = config.viewport_bounds {
-                let clipping_config = config
-                    .clipping_config
-                    .cloned()
-                    .unwrap_or_default();
-                config.layout_engine.layout_text_with_clipping(
-                    config.text,
-                    config.position,
-                    config.style,
-                    config.font_atlas,
-                    None,
-                    viewport_bounds,
-                    &clipping_config,
-                )?
-            } else {
-                config.layout_engine.layout_text(
-                    config.text,
-                    config.position,
-                    config.style,
-                    config.font_atlas,
-                    None,
-                )?
-            };
+        let layout_result = if let Some(viewport_bounds) = config.viewport_bounds {
+            let clipping_config = config.clipping_config.cloned().unwrap_or_default();
+            config.layout_engine.layout_text_with_clipping(
+                config.text,
+                config.position,
+                config.style,
+                config.font_atlas,
+                None,
+                viewport_bounds,
+                &clipping_config,
+            )?
+        } else {
+            config.layout_engine.layout_text(
+                config.text,
+                config.position,
+                config.style,
+                config.font_atlas,
+                None,
+            )?
+        };
 
         if layout_result.glyphs.is_empty() {
             return Ok(layout_result.bounds);
