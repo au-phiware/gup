@@ -48,6 +48,7 @@ pub mod compute_instance_filter;
 pub mod gpu_path_tessellator;
 pub mod line;
 pub mod path;
+pub mod performance_opt;
 pub mod rectangle;
 pub mod renderer;
 pub mod text;
@@ -69,6 +70,10 @@ pub use compute_instance_filter::{ComputeInstanceFilter, FilterConfig, FilterRes
 pub use gpu_path_tessellator::GpuPathTessellator;
 pub use line::{Line, LineAttributes, LineStyle, LineVertex};
 pub use path::{Path, PathAttributes, PathCommand, PathVertex};
+pub use performance_opt::{
+    EnhancedCacheStats, EnhancedPipelineCache, MarkBufferPool, MarkBufferPoolStats,
+    MarkPerformanceMetrics, PipelineCacheKey, SizeClass, SortedBatch,
+};
 pub use rectangle::{Rectangle, RectangleAttributes, RectangleVertex};
 pub use renderer::MarkRenderer;
 pub use text::{Text, TextMarkAttributes, TextVertex};
@@ -640,7 +645,7 @@ impl<M: Mark> MarkInfoImpl<M> {
     }
 
     /// Create bind group layout for this mark type.
-    fn create_bind_group_layout(&self, device: &Device) -> GupResult<BindGroupLayout> {
+    pub fn create_bind_group_layout(&self, device: &Device) -> GupResult<BindGroupLayout> {
         let mut entries = Vec::new();
 
         // Instance data buffer (always present).
