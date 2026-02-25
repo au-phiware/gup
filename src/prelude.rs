@@ -29,6 +29,9 @@ pub use crate::selection::{Mark, Selection};
 // Mark types
 pub use crate::{BoxPlot, Circle, Line, Rectangle};
 
+// Mark validation and profiling
+pub use crate::mark::validation::{MarkProfiler, MarkValidator, assert_mark_valid};
+
 // Advanced mark rendering
 pub use crate::mark::advanced_rendering::{
     DynamicAttributeBufferManager, DynamicAttributeMap, DynamicAttributeValue, MarkBlendConfig,

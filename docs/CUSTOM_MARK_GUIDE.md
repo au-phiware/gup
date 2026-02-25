@@ -484,16 +484,165 @@ selection
 selection.render()?;
 ```
 
+## Quick Start with Derive Macro
+
+The fastest way to create a custom mark is with `#[derive(Mark)]`:
+
+```rust
+use gup_macros::Mark;
+use gup::shader_function::{Vec2, Vec4};
+
+#[derive(Debug, Clone, Mark)]
+#[mark(primitive = "quad")]
+pub struct Diamond {
+    pub center: Vec2,
+    pub size: f32,
+    pub color: Vec4,
+    pub angle: f32,
+}
+```
+
+This single declaration generates:
+
+- A `DiamondVertex` struct with `#[repr(C)]` and `bytemuck` derives
+- A complete `Mark` implementation with quad geometry (4 vertices, 6 indices)
+- Attribute type validation for all fields
+
+### Supported Primitives
+
+| Primitive    | Vertices | Indices | Use Case                         |
+| ------------ | -------- | ------- | -------------------------------- |
+| `"quad"`     | 4        | 6       | Rectangles, circles, diamonds    |
+| `"triangle"` | 3        | None    | Arrows, indicators, simple marks |
+
+Quad is the default if no `#[mark(primitive = ...)]` is specified.
+
+### Supported Field Types
+
+| Rust Type | WGSL Type     | Typical Use     |
+| --------- | ------------- | --------------- |
+| `f32`     | `f32`         | Size, radius    |
+| `i32`     | `i32`         | Counts, indices |
+| `u32`     | `u32`         | Flags, IDs      |
+| `Vec2`    | `vec2<f32>`   | Position        |
+| `Vec3`    | `vec3<f32>`   | 3D position     |
+| `Vec4`    | `vec4<f32>`   | Color           |
+| `Mat2`    | `mat2x2<f32>` | 2D transforms   |
+| `Mat3`    | `mat3x3<f32>` | 3D transforms   |
+| `Mat4`    | `mat4x4<f32>` | Full transforms |
+
+## Validating Your Mark
+
+Use the `MarkValidator` to automatically check your mark for common issues:
+
+```rust
+use gup::mark::validation::{MarkValidator, assert_mark_valid};
+
+// Full validation report
+let report = MarkValidator::<Diamond>::validate();
+println!("{}", report.summary());
+assert!(report.is_passing());
+
+// Quick pass/fail check (returns GupResult)
+assert_mark_valid::<Diamond>().unwrap();
+```
+
+### What Gets Validated
+
+- **Geometry**: Vertex count matches `generate_vertices()`, index count matches
+  `generate_indices()`, indices are in bounds, triangle alignment
+- **Memory Layout**: Vertex size is non-zero, alignment is GPU-compatible,
+  bytemuck round-trip succeeds
+- **Attributes**: Common attribute names resolve to correct WGSL types
+- **Shaders**: Vertex and fragment shader constants are paired correctly
+
+### Example Validation Output
+
+```text
+=== Validation Report for Diamond ===
+Result: PASS
+Duration: 17.2µs
+
+✅ Geometry Validation (3.2µs)
+✅ Memory Layout Validation (7.3µs)
+  [INFO] memory: Vertex size: 8 bytes, alignment: 4 bytes
+✅ Attribute Type Validation (1.1µs)
+✅ Shader Support Validation (0.8µs)
+  [INFO] shaders: Using generated shaders (default implementation)
+
+Summary: 2 issues (0 critical, 0 errors)
+```
+
+## Profiling Your Mark
+
+Use `MarkProfiler` to measure vertex generation performance:
+
+```rust
+use gup::mark::validation::MarkProfiler;
+
+let profile = MarkProfiler::<Diamond>::profile();
+println!("{}", profile.summary());
+assert!(profile.vertex_generation_time.as_millis() < 10);
+```
+
+### Performance Classification
+
+| Class      | Vertex Gen Time | Meaning                    |
+| ---------- | --------------- | -------------------------- |
+| Excellent  | < 1μs           | Optimal for GPU rendering  |
+| Good       | < 100μs         | Suitable for most uses     |
+| Acceptable | < 1ms           | May need optimization      |
+| Needs Work | ≥ 1ms           | Optimize vertex generation |
+
+## Migration Path: Derive to Manual
+
+Start with the derive macro for rapid prototyping, then move to a manual
+implementation when you need:
+
+- Custom shaders (`VERTEX_SHADER` / `FRAGMENT_SHADER` constants)
+- Complex geometry (more than a quad or triangle)
+- Pattern-based rendering for accessibility
+- Custom vertex attributes beyond position
+
+```rust
+// Step 1: Start with derive (quick, <10 lines)
+#[derive(Debug, Clone, Mark)]
+#[mark(primitive = "quad")]
+pub struct MyMark {
+    pub center: Vec2,
+    pub color: Vec4,
+}
+
+// Step 2: When you need more control, implement manually
+#[derive(Debug, Clone)]
+pub struct MyMark;
+
+impl Mark for MyMark {
+    type Vertex = MyMarkVertex;
+    type AttributeValue = MyMarkAttributes;
+
+    const VERTEX_SHADER: Option<&'static str> =
+        Some(include_str!("shaders/my_mark.vert.wgsl"));
+    const FRAGMENT_SHADER: Option<&'static str> =
+        Some(include_str!("shaders/my_mark.frag.wgsl"));
+
+    fn vertex_count() -> usize { 4 }
+    fn index_count() -> Option<usize> { Some(6) }
+    fn generate_vertices() -> Vec<Self::Vertex> { /* ... */ }
+    fn generate_indices() -> Option<Vec<u32>> { /* ... */ }
+}
+```
+
 ## Summary
 
 Creating custom marks involves:
 
-1. Define a zero-sized mark type (`struct MyMark;`)
-2. Define GPU-compatible vertex type (`#[repr(C)] struct MyVertex`)
-3. Define high-level attributes (`struct MyAttributes`)
-4. Implement the `Mark` trait
-5. Provide either hand-optimized or generated shaders
-6. Write comprehensive tests
+1. **Quick path**: Use `#[derive(Mark)]` with a primitive type
+2. **Manual path**: Define mark type, vertex type, attributes, and implement the
+   `Mark` trait
+3. **Validate**: Run `MarkValidator` to catch common issues
+4. **Profile**: Use `MarkProfiler` to verify performance
+5. Optionally provide hand-optimized shaders for maximum performance
 
 The mark system handles:
 
