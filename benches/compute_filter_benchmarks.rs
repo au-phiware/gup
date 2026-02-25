@@ -176,11 +176,33 @@ fn bench_gpu_culling_pooled(c: &mut Criterion) {
         ))
         .unwrap();
 
+        // Cached bind group path (same input buffer every iteration).
         group.bench_with_input(
             BenchmarkId::new("dispatch_filter_pooled", size),
             &size,
             |b, _| {
                 b.iter(|| {
+                    let result = rt.block_on(pooled.dispatch(
+                        device,
+                        queue,
+                        black_box(&input_buffer),
+                        size as u32,
+                        6,
+                        &viewport,
+                        &thresholds,
+                    ));
+                    black_box(result.unwrap());
+                });
+            },
+        );
+
+        // Uncached bind group path (invalidate before each dispatch).
+        group.bench_with_input(
+            BenchmarkId::new("dispatch_filter_pooled_no_bg_cache", size),
+            &size,
+            |b, _| {
+                b.iter(|| {
+                    pooled.invalidate_bind_group_cache();
                     let result = rt.block_on(pooled.dispatch(
                         device,
                         queue,
