@@ -76,6 +76,9 @@
 // #![allow(...)] only works at the crate root, so we allow on the items inside.
 #[allow(dead_code, unused_imports)]
 mod ast;
+mod builtin_integration_tests;
+#[allow(dead_code, unused_imports)]
+pub mod builtins;
 #[allow(dead_code, unused_imports)]
 mod codegen;
 mod control_flow_tests;
@@ -90,6 +93,8 @@ mod type_map_integration_tests;
 // Re-exports are used by pipeline_tests and future integration.
 #[allow(unused_imports)]
 pub use ast::*;
+#[allow(unused_imports)]
+pub use builtins::{BuiltinFunctionRegistry, FunctionCategory, FunctionResolutionError};
 #[allow(unused_imports)]
 pub use codegen::WgslCodeGen;
 #[allow(unused_imports)]
