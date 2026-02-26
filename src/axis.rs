@@ -756,6 +756,64 @@ impl AxisRenderer {
             .unwrap()
     }
 
+    /// Generate tick instances with automatic LOD selection and caching.
+    ///
+    /// This is the performance-optimized instanced counterpart to
+    /// [`generate_axis_vertices_cached`](Self::generate_axis_vertices_cached).
+    /// It follows the same LOD → cache → generate pipeline, but produces
+    /// [`TickInstance`] data instead of `Vertex` pairs.
+    pub fn generate_tick_instances_cached(
+        &mut self,
+        bounds: &AxisBounds,
+        config: &AxisConfiguration,
+        position: AxisPosition,
+        scale: Option<&dyn Scale>,
+        viewport_size: (f32, f32),
+        last_render_time: Option<std::time::Duration>,
+    ) -> &[TickInstance] {
+        // 1. Calculate LOD
+        let axis_pixel_length = Self::axis_pixel_length(bounds, viewport_size);
+        let lod = self
+            .lod_manager
+            .calculate_lod(axis_pixel_length, last_render_time);
+
+        // 2. Apply LOD to config
+        let adjusted_config = lod.apply_to_config(config);
+
+        // 3. Check cache
+        if self
+            .geometry_cache
+            .get_instances(bounds, &adjusted_config, position, viewport_size, lod)
+            .is_some()
+        {
+            return self
+                .geometry_cache
+                .get_instances(bounds, &adjusted_config, position, viewport_size, lod)
+                .unwrap();
+        }
+
+        // 4. Cache miss — generate and store
+        let instances = self.generate_tick_instances(
+            bounds,
+            &adjusted_config,
+            position,
+            scale,
+            viewport_size,
+        );
+        self.geometry_cache.store_instances(
+            bounds,
+            &adjusted_config,
+            position,
+            viewport_size,
+            lod,
+            instances,
+        );
+
+        self.geometry_cache
+            .get_instances(bounds, &adjusted_config, position, viewport_size, lod)
+            .unwrap()
+    }
+
     /// Compute the approximate pixel length of an axis from NDC bounds and viewport.
     fn axis_pixel_length(bounds: &AxisBounds, viewport_size: (f32, f32)) -> f32 {
         let ndc_len = bounds.length();
@@ -2866,5 +2924,43 @@ mod tests {
         assert_eq!(layout.array_stride, 32);
         assert_eq!(layout.step_mode, wgpu::VertexStepMode::Instance);
         assert_eq!(layout.attributes.len(), 3);
+    }
+
+    #[test]
+    fn test_cached_tick_instances_returns_same_data() {
+        let mut renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let config = AxisConfiguration::default();
+        let viewport = (800.0, 600.0);
+
+        // First call — cache miss
+        let first = renderer
+            .generate_tick_instances_cached(
+                &bounds,
+                &config,
+                AxisPosition::Bottom,
+                None,
+                viewport,
+                None,
+            )
+            .to_vec();
+
+        // Second call — cache hit (same inputs)
+        let second = renderer
+            .generate_tick_instances_cached(
+                &bounds,
+                &config,
+                AxisPosition::Bottom,
+                None,
+                viewport,
+                None,
+            )
+            .to_vec();
+
+        assert_eq!(first, second, "Cached data should match");
+        assert!(
+            renderer.geometry_cache().hit_rate() > 0.0,
+            "Should have at least one cache hit"
+        );
     }
 }

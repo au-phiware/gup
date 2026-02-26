@@ -15,7 +15,7 @@
 //!   optimization strategy selection
 //! * **Label culling** — skip labels outside the viewport before rendering
 
-use crate::axis::{AxisBounds, AxisConfiguration, AxisPosition};
+use crate::axis::{AxisBounds, AxisConfiguration, AxisPosition, TickInstance};
 use crate::render::Vertex;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -219,7 +219,9 @@ impl GeometryCacheKey {
 #[derive(Debug)]
 pub struct AxisGeometryCache {
     cached_vertices: Option<Vec<Vertex>>,
+    cached_tick_instances: Option<Vec<TickInstance>>,
     cache_key: Option<GeometryCacheKey>,
+    instance_cache_key: Option<GeometryCacheKey>,
     hits: u64,
     misses: u64,
 }
@@ -229,7 +231,9 @@ impl AxisGeometryCache {
     pub fn new() -> Self {
         Self {
             cached_vertices: None,
+            cached_tick_instances: None,
             cache_key: None,
+            instance_cache_key: None,
             hits: 0,
             misses: 0,
         }
@@ -272,10 +276,49 @@ impl AxisGeometryCache {
         self.cached_vertices = Some(vertices);
     }
 
+    /// Try to retrieve cached tick instances.
+    ///
+    /// Returns `Some(&[TickInstance])` if the cache is valid for the given
+    /// inputs, `None` if regeneration is needed.
+    pub fn get_instances(
+        &mut self,
+        bounds: &AxisBounds,
+        config: &AxisConfiguration,
+        position: AxisPosition,
+        viewport_size: (f32, f32),
+        lod: LODLevel,
+    ) -> Option<&[TickInstance]> {
+        let key = GeometryCacheKey::from_inputs(bounds, config, position, viewport_size, lod);
+        if self.instance_cache_key.as_ref() == Some(&key) {
+            self.hits += 1;
+            self.cached_tick_instances.as_deref()
+        } else {
+            self.misses += 1;
+            None
+        }
+    }
+
+    /// Store newly generated tick instances in the cache.
+    pub fn store_instances(
+        &mut self,
+        bounds: &AxisBounds,
+        config: &AxisConfiguration,
+        position: AxisPosition,
+        viewport_size: (f32, f32),
+        lod: LODLevel,
+        instances: Vec<TickInstance>,
+    ) {
+        let key = GeometryCacheKey::from_inputs(bounds, config, position, viewport_size, lod);
+        self.instance_cache_key = Some(key);
+        self.cached_tick_instances = Some(instances);
+    }
+
     /// Invalidate the cache, forcing regeneration on the next call.
     pub fn invalidate(&mut self) {
         self.cached_vertices = None;
+        self.cached_tick_instances = None;
         self.cache_key = None;
+        self.instance_cache_key = None;
     }
 
     /// Cache hit rate (0.0–1.0). Returns 0.0 if no lookups have occurred.
@@ -1051,5 +1094,98 @@ mod tests {
         assert_eq!(stats.total_labels, 11);
         assert_eq!(stats.total_labels_culled, 1);
         assert_eq!(stats.per_axis.len(), 2);
+    }
+
+    // ---- Instance cache tests ----
+
+    #[test]
+    fn test_instance_cache_miss_then_hit() {
+        use crate::axis::{AxisBounds, AxisConfiguration, AxisPosition, TickInstance};
+        use crate::shader_function::Vec2;
+
+        let mut cache = AxisGeometryCache::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let config = AxisConfiguration::default();
+        let viewport = (800.0, 600.0);
+        let lod = LODLevel::High;
+
+        // First lookup → miss
+        assert!(cache
+            .get_instances(&bounds, &config, AxisPosition::Bottom, viewport, lod)
+            .is_none());
+
+        // Store instances
+        let instances = vec![TickInstance::new([0.0, -0.8], [0.0, -0.02], [0.2; 4])];
+        cache.store_instances(&bounds, &config, AxisPosition::Bottom, viewport, lod, instances);
+
+        // Second lookup → hit
+        let cached = cache
+            .get_instances(&bounds, &config, AxisPosition::Bottom, viewport, lod)
+            .expect("should be a cache hit");
+        assert_eq!(cached.len(), 1);
+        assert_eq!(cached[0].position, [0.0, -0.8]);
+    }
+
+    #[test]
+    fn test_instance_cache_invalidate() {
+        use crate::axis::{AxisBounds, AxisConfiguration, AxisPosition, TickInstance};
+        use crate::shader_function::Vec2;
+
+        let mut cache = AxisGeometryCache::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let config = AxisConfiguration::default();
+        let viewport = (800.0, 600.0);
+        let lod = LODLevel::High;
+
+        let instances = vec![TickInstance::new([0.0, -0.8], [0.0, -0.02], [0.2; 4])];
+        cache.store_instances(&bounds, &config, AxisPosition::Bottom, viewport, lod, instances);
+
+        cache.invalidate();
+
+        assert!(cache
+            .get_instances(&bounds, &config, AxisPosition::Bottom, viewport, lod)
+            .is_none());
+    }
+
+    #[test]
+    fn test_instance_and_vertex_caches_independent() {
+        use crate::axis::{AxisBounds, AxisConfiguration, AxisPosition, TickInstance};
+        use crate::render::Vertex;
+        use crate::shader_function::Vec2;
+
+        let mut cache = AxisGeometryCache::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let config = AxisConfiguration::default();
+        let viewport = (800.0, 600.0);
+        let lod = LODLevel::High;
+
+        // Store vertices only
+        let verts = vec![Vertex {
+            position: [0.0, 0.0],
+            color: [1.0; 4],
+        }];
+        cache.store(&bounds, &config, AxisPosition::Bottom, viewport, lod, verts);
+
+        // Instance cache should still miss
+        assert!(cache
+            .get_instances(&bounds, &config, AxisPosition::Bottom, viewport, lod)
+            .is_none());
+
+        // Vertex cache should hit
+        assert!(cache
+            .get(&bounds, &config, AxisPosition::Bottom, viewport, lod)
+            .is_some());
+
+        // Now store instances
+        let instances = vec![TickInstance::new([0.0, -0.8], [0.0, -0.02], [0.2; 4])];
+        cache.store_instances(&bounds, &config, AxisPosition::Bottom, viewport, lod, instances);
+
+        // Both should hit
+        assert!(cache
+            .get(&bounds, &config, AxisPosition::Bottom, viewport, lod)
+            .is_some());
+        assert!(cache
+            .get_instances(&bounds, &config, AxisPosition::Bottom, viewport, lod)
+            .is_some());
     }
 }
