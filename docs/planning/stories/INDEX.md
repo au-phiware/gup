@@ -89,6 +89,8 @@ epic and status.
 | [GUP-192](GUP-192_Dynamic_Attribute_Readback_Pipeline.md)      | Dynamic Attribute Readback Pipeline            | ✅ Complete | Low      | —      |
 | [GUP-208](GUP-208_Mark_Derive_Instance_Buffer_Generation.md)   | Mark Derive Instance Buffer Generation         | ✅ Complete | Low      | —      |
 | [GUP-209](GUP-209_Mark_Validation_CI_Integration.md)           | Mark Validation CI Integration                 | ✅ Complete | Low      | —      |
+| [GUP-222](GUP-222_Unified_Frustum_Occlusion_Pipeline.md)      | Unified Frustum + Occlusion Culling Pipeline   | 💡 New      | Medium   | —      |
+| [GUP-223](GUP-223_Coarse_HiZ_Early_Reject.md)                 | Coarse Hi-Z Early Reject for Large Marks       | 💡 New      | Low      | —      |
 
 ### Post GUP-005 Stories - Shader Function System Enhancement (Stories 51+)
 

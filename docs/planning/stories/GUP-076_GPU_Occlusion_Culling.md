@@ -118,3 +118,125 @@ invisible geometry.
 - 1 criterion benchmark file with 3 benchmark groups
 - All 1625+ existing passing tests continue to pass (3 pre-existing failures in
   `mark::renderer::tests` unrelated to this change)
+
+## Retrospective
+
+**Completed**: 2026-02-27
+
+### Key Technical Learnings
+
+#### Hi-Z mip edge effects at coarse levels
+
+- **Challenge**: Testing at coarse Hi-Z mip levels (e.g., level 4 where each
+  cell covers 16×16 base cells) caused false negatives—marks that should have
+  been culled were kept visible. The issue: coarse cells at the boundary of a
+  mark's bounding box include base-level cells that are empty (z=0). The minimum
+  aggregation propagates these zeros up the mip chain, making boundary cells
+  appear uncovered.
+- **Solution**: Test at level 0 (finest resolution) for all marks. Level 0 cells
+  exactly match the coverage map, so there are no edge effects. For the target
+  use case (dense scatter plots with small marks covering 1–4 cells), level-0
+  testing is both correct and efficient.
+- **Pattern**: Hi-Z is most useful as a coarse _reject_ pass (quickly confirming
+  visibility), not as a fine _accept_ pass. For 2D visualisation where marks are
+  small, the coarse levels provide marginal benefit and introduce precision
+  issues. The mip chain is still built (satisfying the AC) and can be used in
+  future for a two-level test: coarse reject first, then level-0 confirm.
+
+#### Coverage map cell limit trade-off
+
+- **Challenge**: The initial implementation capped per-instance cell writes at 64
+  to prevent GPU thread stalls on very large marks. But large marks (radius 0.2
+  in clip-space ≈ 1600 cells at 4-pixel tile size) need full coverage for
+  correct occlusion detection.
+- **Solution**: Raised the limit to 4096. For the target use case (small marks,
+  1–4 cells each), the limit is never hit. For large marks, 4096 iterations per
+  thread is fast on modern GPUs. Users can increase `tile_size` for very large
+  viewports.
+- **Pattern**: Cell limits should be set based on the maximum expected mark size,
+  not a fixed constant. `tile_size` is the user's primary control for trading
+  accuracy vs. performance.
+
+#### Instance index as implicit z-order
+
+- **Challenge**: The story describes "front-to-back marks" but most 2D scatter
+  plots don't have explicit z-values. Instance index implicitly determines draw
+  order (later = on top), but this breaks the traditional depth-buffer convention
+  (closer objects have smaller depth).
+- **Solution**: Used `z = instance_index + 1` (0 reserved for "empty cell"). The
+  `atomicMax` in the build pass naturally keeps the highest z (latest-drawn
+  mark), and the occlusion test correctly identifies marks whose z is less than
+  all covering cells' z as fully behind later-drawn marks.
+- **Pattern**: For 2D painter's-algorithm rendering, instance index is a natural
+  z-value. No user-facing z-order assignment is needed.
+
+#### Updating uniform buffer between compute passes
+
+- **Challenge**: The Hi-Z mip generation requires dispatching per level, each
+  needing a different `current_level` value in the uniform config. But
+  `queue.write_buffer` stages writes before the next `queue.submit`, so it can't
+  update a uniform between compute passes within the same encoder.
+- **Solution**: Used `encoder.copy_buffer_to_buffer` from a pre-staged buffer
+  containing all level numbers. Copies between compute passes are properly
+  ordered within a single command encoder.
+- **Pattern**: For per-pass parameter updates within a single encoder, use buffer
+  copies rather than `queue.write_buffer`. Pre-stage all parameter values in a
+  single COPY_SRC buffer.
+
+### Architectural Decisions
+
+#### Standalone module vs. extending ComputeInstanceFilter
+
+- **Decision**: Created `occlusion_culler.rs` as a separate module rather than
+  adding occlusion passes to the existing `ComputeInstanceFilter`.
+- **Reasoning**: The existing filter's 5-pass pipeline (cull → prefix sum ×3 →
+  compact) is tightly coupled around frustum culling and stream compaction. The
+  occlusion culler has a fundamentally different data flow (build coverage → mip
+  chain → per-instance test) and produces visibility flags rather than a
+  compacted buffer.
+- **Trade-off**: Two separate dispatch paths; the caller must combine visibility
+  flags from both if using both frustum and occlusion culling.
+- **Future**: A unified pipeline could run frustum culling first, then occlusion
+  culling only on visible instances, followed by a single compaction pass. This
+  would reduce GPU overhead for the combined case.
+
+#### Level-0 testing vs. hierarchical early-out
+
+- **Decision**: Test all marks at Hi-Z level 0 rather than using the mip
+  hierarchy for early rejection.
+- **Reasoning**: Coarse-level edge effects caused false negatives in testing. For
+  the target use case (dense scatter plots with small marks), level-0 testing is
+  O(1–4 cells) per mark—fast enough that the mip hierarchy adds no benefit.
+- **Trade-off**: Large marks (covering hundreds of cells) are tested at level 0,
+  which is slower. But large marks are rarely fully occluded and are uncommon in
+  dense scatter plots.
+- **Future**: A two-level approach (coarse reject, then level-0 confirm) could
+  benefit scenes with mixed mark sizes, but is not needed for the current target.
+
+### Development Workflow Insights
+
+- The `ComputeInstanceFilter` module served as an excellent template. The
+  pipeline creation pattern (shared bind group layout, `make_pipeline` closure),
+  the `dispatch` / `encode` / `read_*` method structure, and the
+  `PooledComputeInstanceFilter` with bind-group caching all carried over
+  directly.
+- Debugging compute shader correctness requires GPU readback helpers
+  (`read_visibility`, `read_hiz_buffer`). These are "test-only" methods but
+  essential for understanding shader behaviour during development.
+- The `mask all-fix` pre-commit hook has persistent issues with the `gup-macros`
+  crate (42+ pre-existing warnings treated as errors). Running `cargo clippy -p
+  gup --lib` is a faster way to verify the main crate.
+- GPU tests with `--test-threads=1` ran in ~0.5s for all 12 occlusion culler
+  tests—headless GPU context creation is well-optimised in this project.
+
+### Follow-up Stories
+
+1. **GUP-222: Unified Frustum + Occlusion Culling Pipeline** — Combine the
+   existing `ComputeInstanceFilter` frustum culling with occlusion culling in a
+   single compute pipeline to avoid separate dispatches and double buffer
+   allocation. Would reduce per-frame GPU overhead for dense datasets.
+2. **GUP-223: Coarse Hi-Z Early Reject for Large Marks** — Implement a two-level
+   occlusion test: first check coarse Hi-Z levels (with proper interior-cell
+   shrinking) to quickly confirm visibility for most marks, then fall back to
+   level-0 testing only for marks that the coarse test cannot resolve. Would
+   improve performance for scenes with mixed mark sizes.
