@@ -145,10 +145,12 @@ pub struct OptimizationConfig {
     pub enable_dead_code_elimination: bool,
     /// Use AST-based optimization passes instead of string-based ones.
     ///
-    /// When enabled, `optimize_shader()` parses the WGSL source into an AST,
-    /// runs dead-code elimination, constant folding, and function inlining on
-    /// the AST, then regenerates WGSL text.  Falls back to string-based
-    /// optimizations if AST parsing fails.
+    /// When enabled (the default), `optimize_shader()` parses the WGSL source
+    /// into an AST, runs dead-code elimination, constant folding, and function
+    /// inlining on the AST, then regenerates WGSL text.  Falls back to
+    /// string-based optimizations automatically if AST parsing fails.
+    ///
+    /// Set to `false` to use the legacy string-based optimization path.
     pub use_ast_analysis: bool,
     /// Inlining configuration
     pub inlining: InliningConfig,
@@ -160,7 +162,7 @@ impl Default for OptimizationConfig {
             enable_inlining: true,
             enable_constant_folding: true,
             enable_dead_code_elimination: true,
-            use_ast_analysis: false,
+            use_ast_analysis: true,
             inlining: InliningConfig::default(),
         }
     }
@@ -2009,12 +2011,12 @@ fn main() {
     // -----------------------------------------------------------------------
 
     /// Helper: create a pipeline configured for AST-based optimization.
+    ///
+    /// Since `use_ast_analysis` is now `true` by default, this is equivalent
+    /// to `ComposableShaderPipeline::new()` but kept for readability in AST-
+    /// specific tests.
     fn ast_pipeline() -> ComposableShaderPipeline {
-        let config = OptimizationConfig {
-            use_ast_analysis: true,
-            ..Default::default()
-        };
-        ComposableShaderPipeline::new().with_optimization_config(config)
+        ComposableShaderPipeline::new()
     }
 
     #[test]
@@ -2129,10 +2131,20 @@ fn vs_main() -> f32 {
     }
 
     #[test]
-    fn test_ast_backward_compat_default_config() {
-        // With the default config (use_ast_analysis: false), behaviour should
-        // be identical to the old code path.
+    fn test_ast_is_default() {
+        // The default config now enables AST-based optimization.
         let pipeline = ComposableShaderPipeline::new();
+        assert!(pipeline.optimization_config().use_ast_analysis);
+    }
+
+    #[test]
+    fn test_string_based_opt_in() {
+        // Opting out of AST analysis falls back to string-based optimizations.
+        let config = OptimizationConfig {
+            use_ast_analysis: false,
+            ..Default::default()
+        };
+        let pipeline = ComposableShaderPipeline::new().with_optimization_config(config);
         assert!(!pipeline.optimization_config().use_ast_analysis);
 
         let src = "let x = 1.0 * y;";

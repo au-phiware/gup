@@ -332,17 +332,18 @@ mod tests {
     #[test]
     fn test_ast_and_string_produce_equivalent_shaders() {
         // Both paths must produce shaders that contain the same key elements.
-        let mut string_pipeline = ComposableShaderPipeline::new();
+        let string_config = OptimizationConfig {
+            use_ast_analysis: false,
+            ..Default::default()
+        };
+        let mut string_pipeline =
+            ComposableShaderPipeline::new().with_optimization_config(string_config);
         let scale1 = LinearScale::new(0.0, 100.0, 0.0, 1.0);
         string_pipeline.add_function(scale1);
         string_pipeline.map_attribute("color", "linear_scale");
         let string_vertex = string_pipeline.generate_optimized_vertex_shader();
 
-        let ast_config = OptimizationConfig {
-            use_ast_analysis: true,
-            ..Default::default()
-        };
-        let mut ast_pipeline = ComposableShaderPipeline::new().with_optimization_config(ast_config);
+        let mut ast_pipeline = ComposableShaderPipeline::new();
         let scale2 = LinearScale::new(0.0, 100.0, 0.0, 1.0);
         ast_pipeline.add_function(scale2);
         ast_pipeline.map_attribute("color", "linear_scale");
