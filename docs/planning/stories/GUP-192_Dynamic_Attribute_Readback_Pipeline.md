@@ -1,8 +1,8 @@
 # GUP-192: Dynamic Attribute Readback Pipeline
 
-**Status**: 🚧 In Progress **Priority**: Low **Category**: Feature Enhancement
-**Estimated Effort**: 1 day **Dependencies**: GUP-186 (Dynamic Attribute GPU
-Upload Pipeline)
+**Status**: ✅ Complete (2025-07-27) **Priority**: Low **Category**: Feature
+Enhancement **Estimated Effort**: 1 day **Dependencies**: GUP-186 (Dynamic
+Attribute GPU Upload Pipeline)
 
 ## Overview
 
@@ -29,10 +29,10 @@ GPU-computed attribute data
 
 ## Acceptance Criteria
 
-- [ ] Async readback of uniform buffer contents (static attributes)
-- [ ] Async readback of individual storage buffers (per-instance attributes)
-- [ ] Staging buffer management for efficient readback
-- [ ] Integration with existing `GpuBuffer::download()` patterns
+- [x] Async readback of uniform buffer contents (static attributes)
+- [x] Async readback of individual storage buffers (per-instance attributes)
+- [x] Staging buffer management for efficient readback
+- [x] Integration with existing `GpuBuffer::download()` patterns
 
 ## Technical Tasks
 
@@ -59,7 +59,48 @@ GPU-computed attribute data
 
 ## Definition of Done
 
-- [ ] Async readback methods implemented
-- [ ] Staging buffer management
-- [ ] GPU integration tests pass
-- [ ] Documentation with usage examples
+- [x] Async readback methods implemented
+- [x] Staging buffer management
+- [x] GPU integration tests pass
+- [x] Documentation with usage examples
+
+## Implementation Summary
+
+### Files Changed
+
+| File                                      | Change                                                              |
+| ----------------------------------------- | ------------------------------------------------------------------- |
+| `src/mark/advanced_rendering.rs`          | Added readback methods, staging buffer cache, COPY_SRC buffer flags |
+| `tests/dynamic_attribute_buffer_tests.rs` | Added 9 GPU integration tests for readback                          |
+
+### New Methods on `DynamicAttributeBufferManager`
+
+- **`download_static_values()`** — Async method to read back all static
+  attribute values from the GPU uniform buffer. Returns `Vec<[f32; 4]>` in
+  alphabetical attribute name order.
+- **`download_per_instance(name)`** — Async method to read back per-instance
+  attribute data from a named GPU storage buffer.
+- **`clear_staging_buffers()`** — Releases cached staging buffers to free GPU
+  memory.
+
+### New Internal Types
+
+- **`StagingBuffer`** — Tracks a cached `MAP_READ | COPY_DST` buffer and its
+  size for reuse across readback calls.
+
+### Internal Helpers
+
+- **`ensure_staging_buffer()`** — Creates or reuses a staging buffer of
+  sufficient size for a given cache key.
+- **`copy_and_map()`** — Static method that copies data from a source buffer to
+  a staging buffer, maps it, and returns the data.
+
+### Buffer Flag Changes
+
+- Uniform buffers now include `COPY_SRC` usage flag (was: `UNIFORM | COPY_DST`)
+- Storage buffers now include `COPY_SRC` usage flag (was: `STORAGE | COPY_DST`)
+
+### Test Counts
+
+- 9 new GPU integration tests in `dynamic_attribute_buffer_tests.rs` (total 27)
+- All 1543 library tests continue to pass
