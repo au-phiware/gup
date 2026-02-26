@@ -40,6 +40,8 @@ pub enum BufferType {
     Storage,
     /// Index data for indexed rendering
     Index,
+    /// Staging buffers for GPU-to-CPU readback (MAP_READ)
+    Staging,
 }
 
 impl BufferType {
@@ -64,6 +66,7 @@ impl BufferType {
             BufferType::Index => {
                 BufferUsages::INDEX | BufferUsages::COPY_DST | BufferUsages::COPY_SRC
             }
+            BufferType::Staging => BufferUsages::COPY_DST | BufferUsages::MAP_READ,
         }
     }
 
@@ -73,6 +76,7 @@ impl BufferType {
             BufferType::Vertex | BufferType::Instance => 4, // 4-byte alignment
             BufferType::Uniform => 256,                     // Uniform buffer alignment
             BufferType::Storage | BufferType::Index => 4,   // Storage/index buffer alignment
+            BufferType::Staging => 4,                       // Staging buffer alignment
         }
     }
 }
@@ -160,6 +164,25 @@ where
         self.download_range(device, queue, 0, self.len).await
     }
 
+    /// Download data from the GPU buffer using a pooled staging buffer.
+    ///
+    /// Like [`download`](Self::download) but reuses staging buffers from the pool
+    /// instead of creating new ones, reducing allocation overhead for repeated
+    /// readback operations.
+    pub async fn download_pooled(
+        &self,
+        device: &Device,
+        queue: &Queue,
+        pool: &mut BufferPool,
+    ) -> GupResult<Vec<T>> {
+        if self.len == 0 {
+            return Ok(Vec::new());
+        }
+
+        self.download_range_pooled(device, queue, 0, self.len, pool)
+            .await
+    }
+
     /// Download a range of data from the GPU buffer.
     ///
     /// Downloads only a specific range of elements from the buffer, which can be
@@ -238,6 +261,87 @@ where
         // Clean up
         drop(data);
         staging_buffer.unmap();
+
+        Ok(result)
+    }
+
+    /// Download a range of data from the GPU buffer using a pooled staging buffer.
+    ///
+    /// Like [`download_range`](Self::download_range) but reuses staging buffers
+    /// from the pool instead of allocating new ones each time. The staging buffer
+    /// is returned to the pool after use, enabling reuse in subsequent calls.
+    ///
+    /// This provides significant performance benefits for repeated readback
+    /// operations by eliminating per-call buffer allocation overhead.
+    pub async fn download_range_pooled(
+        &self,
+        device: &Device,
+        queue: &Queue,
+        offset: usize,
+        len: usize,
+        pool: &mut BufferPool,
+    ) -> GupResult<Vec<T>> {
+        if len == 0 {
+            return Ok(Vec::new());
+        }
+
+        if offset + len > self.len {
+            return Err(GupError::buffer_error(format!(
+                "Download range exceeds buffer length: offset={}, len={}, buffer_len={}",
+                offset, len, self.len
+            )));
+        }
+
+        let element_size = std::mem::size_of::<T>() as u64;
+        let byte_offset = (offset as u64) * element_size;
+        let byte_size = (len as u64) * element_size;
+
+        // Allocate staging buffer from pool (reuses existing if available)
+        let (staging_buffer, size_class) =
+            pool.allocate_raw(BufferType::Staging, byte_size as usize);
+
+        // Copy from GPU buffer to staging buffer
+        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+            label: Some("download_pooled_encoder"),
+        });
+
+        encoder.copy_buffer_to_buffer(&self.buffer, byte_offset, &staging_buffer, 0, byte_size);
+
+        queue.submit(Some(encoder.finish()));
+
+        // Map the staging buffer for reading
+        let buffer_slice = staging_buffer.slice(..byte_size);
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+
+        buffer_slice.map_async(MapMode::Read, move |result| {
+            let _ = sender.send(result);
+        });
+
+        // Poll the device to complete the mapping operation
+        let _ = device.poll(PollType::Wait);
+
+        // Wait for the mapping to complete
+        let map_result = receiver
+            .await
+            .map_err(|_| GupError::buffer_error("Buffer mapping callback was dropped"))?
+            .map_err(|e| {
+                GupError::buffer_error(format!("Failed to map buffer for reading: {:?}", e))
+            });
+
+        if let Err(e) = map_result {
+            // Return buffer to pool even on error to prevent leaks
+            pool.deallocate_raw(staging_buffer, BufferType::Staging, size_class);
+            return Err(e);
+        }
+
+        // Read the data
+        let data = buffer_slice.get_mapped_range();
+        let result: Vec<T> = bytemuck::cast_slice(&data).to_vec();
+
+        // Clean up and return buffer to pool
+        drop(data);
+        staging_buffer.unmap();
+        pool.deallocate_raw(staging_buffer, BufferType::Staging, size_class);
 
         Ok(result)
     }
