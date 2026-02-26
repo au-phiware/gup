@@ -1,13 +1,11 @@
 # GUP-221: Pool-Aware set_data for Selection
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
-**Title**: Pool-Aware set_data for Selection
-**Epic**: Phase 1 Initiative 4 - Advanced Data Mapping
-**Priority**: Low
-**Story Points**: 2
+**Title**: Pool-Aware set_data for Selection **Epic**: Phase 1 Initiative 4 -
+Advanced Data Mapping **Priority**: Low **Story Points**: 2
 
 ## Context
 
@@ -22,10 +20,9 @@ was not integrated with the pool in GUP-167.
 
 ## User Story
 
-**As a** library developer using pool-allocated Selection buffers
-**I want** `set_data()` to return the instance buffer to the pool
-**So that** pool recycling works correctly regardless of how the Selection's
-data is updated
+**As a** library developer using pool-allocated Selection buffers **I want**
+`set_data()` to return the instance buffer to the pool **So that** pool
+recycling works correctly regardless of how the Selection's data is updated
 
 ## Acceptance Criteria
 
@@ -57,8 +54,8 @@ data is updated
 
 ## Risk Assessment
 
-- **API ergonomics**: Adding a pool parameter to `set_data` is awkward. May
-  need a stored reference approach instead.
+- **API ergonomics**: Adding a pool parameter to `set_data` is awkward. May need
+  a stored reference approach instead.
 - **Complexity**: Low — straightforward extension of GUP-167 patterns.
 
 ## Definition of Done
