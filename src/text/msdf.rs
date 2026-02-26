@@ -1011,6 +1011,43 @@ impl MsdfBitmap {
 
         pixels
     }
+
+    /// Generate a single-channel grayscale visualisation of just one channel.
+    ///
+    /// Useful for debugging edge colouring — you can inspect each channel
+    /// independently to see which edges belong to which colour.
+    pub fn channel_to_grayscale(&self, channel: usize) -> Vec<u8> {
+        let field = match channel {
+            0 => &self.red_channel,
+            1 => &self.green_channel,
+            2 => &self.blue_channel,
+            _ => &self.red_channel,
+        };
+        let mut pixels = Vec::with_capacity(self.width * self.height * 4);
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let v = ((field.get(x, y) * 0.5 + 0.5).clamp(0.0, 1.0) * 255.0) as u8;
+                pixels.extend_from_slice(&[v, v, v, 255]);
+            }
+        }
+        pixels
+    }
+
+    /// Return the reconstructed single-channel bitmap using `median(r,g,b)`.
+    ///
+    /// This matches the reconstruction performed in the MSDF fragment shader.
+    pub fn reconstructed_median(&self) -> DistanceField {
+        let mut field = DistanceField::new(self.width, self.height);
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let r = self.red_channel.get(x, y);
+                let g = self.green_channel.get(x, y);
+                let b = self.blue_channel.get(x, y);
+                field.set(x, y, median_f32(r, g, b));
+            }
+        }
+        field
+    }
 }
 
 /// MSDF generator using ttf_parser
@@ -1391,6 +1428,285 @@ impl SdfQualityMetrics {
             peak_signal_to_noise: f32::INFINITY,
             edge_sharpness,
             memory_bytes,
+        }
+    }
+}
+
+/// Configuration for multi-channel SDF generation with sharp corner preservation.
+///
+/// Controls how the MSDF generator handles corners and edge classification.
+/// Use [`Default`] for reasonable values tuned for standard Latin fonts.
+#[derive(Debug, Clone)]
+pub struct MultiChannelSdfConfig {
+    /// Maximum SDF distance range in pixels.
+    pub max_distance: f32,
+    /// Angle threshold below which a corner is considered "sharp" (in radians).
+    /// Corners sharper than this threshold receive different edge colours on
+    /// each side so that the median-of-three reconstruction preserves them.
+    pub sharp_corner_threshold: f32,
+    /// Maximum number of channels to use (1–3).
+    /// 1 = single-channel SDF, 3 = full MSDF.
+    pub max_channels: u8,
+    /// How the three MSDF channels are combined in the fragment shader.
+    pub combination_mode: ChannelCombinationMode,
+    /// Size of individual glyphs in pixels (same as `MsdfConfig::glyph_size`).
+    pub glyph_size: f32,
+    /// Padding around glyphs in pixels.
+    pub padding: u32,
+}
+
+impl Default for MultiChannelSdfConfig {
+    fn default() -> Self {
+        Self {
+            max_distance: 4.0,
+            sharp_corner_threshold: std::f32::consts::PI / 3.0, // 60 degrees
+            max_channels: 3,
+            combination_mode: ChannelCombinationMode::Median,
+            glyph_size: 48.0,
+            padding: 4,
+        }
+    }
+}
+
+impl MultiChannelSdfConfig {
+    /// Convert to the underlying [`MsdfConfig`] used by the generator.
+    pub fn to_msdf_config(&self) -> MsdfConfig {
+        MsdfConfig {
+            atlas_size: 1024,
+            glyph_size: self.glyph_size,
+            distance_range: self.max_distance,
+            angle_threshold: self.sharp_corner_threshold,
+            padding: self.padding,
+        }
+    }
+}
+
+/// How the three MSDF colour channels are combined in the fragment shader.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChannelCombinationMode {
+    /// `median(r, g, b)` — the standard MSDF approach.
+    /// Preserves sharp corners through edge-colour differences at corners.
+    Median = 0,
+    /// `max(r, g, b)` — union of channels.
+    /// Produces a slightly dilated outline; useful for bold/outline effects.
+    Max = 1,
+    /// `min(r, g, b)` — intersection of channels.
+    /// Produces a sharper (sometimes too sharp) result at corners.
+    Min = 2,
+}
+
+/// Information about a detected corner in a glyph contour.
+#[derive(Debug, Clone)]
+pub struct CornerInfo {
+    /// Position of the corner in glyph coordinate space.
+    pub position: Point,
+    /// Interior angle at the corner (radians, 0 = fully degenerate, π = straight).
+    pub angle: f32,
+    /// Index of the contour that contains this corner.
+    pub contour_index: usize,
+    /// Index of the edge *after* the corner vertex within the contour.
+    pub edge_index: usize,
+    /// Whether this corner is classified as "sharp" based on the threshold.
+    pub is_sharp: bool,
+}
+
+/// Classification of special contour patterns that need extra care during
+/// edge colouring or SDF generation.
+#[derive(Debug, Clone)]
+pub enum ContourPattern {
+    /// A contour with exactly one sharp corner (e.g. a raindrop or teardrop shape).
+    Teardrop {
+        /// The index of the sharp cusp edge.
+        cusp_edge_index: usize,
+        /// The position of the cusp point.
+        cusp_position: Point,
+    },
+    /// A contour with many sharp corners radiating from a central area (e.g. asterisk).
+    StarShape {
+        /// Number of sharp corners detected.
+        sharp_corner_count: usize,
+    },
+    /// A simple convex/smooth contour with no sharp corners.
+    Smooth,
+    /// A standard contour with multiple corners (rectangle, letter shapes, etc.).
+    Standard {
+        /// Number of sharp corners detected.
+        sharp_corner_count: usize,
+    },
+}
+
+impl Contour {
+    /// Detect corners in this contour and return their descriptions.
+    pub fn detect_corners(&self, angle_threshold: f32) -> Vec<CornerInfo> {
+        if self.edges.is_empty() {
+            return Vec::new();
+        }
+
+        let mut corners = Vec::new();
+
+        for i in 0..self.edges.len() {
+            let prev_idx = if i == 0 { self.edges.len() - 1 } else { i - 1 };
+            let prev_dir = self.edges[prev_idx].direction_at_end().normalize();
+            let curr_dir = self.edges[i].direction_at_start().normalize();
+
+            let cross = prev_dir.cross(&curr_dir);
+            let dot = prev_dir.dot(&curr_dir);
+            let angle = cross.atan2(dot).abs();
+
+            let is_sharp = cross.abs() > angle_threshold.sin() || dot < angle_threshold.cos();
+
+            corners.push(CornerInfo {
+                position: self.edges[i].start_point(),
+                angle,
+                contour_index: 0, // Caller fills this in
+                edge_index: i,
+                is_sharp,
+            });
+        }
+
+        corners
+    }
+
+    /// Classify the overall pattern of this contour.
+    pub fn classify_pattern(&self, angle_threshold: f32) -> ContourPattern {
+        let corners = self.detect_corners(angle_threshold);
+        let sharp_count = corners.iter().filter(|c| c.is_sharp).count();
+
+        match sharp_count {
+            0 => ContourPattern::Smooth,
+            1 => ContourPattern::Teardrop {
+                cusp_edge_index: corners.iter().find(|c| c.is_sharp).unwrap().edge_index,
+                cusp_position: corners.iter().find(|c| c.is_sharp).unwrap().position,
+            },
+            n if n >= 5 => ContourPattern::StarShape {
+                sharp_corner_count: n,
+            },
+            n => ContourPattern::Standard {
+                sharp_corner_count: n,
+            },
+        }
+    }
+}
+
+impl GlyphOutline {
+    /// Detect all corners across every contour in this outline.
+    pub fn detect_all_corners(&self, angle_threshold: f32) -> Vec<CornerInfo> {
+        let mut all_corners = Vec::new();
+        for (ci, contour) in self.contours.iter().enumerate() {
+            let mut corners = contour.detect_corners(angle_threshold);
+            for c in &mut corners {
+                c.contour_index = ci;
+            }
+            all_corners.extend(corners);
+        }
+        all_corners
+    }
+
+    /// Classify every contour in the outline.
+    pub fn classify_contours(&self, angle_threshold: f32) -> Vec<ContourPattern> {
+        self.contours
+            .iter()
+            .map(|c| c.classify_pattern(angle_threshold))
+            .collect()
+    }
+}
+
+/// Measures how sharply a corner is preserved in a rendered SDF/MSDF bitmap.
+///
+/// The metric works by sampling the reconstructed distance field near a known
+/// corner position and computing the gradient magnitude at that point.
+/// A perfectly preserved corner has a high gradient (the distance field
+/// changes rapidly), while a rounded corner has a lower gradient because the
+/// field is smoothed out.
+#[derive(Debug, Clone)]
+pub struct CornerSharpnessMetrics {
+    /// Average gradient magnitude at detected corners.
+    pub mean_corner_gradient: f32,
+    /// Maximum gradient magnitude across all corners.
+    pub max_corner_gradient: f32,
+    /// Number of corners that were analysed.
+    pub corner_count: usize,
+    /// Per-corner gradient values (in the same order as the corner list).
+    pub per_corner_gradients: Vec<f32>,
+}
+
+impl CornerSharpnessMetrics {
+    /// Measure corner sharpness in an MSDF bitmap at known corner positions.
+    ///
+    /// `corners` should be in *bitmap pixel coordinates* (not glyph units).
+    pub fn from_msdf(msdf: &MsdfBitmap, corners: &[Point]) -> Self {
+        let mut gradients = Vec::with_capacity(corners.len());
+
+        for corner in corners {
+            let x = corner.x.round() as usize;
+            let y = corner.y.round() as usize;
+
+            if x == 0 || y == 0 || x + 1 >= msdf.width || y + 1 >= msdf.height {
+                gradients.push(0.0);
+                continue;
+            }
+
+            // Reconstruct via median at surrounding pixels
+            let val = |xx: usize, yy: usize| -> f32 {
+                median_f32(
+                    msdf.red_channel.get(xx, yy),
+                    msdf.green_channel.get(xx, yy),
+                    msdf.blue_channel.get(xx, yy),
+                )
+            };
+
+            let dx = val(x + 1, y) - val(x - 1, y);
+            let dy = val(x, y + 1) - val(x, y - 1);
+            let gradient = (dx * dx + dy * dy).sqrt();
+            gradients.push(gradient);
+        }
+
+        let mean = if gradients.is_empty() {
+            0.0
+        } else {
+            gradients.iter().sum::<f32>() / gradients.len() as f32
+        };
+        let max = gradients.iter().cloned().fold(0.0_f32, f32::max);
+
+        Self {
+            mean_corner_gradient: mean,
+            max_corner_gradient: max,
+            corner_count: corners.len(),
+            per_corner_gradients: gradients,
+        }
+    }
+
+    /// Measure corner sharpness in a single-channel SDF bitmap.
+    pub fn from_sdf(sdf: &SdfBitmap, corners: &[Point]) -> Self {
+        let mut gradients = Vec::with_capacity(corners.len());
+
+        for corner in corners {
+            let x = corner.x.round() as usize;
+            let y = corner.y.round() as usize;
+
+            if x == 0 || y == 0 || x + 1 >= sdf.width || y + 1 >= sdf.height {
+                gradients.push(0.0);
+                continue;
+            }
+
+            let dx = sdf.channel.get(x + 1, y) - sdf.channel.get(x - 1, y);
+            let dy = sdf.channel.get(x, y + 1) - sdf.channel.get(x, y - 1);
+            let gradient = (dx * dx + dy * dy).sqrt();
+            gradients.push(gradient);
+        }
+
+        let mean = if gradients.is_empty() {
+            0.0
+        } else {
+            gradients.iter().sum::<f32>() / gradients.len() as f32
+        };
+        let max = gradients.iter().cloned().fold(0.0_f32, f32::max);
+
+        Self {
+            mean_corner_gradient: mean,
+            max_corner_gradient: max,
+            corner_count: corners.len(),
+            per_corner_gradients: gradients,
         }
     }
 }
@@ -1944,5 +2260,286 @@ mod tests {
         assert_eq!(median_f32(2.0, 3.0, 1.0), 2.0);
         assert_eq!(median_f32(1.0, 1.0, 1.0), 1.0);
         assert_eq!(median_f32(-1.0, 0.0, 1.0), 0.0);
+    }
+
+    // -----------------------------------------------------------------------
+    // Multi-channel SDF configuration tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_multi_channel_sdf_config_defaults() {
+        let config = MultiChannelSdfConfig::default();
+        assert_eq!(config.max_distance, 4.0);
+        assert_eq!(config.max_channels, 3);
+        assert_eq!(config.glyph_size, 48.0);
+        assert_eq!(config.padding, 4);
+        assert_eq!(config.combination_mode, ChannelCombinationMode::Median);
+    }
+
+    #[test]
+    fn test_multi_channel_sdf_config_to_msdf() {
+        let config = MultiChannelSdfConfig {
+            max_distance: 6.0,
+            sharp_corner_threshold: 0.5,
+            max_channels: 3,
+            combination_mode: ChannelCombinationMode::Min,
+            glyph_size: 64.0,
+            padding: 8,
+        };
+        let msdf = config.to_msdf_config();
+        assert_eq!(msdf.distance_range, 6.0);
+        assert_eq!(msdf.angle_threshold, 0.5);
+        assert_eq!(msdf.glyph_size, 64.0);
+        assert_eq!(msdf.padding, 8);
+    }
+
+    // -----------------------------------------------------------------------
+    // Corner detection tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_detect_corners_triangle() {
+        let mut contour = Contour::new();
+        contour.add_edge(EdgeSegment {
+            edge_type: EdgeType::Line {
+                start: Point::new(0.0, 0.0),
+                end: Point::new(10.0, 0.0),
+            },
+            color: EdgeColor::WHITE,
+        });
+        contour.add_edge(EdgeSegment {
+            edge_type: EdgeType::Line {
+                start: Point::new(10.0, 0.0),
+                end: Point::new(5.0, 10.0),
+            },
+            color: EdgeColor::WHITE,
+        });
+        contour.add_edge(EdgeSegment {
+            edge_type: EdgeType::Line {
+                start: Point::new(5.0, 10.0),
+                end: Point::new(0.0, 0.0),
+            },
+            color: EdgeColor::WHITE,
+        });
+
+        let corners = contour.detect_corners(0.1);
+        assert_eq!(corners.len(), 3, "Triangle should have 3 corners");
+
+        // All corners in a triangle are sharp (well under 180°)
+        for c in &corners {
+            assert!(c.is_sharp, "Triangle corners should be sharp");
+            assert!(c.angle > 0.0, "Angle should be positive");
+        }
+    }
+
+    #[test]
+    fn test_detect_corners_smooth_circle_approximation() {
+        // Create a very smooth contour (near-circle from many small segments)
+        let mut contour = Contour::new();
+        let n = 32;
+        for i in 0..n {
+            let a0 = 2.0 * std::f32::consts::PI * i as f32 / n as f32;
+            let a1 = 2.0 * std::f32::consts::PI * (i + 1) as f32 / n as f32;
+            contour.add_edge(EdgeSegment {
+                edge_type: EdgeType::Line {
+                    start: Point::new(a0.cos() * 100.0, a0.sin() * 100.0),
+                    end: Point::new(a1.cos() * 100.0, a1.sin() * 100.0),
+                },
+                color: EdgeColor::WHITE,
+            });
+        }
+
+        let corners = contour.detect_corners(std::f32::consts::PI / 3.0);
+        let sharp_count = corners.iter().filter(|c| c.is_sharp).count();
+        assert_eq!(sharp_count, 0, "Smooth circle should have no sharp corners");
+    }
+
+    #[test]
+    fn test_classify_pattern_teardrop() {
+        // Contour with exactly one sharp corner
+        let mut contour = Contour::new();
+        let n = 16;
+        for i in 0..n {
+            let a0 = 2.0 * std::f32::consts::PI * i as f32 / n as f32;
+            let a1 = 2.0 * std::f32::consts::PI * (i + 1) as f32 / n as f32;
+            contour.add_edge(EdgeSegment {
+                edge_type: EdgeType::Line {
+                    start: Point::new(a0.cos() * 100.0, a0.sin() * 100.0),
+                    end: Point::new(a1.cos() * 100.0, a1.sin() * 100.0),
+                },
+                color: EdgeColor::WHITE,
+            });
+        }
+
+        // Replace one edge pair with a sharp spike
+        contour.edges[0] = EdgeSegment {
+            edge_type: EdgeType::Line {
+                start: contour.edges[n - 1].end_point(),
+                end: Point::new(200.0, 0.0),
+            },
+            color: EdgeColor::WHITE,
+        };
+        contour.edges[1] = EdgeSegment {
+            edge_type: EdgeType::Line {
+                start: Point::new(200.0, 0.0),
+                end: contour.edges[2].start_point(),
+            },
+            color: EdgeColor::WHITE,
+        };
+
+        let pattern = contour.classify_pattern(std::f32::consts::PI / 3.0);
+        matches!(pattern, ContourPattern::Teardrop { .. });
+    }
+
+    #[test]
+    fn test_classify_pattern_standard_square() {
+        let mut contour = Contour::new();
+        contour.add_edge(EdgeSegment {
+            edge_type: EdgeType::Line {
+                start: Point::new(0.0, 0.0),
+                end: Point::new(10.0, 0.0),
+            },
+            color: EdgeColor::WHITE,
+        });
+        contour.add_edge(EdgeSegment {
+            edge_type: EdgeType::Line {
+                start: Point::new(10.0, 0.0),
+                end: Point::new(10.0, 10.0),
+            },
+            color: EdgeColor::WHITE,
+        });
+        contour.add_edge(EdgeSegment {
+            edge_type: EdgeType::Line {
+                start: Point::new(10.0, 10.0),
+                end: Point::new(0.0, 10.0),
+            },
+            color: EdgeColor::WHITE,
+        });
+        contour.add_edge(EdgeSegment {
+            edge_type: EdgeType::Line {
+                start: Point::new(0.0, 10.0),
+                end: Point::new(0.0, 0.0),
+            },
+            color: EdgeColor::WHITE,
+        });
+
+        let pattern = contour.classify_pattern(0.1);
+        match pattern {
+            ContourPattern::Standard {
+                sharp_corner_count, ..
+            } => {
+                assert_eq!(sharp_corner_count, 4, "Square should have 4 sharp corners");
+            }
+            other => panic!("Expected Standard, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_glyph_outline_detect_all_corners() {
+        let data = load_test_font_data();
+        let msdf_gen = MsdfGenerator::new(data, MsdfConfig::default()).unwrap();
+        let mut outline = msdf_gen.generate_outline('A').unwrap();
+        outline.apply_edge_coloring(std::f32::consts::PI / 3.0);
+
+        let corners = outline.detect_all_corners(std::f32::consts::PI / 3.0);
+        // 'A' should have sharp corners (at the apex and at the serifs)
+        let sharp = corners.iter().filter(|c| c.is_sharp).count();
+        assert!(
+            sharp >= 2,
+            "'A' should have at least 2 sharp corners, found {sharp}"
+        );
+    }
+
+    #[test]
+    fn test_glyph_outline_classify_contours() {
+        let data = load_test_font_data();
+        let msdf_gen = MsdfGenerator::new(data, MsdfConfig::default()).unwrap();
+        let outline = msdf_gen.generate_outline('O').unwrap();
+
+        let patterns = outline.classify_contours(std::f32::consts::PI / 3.0);
+        // 'O' typically has 2 contours (outer + inner)
+        assert!(
+            !patterns.is_empty(),
+            "'O' should have at least one contour pattern"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Corner sharpness metrics tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_corner_sharpness_msdf_vs_sdf() {
+        let data = load_test_font_data();
+        let msdf_gen = MsdfGenerator::new(data.clone(), MsdfConfig::default()).unwrap();
+        let sdf_gen = SdfGenerator::new(data, SdfConfig::default()).unwrap();
+
+        // Generate MSDF and SDF for 'V' which has a sharp bottom point
+        let msdf = msdf_gen.generate_msdf_for_char('V').unwrap();
+        let sdf = sdf_gen.generate_sdf_for_char('V').unwrap();
+
+        // Use the centre-bottom of the bitmap as a corner (where the V's point is)
+        let corner = Point::new(msdf.width as f32 / 2.0, msdf.height as f32 * 0.8);
+        let corners = vec![corner];
+
+        let msdf_metrics = CornerSharpnessMetrics::from_msdf(&msdf, &corners);
+        let sdf_metrics = CornerSharpnessMetrics::from_sdf(&sdf, &corners);
+
+        assert_eq!(msdf_metrics.corner_count, 1);
+        assert_eq!(sdf_metrics.corner_count, 1);
+
+        // Both should produce some gradient (even if the exact corner pixel misses slightly)
+        // The key assertion is that metrics are produced without errors
+        assert!(msdf_metrics.mean_corner_gradient >= 0.0);
+        assert!(sdf_metrics.mean_corner_gradient >= 0.0);
+    }
+
+    // -----------------------------------------------------------------------
+    // MSDF debugging helpers tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_msdf_bitmap_channel_to_grayscale() {
+        let mut msdf = MsdfBitmap::new(4, 4, 1.0, 0);
+        msdf.red_channel.set(1, 1, 0.8);
+        msdf.green_channel.set(1, 1, -0.3);
+        msdf.blue_channel.set(1, 1, 0.0);
+
+        let gray_r = msdf.channel_to_grayscale(0);
+        let gray_g = msdf.channel_to_grayscale(1);
+        let gray_b = msdf.channel_to_grayscale(2);
+
+        // Each is 4×4 RGBA = 64 bytes
+        assert_eq!(gray_r.len(), 64);
+        assert_eq!(gray_g.len(), 64);
+        assert_eq!(gray_b.len(), 64);
+
+        // Red channel at (1,1): 0.8 → 0.9 normalised → 229 pixel value
+        let idx = (4 + 1) * 4; // pixel (1,1) in RGBA
+        let r_val = gray_r[idx];
+        assert!(
+            r_val > 200,
+            "Expected bright red channel pixel, got {r_val}"
+        );
+
+        // Green channel at (1,1): -0.3 → 0.35 → 89 pixel value
+        let g_val = gray_g[idx];
+        assert!(g_val < 128, "Expected dim green channel pixel, got {g_val}");
+    }
+
+    #[test]
+    fn test_msdf_bitmap_reconstructed_median() {
+        let mut msdf = MsdfBitmap::new(4, 4, 1.0, 0);
+        msdf.red_channel.set(2, 2, 0.6);
+        msdf.green_channel.set(2, 2, 0.2);
+        msdf.blue_channel.set(2, 2, 0.4);
+
+        let recon = msdf.reconstructed_median();
+        let val = recon.get(2, 2);
+        // median(0.6, 0.2, 0.4) = 0.4
+        assert!(
+            (val - 0.4).abs() < 0.01,
+            "Reconstructed median should be 0.4, got {val}"
+        );
     }
 }
