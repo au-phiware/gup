@@ -18,6 +18,9 @@ struct BoxPlotInstance {
     outlier_radius: f32,
     orientation: u32,
     outlier_count: u32,
+    notched: u32,
+    notch_width: f32,
+    _pad_notch: vec2<f32>,
     outliers: array<vec4<f32>, 8>,
 }
 
@@ -126,6 +129,19 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let sw  = inst.stroke_width;
     let aa  = 0.002;
 
+    // ── Compute effective half-width (notch narrows the box at the median) ──
+    var effective_hw = hw;
+    if (inst.notched == 1u && val >= inst.q1 && val <= inst.q3) {
+        var t: f32;
+        if (val <= inst.median) {
+            t = (inst.median - val) / max(inst.median - inst.q1, 0.0001);
+        } else {
+            t = (val - inst.median) / max(inst.q3 - inst.median, 0.0001);
+        }
+        t = clamp(t, 0.0, 1.0);
+        effective_hw = hw * (1.0 - inst.notch_width * (1.0 - t));
+    }
+
     // ── Outlier circles ─────────────────────────────────────────────
     for (var i = 0u; i < inst.outlier_count; i++) {
         let ov = inst.outliers[i / 4u][i % 4u];
@@ -148,10 +164,10 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     // ── Box (IQR) ───────────────────────────────────────────────────
-    let in_box_x = dc <= hw + aa;
+    let in_box_x = dc <= effective_hw + aa;
     let in_box_y = val >= inst.q1 - aa && val <= inst.q3 + aa;
     if (in_box_x && in_box_y) {
-        let edge_x = hw - dc;
+        let edge_x = effective_hw - dc;
         let edge_y = min(val - inst.q1, inst.q3 - val);
         let edge   = min(edge_x, edge_y);
         let alpha  = smoothstep(-aa, aa, edge);

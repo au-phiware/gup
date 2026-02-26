@@ -21,6 +21,9 @@ struct BoxPlotInstance {
     outlier_radius: f32,
     orientation: u32,
     outlier_count: u32,
+    notched: u32,
+    notch_width: f32,
+    _pad_notch: vec2<f32>,
     outliers: array<vec4<f32>, 8>,
 }
 

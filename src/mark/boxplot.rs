@@ -262,6 +262,9 @@ impl Mark for BoxPlot {
         shader.push_str("    outlier_radius: f32,\n");
         shader.push_str("    orientation: u32,\n");
         shader.push_str("    outlier_count: u32,\n");
+        shader.push_str("    notched: u32,\n");
+        shader.push_str("    notch_width: f32,\n");
+        shader.push_str("    _pad_notch: vec2<f32>,\n");
         shader.push_str("    outliers: array<vec4<f32>, 8>,\n");
         shader.push_str("}\n\n");
 
@@ -352,6 +355,9 @@ impl Mark for BoxPlot {
         shader.push_str("    outlier_radius: f32,\n");
         shader.push_str("    orientation: u32,\n");
         shader.push_str("    outlier_count: u32,\n");
+        shader.push_str("    notched: u32,\n");
+        shader.push_str("    notch_width: f32,\n");
+        shader.push_str("    _pad_notch: vec2<f32>,\n");
         shader.push_str("    outliers: array<vec4<f32>, 8>,\n");
         shader.push_str("}\n\n");
 
@@ -527,6 +533,12 @@ pub struct BoxPlotInstance {
     pub orientation: u32,
     /// Number of valid outlier values in the `outliers` array
     pub outlier_count: u32,
+    /// Whether to render a notch at the median (0 = no, 1 = yes)
+    pub notched: u32,
+    /// Notch width as fraction of box width (e.g. 0.5 = narrows to 50%)
+    pub notch_width: f32,
+    /// Padding to align the outliers array to 16 bytes (WGSL requirement)
+    pub _pad_notch: [f32; 2],
     /// Outlier values packed into vec4s (up to 32 values, 4 per vec4)
     pub outliers: [[f32; 4]; 8],
 }
@@ -584,6 +596,9 @@ impl From<&BoxPlotAttributes> for BoxPlotInstance {
                 BoxPlotOrientation::Horizontal => 1,
             },
             outlier_count,
+            notched: if attrs.notched { 1 } else { 0 },
+            notch_width: attrs.notch_width,
+            _pad_notch: [0.0; 2],
             outliers,
         }
     }
@@ -674,6 +689,16 @@ impl MarkInstanceBuilder for BoxPlot {
                 "outlier_radius" => {
                     if let AttrValue::Float(v) = value {
                         instance.outlier_radius = v;
+                    }
+                }
+                "notched" => {
+                    if let AttrValue::Float(v) = value {
+                        instance.notched = if v > 0.0 { 1 } else { 0 };
+                    }
+                }
+                "notch_width" => {
+                    if let AttrValue::Float(v) = value {
+                        instance.notch_width = v;
                     }
                 }
                 _ => {} // Ignore unknown attributes
@@ -795,8 +820,8 @@ mod tests {
 
     #[test]
     fn test_boxplot_instance_size_and_alignment() {
-        // BoxPlotInstance must be exactly 256 bytes to match the WGSL layout.
-        assert_eq!(std::mem::size_of::<BoxPlotInstance>(), 256);
+        // BoxPlotInstance must be exactly 272 bytes to match the WGSL layout.
+        assert_eq!(std::mem::size_of::<BoxPlotInstance>(), 272);
         // Alignment must be at least 4 (repr(C)).
         assert!(std::mem::align_of::<BoxPlotInstance>() >= 4);
     }
@@ -955,5 +980,51 @@ mod tests {
         let inst = BoxPlot::build_instance(&[("unknown_attr", AttrValue::Float(999.0))]);
         assert_eq!(inst.position, default.position);
         assert_eq!(inst.median, default.median);
+    }
+
+    #[test]
+    fn test_boxplot_instance_notch_fields_default() {
+        let inst = BoxPlot::default_instance();
+        // Default: not notched
+        assert_eq!(inst.notched, 0);
+        assert_eq!(inst.notch_width, 0.5);
+        assert_eq!(inst._pad_notch, [0.0; 2]);
+    }
+
+    #[test]
+    fn test_boxplot_instance_notch_from_attributes() {
+        let attrs = BoxPlotAttributes {
+            notched: true,
+            notch_width: 0.4,
+            ..Default::default()
+        };
+        let inst = BoxPlotInstance::from(&attrs);
+        assert_eq!(inst.notched, 1);
+        assert_eq!(inst.notch_width, 0.4);
+    }
+
+    #[test]
+    fn test_boxplot_instance_notch_disabled() {
+        let attrs = BoxPlotAttributes {
+            notched: false,
+            notch_width: 0.3,
+            ..Default::default()
+        };
+        let inst = BoxPlotInstance::from(&attrs);
+        assert_eq!(inst.notched, 0);
+        // notch_width is still stored even when not notched
+        assert_eq!(inst.notch_width, 0.3);
+    }
+
+    #[test]
+    fn test_boxplot_instance_builder_notch_attrs() {
+        use crate::selection::AttrValue;
+
+        let inst = BoxPlot::build_instance(&[
+            ("notched", AttrValue::Float(1.0)),
+            ("notch_width", AttrValue::Float(0.6)),
+        ]);
+        assert_eq!(inst.notched, 1);
+        assert_eq!(inst.notch_width, 0.6);
     }
 }
