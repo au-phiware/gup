@@ -462,6 +462,64 @@ impl Default for LineAttributes {
     }
 }
 
+// ---------------------------------------------------------------------------
+// AccessibleMark implementation for Line
+// ---------------------------------------------------------------------------
+
+impl crate::selection::AccessibleMark for Line {
+    fn describe_point(
+        index: usize,
+        total: usize,
+        attrs: &[(&str, crate::selection::AttrValue)],
+    ) -> String {
+        use crate::selection::AttrValue;
+
+        let mut parts = vec![format!("Line {} of {}", index + 1, total)];
+
+        for &(name, value) in attrs {
+            match (name, value) {
+                ("start", AttrValue::Vec2(pos)) => {
+                    parts.push(format!("from ({:.1}, {:.1})", pos[0], pos[1]));
+                }
+                ("end", AttrValue::Vec2(pos)) => {
+                    parts.push(format!("to ({:.1}, {:.1})", pos[0], pos[1]));
+                }
+                ("width", AttrValue::Float(w)) => {
+                    parts.push(format!("width {:.1}", w));
+                }
+                ("color", AttrValue::Vec4(c)) => {
+                    parts.push(format!("color {}", describe_line_color(c)));
+                }
+                _ => {}
+            }
+        }
+
+        parts.join(", ")
+    }
+
+    fn describe_mark_type() -> &'static str {
+        "line"
+    }
+}
+
+/// Map an RGBA colour to a simple human-readable name (line variant).
+fn describe_line_color(c: [f32; 4]) -> &'static str {
+    let [r, g, b, _a] = c;
+    if r > 0.7 && g < 0.3 && b < 0.3 {
+        "red"
+    } else if r < 0.3 && g > 0.7 && b < 0.3 {
+        "green"
+    } else if r < 0.3 && g < 0.3 && b > 0.7 {
+        "blue"
+    } else if r > 0.9 && g > 0.9 && b > 0.9 {
+        "white"
+    } else if r < 0.1 && g < 0.1 && b < 0.1 {
+        "black"
+    } else {
+        "colored"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -248,6 +248,42 @@ pub trait InteractionData: Send + Sync {
     }
 }
 
+/// Capitalize the first letter of a string.
+fn capitalize(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        None => String::new(),
+        Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
+    }
+}
+
+/// Trait for marks that provide accessible descriptions.
+///
+/// Implement this trait to enable automatic ARIA tree generation for a mark
+/// type.  The methods produce human-readable text that screen readers use to
+/// describe individual data points and overall data patterns.
+///
+/// Default implementations are provided so that only `describe_point()` is
+/// required for a minimal implementation.
+pub trait AccessibleMark: Mark {
+    /// Generate an accessible description for a single data point.
+    ///
+    /// `index` is the zero-based position within the dataset.
+    /// `total` is the total number of data points.
+    /// `attrs` contains the bound attribute values for this point.
+    fn describe_point(index: usize, total: usize, attrs: &[(&str, AttrValue)]) -> String;
+
+    /// Human-readable name for the mark type (e.g. "circle", "line").
+    fn describe_mark_type() -> &'static str {
+        "mark"
+    }
+
+    /// Optionally describe a high-level pattern detected in the data.
+    fn describe_pattern(_all_attrs: &[Vec<(&str, AttrValue)>]) -> Option<String> {
+        None
+    }
+}
+
 /// Selection type for managing data-driven visualizations with GPU acceleration and interaction.
 ///
 /// This type provides:
@@ -283,6 +319,10 @@ pub struct Selection<T, M: Mark> {
     attr_bindings: Vec<AttributeBinding<T>>,
     /// GPU shader function bindings stored via [`attr_shader`](Self::attr_shader).
     shader_attr_bindings: Vec<ShaderAttributeBinding<T>>,
+    /// Whether automatic ARIA registration is enabled (default: `true`).
+    auto_aria: bool,
+    /// Root ARIA node ID registered for this selection (if any).
+    aria_root_node: Option<crate::accessibility::aria::NodeId>,
 }
 
 impl<T, M: Mark> std::fmt::Debug for Selection<T, M> {
@@ -311,6 +351,8 @@ impl<T, M: Mark> Selection<T, M> {
             render_state: None,
             attr_bindings: Vec::new(),
             shader_attr_bindings: Vec::new(),
+            auto_aria: true,
+            aria_root_node: None,
         })
     }
 
@@ -330,6 +372,8 @@ impl<T, M: Mark> Selection<T, M> {
             render_state: None,
             attr_bindings: Vec::new(),
             shader_attr_bindings: Vec::new(),
+            auto_aria: true,
+            aria_root_node: None,
         }
     }
 
@@ -1063,6 +1107,114 @@ impl<T, M: Mark> Selection<T, M> {
     /// Returns `true` if the selection has been prepared for rendering.
     pub fn is_render_ready(&self) -> bool {
         self.render_state.is_some()
+    }
+
+    /// Enable or disable automatic ARIA registration on prepare/render.
+    ///
+    /// When enabled (the default), calling [`prepare_render`](Self::prepare_render)
+    /// or [`prepare_render_bound`](Self::prepare_render_bound) will automatically
+    /// generate and register an ARIA tree with the provided
+    /// [`AriaTree`](crate::accessibility::aria::AriaTree).
+    ///
+    /// Set this to `false` if you need full manual control over ARIA tree
+    /// construction.
+    pub fn set_auto_aria(&mut self, enabled: bool) -> &mut Self {
+        self.auto_aria = enabled;
+        self
+    }
+
+    /// Returns `true` if automatic ARIA registration is enabled.
+    pub fn auto_aria(&self) -> bool {
+        self.auto_aria
+    }
+
+    /// Returns the ARIA root node ID registered for this selection, if any.
+    pub fn aria_root_node(&self) -> Option<crate::accessibility::aria::NodeId> {
+        self.aria_root_node
+    }
+
+    /// Generate and register an ARIA tree for this selection.
+    ///
+    /// Creates a chart-level ARIA node describing the dataset, plus individual
+    /// data-point nodes (capped at `max_points` to avoid DOM bloat).
+    ///
+    /// If the mark type implements [`AccessibleMark`], each data-point node
+    /// uses the mark-specific description; otherwise a generic description is
+    /// used.
+    ///
+    /// Any previously registered ARIA tree for this selection is removed first.
+    ///
+    /// Returns the root [`NodeId`](crate::accessibility::aria::NodeId) of the
+    /// newly created sub-tree.
+    pub fn register_aria(
+        &mut self,
+        aria_tree: &mut crate::accessibility::aria::AriaTree,
+    ) -> crate::accessibility::aria::NodeId
+    where
+        M: AccessibleMark,
+    {
+        use crate::accessibility::aria::{AriaNode, AriaRole};
+
+        // Remove any previous registration for this selection.
+        if let Some(old_root) = self.aria_root_node.take() {
+            aria_tree.remove_subtree(old_root);
+        }
+
+        let total = self.data.len();
+        let mark_name = M::describe_mark_type();
+        let label = format!(
+            "{} chart with {} data point{}",
+            capitalize(mark_name),
+            total,
+            if total == 1 { "" } else { "s" }
+        );
+
+        // Evaluate attribute bindings for each point (needed for descriptions).
+        let all_attrs: Vec<Vec<(&str, AttrValue)>> = self
+            .data
+            .iter()
+            .map(|t| {
+                self.attr_bindings
+                    .iter()
+                    .map(|b| (b.name.as_str(), (b.extractor)(t)))
+                    .collect()
+            })
+            .collect();
+
+        // Build pattern description if available.
+        let description = M::describe_pattern(&all_attrs);
+
+        let chart_id = aria_tree.create_chart_node(label, description);
+
+        // Add individual data-point nodes (cap at 100 to avoid bloat).
+        let max_points = 100;
+        let point_count = total.min(max_points);
+        for (i, attrs) in all_attrs.iter().enumerate().take(point_count) {
+            let point_label = M::describe_point(i, total, attrs);
+            let node = AriaNode::new(AriaRole::DataPoint, point_label);
+            aria_tree.add_child(chart_id, node);
+        }
+
+        if total > max_points {
+            let note = AriaNode::new(
+                AriaRole::DataPoint,
+                format!("… and {} more data points", total - max_points),
+            );
+            aria_tree.add_child(chart_id, note);
+        }
+
+        self.aria_root_node = Some(chart_id);
+        chart_id
+    }
+
+    /// Remove the ARIA sub-tree previously registered for this selection.
+    ///
+    /// This is called automatically when the selection is dropped or when
+    /// a new ARIA tree replaces the old one.
+    pub fn deregister_aria(&mut self, aria_tree: &mut crate::accessibility::aria::AriaTree) {
+        if let Some(root) = self.aria_root_node.take() {
+            aria_tree.remove_subtree(root);
+        }
     }
 
     /// Register the data points in this selection as focusable elements.

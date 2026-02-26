@@ -160,6 +160,50 @@ impl AriaTree {
             format!("Large dataset with {} points", count)
         }
     }
+
+    /// Remove a node and all its descendants from the tree.
+    ///
+    /// If the removed node is the tree root, the root is cleared.
+    /// Emits [`AriaUpdate::NodeRemoved`] for each removed node.
+    pub fn remove_subtree(&mut self, node_id: NodeId) {
+        // Collect all IDs to remove via breadth-first traversal.
+        let mut to_remove = vec![node_id];
+        let mut i = 0;
+        while i < to_remove.len() {
+            if let Some(node) = self.nodes.get(&to_remove[i]) {
+                to_remove.extend_from_slice(&node.children);
+            }
+            i += 1;
+        }
+
+        // Remove from parent's children list.
+        // We search all nodes since we don't store parent pointers.
+        for node in self.nodes.values_mut() {
+            node.children.retain(|c| *c != node_id);
+        }
+
+        // Remove all collected nodes.
+        for id in &to_remove {
+            self.nodes.remove(id);
+            self.queue_update(AriaUpdate::NodeRemoved { node_id: *id });
+        }
+
+        // Clear root if it was removed.
+        if self.root == Some(node_id) {
+            self.root = None;
+        }
+
+        // Clear focus if it pointed to a removed node.
+        if let Some(focus) = self.current_focus
+            && to_remove.contains(&focus) {
+                self.current_focus = None;
+            }
+    }
+
+    /// Returns the total number of nodes in the tree.
+    pub fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
 }
 
 impl Default for AriaTree {

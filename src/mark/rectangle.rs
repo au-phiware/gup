@@ -533,6 +533,61 @@ impl MarkInstanceBuilder for Rectangle {
     }
 }
 
+// ---------------------------------------------------------------------------
+// AccessibleMark implementation for Rectangle
+// ---------------------------------------------------------------------------
+
+impl crate::selection::AccessibleMark for Rectangle {
+    fn describe_point(
+        index: usize,
+        total: usize,
+        attrs: &[(&str, crate::selection::AttrValue)],
+    ) -> String {
+        use crate::selection::AttrValue;
+
+        let mut parts = vec![format!("Rectangle {} of {}", index + 1, total)];
+
+        for &(name, value) in attrs {
+            match (name, value) {
+                ("center" | "position", AttrValue::Vec2(pos)) => {
+                    parts.push(format!("at ({:.1}, {:.1})", pos[0], pos[1]));
+                }
+                ("size", AttrValue::Vec2(s)) => {
+                    parts.push(format!("size {:.1}×{:.1}", s[0], s[1]));
+                }
+                ("fill_color" | "color", AttrValue::Vec4(c)) => {
+                    parts.push(format!("color {}", describe_rect_color(c)));
+                }
+                _ => {}
+            }
+        }
+
+        parts.join(", ")
+    }
+
+    fn describe_mark_type() -> &'static str {
+        "rectangle"
+    }
+}
+
+/// Map an RGBA colour to a simple human-readable name.
+fn describe_rect_color(c: [f32; 4]) -> &'static str {
+    let [r, g, b, _a] = c;
+    if r > 0.7 && g < 0.3 && b < 0.3 {
+        "red"
+    } else if r < 0.3 && g > 0.7 && b < 0.3 {
+        "green"
+    } else if r < 0.3 && g < 0.3 && b > 0.7 {
+        "blue"
+    } else if r > 0.9 && g > 0.9 && b > 0.9 {
+        "white"
+    } else if r < 0.1 && g < 0.1 && b < 0.1 {
+        "black"
+    } else {
+        "colored"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
