@@ -965,6 +965,22 @@ pub struct VarianceViolation {
     pub max_allowed: f64,
 }
 
+/// Format a [`Duration`] as a compact human-readable string.
+///
+/// Uses the most appropriate unit (ns, µs, ms, s) based on magnitude.
+fn format_duration_compact(d: Duration) -> String {
+    let nanos = d.as_nanos();
+    if nanos < 1_000 {
+        format!("{nanos}ns")
+    } else if nanos < 1_000_000 {
+        format!("{:.1}µs", nanos as f64 / 1_000.0)
+    } else if nanos < 1_000_000_000 {
+        format!("{:.2}ms", nanos as f64 / 1_000_000.0)
+    } else {
+        format!("{:.3}s", d.as_secs_f64())
+    }
+}
+
 /// Generate a Markdown table summarising cross-platform benchmark results.
 ///
 /// This produces a table with one row per benchmark and one column per
@@ -1022,8 +1038,8 @@ pub fn generate_variance_report(
 
         for r in reports {
             if let Some(m) = r.measurements.iter().find(|m| m.name.as_str() == *name) {
-                let us = m.median.as_micros();
-                md.push_str(&format!(" {us}µs |"));
+                let formatted = format_duration_compact(m.median);
+                md.push_str(&format!(" {formatted} |"));
 
                 if let Some(base) = base_median {
                     let base_secs = base.as_secs_f64();
