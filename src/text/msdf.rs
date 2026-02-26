@@ -2829,4 +2829,204 @@ mod tests {
             "Median and max should differ for a glyph with sharp corners"
         );
     }
+
+    // -----------------------------------------------------------------------
+    // Comprehensive sharp-corner glyph tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_sharp_corner_glyphs_have_channel_differences() {
+        // Letters with known sharp features should produce different per-channel
+        // values at some pixels, proving edge coloring is working.
+        let data = load_test_font_data();
+        let msdf_gen = MsdfGenerator::new(data, MsdfConfig::default()).unwrap();
+
+        for c in ['A', 'K', 'V', 'W', 'X', 'Y', 'Z'] {
+            let msdf = msdf_gen.generate_msdf_for_char(c).unwrap();
+            let has_diff = (0..msdf.width).any(|x| {
+                (0..msdf.height).any(|y| {
+                    let r = msdf.red_channel.get(x, y);
+                    let g = msdf.green_channel.get(x, y);
+                    let b = msdf.blue_channel.get(x, y);
+                    (r - g).abs() > 0.05 || (g - b).abs() > 0.05 || (r - b).abs() > 0.05
+                })
+            });
+            assert!(
+                has_diff,
+                "'{c}' should have per-channel differences from edge coloring"
+            );
+        }
+    }
+
+    #[test]
+    fn test_smooth_glyph_channels_agree() {
+        // 'O' is mostly smooth curves — channels should be close
+        // (not exactly identical because of minor colour boundaries)
+        let data = load_test_font_data();
+        let msdf_gen = MsdfGenerator::new(data, MsdfConfig::default()).unwrap();
+
+        let msdf = msdf_gen.generate_msdf_for_char('O').unwrap();
+
+        let mut total_diff = 0.0_f64;
+        let mut count = 0usize;
+        for y in 0..msdf.height {
+            for x in 0..msdf.width {
+                let r = msdf.red_channel.get(x, y);
+                let g = msdf.green_channel.get(x, y);
+                let b = msdf.blue_channel.get(x, y);
+                total_diff += ((r - g).abs() + (g - b).abs() + (r - b).abs()) as f64;
+                count += 1;
+            }
+        }
+        let mean_diff = total_diff / count as f64;
+        // 'O' should have very low average channel divergence
+        assert!(
+            mean_diff < 0.5,
+            "'O' average channel divergence should be low: {mean_diff:.4}"
+        );
+    }
+
+    #[test]
+    fn test_msdf_generation_performance() {
+        // Full ASCII set should generate within 200ms
+        use std::time::Instant;
+
+        let data = load_test_font_data();
+        let msdf_gen = MsdfGenerator::new(data.clone(), MsdfConfig::default()).unwrap();
+        let font = ttf_parser::Face::parse(&data, 0).unwrap();
+
+        let start = Instant::now();
+        let mut count = 0;
+        for ch in 33u8..=126u8 {
+            let c = ch as char;
+            if let Some(glyph_id) = font.glyph_index(c)
+                && font.glyph_bounding_box(glyph_id).is_some() {
+                    msdf_gen.generate_msdf(glyph_id).unwrap();
+                    count += 1;
+                }
+        }
+        let elapsed = start.elapsed();
+        // In debug mode the threshold is generous
+        #[cfg(debug_assertions)]
+        let threshold_ms: u128 = 5000;
+        #[cfg(not(debug_assertions))]
+        let threshold_ms: u128 = 200;
+
+        assert!(
+            elapsed.as_millis() < threshold_ms,
+            "MSDF generation for {count} glyphs took {elapsed:?} (threshold: {threshold_ms}ms)"
+        );
+    }
+
+    #[test]
+    fn test_corner_detection_across_special_glyphs() {
+        let data = load_test_font_data();
+        let msdf_gen = MsdfGenerator::new(data, MsdfConfig::default()).unwrap();
+        let threshold = std::f32::consts::PI / 3.0;
+
+        // Characters that should have sharp corners
+        for c in ['A', 'V', 'W', 'M', 'N'] {
+            let outline = msdf_gen.generate_outline(c).unwrap();
+            let corners = outline.detect_all_corners(threshold);
+            let sharp = corners.iter().filter(|c| c.is_sharp).count();
+            assert!(
+                sharp >= 1,
+                "'{c}' should have at least 1 sharp corner, found {sharp}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_edge_coloring_does_not_leave_white_edges() {
+        // After coloring, no edge in a multi-corner contour should remain WHITE.
+        let data = load_test_font_data();
+        let msdf_gen = MsdfGenerator::new(data, MsdfConfig::default()).unwrap();
+
+        for c in ['A', 'B', 'K', 'R'] {
+            let mut outline = msdf_gen.generate_outline(c).unwrap();
+            outline.apply_edge_coloring(std::f32::consts::PI / 3.0);
+
+            for (ci, contour) in outline.contours.iter().enumerate() {
+                let sharp_count = contour
+                    .detect_corners(std::f32::consts::PI / 3.0)
+                    .iter()
+                    .filter(|c| c.is_sharp)
+                    .count();
+                if sharp_count >= 2 {
+                    for (ei, edge) in contour.edges.iter().enumerate() {
+                        assert_ne!(
+                            edge.color,
+                            EdgeColor::WHITE,
+                            "'{c}' contour {ci} edge {ei} should not be WHITE after coloring"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_backward_compatibility_single_channel() {
+        // A single-channel SDF replicated across R=G=B should reconstruct
+        // identically via median.
+        let data = load_test_font_data();
+        let sdf_gen = SdfGenerator::new(data, SdfConfig::default()).unwrap();
+        let sdf = sdf_gen.generate_sdf_for_char('H').unwrap();
+
+        let rgba = sdf.to_rgba_pixels();
+        // Every pixel should have R == G == B (single channel duplicated)
+        for y in 0..sdf.height {
+            for x in 0..sdf.width {
+                let idx = (y * sdf.width + x) * 4;
+                assert_eq!(rgba[idx], rgba[idx + 1], "R != G at ({x},{y})");
+                assert_eq!(rgba[idx + 1], rgba[idx + 2], "G != B at ({x},{y})");
+            }
+        }
+    }
+
+    #[test]
+    fn test_multi_channel_memory_overhead() {
+        // MSDF should use exactly 3x the memory of SDF for the same glyph.
+        let data = load_test_font_data();
+        let msdf_gen = MsdfGenerator::new(data.clone(), MsdfConfig::default()).unwrap();
+        let sdf_gen = SdfGenerator::new(data, SdfConfig::default()).unwrap();
+
+        let msdf = msdf_gen.generate_msdf_for_char('W').unwrap();
+        let sdf = sdf_gen.generate_sdf_for_char('W').unwrap();
+
+        let msdf_mem = SdfQualityMetrics::from_msdf(&msdf).memory_bytes;
+        let sdf_mem = SdfQualityMetrics::compare(&sdf, &msdf).memory_bytes;
+
+        assert_eq!(
+            msdf_mem,
+            sdf_mem * 3,
+            "MSDF should use 3x memory: msdf={msdf_mem}, sdf={sdf_mem}"
+        );
+    }
+
+    #[test]
+    fn test_empty_glyph_outline_detection() {
+        // An empty outline should have no corners and classify as Smooth.
+        let outline = GlyphOutline::new();
+        let corners = outline.detect_all_corners(0.5);
+        assert!(corners.is_empty(), "Empty outline should have no corners");
+
+        let patterns = outline.classify_contours(0.5);
+        assert!(patterns.is_empty(), "Empty outline should have no patterns");
+    }
+
+    #[test]
+    fn test_single_edge_contour_coloring() {
+        // A degenerate contour with a single edge should not panic.
+        let mut contour = Contour::new();
+        contour.add_edge(EdgeSegment {
+            edge_type: EdgeType::Line {
+                start: Point::new(0.0, 0.0),
+                end: Point::new(10.0, 0.0),
+            },
+            color: EdgeColor::WHITE,
+        });
+        contour.apply_edge_coloring(0.5);
+        // Should not panic; coloring may or may not change the single edge
+    }
 }
