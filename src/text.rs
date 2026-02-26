@@ -59,6 +59,28 @@ pub use style::*;
 
 use crate::shader_function::{Vec2, Vec4};
 
+/// Trait for types that can provide glyph information and font metrics.
+///
+/// This enables text layout algorithms to work with both the GPU-backed
+/// [`FontAtlas`] and lightweight mock implementations for testing.
+pub trait GlyphSource {
+    /// Get font metrics for layout calculations.
+    fn metrics(&self) -> &FontMetrics;
+
+    /// Look up glyph information for a character.
+    fn get_glyph(&self, character: char) -> Option<&GlyphInfo>;
+}
+
+impl GlyphSource for FontAtlas {
+    fn metrics(&self) -> &FontMetrics {
+        FontAtlas::metrics(self)
+    }
+
+    fn get_glyph(&self, character: char) -> Option<&GlyphInfo> {
+        FontAtlas::get_glyph(self, character)
+    }
+}
+
 /// Text anchor point for positioning.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TextAnchor {

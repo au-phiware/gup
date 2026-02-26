@@ -112,6 +112,12 @@ pub enum ClippingStrategy {
     HideIfClipped {
         min_visible_threshold: f32, // Hide if less than X% visible
     },
+    /// Wrap text to multiple lines within container width
+    TextWrapping {
+        max_lines: usize,         // Maximum number of lines (0 = unlimited)
+        line_spacing_factor: f32, // Multiplier for line height spacing
+        hyphenate: bool,          // Whether to break mid-word with hyphens
+    },
 }
 
 impl Default for TextMargins {
@@ -431,6 +437,66 @@ impl TextLayoutEngine {
         }
     }
 
+    /// Layout text with word wrapping to fit within a given width.
+    ///
+    /// This wraps text to multiple lines without requiring viewport clipping
+    /// infrastructure. It is useful for standalone multi-line text layout.
+    pub fn layout_wrapped_text(
+        &mut self,
+        text: &str,
+        position: Vec2,
+        style: &TextStyle,
+        font_atlas: &FontAtlas,
+        max_width: f32,
+        max_lines: usize,
+        line_spacing_factor: f32,
+        hyphenate: bool,
+    ) -> GupResult<LayoutResult> {
+        if text.is_empty() || max_width <= 0.0 {
+            return Ok(LayoutResult {
+                glyphs: Vec::new(),
+                bounds: TextBounds::default(),
+                clipped: false,
+            });
+        }
+
+        // Check if wrapping is needed
+        let single_line_bounds = self.measure_text(text, style, font_atlas)?;
+        if single_line_bounds.width() <= max_width {
+            // Fits on one line; use normal layout
+            return self.layout_text(text, position, style, font_atlas, None);
+        }
+
+        let lines =
+            self.break_into_lines(text, max_width, max_lines, hyphenate, style, font_atlas)?;
+
+        if lines.is_empty() {
+            return Ok(LayoutResult {
+                glyphs: Vec::new(),
+                bounds: TextBounds::default(),
+                clipped: false,
+            });
+        }
+
+        let glyphs = self.position_multi_line_glyphs(
+            &lines,
+            position,
+            style,
+            font_atlas,
+            line_spacing_factor,
+        )?;
+
+        let bounds = self.calculate_glyph_bounds(&glyphs);
+        self.collision_grid.add_bounds(&bounds);
+
+        let clipped = max_lines > 0 && lines.len() >= max_lines;
+        Ok(LayoutResult {
+            glyphs,
+            bounds,
+            clipped,
+        })
+    }
+
     /// Internal layout without collision-grid registration (used by clipping retry loop).
     fn layout_text_inner(
         &mut self,
@@ -531,6 +597,21 @@ impl TextLayoutEngine {
                     Ok(None) // Not hidden — let next strategy try
                 }
             }
+            ClippingStrategy::TextWrapping {
+                max_lines,
+                line_spacing_factor,
+                hyphenate,
+            } => self.apply_text_wrapping(
+                text,
+                position,
+                style,
+                font_atlas,
+                constraints,
+                viewport_bounds,
+                *max_lines,
+                *line_spacing_factor,
+                *hyphenate,
+            ),
         }
     }
 
@@ -716,12 +797,425 @@ impl TextLayoutEngine {
         Ok(None)
     }
 
+    /// Break text into wrapped lines based on container width.
+    ///
+    /// Returns a vector of string slices representing each line.
+    /// Uses word-level breaking with optional hyphenation for long words.
+    fn break_into_lines(
+        &self,
+        text: &str,
+        available_width: f32,
+        max_lines: usize,
+        hyphenate: bool,
+        style: &TextStyle,
+        font_atlas: &impl GlyphSource,
+    ) -> GupResult<Vec<String>> {
+        if text.is_empty() || available_width <= 0.0 {
+            return Ok(vec![]);
+        }
+
+        let metrics = font_atlas.metrics();
+        let scale = style.font_size / metrics.size;
+        let effective_max = if max_lines == 0 {
+            usize::MAX
+        } else {
+            max_lines
+        };
+        let mut lines: Vec<String> = Vec::new();
+
+        // Split text into words (preserving whitespace as separators)
+        let words: Vec<&str> = text.split_whitespace().collect();
+        if words.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let mut current_line = String::new();
+        let mut current_width: f32 = 0.0;
+
+        for (word_idx, word) in words.iter().enumerate() {
+            // Measure the word
+            let word_bounds = self.measure_text(word, style, font_atlas)?;
+            let word_width = word_bounds.width();
+
+            // Measure a space character
+            let space_width = if let Some(glyph) = font_atlas.get_glyph(' ') {
+                glyph.advance * scale * style.letter_spacing
+            } else {
+                metrics.size * 0.5 * scale * style.letter_spacing
+            };
+
+            // If adding this word (with space) exceeds width
+            let separator_width = if current_line.is_empty() {
+                0.0
+            } else {
+                space_width
+            };
+            let needed_width = current_width + separator_width + word_width;
+
+            if needed_width <= available_width || current_line.is_empty() {
+                // Word fits on the current line (or it's the first word on a new line)
+                if !current_line.is_empty() {
+                    current_line.push(' ');
+                    current_width += space_width;
+                }
+
+                // If this single word exceeds available width and we allow hyphenation
+                if word_width > available_width && hyphenate {
+                    let remaining_width = available_width - current_width;
+                    let (first_part, rest) = self.hyphenate_word(
+                        word,
+                        remaining_width,
+                        available_width,
+                        style,
+                        font_atlas,
+                    )?;
+
+                    current_line.push_str(&first_part);
+                    lines.push(current_line);
+
+                    if lines.len() >= effective_max {
+                        return Ok(lines);
+                    }
+
+                    // Process remaining hyphenated parts
+                    for part in rest {
+                        if lines.len() >= effective_max {
+                            return Ok(lines);
+                        }
+                        let part_bounds = self.measure_text(&part, style, font_atlas)?;
+                        if part_bounds.width() > available_width && hyphenate {
+                            // Recursively break this oversized part too
+                            let (sub_first, sub_rest) = self.hyphenate_word(
+                                &part,
+                                available_width,
+                                available_width,
+                                style,
+                                font_atlas,
+                            )?;
+                            lines.push(sub_first);
+                            for sub_part in sub_rest {
+                                if lines.len() >= effective_max {
+                                    return Ok(lines);
+                                }
+                                lines.push(sub_part);
+                            }
+                        } else {
+                            lines.push(part);
+                        }
+                    }
+
+                    // Start a new empty line for subsequent words
+                    current_line = String::new();
+                    current_width = 0.0;
+                } else {
+                    current_line.push_str(word);
+                    current_width += word_width;
+                }
+            } else {
+                // Word doesn't fit — start a new line
+                if !current_line.is_empty() {
+                    lines.push(current_line);
+                    if lines.len() >= effective_max {
+                        return Ok(lines);
+                    }
+                }
+
+                // If the word itself is too wide and we can hyphenate
+                if word_width > available_width && hyphenate {
+                    let (first_part, rest) = self.hyphenate_word(
+                        word,
+                        available_width,
+                        available_width,
+                        style,
+                        font_atlas,
+                    )?;
+
+                    lines.push(first_part);
+                    if lines.len() >= effective_max {
+                        return Ok(lines);
+                    }
+
+                    // The last remaining part becomes the current line
+                    if let Some((last, mid_parts)) = rest.split_last() {
+                        for part in mid_parts {
+                            if lines.len() >= effective_max {
+                                return Ok(lines);
+                            }
+                            lines.push(part.clone());
+                        }
+                        // Check if last part still exceeds width
+                        current_line = last.clone();
+                        let last_bounds = self.measure_text(last, style, font_atlas)?;
+                        current_width = last_bounds.width();
+                    } else {
+                        current_line = String::new();
+                        current_width = 0.0;
+                    }
+                } else {
+                    current_line = word.to_string();
+                    current_width = word_width;
+                }
+            }
+
+            // If we're on the last allowed line and there are more words,
+            // truncate with ellipsis
+            if lines.len() + 1 >= effective_max && word_idx < words.len() - 1 {
+                // Remaining words won't fit — add what we have and stop
+                if !current_line.is_empty() {
+                    lines.push(current_line);
+                }
+                return Ok(lines);
+            }
+        }
+
+        // Don't forget the last line
+        if !current_line.is_empty() {
+            lines.push(current_line);
+        }
+
+        Ok(lines)
+    }
+
+    /// Break a single word into parts using hyphenation.
+    ///
+    /// Returns the first part that fits the given width (with a trailing hyphen),
+    /// and a vector of remaining parts.
+    fn hyphenate_word(
+        &self,
+        word: &str,
+        first_line_width: f32,
+        subsequent_line_width: f32,
+        style: &TextStyle,
+        font_atlas: &impl GlyphSource,
+    ) -> GupResult<(String, Vec<String>)> {
+        let chars: Vec<char> = word.chars().collect();
+        if chars.len() <= 2 {
+            // Too short to hyphenate
+            return Ok((word.to_string(), vec![]));
+        }
+
+        // Measure hyphen
+        let hyphen_bounds = self.measure_text("-", style, font_atlas)?;
+        let hyphen_width = hyphen_bounds.width();
+
+        let target_width = first_line_width - hyphen_width;
+        if target_width <= 0.0 {
+            return Ok((word.to_string(), vec![]));
+        }
+
+        // Find the break point that fits within target_width
+        let mut best_break = 0;
+        for i in 1..chars.len() {
+            let prefix: String = chars[..i].iter().collect();
+            let prefix_bounds = self.measure_text(&prefix, style, font_atlas)?;
+            if prefix_bounds.width() <= target_width {
+                best_break = i;
+            } else {
+                break;
+            }
+        }
+
+        if best_break == 0 || best_break >= chars.len() {
+            // Can't break usefully
+            return Ok((word.to_string(), vec![]));
+        }
+
+        let first_part: String = chars[..best_break]
+            .iter()
+            .chain(std::iter::once(&'-'))
+            .collect();
+        let remainder: String = chars[best_break..].iter().collect();
+
+        // If the remainder is still too wide, recursively break it
+        let remainder_bounds = self.measure_text(&remainder, style, font_atlas)?;
+        if remainder_bounds.width() > subsequent_line_width && remainder.len() > 2 {
+            let (next_part, more_parts) = self.hyphenate_word(
+                &remainder,
+                subsequent_line_width,
+                subsequent_line_width,
+                style,
+                font_atlas,
+            )?;
+            let mut parts = vec![next_part];
+            parts.extend(more_parts);
+            Ok((first_part, parts))
+        } else {
+            Ok((first_part, vec![remainder]))
+        }
+    }
+
+    /// Apply text wrapping strategy to fit text within viewport bounds.
+    #[allow(clippy::too_many_arguments)]
+    fn apply_text_wrapping(
+        &mut self,
+        text: &str,
+        position: Vec2,
+        style: &TextStyle,
+        font_atlas: &FontAtlas,
+        _constraints: Option<&LayoutConstraints>,
+        viewport_bounds: &ViewportBounds,
+        max_lines: usize,
+        line_spacing_factor: f32,
+        hyphenate: bool,
+    ) -> GupResult<Option<LayoutResult>> {
+        let effective = viewport_bounds.effective_bounds();
+        let anchor_offset = style.anchor.offset();
+
+        // Estimate anchor-adjusted left edge
+        let text_bounds = self.measure_text(text, style, font_atlas)?;
+        let text_left = position.x - text_bounds.width() * anchor_offset.x;
+        let available_width = (effective.right - text_left).max(0.0);
+
+        if available_width <= 0.0 {
+            return Ok(None);
+        }
+
+        // Check if wrapping is actually needed
+        if text_bounds.width() <= available_width {
+            return Ok(None); // Fits on one line, no wrapping needed
+        }
+
+        // Break text into lines
+        let lines = self.break_into_lines(
+            text,
+            available_width,
+            max_lines,
+            hyphenate,
+            style,
+            font_atlas,
+        )?;
+
+        if lines.is_empty() {
+            return Ok(None);
+        }
+
+        // Position glyphs for each line
+        let glyphs = self.position_multi_line_glyphs(
+            &lines,
+            position,
+            style,
+            font_atlas,
+            line_spacing_factor,
+        )?;
+
+        let bounds = self.calculate_glyph_bounds(&glyphs);
+
+        // Check if the wrapped result fits within viewport
+        let clip = viewport_bounds.detect_clipping(&bounds);
+        if clip.is_completely_clipped() {
+            return Ok(None);
+        }
+
+        Ok(Some(LayoutResult {
+            glyphs,
+            bounds,
+            clipped: true, // Mark as clipped because text was wrapped
+        }))
+    }
+
+    /// Generate positioned glyphs for multiple lines of text.
+    ///
+    /// Each line is offset vertically by line_height * line_spacing_factor.
+    fn position_multi_line_glyphs(
+        &self,
+        lines: &[String],
+        position: Vec2,
+        style: &TextStyle,
+        font_atlas: &impl GlyphSource,
+        line_spacing_factor: f32,
+    ) -> GupResult<GlyphBatch> {
+        let metrics = font_atlas.metrics();
+        let scale = style.font_size / metrics.size;
+        let effective_line_spacing = style.line_spacing * line_spacing_factor;
+        let line_height = metrics.line_height * scale * effective_line_spacing;
+
+        let mut all_glyphs = Vec::new();
+
+        // Calculate total height for anchor adjustment
+        let total_height = line_height * lines.len() as f32;
+        let anchor_offset = style.anchor.offset();
+        let y_anchor_offset = total_height * anchor_offset.y;
+
+        for (line_idx, line) in lines.iter().enumerate() {
+            let line_y = position.y - y_anchor_offset + line_idx as f32 * line_height;
+            let line_position = Vec2 {
+                x: position.x,
+                y: line_y,
+            };
+
+            // Position glyphs for this line (re-use single-line logic)
+            // Apply only horizontal anchor offset, vertical was already handled
+            let line_bounds = self.measure_text(line, style, font_atlas)?;
+            let x_offset = line_bounds.width() * anchor_offset.x;
+            let adjusted_position = Vec2 {
+                x: line_position.x - x_offset,
+                y: line_position.y,
+            };
+
+            let mut cursor_x = adjusted_position.x;
+            let baseline_y = adjusted_position.y + metrics.ascent * scale;
+
+            for ch in line.chars() {
+                if let Some(glyph_info) = font_atlas.get_glyph(ch) {
+                    if glyph_info.size.x > 0.0 && glyph_info.size.y > 0.0 {
+                        let glyph_position = Vec2 {
+                            x: cursor_x + glyph_info.bearing.x * scale,
+                            y: baseline_y - (glyph_info.size.y + glyph_info.bearing.y) * scale,
+                        };
+
+                        // Apply rotation if needed
+                        let final_position = if style.is_rotated() {
+                            let relative_pos = Vec2 {
+                                x: glyph_position.x - position.x,
+                                y: glyph_position.y - position.y,
+                            };
+                            let rotated_relative = style.rotate_point(relative_pos);
+                            Vec2 {
+                                x: position.x + rotated_relative.x,
+                                y: position.y + rotated_relative.y,
+                            }
+                        } else {
+                            glyph_position
+                        };
+
+                        let scaled_glyph = GlyphInfo {
+                            character: glyph_info.character,
+                            atlas_pos: glyph_info.atlas_pos,
+                            size: Vec2 {
+                                x: glyph_info.size.x * scale,
+                                y: glyph_info.size.y * scale,
+                            },
+                            bearing: Vec2 {
+                                x: glyph_info.bearing.x * scale,
+                                y: glyph_info.bearing.y * scale,
+                            },
+                            advance: glyph_info.advance * scale,
+                            sdf_scale: glyph_info.sdf_scale,
+                        };
+
+                        all_glyphs.push(PositionedGlyph {
+                            glyph: scaled_glyph,
+                            position: final_position,
+                            color: style.color,
+                        });
+                    }
+
+                    cursor_x += glyph_info.advance * scale * style.letter_spacing;
+                } else {
+                    cursor_x += metrics.size * 0.5 * scale * style.letter_spacing;
+                }
+            }
+        }
+
+        Ok(all_glyphs)
+    }
+
     /// Measure text without rendering to get bounds.
     pub fn measure_text(
         &self,
         text: &str,
         style: &TextStyle,
-        font_atlas: &FontAtlas,
+        font_atlas: &impl GlyphSource,
     ) -> GupResult<TextBounds> {
         let metrics = font_atlas.metrics();
         let scale = style.font_size / metrics.size;
@@ -820,7 +1314,7 @@ impl TextLayoutEngine {
         text: &str,
         position: Vec2,
         style: &TextStyle,
-        font_atlas: &FontAtlas,
+        font_atlas: &impl GlyphSource,
     ) -> GupResult<GlyphBatch> {
         let metrics = font_atlas.metrics();
         let scale = style.font_size / metrics.size;
@@ -1407,6 +1901,16 @@ mod tests {
         }
     }
 
+    impl GlyphSource for MockFontAtlas {
+        fn metrics(&self) -> &FontMetrics {
+            &self.font_metrics
+        }
+
+        fn get_glyph(&self, character: char) -> Option<&GlyphInfo> {
+            self.glyph_info.get(&character)
+        }
+    }
+
     // === Viewport Bounds & Clipping Detection Tests ===
 
     #[test]
@@ -1633,6 +2137,332 @@ mod tests {
         assert!(
             duration.as_millis() < threshold_ms,
             "Clipping detection too slow: {duration:?}"
+        );
+    }
+
+    // === Text Wrapping Tests ===
+
+    #[test]
+    fn test_break_into_lines_basic() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default();
+
+        // Each char is ~9px advance, so "Hello World" ≈ 99px
+        // With max width of 60px, should split into two lines
+        let lines = engine
+            .break_into_lines("Hello World", 60.0, 0, false, &style, &atlas)
+            .unwrap();
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0], "Hello");
+        assert_eq!(lines[1], "World");
+    }
+
+    #[test]
+    fn test_break_into_lines_single_line_fits() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default();
+
+        // "Hi" ≈ 18px, should fit in 200px
+        let lines = engine
+            .break_into_lines("Hi", 200.0, 0, false, &style, &atlas)
+            .unwrap();
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0], "Hi");
+    }
+
+    #[test]
+    fn test_break_into_lines_max_lines_limit() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default();
+
+        // "one two three four" should wrap but max_lines=2
+        let lines = engine
+            .break_into_lines("one two three four", 40.0, 2, false, &style, &atlas)
+            .unwrap();
+        assert!(
+            lines.len() <= 2,
+            "Expected at most 2 lines, got {}",
+            lines.len()
+        );
+    }
+
+    #[test]
+    fn test_break_into_lines_empty_text() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default();
+
+        let lines = engine
+            .break_into_lines("", 100.0, 0, false, &style, &atlas)
+            .unwrap();
+        assert!(lines.is_empty());
+    }
+
+    #[test]
+    fn test_break_into_lines_zero_width() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default();
+
+        let lines = engine
+            .break_into_lines("Hello", 0.0, 0, false, &style, &atlas)
+            .unwrap();
+        assert!(lines.is_empty());
+    }
+
+    #[test]
+    fn test_break_into_lines_with_hyphenation() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default();
+
+        // "Supercalifragilistic" ≈ 180px, max width 60px
+        // With hyphenation, should break the long word
+        let lines = engine
+            .break_into_lines("Supercalifragilistic", 60.0, 0, true, &style, &atlas)
+            .unwrap();
+        assert!(
+            lines.len() > 1,
+            "Long word should be broken with hyphenation, got {} line(s)",
+            lines.len()
+        );
+        // First line should end with a hyphen
+        assert!(
+            lines[0].ends_with('-'),
+            "First line should end with hyphen: '{}'",
+            lines[0]
+        );
+    }
+
+    #[test]
+    fn test_break_into_lines_without_hyphenation_long_word() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default();
+
+        // Without hyphenation, a single long word stays on one line
+        let lines = engine
+            .break_into_lines("Supercalifragilistic", 60.0, 0, false, &style, &atlas)
+            .unwrap();
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0], "Supercalifragilistic");
+    }
+
+    #[test]
+    fn test_break_into_lines_multiple_words() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default();
+
+        // Each word ~36-45px, width 50px
+        let lines = engine
+            .break_into_lines("The quick brown fox jumps", 50.0, 0, false, &style, &atlas)
+            .unwrap();
+        assert!(
+            lines.len() >= 3,
+            "Expected multiple lines, got {}",
+            lines.len()
+        );
+    }
+
+    #[test]
+    fn test_hyphenate_word_basic() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default();
+
+        let (first, rest) = engine
+            .hyphenate_word("Testing", 40.0, 100.0, &style, &atlas)
+            .unwrap();
+        assert!(first.ends_with('-'), "Should end with hyphen: '{}'", first);
+        assert!(!rest.is_empty(), "Should have remainder");
+    }
+
+    #[test]
+    fn test_hyphenate_word_too_short() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default();
+
+        // Two-character words shouldn't be hyphenated
+        let (first, rest) = engine
+            .hyphenate_word("Hi", 40.0, 100.0, &style, &atlas)
+            .unwrap();
+        assert_eq!(first, "Hi");
+        assert!(rest.is_empty());
+    }
+
+    #[test]
+    fn test_clipping_strategy_text_wrapping_variant() {
+        // Verify the new variant can be constructed
+        let strategy = ClippingStrategy::TextWrapping {
+            max_lines: 3,
+            line_spacing_factor: 1.2,
+            hyphenate: true,
+        };
+        match strategy {
+            ClippingStrategy::TextWrapping {
+                max_lines,
+                line_spacing_factor,
+                hyphenate,
+            } => {
+                assert_eq!(max_lines, 3);
+                assert!((line_spacing_factor - 1.2).abs() < f32::EPSILON);
+                assert!(hyphenate);
+            }
+            _ => panic!("Expected TextWrapping variant"),
+        }
+    }
+
+    #[test]
+    fn test_text_wrapping_performance() {
+        // Verify wrapping 100 labels takes <5ms
+        use std::time::Instant;
+
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default();
+
+        let labels: Vec<String> = (0..100)
+            .map(|i| format!("Label number {} with extra text for wrapping", i))
+            .collect();
+
+        let start = Instant::now();
+        for label in &labels {
+            let _lines = engine
+                .break_into_lines(label, 80.0, 3, false, &style, &atlas)
+                .unwrap();
+        }
+        let duration = start.elapsed();
+
+        // Performance: wrapping 100 labels should be well under 5ms
+        #[cfg(debug_assertions)]
+        let threshold_ms: u128 = 50; // Debug builds are slower
+        #[cfg(not(debug_assertions))]
+        let threshold_ms: u128 = 5;
+
+        println!(
+            "Text wrapping for 100 labels took: {:?} (threshold: {}ms)",
+            duration, threshold_ms
+        );
+        assert!(
+            duration.as_millis() < threshold_ms,
+            "Text wrapping too slow: {duration:?} (threshold: {threshold_ms}ms)"
+        );
+    }
+
+    #[test]
+    fn test_multi_line_glyph_positioning() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default();
+        let position = Vec2 { x: 10.0, y: 10.0 };
+
+        let lines = vec!["Hello".to_string(), "World".to_string()];
+
+        let glyphs = engine
+            .position_multi_line_glyphs(&lines, position, &style, &atlas, 1.0)
+            .unwrap();
+
+        // Should have glyphs from both lines (5 chars each, excluding spaces)
+        assert_eq!(glyphs.len(), 10);
+
+        // Check that second line glyphs are positioned below first line glyphs
+        // Find glyphs for 'H' (first line) and 'W' (second line)
+        let h_glyph = glyphs.iter().find(|g| g.glyph.character == 'H').unwrap();
+        let w_glyph = glyphs.iter().find(|g| g.glyph.character == 'W').unwrap();
+        assert!(
+            w_glyph.position.y > h_glyph.position.y,
+            "Second line should be below first: H.y={} W.y={}",
+            h_glyph.position.y,
+            w_glyph.position.y
+        );
+    }
+
+    #[test]
+    fn test_multi_line_line_spacing_factor() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default();
+        let position = Vec2 { x: 10.0, y: 10.0 };
+
+        let lines = vec!["A".to_string(), "B".to_string()];
+
+        // Normal spacing
+        let glyphs_normal = engine
+            .position_multi_line_glyphs(&lines, position, &style, &atlas, 1.0)
+            .unwrap();
+
+        // Double spacing
+        let glyphs_wide = engine
+            .position_multi_line_glyphs(&lines, position, &style, &atlas, 2.0)
+            .unwrap();
+
+        let a_normal = glyphs_normal
+            .iter()
+            .find(|g| g.glyph.character == 'A')
+            .unwrap();
+        let b_normal = glyphs_normal
+            .iter()
+            .find(|g| g.glyph.character == 'B')
+            .unwrap();
+        let a_wide = glyphs_wide
+            .iter()
+            .find(|g| g.glyph.character == 'A')
+            .unwrap();
+        let b_wide = glyphs_wide
+            .iter()
+            .find(|g| g.glyph.character == 'B')
+            .unwrap();
+
+        let gap_normal = b_normal.position.y - a_normal.position.y;
+        let gap_wide = b_wide.position.y - a_wide.position.y;
+
+        assert!(
+            (gap_wide - gap_normal * 2.0).abs() < 1.0,
+            "Double spacing should double the gap: normal={}, wide={}",
+            gap_normal,
+            gap_wide
+        );
+    }
+
+    #[test]
+    fn test_multi_line_bounds_calculation() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default();
+        let position = Vec2 { x: 10.0, y: 10.0 };
+
+        let lines = vec!["Hello".to_string(), "World!".to_string()];
+        let glyphs = engine
+            .position_multi_line_glyphs(&lines, position, &style, &atlas, 1.0)
+            .unwrap();
+
+        let bounds = engine.calculate_glyph_bounds(&glyphs);
+
+        // Bounds should span both lines
+        assert!(
+            bounds.height() > 0.0,
+            "Multi-line bounds should have positive height"
+        );
+        assert!(
+            bounds.width() > 0.0,
+            "Multi-line bounds should have positive width"
+        );
+
+        // Height should be roughly 2 lines worth
+        let single_line_glyphs = engine
+            .position_multi_line_glyphs(&["Hello".to_string()], position, &style, &atlas, 1.0)
+            .unwrap();
+        let single_bounds = engine.calculate_glyph_bounds(&single_line_glyphs);
+        assert!(
+            bounds.height() > single_bounds.height(),
+            "Multi-line should be taller than single line: multi={} single={}",
+            bounds.height(),
+            single_bounds.height()
         );
     }
 }
