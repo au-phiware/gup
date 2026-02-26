@@ -46,6 +46,7 @@ pub mod font;
 pub mod layout;
 pub mod msdf;
 pub mod renderer;
+pub mod sdf_tuning;
 pub mod style;
 
 pub use atlas::*;
@@ -53,6 +54,7 @@ pub use font::*;
 pub use layout::*;
 pub use msdf::*;
 pub use renderer::*;
+pub use sdf_tuning::*;
 pub use style::*;
 
 use crate::shader_function::{Vec2, Vec4};
