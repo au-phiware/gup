@@ -255,9 +255,10 @@ impl MultiFontApp {
                             font_manager,
                             screen_width,
                             screen_height,
-                        ) {
-                            eprintln!("⚠️ Failed to render multi-font text: {e}");
-                        }
+                        )
+                    {
+                        eprintln!("⚠️ Failed to render multi-font text: {e}");
+                    }
 
                     drop(render_pass);
                     frame.finish()?;
