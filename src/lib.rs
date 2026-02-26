@@ -74,6 +74,7 @@ pub mod axis_performance;
 pub mod axis_system;
 pub mod buffer;
 pub mod chart_builder;
+pub mod color_descriptor;
 pub mod context;
 pub mod debug;
 pub mod error;
