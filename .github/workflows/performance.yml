@@ -178,6 +178,72 @@ jobs:
             }
 
   # Pattern-specific benchmarks for PRs (fast feedback)
+
+  # Cross-platform axis performance validation (GUP-206)
+  axis_performance:
+    name: Axis Performance Validation (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: "Linux"
+            runner: ubuntu-latest
+          # Uncomment to enable cross-platform axis performance validation:
+          # - platform: "macOS"
+          #   runner: macos-latest
+          # - platform: "Windows"
+          #   runner: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        if: runner.os != 'Windows'
+        uses: cachix/install-nix-action@v24
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Run axis performance tests
+        if: runner.os != 'Windows'
+        run: |
+          nix develop --command bash -c "cargo test --test cross_platform_axis_performance_tests -- --test-threads=1 --nocapture 2>&1 | tee axis_performance_output.txt"
+
+      - name: Run axis performance tests (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cargo test --test cross_platform_axis_performance_tests -- --test-threads=1 --nocapture 2>&1 | tee axis_performance_output.txt
+
+      - name: Run axis criterion benchmarks
+        if: runner.os != 'Windows'
+        continue-on-error: true
+        run: |
+          nix develop --command bash -c "cargo bench --bench axis_performance_benchmarks -- --save-baseline ${{ matrix.platform }}"
+
+      - name: Extract report
+        if: always()
+        run: |
+          # Extract the Markdown report from test output
+          if [ -f axis_performance_output.txt ]; then
+            sed -n '/## Cross-Platform Axis Performance Report/,/^$/p' axis_performance_output.txt > axis_report.md || true
+          fi
+
+      - name: Upload axis performance report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: axis-performance-${{ matrix.platform }}-${{ github.sha }}
+          path: |
+            axis_performance_output.txt
+            axis_report.md
+            target/criterion/
+          retention-days: 30
+
+
   pattern_benchmarks_pr:
     name: Pattern Performance Benchmarks (PR)
     runs-on: ubuntu-latest
