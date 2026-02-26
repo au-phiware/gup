@@ -1,6 +1,6 @@
 # GUP-178: MarkInstanceBuilder for Line and BoxPlot
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Story Overview
 

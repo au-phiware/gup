@@ -175,7 +175,7 @@ reorganisation._
 | [GUP-170](GUP-170_BoxPlot_Notch_Rendering.md)                | BoxPlot Notch Rendering                  | 📋 Planned  | Low      | 2      |
 | [GUP-171](GUP-171_BoxPlot_Pixel_Space_Strokes.md)            | BoxPlot Pixel-Space Stroke Widths        | 📋 Planned  | Low      | 3      |
 | [GUP-177](GUP-177_GPU_Shader_Function_Attribute_Binding.md)  | GPU Shader Function Attribute Binding    | ✅ Complete | Medium   | 8      |
-| [GUP-178](GUP-178_MarkInstanceBuilder_Line_BoxPlot.md)       | MarkInstanceBuilder for Line and BoxPlot | 📋 Planned  | Low      | 3      |
+| [GUP-178](GUP-178_MarkInstanceBuilder_Line_BoxPlot.md)       | MarkInstanceBuilder for Line and BoxPlot | 🚧 In Progress | Low      | 3      |
 | [GUP-179](GUP-179_Shader_Function_Uniform_Live_Update.md)    | Shader Function Uniform Live Update      | ✅ Complete | Medium   | 5      |
 | [GUP-180](GUP-180_FunctionChain_Binding_Support.md)          | FunctionChain Binding Support            | ✅ Complete | Low      | 3      |
 | [GUP-218](GUP-218_Duplicate_Struct_Definition_Prevention.md) | Duplicate Struct Definition Prevention   | ✅ Complete | Low      | 2      |
