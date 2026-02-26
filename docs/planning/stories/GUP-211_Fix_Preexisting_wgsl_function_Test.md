@@ -66,3 +66,44 @@ explaining the rationale.
   1254-1257)
 
 **Test counts:** 451 gup-macros tests pass, full suite passes with 0 failures.
+
+## Retrospective
+
+**Completed**: 2025-07-18
+
+### Key Technical Learnings
+
+#### Proc Macro Type Checking Limitations
+
+- **Challenge**: Determining whether to fix the function or the test — the
+  `is_uniform_compatible_type` function treats all unknown custom types as
+  uniform-compatible, but the test expected the opposite.
+- **Solution**: The function's behavior is correct. Proc macros operate at
+  syntax expansion time and cannot verify trait implementations (like Pod +
+  Zeroable). The correct approach is to assume compatibility and let the Rust
+  compiler catch actual type errors at the use site.
+- **Pattern**: When a proc macro function and its test disagree, check the call
+  site behavior — the function is used at line 233 to gate uniform parameter
+  acceptance. Rejecting custom types would prevent users from passing their own
+  `#[derive(Pod, Zeroable)]` structs as uniform parameters, which is a key use
+  case.
+
+### Architectural Decisions
+
+#### Optimistic Custom Type Handling in Proc Macros
+
+- **Decision**: Custom types default to `true` for uniform compatibility
+- **Reasoning**: Proc macros cannot resolve trait implementations; the Rust
+  compiler provides the actual type safety guarantee at compile time
+- **Trade-off**: No early error message from the macro for non-Pod types, but
+  the compiler error at the use site is still clear
+- **Future**: This pattern should be followed for any similar proc macro type
+  checks — prefer permissive behavior and rely on the compiler
+
+### Development Workflow Insights
+
+- The story was originally scoped at "300/300" tests but the actual count is 451
+  — the test suite has grown since the story was written. Always verify actual
+  counts rather than relying on story estimates.
+- This was a 1-point story and correctly so — a 2-line change (assertion flip
+  - comment update) with clear root cause analysis.
