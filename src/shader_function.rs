@@ -1248,7 +1248,7 @@ where
 /// A "whole word" match requires that the character immediately before and after
 /// the match is **not** an ASCII alphanumeric character or underscore.  This
 /// prevents renaming `ChainUniforms_1` when the target word is `ChainUniforms`.
-fn replace_wgsl_identifier(text: &str, word: &str, replacement: &str) -> String {
+pub(crate) fn replace_wgsl_identifier(text: &str, word: &str, replacement: &str) -> String {
     let bytes = text.as_bytes();
     let mut result = String::with_capacity(text.len() + 64);
     let mut pos = 0;
@@ -1282,7 +1282,7 @@ fn is_ident_char(b: u8) -> bool {
 /// boundaries, extracts function names, and emits each function only once.
 ///
 /// Non-function content (empty lines, comments) is preserved.
-fn deduplicate_wgsl_functions(wgsl: &str) -> String {
+pub(crate) fn deduplicate_wgsl_functions(wgsl: &str) -> String {
     let mut result = String::new();
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut pos = 0;

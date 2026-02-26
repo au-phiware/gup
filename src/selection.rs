@@ -24,7 +24,10 @@ use crate::buffer::{BufferPool, BufferType};
 use crate::interaction::{InteractionElement, InteractionEvent, Renderable};
 use crate::mark::{MarkInfo, MarkInfoImpl};
 use crate::pipeline_cache::PipelineCache;
-use crate::shader_function::{ComposableShaderFunction, ShaderType, ShaderUniform};
+use crate::shader_function::{
+    ComposableShaderFunction, ShaderType, ShaderUniform, deduplicate_wgsl_functions,
+    replace_wgsl_identifier,
+};
 use crate::{GupResult, RenderContext};
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -1249,9 +1252,10 @@ impl<T, M: Mark> Selection<T, M> {
     /// must call `prepare_render` again to re-create the render state.
     pub fn release_to_pool(&mut self, pool: &mut BufferPool) {
         if let Some(mut state) = self.render_state.take()
-            && let Some((bt, sc)) = state.pool_meta.take() {
-                pool.deallocate_raw(state.instance_buffer, bt, sc);
-            }
+            && let Some((bt, sc)) = state.pool_meta.take()
+        {
+            pool.deallocate_raw(state.instance_buffer, bt, sc);
+        }
     }
 
     /// Set the viewport dimensions for pixel-space SDF calculations.
@@ -2022,6 +2026,14 @@ fn generate_shader_bound_vertex_wgsl(
         }
     };
 
+    // --- Phase 0: resolve naming conflicts between bindings ----------------
+    //
+    // When multiple bindings produce the same outermost function/struct names
+    // (e.g. two different FunctionChains both named "composed_chain" with
+    // uniform type "ChainUniforms" but different field layouts), rename the
+    // duplicates so they coexist in the same shader.
+    let resolved = resolve_binding_conflicts(bindings);
+
     // --- Part 1: everything before @vertex (struct defs, storage buffer) ---
     result.push_str(before_vertex);
 
@@ -2032,10 +2044,11 @@ fn generate_shader_bound_vertex_wgsl(
     // A single `uniform_struct_def` may contain multiple struct definitions
     // (e.g., ChainUniforms includes nested component struct defs).  We split
     // on `struct ` boundaries and deduplicate by struct name to avoid WGSL
-    // redefinition errors.
+    // redefinition errors.  Content-aware: same name + same body → skip;
+    // same name + different body was already resolved above.
     let mut emitted_structs = std::collections::HashSet::new();
-    for (_attr_name, info) in bindings.iter() {
-        let struct_def = &info.uniform_struct_def;
+    for rb in resolved.iter() {
+        let struct_def = &rb.uniform_struct_def;
         if struct_def.is_empty() || struct_def == "f32" || struct_def == "i32" {
             continue;
         }
@@ -2049,25 +2062,28 @@ fn generate_shader_bound_vertex_wgsl(
         }
     }
 
-    for (i, (_attr_name, info)) in bindings.iter().enumerate() {
+    for (i, rb) in resolved.iter().enumerate() {
         // Uniform binding declaration.
         result.push_str(&format!(
             "@group(0) @binding({}) var<uniform> _gup_uniforms_{}: {};\n",
             i + 1,
             i,
-            info.uniform_type_name,
+            rb.uniform_type_name,
         ));
     }
     result.push('\n');
 
-    // Shader function code (deduplicated by function name).
-    let mut emitted_fns = std::collections::HashSet::new();
-    for (_attr_name, info) in bindings {
-        if emitted_fns.insert(&info.function_name) {
-            result.push_str(info.wgsl_code.trim());
-            result.push_str("\n\n");
-        }
+    // Shader function code: concatenate all resolved code blocks and
+    // deduplicate individual function definitions by name.  This handles
+    // shared inner functions (e.g. two chains that both contain
+    // `fn linear_scale(...)`) while preserving unique renamed entry points.
+    let mut all_fn_code = String::new();
+    for rb in &resolved {
+        all_fn_code.push_str(rb.wgsl_code.trim());
+        all_fn_code.push_str("\n\n");
     }
+    result.push_str(&deduplicate_wgsl_functions(&all_fn_code));
+    result.push_str("\n\n");
 
     // --- Part 3: the @vertex function with transformations ---------------
     // Find the line with `let instance = instances[` and insert
@@ -2084,13 +2100,16 @@ fn generate_shader_bound_vertex_wgsl(
         result.push('\n');
 
         // Insert shader function application statements.
-        for (i, (attr_name, info)) in bindings.iter().enumerate() {
-            let input_expr =
-                narrow_field_expr(attr_name, info.input_wgsl_type, info.output_wgsl_type);
+        for (i, rb) in resolved.iter().enumerate() {
+            let input_expr = narrow_field_expr(
+                rb.attr_name,
+                rb.info.input_wgsl_type,
+                rb.info.output_wgsl_type,
+            );
             result.push_str(&format!(
                 "    let _gup_{attr} = {fn_name}({input_expr}, _gup_uniforms_{i});\n",
-                attr = attr_name,
-                fn_name = info.function_name,
+                attr = rb.attr_name,
+                fn_name = rb.function_name,
                 i = i,
             ));
         }
@@ -2099,9 +2118,9 @@ fn generate_shader_bound_vertex_wgsl(
         // `_gup_<attr>` for each shader-bound attribute.
         let remaining = &at_vertex[insert_pos..];
         let mut modified_remaining = remaining.to_string();
-        for (attr_name, _info) in bindings {
-            let search = format!("instance.{attr_name}");
-            let replace = format!("_gup_{attr_name}");
+        for rb in &resolved {
+            let search = format!("instance.{}", rb.attr_name);
+            let replace = format!("_gup_{}", rb.attr_name);
             modified_remaining = modified_remaining.replace(&search, &replace);
         }
         result.push_str(&modified_remaining);
@@ -2111,6 +2130,99 @@ fn generate_shader_bound_vertex_wgsl(
     }
 
     result
+}
+
+/// Binding metadata after resolving naming conflicts between multiple bindings.
+///
+/// When two bindings produce the same outermost function name (e.g. both are
+/// `composed_chain`) but with different implementations, the duplicate is
+/// renamed to avoid WGSL definition conflicts.
+struct ResolvedBinding<'a> {
+    attr_name: &'a str,
+    function_name: String,
+    wgsl_code: String,
+    uniform_struct_def: String,
+    uniform_type_name: String,
+    info: &'a ShaderFnInfo,
+}
+
+/// Detects and resolves naming conflicts among shader bindings.
+///
+/// If multiple bindings share the same `function_name` but have different WGSL
+/// code or struct definitions (e.g. a 2-function chain and a 3-function chain
+/// both named `composed_chain`), the duplicates are renamed with a `_b<index>`
+/// suffix.  This uses whole-word replacement so that inner suffixed names like
+/// `ChainUniforms_1` or `composed_chain_1` are not affected.
+fn resolve_binding_conflicts<'a>(
+    bindings: &[(&'a str, &'a ShaderFnInfo)],
+) -> Vec<ResolvedBinding<'a>> {
+    let mut resolved: Vec<ResolvedBinding<'a>> = Vec::with_capacity(bindings.len());
+    // Map from function_name → index of first occurrence in `resolved`.
+    let mut first_occurrence: HashMap<&str, usize> = HashMap::new();
+
+    for (i, (attr_name, info)) in bindings.iter().enumerate() {
+        match first_occurrence.get(info.function_name.as_str()) {
+            None => {
+                // First occurrence of this function name — use as-is.
+                first_occurrence.insert(&info.function_name, i);
+                resolved.push(ResolvedBinding {
+                    attr_name,
+                    function_name: info.function_name.clone(),
+                    wgsl_code: info.wgsl_code.clone(),
+                    uniform_struct_def: info.uniform_struct_def.clone(),
+                    uniform_type_name: info.uniform_type_name.clone(),
+                    info,
+                });
+            }
+            Some(&first_idx) => {
+                let first = &resolved[first_idx];
+                if info.wgsl_code == first.wgsl_code
+                    && info.uniform_struct_def == first.uniform_struct_def
+                {
+                    // Identical code and struct layout — no rename needed.
+                    resolved.push(ResolvedBinding {
+                        attr_name,
+                        function_name: info.function_name.clone(),
+                        wgsl_code: info.wgsl_code.clone(),
+                        uniform_struct_def: info.uniform_struct_def.clone(),
+                        uniform_type_name: info.uniform_type_name.clone(),
+                        info,
+                    });
+                } else {
+                    // Same function name but different code/structs — rename.
+                    let suffix = format!("_b{i}");
+                    let new_fn_name = format!("{}{suffix}", info.function_name);
+
+                    let mut code = info.wgsl_code.clone();
+                    let mut struct_def = info.uniform_struct_def.clone();
+                    let mut type_name = info.uniform_type_name.clone();
+
+                    // Rename the outermost function.
+                    code = replace_wgsl_identifier(&code, &info.function_name, &new_fn_name);
+
+                    // Rename the outermost uniform struct type if applicable.
+                    if info.uniform_type_name == "ChainUniforms" {
+                        let new_type = format!("ChainUniforms{suffix}");
+                        code = replace_wgsl_identifier(&code, "ChainUniforms", &new_type);
+                        struct_def =
+                            replace_wgsl_identifier(&struct_def, "ChainUniforms", &new_type);
+                        type_name = new_type;
+                    }
+
+                    resolved.push(ResolvedBinding {
+                        attr_name,
+                        function_name: new_fn_name,
+                        wgsl_code: code,
+                        uniform_struct_def: struct_def,
+                        uniform_type_name: type_name,
+                        info,
+                    });
+                }
+            }
+        }
+    }
+
+    resolved
 }
 
 /// Extracts the struct name from a WGSL struct definition like
@@ -5765,6 +5877,265 @@ fn vs_main() -> VertexOutput {
                 selection
                     .render(&mut pass)
                     .expect("render with deep FunctionChain binding");
+            }
+            frame.finish().expect("finish frame");
+        });
+    }
+
+    // --- Mixed shallow+deep chain deduplication tests (GUP-220) ---
+
+    #[test]
+    fn mixed_shallow_deep_chain_produces_unique_structs() {
+        use crate::shader_function::{ColorMap, ComposableFunction, LinearScale};
+
+        // Shallow chain (2 functions): f32 → f32
+        let shallow_chain =
+            LinearScale::new(0.0, 100.0, 0.0, 1.0).compose(LinearScale::new(0.0, 1.0, 0.0, 10.0));
+        let info_shallow = shader_fn_info_from(&shallow_chain);
+
+        // Deep chain (3 functions): f32 → vec4<f32>
+        let deep_chain = LinearScale::new(0.0, 100.0, 0.0, 1.0)
+            .compose(LinearScale::new(0.0, 1.0, -1.0, 1.0))
+            .compose(ColorMap::new(
+                Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 1.0,
+                    w: 1.0,
+                },
+                Vec4 {
+                    x: 1.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0,
+                },
+            ));
+        let info_deep = shader_fn_info_from(&deep_chain);
+
+        // Both have the same outermost type name but different layouts.
+        assert_eq!(info_shallow.uniform_type_name, "ChainUniforms");
+        assert_eq!(info_deep.uniform_type_name, "ChainUniforms");
+        assert_ne!(
+            info_shallow.uniform_struct_def, info_deep.uniform_struct_def,
+            "Struct defs should differ between shallow and deep chains"
+        );
+
+        let base_wgsl = r#"
+struct CircleInstance {
+    center: vec2<f32>,
+    radius: f32,
+    fill_color: vec4<f32>,
+}
+
+@group(0) @binding(0) var<storage, read> instances: array<CircleInstance>;
+
+@vertex
+fn vs_main() -> VertexOutput {
+    let instance = instances[input.instance_index];
+    let r = instance.radius;
+    let c = instance.fill_color;
+    return r;
+}
+"#;
+
+        let bindings: Vec<(&str, &ShaderFnInfo)> =
+            vec![("radius", &info_shallow), ("fill_color", &info_deep)];
+        let result = generate_shader_bound_vertex_wgsl(base_wgsl, &bindings);
+
+        // The shallow chain keeps the original ChainUniforms name.
+        assert!(
+            result.contains("struct ChainUniforms {"),
+            "Missing original ChainUniforms:\n{result}"
+        );
+
+        // The deep chain's outermost struct should be renamed to avoid
+        // conflict with the shallow chain's ChainUniforms.
+        assert!(
+            result.contains("ChainUniforms_b1"),
+            "Deep chain should have renamed ChainUniforms:\n{result}"
+        );
+
+        // Each binding should reference the correct uniform type.
+        assert!(
+            result.contains("_gup_uniforms_0: ChainUniforms"),
+            "Shallow chain binding should use ChainUniforms:\n{result}"
+        );
+        assert!(
+            result.contains("_gup_uniforms_1: ChainUniforms_b1"),
+            "Deep chain binding should use renamed type:\n{result}"
+        );
+
+        // Both entry-point functions should be present.
+        assert!(
+            result.contains("fn composed_chain("),
+            "Missing shallow composed_chain fn:\n{result}"
+        );
+        assert!(
+            result.contains("fn composed_chain_b1("),
+            "Missing renamed deep composed_chain fn:\n{result}"
+        );
+
+        // Transformation calls should use the correct function names.
+        assert!(
+            result.contains("_gup_radius = composed_chain("),
+            "Shallow binding should call composed_chain:\n{result}"
+        );
+        assert!(
+            result.contains("_gup_fill_color = composed_chain_b1("),
+            "Deep binding should call renamed function:\n{result}"
+        );
+    }
+
+    #[test]
+    fn identical_chains_still_deduplicated() {
+        use crate::shader_function::{ComposableFunction, LinearScale};
+
+        // Two identical chains should NOT be renamed (regression for GUP-218).
+        let chain1 =
+            LinearScale::new(0.0, 100.0, 0.0, 1.0).compose(LinearScale::new(0.0, 1.0, 0.0, 10.0));
+        let chain2 =
+            LinearScale::new(0.0, 50.0, 0.0, 1.0).compose(LinearScale::new(0.0, 1.0, 0.0, 5.0));
+
+        let info1 = shader_fn_info_from(&chain1);
+        let info2 = shader_fn_info_from(&chain2);
+
+        // Both have the same code and struct layout (same types, different
+        // uniform values).
+        assert_eq!(info1.wgsl_code, info2.wgsl_code);
+        assert_eq!(info1.uniform_struct_def, info2.uniform_struct_def);
+
+        let base_wgsl = r#"
+struct CircleInstance {
+    center: vec2<f32>,
+    radius: f32,
+    fill_color: vec4<f32>,
+}
+
+@group(0) @binding(0) var<storage, read> instances: array<CircleInstance>;
+
+@vertex
+fn vs_main() -> VertexOutput {
+    let instance = instances[input.instance_index];
+    let r = instance.radius;
+    let c = instance.fill_color;
+    return r;
+}
+"#;
+
+        let bindings: Vec<(&str, &ShaderFnInfo)> = vec![("radius", &info1), ("fill_color", &info2)];
+        let result = generate_shader_bound_vertex_wgsl(base_wgsl, &bindings);
+
+        // Should have exactly one struct ChainUniforms (not renamed).
+        let count = result.matches("struct ChainUniforms").count();
+        assert_eq!(
+            count, 1,
+            "Expected exactly 1 ChainUniforms, found {count}:\n{result}"
+        );
+
+        // No _b suffix should appear.
+        assert!(
+            !result.contains("ChainUniforms_b"),
+            "Identical chains should not be renamed:\n{result}"
+        );
+
+        // Both bindings should reference the same type.
+        assert!(
+            result.contains("_gup_uniforms_0: ChainUniforms"),
+            "First binding type mismatch:\n{result}"
+        );
+        assert!(
+            result.contains("_gup_uniforms_1: ChainUniforms"),
+            "Second binding type mismatch:\n{result}"
+        );
+    }
+
+    #[test]
+    fn resolve_binding_conflicts_no_conflict() {
+        use crate::shader_function::LinearScale;
+
+        // Two different non-chain functions — no conflict.
+        let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+        let info = shader_fn_info_from(&scale);
+
+        let bindings: Vec<(&str, &ShaderFnInfo)> = vec![("radius", &info)];
+        let resolved = resolve_binding_conflicts(&bindings);
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].function_name, "linear_scale");
+        assert_eq!(resolved[0].uniform_type_name, "LinearScaleUniforms");
+    }
+
+    #[test]
+    fn gpu_mixed_chain_render() {
+        use crate::shader_function::{ColorMap, ComposableFunction, LinearScale};
+
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let data = vec![
+                ScatterPoint {
+                    x: -0.3,
+                    y: 0.0,
+                    value: 50.0,
+                },
+                ScatterPoint {
+                    x: 0.3,
+                    y: 0.0,
+                    value: 80.0,
+                },
+            ];
+
+            let mut selection: Selection<ScatterPoint, Circle> = Selection::from_data(data);
+
+            // CPU binding for position.
+            selection.attr("center", |d: &ScatterPoint| [d.x, d.y]);
+
+            // Shallow chain for radius (2-function): f32 → f32
+            let radius_chain = LinearScale::new(0.0, 100.0, 0.0, 1.0)
+                .compose(LinearScale::new(0.0, 1.0, 0.01, 0.15));
+            selection.attr_shader("radius", |d: &ScatterPoint| d.value, radius_chain);
+
+            // Deep chain for fill_color (3-function): f32 → vec4<f32>
+            let color_chain = LinearScale::new(0.0, 100.0, 0.0, 1.0)
+                .compose(LinearScale::new(0.0, 1.0, -1.0, 1.0))
+                .compose(ColorMap::new(
+                    Vec4 {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 1.0,
+                        w: 1.0,
+                    },
+                    Vec4 {
+                        x: 1.0,
+                        y: 0.0,
+                        z: 0.0,
+                        w: 1.0,
+                    },
+                ));
+            selection.attr_shader("fill_color", |d: &ScatterPoint| d.value, color_chain);
+
+            // This should succeed — previously it would fail because
+            // ChainUniforms was deduplicated incorrectly.
+            selection
+                .prepare_render_bound(&context.device, &context.queue, None, None)
+                .expect("prepare_render_bound with mixed chain bindings");
+
+            assert!(selection.is_render_ready());
+
+            // Render to verify pipeline compilation succeeds.
+            let mut ctx = Arc::try_unwrap(context).expect("single owner");
+            let mut frame = ctx.begin_frame().expect("begin_frame");
+            {
+                let mut pass = frame.render_pass(Some(wgpu::Color::BLACK));
+                selection
+                    .render(&mut pass)
+                    .expect("render with mixed chain bindings");
             }
             frame.finish().expect("finish frame");
         });
