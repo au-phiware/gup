@@ -94,8 +94,8 @@ struct DemoPoint {
     stroke_color: [f32; 4],
 }
 
-/// Generate a grid of circles for visualisation.
-fn generate_demo_data() -> Vec<DemoPoint> {
+/// Generate a grid of circles positioned for the shadow demo (left half).
+fn generate_shadow_data() -> Vec<DemoPoint> {
     let colors: &[[f32; 4]] = &[
         [0.90, 0.25, 0.20, 0.90], // red
         [0.20, 0.65, 0.35, 0.90], // green
@@ -106,21 +106,67 @@ fn generate_demo_data() -> Vec<DemoPoint> {
     ];
 
     let mut points = Vec::new();
-    let cols = 6;
+    let cols = 3;
     let rows = 3;
 
     for row in 0..rows {
         for col in 0..cols {
-            let x = -0.7 + (col as f32 / (cols - 1) as f32) * 1.4;
-            let y = -0.4 + (row as f32 / (rows - 1) as f32) * 0.8;
+            // Left half: x in [-0.85, -0.15]
+            let x = -0.85 + (col as f32 / (cols - 1) as f32) * 0.7;
+            let y = -0.55 + (row as f32 / (rows - 1) as f32) * 1.1;
             let color_idx = (row * cols + col) % colors.len();
             points.push(DemoPoint {
                 x,
                 y,
-                radius: 0.06 + 0.02 * ((row * cols + col) as f32 / (rows * cols) as f32),
+                radius: 0.08 + 0.015 * (col as f32),
                 color: colors[color_idx],
-                stroke_width: 2.0,
-                stroke_color: [0.1, 0.1, 0.1, 1.0],
+                stroke_width: 0.0, // No stroke for shadow demo
+                stroke_color: [0.0, 0.0, 0.0, 0.0],
+            });
+        }
+    }
+    points
+}
+
+/// Generate a grid of circles positioned for the fill+outline demo (right half).
+fn generate_stroke_data() -> Vec<DemoPoint> {
+    let colors: &[[f32; 4]] = &[
+        [0.35, 0.65, 0.95, 0.90], // sky blue
+        [0.95, 0.50, 0.20, 0.90], // orange
+        [0.40, 0.80, 0.40, 0.90], // lime
+        [0.85, 0.25, 0.55, 0.90], // magenta
+        [0.55, 0.55, 0.95, 0.90], // periwinkle
+        [0.95, 0.85, 0.20, 0.90], // gold
+    ];
+
+    let stroke_colors: &[[f32; 4]] = &[
+        [0.10, 0.25, 0.50, 1.0],
+        [0.50, 0.20, 0.05, 1.0],
+        [0.15, 0.35, 0.15, 1.0],
+        [0.40, 0.10, 0.25, 1.0],
+        [0.20, 0.20, 0.45, 1.0],
+        [0.45, 0.35, 0.05, 1.0],
+    ];
+
+    let mut points = Vec::new();
+    let cols = 3;
+    let rows = 3;
+
+    for row in 0..rows {
+        for col in 0..cols {
+            // Right half: x in [0.15, 0.85]
+            let x = 0.15 + (col as f32 / (cols - 1) as f32) * 0.7;
+            let y = -0.55 + (row as f32 / (rows - 1) as f32) * 1.1;
+            let idx = (row * cols + col) % colors.len();
+            points.push(DemoPoint {
+                x,
+                y,
+                radius: 0.08 + 0.015 * (col as f32),
+                color: colors[idx],
+                // stroke_width is in the same space as radius; keep it
+                // at about 15–25 % of radius for a visible ring
+                stroke_width: 0.015 + 0.005 * (row as f32),
+                stroke_color: stroke_colors[idx],
             });
         }
     }
@@ -228,21 +274,57 @@ fn create_pipeline_for_pass(
 
 // ── Renderer ───────────────────────────────────────────────────────────────
 
-/// Holds GPU resources for multi-pass rendering.
-#[allow(dead_code)] // instance_buffer must stay alive while bind_group references it
+/// Helper: create an instance storage buffer and its bind group.
+fn create_instance_resources(
+    device: &wgpu::Device,
+    label: &str,
+    data: &[DemoPoint],
+    layout: &wgpu::BindGroupLayout,
+) -> (wgpu::Buffer, wgpu::BindGroup, u32) {
+    use wgpu::util::DeviceExt;
+    let instances: Vec<CircleInstance> = data.iter().map(to_instance).collect();
+    let count = instances.len() as u32;
+    let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some(&format!("{label}_instance_buffer")),
+        contents: bytemuck::cast_slice(&instances),
+        usage: wgpu::BufferUsages::STORAGE,
+    });
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some(&format!("{label}_bind_group")),
+        layout,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: buffer.as_entire_binding(),
+        }],
+    });
+    (buffer, bind_group, count)
+}
+
+/// Holds GPU resources for the multi-pass rendering demo.
+///
+/// Two independent sets of circles are rendered:
+/// - **Left half** — drop-shadow effect (shadow pass + main pass)
+/// - **Right half** — fill + outline effect (fill pass + outline pass)
+///
+/// Each set has its own instance buffer and bind group so the data
+/// doesn't overlap.
+#[allow(dead_code)] // instance buffers must stay alive while bind groups reference them
 struct MultiPassDemoRenderer {
-    // Buffers
+    // Shared geometry
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
-    instance_buffer: wgpu::Buffer,
-    bind_group: wgpu::BindGroup,
-    instance_count: u32,
 
-    // Drop-shadow pass configuration (left half of the window)
+    // Drop-shadow demo (left half)
+    shadow_instance_buffer: wgpu::Buffer,
+    shadow_bind_group: wgpu::BindGroup,
+    shadow_instance_count: u32,
     shadow_config: MultiPassConfig,
     shadow_pipelines: Vec<wgpu::RenderPipeline>,
 
-    // Fill + outline pass configuration (right half of the window)
+    // Fill + outline demo (right half)
+    stroke_instance_buffer: wgpu::Buffer,
+    stroke_bind_group: wgpu::BindGroup,
+    stroke_instance_count: u32,
     stroke_config: MultiPassConfig,
     stroke_pipelines: Vec<wgpu::RenderPipeline>,
 
@@ -251,10 +333,10 @@ struct MultiPassDemoRenderer {
 }
 
 impl MultiPassDemoRenderer {
-    fn new(device: &wgpu::Device, data: &[DemoPoint]) -> Self {
+    fn new(device: &wgpu::Device) -> Self {
         use wgpu::util::DeviceExt;
 
-        // ── Geometry buffers ───────────────────────────────────────────
+        // ── Shared geometry buffers ────────────────────────────────────
         let vertices = Circle::generate_vertices();
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("vertex_buffer"),
@@ -269,37 +351,31 @@ impl MultiPassDemoRenderer {
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        // ── Instance buffer ────────────────────────────────────────────
-        let instances: Vec<CircleInstance> = data.iter().map(to_instance).collect();
-        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("instance_buffer"),
-            contents: bytemuck::cast_slice(&instances),
-            usage: wgpu::BufferUsages::STORAGE,
-        });
+        // ── Shared bind group layout ───────────────────────────────────
+        let bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("multi_pass_bind_group_layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
 
-        // ── Bind group (storage buffer at binding 0) ───────────────────
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("multi_pass_bind_group_layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-        });
+        // ── Shadow demo data (left half) ───────────────────────────────
+        let shadow_data = generate_shadow_data();
+        let (shadow_instance_buffer, shadow_bind_group, shadow_instance_count) =
+            create_instance_resources(device, "shadow", &shadow_data, &bind_group_layout);
 
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("multi_pass_bind_group"),
-            layout: &bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: instance_buffer.as_entire_binding(),
-            }],
-        });
+        // ── Stroke demo data (right half) ──────────────────────────────
+        let stroke_data = generate_stroke_data();
+        let (stroke_instance_buffer, stroke_bind_group, stroke_instance_count) =
+            create_instance_resources(device, "stroke", &stroke_data, &bind_group_layout);
 
         // ── Drop-shadow multi-pass config ──────────────────────────────
         //
@@ -352,11 +428,14 @@ impl MultiPassDemoRenderer {
         Self {
             vertex_buffer,
             index_buffer,
-            instance_buffer,
-            bind_group,
-            instance_count: instances.len() as u32,
+            shadow_instance_buffer,
+            shadow_bind_group,
+            shadow_instance_count,
             shadow_config,
             shadow_pipelines,
+            stroke_instance_buffer,
+            stroke_bind_group,
+            stroke_instance_count,
             stroke_config,
             stroke_pipelines,
             multi_pass_renderer: MultiPassRenderer::new(),
@@ -374,36 +453,36 @@ impl MultiPassDemoRenderer {
 
         let mut render_pass = frame.render_pass(Some(clear_color));
 
-        // ── Section 1: Drop-shadow circles ─────────────────────────────
+        // ── Section 1: Drop-shadow circles (left half) ─────────────────
         // The MultiPassRenderer issues two draw calls within the same
         // render pass – first the shadow, then the main circle.
         if let Err(e) = self.multi_pass_renderer.render_multi_pass(
             &mut render_pass,
             &self.shadow_config,
             &self.shadow_pipelines,
-            &self.bind_group,
+            &self.shadow_bind_group,
             &self.vertex_buffer,
             Some(&self.index_buffer),
             Circle::vertex_count() as u32,
             Circle::index_count().map(|c| c as u32),
-            self.instance_count,
+            self.shadow_instance_count,
         ) {
             eprintln!("Shadow multi-pass render error: {e}");
         }
 
-        // ── Section 2: Fill + outline circles ──────────────────────────
+        // ── Section 2: Fill + outline circles (right half) ─────────────
         // Same concept – two draw calls, one for the fill, one for the
-        // outline ring.  They share the same vertex/instance buffers.
+        // outline ring.  Each uses a different fragment shader entry point.
         if let Err(e) = self.multi_pass_renderer.render_multi_pass(
             &mut render_pass,
             &self.stroke_config,
             &self.stroke_pipelines,
-            &self.bind_group,
+            &self.stroke_bind_group,
             &self.vertex_buffer,
             Some(&self.index_buffer),
             Circle::vertex_count() as u32,
             Circle::index_count().map(|c| c as u32),
-            self.instance_count,
+            self.stroke_instance_count,
         ) {
             eprintln!("Stroke multi-pass render error: {e}");
         }
@@ -459,26 +538,17 @@ impl MultiPassApp {
         Ok(())
     }
 
-    fn ensure_renderer(&mut self) {
-        if self.renderer.is_some() {
-            return;
-        }
-        if let Some(ref ctx) = self.context
-            && let Ok(ctx_ref) = Arc::try_unwrap(Arc::clone(ctx)) {
-                let data = generate_demo_data();
-                let renderer = MultiPassDemoRenderer::new(&ctx_ref.device, &data);
-                self.renderer = Some(renderer);
-                self.context = Some(Arc::new(ctx_ref));
-            }
-    }
-
     fn render_frame(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        self.ensure_renderer();
-
         let surface_id = self.surface_id.ok_or("No surface")?;
 
         if let Some(context) = self.context.take() {
             let mut ctx = Arc::try_unwrap(context).map_err(|_| "Context is shared")?;
+
+            // Lazily create renderer on first frame (needs device access)
+            if self.renderer.is_none() {
+                let renderer = MultiPassDemoRenderer::new(&ctx.device);
+                self.renderer = Some(renderer);
+            }
 
             match ctx.begin_frame_for_surface(surface_id) {
                 Ok(mut frame) => {

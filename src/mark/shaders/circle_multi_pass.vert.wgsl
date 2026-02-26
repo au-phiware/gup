@@ -55,13 +55,13 @@ fn vs_shadow(input: VertexInput) -> VertexOutput {
     let instance = instances[input.instance_index];
 
     // Offset the shadow down-right in clip space
-    let shadow_offset = vec2<f32>(0.015, -0.015);
+    let shadow_offset = vec2<f32>(0.03, -0.03);
     // Make shadow slightly larger than the main circle
-    let shadow_radius = instance.radius * 1.15;
+    let shadow_radius = instance.radius * 1.1;
     let world_pos = input.position * shadow_radius + instance.center + shadow_offset;
 
     // Semi-transparent dark shadow colour
-    let shadow_color = vec4<f32>(0.0, 0.0, 0.0, 0.35);
+    let shadow_color = vec4<f32>(0.0, 0.0, 0.0, 0.4);
 
     var output: VertexOutput;
     output.clip_position = vec4<f32>(world_pos, 0.0, 1.0);
