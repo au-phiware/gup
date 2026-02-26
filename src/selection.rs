@@ -1051,19 +1051,20 @@ impl<T, M: Mark> Selection<T, M> {
             if instance_bytes.len() > state.instance_buffer_capacity {
                 // Return the old buffer to the pool before allocating a new one.
                 if let Some((bt, sc)) = state.pool_meta.take()
-                    && let Some(ref mut p) = pool {
-                        let old_buffer = std::mem::replace(
-                            &mut state.instance_buffer,
-                            device.create_buffer(&wgpu::BufferDescriptor {
-                                label: Some("selection_instance_placeholder"),
-                                size: 16,
-                                usage: wgpu::BufferUsages::STORAGE,
-                                mapped_at_creation: false,
-                            }),
-                        );
-                        p.deallocate_raw(old_buffer, bt, sc);
-                    }
-                    // else: no pool provided at reallocation — drop the old buffer.
+                    && let Some(ref mut p) = pool
+                {
+                    let old_buffer = std::mem::replace(
+                        &mut state.instance_buffer,
+                        device.create_buffer(&wgpu::BufferDescriptor {
+                            label: Some("selection_instance_placeholder"),
+                            size: 16,
+                            usage: wgpu::BufferUsages::STORAGE,
+                            mapped_at_creation: false,
+                        }),
+                    );
+                    p.deallocate_raw(old_buffer, bt, sc);
+                }
+                // else: no pool provided at reallocation — drop the old buffer.
 
                 let (instance_buffer, bind_group, pool_meta) =
                     Self::create_shader_bound_buffers_and_bind_group(
