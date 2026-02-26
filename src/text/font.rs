@@ -390,6 +390,147 @@ impl std::fmt::Debug for FontDatabase {
     }
 }
 
+/// Manager for multiple font atlases, keyed by font family name.
+///
+/// Provides lazy creation of [`FontAtlas`](super::FontAtlas) instances
+/// on first use, driven by `TextStyle.font_family`. When no font family
+/// is specified, the embedded default font is used.
+///
+/// # Examples
+///
+/// ```ignore
+/// use gup::text::{FontAtlasManager, FontDatabase, TextStyle};
+///
+/// let font_db = FontDatabase::new();
+/// let mut manager = FontAtlasManager::new(font_db, 16.0);
+///
+/// // Get atlas for a specific font family (created lazily)
+/// let atlas = manager.get_or_create(device, queue, Some("Arial"))?;
+///
+/// // Get atlas based on a TextStyle
+/// let style = TextStyle::new(24.0).with_font_family("Times New Roman");
+/// let atlas = manager.get_atlas_for_style(device, queue, &style)?;
+/// ```
+pub struct FontAtlasManager {
+    /// Font database for resolving font specs.
+    font_db: FontDatabase,
+    /// Font atlases keyed by resolved family name.
+    atlases: HashMap<String, super::FontAtlas>,
+    /// Default font size for MSDF atlas generation.
+    default_font_size: f32,
+}
+
+/// Key used for the default (embedded) font atlas.
+const DEFAULT_ATLAS_KEY: &str = "__default__";
+
+impl FontAtlasManager {
+    /// Create a new font atlas manager.
+    ///
+    /// The `font_db` is used to resolve font family names to font data.
+    /// The `default_font_size` controls the MSDF rasterisation quality
+    /// for all lazily-created atlases.
+    pub fn new(font_db: FontDatabase, default_font_size: f32) -> Self {
+        Self {
+            font_db,
+            atlases: HashMap::new(),
+            default_font_size,
+        }
+    }
+
+    /// Get or lazily create a font atlas for the given family name.
+    ///
+    /// When `family` is `None`, returns the default (embedded) font atlas.
+    /// When the requested font is not found on the system, falls back to
+    /// the embedded default font but stores it under the requested key.
+    pub fn get_or_create(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        family: Option<&str>,
+    ) -> GupResult<&mut super::FontAtlas> {
+        let key = family.unwrap_or(DEFAULT_ATLAS_KEY).to_string();
+
+        if !self.atlases.contains_key(&key) {
+            let atlas = match family {
+                Some(name) => {
+                    let spec = FontSpec::new(name);
+                    super::FontAtlas::with_font(
+                        device,
+                        queue,
+                        self.default_font_size,
+                        &spec,
+                        &self.font_db,
+                    )?
+                }
+                None => super::FontAtlas::new(device, queue, self.default_font_size)?,
+            };
+            self.atlases.insert(key.clone(), atlas);
+        }
+
+        Ok(self.atlases.get_mut(&key).unwrap())
+    }
+
+    /// Get or lazily create the atlas appropriate for a [`TextStyle`](super::TextStyle).
+    ///
+    /// Uses `TextStyle.font_family` to select the atlas, falling back to
+    /// the default atlas when `font_family` is `None`.
+    pub fn get_atlas_for_style(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        style: &super::TextStyle,
+    ) -> GupResult<&mut super::FontAtlas> {
+        self.get_or_create(device, queue, style.font_family.as_deref())
+    }
+
+    /// Return the atlas key for a given font family.
+    ///
+    /// This is the key used internally to store and look up atlases.
+    pub fn atlas_key(family: Option<&str>) -> String {
+        family.unwrap_or(DEFAULT_ATLAS_KEY).to_string()
+    }
+
+    /// Get an existing atlas by key without creating one.
+    pub fn get_atlas(&self, family: Option<&str>) -> Option<&super::FontAtlas> {
+        let key = family.unwrap_or(DEFAULT_ATLAS_KEY);
+        self.atlases.get(key)
+    }
+
+    /// Get a mutable reference to an existing atlas by key.
+    pub fn get_atlas_mut(&mut self, family: Option<&str>) -> Option<&mut super::FontAtlas> {
+        let key = family.unwrap_or(DEFAULT_ATLAS_KEY);
+        self.atlases.get_mut(key)
+    }
+
+    /// Get the number of font atlases currently loaded.
+    pub fn atlas_count(&self) -> usize {
+        self.atlases.len()
+    }
+
+    /// Get the font database.
+    pub fn font_db(&self) -> &FontDatabase {
+        &self.font_db
+    }
+
+    /// Iterate over all loaded atlases and their keys.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &super::FontAtlas)> {
+        self.atlases.iter().map(|(k, v)| (k.as_str(), v))
+    }
+}
+
+impl std::fmt::Debug for FontAtlasManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FontAtlasManager")
+            .field("atlas_count", &self.atlases.len())
+            .field(
+                "loaded_families",
+                &self.atlases.keys().collect::<Vec<_>>(),
+            )
+            .field("default_font_size", &self.default_font_size)
+            .finish()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -600,5 +741,38 @@ mod tests {
     fn test_font_style_into_fontdb() {
         let s: fontdb::Style = FontStyle::Italic.into();
         assert_eq!(s, fontdb::Style::Italic);
+    }
+
+    // --- FontAtlasManager tests ---
+
+    #[test]
+    fn test_font_atlas_manager_new() {
+        let db = FontDatabase::empty();
+        let manager = FontAtlasManager::new(db, 16.0);
+        assert_eq!(manager.atlas_count(), 0);
+    }
+
+    #[test]
+    fn test_font_atlas_manager_atlas_key() {
+        assert_eq!(FontAtlasManager::atlas_key(None), DEFAULT_ATLAS_KEY);
+        assert_eq!(FontAtlasManager::atlas_key(Some("Arial")), "Arial");
+    }
+
+    #[test]
+    fn test_font_atlas_manager_get_atlas_empty() {
+        let db = FontDatabase::empty();
+        let manager = FontAtlasManager::new(db, 16.0);
+        assert!(manager.get_atlas(None).is_none());
+        assert!(manager.get_atlas(Some("Arial")).is_none());
+    }
+
+    #[test]
+    fn test_font_atlas_manager_debug() {
+        let db = FontDatabase::empty();
+        let manager = FontAtlasManager::new(db, 16.0);
+        let debug_str = format!("{manager:?}");
+        assert!(debug_str.contains("FontAtlasManager"));
+        assert!(debug_str.contains("atlas_count"));
+        assert!(debug_str.contains("default_font_size"));
     }
 }
