@@ -93,3 +93,52 @@ before merge.
 
 - 5 new integration tests (all passing)
 - All 6 built-in marks pass validation with 0 critical issues and 0 errors
+
+## Retrospective
+
+**Completed**: 2025-07-22
+
+### Key Technical Learnings
+
+#### Rust Binary Integration with Mask
+
+- **Challenge**: Deciding between a script-based or binary-based validation
+  runner
+- **Solution**: Used a Rust `[[bin]]` target (`src/bin/validate_marks.rs`) which
+  reuses the library's `MarkValidator` and `MarkProfiler` directly, avoiding
+  script maintenance and ensuring type safety
+- **Pattern**: For CI tooling that validates internal library types, a binary in
+  the same crate is the simplest approach — it compiles alongside the library
+  and stays in sync automatically
+
+#### Concurrently Pipeline Integration
+
+- **Challenge**: Adding mark validation to `mask all-check` without slowing down
+  the pipeline
+- **Solution**: Added `mask validate-marks` as a separate concurrent job in the
+  `concurrently` command, running in parallel with lint/format/check jobs
+- **Pattern**: The mask/concurrently pattern makes it easy to add new CI stages
+  without sequential bottlenecks
+
+### Architectural Decisions
+
+#### Binary Over Test-Only Approach
+
+- **Decision**: Created a standalone binary rather than just integration tests
+- **Reasoning**: A binary gives human-readable CLI output, can be invoked by
+  mask tasks, and provides an explicit CI gate with exit codes. Tests validate
+  correctness but don't provide the same developer-facing workflow
+- **Trade-off**: Slightly more code (a small binary file) vs better CI/DX
+  ergonomics
+- **Future**: The binary can be extended to validate custom marks from external
+  crates or user plugins
+
+### Development Workflow Insights
+
+- The story was straightforward thanks to the excellent `MarkValidator` and
+  `MarkProfiler` infrastructure from GUP-071. The validation framework was
+  well-designed and needed no modifications.
+- All 6 built-in marks pass validation cleanly with "Excellent" performance
+  classification (sub-microsecond vertex generation).
+- The `mask all-check` pipeline's use of `concurrently` made integration trivial
+  — just adding one more concurrent command.
