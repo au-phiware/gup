@@ -799,4 +799,61 @@ mod tests {
             "Should generate else, got:\n{wgsl}"
         );
     }
+
+    #[test]
+    fn generate_switch_statement() {
+        let func = WgslFunction {
+            name: "classify".to_string(),
+            params: vec![WgslParam {
+                name: "x".to_string(),
+                ty: WgslType::Scalar(ScalarType::I32),
+            }],
+            return_type: WgslType::Scalar(ScalarType::I32),
+            body: vec![WgslStatement::Switch {
+                selector: WgslExpr::Ident("x".to_string()),
+                cases: vec![
+                    SwitchCase {
+                        selectors: vec![WgslExpr::Literal(Literal::Int(0))],
+                        body: vec![WgslStatement::Return(Some(WgslExpr::Literal(
+                            Literal::Int(10),
+                        )))],
+                    },
+                    SwitchCase {
+                        selectors: vec![
+                            WgslExpr::Literal(Literal::Int(1)),
+                            WgslExpr::Literal(Literal::Int(2)),
+                        ],
+                        body: vec![WgslStatement::Return(Some(WgslExpr::Literal(
+                            Literal::Int(20),
+                        )))],
+                    },
+                ],
+                default_body: Some(vec![WgslStatement::Return(Some(WgslExpr::Literal(
+                    Literal::Int(0),
+                )))]),
+            }],
+        };
+
+        let wgsl = generate_function_wgsl(&func);
+        assert!(
+            wgsl.contains("switch (x) {"),
+            "Should contain switch, got:\n{wgsl}"
+        );
+        assert!(
+            wgsl.contains("case 0: {"),
+            "Should contain case 0, got:\n{wgsl}"
+        );
+        assert!(
+            wgsl.contains("case 1, 2: {"),
+            "Should contain multi-selector case, got:\n{wgsl}"
+        );
+        assert!(
+            wgsl.contains("default: {"),
+            "Should contain default, got:\n{wgsl}"
+        );
+        assert!(
+            wgsl.contains("return 10;"),
+            "Should contain return 10, got:\n{wgsl}"
+        );
+    }
 }

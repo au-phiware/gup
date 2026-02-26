@@ -526,14 +526,312 @@ mod tests {
     }
 
     #[test]
-    fn error_match_expression() {
+    fn error_match_expression_position() {
+        // Match as an expression (not statement) should still error
+        // because WGSL switch is a statement, not an expression.
         let mut converter = RustToWgsl::new(std::iter::empty::<String>());
         let expr: syn::Expr = syn::parse_quote!(match x {
             0 => 1,
             _ => 2,
         });
         let result = converter.convert_expr(&expr);
-        assert!(result.is_err(), "Match should error");
+        assert!(result.is_err(), "Match in expression position should error");
+    }
+
+    // ===================================================================
+    // Match → Switch Transpilation (GUP-210)
+    // ===================================================================
+
+    #[test]
+    fn match_simple_integer_switch() {
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn test(x: i32) -> i32 {
+                match x {
+                    0 => {
+                        return 10;
+                    }
+                    1 => {
+                        return 20;
+                    }
+                    _ => {
+                        return 0;
+                    }
+                }
+            }
+        };
+        let wgsl = transpile(&func);
+        assert!(wgsl.contains("switch (x)"), "got:\n{wgsl}");
+        assert!(wgsl.contains("case 0:"), "got:\n{wgsl}");
+        assert!(wgsl.contains("case 1:"), "got:\n{wgsl}");
+        assert!(wgsl.contains("default:"), "got:\n{wgsl}");
+        assert!(wgsl.contains("return 10;"), "got:\n{wgsl}");
+        assert!(wgsl.contains("return 20;"), "got:\n{wgsl}");
+        assert!(wgsl.contains("return 0;"), "got:\n{wgsl}");
+    }
+
+    #[test]
+    fn match_wildcard_default() {
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn test(x: i32) -> i32 {
+                match x {
+                    0 => {
+                        return 1;
+                    }
+                    _ => {
+                        return -1;
+                    }
+                }
+            }
+        };
+        let wgsl = transpile(&func);
+        assert!(wgsl.contains("switch (x)"), "got:\n{wgsl}");
+        assert!(wgsl.contains("case 0:"), "got:\n{wgsl}");
+        assert!(wgsl.contains("default:"), "got:\n{wgsl}");
+    }
+
+    #[test]
+    fn match_or_pattern() {
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn test(x: i32) -> i32 {
+                match x {
+                    1 | 2 | 3 => {
+                        return 100;
+                    }
+                    _ => {
+                        return 0;
+                    }
+                }
+            }
+        };
+        let wgsl = transpile(&func);
+        assert!(wgsl.contains("case 1, 2, 3:"), "got:\n{wgsl}");
+        assert!(wgsl.contains("default:"), "got:\n{wgsl}");
+    }
+
+    #[test]
+    fn match_multiple_arms() {
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn classify(category: i32) -> f32 {
+                match category {
+                    0 => {
+                        return 0.0;
+                    }
+                    1 => {
+                        return 0.25;
+                    }
+                    2 => {
+                        return 0.5;
+                    }
+                    3 => {
+                        return 0.75;
+                    }
+                    _ => {
+                        return 1.0;
+                    }
+                }
+            }
+        };
+        let wgsl = transpile(&func);
+        assert!(wgsl.contains("switch (category)"), "got:\n{wgsl}");
+        assert!(wgsl.contains("case 0:"), "got:\n{wgsl}");
+        assert!(wgsl.contains("case 1:"), "got:\n{wgsl}");
+        assert!(wgsl.contains("case 2:"), "got:\n{wgsl}");
+        assert!(wgsl.contains("case 3:"), "got:\n{wgsl}");
+        assert!(wgsl.contains("default:"), "got:\n{wgsl}");
+        assert!(wgsl.contains("return 0.75;"), "got:\n{wgsl}");
+    }
+
+    #[test]
+    fn match_no_default() {
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn test(x: i32) -> i32 {
+                match x {
+                    0 => {
+                        return 10;
+                    }
+                    1 => {
+                        return 20;
+                    }
+                }
+                return 0;
+            }
+        };
+        let wgsl = transpile(&func);
+        assert!(wgsl.contains("switch (x)"), "got:\n{wgsl}");
+        assert!(wgsl.contains("case 0:"), "got:\n{wgsl}");
+        assert!(wgsl.contains("case 1:"), "got:\n{wgsl}");
+        // No default case should be generated
+        assert!(!wgsl.contains("default:"), "got:\n{wgsl}");
+    }
+
+    #[test]
+    fn match_with_expression_body() {
+        // Match arms with simple expression bodies (no braces)
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn test(x: i32) {
+                let mut result = 0;
+                match x {
+                    0 => result = 10,
+                    1 => result = 20,
+                    _ => result = 0,
+                }
+            }
+        };
+        let wgsl = transpile(&func);
+        assert!(wgsl.contains("switch (x)"), "got:\n{wgsl}");
+        // Each arm body should be an expression statement
+        assert!(wgsl.contains("result = 10;"), "got:\n{wgsl}");
+    }
+
+    #[test]
+    fn match_with_unsigned_literals() {
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn test(x: u32) -> u32 {
+                match x {
+                    0u32 => {
+                        return 1u32;
+                    }
+                    1u32 => {
+                        return 2u32;
+                    }
+                    _ => {
+                        return 0u32;
+                    }
+                }
+            }
+        };
+        let wgsl = transpile(&func);
+        assert!(wgsl.contains("switch (x)"), "got:\n{wgsl}");
+        assert!(wgsl.contains("case 0u:"), "got:\n{wgsl}");
+        assert!(wgsl.contains("case 1u:"), "got:\n{wgsl}");
+    }
+
+    #[test]
+    fn error_match_with_guard() {
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn test(x: i32) -> i32 {
+                match x {
+                    n if n > 0 => {
+                        return 1;
+                    }
+                    _ => {
+                        return 0;
+                    }
+                }
+            }
+        };
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
+        let result = converter.convert_function(&func);
+        assert!(result.is_err(), "Guard pattern should error");
+        let err = result.unwrap_err();
+        assert!(
+            err.message.contains("guard"),
+            "Error should mention guard, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn error_match_with_range_pattern() {
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn test(x: i32) -> i32 {
+                match x {
+                    0..=10 => {
+                        return 1;
+                    }
+                    _ => {
+                        return 0;
+                    }
+                }
+            }
+        };
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
+        let result = converter.convert_function(&func);
+        assert!(result.is_err(), "Range pattern should error");
+        let err = result.unwrap_err();
+        assert!(
+            err.message.contains("Range") || err.message.contains("range"),
+            "Error should mention range, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn error_match_with_variable_binding() {
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn test(x: i32) -> i32 {
+                match x {
+                    n => {
+                        return n;
+                    }
+                }
+            }
+        };
+        let mut converter = RustToWgsl::new(std::iter::empty::<String>());
+        let result = converter.convert_function(&func);
+        assert!(result.is_err(), "Variable binding pattern should error");
+        let err = result.unwrap_err();
+        assert!(
+            err.message.contains("binding") || err.message.contains("Variable"),
+            "Error should mention binding, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn match_switch_indentation() {
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn test(x: i32) -> i32 {
+                match x {
+                    0 => {
+                        return 1;
+                    }
+                    _ => {
+                        return 0;
+                    }
+                }
+            }
+        };
+        let wgsl = transpile(&func);
+        assert!(
+            wgsl.contains("    switch (x) {"),
+            "Switch should be indented at function level, got:\n{wgsl}"
+        );
+        assert!(
+            wgsl.contains("        case 0: {"),
+            "Case should be double-indented, got:\n{wgsl}"
+        );
+        assert!(
+            wgsl.contains("            return 1;"),
+            "Case body should be triple-indented, got:\n{wgsl}"
+        );
+    }
+
+    #[test]
+    fn match_in_loop() {
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn test(n: i32) -> i32 {
+                let mut sum = 0;
+                for i in 0..n {
+                    match i {
+                        0 => {
+                            sum += 10;
+                        }
+                        1 => {
+                            sum += 20;
+                        }
+                        _ => {
+                            sum += 1;
+                        }
+                    }
+                }
+                return sum;
+            }
+        };
+        let wgsl = transpile(&func);
+        assert!(wgsl.contains("for (var i = 0; i < n; i++)"), "got:\n{wgsl}");
+        assert!(wgsl.contains("switch (i)"), "got:\n{wgsl}");
+        assert!(wgsl.contains("case 0:"), "got:\n{wgsl}");
     }
 
     // ===================================================================

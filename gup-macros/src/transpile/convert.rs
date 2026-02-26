@@ -1126,7 +1126,17 @@ impl RustToWgsl {
                     .transpose()?;
                 Ok(vec![WgslStatement::Return(val)])
             }
+            // Handle assignment as statement (not expression)
+            Expr::Assign(assign) => {
+                let target = self.convert_expr(&assign.left)?;
+                let value = self.convert_expr(&assign.right)?;
+                Ok(vec![WgslStatement::Assign(target, value)])
+            }
             other => {
+                // Check for compound assignments
+                if let Some(compound) = self.try_convert_compound_assign(other)? {
+                    return Ok(vec![compound]);
+                }
                 let expr = self.convert_expr(other)?;
                 Ok(vec![WgslStatement::Expression(expr)])
             }
