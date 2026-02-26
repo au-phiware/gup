@@ -39,6 +39,7 @@
 //! ```
 
 use crate::RenderContext;
+use crate::buffer::{BufferPool, BufferPoolConfig, BufferType as PoolBufferType};
 use crate::error::{GupError, GupResult};
 use crate::spatial_index::{
     Aabb, ElementPosition, MortonEntry, SpatialAlgorithm, SpatialIndex, SpatialQuery,
@@ -661,6 +662,11 @@ pub struct InteractionSystem {
     /// Used to limit the staging buffer copy size in `download_results()`.
     /// A value of 0 means "copy the full buffer" (conservative fallback).
     last_dispatch_result_slots: usize,
+
+    /// Buffer pool for staging buffers used in GPU readback operations (GUP-079).
+    /// Reuses MAP_READ staging buffers across Morton count/candidate readbacks
+    /// instead of creating and destroying them per query.
+    staging_pool: BufferPool,
 }
 
 impl InteractionSystem {
@@ -861,6 +867,19 @@ impl InteractionSystem {
             world_bounds_max: [1000.0, 1000.0],
         };
 
+        // Staging buffer pool (GUP-079): reuse MAP_READ buffers across readbacks.
+        // Use a small, focused configuration – Morton readbacks are small and
+        // frequent, so a few pooled buffers with a short eviction timeout suffice.
+        let staging_pool = BufferPool::with_config(
+            Arc::new(device.clone()),
+            BufferPoolConfig {
+                max_buffers_per_pool: 4,
+                max_total_memory: Some(4 * 1024 * 1024), // 4 MB for staging
+                enable_adaptive_sizing: true,
+                ..Default::default()
+            },
+        );
+
         Ok(Self {
             hit_test_pipeline,
             spatial_index_pipeline,
@@ -905,6 +924,7 @@ impl InteractionSystem {
             cached_element_version: 0,
             cached_element_count: 0,
             last_dispatch_result_slots: 0,
+            staging_pool,
         })
     }
 
@@ -1913,13 +1933,13 @@ impl InteractionSystem {
     }
 
     /// Read the Morton candidate count back from the GPU.
-    async fn read_morton_candidate_count(&self) -> GupResult<u32> {
-        let staging = self.device.create_buffer(&BufferDescriptor {
-            label: Some("morton_count_staging"),
-            size: std::mem::size_of::<u32>() as u64,
-            usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
+    ///
+    /// Uses a pooled staging buffer (GUP-079) to avoid per-call allocation.
+    async fn read_morton_candidate_count(&mut self) -> GupResult<u32> {
+        let byte_size = std::mem::size_of::<u32>();
+        let (staging, size_class) = self
+            .staging_pool
+            .allocate_raw(PoolBufferType::Staging, byte_size);
 
         let mut encoder = self
             .device
@@ -1931,44 +1951,51 @@ impl InteractionSystem {
             0,
             &staging,
             0,
-            std::mem::size_of::<u32>() as u64,
+            byte_size as u64,
         );
         let sub_idx = self.queue.submit([encoder.finish()]);
         let _ = self.device.poll(PollType::WaitForSubmissionIndex(sub_idx));
 
-        let slice = staging.slice(..);
+        let slice = staging.slice(..byte_size as u64);
         let (sender, receiver) = futures_channel::oneshot::channel();
         slice.map_async(wgpu::MapMode::Read, move |r| {
             let _ = sender.send(r);
         });
         let _ = self.device.poll(PollType::Wait);
-        receiver
+        let map_result = receiver
             .await
             .map_err(|_| GupError::render_error("Morton count readback cancelled".to_string()))?
-            .map_err(|e| GupError::render_error(format!("Morton count map failed: {e:?}")))?;
+            .map_err(|e| GupError::render_error(format!("Morton count map failed: {e:?}")));
+
+        if let Err(e) = map_result {
+            self.staging_pool
+                .deallocate_raw(staging, PoolBufferType::Staging, size_class);
+            return Err(e);
+        }
 
         let data = slice.get_mapped_range();
         let count = *bytemuck::from_bytes::<u32>(&data);
         drop(data);
         staging.unmap();
+        self.staging_pool
+            .deallocate_raw(staging, PoolBufferType::Staging, size_class);
 
         // Clamp to max to avoid OOB reads.
         Ok(count.min(self.max_morton_candidates as u32))
     }
 
     /// Read Morton candidate indices from the GPU.
-    async fn read_morton_candidates(&self, count: u32) -> GupResult<Vec<u32>> {
+    ///
+    /// Uses a pooled staging buffer (GUP-079) to avoid per-call allocation.
+    async fn read_morton_candidates(&mut self, count: u32) -> GupResult<Vec<u32>> {
         if count == 0 {
             return Ok(Vec::new());
         }
 
         let byte_size = (count as usize * std::mem::size_of::<u32>()) as u64;
-        let staging = self.device.create_buffer(&BufferDescriptor {
-            label: Some("morton_candidates_staging"),
-            size: byte_size,
-            usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
+        let (staging, size_class) = self
+            .staging_pool
+            .allocate_raw(PoolBufferType::Staging, byte_size as usize);
 
         let mut encoder = self
             .device
@@ -1979,23 +2006,31 @@ impl InteractionSystem {
         let sub_idx = self.queue.submit([encoder.finish()]);
         let _ = self.device.poll(PollType::WaitForSubmissionIndex(sub_idx));
 
-        let slice = staging.slice(..);
+        let slice = staging.slice(..byte_size);
         let (sender, receiver) = futures_channel::oneshot::channel();
         slice.map_async(wgpu::MapMode::Read, move |r| {
             let _ = sender.send(r);
         });
         let _ = self.device.poll(PollType::Wait);
-        receiver
+        let map_result = receiver
             .await
             .map_err(|_| {
                 GupError::render_error("Morton candidates readback cancelled".to_string())
             })?
-            .map_err(|e| GupError::render_error(format!("Morton candidates map failed: {e:?}")))?;
+            .map_err(|e| GupError::render_error(format!("Morton candidates map failed: {e:?}")));
+
+        if let Err(e) = map_result {
+            self.staging_pool
+                .deallocate_raw(staging, PoolBufferType::Staging, size_class);
+            return Err(e);
+        }
 
         let data = slice.get_mapped_range();
         let indices: Vec<u32> = bytemuck::cast_slice::<u8, u32>(&data).to_vec();
         drop(data);
         staging.unmap();
+        self.staging_pool
+            .deallocate_raw(staging, PoolBufferType::Staging, size_class);
 
         Ok(indices)
     }
@@ -2660,6 +2695,22 @@ impl InteractionSystem {
     /// Get performance statistics
     pub fn query_stats(&self) -> &QueryStats {
         &self.query_stats
+    }
+
+    /// Get buffer pool statistics for staging buffers (GUP-079).
+    ///
+    /// Returns allocation statistics including pool hit rate, active/pooled
+    /// buffer counts, and total bytes allocated through the staging pool.
+    pub fn staging_pool_stats(&self) -> &crate::buffer::AllocationStats {
+        self.staging_pool.get_stats()
+    }
+
+    /// Clean up unused staging buffers to free GPU memory (GUP-079).
+    ///
+    /// Removes staging buffers that haven't been used within the configured
+    /// eviction timeout and enforces pool size limits.
+    pub fn cleanup_staging_pool(&mut self) {
+        self.staging_pool.cleanup_unused();
     }
 
     /// Reset performance statistics
