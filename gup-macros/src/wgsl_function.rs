@@ -1251,9 +1251,10 @@ mod tests {
         let sampler_type: Type = parse_quote!(Sampler);
         assert!(!is_uniform_compatible_type(&sampler_type));
 
-        // Custom types should return false (need explicit verification)
+        // Custom types are assumed uniform-compatible (user ensures Pod + Zeroable)
+        // The compiler will catch actual type errors at use site
         let custom_type: Type = parse_quote!(MyCustomType);
-        assert!(!is_uniform_compatible_type(&custom_type));
+        assert!(is_uniform_compatible_type(&custom_type));
     }
 
     #[test]
