@@ -67,13 +67,14 @@ Deep dives into specific library capabilities:
 
 For understanding the library internals:
 
-| Example                | Description                |
-| ---------------------- | -------------------------- |
-| `text_rendering_demo`  | MSDF text rendering system |
-| `shader_pipeline_demo` | Custom shader integration  |
-| `gpu_debug_demo`       | GPU debugging tools        |
-| `buffer_demo`          | GPU buffer management      |
-| `async_streaming_demo` | Async data streaming       |
+| Example                  | Description                               |
+| ------------------------ | ----------------------------------------- |
+| `multi_pass_mark_demo`   | Multi-pass rendering (shadow + outline)   |
+| `text_rendering_demo`    | MSDF text rendering system                |
+| `shader_pipeline_demo`   | Custom shader integration                 |
+| `gpu_debug_demo`         | GPU debugging tools                       |
+| `buffer_demo`            | GPU buffer management                     |
+| `async_streaming_demo`   | Async data streaming                      |
 
 ## Quick Start
 
