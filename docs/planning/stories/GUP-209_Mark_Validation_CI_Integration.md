@@ -1,6 +1,6 @@
 # GUP-209: Mark Validation CI Integration
 
-**Status**: 📋 Planned **Priority**: Low **Category**: Developer Experience
+**Status**: 🚧 In Progress **Priority**: Low **Category**: Developer Experience
 **Estimated Effort**: 0.5 days **Dependencies**: GUP-071 (Custom Mark
 Development Kit)
 
