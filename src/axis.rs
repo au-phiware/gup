@@ -1464,6 +1464,173 @@ impl Default for AxisRenderer {
     }
 }
 
+/// GPU render pipeline for instanced tick marks.
+///
+/// `TickPipeline` owns a wgpu [`RenderPipeline`](wgpu::RenderPipeline)
+/// configured for instanced `LineList` rendering of tick marks. A
+/// two-vertex base geometry (a unit parameter from 0.0 to 1.0) is
+/// instanced across all tick positions via a [`TickInstance`] buffer.
+///
+/// # Usage
+///
+/// ```rust,no_run
+/// use gup::axis::{TickPipeline, TickInstance, AxisRenderer, AxisBounds, AxisConfiguration, AxisPosition};
+/// use gup::shader_function::Vec2;
+/// use gup::RenderContext;
+/// use std::sync::Arc;
+///
+/// # async fn example() -> gup::error::GupResult<()> {
+/// let context = Arc::new(RenderContext::new().await?);
+/// let tick_pipeline = TickPipeline::new(context.device(), wgpu::TextureFormat::Bgra8Unorm);
+///
+/// // Generate instances
+/// let renderer = AxisRenderer::new();
+/// let bounds = AxisBounds::new(
+///     Vec2 { x: -0.8, y: -0.8 },
+///     Vec2 { x: 0.8, y: -0.8 },
+///     50.0,
+/// );
+/// let config = AxisConfiguration::default();
+/// let instances = renderer.generate_tick_instances(
+///     &bounds, &config, AxisPosition::Bottom, None, (800.0, 600.0),
+/// );
+///
+/// // Upload and draw
+/// let (base_buf, inst_buf) = tick_pipeline.upload(context.device(), context.queue(), &instances);
+/// // ... in a render pass:
+/// // tick_pipeline.draw(&mut render_pass, &base_buf, &inst_buf, instances.len() as u32);
+/// # Ok(())
+/// # }
+/// ```
+pub struct TickPipeline {
+    pipeline: wgpu::RenderPipeline,
+}
+
+impl TickPipeline {
+    /// Create a new instanced tick pipeline for the given surface format.
+    pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("tick_instanced_shader"),
+            source: wgpu::ShaderSource::Wgsl(
+                include_str!("shaders/tick_instanced.wgsl").into(),
+            ),
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("tick_instanced_pipeline_layout"),
+            bind_group_layouts: &[],
+            push_constant_ranges: &[],
+        });
+
+        // Base vertex buffer: a single f32 per vertex (the parameter t)
+        let base_vertex_layout = wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<f32>() as u64,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[wgpu::VertexAttribute {
+                offset: 0,
+                shader_location: 0,
+                format: wgpu::VertexFormat::Float32,
+            }],
+        };
+
+        let instance_layout = TickInstance::instance_buffer_layout();
+
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("tick_instanced_pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                buffers: &[base_vertex_layout, instance_layout],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: surface_format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::LineList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+            cache: None,
+        });
+
+        Self { pipeline }
+    }
+
+    /// Upload the base geometry and instance data to GPU buffers.
+    ///
+    /// Returns `(base_vertex_buffer, instance_buffer)`.
+    pub fn upload(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        instances: &[TickInstance],
+    ) -> (wgpu::Buffer, wgpu::Buffer) {
+        use wgpu::util::{BufferInitDescriptor, DeviceExt};
+
+        // Base geometry: two floats [0.0, 1.0] forming one line segment
+        let base_data: [f32; 2] = [0.0, 1.0];
+        let base_buf = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("tick_base_vertices"),
+            contents: bytemuck::cast_slice(&base_data),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let inst_buf = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("tick_instance_buffer"),
+            contents: bytemuck::cast_slice(instances),
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        });
+
+        (base_buf, inst_buf)
+    }
+
+    /// Record instanced draw commands into an active render pass.
+    ///
+    /// `base_buf` contains the two-vertex base geometry, `inst_buf`
+    /// contains the per-tick instance data, and `instance_count` is the
+    /// number of ticks to draw.
+    pub fn draw<'a>(
+        &'a self,
+        render_pass: &mut wgpu::RenderPass<'a>,
+        base_buf: &'a wgpu::Buffer,
+        inst_buf: &'a wgpu::Buffer,
+        instance_count: u32,
+    ) {
+        if instance_count == 0 {
+            return;
+        }
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_vertex_buffer(0, base_buf.slice(..));
+        render_pass.set_vertex_buffer(1, inst_buf.slice(..));
+        render_pass.draw(0..2, 0..instance_count);
+    }
+
+    /// Access the underlying render pipeline.
+    pub fn pipeline(&self) -> &wgpu::RenderPipeline {
+        &self.pipeline
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
