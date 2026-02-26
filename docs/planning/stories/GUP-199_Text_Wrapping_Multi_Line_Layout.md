@@ -101,3 +101,97 @@ truncation
 
 **Story Created**: 2026-02-26  
 **Origin**: GUP-105 follow-up ("Could Have" AC not implemented)
+
+## Retrospective
+
+**Completed**: 2025-07-18
+
+### Key Technical Learnings
+
+#### GlyphSource Trait for Testability
+
+- **Challenge**: The text layout engine methods were tightly coupled to
+  `FontAtlas`, which requires GPU resources and can't be constructed in simple
+  unit tests. Existing tests used a `MockFontAtlas` struct but could only test
+  inline code, not engine methods.
+- **Solution**: Introduced a `GlyphSource` trait with `metrics()` and
+  `get_glyph()` methods. `FontAtlas` and `MockFontAtlas` both implement it.
+  Changed private helper methods to use `impl GlyphSource` while keeping public
+  API signatures accepting `&FontAtlas` (which satisfies the trait).
+- **Pattern**: When testing GPU-dependent code, introduce minimal traits at the
+  boundary between algorithm and GPU resource. Keep public APIs concrete for
+  simplicity; use generics only in internal helpers that benefit from
+  testability.
+
+#### Word-Level Line Breaking Algorithm
+
+- **Challenge**: Implementing word wrapping that handles edge cases: empty text,
+  zero width, single long words, max line limits, and word-plus-space width
+  accounting.
+- **Solution**: Iterative word-by-word approach tracking current line width.
+  Space width measured from actual glyph data. Long words optionally hyphenated
+  with recursive breaking for very long words.
+- **Pattern**: For text layout algorithms, measure text width using the same
+  glyph metrics that rendering uses (not estimated widths). This ensures
+  wrapping decisions match rendered output exactly.
+
+#### Multi-Line Glyph Positioning with Anchoring
+
+- **Challenge**: Multi-line text needs proper vertical anchor adjustment. A
+  center-anchored two-line text block should be centered on its total height,
+  not just the first line.
+- **Solution**: Calculate total height upfront, then apply vertical anchor
+  offset to the starting position. Each line applies its own horizontal anchor
+  offset independently (allowing different-length lines to align properly).
+- **Pattern**: Separate vertical and horizontal anchor calculations for
+  multi-line text. Total height drives vertical centering; per-line width drives
+  horizontal alignment.
+
+### Architectural Decisions
+
+#### Extending ClippingStrategy Enum
+
+- **Decision**: Added `TextWrapping` as a new variant to the existing
+  `ClippingStrategy` enum rather than creating a separate wrapping system.
+- **Reasoning**: The existing clipping cascade (primary → fallback strategies)
+  naturally supports text wrapping as one option. Users can configure wrapping
+  as primary with truncation as fallback, or vice versa.
+- **Trade-off**: The `ClippingStrategy` enum grows, but avoids a parallel
+  configuration system. The `apply_strategy()` match arm dispatches cleanly.
+- **Future**: Additional text strategies (e.g., ellipsis on last wrapped line,
+  shrink-to-fit within wrapped layout) can be added as new variants or as
+  options on the existing `TextWrapping` variant.
+
+#### Standalone `layout_wrapped_text()` API
+
+- **Decision**: Added a public `layout_wrapped_text()` method in addition to the
+  clipping-strategy integration, so users can wrap text without needing viewport
+  bounds infrastructure.
+- **Reasoning**: Multi-line text layout is useful outside the clipping context
+  (e.g., chart titles, annotations, tooltip text).
+- **Trade-off**: Slight API surface increase, but provides a clean entry point
+  for the most common use case.
+- **Future**: Could extend with alignment options (left/center/right/justify)
+  per line.
+
+### Development Workflow Insights
+
+- The story was well-scoped: the existing `ClippingStrategy` infrastructure
+  provided clear integration points.
+- Adding `GlyphSource` trait was the key enabler for thorough unit testing
+  without GPU. This pattern should be applied to other GPU-dependent algorithms.
+- All 15 new tests passed on first run, validating the algorithm design.
+- The `MockFontAtlas` with uniform 9px advance per character made test
+  assertions predictable (e.g., "Hello" = 5 × 9 = 45px).
+
+### Follow-up Stories
+
+1. **GUP-227: Multi-Line Text Alignment Options** — Add left/center/right/
+   justify alignment for wrapped text lines. Currently all lines use the same
+   anchor-based alignment; per-line justification would improve readability for
+   paragraph-style text in annotations and tooltips.
+
+2. **GUP-228: Ellipsis on Last Wrapped Line** — When `max_lines` truncates
+   wrapped text, append an ellipsis to the last visible line to indicate
+   continuation. Currently wrapping simply stops at the line limit without
+   visual indication of truncation.

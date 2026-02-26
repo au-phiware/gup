@@ -307,6 +307,8 @@ system story. The expanded story is also complete._
 | [GUP-215](GUP-215_Chart_Builder_Multi_Font.md)                                     | Chart Builder Multi-Font Integration        | ✅ Complete | Medium   | —      |
 | [GUP-216](GUP-216_Chart_Title_Layout_Configuration.md)                             | Chart Title Layout Configuration            | 📋 Planned  | Low      | —      |
 | [GUP-217](GUP-217_Per_Axis_Label_Style_Override.md)                                | Per-Axis Label Style Override               | 📋 Planned  | Low      | —      |
+| [GUP-227](GUP-227_Multi_Line_Text_Alignment.md)                                    | Multi-Line Text Alignment Options           | 💡 New      | Low      | 3      |
+| [GUP-228](GUP-228_Ellipsis_Last_Wrapped_Line.md)                                   | Ellipsis on Last Wrapped Line               | 💡 New      | Low      | 2      |
 
 ### Post GUP-016 Stories - Accessibility System (Stories 111-130)
 
