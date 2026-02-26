@@ -792,10 +792,37 @@ impl<T, M: Mark> Selection<T, M> {
     /// This invalidates the GPU render state; call
     /// [`prepare_render`](Self::prepare_render) again before the next
     /// [`render`](Self::render) call.
+    ///
+    /// If the instance buffer was allocated from a [`BufferPool`], use
+    /// [`set_data_with_pool`](Self::set_data_with_pool) instead to return
+    /// the buffer to the pool before clearing the render state.
     pub fn set_data(&mut self, data: Vec<T>) {
         self.data = data;
         // Invalidate render state so next prepare_render re-uploads.
         self.render_state = None;
+        // Mark ARIA tree as needing a refresh.
+        self.aria_dirty = true;
+    }
+
+    /// Replace the data in this selection, returning any pool-allocated
+    /// instance buffer to the [`BufferPool`].
+    ///
+    /// This is the pool-aware equivalent of [`set_data`](Self::set_data).
+    /// When the current render state holds a pool-allocated instance buffer,
+    /// it is returned to `pool` before the render state is cleared.
+    ///
+    /// After calling this method you must call
+    /// [`prepare_render`](Self::prepare_render) (or
+    /// [`prepare_render_bound`](Self::prepare_render_bound)) again before
+    /// the next [`render`](Self::render) call.
+    pub fn set_data_with_pool(&mut self, data: Vec<T>, pool: &mut BufferPool) {
+        // Return pool-allocated buffer before clearing state.
+        if let Some(mut state) = self.render_state.take()
+            && let Some((bt, sc)) = state.pool_meta.take()
+        {
+            pool.deallocate_raw(state.instance_buffer, bt, sc);
+        }
+        self.data = data;
         // Mark ARIA tree as needing a refresh.
         self.aria_dirty = true;
     }
@@ -882,7 +909,7 @@ impl<T, M: Mark> Selection<T, M> {
     {
         // If there are GPU shader bindings, delegate to the shader-aware path.
         if !self.shader_attr_bindings.is_empty() {
-            return self.prepare_render_shader_bound(device, queue);
+            return self.prepare_render_shader_bound(device, queue, pool);
         }
 
         if self.attr_bindings.is_empty() {
@@ -930,7 +957,12 @@ impl<T, M: Mark> Selection<T, M> {
     ///
     /// Returns an error if no bindings are set, or if GPU resource creation
     /// fails.
-    fn prepare_render_shader_bound(&mut self, device: &Device, queue: &Queue) -> GupResult<()>
+    fn prepare_render_shader_bound(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        mut pool: Option<&mut BufferPool>,
+    ) -> GupResult<()>
     where
         M: MarkInstanceBuilder,
     {
@@ -1017,16 +1049,36 @@ impl<T, M: Mark> Selection<T, M> {
             // Re-use existing pipeline (shader functions don't change between
             // frames — only uniform values might).  Re-upload instances.
             if instance_bytes.len() > state.instance_buffer_capacity {
-                let (instance_buffer, bind_group) =
+                // Return the old buffer to the pool before allocating a new one.
+                if let Some((bt, sc)) = state.pool_meta.take() {
+                    if let Some(ref mut p) = pool {
+                        let old_buffer = std::mem::replace(
+                            &mut state.instance_buffer,
+                            device.create_buffer(&wgpu::BufferDescriptor {
+                                label: Some("selection_instance_placeholder"),
+                                size: 16,
+                                usage: wgpu::BufferUsages::STORAGE,
+                                mapped_at_creation: false,
+                            }),
+                        );
+                        p.deallocate_raw(old_buffer, bt, sc);
+                    }
+                    // else: no pool provided at reallocation — drop the old buffer.
+                }
+
+                let (instance_buffer, bind_group, pool_meta) =
                     Self::create_shader_bound_buffers_and_bind_group(
                         device,
+                        queue,
                         &state.pipeline,
                         instance_bytes,
                         gpu_bindings,
+                        pool.as_deref_mut(),
                     );
                 state.instance_buffer = instance_buffer;
                 state.bind_group = bind_group;
                 state.instance_buffer_capacity = instance_bytes.len();
+                state.pool_meta = pool_meta;
             } else {
                 queue.write_buffer(&state.instance_buffer, 0, instance_bytes);
                 // Also re-upload uniform data (shader function params may have
@@ -1037,11 +1089,13 @@ impl<T, M: Mark> Selection<T, M> {
         } else {
             let state = SelectionRenderState::new_with_shader_fns::<M, T>(
                 device,
+                queue,
                 instance_bytes,
                 instance_count,
                 &modified_vertex_wgsl,
                 &fragment_wgsl,
                 gpu_bindings,
+                pool,
             )?;
             self.render_state = Some(state);
         }
@@ -1066,21 +1120,36 @@ impl<T, M: Mark> Selection<T, M> {
 
     /// Create instance buffer, uniform buffers, and bind group for shader
     /// function bindings.
+    ///
+    /// When `pool` is provided the instance buffer is allocated from the
+    /// [`BufferPool`]; otherwise a one-off buffer is created.  The returned
+    /// pool metadata must be stored in the render state for later deallocation.
     fn create_shader_bound_buffers_and_bind_group(
         device: &Device,
+        queue: &Queue,
         pipeline: &wgpu::RenderPipeline,
         instance_bytes: &[u8],
         gpu_bindings: &[ShaderAttributeBinding<T>],
-    ) -> (wgpu::Buffer, wgpu::BindGroup) {
-        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("selection_shader_instance_buffer"),
-            contents: if instance_bytes.is_empty() {
-                &[0u8; 16]
-            } else {
-                instance_bytes
-            },
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-        });
+        pool: Option<&mut BufferPool>,
+    ) -> (wgpu::Buffer, wgpu::BindGroup, Option<(BufferType, usize)>) {
+        let effective_bytes = if instance_bytes.is_empty() {
+            &[0u8; 16][..]
+        } else {
+            instance_bytes
+        };
+
+        let (instance_buffer, pool_meta) = if let Some(pool) = pool {
+            let (buf, size_class) = pool.allocate_raw(BufferType::Storage, effective_bytes.len());
+            queue.write_buffer(&buf, 0, effective_bytes);
+            (buf, Some((BufferType::Storage, size_class)))
+        } else {
+            let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("selection_shader_instance_buffer"),
+                contents: effective_bytes,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            });
+            (buf, None)
+        };
 
         // Create uniform buffers for each shader function.
         let mut entries = vec![wgpu::BindGroupEntry {
@@ -1123,7 +1192,7 @@ impl<T, M: Mark> Selection<T, M> {
         // For update support we store them in SelectionRenderState.
         // For now this is only used on first creation; updates go through
         // update_uniform_buffers with the stored buffers.
-        (instance_buffer, bind_group)
+        (instance_buffer, bind_group, pool_meta)
     }
 
     /// Get the names of currently bound attributes.
@@ -1777,11 +1846,13 @@ impl SelectionRenderState {
     /// shader function transformations.
     fn new_with_shader_fns<M: Mark, T>(
         device: &Device,
+        queue: &Queue,
         instance_bytes: &[u8],
         instance_count: u32,
         vertex_wgsl: &str,
         fragment_wgsl: &str,
         gpu_bindings: &[ShaderAttributeBinding<T>],
+        pool: Option<&mut BufferPool>,
     ) -> GupResult<Self> {
         // --- Shader modules ------------------------------------------
         let vertex_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -1892,15 +1963,24 @@ impl SelectionRenderState {
         });
 
         // --- Instance buffer -----------------------------------------
-        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("selection_shader_fn_instance_buffer"),
-            contents: if instance_bytes.is_empty() {
-                &[0u8; 16]
-            } else {
-                instance_bytes
-            },
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-        });
+        let effective_bytes = if instance_bytes.is_empty() {
+            &[0u8; 16][..]
+        } else {
+            instance_bytes
+        };
+
+        let (instance_buffer, pool_meta) = if let Some(pool) = pool {
+            let (buf, size_class) = pool.allocate_raw(BufferType::Storage, effective_bytes.len());
+            queue.write_buffer(&buf, 0, effective_bytes);
+            (buf, Some((BufferType::Storage, size_class)))
+        } else {
+            let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("selection_shader_fn_instance_buffer"),
+                contents: effective_bytes,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            });
+            (buf, None)
+        };
 
         // --- Uniform buffers for shader functions --------------------
         let uniform_buffers: Vec<wgpu::Buffer> = gpu_bindings
@@ -1952,7 +2032,7 @@ impl SelectionRenderState {
             instance_buffer_capacity: instance_bytes.len(),
             viewport_buffer: None,
             uniform_buffers,
-            pool_meta: None,
+            pool_meta,
         })
     }
 }
