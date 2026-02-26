@@ -94,11 +94,12 @@ Run Rust check, linters and formatters' checks.
 
 ```bash
 shopt -qs globstar
-concurrently --group --names '\s,rs,nix,md' \
+concurrently --group --names '\s,rs,nix,md,marks' \
    '! git --no-pager grep --untracked --name-only --full-name "[[:space:]]\+$" **/*.rs' \
    'mask check && cargo fmt --all -- --check && cargo clippy --allow-no-vcs --fix --all-targets --all-features -- -D warnings' \
    'nixfmt --check flake.nix && statix check flake.nix' \
    'prettier --cache --log-level warn --check "**/*.md" && mdl --git-recurse .' \
+   'mask validate-marks'
 ```
 
 ## clean
@@ -188,6 +189,14 @@ Show dependency tree
 
 ```bash
 cargo tree
+```
+
+## validate-marks
+
+Validate all built-in mark types (CI gate)
+
+```bash
+cargo run --bin validate_marks
 ```
 
 ## bench
