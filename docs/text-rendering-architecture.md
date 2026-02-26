@@ -247,13 +247,35 @@ graph LR
 
 ### SDF Generation Process
 
-The SDF generation converts fontdue's grayscale coverage into distance fields:
+The text rendering pipeline supports two generation strategies:
 
-1. **Input**: Grayscale bitmap where 255 = fully covered, 0 = empty
-2. **Threshold Detection**: Pixels > 32 considered "inside" the glyph
-3. **Distance Calculation**: For each SDF pixel, find distance to nearest edge
-4. **Value Encoding**: Inside = 128+ (128-255), Outside = 128- (0-127)
-5. **Output**: SDF texture ready for GPU upload
+#### Multi-Channel SDF (MSDF) — Default
+
+The MSDF approach stores separate edge distances in three colour channels (RGB)
+using edge colouring. This preserves sharp corners via median-of-three
+reconstruction in the fragment shader.
+
+1. **Outline Extraction**: TTF glyph outlines are parsed into contours of
+   line/quadratic/cubic segments.
+2. **Edge Colouring**: Contour edges are assigned colours (cyan, yellow,
+   magenta) so that adjacent edges at sharp corners differ by at least one
+   channel.
+3. **Per-Channel Distance**: Each texel stores the signed distance to the
+   nearest edge of each colour.
+4. **GPU Reconstruction**: The fragment shader computes `median(r, g, b)` to
+   reconstruct the glyph with sharp corners intact.
+
+Configuration is available via `MultiChannelSdfConfig`:
+
+- `combination_mode`: `Median` (default), `Max` (union), `Min` (intersection)
+- `sharp_corner_threshold`: angle below which a corner is classified as sharp
+- Channel debug modes (2–5) in the shader to visualise individual channels
+
+#### Single-Channel SDF
+
+A simpler alternative that computes a single distance per texel. Faster (~25%)
+and uses 1/3 the memory but rounds off sharp corners. Suitable for small labels
+and low-resolution text.
 
 ```rust
 // Simplified SDF generation logic
