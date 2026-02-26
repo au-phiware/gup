@@ -775,4 +775,110 @@ mod tests {
         assert!(debug_str.contains("atlas_count"));
         assert!(debug_str.contains("default_font_size"));
     }
+
+    #[tokio::test]
+    async fn test_font_atlas_manager_get_or_create_default() {
+        let context = crate::RenderContext::new().await.unwrap();
+        let db = FontDatabase::empty();
+        let mut manager = FontAtlasManager::new(db, 16.0);
+
+        // Create default atlas
+        let atlas = manager
+            .get_or_create(context.device(), context.queue(), None)
+            .unwrap();
+        assert!(atlas.is_fallback_font());
+        assert_eq!(atlas.font_family(), "Squada One");
+        assert!(atlas.glyph_count() > 0);
+
+        // Should now have one atlas
+        assert_eq!(manager.atlas_count(), 1);
+
+        // Get it again — no new atlas created
+        let _ = manager
+            .get_or_create(context.device(), context.queue(), None)
+            .unwrap();
+        assert_eq!(manager.atlas_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_font_atlas_manager_get_or_create_named() {
+        let context = crate::RenderContext::new().await.unwrap();
+        let db = FontDatabase::empty();
+        let mut manager = FontAtlasManager::new(db, 16.0);
+
+        // Request a named font (falls back to default with empty db)
+        let atlas = manager
+            .get_or_create(context.device(), context.queue(), Some("Arial"))
+            .unwrap();
+        assert!(atlas.is_fallback_font()); // Falls back
+        assert_eq!(manager.atlas_count(), 1);
+
+        // Request another named font
+        let _ = manager
+            .get_or_create(context.device(), context.queue(), Some("Times"))
+            .unwrap();
+        assert_eq!(manager.atlas_count(), 2);
+
+        // Request same font again — no new atlas
+        let _ = manager
+            .get_or_create(context.device(), context.queue(), Some("Arial"))
+            .unwrap();
+        assert_eq!(manager.atlas_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_font_atlas_manager_get_atlas_for_style() {
+        let context = crate::RenderContext::new().await.unwrap();
+        let db = FontDatabase::empty();
+        let mut manager = FontAtlasManager::new(db, 16.0);
+
+        // Style without font family → default atlas
+        let style = super::super::TextStyle::default();
+        let atlas = manager
+            .get_atlas_for_style(context.device(), context.queue(), &style)
+            .unwrap();
+        assert!(atlas.is_fallback_font());
+        assert_eq!(manager.atlas_count(), 1);
+
+        // Style with font family → named atlas
+        let style = super::super::TextStyle::new(24.0).with_font_family("Helvetica");
+        let atlas = manager
+            .get_atlas_for_style(context.device(), context.queue(), &style)
+            .unwrap();
+        assert!(atlas.is_fallback_font()); // Falls back with empty db
+        assert_eq!(manager.atlas_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_font_atlas_manager_iter() {
+        let context = crate::RenderContext::new().await.unwrap();
+        let db = FontDatabase::empty();
+        let mut manager = FontAtlasManager::new(db, 16.0);
+
+        let _ = manager
+            .get_or_create(context.device(), context.queue(), None)
+            .unwrap();
+        let _ = manager
+            .get_or_create(context.device(), context.queue(), Some("Mono"))
+            .unwrap();
+
+        let keys: Vec<&str> = manager.iter().map(|(k, _)| k).collect();
+        assert_eq!(keys.len(), 2);
+        assert!(keys.contains(&DEFAULT_ATLAS_KEY));
+        assert!(keys.contains(&"Mono"));
+    }
+
+    #[tokio::test]
+    async fn test_font_atlas_manager_with_system_fonts() {
+        let context = crate::RenderContext::new().await.unwrap();
+        let db = FontDatabase::new();
+        let mut manager = FontAtlasManager::new(db, 16.0);
+
+        // Try to load a common system font
+        let atlas = manager
+            .get_or_create(context.device(), context.queue(), Some("DejaVu Sans"))
+            .unwrap();
+        // Should succeed regardless (falls back if not found)
+        assert!(atlas.glyph_count() > 0);
+    }
 }
