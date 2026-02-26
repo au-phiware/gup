@@ -93,7 +93,7 @@ impl FontAtlas {
     }
 
     /// Internal: Create a font atlas from a resolved font.
-    fn from_resolved(
+    pub(crate) fn from_resolved(
         device: &Device,
         queue: &Queue,
         font_size: f32,
