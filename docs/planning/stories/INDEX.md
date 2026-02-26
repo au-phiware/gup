@@ -353,8 +353,8 @@ system story. The expanded story is also complete._
    performance chain (unblocks 100K pts metric)_
 3. **GUP-068** → **GUP-165** ✅ → **GUP-149** ✅ / **GUP-166** ✅ / **GUP-127**
    ✅ _Rendering integration chain complete_
-4. **GUP-005** → **GUP-054-ES** → **GUP-055–062** 📋 _Phase 2 transpilation (not
-   yet started)_
+4. **GUP-005** → **GUP-054-ES** → **GUP-055–062** ✅ _Phase 2 transpilation
+   complete_
 
 ### Foundation Dependencies
 
