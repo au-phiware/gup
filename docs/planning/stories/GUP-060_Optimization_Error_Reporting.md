@@ -546,3 +546,86 @@ The transpile pipeline now follows a 5-phase architecture:
 3. **Analyse**: `analyse_performance()` detects GPU performance issues
 4. **Validate**: `validate_module()` checks for structural correctness
 5. **Generate**: `WgslCodeGen` produces WGSL text with optional source map
+
+## Retrospective
+
+**Completed**: 2025-07-22
+
+### Key Technical Learnings
+
+#### Dual AST Architecture
+
+- **Challenge**: The project has two separate WGSL AST systems — the runtime AST
+  in `src/shader_ast/` (with attributes, globals, blocks) and the transpile AST
+  in `gup-macros/src/transpile/` (lightweight, no attributes). Optimization
+  passes need different implementations for each.
+- **Solution**: Implemented optimization passes specifically for the transpile
+  AST (`WgslModule` with `WgslFunction`/`WgslStatement`/`WgslExpr`), mirroring
+  the patterns already proven in the runtime optimizer.
+- **Pattern**: When two parallel type systems exist, implement parallel
+  optimization passes rather than trying to bridge between them.
+
+#### Proc-Macro Crate Constraints
+
+- **Challenge**: The `gup-macros` crate is a proc-macro crate which limits
+  available dependencies (no `serde`, no GPU crates). The diagnostic JSON
+  formatter had to be hand-rolled.
+- **Solution**: Manual JSON string construction in `format_json()` without any
+  external dependency. The diagnostic system is self-contained.
+- **Pattern**: In proc-macro crates, keep utilities dependency-free. Manual
+  serialisation is acceptable for simple structured output.
+
+#### Side-Effect Analysis for DCE
+
+- **Challenge**: Dead variable elimination cannot simply remove all unused `let`
+  bindings because the initialiser may have side effects (e.g. function calls
+  that modify state).
+- **Solution**: `expr_has_side_effects()` conservatively considers any
+  `WgslExpr::Call` as having potential side effects, preserving such bindings
+  even if the variable itself is unused.
+- **Pattern**: Conservative analysis is safer than aggressive analysis for
+  correctness-critical optimisations.
+
+### Architectural Decisions
+
+#### Enum-Based Optimization Level Rather Than Trait-Based Pass System
+
+- **Decision**: Used `OptimizationConfig` with boolean flags rather than a
+  trait-based `OptimizationPass` system (as suggested in the story spec).
+- **Reasoning**: The transpile AST is simpler than the runtime AST, and the
+  number of passes is small (4). An enum/config approach avoids the overhead of
+  trait objects and dynamic dispatch. It also avoids object-safety issues noted
+  in CLAUDE.md.
+- **Trade-off**: Less extensible for third-party passes, but much simpler to
+  implement and maintain.
+- **Future**: If many more passes are needed, the system can be refactored to a
+  pass-registry pattern.
+
+#### Validation as Separate Phase
+
+- **Decision**: Validation runs after optimisation rather than before.
+- **Reasoning**: Optimisation may remove code that would trigger false positive
+  validation warnings (e.g. unused variables that get DCE'd). Running validation
+  on the optimised AST gives more accurate results.
+- **Trade-off**: Users won't see warnings about code that gets optimised away,
+  which is generally desirable.
+- **Future**: Pre-optimisation warnings could be added as a separate "lint"
+  phase if needed.
+
+### Development Workflow Insights
+
+- The transpile test infrastructure is well-designed — `syn::parse_quote!` makes
+  it trivial to construct test inputs, and the 3-phase pipeline (parse → convert
+  → generate) is easy to test at each stage.
+- All 61 tests run in under 0.1 seconds since they're pure CPU AST operations
+  with no GPU dependencies.
+- The pre-existing `test_is_uniform_compatible_type` failure (GUP-211) and
+  `test_registry_scalability` failure (GPU resource issue) are not related to
+  this story.
+
+### Follow-up Stories
+
+No new follow-up stories identified. The existing stories GUP-210 (Switch
+Statement Transpilation), GUP-211 (Fix Pre-existing wgsl_function Test), GUP-212
+(WGSL Reserved Keyword Detection), and GUP-213 (Transpiler Custom Struct
+Support) cover the natural next steps for the transpilation system.
