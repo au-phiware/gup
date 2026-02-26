@@ -314,9 +314,9 @@ system story. The expanded story is also complete._
 | [GUP-119](GUP-119_Interactive_Event_Forwarding.md)           | Interactive Event Forwarding                | ✅ Complete           | Medium   | 3      |
 | [GUP-121](GUP-121_Screen_Reader_Manual_Testing.md)           | Screen Reader Manual Testing Infrastructure | ✅ Complete           | High     | 3      |
 | [GUP-122](GUP-122_Manual_Screen_Reader_Testing_Execution.md) | Manual Screen Reader Testing Execution      | 🎯 Awaiting Resources | High     | 5      |
-| [GUP-124](GUP-124_Enhanced_Color_Description.md)             | Enhanced Color Description                  | 💡 New                | Low      | 2      |
+| [GUP-124](GUP-124_Enhanced_Color_Description.md)             | Enhanced Color Description                  | 🚧 In Progress        | Low      | 2      |
 | [GUP-125](GUP-125_Automatic_ARIA_Registration.md)            | Automatic ARIA Registration                 | ✅ Complete           | Medium   | 3      |
-| [GUP-126](GUP-126_Reactive_ARIA_Updates.md)                  | Reactive ARIA Updates                       | ✅ Complete            | Medium   | 5      |
+| [GUP-126](GUP-126_Reactive_ARIA_Updates.md)                  | Reactive ARIA Updates                       | ✅ Complete           | Medium   | 5      |
 | [GUP-127](GUP-127_Focus_Elements_for_Data_Points.md)         | Focus Elements for Data Points              | ✅ Complete           | High     | 5      |
 | [GUP-128](GUP-128_Debug_GPU_Hit_Test_Detection.md)           | Debug GPU Hit Test Element Detection        | ✅ Complete           | High     | 5      |
 | [GUP-129](GUP-129_GPU_Debug_Visualization_Tool.md)           | GPU Interaction Debug Visualization Tool    | ✅ Complete           | Medium   | 8      |
