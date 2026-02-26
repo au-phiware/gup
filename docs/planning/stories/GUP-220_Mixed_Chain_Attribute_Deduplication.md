@@ -1,6 +1,6 @@
 # GUP-220: Mixed Shallow+Deep Chain Attribute Deduplication
 
-**Status**: 🚧 In Progress
+**Status**: ✅ Complete (2025-07-17)
 
 ## Story Overview
 
@@ -28,14 +28,14 @@ each chain's GPU uniform struct is correctly defined
 
 ## Acceptance Criteria
 
-- [ ] A selection with both `attr_shader("radius", ..., scale1.compose(scale2))`
+- [x] A selection with both `attr_shader("radius", ..., scale1.compose(scale2))`
       and
       `attr_shader("fill_color", ..., scale1.compose(scale2).compose(color_map))`
       produces correct, non-conflicting WGSL struct definitions
-- [ ] Name-based deduplication is replaced or augmented with content-aware
+- [x] Name-based deduplication is replaced or augmented with content-aware
       deduplication (or `ChainUniforms` names are made globally unique)
-- [ ] Existing GUP-218 deduplication of truly identical structs still works
-- [ ] GPU integration test renders correctly with mixed chain bindings
+- [x] Existing GUP-218 deduplication of truly identical structs still works
+- [x] GPU integration test renders correctly with mixed chain bindings
 
 ## Dependencies
 
@@ -69,6 +69,38 @@ each chain's GPU uniform struct is correctly defined
 
 ## Definition of Done
 
-- [ ] All acceptance criteria met
-- [ ] Existing Selection and chain tests still pass
-- [ ] `mask all-fix` clean
+- [x] All acceptance criteria met
+- [x] Existing Selection and chain tests still pass
+- [x] `mask all-fix` clean
+
+## Implementation Summary
+
+### Approach Chosen
+
+**Option B** was implemented: content-aware deduplication with automatic
+renaming. This keeps the `ShaderUniform` trait signature stable
+(`wgsl_type_name` still returns `&'static str`) while resolving conflicts at
+WGSL generation time.
+
+### Key Changes
+
+- **`src/shader_function.rs`**: Made `replace_wgsl_identifier` and
+  `deduplicate_wgsl_functions` `pub(crate)` for reuse in `selection.rs`.
+- **`src/selection.rs`**:
+  - Added `ResolvedBinding` struct and `resolve_binding_conflicts()` function
+    that pre-processes bindings to detect when multiple bindings share a
+    function name (e.g., `composed_chain`) but have different code/struct
+    layouts, and renames the duplicates with a `_b<index>` suffix.
+  - Refactored `generate_shader_bound_vertex_wgsl()` to use resolved bindings
+    and cross-binding function deduplication (concatenate all code blocks then
+    deduplicate individual function definitions).
+  - Added 4 new tests: `mixed_shallow_deep_chain_produces_unique_structs`,
+    `identical_chains_still_deduplicated`,
+    `resolve_binding_conflicts_no_conflict`, and `gpu_mixed_chain_render`.
+
+### Test Results
+
+- 184 selection tests pass (180 pre-existing + 4 new)
+- All 1597 non-pre-existing-failing tests pass across the project
+- `mask all-fix` clean
+- All examples compile
