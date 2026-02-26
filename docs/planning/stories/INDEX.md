@@ -413,7 +413,7 @@ system story. The expanded story is also complete._
 - **Axis/Grid planned**: GUP-094 📋, GUP-098 📋
 - **Axis/Grid complete**: GUP-096 ✅
 - **Text complete**: GUP-104 ✅, GUP-105 ✅, GUP-106 ✅, GUP-107 ✅, GUP-108 ✅
-- **Text planned**: GUP-109 📋, GUP-110 📋, GUP-199 📋, GUP-200 📋, GUP-201 📋,
+- **Text planned**: GUP-110 📋, GUP-199 📋, GUP-200 📋, GUP-201 📋,
   GUP-202 📋, GUP-203 📋
 
 ## Story Point Summary

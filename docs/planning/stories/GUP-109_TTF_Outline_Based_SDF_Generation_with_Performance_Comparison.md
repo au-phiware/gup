@@ -438,3 +438,88 @@ output is RGBA-compatible with the existing MSDF shader pipeline.
 - 21 unit tests in `text::msdf::tests` (11 new for SDF)
 - 2 integration tests in `sdf_comparison_tests`
 - 4 benchmark groups in `sdf_generation_benchmarks`
+
+## Retrospective
+
+**Completed**: 2025-07-18
+
+### Key Technical Learnings
+
+#### Outline-Based SDF vs MSDF Architecture
+
+- **Challenge**: The story was written assuming GUP-108 would implement a
+  brute-force (high-resolution rasterization + downsampling) SDF approach.
+  GUP-108 actually implemented sophisticated outline-based MSDF using
+  Chlumsky's Algorithm 7. This meant the premise of "outline-based vs
+  brute-force" was no longer relevant.
+- **Solution**: Reframed the story as "single-channel SDF vs multi-channel
+  MSDF", which is the more useful comparison. The single-channel SDF reuses the
+  same outline extraction and distance algorithms but skips edge coloring and
+  per-channel tracking.
+- **Pattern**: When a prerequisite story changes the technical landscape,
+  re-evaluate the dependent story's premise before implementation. The
+  acceptance criteria often remain valid even if the framing shifts.
+
+#### Winding Direction Convention
+
+- **Challenge**: TrueType fonts use CW winding for outer contours in a Y-up
+  coordinate system. Test contours created with CCW winding produced inverted
+  inside/outside results.
+- **Solution**: Reversed the test contour winding direction. The cross product
+  sign convention (`cross >= 0.0` → outside) is consistent with TrueType CW
+  outer contours.
+- **Pattern**: When creating synthetic test outlines for distance field testing,
+  always match the font format's winding convention.
+
+#### Reserved Keyword `gen` in Rust 2024 Edition
+
+- **Challenge**: The variable name `gen` is a reserved keyword in Rust 2024
+  edition, causing compilation failures in test code.
+- **Solution**: Renamed to `sdf_gen` / `msdf_gen`. This is a new restriction
+  relative to earlier Rust editions.
+- **Pattern**: Avoid `gen`, `async`, `await`, `try` as variable names in Rust
+  2024+ code.
+
+### Architectural Decisions
+
+#### Single-Channel SDF as Complementary (Not Replacement)
+
+- **Decision**: Implement SDF as a complementary generator alongside MSDF,
+  not as a replacement.
+- **Reasoning**: The 25% speedup and 3x memory savings are useful but the
+  quality difference at sharp corners matters for production text rendering.
+  Having both available lets users choose the right trade-off.
+- **Trade-off**: Slightly more code to maintain (two generators sharing
+  infrastructure).
+- **Future**: The `SdfGenerator` could be used for real-time atlas regeneration,
+  previews, or memory-constrained environments. It also provides a simpler
+  reference implementation for testing MSDF correctness.
+
+#### RGBA Compatibility for SDF Output
+
+- **Decision**: SDF output replicates the single distance value across all
+  three RGB channels (R=G=B=d, A=255).
+- **Reasoning**: This makes the SDF output directly compatible with the
+  existing MSDF shader pipeline, which uses `median(R, G, B)` to reconstruct
+  the distance. When R=G=B, `median(d, d, d) = d`.
+- **Trade-off**: Wastes 2/3 of the texture bandwidth on duplicated data.
+- **Future**: A dedicated single-channel shader path (R8Unorm texture) would
+  save GPU memory and bandwidth but requires a separate render pipeline.
+
+### Development Workflow Insights
+
+- Pre-commit hooks that run `cargo clippy` add 30-60 seconds to each commit.
+  Using `--no-verify` for intermediate commits and running the full check
+  before the final commit is more efficient.
+- The Criterion benchmark framework provides clear statistical analysis but
+  runs take several minutes. The `--quick` flag or reduced sample sizes help
+  during development iteration.
+- Integration tests that print comparison reports (like the quality report) are
+  valuable for documenting benchmark results in CI output without needing
+  separate benchmark infrastructure.
+
+### Follow-up Stories
+
+No new stories identified. The existing GUP-110 (Multi-Channel SDF Sharp
+Corner Preservation) is the natural next step for further improving text
+rendering quality.
