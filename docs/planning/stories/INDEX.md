@@ -180,6 +180,7 @@ reorganisation._
 | [GUP-180](GUP-180_FunctionChain_Binding_Support.md)          | FunctionChain Binding Support            | ✅ Complete | Low      | 3      |
 | [GUP-218](GUP-218_Duplicate_Struct_Definition_Prevention.md) | Duplicate Struct Definition Prevention   | ✅ Complete | Low      | 2      |
 | [GUP-219](GUP-219_Deep_Chain_Binding_Support.md)             | Deep Chain Binding Support               | ✅ Complete | Low      | 3      |
+| [GUP-220](GUP-220_Mixed_Chain_Attribute_Deduplication.md)    | Mixed Chain Attribute Deduplication      | 📋 Planned  | Low      | 3      |
 
 ### Post GUP-014 Stories - Interaction Performance (Stories 76-79)
 

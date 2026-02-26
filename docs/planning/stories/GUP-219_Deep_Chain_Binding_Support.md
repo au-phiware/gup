@@ -90,3 +90,107 @@ transformation pipelines
 - [x] All acceptance criteria met
 - [x] Existing Selection tests still pass
 - [x] `mask all-fix` clean
+
+## Retrospective
+
+**Completed**: 2025-07-11
+
+### Key Technical Learnings
+
+#### Whole-Word Identifier Renaming in WGSL
+
+- **Challenge**: Inner chain identifiers (`ChainUniforms`, `composed_chain`)
+  needed to be renamed to depth-suffixed variants (e.g. `ChainUniforms_1`,
+  `composed_chain_1`), but a naive string replace of `ChainUniforms` would also
+  match `ChainUniforms_1`, breaking deeper nesting.
+- **Solution**: Implemented `replace_wgsl_identifier()` that checks identifier
+  boundaries — the character before and after the match must not be alphanumeric
+  or underscore. This ensures `ChainUniforms` is renamed but `ChainUniforms_1`
+  is left untouched.
+- **Pattern**: When doing identifier renaming in generated code, always check
+  word boundaries. The `is_ident_char()` helper (ASCII alphanumeric or `_`)
+  provides a reliable boundary check for WGSL/GLSL identifiers.
+
+#### Duplicate Function Definitions in Composed WGSL
+
+- **Challenge**: When both components of a chain share the same underlying
+  function type (e.g. two `LinearScale` instances), `generate_wgsl()`
+  concatenated both components' WGSL code, producing duplicate
+  `fn linear_scale(...)` definitions. The WGSL compiler rejected the duplicate.
+- **Solution**: Added `deduplicate_wgsl_functions()` as a post-processing step
+  on the final generated WGSL. It parses function boundaries (by matching
+  braces) and keeps only the first occurrence of each function name.
+- **Pattern**: When generating code by concatenation of sub-components, always
+  consider deduplication. Components may share dependencies that produce
+  identical code fragments.
+
+#### Static Return Types vs Dynamic Names
+
+- **Challenge**: `ShaderUniform::wgsl_type_name()` returns `&'static str`,
+  preventing dynamic name generation for nested chains. Changing the return type
+  to `String` would touch 22+ implementations.
+- **Solution**: Kept `wgsl_type_name()` returning `"ChainUniforms"` (static) but
+  performed renaming in the `wgsl_struct_definition()` and `generate_wgsl()`
+  methods, which already return `String`. The outermost chain always uses the
+  plain `ChainUniforms` name (matching `wgsl_type_name()`), while inner chains
+  get suffixed. This is consistent because `ShaderFnInfo` uses
+  `wgsl_type_name()` for the uniform binding declaration, which always refers to
+  the outermost struct.
+- **Pattern**: When a trait method has a restrictive return type, work within
+  that constraint by handling name resolution in the methods that already return
+  dynamic types.
+
+### Architectural Decisions
+
+#### Depth-Based Suffix Naming
+
+- **Decision**: Use `chain_depth()` (computed recursively as `max(A, B) + 1`) as
+  the suffix for inner chain identifiers
+- **Reasoning**: Depth-based suffixes are deterministic, unique for each nesting
+  level, and human-readable in generated WGSL. They naturally compose: a depth-3
+  chain produces `ChainUniforms_1`, `ChainUniforms_2`, and `ChainUniforms`.
+- **Trade-off**: If a selection has both a shallow chain and a deep chain bound
+  to different attributes, the name-based deduplication from GUP-218 could
+  incorrectly conflate two `ChainUniforms` structs with different layouts. This
+  edge case is documented but unlikely in practice.
+- **Future**: If mixed shallow+deep chain attributes become a real use case,
+  `wgsl_type_name()` should be changed to return `String` for content-aware
+  naming.
+
+#### Function Deduplication in generate_wgsl()
+
+- **Decision**: Apply deduplication at the `FunctionChain::generate_wgsl()`
+  level rather than in `generate_shader_bound_vertex_wgsl()`
+- **Reasoning**: The vertex shader injection layer already deduplicates by
+  `function_name` across bindings, but doesn't inspect the `wgsl_code` string.
+  Deduplicating at the generation level ensures each chain produces clean,
+  non-redundant WGSL regardless of how it's consumed.
+- **Trade-off**: Slight overhead from parsing function boundaries in every
+  `generate_wgsl()` call, but this is negligible since WGSL generation is not a
+  hot path.
+- **Future**: This same deduplication pattern should likely be applied to
+  `ParallelComposition` if it ever supports nested compositions.
+
+### Development Workflow Insights
+
+- The implementation was straightforward once the naming strategy was clear. The
+  main complexity was reasoning about the static vs dynamic type name constraint
+  and ensuring consistency between struct definitions and function signatures.
+- Writing the `replace_wgsl_identifier` helper first and testing it in isolation
+  simplified the rest of the implementation.
+- The GPU test caught a real bug (duplicate function definitions) that the unit
+  tests missed because they don't validate WGSL syntax. GPU integration tests
+  remain essential for shader code generation features.
+- The `chain_depth()` trait method addition was minimal and non-breaking thanks
+  to the default value of 0.
+
+### Follow-up Stories
+
+1. **GUP-220: Mixed Shallow+Deep Chain Attribute Deduplication** — When a
+   selection binds both a shallow chain (e.g. `LinearScale.compose(ColorMap)`)
+   and a deep chain (e.g. `LinearScale.compose(LinearScale).compose(ColorMap)`)
+   to different attributes, both produce an outermost `struct ChainUniforms` but
+   with different layouts. The GUP-218 name-based deduplication would keep only
+   the first, causing an incorrect struct definition for the second binding. Fix
+   by either switching to content-aware deduplication or changing
+   `wgsl_type_name()` to return `String`.
