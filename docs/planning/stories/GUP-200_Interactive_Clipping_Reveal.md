@@ -6,7 +6,7 @@
 **Theme**: Advanced Text Layout and Rendering  
 **Priority**: Low  
 **Story Points**: 3  
-**Status**: 📋 Planned  
+**Status**: 🚧 In Progress  
 **Dependencies**: GUP-105 (Text Clipping Detection), GUP-012 (GPU Interaction
 System)
 
