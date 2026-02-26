@@ -425,9 +425,10 @@ fn fold_statement(stmt: &mut Statement) -> bool {
             let mut changed = fold_expr(subject);
             for case in cases {
                 if let Some(ref mut sel) = case.selector
-                    && fold_expr(sel) {
-                        changed = true;
-                    }
+                    && fold_expr(sel)
+                {
+                    changed = true;
+                }
                 if fold_block(&mut case.body) {
                     changed = true;
                 }
@@ -767,9 +768,10 @@ fn inline_calls_in_stmt(
             let mut changed = inline_calls_in_expr(subject, func_name, params, body_expr);
             for case in cases {
                 if let Some(ref mut sel) = case.selector
-                    && inline_calls_in_expr(sel, func_name, params, body_expr) {
-                        changed = true;
-                    }
+                    && inline_calls_in_expr(sel, func_name, params, body_expr)
+                {
+                    changed = true;
+                }
                 if inline_calls_in_block(&mut case.body, func_name, params, body_expr) {
                     changed = true;
                 }
@@ -1234,5 +1236,152 @@ mod tests {
             }
             other => panic!("expected folded and cleaned result, got {other:?}"),
         }
+    }
+
+    // --- Compute shader DCE tests ---
+
+    #[test]
+    fn test_dce_compute_entry_point_kept() {
+        let mut module = WgslModule {
+            structs: vec![],
+            globals: vec![],
+            constants: vec![],
+            functions: vec![
+                Function {
+                    name: "compute_main".to_string(),
+                    parameters: vec![],
+                    return_type: None,
+                    body: Block::new(vec![Statement::Expression(Expr::Call(
+                        "helper".to_string(),
+                        vec![],
+                    ))]),
+                    attributes: vec![
+                        Attribute::Compute,
+                        Attribute::WorkgroupSize(256, None, None),
+                    ],
+                    return_attributes: vec![],
+                },
+                Function {
+                    name: "helper".to_string(),
+                    parameters: vec![],
+                    return_type: Some(WgslType::Scalar(ScalarType::F32)),
+                    body: Block::new(vec![Statement::Return(Some(Expr::Literal(
+                        Literal::Float(1.0),
+                    )))]),
+                    attributes: vec![],
+                    return_attributes: vec![],
+                },
+                Function {
+                    name: "unused_func".to_string(),
+                    parameters: vec![],
+                    return_type: None,
+                    body: Block::new(vec![Statement::Return(None)]),
+                    attributes: vec![],
+                    return_attributes: vec![],
+                },
+            ],
+        };
+
+        let result = dead_code_elimination(&mut module);
+        assert!(result.changed);
+        // compute_main (entry) and helper (called) kept; unused_func removed
+        assert_eq!(module.functions.len(), 2);
+        assert!(module.functions.iter().any(|f| f.name == "compute_main"));
+        assert!(module.functions.iter().any(|f| f.name == "helper"));
+        assert!(!module.functions.iter().any(|f| f.name == "unused_func"));
+    }
+
+    #[test]
+    fn test_dce_multiple_compute_entry_points() {
+        let mut module = WgslModule {
+            structs: vec![],
+            globals: vec![],
+            constants: vec![],
+            functions: vec![
+                Function {
+                    name: "pass1".to_string(),
+                    parameters: vec![],
+                    return_type: None,
+                    body: Block::new(vec![Statement::Expression(Expr::Call(
+                        "shared_helper".to_string(),
+                        vec![],
+                    ))]),
+                    attributes: vec![
+                        Attribute::Compute,
+                        Attribute::WorkgroupSize(256, None, None),
+                    ],
+                    return_attributes: vec![],
+                },
+                Function {
+                    name: "pass2".to_string(),
+                    parameters: vec![],
+                    return_type: None,
+                    body: Block::new(vec![Statement::Expression(Expr::Call(
+                        "shared_helper".to_string(),
+                        vec![],
+                    ))]),
+                    attributes: vec![Attribute::Compute, Attribute::WorkgroupSize(64, None, None)],
+                    return_attributes: vec![],
+                },
+                Function {
+                    name: "shared_helper".to_string(),
+                    parameters: vec![],
+                    return_type: None,
+                    body: Block::empty(),
+                    attributes: vec![],
+                    return_attributes: vec![],
+                },
+                Function {
+                    name: "dead_code".to_string(),
+                    parameters: vec![],
+                    return_type: None,
+                    body: Block::empty(),
+                    attributes: vec![],
+                    return_attributes: vec![],
+                },
+            ],
+        };
+
+        let result = dead_code_elimination(&mut module);
+        assert!(result.changed);
+        // Both entry points + shared helper kept; dead_code removed
+        assert_eq!(module.functions.len(), 3);
+        assert!(!module.functions.iter().any(|f| f.name == "dead_code"));
+    }
+
+    #[test]
+    fn test_dce_on_parsed_compute_shader() {
+        use crate::shader_ast::parser::parse_wgsl;
+
+        // Parse a real compute shader, add an unused function, verify DCE removes it
+        let source = r#"
+struct Config { count: u32, }
+
+@group(0) @binding(0) var<storage, read> data: array<f32>;
+@group(0) @binding(1) var<uniform> config: Config;
+
+fn helper(x: f32) -> f32 {
+    return x * 2.0;
+}
+
+fn dead_helper(x: f32) -> f32 {
+    return x * 3.0;
+}
+
+@compute @workgroup_size(256)
+fn compute_main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let val = helper(data[gid.x]);
+    return;
+}
+"#;
+
+        let mut module = parse_wgsl(source).unwrap();
+        assert_eq!(module.functions.len(), 3);
+
+        let result = dead_code_elimination(&mut module);
+        assert!(result.changed);
+        // compute_main + helper kept; dead_helper removed
+        assert_eq!(module.functions.len(), 2);
+        assert!(!module.functions.iter().any(|f| f.name == "dead_helper"));
     }
 }

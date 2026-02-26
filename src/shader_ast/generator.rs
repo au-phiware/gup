@@ -652,4 +652,124 @@ fn clamp_val(x: f32) -> f32 {
         assert!(wgsl.contains("@vertex"));
         assert!(wgsl.contains("fn vs_main()"));
     }
+
+    // --- Compute shader round-trip tests ---
+
+    #[test]
+    fn test_roundtrip_compute_shader() {
+        let source = r#"
+struct Config {
+    count: u32,
+}
+
+@group(0) @binding(0) var<storage, read> data: array<f32>;
+@group(0) @binding(1) var<storage, read_write> result: array<f32>;
+@group(0) @binding(2) var<uniform> config: Config;
+
+@compute
+@workgroup_size(256)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let idx = global_id.x;
+    if (idx >= config.count) {
+        return;
+    }
+    result[idx] = data[idx] * 2.0;
+}
+"#;
+
+        let module = parse_wgsl(source).unwrap();
+        let generated = generate_wgsl_minimal(&module);
+
+        // Verify key compute shader constructs survive round-trip
+        assert!(generated.contains("@compute"));
+        assert!(generated.contains("@workgroup_size(256)"));
+        assert!(generated.contains("var<storage, read>"));
+        assert!(generated.contains("var<storage, read_write>"));
+        assert!(generated.contains("@builtin(global_invocation_id) global_id: vec3<u32>"));
+
+        // Parse again to verify structural integrity
+        let module2 = parse_wgsl(&generated).unwrap();
+        assert_eq!(module2.functions.len(), module.functions.len());
+        assert_eq!(module2.globals.len(), module.globals.len());
+        assert_eq!(module2.structs.len(), module.structs.len());
+    }
+
+    #[test]
+    fn test_roundtrip_switch_statement() {
+        let source = r#"
+fn dispatch(kind: u32) -> u32 {
+    switch (kind) {
+        case 0u: {
+            return 10u;
+        }
+        case 1u: {
+            return 20u;
+        }
+        default: {
+            return 0u;
+        }
+    }
+}
+"#;
+
+        let module = parse_wgsl(source).unwrap();
+        let generated = generate_wgsl_minimal(&module);
+
+        assert!(generated.contains("switch (kind)"));
+        assert!(generated.contains("case 0u:"));
+        assert!(generated.contains("default:"));
+
+        // Round-trip
+        let module2 = parse_wgsl(&generated).unwrap();
+        assert_eq!(module2.functions.len(), 1);
+    }
+
+    #[test]
+    fn test_roundtrip_loop_and_bitwise() {
+        let source = r#"
+fn interleave(v_in: u32) -> u32 {
+    var v = v_in & 65535u;
+    v = (v | (v << 8u)) & 16711935u;
+    v = (v | (v << 4u)) & 252645135u;
+    return v;
+}
+"#;
+
+        let module = parse_wgsl(source).unwrap();
+        let generated = generate_wgsl_minimal(&module);
+
+        // Verify bitwise operators survive
+        assert!(generated.contains("&"));
+        assert!(generated.contains("|"));
+        assert!(generated.contains("<<"));
+
+        // Round-trip parse
+        let module2 = parse_wgsl(&generated).unwrap();
+        assert_eq!(module2.functions.len(), 1);
+    }
+
+    #[test]
+    fn test_roundtrip_const_and_atomic() {
+        let source = r#"
+const WORKGROUP_SIZE: u32 = 256u;
+
+@group(0) @binding(0) var<storage, read_write> counter: atomic<u32>;
+
+@compute
+@workgroup_size(256)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    atomicAdd(&counter, 1u);
+}
+"#;
+
+        let module = parse_wgsl(source).unwrap();
+        let generated = generate_wgsl_minimal(&module);
+
+        assert!(generated.contains("const WORKGROUP_SIZE: u32 = 256u;"));
+        assert!(generated.contains("atomic<u32>"));
+
+        // Round-trip
+        let module2 = parse_wgsl(&generated).unwrap();
+        assert_eq!(module2.constants.len(), 1);
+    }
 }

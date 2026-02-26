@@ -178,16 +178,29 @@ impl<'a> Lexer<'a> {
         s.push(first);
         let mut has_dot = false;
         let mut is_uint = false;
+        let mut has_exponent = false;
 
         while let Some(&c) = self.peek() {
             if c.is_ascii_digit() {
                 s.push(c);
                 self.advance();
-            } else if c == '.' && !has_dot {
+            } else if c == '.' && !has_dot && !has_exponent {
                 has_dot = true;
                 s.push(c);
                 self.advance();
-            } else if c == 'u' && !has_dot {
+            } else if (c == 'e' || c == 'E') && !has_exponent {
+                // Scientific notation: 1e38, 3.14e+10, 2.5e-3
+                has_exponent = true;
+                has_dot = true; // Force float parsing
+                s.push(c);
+                self.advance();
+                // Optional sign after exponent
+                if let Some(&sign) = self.peek()
+                    && (sign == '+' || sign == '-') {
+                        s.push(sign);
+                        self.advance();
+                    }
+            } else if c == 'u' && !has_dot && !has_exponent {
                 is_uint = true;
                 self.advance();
                 break;
@@ -198,7 +211,7 @@ impl<'a> Lexer<'a> {
 
         if is_uint {
             Token::UIntLiteral(s.parse().unwrap_or(0))
-        } else if has_dot {
+        } else if has_dot || has_exponent {
             Token::FloatLiteral(s.parse().unwrap_or(0.0))
         } else {
             Token::IntLiteral(s.parse().unwrap_or(0))
@@ -813,7 +826,7 @@ impl WgslParser {
         let address_space = if self.peek() == &Token::Less {
             self.advance(); // <
             let space_name = self.expect_ident()?;
-            
+
             match space_name.as_str() {
                 "uniform" => {
                     self.expect_greater()?;
@@ -1079,9 +1092,22 @@ impl WgslParser {
         let update = if self.peek() == &Token::RightParen {
             None
         } else {
-            // Parse update expression as a statement
+            // Parse update as expression, then check for = or +=
             let expr = self.parse_expression()?;
-            Some(Box::new(Statement::Expression(expr)))
+            let stmt = match self.peek() {
+                Token::Equal => {
+                    self.advance();
+                    let value = self.parse_expression()?;
+                    Statement::Assign(expr, value)
+                }
+                Token::PlusEqual => {
+                    self.advance();
+                    let value = self.parse_expression()?;
+                    Statement::CompoundAssign(expr, BinaryOp::Add, value)
+                }
+                _ => Statement::Expression(expr),
+            };
+            Some(Box::new(stmt))
         };
 
         self.expect(&Token::RightParen)?;
@@ -1662,5 +1688,340 @@ mod tests {
         let err = result.unwrap_err();
         assert!(err.line > 0);
         assert!(err.col > 0);
+    }
+
+    // --- Compute shader feature tests ---
+
+    #[test]
+    fn test_parse_workgroup_size() {
+        let source = r#"
+            @compute @workgroup_size(256)
+            fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+                return;
+            }
+        "#;
+        let module = parse_wgsl(source).unwrap();
+        let func = &module.functions[0];
+        assert!(func.attributes.contains(&Attribute::Compute));
+        assert!(
+            func.attributes
+                .contains(&Attribute::WorkgroupSize(256, None, None))
+        );
+        assert_eq!(func.parameters[0].attributes.len(), 1);
+        assert_eq!(
+            func.parameters[0].attributes[0],
+            Attribute::Builtin("global_invocation_id".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_workgroup_size_3d() {
+        let source = r#"
+            @compute @workgroup_size(8, 8, 1)
+            fn main() {
+                return;
+            }
+        "#;
+        let module = parse_wgsl(source).unwrap();
+        let func = &module.functions[0];
+        assert!(
+            func.attributes
+                .contains(&Attribute::WorkgroupSize(8, Some(8), Some(1)))
+        );
+    }
+
+    #[test]
+    fn test_parse_storage_access_modes() {
+        let source = r#"
+            @group(0) @binding(0) var<storage, read> data: array<f32>;
+            @group(0) @binding(1) var<storage, read_write> result: MyStruct;
+        "#;
+        let module = parse_wgsl(source).unwrap();
+        assert_eq!(
+            module.globals[0].address_space,
+            AddressSpace::Storage(AccessMode::Read)
+        );
+        assert_eq!(
+            module.globals[1].address_space,
+            AddressSpace::Storage(AccessMode::ReadWrite)
+        );
+    }
+
+    #[test]
+    fn test_parse_atomic_type() {
+        let source = r#"
+            @group(0) @binding(0) var<storage, read_write> counter: atomic<u32>;
+        "#;
+        let module = parse_wgsl(source).unwrap();
+        assert_eq!(
+            module.globals[0].ty,
+            WgslType::Atomic(Box::new(WgslType::Scalar(ScalarType::U32)))
+        );
+    }
+
+    #[test]
+    fn test_parse_ptr_type() {
+        let source = r#"
+            fn test(result: ptr<function, MyStruct>) -> u32 {
+                return 0u;
+            }
+        "#;
+        let module = parse_wgsl(source).unwrap();
+        assert_eq!(
+            module.functions[0].parameters[0].ty,
+            WgslType::Pointer(
+                AddressSpace::Function,
+                Box::new(WgslType::Struct("MyStruct".to_string()))
+            )
+        );
+    }
+
+    #[test]
+    fn test_parse_switch_statement() {
+        let source = r#"
+            fn test(x: u32) -> u32 {
+                switch (x) {
+                    case 0u: {
+                        return 1u;
+                    }
+                    case 1u: {
+                        return 2u;
+                    }
+                    default: {
+                        return 0u;
+                    }
+                }
+            }
+        "#;
+        let module = parse_wgsl(source).unwrap();
+        let body = &module.functions[0].body;
+        match &body.statements[0] {
+            Statement::Switch { subject: _, cases } => {
+                assert_eq!(cases.len(), 3);
+                assert!(cases[0].selector.is_some());
+                assert!(cases[2].selector.is_none()); // default
+            }
+            other => panic!("expected Switch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_parse_loop_break() {
+        let source = r#"
+            fn test() -> u32 {
+                var x: u32 = 0u;
+                loop {
+                    if x >= 10u {
+                        break;
+                    }
+                    x = x + 1u;
+                }
+                return x;
+            }
+        "#;
+        let module = parse_wgsl(source).unwrap();
+        let body = &module.functions[0].body;
+        assert!(matches!(&body.statements[1], Statement::Loop { .. }));
+    }
+
+    #[test]
+    fn test_parse_compound_assign() {
+        let source = r#"
+            fn test() -> f32 {
+                var x: f32 = 0.0;
+                x += 1.0;
+                return x;
+            }
+        "#;
+        let module = parse_wgsl(source).unwrap();
+        let body = &module.functions[0].body;
+        assert!(matches!(
+            &body.statements[1],
+            Statement::CompoundAssign(_, BinaryOp::Add, _)
+        ));
+    }
+
+    #[test]
+    fn test_parse_const_declaration() {
+        let source = r#"
+            const MY_CONST: u32 = 42u;
+            fn test() -> u32 {
+                return MY_CONST;
+            }
+        "#;
+        let module = parse_wgsl(source).unwrap();
+        assert_eq!(module.constants.len(), 1);
+        assert_eq!(module.constants[0].name, "MY_CONST");
+    }
+
+    #[test]
+    fn test_parse_hex_literal() {
+        let source = r#"
+            fn test() -> u32 {
+                let x = 0x00FF00FFu;
+                return x;
+            }
+        "#;
+        let module = parse_wgsl(source).unwrap();
+        let body = &module.functions[0].body;
+        match &body.statements[0] {
+            Statement::Let { value, .. } => match value {
+                Expr::Literal(Literal::UInt(v)) => assert_eq!(*v, 0x00FF00FF),
+                other => panic!("expected UInt literal, got {other:?}"),
+            },
+            other => panic!("expected Let, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_parse_bitwise_operators() {
+        let source = r#"
+            fn test(a: u32, b: u32) -> u32 {
+                return a | b;
+            }
+        "#;
+        let module = parse_wgsl(source).unwrap();
+        let body = &module.functions[0].body;
+        match &body.statements[0] {
+            Statement::Return(Some(Expr::Binary(_, BinaryOp::BitwiseOr, _))) => {}
+            other => panic!("expected bitwise or, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_parse_shift_operators() {
+        let source = r#"
+            fn test(v: u32) -> u32 {
+                return v << 1u;
+            }
+        "#;
+        let module = parse_wgsl(source).unwrap();
+        let body = &module.functions[0].body;
+        match &body.statements[0] {
+            Statement::Return(Some(Expr::Binary(_, BinaryOp::ShiftLeft, _))) => {}
+            other => panic!("expected shift left, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_parse_address_of() {
+        let source = r#"
+            fn test(x: ptr<function, u32>) -> u32 {
+                return 0u;
+            }
+            fn caller() -> u32 {
+                var val: u32 = 5u;
+                return test(&val);
+            }
+        "#;
+        let module = parse_wgsl(source).unwrap();
+        let caller = &module.functions[1];
+        match &caller.body.statements[1] {
+            Statement::Return(Some(Expr::Call(_, args))) => match &args[0] {
+                Expr::Unary(UnaryOp::AddressOf, _) => {}
+                other => panic!("expected address-of, got {other:?}"),
+            },
+            other => panic!("expected return call, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_parse_deref() {
+        let source = r#"
+            fn test(x: ptr<function, u32>) -> u32 {
+                return *x;
+            }
+        "#;
+        let module = parse_wgsl(source).unwrap();
+        let body = &module.functions[0].body;
+        match &body.statements[0] {
+            Statement::Return(Some(Expr::Unary(UnaryOp::Deref, _))) => {}
+            other => panic!("expected deref, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_parse_array_of_atomic() {
+        let source = r#"
+            var<workgroup> bins: array<atomic<u32>, 256>;
+        "#;
+        let module = parse_wgsl(source).unwrap();
+        assert_eq!(module.globals[0].address_space, AddressSpace::Workgroup);
+        match &module.globals[0].ty {
+            WgslType::Array(inner, Some(256)) => {
+                assert_eq!(
+                    **inner,
+                    WgslType::Atomic(Box::new(WgslType::Scalar(ScalarType::U32)))
+                );
+            }
+            other => panic!("expected array<atomic<u32>, 256>, got {other:?}"),
+        }
+    }
+
+    // --- Parse existing compute shader files ---
+
+    fn parse_shader_file(path: &str) -> WgslModule {
+        let source =
+            std::fs::read_to_string(path).unwrap_or_else(|e| panic!("failed to read {path}: {e}"));
+        parse_wgsl(&source).unwrap_or_else(|e| panic!("failed to parse {path}: {e}"))
+    }
+
+    #[test]
+    fn test_parse_statistics_compute_shader() {
+        let m = parse_shader_file("src/shaders/statistics.compute.wgsl");
+        assert!(m.functions.len() >= 2); // compute_basic_stats, compute_variance
+        assert!(
+            m.functions
+                .iter()
+                .any(|f| f.attributes.iter().any(|a| matches!(a, Attribute::Compute)))
+        );
+    }
+
+    #[test]
+    fn test_parse_gather_candidates_compute_shader() {
+        let m = parse_shader_file("src/shaders/gather_candidates.compute.wgsl");
+        assert!(!m.functions.is_empty());
+    }
+
+    #[test]
+    fn test_parse_percentile_compute_shader() {
+        let m = parse_shader_file("src/shaders/percentile.compute.wgsl");
+        assert!(m.functions.len() >= 3);
+    }
+
+    #[test]
+    fn test_parse_spatial_index_compute_shader() {
+        let m = parse_shader_file("src/shaders/spatial_index.compute.wgsl");
+        assert!(m.functions.len() >= 4);
+    }
+
+    #[test]
+    fn test_parse_instance_filter_compute_shader() {
+        let m = parse_shader_file("src/shaders/instance_filter.compute.wgsl");
+        assert!(m.functions.len() >= 5);
+    }
+
+    #[test]
+    fn test_parse_hit_test_compute_shader() {
+        let m = parse_shader_file("src/shaders/hit_test.compute.wgsl");
+        assert!(m.functions.len() >= 3);
+    }
+
+    #[test]
+    fn test_parse_histogram_compute_shader() {
+        let m = parse_shader_file("src/shaders/histogram.compute.wgsl");
+        assert!(m.functions.len() >= 2);
+    }
+
+    #[test]
+    fn test_parse_path_tessellation_compute_shader() {
+        let m = parse_shader_file("src/shaders/path_tessellation.compute.wgsl");
+        assert!(m.functions.len() >= 3);
+    }
+
+    #[test]
+    fn test_parse_morton_query_compute_shader() {
+        let m = parse_shader_file("src/shaders/morton_query.compute.wgsl");
+        assert!(m.functions.len() >= 4);
     }
 }
