@@ -150,7 +150,7 @@ fn build_boxplot_attributes(datasets: &[(&str, Vec<f32>, f32)]) -> Vec<BoxPlotAt
                 },
                 stroke_width: 0.004,
                 outlier_radius: 0.015,
-                notched: false,
+                notched: i % 2 == 0, // Alternate: Normal and With Outliers are notched
                 notch_width: 0.5,
             }
         })
@@ -235,10 +235,10 @@ impl BoxPlotApp {
         println!("Box Plot Rendering Demo (Unified BoxPlot Mark)");
         println!("===============================================");
         println!("Displaying 4 distributions via a single Selection:");
-        println!("  1. Normal   2. Skewed   3. With Outliers   4. Uniform");
+        println!("  1. Normal (notched)   2. Skewed   3. With Outliers (notched)   4. Uniform");
         println!();
         println!("Each box plot is rendered in ONE draw call:");
-        println!("  - Coloured box (IQR Q1–Q3)");
+        println!("  - Coloured box (IQR Q1–Q3), notched at median for odd-numbered plots");
         println!("  - Red median line");
         println!("  - Dark whiskers + caps");
         println!("  - Orange outlier circles");
