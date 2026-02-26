@@ -6,7 +6,7 @@
 **Epic**: Phase 2 Initiative 3 - Rust-to-WGSL Transpilation Research  
 **Priority**: Low  
 **Story Points**: 5  
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Context
 

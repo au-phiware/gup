@@ -130,7 +130,7 @@ _Initiative doc:
 | [GUP-210](GUP-210_Switch_Statement_Transpilation.md)          | Switch Statement Transpilation            | ✅ Complete | Low      | 5      |
 | [GUP-211](GUP-211_Fix_Preexisting_wgsl_function_Test.md)      | Fix Pre-existing wgsl_function Test       | ✅ Complete | Medium   | 1      |
 | [GUP-212](GUP-212_WGSL_Reserved_Keyword_Detection.md)         | WGSL Reserved Keyword Detection           | ✅ Complete | Medium   | 3      |
-| [GUP-213](GUP-213_Transpiler_Custom_Struct_Support.md)        | Transpiler Custom Struct Support          | 📋 Planned  | Low      | 5      |
+| [GUP-213](GUP-213_Transpiler_Custom_Struct_Support.md)        | Transpiler Custom Struct Support          | 🚧 In Progress | Low      | 5      |
 
 _Note: GUP-054 here is the Phase 2 research story (Existing Solutions Analysis).
 GUP-054 in the Post-GUP-005/007 tables above refers to the Phase 1 Shader
