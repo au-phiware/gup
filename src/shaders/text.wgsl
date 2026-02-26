@@ -7,12 +7,12 @@
 // Key insight: The median of the three color channels preserves sharp corners
 // by using edge coloring where adjacent edges at corners have different colors.
 //
-// Channel combination modes (sdf_params.z):
+// Channel combination modes (sdf_params.w fractional):
 //   0 = median(r,g,b)   — default MSDF, sharp corners preserved
 //   1 = max(r,g,b)       — union, slightly dilated outline
 //   2 = min(r,g,b)       — intersection, sharper corners
 //
-// Debug modes (sdf_params.w):
+// Debug modes (sdf_params.w integer part):
 //   0.0 = normal rendering
 //   1.0 = quad outlines + raw MSDF colours
 //   2.0 = red channel only
@@ -103,8 +103,12 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Extract SDF parameters
     let sdf_scale = in.sdf_params.x;
     let edge_threshold = in.sdf_params.y;
-    let combination_mode = u32(in.sdf_params.z);
-    let debug_mode = in.sdf_params.w;
+    // sdf_params.z = smoothing factor (0 means use default 1.5)
+    let smoothing_factor_raw = in.sdf_params.z;
+    let smoothing_factor = select(smoothing_factor_raw, 1.5, smoothing_factor_raw <= 0.0);
+    // sdf_params.w packs debug_mode (integer part) and combination_mode (fractional × 10)
+    let debug_mode = floor(in.sdf_params.w);
+    let combination_mode = u32(round(fract(in.sdf_params.w) * 10.0));
 
     // Combine channels using the selected mode
     let combined_value = combine_sdf_channels(msdf.r, msdf.g, msdf.b, combination_mode);
@@ -116,7 +120,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Improved antialiasing with adaptive edge width using screen-space derivatives
     // fwidth gives us the rate of change of the distance across the pixel
     let edge_width = max(length(vec2<f32>(dpdx(distance), dpdy(distance))), 0.1);
-    let smoothing = edge_width * 1.5;
+    let smoothing = edge_width * smoothing_factor;
     let alpha = smoothstep(-smoothing, smoothing, distance - edge_threshold);
 
     // Apply color and alpha
