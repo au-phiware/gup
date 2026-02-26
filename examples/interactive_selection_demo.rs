@@ -183,6 +183,7 @@ impl App {
                         })
                 },
                 Some(&mut self.cache),
+                None,
             );
         }
     }

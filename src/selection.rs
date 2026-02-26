@@ -14,12 +14,13 @@
 //!
 //! ```rust,ignore
 //! // Prepare GPU resources with a data-to-instance mapping
-//! selection.prepare_render(&device, &queue, |attrs| CircleInstance::from(attrs), None)?;
+//! selection.prepare_render(&device, &queue, |attrs| CircleInstance::from(attrs), None, None)?;
 //!
 //! // Later, in a render pass:
 //! selection.render(&mut render_pass)?;
 //! ```
 
+use crate::buffer::{BufferPool, BufferType};
 use crate::interaction::{InteractionElement, InteractionEvent, Renderable};
 use crate::mark::{MarkInfo, MarkInfoImpl};
 use crate::pipeline_cache::PipelineCache;
@@ -812,6 +813,10 @@ impl<T, M: Mark> Selection<T, M> {
     /// of the same mark type.  When `cache` is `None` a new pipeline is
     /// created for every Selection.
     ///
+    /// Pass a [`BufferPool`] to allocate instance buffers from a shared pool
+    /// instead of creating one-off GPU buffers.  This reduces allocation
+    /// overhead in high-churn scenarios (e.g. animated transitions).
+    ///
     /// # Errors
     ///
     /// Returns an error if pipeline or buffer creation fails.
@@ -821,6 +826,7 @@ impl<T, M: Mark> Selection<T, M> {
         queue: &Queue,
         mapper: impl Fn(&T) -> I,
         cache: Option<&mut PipelineCache>,
+        pool: Option<&mut BufferPool>,
     ) -> GupResult<()>
     where
         I: bytemuck::Pod + bytemuck::Zeroable,
@@ -830,7 +836,7 @@ impl<T, M: Mark> Selection<T, M> {
         let instance_bytes: &[u8] = bytemuck::cast_slice(&instances);
         let instance_count = instances.len() as u32;
 
-        self.upload_instances(device, queue, instance_bytes, instance_count, cache)
+        self.upload_instances(device, queue, instance_bytes, instance_count, cache, pool)
     }
 
     /// Prepare GPU resources using the attribute bindings stored via
@@ -844,6 +850,9 @@ impl<T, M: Mark> Selection<T, M> {
     /// Pass a [`PipelineCache`] to share render pipelines across Selections
     /// of the same mark type.
     ///
+    /// Pass a [`BufferPool`] to allocate instance buffers from a shared pool
+    /// instead of creating one-off GPU buffers.
+    ///
     /// # Errors
     ///
     /// Returns an error if no attribute bindings have been set, or if GPU
@@ -856,13 +865,14 @@ impl<T, M: Mark> Selection<T, M> {
     ///     .attr("center", |d: &MyData| [d.x, d.y])
     ///     .attr("radius", |d: &MyData| d.size * 0.1)
     ///     .attr("fill_color", |d: &MyData| [d.r, d.g, d.b, 1.0])
-    ///     .prepare_render_bound(&device, &queue, None)?;
+    ///     .prepare_render_bound(&device, &queue, None, None)?;
     /// ```
     pub fn prepare_render_bound(
         &mut self,
         device: &Device,
         queue: &Queue,
         cache: Option<&mut PipelineCache>,
+        pool: Option<&mut BufferPool>,
     ) -> GupResult<()>
     where
         M: MarkInstanceBuilder,
@@ -894,7 +904,7 @@ impl<T, M: Mark> Selection<T, M> {
         let instance_bytes: &[u8] = bytemuck::cast_slice(&instances);
         let instance_count = instances.len() as u32;
 
-        self.upload_instances(device, queue, instance_bytes, instance_count, cache)
+        self.upload_instances(device, queue, instance_bytes, instance_count, cache, pool)
     }
 
     /// Prepare GPU resources with shader function bindings.
@@ -1131,21 +1141,43 @@ impl<T, M: Mark> Selection<T, M> {
         instance_bytes: &[u8],
         instance_count: u32,
         cache: Option<&mut PipelineCache>,
+        mut pool: Option<&mut BufferPool>,
     ) -> GupResult<()> {
         if let Some(ref mut state) = self.render_state {
             // Re-use existing pipeline and vertex buffers.
             // If the instance buffer is too small, reallocate.
             if instance_bytes.len() > state.instance_buffer_capacity {
-                let (instance_buffer, bind_group) =
+                // Return the old buffer to the pool before allocating a new one.
+                if let Some((bt, sc)) = state.pool_meta.take() {
+                    let old_buffer = std::mem::replace(
+                        &mut state.instance_buffer,
+                        // Temporary placeholder — will be overwritten below.
+                        device.create_buffer(&wgpu::BufferDescriptor {
+                            label: Some("selection_instance_placeholder"),
+                            size: 16,
+                            usage: wgpu::BufferUsages::STORAGE,
+                            mapped_at_creation: false,
+                        }),
+                    );
+                    if let Some(ref mut p) = pool {
+                        p.deallocate_raw(old_buffer, bt, sc);
+                    }
+                    // else: no pool provided at reallocation — drop the old buffer.
+                }
+
+                let (instance_buffer, bind_group, pool_meta) =
                     SelectionRenderState::create_instance_buffer_and_bind_group(
                         device,
                         &state.pipeline,
                         instance_bytes,
                         state.viewport_buffer.as_ref(),
+                        queue,
+                        pool.as_deref_mut(),
                     );
                 state.instance_buffer = instance_buffer;
                 state.bind_group = bind_group;
                 state.instance_buffer_capacity = instance_bytes.len();
+                state.pool_meta = pool_meta;
             } else {
                 // Buffer large enough: just re-upload.
                 queue.write_buffer(&state.instance_buffer, 0, instance_bytes);
@@ -1153,8 +1185,14 @@ impl<T, M: Mark> Selection<T, M> {
             state.instance_count = instance_count;
         } else {
             // First-time setup: create everything.
-            let state =
-                SelectionRenderState::new::<M>(device, instance_bytes, instance_count, cache)?;
+            let state = SelectionRenderState::new::<M>(
+                device,
+                queue,
+                instance_bytes,
+                instance_count,
+                cache,
+                pool,
+            )?;
             self.render_state = Some(state);
         }
 
@@ -1198,6 +1236,23 @@ impl<T, M: Mark> Selection<T, M> {
     /// Returns `true` if the selection has been prepared for rendering.
     pub fn is_render_ready(&self) -> bool {
         self.render_state.is_some()
+    }
+
+    /// Release the instance buffer back to a [`BufferPool`] for reuse.
+    ///
+    /// Call this before dropping a Selection whose instance buffer was
+    /// allocated from a pool (i.e., a pool was passed to
+    /// [`prepare_render`](Self::prepare_render)).  If the instance buffer
+    /// was *not* pool-allocated this method is a no-op.
+    ///
+    /// After calling this the Selection is no longer render-ready — you
+    /// must call `prepare_render` again to re-create the render state.
+    pub fn release_to_pool(&mut self, pool: &mut BufferPool) {
+        if let Some(mut state) = self.render_state.take() {
+            if let Some((bt, sc)) = state.pool_meta.take() {
+                pool.deallocate_raw(state.instance_buffer, bt, sc);
+            }
+        }
     }
 
     /// Set the viewport dimensions for pixel-space SDF calculations.
@@ -1568,15 +1623,21 @@ struct SelectionRenderState {
     /// Uniform buffers for GPU shader function bindings (empty when no shader
     /// functions are used).
     uniform_buffers: Vec<wgpu::Buffer>,
+    /// Pool metadata for the instance buffer, if allocated from a
+    /// [`BufferPool`]. Stores `(buffer_type, size_class)` so the buffer can
+    /// be returned to the pool on reallocation or release.
+    pool_meta: Option<(BufferType, usize)>,
 }
 
 impl SelectionRenderState {
     /// Create a complete render state for a mark type.
     fn new<M: Mark>(
         device: &Device,
+        queue: &Queue,
         instance_bytes: &[u8],
         instance_count: u32,
         cache: Option<&mut PipelineCache>,
+        pool: Option<&mut BufferPool>,
     ) -> GupResult<Self> {
         // --- Pipeline ------------------------------------------------
         let pipeline: Arc<wgpu::RenderPipeline> = match cache {
@@ -1624,12 +1685,15 @@ impl SelectionRenderState {
         };
 
         // --- Instance buffer + bind group ----------------------------
-        let (instance_buffer, bind_group) = Self::create_instance_buffer_and_bind_group(
-            device,
-            &pipeline,
-            instance_bytes,
-            viewport_buffer.as_ref(),
-        );
+        let (instance_buffer, bind_group, pool_meta) =
+            Self::create_instance_buffer_and_bind_group(
+                device,
+                &pipeline,
+                instance_bytes,
+                viewport_buffer.as_ref(),
+                queue,
+                pool,
+            );
 
         let vertex_count = M::vertex_count() as u32;
         let index_count = M::index_count().map(|c| c as u32);
@@ -1646,26 +1710,44 @@ impl SelectionRenderState {
             instance_buffer_capacity: instance_bytes.len(),
             viewport_buffer,
             uniform_buffers: Vec::new(),
+            pool_meta,
         })
     }
 
     /// Create (or recreate) the instance storage buffer and matching bind group.
+    ///
+    /// When `pool` is provided the buffer is allocated from the
+    /// [`BufferPool`]; otherwise a one-off buffer is created via
+    /// `device.create_buffer_init`.  The returned `Option<(BufferType,
+    /// usize)>` is the pool metadata that must be stored on the render state
+    /// so the buffer can later be returned to the pool.
     fn create_instance_buffer_and_bind_group(
         device: &Device,
         pipeline: &wgpu::RenderPipeline,
         instance_bytes: &[u8],
         viewport_buffer: Option<&wgpu::Buffer>,
-    ) -> (wgpu::Buffer, wgpu::BindGroup) {
-        // Ensure at least 16 bytes for wgpu minimum buffer size requirements.
-        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("selection_instance_buffer"),
-            contents: if instance_bytes.is_empty() {
-                &[0u8; 16]
-            } else {
-                instance_bytes
-            },
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-        });
+        queue: &Queue,
+        pool: Option<&mut BufferPool>,
+    ) -> (wgpu::Buffer, wgpu::BindGroup, Option<(BufferType, usize)>) {
+        let effective_bytes = if instance_bytes.is_empty() {
+            &[0u8; 16][..]
+        } else {
+            instance_bytes
+        };
+
+        let (instance_buffer, pool_meta) = if let Some(pool) = pool {
+            let (buf, size_class) =
+                pool.allocate_raw(BufferType::Storage, effective_bytes.len());
+            queue.write_buffer(&buf, 0, effective_bytes);
+            (buf, Some((BufferType::Storage, size_class)))
+        } else {
+            let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("selection_instance_buffer"),
+                contents: effective_bytes,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            });
+            (buf, None)
+        };
 
         // Derive bind group layout from the pipeline (guaranteed to match).
         let bind_group_layout = pipeline.get_bind_group_layout(0);
@@ -1687,7 +1769,7 @@ impl SelectionRenderState {
             entries: &entries,
         });
 
-        (instance_buffer, bind_group)
+        (instance_buffer, bind_group, pool_meta)
     }
 
     /// Create a render state with a generated vertex shader that includes
@@ -1869,6 +1951,7 @@ impl SelectionRenderState {
             instance_buffer_capacity: instance_bytes.len(),
             viewport_buffer: None,
             uniform_buffers,
+            pool_meta: None,
         })
     }
 }
@@ -3208,6 +3291,7 @@ mod tests {
                     &context.queue,
                     |a| CircleInstance::from(a),
                     None,
+                    None,
                 )
                 .expect("prepare_render should succeed");
 
@@ -3287,6 +3371,7 @@ mod tests {
                     &context.queue,
                     |a| RectangleInstance::from(a),
                     None,
+                    None,
                 )
                 .expect("prepare_render should succeed");
 
@@ -3344,6 +3429,7 @@ mod tests {
                     &context.queue,
                     |a| CircleInstance::from(a),
                     None,
+                    None,
                 )
                 .expect("first prepare_render");
 
@@ -3355,6 +3441,7 @@ mod tests {
                     &context.device,
                     &context.queue,
                     |a| CircleInstance::from(a),
+                    None,
                     None,
                 )
                 .expect("second prepare_render (re-upload)");
@@ -3402,6 +3489,7 @@ mod tests {
                     &context.queue,
                     |a| CircleInstance::from(a),
                     None,
+                    None,
                 )
                 .expect("first prepare");
 
@@ -3414,6 +3502,7 @@ mod tests {
                     &context.device,
                     &context.queue,
                     |a| CircleInstance::from(a),
+                    None,
                     None,
                 )
                 .expect("second prepare after resize");
@@ -3442,6 +3531,7 @@ mod tests {
                     &context.device,
                     &context.queue,
                     |a| CircleInstance::from(a),
+                    None,
                     None,
                 )
                 .expect("prepare empty selection");
@@ -3521,6 +3611,7 @@ mod tests {
                     &context.queue,
                     |a| RectangleInstance::from(a),
                     None,
+                    None,
                 )
                 .expect("rect prepare");
             circle_sel
@@ -3528,6 +3619,7 @@ mod tests {
                     &context.device,
                     &context.queue,
                     |a| CircleInstance::from(a),
+                    None,
                     None,
                 )
                 .expect("circle prepare");
@@ -3583,6 +3675,7 @@ mod tests {
                     &context.device,
                     &context.queue,
                     |a| BoxPlotInstance::from(a),
+                    None,
                     None,
                 )
                 .expect("boxplot prepare_render");
@@ -3647,6 +3740,7 @@ mod tests {
                     &context.queue,
                     |a| BoxPlotInstance::from(a),
                     None,
+                    None,
                 )
                 .expect("prepare_render");
 
@@ -3700,6 +3794,7 @@ mod tests {
                     &context.device,
                     &context.queue,
                     |a| BoxPlotInstance::from(a),
+                    None,
                     None,
                 )
                 .expect("prepare_render horizontal");
@@ -3786,6 +3881,7 @@ mod tests {
                     &context.queue,
                     |a| BoxPlotInstance::from(a),
                     None,
+                    None,
                 )
                 .expect("prepare_render notched");
 
@@ -3844,6 +3940,7 @@ mod tests {
                     &context.device,
                     &context.queue,
                     |a| BoxPlotInstance::from(a),
+                    None,
                     None,
                 )
                 .expect("prepare_render");
@@ -4028,7 +4125,7 @@ mod tests {
                 });
 
             selection
-                .prepare_render_bound(&context.device, &context.queue, None)
+                .prepare_render_bound(&context.device, &context.queue, None, None)
                 .expect("prepare_render_bound should succeed");
 
             assert!(selection.is_render_ready());
@@ -4082,7 +4179,7 @@ mod tests {
                 .attr("corner_radius", |_: &ScatterPoint| 0.02f32);
 
             selection
-                .prepare_render_bound(&context.device, &context.queue, None)
+                .prepare_render_bound(&context.device, &context.queue, None, None)
                 .expect("prepare_render_bound should succeed");
 
             assert!(selection.is_render_ready());
@@ -4136,7 +4233,7 @@ mod tests {
                 .attr("radius", |d: &ScatterPoint| d.value * 0.1);
 
             selection
-                .prepare_render_bound(&context.device, &context.queue, None)
+                .prepare_render_bound(&context.device, &context.queue, None, None)
                 .expect("prepare_render_bound should succeed");
 
             assert!(selection.is_render_ready());
@@ -4195,7 +4292,7 @@ mod tests {
                 .attr("width", |d: &ScatterPoint| d.value * 0.05);
 
             selection
-                .prepare_render_bound(&context.device, &context.queue, None)
+                .prepare_render_bound(&context.device, &context.queue, None, None)
                 .expect("prepare_render_bound should succeed for Line");
 
             assert!(selection.is_render_ready());
@@ -4267,7 +4364,7 @@ mod tests {
                 .attr("box_fill_color", |_: &StatsData| [0.7, 0.7, 1.0, 0.8]);
 
             selection
-                .prepare_render_bound(&context.device, &context.queue, None)
+                .prepare_render_bound(&context.device, &context.queue, None, None)
                 .expect("prepare_render_bound should succeed for BoxPlot");
 
             assert!(selection.is_render_ready());
@@ -4302,7 +4399,7 @@ mod tests {
             selection.attr("center", |d: &ScatterPoint| [d.x, d.y]);
 
             selection
-                .prepare_render_bound(&context.device, &context.queue, None)
+                .prepare_render_bound(&context.device, &context.queue, None, None)
                 .expect("prepare empty selection");
 
             let mut ctx = Arc::try_unwrap(context).expect("single owner");
@@ -4338,7 +4435,7 @@ mod tests {
                 }]);
 
             // No attr() calls — should fail
-            let result = selection.prepare_render_bound(&context.device, &context.queue, None);
+            let result = selection.prepare_render_bound(&context.device, &context.queue, None, None);
             assert!(result.is_err());
         });
     }
@@ -4540,7 +4637,7 @@ fn vs_main() -> VertexOutput {
             selection.attr_shader("radius", |d: &ScatterPoint| d.value, scale);
 
             selection
-                .prepare_render_bound(&context.device, &context.queue, None)
+                .prepare_render_bound(&context.device, &context.queue, None, None)
                 .expect("prepare_render_bound with shader fn");
 
             assert!(selection.is_render_ready());
@@ -4584,7 +4681,7 @@ fn vs_main() -> VertexOutput {
             selection.attr_shader("radius", |d: &ScatterPoint| d.value, radius_scale);
 
             selection
-                .prepare_render_bound(&context.device, &context.queue, None)
+                .prepare_render_bound(&context.device, &context.queue, None, None)
                 .expect("prepare with only shader bindings");
 
             assert!(selection.is_render_ready());
@@ -4629,7 +4726,7 @@ fn vs_main() -> VertexOutput {
             );
             selection.attr_shader("radius", |d: &ScatterPoint| d.value, color_map);
 
-            let result = selection.prepare_render_bound(&context.device, &context.queue, None);
+            let result = selection.prepare_render_bound(&context.device, &context.queue, None, None);
             assert!(result.is_err(), "Should reject type-mismatched shader fn");
             let err_msg = format!("{}", result.unwrap_err());
             assert!(
@@ -4678,7 +4775,7 @@ fn vs_main() -> VertexOutput {
 
             let cpu_start = Instant::now();
             sel_cpu
-                .prepare_render_bound(&context.device, &context.queue, None)
+                .prepare_render_bound(&context.device, &context.queue, None, None)
                 .expect("CPU prepare");
             let cpu_elapsed = cpu_start.elapsed();
 
@@ -4692,7 +4789,7 @@ fn vs_main() -> VertexOutput {
 
             let gpu_start = Instant::now();
             sel_gpu
-                .prepare_render_bound(&context.device, &context.queue, None)
+                .prepare_render_bound(&context.device, &context.queue, None, None)
                 .expect("GPU prepare");
             let gpu_elapsed = gpu_start.elapsed();
 
@@ -4773,7 +4870,7 @@ fn vs_main() -> VertexOutput {
 
             // First: full pipeline creation.
             selection
-                .prepare_render_bound(&context.device, &context.queue, None)
+                .prepare_render_bound(&context.device, &context.queue, None, None)
                 .expect("initial prepare_render_bound");
 
             assert!(selection.is_render_ready());
@@ -4825,7 +4922,7 @@ fn vs_main() -> VertexOutput {
             selection.attr_shader("radius", |d: &ScatterPoint| d.value, scale);
 
             selection
-                .prepare_render_bound(&context.device, &context.queue, None)
+                .prepare_render_bound(&context.device, &context.queue, None, None)
                 .expect("prepare_render_bound");
 
             // Try to update a non-existent attribute.
@@ -4869,7 +4966,7 @@ fn vs_main() -> VertexOutput {
             selection.attr_shader("radius", |d: &ScatterPoint| d.value, scale);
 
             selection
-                .prepare_render_bound(&context.device, &context.queue, None)
+                .prepare_render_bound(&context.device, &context.queue, None, None)
                 .expect("prepare_render_bound");
 
             // Try to update "center" which is a CPU binding, not a shader binding.
@@ -4945,7 +5042,7 @@ fn vs_main() -> VertexOutput {
             selection.attr_shader("radius", |d: &ScatterPoint| d.value, scale);
 
             selection
-                .prepare_render_bound(&context.device, &context.queue, None)
+                .prepare_render_bound(&context.device, &context.queue, None, None)
                 .expect("prepare_render_bound");
 
             // Try updating with a ColorMap (outputs vec4<f32>) — type mismatch
@@ -5010,7 +5107,7 @@ fn vs_main() -> VertexOutput {
             // Full prepare (uploads instance data + creates pipeline).
             let prepare_start = Instant::now();
             selection
-                .prepare_render_bound(&context.device, &context.queue, None)
+                .prepare_render_bound(&context.device, &context.queue, None, None)
                 .expect("initial prepare");
             let prepare_elapsed = prepare_start.elapsed();
 
@@ -5264,7 +5361,7 @@ fn vs_main() -> VertexOutput {
             let mut selection: Selection<ScatterPoint, Circle> = Selection::from_data(data);
             selection.attr_shader("fill_color", |d: &ScatterPoint| d.value, chain);
 
-            let result = selection.prepare_render_bound(&context.device, &context.queue, None);
+            let result = selection.prepare_render_bound(&context.device, &context.queue, None, None);
             assert!(
                 result.is_err(),
                 "Should reject f32 chain bound to vec4 attr"
@@ -5328,7 +5425,7 @@ fn vs_main() -> VertexOutput {
             selection.attr_shader("fill_color", |d: &ScatterPoint| d.value, chain);
 
             selection
-                .prepare_render_bound(&context.device, &context.queue, None)
+                .prepare_render_bound(&context.device, &context.queue, None, None)
                 .expect("prepare_render_bound with FunctionChain");
 
             assert!(selection.is_render_ready());
@@ -5655,7 +5752,7 @@ fn vs_main() -> VertexOutput {
             selection.attr_shader("fill_color", |d: &ScatterPoint| d.value, chain);
 
             selection
-                .prepare_render_bound(&context.device, &context.queue, None)
+                .prepare_render_bound(&context.device, &context.queue, None, None)
                 .expect("prepare_render_bound with deep FunctionChain");
 
             assert!(selection.is_render_ready());

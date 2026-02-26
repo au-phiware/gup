@@ -353,6 +353,7 @@ mod gpu_tests {
                     &context.queue,
                     |a| CircleInstance::from(a),
                     Some(&mut cache),
+                    None,
                 )
                 .expect("prepare_render");
                 selections.push(sel);
@@ -399,6 +400,7 @@ mod gpu_tests {
                     &context.queue,
                     |a| CircleInstance::from(a),
                     Some(&mut cache),
+                    None,
                 )
                 .expect("circle prepare");
 
@@ -410,6 +412,7 @@ mod gpu_tests {
                     &context.queue,
                     |a| RectangleInstance::from(a),
                     Some(&mut cache),
+                    None,
                 )
                 .expect("rect prepare");
 
@@ -443,6 +446,7 @@ mod gpu_tests {
                 &context.queue,
                 |a| CircleInstance::from(a),
                 Some(&mut cache),
+                None,
             )
             .expect("first prepare");
 
@@ -461,6 +465,7 @@ mod gpu_tests {
                 &context.queue,
                 |a| CircleInstance::from(a),
                 Some(&mut cache),
+                None,
             )
             .expect("rebuild after clear");
 
@@ -519,6 +524,7 @@ mod gpu_tests {
                     &context.queue,
                     |a| CircleInstance::from(a),
                     Some(&mut cache),
+                    None,
                 )
                 .expect("prepare");
             }
@@ -552,6 +558,7 @@ mod gpu_tests {
                     &context.queue,
                     |a| CircleInstance::from(a),
                     None,
+                    None,
                 )
                 .expect("uncached prepare");
             }
@@ -568,6 +575,7 @@ mod gpu_tests {
                     &context.queue,
                     |a| CircleInstance::from(a),
                     Some(&mut cache),
+                    None,
                 )
                 .expect("cached prepare");
             }

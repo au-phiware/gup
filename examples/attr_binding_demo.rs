@@ -105,7 +105,7 @@ fn example_individual_attrs(context: &Arc<RenderContext>) -> GupResult<()> {
     println!("  ✓ {} data points", selection.len());
 
     // Prepare and render via bound attributes (no manual mapper needed!)
-    selection.prepare_render_bound(context.device(), context.queue(), None)?;
+    selection.prepare_render_bound(context.device(), context.queue(), None, None)?;
     println!("  ✓ prepare_render_bound() succeeded");
 
     Ok(())
@@ -133,7 +133,7 @@ fn example_parallel_attrs(context: &Arc<RenderContext>) -> GupResult<()> {
     println!("  ✓ Bound: {:?}", selection.bound_attributes());
     println!("  ✓ {} data points", selection.len());
 
-    selection.prepare_render_bound(context.device(), context.queue(), None)?;
+    selection.prepare_render_bound(context.device(), context.queue(), None, None)?;
     println!("  ✓ prepare_render_bound() succeeded");
 
     Ok(())
@@ -168,7 +168,7 @@ fn example_rectangle_attrs(context: &Arc<RenderContext>) -> GupResult<()> {
 
     println!("  ✓ Bound: {:?}", selection.bound_attributes());
 
-    selection.prepare_render_bound(context.device(), context.queue(), None)?;
+    selection.prepare_render_bound(context.device(), context.queue(), None, None)?;
     println!("  ✓ prepare_render_bound() succeeded");
 
     Ok(())
@@ -195,6 +195,7 @@ fn example_comparison(context: &Arc<RenderContext>) -> GupResult<()> {
                 stroke_color: [0.0; 4],
             },
             None,
+            None,
         )?;
         println!("  ✓ Traditional prepare_render(mapper): OK");
     }
@@ -209,7 +210,7 @@ fn example_comparison(context: &Arc<RenderContext>) -> GupResult<()> {
             .attr("radius", |_: &SalesData| 0.02f32)
             .attr("fill_color", |_: &SalesData| [0.9f32, 0.2, 0.2, 0.8]);
 
-        selection.prepare_render_bound(context.device(), context.queue(), None)?;
+        selection.prepare_render_bound(context.device(), context.queue(), None, None)?;
         println!("  ✓ Declarative prepare_render_bound(): OK");
     }
 
@@ -261,6 +262,7 @@ fn example_comparison(context: &Arc<RenderContext>) -> GupResult<()> {
                 })
             },
             None,
+            None,
         )?;
 
         // Declarative
@@ -271,7 +273,7 @@ fn example_comparison(context: &Arc<RenderContext>) -> GupResult<()> {
         .attr("size", |d: &BarItem| [0.3, d.value])
         .attr("fill_color", |_: &BarItem| [0.2f32, 0.5, 0.8, 1.0]);
 
-        decl.prepare_render_bound(context.device(), context.queue(), None)?;
+        decl.prepare_render_bound(context.device(), context.queue(), None, None)?;
 
         println!("  ✓ Rectangle: traditional and declarative both OK");
     }
