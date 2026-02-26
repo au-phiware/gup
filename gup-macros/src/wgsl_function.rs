@@ -1499,4 +1499,105 @@ mod tests {
         assert!(generated_code.contains("fn new () -> Self"));
         assert!(generated_code.contains("impl Default for Identity"));
     }
+
+    // --- WGSL reserved keyword detection tests ---
+
+    #[test]
+    fn test_error_wgsl_reserved_keyword_function_name() {
+        let input = quote! {
+            fn var(value: f32) -> f32 {
+                return value;
+            }
+        };
+        let result: Result<WgslFunctionInfo> = parse2(input);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("reserved"),
+            "Error should mention reserved: {err}"
+        );
+        assert!(
+            err.contains("var_val"),
+            "Error should suggest alternative: {err}"
+        );
+    }
+
+    #[test]
+    fn test_error_wgsl_reserved_keyword_input_param() {
+        let input = quote! {
+            fn my_func(target: f32) -> f32 {
+                return target;
+            }
+        };
+        let result: Result<WgslFunctionInfo> = parse2(input);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("target"),
+            "Error should mention the keyword: {err}"
+        );
+    }
+
+    #[test]
+    fn test_error_wgsl_reserved_keyword_uniform_param() {
+        let input = quote! {
+            fn my_func(value: f32, uniform: f32) -> f32 {
+                return value * uniform;
+            }
+        };
+        let result: Result<WgslFunctionInfo> = parse2(input);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("uniform"),
+            "Error should mention keyword: {err}"
+        );
+        assert!(
+            err.contains("contextual"),
+            "Error should classify as contextual: {err}"
+        );
+    }
+
+    #[test]
+    fn test_error_wgsl_contextual_keyword_param() {
+        let input = quote! {
+            fn my_func(value: f32, storage: f32) -> f32 {
+                return value + storage;
+            }
+        };
+        let result: Result<WgslFunctionInfo> = parse2(input);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("storage"),
+            "Error should mention keyword: {err}"
+        );
+    }
+
+    #[test]
+    fn test_error_wgsl_future_reserved_keyword_param() {
+        let input = quote! {
+            fn my_func(value: f32, target: f32) -> f32 {
+                return value + target;
+            }
+        };
+        let result: Result<WgslFunctionInfo> = parse2(input);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("future"),
+            "Error should mention future reserved: {err}"
+        );
+    }
+
+    #[test]
+    fn test_wgsl_keyword_detection_allows_valid_names() {
+        let input = quote! {
+            fn scale_and_offset(value: f32, scale: f32, offset: f32) -> f32 {
+                return value * scale + offset;
+            }
+        };
+        let result: Result<WgslFunctionInfo> = parse2(input);
+        assert!(result.is_ok(), "Valid names should be accepted");
+    }
 }

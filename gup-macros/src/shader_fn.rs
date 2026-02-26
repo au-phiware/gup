@@ -393,4 +393,98 @@ mod tests {
         assert_eq!(pascal_case("my_func"), "MyFunc");
         assert_eq!(pascal_case("simple"), "Simple");
     }
+
+    // --- WGSL reserved keyword detection tests ---
+
+    #[test]
+    fn error_on_reserved_keyword_function_name() {
+        let result = expand(quote! {
+            fn var(value: f32) -> f32 {
+                return value;
+            }
+        });
+        assert!(result.is_err(), "Should reject `var` as function name");
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("reserved"),
+            "Error should mention 'reserved': {err}"
+        );
+        assert!(
+            err.contains("var_val"),
+            "Error should suggest alternative: {err}"
+        );
+    }
+
+    #[test]
+    fn error_on_reserved_keyword_input_param() {
+        let result = expand(quote! {
+            fn my_func(target: f32) -> f32 {
+                return target * 2.0;
+            }
+        });
+        assert!(result.is_err(), "Should reject `target` as parameter name");
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("target"),
+            "Error should mention the keyword: {err}"
+        );
+        assert!(
+            err.contains("target_val"),
+            "Error should suggest alternative: {err}"
+        );
+    }
+
+    #[test]
+    fn error_on_reserved_keyword_uniform_param() {
+        let result = expand(quote! {
+            fn my_func(value: f32, uniform: f32) -> f32 {
+                return value * uniform;
+            }
+        });
+        assert!(
+            result.is_err(),
+            "Should reject `uniform` as uniform parameter name"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("uniform"),
+            "Error should mention the keyword: {err}"
+        );
+    }
+
+    #[test]
+    fn error_on_contextual_keyword_param() {
+        let result = expand(quote! {
+            fn my_func(value: f32, storage: f32) -> f32 {
+                return value + storage;
+            }
+        });
+        assert!(result.is_err(), "Should reject `storage` as parameter name");
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("contextual"),
+            "Error should mention contextual keyword: {err}"
+        );
+    }
+
+    #[test]
+    fn error_on_future_reserved_keyword_param() {
+        let result = expand(quote! {
+            fn my_func(value: f32, self_val: f32) -> f32 {
+                return value + self_val;
+            }
+        });
+        // `self_val` is NOT reserved, so this should succeed
+        assert!(result.is_ok(), "self_val should be accepted");
+    }
+
+    #[test]
+    fn valid_names_still_accepted() {
+        let result = expand(quote! {
+            fn linear_scale(value: f32, scale: f32, offset: f32) -> f32 {
+                return value * scale + offset;
+            }
+        });
+        assert!(result.is_ok(), "Valid names should be accepted: {result:?}");
+    }
 }
