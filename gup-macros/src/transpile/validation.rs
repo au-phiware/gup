@@ -142,6 +142,26 @@ fn collect_idents_stmt(stmt: &WgslStatement, idents: &mut HashSet<String>) {
             collect_idents_expr(t, idents);
             collect_idents_expr(v, idents);
         }
+        WgslStatement::Switch {
+            selector,
+            cases,
+            default_body,
+        } => {
+            collect_idents_expr(selector, idents);
+            for case in cases {
+                for sel in &case.selectors {
+                    collect_idents_expr(sel, idents);
+                }
+                for s in &case.body {
+                    collect_idents_stmt(s, idents);
+                }
+            }
+            if let Some(db) = default_body {
+                for s in db {
+                    collect_idents_stmt(s, idents);
+                }
+            }
+        }
     }
 }
 

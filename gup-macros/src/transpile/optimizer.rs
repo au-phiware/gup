@@ -215,6 +215,26 @@ fn collect_idents_in_stmt(stmt: &WgslStatement, used: &mut HashSet<String>) {
             collect_idents_in_expr(t, used);
             collect_idents_in_expr(v, used);
         }
+        WgslStatement::Switch {
+            selector,
+            cases,
+            default_body,
+        } => {
+            collect_idents_in_expr(selector, used);
+            for case in cases {
+                for sel in &case.selectors {
+                    collect_idents_in_expr(sel, used);
+                }
+                for s in &case.body {
+                    collect_idents_in_stmt(s, used);
+                }
+            }
+            if let Some(db) = default_body {
+                for s in db {
+                    collect_idents_in_stmt(s, used);
+                }
+            }
+        }
     }
 }
 
@@ -348,6 +368,27 @@ fn fold_stmt(stmt: &mut WgslStatement) -> usize {
         WgslStatement::Expression(e) => fold_expr(e),
         WgslStatement::Assign(_, v) => fold_expr(v),
         WgslStatement::CompoundAssign(_, _, v) => fold_expr(v),
+        WgslStatement::Switch {
+            selector,
+            cases,
+            default_body,
+        } => {
+            let mut count = fold_expr(selector);
+            for case in cases {
+                for sel in &mut case.selectors {
+                    count += fold_expr(sel);
+                }
+                for s in case.body.iter_mut() {
+                    count += fold_stmt(s);
+                }
+            }
+            if let Some(db) = default_body {
+                for s in db.iter_mut() {
+                    count += fold_stmt(s);
+                }
+            }
+            count
+        }
     }
 }
 
@@ -568,6 +609,27 @@ fn elim_conversions_stmt(stmt: &mut WgslStatement) -> usize {
         WgslStatement::Expression(e) => elim_conversions_expr(e),
         WgslStatement::Assign(_, v) => elim_conversions_expr(v),
         WgslStatement::CompoundAssign(_, _, v) => elim_conversions_expr(v),
+        WgslStatement::Switch {
+            selector,
+            cases,
+            default_body,
+        } => {
+            let mut count = elim_conversions_expr(selector);
+            for case in cases {
+                for sel in &mut case.selectors {
+                    count += elim_conversions_expr(sel);
+                }
+                for s in case.body.iter_mut() {
+                    count += elim_conversions_stmt(s);
+                }
+            }
+            if let Some(db) = default_body {
+                for s in db.iter_mut() {
+                    count += elim_conversions_stmt(s);
+                }
+            }
+            count
+        }
     }
 }
 

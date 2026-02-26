@@ -194,12 +194,27 @@ pub enum WgslStatement {
     Break,
     /// Continue statement.
     Continue,
+    /// Switch statement: `switch(selector) { case N: { ... } default: { ... } }`.
+    Switch {
+        selector: WgslExpr,
+        cases: Vec<SwitchCase>,
+        default_body: Option<Vec<WgslStatement>>,
+    },
     /// Expression statement (e.g. function call as statement).
     Expression(WgslExpr),
     /// Assignment: `target = value;`.
     Assign(WgslExpr, WgslExpr),
     /// Compound assignment: `target op= value;` (e.g., `x += 1;`).
     CompoundAssign(WgslExpr, BinaryOp, WgslExpr),
+}
+
+/// A case in a WGSL switch statement.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SwitchCase {
+    /// Integer literal selectors for this case.
+    pub selectors: Vec<WgslExpr>,
+    /// Body statements of the case.
+    pub body: Vec<WgslStatement>,
 }
 
 /// A function parameter.

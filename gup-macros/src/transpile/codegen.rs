@@ -233,6 +233,40 @@ impl WgslCodeGen {
             WgslStatement::Continue => {
                 self.write_line("continue;");
             }
+            WgslStatement::Switch {
+                selector,
+                cases,
+                default_body,
+            } => {
+                let sel = self.generate_expr(selector);
+                self.write_line(&format!("switch ({sel}) {{"));
+                self.indent_level += 1;
+                for case in cases {
+                    let selectors: Vec<String> = case
+                        .selectors
+                        .iter()
+                        .map(|s| self.generate_expr(s))
+                        .collect();
+                    self.write_line(&format!("case {}: {{", selectors.join(", ")));
+                    self.indent_level += 1;
+                    for s in &case.body {
+                        self.generate_stmt(s);
+                    }
+                    self.indent_level -= 1;
+                    self.write_line("}");
+                }
+                if let Some(default_stmts) = default_body {
+                    self.write_line("default: {");
+                    self.indent_level += 1;
+                    for s in default_stmts {
+                        self.generate_stmt(s);
+                    }
+                    self.indent_level -= 1;
+                    self.write_line("}");
+                }
+                self.indent_level -= 1;
+                self.write_line("}");
+            }
             WgslStatement::Expression(e) => {
                 let expr = self.generate_expr(e);
                 self.write_line(&format!("{expr};"));

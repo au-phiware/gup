@@ -248,6 +248,11 @@ impl RustToWgsl {
                     return Ok(WgslStatement::Continue);
                 }
 
+                // Handle match → switch
+                if let Expr::Match(match_expr) = expr {
+                    return self.convert_match_statement(match_expr);
+                }
+
                 if semi.is_some() {
                     // Check for return statements
                     if let Expr::Return(ret) = expr {
@@ -281,6 +286,10 @@ impl RustToWgsl {
                     // Handle continue with semicolon
                     if let Expr::Continue(_) = expr {
                         return Ok(WgslStatement::Continue);
+                    }
+                    // Handle match with semicolon → switch
+                    if let Expr::Match(match_expr) = expr {
+                        return self.convert_match_statement(match_expr);
                     }
                     // Expression with semicolon — regular statement
                     let wgsl_expr = self.convert_expr(expr)?;
@@ -628,8 +637,9 @@ impl RustToWgsl {
                 ),
                 Span::call_site(),
                 "Only arithmetic, comparison, logical, and bitwise expressions \
-                 are supported. Closures, match, async, and await are not \
-                 available in WGSL.",
+                 are supported. Match expressions are supported as statements \
+                 (not in expression position). Closures, async, and await are \
+                 not available in WGSL.",
             )),
         }
     }
@@ -1041,6 +1051,122 @@ impl RustToWgsl {
             body,
             else_body,
         })
+    }
+
+    /// Convert a Rust match expression to a WGSL switch statement.
+    ///
+    /// Supports integer literal patterns, wildcard (`_`), and or-patterns
+    /// (`1 | 2`). Produces clear errors for unsupported patterns (guards,
+    /// ranges, destructuring, etc.).
+    fn convert_match_statement(
+        &mut self,
+        match_expr: &syn::ExprMatch,
+    ) -> Result<WgslStatement, TranspileError> {
+        let selector = self.convert_expr(&match_expr.expr)?;
+        let mut cases = Vec::new();
+        let mut default_body = None;
+
+        for arm in &match_expr.arms {
+            // Guards are not supported in WGSL switch.
+            if arm.guard.is_some() {
+                return Err(TranspileError::with_suggestion(
+                    "Match arm guards are not supported in WGSL switch statements",
+                    Span::call_site(),
+                    "Remove the guard condition and use if-else inside the arm body instead.",
+                ));
+            }
+
+            // Convert the arm body to a list of statements.
+            let body = self.convert_arm_body(&arm.body)?;
+
+            // Convert the arm pattern.
+            match &arm.pat {
+                Pat::Wild(_) => {
+                    default_body = Some(body);
+                }
+                Pat::Or(or_pat) => {
+                    let selectors = or_pat
+                        .cases
+                        .iter()
+                        .map(|p| self.convert_case_pattern(p))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    cases.push(SwitchCase { selectors, body });
+                }
+                other => {
+                    // Try to convert as a single literal pattern.
+                    let selector_expr = self.convert_case_pattern(other)?;
+                    cases.push(SwitchCase {
+                        selectors: vec![selector_expr],
+                        body,
+                    });
+                }
+            }
+        }
+
+        Ok(WgslStatement::Switch {
+            selector,
+            cases,
+            default_body,
+        })
+    }
+
+    /// Convert a match arm body to a list of WGSL statements.
+    ///
+    /// A match arm body is a single Rust expression. If it is a block,
+    /// the block's statements are converted directly. Otherwise the
+    /// expression is wrapped as a single expression statement.
+    fn convert_arm_body(&mut self, body: &Expr) -> Result<Vec<WgslStatement>, TranspileError> {
+        match body {
+            Expr::Block(block) => self.convert_block(&block.block),
+            Expr::Return(ret) => {
+                let val = ret
+                    .expr
+                    .as_ref()
+                    .map(|e| self.convert_expr(e))
+                    .transpose()?;
+                Ok(vec![WgslStatement::Return(val)])
+            }
+            other => {
+                let expr = self.convert_expr(other)?;
+                Ok(vec![WgslStatement::Expression(expr)])
+            }
+        }
+    }
+
+    /// Convert a single case pattern to a WGSL expression (integer literal).
+    ///
+    /// Only integer literal patterns are supported for WGSL switch cases.
+    fn convert_case_pattern(&mut self, pat: &Pat) -> Result<WgslExpr, TranspileError> {
+        match pat {
+            Pat::Lit(lit) => self.convert_literal(&lit.lit),
+            Pat::Range(_) => Err(TranspileError::with_suggestion(
+                "Range patterns are not supported in WGSL switch statements",
+                Span::call_site(),
+                "Use individual integer literal cases or an or-pattern (e.g. 1 | 2 | 3) instead.",
+            )),
+            Pat::Ident(ident) => Err(TranspileError::with_suggestion(
+                format!(
+                    "Variable binding pattern '{}' is not supported in WGSL switch cases",
+                    ident.ident
+                ),
+                Span::call_site(),
+                "Use integer literal patterns (0, 1, 2) or wildcard (_) for the default case.",
+            )),
+            Pat::Struct(_) | Pat::TupleStruct(_) | Pat::Tuple(_) | Pat::Slice(_) => {
+                Err(TranspileError::with_suggestion(
+                    "Destructuring patterns are not supported in WGSL switch statements",
+                    Span::call_site(),
+                    "WGSL switch only supports integer literal selectors. \
+                     Use if-else chains for complex pattern matching.",
+                ))
+            }
+            _ => Err(TranspileError::with_suggestion(
+                "Unsupported match pattern for WGSL switch: \
+                 only integer literals, wildcard (_), and or-patterns (a | b) are supported",
+                Span::call_site(),
+                "Use integer literal patterns (0, 1, 2) or wildcard (_) for the default case.",
+            )),
+        }
     }
 }
 
