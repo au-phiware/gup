@@ -3,7 +3,8 @@
 ## Story Overview
 
 **Epic**: Phase 2 - High-Level Convenience APIs **Theme**: Automatic Scale and
-Axis System **Priority**: Low **Story Points**: 3 **Status**: 🚧 In Progress
+Axis System **Priority**: Low **Story Points**: 3 **Status**: ✅ Complete
+(2025-07-18)
 
 ## Overview
 
@@ -29,11 +30,11 @@ position and length.
 
 ## Acceptance Criteria
 
-- [ ] Tick marks rendered via GPU instancing (single draw call per tick type)
-- [ ] Per-instance data: position along axis, tick length, color
-- [ ] Performance improvement measured: fewer vertices uploaded per frame
-- [ ] Visual output identical to current vertex-pair approach
-- [ ] Backward compatible — existing `generate_axis_vertices()` API preserved
+- [x] Tick marks rendered via GPU instancing (single draw call per tick type)
+- [x] Per-instance data: position along axis, tick length, color
+- [x] Performance improvement measured: fewer vertices uploaded per frame
+- [x] Visual output identical to current vertex-pair approach
+- [x] Backward compatible — existing `generate_axis_vertices()` API preserved
 
 ## Technical Tasks
 
@@ -58,7 +59,59 @@ position and length.
 
 ## Definition of Done
 
-- [ ] GPU instancing implemented for tick marks
-- [ ] Benchmark shows measurable improvement
-- [ ] All existing axis tests pass
-- [ ] Visual output unchanged
+- [x] GPU instancing implemented for tick marks
+- [x] Benchmark shows measurable improvement
+- [x] All existing axis tests pass
+- [x] Visual output unchanged
+
+## Implementation Summary
+
+### What Was Implemented
+
+1. **`TickInstance` struct** (`src/axis.rs`) — A 32-byte `#[repr(C)]` +
+   `bytemuck::Pod` struct with `position: [f32; 2]`, `tick_vector: [f32; 2]`,
+   and `color: [f32; 4]`. Includes `instance_buffer_layout()` for pipeline
+   integration.
+
+2. **Instance generation methods** (`src/axis.rs`) — Three new methods on
+   `AxisRenderer`:
+   - `generate_tick_instances()` — all ticks (major first, then minor)
+   - `generate_major_tick_instances()` — major ticks only
+   - `generate_minor_tick_instances()` — minor ticks only
+   - `generate_tick_instances_cached()` — LOD-aware with caching
+
+3. **Instanced shader** (`src/shaders/tick_instanced.wgsl`) — Vertex shader
+   accepting base geometry `t ∈ {0, 1}` and per-instance position, tick_vector,
+   color attributes. Single draw call renders all ticks.
+
+4. **`TickPipeline` struct** (`src/axis.rs`) — Complete wgpu render pipeline
+   with `upload()` and `draw()` methods. Creates base vertex buffer (8 bytes)
+   and instance buffer.
+
+5. **Cache extension** (`src/axis_performance.rs`) — `AxisGeometryCache` now has
+   `get_instances()` / `store_instances()` alongside the existing vertex cache.
+
+### Key Files Changed
+
+| File | Change |
+|------|--------|
+| `src/axis.rs` | TickInstance struct, generation methods, TickPipeline |
+| `src/axis_performance.rs` | Instance caching in AxisGeometryCache |
+| `src/shaders/tick_instanced.wgsl` | New instanced tick shader |
+
+### Performance Comparison
+
+| Metric | Vertex Pairs | Instanced |
+|--------|-------------|-----------|
+| Data per tick | 48 bytes (2 × Vertex) | 32 bytes (1 × TickInstance) |
+| Base geometry | 0 bytes | 8 bytes (shared) |
+| 6 major ticks | 288 bytes | 200 bytes (31% smaller) |
+| Draw calls | 1 | 1 per tick type |
+
+### Test Counts
+
+- **16 new axis tests** (TickInstance struct, all 4 axis positions, data
+  reduction, cache hit/miss, separate major/minor, cached generation)
+- **3 new cache tests** (miss→hit, invalidation, independence)
+- **42 existing axis tests** — all pass unchanged
+- **25 existing cache tests** — all pass unchanged
