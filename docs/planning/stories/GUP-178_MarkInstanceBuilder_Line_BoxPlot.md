@@ -83,3 +83,63 @@ and BoxPlot marks **So that** I have a consistent API across all mark types
 - 5 new BoxPlot unit tests (builder, colors, aliases)
 - 2 new GPU integration tests (Line + BoxPlot prepare_render_bound)
 - All 1588 existing tests continue to pass
+
+## Retrospective
+
+**Completed**: 2025-07-24
+
+### Key Technical Learnings
+
+#### LineInstance GPU Struct
+
+- **Challenge**: Line mark had no Rust-side `LineInstance` struct — the WGSL
+  shader defined the layout but there was no corresponding bytemuck-compatible
+  Rust struct for CPU-side instance construction.
+- **Solution**: Created `LineInstance` (48 bytes) matching the WGSL layout
+  exactly, including the `_padding: [f32; 2]` field to align to a 16-byte
+  boundary.
+- **Pattern**: When adding `MarkInstanceBuilder` to a mark type, always verify
+  the Rust struct matches the WGSL struct layout byte-for-byte. Add a
+  `size_of` assertion to catch mismatches.
+
+#### AttrValue Limitations for Complex Types
+
+- **Challenge**: `AttrValue` only supports `Float`, `Vec2`, and `Vec4` variants.
+  BoxPlot has attributes like `orientation` (u32), `notched` (bool), and
+  `outliers` (array) that cannot be set via `attr()`.
+- **Solution**: Omitted `orientation`, `notched`, `notch_width`, and `outliers`
+  from the builder — they use default values. Users requiring these can use the
+  manual `prepare_render(mapper)` path or set them on `BoxPlotAttributes`
+  directly.
+- **Pattern**: `MarkInstanceBuilder` is best suited for the common numeric
+  attributes (positions, sizes, colours). Complex or typed attributes may need
+  a richer `AttrValue` enum or a different binding mechanism.
+
+### Architectural Decisions
+
+#### Alias Consistency Across Mark Types
+
+- **Decision**: Used `position`/`center` as position aliases on BoxPlot (matching
+  Circle and Rectangle), and `color`/`fill_color` as color aliases (matching
+  Circle). Line uses `start`/`from` and `end`/`to` since it has two position
+  endpoints rather than one center.
+- **Reasoning**: Users switching between mark types should find familiar
+  attribute names. The alias pattern (`"color"` → fill color) is consistent.
+- **Trade-off**: More aliases means more match arms, but the cost is negligible.
+- **Future**: If mark types grow further, a formal attribute name registry or
+  derive macro could reduce boilerplate.
+
+### Development Workflow Insights
+
+- The implementation was straightforward because GUP-168 established clear
+  patterns. Both impls followed the same structure: `default_instance()` from
+  `Default` attrs, `build_instance()` iterating over name-value pairs.
+- The existing GPU test pattern (headless context, attr binding, prepare, render,
+  frame finish) copied cleanly for both Line and BoxPlot.
+- `cargo test --lib mark::line` provided fast feedback loops during development
+  without running the full 1588-test suite each time.
+
+### Follow-up Stories
+
+No new stories identified. The `AttrValue` enum limitation (no u32/bool/array
+variants) is a known trade-off documented in GUP-168's retrospective.
