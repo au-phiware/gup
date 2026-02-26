@@ -368,19 +368,19 @@ impl TextRenderer {
         };
 
         // Add to internal batches for later rendering
-        self.add_glyph_batch(&layout_result.glyphs)?;
+        self.add_glyph_batch(&layout_result.glyphs, config.style.font_size)?;
 
         Ok(layout_result.bounds)
     }
 
     /// Add a glyph batch to the internal rendering queue.
     /// This is a low-level method for building batched text rendering.
-    fn add_glyph_batch(&mut self, glyphs: &GlyphBatch) -> GupResult<()> {
+    fn add_glyph_batch(&mut self, glyphs: &GlyphBatch, font_size: f32) -> GupResult<()> {
         if glyphs.is_empty() {
             return Ok(());
         }
 
-        let vertices = self.create_vertices(glyphs);
+        let vertices = self.create_vertices(glyphs, font_size);
         if !vertices.is_empty() {
             self.render_queue.extend_from_slice(&vertices);
         }
@@ -389,12 +389,17 @@ impl TextRenderer {
     }
 
     /// Add a glyph batch to a per-atlas font batch.
-    fn add_glyph_batch_for_font(&mut self, atlas_key: &str, glyphs: &GlyphBatch) -> GupResult<()> {
+    fn add_glyph_batch_for_font(
+        &mut self,
+        atlas_key: &str,
+        glyphs: &GlyphBatch,
+        font_size: f32,
+    ) -> GupResult<()> {
         if glyphs.is_empty() {
             return Ok(());
         }
 
-        let vertices = self.create_vertices(glyphs);
+        let vertices = self.create_vertices(glyphs, font_size);
         if !vertices.is_empty() {
             self.font_batches
                 .entry(atlas_key.to_string())
@@ -448,7 +453,7 @@ impl TextRenderer {
         };
 
         // Add to the per-atlas batch
-        self.add_glyph_batch_for_font(&atlas_key, &layout_result.glyphs)?;
+        self.add_glyph_batch_for_font(&atlas_key, &layout_result.glyphs, style.font_size)?;
 
         Ok(layout_result.bounds)
     }
@@ -589,7 +594,7 @@ impl TextRenderer {
         }
 
         // Create vertices for immediate rendering
-        let vertices = self.create_vertices(&layout_result.glyphs);
+        let vertices = self.create_vertices(&layout_result.glyphs, config.style.font_size);
         if vertices.is_empty() {
             return Ok(layout_result.bounds);
         }
@@ -653,9 +658,12 @@ impl TextRenderer {
         Ok(layout_result.bounds)
     }
 
-    /// Create vertices for glyph batch.
-    fn create_vertices(&self, glyphs: &GlyphBatch) -> Vec<TextVertex> {
+    /// Create vertices for glyph batch with auto-tuned SDF parameters.
+    fn create_vertices(&self, glyphs: &GlyphBatch, font_size: f32) -> Vec<TextVertex> {
         let mut vertices = Vec::with_capacity(glyphs.len() * 4);
+
+        // Auto-tune SDF parameters based on the rendered font size
+        let tuning = SdfTuningParams::for_font_size(font_size);
 
         for glyph in glyphs {
             let left = glyph.position.x;
@@ -667,9 +675,9 @@ impl TextRenderer {
 
             let sdf_params = [
                 glyph.glyph.sdf_scale,
-                0.0, // SDF edge threshold (0.0 for normal rendering at distance field edge)
-                0.0, // Channel combination mode (0=median, 1=max, 2=min)
-                0.0, // Debug mode (0=normal, 1=quad outlines, 2/3/4=R/G/B channel, 5=median)
+                tuning.edge_threshold,   // Auto-tuned per font size
+                tuning.smoothing_factor, // Auto-tuned per font size (shader uses default 1.5 when 0)
+                0.0,                     // debug_mode (integer) + combination_mode (fractional×10)
             ];
 
             // Create quad vertices (2 triangles)
@@ -841,7 +849,7 @@ mod tests {
             },
         };
 
-        let vertices = renderer.create_vertices(&vec![glyph]);
+        let vertices = renderer.create_vertices(&vec![glyph], 16.0);
 
         // Should create 4 vertices per glyph
         assert_eq!(vertices.len(), 4);
@@ -901,7 +909,7 @@ mod tests {
             .collect();
 
         let start = Instant::now();
-        let vertices = renderer.create_vertices(&glyphs);
+        let vertices = renderer.create_vertices(&glyphs, 16.0);
         let duration = start.elapsed();
 
         // Should create 4 vertices per glyph
