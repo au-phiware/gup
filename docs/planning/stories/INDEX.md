@@ -85,7 +85,7 @@ epic and status.
 | [GUP-188](GUP-188_Automatic_Draw_Call_Metrics.md)              | Automatic Draw Call Metrics in MarkRenderer    | 📋 Planned  | Low      | —      |
 | [GUP-189](GUP-189_AST_Integration_ComposableShaderPipeline.md) | AST Integration with ComposableShaderPipeline  | ✅ Complete | Medium   | 5      |
 | [GUP-190](GUP-190_WGSL_Compute_Shader_AST_Support.md)          | WGSL Compute Shader AST Support                | 📋 Planned  | Low      | 5      |
-| [GUP-191](GUP-191_Enable_AST_Optimization_Default.md)          | Enable AST Optimization by Default             | 🚧 In Progress | Low      | 3      |
+| [GUP-191](GUP-191_Enable_AST_Optimization_Default.md)          | Enable AST Optimization by Default             | ✅ Complete | Low      | 3      |
 | [GUP-192](GUP-192_Dynamic_Attribute_Readback_Pipeline.md)      | Dynamic Attribute Readback Pipeline            | 📋 Planned  | Low      | —      |
 | [GUP-208](GUP-208_Mark_Derive_Instance_Buffer_Generation.md)   | Mark Derive Instance Buffer Generation         | 📋 Planned  | Low      | —      |
 | [GUP-209](GUP-209_Mark_Validation_CI_Integration.md)           | Mark Validation CI Integration                 | 📋 Planned  | Low      | —      |
@@ -314,7 +314,7 @@ system story. The expanded story is also complete._
 | [GUP-119](GUP-119_Interactive_Event_Forwarding.md)           | Interactive Event Forwarding                | ✅ Complete           | Medium   | 3      |
 | [GUP-121](GUP-121_Screen_Reader_Manual_Testing.md)           | Screen Reader Manual Testing Infrastructure | ✅ Complete           | High     | 3      |
 | [GUP-122](GUP-122_Manual_Screen_Reader_Testing_Execution.md) | Manual Screen Reader Testing Execution      | 🎯 Awaiting Resources | High     | 5      |
-| [GUP-124](GUP-124_Enhanced_Color_Description.md)             | Enhanced Color Description                  | ✅ Complete            | Low      | 2      |
+| [GUP-124](GUP-124_Enhanced_Color_Description.md)             | Enhanced Color Description                  | ✅ Complete           | Low      | 2      |
 | [GUP-125](GUP-125_Automatic_ARIA_Registration.md)            | Automatic ARIA Registration                 | ✅ Complete           | Medium   | 3      |
 | [GUP-126](GUP-126_Reactive_ARIA_Updates.md)                  | Reactive ARIA Updates                       | ✅ Complete           | Medium   | 5      |
 | [GUP-127](GUP-127_Focus_Elements_for_Data_Points.md)         | Focus Elements for Data Points              | ✅ Complete           | High     | 5      |
