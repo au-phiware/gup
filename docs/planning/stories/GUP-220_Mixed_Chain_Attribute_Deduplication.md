@@ -1,6 +1,6 @@
 # GUP-220: Mixed Shallow+Deep Chain Attribute Deduplication
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
