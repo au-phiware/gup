@@ -584,3 +584,246 @@ async fn test_storage_buffer_names_sorted() -> GupResult<()> {
 
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Readback (GPU→CPU) tests
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_download_static_values_roundtrip() -> GupResult<()> {
+    let context = create_test_context().await?;
+    let device = &context.device;
+    let queue = &context.queue;
+
+    let mut manager = DynamicAttributeBufferManager::new();
+    let mut attrs = DynamicAttributeMap::new();
+
+    attrs.set(
+        "alpha",
+        DynamicAttributeValue::from_color(0.1, 0.2, 0.3, 0.4),
+    );
+    attrs.set("beta", DynamicAttributeValue::from_scalar(42.0));
+    attrs.set(
+        "gamma",
+        DynamicAttributeValue::from_color(1.0, 0.5, 0.25, 0.125),
+    );
+
+    manager.upload_dirty(device, queue, &mut attrs)?;
+
+    let values = manager.download_static_values(device, queue).await?;
+    assert_eq!(values.len(), 3);
+
+    // Values are sorted alphabetically by attribute name
+    assert_eq!(values[0], [0.1, 0.2, 0.3, 0.4]); // alpha
+    assert_eq!(values[1], [42.0, 0.0, 0.0, 0.0]); // beta (scalar → [v, 0, 0, 0])
+    assert_eq!(values[2], [1.0, 0.5, 0.25, 0.125]); // gamma
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_download_per_instance_roundtrip() -> GupResult<()> {
+    let context = create_test_context().await?;
+    let device = &context.device;
+    let queue = &context.queue;
+
+    let mut manager = DynamicAttributeBufferManager::new();
+    let mut attrs = DynamicAttributeMap::new();
+
+    let instance_data = vec![
+        [1.0, 0.0, 0.0, 1.0],
+        [0.0, 1.0, 0.0, 1.0],
+        [0.0, 0.0, 1.0, 1.0],
+    ];
+    attrs.set(
+        "colors",
+        DynamicAttributeValue::from_instances(instance_data.clone()),
+    );
+    manager.upload_dirty(device, queue, &mut attrs)?;
+
+    let values = manager
+        .download_per_instance(device, queue, "colors")
+        .await?;
+    assert_eq!(values, instance_data);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_download_after_update() -> GupResult<()> {
+    let context = create_test_context().await?;
+    let device = &context.device;
+    let queue = &context.queue;
+
+    let mut manager = DynamicAttributeBufferManager::new();
+    let mut attrs = DynamicAttributeMap::new();
+
+    // Initial upload
+    attrs.set("value", DynamicAttributeValue::from_scalar(1.0));
+    manager.upload_dirty(device, queue, &mut attrs)?;
+
+    let v1 = manager.download_static_values(device, queue).await?;
+    assert_eq!(v1[0][0], 1.0);
+
+    // Update and re-upload
+    attrs.set("value", DynamicAttributeValue::from_scalar(99.0));
+    manager.upload_dirty(device, queue, &mut attrs)?;
+
+    let v2 = manager.download_static_values(device, queue).await?;
+    assert_eq!(v2[0][0], 99.0);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_download_static_no_buffer_returns_error() -> GupResult<()> {
+    let context = create_test_context().await?;
+    let device = &context.device;
+    let queue = &context.queue;
+
+    let mut manager = DynamicAttributeBufferManager::new();
+
+    let result = manager.download_static_values(device, queue).await;
+    assert!(result.is_err());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_download_per_instance_missing_attr_returns_error() -> GupResult<()> {
+    let context = create_test_context().await?;
+    let device = &context.device;
+    let queue = &context.queue;
+
+    let mut manager = DynamicAttributeBufferManager::new();
+
+    let result = manager
+        .download_per_instance(device, queue, "nonexistent")
+        .await;
+    assert!(result.is_err());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_staging_buffer_reuse() -> GupResult<()> {
+    let context = create_test_context().await?;
+    let device = &context.device;
+    let queue = &context.queue;
+
+    let mut manager = DynamicAttributeBufferManager::new();
+    let mut attrs = DynamicAttributeMap::new();
+
+    attrs.set("x", DynamicAttributeValue::from_scalar(1.0));
+    manager.upload_dirty(device, queue, &mut attrs)?;
+
+    // First readback creates the staging buffer
+    let _ = manager.download_static_values(device, queue).await?;
+
+    // Second readback should reuse the same staging buffer (no error)
+    let v2 = manager.download_static_values(device, queue).await?;
+    assert_eq!(v2[0][0], 1.0);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_staging_buffer_grows_with_data() -> GupResult<()> {
+    let context = create_test_context().await?;
+    let device = &context.device;
+    let queue = &context.queue;
+
+    let mut manager = DynamicAttributeBufferManager::new();
+    let mut attrs = DynamicAttributeMap::new();
+
+    // Start with 1 attribute
+    attrs.set("a", DynamicAttributeValue::from_scalar(1.0));
+    manager.upload_dirty(device, queue, &mut attrs)?;
+    let _ = manager.download_static_values(device, queue).await?;
+
+    // Add many more attributes — staging buffer must grow
+    for i in 0..50 {
+        attrs.set(
+            &format!("attr_{i:03}"),
+            DynamicAttributeValue::from_scalar(i as f32),
+        );
+    }
+    manager.upload_dirty(device, queue, &mut attrs)?;
+
+    let values = manager.download_static_values(device, queue).await?;
+    assert_eq!(values.len(), 51); // 1 original + 50 new
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_clear_staging_buffers() -> GupResult<()> {
+    let context = create_test_context().await?;
+    let device = &context.device;
+    let queue = &context.queue;
+
+    let mut manager = DynamicAttributeBufferManager::new();
+    let mut attrs = DynamicAttributeMap::new();
+
+    attrs.set("x", DynamicAttributeValue::from_scalar(5.0));
+    manager.upload_dirty(device, queue, &mut attrs)?;
+
+    // Create staging buffer via readback
+    let _ = manager.download_static_values(device, queue).await?;
+
+    // Clear staging buffers
+    manager.clear_staging_buffers();
+
+    // Should still work — new staging buffer will be created
+    let values = manager.download_static_values(device, queue).await?;
+    assert_eq!(values[0][0], 5.0);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_download_mixed_static_and_per_instance() -> GupResult<()> {
+    let context = create_test_context().await?;
+    let device = &context.device;
+    let queue = &context.queue;
+
+    let mut manager = DynamicAttributeBufferManager::new();
+    let mut attrs = DynamicAttributeMap::new();
+
+    attrs.set(
+        "opacity",
+        DynamicAttributeValue::from_color(0.5, 0.0, 0.0, 0.0),
+    );
+
+    let sizes = vec![[10.0, 0.0, 0.0, 0.0], [20.0, 0.0, 0.0, 0.0]];
+    attrs.set(
+        "sizes",
+        DynamicAttributeValue::from_instances(sizes.clone()),
+    );
+
+    let colors = vec![[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0]];
+    attrs.set(
+        "colors",
+        DynamicAttributeValue::from_instances(colors.clone()),
+    );
+
+    manager.upload_dirty(device, queue, &mut attrs)?;
+
+    // Read back static
+    let static_vals = manager.download_static_values(device, queue).await?;
+    assert_eq!(static_vals.len(), 1);
+    assert_eq!(static_vals[0], [0.5, 0.0, 0.0, 0.0]);
+
+    // Read back per-instance
+    let sizes_back = manager
+        .download_per_instance(device, queue, "sizes")
+        .await?;
+    assert_eq!(sizes_back, sizes);
+
+    let colors_back = manager
+        .download_per_instance(device, queue, "colors")
+        .await?;
+    assert_eq!(colors_back, colors);
+
+    Ok(())
+}
