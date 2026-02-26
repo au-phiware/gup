@@ -115,6 +115,138 @@ impl Default for LODConfiguration {
     }
 }
 
+/// Platform categories for tuning LOD thresholds and performance budgets.
+///
+/// Different platforms have different GPU capabilities, driver overhead, and
+/// rendering characteristics. These presets provide optimised defaults for
+/// each target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PlatformPreset {
+    /// Linux desktop — baseline platform, uses default thresholds.
+    LinuxDesktop,
+    /// macOS desktop — Metal backend, typically comparable to Linux.
+    MacOSDesktop,
+    /// Windows desktop — DX12/Vulkan backend, comparable to Linux.
+    WindowsDesktop,
+    /// WebAssembly — browser-hosted WebGPU, higher driver overhead.
+    WebAssembly,
+}
+
+impl PlatformPreset {
+    /// Detect the platform preset for the current compilation target.
+    #[must_use]
+    pub fn detect() -> Self {
+        #[cfg(target_arch = "wasm32")]
+        {
+            PlatformPreset::WebAssembly
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            #[cfg(target_os = "macos")]
+            {
+                PlatformPreset::MacOSDesktop
+            }
+            #[cfg(target_os = "windows")]
+            {
+                PlatformPreset::WindowsDesktop
+            }
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+            {
+                PlatformPreset::LinuxDesktop
+            }
+        }
+    }
+
+    /// Human-readable platform name.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            PlatformPreset::LinuxDesktop => "Linux Desktop",
+            PlatformPreset::MacOSDesktop => "macOS Desktop",
+            PlatformPreset::WindowsDesktop => "Windows Desktop",
+            PlatformPreset::WebAssembly => "WebAssembly",
+        }
+    }
+}
+
+impl LODConfiguration {
+    /// Create an LOD configuration tuned for the given platform.
+    ///
+    /// WebAssembly targets use more aggressive thresholds to account for
+    /// higher driver overhead and generally lower GPU throughput in
+    /// browser-hosted contexts.
+    #[must_use]
+    pub fn for_platform(platform: PlatformPreset) -> Self {
+        match platform {
+            PlatformPreset::LinuxDesktop => Self::default(),
+            PlatformPreset::MacOSDesktop => Self {
+                // Metal has similar throughput to Vulkan on desktop
+                high_to_medium_threshold: 200.0,
+                medium_to_low_threshold: 100.0,
+                low_to_minimal_threshold: 50.0,
+                performance_downgrade_threshold: Duration::from_millis(5),
+            },
+            PlatformPreset::WindowsDesktop => Self {
+                // DX12/Vulkan on Windows — similar to Linux
+                high_to_medium_threshold: 200.0,
+                medium_to_low_threshold: 100.0,
+                low_to_minimal_threshold: 50.0,
+                performance_downgrade_threshold: Duration::from_millis(5),
+            },
+            PlatformPreset::WebAssembly => Self {
+                // WebGPU in browsers has higher overhead; be more aggressive
+                // about downgrading quality to maintain smooth frame rates.
+                high_to_medium_threshold: 250.0,
+                medium_to_low_threshold: 130.0,
+                low_to_minimal_threshold: 65.0,
+                performance_downgrade_threshold: Duration::from_millis(3),
+            },
+        }
+    }
+
+    /// Create an LOD configuration for the current compilation target.
+    #[must_use]
+    pub fn for_current_platform() -> Self {
+        Self::for_platform(PlatformPreset::detect())
+    }
+}
+
+impl PerformanceBudget {
+    /// Create a performance budget tuned for the given platform.
+    ///
+    /// WebAssembly targets get a more relaxed budget (2 ms) because browser
+    /// WebGPU drivers add overhead that native targets do not experience.
+    #[must_use]
+    pub fn for_platform(platform: PlatformPreset) -> Self {
+        match platform {
+            PlatformPreset::LinuxDesktop
+            | PlatformPreset::MacOSDesktop
+            | PlatformPreset::WindowsDesktop => {
+                Self::default() // 1 ms target
+            }
+            PlatformPreset::WebAssembly => Self {
+                target_render_time: Duration::from_millis(2),
+                quality_preference: 0.5,
+            },
+        }
+    }
+
+    /// Create a performance budget for the current compilation target.
+    #[must_use]
+    pub fn for_current_platform() -> Self {
+        Self::for_platform(PlatformPreset::detect())
+    }
+
+    /// Maximum acceptable variance multiplier for cross-platform validation.
+    ///
+    /// A result that exceeds `baseline × max_variance_factor()` is considered
+    /// a cross-platform regression.
+    #[must_use]
+    pub fn max_variance_factor() -> f64 {
+        2.0
+    }
+}
+
 /// Manages LOD selection for individual axes.
 #[derive(Debug, Clone)]
 pub struct AxisLODManager {
@@ -698,6 +830,231 @@ impl AxisSystemRenderStats {
 }
 
 // ---------------------------------------------------------------------------
+// Cross-platform validation
+// ---------------------------------------------------------------------------
+
+/// Result of a single benchmark measurement for cross-platform comparison.
+#[derive(Debug, Clone)]
+pub struct BenchmarkMeasurement {
+    /// Human-readable name of the benchmark.
+    pub name: String,
+    /// Median execution time.
+    pub median: Duration,
+    /// Minimum execution time.
+    pub min: Duration,
+    /// Maximum execution time.
+    pub max: Duration,
+    /// Number of iterations measured.
+    pub iterations: usize,
+}
+
+/// Cross-platform validation report collecting measurements from one platform.
+#[derive(Debug, Clone)]
+pub struct PlatformBenchmarkReport {
+    /// Which platform this report was collected on.
+    pub platform: PlatformPreset,
+    /// Platform name (may include GPU/driver detail).
+    pub platform_description: String,
+    /// Individual benchmark measurements.
+    pub measurements: Vec<BenchmarkMeasurement>,
+}
+
+impl PlatformBenchmarkReport {
+    /// Create a new empty report for the given platform.
+    pub fn new(platform: PlatformPreset) -> Self {
+        Self {
+            platform,
+            platform_description: platform.name().to_string(),
+            measurements: Vec::new(),
+        }
+    }
+
+    /// Create a report with a custom platform description (e.g. including GPU name).
+    pub fn with_description(platform: PlatformPreset, description: impl Into<String>) -> Self {
+        Self {
+            platform,
+            platform_description: description.into(),
+            measurements: Vec::new(),
+        }
+    }
+
+    /// Add a benchmark measurement.
+    pub fn add_measurement(&mut self, measurement: BenchmarkMeasurement) {
+        self.measurements.push(measurement);
+    }
+
+    /// Check whether all measurements are within the performance budget.
+    ///
+    /// Returns a list of measurements that exceed their budget.
+    pub fn validate_budget(&self, budget: &PerformanceBudget) -> Vec<BudgetViolation> {
+        self.measurements
+            .iter()
+            .filter(|m| m.median > budget.target_render_time)
+            .map(|m| BudgetViolation {
+                benchmark_name: m.name.clone(),
+                median: m.median,
+                budget: budget.target_render_time,
+                overshoot_factor: m.median.as_secs_f64() / budget.target_render_time.as_secs_f64(),
+            })
+            .collect()
+    }
+}
+
+/// A measurement that exceeded its performance budget.
+#[derive(Debug, Clone)]
+pub struct BudgetViolation {
+    /// Which benchmark exceeded budget.
+    pub benchmark_name: String,
+    /// The measured median time.
+    pub median: Duration,
+    /// The budget that was exceeded.
+    pub budget: Duration,
+    /// How much the budget was exceeded by (e.g. 1.5 = 50% over).
+    pub overshoot_factor: f64,
+}
+
+/// Compare two platform reports and check for variance exceeding the allowed factor.
+///
+/// Returns a list of benchmark names where the variance between the two
+/// platforms exceeds `max_factor` (default 2.0).
+pub fn check_cross_platform_variance(
+    baseline: &PlatformBenchmarkReport,
+    other: &PlatformBenchmarkReport,
+    max_factor: f64,
+) -> Vec<VarianceViolation> {
+    let mut violations = Vec::new();
+
+    for base_m in &baseline.measurements {
+        if let Some(other_m) = other.measurements.iter().find(|m| m.name == base_m.name) {
+            let base_secs = base_m.median.as_secs_f64();
+            let other_secs = other_m.median.as_secs_f64();
+
+            // Avoid division by zero
+            if base_secs <= 0.0 {
+                continue;
+            }
+
+            let ratio = other_secs / base_secs;
+            if ratio > max_factor || (ratio > 0.0 && (1.0 / ratio) > max_factor) {
+                violations.push(VarianceViolation {
+                    benchmark_name: base_m.name.clone(),
+                    baseline_median: base_m.median,
+                    other_median: other_m.median,
+                    variance_ratio: ratio,
+                    max_allowed: max_factor,
+                });
+            }
+        }
+    }
+
+    violations
+}
+
+/// A cross-platform variance that exceeds the allowed threshold.
+#[derive(Debug, Clone)]
+pub struct VarianceViolation {
+    /// Which benchmark exceeded the variance threshold.
+    pub benchmark_name: String,
+    /// The baseline platform's median.
+    pub baseline_median: Duration,
+    /// The other platform's median.
+    pub other_median: Duration,
+    /// The ratio `other / baseline`.
+    pub variance_ratio: f64,
+    /// The maximum allowed ratio.
+    pub max_allowed: f64,
+}
+
+/// Generate a Markdown table summarising cross-platform benchmark results.
+///
+/// This produces a table with one row per benchmark and one column per
+/// platform, showing median times and variance from a chosen baseline.
+pub fn generate_variance_report(
+    reports: &[PlatformBenchmarkReport],
+    baseline_index: usize,
+) -> String {
+    if reports.is_empty() {
+        return String::from("No platform reports available.\n");
+    }
+
+    let baseline = &reports[baseline_index.min(reports.len() - 1)];
+    let mut md = String::new();
+
+    md.push_str("## Cross-Platform Axis Performance Report\n\n");
+    md.push_str(&format!(
+        "**Baseline**: {} ({})\n\n",
+        baseline.platform.name(),
+        baseline.platform_description
+    ));
+
+    // Header row
+    md.push_str("| Benchmark |");
+    for r in reports {
+        md.push_str(&format!(" {} |", r.platform.name()));
+    }
+    md.push_str(" Max Variance |\n");
+
+    // Separator
+    md.push_str("| --- |");
+    for _ in reports {
+        md.push_str(" --- |");
+    }
+    md.push_str(" --- |\n");
+
+    // Collect all unique benchmark names
+    let mut names: Vec<&str> = baseline
+        .measurements
+        .iter()
+        .map(|m| m.name.as_str())
+        .collect();
+    names.dedup();
+
+    for name in &names {
+        md.push_str(&format!("| {} |", name));
+
+        let base_median = baseline
+            .measurements
+            .iter()
+            .find(|m| m.name.as_str() == *name)
+            .map(|m| m.median);
+
+        let mut max_ratio: f64 = 1.0;
+
+        for r in reports {
+            if let Some(m) = r.measurements.iter().find(|m| m.name.as_str() == *name) {
+                let us = m.median.as_micros();
+                md.push_str(&format!(" {us}µs |"));
+
+                if let Some(base) = base_median {
+                    let base_secs = base.as_secs_f64();
+                    if base_secs > 0.0 {
+                        let ratio = m.median.as_secs_f64() / base_secs;
+                        if ratio > max_ratio {
+                            max_ratio = ratio;
+                        }
+                        if ratio > 0.0 && (1.0 / ratio) > max_ratio {
+                            max_ratio = 1.0 / ratio;
+                        }
+                    }
+                }
+            } else {
+                md.push_str(" — |");
+            }
+        }
+
+        let pass = if max_ratio <= PerformanceBudget::max_variance_factor() {
+            "✅"
+        } else {
+            "❌"
+        };
+        md.push_str(&format!(" {max_ratio:.2}x {pass} |\n"));
+    }
+
+    md.push('\n');
+    md
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1220,5 +1577,178 @@ mod tests {
                 .get_instances(&bounds, &config, AxisPosition::Bottom, viewport, lod)
                 .is_some()
         );
+    }
+
+    // -- Platform preset tests --
+
+    #[test]
+    fn test_platform_detect_is_linux() {
+        // In this build environment we always compile for Linux
+        assert_eq!(PlatformPreset::detect(), PlatformPreset::LinuxDesktop);
+    }
+
+    #[test]
+    fn test_platform_preset_names() {
+        assert_eq!(PlatformPreset::LinuxDesktop.name(), "Linux Desktop");
+        assert_eq!(PlatformPreset::MacOSDesktop.name(), "macOS Desktop");
+        assert_eq!(PlatformPreset::WindowsDesktop.name(), "Windows Desktop");
+        assert_eq!(PlatformPreset::WebAssembly.name(), "WebAssembly");
+    }
+
+    #[test]
+    fn test_lod_config_for_platform_linux() {
+        let config = LODConfiguration::for_platform(PlatformPreset::LinuxDesktop);
+        let default = LODConfiguration::default();
+        assert_eq!(
+            config.high_to_medium_threshold,
+            default.high_to_medium_threshold
+        );
+        assert_eq!(
+            config.medium_to_low_threshold,
+            default.medium_to_low_threshold
+        );
+        assert_eq!(
+            config.low_to_minimal_threshold,
+            default.low_to_minimal_threshold
+        );
+    }
+
+    #[test]
+    fn test_lod_config_for_wasm_more_aggressive() {
+        let wasm = LODConfiguration::for_platform(PlatformPreset::WebAssembly);
+        let linux = LODConfiguration::for_platform(PlatformPreset::LinuxDesktop);
+
+        // WebAssembly thresholds are higher → downgrades happen sooner
+        assert!(wasm.high_to_medium_threshold > linux.high_to_medium_threshold);
+        assert!(wasm.medium_to_low_threshold > linux.medium_to_low_threshold);
+        assert!(wasm.low_to_minimal_threshold > linux.low_to_minimal_threshold);
+        // Performance downgrade is more sensitive
+        assert!(wasm.performance_downgrade_threshold < linux.performance_downgrade_threshold);
+    }
+
+    #[test]
+    fn test_performance_budget_for_platform() {
+        let linux = PerformanceBudget::for_platform(PlatformPreset::LinuxDesktop);
+        assert_eq!(linux.target_render_time, Duration::from_millis(1));
+
+        let wasm = PerformanceBudget::for_platform(PlatformPreset::WebAssembly);
+        assert_eq!(wasm.target_render_time, Duration::from_millis(2));
+    }
+
+    #[test]
+    fn test_max_variance_factor() {
+        assert!((PerformanceBudget::max_variance_factor() - 2.0).abs() < f64::EPSILON);
+    }
+
+    // -- Cross-platform validation tests --
+
+    #[test]
+    fn test_benchmark_report_budget_validation() {
+        let mut report = PlatformBenchmarkReport::new(PlatformPreset::LinuxDesktop);
+        report.add_measurement(BenchmarkMeasurement {
+            name: "vertex_gen".into(),
+            median: Duration::from_micros(500),
+            min: Duration::from_micros(400),
+            max: Duration::from_micros(700),
+            iterations: 1000,
+        });
+        report.add_measurement(BenchmarkMeasurement {
+            name: "label_gen".into(),
+            median: Duration::from_millis(2),
+            min: Duration::from_millis(1),
+            max: Duration::from_millis(3),
+            iterations: 1000,
+        });
+
+        let budget = PerformanceBudget::default(); // 1ms
+        let violations = report.validate_budget(&budget);
+
+        // Only label_gen should exceed 1ms
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].benchmark_name, "label_gen");
+        assert!(violations[0].overshoot_factor > 1.0);
+    }
+
+    #[test]
+    fn test_cross_platform_variance_within_limit() {
+        let mut linux = PlatformBenchmarkReport::new(PlatformPreset::LinuxDesktop);
+        linux.add_measurement(BenchmarkMeasurement {
+            name: "vertex_gen".into(),
+            median: Duration::from_micros(100),
+            min: Duration::from_micros(90),
+            max: Duration::from_micros(120),
+            iterations: 1000,
+        });
+
+        let mut macos = PlatformBenchmarkReport::new(PlatformPreset::MacOSDesktop);
+        macos.add_measurement(BenchmarkMeasurement {
+            name: "vertex_gen".into(),
+            median: Duration::from_micros(150),
+            min: Duration::from_micros(130),
+            max: Duration::from_micros(180),
+            iterations: 1000,
+        });
+
+        let violations = check_cross_platform_variance(&linux, &macos, 2.0);
+        assert!(violations.is_empty(), "1.5x should be within 2x limit");
+    }
+
+    #[test]
+    fn test_cross_platform_variance_exceeds_limit() {
+        let mut linux = PlatformBenchmarkReport::new(PlatformPreset::LinuxDesktop);
+        linux.add_measurement(BenchmarkMeasurement {
+            name: "vertex_gen".into(),
+            median: Duration::from_micros(100),
+            min: Duration::from_micros(90),
+            max: Duration::from_micros(120),
+            iterations: 1000,
+        });
+
+        let mut wasm = PlatformBenchmarkReport::new(PlatformPreset::WebAssembly);
+        wasm.add_measurement(BenchmarkMeasurement {
+            name: "vertex_gen".into(),
+            median: Duration::from_micros(300),
+            min: Duration::from_micros(250),
+            max: Duration::from_micros(400),
+            iterations: 1000,
+        });
+
+        let violations = check_cross_platform_variance(&linux, &wasm, 2.0);
+        assert_eq!(violations.len(), 1);
+        assert!((violations[0].variance_ratio - 3.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_generate_variance_report() {
+        let mut linux = PlatformBenchmarkReport::new(PlatformPreset::LinuxDesktop);
+        linux.add_measurement(BenchmarkMeasurement {
+            name: "vertex_gen".into(),
+            median: Duration::from_micros(100),
+            min: Duration::from_micros(90),
+            max: Duration::from_micros(120),
+            iterations: 1000,
+        });
+
+        let mut macos = PlatformBenchmarkReport::new(PlatformPreset::MacOSDesktop);
+        macos.add_measurement(BenchmarkMeasurement {
+            name: "vertex_gen".into(),
+            median: Duration::from_micros(130),
+            min: Duration::from_micros(110),
+            max: Duration::from_micros(160),
+            iterations: 1000,
+        });
+
+        let report = generate_variance_report(&[linux, macos], 0);
+        assert!(report.contains("Cross-Platform Axis Performance Report"));
+        assert!(report.contains("vertex_gen"));
+        assert!(report.contains("Linux Desktop"));
+        assert!(report.contains("macOS Desktop"));
+        assert!(report.contains("✅"));
+    }
+
+    #[test]
+    fn test_generate_variance_report_empty() {
+        let report = generate_variance_report(&[], 0);
+        assert!(report.contains("No platform reports"));
     }
 }
