@@ -531,6 +531,73 @@ Quad is the default if no `#[mark(primitive = ...)]` is specified.
 | `Mat3`    | `mat3x3<f32>` | 3D transforms   |
 | `Mat4`    | `mat4x4<f32>` | Full transforms |
 
+### Instance Buffer Generation
+
+Annotate fields with `#[mark(position)]`, `#[mark(color)]`, `#[mark(size)]`, or
+any custom role to automatically generate a GPU-compatible instance buffer type:
+
+```rust
+use gup_macros::Mark;
+use gup::shader_function::{Vec2, Vec4};
+
+#[derive(Debug, Clone, Mark)]
+#[mark(primitive = "quad")]
+pub struct Diamond {
+    #[mark(position)]
+    pub center: Vec2,
+    #[mark(size)]
+    pub size: f32,
+    #[mark(color)]
+    pub color: Vec4,
+    #[mark(rotation)]
+    pub angle: f32,
+}
+```
+
+This generates a `DiamondInstance` struct with:
+
+- `#[repr(C)]` layout for GPU compatibility
+- `bytemuck::Pod` and `bytemuck::Zeroable` derives for safe GPU memory transfer
+- Automatic WGSL-compatible alignment padding (e.g., padding before `vec4`
+  fields to satisfy 16-byte alignment)
+- `From<&Diamond>` and `From<Diamond>` conversion implementations
+
+```rust
+// Convert mark data to GPU instance
+let diamond = Diamond {
+    center: Vec2 { x: 0.5, y: 0.5 },
+    size: 0.1,
+    color: Vec4 { x: 1.0, y: 0.0, z: 0.0, w: 1.0 },
+    angle: 0.785,
+};
+let instance = DiamondInstance::from(&diamond);
+
+// Batch convert for storage buffer upload
+let instances: Vec<DiamondInstance> = diamonds.iter().map(DiamondInstance::from).collect();
+let bytes: &[u8] = bytemuck::cast_slice(&instances);
+// bytes can be uploaded directly to a wgpu storage buffer
+```
+
+Only annotated fields are included in the instance struct. Fields without a
+`#[mark(...)]` annotation are excluded, giving you control over what data gets
+uploaded to the GPU.
+
+#### WGSL Alignment Rules
+
+The generated struct follows WGSL storage buffer alignment:
+
+| Field Type  | GPU Size | Alignment | Notes                       |
+| ----------- | -------- | --------- | --------------------------- |
+| `f32`       | 4 bytes  | 4 bytes   | No padding needed           |
+| `i32`/`u32` | 4 bytes  | 4 bytes   | Same as f32                 |
+| `Vec2`      | 8 bytes  | 8 bytes   | May need 4-byte pad before  |
+| `Vec3`      | 12 bytes | 16 bytes  | May need up to 12 bytes pad |
+| `Vec4`      | 16 bytes | 16 bytes  | May need up to 12 bytes pad |
+
+The struct's total size is automatically padded to a multiple of its maximum
+field alignment, ensuring correct array stride when uploading multiple
+instances.
+
 ## Validating Your Mark
 
 Use the `MarkValidator` to automatically check your mark for common issues:

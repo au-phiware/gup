@@ -378,6 +378,20 @@ pub fn derive_mark_type_id(input: TokenStream) -> TokenStream {
 ///   This is the default.
 /// - `#[mark(primitive = "triangle")]` - Generate triangle geometry (3 vertices).
 ///
+/// # Field Annotations
+///
+/// Fields can be annotated with `#[mark(role)]` to include them in an
+/// auto-generated `{Name}Instance` struct for GPU storage buffer upload:
+///
+/// - `#[mark(position)]` - Position data (typically `Vec2`)
+/// - `#[mark(color)]` - Color data (typically `Vec4`)
+/// - `#[mark(size)]` - Size data (typically `f32`)
+/// - `#[mark(any_name)]` - Any custom role name
+///
+/// The instance struct includes `#[repr(C)]`, `bytemuck::Pod`, and
+/// `bytemuck::Zeroable` derives, with automatic WGSL-compatible alignment
+/// padding. `From<&Name>` and `From<Name>` conversions are also generated.
+///
 /// # Field Types
 ///
 /// Fields are mapped to WGSL types for attribute validation:
@@ -395,9 +409,13 @@ pub fn derive_mark_type_id(input: TokenStream) -> TokenStream {
 /// #[derive(Debug, Clone, Mark)]
 /// #[mark(primitive = "quad")]
 /// pub struct Diamond {
+///     #[mark(position)]
 ///     pub center: Vec2,
+///     #[mark(size)]
 ///     pub size: f32,
+///     #[mark(color)]
 ///     pub color: Vec4,
+///     #[mark(rotation)]
 ///     pub angle: f32,
 /// }
 ///
@@ -405,6 +423,8 @@ pub fn derive_mark_type_id(input: TokenStream) -> TokenStream {
 /// // - `DiamondVertex` struct with `position: [f32; 2]`
 /// // - `impl Mark for Diamond` with quad geometry
 /// // - Attribute type validation for all fields
+/// // - `DiamondInstance` struct with WGSL-aligned layout
+/// // - `From<&Diamond>` and `From<Diamond>` for `DiamondInstance`
 /// ```
 ///
 /// # Generated Items
@@ -416,6 +436,10 @@ pub fn derive_mark_type_id(input: TokenStream) -> TokenStream {
 ///   - `type AttributeValue = Foo`
 ///   - Geometry generation matching the selected primitive
 ///   - `get_attribute_type()` returning correct WGSL types for all fields
+/// - `FooInstance` (if any fields have `#[mark(...)]` annotations):
+///   - `#[repr(C)]` with `bytemuck::Pod` + `bytemuck::Zeroable`
+///   - WGSL-compatible alignment padding
+///   - `From<&Foo>` and `From<Foo>` conversions
 #[proc_macro_derive(Mark, attributes(mark))]
 pub fn derive_mark(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
