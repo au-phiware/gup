@@ -963,6 +963,51 @@ impl InstancedBatchRenderer {
         Ok(None)
     }
 
+    /// Submit instances with GPU occlusion culling.
+    ///
+    /// Uses [`OcclusionCuller`] to identify instances that are fully hidden
+    /// behind other instances in screen space. Requires that instances are
+    /// already provided as [`InstanceAttributes`]. Only effective for dense
+    /// datasets where many instances overlap.
+    ///
+    /// Returns the [`OcclusionResult`] containing per-instance visibility
+    /// flags and the Hi-Z buffer.
+    ///
+    /// [`OcclusionCuller`]: super::occlusion_culler::OcclusionCuller
+    pub async fn submit_with_occlusion_culling(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        instances: &[InstanceAttributes],
+        occlusion_culler: &super::occlusion_culler::OcclusionCuller,
+    ) -> GupResult<super::occlusion_culler::OcclusionResult> {
+        if instances.is_empty() {
+            return Err(crate::error::GupError::invalid_operation(
+                "Cannot run occlusion culling on zero instances".to_string(),
+            ));
+        }
+
+        let attr_bytes: &[u8] = bytemuck::cast_slice(instances);
+        let input_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("occlusion_cull_input"),
+            size: attr_bytes.len() as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        queue.write_buffer(&input_buffer, 0, attr_bytes);
+
+        occlusion_culler
+            .dispatch(
+                device,
+                queue,
+                &input_buffer,
+                instances.len() as u32,
+                self.culling.viewport(),
+                &self.config.occlusion_params,
+            )
+            .await
+    }
+
     // ------------------------------------------------------------------
     // Sorted rendering
     // ------------------------------------------------------------------
@@ -1710,6 +1755,49 @@ mod tests {
         assert_eq!(
             stats.culled_instances, 1,
             "CPU fallback should cull 1 instance"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_submit_with_occlusion_culling() {
+        use crate::mark::occlusion_culler::OcclusionCuller;
+
+        let ctx = match crate::context::GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let device = &ctx.device;
+        let queue = &ctx.queue;
+
+        let culler = OcclusionCuller::new(device).unwrap();
+        let mut config = BatchRendererConfig::default();
+        config.enable_occlusion_culling = true;
+        config.occlusion_params.conservative_margin = 0.0;
+
+        let mut renderer = InstancedBatchRenderer::new(config);
+        renderer.begin_frame();
+
+        // 20 stacked circles — should trigger significant occlusion.
+        let instances: Vec<InstanceAttributes> = (0..20)
+            .map(|_| InstanceAttributes::from_circle([0.0, 0.0], 0.2, [1.0, 0.0, 0.0, 1.0]))
+            .collect();
+
+        let result = renderer
+            .submit_with_occlusion_culling(device, queue, &instances, &culler)
+            .await
+            .unwrap();
+
+        let flags = OcclusionCuller::read_visibility(device, queue, &result.visibility_buffer, 20)
+            .await
+            .unwrap();
+
+        let visible_count: u32 = flags.iter().sum();
+        // Last instance (front) should always be visible.
+        assert_eq!(flags[19], 1, "Front instance must be visible");
+        // At least some should be culled.
+        assert!(
+            visible_count < 20,
+            "Stacked instances should have some occlusion: visible={visible_count}"
         );
     }
 }
