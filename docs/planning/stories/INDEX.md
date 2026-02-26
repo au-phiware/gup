@@ -84,7 +84,7 @@ epic and status.
 | [GUP-187](GUP-187_Flaky_Label_Performance_Test_Fix.md)         | Flaky Label Performance Test Fix               | ✅ Complete | Low      | —      |
 | [GUP-188](GUP-188_Automatic_Draw_Call_Metrics.md)              | Automatic Draw Call Metrics in MarkRenderer    | 📋 Planned  | Low      | —      |
 | [GUP-189](GUP-189_AST_Integration_ComposableShaderPipeline.md) | AST Integration with ComposableShaderPipeline  | ✅ Complete | Medium   | 5      |
-| [GUP-190](GUP-190_WGSL_Compute_Shader_AST_Support.md)          | WGSL Compute Shader AST Support                | 📋 Planned  | Low      | 5      |
+| [GUP-190](GUP-190_WGSL_Compute_Shader_AST_Support.md)          | WGSL Compute Shader AST Support                | 🚧 In Progress | Low      | 5      |
 | [GUP-191](GUP-191_Enable_AST_Optimization_Default.md)          | Enable AST Optimization by Default             | ✅ Complete | Low      | 3      |
 | [GUP-192](GUP-192_Dynamic_Attribute_Readback_Pipeline.md)      | Dynamic Attribute Readback Pipeline            | 📋 Planned  | Low      | —      |
 | [GUP-208](GUP-208_Mark_Derive_Instance_Buffer_Generation.md)   | Mark Derive Instance Buffer Generation         | 📋 Planned  | Low      | —      |

@@ -1,7 +1,7 @@
 # GUP-190: WGSL Compute Shader AST Support
 
-**Story ID**: GUP-190 **Title**: WGSL Compute Shader AST Support **Status**: 📋
-Planned **Priority**: Low **Effort**: 5 story points **Created**: 2025-08-07
+**Story ID**: GUP-190 **Title**: WGSL Compute Shader AST Support **Status**: 🚧
+In Progress **Priority**: Low **Effort**: 5 story points **Created**: 2025-08-07
 **Dependencies**: GUP-073 (Advanced Shader Composition)
 
 ## Overview
