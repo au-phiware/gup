@@ -1829,9 +1829,7 @@ mod tests {
         assert_eq!(pool.get_stats().active_buffers, 1);
 
         // Write some data to prove the buffer works.
-        context
-            .queue()
-            .write_buffer(&buf1, 0, &[42u8; 128]);
+        context.queue().write_buffer(&buf1, 0, &[42u8; 128]);
 
         // Return to pool.
         pool.deallocate_raw(buf1, BufferType::Storage, sc1);

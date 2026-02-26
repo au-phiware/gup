@@ -1248,11 +1248,10 @@ impl<T, M: Mark> Selection<T, M> {
     /// After calling this the Selection is no longer render-ready — you
     /// must call `prepare_render` again to re-create the render state.
     pub fn release_to_pool(&mut self, pool: &mut BufferPool) {
-        if let Some(mut state) = self.render_state.take() {
-            if let Some((bt, sc)) = state.pool_meta.take() {
+        if let Some(mut state) = self.render_state.take()
+            && let Some((bt, sc)) = state.pool_meta.take() {
                 pool.deallocate_raw(state.instance_buffer, bt, sc);
             }
-        }
     }
 
     /// Set the viewport dimensions for pixel-space SDF calculations.
@@ -1685,15 +1684,14 @@ impl SelectionRenderState {
         };
 
         // --- Instance buffer + bind group ----------------------------
-        let (instance_buffer, bind_group, pool_meta) =
-            Self::create_instance_buffer_and_bind_group(
-                device,
-                &pipeline,
-                instance_bytes,
-                viewport_buffer.as_ref(),
-                queue,
-                pool,
-            );
+        let (instance_buffer, bind_group, pool_meta) = Self::create_instance_buffer_and_bind_group(
+            device,
+            &pipeline,
+            instance_bytes,
+            viewport_buffer.as_ref(),
+            queue,
+            pool,
+        );
 
         let vertex_count = M::vertex_count() as u32;
         let index_count = M::index_count().map(|c| c as u32);
@@ -1736,8 +1734,7 @@ impl SelectionRenderState {
         };
 
         let (instance_buffer, pool_meta) = if let Some(pool) = pool {
-            let (buf, size_class) =
-                pool.allocate_raw(BufferType::Storage, effective_bytes.len());
+            let (buf, size_class) = pool.allocate_raw(BufferType::Storage, effective_bytes.len());
             queue.write_buffer(&buf, 0, effective_bytes);
             (buf, Some((BufferType::Storage, size_class)))
         } else {
@@ -4435,7 +4432,8 @@ mod tests {
                 }]);
 
             // No attr() calls — should fail
-            let result = selection.prepare_render_bound(&context.device, &context.queue, None, None);
+            let result =
+                selection.prepare_render_bound(&context.device, &context.queue, None, None);
             assert!(result.is_err());
         });
     }
@@ -4726,7 +4724,8 @@ fn vs_main() -> VertexOutput {
             );
             selection.attr_shader("radius", |d: &ScatterPoint| d.value, color_map);
 
-            let result = selection.prepare_render_bound(&context.device, &context.queue, None, None);
+            let result =
+                selection.prepare_render_bound(&context.device, &context.queue, None, None);
             assert!(result.is_err(), "Should reject type-mismatched shader fn");
             let err_msg = format!("{}", result.unwrap_err());
             assert!(
@@ -5361,7 +5360,8 @@ fn vs_main() -> VertexOutput {
             let mut selection: Selection<ScatterPoint, Circle> = Selection::from_data(data);
             selection.attr_shader("fill_color", |d: &ScatterPoint| d.value, chain);
 
-            let result = selection.prepare_render_bound(&context.device, &context.queue, None, None);
+            let result =
+                selection.prepare_render_bound(&context.device, &context.queue, None, None);
             assert!(
                 result.is_err(),
                 "Should reject f32 chain bound to vec4 attr"
@@ -5803,8 +5803,7 @@ fn vs_main() -> VertexOutput {
                 },
             }];
 
-            let mut selection: Selection<CircleAttributes, Circle> =
-                Selection::from_data(data);
+            let mut selection: Selection<CircleAttributes, Circle> = Selection::from_data(data);
 
             // Prepare with pool — first call is a miss (no pooled buffers).
             selection
@@ -5826,7 +5825,9 @@ fn vs_main() -> VertexOutput {
             let mut frame = ctx.begin_frame().expect("begin_frame");
             {
                 let mut pass = frame.render_pass(Some(wgpu::Color::BLACK));
-                selection.render(&mut pass).expect("render with pooled buffer");
+                selection
+                    .render(&mut pass)
+                    .expect("render with pooled buffer");
             }
             frame.finish().expect("finish frame");
         });
@@ -5867,8 +5868,7 @@ fn vs_main() -> VertexOutput {
             };
 
             // First selection: allocate from pool (miss).
-            let mut sel1: Selection<CircleAttributes, Circle> =
-                Selection::from_data(make_data());
+            let mut sel1: Selection<CircleAttributes, Circle> = Selection::from_data(make_data());
             sel1.prepare_render(
                 &context.device,
                 &context.queue,
@@ -5887,8 +5887,7 @@ fn vs_main() -> VertexOutput {
             assert_eq!(pool.get_stats().pooled_buffers, 1);
 
             // Second selection: allocate from pool (hit!).
-            let mut sel2: Selection<CircleAttributes, Circle> =
-                Selection::from_data(make_data());
+            let mut sel2: Selection<CircleAttributes, Circle> = Selection::from_data(make_data());
             sel2.prepare_render(
                 &context.device,
                 &context.queue,
@@ -5955,12 +5954,7 @@ fn vs_main() -> VertexOutput {
 
             assert_eq!(pool.get_stats().total_allocated, 1);
             assert!(
-                selection
-                    .render_state
-                    .as_ref()
-                    .unwrap()
-                    .pool_meta
-                    .is_some(),
+                selection.render_state.as_ref().unwrap().pool_meta.is_some(),
                 "pool_meta should be set after pooled allocation"
             );
 
@@ -6037,7 +6031,10 @@ fn vs_main() -> VertexOutput {
 
             let stats = pool.get_stats();
             // First cycle is a miss, all subsequent should be hits.
-            assert_eq!(stats.pool_misses, 1, "only the first allocation should miss");
+            assert_eq!(
+                stats.pool_misses, 1,
+                "only the first allocation should miss"
+            );
             assert_eq!(
                 stats.pool_hits,
                 cycles - 1,
@@ -6081,8 +6078,7 @@ fn vs_main() -> VertexOutput {
                 },
             }];
 
-            let mut selection: Selection<CircleAttributes, Circle> =
-                Selection::from_data(data);
+            let mut selection: Selection<CircleAttributes, Circle> = Selection::from_data(data);
 
             // Prepare WITHOUT pool.
             selection
