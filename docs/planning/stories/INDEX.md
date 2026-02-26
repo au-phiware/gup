@@ -169,7 +169,7 @@ reorganisation._
 | [GUP-151](GUP-151_Multi_Category_Box_Plots.md)               | Multi-Category Box Plots                 | ✅ Complete    | Low      | 3      |
 | [GUP-165](GUP-165_Selection_API_Render_Integration.md)       | Selection API Render Integration         | ✅ Complete    | High     | 13     |
 | [GUP-166](GUP-166_Unified_BoxPlot_Mark_Renderer.md)          | Unified BoxPlot Mark Renderer            | ✅ Complete    | Medium   | 5      |
-| [GUP-167](GUP-167_GpuBufferPool_Selection_Integration.md)    | GpuBufferPool Selection Integration      | 📋 Planned     | Low      | 3      |
+| [GUP-167](GUP-167_GpuBufferPool_Selection_Integration.md)    | GpuBufferPool Selection Integration      | 🚧 In Progress | Low      | 3      |
 | [GUP-168](GUP-168_Selection_Attribute_Binding_Pipeline.md)   | Selection Attribute Binding Pipeline     | ✅ Complete    | Medium   | 8      |
 | [GUP-169](GUP-169_Shared_Pipeline_Cache_Selections.md)       | Shared Pipeline Cache for Selections     | ✅ Complete    | Low      | 3      |
 | [GUP-170](GUP-170_BoxPlot_Notch_Rendering.md)                | BoxPlot Notch Rendering                  | ✅ Complete    | Low      | 2      |

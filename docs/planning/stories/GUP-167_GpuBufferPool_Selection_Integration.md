@@ -1,6 +1,6 @@
 # GUP-167: GpuBufferPool Integration for Selection Rendering
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
