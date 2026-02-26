@@ -1,7 +1,7 @@
 # GUP-076: GPU Occlusion Culling for Dense Datasets
 
 **Story ID**: GUP-076 **Title**: GPU Occlusion Culling for Dense Datasets
-**Status**: 📋 Planned **Priority**: Low **Effort**: — **Created**: 2026-02-25
+**Status**: 🚧 In Progress **Priority**: Low **Effort**: — **Created**: 2026-02-25
 **Dependencies**: GUP-074 (Mark Performance Optimization)
 
 ## Overview
