@@ -1868,13 +1868,28 @@ fn generate_shader_bound_vertex_wgsl(
 
     // --- Part 2: inject uniform struct defs, bindings, and function code ---
     result.push_str("// --- Gup shader function bindings ---\n");
-    for (i, (_attr_name, info)) in bindings.iter().enumerate() {
-        // Uniform struct definition (skip if empty / primitive type).
+
+    // Collect and deduplicate struct definitions across all bindings.
+    // A single `uniform_struct_def` may contain multiple struct definitions
+    // (e.g., ChainUniforms includes nested component struct defs).  We split
+    // on `struct ` boundaries and deduplicate by struct name to avoid WGSL
+    // redefinition errors.
+    let mut emitted_structs = std::collections::HashSet::new();
+    for (_attr_name, info) in bindings.iter() {
         let struct_def = &info.uniform_struct_def;
-        if !struct_def.is_empty() && struct_def != "f32" && struct_def != "i32" {
-            result.push_str(struct_def);
-            result.push('\n');
+        if struct_def.is_empty() || struct_def == "f32" || struct_def == "i32" {
+            continue;
         }
+        for individual_def in split_wgsl_struct_definitions(struct_def) {
+            if let Some(name) = extract_wgsl_struct_name(individual_def)
+                && emitted_structs.insert(name.to_string()) {
+                    result.push_str(individual_def.trim());
+                    result.push('\n');
+                }
+        }
+    }
+
+    for (i, (_attr_name, info)) in bindings.iter().enumerate() {
         // Uniform binding declaration.
         result.push_str(&format!(
             "@group(0) @binding({}) var<uniform> _gup_uniforms_{}: {};\n",
@@ -1935,6 +1950,48 @@ fn generate_shader_bound_vertex_wgsl(
         result.push_str(at_vertex);
     }
 
+    result
+}
+
+/// Extracts the struct name from a WGSL struct definition like
+/// `"struct Foo {\n    bar: f32,\n}"`.
+///
+/// Returns `None` if the string doesn't start with `struct `.
+fn extract_wgsl_struct_name(def: &str) -> Option<&str> {
+    let trimmed = def.trim();
+    let rest = trimmed.strip_prefix("struct ")?;
+    // The struct name ends at the first whitespace or `{`.
+    let end = rest
+        .find(|c: char| c.is_whitespace() || c == '{')
+        .unwrap_or(rest.len());
+    let name = &rest[..end];
+    if name.is_empty() { None } else { Some(name) }
+}
+
+/// Splits a WGSL string that may contain multiple struct definitions into
+/// individual definitions.
+///
+/// Each element in the returned vec starts with `struct ` and ends after its
+/// closing `}`.  Non-struct content between definitions is discarded.
+fn split_wgsl_struct_definitions(defs: &str) -> Vec<&str> {
+    let mut result = Vec::new();
+    let mut search_from = 0;
+    while search_from < defs.len() {
+        // Find the next `struct ` keyword.
+        let start = match defs[search_from..].find("struct ") {
+            Some(pos) => search_from + pos,
+            None => break,
+        };
+        // Find the matching closing brace.  Struct definitions in WGSL are
+        // always single-level (no nested braces), so the first `}` ends the
+        // definition.
+        let end = match defs[start..].find('}') {
+            Some(pos) => start + pos + 1, // include the `}`
+            None => break,
+        };
+        result.push(&defs[start..end]);
+        search_from = end;
+    }
     result
 }
 ///
@@ -4814,5 +4871,114 @@ fn vs_main() -> VertexOutput {
             }
             frame.finish().expect("finish frame");
         });
+    }
+
+    #[test]
+    fn extract_wgsl_struct_name_parses_name() {
+        assert_eq!(
+            extract_wgsl_struct_name("struct Foo {\n    bar: f32,\n}"),
+            Some("Foo")
+        );
+        assert_eq!(
+            extract_wgsl_struct_name("struct LinearScaleUniforms {\n    domain_min: f32,\n}"),
+            Some("LinearScaleUniforms")
+        );
+        // Brace on same line as struct keyword
+        assert_eq!(
+            extract_wgsl_struct_name("struct Compact{ x: f32, }"),
+            Some("Compact")
+        );
+        // Not a struct definition
+        assert_eq!(extract_wgsl_struct_name("fn foo() {}"), None);
+        assert_eq!(extract_wgsl_struct_name(""), None);
+    }
+
+    #[test]
+    fn split_wgsl_struct_definitions_single() {
+        let input = "struct Foo {\n    bar: f32,\n}";
+        let parts = split_wgsl_struct_definitions(input);
+        assert_eq!(parts.len(), 1);
+        assert!(parts[0].starts_with("struct Foo"));
+    }
+
+    #[test]
+    fn split_wgsl_struct_definitions_multiple() {
+        let input = "struct A {\n    x: f32,\n}\nstruct B {\n    y: f32,\n}";
+        let parts = split_wgsl_struct_definitions(input);
+        assert_eq!(parts.len(), 2);
+        assert_eq!(extract_wgsl_struct_name(parts[0]), Some("A"));
+        assert_eq!(extract_wgsl_struct_name(parts[1]), Some("B"));
+    }
+
+    #[test]
+    fn split_wgsl_struct_definitions_empty() {
+        assert!(split_wgsl_struct_definitions("").is_empty());
+        assert!(split_wgsl_struct_definitions("fn foo() {}").is_empty());
+    }
+
+    #[test]
+    fn duplicate_struct_definitions_deduplicated() {
+        use crate::shader_function::{ComposableFunction, LinearScale};
+
+        // Two chains that both contain LinearScaleUniforms.
+        let chain1 =
+            LinearScale::new(0.0, 100.0, 0.0, 1.0).compose(LinearScale::new(0.0, 1.0, 0.0, 10.0));
+        let chain2 =
+            LinearScale::new(0.0, 50.0, 0.0, 1.0).compose(LinearScale::new(0.0, 1.0, 0.0, 5.0));
+
+        let info1 = shader_fn_info_from(&chain1);
+        let info2 = shader_fn_info_from(&chain2);
+
+        // Verify both infos share the same nested struct name.
+        assert!(
+            info1
+                .uniform_struct_def
+                .contains("struct LinearScaleUniforms"),
+            "info1 should reference LinearScaleUniforms: {}",
+            info1.uniform_struct_def
+        );
+        assert!(
+            info2
+                .uniform_struct_def
+                .contains("struct LinearScaleUniforms"),
+            "info2 should reference LinearScaleUniforms: {}",
+            info2.uniform_struct_def
+        );
+
+        let base_wgsl = r#"
+struct CircleInstance {
+    center: vec2<f32>,
+    radius: f32,
+    fill_color: vec4<f32>,
+}
+
+@group(0) @binding(0) var<storage, read> instances: array<CircleInstance>;
+
+@vertex
+fn vs_main() -> VertexOutput {
+    let instance = instances[input.instance_index];
+    let r = instance.radius;
+    let c = instance.fill_color;
+    return r;
+}
+"#;
+
+        let bindings: Vec<(&str, &ShaderFnInfo)> = vec![("radius", &info1), ("fill_color", &info2)];
+        let result = generate_shader_bound_vertex_wgsl(base_wgsl, &bindings);
+
+        // LinearScaleUniforms should appear exactly once.
+        let count = result.matches("struct LinearScaleUniforms").count();
+        assert_eq!(
+            count, 1,
+            "Expected exactly 1 LinearScaleUniforms definition, found {count}:\n{result}"
+        );
+
+        // ChainUniforms should appear exactly once too (both chains share
+        // the same top-level type name).
+        let chain_count = result.matches("struct ChainUniforms").count();
+        assert_eq!(
+            chain_count, 1,
+            "Expected exactly 1 ChainUniforms definition, found {chain_count}:\n{result}"
+        );
     }
 }
