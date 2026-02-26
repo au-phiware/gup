@@ -25,8 +25,11 @@ pub struct TextRenderer {
     uniform_buffer: Buffer,
     /// Current vertex buffer capacity
     vertex_capacity: usize,
-    /// Queued text vertices awaiting rendering
+    /// Queued text vertices awaiting rendering (single-atlas mode)
     render_queue: Vec<TextVertex>,
+    /// Per-atlas vertex batches for multi-font rendering.
+    /// Key is the atlas key from [`FontAtlasManager::atlas_key`].
+    font_batches: std::collections::HashMap<String, Vec<TextVertex>>,
     /// Sampler for font texture
     sampler: Sampler,
 }
@@ -237,6 +240,7 @@ impl TextRenderer {
             uniform_buffer,
             vertex_capacity,
             render_queue: Vec::new(),
+            font_batches: std::collections::HashMap::new(),
             sampler,
         })
     }
@@ -244,6 +248,7 @@ impl TextRenderer {
     /// Reset buffer state for a new frame. Call this before rendering any text in a frame.
     pub fn begin_frame(&mut self) {
         self.render_queue.clear();
+        self.font_batches.clear();
     }
 
     /// Render all queued text with a single draw call.
@@ -378,6 +383,174 @@ impl TextRenderer {
         let vertices = self.create_vertices(glyphs);
         if !vertices.is_empty() {
             self.render_queue.extend_from_slice(&vertices);
+        }
+
+        Ok(())
+    }
+
+    /// Add a glyph batch to a per-atlas font batch.
+    fn add_glyph_batch_for_font(
+        &mut self,
+        atlas_key: &str,
+        glyphs: &GlyphBatch,
+    ) -> GupResult<()> {
+        if glyphs.is_empty() {
+            return Ok(());
+        }
+
+        let vertices = self.create_vertices(glyphs);
+        if !vertices.is_empty() {
+            self.font_batches
+                .entry(atlas_key.to_string())
+                .or_default()
+                .extend_from_slice(&vertices);
+        }
+
+        Ok(())
+    }
+
+    /// Queue text for multi-font batched rendering.
+    ///
+    /// Uses the [`FontAtlasManager`] to resolve `TextStyle.font_family` to
+    /// the appropriate [`FontAtlas`], lazily creating atlases as needed.
+    /// Text is batched per atlas so that each atlas's vertices can be drawn
+    /// separately during [`render_queued_text_multi`](Self::render_queued_text_multi).
+    ///
+    /// Must be called before creating the render pass.
+    pub fn queue_text_with_fonts(
+        &mut self,
+        frame: &crate::RenderFrame,
+        text: &str,
+        position: Vec2,
+        style: &TextStyle,
+        font_manager: &mut FontAtlasManager,
+        layout_engine: &mut TextLayoutEngine,
+        viewport_bounds: Option<&ViewportBounds>,
+        clipping_config: Option<&ClippingStrategyConfig>,
+    ) -> GupResult<TextBounds> {
+        let atlas_key = FontAtlasManager::atlas_key(style.font_family.as_deref());
+
+        // Get or create the atlas for this font family
+        let font_atlas =
+            font_manager.get_or_create(frame.device(), frame.queue(), style.font_family.as_deref())?;
+
+        // Ensure all glyphs are available in the atlas
+        for ch in text.chars() {
+            font_atlas.ensure_glyph(frame.device(), frame.queue(), ch, style.font_size)?;
+        }
+
+        // Layout the text
+        let layout_result = if let Some(vb) = viewport_bounds {
+            let cc = clipping_config.cloned().unwrap_or_default();
+            layout_engine.layout_text_with_clipping(
+                text, position, style, font_atlas, None, vb, &cc,
+            )?
+        } else {
+            layout_engine.layout_text(text, position, style, font_atlas, None)?
+        };
+
+        // Add to the per-atlas batch
+        self.add_glyph_batch_for_font(&atlas_key, &layout_result.glyphs)?;
+
+        Ok(layout_result.bounds)
+    }
+
+    /// Render all multi-font queued text.
+    ///
+    /// Iterates over each per-atlas vertex batch and issues a separate
+    /// draw call for each font atlas (since each uses a different GPU
+    /// texture). Vertices for the same atlas are still batched into a
+    /// single draw call for efficiency.
+    ///
+    /// Call this after [`queue_text_with_fonts`](Self::queue_text_with_fonts)
+    /// and before ending the render pass.
+    pub fn render_queued_text_multi<'a>(
+        &mut self,
+        render_pass: &mut RenderPass<'a>,
+        device: &Device,
+        queue: &Queue,
+        font_manager: &FontAtlasManager,
+        screen_width: f32,
+        screen_height: f32,
+    ) -> GupResult<()> {
+        if self.font_batches.is_empty() {
+            return Ok(());
+        }
+
+        // Update uniform buffer once (shared across all batches)
+        let projection = self.create_projection_matrix(screen_width, screen_height);
+        let uniforms = TextUniforms {
+            projection,
+            screen_size: [screen_width, screen_height],
+            _padding: [0.0, 0.0],
+        };
+        queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
+
+        // Take ownership of batches to avoid borrow conflicts with self.resize_buffers
+        let batches = std::mem::take(&mut self.font_batches);
+
+        for (key, vertices) in &batches {
+            if vertices.is_empty() {
+                continue;
+            }
+
+            let font_atlas = font_manager
+                .get_atlas(Some(key))
+                .ok_or_else(|| {
+                    GupError::render_error(format!("Font atlas not found for key: {key}"))
+                })?;
+
+            // Ensure vertex buffer capacity
+            if vertices.len() > self.vertex_capacity {
+                let new_capacity = vertices.len().max(self.vertex_capacity * 2);
+                let capped_capacity = new_capacity.min(65535);
+                if vertices.len() > capped_capacity {
+                    return Err(GupError::render_error("Too many text vertices"));
+                }
+                self.resize_buffers(device, capped_capacity)?;
+            }
+
+            // Upload vertices for this batch
+            queue.write_buffer(
+                &self.vertex_buffer,
+                0,
+                bytemuck::cast_slice(vertices),
+            );
+
+            // Create bind group with this atlas's texture
+            let font_texture_view = font_atlas
+                .texture()
+                .create_view(&TextureViewDescriptor::default());
+            let bind_group = device.create_bind_group(&BindGroupDescriptor {
+                label: Some("Text Bind Group"),
+                layout: &self.bind_group_layout,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: self.uniform_buffer.as_entire_binding(),
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::TextureView(&font_texture_view),
+                    },
+                    BindGroupEntry {
+                        binding: 2,
+                        resource: BindingResource::Sampler(&self.sampler),
+                    },
+                ],
+            });
+
+            // Draw this batch
+            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_bind_group(0, &bind_group, &[]);
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(
+                self.index_buffer.slice(..),
+                wgpu::IndexFormat::Uint16,
+            );
+
+            let total_indices = (vertices.len() / 4) * 6;
+            render_pass.draw_indexed(0..total_indices as u32, 0, 0..1);
         }
 
         Ok(())
@@ -595,6 +768,7 @@ impl std::fmt::Debug for TextRenderer {
         f.debug_struct("TextRenderer")
             .field("vertex_capacity", &self.vertex_capacity)
             .field("queued_vertices", &self.render_queue.len())
+            .field("font_batch_count", &self.font_batches.len())
             .finish()
     }
 }
@@ -630,6 +804,7 @@ mod tests {
             uniform_buffer: unsafe { mem::zeroed() },
             vertex_capacity: 1024,
             render_queue: Vec::new(),
+            font_batches: std::collections::HashMap::new(),
             sampler: unsafe { mem::zeroed() },
         };
 
@@ -655,6 +830,7 @@ mod tests {
             uniform_buffer: unsafe { mem::zeroed() },
             vertex_capacity: 1024,
             render_queue: Vec::new(),
+            font_batches: std::collections::HashMap::new(),
             sampler: unsafe { mem::zeroed() },
         };
 
@@ -706,6 +882,7 @@ mod tests {
             uniform_buffer: unsafe { mem::zeroed() },
             vertex_capacity: 1024,
             render_queue: Vec::new(),
+            font_batches: std::collections::HashMap::new(),
             sampler: unsafe { mem::zeroed() },
         };
 
