@@ -1814,4 +1814,34 @@ mod tests {
         // With adaptive sizing disabled, it should still work but use simple LRU
         assert!(pool.get_stats().pooled_buffers > 0);
     }
+
+    #[tokio::test]
+    async fn test_allocate_raw_and_deallocate_raw() {
+        let context = create_test_context().await;
+        let device = Arc::new(context.device().clone());
+        let mut pool = BufferPool::new(device);
+
+        // First allocation is a miss.
+        let (buf1, sc1) = pool.allocate_raw(BufferType::Storage, 256);
+        assert!(sc1 >= 256); // power-of-2 rounding
+        assert_eq!(pool.get_stats().pool_misses, 1);
+        assert_eq!(pool.get_stats().pool_hits, 0);
+        assert_eq!(pool.get_stats().active_buffers, 1);
+
+        // Write some data to prove the buffer works.
+        context
+            .queue()
+            .write_buffer(&buf1, 0, &[42u8; 128]);
+
+        // Return to pool.
+        pool.deallocate_raw(buf1, BufferType::Storage, sc1);
+        assert_eq!(pool.get_stats().active_buffers, 0);
+        assert_eq!(pool.get_stats().pooled_buffers, 1);
+
+        // Second allocation should hit the pool.
+        let (_buf2, sc2) = pool.allocate_raw(BufferType::Storage, 256);
+        assert_eq!(sc2, sc1); // same size class
+        assert_eq!(pool.get_stats().pool_hits, 1);
+        assert_eq!(pool.get_stats().pooled_buffers, 0);
+    }
 }

@@ -5769,4 +5769,336 @@ fn vs_main() -> VertexOutput {
             frame.finish().expect("finish frame");
         });
     }
+
+    // --- BufferPool integration tests ---
+
+    #[test]
+    fn gpu_prepare_render_with_buffer_pool() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let mut pool = BufferPool::new(Arc::clone(&context.device));
+
+            let data = vec![CircleAttributes {
+                center: Vec2 { x: 0.0, y: 0.0 },
+                radius: 0.1,
+                fill_color: Vec4 {
+                    x: 1.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0,
+                },
+                stroke_width: 0.0,
+                stroke_color: Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 0.0,
+                },
+            }];
+
+            let mut selection: Selection<CircleAttributes, Circle> =
+                Selection::from_data(data);
+
+            // Prepare with pool — first call is a miss (no pooled buffers).
+            selection
+                .prepare_render(
+                    &context.device,
+                    &context.queue,
+                    |a| CircleInstance::from(a),
+                    None,
+                    Some(&mut pool),
+                )
+                .expect("prepare_render with pool");
+
+            assert!(selection.is_render_ready());
+            assert_eq!(pool.get_stats().total_allocated, 1);
+            assert_eq!(pool.get_stats().pool_misses, 1);
+
+            // Render to an offscreen frame to verify correctness.
+            let mut ctx = Arc::try_unwrap(context).expect("single owner");
+            let mut frame = ctx.begin_frame().expect("begin_frame");
+            {
+                let mut pass = frame.render_pass(Some(wgpu::Color::BLACK));
+                selection.render(&mut pass).expect("render with pooled buffer");
+            }
+            frame.finish().expect("finish frame");
+        });
+    }
+
+    #[test]
+    fn gpu_release_to_pool_enables_reuse() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let mut pool = BufferPool::new(Arc::clone(&context.device));
+
+            // Helper to create a selection with some data.
+            let make_data = || {
+                vec![CircleAttributes {
+                    center: Vec2 { x: 0.0, y: 0.0 },
+                    radius: 0.1,
+                    fill_color: Vec4 {
+                        x: 1.0,
+                        y: 0.0,
+                        z: 0.0,
+                        w: 1.0,
+                    },
+                    stroke_width: 0.0,
+                    stroke_color: Vec4 {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 0.0,
+                        w: 0.0,
+                    },
+                }]
+            };
+
+            // First selection: allocate from pool (miss).
+            let mut sel1: Selection<CircleAttributes, Circle> =
+                Selection::from_data(make_data());
+            sel1.prepare_render(
+                &context.device,
+                &context.queue,
+                |a| CircleInstance::from(a),
+                None,
+                Some(&mut pool),
+            )
+            .unwrap();
+
+            assert_eq!(pool.get_stats().pool_misses, 1);
+            assert_eq!(pool.get_stats().pool_hits, 0);
+
+            // Release buffer back to pool.
+            sel1.release_to_pool(&mut pool);
+            assert!(!sel1.is_render_ready());
+            assert_eq!(pool.get_stats().pooled_buffers, 1);
+
+            // Second selection: allocate from pool (hit!).
+            let mut sel2: Selection<CircleAttributes, Circle> =
+                Selection::from_data(make_data());
+            sel2.prepare_render(
+                &context.device,
+                &context.queue,
+                |a| CircleInstance::from(a),
+                None,
+                Some(&mut pool),
+            )
+            .unwrap();
+
+            assert_eq!(pool.get_stats().pool_hits, 1);
+            assert_eq!(pool.get_stats().pooled_buffers, 0);
+
+            // Clean up.
+            sel2.release_to_pool(&mut pool);
+        });
+    }
+
+    #[test]
+    fn gpu_pool_reallocation_returns_old_buffer() {
+        // Test the reallocation path: when the instance data grows beyond
+        // the current buffer capacity without calling set_data (which
+        // destroys the render state), the old pooled buffer is returned.
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let mut pool = BufferPool::new(Arc::clone(&context.device));
+
+            let make_attr = |x: f32| CircleAttributes {
+                center: Vec2 { x, y: 0.0 },
+                radius: 0.05,
+                fill_color: Vec4 {
+                    x: 1.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0,
+                },
+                stroke_width: 0.0,
+                stroke_color: Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 0.0,
+                },
+            };
+
+            // Start with 2 items — small buffer.
+            let mut selection: Selection<CircleAttributes, Circle> =
+                Selection::from_data(vec![make_attr(-0.5), make_attr(0.5)]);
+            selection
+                .prepare_render(
+                    &context.device,
+                    &context.queue,
+                    |a| CircleInstance::from(a),
+                    None,
+                    Some(&mut pool),
+                )
+                .unwrap();
+
+            assert_eq!(pool.get_stats().total_allocated, 1);
+            assert!(
+                selection
+                    .render_state
+                    .as_ref()
+                    .unwrap()
+                    .pool_meta
+                    .is_some(),
+                "pool_meta should be set after pooled allocation"
+            );
+
+            // Directly replace data with 200 items (bypassing set_data which
+            // clears render_state). This forces the reallocation path in
+            // upload_instances because the new instance_bytes are much larger.
+            selection.data = (0..200).map(|i| make_attr(i as f32 * 0.01)).collect();
+
+            selection
+                .prepare_render(
+                    &context.device,
+                    &context.queue,
+                    |a| CircleInstance::from(a),
+                    None,
+                    Some(&mut pool),
+                )
+                .unwrap();
+
+            // Old buffer returned to pool, new one allocated.
+            assert_eq!(pool.get_stats().total_allocated, 2);
+            assert_eq!(pool.get_stats().total_deallocated, 1);
+            // Old (small) buffer is in the pool now.
+            assert_eq!(pool.get_stats().pooled_buffers, 1);
+
+            selection.release_to_pool(&mut pool);
+        });
+    }
+
+    #[test]
+    fn gpu_pool_create_destroy_cycle_benchmark() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let mut pool = BufferPool::new(Arc::clone(&context.device));
+            let cycles = 100;
+
+            let data = vec![CircleAttributes {
+                center: Vec2 { x: 0.0, y: 0.0 },
+                radius: 0.1,
+                fill_color: Vec4 {
+                    x: 1.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0,
+                },
+                stroke_width: 0.0,
+                stroke_color: Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 0.0,
+                },
+            }];
+
+            for _ in 0..cycles {
+                let mut sel: Selection<CircleAttributes, Circle> =
+                    Selection::from_data(data.clone());
+                sel.prepare_render(
+                    &context.device,
+                    &context.queue,
+                    |a| CircleInstance::from(a),
+                    None,
+                    Some(&mut pool),
+                )
+                .unwrap();
+                sel.release_to_pool(&mut pool);
+            }
+
+            let stats = pool.get_stats();
+            // First cycle is a miss, all subsequent should be hits.
+            assert_eq!(stats.pool_misses, 1, "only the first allocation should miss");
+            assert_eq!(
+                stats.pool_hits,
+                cycles - 1,
+                "subsequent allocations should hit"
+            );
+            assert_eq!(stats.total_allocated, cycles);
+            assert_eq!(stats.total_deallocated, cycles);
+        });
+    }
+
+    #[test]
+    fn release_to_pool_noop_without_pool_meta() {
+        // A selection prepared without a pool should be a no-op when
+        // release_to_pool is called.
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let mut pool = BufferPool::new(Arc::clone(&context.device));
+
+            let data = vec![CircleAttributes {
+                center: Vec2 { x: 0.0, y: 0.0 },
+                radius: 0.1,
+                fill_color: Vec4 {
+                    x: 1.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0,
+                },
+                stroke_width: 0.0,
+                stroke_color: Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 0.0,
+                },
+            }];
+
+            let mut selection: Selection<CircleAttributes, Circle> =
+                Selection::from_data(data);
+
+            // Prepare WITHOUT pool.
+            selection
+                .prepare_render(
+                    &context.device,
+                    &context.queue,
+                    |a| CircleInstance::from(a),
+                    None,
+                    None,
+                )
+                .unwrap();
+
+            // Releasing to pool should not add anything (no pool_meta).
+            let before = pool.get_stats().pooled_buffers;
+            selection.release_to_pool(&mut pool);
+            assert_eq!(pool.get_stats().pooled_buffers, before);
+        });
+    }
 }
