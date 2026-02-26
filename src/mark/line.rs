@@ -21,6 +21,7 @@
 //! and GPU-accelerated attribute transformations.
 
 use crate::mark::Mark;
+use crate::selection::{AttrValue, MarkInstanceBuilder};
 use crate::shader_function::{Vec2, Vec4};
 use crate::shader_pipeline::ComposableShaderPipeline;
 use std::collections::HashMap;
@@ -101,6 +102,47 @@ pub struct LineAttributes {
     pub width: f32,
     /// Line style (solid, dashed, dotted)
     pub style: LineStyle,
+}
+
+/// GPU-ready instance data for line rendering.
+///
+/// This struct matches the WGSL `LineInstance` layout in `line.vert.wgsl`
+/// and is suitable for upload to a storage buffer. Fields are aligned to
+/// satisfy WGSL storage buffer alignment rules.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct LineInstance {
+    /// Start position in clip space
+    pub start: [f32; 2],
+    /// End position in clip space
+    pub end: [f32; 2],
+    /// Line colour (RGBA)
+    pub color: [f32; 4],
+    /// Line width in clip space units
+    pub width: f32,
+    /// Line style: 0 = solid, 1 = dashed, 2 = dotted
+    pub style: u32,
+    /// Padding to align struct to 16-byte boundary
+    pub _padding: [f32; 2],
+}
+
+impl From<&LineAttributes> for LineInstance {
+    fn from(attrs: &LineAttributes) -> Self {
+        Self {
+            start: [attrs.start.x, attrs.start.y],
+            end: [attrs.end.x, attrs.end.y],
+            color: [attrs.color.x, attrs.color.y, attrs.color.z, attrs.color.w],
+            width: attrs.width,
+            style: attrs.style as u32,
+            _padding: [0.0; 2],
+        }
+    }
+}
+
+impl From<LineAttributes> for LineInstance {
+    fn from(attrs: LineAttributes) -> Self {
+        Self::from(&attrs)
+    }
 }
 
 impl Mark for Line {
@@ -462,6 +504,44 @@ impl Default for LineAttributes {
     }
 }
 
+impl MarkInstanceBuilder for Line {
+    type Instance = LineInstance;
+
+    fn default_instance() -> Self::Instance {
+        LineInstance::from(&LineAttributes::default())
+    }
+
+    fn build_instance(attrs: &[(&str, AttrValue)]) -> Self::Instance {
+        let mut instance = Self::default_instance();
+        for &(name, value) in attrs {
+            match name {
+                "start" | "from" => {
+                    if let AttrValue::Vec2(v) = value {
+                        instance.start = v;
+                    }
+                }
+                "end" | "to" => {
+                    if let AttrValue::Vec2(v) = value {
+                        instance.end = v;
+                    }
+                }
+                "color" | "stroke_color" => {
+                    if let AttrValue::Vec4(v) = value {
+                        instance.color = v;
+                    }
+                }
+                "width" | "stroke_width" | "size" => {
+                    if let AttrValue::Float(v) = value {
+                        instance.width = v;
+                    }
+                }
+                _ => {} // Ignore unknown attributes
+            }
+        }
+        instance
+    }
+}
+
 // ---------------------------------------------------------------------------
 // AccessibleMark implementation for Line
 // ---------------------------------------------------------------------------
@@ -769,5 +849,87 @@ mod tests {
     fn test_line_accessible_mark_type() {
         use crate::selection::AccessibleMark;
         assert_eq!(Line::describe_mark_type(), "line");
+    }
+
+    #[test]
+    fn test_line_instance_size_and_alignment() {
+        // LineInstance must be 48 bytes to match the WGSL layout.
+        assert_eq!(std::mem::size_of::<LineInstance>(), 48);
+        assert!(std::mem::align_of::<LineInstance>() >= 4);
+    }
+
+    #[test]
+    fn test_line_instance_from_attributes() {
+        let attrs = LineAttributes {
+            start: vec2![0.1, 0.2],
+            end: vec2![0.8, 0.9],
+            color: vec4![1.0, 0.0, 0.0, 1.0],
+            width: 0.05,
+            style: LineStyle::Dashed,
+        };
+
+        let inst = LineInstance::from(&attrs);
+        assert_eq!(inst.start, [0.1, 0.2]);
+        assert_eq!(inst.end, [0.8, 0.9]);
+        assert_eq!(inst.color, [1.0, 0.0, 0.0, 1.0]);
+        assert_eq!(inst.width, 0.05);
+        assert_eq!(inst.style, 1); // Dashed
+    }
+
+    #[test]
+    fn test_line_instance_from_owned() {
+        let attrs = LineAttributes::default();
+        let inst_ref = LineInstance::from(&attrs);
+        let inst_owned = LineInstance::from(attrs);
+        assert_eq!(inst_ref.start, inst_owned.start);
+        assert_eq!(inst_ref.end, inst_owned.end);
+    }
+
+    #[test]
+    fn test_line_instance_builder_default() {
+        let inst = Line::default_instance();
+        assert_eq!(inst.start, [0.0, 0.0]);
+        assert_eq!(inst.end, [10.0, 0.0]);
+        assert_eq!(inst.width, 1.0);
+        assert_eq!(inst.style, 0); // Solid
+    }
+
+    #[test]
+    fn test_line_instance_builder_with_attrs() {
+        let inst = Line::build_instance(&[
+            ("start", AttrValue::Vec2([0.1, 0.2])),
+            ("end", AttrValue::Vec2([0.8, 0.9])),
+            ("color", AttrValue::Vec4([1.0, 0.0, 0.0, 1.0])),
+            ("width", AttrValue::Float(0.05)),
+        ]);
+        assert_eq!(inst.start, [0.1, 0.2]);
+        assert_eq!(inst.end, [0.8, 0.9]);
+        assert_eq!(inst.color, [1.0, 0.0, 0.0, 1.0]);
+        assert_eq!(inst.width, 0.05);
+    }
+
+    #[test]
+    fn test_line_instance_builder_aliases() {
+        // "from" alias for "start"
+        let inst = Line::build_instance(&[
+            ("from", AttrValue::Vec2([0.1, 0.2])),
+            ("to", AttrValue::Vec2([0.3, 0.4])),
+            ("stroke_color", AttrValue::Vec4([0.5, 0.5, 0.5, 1.0])),
+            ("stroke_width", AttrValue::Float(0.03)),
+            ("size", AttrValue::Float(0.07)),
+        ]);
+        assert_eq!(inst.start, [0.1, 0.2]);
+        assert_eq!(inst.end, [0.3, 0.4]);
+        assert_eq!(inst.color, [0.5, 0.5, 0.5, 1.0]);
+        // "size" overwrites "stroke_width" since it comes after
+        assert_eq!(inst.width, 0.07);
+    }
+
+    #[test]
+    fn test_line_instance_builder_ignores_unknown() {
+        let default = Line::default_instance();
+        let inst = Line::build_instance(&[("unknown_attr", AttrValue::Float(999.0))]);
+        assert_eq!(inst.start, default.start);
+        assert_eq!(inst.end, default.end);
     }
 }
