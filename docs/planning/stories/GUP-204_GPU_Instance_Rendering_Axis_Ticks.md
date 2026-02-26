@@ -115,3 +115,88 @@ position and length.
 - **3 new cache tests** (miss→hit, invalidation, independence)
 - **42 existing axis tests** — all pass unchanged
 - **25 existing cache tests** — all pass unchanged
+
+## Retrospective
+
+**Completed**: 2025-07-18
+
+### Key Technical Learnings
+
+#### Tick Vector vs Separate Length/Direction
+
+- **Challenge**: The story described per-instance data as "position along axis,
+  tick length, color". A naïve approach would store a scalar length and rely on
+  the shader to compute the perpendicular direction.
+- **Solution**: Storing a 2D `tick_vector` (direction × length) instead of a
+  scalar length avoids per-instance direction calculation in the shader and
+  keeps the CPU-side generation symmetric with the existing vertex-pair code.
+- **Pattern**: When instancing line segments, encode the full offset vector
+  rather than decomposing into length + direction. This simplifies the shader
+  to a single multiply-add.
+
+#### Base Geometry Design for Line Instancing
+
+- **Challenge**: GPU instancing typically uses quads or triangle meshes as base
+  geometry. For line-list ticks, the base geometry is just two vertices.
+- **Solution**: Used a single `f32` parameter `t ∈ {0.0, 1.0}` as the base
+  vertex buffer (8 bytes total). The vertex shader computes
+  `pos = instance.position + instance.tick_vector * t`, which gives the
+  on-axis point at t=0 and the tick endpoint at t=1.
+- **Pattern**: For instanced line segments, a 1D parameter buffer is the
+  minimal base geometry — no index buffer needed, just `draw(0..2, 0..N)`.
+
+#### Cache Dual-Keying
+
+- **Challenge**: The `AxisGeometryCache` already cached `Vec<Vertex>`. Adding
+  `Vec<TickInstance>` caching required deciding whether to share or duplicate
+  the cache key.
+- **Solution**: Used independent cache keys for vertices and instances. This
+  allows mixed usage (vertex-pair rendering for the axis line, instanced
+  rendering for ticks) without cache thrashing.
+- **Pattern**: When extending a cache with a new data type, prefer independent
+  key slots over a single shared key to avoid invalidation cross-talk.
+
+### Architectural Decisions
+
+#### Additive API (Not Replacement)
+
+- **Decision**: Added instanced rendering as an alternative path alongside the
+  existing vertex-pair API, rather than replacing it.
+- **Reasoning**: The vertex-pair approach is used by `chart_builder.rs` and
+  other callers who draw axis lines and ticks together in a single `LineList`
+  draw call. Forcing callers to switch to instanced rendering would require a
+  pipeline change.
+- **Trade-off**: Slightly more API surface, but zero breaking changes.
+- **Future**: Callers can migrate to instanced ticks incrementally. The
+  `TickPipeline` makes it easy to adopt when a caller is ready.
+
+#### TickPipeline Owns Its Pipeline
+
+- **Decision**: `TickPipeline` is a standalone struct that owns a
+  `wgpu::RenderPipeline`, rather than extending the existing `BasicPipeline`.
+- **Reasoning**: The instanced tick pipeline has fundamentally different vertex
+  buffer layouts (1D base + instance buffer) vs `BasicPipeline` (position +
+  color per vertex). Sharing would require runtime branching.
+- **Trade-off**: One more pipeline object to manage, but clean separation.
+
+### Development Workflow Insights
+
+- The `test_tick_instances_match_vertex_pairs` test was the most valuable: it
+  directly proves that the instanced path reconstructs identical line endpoints
+  to the vertex-pair path, satisfying the "visual output identical" AC.
+- The `bytemuck::Pod` + `#[repr(C)]` pattern made GPU buffer serialization
+  trivial — the struct can be uploaded directly with `bytemuck::cast_slice`.
+- Pre-existing test failures in `mark::renderer::tests` (3 tests) and
+  pre-commit hook failures (markdown formatting, deprecated criterion API) were
+  unrelated to this story.
+
+### Follow-up Stories
+
+1. **GUP-224: Migrate chart_builder to instanced tick rendering** — Update
+   `ComposedChart::generate_axis_geometry()` to use `TickPipeline` for tick
+   marks while keeping vertex pairs for the axis line only. This would realise
+   the full performance benefit in production rendering.
+
+2. **GUP-225: Instanced grid line rendering** — Apply the same instancing
+   pattern to grid lines, which currently use the same vertex-pair approach as
+   ticks but can have even more lines (one per tick across the chart area).
