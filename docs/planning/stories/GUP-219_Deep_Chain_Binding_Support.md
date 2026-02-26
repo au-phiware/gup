@@ -1,6 +1,6 @@
 # GUP-219: Deep Chain Binding Support
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
