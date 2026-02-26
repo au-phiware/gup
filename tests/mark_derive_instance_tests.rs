@@ -550,3 +550,50 @@ fn instance_implements_clone_copy() {
     let copied = instance;
     assert_eq!(cloned.center, copied.center);
 }
+
+// ============================================================
+// MarkValidator compatibility
+// ============================================================
+
+#[test]
+fn annotated_marks_pass_mark_validator() {
+    use gup::mark::validation::assert_mark_valid;
+
+    // Marks with field annotations should still pass all MarkValidator checks
+    assert_mark_valid::<AnnotatedDiamond>().expect("AnnotatedDiamond should be valid");
+    assert_mark_valid::<PositionOnly>().expect("PositionOnly should be valid");
+    assert_mark_valid::<PosColor>().expect("PosColor should be valid");
+    assert_mark_valid::<AllScalars>().expect("AllScalars should be valid");
+    assert_mark_valid::<WithVec3>().expect("WithVec3 should be valid");
+    assert_mark_valid::<CustomRoles>().expect("CustomRoles should be valid");
+    assert_mark_valid::<AnnotatedArrow>().expect("AnnotatedArrow should be valid");
+    assert_mark_valid::<MultiVec4>().expect("MultiVec4 should be valid");
+    assert_mark_valid::<WithIntegers>().expect("WithIntegers should be valid");
+    assert_mark_valid::<NoAnnotations>().expect("NoAnnotations should be valid");
+}
+
+#[test]
+fn annotated_marks_produce_passing_validation_reports() {
+    use gup::mark::validation::MarkValidator;
+
+    let report = MarkValidator::<AnnotatedDiamond>::validate();
+    assert!(
+        report.is_passing(),
+        "AnnotatedDiamond validation failed: {}",
+        report.summary()
+    );
+
+    let report = MarkValidator::<AnnotatedArrow>::validate();
+    assert!(
+        report.is_passing(),
+        "AnnotatedArrow validation failed: {}",
+        report.summary()
+    );
+
+    let report = MarkValidator::<CustomRoles>::validate();
+    assert!(
+        report.is_passing(),
+        "CustomRoles validation failed: {}",
+        report.summary()
+    );
+}
