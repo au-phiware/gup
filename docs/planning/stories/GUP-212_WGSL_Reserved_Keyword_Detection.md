@@ -99,3 +99,66 @@ macros.
 - 6 integration tests in `wgsl_function` (same categories through full macro
   parsing)
 - All 1,379+ existing unit tests continue to pass
+
+## Retrospective
+
+**Completed**: 2025-07-26
+
+### Key Technical Learnings
+
+#### Shared Keyword Module Between Two Macros
+
+- **Challenge**: Both `#[shader_fn]` and `#[wgsl_function]` produce WGSL output
+  and need the same keyword validation, but they have different parsing paths.
+- **Solution**: Created a shared `wgsl_keywords` module with
+  `validate_param_name` and `validate_function_name` functions that both macros
+  call independently. The validation returns `syn::Error` with proper span
+  information.
+- **Pattern**: When two macro implementations need the same validation logic,
+  extract it into a shared module with functions that accept `syn::Ident` for
+  proper error span reporting.
+
+#### WGSL Keyword Categories
+
+- **Challenge**: WGSL has multiple categories of reserved words with different
+  levels of restriction. Simply blocking "reserved keywords" is insufficient.
+- **Solution**: Implemented four categories (Reserved, Contextual, Built-in
+  Type, Future Reserved) sourced from the WGSL specification §14.1. Each
+  category produces a different error message explaining why the name is
+  problematic.
+- **Pattern**: When blocking identifiers, classify them by category so error
+  messages educate the user about the underlying reason.
+
+### Architectural Decisions
+
+#### Validating Both Function Names and Parameter Names
+
+- **Decision**: Validate both function names and all parameter names (including
+  the first input parameter, not just uniform parameters).
+- **Reasoning**: While the story specifically mentioned parameter names,
+  function names that are WGSL keywords would also cause compilation failures.
+  The cost of validation is negligible and the protection is comprehensive.
+- **Trade-off**: Slightly more restrictive — e.g., a Rust function named `loop`
+  would be rejected even though Rust allows it with raw identifiers.
+- **Future**: The keyword list may need updates as the WGSL specification
+  evolves.
+
+#### Suggesting `_val` Suffix Rather Than Prefix
+
+- **Decision**: Suggest `target_val` rather than `_target` or `target_` as the
+  alternative name.
+- **Reasoning**: Underscore-prefixed names convey "unused" in Rust convention.
+  Trailing underscores are unusual. The `_val` suffix is clear and conventional.
+- **Trade-off**: The suggestion is opinionated; users may prefer different
+  names.
+
+### Development Workflow Insights
+
+- This was a well-scoped, low-risk story that required minimal exploration. The
+  existing test infrastructure (`expand()` helper in `shader_fn.rs` and `parse2`
+  in `wgsl_function.rs`) made it easy to add integration tests.
+- The `mask all-fix` workflow caught formatting issues automatically, making the
+  commit-ready check fast.
+- The pre-existing flaky `test_registry_scalability` performance test failure
+  (from `mark_pipeline_performance_tests.rs`) is unrelated — it's a timing-
+  sensitive test that occasionally fails under load.
