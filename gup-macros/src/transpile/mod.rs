@@ -84,8 +84,14 @@ mod codegen;
 mod control_flow_tests;
 #[allow(dead_code, unused_imports)]
 mod convert;
+pub mod diagnostics;
 mod expression_tests;
+#[allow(dead_code, unused_imports)]
+pub mod optimizer;
+mod optimizer_tests;
+pub mod performance;
 mod pipeline_tests;
+pub mod source_map;
 #[allow(dead_code, unused_imports)]
 pub mod type_map;
 mod type_map_integration_tests;
@@ -99,5 +105,13 @@ pub use builtins::{BuiltinFunctionRegistry, FunctionCategory, FunctionResolution
 pub use codegen::WgslCodeGen;
 #[allow(unused_imports)]
 pub use convert::{RustToWgsl, TranspileError};
+#[allow(unused_imports)]
+pub use diagnostics::{
+    DiagnosticBuilder, DiagnosticLevel, DiagnosticOutputFormat, Suggestion, TranspilationDiagnostic,
+};
+#[allow(unused_imports)]
+pub use optimizer::{OptimizationConfig, OptimizationLevel, PassResult, optimize_module};
+#[allow(unused_imports)]
+pub use source_map::{SourceMap, SourceMapping};
 #[allow(unused_imports)]
 pub use type_map::{TypeMapper, TypeMappingError, TypeMappingErrorKind, WgslTypeInfo};
