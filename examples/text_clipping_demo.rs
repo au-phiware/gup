@@ -233,11 +233,12 @@ impl RectPipeline {
 
     fn draw<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
         if let (Some(pipeline), Some(vb)) = (&self.pipeline, &self.vertex_buffer)
-            && self.vertex_count > 0 {
-                render_pass.set_pipeline(pipeline);
-                render_pass.set_vertex_buffer(0, vb.slice(..));
-                render_pass.draw(0..self.vertex_count, 0..1);
-            }
+            && self.vertex_count > 0
+        {
+            render_pass.set_pipeline(pipeline);
+            render_pass.set_vertex_buffer(0, vb.slice(..));
+            render_pass.draw(0..self.vertex_count, 0..1);
+        }
     }
 }
 
@@ -644,6 +645,14 @@ impl App {
                     let mut rects: Vec<RectOutline> = Vec::new();
                     let container_color = [0.55, 0.55, 0.8, 0.7];
 
+                    // Clipping statistics
+                    let mut stats_total = 0u32;
+                    let mut stats_clipped = 0u32;
+                    let mut stats_truncated = 0u32;
+                    let mut stats_scaled = 0u32;
+                    let mut stats_hidden = 0u32;
+                    let mut stats_unclipped = 0u32;
+
                     // ── Queue demo items ─────────────────────────────────
                     for item in &items {
                         // Item label
@@ -672,6 +681,8 @@ impl App {
                             container_color,
                         ));
 
+                        stats_total += 1;
+
                         // Decide whether to apply clipping
                         let use_clipping = self.clipping_enabled && item.strategy.is_some();
 
@@ -693,9 +704,27 @@ impl App {
                                 viewport_bounds: Some(&viewport),
                                 clipping_config: Some(strategy),
                             };
-                            let _ = text_renderer.queue_text(&frame, &mut text_cfg);
+                            if let Ok(result) = text_renderer.queue_text(&frame, &mut text_cfg) {
+                                if result.clipped {
+                                    stats_clipped += 1;
+                                    // Classify strategy used (approximate from label)
+                                    if result.glyphs.is_empty() {
+                                        stats_hidden += 1;
+                                    } else if item.label.contains("scale")
+                                        || item.label.contains("Scale")
+                                        || item.label.contains("scaled")
+                                    {
+                                        stats_scaled += 1;
+                                    } else {
+                                        stats_truncated += 1;
+                                    }
+                                } else {
+                                    stats_unclipped += 1;
+                                }
+                            }
                         } else {
                             // Render without any clipping
+                            stats_unclipped += 1;
                             let mut text_cfg = TextRenderConfig {
                                 text: item.text,
                                 position: Vec2 {
@@ -713,6 +742,33 @@ impl App {
                             let _ = text_renderer.queue_text(&frame, &mut text_cfg);
                         }
                     }
+
+                    // ── Queue statistics overlay ─────────────────────────
+                    let stats_text = format!(
+                        "Items: {}  |  Clipped: {}  (truncated: {}, scaled: {}, hidden: {})  |  Unclipped: {}",
+                        stats_total,
+                        stats_clipped,
+                        stats_truncated,
+                        stats_scaled,
+                        stats_hidden,
+                        stats_unclipped
+                    );
+                    let stats_display_style = TextStyle::new(10.0).with_rgba(0.35, 0.35, 0.35, 1.0);
+                    let mut stats_cfg = TextRenderConfig {
+                        text: &stats_text,
+                        position: Vec2 {
+                            x: 30.0,
+                            y: screen_h - 20.0,
+                        },
+                        style: &stats_display_style,
+                        font_atlas,
+                        layout_engine,
+                        screen_width: screen_w,
+                        screen_height: screen_h,
+                        viewport_bounds: None,
+                        clipping_config: None,
+                    };
+                    let _ = text_renderer.queue_text(&frame, &mut stats_cfg);
 
                     // ── Upload rectangle vertices ────────────────────────
                     let rect_verts: Vec<RectVertex> = rects
@@ -807,13 +863,12 @@ impl ApplicationHandler for App {
             WindowEvent::Resized(size) => {
                 if let Some(surface_id) = self.surface_id
                     && let Some(ctx_arc) = self.context.take()
-                        && let Ok(mut ctx) = Arc::try_unwrap(ctx_arc) {
-                            let _ = ctx.resize_surface(
-                                surface_id,
-                                PhysicalSize::new(size.width, size.height),
-                            );
-                            self.context = Some(Arc::new(ctx));
-                        }
+                    && let Ok(mut ctx) = Arc::try_unwrap(ctx_arc)
+                {
+                    let _ =
+                        ctx.resize_surface(surface_id, PhysicalSize::new(size.width, size.height));
+                    self.context = Some(Arc::new(ctx));
+                }
             }
             WindowEvent::RedrawRequested => {
                 if let Err(e) = self.render_frame() {
