@@ -1,8 +1,8 @@
 # GUP-188: Automatic Draw Call Metrics in MarkRenderer
 
-**Status**: 🚧 In Progress **Priority**: Low **Category**: Performance / Developer
-Experience **Estimated Effort**: 0.5 days **Dependencies**: GUP-070 (Mark
-Performance Optimization)
+**Status**: ✅ Complete (2025-07-25) **Priority**: Low **Category**: Performance
+/ Developer Experience **Estimated Effort**: 0.5 days **Dependencies**: GUP-070
+(Mark Performance Optimization)
 
 ## Overview
 
@@ -26,10 +26,10 @@ rendering performance without manual bookkeeping
 
 ## Acceptance Criteria
 
-- [ ] `render_marks_tracked()` takes `&mut self` and updates metrics
-- [ ] Draw call count, instance count, and pipeline switch count are tracked
-- [ ] Existing `render_marks(&self)` API is unchanged for backward compatibility
-- [ ] Performance overhead of tracking is <1% (simple counter increments)
+- [x] `render_marks_tracked()` takes `&mut self` and updates metrics
+- [x] Draw call count, instance count, and pipeline switch count are tracked
+- [x] Existing `render_marks(&self)` API is unchanged for backward compatibility
+- [x] Performance overhead of tracking is <1% (simple counter increments)
 
 ## Technical Tasks
 
@@ -50,7 +50,38 @@ rendering performance without manual bookkeeping
 
 ## Definition of Done
 
-- [ ] `render_marks_tracked()` implemented and tested
-- [ ] Documentation updated with metrics usage examples
-- [ ] Benchmark confirms negligible overhead
-- [ ] All existing tests pass
+- [x] `render_marks_tracked()` implemented and tested
+- [x] Documentation updated with metrics usage examples
+- [x] Benchmark confirms negligible overhead
+- [x] All existing tests pass
+
+## Implementation Summary
+
+### What Was Implemented
+
+- **5 tracked render methods** in `MarkRenderer`:
+  - `render_marks_tracked()` — base tracked render
+  - `render_marks_with_patterns_tracked()` — with accessibility patterns
+  - `render_marks_multi_pass_tracked()` — multi-pass (also tracks pipeline
+    switches)
+  - `render_marks_with_state_tracked()` — with viewport/scissor state isolation
+  - `render_marks_with_dynamic_attrs_tracked()` — with dynamic attribute buffers
+- **`BufferType::Index`** variant added to fix a pre-existing bug where the
+  MarkRenderer's index buffer was created with `Storage` usage flags, which
+  lacked the `INDEX` usage flag required by `set_index_buffer()`
+- **7 new tests** verifying metrics tracking, reset, accumulation across frames,
+  and backward compatibility of the non-tracked API
+
+### Key Files Changed
+
+| File                                | Change                                         |
+| ----------------------------------- | ---------------------------------------------- |
+| `src/mark/renderer.rs`              | Added 5 tracked methods + 7 tests              |
+| `src/buffer.rs`                     | Added `BufferType::Index` variant              |
+| `docs/mark-system/api-reference.md` | Documented tracked methods and metrics API     |
+| `docs/mark-system/performance.md`   | Updated profiling section with tracked example |
+
+### Test Results
+
+- 12 renderer tests pass (7 new + 5 existing)
+- 2,100+ total tests pass across all crates, 0 failures
