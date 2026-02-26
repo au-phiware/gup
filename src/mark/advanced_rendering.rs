@@ -574,12 +574,19 @@ struct ManagedBuffer {
     len: usize,
 }
 
-/// Manages GPU buffer allocation and dirty-only uploads for [`DynamicAttributeMap`].
+/// Manages GPU buffer allocation, dirty-only uploads, and async readback for [`DynamicAttributeMap`].
 ///
 /// This manager automatically creates and resizes GPU buffers as attributes change,
 /// and only re-uploads data for attributes that have been modified since the last
 /// upload (dirty-only uploads). Static attributes go into a uniform buffer and
 /// per-instance attributes go into storage buffers.
+///
+/// ## Readback (GPU→CPU)
+///
+/// The manager supports reading attribute data back from the GPU via
+/// [`download_static_values()`](Self::download_static_values) and
+/// [`download_per_instance()`](Self::download_per_instance). Staging buffers
+/// are cached and reused across readback calls to minimise allocation overhead.
 ///
 /// # Buffer Layout
 ///
@@ -604,6 +611,9 @@ struct ManagedBuffer {
 ///
 /// // Create a bind group for rendering
 /// let bind_group = manager.create_bind_group(&device, &layout);
+///
+/// // Read static attribute values back from GPU
+/// let values = manager.download_static_values(&device, &queue).await?;
 /// ```
 pub struct DynamicAttributeBufferManager {
     /// Uniform buffer for static attributes (packed [f32; 4] values)
@@ -614,6 +624,18 @@ pub struct DynamicAttributeBufferManager {
     last_upload_generation: u64,
     /// Upload statistics
     stats: UploadStats,
+    /// Cached staging buffers for GPU→CPU readback, keyed by purpose
+    /// ("uniform" for the uniform buffer, attribute name for storage buffers)
+    staging_buffers: HashMap<String, StagingBuffer>,
+}
+
+/// A cached staging buffer used for GPU→CPU readback.
+#[derive(Debug)]
+struct StagingBuffer {
+    /// The staging buffer (MAP_READ | COPY_DST)
+    buffer: wgpu::Buffer,
+    /// Size of the buffer in bytes
+    size: u64,
 }
 
 /// Statistics about dynamic attribute GPU uploads.
@@ -641,6 +663,7 @@ impl DynamicAttributeBufferManager {
             storage_buffers: HashMap::new(),
             last_upload_generation: 0,
             stats: UploadStats::default(),
+            staging_buffers: HashMap::new(),
         }
     }
 
@@ -838,6 +861,95 @@ impl DynamicAttributeBufferManager {
         }))
     }
 
+    // --- Readback (GPU→CPU) ---
+
+    /// Download all static attribute values from the GPU uniform buffer.
+    ///
+    /// Returns the packed `[f32; 4]` values in the same order as
+    /// [`DynamicAttributeMap::collect_static_values()`] (alphabetical by name).
+    ///
+    /// A cached staging buffer is reused across calls when the size has not
+    /// changed, minimising allocation overhead.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no uniform buffer has been allocated (i.e., no static
+    /// attributes have been uploaded yet) or if the GPU buffer mapping fails.
+    pub async fn download_static_values(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> GupResult<Vec<[f32; 4]>> {
+        let (len, byte_size) = {
+            let ub = self.uniform_buffer.as_ref().ok_or_else(|| {
+                GupError::buffer_error("No uniform buffer allocated for static attribute readback")
+            })?;
+            let element_size = std::mem::size_of::<[f32; 4]>() as u64;
+            (ub.len, (ub.len as u64) * element_size)
+        };
+
+        if len == 0 {
+            return Ok(Vec::new());
+        }
+
+        // Ensure the staging buffer exists and is large enough
+        self.ensure_staging_buffer(device, "uniform", byte_size);
+
+        // Copy and map — borrows are now independent
+        let source = &self.uniform_buffer.as_ref().unwrap().buffer;
+        let staging = &self.staging_buffers["uniform"];
+        Self::copy_and_map(device, queue, source, staging, byte_size, "uniform").await
+    }
+
+    /// Download per-instance attribute data from a GPU storage buffer.
+    ///
+    /// Returns the `[f32; 4]` values for the named per-instance attribute
+    /// in the same order they were uploaded.
+    ///
+    /// A cached staging buffer is reused across calls when the size has not
+    /// changed, minimising allocation overhead.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no storage buffer exists for the given attribute name
+    /// or if the GPU buffer mapping fails.
+    pub async fn download_per_instance(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        name: &str,
+    ) -> GupResult<Vec<[f32; 4]>> {
+        let (len, byte_size) = {
+            let sb = self.storage_buffers.get(name).ok_or_else(|| {
+                GupError::buffer_error(format!(
+                    "No storage buffer for per-instance attribute '{name}'"
+                ))
+            })?;
+            let element_size = std::mem::size_of::<[f32; 4]>() as u64;
+            (sb.len, (sb.len as u64) * element_size)
+        };
+
+        if len == 0 {
+            return Ok(Vec::new());
+        }
+
+        // Ensure the staging buffer exists and is large enough
+        self.ensure_staging_buffer(device, name, byte_size);
+
+        // Copy and map — borrows are now independent
+        let source = &self.storage_buffers[name].buffer;
+        let staging = &self.staging_buffers[name];
+        Self::copy_and_map(device, queue, source, staging, byte_size, name).await
+    }
+
+    /// Invalidate all cached staging buffers.
+    ///
+    /// This releases the GPU memory used by staging buffers. New staging buffers
+    /// will be allocated on the next readback call.
+    pub fn clear_staging_buffers(&mut self) {
+        self.staging_buffers.clear();
+    }
+
     /// Get upload statistics.
     pub fn stats(&self) -> &UploadStats {
         &self.stats
@@ -893,7 +1005,9 @@ impl DynamicAttributeBufferManager {
             let buffer = device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("dynamic_attr_uniform_buffer"),
                 size: aligned_size,
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                usage: wgpu::BufferUsages::UNIFORM
+                    | wgpu::BufferUsages::COPY_DST
+                    | wgpu::BufferUsages::COPY_SRC,
                 mapped_at_creation: false,
             });
 
@@ -963,7 +1077,9 @@ impl DynamicAttributeBufferManager {
             let buffer = device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(&format!("dynamic_attr_storage_{name}")),
                 size: aligned_size,
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                usage: wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::COPY_DST
+                    | wgpu::BufferUsages::COPY_SRC,
                 mapped_at_creation: false,
             });
 
@@ -985,6 +1101,72 @@ impl DynamicAttributeBufferManager {
         self.stats.total_bytes_uploaded += data_bytes;
 
         Ok(())
+    }
+
+    /// Ensure a staging buffer of at least `byte_size` exists for `cache_key`.
+    fn ensure_staging_buffer(&mut self, device: &wgpu::Device, cache_key: &str, byte_size: u64) {
+        let needs_recreate = match self.staging_buffers.get(cache_key) {
+            None => true,
+            Some(sb) => sb.size < byte_size,
+        };
+
+        if needs_recreate {
+            let staging = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(&format!("readback_staging_{cache_key}")),
+                size: byte_size,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+            self.staging_buffers.insert(
+                cache_key.to_string(),
+                StagingBuffer {
+                    buffer: staging,
+                    size: byte_size,
+                },
+            );
+        }
+    }
+
+    /// Copy `byte_size` bytes from `source` to `staging`, map the staging buffer,
+    /// and return the data as `Vec<[f32; 4]>`.
+    async fn copy_and_map(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        source: &wgpu::Buffer,
+        staging: &StagingBuffer,
+        byte_size: u64,
+        label: &str,
+    ) -> GupResult<Vec<[f32; 4]>> {
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some(&format!("readback_encoder_{label}")),
+        });
+        encoder.copy_buffer_to_buffer(source, 0, &staging.buffer, 0, byte_size);
+        queue.submit(Some(encoder.finish()));
+
+        let buffer_slice = staging.buffer.slice(..byte_size);
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = sender.send(result);
+        });
+
+        let _ = device.poll(wgpu::PollType::Wait);
+
+        receiver
+            .await
+            .map_err(|_| GupError::buffer_error("Readback buffer mapping callback was dropped"))?
+            .map_err(|e| {
+                GupError::buffer_error(format!(
+                    "Failed to map readback staging buffer for '{label}': {e:?}"
+                ))
+            })?;
+
+        let data = buffer_slice.get_mapped_range();
+        let result: Vec<[f32; 4]> = bytemuck::cast_slice(&data).to_vec();
+
+        drop(data);
+        staging.buffer.unmap();
+
+        Ok(result)
     }
 }
 
