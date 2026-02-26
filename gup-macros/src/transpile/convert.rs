@@ -13,6 +13,7 @@ use proc_macro2::Span;
 use syn::{BinOp, Expr, FnArg, Pat, Stmt, Type};
 
 use super::ast::*;
+use super::diagnostics::{DiagnosticBuilder, TranspilationDiagnostic};
 use super::type_map::TypeMapper;
 
 /// Errors that can occur during Rust-to-WGSL transpilation.
@@ -20,6 +21,10 @@ use super::type_map::TypeMapper;
 pub struct TranspileError {
     pub message: String,
     pub span: Span,
+    /// Optional suggestion for how to fix the error.
+    pub suggestion: Option<String>,
+    /// Optional error code for categorisation.
+    pub code: Option<String>,
 }
 
 impl TranspileError {
@@ -27,12 +32,43 @@ impl TranspileError {
         Self {
             message: message.into(),
             span,
+            suggestion: None,
+            code: None,
+        }
+    }
+
+    /// Create an error with a fix suggestion.
+    pub fn with_suggestion(
+        message: impl Into<String>,
+        span: Span,
+        suggestion: impl Into<String>,
+    ) -> Self {
+        Self {
+            message: message.into(),
+            span,
+            suggestion: Some(suggestion.into()),
+            code: None,
         }
     }
 
     /// Convert to a `syn::Error` for integration with proc macro error reporting.
     pub fn into_syn_error(self) -> syn::Error {
         syn::Error::new(self.span, self.message)
+    }
+
+    /// Convert to a [`TranspilationDiagnostic`] for rich error reporting.
+    pub fn to_diagnostic(&self) -> TranspilationDiagnostic {
+        let mut builder = DiagnosticBuilder::error(&self.message);
+
+        if let Some(ref code) = self.code {
+            builder = builder.code(code.clone());
+        }
+
+        if let Some(ref suggestion) = self.suggestion {
+            builder = builder.help(suggestion.clone());
+        }
+
+        builder.build()
     }
 }
 
@@ -268,9 +304,11 @@ impl RustToWgsl {
                     Ok(WgslStatement::Expression(wgsl_expr))
                 }
             }
-            _ => Err(TranspileError::new(
+            _ => Err(TranspileError::with_suggestion(
                 "Unsupported statement type (items and macros are not allowed)",
                 Span::call_site(),
+                "Only let bindings, assignments, control flow (if/for/while/loop), \
+                 and expression statements are supported in WGSL.",
             )),
         }
     }
@@ -583,12 +621,15 @@ impl RustToWgsl {
             // --- Group expression (invisible delimiter) ---
             Expr::Group(group) => self.convert_expr(&group.expr),
 
-            _ => Err(TranspileError::new(
+            _ => Err(TranspileError::with_suggestion(
                 format!(
                     "Unsupported expression type for WGSL transpilation: {}",
                     expr_type_name(expr)
                 ),
                 Span::call_site(),
+                "Only arithmetic, comparison, logical, and bitwise expressions \
+                 are supported. Closures, match, async, and await are not \
+                 available in WGSL.",
             )),
         }
     }
@@ -617,9 +658,11 @@ impl RustToWgsl {
                 }
             }
             syn::Lit::Bool(b) => Ok(WgslExpr::Literal(Literal::Bool(b.value))),
-            _ => Err(TranspileError::new(
+            _ => Err(TranspileError::with_suggestion(
                 "Only numeric and boolean literals are supported in WGSL",
                 Span::call_site(),
+                "String, byte, and character literals cannot be used in WGSL \
+                 shaders. Use f32, i32, u32, or bool values.",
             )),
         }
     }
