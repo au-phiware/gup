@@ -833,6 +833,100 @@ impl GlyphOutline {
 
         [r, g, b]
     }
+
+    /// Compute a single signed distance value for a point.
+    ///
+    /// Unlike [`msdf_at`](Self::msdf_at), which tracks per-channel closest
+    /// edges, this method finds the globally closest edge and returns its
+    /// signed distance. No edge coloring is required, making this simpler
+    /// and faster at the cost of losing sharp corner preservation.
+    pub fn sdf_at(&self, point: &Point) -> f32 {
+        let mut closest: Option<SignedDistance> = None;
+
+        for contour in &self.contours {
+            for edge in &contour.edges {
+                let sd = edge.signed_distance(point);
+                if closest.is_none() || sd.is_closer_than(&closest.unwrap()) {
+                    closest = Some(sd);
+                }
+            }
+        }
+
+        closest.map(|sd| sd.distance).unwrap_or(f32::NEG_INFINITY)
+    }
+}
+
+/// Configuration for single-channel outline-based SDF generation.
+///
+/// This is a simpler alternative to [`MsdfConfig`] that generates a single
+/// distance channel instead of the 3-channel MSDF. The resulting SDF is
+/// compatible with the existing MSDF rendering pipeline (by duplicating
+/// the distance value across RGB channels).
+#[derive(Debug, Clone)]
+pub struct SdfConfig {
+    /// Size of individual glyphs in pixels
+    pub glyph_size: f32,
+    /// SDF distance range in pixels (how far from the edge the field extends)
+    pub distance_range: f32,
+    /// Padding around glyphs in pixels
+    pub padding: u32,
+}
+
+impl Default for SdfConfig {
+    fn default() -> Self {
+        Self {
+            glyph_size: 48.0,
+            distance_range: 4.0,
+            padding: 4,
+        }
+    }
+}
+
+/// Single-channel SDF bitmap.
+///
+/// Stores one signed distance value per texel. Provides conversion to RGBA
+/// for compatibility with the existing MSDF texture pipeline (the same value
+/// is replicated to all three RGB channels).
+#[derive(Debug, Clone)]
+pub struct SdfBitmap {
+    pub width: usize,
+    pub height: usize,
+    pub channel: DistanceField,
+    /// Scale factor used to generate this SDF (font units to pixels)
+    pub scale: f32,
+    /// Padding in pixels around the glyph
+    pub padding: u32,
+}
+
+impl SdfBitmap {
+    pub fn new(width: usize, height: usize, scale: f32, padding: u32) -> Self {
+        Self {
+            width,
+            height,
+            channel: DistanceField::new(width, height),
+            scale,
+            padding,
+        }
+    }
+
+    /// Convert to RGBA pixels for GPU texture upload.
+    ///
+    /// The single distance value is replicated across all three RGB channels
+    /// so that the existing MSDF shader (which uses `median(r, g, b)`) produces
+    /// the correct result.
+    pub fn to_rgba_pixels(&self) -> Vec<u8> {
+        let mut pixels = Vec::with_capacity(self.width * self.height * 4);
+
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let d = (self.channel.get(x, y) * 0.5 + 0.5).clamp(0.0, 1.0);
+                let v = (d * 255.0) as u8;
+                pixels.extend_from_slice(&[v, v, v, 255u8]);
+            }
+        }
+
+        pixels
+    }
 }
 
 /// Distance field for a single channel
@@ -1044,6 +1138,266 @@ impl MsdfGenerator {
             .ok_or_else(|| GupError::resource_error(format!("Glyph not found for '{c}'")))?;
         self.extract_glyph_outline(glyph_id, &font)
     }
+
+    /// Generate MSDF for a character.
+    pub fn generate_msdf_for_char(&self, c: char) -> GupResult<MsdfBitmap> {
+        let font = self.get_font()?;
+        let glyph_id = font
+            .glyph_index(c)
+            .ok_or_else(|| GupError::resource_error(format!("Glyph not found for '{c}'")))?;
+        self.generate_msdf(glyph_id)
+    }
+}
+
+/// Single-channel outline-based SDF generator.
+///
+/// A simpler and faster alternative to [`MsdfGenerator`] that produces a
+/// single distance channel instead of three. This approach:
+///
+/// - **Skips edge coloring** – no need to assign colours to contour edges
+/// - **Computes one distance per texel** instead of tracking three per-channel
+///   closest edges
+/// - **Uses the same outline extraction** and distance algorithms as MSDF
+///
+/// The trade-off is that sharp corners are not preserved the way they are
+/// with MSDF. For many visualization use cases (labels, tick marks, legends)
+/// the difference is negligible.
+pub struct SdfGenerator {
+    font_data: Vec<u8>,
+    config: SdfConfig,
+}
+
+impl SdfGenerator {
+    /// Create a new single-channel SDF generator.
+    pub fn new(font_data: Vec<u8>, config: SdfConfig) -> GupResult<Self> {
+        ttf_parser::Face::parse(&font_data, 0)
+            .map_err(|e| GupError::resource_error(format!("Failed to parse font: {e:?}")))?;
+        Ok(Self { font_data, config })
+    }
+
+    /// Get the font face.
+    fn get_font(&self) -> GupResult<ttf_parser::Face<'_>> {
+        ttf_parser::Face::parse(&self.font_data, 0)
+            .map_err(|e| GupError::resource_error(format!("Failed to parse font: {e:?}")))
+    }
+
+    /// Generate a single-channel SDF for a specific glyph.
+    pub fn generate_sdf(&self, glyph_id: ttf_parser::GlyphId) -> GupResult<SdfBitmap> {
+        let font = self.get_font()?;
+
+        // Extract glyph outline (no edge coloring needed)
+        let outline = Self::extract_glyph_outline(glyph_id, &font)?;
+
+        // Calculate glyph bounds and scaling
+        let glyph_bounds = font.glyph_bounding_box(glyph_id);
+        let units_per_em = font.units_per_em() as f32;
+
+        let (scale, offset_x, offset_y, glyph_width, glyph_height) = if let Some(bbox) =
+            glyph_bounds
+        {
+            let bbox_width = (bbox.x_max - bbox.x_min) as f32;
+            let bbox_height = (bbox.y_max - bbox.y_min) as f32;
+
+            let target_size = self.config.glyph_size - 2.0 * self.config.padding as f32;
+            let scale = if bbox_width > 0.0 && bbox_height > 0.0 {
+                (target_size / bbox_width).min(target_size / bbox_height)
+            } else {
+                self.config.glyph_size / units_per_em
+            };
+
+            let scaled_width = bbox_width * scale;
+            let scaled_height = bbox_height * scale;
+
+            let glyph_width = (scaled_width + 2.0 * self.config.padding as f32).ceil() as usize;
+            let glyph_height = (scaled_height + 2.0 * self.config.padding as f32).ceil() as usize;
+
+            let offset_x = bbox.x_min as f32;
+            let offset_y = bbox.y_min as f32;
+
+            (scale, offset_x, offset_y, glyph_width, glyph_height)
+        } else {
+            let scale = self.config.glyph_size / units_per_em;
+            (
+                scale,
+                0.0,
+                0.0,
+                self.config.glyph_size as usize,
+                self.config.glyph_size as usize,
+            )
+        };
+
+        let mut sdf = SdfBitmap::new(
+            glyph_width.max(1),
+            glyph_height.max(1),
+            scale,
+            self.config.padding,
+        );
+        let distance_range = self.config.distance_range;
+        let padding = self.config.padding as f32;
+
+        for y in 0..sdf.height {
+            for x in 0..sdf.width {
+                let glyph_x = (x as f32 - padding) / scale + offset_x;
+                let glyph_y = (y as f32 - padding) / scale + offset_y;
+                let glyph_y_flipped =
+                    offset_y + (glyph_height as f32 - 2.0 * padding) / scale - (glyph_y - offset_y);
+
+                let point = Point::new(glyph_x, glyph_y_flipped);
+                let d = outline.sdf_at(&point);
+
+                let normalized = (d * scale / distance_range).clamp(-1.0, 1.0);
+                sdf.channel.set(x, y, normalized);
+            }
+        }
+
+        Ok(sdf)
+    }
+
+    /// Generate a single-channel SDF for a character.
+    pub fn generate_sdf_for_char(&self, c: char) -> GupResult<SdfBitmap> {
+        let font = self.get_font()?;
+        let glyph_id = font
+            .glyph_index(c)
+            .ok_or_else(|| GupError::resource_error(format!("Glyph not found for '{c}'")))?;
+        self.generate_sdf(glyph_id)
+    }
+
+    /// Extract glyph outline (no edge coloring applied).
+    fn extract_glyph_outline(
+        glyph_id: ttf_parser::GlyphId,
+        font: &ttf_parser::Face,
+    ) -> GupResult<GlyphOutline> {
+        let mut builder = GlyphOutlineBuilder::new();
+        let _ = font.outline_glyph(glyph_id, &mut builder);
+        Ok(builder.build())
+    }
+}
+
+/// Quality metrics for comparing SDF generation approaches.
+#[derive(Debug, Clone)]
+pub struct SdfQualityMetrics {
+    /// Mean absolute error between two distance fields.
+    pub mean_absolute_error: f32,
+    /// Peak signal-to-noise ratio (dB).
+    pub peak_signal_to_noise: f32,
+    /// Average gradient magnitude at the 0.5 isoline (edge sharpness).
+    pub edge_sharpness: f32,
+    /// Memory used by the bitmap data (bytes).
+    pub memory_bytes: usize,
+}
+
+impl SdfQualityMetrics {
+    /// Compare a single-channel SDF against an MSDF reference.
+    ///
+    /// The MSDF reference is converted to a single channel via `median(r,g,b)`
+    /// before comparison.
+    pub fn compare(sdf: &SdfBitmap, msdf: &MsdfBitmap) -> Self {
+        assert_eq!(sdf.width, msdf.width);
+        assert_eq!(sdf.height, msdf.height);
+
+        let n = sdf.width * sdf.height;
+        let mut sum_abs_error: f64 = 0.0;
+        let mut sum_sq_error: f64 = 0.0;
+        let mut edge_gradient_sum: f64 = 0.0;
+        let mut edge_pixel_count: usize = 0;
+
+        for y in 0..sdf.height {
+            for x in 0..sdf.width {
+                let sdf_val = sdf.channel.get(x, y);
+
+                // Reconstruct single-channel from MSDF via median
+                let r = msdf.red_channel.get(x, y);
+                let g = msdf.green_channel.get(x, y);
+                let b = msdf.blue_channel.get(x, y);
+                let msdf_val = median_f32(r, g, b);
+
+                let err = (sdf_val - msdf_val).abs();
+                sum_abs_error += err as f64;
+                sum_sq_error += (err * err) as f64;
+
+                // Edge sharpness: measure gradient magnitude near the edge
+                // (values close to 0.0 in normalized space = the 0.5 isoline)
+                if sdf_val.abs() < 0.3 && x > 0 && y > 0 && x + 1 < sdf.width && y + 1 < sdf.height
+                {
+                    let dx = sdf.channel.get(x + 1, y) - sdf.channel.get(x - 1, y);
+                    let dy = sdf.channel.get(x, y + 1) - sdf.channel.get(x, y - 1);
+                    edge_gradient_sum += (dx * dx + dy * dy).sqrt() as f64;
+                    edge_pixel_count += 1;
+                }
+            }
+        }
+
+        let mae = (sum_abs_error / n as f64) as f32;
+        let mse = sum_sq_error / n as f64;
+        // PSNR with max value 2.0 (range is -1.0 to 1.0)
+        let psnr = if mse > 0.0 {
+            (10.0 * (4.0_f64 / mse).log10()) as f32
+        } else {
+            f32::INFINITY
+        };
+        let edge_sharpness = if edge_pixel_count > 0 {
+            (edge_gradient_sum / edge_pixel_count as f64) as f32
+        } else {
+            0.0
+        };
+        let memory_bytes = sdf.width * sdf.height * std::mem::size_of::<f32>();
+
+        Self {
+            mean_absolute_error: mae,
+            peak_signal_to_noise: psnr,
+            edge_sharpness,
+            memory_bytes,
+        }
+    }
+
+    /// Compute quality metrics for an MSDF bitmap.
+    pub fn from_msdf(msdf: &MsdfBitmap) -> Self {
+        let n = msdf.width * msdf.height;
+        let mut edge_gradient_sum: f64 = 0.0;
+        let mut edge_pixel_count: usize = 0;
+
+        for y in 0..msdf.height {
+            for x in 0..msdf.width {
+                let r = msdf.red_channel.get(x, y);
+                let g = msdf.green_channel.get(x, y);
+                let b = msdf.blue_channel.get(x, y);
+                let val = median_f32(r, g, b);
+
+                if val.abs() < 0.3 && x > 0 && y > 0 && x + 1 < msdf.width && y + 1 < msdf.height {
+                    let get_median = |xx: usize, yy: usize| -> f32 {
+                        median_f32(
+                            msdf.red_channel.get(xx, yy),
+                            msdf.green_channel.get(xx, yy),
+                            msdf.blue_channel.get(xx, yy),
+                        )
+                    };
+                    let dx = get_median(x + 1, y) - get_median(x - 1, y);
+                    let dy = get_median(x, y + 1) - get_median(x, y - 1);
+                    edge_gradient_sum += (dx * dx + dy * dy).sqrt() as f64;
+                    edge_pixel_count += 1;
+                }
+            }
+        }
+
+        let edge_sharpness = if edge_pixel_count > 0 {
+            (edge_gradient_sum / edge_pixel_count as f64) as f32
+        } else {
+            0.0
+        };
+        let memory_bytes = n * std::mem::size_of::<f32>() * 3;
+
+        Self {
+            mean_absolute_error: 0.0,
+            peak_signal_to_noise: f32::INFINITY,
+            edge_sharpness,
+            memory_bytes,
+        }
+    }
+}
+
+/// Compute the median of three f32 values.
+fn median_f32(a: f32, b: f32, c: f32) -> f32 {
+    a.max(b.min(c)).min(b.max(c))
 }
 
 /// Builder for glyph outlines using ttf_parser OutlineBuilder trait
@@ -1366,5 +1720,229 @@ mod tests {
         // Note: For a square (4 corners), we can't guarantee all adjacent edges have
         // different colors because we only have 3 colors. This is a known limitation
         // documented in the Chlumsky thesis. We just verify valid colors are assigned.
+    }
+
+    // -----------------------------------------------------------------------
+    // Single-channel SDF generator tests
+    // -----------------------------------------------------------------------
+
+    fn load_test_font_data() -> Vec<u8> {
+        include_bytes!("../../assets/fonts/default.ttf").to_vec()
+    }
+
+    #[test]
+    fn test_sdf_config_defaults() {
+        let config = SdfConfig::default();
+        assert_eq!(config.glyph_size, 48.0);
+        assert_eq!(config.distance_range, 4.0);
+        assert_eq!(config.padding, 4);
+    }
+
+    #[test]
+    fn test_sdf_bitmap_creation() {
+        let sdf = SdfBitmap::new(32, 32, 1.0, 4);
+        assert_eq!(sdf.width, 32);
+        assert_eq!(sdf.height, 32);
+        assert_eq!(sdf.channel.data.len(), 32 * 32);
+        assert_eq!(sdf.scale, 1.0);
+        assert_eq!(sdf.padding, 4);
+    }
+
+    #[test]
+    fn test_sdf_bitmap_to_rgba() {
+        let mut sdf = SdfBitmap::new(2, 2, 1.0, 0);
+        // Set known values: -1.0 (far outside), 0.0 (edge), 1.0 (far inside)
+        sdf.channel.set(0, 0, -1.0);
+        sdf.channel.set(1, 0, 0.0);
+        sdf.channel.set(0, 1, 1.0);
+        sdf.channel.set(1, 1, 0.5);
+
+        let rgba = sdf.to_rgba_pixels();
+        assert_eq!(rgba.len(), 2 * 2 * 4);
+
+        // -1.0 -> 0.0 normalised -> pixel 0
+        assert_eq!(rgba[0], 0);
+        assert_eq!(rgba[1], 0);
+        assert_eq!(rgba[2], 0);
+        assert_eq!(rgba[3], 255);
+
+        // 0.0 -> 0.5 normalised -> pixel 127/128
+        let edge_val = rgba[4];
+        assert!((edge_val as i32 - 127).unsigned_abs() <= 1);
+        // All three channels identical
+        assert_eq!(rgba[4], rgba[5]);
+        assert_eq!(rgba[5], rgba[6]);
+        assert_eq!(rgba[7], 255);
+
+        // 1.0 -> 1.0 normalised -> pixel 255
+        assert_eq!(rgba[8], 255);
+    }
+
+    #[test]
+    fn test_sdf_generator_creation() {
+        let data = load_test_font_data();
+        let sdf_gen = SdfGenerator::new(data, SdfConfig::default());
+        assert!(sdf_gen.is_ok());
+    }
+
+    #[test]
+    fn test_sdf_generator_invalid_font() {
+        let sdf_gen = SdfGenerator::new(vec![0u8; 100], SdfConfig::default());
+        assert!(sdf_gen.is_err());
+    }
+
+    #[test]
+    fn test_sdf_generate_char_a() {
+        let data = load_test_font_data();
+        let sdf_gen = SdfGenerator::new(data, SdfConfig::default()).unwrap();
+        let sdf = sdf_gen.generate_sdf_for_char('A').unwrap();
+
+        // Bitmap should have reasonable dimensions
+        assert!(sdf.width > 0);
+        assert!(sdf.height > 0);
+        assert_eq!(sdf.channel.data.len(), sdf.width * sdf.height);
+
+        // Should contain both inside and outside values
+        let has_inside = sdf.channel.data.iter().any(|&v| v > 0.1);
+        let has_outside = sdf.channel.data.iter().any(|&v| v < -0.1);
+        assert!(has_inside, "SDF for 'A' should have inside values");
+        assert!(has_outside, "SDF for 'A' should have outside values");
+    }
+
+    #[test]
+    fn test_sdf_generates_full_ascii() {
+        let data = load_test_font_data();
+        let sdf_gen = SdfGenerator::new(data.clone(), SdfConfig::default()).unwrap();
+        let font = ttf_parser::Face::parse(&data, 0).unwrap();
+
+        let mut success_count = 0;
+        for ch in 33u8..=126u8 {
+            let c = ch as char;
+            if font.glyph_index(c).is_some()
+                && font
+                    .glyph_bounding_box(font.glyph_index(c).unwrap())
+                    .is_some()
+            {
+                let result = sdf_gen.generate_sdf_for_char(c);
+                assert!(result.is_ok(), "Failed to generate SDF for '{c}'");
+                let sdf = result.unwrap();
+                assert!(sdf.width > 0 && sdf.height > 0);
+                success_count += 1;
+            }
+        }
+        assert!(success_count > 0, "Should generate at least some glyphs");
+    }
+
+    #[test]
+    fn test_sdf_at_simple_contour() {
+        // Create a simple square outline with CW winding (TrueType outer contour convention).
+        // CW in the Y-up coordinate system used by TrueType means: right → down → left → up
+        // which is the opposite of screen coordinates.
+        let mut outline = GlyphOutline::new();
+        let mut contour = Contour::new();
+        contour.add_edge(EdgeSegment {
+            edge_type: EdgeType::Line {
+                start: Point::new(0.0, 0.0),
+                end: Point::new(0.0, 10.0),
+            },
+            color: EdgeColor::WHITE,
+        });
+        contour.add_edge(EdgeSegment {
+            edge_type: EdgeType::Line {
+                start: Point::new(0.0, 10.0),
+                end: Point::new(10.0, 10.0),
+            },
+            color: EdgeColor::WHITE,
+        });
+        contour.add_edge(EdgeSegment {
+            edge_type: EdgeType::Line {
+                start: Point::new(10.0, 10.0),
+                end: Point::new(10.0, 0.0),
+            },
+            color: EdgeColor::WHITE,
+        });
+        contour.add_edge(EdgeSegment {
+            edge_type: EdgeType::Line {
+                start: Point::new(10.0, 0.0),
+                end: Point::new(0.0, 0.0),
+            },
+            color: EdgeColor::WHITE,
+        });
+        outline.add_contour(contour);
+
+        // Centre of square should be inside (positive distance)
+        let d_centre = outline.sdf_at(&Point::new(5.0, 5.0));
+        assert!(d_centre > 0.0, "Centre should be inside: {d_centre}");
+
+        // Outside the square should be negative distance
+        let d_outside = outline.sdf_at(&Point::new(-5.0, 5.0));
+        assert!(d_outside < 0.0, "Outside should be negative: {d_outside}");
+
+        // On the edge should be very close to zero
+        let d_edge = outline.sdf_at(&Point::new(0.0, 5.0));
+        assert!(d_edge.abs() < 0.5, "On edge should be near zero: {d_edge}");
+    }
+
+    #[test]
+    fn test_sdf_matches_msdf_dimensions() {
+        let data = load_test_font_data();
+        let sdf_gen = SdfGenerator::new(data.clone(), SdfConfig::default()).unwrap();
+        let msdf_gen = MsdfGenerator::new(data, MsdfConfig::default()).unwrap();
+
+        for c in ['A', 'g', 'W'] {
+            let sdf = sdf_gen.generate_sdf_for_char(c).unwrap();
+            let msdf = msdf_gen.generate_msdf_for_char(c).unwrap();
+
+            assert_eq!(sdf.width, msdf.width, "Width mismatch for '{c}'");
+            assert_eq!(sdf.height, msdf.height, "Height mismatch for '{c}'");
+            assert_eq!(sdf.scale, msdf.scale, "Scale mismatch for '{c}'");
+            assert_eq!(sdf.padding, msdf.padding, "Padding mismatch for '{c}'");
+        }
+    }
+
+    #[test]
+    fn test_quality_metrics_self_comparison() {
+        let data = load_test_font_data();
+        let msdf_gen = MsdfGenerator::new(data, MsdfConfig::default()).unwrap();
+        let msdf = msdf_gen.generate_msdf_for_char('A').unwrap();
+        let metrics = SdfQualityMetrics::from_msdf(&msdf);
+
+        assert_eq!(metrics.mean_absolute_error, 0.0);
+        assert!(metrics.peak_signal_to_noise.is_infinite());
+        assert!(metrics.edge_sharpness >= 0.0);
+        assert!(metrics.memory_bytes > 0);
+    }
+
+    #[test]
+    fn test_quality_metrics_comparison() {
+        let data = load_test_font_data();
+        let sdf_gen = SdfGenerator::new(data.clone(), SdfConfig::default()).unwrap();
+        let msdf_gen = MsdfGenerator::new(data, MsdfConfig::default()).unwrap();
+
+        let sdf = sdf_gen.generate_sdf_for_char('A').unwrap();
+        let msdf = msdf_gen.generate_msdf_for_char('A').unwrap();
+        let metrics = SdfQualityMetrics::compare(&sdf, &msdf);
+
+        // MAE should be non-negative
+        assert!(metrics.mean_absolute_error >= 0.0);
+        // PSNR should be positive (they're similar but not identical)
+        assert!(metrics.peak_signal_to_noise > 0.0);
+        // Edge sharpness should be non-negative
+        assert!(metrics.edge_sharpness >= 0.0);
+        // SDF uses 1/3 the memory of MSDF
+        let msdf_metrics = SdfQualityMetrics::from_msdf(&msdf);
+        assert!(
+            metrics.memory_bytes < msdf_metrics.memory_bytes,
+            "SDF should use less memory than MSDF"
+        );
+    }
+
+    #[test]
+    fn test_median_f32() {
+        assert_eq!(median_f32(1.0, 2.0, 3.0), 2.0);
+        assert_eq!(median_f32(3.0, 1.0, 2.0), 2.0);
+        assert_eq!(median_f32(2.0, 3.0, 1.0), 2.0);
+        assert_eq!(median_f32(1.0, 1.0, 1.0), 1.0);
+        assert_eq!(median_f32(-1.0, 0.0, 1.0), 0.0);
     }
 }
