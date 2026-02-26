@@ -522,10 +522,7 @@ impl std::fmt::Debug for FontAtlasManager {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("FontAtlasManager")
             .field("atlas_count", &self.atlases.len())
-            .field(
-                "loaded_families",
-                &self.atlases.keys().collect::<Vec<_>>(),
-            )
+            .field("loaded_families", &self.atlases.keys().collect::<Vec<_>>())
             .field("default_font_size", &self.default_font_size)
             .finish()
     }

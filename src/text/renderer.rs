@@ -389,11 +389,7 @@ impl TextRenderer {
     }
 
     /// Add a glyph batch to a per-atlas font batch.
-    fn add_glyph_batch_for_font(
-        &mut self,
-        atlas_key: &str,
-        glyphs: &GlyphBatch,
-    ) -> GupResult<()> {
+    fn add_glyph_batch_for_font(&mut self, atlas_key: &str, glyphs: &GlyphBatch) -> GupResult<()> {
         if glyphs.is_empty() {
             return Ok(());
         }
@@ -431,8 +427,11 @@ impl TextRenderer {
         let atlas_key = FontAtlasManager::atlas_key(style.font_family.as_deref());
 
         // Get or create the atlas for this font family
-        let font_atlas =
-            font_manager.get_or_create(frame.device(), frame.queue(), style.font_family.as_deref())?;
+        let font_atlas = font_manager.get_or_create(
+            frame.device(),
+            frame.queue(),
+            style.font_family.as_deref(),
+        )?;
 
         // Ensure all glyphs are available in the atlas
         for ch in text.chars() {
@@ -442,9 +441,8 @@ impl TextRenderer {
         // Layout the text
         let layout_result = if let Some(vb) = viewport_bounds {
             let cc = clipping_config.cloned().unwrap_or_default();
-            layout_engine.layout_text_with_clipping(
-                text, position, style, font_atlas, None, vb, &cc,
-            )?
+            layout_engine
+                .layout_text_with_clipping(text, position, style, font_atlas, None, vb, &cc)?
         } else {
             layout_engine.layout_text(text, position, style, font_atlas, None)?
         };
@@ -494,11 +492,9 @@ impl TextRenderer {
                 continue;
             }
 
-            let font_atlas = font_manager
-                .get_atlas(Some(key))
-                .ok_or_else(|| {
-                    GupError::render_error(format!("Font atlas not found for key: {key}"))
-                })?;
+            let font_atlas = font_manager.get_atlas(Some(key)).ok_or_else(|| {
+                GupError::render_error(format!("Font atlas not found for key: {key}"))
+            })?;
 
             // Ensure vertex buffer capacity
             if vertices.len() > self.vertex_capacity {
@@ -511,11 +507,7 @@ impl TextRenderer {
             }
 
             // Upload vertices for this batch
-            queue.write_buffer(
-                &self.vertex_buffer,
-                0,
-                bytemuck::cast_slice(vertices),
-            );
+            queue.write_buffer(&self.vertex_buffer, 0, bytemuck::cast_slice(vertices));
 
             // Create bind group with this atlas's texture
             let font_texture_view = font_atlas
@@ -544,10 +536,7 @@ impl TextRenderer {
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(
-                self.index_buffer.slice(..),
-                wgpu::IndexFormat::Uint16,
-            );
+            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
             let total_indices = (vertices.len() / 4) * 6;
             render_pass.draw_indexed(0..total_indices as u32, 0, 0..1);

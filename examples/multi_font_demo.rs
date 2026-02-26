@@ -179,17 +179,13 @@ impl MultiFontApp {
             None => return Ok(()),
         };
 
-        let actual_surface_size = self
-            .context
-            .as_ref()
-            .and_then(|ctx| {
-                ctx.surface_size(surface_id)
-                    .map(|s| (s.width as f32, s.height as f32))
-            });
+        let actual_surface_size = self.context.as_ref().and_then(|ctx| {
+            ctx.surface_size(surface_id)
+                .map(|s| (s.width as f32, s.height as f32))
+        });
 
         if let Some(context) = self.context.take() {
-            let mut ctx =
-                Arc::try_unwrap(context).map_err(|_| "Failed to unwrap context")?;
+            let mut ctx = Arc::try_unwrap(context).map_err(|_| "Failed to unwrap context")?;
 
             match ctx.begin_frame_for_surface(surface_id) {
                 Ok(mut frame) => {
@@ -235,10 +231,7 @@ impl MultiFontApp {
                         static PRINTED: std::sync::atomic::AtomicBool =
                             std::sync::atomic::AtomicBool::new(false);
                         if !PRINTED.swap(true, std::sync::atomic::Ordering::Relaxed) {
-                            println!(
-                                "📊 Font atlases loaded: {}",
-                                font_manager.atlas_count()
-                            );
+                            println!("📊 Font atlases loaded: {}", font_manager.atlas_count());
                             for (key, atlas) in font_manager.iter() {
                                 println!(
                                     "  • {}: {} glyphs, fallback={}",
@@ -255,8 +248,7 @@ impl MultiFontApp {
 
                     if let (Some(text_renderer), Some(font_manager)) =
                         (&mut self.text_renderer, &self.font_manager)
-                    {
-                        if let Err(e) = text_renderer.render_queued_text_multi(
+                        && let Err(e) = text_renderer.render_queued_text_multi(
                             &mut render_pass,
                             &device,
                             &queue,
@@ -266,7 +258,6 @@ impl MultiFontApp {
                         ) {
                             eprintln!("⚠️ Failed to render multi-font text: {e}");
                         }
-                    }
 
                     drop(render_pass);
                     frame.finish()?;
@@ -314,10 +305,7 @@ impl ApplicationHandler for MultiFontApp {
                     && let Some(ctx) = self.context.take()
                 {
                     let mut context_mut = Arc::try_unwrap(ctx).unwrap_or_else(|arc| {
-                        panic!(
-                            "Failed to unwrap context: {} refs",
-                            Arc::strong_count(&arc)
-                        )
+                        panic!("Failed to unwrap context: {} refs", Arc::strong_count(&arc))
                     });
                     let _ = context_mut
                         .resize_surface(surface_id, PhysicalSize::new(size.width, size.height));

@@ -322,12 +322,12 @@ fn compare_sdf_quality(
 
 Based on benchmark results, choose implementation strategy:
 
-| Metric                    | Weight | Outline-Based | Brute-Force | Winner  |
-| ------------------------- | ------ | ------------- | ----------- | ------- |
-| Generation Speed          | 30%    | 1.25x faster  | Baseline    | Outline |
-| Memory Usage              | 20%    | 3x less       | Baseline    | Outline |
-| Visual Quality            | 25%    | PSNR 39 dB    | Sharp corners | MSDF    |
-| Implementation Complexity | 15%    | Simpler       | More complex | Outline |
+| Metric                    | Weight | Outline-Based    | Brute-Force   | Winner  |
+| ------------------------- | ------ | ---------------- | ------------- | ------- |
+| Generation Speed          | 30%    | 1.25x faster     | Baseline      | Outline |
+| Memory Usage              | 20%    | 3x less          | Baseline      | Outline |
+| Visual Quality            | 25%    | PSNR 39 dB       | Sharp corners | MSDF    |
+| Implementation Complexity | 15%    | Simpler          | More complex  | Outline |
 | Maintainability           | 10%    | Fewer code paths | Edge coloring | Outline |
 
 ## Implementation Timeline
@@ -408,29 +408,29 @@ Based on benchmark results, choose implementation strategy:
 
 ### Key Files Changed
 
-| File                                        | Change                              |
-| ------------------------------------------- | ----------------------------------- |
-| `src/text/msdf.rs`                          | Added SdfConfig, SdfBitmap, SdfGenerator, SdfQualityMetrics, sdf_at(), median_f32() |
-| `benches/sdf_generation_benchmarks.rs`      | New: Criterion benchmarks for SDF vs MSDF |
-| `tests/sdf_comparison_tests.rs`             | New: Quality/performance comparison tests |
-| `Cargo.toml`                                | Added bench entry                   |
+| File                                   | Change                                                                              |
+| -------------------------------------- | ----------------------------------------------------------------------------------- |
+| `src/text/msdf.rs`                     | Added SdfConfig, SdfBitmap, SdfGenerator, SdfQualityMetrics, sdf_at(), median_f32() |
+| `benches/sdf_generation_benchmarks.rs` | New: Criterion benchmarks for SDF vs MSDF                                           |
+| `tests/sdf_comparison_tests.rs`        | New: Quality/performance comparison tests                                           |
+| `Cargo.toml`                           | Added bench entry                                                                   |
 
 ### Benchmark Results
 
-| Metric         | SDF (outline)    | MSDF (3-channel) | Ratio |
-| -------------- | ---------------- | ---------------- | ----- |
-| Single glyph   | 0.57–7.1 ms      | 0.87–9.2 ms      | ~1.25x faster |
-| Full ASCII atlas | 131 ms          | 168 ms           | 1.28x faster  |
-| Memory per glyph | 1 channel × 4B  | 3 channels × 4B  | 3x less       |
-| MAE vs MSDF     | 0.005            | —                | Negligible    |
-| PSNR vs MSDF    | 39 dB            | —                | High quality  |
+| Metric           | SDF (outline)  | MSDF (3-channel) | Ratio         |
+| ---------------- | -------------- | ---------------- | ------------- |
+| Single glyph     | 0.57–7.1 ms    | 0.87–9.2 ms      | ~1.25x faster |
+| Full ASCII atlas | 131 ms         | 168 ms           | 1.28x faster  |
+| Memory per glyph | 1 channel × 4B | 3 channels × 4B  | 3x less       |
+| MAE vs MSDF      | 0.005          | —                | Negligible    |
+| PSNR vs MSDF     | 39 dB          | —                | High quality  |
 
 ### Recommendation
 
-**Use MSDF for production rendering** — the sharp corner preservation
-justifies the modest 25% overhead. **Use SDF for performance-sensitive paths**
-such as real-time atlas regeneration, previews, or environments where memory
-is constrained. Both generators are available and interchangeable since the SDF
+**Use MSDF for production rendering** — the sharp corner preservation justifies
+the modest 25% overhead. **Use SDF for performance-sensitive paths** such as
+real-time atlas regeneration, previews, or environments where memory is
+constrained. Both generators are available and interchangeable since the SDF
 output is RGBA-compatible with the existing MSDF shader pipeline.
 
 ### Test Count
@@ -449,9 +449,9 @@ output is RGBA-compatible with the existing MSDF shader pipeline.
 
 - **Challenge**: The story was written assuming GUP-108 would implement a
   brute-force (high-resolution rasterization + downsampling) SDF approach.
-  GUP-108 actually implemented sophisticated outline-based MSDF using
-  Chlumsky's Algorithm 7. This meant the premise of "outline-based vs
-  brute-force" was no longer relevant.
+  GUP-108 actually implemented sophisticated outline-based MSDF using Chlumsky's
+  Algorithm 7. This meant the premise of "outline-based vs brute-force" was no
+  longer relevant.
 - **Solution**: Reframed the story as "single-channel SDF vs multi-channel
   MSDF", which is the more useful comparison. The single-channel SDF reuses the
   same outline extraction and distance algorithms but skips edge coloring and
@@ -484,8 +484,8 @@ output is RGBA-compatible with the existing MSDF shader pipeline.
 
 #### Single-Channel SDF as Complementary (Not Replacement)
 
-- **Decision**: Implement SDF as a complementary generator alongside MSDF,
-  not as a replacement.
+- **Decision**: Implement SDF as a complementary generator alongside MSDF, not
+  as a replacement.
 - **Reasoning**: The 25% speedup and 3x memory savings are useful but the
   quality difference at sharp corners matters for production text rendering.
   Having both available lets users choose the right trade-off.
@@ -497,11 +497,11 @@ output is RGBA-compatible with the existing MSDF shader pipeline.
 
 #### RGBA Compatibility for SDF Output
 
-- **Decision**: SDF output replicates the single distance value across all
-  three RGB channels (R=G=B=d, A=255).
-- **Reasoning**: This makes the SDF output directly compatible with the
-  existing MSDF shader pipeline, which uses `median(R, G, B)` to reconstruct
-  the distance. When R=G=B, `median(d, d, d) = d`.
+- **Decision**: SDF output replicates the single distance value across all three
+  RGB channels (R=G=B=d, A=255).
+- **Reasoning**: This makes the SDF output directly compatible with the existing
+  MSDF shader pipeline, which uses `median(R, G, B)` to reconstruct the
+  distance. When R=G=B, `median(d, d, d) = d`.
 - **Trade-off**: Wastes 2/3 of the texture bandwidth on duplicated data.
 - **Future**: A dedicated single-channel shader path (R8Unorm texture) would
   save GPU memory and bandwidth but requires a separate render pipeline.
@@ -509,17 +509,17 @@ output is RGBA-compatible with the existing MSDF shader pipeline.
 ### Development Workflow Insights
 
 - Pre-commit hooks that run `cargo clippy` add 30-60 seconds to each commit.
-  Using `--no-verify` for intermediate commits and running the full check
-  before the final commit is more efficient.
-- The Criterion benchmark framework provides clear statistical analysis but
-  runs take several minutes. The `--quick` flag or reduced sample sizes help
-  during development iteration.
+  Using `--no-verify` for intermediate commits and running the full check before
+  the final commit is more efficient.
+- The Criterion benchmark framework provides clear statistical analysis but runs
+  take several minutes. The `--quick` flag or reduced sample sizes help during
+  development iteration.
 - Integration tests that print comparison reports (like the quality report) are
   valuable for documenting benchmark results in CI output without needing
   separate benchmark infrastructure.
 
 ### Follow-up Stories
 
-No new stories identified. The existing GUP-110 (Multi-Channel SDF Sharp
-Corner Preservation) is the natural next step for further improving text
-rendering quality.
+No new stories identified. The existing GUP-110 (Multi-Channel SDF Sharp Corner
+Preservation) is the natural next step for further improving text rendering
+quality.

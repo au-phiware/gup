@@ -1,7 +1,7 @@
 # GUP-202: Font-Aware Text Rendering Pipeline
 
-**Status**: 🚧 In Progress **Priority**: Medium **Complexity**: Medium **Created**:
-2025-08-20
+**Status**: 🚧 In Progress **Priority**: Medium **Complexity**: Medium
+**Created**: 2025-08-20
 
 ## Overview
 
