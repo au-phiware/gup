@@ -172,8 +172,8 @@ reorganisation._
 | [GUP-167](GUP-167_GpuBufferPool_Selection_Integration.md)    | GpuBufferPool Selection Integration      | 📋 Planned     | Low      | 3      |
 | [GUP-168](GUP-168_Selection_Attribute_Binding_Pipeline.md)   | Selection Attribute Binding Pipeline     | ✅ Complete    | Medium   | 8      |
 | [GUP-169](GUP-169_Shared_Pipeline_Cache_Selections.md)       | Shared Pipeline Cache for Selections     | ✅ Complete    | Low      | 3      |
-| [GUP-170](GUP-170_BoxPlot_Notch_Rendering.md)                | BoxPlot Notch Rendering                  | ✅ Complete | Low      | 2      |
-| [GUP-171](GUP-171_BoxPlot_Pixel_Space_Strokes.md)            | BoxPlot Pixel-Space Stroke Widths        | 🚧 In Progress     | Low      | 3      |
+| [GUP-170](GUP-170_BoxPlot_Notch_Rendering.md)                | BoxPlot Notch Rendering                  | ✅ Complete    | Low      | 2      |
+| [GUP-171](GUP-171_BoxPlot_Pixel_Space_Strokes.md)            | BoxPlot Pixel-Space Stroke Widths        | ✅ Complete | Low      | 3      |
 | [GUP-177](GUP-177_GPU_Shader_Function_Attribute_Binding.md)  | GPU Shader Function Attribute Binding    | ✅ Complete    | Medium   | 8      |
 | [GUP-178](GUP-178_MarkInstanceBuilder_Line_BoxPlot.md)       | MarkInstanceBuilder for Line and BoxPlot | ✅ Complete    | Low      | 3      |
 | [GUP-179](GUP-179_Shader_Function_Uniform_Live_Update.md)    | Shader Function Uniform Live Update      | ✅ Complete    | Medium   | 5      |
