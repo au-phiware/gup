@@ -1,6 +1,6 @@
 # GUP-170: BoxPlot Notch Rendering
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
