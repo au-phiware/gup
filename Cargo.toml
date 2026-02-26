@@ -214,6 +214,10 @@ path = "examples/intermediate/categorical_bar.rs"
 name = "business_dashboard"
 path = "examples/showcase/business_dashboard.rs"
 
+[[bin]]
+name = "validate_marks"
+path = "src/bin/validate_marks.rs"
+
 [features]
 default = []
 web-dashboard = ["tiny_http"]
