@@ -1,12 +1,46 @@
 # GUP-219: Deep Chain Binding Support
 
-**Status**: 🚧 In Progress
+**Status**: ✅ Complete (2025-07-11)
 
 ## Story Overview
 
 **Title**: Validate deep function chain bindings with attr_shader() **Epic**:
 Phase 1 Initiative 4 - Advanced Data Mapping **Priority**: Low **Story Points**:
 3
+
+## Implementation Summary
+
+### What Was Implemented
+
+1. **`chain_depth()` method on `ShaderUniform` trait** — returns nesting depth
+   for chain uniform types (default 0, increments for each `ChainUniforms`
+   nesting level)
+2. **`replace_wgsl_identifier()` helper** — whole-word replacement in WGSL code,
+   respecting identifier boundaries (won't rename `ChainUniforms_1` when
+   targeting `ChainUniforms`)
+3. **`deduplicate_wgsl_functions()` helper** — removes duplicate function
+   definitions from generated WGSL (handles cases like two `LinearScale`
+   instances in a chain producing duplicate `fn linear_scale(...)` blocks)
+4. **Updated `ChainUniforms::wgsl_struct_definition()`** — inner chain structs
+   are renamed with depth suffix (e.g. `ChainUniforms_1`) to avoid WGSL name
+   collisions
+5. **Updated `FunctionChain::generate_wgsl()`** — inner chain function names are
+   similarly renamed (e.g. `composed_chain_1`), with function deduplication
+   applied
+
+### Key Files Changed
+
+- `src/shader_function.rs` — core trait extension, helpers, ChainUniforms and
+  FunctionChain updates
+- `src/selection.rs` — deep chain test suite
+
+### Test Counts
+
+- 7 new unit tests in `shader_function::tests` (struct names, depth values, WGSL
+  generation, bytemuck layout, create_uniforms, replace_wgsl_identifier)
+- 4 new tests in `selection::tests` (ShaderFnInfo metadata, renamed inner
+  structs, WGSL injection, GPU integration render)
+- All 1574 existing tests continue to pass
 
 ## Context
 
@@ -26,12 +60,12 @@ transformation pipelines
 
 ## Acceptance Criteria
 
-- [ ] Three-function chain (`A.compose(B).compose(C)`) works with
+- [x] Three-function chain (`A.compose(B).compose(C)`) works with
       `attr_shader()`
-- [ ] Nested `ChainUniforms` struct names are unique or properly handled
-- [ ] WGSL generation includes all component functions at every level
-- [ ] GPU integration test renders correctly with a deep chain
-- [ ] `ChainUniforms<ChainUniforms<A, B>, C>` serialises correctly via bytemuck
+- [x] Nested `ChainUniforms` struct names are unique or properly handled
+- [x] WGSL generation includes all component functions at every level
+- [x] GPU integration test renders correctly with a deep chain
+- [x] `ChainUniforms<ChainUniforms<A, B>, C>` serialises correctly via bytemuck
 
 ## Dependencies
 
@@ -53,6 +87,6 @@ transformation pipelines
 
 ## Definition of Done
 
-- [ ] All acceptance criteria met
-- [ ] Existing Selection tests still pass
-- [ ] `mask all-fix` clean
+- [x] All acceptance criteria met
+- [x] Existing Selection tests still pass
+- [x] `mask all-fix` clean
