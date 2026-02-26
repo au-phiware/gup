@@ -1,6 +1,6 @@
 # GUP-171: BoxPlot Pixel-Space Stroke Widths
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
