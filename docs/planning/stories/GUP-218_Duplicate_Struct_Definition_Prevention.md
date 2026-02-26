@@ -1,6 +1,6 @@
 # GUP-218: Duplicate Struct Definition Prevention
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Story Overview
 

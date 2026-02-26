@@ -178,7 +178,7 @@ reorganisation._
 | [GUP-178](GUP-178_MarkInstanceBuilder_Line_BoxPlot.md)       | MarkInstanceBuilder for Line and BoxPlot | 📋 Planned  | Low      | 3      |
 | [GUP-179](GUP-179_Shader_Function_Uniform_Live_Update.md)    | Shader Function Uniform Live Update      | ✅ Complete | Medium   | 5      |
 | [GUP-180](GUP-180_FunctionChain_Binding_Support.md)          | FunctionChain Binding Support            | ✅ Complete | Low      | 3      |
-| [GUP-218](GUP-218_Duplicate_Struct_Definition_Prevention.md) | Duplicate Struct Definition Prevention   | 📋 Planned  | Low      | 2      |
+| [GUP-218](GUP-218_Duplicate_Struct_Definition_Prevention.md) | Duplicate Struct Definition Prevention   | 🚧 In Progress | Low      | 2      |
 | [GUP-219](GUP-219_Deep_Chain_Binding_Support.md)             | Deep Chain Binding Support               | 📋 Planned  | Low      | 3      |
 
 ### Post GUP-014 Stories - Interaction Performance (Stories 76-79)
