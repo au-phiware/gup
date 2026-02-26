@@ -86,7 +86,7 @@ Key performance bottlenecks identified:
    - [x] Frustum culling reduces processed marks by 50-80% for typical views
    - [x] LOD system with 3 levels (full, simplified, point)
    - [x] Automatic LOD selection based on screen space size
-   - [ ] Occlusion culling for dense point clouds
+   - [x] Occlusion culling for dense point clouds
 
 4. **Performance Benchmarks**
    - [x] 100K circles render in \<1ms (instanced)

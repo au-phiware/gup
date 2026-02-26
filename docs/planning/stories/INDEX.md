@@ -77,7 +77,7 @@ epic and status.
 | [GUP-073](GUP-073_Advanced_Shader_Composition.md)              | Advanced Shader Composition                    | ✅ Complete | Medium   | —      |
 | [GUP-074](GUP-074_Mark_Performance_Optimization.md)            | Mark Performance Optimization (GPU Instancing) | ✅ Complete | High     | 5      |
 | [GUP-075](GUP-075_Interactive_Mark_Selection.md)               | Interactive Mark Selection                     | ✅ Complete | Medium   | 6      |
-| [GUP-076](GUP-076_GPU_Occlusion_Culling.md)                    | GPU Occlusion Culling for Dense Datasets       | 🚧 In Progress | Low      | —      |
+| [GUP-076](GUP-076_GPU_Occlusion_Culling.md)                    | GPU Occlusion Culling for Dense Datasets       | ✅ Complete | Low      | —      |
 | [GUP-077](GUP-077_Compute_Shader_Instance_Filtering.md)        | Compute Shader Instance Sorting and Filtering  | ✅ Complete | Medium   | —      |
 | [GUP-185](GUP-185_Multi_Pass_Mark_Examples.md)                 | Multi-Pass Mark Examples                       | ✅ Complete | Low      | —      |
 | [GUP-186](GUP-186_Dynamic_Attribute_GPU_Upload_Pipeline.md)    | Dynamic Attribute GPU Upload Pipeline          | ✅ Complete | Medium   | —      |

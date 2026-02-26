@@ -1,7 +1,8 @@
 # GUP-076: GPU Occlusion Culling for Dense Datasets
 
 **Story ID**: GUP-076 **Title**: GPU Occlusion Culling for Dense Datasets
-**Status**: 🚧 In Progress **Priority**: Low **Effort**: — **Created**: 2026-02-25
+**Status**: ✅ Complete **Priority**: Low **Effort**: — **Created**: 2026-02-25
+**Completed**: 2026-02-27
 **Dependencies**: GUP-074 (Mark Performance Optimization)
 
 ## Overview
@@ -28,11 +29,11 @@ invisible geometry.
 
 ## Acceptance Criteria
 
-- [ ] Compute shader generates hierarchical Z-buffer from front-to-back marks
-- [ ] Instance culling pass tests mark bounds against the Z-buffer
-- [ ] At least 30% reduction in draw calls for typical dense scatter plots
-- [ ] No visual artifacts from incorrect culling
-- [ ] Configurable toggle to enable/disable occlusion culling
+- [x] Compute shader generates hierarchical Z-buffer from front-to-back marks
+- [x] Instance culling pass tests mark bounds against the Z-buffer
+- [x] At least 30% reduction in draw calls for typical dense scatter plots
+- [x] No visual artifacts from incorrect culling
+- [x] Configurable toggle to enable/disable occlusion culling
 
 ## Technical Tasks
 
@@ -69,8 +70,51 @@ invisible geometry.
 
 ## Definition of Done
 
-- [ ] Compute shader implementation compiles and runs
-- [ ] Integration tests verify correct culling behavior
-- [ ] Performance benchmarks show improvement for dense datasets
-- [ ] No visual regressions in existing tests
-- [ ] Documentation updated
+- [x] Compute shader implementation compiles and runs
+- [x] Integration tests verify correct culling behavior
+- [x] Performance benchmarks show improvement for dense datasets
+- [x] No visual regressions in existing tests
+- [x] Documentation updated
+
+## Implementation Summary
+
+### Key Files Added/Modified
+
+- **`src/shaders/occlusion_culling.compute.wgsl`** (new) — Compute shader with
+  three entry points:
+  - `build_coverage` — populates level-0 coverage map via `atomicMax(z)` where z
+    is based on instance index (higher = drawn later = on top).
+  - `generate_hiz_level` — builds one Hi-Z mip level by taking the minimum z of
+    each 2×2 block from the previous level.
+  - `occlusion_test` — tests each instance's screen-space bounding box against
+    level-0 of the Hi-Z buffer; marks instances whose z is less than all
+    covering cells' z as occluded.
+- **`src/mark/occlusion_culler.rs`** (new) — Rust-side pipeline management:
+  - `OcclusionCuller` — compiles WGSL, creates three compute pipelines, manages
+    dispatch with buffer allocation and Hi-Z mip generation.
+  - `PooledOcclusionCuller` — pre-allocates GPU buffers for zero-allocation
+    steady-state dispatches with automatic grow and bind-group caching.
+  - `OcclusionParams` — user-facing configuration (tile size, conservative
+    margin).
+  - `OcclusionGpuConfig` — 96-byte `#[repr(C)]` uniform matching the WGSL
+    struct, including packed level offsets.
+- **`src/mark/batch_renderer.rs`** — Added:
+  - `enable_occlusion_culling`, `occlusion_threshold`, `occlusion_params` fields
+    to `BatchRendererConfig`.
+  - `submit_with_occlusion_culling()` method on `InstancedBatchRenderer`.
+- **`src/mark.rs`** — Added `occlusion_culler` submodule and public re-exports.
+- **`src/lib.rs`** — Added crate-level re-exports for all occlusion types.
+- **`benches/occlusion_culling_benchmarks.rs`** (new) — Criterion benchmarks for
+  fresh-buffer dispatch, pooled dispatch, and culling effectiveness at 1K–100K
+  scales.
+- **`Cargo.toml`** — Registered benchmark target.
+- **`docs/planning/stories/GUP-074_Mark_Performance_Optimization.md`** — Checked
+  off the deferred occlusion culling AC item.
+
+### Test Counts
+
+- 12 unit + GPU integration tests in `mark::occlusion_culler::tests`
+- 1 integration test in `mark::batch_renderer::tests`
+- 1 criterion benchmark file with 3 benchmark groups
+- All 1625+ existing passing tests continue to pass (3 pre-existing failures in
+  `mark::renderer::tests` unrelated to this change)
