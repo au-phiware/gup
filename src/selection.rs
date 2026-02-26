@@ -938,8 +938,14 @@ impl<T, M: Mark> Selection<T, M> {
                     .map(|b| (b.name.as_str(), (b.extractor)(t)))
                     .collect();
                 // GPU-bound attrs: extract the *raw* value (the shader will transform it).
+                // Widen the value to match the instance field type if necessary
+                // (e.g., a FunctionChain may input f32 but the field is vec4).
                 for sb in gpu_bindings {
-                    attr_values.push((sb.name.as_str(), (sb.extractor)(t)));
+                    let raw = (sb.extractor)(t);
+                    attr_values.push((
+                        sb.name.as_str(),
+                        widen_attr_value(raw, sb.shader_fn.output_wgsl_type),
+                    ));
                 }
                 M::build_instance(&attr_values)
             })
@@ -1305,23 +1311,25 @@ impl<T, M: Mark> Selection<T, M> {
 
         // --- Restore focus ---
         if let Some(idx) = focused_child_index
-            && let Some(chart_node) = aria_tree.get_node(chart_id) {
-                let children = &chart_node.children;
-                // If the previously focused index still exists, refocus it;
-                // otherwise fall back to the chart root.
-                let new_focus = children.get(idx).copied().unwrap_or(chart_id);
-                aria_tree.set_focus(Some(new_focus));
-            }
+            && let Some(chart_node) = aria_tree.get_node(chart_id)
+        {
+            let children = &chart_node.children;
+            // If the previously focused index still exists, refocus it;
+            // otherwise fall back to the chart root.
+            let new_focus = children.get(idx).copied().unwrap_or(chart_id);
+            aria_tree.set_focus(Some(new_focus));
+        }
 
         // --- Live region announcement ---
         if self.aria_update_config.announce_changes
-            && let Some(summary) = Self::summarise_change(old_count, new_count, mark_name) {
-                aria_tree.update_live_region_with_urgency(
-                    &format!("selection-{}", self.selection_id),
-                    &summary,
-                    self.aria_update_config.urgency,
-                );
-            }
+            && let Some(summary) = Self::summarise_change(old_count, new_count, mark_name)
+        {
+            aria_tree.update_live_region_with_urgency(
+                &format!("selection-{}", self.selection_id),
+                &summary,
+                self.aria_update_config.urgency,
+            );
+        }
 
         chart_id
     }
@@ -1790,6 +1798,41 @@ impl SelectionRenderState {
 // WGSL generation for shader function attribute bindings
 // ---------------------------------------------------------------------------
 
+/// Widen an [`AttrValue`] to match the target field type.
+///
+/// When a shader function chain has an input type narrower than the instance
+/// field type (e.g., `f32` input stored in a `vec4<f32>` field), the raw value
+/// must be widened so that [`MarkInstanceBuilder::build_instance`] can store it.
+fn widen_attr_value(value: AttrValue, target_wgsl_type: &str) -> AttrValue {
+    match (value, target_wgsl_type) {
+        // f32 → vec2: store in first component.
+        (AttrValue::Float(v), "vec2<f32>") => AttrValue::Vec2([v, 0.0]),
+        // f32 → vec4: store in first component.
+        (AttrValue::Float(v), "vec4<f32>") => AttrValue::Vec4([v, 0.0, 0.0, 0.0]),
+        // vec2 → vec4: store in first two components.
+        (AttrValue::Vec2(v), "vec4<f32>") => AttrValue::Vec4([v[0], v[1], 0.0, 0.0]),
+        // No conversion needed.
+        (v, _) => v,
+    }
+}
+
+/// Return a WGSL expression that narrows an instance field to the shader
+/// function's expected input type.
+///
+/// For example, if the field is `vec4<f32>` but the function expects `f32`,
+/// this returns `"instance.fill_color.x"` instead of `"instance.fill_color"`.
+fn narrow_field_expr(attr: &str, input_type: &str, output_type: &str) -> String {
+    let base = format!("instance.{attr}");
+    if input_type == output_type {
+        return base;
+    }
+    match (input_type, output_type) {
+        ("f32", "vec2<f32>") | ("f32", "vec4<f32>") => format!("{base}.x"),
+        ("vec2<f32>", "vec4<f32>") => format!("{base}.xy"),
+        _ => base,
+    }
+}
+
 /// Generate a modified vertex shader that applies shader functions to
 /// instance attributes.
 ///
@@ -1867,8 +1910,10 @@ fn generate_shader_bound_vertex_wgsl(
 
         // Insert shader function application statements.
         for (i, (attr_name, info)) in bindings.iter().enumerate() {
+            let input_expr =
+                narrow_field_expr(attr_name, info.input_wgsl_type, info.output_wgsl_type);
             result.push_str(&format!(
-                "    let _gup_{attr} = {fn_name}(instance.{attr}, _gup_uniforms_{i});\n",
+                "    let _gup_{attr} = {fn_name}({input_expr}, _gup_uniforms_{i});\n",
                 attr = attr_name,
                 fn_name = info.function_name,
                 i = i,
@@ -2964,10 +3009,7 @@ mod tests {
     #[test]
     fn summarise_change_removals() {
         let summary = Selection::<(), Circle>::summarise_change(Some(5), 3, "circle");
-        assert_eq!(
-            summary,
-            Some("2 data points removed, 3 total".to_string())
-        );
+        assert_eq!(summary, Some("2 data points removed, 3 total".to_string()));
     }
 
     #[test]
@@ -2985,10 +3027,7 @@ mod tests {
     #[test]
     fn summarise_change_single_point() {
         let summary = Selection::<(), Circle>::summarise_change(Some(2), 3, "line");
-        assert_eq!(
-            summary,
-            Some("1 new data point added, 3 total".to_string())
-        );
+        assert_eq!(summary, Some("1 new data point added, 3 total".to_string()));
     }
 
     // --- GPU integration tests ---
@@ -4474,6 +4513,306 @@ fn vs_main() -> VertexOutput {
 
             // Verify render still works.
             assert!(selection.is_render_ready());
+        });
+    }
+
+    // --- FunctionChain binding tests (GUP-180) ---
+
+    #[test]
+    fn shader_fn_info_captures_function_chain_metadata() {
+        use crate::shader_function::{ColorMap, ComposableFunction, LinearScale};
+
+        let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+        let color_map = ColorMap::new(
+            Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 1.0,
+                w: 1.0,
+            },
+            Vec4 {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+        );
+        let chain = scale.compose(color_map);
+        let info = shader_fn_info_from(&chain);
+
+        assert_eq!(info.function_name, "composed_chain");
+        assert_eq!(info.input_wgsl_type, "f32");
+        assert_eq!(info.output_wgsl_type, "vec4<f32>");
+        // WGSL code must include both component functions.
+        assert!(
+            info.wgsl_code.contains("linear_scale"),
+            "Missing first function: {}",
+            info.wgsl_code
+        );
+        assert!(
+            info.wgsl_code.contains("color_map"),
+            "Missing second function: {}",
+            info.wgsl_code
+        );
+        assert!(
+            info.wgsl_code.contains("composed_chain"),
+            "Missing composed entry point: {}",
+            info.wgsl_code
+        );
+        // Uniform bytes must be non-empty (both functions have uniforms).
+        assert!(
+            !info.uniform_bytes.is_empty(),
+            "ChainUniforms should serialise to non-empty bytes"
+        );
+        // Uniform type name should be the chain wrapper.
+        assert_eq!(info.uniform_type_name, "ChainUniforms");
+    }
+
+    #[test]
+    fn chain_uniform_struct_def_includes_nested_types() {
+        use crate::shader_function::{ColorMap, ComposableFunction, LinearScale};
+
+        let scale = LinearScale::new(0.0, 1.0, 0.0, 1.0);
+        let color_map = ColorMap::new(
+            Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+            Vec4 {
+                x: 1.0,
+                y: 1.0,
+                z: 1.0,
+                w: 1.0,
+            },
+        );
+        let chain = scale.compose(color_map);
+        let info = shader_fn_info_from(&chain);
+
+        // The struct definition must include both nested struct definitions so
+        // the WGSL is self-contained.
+        assert!(
+            info.uniform_struct_def.contains("LinearScaleUniforms"),
+            "Missing LinearScaleUniforms struct: {}",
+            info.uniform_struct_def
+        );
+        assert!(
+            info.uniform_struct_def.contains("ColorMapUniforms"),
+            "Missing ColorMapUniforms struct: {}",
+            info.uniform_struct_def
+        );
+        assert!(
+            info.uniform_struct_def.contains("struct ChainUniforms"),
+            "Missing ChainUniforms struct: {}",
+            info.uniform_struct_def
+        );
+    }
+
+    #[test]
+    fn generate_wgsl_with_function_chain_injects_all_code() {
+        use crate::shader_function::{ColorMap, ComposableFunction, LinearScale};
+
+        let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+        let color_map = ColorMap::new(
+            Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 1.0,
+                w: 1.0,
+            },
+            Vec4 {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+        );
+        let chain = scale.compose(color_map);
+        let info = shader_fn_info_from(&chain);
+
+        let base_wgsl = r#"
+struct CircleInstance {
+    center: vec2<f32>,
+    radius: f32,
+    fill_color: vec4<f32>,
+}
+
+@group(0) @binding(0) var<storage, read> instances: array<CircleInstance>;
+
+@vertex
+fn vs_main() -> VertexOutput {
+    let instance = instances[input.instance_index];
+    let c = instance.fill_color;
+    return c;
+}
+"#;
+
+        let bindings: Vec<(&str, &ShaderFnInfo)> = vec![("fill_color", &info)];
+        let result = generate_shader_bound_vertex_wgsl(base_wgsl, &bindings);
+
+        // Should contain all three functions.
+        assert!(
+            result.contains("fn linear_scale"),
+            "Missing linear_scale fn: {result}"
+        );
+        assert!(
+            result.contains("fn color_map"),
+            "Missing color_map fn: {result}"
+        );
+        assert!(
+            result.contains("fn composed_chain"),
+            "Missing composed_chain fn: {result}"
+        );
+        // The uniform binding should reference ChainUniforms.
+        assert!(
+            result.contains("ChainUniforms"),
+            "Missing ChainUniforms reference: {result}"
+        );
+        // The transformation variable should call composed_chain.
+        assert!(
+            result.contains("_gup_fill_color = composed_chain("),
+            "Missing transformation call: {result}"
+        );
+    }
+
+    #[test]
+    fn attr_shader_stores_function_chain_binding() {
+        use crate::shader_function::{ColorMap, ComposableFunction, LinearScale};
+
+        let data = vec![ScatterPoint {
+            x: 0.0,
+            y: 0.0,
+            value: 50.0,
+        }];
+        let mut selection: Selection<ScatterPoint, Circle> = Selection::from_data(data);
+
+        let chain = LinearScale::new(0.0, 100.0, 0.0, 1.0).compose(ColorMap::new(
+            Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 1.0,
+                w: 1.0,
+            },
+            Vec4 {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+        ));
+
+        selection.attr_shader("fill_color", |d: &ScatterPoint| d.value, chain);
+
+        assert!(selection.has_shader_bindings());
+        assert_eq!(selection.shader_bound_attributes(), vec!["fill_color"]);
+    }
+
+    #[test]
+    fn function_chain_type_safety_rejects_wrong_output() {
+        use crate::shader_function::{ComposableFunction, LinearScale};
+
+        // LinearScale composes f32 → f32, so a chain of two LinearScales
+        // still outputs f32.  Binding to "fill_color" (vec4) should fail.
+        let chain =
+            LinearScale::new(0.0, 100.0, 0.0, 1.0).compose(LinearScale::new(0.0, 1.0, 0.0, 100.0));
+
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let data = vec![ScatterPoint {
+                x: 0.0,
+                y: 0.0,
+                value: 50.0,
+            }];
+            let mut selection: Selection<ScatterPoint, Circle> = Selection::from_data(data);
+            selection.attr_shader("fill_color", |d: &ScatterPoint| d.value, chain);
+
+            let result = selection.prepare_render_bound(&context.device, &context.queue, None);
+            assert!(
+                result.is_err(),
+                "Should reject f32 chain bound to vec4 attr"
+            );
+            let err_msg = format!("{}", result.unwrap_err());
+            assert!(
+                err_msg.contains("not compatible"),
+                "Error should mention incompatibility: {err_msg}"
+            );
+        });
+    }
+
+    #[test]
+    fn gpu_function_chain_render() {
+        use crate::shader_function::{ColorMap, ComposableFunction, LinearScale};
+
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let data = vec![
+                ScatterPoint {
+                    x: -0.3,
+                    y: 0.0,
+                    value: 20.0,
+                },
+                ScatterPoint {
+                    x: 0.3,
+                    y: 0.0,
+                    value: 80.0,
+                },
+            ];
+
+            let mut selection: Selection<ScatterPoint, Circle> = Selection::from_data(data);
+
+            // CPU bindings for position and radius.
+            selection
+                .attr("center", |d: &ScatterPoint| [d.x, d.y])
+                .attr("radius", |_: &ScatterPoint| 0.1f32);
+
+            // GPU binding: linear_scale → color_map for fill_color.
+            let chain = LinearScale::new(0.0, 100.0, 0.0, 1.0).compose(ColorMap::new(
+                Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 1.0,
+                    w: 1.0,
+                },
+                Vec4 {
+                    x: 1.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0,
+                },
+            ));
+            selection.attr_shader("fill_color", |d: &ScatterPoint| d.value, chain);
+
+            selection
+                .prepare_render_bound(&context.device, &context.queue, None)
+                .expect("prepare_render_bound with FunctionChain");
+
+            assert!(selection.is_render_ready());
+
+            // Render to verify pipeline compilation succeeds.
+            let mut ctx = Arc::try_unwrap(context).expect("single owner");
+            let mut frame = ctx.begin_frame().expect("begin_frame");
+            {
+                let mut pass = frame.render_pass(Some(wgpu::Color::BLACK));
+                selection
+                    .render(&mut pass)
+                    .expect("render with FunctionChain binding");
+            }
+            frame.finish().expect("finish frame");
         });
     }
 }

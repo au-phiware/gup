@@ -1232,6 +1232,7 @@ where
     }
 }
 
+#[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct ChainUniforms<A, B>
 where
@@ -1262,7 +1263,20 @@ where
     B: ShaderUniform + Copy,
 {
     fn wgsl_struct_definition() -> String {
-        let mut def = String::from("struct ChainUniforms {\n");
+        let mut def = String::new();
+        // Include nested struct definitions so the generated WGSL is
+        // self-contained.  Skip empty definitions (primitive types).
+        let first_def = A::wgsl_struct_definition();
+        if !first_def.is_empty() {
+            def.push_str(&first_def);
+            def.push('\n');
+        }
+        let second_def = B::wgsl_struct_definition();
+        if !second_def.is_empty() {
+            def.push_str(&second_def);
+            def.push('\n');
+        }
+        def.push_str("struct ChainUniforms {\n");
         def.push_str(&format!("    first: {},\n", A::wgsl_type_name()));
         def.push_str(&format!("    second: {},\n", B::wgsl_type_name()));
         def.push('}');
@@ -1292,14 +1306,22 @@ where
     }
 
     fn generate_wgsl(&self) -> String {
-        // Generate proper WGSL with type substitution for composition
-        format!(
+        // Include WGSL for both component functions so the composed code is
+        // self-contained when injected into a vertex shader.
+        let mut wgsl = String::new();
+        wgsl.push_str(self.first.generate_wgsl().trim());
+        wgsl.push_str("\n\n");
+        wgsl.push_str(self.second.generate_wgsl().trim());
+        wgsl.push_str("\n\n");
+        // Append the composed entry-point that chains them together.
+        wgsl.push_str(&format!(
             "fn composed_chain(input: {}, uniforms: ChainUniforms) -> {} {{\n    let intermediate = {}(input, uniforms.first);\n    return {}(intermediate, uniforms.second);\n}}",
             <A::Input as ShaderType>::wgsl_type_name(),
             <B::Output as ShaderType>::wgsl_type_name(),
             A::function_name(),
             B::function_name()
-        )
+        ));
+        wgsl
     }
 
     fn create_uniforms(&self) -> Option<Self::Uniforms> {
