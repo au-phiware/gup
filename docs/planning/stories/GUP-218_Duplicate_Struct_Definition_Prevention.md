@@ -79,3 +79,57 @@ were added to split and parse them:
 - 5 new unit tests added
 - 152 existing selection tests continue to pass
 - All examples compile
+
+## Retrospective
+
+**Completed**: 2025-07-18
+
+### Key Technical Learnings
+
+#### WGSL Struct Definition Format
+
+- **Challenge**: The `uniform_struct_def` field is a single string that can
+  contain multiple struct definitions concatenated together (from
+  `ChainUniforms::wgsl_struct_definition()` which recursively includes nested
+  component struct defs).
+- **Solution**: Split the compound string on `struct` keyword boundaries,
+  extract each struct name, and deduplicate using a `HashSet<String>`.
+- **Pattern**: When deduplicating generated code, work at the semantic level
+  (struct names) rather than raw string equality, since struct definitions from
+  different sources may have different whitespace but the same name.
+
+#### Separation of Struct Emission from Binding Declarations
+
+- **Challenge**: The original code interleaved struct definitions with
+  `@group/@binding` declarations in a single loop per binding.
+- **Solution**: Separated into two passes: first collect and deduplicate all
+  struct definitions, then emit all binding declarations. This is cleaner and
+  ensures structs are defined before they're referenced.
+- **Pattern**: When injecting generated code, separate declaration/definition
+  phases from usage phases.
+
+### Architectural Decisions
+
+#### String-Level Deduplication vs Trait-Level
+
+- **Decision**: Deduplicate at the string level in
+  `generate_shader_bound_vertex_wgsl()` rather than modifying `ShaderUniform` to
+  avoid emitting nested defs.
+- **Reasoning**: Keeps the fix localised to the code generation function.
+  Modifying `ChainUniforms::wgsl_struct_definition()` would be a larger change
+  and could break the self-contained property that each uniform type's
+  definition is independently valid.
+- **Trade-off**: String parsing is slightly fragile (relies on the `struct`
+  keyword prefix and `}` delimiter), but WGSL struct syntax is well-defined and
+  unlikely to change.
+- **Future**: If the project moves to AST-based WGSL generation (GUP-189 style),
+  deduplication would happen naturally at the AST node level.
+
+### Development Workflow Insights
+
+- The story was straightforward — a 2-point story that delivered in a single
+  focused increment. The existing test infrastructure for `ShaderFnInfo` and
+  `generate_shader_bound_vertex_wgsl` made it easy to write targeted tests.
+- The pre-existing `test_registry_scalability` failure in
+  `mark_pipeline_performance_tests` is unrelated to this change (confirmed by
+  running it on the base commit).
