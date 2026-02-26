@@ -98,3 +98,70 @@ clipping strategies in clearly labeled sections:
 
 **Story Created**: 2026-02-26  
 **Origin**: GUP-105 follow-up ("Demo Enhancement" AC not completed)
+
+## Retrospective
+
+**Completed**: 2025-07-17
+
+### Key Technical Learnings
+
+#### Combining Multiple Render Pipelines in One Pass
+
+- **Challenge**: Drawing container-bound outline rectangles alongside SDF text
+  in the same render pass required a second wgpu pipeline.
+- **Solution**: Created a minimal `RectPipeline` with a simple vertex+color
+  `LineList` shader that renders before text. Both pipelines share the same
+  render pass.
+- **Pattern**: For debug/overlay visuals in examples, a lightweight inline WGSL
+  shader with `LineList` topology is the simplest approach — no need to pull in
+  the full `MarkRenderer` / `Rectangle` mark infrastructure.
+
+#### Pixel-to-NDC Coordinate Conversion
+
+- **Challenge**: The text renderer works in pixel coordinates (top-left origin)
+  while wgpu clip space is NDC (-1..1, y-up).
+- **Solution**: `RectOutline::to_vertices()` converts pixel coords to NDC with
+  y-flip: `ndc_y = -(py / h * 2.0 - 1.0)`.
+- **Pattern**: Keep coordinate systems isolated per pipeline; convert at the
+  vertex-generation boundary.
+
+### Architectural Decisions
+
+#### Standalone Example vs Enhancing Existing Demo
+
+- **Decision**: Created a new `text_clipping_demo.rs` rather than extending
+  `text_rendering_demo.rs`.
+- **Reasoning**: The existing demo focuses on font rendering capabilities
+  (sizes, colours, anchors); adding clipping sections would make it unwieldy and
+  dilute both demos' purposes.
+- **Trade-off**: One more file to maintain, but cleaner separation of concerns.
+- **Future**: Each text-related feature (rendering, clipping, hover reveal,
+  wrapping) has its own focused demo.
+
+#### Statistics Classification Heuristic
+
+- **Decision**: Classified clipped items by inspecting the label string and
+  whether glyphs are empty, rather than threading strategy identity through the
+  layout engine.
+- **Reasoning**: The `LayoutResult` only exposes `clipped: bool` and empty
+  glyphs; adding a `strategy_used` field would be a larger API change for a
+  demo- only need.
+- **Trade-off**: Approximate categorisation based on label text.
+- **Future**: A `ClipAction` enum on `LayoutResult` would make this exact.
+
+### Development Workflow Insights
+
+- The `mask all-fix` pipeline is reliable and fast; running it before every
+  commit caught formatting drifts immediately.
+- GPU examples cannot be visually verified in the headless CI/development
+  environment — tests validate structure and the example compiles+runs without
+  errors, but visual review requires a desktop session.
+- The project's `Arc<GupContext>` take-unwrap-rewrap pattern for mutable access
+  is verbose but well-established in every example. A `RefCell`-based helper
+  could reduce boilerplate in future.
+
+### Follow-up Stories
+
+No new stories identified. All clipping strategies (truncation, scaling,
+repositioning, hide, wrapping) are now demonstrated. The `TextWrapping` strategy
+is exercised in GUP-199's dedicated wrapping demo.
