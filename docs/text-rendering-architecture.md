@@ -775,6 +775,68 @@ impl TextLayoutEngine {
 
 ---
 
+## Chart Builder Multi-Font Integration (GUP-215)
+
+The chart builder layer integrates with `FontAtlasManager` so that
+`TextStyle.font_family` is automatically respected for axis labels and chart
+titles.
+
+### Configuration
+
+`ChartConfig` exposes `label_style` and `title_style` fields, both of type
+`TextStyle`. Set `font_family` on either style to select a font:
+
+```rust
+use gup::chart_builder::ChartConfig;
+use gup::text::TextStyle;
+
+let config = ChartConfig::default()
+    .with_title("Revenue by Quarter")
+    .with_title_style(
+        TextStyle::new(20.0)
+            .bold()
+            .with_font_family("DejaVu Serif"),
+    )
+    .with_label_style(
+        TextStyle::new(14.0)
+            .with_font_family("DejaVu Sans"),
+    );
+```
+
+### Rendering
+
+Use `ComposedChart::queue_chart_text` (or `queue_chart_text_resolved` for
+collision-aware layout) before the render pass, then call
+`TextRenderer::render_queued_text_multi` inside the pass:
+
+```rust
+// Before the render pass
+text_renderer.begin_frame();
+chart.queue_chart_text_resolved(
+    &frame,
+    &mut text_renderer,
+    &mut font_manager,
+    &mut layout_engine,
+    &mut positioner,
+    &constraints,
+)?;
+
+// Inside the render pass
+text_renderer.render_queued_text_multi(
+    &mut render_pass,
+    &device,
+    &queue,
+    &font_manager,
+    screen_width,
+    screen_height,
+)?;
+```
+
+The font manager lazily creates a font atlas for each unique `font_family` the
+first time it is referenced. Subsequent frames reuse the cached atlases.
+
+---
+
 This documentation provides a comprehensive foundation for understanding and
 working with the text rendering system. As the system evolves, this document
 should be updated to reflect architectural changes and performance improvements.
