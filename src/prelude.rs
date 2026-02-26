@@ -137,6 +137,9 @@ pub use crate::shader_function::{
 pub use crate::selection::{AttrValue, IntoAttrValue, IntoAttrValues, MarkInstanceBuilder};
 
 // Text rendering system
+pub use crate::text::hover_reveal::{
+    ClippedTextRegistry, HoverRevealState, TooltipConfig, TooltipLayout,
+};
 pub use crate::text::{
     FontAtlas, GlyphBatch, PositionedGlyph, TextAnchor, TextBounds, TextLayoutEngine, TextRenderer,
     TextStyle,
