@@ -146,6 +146,10 @@ harness = false
 name = "transpilation_benchmarks"
 harness = false
 
+[[bench]]
+name = "sdf_generation_benchmarks"
+harness = false
+
 [[example]]
 name = "custom_mark_demo"
 path = "examples/custom_mark_demo.rs"
