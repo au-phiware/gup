@@ -760,4 +760,29 @@ mod tests {
         assert!(fragment_shader.contains("style == 1u")); // Dashed style check
         assert!(fragment_shader.contains("style == 2u")); // Dotted style check
     }
+
+    #[test]
+    fn test_line_accessible_mark_describe_point() {
+        use crate::selection::{AccessibleMark, AttrValue};
+
+        let desc = Line::describe_point(
+            0,
+            2,
+            &[
+                ("start", AttrValue::Vec2([0.0, 0.0])),
+                ("end", AttrValue::Vec2([100.0, 50.0])),
+                ("color", AttrValue::Vec4([0.0, 0.0, 1.0, 1.0])),
+            ],
+        );
+        assert!(desc.contains("Line 1 of 2"));
+        assert!(desc.contains("from (0.0, 0.0)"));
+        assert!(desc.contains("to (100.0, 50.0)"));
+        assert!(desc.contains("color blue"));
+    }
+
+    #[test]
+    fn test_line_accessible_mark_type() {
+        use crate::selection::AccessibleMark;
+        assert_eq!(Line::describe_mark_type(), "line");
+    }
 }

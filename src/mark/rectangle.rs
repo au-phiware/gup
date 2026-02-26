@@ -878,4 +878,29 @@ mod tests {
         assert_eq!(instance.center, [0.1, 0.2]);
         assert_eq!(instance.fill_color, [1.0, 0.0, 0.0, 0.5]);
     }
+
+    #[test]
+    fn test_rectangle_accessible_mark_describe_point() {
+        use crate::selection::{AccessibleMark, AttrValue};
+
+        let desc = Rectangle::describe_point(
+            2,
+            5,
+            &[
+                ("center", AttrValue::Vec2([50.0, 100.0])),
+                ("size", AttrValue::Vec2([20.0, 30.0])),
+                ("fill_color", AttrValue::Vec4([0.0, 1.0, 0.0, 1.0])),
+            ],
+        );
+        assert!(desc.contains("Rectangle 3 of 5"));
+        assert!(desc.contains("at (50.0, 100.0)"));
+        assert!(desc.contains("size 20.0×30.0"));
+        assert!(desc.contains("color green"));
+    }
+
+    #[test]
+    fn test_rectangle_accessible_mark_type() {
+        use crate::selection::AccessibleMark;
+        assert_eq!(Rectangle::describe_mark_type(), "rectangle");
+    }
 }

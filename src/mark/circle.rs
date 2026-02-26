@@ -724,4 +724,29 @@ mod tests {
 
         assert_eq!(instance.center, [0.1, 0.2]);
     }
+
+    #[test]
+    fn test_circle_accessible_mark_describe_point() {
+        use crate::selection::{AccessibleMark, AttrValue};
+
+        let desc = Circle::describe_point(
+            0,
+            3,
+            &[
+                ("center", AttrValue::Vec2([10.0, 20.0])),
+                ("radius", AttrValue::Float(5.0)),
+                ("fill_color", AttrValue::Vec4([1.0, 0.0, 0.0, 1.0])),
+            ],
+        );
+        assert!(desc.contains("Point 1 of 3"));
+        assert!(desc.contains("at (10.0, 20.0)"));
+        assert!(desc.contains("radius 5.0"));
+        assert!(desc.contains("color red"));
+    }
+
+    #[test]
+    fn test_circle_accessible_mark_type() {
+        use crate::selection::AccessibleMark;
+        assert_eq!(Circle::describe_mark_type(), "circle");
+    }
 }
