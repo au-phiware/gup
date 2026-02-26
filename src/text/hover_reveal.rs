@@ -423,6 +423,74 @@ impl HoverRevealState {
     }
 }
 
+/// Computed layout for rendering a tooltip.
+///
+/// Produced by [`compute_tooltip_layout`] and consumed by the rendering code
+/// to draw the background rectangle and position the text.
+#[derive(Debug, Clone)]
+pub struct TooltipLayout {
+    /// Bounding rectangle for the tooltip background (includes padding).
+    pub background_bounds: TextBounds,
+    /// Position for the tooltip text (top-left corner, inside padding).
+    pub text_position: Vec2,
+    /// The text to display.
+    pub text: String,
+    /// Opacity for the tooltip (0.0–1.0).
+    pub opacity: f32,
+}
+
+/// Compute the tooltip layout from an [`ActiveTooltip`] and text measurements.
+///
+/// * `tooltip` — the active tooltip from [`HoverRevealState::active_tooltip`].
+/// * `config` — tooltip configuration for padding.
+/// * `text_width`, `text_height` — measured dimensions of the tooltip text.
+/// * `screen_width`, `screen_height` — viewport dimensions for clamping.
+pub fn compute_tooltip_layout(
+    tooltip: &ActiveTooltip,
+    config: &TooltipConfig,
+    text_width: f32,
+    text_height: f32,
+    screen_width: f32,
+    screen_height: f32,
+) -> TooltipLayout {
+    let total_width = text_width + config.padding_x * 2.0 + config.border_width * 2.0;
+    let total_height = text_height + config.padding_y * 2.0 + config.border_width * 2.0;
+
+    // Start centred on tooltip.position.x, clamped to screen bounds.
+    let mut left = tooltip.position.x - total_width * 0.5;
+    let mut top = tooltip.position.y;
+
+    // Clamp horizontally
+    if left < 0.0 {
+        left = 0.0;
+    }
+    if left + total_width > screen_width {
+        left = (screen_width - total_width).max(0.0);
+    }
+
+    // If tooltip would extend below the screen, flip it above the source.
+    if top + total_height > screen_height {
+        top = tooltip.source_bounds.top - total_height - config.offset_y;
+        if top < 0.0 {
+            top = 0.0;
+        }
+    }
+
+    let background_bounds = TextBounds::new(left, top, left + total_width, top + total_height);
+
+    let text_position = Vec2 {
+        x: left + config.padding_x + config.border_width,
+        y: top + config.padding_y + config.border_width,
+    };
+
+    TooltipLayout {
+        background_bounds,
+        text_position,
+        text: tooltip.text.clone(),
+        opacity: tooltip.opacity,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -702,5 +770,84 @@ mod tests {
         // Re-enter: should resume from current opacity, not restart from 0
         state.update(&reg, 50.0, 10.0, 0.016);
         assert!(state.opacity() >= fade_out_opacity);
+    }
+
+    // ── TooltipLayout tests ─────────────────────────────────────────────
+
+    fn make_active_tooltip(text: &str, x: f32, y: f32, source_bottom: f32) -> ActiveTooltip {
+        ActiveTooltip {
+            text: text.to_string(),
+            position: Vec2 { x, y },
+            opacity: 1.0,
+            source_bounds: make_bounds(x - 50.0, source_bottom - 20.0, x + 50.0, source_bottom),
+        }
+    }
+
+    #[test]
+    fn tooltip_layout_basic_positioning() {
+        let tooltip = make_active_tooltip("Hello", 400.0, 104.0, 100.0);
+        let config = TooltipConfig {
+            padding_x: 6.0,
+            padding_y: 4.0,
+            border_width: 1.0,
+            ..Default::default()
+        };
+        let layout = compute_tooltip_layout(&tooltip, &config, 60.0, 14.0, 800.0, 600.0);
+
+        // Background should include padding and border
+        let expected_w = 60.0 + 6.0 * 2.0 + 1.0 * 2.0; // 74
+        let expected_h = 14.0 + 4.0 * 2.0 + 1.0 * 2.0; // 24
+        assert!((layout.background_bounds.width() - expected_w).abs() < 0.01);
+        assert!((layout.background_bounds.height() - expected_h).abs() < 0.01);
+
+        // Text position should be inside the background with padding offset
+        assert!(layout.text_position.x > layout.background_bounds.left);
+        assert!(layout.text_position.y > layout.background_bounds.top);
+    }
+
+    #[test]
+    fn tooltip_layout_clamp_right() {
+        // Position near right edge of screen
+        let tooltip = make_active_tooltip("text", 790.0, 104.0, 100.0);
+        let config = TooltipConfig::default();
+        let layout = compute_tooltip_layout(&tooltip, &config, 100.0, 14.0, 800.0, 600.0);
+
+        // Should not extend beyond screen right
+        assert!(layout.background_bounds.right <= 800.0);
+    }
+
+    #[test]
+    fn tooltip_layout_clamp_left() {
+        // Position near left edge
+        let tooltip = make_active_tooltip("text", 5.0, 104.0, 100.0);
+        let config = TooltipConfig::default();
+        let layout = compute_tooltip_layout(&tooltip, &config, 100.0, 14.0, 800.0, 600.0);
+
+        assert!(layout.background_bounds.left >= 0.0);
+    }
+
+    #[test]
+    fn tooltip_layout_flip_above_when_near_bottom() {
+        // Position near bottom of screen
+        let tooltip = make_active_tooltip("text", 400.0, 590.0, 586.0);
+        let config = TooltipConfig {
+            offset_y: 4.0,
+            ..Default::default()
+        };
+        let layout = compute_tooltip_layout(&tooltip, &config, 60.0, 14.0, 800.0, 600.0);
+
+        // Should be positioned above the source text
+        assert!(layout.background_bounds.bottom < 586.0);
+    }
+
+    #[test]
+    fn tooltip_layout_preserves_text_and_opacity() {
+        let mut tooltip = make_active_tooltip("Full label text here", 400.0, 104.0, 100.0);
+        tooltip.opacity = 0.75;
+        let config = TooltipConfig::default();
+        let layout = compute_tooltip_layout(&tooltip, &config, 100.0, 14.0, 800.0, 600.0);
+
+        assert_eq!(layout.text, "Full label text here");
+        assert_eq!(layout.opacity, 0.75);
     }
 }
