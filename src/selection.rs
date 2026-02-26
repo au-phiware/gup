@@ -2077,6 +2077,154 @@ mod tests {
         assert!(desc.contains("Circle 0"));
     }
 
+    // --- ARIA registration tests (no GPU) ---
+
+    #[test]
+    fn aria_generate_empty_selection() {
+        let sel = Selection::<(), Circle>::from_data(vec![]);
+        let mut tree = crate::accessibility::aria::AriaTree::new();
+        // We need a mutable selection to call register_aria
+        let mut sel = sel;
+        let root = sel.register_aria(&mut tree);
+
+        let node = tree.get_node(root).unwrap();
+        assert_eq!(node.label, "Circle chart with 0 data points");
+        assert!(node.children.is_empty());
+    }
+
+    #[test]
+    fn aria_generate_with_data_and_bindings() {
+        struct Pt {
+            x: f32,
+            y: f32,
+        }
+
+        let mut sel = Selection::<Pt, Circle>::from_data(vec![
+            Pt { x: 10.0, y: 20.0 },
+            Pt { x: 30.0, y: 40.0 },
+        ]);
+        sel.attr("center", |p: &Pt| [p.x, p.y]);
+        sel.attr("radius", |_: &Pt| 5.0f32);
+
+        let mut tree = crate::accessibility::aria::AriaTree::new();
+        let root = sel.register_aria(&mut tree);
+
+        let node = tree.get_node(root).unwrap();
+        assert_eq!(node.label, "Circle chart with 2 data points");
+        assert_eq!(node.children.len(), 2);
+
+        // Check that child node has point description
+        let child = tree.get_node(node.children[0]).unwrap();
+        assert!(child.label.contains("Point 1 of 2"));
+    }
+
+    #[test]
+    fn aria_no_duplicate_registration() {
+        let mut sel = Selection::<(), Circle>::from_data(vec![]);
+        let mut tree = crate::accessibility::aria::AriaTree::new();
+
+        let root1 = sel.register_aria(&mut tree);
+        assert!(tree.get_node(root1).is_some());
+
+        // Second registration should replace the first
+        let root2 = sel.register_aria(&mut tree);
+        assert!(tree.get_node(root1).is_none(), "old root should be removed");
+        assert!(tree.get_node(root2).is_some());
+    }
+
+    #[test]
+    fn aria_deregister_cleans_up() {
+        let mut sel = Selection::<(), Circle>::from_data(vec![]);
+        let mut tree = crate::accessibility::aria::AriaTree::new();
+
+        let root = sel.register_aria(&mut tree);
+        assert!(tree.get_node(root).is_some());
+
+        sel.deregister_aria(&mut tree);
+        assert!(tree.get_node(root).is_none());
+        assert!(sel.aria_root_node().is_none());
+    }
+
+    #[test]
+    fn aria_opt_out_flag() {
+        let mut sel = Selection::<(), Circle>::from_data(vec![]);
+        assert!(sel.auto_aria());
+
+        sel.set_auto_aria(false);
+        assert!(!sel.auto_aria());
+    }
+
+    #[test]
+    fn aria_truncates_large_datasets() {
+        let data: Vec<u32> = (0..200).collect();
+        let mut sel = Selection::<u32, Circle>::from_data(data);
+        let mut tree = crate::accessibility::aria::AriaTree::new();
+
+        let root = sel.register_aria(&mut tree);
+        let node = tree.get_node(root).unwrap();
+        assert_eq!(node.label, "Circle chart with 200 data points");
+        // 100 point nodes + 1 truncation note = 101
+        assert_eq!(node.children.len(), 101);
+
+        let last = tree.get_node(*node.children.last().unwrap()).unwrap();
+        assert!(last.label.contains("100 more data points"));
+    }
+
+    #[test]
+    fn aria_line_mark_description() {
+        use crate::mark::Line;
+
+        struct Seg {
+            x1: f32,
+            y1: f32,
+            x2: f32,
+            y2: f32,
+        }
+
+        let mut sel = Selection::<Seg, Line>::from_data(vec![Seg {
+            x1: 0.0,
+            y1: 0.0,
+            x2: 10.0,
+            y2: 5.0,
+        }]);
+        sel.attr("start", |s: &Seg| [s.x1, s.y1]);
+        sel.attr("end", |s: &Seg| [s.x2, s.y2]);
+
+        let mut tree = crate::accessibility::aria::AriaTree::new();
+        let root = sel.register_aria(&mut tree);
+
+        let node = tree.get_node(root).unwrap();
+        assert_eq!(node.label, "Line chart with 1 data point");
+        assert_eq!(node.children.len(), 1);
+
+        let child = tree.get_node(node.children[0]).unwrap();
+        assert!(child.label.contains("Line 1 of 1"));
+        assert!(child.label.contains("from (0.0, 0.0)"));
+        assert!(child.label.contains("to (10.0, 5.0)"));
+    }
+
+    #[test]
+    fn aria_rectangle_mark_description() {
+        let mut sel = Selection::<(), Rectangle>::from_data(vec![()]);
+        sel.attr("center", |_: &()| [50.0f32, 100.0]);
+        sel.attr("size", |_: &()| [20.0f32, 30.0]);
+
+        let mut tree = crate::accessibility::aria::AriaTree::new();
+        let root = sel.register_aria(&mut tree);
+
+        let node = tree.get_node(root).unwrap();
+        assert_eq!(node.label, "Rectangle chart with 1 data point");
+
+        let child = tree.get_node(node.children[0]).unwrap();
+        assert!(child.label.contains("Rectangle 1 of 1"));
+        assert!(child.label.contains("at (50.0, 100.0)"));
+        assert!(
+            child.label.contains("20.0×30.0"),
+            "expected size in label: {}",
+            child.label
+        );
+    }
+
     // --- GPU integration tests ---
 
     #[test]

@@ -195,9 +195,10 @@ impl AriaTree {
 
         // Clear focus if it pointed to a removed node.
         if let Some(focus) = self.current_focus
-            && to_remove.contains(&focus) {
-                self.current_focus = None;
-            }
+            && to_remove.contains(&focus)
+        {
+            self.current_focus = None;
+        }
     }
 
     /// Returns the total number of nodes in the tree.
@@ -496,5 +497,49 @@ mod tests {
         assert_eq!(AriaRole::Chart.as_str(), "img");
         assert_eq!(AriaRole::DataPoint.as_str(), "listitem");
         assert_eq!(AriaRole::Control.as_str(), "button");
+    }
+
+    #[test]
+    fn test_remove_subtree() {
+        let mut tree = AriaTree::new();
+        let root = tree.create_chart_node("Root".to_string(), None);
+        let child = tree.add_child(root, AriaNode::new(AriaRole::ChartSeries, "S1".into()));
+        let grandchild = tree.add_child(child, AriaNode::new(AriaRole::DataPoint, "P1".into()));
+
+        assert_eq!(tree.node_count(), 3);
+
+        tree.remove_subtree(child);
+
+        // child and grandchild should be gone
+        assert!(tree.get_node(child).is_none());
+        assert!(tree.get_node(grandchild).is_none());
+        // root should remain but without the child reference
+        assert!(tree.get_node(root).is_some());
+        assert!(tree.get_node(root).unwrap().children.is_empty());
+        assert_eq!(tree.node_count(), 1);
+    }
+
+    #[test]
+    fn test_remove_subtree_root() {
+        let mut tree = AriaTree::new();
+        let root = tree.create_chart_node("Root".to_string(), None);
+        tree.add_child(root, AriaNode::new(AriaRole::DataPoint, "P1".into()));
+
+        tree.remove_subtree(root);
+        assert_eq!(tree.node_count(), 0);
+        assert!(tree.get_root_node().is_none());
+    }
+
+    #[test]
+    fn test_remove_subtree_clears_focus() {
+        let mut tree = AriaTree::new();
+        let root = tree.create_chart_node("Root".to_string(), None);
+        let child = tree.add_child(root, AriaNode::new(AriaRole::DataPoint, "P1".into()));
+
+        tree.set_focus(Some(child));
+        assert_eq!(tree.get_focus(), Some(child));
+
+        tree.remove_subtree(child);
+        assert_eq!(tree.get_focus(), None);
     }
 }
