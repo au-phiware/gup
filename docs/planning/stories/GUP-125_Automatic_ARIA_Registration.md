@@ -150,3 +150,97 @@ rendered, ensuring all visualizations are accessible without additional effort.
 - 3 unit tests for AriaTree.remove_subtree()
 - 6 unit tests for AccessibleMark implementations (2 per mark type)
 - Total: 22 new tests, all passing
+
+## Retrospective
+
+**Completed**: 2025-07-24
+
+### Key Technical Learnings
+
+#### Trait Design for Optional Accessibility
+
+- **Challenge**: Making ARIA registration automatic without requiring all marks
+  to implement AccessibleMark
+- **Solution**: Separate `AccessibleMark` trait (not bound on Mark) that marks
+  opt into. `sync_aria_from_context()` requires `M: AccessibleMark` at the call
+  site, so non-accessible marks compile fine but don't get automatic ARIA.
+- **Pattern**: Opt-in trait extension — keep the base trait minimal, add
+  capabilities via additional trait impls.
+
+#### Borrow Checker and Arc<Mutex> Dance
+
+- **Challenge**: `sync_aria_from_context` needs to read `self.context`
+  (immutable borrow) to get the accessibility system, then call `register_aria`
+  which needs `&mut self`.
+- **Solution**: Clone the `Arc<Mutex<AccessibilitySystem>>` before the mutable
+  borrow, releasing the immutable reference to `self.context`.
+- **Pattern**: When you need to extract a shared reference from a struct and
+  then mutate the same struct, clone the Arc first to decouple the borrows.
+
+#### Drop Implementation for GPU Resources
+
+- **Challenge**: Automatically deregistering ARIA trees when a Selection is
+  dropped requires access to the accessibility system, which lives behind an
+  `Arc<Mutex<>>` in the RenderContext.
+- **Solution**: The Drop impl extracts the accessibility Arc from the context
+  (if present), locks it, and removes the subtree. This is safe because Drop
+  runs synchronously and the lock is released immediately.
+- **Pattern**: Drop implementations can safely use `Arc<Mutex<>>` for cleanup,
+  as long as the lock operation is non-blocking (try_lock) or guaranteed to not
+  deadlock.
+
+### Architectural Decisions
+
+#### AccessibleMark as Separate Trait
+
+- **Decision**: Made `AccessibleMark` a separate trait from `Mark` rather than
+  adding methods to Mark itself
+- **Reasoning**: Not all mark types need accessibility descriptions (e.g.,
+  internal composite marks). Separate trait avoids cluttering the Mark
+  interface.
+- **Trade-off**: Users must implement two traits for accessible marks, but this
+  is explicit and intentional
+- **Future**: Could add a derive macro `#[derive(AccessibleMark)]` for common
+  patterns
+
+#### Registration via sync_aria_from_context vs Fully Automatic
+
+- **Decision**: Provide `sync_aria_from_context()` that the user calls
+  explicitly, rather than hooking into prepare_render automatically
+- **Reasoning**: prepare_render doesn't require `M: AccessibleMark`, so we can't
+  call AccessibleMark methods from it without specialization. The explicit call
+  is one line and gives the user control over timing.
+- **Trade-off**: Not fully automatic — user must call sync_aria_from_context().
+  But this avoids Rust's specialization limitations.
+- **Future**: When Rust gets specialization, could make prepare_render auto-call
+  when the bound is satisfied
+
+#### AriaTree Subtree Management
+
+- **Decision**: Added `remove_subtree()` to AriaTree rather than per-node
+  removal
+- **Reasoning**: ARIA trees for selections are always rooted subtrees — removing
+  individual nodes would leave orphans. Subtree removal is the correct
+  abstraction.
+- **Trade-off**: Slightly more expensive than node removal (BFS traversal), but
+  correct and simple
+- **Future**: Could optimise with parent pointers if tree gets large
+
+### Development Workflow Insights
+
+- **Incremental approach worked well**: Built the trait, then implementations,
+  then integration, then lifecycle — each increment was compilable and testable
+- **Colour naming is surprisingly tricky**: Simple RGB thresholds work for
+  primary colours but miss many real-world colours. Good enough for MVP.
+- **GPU tests are stable**: All GPU tests ran consistently on first try with
+  --test-threads=1
+- **Pre-existing flaky test**: `test_transform_to_matrix_performance` in
+  mark_performance_tests is flaky and not related to this story
+
+### Follow-up Stories
+
+1. **GUP-126: Reactive ARIA Updates** — Automatically update ARIA tree when
+   selection data changes (already planned in INDEX.md)
+2. **GUP-127: Focus Element for Data Points** — Create focusable elements for
+   each mark instance to enable keyboard navigation (already planned in
+   INDEX.md)
