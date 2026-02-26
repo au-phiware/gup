@@ -106,3 +106,76 @@ existing bind group layout extension is straightforward.
   verifies non-white pixel ratio ≈2.0 (pixel-consistent strokes)
 
 _Identified during GUP-166 retrospective (2025-07-17)._
+
+## Retrospective
+
+**Completed**: 2025-07-18
+
+### Key Technical Learnings
+
+#### Pixel-to-Clip Conversion via Geometric Mean
+
+- **Challenge**: The box plot SDF operates in clip space where x and y axes can
+  map to different physical pixel sizes (non-square viewports). Stroke widths and
+  circle radii need a single conversion factor from pixels to clip-space for
+  isotropic rendering.
+- **Solution**: Use the geometric mean of per-axis conversion factors:
+  `px2clip_iso = sqrt((2/width) * (2/height))`. This gives consistent visual
+  results for mixed-axis distance calculations (e.g., outlier circles, diagonal
+  SDF edges).
+- **Pattern**: For marks that mix distances from both axes in SDF calculations,
+  geometric mean is the correct isotropic conversion. For purely axis-aligned
+  features, per-axis factors would be more precise but the visual difference is
+  negligible for typical stroke widths (1–4 pixels).
+
+#### Bind Group Layout Extension for Viewport Uniform
+
+- **Challenge**: All current marks (Circle, Rectangle, Line, BoxPlot, Path) use
+  custom shaders, so the bind group layout only had binding 0 (instance storage).
+  Adding viewport at binding 1 was straightforward.
+- **Solution**: Modified `create_bind_group_layout()` to add viewport uniform
+  at binding 1 for all marks with custom shaders. This establishes the pattern
+  for future Circle/Rectangle pixel-space implementation.
+- **Pattern**: Adding a new uniform to all marks is low-cost (8 bytes per
+  Selection). The bind group includes the viewport buffer regardless of whether
+  the mark's shader references it (wgpu allows unused bindings).
+
+### Architectural Decisions
+
+#### Viewport Buffer Stored in SelectionRenderState
+
+- **Decision**: Store the viewport buffer as `Option<wgpu::Buffer>` in
+  `SelectionRenderState` rather than passing it as a separate bind group.
+- **Reasoning**: Keeps the existing single-bind-group architecture. The viewport
+  buffer must outlive the bind group, so storing it alongside the instance buffer
+  is natural.
+- **Trade-off**: The viewport buffer is created with a default size (800×600)
+  and updated via `queue.write_buffer()`. If `set_viewport_size()` is never
+  called, the defaults work reasonably well.
+- **Future**: When Circle and Rectangle marks adopt pixel-space strokes, they
+  can use the same viewport buffer at binding 1 with zero infrastructure changes.
+
+#### Geometric Mean vs Per-Axis Conversion
+
+- **Decision**: Use a single isotropic conversion factor (`px2clip_iso`) for all
+  SDF calculations rather than per-axis factors.
+- **Reasoning**: The SDF code mixes distances from both axes (e.g.,
+  `edge = min(edge_x, edge_y)`, outlier `length(vec2(...))`). Per-axis factors
+  would require restructuring the entire SDF to separate x and y comparisons.
+- **Trade-off**: On very non-square viewports (e.g., 400×1600), strokes may
+  appear slightly anisotropic. This is acceptable for typical chart aspect ratios
+  (4:3, 16:9).
+- **Future**: If per-axis precision becomes important, the SDF could be rewritten
+  to convert all coordinates to pixel space before distance calculations.
+
+### Development Workflow Insights
+
+- The wgpu v26 API changes caught me: `PollType::Wait` (not `Maintain::Wait`)
+  and `depth_slice: None` are required on `RenderPassColorAttachment`. Searching
+  existing code for usage patterns (e.g., `grep device.poll`) was faster than
+  checking documentation.
+- The `COPY_BYTES_PER_ROW_ALIGNMENT` (256 bytes) requirement meant I had to use
+  256×256 and 512×512 textures for the readback test (where row_bytes is
+  naturally 256-byte aligned) rather than arbitrary sizes like 400×400.
+- The story was well-scoped: 3 shader files, 2 Rust files for infrastructure,
+  1 demo update. Total implementation was ~3 commits after the status change.
