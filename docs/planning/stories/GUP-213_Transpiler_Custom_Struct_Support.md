@@ -79,8 +79,8 @@ largely in place through prior work on GUP-061 and GUP-064-B. This story
 validated, tested, and documented the end-to-end integration:
 
 1. **Type recognition**: `rust_type_to_wgsl_string()` in `shader_fn.rs` already
-   passes through unknown type names, and `is_custom_type()` correctly identifies
-   non-primitive types. No code changes were needed.
+   passes through unknown type names, and `is_custom_type()` correctly
+   identifies non-primitive types. No code changes were needed.
 
 2. **WGSL struct definition inclusion**: `generate_wgsl()` in the generated
    `ComposableShaderFunction` impl queries `ShaderType::wgsl_type_definition()`
@@ -120,10 +120,11 @@ validated, tested, and documented the end-to-end integration:
   infrastructure.
 - **Solution**: The `rust_type_to_wgsl_string()` function already passes through
   unknown type names as-is, `is_custom_type()` already identifies non-primitive
-  types, and `generate_wgsl()` already queries `ShaderType::wgsl_type_definition()`
-  for custom types. The primary work was validation and testing.
-- **Pattern**: When a story's implementation path looks surprisingly clear, it may
-  be because prior stories (GUP-061, GUP-064-B) already laid the groundwork.
+  types, and `generate_wgsl()` already queries
+  `ShaderType::wgsl_type_definition()` for custom types. The primary work was
+  validation and testing.
+- **Pattern**: When a story's implementation path looks surprisingly clear, it
+  may be because prior stories (GUP-061, GUP-064-B) already laid the groundwork.
   Always check existing code before assuming new code is needed.
 
 #### Field Access Transpilation for Uniform vs Input Parameters
@@ -133,8 +134,8 @@ validated, tested, and documented the end-to-end integration:
   `param_name.field_name`.
 - **Solution**: The `RustToWgsl` converter already distinguishes between uniform
   params (in the `uniform_params` HashSet) and the input param. The converter
-  wraps uniform parameter references with `uniforms.` prefix, and field access on
-  uniform params becomes `uniforms.param.field`.
+  wraps uniform parameter references with `uniforms.` prefix, and field access
+  on uniform params becomes `uniforms.param.field`.
 - **Pattern**: The uniform parameter transformation is a two-level operation:
   bare reference `config` → `uniforms.config`, and field access `config.scale` →
   `uniforms.config.scale`.
@@ -143,9 +144,9 @@ validated, tested, and documented the end-to-end integration:
 
 - **Challenge**: The generated uniform struct embeds custom types directly, so
   they must satisfy `bytemuck::Pod + Zeroable`.
-- **Solution**: `#[derive(WgslStruct)]` already requires and derives these traits,
-  so any type usable as a `WgslStruct` is automatically compatible as a uniform
-  struct field.
+- **Solution**: `#[derive(WgslStruct)]` already requires and derives these
+  traits, so any type usable as a `WgslStruct` is automatically compatible as a
+  uniform struct field.
 - **Pattern**: The `WgslStruct` derive macro enforces both `#[repr(C)]` and the
   bytemuck traits, making the type system enforce GPU compatibility at compile
   time.
@@ -157,9 +158,10 @@ validated, tested, and documented the end-to-end integration:
 - **Decision**: Implement as a validation and test story rather than a feature
   development story.
 - **Reasoning**: The existing infrastructure already supported custom structs.
-  Adding tests and documentation was more valuable than refactoring working code.
-- **Trade-off**: No new APIs or features were added, but confidence in the system
-  was significantly increased through comprehensive testing.
+  Adding tests and documentation was more valuable than refactoring working
+  code.
+- **Trade-off**: No new APIs or features were added, but confidence in the
+  system was significantly increased through comprehensive testing.
 - **Future**: This pattern of "validation stories" should be considered when a
   feature is believed to work but lacks test coverage.
 

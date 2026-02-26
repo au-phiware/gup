@@ -71,10 +71,12 @@ descriptions.
 
 ## Success Metrics
 
-- 90%+ accuracy on common data visualization colors ✅ (Tableau 10 palette passes 100%)
+- 90%+ accuracy on common data visualization colors ✅ (Tableau 10 palette
+  passes 100%)
 - <1ms overhead per color conversion ✅ (pure arithmetic, nanosecond range)
 - Handles all CSS named colors correctly ✅ (validated in tests)
-- Screen reader feedback indicates better comprehension ✅ (14 distinct names vs 7)
+- Screen reader feedback indicates better comprehension ✅ (14 distinct names
+  vs 7)
 
 ## Definition of Done
 
@@ -91,14 +93,16 @@ descriptions.
 1. **`src/color_descriptor.rs`** — New module with:
    - `Hsl` struct for HSL colour representation
    - `rgba_to_hsl()` — RGBA to HSL conversion
-   - `describe_color()` — Basic naming returning one of 14 distinct `&'static str` names
-   - `describe_color_detailed()` — Detailed naming with lightness/saturation qualifiers
+   - `describe_color()` — Basic naming returning one of 14 distinct
+     `&'static str` names
+   - `describe_color_detailed()` — Detailed naming with lightness/saturation
+     qualifiers
    - `ColorNamer` trait — Extensible custom naming scheme support
    - `describe_color_with()` — Custom namer with fallback to defaults
 
-2. **Mark AccessibleMark updates** — Circle, Rectangle, and Line marks updated to
-   use the shared `color_descriptor::describe_color()`, eliminating 3 duplicate
-   private functions.
+2. **Mark AccessibleMark updates** — Circle, Rectangle, and Line marks updated
+   to use the shared `color_descriptor::describe_color()`, eliminating 3
+   duplicate private functions.
 
 3. **Public API re-exports** — `Hsl`, `rgba_to_hsl`, `describe_color`,
    `describe_color_detailed`, `ColorNamer`, `describe_color_with` all exported
@@ -139,17 +143,17 @@ descriptions.
   (light magenta/red-ish).
 - **Pattern**: When mapping a continuous perceptual dimension to discrete
   categories, start with the obvious primary/secondary ranges, then add
-  perceptual special cases as test-driven overrides. The order of checks matters:
-  achromatic → pink → brown → hue name.
+  perceptual special cases as test-driven overrides. The order of checks
+  matters: achromatic → pink → brown → hue name.
 
 #### Perceptual vs Spectral Colour Categories
 
 - **Challenge**: Some common colour names (brown, pink) don't correspond to
   unique hue ranges — they emerge from combinations of hue + lightness +
   saturation. Pure hue-based naming misses these.
-- **Solution**: Check for brown (dark, warm, moderate saturation in orange–yellow
-  range) and pink (light, warm, in magenta–red range) before falling through to
-  the generic hue name.
+- **Solution**: Check for brown (dark, warm, moderate saturation in
+  orange–yellow range) and pink (light, warm, in magenta–red range) before
+  falling through to the generic hue name.
 - **Pattern**: Perceptual colour categories need multi-dimensional checks (hue +
   lightness + saturation), not just single-axis thresholds.
 
@@ -159,9 +163,9 @@ descriptions.
 
 - **Decision**: Created `src/color_descriptor.rs` as a top-level module rather
   than nesting under `accessibility/`.
-- **Reasoning**: Colour description is a general-purpose utility used by multiple
-  mark types. Placing it at the crate root makes it discoverable and avoids
-  coupling it to the accessibility subsystem.
+- **Reasoning**: Colour description is a general-purpose utility used by
+  multiple mark types. Placing it at the crate root makes it discoverable and
+  avoids coupling it to the accessibility subsystem.
 - **Trade-off**: Slightly more top-level modules, but better separation of
   concerns.
 - **Future**: Could be used by chart builders, legends, or debugging tools — not

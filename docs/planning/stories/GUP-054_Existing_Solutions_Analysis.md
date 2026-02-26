@@ -281,11 +281,11 @@ significantly increase the likelihood of implementation success.
 
 ### Key Files Changed
 
-| File                                 | Change                      |
-| ------------------------------------ | --------------------------- |
+| File                                  | Change                     |
+| ------------------------------------- | -------------------------- |
 | `docs/existing-solutions-analysis.md` | New: comprehensive report  |
-| `docs/README.md`                     | Updated: added report link  |
-| `docs/planning/stories/INDEX.md`    | Updated: story status       |
+| `docs/README.md`                      | Updated: added report link |
+| `docs/planning/stories/INDEX.md`      | Updated: story status      |
 
 ## Retrospective
 
@@ -295,11 +295,10 @@ significantly increase the likelihood of implementation success.
 
 #### Research Story Execution Pattern
 
-- **Challenge**: This research story (GUP-054) was written as a prerequisite
-  for the implementation stories (GUP-055 through GUP-062), but the
-  implementation was completed first. The story needed to be completed
-  retrospectively, synthesising the research that was done organically during
-  implementation.
+- **Challenge**: This research story (GUP-054) was written as a prerequisite for
+  the implementation stories (GUP-055 through GUP-062), but the implementation
+  was completed first. The story needed to be completed retrospectively,
+  synthesising the research that was done organically during implementation.
 - **Solution**: Treated the story as a documentation consolidation task —
   gathering research findings scattered across multiple story retrospectives,
   research documents, and implementation decisions into a single comprehensive
@@ -312,8 +311,8 @@ significantly increase the likelihood of implementation success.
 #### Weighted Comparison Methodology
 
 - **Challenge**: Comparing fundamentally different approaches (compiler
-  backends, macro-based generators, eDSLs, runtime systems) on a common scale
-  is inherently subjective.
+  backends, macro-based generators, eDSLs, runtime systems) on a common scale is
+  inherently subjective.
 - **Solution**: Used Gup's explicit design constraints (zero runtime overhead,
   library-friendly, etc.) as weighted criteria. This made the evaluation
   objective relative to Gup's specific requirements, even though the weights
@@ -350,8 +349,8 @@ significantly increase the likelihood of implementation success.
 - **Trade-off**: Cannot directly target non-WebGPU backends (Vulkan, OpenCL),
   but this is handled by wgpu's naga integration.
 - **Future**: If Gup ever needs to target compute frameworks outside of wgpu
-  (e.g., native Vulkan, CUDA), the SPIR-V question should be revisited. For
-  the foreseeable future, wgpu is the only target.
+  (e.g., native Vulkan, CUDA), the SPIR-V question should be revisited. For the
+  foreseeable future, wgpu is the only target.
 
 #### Syntax-Level Transpilation over Semantic Analysis
 
@@ -373,8 +372,8 @@ significantly increase the likelihood of implementation success.
 - **Linking research documents matters**: Adding navigation links from
   `docs/README.md` to the analysis report ensures the research is discoverable
   and not orphaned.
-- **Pre-existing flaky test**: The `test_cache_hit_is_significantly_faster`
-  test in `grid_performance_validation_tests.rs` is flaky — it failed during
+- **Pre-existing flaky test**: The `test_cache_hit_is_significantly_faster` test
+  in `grid_performance_validation_tests.rs` is flaky — it failed during
   validation but is unrelated to our changes (it's a timing-sensitive
   performance assertion). This is a known issue.
 

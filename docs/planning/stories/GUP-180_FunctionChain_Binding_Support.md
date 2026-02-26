@@ -99,3 +99,102 @@ the output type (e.g., `f32 → vec4<f32>`):
 - **New GPU tests**: full pipeline render with
   `linear_scale.compose(color_map)`, type safety rejection for mismatched chain
   output
+
+## Retrospective
+
+**Completed**: 2025-07-23
+
+### Key Technical Learnings
+
+#### Self-Contained WGSL Generation for Composed Functions
+
+- **Challenge**: `FunctionChain::generate_wgsl()` only returned the
+  `composed_chain()` wrapper function. When injected into a vertex shader via
+  `attr_shader()`, the component functions (`linear_scale()`, `color_map()`)
+  were undefined, causing WGSL compilation failure.
+- **Solution**: Override `generate_wgsl()` to emit all component functions
+  first, then the composed wrapper. Each function's WGSL is obtained by calling
+  `generate_wgsl()` on the inner functions recursively.
+- **Pattern**: When serialising composed structures to a flat representation
+  (type-erased `ShaderFnInfo`), ensure all transitive dependencies are included.
+  A composed function's WGSL must be self-contained.
+
+#### Type-Mismatched Input/Output in Shader Function Chains
+
+- **Challenge**: A chain like `LinearScale (f32→f32) → ColorMap (f32→vec4)`
+  bound to `fill_color` (vec4 field) has input type `f32` but the instance field
+  is `vec4<f32>`. The raw `f32` value cannot be stored in a `vec4` field without
+  conversion, and the WGSL cannot read `instance.fill_color` (vec4) and pass it
+  to a function expecting `f32`.
+- **Solution**: Two-sided conversion — `widen_attr_value()` pads the raw value
+  to match the field type on the CPU side (e.g., `f32` → `[f32, 0, 0, 0]`), and
+  `narrow_field_expr()` generates WGSL that extracts the correct component on
+  the GPU side (e.g., `instance.fill_color.x`).
+- **Pattern**: When pipeline input and output types differ, handle conversions
+  symmetrically: widen at the storage boundary, narrow at the consumption
+  boundary.
+
+#### `#[repr(C)]` for GPU-Facing Structs
+
+- **Challenge**: `ChainUniforms<A, B>` lacked `#[repr(C)]`, meaning Rust could
+  reorder fields. The WGSL struct definition assumed `first` then `second`
+  ordering, which could disagree with the Rust layout.
+- **Solution**: Added `#[repr(C)]` to guarantee field ordering matches WGSL.
+- **Pattern**: All structs that are uploaded to GPU buffers via `bytemuck` must
+  use `#[repr(C)]`. This is a recurring theme (GUP-013 documented similar
+  alignment issues).
+
+### Architectural Decisions
+
+#### Type Conversion at Binding Boundaries
+
+- **Decision**: Added `widen_attr_value()` and `narrow_field_expr()` to handle
+  type mismatches between shader function input type and instance field type.
+- **Reasoning**: The existing design stores raw data in the instance struct's
+  existing fields. When a chain's input type is narrower than the field type, we
+  need conversion on both the CPU side (widening for storage) and GPU side
+  (narrowing for consumption).
+- **Trade-off**: Only supports widening to wider types (f32→vec2, f32→vec4,
+  vec2→vec4). Arbitrary type conversions are not supported.
+- **Future**: If more complex type relationships are needed (e.g., vec3→vec4, or
+  custom struct types), additional conversion patterns could be added.
+
+#### Nested Struct Definitions in ShaderUniform
+
+- **Decision**: `ChainUniforms::wgsl_struct_definition()` now includes nested
+  uniform struct definitions, making the output self-contained.
+- **Reasoning**: The `generate_shader_bound_vertex_wgsl` function emits one
+  struct definition per binding. For a chain, a single call to
+  `wgsl_struct_definition()` must produce all the types needed.
+- **Trade-off**: If two chains share a component type (e.g., both use
+  `LinearScaleUniforms`), the struct definition could be emitted twice. The WGSL
+  code deduplicates function definitions but not struct definitions. This would
+  need a deduplication pass if multiple chain bindings are used simultaneously.
+- **Future**: A struct deduplication layer in the WGSL generation could prevent
+  redefinition errors when multiple chain bindings share component types.
+
+### Development Workflow Insights
+
+- The story was nominally low-risk ("just needs testing") but actually had three
+  distinct bugs that would have caused GPU shader compilation failures. This
+  validates the story's premise that explicit testing was needed.
+- The `ShaderFnInfo` type-erasure boundary is where most composition bugs
+  manifest. The serialisation from generic types to flat strings/bytes loses
+  structural information (nested functions, nested uniforms) that must be
+  explicitly flattened.
+- `narrow_field_expr()` and `widen_attr_value()` are small focused functions
+  that make the type conversion logic easy to test and extend.
+
+### Follow-up Stories
+
+1. **GUP-214: Duplicate Struct Definition Prevention** — When multiple shader
+   function bindings share component types (e.g., two different chains both
+   using `LinearScaleUniforms`), the generated WGSL may contain duplicate struct
+   definitions. Add a deduplication pass to `generate_shader_bound_vertex_wgsl`
+   that tracks emitted struct names and skips duplicates.
+
+2. **GUP-215: Deep Chain Binding Support** — Currently only two-level chains
+   (`A.compose(B)`) are tested. Validate that deeper chains
+   (`A.compose(B).compose(C)`) work correctly with `attr_shader()`, including
+   nested `ChainUniforms<ChainUniforms<A, B>, C>` serialisation and WGSL
+   generation.
