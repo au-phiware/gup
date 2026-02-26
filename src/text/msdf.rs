@@ -655,6 +655,12 @@ impl Contour {
 
     /// Apply edge coloring to this contour
     /// Uses the simple algorithm: cycle between magenta, cyan, yellow
+    ///
+    /// For special cases:
+    /// - **Smooth blob** (no sharp corners): all edges keep WHITE (single-channel equivalent)
+    /// - **Teardrop** (one sharp corner): synthetic corner inserted at the point
+    ///   *furthest* from the cusp so the two edge groups are geometrically balanced
+    /// - **Standard** (≥2 sharp corners): colours cycle normally at each corner
     pub fn apply_edge_coloring(&mut self, angle_threshold: f32) {
         if self.edges.is_empty() {
             return;
@@ -687,9 +693,26 @@ impl Contour {
             return;
         }
         let first_edge = first_edge.unwrap();
-        // If only one edge (teardrop), arbitrarily create two half-edges
+        // Teardrop handling: if only one corner, insert a synthetic corner
+        // at the edge whose start point is *furthest* from the cusp.
+        // This gives the two colour regions roughly equal geometric extent.
         if !starter.any(|&c| c) {
-            is_corner[(first_edge + self.edges.len() / 2) % self.edges.len()] = true;
+            let cusp_pos = self.edges[first_edge].start_point();
+            let best = self
+                .edges
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| *i != first_edge)
+                .max_by(|(_, a), (_, b)| {
+                    let da = a.start_point().distance_squared_to(&cusp_pos);
+                    let db = b.start_point().distance_squared_to(&cusp_pos);
+                    da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+                });
+            let split_idx = best.map_or(
+                (first_edge + self.edges.len() / 2) % self.edges.len(),
+                |(i, _)| i,
+            );
+            is_corner[split_idx] = true;
         }
 
         // Color cycling: magenta -> cyan -> yellow -> cyan -> yellow...
@@ -1183,6 +1206,17 @@ impl MsdfGenerator {
             .glyph_index(c)
             .ok_or_else(|| GupError::resource_error(format!("Glyph not found for '{c}'")))?;
         self.generate_msdf(glyph_id)
+    }
+
+    /// Create an MSDF generator from a [`MultiChannelSdfConfig`].
+    ///
+    /// This is a convenience constructor that converts the high-level config
+    /// to the internal [`MsdfConfig`] used for generation.
+    pub fn from_multi_channel_config(
+        font_data: Vec<u8>,
+        config: &MultiChannelSdfConfig,
+    ) -> GupResult<Self> {
+        Self::new(font_data, config.to_msdf_config())
     }
 }
 
@@ -2540,6 +2574,139 @@ mod tests {
         assert!(
             (val - 0.4).abs() < 0.01,
             "Reconstructed median should be 0.4, got {val}"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Edge coloring enhancement tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_teardrop_coloring_splits_at_furthest() {
+        // Build a teardrop-like contour: a sharp cusp at (0,0) followed by
+        // a smooth arc. The synthetic split should land near the opposite side
+        // of the arc (at about 180° from the cusp).
+        let mut contour = Contour::new();
+        let n = 12;
+        // Cusp edges: two edges meeting at a sharp angle at (0,0)
+        contour.add_edge(EdgeSegment {
+            edge_type: EdgeType::Line {
+                start: Point::new(-3.0, -5.0),
+                end: Point::new(0.0, 0.0),
+            },
+            color: EdgeColor::WHITE,
+        });
+        contour.add_edge(EdgeSegment {
+            edge_type: EdgeType::Line {
+                start: Point::new(0.0, 0.0),
+                end: Point::new(3.0, -5.0),
+            },
+            color: EdgeColor::WHITE,
+        });
+        // Smooth arc connecting the two legs
+        for i in 0..n {
+            let a0 = -std::f32::consts::PI / 3.0
+                + std::f32::consts::PI * (2.0 / 3.0) * i as f32 / n as f32;
+            let a1 = -std::f32::consts::PI / 3.0
+                + std::f32::consts::PI * (2.0 / 3.0) * (i + 1) as f32 / n as f32;
+            let start = if i == 0 {
+                Point::new(3.0, -5.0)
+            } else {
+                Point::new(a0.cos() * 10.0, a0.sin() * 10.0 - 15.0)
+            };
+            let end = if i == n - 1 {
+                Point::new(-3.0, -5.0)
+            } else {
+                Point::new(a1.cos() * 10.0, a1.sin() * 10.0 - 15.0)
+            };
+            contour.add_edge(EdgeSegment {
+                edge_type: EdgeType::Line { start, end },
+                color: EdgeColor::WHITE,
+            });
+        }
+
+        contour.apply_edge_coloring(0.3);
+
+        // The cusp should have different colours on each side
+        let c0 = contour.edges[0].color;
+        let c1 = contour.edges[1].color;
+        assert_ne!(
+            c0, c1,
+            "Edges flanking the cusp should have different colours"
+        );
+
+        // All edges should have valid 2-channel colours (not WHITE)
+        for edge in &contour.edges {
+            let count = edge.color.r as u8 + edge.color.g as u8 + edge.color.b as u8;
+            assert_eq!(
+                count, 2,
+                "Edge should have exactly 2 channels set, got {count}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_msdf_generator_from_multi_channel_config() {
+        let data = load_test_font_data();
+        let config = MultiChannelSdfConfig {
+            max_distance: 6.0,
+            sharp_corner_threshold: 0.5,
+            max_channels: 3,
+            combination_mode: ChannelCombinationMode::Min,
+            glyph_size: 64.0,
+            padding: 8,
+        };
+        let msdf_gen = MsdfGenerator::from_multi_channel_config(data, &config);
+        assert!(msdf_gen.is_ok());
+        let msdf_gen = msdf_gen.unwrap();
+        let msdf = msdf_gen.generate_msdf_for_char('K');
+        assert!(msdf.is_ok());
+        let msdf = msdf.unwrap();
+        assert!(msdf.width > 0);
+        assert!(msdf.height > 0);
+    }
+
+    #[test]
+    fn test_combination_modes_differ_at_corners() {
+        // Generate MSDF for 'V' (sharp bottom corner) and verify that
+        // median and min reconstructions differ near the corner.
+        let data = load_test_font_data();
+        let msdf_gen = MsdfGenerator::new(data, MsdfConfig::default()).unwrap();
+        let msdf = msdf_gen.generate_msdf_for_char('V').unwrap();
+
+        let mut median_vals = Vec::new();
+        let mut min_vals = Vec::new();
+        let mut max_vals = Vec::new();
+
+        for y in 0..msdf.height {
+            for x in 0..msdf.width {
+                let r = msdf.red_channel.get(x, y);
+                let g = msdf.green_channel.get(x, y);
+                let b = msdf.blue_channel.get(x, y);
+                median_vals.push(median_f32(r, g, b));
+                min_vals.push(r.min(g).min(b));
+                max_vals.push(r.max(g).max(b));
+            }
+        }
+
+        // median and min/max should not be identical everywhere when
+        // edge coloring creates channel differences
+        let differs_min = median_vals
+            .iter()
+            .zip(min_vals.iter())
+            .any(|(m, n)| (m - n).abs() > 0.01);
+        let differs_max = median_vals
+            .iter()
+            .zip(max_vals.iter())
+            .any(|(m, n)| (m - n).abs() > 0.01);
+
+        assert!(
+            differs_min,
+            "Median and min should differ for a glyph with sharp corners"
+        );
+        assert!(
+            differs_max,
+            "Median and max should differ for a glyph with sharp corners"
         );
     }
 }
