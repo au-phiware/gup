@@ -521,6 +521,103 @@ pub struct AxisLabel {
     pub value: f64,
 }
 
+/// Per-instance data for GPU-instanced tick mark rendering.
+///
+/// Instead of generating two vertices per tick (a `LineList` pair),
+/// instanced rendering uses a single base line segment that is replicated
+/// by the GPU for each tick. The `TickInstance` provides the per-tick
+/// parameters: where to place the tick on the axis and how long/directed
+/// it should be.
+///
+/// # Layout
+///
+/// The struct is `#[repr(C)]` with [`bytemuck::Pod`] so it can be uploaded
+/// directly to a GPU instance buffer.
+///
+/// # Usage
+///
+/// ```rust
+/// use gup::axis::{AxisRenderer, AxisBounds, AxisConfiguration, AxisPosition, TickInstance};
+/// use gup::shader_function::Vec2;
+///
+/// let renderer = AxisRenderer::new();
+/// let bounds = AxisBounds::new(
+///     Vec2 { x: -0.8, y: -0.8 },
+///     Vec2 { x: 0.8, y: -0.8 },
+///     50.0,
+/// );
+/// let config = AxisConfiguration::default();
+///
+/// let instances = renderer.generate_tick_instances(
+///     &bounds,
+///     &config,
+///     AxisPosition::Bottom,
+///     None,
+///     (800.0, 600.0),
+/// );
+///
+/// // Each tick is one instance instead of two vertices
+/// assert!(instances.len() <= 12); // ≤ 6 major + 6 minor (if enabled)
+/// ```
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct TickInstance {
+    /// NDC position on the axis line where the tick starts.
+    pub position: [f32; 2],
+    /// Direction and length of the tick in NDC units.
+    ///
+    /// The base geometry is a line from `position` to
+    /// `position + tick_vector`.
+    pub tick_vector: [f32; 2],
+    /// RGBA colour of this tick mark.
+    pub color: [f32; 4],
+}
+
+impl TickInstance {
+    /// Byte size of a single instance (for GPU buffer stride).
+    pub const SIZE: u64 = std::mem::size_of::<Self>() as u64;
+
+    /// Create a new tick instance.
+    pub fn new(position: [f32; 2], tick_vector: [f32; 2], color: [f32; 4]) -> Self {
+        Self {
+            position,
+            tick_vector,
+            color,
+        }
+    }
+
+    /// `wgpu::VertexBufferLayout` describing the per-instance attributes.
+    ///
+    /// Use this alongside the base vertex buffer layout when creating an
+    /// instanced render pipeline for tick marks.
+    pub fn instance_buffer_layout() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: Self::SIZE,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &[
+                // @location(1) position: vec2<f32>
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                // @location(2) tick_vector: vec2<f32>
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 2]>() as u64,
+                    shader_location: 2,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                // @location(3) color: vec4<f32>
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 4]>() as u64,
+                    shader_location: 3,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+            ],
+        }
+    }
+}
+
 /// Axis renderer that generates vertex data for GPU rendering.
 ///
 /// `AxisRenderer` produces `Vec<Vertex>` data (using `LineList` topology)
@@ -808,7 +905,140 @@ impl AxisRenderer {
         vertices
     }
 
-    /// Generate label data for axis tick labels.
+    /// Generate per-instance data for instanced tick rendering.
+    ///
+    /// This is the instanced counterpart to
+    /// [`generate_tick_vertices`](Self::generate_tick_vertices). Instead of
+    /// producing two `Vertex` entries per tick, it produces one
+    /// [`TickInstance`] per tick. A single base line segment (two vertices at
+    /// `t = 0.0` and `t = 1.0`) is drawn once by the GPU and instanced
+    /// across all tick positions using this per-instance data.
+    ///
+    /// # Vertex count comparison
+    ///
+    /// | Approach | Data per tick | Draw calls |
+    /// |----------|--------------|------------|
+    /// | Vertex pairs (`generate_tick_vertices`) | 2 × `Vertex` (48 B) | 1 |
+    /// | Instanced (`generate_tick_instances`) | 1 × `TickInstance` (32 B) | 1 per tick type |
+    ///
+    /// # Parameters
+    ///
+    /// Same as [`generate_axis_vertices`](Self::generate_axis_vertices).
+    ///
+    /// # Returns
+    ///
+    /// A `Vec<TickInstance>` containing one entry per visible tick. Major
+    /// and minor ticks are interleaved in the output (major first, then
+    /// minor). If separate draw calls per tick type are desired, use
+    /// [`generate_major_tick_instances`](Self::generate_major_tick_instances)
+    /// and [`generate_minor_tick_instances`](Self::generate_minor_tick_instances).
+    pub fn generate_tick_instances(
+        &self,
+        bounds: &AxisBounds,
+        config: &AxisConfiguration,
+        position: AxisPosition,
+        scale: Option<&dyn Scale>,
+        viewport_size: (f32, f32),
+    ) -> Vec<TickInstance> {
+        let mut instances = Vec::new();
+
+        if config.show_major_ticks {
+            let tick_positions =
+                Self::compute_tick_positions(bounds, scale, config.target_tick_count, false, 0);
+            self.append_tick_instances(
+                &mut instances,
+                bounds,
+                &tick_positions,
+                config.major_tick_length,
+                config,
+                position,
+                viewport_size,
+            );
+        }
+
+        if config.show_minor_ticks {
+            let tick_positions = Self::compute_tick_positions(
+                bounds,
+                scale,
+                config.target_tick_count,
+                true,
+                config.minor_tick_subdivisions,
+            );
+            self.append_tick_instances(
+                &mut instances,
+                bounds,
+                &tick_positions,
+                config.minor_tick_length,
+                config,
+                position,
+                viewport_size,
+            );
+        }
+
+        instances
+    }
+
+    /// Generate instance data for major ticks only.
+    ///
+    /// Useful when major and minor ticks are rendered with separate draw
+    /// calls (e.g. different pipeline states or line widths).
+    pub fn generate_major_tick_instances(
+        &self,
+        bounds: &AxisBounds,
+        config: &AxisConfiguration,
+        position: AxisPosition,
+        scale: Option<&dyn Scale>,
+        viewport_size: (f32, f32),
+    ) -> Vec<TickInstance> {
+        let mut instances = Vec::new();
+        if config.show_major_ticks {
+            let tick_positions =
+                Self::compute_tick_positions(bounds, scale, config.target_tick_count, false, 0);
+            self.append_tick_instances(
+                &mut instances,
+                bounds,
+                &tick_positions,
+                config.major_tick_length,
+                config,
+                position,
+                viewport_size,
+            );
+        }
+        instances
+    }
+
+    /// Generate instance data for minor ticks only.
+    ///
+    /// See [`generate_major_tick_instances`](Self::generate_major_tick_instances).
+    pub fn generate_minor_tick_instances(
+        &self,
+        bounds: &AxisBounds,
+        config: &AxisConfiguration,
+        position: AxisPosition,
+        scale: Option<&dyn Scale>,
+        viewport_size: (f32, f32),
+    ) -> Vec<TickInstance> {
+        let mut instances = Vec::new();
+        if config.show_minor_ticks {
+            let tick_positions = Self::compute_tick_positions(
+                bounds,
+                scale,
+                config.target_tick_count,
+                true,
+                config.minor_tick_subdivisions,
+            );
+            self.append_tick_instances(
+                &mut instances,
+                bounds,
+                &tick_positions,
+                config.minor_tick_length,
+                config,
+                position,
+                viewport_size,
+            );
+        }
+        instances
+    }
     ///
     /// Returns an [`AxisLabel`] for each major tick position, containing the
     /// formatted text, screen-space position, NDC position, and recommended
@@ -1098,6 +1328,60 @@ impl AxisRenderer {
                 position: [tick_end.x, tick_end.y],
                 color: config.line_color,
             });
+        }
+    }
+
+    /// Append instanced tick data. Each tick becomes a single [`TickInstance`].
+    #[allow(clippy::too_many_arguments)]
+    fn append_tick_instances(
+        &self,
+        instances: &mut Vec<TickInstance>,
+        bounds: &AxisBounds,
+        normalized_positions: &[f32],
+        tick_length_px: f32,
+        config: &AxisConfiguration,
+        position: AxisPosition,
+        viewport_size: (f32, f32),
+    ) {
+        let tick_vector = Self::compute_tick_vector(tick_length_px, position, viewport_size);
+        let direction = bounds.direction();
+        let axis_length = bounds.length();
+
+        for &t in normalized_positions {
+            if !(0.0..=1.0).contains(&t) {
+                continue;
+            }
+
+            let on_axis = [
+                bounds.start.x + direction.x * axis_length * t,
+                bounds.start.y + direction.y * axis_length * t,
+            ];
+
+            instances.push(TickInstance {
+                position: on_axis,
+                tick_vector,
+                color: config.line_color,
+            });
+        }
+    }
+
+    /// Convert a pixel-space tick length and axis position into an NDC tick
+    /// direction vector.
+    fn compute_tick_vector(
+        tick_length_px: f32,
+        position: AxisPosition,
+        viewport_size: (f32, f32),
+    ) -> [f32; 2] {
+        let tick_length_ndc = match position {
+            AxisPosition::Top | AxisPosition::Bottom => tick_length_px * 2.0 / viewport_size.1,
+            AxisPosition::Left | AxisPosition::Right => tick_length_px * 2.0 / viewport_size.0,
+        };
+
+        match position {
+            AxisPosition::Bottom => [0.0, -tick_length_ndc],
+            AxisPosition::Top => [0.0, tick_length_ndc],
+            AxisPosition::Left => [-tick_length_ndc, 0.0],
+            AxisPosition::Right => [tick_length_ndc, 0.0],
         }
     }
 
@@ -2090,5 +2374,330 @@ mod tests {
             labels.len() < 6,
             "Fewer than 6 labels should be visible in tiny viewport"
         );
+    }
+
+    // ---- Tests for GPU-instanced tick rendering ----
+
+    #[test]
+    fn test_tick_instance_struct_size() {
+        // position (2×f32) + tick_vector (2×f32) + color (4×f32) = 32 bytes
+        assert_eq!(std::mem::size_of::<TickInstance>(), 32);
+        assert_eq!(TickInstance::SIZE, 32);
+    }
+
+    #[test]
+    fn test_tick_instance_new() {
+        let ti = TickInstance::new([0.5, -0.5], [0.0, -0.02], [1.0, 0.0, 0.0, 1.0]);
+        assert_eq!(ti.position, [0.5, -0.5]);
+        assert_eq!(ti.tick_vector, [0.0, -0.02]);
+        assert_eq!(ti.color, [1.0, 0.0, 0.0, 1.0]);
+    }
+
+    #[test]
+    fn test_tick_instance_bytemuck_round_trip() {
+        let ti = TickInstance::new([0.1, 0.2], [0.3, 0.4], [0.5, 0.6, 0.7, 0.8]);
+        let bytes: &[u8] = bytemuck::bytes_of(&ti);
+        let recovered: &TickInstance = bytemuck::from_bytes(bytes);
+        assert_eq!(*recovered, ti);
+    }
+
+    #[test]
+    fn test_generate_tick_instances_count() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let config = AxisConfiguration::default(); // major ticks only
+
+        let instances = renderer.generate_tick_instances(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+        );
+
+        // Default: 6 major ticks, no minor
+        assert_eq!(instances.len(), 6);
+    }
+
+    #[test]
+    fn test_tick_instances_match_vertex_pairs() {
+        // The instanced data should represent the same line segments as vertex pairs.
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.5 }, Vec2 { x: 0.8, y: -0.5 }, 50.0);
+        let config = AxisConfiguration::default().without_line();
+
+        let viewport = (800.0, 600.0);
+        let vertices = renderer.generate_tick_vertices(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            viewport,
+        );
+        let instances = renderer.generate_tick_instances(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            viewport,
+        );
+
+        // Each vertex pair maps to one instance
+        assert_eq!(vertices.len(), instances.len() * 2);
+
+        for (i, inst) in instances.iter().enumerate() {
+            let v_start = &vertices[i * 2];
+            let v_end = &vertices[i * 2 + 1];
+
+            // Instance position matches the on-axis vertex
+            assert!(
+                (inst.position[0] - v_start.position[0]).abs() < 1e-6,
+                "tick {i}: position x"
+            );
+            assert!(
+                (inst.position[1] - v_start.position[1]).abs() < 1e-6,
+                "tick {i}: position y"
+            );
+
+            // position + tick_vector should equal the tick-end vertex
+            let end_x = inst.position[0] + inst.tick_vector[0];
+            let end_y = inst.position[1] + inst.tick_vector[1];
+            assert!(
+                (end_x - v_end.position[0]).abs() < 1e-6,
+                "tick {i}: end x"
+            );
+            assert!(
+                (end_y - v_end.position[1]).abs() < 1e-6,
+                "tick {i}: end y"
+            );
+
+            // Color matches
+            assert_eq!(inst.color, v_start.color, "tick {i}: color");
+        }
+    }
+
+    #[test]
+    fn test_bottom_tick_instances_extend_downward() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.5 }, Vec2 { x: 0.8, y: -0.5 }, 50.0);
+        let config = AxisConfiguration::default();
+
+        let instances = renderer.generate_tick_instances(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+        );
+
+        for inst in &instances {
+            assert_eq!(inst.tick_vector[0], 0.0, "Bottom ticks should not move in X");
+            assert!(
+                inst.tick_vector[1] < 0.0,
+                "Bottom ticks should extend downward (negative Y)"
+            );
+        }
+    }
+
+    #[test]
+    fn test_top_tick_instances_extend_upward() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: 0.5 }, Vec2 { x: 0.8, y: 0.5 }, 50.0);
+        let config = AxisConfiguration::default();
+
+        let instances = renderer.generate_tick_instances(
+            &bounds,
+            &config,
+            AxisPosition::Top,
+            None,
+            (800.0, 600.0),
+        );
+
+        for inst in &instances {
+            assert_eq!(inst.tick_vector[0], 0.0, "Top ticks should not move in X");
+            assert!(
+                inst.tick_vector[1] > 0.0,
+                "Top ticks should extend upward (positive Y)"
+            );
+        }
+    }
+
+    #[test]
+    fn test_left_tick_instances_extend_leftward() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.5, y: -0.8 }, Vec2 { x: -0.5, y: 0.8 }, 50.0);
+        let config = AxisConfiguration::default();
+
+        let instances = renderer.generate_tick_instances(
+            &bounds,
+            &config,
+            AxisPosition::Left,
+            None,
+            (800.0, 600.0),
+        );
+
+        for inst in &instances {
+            assert!(
+                inst.tick_vector[0] < 0.0,
+                "Left ticks should extend leftward (negative X)"
+            );
+            assert_eq!(inst.tick_vector[1], 0.0, "Left ticks should not move in Y");
+        }
+    }
+
+    #[test]
+    fn test_right_tick_instances_extend_rightward() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: 0.5, y: -0.8 }, Vec2 { x: 0.5, y: 0.8 }, 50.0);
+        let config = AxisConfiguration::default();
+
+        let instances = renderer.generate_tick_instances(
+            &bounds,
+            &config,
+            AxisPosition::Right,
+            None,
+            (800.0, 600.0),
+        );
+
+        for inst in &instances {
+            assert!(
+                inst.tick_vector[0] > 0.0,
+                "Right ticks should extend rightward (positive X)"
+            );
+            assert_eq!(
+                inst.tick_vector[1], 0.0,
+                "Right ticks should not move in Y"
+            );
+        }
+    }
+
+    #[test]
+    fn test_tick_instances_with_minor_ticks() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let mut config = AxisConfiguration::default();
+        config.show_minor_ticks = true;
+
+        let instances = renderer.generate_tick_instances(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+        );
+
+        // Should have more instances than major-only
+        assert!(instances.len() >= 6, "Should have at least 6 major ticks");
+    }
+
+    #[test]
+    fn test_major_minor_separate_generation() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let mut config = AxisConfiguration::default();
+        config.show_minor_ticks = true;
+
+        let viewport = (800.0, 600.0);
+        let major = renderer.generate_major_tick_instances(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            viewport,
+        );
+        let minor = renderer.generate_minor_tick_instances(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            viewport,
+        );
+        let combined = renderer.generate_tick_instances(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            viewport,
+        );
+
+        assert_eq!(major.len() + minor.len(), combined.len());
+    }
+
+    #[test]
+    fn test_tick_instances_empty_when_hidden() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let config = AxisConfiguration::default().without_ticks();
+
+        let instances = renderer.generate_tick_instances(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+        );
+
+        assert!(instances.is_empty());
+    }
+
+    #[test]
+    fn test_tick_instance_color_matches_config() {
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let color = [1.0, 0.0, 0.0, 1.0];
+        let config = AxisConfiguration::default().with_color(color);
+
+        let instances = renderer.generate_tick_instances(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            (800.0, 600.0),
+        );
+
+        for inst in &instances {
+            assert_eq!(inst.color, color);
+        }
+    }
+
+    #[test]
+    fn test_tick_instance_vertex_count_reduction() {
+        // This is the key performance metric: instances use less data than vertex pairs.
+        let renderer = AxisRenderer::new();
+        let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
+        let config = AxisConfiguration::default();
+        let viewport = (800.0, 600.0);
+
+        let vertices = renderer.generate_tick_vertices(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            viewport,
+        );
+        let instances = renderer.generate_tick_instances(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            None,
+            viewport,
+        );
+
+        let vertex_bytes = vertices.len() * std::mem::size_of::<Vertex>();
+        let instance_bytes =
+            instances.len() * std::mem::size_of::<TickInstance>() + 2 * std::mem::size_of::<f32>();
+
+        assert!(
+            instance_bytes < vertex_bytes,
+            "Instance data ({instance_bytes} B) should be smaller than vertex data ({vertex_bytes} B)"
+        );
+    }
+
+    #[test]
+    fn test_tick_instance_buffer_layout() {
+        let layout = TickInstance::instance_buffer_layout();
+        assert_eq!(layout.array_stride, 32);
+        assert_eq!(layout.step_mode, wgpu::VertexStepMode::Instance);
+        assert_eq!(layout.attributes.len(), 3);
     }
 }
