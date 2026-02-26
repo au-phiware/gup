@@ -124,7 +124,7 @@ _Initiative doc:
 | [GUP-057](GUP-057_Expression_Transpilation.md)                | Expression and Operator Transpilation     | ✅ Complete | High     | 13     |
 | [GUP-058](GUP-058_Control_Flow_Handling.md)                   | Control Flow and Statement Transpilation  | ✅ Complete | High     | 10     |
 | [GUP-059](GUP-059_Built_in_Function_Library.md)               | Built-in Function Library                 | ✅ Complete | Medium   | 8      |
-| [GUP-060](GUP-060_Optimization_Error_Reporting.md)            | Optimization Engine and Error Reporting   | 📋 Planned  | Medium   | 13     |
+| [GUP-060](GUP-060_Optimization_Error_Reporting.md)            | Optimization Engine and Error Reporting   | 🚧 In Progress | Medium   | 13     |
 | [GUP-061](GUP-061_Integration_With_Shader_Function_System.md) | Integration with Shader Function System   | ✅ Complete | High     | 8      |
 | [GUP-062](GUP-062_Community_Validation_Prototyping.md)        | Community Validation and Proof-of-Concept | ✅ Complete | High     | 13     |
 | [GUP-210](GUP-210_Switch_Statement_Transpilation.md)          | Switch Statement Transpilation            | 📋 Planned  | Low      | 5      |
