@@ -39,6 +39,10 @@ pub enum WgslType {
     Matrix(ScalarType, u8, u8),
     /// Array type: `array<{element}, {size}>` or `array<{element}>`.
     Array(Box<WgslType>, Option<u32>),
+    /// Atomic type: `atomic<{inner}>`.
+    Atomic(Box<WgslType>),
+    /// Pointer type: `ptr<{address_space}, {inner}>`.
+    Pointer(AddressSpace, Box<WgslType>),
     /// Named struct type.
     Struct(String),
     /// Void (no return type).
@@ -53,6 +57,8 @@ impl fmt::Display for WgslType {
             WgslType::Matrix(s, cols, rows) => write!(f, "mat{cols}x{rows}<{s}>"),
             WgslType::Array(elem, Some(size)) => write!(f, "array<{elem}, {size}>"),
             WgslType::Array(elem, None) => write!(f, "array<{elem}>"),
+            WgslType::Atomic(inner) => write!(f, "atomic<{inner}>"),
+            WgslType::Pointer(space, inner) => write!(f, "ptr<{space}, {inner}>"),
             WgslType::Struct(name) => write!(f, "{name}"),
             WgslType::Void => write!(f, "void"),
         }
@@ -120,6 +126,8 @@ impl WgslType {
 pub struct Parameter {
     pub name: String,
     pub ty: WgslType,
+    /// Attributes on the parameter (e.g., `@builtin(global_invocation_id)`).
+    pub attributes: Vec<Attribute>,
 }
 
 /// A struct field definition.
@@ -143,6 +151,8 @@ pub enum Attribute {
     Vertex,
     Fragment,
     Compute,
+    /// `@workgroup_size(x)`, `@workgroup_size(x, y)`, or `@workgroup_size(x, y, z)`.
+    WorkgroupSize(u32, Option<u32>, Option<u32>),
     Group(u32),
     Binding(u32),
     Location(u32),
@@ -156,6 +166,14 @@ impl fmt::Display for Attribute {
             Attribute::Vertex => write!(f, "@vertex"),
             Attribute::Fragment => write!(f, "@fragment"),
             Attribute::Compute => write!(f, "@compute"),
+            Attribute::WorkgroupSize(x, None, None) => write!(f, "@workgroup_size({x})"),
+            Attribute::WorkgroupSize(x, Some(y), None) => write!(f, "@workgroup_size({x}, {y})"),
+            Attribute::WorkgroupSize(x, Some(y), Some(z)) => {
+                write!(f, "@workgroup_size({x}, {y}, {z})")
+            }
+            Attribute::WorkgroupSize(x, None, Some(z)) => {
+                write!(f, "@workgroup_size({x}, 1, {z})")
+            }
             Attribute::Group(n) => write!(f, "@group({n})"),
             Attribute::Binding(n) => write!(f, "@binding({n})"),
             Attribute::Location(n) => write!(f, "@location({n})"),
@@ -170,6 +188,10 @@ impl fmt::Display for Attribute {
 pub enum UnaryOp {
     Negate,
     Not,
+    /// Address-of: `&expr`.
+    AddressOf,
+    /// Dereference: `*expr`.
+    Deref,
 }
 
 /// A binary operator.
@@ -188,6 +210,11 @@ pub enum BinaryOp {
     LessEqual,
     Greater,
     GreaterEqual,
+    BitwiseAnd,
+    BitwiseOr,
+    BitwiseXor,
+    ShiftLeft,
+    ShiftRight,
 }
 
 impl fmt::Display for BinaryOp {
@@ -206,6 +233,11 @@ impl fmt::Display for BinaryOp {
             BinaryOp::LessEqual => write!(f, "<="),
             BinaryOp::Greater => write!(f, ">"),
             BinaryOp::GreaterEqual => write!(f, ">="),
+            BinaryOp::BitwiseAnd => write!(f, "&"),
+            BinaryOp::BitwiseOr => write!(f, "|"),
+            BinaryOp::BitwiseXor => write!(f, "^"),
+            BinaryOp::ShiftLeft => write!(f, "<<"),
+            BinaryOp::ShiftRight => write!(f, ">>"),
         }
     }
 }
@@ -252,6 +284,8 @@ pub enum Statement {
     },
     /// Assignment: `target = value;`.
     Assign(Expr, Expr),
+    /// Compound assignment: `target += value;`, etc.
+    CompoundAssign(Expr, BinaryOp, Expr),
     /// Return statement: `return expr;`.
     Return(Option<Expr>),
     /// If statement: `if (condition) { body } else { else_body }`.
@@ -267,10 +301,29 @@ pub enum Statement {
         update: Option<Box<Statement>>,
         body: Block,
     },
+    /// Loop: `loop { body }`.
+    Loop { body: Block },
+    /// Break statement.
+    Break,
+    /// Continue statement.
+    Continue,
+    /// Switch statement: `switch (expr) { case N: { ... } default: { ... } }`.
+    Switch {
+        subject: Expr,
+        cases: Vec<SwitchCase>,
+    },
     /// Expression statement (function call as statement).
     Expression(Expr),
     /// A block of statements.
     Block(Block),
+}
+
+/// A single case in a switch statement.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SwitchCase {
+    /// The match expression, or `None` for `default`.
+    pub selector: Option<Expr>,
+    pub body: Block,
 }
 
 /// A block of statements.
@@ -312,24 +365,51 @@ pub struct GlobalVar {
     pub attributes: Vec<Attribute>,
 }
 
+/// Access mode for storage address space.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AccessMode {
+    Read,
+    ReadWrite,
+}
+
+impl fmt::Display for AccessMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AccessMode::Read => write!(f, "read"),
+            AccessMode::ReadWrite => write!(f, "read_write"),
+        }
+    }
+}
+
 /// WGSL address spaces for global variables.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AddressSpace {
     Uniform,
-    Storage,
+    Storage(AccessMode),
     Private,
     Workgroup,
+    /// Function-scope address space (used in pointer types).
+    Function,
 }
 
 impl fmt::Display for AddressSpace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AddressSpace::Uniform => write!(f, "uniform"),
-            AddressSpace::Storage => write!(f, "storage"),
+            AddressSpace::Storage(mode) => write!(f, "storage, {mode}"),
             AddressSpace::Private => write!(f, "private"),
             AddressSpace::Workgroup => write!(f, "workgroup"),
+            AddressSpace::Function => write!(f, "function"),
         }
     }
+}
+
+/// A top-level constant declaration: `const NAME: TYPE = EXPR;`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GlobalConst {
+    pub name: String,
+    pub ty: Option<WgslType>,
+    pub value: Expr,
 }
 
 /// Top-level WGSL module containing all definitions.
@@ -337,6 +417,7 @@ impl fmt::Display for AddressSpace {
 pub struct WgslModule {
     pub structs: Vec<StructDef>,
     pub globals: Vec<GlobalVar>,
+    pub constants: Vec<GlobalConst>,
     pub functions: Vec<Function>,
 }
 
@@ -345,6 +426,7 @@ impl WgslModule {
         Self {
             structs: Vec::new(),
             globals: Vec::new(),
+            constants: Vec::new(),
             functions: Vec::new(),
         }
     }
@@ -453,6 +535,7 @@ mod tests {
                 fields: vec![],
             }],
             globals: vec![],
+            constants: vec![],
             functions: vec![Function {
                 name: "my_func".to_string(),
                 parameters: vec![],

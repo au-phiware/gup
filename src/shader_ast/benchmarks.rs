@@ -140,6 +140,7 @@ pub fn bench_optimize(total_functions: usize, unused_count: usize) -> BenchmarkR
             parameters: vec![Parameter {
                 name: "x".to_string(),
                 ty: WgslType::Scalar(ScalarType::F32),
+                attributes: vec![],
             }],
             return_type: Some(WgslType::Scalar(ScalarType::F32)),
             body: Block::new(vec![Statement::Return(Some(Expr::Binary(
@@ -159,6 +160,7 @@ pub fn bench_optimize(total_functions: usize, unused_count: usize) -> BenchmarkR
             parameters: vec![Parameter {
                 name: "y".to_string(),
                 ty: WgslType::Scalar(ScalarType::F32),
+                attributes: vec![],
             }],
             return_type: Some(WgslType::Scalar(ScalarType::F32)),
             body: Block::new(vec![Statement::Return(Some(Expr::Ident("y".to_string())))]),

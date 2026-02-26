@@ -152,6 +152,24 @@ fn collect_called_functions_stmt(stmt: &Statement, called: &mut HashSet<String>)
                 collect_called_functions_stmt(s, called);
             }
         }
+        Statement::CompoundAssign(target, _, value) => {
+            collect_called_functions_expr(target, called);
+            collect_called_functions_expr(value, called);
+        }
+        Statement::Loop { body } => {
+            for s in &body.statements {
+                collect_called_functions_stmt(s, called);
+            }
+        }
+        Statement::Break | Statement::Continue => {}
+        Statement::Switch { subject, cases } => {
+            collect_called_functions_expr(subject, called);
+            for case in cases {
+                for s in &case.body.statements {
+                    collect_called_functions_stmt(s, called);
+                }
+            }
+        }
     }
 }
 
@@ -204,7 +222,9 @@ fn collect_type_names(ty: &WgslType, names: &mut HashSet<String>) {
         WgslType::Struct(name) => {
             names.insert(name.clone());
         }
-        WgslType::Array(elem, _) => collect_type_names(elem, names),
+        WgslType::Array(elem, _) | WgslType::Atomic(elem) | WgslType::Pointer(_, elem) => {
+            collect_type_names(elem, names);
+        }
         _ => {}
     }
 }
@@ -263,6 +283,18 @@ fn collect_idents_stmt(stmt: &Statement, idents: &mut HashSet<String>) {
         }
         Statement::Expression(e) => collect_idents_expr(e, idents),
         Statement::Block(b) => collect_idents_block(b, idents),
+        Statement::CompoundAssign(t, _, v) => {
+            collect_idents_expr(t, idents);
+            collect_idents_expr(v, idents);
+        }
+        Statement::Loop { body } => collect_idents_block(body, idents),
+        Statement::Break | Statement::Continue => {}
+        Statement::Switch { subject, cases } => {
+            collect_idents_expr(subject, idents);
+            for case in cases {
+                collect_idents_block(&case.body, idents);
+            }
+        }
     }
 }
 
@@ -380,6 +412,28 @@ fn fold_statement(stmt: &mut Statement) -> bool {
         }
         Statement::Expression(expr) => fold_expr(expr),
         Statement::Block(block) => fold_block(block),
+        Statement::CompoundAssign(target, _, value) => {
+            let mut changed = fold_expr(target);
+            if fold_expr(value) {
+                changed = true;
+            }
+            changed
+        }
+        Statement::Loop { body } => fold_block(body),
+        Statement::Break | Statement::Continue => false,
+        Statement::Switch { subject, cases } => {
+            let mut changed = fold_expr(subject);
+            for case in cases {
+                if let Some(ref mut sel) = case.selector
+                    && fold_expr(sel) {
+                        changed = true;
+                    }
+                if fold_block(&mut case.body) {
+                    changed = true;
+                }
+            }
+            changed
+        }
     }
 }
 
@@ -702,6 +756,26 @@ fn inline_calls_in_stmt(
         Statement::Expression(expr) => inline_calls_in_expr(expr, func_name, params, body_expr),
         Statement::Block(block) => inline_calls_in_block(block, func_name, params, body_expr),
         Statement::Return(None) => false,
+        Statement::CompoundAssign(target, _, value) => {
+            let t = inline_calls_in_expr(target, func_name, params, body_expr);
+            let v = inline_calls_in_expr(value, func_name, params, body_expr);
+            t || v
+        }
+        Statement::Loop { body } => inline_calls_in_block(body, func_name, params, body_expr),
+        Statement::Break | Statement::Continue => false,
+        Statement::Switch { subject, cases } => {
+            let mut changed = inline_calls_in_expr(subject, func_name, params, body_expr);
+            for case in cases {
+                if let Some(ref mut sel) = case.selector
+                    && inline_calls_in_expr(sel, func_name, params, body_expr) {
+                        changed = true;
+                    }
+                if inline_calls_in_block(&mut case.body, func_name, params, body_expr) {
+                    changed = true;
+                }
+            }
+            changed
+        }
     }
 }
 
@@ -875,6 +949,7 @@ mod tests {
             parameters: vec![Parameter {
                 name: "value".to_string(),
                 ty: WgslType::Scalar(ScalarType::F32),
+                attributes: vec![],
             }],
             return_type: Some(WgslType::Scalar(ScalarType::F32)),
             body: Block::new(vec![Statement::Return(Some(Expr::Ident(
@@ -890,6 +965,7 @@ mod tests {
         let mut module = WgslModule {
             structs: vec![],
             globals: vec![],
+            constants: vec![],
             functions: vec![
                 // Entry point that only calls "used_fn"
                 Function {
@@ -921,6 +997,7 @@ mod tests {
         let mut module = WgslModule {
             structs: vec![],
             globals: vec![],
+            constants: vec![],
             functions: vec![
                 Function {
                     name: "vs_main".to_string(),
@@ -939,6 +1016,7 @@ mod tests {
                     parameters: vec![Parameter {
                         name: "x".to_string(),
                         ty: WgslType::Scalar(ScalarType::F32),
+                        attributes: vec![],
                     }],
                     return_type: Some(WgslType::Scalar(ScalarType::F32)),
                     body: Block::new(vec![Statement::Return(Some(Expr::Call(
@@ -964,6 +1042,7 @@ mod tests {
         let mut module = WgslModule {
             structs: vec![],
             globals: vec![],
+            constants: vec![],
             functions: vec![Function {
                 name: "test".to_string(),
                 parameters: vec![],
@@ -995,11 +1074,13 @@ mod tests {
         let mut module = WgslModule {
             structs: vec![],
             globals: vec![],
+            constants: vec![],
             functions: vec![Function {
                 name: "test".to_string(),
                 parameters: vec![Parameter {
                     name: "x".to_string(),
                     ty: WgslType::Scalar(ScalarType::F32),
+                    attributes: vec![],
                 }],
                 return_type: Some(WgslType::Scalar(ScalarType::F32)),
                 body: Block::new(vec![Statement::Return(Some(Expr::Binary(
@@ -1029,11 +1110,13 @@ mod tests {
         let mut module = WgslModule {
             structs: vec![],
             globals: vec![],
+            constants: vec![],
             functions: vec![Function {
                 name: "test".to_string(),
                 parameters: vec![Parameter {
                     name: "x".to_string(),
                     ty: WgslType::Scalar(ScalarType::F32),
+                    attributes: vec![],
                 }],
                 return_type: Some(WgslType::Scalar(ScalarType::F32)),
                 body: Block::new(vec![Statement::Return(Some(Expr::Binary(
@@ -1063,6 +1146,7 @@ mod tests {
         let mut module = WgslModule {
             structs: vec![],
             globals: vec![],
+            constants: vec![],
             functions: vec![
                 // Small function to inline
                 Function {
@@ -1070,6 +1154,7 @@ mod tests {
                     parameters: vec![Parameter {
                         name: "x".to_string(),
                         ty: WgslType::Scalar(ScalarType::F32),
+                        attributes: vec![],
                     }],
                     return_type: Some(WgslType::Scalar(ScalarType::F32)),
                     body: Block::new(vec![Statement::Return(Some(Expr::Binary(
@@ -1086,6 +1171,7 @@ mod tests {
                     parameters: vec![Parameter {
                         name: "val".to_string(),
                         ty: WgslType::Scalar(ScalarType::F32),
+                        attributes: vec![],
                     }],
                     return_type: Some(WgslType::Scalar(ScalarType::F32)),
                     body: Block::new(vec![Statement::Return(Some(Expr::Call(
@@ -1118,6 +1204,7 @@ mod tests {
         let mut module = WgslModule {
             structs: vec![],
             globals: vec![],
+            constants: vec![],
             functions: vec![
                 Function {
                     name: "vs_main".to_string(),

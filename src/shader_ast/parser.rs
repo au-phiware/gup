@@ -49,6 +49,12 @@ enum Token {
     AmpAmp,       // &&
     PipePipe,     // ||
     Bang,         // !
+    Ampersand,    // & (single)
+    Pipe,         // | (single)
+    Caret,        // ^
+    ShiftLeft,    // <<
+    ShiftRight,   // >>
+    PlusEqual,    // +=
 
     // Keywords
     Fn,
@@ -61,6 +67,13 @@ enum Token {
     Struct,
     True,
     False,
+    Loop,
+    Break,
+    Continue,
+    Switch,
+    Case,
+    Default,
+    Const,
 
     // Literals
     FloatLiteral(f64),
@@ -139,6 +152,28 @@ impl<'a> Lexer<'a> {
     }
 
     fn read_number(&mut self, first: char) -> Token {
+        // Check for hex: 0x...
+        if first == '0' && self.peek() == Some(&'x') {
+            self.advance(); // consume 'x'
+            let mut hex = String::new();
+            while let Some(&c) = self.peek() {
+                if c.is_ascii_hexdigit() {
+                    hex.push(c);
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+            // Check for u suffix
+            if self.peek() == Some(&'u') {
+                self.advance();
+                let val = u64::from_str_radix(&hex, 16).unwrap_or(0);
+                return Token::UIntLiteral(val);
+            }
+            let val = i64::from_str_radix(&hex, 16).unwrap_or(0);
+            return Token::IntLiteral(val);
+        }
+
         let mut s = String::new();
         s.push(first);
         let mut has_dot = false;
@@ -194,6 +229,13 @@ impl<'a> Lexer<'a> {
             "struct" => Token::Struct,
             "true" => Token::True,
             "false" => Token::False,
+            "loop" => Token::Loop,
+            "break" => Token::Break,
+            "continue" => Token::Continue,
+            "switch" => Token::Switch,
+            "case" => Token::Case,
+            "default" => Token::Default,
+            "const" => Token::Const,
             _ => Token::Ident(s),
         }
     }
@@ -218,7 +260,14 @@ impl<'a> Lexer<'a> {
             ';' => Ok(Token::Semicolon),
             '.' => Ok(Token::Dot),
             '@' => Ok(Token::At),
-            '+' => Ok(Token::Plus),
+            '+' => {
+                if self.peek() == Some(&'=') {
+                    self.advance();
+                    Ok(Token::PlusEqual)
+                } else {
+                    Ok(Token::Plus)
+                }
+            }
             '*' => Ok(Token::Star),
             '%' => Ok(Token::Percent),
             '-' => {
@@ -250,6 +299,9 @@ impl<'a> Lexer<'a> {
                 if self.peek() == Some(&'=') {
                     self.advance();
                     Ok(Token::LessEqual)
+                } else if self.peek() == Some(&'<') {
+                    self.advance();
+                    Ok(Token::ShiftLeft)
                 } else {
                     Ok(Token::Less)
                 }
@@ -258,6 +310,9 @@ impl<'a> Lexer<'a> {
                 if self.peek() == Some(&'=') {
                     self.advance();
                     Ok(Token::GreaterEqual)
+                } else if self.peek() == Some(&'>') {
+                    self.advance();
+                    Ok(Token::ShiftRight)
                 } else {
                     Ok(Token::Greater)
                 }
@@ -267,7 +322,7 @@ impl<'a> Lexer<'a> {
                     self.advance();
                     Ok(Token::AmpAmp)
                 } else {
-                    Err(ParseError::unexpected_char(ch, self.line, self.col))
+                    Ok(Token::Ampersand)
                 }
             }
             '|' => {
@@ -275,9 +330,10 @@ impl<'a> Lexer<'a> {
                     self.advance();
                     Ok(Token::PipePipe)
                 } else {
-                    Err(ParseError::unexpected_char(ch, self.line, self.col))
+                    Ok(Token::Pipe)
                 }
             }
+            '^' => Ok(Token::Caret),
             c if c.is_ascii_digit() => Ok(self.read_number(c)),
             c if c.is_alphabetic() || c == '_' => Ok(self.read_ident(c)),
             c => Err(ParseError::unexpected_char(c, self.line, self.col)),
@@ -405,6 +461,10 @@ impl WgslParser {
                     let s = self.parse_struct()?;
                     module.structs.push(s);
                 }
+                Token::Const => {
+                    let c = self.parse_global_const()?;
+                    module.constants.push(c);
+                }
                 Token::Eof => break,
                 tok => {
                     // Try to parse as a global variable declaration
@@ -424,7 +484,7 @@ impl WgslParser {
                     let (line, col) = self.current_position();
                     return Err(ParseError::unexpected_token(
                         &tok.clone(),
-                        "fn, struct, or var declaration",
+                        "fn, struct, var, or const declaration",
                         line,
                         col,
                     ));
@@ -475,12 +535,36 @@ impl WgslParser {
         let tok = self.advance();
         match tok {
             Token::Ident(s) => Ok(s),
+            // Accept keywords that are used as identifiers in some contexts
+            // (e.g., @builtin(position) where "position" could be shadowed).
             other => Err(ParseError::unexpected_token(
                 &other,
                 "identifier",
                 line,
                 col,
             )),
+        }
+    }
+
+    /// Expect a `>` token, handling the case where `>>` was tokenized as a
+    /// single `ShiftRight` token.
+    fn expect_greater(&mut self) -> Result<(), ParseError> {
+        let (line, col) = self.current_position();
+        match self.peek().clone() {
+            Token::Greater => {
+                self.advance();
+                Ok(())
+            }
+            Token::ShiftRight => {
+                // >> was tokenized as one token; consume it and insert a
+                // replacement `Greater` so the remaining `>` is available.
+                let pos = self.positions[self.pos];
+                self.advance(); // consume ShiftRight
+                self.tokens.insert(self.pos, Token::Greater);
+                self.positions.insert(self.pos, pos);
+                Ok(())
+            }
+            ref tok => Err(ParseError::unexpected_token(tok, ">", line, col)),
         }
     }
 
@@ -495,6 +579,33 @@ impl WgslParser {
                 "vertex" => Attribute::Vertex,
                 "fragment" => Attribute::Fragment,
                 "compute" => Attribute::Compute,
+                "workgroup_size" => {
+                    self.expect(&Token::LeftParen)?;
+                    let x = self.parse_u32_literal()?;
+                    let y = if self.peek() == &Token::Comma {
+                        self.advance();
+                        // Check if next is RightParen (trailing comma)
+                        if self.peek() == &Token::RightParen {
+                            None
+                        } else {
+                            Some(self.parse_u32_literal()?)
+                        }
+                    } else {
+                        None
+                    };
+                    let z = if y.is_some() && self.peek() == &Token::Comma {
+                        self.advance();
+                        if self.peek() == &Token::RightParen {
+                            None
+                        } else {
+                            Some(self.parse_u32_literal()?)
+                        }
+                    } else {
+                        None
+                    };
+                    self.expect(&Token::RightParen)?;
+                    Attribute::WorkgroupSize(x, y, z)
+                }
                 "group" => {
                     self.expect(&Token::LeftParen)?;
                     let n = self.parse_u32_literal()?;
@@ -571,7 +682,7 @@ impl WgslParser {
                         if self.peek() == &Token::Less {
                             self.advance(); // <
                             let scalar = self.parse_scalar_type()?;
-                            self.expect(&Token::Greater)?;
+                            self.expect_greater()?;
                             Ok(WgslType::Vector(scalar, d as u8))
                         } else {
                             // Default to f32
@@ -599,7 +710,7 @@ impl WgslParser {
                     if self.peek() == &Token::Less {
                         self.advance();
                         let scalar = self.parse_scalar_type()?;
-                        self.expect(&Token::Greater)?;
+                        self.expect_greater()?;
                         Ok(WgslType::Matrix(scalar, cols, rows))
                     } else {
                         Ok(WgslType::Matrix(ScalarType::F32, cols, rows))
@@ -621,8 +732,30 @@ impl WgslParser {
                 } else {
                     None
                 };
-                self.expect(&Token::Greater)?;
+                self.expect_greater()?;
                 Ok(WgslType::Array(Box::new(elem), size))
+            }
+            "atomic" => {
+                self.expect(&Token::Less)?;
+                let inner = self.parse_type()?;
+                self.expect_greater()?;
+                Ok(WgslType::Atomic(Box::new(inner)))
+            }
+            "ptr" => {
+                self.expect(&Token::Less)?;
+                let space_name = self.expect_ident()?;
+                let addr_space = match space_name.as_str() {
+                    "function" => AddressSpace::Function,
+                    "private" => AddressSpace::Private,
+                    "workgroup" => AddressSpace::Workgroup,
+                    "uniform" => AddressSpace::Uniform,
+                    "storage" => AddressSpace::Storage(AccessMode::Read),
+                    _ => AddressSpace::Function,
+                };
+                self.expect(&Token::Comma)?;
+                let inner = self.parse_type()?;
+                self.expect_greater()?;
+                Ok(WgslType::Pointer(addr_space, Box::new(inner)))
             }
             other => Ok(WgslType::Struct(other.to_string())),
         }
@@ -676,17 +809,45 @@ impl WgslParser {
     fn parse_global_var(&mut self, attributes: Vec<Attribute>) -> Result<GlobalVar, ParseError> {
         self.advance(); // consume 'var'
 
-        // Parse address space: var<uniform>, var<storage>, etc.
+        // Parse address space: var<uniform>, var<storage, read_write>, etc.
         let address_space = if self.peek() == &Token::Less {
             self.advance(); // <
             let space_name = self.expect_ident()?;
-            self.expect(&Token::Greater)?;
+            
             match space_name.as_str() {
-                "uniform" => AddressSpace::Uniform,
-                "storage" => AddressSpace::Storage,
-                "private" => AddressSpace::Private,
-                "workgroup" => AddressSpace::Workgroup,
-                _ => AddressSpace::Private,
+                "uniform" => {
+                    self.expect_greater()?;
+                    AddressSpace::Uniform
+                }
+                "storage" => {
+                    // Check for access mode: var<storage, read> or var<storage, read_write>
+                    if self.peek() == &Token::Comma {
+                        self.advance(); // consume ','
+                        let mode_name = self.expect_ident()?;
+                        let mode = match mode_name.as_str() {
+                            "read" => AccessMode::Read,
+                            "read_write" => AccessMode::ReadWrite,
+                            _ => AccessMode::Read,
+                        };
+                        self.expect_greater()?;
+                        AddressSpace::Storage(mode)
+                    } else {
+                        self.expect_greater()?;
+                        AddressSpace::Storage(AccessMode::Read)
+                    }
+                }
+                "private" => {
+                    self.expect_greater()?;
+                    AddressSpace::Private
+                }
+                "workgroup" => {
+                    self.expect_greater()?;
+                    AddressSpace::Workgroup
+                }
+                _ => {
+                    self.expect_greater()?;
+                    AddressSpace::Private
+                }
             }
         } else {
             AddressSpace::Private
@@ -705,6 +866,23 @@ impl WgslParser {
         })
     }
 
+    // --- Const ---
+
+    fn parse_global_const(&mut self) -> Result<GlobalConst, ParseError> {
+        self.advance(); // consume 'const'
+        let name = self.expect_ident()?;
+        let ty = if self.peek() == &Token::Colon {
+            self.advance();
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+        self.expect(&Token::Equal)?;
+        let value = self.parse_expression()?;
+        self.expect(&Token::Semicolon)?;
+        Ok(GlobalConst { name, ty, value })
+    }
+
     // --- Function ---
 
     fn parse_function(&mut self, attributes: Vec<Attribute>) -> Result<Function, ParseError> {
@@ -715,13 +893,14 @@ impl WgslParser {
         let mut parameters = Vec::new();
         while self.peek() != &Token::RightParen {
             // Skip any parameter attributes (e.g., @builtin(vertex_index))
-            let _param_attrs = self.parse_attributes()?;
+            let param_attrs = self.parse_attributes()?;
             let param_name = self.expect_ident()?;
             self.expect(&Token::Colon)?;
             let ty = self.parse_type()?;
             parameters.push(Parameter {
                 name: param_name,
                 ty,
+                attributes: param_attrs,
             });
             if self.peek() == &Token::Comma {
                 self.advance();
@@ -768,11 +947,23 @@ impl WgslParser {
 
     fn parse_statement(&mut self) -> Result<Statement, ParseError> {
         match self.peek().clone() {
-            Token::Let => self.parse_let(false),
+            Token::Let | Token::Const => self.parse_let(false),
             Token::Var => self.parse_let(true),
             Token::Return => self.parse_return(),
             Token::If => self.parse_if(),
             Token::For => self.parse_for(),
+            Token::Loop => self.parse_loop(),
+            Token::Break => {
+                self.advance();
+                self.expect(&Token::Semicolon)?;
+                Ok(Statement::Break)
+            }
+            Token::Continue => {
+                self.advance();
+                self.expect(&Token::Semicolon)?;
+                Ok(Statement::Continue)
+            }
+            Token::Switch => self.parse_switch(),
             Token::LeftBrace => {
                 let block = self.parse_block()?;
                 Ok(Statement::Block(block))
@@ -846,7 +1037,13 @@ impl WgslParser {
         let body = self.parse_block()?;
         let else_body = if self.peek() == &Token::Else {
             self.advance();
-            Some(self.parse_block()?)
+            // Handle `else if` by wrapping in a block with an if statement
+            if self.peek() == &Token::If {
+                let nested_if = self.parse_if()?;
+                Some(Block::new(vec![nested_if]))
+            } else {
+                Some(self.parse_block()?)
+            }
         } else {
             None
         };
@@ -898,20 +1095,91 @@ impl WgslParser {
         })
     }
 
+    fn parse_loop(&mut self) -> Result<Statement, ParseError> {
+        self.advance(); // consume 'loop'
+        let body = self.parse_block()?;
+        Ok(Statement::Loop { body })
+    }
+
+    fn parse_switch(&mut self) -> Result<Statement, ParseError> {
+        self.advance(); // consume 'switch'
+
+        // Parse subject expression, with optional parens
+        let has_paren = if self.peek() == &Token::LeftParen {
+            self.advance();
+            true
+        } else {
+            false
+        };
+        let subject = self.parse_expression()?;
+        if has_paren {
+            self.expect(&Token::RightParen)?;
+        }
+
+        self.expect(&Token::LeftBrace)?;
+        let mut cases = Vec::new();
+
+        while self.peek() != &Token::RightBrace && !self.is_at_end() {
+            match self.peek().clone() {
+                Token::Case => {
+                    self.advance(); // consume 'case'
+                    let selector = self.parse_expression()?;
+                    self.expect(&Token::Colon)?;
+                    let body = self.parse_block()?;
+                    cases.push(SwitchCase {
+                        selector: Some(selector),
+                        body,
+                    });
+                }
+                Token::Default => {
+                    self.advance(); // consume 'default'
+                    self.expect(&Token::Colon)?;
+                    let body = self.parse_block()?;
+                    cases.push(SwitchCase {
+                        selector: None,
+                        body,
+                    });
+                }
+                _ => {
+                    let (line, col) = self.current_position();
+                    return Err(ParseError::new(
+                        "expected 'case' or 'default' in switch",
+                        line,
+                        col,
+                    ));
+                }
+            }
+        }
+
+        self.expect(&Token::RightBrace)?;
+        Ok(Statement::Switch { subject, cases })
+    }
+
     fn parse_expr_or_assign_statement(&mut self) -> Result<Statement, ParseError> {
         let expr = self.parse_expression()?;
-        if self.peek() == &Token::Equal {
-            self.advance();
-            let value = self.parse_expression()?;
-            self.expect(&Token::Semicolon)?;
-            Ok(Statement::Assign(expr, value))
-        } else {
-            self.expect(&Token::Semicolon)?;
-            Ok(Statement::Expression(expr))
+        match self.peek() {
+            Token::Equal => {
+                self.advance();
+                let value = self.parse_expression()?;
+                self.expect(&Token::Semicolon)?;
+                Ok(Statement::Assign(expr, value))
+            }
+            Token::PlusEqual => {
+                self.advance();
+                let value = self.parse_expression()?;
+                self.expect(&Token::Semicolon)?;
+                Ok(Statement::CompoundAssign(expr, BinaryOp::Add, value))
+            }
+            _ => {
+                self.expect(&Token::Semicolon)?;
+                Ok(Statement::Expression(expr))
+            }
         }
     }
 
     // --- Expressions (precedence climbing) ---
+    // WGSL precedence (low to high):
+    //   ||  →  &&  →  |  →  ^  →  &  →  ==,!=  →  <,>,<=,>=  →  <<,>>  →  +,-  →  *,/,%  →  unary  →  postfix
 
     fn parse_expression(&mut self) -> Result<Expr, ParseError> {
         self.parse_or_expr()
@@ -928,11 +1196,41 @@ impl WgslParser {
     }
 
     fn parse_and_expr(&mut self) -> Result<Expr, ParseError> {
-        let mut left = self.parse_equality_expr()?;
+        let mut left = self.parse_bitwise_or_expr()?;
         while self.peek() == &Token::AmpAmp {
             self.advance();
-            let right = self.parse_equality_expr()?;
+            let right = self.parse_bitwise_or_expr()?;
             left = Expr::Binary(Box::new(left), BinaryOp::And, Box::new(right));
+        }
+        Ok(left)
+    }
+
+    fn parse_bitwise_or_expr(&mut self) -> Result<Expr, ParseError> {
+        let mut left = self.parse_bitwise_xor_expr()?;
+        while self.peek() == &Token::Pipe {
+            self.advance();
+            let right = self.parse_bitwise_xor_expr()?;
+            left = Expr::Binary(Box::new(left), BinaryOp::BitwiseOr, Box::new(right));
+        }
+        Ok(left)
+    }
+
+    fn parse_bitwise_xor_expr(&mut self) -> Result<Expr, ParseError> {
+        let mut left = self.parse_bitwise_and_expr()?;
+        while self.peek() == &Token::Caret {
+            self.advance();
+            let right = self.parse_bitwise_and_expr()?;
+            left = Expr::Binary(Box::new(left), BinaryOp::BitwiseXor, Box::new(right));
+        }
+        Ok(left)
+    }
+
+    fn parse_bitwise_and_expr(&mut self) -> Result<Expr, ParseError> {
+        let mut left = self.parse_equality_expr()?;
+        while self.peek() == &Token::Ampersand {
+            self.advance();
+            let right = self.parse_equality_expr()?;
+            left = Expr::Binary(Box::new(left), BinaryOp::BitwiseAnd, Box::new(right));
         }
         Ok(left)
     }
@@ -953,13 +1251,28 @@ impl WgslParser {
     }
 
     fn parse_comparison_expr(&mut self) -> Result<Expr, ParseError> {
-        let mut left = self.parse_additive_expr()?;
+        let mut left = self.parse_shift_expr()?;
         loop {
             let op = match self.peek() {
                 Token::Less => BinaryOp::Less,
                 Token::LessEqual => BinaryOp::LessEqual,
                 Token::Greater => BinaryOp::Greater,
                 Token::GreaterEqual => BinaryOp::GreaterEqual,
+                _ => break,
+            };
+            self.advance();
+            let right = self.parse_shift_expr()?;
+            left = Expr::Binary(Box::new(left), op, Box::new(right));
+        }
+        Ok(left)
+    }
+
+    fn parse_shift_expr(&mut self) -> Result<Expr, ParseError> {
+        let mut left = self.parse_additive_expr()?;
+        loop {
+            let op = match self.peek() {
+                Token::ShiftLeft => BinaryOp::ShiftLeft,
+                Token::ShiftRight => BinaryOp::ShiftRight,
                 _ => break,
             };
             self.advance();
@@ -1011,6 +1324,16 @@ impl WgslParser {
                 self.advance();
                 let expr = self.parse_unary_expr()?;
                 Ok(Expr::Unary(UnaryOp::Not, Box::new(expr)))
+            }
+            Token::Ampersand => {
+                self.advance();
+                let expr = self.parse_unary_expr()?;
+                Ok(Expr::Unary(UnaryOp::AddressOf, Box::new(expr)))
+            }
+            Token::Star => {
+                self.advance();
+                let expr = self.parse_unary_expr()?;
+                Ok(Expr::Unary(UnaryOp::Deref, Box::new(expr)))
             }
             _ => self.parse_postfix_expr(),
         }
@@ -1120,7 +1443,11 @@ impl WgslParser {
 
 /// Checks if an identifier looks like a WGSL type constructor name.
 fn is_type_constructor_name(name: &str) -> bool {
-    name.starts_with("vec") || name.starts_with("mat") || name == "array"
+    name.starts_with("vec")
+        || name.starts_with("mat")
+        || name == "array"
+        || name == "atomic"
+        || name == "bitcast"
 }
 
 /// Convenience function to parse WGSL source into a module.

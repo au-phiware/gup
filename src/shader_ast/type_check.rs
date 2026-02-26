@@ -434,10 +434,12 @@ mod tests {
                 Parameter {
                     name: "value".to_string(),
                     ty: WgslType::Scalar(ScalarType::F32),
+                    attributes: vec![],
                 },
                 Parameter {
                     name: "uniforms".to_string(),
                     ty: WgslType::Struct("LinearScaleUniforms".to_string()),
+                    attributes: vec![],
                 },
             ],
             return_type: Some(WgslType::Scalar(ScalarType::F32)),

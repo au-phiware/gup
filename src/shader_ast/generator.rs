@@ -50,6 +50,18 @@ impl WgslGenerator {
             self.write_line("");
         }
 
+        // Emit constants.
+        for c in &module.constants {
+            self.generate_const(c);
+        }
+        if !module.constants.is_empty()
+            && (!module.structs.is_empty()
+                || !module.globals.is_empty()
+                || !module.functions.is_empty())
+        {
+            self.write_line("");
+        }
+
         // Emit structs.
         for (i, s) in module.structs.iter().enumerate() {
             self.generate_struct(s);
@@ -98,6 +110,19 @@ impl WgslGenerator {
         self.write("}\n");
     }
 
+    // --- Constant ---
+
+    fn generate_const(&mut self, c: &GlobalConst) {
+        self.write_indent();
+        if let Some(ref ty) = c.ty {
+            self.write(&format!("const {}: {ty} = ", c.name));
+        } else {
+            self.write(&format!("const {} = ", c.name));
+        }
+        self.generate_expr(&c.value);
+        self.write(";\n");
+    }
+
     // --- Global ---
 
     fn generate_global(&mut self, g: &GlobalVar) {
@@ -121,6 +146,9 @@ impl WgslGenerator {
         for (i, param) in f.parameters.iter().enumerate() {
             if i > 0 {
                 self.write(", ");
+            }
+            for attr in &param.attributes {
+                self.write(&format!("{attr} "));
             }
             self.write(&format!("{}: {}", param.name, param.ty));
         }
@@ -249,6 +277,55 @@ impl WgslGenerator {
                 self.write_indent();
                 self.write("}\n");
             }
+            Statement::CompoundAssign(target, op, value) => {
+                self.write_indent();
+                self.generate_expr(target);
+                self.write(&format!(" {op}= "));
+                self.generate_expr(value);
+                self.write(";\n");
+            }
+            Statement::Loop { body } => {
+                self.write_indent();
+                self.write("loop {\n");
+                self.indent_level += 1;
+                self.generate_block_contents(body);
+                self.indent_level -= 1;
+                self.write_indent();
+                self.write("}\n");
+            }
+            Statement::Break => {
+                self.write_indent();
+                self.write("break;\n");
+            }
+            Statement::Continue => {
+                self.write_indent();
+                self.write("continue;\n");
+            }
+            Statement::Switch { subject, cases } => {
+                self.write_indent();
+                self.write("switch (");
+                self.generate_expr(subject);
+                self.write(") {\n");
+                self.indent_level += 1;
+                for case in cases {
+                    self.write_indent();
+                    if let Some(ref sel) = case.selector {
+                        self.write("case ");
+                        self.generate_expr(sel);
+                        self.write(": {\n");
+                    } else {
+                        self.write("default: {\n");
+                    }
+                    self.indent_level += 1;
+                    self.generate_block_contents(&case.body);
+                    self.indent_level -= 1;
+                    self.write_indent();
+                    self.write("}\n");
+                }
+                self.indent_level -= 1;
+                self.write_indent();
+                self.write("}\n");
+            }
         }
     }
 
@@ -327,6 +404,8 @@ impl WgslGenerator {
                 match op {
                     UnaryOp::Negate => self.write("-"),
                     UnaryOp::Not => self.write("!"),
+                    UnaryOp::AddressOf => self.write("&"),
+                    UnaryOp::Deref => self.write("*"),
                 }
                 self.generate_expr(inner);
             }
@@ -408,11 +487,13 @@ mod tests {
         let module = WgslModule {
             structs: vec![],
             globals: vec![],
+            constants: vec![],
             functions: vec![Function {
                 name: "add_one".to_string(),
                 parameters: vec![Parameter {
                     name: "value".to_string(),
                     ty: WgslType::Scalar(ScalarType::F32),
+                    attributes: vec![],
                 }],
                 return_type: Some(WgslType::Scalar(ScalarType::F32)),
                 body: Block::new(vec![Statement::Return(Some(Expr::Binary(
@@ -449,6 +530,7 @@ mod tests {
                 ],
             }],
             globals: vec![],
+            constants: vec![],
             functions: vec![],
         };
 
@@ -468,6 +550,7 @@ mod tests {
                 address_space: AddressSpace::Uniform,
                 attributes: vec![Attribute::Group(0), Attribute::Binding(0)],
             }],
+            constants: vec![],
             functions: vec![],
         };
 
@@ -554,6 +637,7 @@ fn clamp_val(x: f32) -> f32 {
         let module = WgslModule {
             structs: vec![],
             globals: vec![],
+            constants: vec![],
             functions: vec![Function {
                 name: "vs_main".to_string(),
                 parameters: vec![],
