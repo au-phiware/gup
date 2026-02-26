@@ -74,6 +74,13 @@ Analysis of the Rust-to-WGSL transpilation system: approach comparison,
 technical validation results, performance benchmarks, developer experience
 assessment, and implementation recommendation.
 
+### [🔍 Existing Solutions Analysis](./existing-solutions-analysis.md)
+
+Comprehensive analysis of existing Rust-to-GPU compilation solutions: rust-gpu
+ecosystem, naga/WebGPU assessment, academic and industry research review,
+alternative approaches (eDSLs, runtime compilation, hybrid), weighted comparison
+matrix, and strategic recommendation for Gup's transpilation approach.
+
 ### [🔤 Text Rendering Architecture](./text-rendering-architecture.md)
 
 Technical details of the SDF-based GPU text rendering pipeline.
