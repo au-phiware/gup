@@ -1743,6 +1743,88 @@ impl CornerSharpnessMetrics {
             per_corner_gradients: gradients,
         }
     }
+
+    /// Compare corner sharpness between MSDF and single-channel SDF.
+    ///
+    /// Returns the improvement ratio: values > 1.0 mean the MSDF preserves
+    /// corners better; values < 1.0 mean the SDF is sharper (unlikely for
+    /// corners where MSDF edge colouring is active).
+    ///
+    /// `outline` is used to detect corner positions.
+    /// `msdf` and `sdf` are the generated bitmaps (must have the same dimensions).
+    pub fn compare_msdf_vs_sdf(
+        outline: &GlyphOutline,
+        msdf: &MsdfBitmap,
+        sdf: &SdfBitmap,
+        angle_threshold: f32,
+    ) -> CornerComparison {
+        assert_eq!(msdf.width, sdf.width);
+        assert_eq!(msdf.height, sdf.height);
+
+        // Convert glyph-space corners to bitmap pixel coordinates
+        let corners = outline.detect_all_corners(angle_threshold);
+        let sharp_corners: Vec<&CornerInfo> = corners.iter().filter(|c| c.is_sharp).collect();
+
+        if sharp_corners.is_empty() {
+            return CornerComparison {
+                msdf_metrics: Self {
+                    mean_corner_gradient: 0.0,
+                    max_corner_gradient: 0.0,
+                    corner_count: 0,
+                    per_corner_gradients: Vec::new(),
+                },
+                sdf_metrics: Self {
+                    mean_corner_gradient: 0.0,
+                    max_corner_gradient: 0.0,
+                    corner_count: 0,
+                    per_corner_gradients: Vec::new(),
+                },
+                improvement_ratio: 1.0,
+            };
+        }
+
+        // Map corner positions from glyph space to bitmap pixel space
+        let glyph_bounds = &outline.bounds;
+        let scale = msdf.scale;
+        let padding = msdf.padding as f32;
+
+        let pixel_corners: Vec<Point> = sharp_corners
+            .iter()
+            .map(|c| {
+                let px = (c.position.x - glyph_bounds.0.x) * scale + padding;
+                // Flip Y (glyph Y-up → bitmap Y-down)
+                let glyph_height = (glyph_bounds.1.y - glyph_bounds.0.y) * scale;
+                let py = glyph_height - (c.position.y - glyph_bounds.0.y) * scale + padding;
+                Point::new(px, py)
+            })
+            .collect();
+
+        let msdf_metrics = Self::from_msdf(msdf, &pixel_corners);
+        let sdf_metrics = Self::from_sdf(sdf, &pixel_corners);
+
+        let improvement_ratio = if sdf_metrics.mean_corner_gradient > 1e-6 {
+            msdf_metrics.mean_corner_gradient / sdf_metrics.mean_corner_gradient
+        } else {
+            1.0
+        };
+
+        CornerComparison {
+            msdf_metrics,
+            sdf_metrics,
+            improvement_ratio,
+        }
+    }
+}
+
+/// Result of comparing MSDF and SDF corner sharpness.
+#[derive(Debug, Clone)]
+pub struct CornerComparison {
+    /// Corner sharpness metrics for the MSDF bitmap.
+    pub msdf_metrics: CornerSharpnessMetrics,
+    /// Corner sharpness metrics for the single-channel SDF bitmap.
+    pub sdf_metrics: CornerSharpnessMetrics,
+    /// Improvement ratio: `msdf_mean / sdf_mean`. Values > 1.0 mean MSDF is sharper.
+    pub improvement_ratio: f32,
 }
 
 /// Compute the median of three f32 values.
@@ -2526,6 +2608,44 @@ mod tests {
         // The key assertion is that metrics are produced without errors
         assert!(msdf_metrics.mean_corner_gradient >= 0.0);
         assert!(sdf_metrics.mean_corner_gradient >= 0.0);
+    }
+
+    #[test]
+    fn test_compare_msdf_vs_sdf_on_sharp_glyph() {
+        let data = load_test_font_data();
+        let config = MsdfConfig::default();
+        let msdf_gen = MsdfGenerator::new(data.clone(), config.clone()).unwrap();
+        let sdf_gen = SdfGenerator::new(
+            data,
+            SdfConfig {
+                glyph_size: config.glyph_size,
+                distance_range: config.distance_range,
+                padding: config.padding,
+            },
+        )
+        .unwrap();
+
+        // 'A' has a sharp apex
+        let mut outline = msdf_gen.generate_outline('A').unwrap();
+        outline.apply_edge_coloring(config.angle_threshold);
+
+        let msdf = msdf_gen.generate_msdf_for_char('A').unwrap();
+        let sdf = sdf_gen.generate_sdf_for_char('A').unwrap();
+
+        let comparison = CornerSharpnessMetrics::compare_msdf_vs_sdf(
+            &outline,
+            &msdf,
+            &sdf,
+            config.angle_threshold,
+        );
+
+        // Should have found some sharp corners
+        assert!(
+            comparison.msdf_metrics.corner_count > 0,
+            "'A' should have sharp corners"
+        );
+        // improvement_ratio should be non-negative
+        assert!(comparison.improvement_ratio >= 0.0);
     }
 
     // -----------------------------------------------------------------------
