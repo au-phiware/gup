@@ -43,6 +43,7 @@
 
 pub mod atlas;
 pub mod font;
+pub mod hover_reveal;
 pub mod layout;
 pub mod msdf;
 pub mod renderer;
@@ -51,6 +52,7 @@ pub mod style;
 
 pub use atlas::*;
 pub use font::*;
+pub use hover_reveal::*;
 pub use layout::*;
 pub use msdf::*;
 pub use renderer::*;
