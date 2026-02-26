@@ -8,6 +8,7 @@
 //! with the statistical shader functions from GUP-139 for efficient quartile calculation.
 
 use crate::mark::Mark;
+use crate::selection::{AttrValue, MarkInstanceBuilder};
 use crate::shader_function::{MinMax, Percentile, Vec2, Vec4};
 use crate::shader_pipeline::ComposableShaderPipeline;
 use std::collections::HashMap;
@@ -594,6 +595,94 @@ impl From<BoxPlotAttributes> for BoxPlotInstance {
     }
 }
 
+impl MarkInstanceBuilder for BoxPlot {
+    type Instance = BoxPlotInstance;
+
+    fn default_instance() -> Self::Instance {
+        BoxPlotInstance::from(&BoxPlotAttributes::default())
+    }
+
+    fn build_instance(attrs: &[(&str, AttrValue)]) -> Self::Instance {
+        let mut instance = Self::default_instance();
+        for &(name, value) in attrs {
+            match name {
+                "position" | "center" => {
+                    if let AttrValue::Vec2(v) = value {
+                        instance.position = v;
+                    }
+                }
+                "min" | "whisker_min" => {
+                    if let AttrValue::Float(v) = value {
+                        instance.whisker_min = v;
+                    }
+                }
+                "q1" => {
+                    if let AttrValue::Float(v) = value {
+                        instance.q1 = v;
+                    }
+                }
+                "median" => {
+                    if let AttrValue::Float(v) = value {
+                        instance.median = v;
+                    }
+                }
+                "q3" => {
+                    if let AttrValue::Float(v) = value {
+                        instance.q3 = v;
+                    }
+                }
+                "max" | "whisker_max" => {
+                    if let AttrValue::Float(v) = value {
+                        instance.whisker_max = v;
+                    }
+                }
+                "width" => {
+                    if let AttrValue::Float(v) = value {
+                        instance.width = v;
+                    }
+                }
+                "box_fill_color" | "fill_color" | "color" => {
+                    if let AttrValue::Vec4(v) = value {
+                        instance.box_fill_color = v;
+                    }
+                }
+                "box_stroke_color" => {
+                    if let AttrValue::Vec4(v) = value {
+                        instance.box_stroke_color = v;
+                    }
+                }
+                "median_color" => {
+                    if let AttrValue::Vec4(v) = value {
+                        instance.median_color = v;
+                    }
+                }
+                "whisker_color" => {
+                    if let AttrValue::Vec4(v) = value {
+                        instance.whisker_color = v;
+                    }
+                }
+                "outlier_color" => {
+                    if let AttrValue::Vec4(v) = value {
+                        instance.outlier_color = v;
+                    }
+                }
+                "stroke_width" => {
+                    if let AttrValue::Float(v) = value {
+                        instance.stroke_width = v;
+                    }
+                }
+                "outlier_radius" => {
+                    if let AttrValue::Float(v) = value {
+                        instance.outlier_radius = v;
+                    }
+                }
+                _ => {} // Ignore unknown attributes
+            }
+        }
+        instance
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -777,5 +866,94 @@ mod tests {
         // Both conversions should produce identical results.
         assert_eq!(inst_ref.position, inst_owned.position);
         assert_eq!(inst_ref.median, inst_owned.median);
+    }
+
+    #[test]
+    fn test_boxplot_instance_builder_default() {
+        let inst = BoxPlot::default_instance();
+        let default_attrs = BoxPlotAttributes::default();
+        let expected = BoxPlotInstance::from(&default_attrs);
+        assert_eq!(inst.position, expected.position);
+        assert_eq!(inst.median, expected.median);
+        assert_eq!(inst.q1, expected.q1);
+        assert_eq!(inst.q3, expected.q3);
+    }
+
+    #[test]
+    fn test_boxplot_instance_builder_with_attrs() {
+        use crate::selection::AttrValue;
+
+        let inst = BoxPlot::build_instance(&[
+            ("position", AttrValue::Vec2([0.5, 0.0])),
+            ("min", AttrValue::Float(0.1)),
+            ("q1", AttrValue::Float(0.3)),
+            ("median", AttrValue::Float(0.5)),
+            ("q3", AttrValue::Float(0.7)),
+            ("max", AttrValue::Float(0.9)),
+            ("width", AttrValue::Float(0.2)),
+            ("stroke_width", AttrValue::Float(0.01)),
+        ]);
+        assert_eq!(inst.position, [0.5, 0.0]);
+        assert_eq!(inst.whisker_min, 0.1);
+        assert_eq!(inst.q1, 0.3);
+        assert_eq!(inst.median, 0.5);
+        assert_eq!(inst.q3, 0.7);
+        assert_eq!(inst.whisker_max, 0.9);
+        assert_eq!(inst.width, 0.2);
+        assert_eq!(inst.stroke_width, 0.01);
+    }
+
+    #[test]
+    fn test_boxplot_instance_builder_color_attrs() {
+        use crate::selection::AttrValue;
+
+        let red = [1.0, 0.0, 0.0, 1.0];
+        let green = [0.0, 1.0, 0.0, 1.0];
+        let blue = [0.0, 0.0, 1.0, 1.0];
+
+        let inst = BoxPlot::build_instance(&[
+            ("box_fill_color", AttrValue::Vec4(red)),
+            ("median_color", AttrValue::Vec4(green)),
+            ("whisker_color", AttrValue::Vec4(blue)),
+        ]);
+        assert_eq!(inst.box_fill_color, red);
+        assert_eq!(inst.median_color, green);
+        assert_eq!(inst.whisker_color, blue);
+    }
+
+    #[test]
+    fn test_boxplot_instance_builder_aliases() {
+        use crate::selection::AttrValue;
+
+        // "center" alias for "position"
+        let inst = BoxPlot::build_instance(&[("center", AttrValue::Vec2([0.3, 0.4]))]);
+        assert_eq!(inst.position, [0.3, 0.4]);
+
+        // "fill_color" alias for "box_fill_color"
+        let yellow = [1.0, 1.0, 0.0, 1.0];
+        let inst = BoxPlot::build_instance(&[("fill_color", AttrValue::Vec4(yellow))]);
+        assert_eq!(inst.box_fill_color, yellow);
+
+        // "color" alias for "box_fill_color"
+        let inst = BoxPlot::build_instance(&[("color", AttrValue::Vec4(yellow))]);
+        assert_eq!(inst.box_fill_color, yellow);
+
+        // "whisker_min" / "whisker_max" aliases
+        let inst = BoxPlot::build_instance(&[
+            ("whisker_min", AttrValue::Float(0.05)),
+            ("whisker_max", AttrValue::Float(0.95)),
+        ]);
+        assert_eq!(inst.whisker_min, 0.05);
+        assert_eq!(inst.whisker_max, 0.95);
+    }
+
+    #[test]
+    fn test_boxplot_instance_builder_ignores_unknown() {
+        use crate::selection::AttrValue;
+
+        let default = BoxPlot::default_instance();
+        let inst = BoxPlot::build_instance(&[("unknown_attr", AttrValue::Float(999.0))]);
+        assert_eq!(inst.position, default.position);
+        assert_eq!(inst.median, default.median);
     }
 }
