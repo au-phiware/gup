@@ -148,3 +148,90 @@ code generation, and dead code elimination for all 9 existing compute shaders.
 - 4 round-trip tests for compute constructs
 - 3 DCE tests with compute entry points
 - 15 unit tests for individual compute features
+
+## Retrospective
+
+**Completed**: 2025-08-08
+
+### Key Technical Learnings
+
+#### Token Splitting for Nested Generics
+
+- **Challenge**: The `>>` operator conflicts with nested generic closing
+  brackets (e.g., `array<atomic<u32>, 256>` ending with `>>` if no comma
+  intervened). Tokenizing `>>` as `ShiftRight` could break type parsing.
+- **Solution**: Added `expect_greater()` method that accepts either `Greater` or
+  `ShiftRight` tokens. When `ShiftRight` is encountered where a single `>` is
+  expected, it splits the token by consuming `ShiftRight` and inserting a
+  replacement `Greater` token at the current position.
+- **Pattern**: Context-sensitive token consumption — the same token (`>>`) means
+  different things in type context vs expression context. Splitting at the
+  parser level rather than the lexer level keeps the lexer simple.
+
+#### Scientific Notation in Float Lexing
+
+- **Challenge**: Compute shaders use scientific notation (`1e38`, `3.40282e+38`)
+  for large/small float constants. The original lexer only handled digits and
+  dots.
+- **Solution**: Extended `read_number` to detect `e`/`E` characters and consume
+  optional `+`/`-` signs after the exponent marker.
+- **Pattern**: Real-world WGSL uses many float literal formats. Testing against
+  actual shader files (not just synthetic tests) catches these gaps.
+
+#### For-Loop Update Assignments
+
+- **Challenge**: The for-loop update clause (`i = i + 1u`) is an assignment, not
+  just an expression. The original parser only parsed expressions in the update
+  position.
+- **Solution**: After parsing the update expression, check for `=` or `+=` and
+  convert to an assignment or compound assignment statement.
+- **Pattern**: WGSL for-loops are more permissive than the original parser
+  assumed. Testing against real shaders revealed this immediately.
+
+### Architectural Decisions
+
+#### Storage Access Mode as Part of AddressSpace
+
+- **Decision**: Made `AddressSpace::Storage(AccessMode)` carry the access mode
+  directly, rather than adding a separate `access_mode` field to `GlobalVar`.
+- **Reasoning**: The access mode is syntactically part of the address space
+  declaration (`var<storage, read_write>`), and WGSL only allows access modes on
+  `storage` address space. Encoding this in the type prevents invalid
+  combinations.
+- **Trade-off**: Changes all code that matches `AddressSpace::Storage`, but the
+  compiler catches all sites.
+- **Future**: If WGSL adds access modes to other address spaces, this design
+  would need revision.
+
+#### Comprehensive WGSL Feature Support
+
+- **Decision**: Implemented many more WGSL features than the story strictly
+  required (switch, loop, break, continue, bitwise ops, hex literals, shift
+  operators, pointer types, atomic types, const declarations).
+- **Reasoning**: The AC required "existing compute shader WGSL files can be
+  parsed," which necessitated supporting all constructs those shaders use. An
+  incomplete parser would fail on real shaders.
+- **Trade-off**: Larger change set than minimal, but the parser is now useful
+  for a much broader range of WGSL.
+- **Future**: Enables compute shader composition (GUP-192) and any future WGSL
+  analysis tools.
+
+### Development Workflow Insights
+
+- Testing against actual shader files (`src/shaders/*.compute.wgsl`) was the
+  most effective way to find parser gaps. Synthetic unit tests alone would have
+  missed scientific notation, for-loop assignments, and several other
+  constructs.
+- The existing AST architecture (types → parser → generator → optimizer) was
+  well-structured for extension. Adding new variants to enums and handling them
+  in each module was systematic. The compiler's exhaustive match checking
+  ensured no cases were missed.
+- Working in two increments (types+parser+generator, then tests+fixes) was
+  efficient. The first increment established the structure, the second validated
+  it against reality and fixed gaps.
+
+### Follow-up Stories
+
+No new stories identified. The existing GUP-192 (Dynamic Attribute Readback
+Pipeline) is already planned and could benefit from this compute shader AST
+support.
