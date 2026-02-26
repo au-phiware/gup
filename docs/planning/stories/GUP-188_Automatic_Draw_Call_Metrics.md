@@ -1,6 +1,6 @@
 # GUP-188: Automatic Draw Call Metrics in MarkRenderer
 
-**Status**: 📋 Planned **Priority**: Low **Category**: Performance / Developer
+**Status**: 🚧 In Progress **Priority**: Low **Category**: Performance / Developer
 Experience **Estimated Effort**: 0.5 days **Dependencies**: GUP-070 (Mark
 Performance Optimization)
 
