@@ -1295,6 +1295,20 @@ impl<T, M: Mark> Selection<T, M> {
     }
 }
 
+impl<T, M: Mark> Drop for Selection<T, M> {
+    fn drop(&mut self) {
+        // Automatically deregister ARIA tree when selection is dropped.
+        if let Some(root) = self.aria_root_node.take()
+            && let Some(acc) = self
+                .context
+                .as_ref()
+                .and_then(|ctx| ctx.accessibility().cloned())
+                && let Ok(mut system) = acc.lock() {
+                    system.aria_tree.remove_subtree(root);
+                }
+    }
+}
+
 /// Internal GPU state for rendering a Selection's data.
 ///
 /// Holds the render pipeline, vertex/index/instance buffers, and bind group.
@@ -2399,6 +2413,47 @@ mod tests {
             assert_eq!(
                 system.aria_tree.get_node(root2).unwrap().label,
                 "Circle chart with 4 data points"
+            );
+        });
+    }
+
+    #[test]
+    fn gpu_aria_drop_cleans_up() {
+        pollster::block_on(async {
+            let render_ctx = match crate::RenderContext::new().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let acc = std::sync::Arc::new(std::sync::Mutex::new(
+                crate::accessibility::AccessibilitySystem::new(),
+            ));
+            let mut render_ctx = render_ctx;
+            render_ctx.set_accessibility(acc.clone());
+
+            let ctx = std::sync::Arc::new(render_ctx);
+
+            let root;
+            {
+                let mut sel =
+                    Selection::<(), Circle>::new(vec![(), ()], ctx).expect("selection creation");
+                sel.sync_aria_from_context();
+                root = sel.aria_root_node().unwrap();
+
+                // Verify the tree is registered.
+                let system = acc.lock().unwrap();
+                assert!(system.aria_tree.get_node(root).is_some());
+                // Drop sel at end of scope.
+            }
+
+            // After drop, the ARIA tree should be cleaned up.
+            let system = acc.lock().unwrap();
+            assert!(
+                system.aria_tree.get_node(root).is_none(),
+                "ARIA node should be removed after selection drop"
             );
         });
     }
