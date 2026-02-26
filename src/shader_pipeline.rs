@@ -1368,6 +1368,10 @@ impl ComposableShaderPipeline {
     }
 
     /// String-based optimization pipeline (the original implementation).
+    ///
+    /// Retained as a fallback when AST parsing fails. Prefer AST-based
+    /// optimization via `OptimizationConfig { use_ast_analysis: true, .. }`.
+    #[allow(deprecated)]
     fn optimize_shader_string(&self, shader_source: &str) -> String {
         let mut optimized = shader_source.to_string();
 
@@ -1463,6 +1467,10 @@ impl ComposableShaderPipeline {
     }
 
     /// Remove unused uniform declarations from shader source.
+    #[deprecated(
+        since = "0.1.0",
+        note = "Use AST-based optimization via `OptimizationConfig { use_ast_analysis: true, .. }` instead"
+    )]
     fn remove_unused_uniforms(&self, shader: &str) -> String {
         let mut lines: Vec<&str> = shader.lines().collect();
         let mut used_uniforms = std::collections::HashSet::new();
@@ -1536,6 +1544,10 @@ impl ComposableShaderPipeline {
     /// - Considers function size and call count
     /// - Performs basic control flow analysis
     /// - Tracks inlining decisions for profiling
+    #[deprecated(
+        since = "0.1.0",
+        note = "Use AST-based optimization via `OptimizationConfig { use_ast_analysis: true, .. }` instead"
+    )]
     fn inline_small_functions_advanced(&self, shader: &str) -> String {
         let config = &self.optimization_config.inlining;
         let mut optimized = shader.to_string();
@@ -1603,6 +1615,10 @@ impl ComposableShaderPipeline {
     }
 
     /// Perform constant folding optimizations.
+    #[deprecated(
+        since = "0.1.0",
+        note = "Use AST-based optimization via `OptimizationConfig { use_ast_analysis: true, .. }` instead"
+    )]
     fn fold_constants(&self, shader: &str) -> String {
         let mut optimized = shader.to_string();
 
@@ -1638,6 +1654,10 @@ impl ComposableShaderPipeline {
     /// When a `let x = <literal>;` is used exactly once, substitute the
     /// literal at the use site and remove the binding.  This is conservative
     /// and only handles simple scalar/vec literals to avoid correctness issues.
+    #[deprecated(
+        since = "0.1.0",
+        note = "Use AST-based optimization via `OptimizationConfig { use_ast_analysis: true, .. }` instead"
+    )]
     pub fn propagate_constants(&self, shader: &str) -> String {
         let lines: Vec<&str> = shader.lines().collect();
         let mut constants: Vec<(String, String)> = Vec::new();
@@ -1923,6 +1943,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_constant_folding() {
         let pipeline = ComposableShaderPipeline::new();
         let test_code = "let result = value * 1.0 + 0.0;";
@@ -1990,6 +2011,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_removed_unused_uniforms() {
         let pipeline = ComposableShaderPipeline::new();
         let shader_with_unused = r#"
@@ -2199,6 +2221,7 @@ fn vs_main() -> f32 {
     // -----------------------------------------------------------------------
 
     #[test]
+    #[allow(deprecated)]
     fn test_fold_subtraction_identity() {
         let pipeline = ComposableShaderPipeline::new();
         let result = pipeline.fold_constants("let x = y - 0.0;");
@@ -2206,6 +2229,7 @@ fn vs_main() -> f32 {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_fold_division_identity() {
         let pipeline = ComposableShaderPipeline::new();
         let result = pipeline.fold_constants("let x = y / 1.0;");
@@ -2213,6 +2237,7 @@ fn vs_main() -> f32 {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_fold_vec4_zero() {
         let pipeline = ComposableShaderPipeline::new();
         let result = pipeline.fold_constants("let c = vec4<f32>(0.0, 0.0, 0.0, 0.0);");
@@ -2220,6 +2245,7 @@ fn vs_main() -> f32 {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_fold_vec4_one() {
         let pipeline = ComposableShaderPipeline::new();
         let result = pipeline.fold_constants("let c = vec4<f32>(1.0, 1.0, 1.0, 1.0);");
@@ -2227,6 +2253,7 @@ fn vs_main() -> f32 {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_constant_propagation_single_use() {
         let pipeline = ComposableShaderPipeline::new();
         let shader = "let k = 42.0;\nlet result = k + 1.0;\n";
@@ -2240,6 +2267,7 @@ fn vs_main() -> f32 {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_constant_propagation_multiple_use() {
         let pipeline = ComposableShaderPipeline::new();
         let shader = "let k = 42.0;\nlet a = k + 1.0;\nlet b = k + 2.0;\n";
