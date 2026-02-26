@@ -1110,13 +1110,22 @@ mod tests {
         let lod = LODLevel::High;
 
         // First lookup → miss
-        assert!(cache
-            .get_instances(&bounds, &config, AxisPosition::Bottom, viewport, lod)
-            .is_none());
+        assert!(
+            cache
+                .get_instances(&bounds, &config, AxisPosition::Bottom, viewport, lod)
+                .is_none()
+        );
 
         // Store instances
         let instances = vec![TickInstance::new([0.0, -0.8], [0.0, -0.02], [0.2; 4])];
-        cache.store_instances(&bounds, &config, AxisPosition::Bottom, viewport, lod, instances);
+        cache.store_instances(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            viewport,
+            lod,
+            instances,
+        );
 
         // Second lookup → hit
         let cached = cache
@@ -1138,13 +1147,22 @@ mod tests {
         let lod = LODLevel::High;
 
         let instances = vec![TickInstance::new([0.0, -0.8], [0.0, -0.02], [0.2; 4])];
-        cache.store_instances(&bounds, &config, AxisPosition::Bottom, viewport, lod, instances);
+        cache.store_instances(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            viewport,
+            lod,
+            instances,
+        );
 
         cache.invalidate();
 
-        assert!(cache
-            .get_instances(&bounds, &config, AxisPosition::Bottom, viewport, lod)
-            .is_none());
+        assert!(
+            cache
+                .get_instances(&bounds, &config, AxisPosition::Bottom, viewport, lod)
+                .is_none()
+        );
     }
 
     #[test]
@@ -1167,25 +1185,40 @@ mod tests {
         cache.store(&bounds, &config, AxisPosition::Bottom, viewport, lod, verts);
 
         // Instance cache should still miss
-        assert!(cache
-            .get_instances(&bounds, &config, AxisPosition::Bottom, viewport, lod)
-            .is_none());
+        assert!(
+            cache
+                .get_instances(&bounds, &config, AxisPosition::Bottom, viewport, lod)
+                .is_none()
+        );
 
         // Vertex cache should hit
-        assert!(cache
-            .get(&bounds, &config, AxisPosition::Bottom, viewport, lod)
-            .is_some());
+        assert!(
+            cache
+                .get(&bounds, &config, AxisPosition::Bottom, viewport, lod)
+                .is_some()
+        );
 
         // Now store instances
         let instances = vec![TickInstance::new([0.0, -0.8], [0.0, -0.02], [0.2; 4])];
-        cache.store_instances(&bounds, &config, AxisPosition::Bottom, viewport, lod, instances);
+        cache.store_instances(
+            &bounds,
+            &config,
+            AxisPosition::Bottom,
+            viewport,
+            lod,
+            instances,
+        );
 
         // Both should hit
-        assert!(cache
-            .get(&bounds, &config, AxisPosition::Bottom, viewport, lod)
-            .is_some());
-        assert!(cache
-            .get_instances(&bounds, &config, AxisPosition::Bottom, viewport, lod)
-            .is_some());
+        assert!(
+            cache
+                .get(&bounds, &config, AxisPosition::Bottom, viewport, lod)
+                .is_some()
+        );
+        assert!(
+            cache
+                .get_instances(&bounds, &config, AxisPosition::Bottom, viewport, lod)
+                .is_some()
+        );
     }
 }

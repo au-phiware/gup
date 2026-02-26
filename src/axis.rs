@@ -793,13 +793,8 @@ impl AxisRenderer {
         }
 
         // 4. Cache miss — generate and store
-        let instances = self.generate_tick_instances(
-            bounds,
-            &adjusted_config,
-            position,
-            scale,
-            viewport_size,
-        );
+        let instances =
+            self.generate_tick_instances(bounds, &adjusted_config, position, scale, viewport_size);
         self.geometry_cache.store_instances(
             bounds,
             &adjusted_config,
@@ -1569,9 +1564,7 @@ impl TickPipeline {
     pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("tick_instanced_shader"),
-            source: wgpu::ShaderSource::Wgsl(
-                include_str!("shaders/tick_instanced.wgsl").into(),
-            ),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/tick_instanced.wgsl").into()),
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -1640,7 +1633,7 @@ impl TickPipeline {
     pub fn upload(
         &self,
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        _queue: &wgpu::Queue,
         instances: &[TickInstance],
     ) -> (wgpu::Buffer, wgpu::Buffer) {
         use wgpu::util::{BufferInitDescriptor, DeviceExt};
@@ -2652,13 +2645,8 @@ mod tests {
         let config = AxisConfiguration::default().without_line();
 
         let viewport = (800.0, 600.0);
-        let vertices = renderer.generate_tick_vertices(
-            &bounds,
-            &config,
-            AxisPosition::Bottom,
-            None,
-            viewport,
-        );
+        let vertices =
+            renderer.generate_tick_vertices(&bounds, &config, AxisPosition::Bottom, None, viewport);
         let instances = renderer.generate_tick_instances(
             &bounds,
             &config,
@@ -2687,14 +2675,8 @@ mod tests {
             // position + tick_vector should equal the tick-end vertex
             let end_x = inst.position[0] + inst.tick_vector[0];
             let end_y = inst.position[1] + inst.tick_vector[1];
-            assert!(
-                (end_x - v_end.position[0]).abs() < 1e-6,
-                "tick {i}: end x"
-            );
-            assert!(
-                (end_y - v_end.position[1]).abs() < 1e-6,
-                "tick {i}: end y"
-            );
+            assert!((end_x - v_end.position[0]).abs() < 1e-6, "tick {i}: end x");
+            assert!((end_y - v_end.position[1]).abs() < 1e-6, "tick {i}: end y");
 
             // Color matches
             assert_eq!(inst.color, v_start.color, "tick {i}: color");
@@ -2716,7 +2698,10 @@ mod tests {
         );
 
         for inst in &instances {
-            assert_eq!(inst.tick_vector[0], 0.0, "Bottom ticks should not move in X");
+            assert_eq!(
+                inst.tick_vector[0], 0.0,
+                "Bottom ticks should not move in X"
+            );
             assert!(
                 inst.tick_vector[1] < 0.0,
                 "Bottom ticks should extend downward (negative Y)"
@@ -2789,10 +2774,7 @@ mod tests {
                 inst.tick_vector[0] > 0.0,
                 "Right ticks should extend rightward (positive X)"
             );
-            assert_eq!(
-                inst.tick_vector[1], 0.0,
-                "Right ticks should not move in Y"
-            );
+            assert_eq!(inst.tick_vector[1], 0.0, "Right ticks should not move in Y");
         }
     }
 
@@ -2893,13 +2875,8 @@ mod tests {
         let config = AxisConfiguration::default();
         let viewport = (800.0, 600.0);
 
-        let vertices = renderer.generate_tick_vertices(
-            &bounds,
-            &config,
-            AxisPosition::Bottom,
-            None,
-            viewport,
-        );
+        let vertices =
+            renderer.generate_tick_vertices(&bounds, &config, AxisPosition::Bottom, None, viewport);
         let instances = renderer.generate_tick_instances(
             &bounds,
             &config,
