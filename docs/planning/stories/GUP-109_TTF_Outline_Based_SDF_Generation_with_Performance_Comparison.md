@@ -1,6 +1,6 @@
 # GUP-109: TTF Outline-Based SDF Generation with Performance Comparison
 
-**Status**: Open  
+**Status**: 🚧 In Progress  
 **Priority**: Medium  
 **Component**: Font Atlas / Text Rendering  
 **Depends On**: GUP-108 (Correct SDF Font Atlas Generation)  
