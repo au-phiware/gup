@@ -1,6 +1,6 @@
 # GUP-208: Mark Derive Macro GPU Instance Buffer Generation
 
-**Status**: 📋 Planned **Priority**: Low **Category**: Developer Experience
+**Status**: 🚧 In Progress **Priority**: Low **Category**: Developer Experience
 **Estimated Effort**: 1 day **Dependencies**: GUP-071 (Custom Mark Development
 Kit)
 
