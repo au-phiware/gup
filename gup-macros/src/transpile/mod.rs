@@ -92,6 +92,7 @@ mod optimizer_tests;
 pub mod performance;
 mod pipeline_tests;
 pub mod source_map;
+pub mod transpile_pipeline;
 #[allow(dead_code, unused_imports)]
 pub mod type_map;
 mod type_map_integration_tests;
@@ -113,5 +114,7 @@ pub use diagnostics::{
 pub use optimizer::{OptimizationConfig, OptimizationLevel, PassResult, optimize_module};
 #[allow(unused_imports)]
 pub use source_map::{SourceMap, SourceMapping};
+#[allow(unused_imports)]
+pub use transpile_pipeline::{TranspilePipelineConfig, TranspileResult, transpile_function};
 #[allow(unused_imports)]
 pub use type_map::{TypeMapper, TypeMappingError, TypeMappingErrorKind, WgslTypeInfo};
