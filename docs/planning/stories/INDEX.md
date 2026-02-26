@@ -296,6 +296,8 @@ system story. The expanded story is also complete._
 | [GUP-203](GUP-203_Multi_Font_Atlas_Manager.md)                                     | Multi-Font Atlas Manager                    | 📋 Planned  | Low      | —      |
 | [GUP-214](GUP-214_Font_Atlas_Eviction.md)                                          | Font Atlas Eviction and Memory Management   | 📋 Planned  | Low      | —      |
 | [GUP-215](GUP-215_Chart_Builder_Multi_Font.md)                                     | Chart Builder Multi-Font Integration        | ✅ Complete | Medium   | —      |
+| [GUP-216](GUP-216_Chart_Title_Layout_Configuration.md)                             | Chart Title Layout Configuration            | 📋 Planned  | Low      | —      |
+| [GUP-217](GUP-217_Per_Axis_Label_Style_Override.md)                                | Per-Axis Label Style Override               | 📋 Planned  | Low      | —      |
 
 ### Post GUP-016 Stories - Accessibility System (Stories 111-130)
 

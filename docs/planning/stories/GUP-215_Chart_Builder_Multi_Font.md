@@ -89,3 +89,75 @@ so I can create typographically rich charts without managing font atlases.
 ---
 
 **Estimated Effort**: 3-5 days **Prerequisites**: GUP-202 ✅ **Blockers**: None
+
+## Retrospective
+
+**Completed**: 2025-07-22
+
+### Key Technical Learnings
+
+#### FontAtlasManager as the bridge between chart builders and text rendering
+
+- **Challenge**: Chart builders generate axis geometry (vertices + labels) but
+  don't own the text rendering pipeline. The text rendering happens externally
+  in the example/app code, making it hard to inject font family resolution.
+- **Solution**: Added `queue_chart_text()` and `queue_chart_text_resolved()`
+  methods to `ComposedChart` that accept `TextRenderer` + `FontAtlasManager`
+  references. These methods bridge the chart geometry layer and the text
+  rendering layer, using `queue_text_with_fonts` under the hood.
+- **Pattern**: The chart builder doesn't _own_ the text renderer — it borrows
+  it. This keeps the architecture composable: the caller controls the render
+  lifecycle while the chart builder controls the text content and styling.
+
+#### TextStyle propagation from config to labels
+
+- **Challenge**: `AxisLabel` has its own `anchor` field from axis geometry, but
+  the font family and other style properties should come from `ChartConfig`.
+- **Solution**: Clone the config's `label_style`, then override the anchor with
+  the label-specific anchor. This preserves the user's font, color, and size
+  choices while respecting the per-label anchor from the axis system.
+- **Pattern**: Config-level styles as base, with per-element overrides applied
+  on top.
+
+### Architectural Decisions
+
+#### External text renderer ownership
+
+- **Decision**: `ComposedChart` borrows `TextRenderer`, `FontAtlasManager`, and
+  `TextLayoutEngine` instead of owning them.
+- **Reasoning**: Text rendering resources (GPU pipelines, atlases) should be
+  shared across the application, not duplicated per chart. Owning them would
+  force a specific lifecycle that may conflict with the app's render loop.
+- **Trade-off**: The API requires passing more arguments to `queue_chart_text`.
+- **Future**: If charts are made more self-contained (e.g., for a
+  `Chart::render_to_texture()` API), the text renderer could be internalised
+  behind an optional owned mode.
+
+#### Title positioning
+
+- **Decision**: Title is centred horizontally at `width / 2` and vertically at
+  `top_margin / 2`, using `TextAnchor::TopCenter`.
+- **Reasoning**: Simple and predictable for the common case. The top margin
+  already reserves space for the title.
+- **Trade-off**: Doesn't support arbitrary title positions or multi-line titles.
+- **Future**: A dedicated `TitleConfig` struct could add alignment, offset, and
+  multi-line support.
+
+### Development Workflow Insights
+
+- The headless `GupContext` + `begin_frame()` pattern made GPU integration tests
+  straightforward — no window or surface needed.
+- The two-phase text rendering API (queue before pass, render during pass) is
+  clean but requires discipline: the example must call `begin_frame()`, queue
+  all text, then create the render pass.
+- Pre-existing doctest failures (GUP-207) are noisy but don't affect
+  lib/integration test results.
+
+### Follow-up Stories
+
+1. **GUP-216: Chart Title Layout Configuration** — Add `TitleConfig` to support
+   title alignment (left/center/right), vertical offset, subtitle, and
+   multi-line titles.
+2. **GUP-217: Per-Axis Label Style Override** — Allow individual axes to
+   override the chart-level `label_style`, e.g., different font sizes or colors
+   for the X-axis vs Y-axis.
