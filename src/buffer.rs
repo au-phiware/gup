@@ -1946,4 +1946,260 @@ mod tests {
         assert_eq!(pool.get_stats().pool_hits, 1);
         assert_eq!(pool.get_stats().pooled_buffers, 0);
     }
+
+    // === Staging Buffer Pool Tests (GUP-079) ===
+
+    #[tokio::test]
+    async fn test_staging_buffer_type_flags() {
+        // Staging buffers should have MAP_READ | COPY_DST usage
+        let usage = BufferType::Staging.usage_flags();
+        assert!(usage.contains(wgpu::BufferUsages::MAP_READ));
+        assert!(usage.contains(wgpu::BufferUsages::COPY_DST));
+        // Should NOT have COPY_SRC (not needed for staging readback)
+        assert!(!usage.contains(wgpu::BufferUsages::COPY_SRC));
+    }
+
+    #[tokio::test]
+    async fn test_staging_buffer_alignment() {
+        assert_eq!(BufferType::Staging.alignment(), 4);
+    }
+
+    #[tokio::test]
+    async fn test_staging_buffer_pool_allocation() {
+        let context = create_test_context().await;
+        let device = Arc::new(context.device().clone());
+        let mut pool = BufferPool::new(device);
+
+        // Allocate a staging buffer
+        let (buf1, sc1) = pool.allocate_raw(BufferType::Staging, 64);
+        assert!(sc1 >= 64);
+        assert_eq!(pool.get_stats().pool_misses, 1);
+        assert_eq!(pool.get_stats().active_buffers, 1);
+
+        // Return to pool
+        pool.deallocate_raw(buf1, BufferType::Staging, sc1);
+        assert_eq!(pool.get_stats().pooled_buffers, 1);
+        assert_eq!(pool.get_stats().active_buffers, 0);
+
+        // Reallocate should hit the pool
+        let (_buf2, sc2) = pool.allocate_raw(BufferType::Staging, 64);
+        assert_eq!(sc2, sc1);
+        assert_eq!(pool.get_stats().pool_hits, 1);
+    }
+
+    #[tokio::test]
+    async fn test_staging_buffer_reuse_rate() {
+        let context = create_test_context().await;
+        let device = Arc::new(context.device().clone());
+        let mut pool = BufferPool::new(device);
+
+        // First round: all misses (cold start)
+        let mut buffers = Vec::new();
+        for _ in 0..5 {
+            buffers.push(pool.allocate_raw(BufferType::Staging, 128));
+        }
+        for (buf, sc) in buffers {
+            pool.deallocate_raw(buf, BufferType::Staging, sc);
+        }
+
+        // Second round: all hits (warm pool)
+        let mut buffers2 = Vec::new();
+        for _ in 0..5 {
+            buffers2.push(pool.allocate_raw(BufferType::Staging, 128));
+        }
+        for (buf, sc) in buffers2 {
+            pool.deallocate_raw(buf, BufferType::Staging, sc);
+        }
+
+        // Third round: all hits again
+        for _ in 0..5 {
+            let (buf, sc) = pool.allocate_raw(BufferType::Staging, 128);
+            pool.deallocate_raw(buf, BufferType::Staging, sc);
+        }
+
+        // Recent hit rate for last 10 allocations should be >80%
+        let hit_rate = pool.recent_hit_rate(10);
+        assert!(
+            hit_rate > 80.0,
+            "Expected >80% reuse rate but got {hit_rate}%"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_staging_buffer_different_sizes() {
+        let context = create_test_context().await;
+        let device = Arc::new(context.device().clone());
+        let mut pool = BufferPool::new(device);
+
+        // Allocate staging buffers of different sizes
+        let (buf_small, sc_small) = pool.allocate_raw(BufferType::Staging, 4);
+        let (buf_medium, sc_medium) = pool.allocate_raw(BufferType::Staging, 1024);
+        let (buf_large, sc_large) = pool.allocate_raw(BufferType::Staging, 65536);
+
+        // Each should have a different size class
+        assert_ne!(sc_small, sc_medium);
+        assert_ne!(sc_medium, sc_large);
+
+        // Return all to pool
+        pool.deallocate_raw(buf_small, BufferType::Staging, sc_small);
+        pool.deallocate_raw(buf_medium, BufferType::Staging, sc_medium);
+        pool.deallocate_raw(buf_large, BufferType::Staging, sc_large);
+
+        assert_eq!(pool.get_stats().pooled_buffers, 3);
+
+        // Each size class should be reusable
+        let (_, sc) = pool.allocate_raw(BufferType::Staging, 4);
+        assert_eq!(sc, sc_small);
+        let (_, sc) = pool.allocate_raw(BufferType::Staging, 1024);
+        assert_eq!(sc, sc_medium);
+        let (_, sc) = pool.allocate_raw(BufferType::Staging, 65536);
+        assert_eq!(sc, sc_large);
+    }
+
+    #[tokio::test]
+    async fn test_staging_buffer_pool_memory_overhead() {
+        let context = create_test_context().await;
+        let device = Arc::new(context.device().clone());
+
+        let config = BufferPoolConfig {
+            max_total_memory: Some(1024 * 1024), // 1 MB limit
+            ..Default::default()
+        };
+        let mut pool = BufferPool::with_config(device, config);
+
+        // Allocate and return buffers to build up pool
+        for _ in 0..10 {
+            let (buf, sc) = pool.allocate_raw(BufferType::Staging, 256);
+            pool.deallocate_raw(buf, BufferType::Staging, sc);
+        }
+
+        // Memory overhead should be <10% of the limit
+        let usage = pool.memory_usage_percentage().unwrap();
+        assert!(
+            usage < 10.0,
+            "Pool memory overhead {usage}% exceeds 10% threshold"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_download_pooled_round_trip() {
+        let context = create_test_context().await;
+        let device = Arc::new(context.device().clone());
+        let mut pool = BufferPool::new(device.clone());
+
+        let mut buffer = GpuBuffer::new(&device, BufferType::Storage, 100);
+        let data = vec![1.0f32, 2.0, 3.0, 4.0, 5.0];
+        buffer.upload(&device, context.queue(), &data).unwrap();
+
+        let downloaded = buffer
+            .download_pooled(&device, context.queue(), &mut pool)
+            .await
+            .unwrap();
+
+        assert_eq!(downloaded, data);
+    }
+
+    #[tokio::test]
+    async fn test_download_range_pooled_round_trip() {
+        let context = create_test_context().await;
+        let device = Arc::new(context.device().clone());
+        let mut pool = BufferPool::new(device.clone());
+
+        let mut buffer = GpuBuffer::new(&device, BufferType::Storage, 100);
+        let data: Vec<f32> = (0..50).map(|i| i as f32).collect();
+        buffer.upload(&device, context.queue(), &data).unwrap();
+
+        let downloaded = buffer
+            .download_range_pooled(&device, context.queue(), 10, 10, &mut pool)
+            .await
+            .unwrap();
+
+        assert_eq!(downloaded.len(), 10);
+        assert_eq!(downloaded, &data[10..20]);
+    }
+
+    #[tokio::test]
+    async fn test_download_pooled_reuses_buffers() {
+        let context = create_test_context().await;
+        let device = Arc::new(context.device().clone());
+        let mut pool = BufferPool::new(device.clone());
+
+        let mut buffer = GpuBuffer::new(&device, BufferType::Storage, 100);
+        let data = vec![1.0f32, 2.0, 3.0, 4.0, 5.0];
+        buffer.upload(&device, context.queue(), &data).unwrap();
+
+        // First download: pool miss (staging buffer created)
+        let _ = buffer
+            .download_pooled(&device, context.queue(), &mut pool)
+            .await
+            .unwrap();
+        assert_eq!(pool.get_stats().pool_misses, 1);
+
+        // Second download: pool hit (staging buffer reused)
+        let _ = buffer
+            .download_pooled(&device, context.queue(), &mut pool)
+            .await
+            .unwrap();
+        assert_eq!(pool.get_stats().pool_hits, 1);
+
+        // Third download: pool hit again
+        let downloaded = buffer
+            .download_pooled(&device, context.queue(), &mut pool)
+            .await
+            .unwrap();
+        assert_eq!(pool.get_stats().pool_hits, 2);
+        assert_eq!(downloaded, data);
+    }
+
+    #[tokio::test]
+    async fn test_allocation_latency_improvement() {
+        use std::time::Instant;
+
+        let context = create_test_context().await;
+        let device = Arc::new(context.device().clone());
+        let mut pool = BufferPool::new(device.clone());
+
+        // Warm up the pool with staging buffers
+        for _ in 0..5 {
+            let (buf, sc) = pool.allocate_raw(BufferType::Staging, 4096);
+            pool.deallocate_raw(buf, BufferType::Staging, sc);
+        }
+
+        // Measure pooled allocation time (should be fast - just a deque pop)
+        let pooled_start = Instant::now();
+        for _ in 0..100 {
+            let (buf, sc) = pool.allocate_raw(BufferType::Staging, 4096);
+            pool.deallocate_raw(buf, BufferType::Staging, sc);
+        }
+        let pooled_time = pooled_start.elapsed();
+
+        // Measure fresh allocation time (creates new buffers each time)
+        let fresh_start = Instant::now();
+        for _ in 0..100 {
+            let _ = device.create_buffer(&BufferDescriptor {
+                label: Some("fresh_staging"),
+                size: 4096,
+                usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+            // Buffer is dropped here, not returned to any pool
+        }
+        let fresh_time = fresh_start.elapsed();
+
+        println!(
+            "Pooled: {:?}, Fresh: {:?}, Improvement: {:.1}x",
+            pooled_time,
+            fresh_time,
+            fresh_time.as_nanos() as f64 / pooled_time.as_nanos().max(1) as f64
+        );
+
+        // Pooled allocation should be faster than fresh allocation
+        // (at minimum, not significantly slower)
+        assert!(
+            pooled_time <= fresh_time.mul_f32(2.0),
+            "Pooled allocation ({:?}) should not be significantly slower than fresh ({:?})",
+            pooled_time,
+            fresh_time
+        );
+    }
 }
