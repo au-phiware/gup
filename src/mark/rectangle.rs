@@ -556,7 +556,10 @@ impl crate::selection::AccessibleMark for Rectangle {
                     parts.push(format!("size {:.1}×{:.1}", s[0], s[1]));
                 }
                 ("fill_color" | "color", AttrValue::Vec4(c)) => {
-                    parts.push(format!("color {}", describe_rect_color(c)));
+                    parts.push(format!(
+                        "color {}",
+                        crate::color_descriptor::describe_color(c)
+                    ));
                 }
                 _ => {}
             }
@@ -567,24 +570,6 @@ impl crate::selection::AccessibleMark for Rectangle {
 
     fn describe_mark_type() -> &'static str {
         "rectangle"
-    }
-}
-
-/// Map an RGBA colour to a simple human-readable name.
-fn describe_rect_color(c: [f32; 4]) -> &'static str {
-    let [r, g, b, _a] = c;
-    if r > 0.7 && g < 0.3 && b < 0.3 {
-        "red"
-    } else if r < 0.3 && g > 0.7 && b < 0.3 {
-        "green"
-    } else if r < 0.3 && g < 0.3 && b > 0.7 {
-        "blue"
-    } else if r > 0.9 && g > 0.9 && b > 0.9 {
-        "white"
-    } else if r < 0.1 && g < 0.1 && b < 0.1 {
-        "black"
-    } else {
-        "colored"
     }
 }
 
