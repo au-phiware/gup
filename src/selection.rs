@@ -2264,6 +2264,145 @@ mod tests {
         );
     }
 
+    // --- GPU integration tests (sync_aria_from_context) ---
+
+    #[test]
+    fn gpu_sync_aria_from_context() {
+        pollster::block_on(async {
+            let render_ctx = match crate::RenderContext::new().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            // Attach accessibility system to the render context.
+            let acc = std::sync::Arc::new(std::sync::Mutex::new(
+                crate::accessibility::AccessibilitySystem::new(),
+            ));
+            let mut render_ctx = render_ctx;
+            render_ctx.set_accessibility(acc.clone());
+
+            let ctx = std::sync::Arc::new(render_ctx);
+
+            let mut sel =
+                Selection::<(), Circle>::new(vec![(), (), ()], ctx).expect("selection creation");
+            sel.attr("center", |_: &()| [0.1f32, 0.2]);
+
+            // sync should register ARIA
+            assert!(sel.sync_aria_from_context());
+            assert!(sel.aria_root_node().is_some());
+
+            // Verify the ARIA tree contents.
+            let system = acc.lock().unwrap();
+            let root = sel.aria_root_node().unwrap();
+            let node = system.aria_tree.get_node(root).unwrap();
+            assert_eq!(node.label, "Circle chart with 3 data points");
+            assert_eq!(node.children.len(), 3);
+        });
+    }
+
+    #[test]
+    fn gpu_sync_aria_opt_out() {
+        pollster::block_on(async {
+            let render_ctx = match crate::RenderContext::new().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let acc = std::sync::Arc::new(std::sync::Mutex::new(
+                crate::accessibility::AccessibilitySystem::new(),
+            ));
+            let mut render_ctx = render_ctx;
+            render_ctx.set_accessibility(acc.clone());
+
+            let ctx = std::sync::Arc::new(render_ctx);
+
+            let mut sel = Selection::<(), Circle>::new(vec![()], ctx).expect("selection creation");
+            sel.set_auto_aria(false);
+
+            // Should not register when opted out.
+            assert!(!sel.sync_aria_from_context());
+            assert!(sel.aria_root_node().is_none());
+        });
+    }
+
+    #[test]
+    fn gpu_sync_aria_no_accessibility_system() {
+        pollster::block_on(async {
+            let render_ctx = match crate::RenderContext::new().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            // No accessibility system attached.
+            let ctx = std::sync::Arc::new(render_ctx);
+
+            let mut sel = Selection::<(), Circle>::new(vec![()], ctx).expect("selection creation");
+
+            // Should not register when no accessibility system.
+            assert!(!sel.sync_aria_from_context());
+            assert!(sel.aria_root_node().is_none());
+        });
+    }
+
+    #[test]
+    fn gpu_sync_aria_updates_on_second_call() {
+        pollster::block_on(async {
+            let render_ctx = match crate::RenderContext::new().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let acc = std::sync::Arc::new(std::sync::Mutex::new(
+                crate::accessibility::AccessibilitySystem::new(),
+            ));
+            let mut render_ctx = render_ctx;
+            render_ctx.set_accessibility(acc.clone());
+
+            let ctx = std::sync::Arc::new(render_ctx);
+
+            let mut sel =
+                Selection::<(), Circle>::new(vec![(), ()], ctx).expect("selection creation");
+
+            // First sync.
+            sel.sync_aria_from_context();
+            let root1 = sel.aria_root_node().unwrap();
+
+            {
+                let system = acc.lock().unwrap();
+                assert_eq!(
+                    system.aria_tree.get_node(root1).unwrap().label,
+                    "Circle chart with 2 data points"
+                );
+            }
+
+            // Change data and re-sync — should replace the old tree.
+            sel.set_data(vec![(), (), (), ()]);
+            sel.sync_aria_from_context();
+            let root2 = sel.aria_root_node().unwrap();
+
+            let system = acc.lock().unwrap();
+            // Old root should be gone.
+            assert!(system.aria_tree.get_node(root1).is_none());
+            // New root should be present.
+            assert_eq!(
+                system.aria_tree.get_node(root2).unwrap().label,
+                "Circle chart with 4 data points"
+            );
+        });
+    }
+
     // --- GPU integration tests ---
 
     #[test]
