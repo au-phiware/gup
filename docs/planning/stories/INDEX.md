@@ -88,7 +88,7 @@ epic and status.
 | [GUP-191](GUP-191_Enable_AST_Optimization_Default.md)          | Enable AST Optimization by Default             | ✅ Complete | Low      | 3      |
 | [GUP-192](GUP-192_Dynamic_Attribute_Readback_Pipeline.md)      | Dynamic Attribute Readback Pipeline            | ✅ Complete | Low      | —      |
 | [GUP-208](GUP-208_Mark_Derive_Instance_Buffer_Generation.md)   | Mark Derive Instance Buffer Generation         | ✅ Complete | Low      | —      |
-| [GUP-209](GUP-209_Mark_Validation_CI_Integration.md)           | Mark Validation CI Integration                 | 🚧 In Progress | Low      | —      |
+| [GUP-209](GUP-209_Mark_Validation_CI_Integration.md)           | Mark Validation CI Integration                 | ✅ Complete | Low      | —      |
 
 ### Post GUP-005 Stories - Shader Function System Enhancement (Stories 51+)
 

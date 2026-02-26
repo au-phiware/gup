@@ -1,7 +1,7 @@
 # GUP-209: Mark Validation CI Integration
 
-**Status**: 🚧 In Progress **Priority**: Low **Category**: Developer Experience
-**Estimated Effort**: 0.5 days **Dependencies**: GUP-071 (Custom Mark
+**Status**: ✅ Complete (2025-07-22) **Priority**: Low **Category**: Developer
+Experience **Estimated Effort**: 0.5 days **Dependencies**: GUP-071 (Custom Mark
 Development Kit)
 
 ## Summary
@@ -24,12 +24,12 @@ before merge.
 
 ## Acceptance Criteria
 
-- [ ] `mask validate-marks` command runs `MarkValidator` on all built-in mark
+- [x] `mask validate-marks` command runs `MarkValidator` on all built-in mark
       types (Circle, Rectangle, Line, Path, BoxPlot, Text)
-- [ ] Command exits with non-zero code if any mark fails validation
-- [ ] Validation report is printed in human-readable format
-- [ ] Performance profiling results are included in the output
-- [ ] Integration with `mask all-check` for pre-commit validation
+- [x] Command exits with non-zero code if any mark fails validation
+- [x] Validation report is printed in human-readable format
+- [x] Performance profiling results are included in the output
+- [x] Integration with `mask all-check` for pre-commit validation
 
 ## Technical Tasks
 
@@ -52,7 +52,44 @@ before merge.
 
 ## Definition of Done
 
-- [ ] All acceptance criteria met
-- [ ] `mask validate-marks` runs successfully
-- [ ] Integrated into `mask all-check`
-- [ ] Documentation updated
+- [x] All acceptance criteria met
+- [x] `mask validate-marks` runs successfully
+- [x] Integrated into `mask all-check`
+- [x] Documentation updated
+
+## Implementation Summary
+
+### What was implemented
+
+- **`validate_marks` binary** (`src/bin/validate_marks.rs`): CLI tool that runs
+  `MarkValidator` and `MarkProfiler` on all 6 built-in mark types (Circle,
+  Rectangle, Line, Path, BoxPlot, Text). Prints a structured, human-readable
+  report including per-section validation results, performance classification,
+  vertex/index counts, memory usage, and generation timing. Exits with non-zero
+  code if any mark fails validation.
+
+- **`mask validate-marks` command** (`maskfile.md`): New mask task that runs the
+  binary via `cargo run --bin validate_marks`.
+
+- **`mask all-check` integration** (`maskfile.md`): Added `mask validate-marks`
+  as a concurrent check in the `all-check` pipeline, ensuring mark validation
+  runs alongside lint, format, and other checks.
+
+- **Integration tests** (`tests/mark_validation_ci_tests.rs`): 5 tests verifying
+  all built-in marks pass validation, have no critical issues, meet performance
+  thresholds, produce expected report structure, and generate readable
+  summaries.
+
+### Key files changed
+
+| File                                | Change                                          |
+| ----------------------------------- | ----------------------------------------------- |
+| `src/bin/validate_marks.rs`         | New validation runner binary                    |
+| `Cargo.toml`                        | Added `[[bin]]` section                         |
+| `maskfile.md`                       | Added validate-marks task, wired into all-check |
+| `tests/mark_validation_ci_tests.rs` | New integration tests                           |
+
+### Test counts
+
+- 5 new integration tests (all passing)
+- All 6 built-in marks pass validation with 0 critical issues and 0 errors
