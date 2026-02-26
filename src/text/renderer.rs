@@ -506,8 +506,8 @@ impl TextRenderer {
             let sdf_params = [
                 glyph.glyph.sdf_scale,
                 0.0, // SDF edge threshold (0.0 for normal rendering at distance field edge)
-                0.0, // Outline width
-                0.0, // Debug quad outline (0.0 = disabled, show actual text)
+                0.0, // Channel combination mode (0=median, 1=max, 2=min)
+                0.0, // Debug mode (0=normal, 1=quad outlines, 2/3/4=R/G/B channel, 5=median)
             ];
 
             // Create quad vertices (2 triangles)

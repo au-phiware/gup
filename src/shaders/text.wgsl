@@ -6,6 +6,19 @@
 //
 // Key insight: The median of the three color channels preserves sharp corners
 // by using edge coloring where adjacent edges at corners have different colors.
+//
+// Channel combination modes (sdf_params.z):
+//   0 = median(r,g,b)   — default MSDF, sharp corners preserved
+//   1 = max(r,g,b)       — union, slightly dilated outline
+//   2 = min(r,g,b)       — intersection, sharper corners
+//
+// Debug modes (sdf_params.w):
+//   0.0 = normal rendering
+//   1.0 = quad outlines + raw MSDF colours
+//   2.0 = red channel only
+//   3.0 = green channel only
+//   4.0 = blue channel only
+//   5.0 = reconstructed median as grayscale
 
 struct Uniforms {
     projection: mat4x4<f32>,
@@ -53,6 +66,35 @@ fn median(a: f32, b: f32, c: f32) -> f32 {
     return max(min(a, b), min(max(a, b), c));
 }
 
+// Combine three MSDF channels into a single distance value.
+// The combination mode controls the visual trade-off between
+// corner sharpness and outline accuracy.
+fn combine_sdf_channels(r: f32, g: f32, b: f32, mode: u32) -> f32 {
+    switch mode {
+        // Median: standard MSDF reconstruction.
+        // At smooth edges all channels agree so median = any channel.
+        // At sharp corners the channels differ and the median picks
+        // the correct distance for that region of the plane.
+        case 0u: {
+            return median(r, g, b);
+        }
+        // Max (union): the outermost distance of any channel.
+        // Produces a slightly dilated outline; useful for bold effects.
+        case 1u: {
+            return max(max(r, g), b);
+        }
+        // Min (intersection): the innermost distance of any channel.
+        // Produces maximally sharp corners at the cost of slightly
+        // thinner strokes.
+        case 2u: {
+            return min(min(r, g), b);
+        }
+        default: {
+            return median(r, g, b);
+        }
+    }
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Sample all three channels of the MSDF texture
@@ -61,16 +103,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Extract SDF parameters
     let sdf_scale = in.sdf_params.x;
     let edge_threshold = in.sdf_params.y;
-    let debug_quad = in.sdf_params.w;
+    let combination_mode = u32(in.sdf_params.z);
+    let debug_mode = in.sdf_params.w;
 
-    // Compute the median of the three channels
-    // This is the key operation that reconstructs the shape with sharp corners
-    // The median selects the correct distance at corners where edge colors differ
-    let median_value = median(msdf.r, msdf.g, msdf.b);
+    // Combine channels using the selected mode
+    let combined_value = combine_sdf_channels(msdf.r, msdf.g, msdf.b, combination_mode);
 
     // Convert from 0-1 range (where 0.5 is the edge) to signed distance
     // Distance is positive inside the glyph, negative outside
-    let distance = (median_value - 0.5) * sdf_scale;
+    let distance = (combined_value - 0.5) * sdf_scale;
 
     // Improved antialiasing with adaptive edge width using screen-space derivatives
     // fwidth gives us the rate of change of the distance across the pixel
@@ -82,24 +123,44 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var final_color = in.color;
     final_color.a *= alpha;
 
-    // Debug mode: show quad outlines and raw MSDF values
-    if (debug_quad > 0.5) {
+    // Debug modes for inspecting MSDF channel data
+    if (debug_mode > 0.5) {
         let uv = in.tex_coords;
-        let line_width = 0.15;
 
-        // Check if we're near any edge of the quad
-        let near_left = uv.x < line_width;
-        let near_right = uv.x > (1.0 - line_width);
-        let near_top = uv.y < line_width;
-        let near_bottom = uv.y > (1.0 - line_width);
+        // Mode 1: quad outlines + raw MSDF colours
+        if (debug_mode < 1.5) {
+            let line_width = 0.15;
+            let near_left = uv.x < line_width;
+            let near_right = uv.x > (1.0 - line_width);
+            let near_top = uv.y < line_width;
+            let near_bottom = uv.y > (1.0 - line_width);
 
-        // Show outline
-        if (near_left || near_right || near_top || near_bottom) {
-            return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+            if (near_left || near_right || near_top || near_bottom) {
+                return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+            }
+            return vec4<f32>(msdf.r, msdf.g, msdf.b, 1.0);
         }
 
-        // Show the raw MSDF colors for debugging
-        return vec4<f32>(msdf.r, msdf.g, msdf.b, 1.0);
+        // Mode 2: red channel only
+        if (debug_mode < 2.5) {
+            return vec4<f32>(msdf.r, msdf.r, msdf.r, 1.0);
+        }
+
+        // Mode 3: green channel only
+        if (debug_mode < 3.5) {
+            return vec4<f32>(msdf.g, msdf.g, msdf.g, 1.0);
+        }
+
+        // Mode 4: blue channel only
+        if (debug_mode < 4.5) {
+            return vec4<f32>(msdf.b, msdf.b, msdf.b, 1.0);
+        }
+
+        // Mode 5: reconstructed median as grayscale
+        if (debug_mode < 5.5) {
+            let m = median(msdf.r, msdf.g, msdf.b);
+            return vec4<f32>(m, m, m, 1.0);
+        }
     }
 
     // Discard fully transparent pixels
