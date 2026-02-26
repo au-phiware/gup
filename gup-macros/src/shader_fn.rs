@@ -487,4 +487,136 @@ mod tests {
         });
         assert!(result.is_ok(), "Valid names should be accepted: {result:?}");
     }
+
+    // --- Custom struct parameter tests ---
+
+    #[test]
+    fn custom_struct_as_input_parameter() {
+        let tokens = expand(quote! {
+            fn process_point(point: MyPoint) -> f32 {
+                return point.x + point.y;
+            }
+        })
+        .unwrap();
+
+        assert!(
+            tokens.contains("ProcessPoint"),
+            "Should generate ProcessPoint struct, got: {tokens}"
+        );
+        assert!(
+            tokens.contains("MyPoint"),
+            "Should reference custom type MyPoint, got: {tokens}"
+        );
+        // The custom type should be detected for wgsl_type_definition collection
+        assert!(
+            tokens.contains("ShaderType"),
+            "Should reference ShaderType trait for custom type, got: {tokens}"
+        );
+    }
+
+    #[test]
+    fn custom_struct_as_uniform_parameter() {
+        let tokens = expand(quote! {
+            fn apply_config(value: f32, config: ScaleConfig) -> f32 {
+                return value * config.scale + config.offset;
+            }
+        })
+        .unwrap();
+
+        assert!(
+            tokens.contains("ApplyConfig"),
+            "Should generate ApplyConfig struct, got: {tokens}"
+        );
+        assert!(
+            tokens.contains("ScaleConfig"),
+            "Should reference custom type ScaleConfig, got: {tokens}"
+        );
+        assert!(
+            tokens.contains("uniforms.config.scale"),
+            "Should transpile config.scale as uniforms.config.scale, got: {tokens}"
+        );
+        assert!(
+            tokens.contains("uniforms.config.offset"),
+            "Should transpile config.offset as uniforms.config.offset, got: {tokens}"
+        );
+    }
+
+    #[test]
+    fn custom_struct_as_input_with_field_access() {
+        let tokens = expand(quote! {
+            fn extract_x(data: MyData) -> f32 {
+                return data.x;
+            }
+        })
+        .unwrap();
+
+        assert!(
+            tokens.contains("data.x"),
+            "Should transpile data.x directly (not via uniforms), got: {tokens}"
+        );
+    }
+
+    #[test]
+    fn custom_struct_as_both_input_and_uniform() {
+        let tokens = expand(quote! {
+            fn combine_points(input: PointA, offset: PointB) -> f32 {
+                return input.x + offset.x;
+            }
+        })
+        .unwrap();
+
+        assert!(
+            tokens.contains("PointA"),
+            "Should reference input custom type, got: {tokens}"
+        );
+        assert!(
+            tokens.contains("PointB"),
+            "Should reference uniform custom type, got: {tokens}"
+        );
+        assert!(
+            tokens.contains("input.x"),
+            "Should access input field directly, got: {tokens}"
+        );
+        assert!(
+            tokens.contains("uniforms.offset.x"),
+            "Should access uniform field via uniforms prefix, got: {tokens}"
+        );
+    }
+
+    #[test]
+    fn custom_struct_as_output_type() {
+        let result = expand(quote! {
+            fn make_point(value: f32) -> MyPoint {
+                return MyPoint(value, value);
+            }
+        });
+        assert!(
+            result.is_ok(),
+            "Custom struct as output type should be accepted: {result:?}"
+        );
+        let tokens = result.unwrap();
+        assert!(
+            tokens.contains("MyPoint"),
+            "Should reference custom output type, got: {tokens}"
+        );
+    }
+
+    #[test]
+    fn custom_struct_wgsl_type_detected() {
+        assert!(is_custom_type(&syn::parse_quote!(MyCustomStruct)));
+        assert!(!is_custom_type(&syn::parse_quote!(f32)));
+        assert!(!is_custom_type(&syn::parse_quote!(Vec3)));
+        assert!(!is_custom_type(&syn::parse_quote!(Mat4)));
+    }
+
+    #[test]
+    fn custom_struct_wgsl_type_string() {
+        let ty: Type = syn::parse_quote!(MyCustomStruct);
+        let result = rust_type_to_wgsl_string(&ty);
+        assert_eq!(
+            result.unwrap(),
+            "MyCustomStruct",
+            "Custom type should map to its name"
+        );
+    }
 }
