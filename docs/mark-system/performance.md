@@ -195,15 +195,27 @@ Performance classifications:
 
 ### Performance Metrics
 
-Track rendering performance per frame with `MarkPerformanceMetrics`:
+Track rendering performance per frame with `MarkPerformanceMetrics`. The
+simplest approach is to use the tracked render methods which automatically
+accumulate counters:
 
 ```rust
-let metrics = renderer.metrics();
-println!("Draw calls: {}", metrics.draw_calls);
-println!("Instances:  {}", metrics.instances_rendered);
-println!("Upload:     {:?}", metrics.upload_time);
-println!("Render:     {:?}", metrics.render_time);
+// At the start of each frame, reset counters
+renderer.reset_performance_counters();
+
+// Use tracked variants — metrics are updated automatically
+renderer.render_marks_tracked::<Circle>(&mut pass, &pipeline, &bind_group, 500)?;
+renderer.render_marks_tracked::<Rectangle>(&mut pass, &pipeline2, &bind_group2, 200)?;
+
+// At the end of the frame, read metrics
+let metrics = renderer.get_performance_metrics();
+println!("Draw calls:       {}", metrics.draw_calls);        // 2
+println!("Total instances:  {}", metrics.total_instances);    // 700
+println!("Pipeline switches: {}", metrics.pipeline_switches); // 0
 ```
+
+You can also accumulate metrics manually via `metrics_mut()` when using the
+non-tracked `render_marks()` variant.
 
 ### GPU Timing
 

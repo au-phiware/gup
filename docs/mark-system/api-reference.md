@@ -308,6 +308,54 @@ Renders through multiple passes with different pipeline configurations.
 Renders with state isolation — saves and restores viewport/scissor state to
 prevent marks from interfering with each other in compositions.
 
+### Tracked Rendering (Automatic Metrics)
+
+The tracked variants take `&mut self` and automatically increment the internal
+`MarkPerformanceMetrics` counters (`draw_calls`, `total_instances`,
+`pipeline_switches`) after each draw. Use these instead of the non-tracked
+methods when you want per-frame performance data without manual bookkeeping.
+
+#### `render_marks_tracked::<M: Mark>(&mut self, render_pass, pipeline, bind_group, count)`
+
+Same as `render_marks` but increments `draw_calls` by 1 and `total_instances` by
+`count` on success.
+
+```rust
+renderer.reset_performance_counters();  // start of frame
+
+renderer.render_marks_tracked::<Circle>(&mut render_pass, &pipeline, &bind_group, 500)?;
+renderer.render_marks_tracked::<Circle>(&mut render_pass, &pipeline, &bind_group, 300)?;
+
+let m = renderer.get_performance_metrics();
+assert_eq!(m.draw_calls, 2);
+assert_eq!(m.total_instances, 800);
+```
+
+#### `render_marks_with_patterns_tracked::<M>(&mut self, ...)`
+
+Tracked variant of `render_marks_with_patterns`.
+
+#### `render_marks_multi_pass_tracked::<M>(&mut self, ...)`
+
+Tracked variant of `render_marks_multi_pass`. Each configured pass adds one draw
+call and one pipeline switch.
+
+#### `render_marks_with_state_tracked::<M>(&mut self, ...)`
+
+Tracked variant of `render_marks_with_state`.
+
+#### `render_marks_with_dynamic_attrs_tracked::<M>(&mut self, ...)`
+
+Tracked variant of `render_marks_with_dynamic_attrs`.
+
+### Performance Metrics
+
+| Method                         | Returns                       | Description                        |
+| ------------------------------ | ----------------------------- | ---------------------------------- |
+| `get_performance_metrics()`    | `&MarkPerformanceMetrics`     | Current metric counters            |
+| `metrics_mut()`                | `&mut MarkPerformanceMetrics` | Mutable access for manual use      |
+| `reset_performance_counters()` | `()`                          | Zero all counters (call per-frame) |
+
 ### Buffer Access
 
 | Method                | Returns                   | Description                |
