@@ -3,6 +3,9 @@
 // The fragment shader uses the instance data (read from the storage buffer
 // via flat instance_index) to render all components: box, median, whiskers,
 // caps, and outlier circles.
+//
+// Stroke width and outlier radius are specified in pixels.  The viewport
+// uniform converts them to clip-space units for the quad margin calculation.
 
 struct BoxPlotInstance {
     position: vec2<f32>,
@@ -27,8 +30,16 @@ struct BoxPlotInstance {
     outliers: array<vec4<f32>, 8>,
 }
 
+struct ViewportUniforms {
+    width: f32,
+    height: f32,
+}
+
 @group(0) @binding(0)
 var<storage, read> instances: array<BoxPlotInstance>;
+
+@group(0) @binding(1)
+var<uniform> viewport: ViewportUniforms;
 
 struct VertexInput {
     @location(0) position: vec2<f32>,
@@ -45,6 +56,10 @@ struct VertexOutput {
 fn vs_main(input: VertexInput) -> VertexOutput {
     let inst = instances[input.instance_index];
 
+    // Convert pixel-space values to clip-space using viewport dimensions.
+    let px2clip = 2.0 / vec2<f32>(viewport.width, viewport.height);
+    let px2clip_iso = sqrt(px2clip.x * px2clip.y);
+
     // Compute the full extent including whiskers and outliers.
     var val_min = inst.whisker_min;
     var val_max = inst.whisker_max;
@@ -55,7 +70,8 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     }
 
     // Add margin so outlier circles and strokes are not clipped.
-    let margin = max(inst.outlier_radius, inst.stroke_width) + 0.005;
+    // Convert pixel-based radius/stroke to clip space for the margin.
+    let margin = max(inst.outlier_radius, inst.stroke_width) * px2clip_iso + 0.005;
     val_min -= margin;
     val_max += margin;
     let half_w = inst.width * 0.5 + margin;

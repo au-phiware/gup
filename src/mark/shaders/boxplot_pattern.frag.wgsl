@@ -1,5 +1,9 @@
 // Box Plot Fragment Shader with Pattern Support
-// Renders the box with anti-aliased edges and pattern support for accessibility
+// Renders the box with anti-aliased edges and pattern support for accessibility.
+//
+// Stroke width and outlier radius are specified in pixels.  The viewport
+// uniform converts them to clip-space units so that visual appearance
+// is consistent regardless of window size.
 
 struct BoxPlotInstance {
     position: vec2<f32>,
@@ -24,8 +28,16 @@ struct BoxPlotInstance {
     outliers: array<vec4<f32>, 8>,
 }
 
+struct ViewportUniforms {
+    width: f32,
+    height: f32,
+}
+
 @group(0) @binding(0)
 var<storage, read> instances: array<BoxPlotInstance>;
+
+@group(0) @binding(1)
+var<uniform> viewport: ViewportUniforms;
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
@@ -126,8 +138,13 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
     let hw  = inst.width * 0.5;
     let dc  = abs(cat - cat0);
-    let sw  = inst.stroke_width;
-    let aa  = 0.002;
+
+    // Convert pixel-space stroke width and outlier radius to clip-space.
+    let px2clip = 2.0 / vec2<f32>(viewport.width, viewport.height);
+    let px2clip_iso = sqrt(px2clip.x * px2clip.y);
+    let sw  = inst.stroke_width * px2clip_iso;
+    let aa  = px2clip_iso;
+    let r   = inst.outlier_radius * px2clip_iso;
 
     // ── Compute effective half-width (notch narrows the box at the median) ──
     var effective_hw = hw;
@@ -146,7 +163,6 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     for (var i = 0u; i < inst.outlier_count; i++) {
         let ov = inst.outliers[i / 4u][i % 4u];
         let d  = length(vec2<f32>(cat - cat0, val - ov));
-        let r  = inst.outlier_radius;
         if (d < r + aa) {
             let outer_alpha = 1.0 - smoothstep(r - aa, r + aa, d);
             let inner = r - sw * 0.6;

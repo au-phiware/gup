@@ -715,8 +715,22 @@ impl<M: Mark> MarkInfoImpl<M> {
             count: None,
         });
 
-        // Add uniform buffers if the mark uses generated shaders
-        if !self.has_custom_shaders() {
+        if self.has_custom_shaders() {
+            // Viewport dimensions uniform (for pixel-space SDF calculations).
+            // Contains width and height in pixels, enabling marks to convert
+            // pixel-based values (e.g. stroke widths) to clip-space units.
+            entries.push(BindGroupLayoutEntry {
+                binding: 1,
+                visibility: ShaderStages::VERTEX_FRAGMENT,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            });
+        } else {
+            // Add uniform buffers if the mark uses generated shaders
             // Position transform uniforms
             entries.push(BindGroupLayoutEntry {
                 binding: 1,

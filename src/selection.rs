@@ -33,6 +33,24 @@ use wgpu::util::DeviceExt;
 use wgpu::{Device, Queue, RenderPass};
 
 // ---------------------------------------------------------------------------
+// Viewport uniform type
+// ---------------------------------------------------------------------------
+
+/// GPU-ready viewport dimensions for pixel-space SDF calculations.
+///
+/// Passed to mark shaders as a uniform buffer so that pixel-based values
+/// (stroke widths, radii) can be converted to clip-space units. This
+/// enables visually consistent rendering regardless of window size.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ViewportUniforms {
+    /// Viewport width in pixels.
+    pub width: f32,
+    /// Viewport height in pixels.
+    pub height: f32,
+}
+
+// ---------------------------------------------------------------------------
 // Attribute binding types
 // ---------------------------------------------------------------------------
 
@@ -1123,6 +1141,7 @@ impl<T, M: Mark> Selection<T, M> {
                         device,
                         &state.pipeline,
                         instance_bytes,
+                        state.viewport_buffer.as_ref(),
                     );
                 state.instance_buffer = instance_buffer;
                 state.bind_group = bind_group;
@@ -1179,6 +1198,29 @@ impl<T, M: Mark> Selection<T, M> {
     /// Returns `true` if the selection has been prepared for rendering.
     pub fn is_render_ready(&self) -> bool {
         self.render_state.is_some()
+    }
+
+    /// Set the viewport dimensions for pixel-space SDF calculations.
+    ///
+    /// Marks that use SDF-based rendering (such as BoxPlot) interpret values
+    /// like `stroke_width` and `outlier_radius` as pixel measurements. This
+    /// method updates the viewport uniform so those pixel values map correctly
+    /// to clip-space distances regardless of window size.
+    ///
+    /// Call this whenever the render target size changes (e.g. on window
+    /// resize) and before calling [`render`](Self::render).
+    ///
+    /// # Panics
+    ///
+    /// This method is a no-op if [`prepare_render`](Self::prepare_render) has
+    /// not been called yet.
+    pub fn set_viewport_size(&self, queue: &Queue, width: f32, height: f32) {
+        if let Some(ref state) = self.render_state
+            && let Some(ref vp_buf) = state.viewport_buffer
+        {
+            let viewport = ViewportUniforms { width, height };
+            queue.write_buffer(vp_buf, 0, bytemuck::bytes_of(&viewport));
+        }
     }
 
     /// Enable or disable automatic ARIA registration on prepare/render.
@@ -1520,6 +1562,9 @@ struct SelectionRenderState {
     instance_count: u32,
     /// Current byte capacity of the instance buffer.
     instance_buffer_capacity: usize,
+    /// Viewport dimensions uniform buffer (for marks with custom shaders).
+    /// Enables pixel-space SDF calculations in shaders.
+    viewport_buffer: Option<wgpu::Buffer>,
     /// Uniform buffers for GPU shader function bindings (empty when no shader
     /// functions are used).
     uniform_buffers: Vec<wgpu::Buffer>,
@@ -1560,9 +1605,31 @@ impl SelectionRenderState {
             })
         });
 
+        // --- Viewport buffer (for custom-shader marks) ---------------
+        let has_custom = M::VERTEX_SHADER.is_some() && M::FRAGMENT_SHADER.is_some();
+        let viewport_buffer = if has_custom {
+            let default_viewport = ViewportUniforms {
+                width: 800.0,
+                height: 600.0,
+            };
+            Some(
+                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("selection_viewport_uniform"),
+                    contents: bytemuck::bytes_of(&default_viewport),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                }),
+            )
+        } else {
+            None
+        };
+
         // --- Instance buffer + bind group ----------------------------
-        let (instance_buffer, bind_group) =
-            Self::create_instance_buffer_and_bind_group(device, &pipeline, instance_bytes);
+        let (instance_buffer, bind_group) = Self::create_instance_buffer_and_bind_group(
+            device,
+            &pipeline,
+            instance_bytes,
+            viewport_buffer.as_ref(),
+        );
 
         let vertex_count = M::vertex_count() as u32;
         let index_count = M::index_count().map(|c| c as u32);
@@ -1577,6 +1644,7 @@ impl SelectionRenderState {
             index_count,
             instance_count,
             instance_buffer_capacity: instance_bytes.len(),
+            viewport_buffer,
             uniform_buffers: Vec::new(),
         })
     }
@@ -1586,6 +1654,7 @@ impl SelectionRenderState {
         device: &Device,
         pipeline: &wgpu::RenderPipeline,
         instance_bytes: &[u8],
+        viewport_buffer: Option<&wgpu::Buffer>,
     ) -> (wgpu::Buffer, wgpu::BindGroup) {
         // Ensure at least 16 bytes for wgpu minimum buffer size requirements.
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -1600,13 +1669,22 @@ impl SelectionRenderState {
 
         // Derive bind group layout from the pipeline (guaranteed to match).
         let bind_group_layout = pipeline.get_bind_group_layout(0);
+        let mut entries = vec![wgpu::BindGroupEntry {
+            binding: 0,
+            resource: instance_buffer.as_entire_binding(),
+        }];
+
+        if let Some(vp_buf) = viewport_buffer {
+            entries.push(wgpu::BindGroupEntry {
+                binding: 1,
+                resource: vp_buf.as_entire_binding(),
+            });
+        }
+
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("selection_bind_group"),
             layout: &bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: instance_buffer.as_entire_binding(),
-            }],
+            entries: &entries,
         });
 
         (instance_buffer, bind_group)
@@ -1789,6 +1867,7 @@ impl SelectionRenderState {
             index_count,
             instance_count,
             instance_buffer_capacity: instance_bytes.len(),
+            viewport_buffer: None,
             uniform_buffers,
         })
     }
@@ -3492,8 +3571,8 @@ mod tests {
                 outliers: vec![-0.7, 0.8],
                 width: 0.3,
                 orientation: BoxPlotOrientation::Vertical,
-                stroke_width: 0.01,
-                outlier_radius: 0.03,
+                stroke_width: 3.0,
+                outlier_radius: 10.0,
                 ..Default::default()
             }];
 
@@ -3552,8 +3631,8 @@ mod tests {
                         outliers: vec![-0.6],
                         width: 0.15,
                         orientation: BoxPlotOrientation::Vertical,
-                        stroke_width: 0.005,
-                        outlier_radius: 0.02,
+                        stroke_width: 2.0,
+                        outlier_radius: 7.0,
                         ..Default::default()
                     }
                 })
@@ -3610,8 +3689,8 @@ mod tests {
                 outliers: vec![],
                 width: 0.3,
                 orientation: BoxPlotOrientation::Horizontal,
-                stroke_width: 0.01,
-                outlier_radius: 0.03,
+                stroke_width: 3.0,
+                outlier_radius: 10.0,
                 ..Default::default()
             }];
 
@@ -3666,8 +3745,8 @@ mod tests {
                     outliers: vec![-0.7],
                     width: 0.2,
                     orientation: BoxPlotOrientation::Vertical,
-                    stroke_width: 0.01,
-                    outlier_radius: 0.02,
+                    stroke_width: 3.0,
+                    outlier_radius: 7.0,
                     notched: true,
                     notch_width: 0.5,
                     ..Default::default()
@@ -3682,8 +3761,8 @@ mod tests {
                     outliers: vec![],
                     width: 0.2,
                     orientation: BoxPlotOrientation::Vertical,
-                    stroke_width: 0.01,
-                    outlier_radius: 0.02,
+                    stroke_width: 3.0,
+                    outlier_radius: 7.0,
                     notched: false,
                     notch_width: 0.5,
                     ..Default::default()

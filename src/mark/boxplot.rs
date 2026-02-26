@@ -105,9 +105,9 @@ pub struct BoxPlotAttributes {
     pub whisker_color: Vec4,
     /// Color for outlier points
     pub outlier_color: Vec4,
-    /// Stroke width for box and whiskers
+    /// Stroke width for box and whiskers (in pixels)
     pub stroke_width: f32,
-    /// Radius of outlier circles
+    /// Radius of outlier circles (in pixels)
     pub outlier_radius: f32,
     /// Whether to draw notched box plot (shows confidence interval)
     pub notched: bool,
@@ -272,6 +272,13 @@ impl Mark for BoxPlot {
             "@group(0) @binding(0) var<storage, read> instances: array<BoxPlotInstance>;\n\n",
         );
 
+        shader.push_str("struct ViewportUniforms {\n");
+        shader.push_str("    width: f32,\n");
+        shader.push_str("    height: f32,\n");
+        shader.push_str("}\n\n");
+
+        shader.push_str("@group(0) @binding(1) var<uniform> viewport: ViewportUniforms;\n\n");
+
         shader.push_str("struct VertexInput {\n");
         shader.push_str("    @location(0) position: vec2<f32>,\n");
         shader.push_str("    @builtin(instance_index) instance_index: u32,\n");
@@ -293,6 +300,8 @@ impl Mark for BoxPlot {
         shader.push_str("@vertex\n");
         shader.push_str("fn vs_main(input: VertexInput) -> VertexOutput {\n");
         shader.push_str("    let inst = instances[input.instance_index];\n");
+        shader.push_str("    let px2clip = 2.0 / vec2<f32>(viewport.width, viewport.height);\n");
+        shader.push_str("    let px2clip_iso = sqrt(px2clip.x * px2clip.y);\n");
         shader.push_str("    var val_min = inst.whisker_min;\n");
         shader.push_str("    var val_max = inst.whisker_max;\n");
         shader.push_str("    for (var i = 0u; i < inst.outlier_count; i++) {\n");
@@ -300,7 +309,9 @@ impl Mark for BoxPlot {
         shader.push_str("        val_min = min(val_min, v);\n");
         shader.push_str("        val_max = max(val_max, v);\n");
         shader.push_str("    }\n");
-        shader.push_str("    let margin = max(inst.outlier_radius, inst.stroke_width) + 0.005;\n");
+        shader.push_str(
+            "    let margin = max(inst.outlier_radius, inst.stroke_width) * px2clip_iso + 0.005;\n",
+        );
         shader.push_str("    val_min -= margin;\n");
         shader.push_str("    val_max += margin;\n");
         shader.push_str("    let half_w = inst.width * 0.5 + margin;\n");
@@ -364,6 +375,13 @@ impl Mark for BoxPlot {
         shader.push_str(
             "@group(0) @binding(0) var<storage, read> instances: array<BoxPlotInstance>;\n\n",
         );
+
+        shader.push_str("struct ViewportUniforms {\n");
+        shader.push_str("    width: f32,\n");
+        shader.push_str("    height: f32,\n");
+        shader.push_str("}\n\n");
+
+        shader.push_str("@group(0) @binding(1) var<uniform> viewport: ViewportUniforms;\n\n");
 
         shader.push_str("struct VertexOutput {\n");
         shader.push_str("    @builtin(position) clip_position: vec4<f32>,\n");
@@ -525,9 +543,9 @@ pub struct BoxPlotInstance {
     pub whisker_color: [f32; 4],
     /// Outlier circle colour (RGBA)
     pub outlier_color: [f32; 4],
-    /// Stroke width in clip space units
+    /// Stroke width in pixels (converted to clip space by shader)
     pub stroke_width: f32,
-    /// Outlier circle radius in clip space units
+    /// Outlier circle radius in pixels (converted to clip space by shader)
     pub outlier_radius: f32,
     /// Orientation: 0 = vertical, 1 = horizontal
     pub orientation: u32,

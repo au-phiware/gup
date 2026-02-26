@@ -3,6 +3,10 @@
 // components: box (IQR), median line, whisker lines, whisker caps, and
 // outlier circles.  Anti-aliasing is achieved via smoothstep on signed
 // distance values.
+//
+// Stroke width and outlier radius are specified in pixels.  The viewport
+// uniform converts them to clip-space units so that visual appearance
+// is consistent regardless of window size.
 
 struct BoxPlotInstance {
     position: vec2<f32>,
@@ -27,8 +31,16 @@ struct BoxPlotInstance {
     outliers: array<vec4<f32>, 8>,
 }
 
+struct ViewportUniforms {
+    width: f32,
+    height: f32,
+}
+
 @group(0) @binding(0)
 var<storage, read> instances: array<BoxPlotInstance>;
+
+@group(0) @binding(1)
+var<uniform> viewport: ViewportUniforms;
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
@@ -56,8 +68,16 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
     let hw  = inst.width * 0.5;   // half box width
     let dc  = abs(cat - cat0);    // distance from centre on category axis
-    let sw  = inst.stroke_width;
-    let aa  = 0.002;              // anti-aliasing half-width
+
+    // Convert pixel-space stroke width and outlier radius to clip-space
+    // using the viewport dimensions.  Clip space spans [-1, 1] = 2 units
+    // across the full viewport, so 1 pixel = 2 / viewport_dim clip units.
+    // Use the geometric mean of both axes for isotropic conversion.
+    let px2clip = 2.0 / vec2<f32>(viewport.width, viewport.height);
+    let px2clip_iso = sqrt(px2clip.x * px2clip.y);
+    let sw  = inst.stroke_width * px2clip_iso;
+    let aa  = px2clip_iso;            // 1-pixel anti-aliasing half-width
+    let r   = inst.outlier_radius * px2clip_iso;
 
     // ── Compute effective half-width (notch narrows the box at the median) ──
     var effective_hw = hw;
@@ -78,7 +98,6 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     for (var i = 0u; i < inst.outlier_count; i++) {
         let ov = inst.outliers[i / 4u][i % 4u];
         let d  = length(vec2<f32>(cat - cat0, val - ov));
-        let r  = inst.outlier_radius;
         if (d < r + aa) {
             let outer_alpha = 1.0 - smoothstep(r - aa, r + aa, d);
             // Thin stroke ring around each outlier circle

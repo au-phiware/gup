@@ -207,7 +207,7 @@ pub use mark::{Mark, MarkInfo, MarkInfoImpl, MarkRegistry};
 pub use pipeline_cache::PipelineCache;
 pub use selection::{
     AccessibleMark, AriaUpdateConfig, AttrValue, InteractionData, IntoAttrValue, IntoAttrValues,
-    MarkInstanceBuilder, Selection,
+    MarkInstanceBuilder, Selection, ViewportUniforms,
 };
 
 // Export interactive mark selection system

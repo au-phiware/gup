@@ -148,8 +148,8 @@ fn build_boxplot_attributes(datasets: &[(&str, Vec<f32>, f32)]) -> Vec<BoxPlotAt
                     z: 0.1,
                     w: 1.0,
                 },
-                stroke_width: 0.004,
-                outlier_radius: 0.015,
+                stroke_width: 2.0,
+                outlier_radius: 6.0,
                 notched: i % 2 == 0, // Alternate: Normal and With Outliers are notched
                 notch_width: 0.5,
             }
@@ -186,6 +186,11 @@ impl BoxPlotRenderer {
             .prepare_render(device, queue, |a| BoxPlotInstance::from(a), None)
             .expect("boxplot prepare_render");
         self.prepared = true;
+    }
+
+    /// Update the viewport dimensions for pixel-space stroke calculations.
+    fn set_viewport(&self, queue: &wgpu::Queue, width: f32, height: f32) {
+        self.selection.set_viewport_size(queue, width, height);
     }
 
     /// Issue a single instanced draw call inside an existing render pass.
@@ -260,6 +265,14 @@ impl BoxPlotApp {
 
             if let Some(renderer) = &mut self.renderer {
                 renderer.prepare(&ctx.device, &ctx.queue);
+            }
+
+            // Update viewport dimensions for pixel-space stroke widths.
+            if let Some(window) = &self.window {
+                let size = window.inner_size();
+                if let Some(renderer) = &self.renderer {
+                    renderer.set_viewport(&ctx.queue, size.width as f32, size.height as f32);
+                }
             }
 
             match ctx.begin_frame() {
