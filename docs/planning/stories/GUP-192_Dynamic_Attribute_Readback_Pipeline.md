@@ -1,6 +1,6 @@
 # GUP-192: Dynamic Attribute Readback Pipeline
 
-**Status**: 📋 Planned **Priority**: Low **Category**: Feature Enhancement
+**Status**: 🚧 In Progress **Priority**: Low **Category**: Feature Enhancement
 **Estimated Effort**: 1 day **Dependencies**: GUP-186 (Dynamic Attribute GPU
 Upload Pipeline)
 
