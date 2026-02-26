@@ -265,7 +265,10 @@ pub mod sdf {
     /// SDF range (distance field extends this many pixels)
     pub const SDF_RANGE: f32 = 8.0;
 
-    /// Smoothing factor for SDF edges
+    /// Legacy smoothing factor for SDF edges.
+    ///
+    /// **Superseded** by [`SdfTuningParams::for_font_size`] which provides
+    /// per-size adaptive smoothing. Kept for reference only.
     pub const SDF_SMOOTHING: f32 = 0.5;
 }
 
