@@ -1,6 +1,6 @@
 # GUP-218: Duplicate Struct Definition Prevention
 
-**Status**: 🚧 In Progress
+**Status**: ✅ Complete (2025-07-18)
 
 ## Story Overview
 
@@ -30,10 +30,10 @@ duplicate struct definitions
 
 ## Acceptance Criteria
 
-- [ ] `generate_shader_bound_vertex_wgsl()` deduplicates struct definitions by
+- [x] `generate_shader_bound_vertex_wgsl()` deduplicates struct definitions by
       name
-- [ ] Multiple chain bindings sharing a component type generate valid WGSL
-- [ ] Test: two chains both using `LinearScaleUniforms` produce a single struct
+- [x] Multiple chain bindings sharing a component type generate valid WGSL
+- [x] Test: two chains both using `LinearScaleUniforms` produce a single struct
       definition
 
 ## Dependencies
@@ -52,6 +52,30 @@ duplicate struct definitions
 
 ## Definition of Done
 
-- [ ] All acceptance criteria met
-- [ ] Existing Selection tests still pass
-- [ ] `mask all-fix` clean
+- [x] All acceptance criteria met
+- [x] Existing Selection tests still pass
+- [x] `mask all-fix` clean
+
+## Implementation Summary
+
+### What Was Implemented
+
+Modified `generate_shader_bound_vertex_wgsl()` in `src/selection.rs` to
+deduplicate struct definitions by struct name using a `HashSet`. Since a single
+`uniform_struct_def` string can contain multiple struct definitions (e.g.,
+`ChainUniforms` includes nested component struct defs), two helper functions
+were added to split and parse them:
+
+- `split_wgsl_struct_definitions(defs)` — splits a compound definition string
+  into individual `struct ...{ ... }` blocks
+- `extract_wgsl_struct_name(def)` — parses the struct name from a single block
+
+### Key Files Changed
+
+- `src/selection.rs` — core deduplication logic + 5 new tests
+
+### Test Counts
+
+- 5 new unit tests added
+- 152 existing selection tests continue to pass
+- All examples compile
