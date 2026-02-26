@@ -3069,6 +3069,30 @@ mod tests {
         assert_eq!(indices[1], 1); // second element in cell 11
         assert_eq!(indices[2], 2); // element in cell 99
     }
+
+    #[tokio::test]
+    async fn test_interaction_system_staging_pool_creation() {
+        let context = crate::render::RenderContext::new().await.unwrap();
+        let system = InteractionSystem::new(&context).await.unwrap();
+
+        // Staging pool should be initialized with zero active buffers
+        let stats = system.staging_pool_stats();
+        assert_eq!(stats.active_buffers, 0);
+        assert_eq!(stats.pooled_buffers, 0);
+        assert_eq!(stats.total_allocated, 0);
+    }
+
+    #[tokio::test]
+    async fn test_interaction_system_staging_pool_cleanup() {
+        let context = crate::render::RenderContext::new().await.unwrap();
+        let mut system = InteractionSystem::new(&context).await.unwrap();
+
+        // Cleanup should be safe to call even with empty pool
+        system.cleanup_staging_pool();
+
+        let stats = system.staging_pool_stats();
+        assert_eq!(stats.pooled_buffers, 0);
+    }
 }
 
 /// Multi-touch gesture recognizer that processes touch events to detect gestures.
