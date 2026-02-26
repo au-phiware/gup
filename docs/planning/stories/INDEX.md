@@ -289,28 +289,28 @@ system story. The expanded story is also complete._
 
 ### Text Rendering Stories (Stories 104-110)
 
-| Story                                                                              | Title                                       | Status         | Priority | Points |
-| ---------------------------------------------------------------------------------- | ------------------------------------------- | -------------- | -------- | ------ |
-| [GUP-104](GUP-104_SDF_Glyph_Texture_Upload.md)                                     | SDF Glyph Texture Upload                    | ✅ Complete    | High     | —      |
-| [GUP-105](GUP-105_Text_Clipping_Detection_and_Viewport_Bounds_Management.md)       | Text Clipping Detection and Viewport Bounds | ✅ Complete    | Medium   | 8      |
-| [GUP-106](GUP-106_System_Font_Loading.md)                                          | System Font Loading                         | ✅ Complete    | Medium   | —      |
-| [GUP-107](GUP-107_Text_Character_Positioning_Bug.md)                               | Text Character Positioning Bug              | ✅ Complete    | Medium   | —      |
-| [GUP-108](GUP-108_Correct_SDF_Font_Atlas_Generation.md)                            | Correct SDF Font Atlas Generation           | ✅ Complete    | High     | —      |
-| [GUP-109](GUP-109_TTF_Outline_Based_SDF_Generation_with_Performance_Comparison.md) | TTF Outline-Based SDF Generation            | ✅ Complete    | Medium   | —      |
-| [GUP-110](GUP-110_Multi_Channel_SDF_Sharp_Corner_Preservation.md)                  | Multi-Channel SDF Sharp Corner Preservation | ✅ Complete    | Medium   | —      |
-| [GUP-199](GUP-199_Text_Wrapping_Multi_Line_Layout.md)                              | Text Wrapping and Multi-Line Layout         | ✅ Complete    | Low      | 5      |
+| Story                                                                              | Title                                       | Status      | Priority | Points |
+| ---------------------------------------------------------------------------------- | ------------------------------------------- | ----------- | -------- | ------ |
+| [GUP-104](GUP-104_SDF_Glyph_Texture_Upload.md)                                     | SDF Glyph Texture Upload                    | ✅ Complete | High     | —      |
+| [GUP-105](GUP-105_Text_Clipping_Detection_and_Viewport_Bounds_Management.md)       | Text Clipping Detection and Viewport Bounds | ✅ Complete | Medium   | 8      |
+| [GUP-106](GUP-106_System_Font_Loading.md)                                          | System Font Loading                         | ✅ Complete | Medium   | —      |
+| [GUP-107](GUP-107_Text_Character_Positioning_Bug.md)                               | Text Character Positioning Bug              | ✅ Complete | Medium   | —      |
+| [GUP-108](GUP-108_Correct_SDF_Font_Atlas_Generation.md)                            | Correct SDF Font Atlas Generation           | ✅ Complete | High     | —      |
+| [GUP-109](GUP-109_TTF_Outline_Based_SDF_Generation_with_Performance_Comparison.md) | TTF Outline-Based SDF Generation            | ✅ Complete | Medium   | —      |
+| [GUP-110](GUP-110_Multi_Channel_SDF_Sharp_Corner_Preservation.md)                  | Multi-Channel SDF Sharp Corner Preservation | ✅ Complete | Medium   | —      |
+| [GUP-199](GUP-199_Text_Wrapping_Multi_Line_Layout.md)                              | Text Wrapping and Multi-Line Layout         | ✅ Complete | Low      | 5      |
 | [GUP-200](GUP-200_Interactive_Clipping_Reveal.md)                                  | Interactive Clipping Reveal                 | ✅ Complete | Low      | 3      |
-| [GUP-201](GUP-201_Text_Clipping_Visual_Demo.md)                                    | Text Clipping Visual Demo                   | 🚧 In Progress | Low      | 2      |
-| [GUP-202](GUP-202_Font_Aware_Text_Rendering_Pipeline.md)                           | Font-Aware Text Rendering Pipeline          | ✅ Complete    | Medium   | —      |
-| [GUP-203](GUP-203_Multi_Font_Atlas_Manager.md)                                     | Multi-Font Atlas Manager                    | 📋 Planned     | Low      | —      |
-| [GUP-214](GUP-214_Font_Atlas_Eviction.md)                                          | Font Atlas Eviction and Memory Management   | 📋 Planned     | Low      | —      |
-| [GUP-215](GUP-215_Chart_Builder_Multi_Font.md)                                     | Chart Builder Multi-Font Integration        | ✅ Complete    | Medium   | —      |
-| [GUP-216](GUP-216_Chart_Title_Layout_Configuration.md)                             | Chart Title Layout Configuration            | 📋 Planned     | Low      | —      |
-| [GUP-217](GUP-217_Per_Axis_Label_Style_Override.md)                                | Per-Axis Label Style Override               | 📋 Planned     | Low      | —      |
-| [GUP-227](GUP-227_Multi_Line_Text_Alignment.md)                                    | Multi-Line Text Alignment Options           | 💡 New         | Low      | 3      |
-| [GUP-228](GUP-228_Ellipsis_Last_Wrapped_Line.md)                                   | Ellipsis on Last Wrapped Line               | 💡 New         | Low      | 2      |
-| [GUP-229](GUP-229_Tooltip_Background_Rendering.md)                                 | Tooltip Background Rendering                | 📋 Planned     | Low      | 3      |
-| [GUP-230](GUP-230_Chart_Builder_Hover_Reveal_Integration.md)                       | Chart Builder Hover Reveal Integration      | 📋 Planned     | Low      | 3      |
+| [GUP-201](GUP-201_Text_Clipping_Visual_Demo.md)                                    | Text Clipping Visual Demo                   | ✅ Complete | Low      | 2      |
+| [GUP-202](GUP-202_Font_Aware_Text_Rendering_Pipeline.md)                           | Font-Aware Text Rendering Pipeline          | ✅ Complete | Medium   | —      |
+| [GUP-203](GUP-203_Multi_Font_Atlas_Manager.md)                                     | Multi-Font Atlas Manager                    | 📋 Planned  | Low      | —      |
+| [GUP-214](GUP-214_Font_Atlas_Eviction.md)                                          | Font Atlas Eviction and Memory Management   | 📋 Planned  | Low      | —      |
+| [GUP-215](GUP-215_Chart_Builder_Multi_Font.md)                                     | Chart Builder Multi-Font Integration        | ✅ Complete | Medium   | —      |
+| [GUP-216](GUP-216_Chart_Title_Layout_Configuration.md)                             | Chart Title Layout Configuration            | 📋 Planned  | Low      | —      |
+| [GUP-217](GUP-217_Per_Axis_Label_Style_Override.md)                                | Per-Axis Label Style Override               | 📋 Planned  | Low      | —      |
+| [GUP-227](GUP-227_Multi_Line_Text_Alignment.md)                                    | Multi-Line Text Alignment Options           | 💡 New      | Low      | 3      |
+| [GUP-228](GUP-228_Ellipsis_Last_Wrapped_Line.md)                                   | Ellipsis on Last Wrapped Line               | 💡 New      | Low      | 2      |
+| [GUP-229](GUP-229_Tooltip_Background_Rendering.md)                                 | Tooltip Background Rendering                | 📋 Planned  | Low      | 3      |
+| [GUP-230](GUP-230_Chart_Builder_Hover_Reveal_Integration.md)                       | Chart Builder Hover Reveal Integration      | 📋 Planned  | Low      | 3      |
 
 ### Post GUP-016 Stories - Accessibility System (Stories 111-130)
 
@@ -430,7 +430,7 @@ system story. The expanded story is also complete._
 - **Axis/Grid planned**: GUP-094 📋, GUP-098 📋
 - **Axis/Grid complete**: GUP-096 ✅
 - **Text complete**: GUP-104 ✅, GUP-105 ✅, GUP-106 ✅, GUP-107 ✅, GUP-108 ✅
-- **Text planned**: GUP-110 ✅, GUP-199 ✅, GUP-200 ✅, GUP-201 📋, GUP-202 ✅,
+- **Text planned**: GUP-110 ✅, GUP-199 ✅, GUP-200 ✅, GUP-201 ✅, GUP-202 ✅,
   GUP-203 📋, GUP-214 📋, GUP-215 ✅
 
 ## Story Point Summary
