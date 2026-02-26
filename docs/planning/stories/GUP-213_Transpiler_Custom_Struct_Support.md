@@ -106,3 +106,73 @@ validated, tested, and documented the end-to-end integration:
 - 20 new integration tests in `shader_fn_custom_struct_tests`
 - 3 GPU compilation validation tests
 - All 1549+ existing tests continue to pass
+
+## Retrospective
+
+**Completed**: 2025-07-18
+
+### Key Technical Learnings
+
+#### Existing Infrastructure Was Sufficient
+
+- **Challenge**: The story assumed custom struct support needed to be built from
+  scratch, but the transpiler and macro systems already had the necessary
+  infrastructure.
+- **Solution**: The `rust_type_to_wgsl_string()` function already passes through
+  unknown type names as-is, `is_custom_type()` already identifies non-primitive
+  types, and `generate_wgsl()` already queries `ShaderType::wgsl_type_definition()`
+  for custom types. The primary work was validation and testing.
+- **Pattern**: When a story's implementation path looks surprisingly clear, it may
+  be because prior stories (GUP-061, GUP-064-B) already laid the groundwork.
+  Always check existing code before assuming new code is needed.
+
+#### Field Access Transpilation for Uniform vs Input Parameters
+
+- **Challenge**: Custom structs used as uniform parameters need field access to
+  go through `uniforms.param_name.field_name`, while input parameters use direct
+  `param_name.field_name`.
+- **Solution**: The `RustToWgsl` converter already distinguishes between uniform
+  params (in the `uniform_params` HashSet) and the input param. The converter
+  wraps uniform parameter references with `uniforms.` prefix, and field access on
+  uniform params becomes `uniforms.param.field`.
+- **Pattern**: The uniform parameter transformation is a two-level operation:
+  bare reference `config` → `uniforms.config`, and field access `config.scale` →
+  `uniforms.config.scale`.
+
+#### bytemuck Compatibility for Embedded Structs
+
+- **Challenge**: The generated uniform struct embeds custom types directly, so
+  they must satisfy `bytemuck::Pod + Zeroable`.
+- **Solution**: `#[derive(WgslStruct)]` already requires and derives these traits,
+  so any type usable as a `WgslStruct` is automatically compatible as a uniform
+  struct field.
+- **Pattern**: The `WgslStruct` derive macro enforces both `#[repr(C)]` and the
+  bytemuck traits, making the type system enforce GPU compatibility at compile
+  time.
+
+### Architectural Decisions
+
+#### Validation-Only Story
+
+- **Decision**: Implement as a validation and test story rather than a feature
+  development story.
+- **Reasoning**: The existing infrastructure already supported custom structs.
+  Adding tests and documentation was more valuable than refactoring working code.
+- **Trade-off**: No new APIs or features were added, but confidence in the system
+  was significantly increased through comprehensive testing.
+- **Future**: This pattern of "validation stories" should be considered when a
+  feature is believed to work but lacks test coverage.
+
+### Development Workflow Insights
+
+- The `mask all-fix` workflow works well for keeping code clean.
+- GPU compilation tests (`validate_wgsl_compiles`) are valuable for catching
+  issues that Rust's type system can't detect — they validate the generated WGSL
+  actually compiles on the GPU.
+- Making test struct types `pub` is required since `#[shader_fn]` generates
+  public trait implementations that reference the types.
+
+### Follow-up Stories
+
+No follow-up stories identified — the custom struct support is complete and
+well-tested.
