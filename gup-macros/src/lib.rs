@@ -26,6 +26,7 @@ mod mixable_derive;
 mod shader_fn;
 pub(crate) mod transpile;
 mod wgsl_function;
+mod wgsl_keywords;
 mod wgsl_struct;
 
 use wgsl_function::WgslFunctionInfo;

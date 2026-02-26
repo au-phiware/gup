@@ -18,6 +18,7 @@ use syn::{Error, FnArg, ItemFn, Pat, PatType, Result, Type};
 
 use crate::transpile::{RustToWgsl, WgslCodeGen};
 use crate::wgsl_function::{UniformParam, WgslFunctionInfo};
+use crate::wgsl_keywords::{validate_function_name, validate_param_name};
 
 /// Parse a `syn::ItemFn` and transpile its body to WGSL, producing a
 /// [`WgslFunctionInfo`] that can be rendered to tokens identically to
@@ -39,6 +40,9 @@ pub fn expand_shader_fn(function: ItemFn) -> Result<TokenStream> {
             "Function names with double underscores are reserved. Use single underscores instead.",
         ));
     }
+
+    // Validate function name is not a WGSL reserved keyword
+    validate_function_name(&function.sig.ident)?;
 
     if !function.sig.generics.params.is_empty() {
         return Err(Error::new_spanned(
@@ -72,7 +76,13 @@ pub fn expand_shader_fn(function: ItemFn) -> Result<TokenStream> {
 
     // --- Extract input type, output type, and uniform parameters ---
     let input_type = match inputs.first().unwrap() {
-        FnArg::Typed(PatType { ty, .. }) => (**ty).clone(),
+        FnArg::Typed(PatType { pat, ty, .. }) => {
+            // Validate the first parameter name is not a WGSL reserved keyword
+            if let Pat::Ident(pat_ident) = &**pat {
+                validate_param_name(&pat_ident.ident)?;
+            }
+            (**ty).clone()
+        }
         FnArg::Receiver(_) => {
             return Err(Error::new_spanned(
                 inputs.first().unwrap(),
@@ -99,6 +109,10 @@ pub fn expand_shader_fn(function: ItemFn) -> Result<TokenStream> {
             FnArg::Typed(PatType { pat, ty, .. }) => {
                 if let Pat::Ident(pat_ident) = &**pat {
                     let name = pat_ident.ident.clone();
+
+                    // Validate parameter name is not a WGSL reserved keyword
+                    validate_param_name(&name)?;
+
                     let wgsl_type =
                         rust_type_to_wgsl_string(ty).map_err(|msg| Error::new_spanned(ty, msg))?;
 

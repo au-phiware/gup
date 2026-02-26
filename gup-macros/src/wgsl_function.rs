@@ -30,6 +30,8 @@ use syn::{
     parse::{Parse, ParseStream},
 };
 
+use crate::wgsl_keywords::{validate_function_name, validate_param_name};
+
 /// Parsed WGSL function information extracted from the procedural macro input
 #[derive(Debug, Clone)]
 pub struct WgslFunctionInfo {
@@ -91,6 +93,9 @@ impl Parse for WgslFunctionInfo {
                 "Function names with double underscores are reserved. Use single underscores instead.",
             ));
         }
+
+        // Validate function name is not a WGSL reserved keyword
+        validate_function_name(&function.sig.ident)?;
 
         // Generate struct names based on function name
         let struct_name = pascal_case(&function_name);
@@ -180,7 +185,11 @@ fn parse_function_signature(sig: &syn::Signature) -> Result<(Type, Type, Vec<Uni
 
     // First parameter is the input value
     let input_type = match inputs.first().unwrap() {
-        FnArg::Typed(PatType { ty, .. }) => {
+        FnArg::Typed(PatType { pat, ty, .. }) => {
+            // Validate parameter name is not a WGSL reserved keyword
+            if let Pat::Ident(pat_ident) = &**pat {
+                validate_param_name(&pat_ident.ident)?;
+            }
             // Validate that the input type is supported
             rust_type_to_wgsl_type(ty).map_err(|e| {
                 Error::new_spanned(ty, format!("Unsupported input type for WGSL function: {e}"))
@@ -221,6 +230,9 @@ fn parse_function_signature(sig: &syn::Signature) -> Result<(Type, Type, Vec<Uni
         match input {
             FnArg::Typed(PatType { pat, ty, .. }) => {
                 if let Pat::Ident(pat_ident) = &**pat {
+                    // Validate parameter name is not a WGSL reserved keyword
+                    validate_param_name(&pat_ident.ident)?;
+
                     // Validate uniform parameter type
                     let wgsl_type = rust_type_to_wgsl_type(ty).map_err(|e| {
                         Error::new_spanned(
