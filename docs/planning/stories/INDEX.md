@@ -118,7 +118,7 @@ _Initiative doc:
 
 | Story                                                         | Title                                     | Status      | Priority | Points |
 | ------------------------------------------------------------- | ----------------------------------------- | ----------- | -------- | ------ |
-| [GUP-054](GUP-054_Existing_Solutions_Analysis.md)             | Existing Solutions Analysis               | 📋 Planned  | High     | 8      |
+| [GUP-054](GUP-054_Existing_Solutions_Analysis.md)             | Existing Solutions Analysis               | 🚧 In Progress | High     | 8      |
 | [GUP-055](GUP-055_Rust_AST_Parsing_Research.md)               | Rust AST Parsing Research and Prototype   | ✅ Complete | High     | 8      |
 | [GUP-056](GUP-056_Type_System_Mapping.md)                     | Rust-to-WGSL Type System Mapping          | ✅ Complete | High     | 8      |
 | [GUP-057](GUP-057_Expression_Transpilation.md)                | Expression and Operator Transpilation     | ✅ Complete | High     | 13     |
