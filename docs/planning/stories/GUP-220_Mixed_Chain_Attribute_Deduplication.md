@@ -104,3 +104,75 @@ WGSL generation time.
 - All 1597 non-pre-existing-failing tests pass across the project
 - `mask all-fix` clean
 - All examples compile
+
+## Retrospective
+
+**Completed**: 2025-07-17
+
+### Key Technical Learnings
+
+#### Content-Aware vs Name-Only Deduplication
+
+- **Challenge**: Name-based struct deduplication (GUP-218) worked for identical
+  chains but broke when two chains with the same outermost type name
+  (`ChainUniforms`) had different field layouts. The second binding silently
+  referenced the wrong struct.
+- **Solution**: Option B — augment name-based dedup with full content
+  comparison. When two struct definitions share a name but differ in body, the
+  duplicate is renamed with a `_b<index>` suffix. This avoids changing the
+  `ShaderUniform` trait signature.
+- **Pattern**: When deduplicating generated code artifacts by name, always
+  verify that identically-named items are truly identical in content. Silent
+  mismatches are worse than duplicates.
+
+#### Whole-Word Identifier Renaming Is Key
+
+- **Challenge**: Renaming `ChainUniforms` to `ChainUniforms_b1` must NOT rename
+  inner suffixed names like `ChainUniforms_1` (from GUP-219's depth suffixing).
+- **Solution**: The existing `replace_wgsl_identifier()` function handles this
+  correctly via word-boundary checks — it only matches when the character after
+  the identifier is not an alphanumeric or underscore. This made the rename
+  safe.
+- **Pattern**: Whole-word replacement is essential for WGSL code manipulation.
+  Always use `replace_wgsl_identifier` rather than string `replace`.
+
+#### Cross-Binding Function Deduplication
+
+- **Challenge**: The original function code dedup was per-binding (`HashSet` of
+  function names, skip entire code block if name seen). This failed when two
+  chains shared inner functions (e.g. `linear_scale`) but had different outer
+  entry points — skipping the second code block lost unique inner functions.
+- **Solution**: Concatenate all function code blocks, then run
+  `deduplicate_wgsl_functions()` on the combined result. This deduplicates
+  individual function definitions by name across all bindings, keeping unique
+  functions from every binding.
+- **Pattern**: For multi-component code generation, per-component dedup is
+  insufficient. Aggregate first, then deduplicate at the individual definition
+  level.
+
+### Architectural Decisions
+
+#### Option B: Runtime Renaming Over Trait Signature Change
+
+- **Decision**: Resolve naming conflicts at WGSL generation time in
+  `generate_shader_bound_vertex_wgsl()` rather than changing
+  `ShaderUniform::wgsl_type_name()` to return `String`.
+- **Reasoning**: Option A would require updating ~30+ implementations of
+  `wgsl_type_name()` and changing the trait from `&'static str` to `String`,
+  affecting the entire shader function system. Option B is localized to the
+  selection module's code generation function.
+- **Trade-off**: The fix is localized but relies on string manipulation at
+  code-gen time. If many different chain types are used simultaneously, the
+  renaming adds some complexity. However, this is unlikely in practice.
+- **Future**: If the system grows to need many simultaneously-bound chains with
+  conflicting names, consider migrating to unique type names at the trait level.
+
+### Development Workflow Insights
+
+- The implementation was straightforward — the hardest part was understanding
+  the full data flow from `ShaderUniform::wgsl_struct_definition()` through
+  `shader_fn_info_from()` to `generate_shader_bound_vertex_wgsl()`.
+- Making `replace_wgsl_identifier` and `deduplicate_wgsl_functions` `pub(crate)`
+  was the minimal API change needed to reuse proven logic across modules.
+- The 3 pre-existing test failures in `mark::renderer::tests` are unrelated GPU
+  resource issues, not caused by this change.
