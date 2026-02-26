@@ -3805,6 +3805,180 @@ mod tests {
         });
     }
 
+    #[test]
+    fn gpu_boxplot_pixel_consistent_strokes() {
+        // Render the same box plot at two different viewport sizes and verify
+        // that the stroke occupies the same number of pixels.
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            use crate::BoxPlotAttributes;
+            use crate::mark::BoxPlot;
+            use crate::mark::boxplot::{BoxPlotInstance, BoxPlotOrientation};
+
+            let data = vec![BoxPlotAttributes {
+                position: Vec2 { x: 0.0, y: 0.0 },
+                min: -0.5,
+                q1: -0.2,
+                median: 0.0,
+                q3: 0.2,
+                max: 0.5,
+                outliers: vec![],
+                width: 0.3,
+                orientation: BoxPlotOrientation::Vertical,
+                stroke_width: 4.0,
+                outlier_radius: 8.0,
+                ..Default::default()
+            }];
+
+            let mut selection: Selection<BoxPlotAttributes, BoxPlot> =
+                Selection::from_data(data.clone());
+            selection
+                .prepare_render(
+                    &context.device,
+                    &context.queue,
+                    |a| BoxPlotInstance::from(a),
+                    None,
+                )
+                .expect("prepare_render");
+
+            // Use 256 and 512 pixel sizes (byte-per-row is 256-byte aligned
+            // for BGRA textures: 256*4=1024, 512*4=2048).
+            let small = 256u32;
+            let large = 512u32;
+
+            // Helper to render and read back non-white pixel count in the
+            // middle row for a given viewport/texture size.
+            let render_and_count_row = |sel: &Selection<BoxPlotAttributes, BoxPlot>,
+                                        size: u32,
+                                        label: &str| {
+                let tex = context.device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some(label),
+                    size: wgpu::Extent3d {
+                        width: size,
+                        height: size,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                    view_formats: &[],
+                });
+                let view = tex.create_view(&wgpu::TextureViewDescriptor::default());
+
+                let row_bytes = (size * 4) as usize;
+                let readback = context.device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some(&format!("{label}_readback")),
+                    size: (row_bytes * size as usize) as u64,
+                    usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                    mapped_at_creation: false,
+                });
+
+                let mut encoder =
+                    context
+                        .device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some(&format!("{label}_enc")),
+                        });
+
+                {
+                    let mut rp = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some(&format!("{label}_rp")),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            resolve_target: None,
+                            depth_slice: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                    });
+                    sel.render(&mut rp).expect("render");
+                }
+
+                encoder.copy_texture_to_buffer(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: &tex,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::TexelCopyBufferInfo {
+                        buffer: &readback,
+                        layout: wgpu::TexelCopyBufferLayout {
+                            offset: 0,
+                            bytes_per_row: Some(row_bytes as u32),
+                            rows_per_image: Some(size),
+                        },
+                    },
+                    wgpu::Extent3d {
+                        width: size,
+                        height: size,
+                        depth_or_array_layers: 1,
+                    },
+                );
+                context.queue.submit(Some(encoder.finish()));
+
+                let slice = readback.slice(..);
+                let (tx, rx) = std::sync::mpsc::channel();
+                slice.map_async(wgpu::MapMode::Read, move |r| tx.send(r).unwrap());
+                let _ = context.device.poll(wgpu::PollType::Wait);
+                rx.recv().unwrap().unwrap();
+
+                let data = slice.get_mapped_range();
+                let mid_row = (size / 2) as usize;
+                let start = mid_row * row_bytes;
+                let end = start + row_bytes;
+                let count = (start..end)
+                    .step_by(4)
+                    .filter(|&i| data[i] != 255 || data[i + 1] != 255 || data[i + 2] != 255)
+                    .count();
+                drop(data);
+                count
+            };
+
+            // Render at small viewport
+            selection.set_viewport_size(&context.queue, small as f32, small as f32);
+            let count_small = render_and_count_row(&selection, small, "small");
+
+            // Render at large viewport
+            selection.set_viewport_size(&context.queue, large as f32, large as f32);
+            let count_large = render_and_count_row(&selection, large, "large");
+
+            // Both should have visible non-white pixels
+            assert!(
+                count_small > 0,
+                "{small}px render should have visible box stroke pixels"
+            );
+            assert!(
+                count_large > 0,
+                "{large}px render should have visible box stroke pixels"
+            );
+
+            // At 2× resolution, the box doubles in pixel width but stroke
+            // stays constant at 4 pixels.  The total non-white count in
+            // the middle row should roughly double.
+            let ratio = count_large as f64 / count_small as f64;
+            assert!(
+                (1.6..=2.4).contains(&ratio),
+                "Non-white pixel ratio should be ~2.0 (was {ratio:.2}). \
+                 {small}px: {count_small}, {large}px: {count_large}"
+            );
+        });
+    }
+
     // --- GPU tests for attribute binding pipeline (GUP-168) ---
 
     /// Custom data type for testing attribute bindings.
