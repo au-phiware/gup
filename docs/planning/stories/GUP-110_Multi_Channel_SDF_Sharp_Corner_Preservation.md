@@ -1,6 +1,6 @@
 # GUP-110: Multi-Channel SDF Sharp Corner Preservation
 
-**Status**: Open  
+**Status**: 🚧 In Progress  
 **Priority**: Medium  
 **Component**: Font Atlas / Text Rendering  
 **Depends On**: GUP-108 (Correct SDF Font Atlas Generation), GUP-109 (TTF

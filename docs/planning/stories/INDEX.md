@@ -288,7 +288,7 @@ system story. The expanded story is also complete._
 | [GUP-107](GUP-107_Text_Character_Positioning_Bug.md)                               | Text Character Positioning Bug              | ✅ Complete | Medium   | —      |
 | [GUP-108](GUP-108_Correct_SDF_Font_Atlas_Generation.md)                            | Correct SDF Font Atlas Generation           | ✅ Complete | High     | —      |
 | [GUP-109](GUP-109_TTF_Outline_Based_SDF_Generation_with_Performance_Comparison.md) | TTF Outline-Based SDF Generation            | ✅ Complete  | Medium   | —      |
-| [GUP-110](GUP-110_Multi_Channel_SDF_Sharp_Corner_Preservation.md)                  | Multi-Channel SDF Sharp Corner Preservation | 📋 Planned  | Medium   | —      |
+| [GUP-110](GUP-110_Multi_Channel_SDF_Sharp_Corner_Preservation.md)                  | Multi-Channel SDF Sharp Corner Preservation | 🚧 In Progress  | Medium   | —      |
 | [GUP-199](GUP-199_Text_Wrapping_Multi_Line_Layout.md)                              | Text Wrapping and Multi-Line Layout         | 📋 Planned  | Low      | 5      |
 | [GUP-200](GUP-200_Interactive_Clipping_Reveal.md)                                  | Interactive Clipping Reveal                 | 📋 Planned  | Low      | 3      |
 | [GUP-201](GUP-201_Text_Clipping_Visual_Demo.md)                                    | Text Clipping Visual Demo                   | 📋 Planned  | Low      | 2      |
