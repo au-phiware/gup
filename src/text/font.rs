@@ -1,11 +1,12 @@
 // Copyright (C) 2024 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Font specification and system font loading.
+//! Font specification, system font loading, and multi-font atlas management.
 //!
 //! Provides types for specifying desired fonts by family name, weight, and style,
-//! and a font database for resolving these specifications to actual font data
-//! from the operating system's installed fonts.
+//! a font database for resolving these specifications to actual font data from
+//! the operating system's installed fonts, and a [`FontAtlasManager`] that
+//! maintains a bounded cache of GPU font atlases with LRU eviction.
 
 use crate::error::{GupError, GupResult};
 use std::collections::HashMap;
@@ -555,8 +556,9 @@ const DEFAULT_ATLAS_KEY: &str = "__default__";
 
 /// Estimated GPU memory per atlas: atlas_size² × 4 bytes (RGBA).
 ///
-/// With the default 1024×1024 atlas, this is 4 MB.
-const BYTES_PER_ATLAS: u64 = (super::sdf::ATLAS_SIZE as u64) * (super::sdf::ATLAS_SIZE as u64) * 4;
+/// With the default 1024×1024 atlas, this is 4,194,304 bytes (4 MB).
+pub const BYTES_PER_ATLAS: u64 =
+    (super::sdf::ATLAS_SIZE as u64) * (super::sdf::ATLAS_SIZE as u64) * 4;
 
 impl FontAtlasManager {
     /// Create a new font atlas manager with default configuration.
