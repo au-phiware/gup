@@ -295,7 +295,7 @@ system story. The expanded story is also complete._
 | [GUP-202](GUP-202_Font_Aware_Text_Rendering_Pipeline.md)                           | Font-Aware Text Rendering Pipeline          | ✅ Complete | Medium   | —      |
 | [GUP-203](GUP-203_Multi_Font_Atlas_Manager.md)                                     | Multi-Font Atlas Manager                    | 📋 Planned  | Low      | —      |
 | [GUP-214](GUP-214_Font_Atlas_Eviction.md)                                          | Font Atlas Eviction and Memory Management   | 📋 Planned  | Low      | —      |
-| [GUP-215](GUP-215_Chart_Builder_Multi_Font.md)                                     | Chart Builder Multi-Font Integration        | 🚧 In Progress  | Medium   | —      |
+| [GUP-215](GUP-215_Chart_Builder_Multi_Font.md)                                     | Chart Builder Multi-Font Integration        | ✅ Complete | Medium   | —      |
 
 ### Post GUP-016 Stories - Accessibility System (Stories 111-130)
 
@@ -416,7 +416,7 @@ system story. The expanded story is also complete._
 - **Axis/Grid complete**: GUP-096 ✅
 - **Text complete**: GUP-104 ✅, GUP-105 ✅, GUP-106 ✅, GUP-107 ✅, GUP-108 ✅
 - **Text planned**: GUP-110 ✅, GUP-199 📋, GUP-200 📋, GUP-201 📋, GUP-202 ✅,
-  GUP-203 📋, GUP-214 📋, GUP-215 📋
+  GUP-203 📋, GUP-214 📋, GUP-215 ✅
 
 ## Story Point Summary
 

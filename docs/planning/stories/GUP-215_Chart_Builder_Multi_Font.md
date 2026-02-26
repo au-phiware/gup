@@ -1,7 +1,7 @@
 # GUP-215: Chart Builder Multi-Font Integration
 
-**Status**: 🚧 In Progress **Priority**: Medium **Complexity**: Low **Created**:
-2025-08-21
+**Status**: ✅ Complete **Priority**: Medium **Complexity**: Low **Created**:
+2025-08-21 **Completed**: 2025-07-22
 
 ## Overview
 
@@ -25,10 +25,10 @@ so I can create typographically rich charts without managing font atlases.
 
 ## Acceptance Criteria
 
-- [ ] Chart builders accept or internally create a `FontAtlasManager`
-- [ ] Axis label `TextStyle.font_family` is respected during chart rendering
-- [ ] Chart title `TextStyle.font_family` is respected during chart rendering
-- [ ] Existing chart examples continue to work without changes
+- [x] Chart builders accept or internally create a `FontAtlasManager`
+- [x] Axis label `TextStyle.font_family` is respected during chart rendering
+- [x] Chart title `TextStyle.font_family` is respected during chart rendering
+- [x] Existing chart examples continue to work without changes
 
 ## Technical Tasks
 
@@ -53,10 +53,38 @@ so I can create typographically rich charts without managing font atlases.
 
 ## Definition of Done
 
-- [ ] Chart builder API supports multi-font rendering via `font_family`
-- [ ] All existing chart tests pass
-- [ ] Documentation updated with chart font customisation examples
-- [ ] At least one chart example uses multiple fonts
+- [x] Chart builder API supports multi-font rendering via `font_family`
+- [x] All existing chart tests pass
+- [x] Documentation updated with chart font customisation examples
+- [x] At least one chart example uses multiple fonts
+
+## Implementation Summary
+
+### What was implemented
+
+- **`ChartConfig` text style fields**: Added `label_style` and `title_style`
+  (`TextStyle`) to `ChartConfig` with builder methods `with_label_style()`,
+  `with_title_style()`, and `with_title()`.
+- **`ComposedChart::queue_chart_text()`**: Queues axis labels and optional chart
+  title through `FontAtlasManager` using `queue_text_with_fonts()` so that
+  `TextStyle.font_family` is automatically resolved.
+- **`ComposedChart::queue_chart_text_resolved()`**: Same as above but with label
+  collision detection via `LabelPositioner`.
+- **`ComposedChart::queue_title_text()`**: Private helper that positions the
+  title centred at the top of the chart area.
+
+### Key files changed
+
+| File                                  | Change                                                   |
+| ------------------------------------- | -------------------------------------------------------- |
+| `src/chart_builder.rs`                | Added text style fields, queue methods, 11 tests         |
+| `examples/multi_font_chart_demo.rs`   | New example: chart with DejaVu Serif title + Sans labels |
+| `docs/text-rendering-architecture.md` | Added "Chart Builder Multi-Font Integration" section     |
+
+### Tests
+
+- 11 new tests (6 unit, 5 GPU integration) in `chart_builder::tests_multi_font`
+- All 1435 existing lib tests pass with 0 failures
 
 ---
 
