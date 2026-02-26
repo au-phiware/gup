@@ -2636,6 +2636,361 @@ mod tests {
         });
     }
 
+    // --- Reactive ARIA update tests (GUP-126) ---
+
+    #[test]
+    fn aria_dirty_on_set_data() {
+        let mut sel = Selection::<f32, Circle>::from_data(vec![1.0, 2.0]);
+        let mut tree = crate::accessibility::aria::AriaTree::new();
+
+        sel.attr("center", |d: &f32| [*d, 0.0]);
+
+        // First registration clears dirty flag.
+        sel.register_aria(&mut tree);
+        assert!(!sel.is_aria_dirty());
+
+        // set_data should mark aria as dirty.
+        sel.set_data(vec![3.0, 4.0, 5.0]);
+        assert!(sel.is_aria_dirty());
+
+        // Re-registering should clear the dirty flag again.
+        sel.register_aria(&mut tree);
+        assert!(!sel.is_aria_dirty());
+    }
+
+    #[test]
+    fn aria_dirty_on_attr() {
+        let mut sel = Selection::<f32, Circle>::from_data(vec![1.0]);
+        let mut tree = crate::accessibility::aria::AriaTree::new();
+
+        sel.attr("center", |d: &f32| [*d, 0.0]);
+        sel.register_aria(&mut tree);
+        assert!(!sel.is_aria_dirty());
+
+        // Adding a new attribute should mark dirty.
+        sel.attr("radius", |d: &f32| *d);
+        assert!(sel.is_aria_dirty());
+    }
+
+    #[test]
+    fn aria_dirty_on_attr_parallel() {
+        let mut sel = Selection::<f32, Circle>::from_data(vec![1.0]);
+        let mut tree = crate::accessibility::aria::AriaTree::new();
+
+        sel.attr("center", |d: &f32| [*d, 0.0]);
+        sel.register_aria(&mut tree);
+        assert!(!sel.is_aria_dirty());
+
+        // attr_parallel should also mark dirty.
+        sel.attr_parallel(|d: &f32| ([*d, 0.0], *d), ["center", "radius"]);
+        assert!(sel.is_aria_dirty());
+    }
+
+    #[test]
+    fn sync_aria_skips_when_not_dirty() {
+        pollster::block_on(async {
+            let render_ctx = match crate::RenderContext::new().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let acc = std::sync::Arc::new(std::sync::Mutex::new(
+                crate::accessibility::AccessibilitySystem::new(),
+            ));
+            let mut render_ctx = render_ctx;
+            render_ctx.set_accessibility(acc.clone());
+            let ctx = std::sync::Arc::new(render_ctx);
+
+            let mut sel =
+                Selection::<(), Circle>::new(vec![(), ()], ctx).expect("selection creation");
+            sel.attr("center", |_: &()| [0.0f32, 0.0]);
+
+            // First sync always runs (no existing ARIA tree).
+            assert!(sel.sync_aria_from_context());
+            let root1 = sel.aria_root_node().unwrap();
+
+            // Second sync without changes should be a no-op.
+            assert!(!sel.sync_aria_from_context());
+            // Root should be unchanged.
+            assert_eq!(sel.aria_root_node().unwrap(), root1);
+        });
+    }
+
+    #[test]
+    fn sync_aria_runs_when_dirty() {
+        pollster::block_on(async {
+            let render_ctx = match crate::RenderContext::new().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let acc = std::sync::Arc::new(std::sync::Mutex::new(
+                crate::accessibility::AccessibilitySystem::new(),
+            ));
+            let mut render_ctx = render_ctx;
+            render_ctx.set_accessibility(acc.clone());
+            let ctx = std::sync::Arc::new(render_ctx);
+
+            let mut sel =
+                Selection::<(), Circle>::new(vec![(), ()], ctx).expect("selection creation");
+            sel.attr("center", |_: &()| [0.0f32, 0.0]);
+
+            assert!(sel.sync_aria_from_context());
+            let root1 = sel.aria_root_node().unwrap();
+
+            // Mark dirty via set_data, then sync should run again.
+            sel.set_data(vec![(), (), (), ()]);
+            assert!(sel.sync_aria_from_context());
+            let root2 = sel.aria_root_node().unwrap();
+            // New root should differ from the old one.
+            assert_ne!(root1, root2);
+
+            // Check updated label
+            let system = acc.lock().unwrap();
+            assert_eq!(
+                system.aria_tree.get_node(root2).unwrap().label,
+                "Circle chart with 4 data points"
+            );
+        });
+    }
+
+    #[test]
+    fn aria_focus_preserved_during_update() {
+        let mut sel = Selection::<f32, Circle>::from_data(vec![1.0, 2.0, 3.0]);
+        sel.attr("center", |d: &f32| [*d, 0.0]);
+        let mut tree = crate::accessibility::aria::AriaTree::new();
+
+        sel.register_aria(&mut tree);
+        let root = sel.aria_root_node().unwrap();
+
+        // Focus on the second data point child.
+        let children = tree.get_node(root).unwrap().children.clone();
+        assert_eq!(children.len(), 3);
+        tree.set_focus(Some(children[1]));
+
+        // Update data — the child NodeIds will change but focus should
+        // land on index 1 in the new tree.
+        sel.set_data(vec![10.0, 20.0, 30.0, 40.0]);
+        sel.register_aria(&mut tree);
+
+        let new_root = sel.aria_root_node().unwrap();
+        let new_children = tree.get_node(new_root).unwrap().children.clone();
+        assert_eq!(tree.get_focus(), Some(new_children[1]));
+    }
+
+    #[test]
+    fn aria_focus_falls_back_to_chart_root_when_index_gone() {
+        let mut sel = Selection::<f32, Circle>::from_data(vec![1.0, 2.0, 3.0]);
+        sel.attr("center", |d: &f32| [*d, 0.0]);
+        let mut tree = crate::accessibility::aria::AriaTree::new();
+
+        sel.register_aria(&mut tree);
+        let root = sel.aria_root_node().unwrap();
+
+        // Focus on the third (last) child.
+        let children = tree.get_node(root).unwrap().children.clone();
+        tree.set_focus(Some(children[2]));
+
+        // Shrink data so index 2 no longer exists.
+        sel.set_data(vec![10.0, 20.0]);
+        sel.register_aria(&mut tree);
+
+        let new_root = sel.aria_root_node().unwrap();
+        // Focus should fall back to the chart root.
+        assert_eq!(tree.get_focus(), Some(new_root));
+    }
+
+    #[test]
+    fn aria_live_region_on_data_added() {
+        let mut sel = Selection::<f32, Circle>::from_data(vec![1.0, 2.0]);
+        sel.attr("center", |d: &f32| [*d, 0.0]);
+        let mut tree = crate::accessibility::aria::AriaTree::new();
+
+        // Initial registration — no announcement for the very first registration.
+        sel.register_aria(&mut tree);
+        let updates = tree.drain_update_queue();
+        // The queue should have NodeCreated events but no LiveRegion.
+        assert!(
+            !updates
+                .iter()
+                .any(|u| matches!(u, crate::accessibility::aria::AriaUpdate::LiveRegion { .. })),
+            "No live region announcement on initial registration"
+        );
+
+        // Now add data points.
+        sel.set_data(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+        sel.register_aria(&mut tree);
+        let updates = tree.drain_update_queue();
+
+        // Should have a LiveRegion announcement about 3 new points.
+        let live = updates
+            .iter()
+            .find(|u| matches!(u, crate::accessibility::aria::AriaUpdate::LiveRegion { .. }));
+        assert!(live.is_some(), "Expected live region announcement");
+        if let crate::accessibility::aria::AriaUpdate::LiveRegion { content, .. } = live.unwrap() {
+            assert!(
+                content.contains("3 new data point"),
+                "Expected '3 new data points' but got: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn aria_live_region_on_data_removed() {
+        let mut sel = Selection::<f32, Circle>::from_data(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+        sel.attr("center", |d: &f32| [*d, 0.0]);
+        let mut tree = crate::accessibility::aria::AriaTree::new();
+
+        sel.register_aria(&mut tree);
+        tree.drain_update_queue();
+
+        // Remove 2 points.
+        sel.set_data(vec![1.0, 2.0, 3.0]);
+        sel.register_aria(&mut tree);
+        let updates = tree.drain_update_queue();
+
+        let live = updates
+            .iter()
+            .find(|u| matches!(u, crate::accessibility::aria::AriaUpdate::LiveRegion { .. }));
+        assert!(live.is_some(), "Expected live region announcement");
+        if let crate::accessibility::aria::AriaUpdate::LiveRegion { content, .. } = live.unwrap() {
+            assert!(
+                content.contains("2 data point") && content.contains("removed"),
+                "Expected removal summary but got: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn aria_live_region_on_same_count_update() {
+        let mut sel = Selection::<f32, Circle>::from_data(vec![1.0, 2.0]);
+        sel.attr("center", |d: &f32| [*d, 0.0]);
+        let mut tree = crate::accessibility::aria::AriaTree::new();
+
+        sel.register_aria(&mut tree);
+        tree.drain_update_queue();
+
+        // Same count, different data.
+        sel.set_data(vec![10.0, 20.0]);
+        sel.register_aria(&mut tree);
+        let updates = tree.drain_update_queue();
+
+        let live = updates
+            .iter()
+            .find(|u| matches!(u, crate::accessibility::aria::AriaUpdate::LiveRegion { .. }));
+        assert!(live.is_some(), "Expected live region announcement");
+        if let crate::accessibility::aria::AriaUpdate::LiveRegion { content, .. } = live.unwrap() {
+            assert!(
+                content.contains("data updated"),
+                "Expected 'data updated' but got: {content}"
+            );
+        }
+    }
+
+    #[test]
+    fn aria_update_config_urgency() {
+        let mut sel = Selection::<f32, Circle>::from_data(vec![1.0]);
+        sel.attr("center", |d: &f32| [*d, 0.0]);
+        sel.set_aria_update_config(AriaUpdateConfig {
+            urgency: crate::accessibility::aria::AriaLive::Assertive,
+            announce_changes: true,
+        });
+        let mut tree = crate::accessibility::aria::AriaTree::new();
+
+        sel.register_aria(&mut tree);
+        tree.drain_update_queue();
+
+        sel.set_data(vec![1.0, 2.0]);
+        sel.register_aria(&mut tree);
+        let updates = tree.drain_update_queue();
+
+        let live = updates
+            .iter()
+            .find(|u| matches!(u, crate::accessibility::aria::AriaUpdate::LiveRegion { .. }));
+        assert!(live.is_some());
+        if let crate::accessibility::aria::AriaUpdate::LiveRegion { urgency, .. } = live.unwrap() {
+            assert_eq!(*urgency, crate::accessibility::aria::AriaLive::Assertive);
+        }
+    }
+
+    #[test]
+    fn aria_update_config_announce_off() {
+        let mut sel = Selection::<f32, Circle>::from_data(vec![1.0]);
+        sel.attr("center", |d: &f32| [*d, 0.0]);
+        sel.set_aria_update_config(AriaUpdateConfig {
+            urgency: crate::accessibility::aria::AriaLive::Polite,
+            announce_changes: false,
+        });
+        let mut tree = crate::accessibility::aria::AriaTree::new();
+
+        sel.register_aria(&mut tree);
+        tree.drain_update_queue();
+
+        sel.set_data(vec![1.0, 2.0]);
+        sel.register_aria(&mut tree);
+        let updates = tree.drain_update_queue();
+
+        // Should NOT have a LiveRegion announcement.
+        assert!(
+            !updates
+                .iter()
+                .any(|u| matches!(u, crate::accessibility::aria::AriaUpdate::LiveRegion { .. })),
+            "No live region when announce_changes is false"
+        );
+    }
+
+    #[test]
+    fn aria_update_config_defaults() {
+        let config = AriaUpdateConfig::default();
+        assert_eq!(config.urgency, crate::accessibility::aria::AriaLive::Polite);
+        assert!(config.announce_changes);
+    }
+
+    #[test]
+    fn summarise_change_additions() {
+        let summary = Selection::<(), Circle>::summarise_change(Some(3), 5, "circle");
+        assert_eq!(
+            summary,
+            Some("2 new data points added, 5 total".to_string())
+        );
+    }
+
+    #[test]
+    fn summarise_change_removals() {
+        let summary = Selection::<(), Circle>::summarise_change(Some(5), 3, "circle");
+        assert_eq!(
+            summary,
+            Some("2 data points removed, 3 total".to_string())
+        );
+    }
+
+    #[test]
+    fn summarise_change_same_count() {
+        let summary = Selection::<(), Circle>::summarise_change(Some(3), 3, "circle");
+        assert_eq!(summary, Some("Circle chart data updated".to_string()));
+    }
+
+    #[test]
+    fn summarise_change_initial() {
+        let summary = Selection::<(), Circle>::summarise_change(None, 5, "circle");
+        assert!(summary.is_none(), "No summary for initial registration");
+    }
+
+    #[test]
+    fn summarise_change_single_point() {
+        let summary = Selection::<(), Circle>::summarise_change(Some(2), 3, "line");
+        assert_eq!(
+            summary,
+            Some("1 new data point added, 3 total".to_string())
+        );
+    }
+
     // --- GPU integration tests ---
 
     #[test]

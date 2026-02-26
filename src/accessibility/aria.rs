@@ -484,6 +484,28 @@ mod tests {
     }
 
     #[test]
+    fn test_aria_live_region_with_urgency() {
+        let mut tree = AriaTree::new();
+        tree.update_live_region_with_urgency("chart-1", "3 new points", AriaLive::Assertive);
+
+        let updates = tree.drain_update_queue();
+        assert_eq!(updates.len(), 1);
+
+        match &updates[0] {
+            AriaUpdate::LiveRegion {
+                id,
+                content,
+                urgency,
+            } => {
+                assert_eq!(id, "chart-1");
+                assert_eq!(content, "3 new points");
+                assert_eq!(*urgency, AriaLive::Assertive);
+            }
+            _ => panic!("Expected LiveRegion update"),
+        }
+    }
+
+    #[test]
     fn test_data_pattern_analysis() {
         let tree = AriaTree::new();
 
