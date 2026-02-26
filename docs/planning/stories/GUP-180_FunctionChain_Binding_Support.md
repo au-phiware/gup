@@ -1,6 +1,6 @@
 # GUP-180: FunctionChain Binding Support
 
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
