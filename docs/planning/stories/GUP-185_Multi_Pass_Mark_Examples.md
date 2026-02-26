@@ -1,6 +1,6 @@
 # GUP-185: Multi-Pass Mark Examples
 
-**Status**: 📋 Planned **Priority**: Low **Category**: Examples / Documentation
+**Status**: 🚧 In Progress **Priority**: Low **Category**: Examples / Documentation
 **Estimated Effort**: 1 day **Dependencies**: GUP-069 (Advanced Mark Rendering
 Features)
 
