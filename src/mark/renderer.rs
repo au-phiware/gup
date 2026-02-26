@@ -68,7 +68,7 @@ impl MarkRenderer {
         Self {
             vertex_buffer: GpuBuffer::new(device, BufferType::Vertex, 4096), // 4KB initial capacity
             instance_buffer: GpuBuffer::new(device, BufferType::Instance, 8192), // 8KB initial capacity
-            index_buffer: Some(GpuBuffer::new(device, BufferType::Storage, 2048)), // 2KB for indices
+            index_buffer: Some(GpuBuffer::new(device, BufferType::Index, 2048)), // 2KB for indices
             metrics: Default::default(),
         }
     }
@@ -408,6 +408,134 @@ impl MarkRenderer {
     }
 
     // ------------------------------------------------------------------
+    // Tracked render methods (automatic metrics accumulation)
+    // ------------------------------------------------------------------
+
+    /// Render mark instances, automatically tracking draw-call and instance
+    /// metrics.
+    ///
+    /// This is the same as [`render_marks`] but takes `&mut self` so it can
+    /// increment the internal [`MarkPerformanceMetrics`] counters:
+    ///
+    /// * `draw_calls += 1`
+    /// * `total_instances += instance_count`
+    ///
+    /// Use [`reset_performance_counters`] at the start of each frame and
+    /// [`get_performance_metrics`] at the end to obtain per-frame statistics.
+    pub fn render_marks_tracked<M: Mark>(
+        &mut self,
+        render_pass: &mut RenderPass,
+        pipeline: &wgpu::RenderPipeline,
+        bind_group: &wgpu::BindGroup,
+        instance_count: u32,
+    ) -> GupResult<()> {
+        self.render_marks::<M>(render_pass, pipeline, bind_group, instance_count)?;
+        self.metrics.draw_calls += 1;
+        self.metrics.total_instances += instance_count;
+        Ok(())
+    }
+
+    /// Render mark instances with accessibility patterns, automatically
+    /// tracking draw-call and instance metrics.
+    ///
+    /// Tracked variant of [`render_marks_with_patterns`].
+    pub fn render_marks_with_patterns_tracked<M: Mark>(
+        &mut self,
+        render_pass: &mut RenderPass,
+        pipeline: &wgpu::RenderPipeline,
+        bind_group: &wgpu::BindGroup,
+        pattern_bind_group: &wgpu::BindGroup,
+        instance_count: u32,
+    ) -> GupResult<()> {
+        self.render_marks_with_patterns::<M>(
+            render_pass,
+            pipeline,
+            bind_group,
+            pattern_bind_group,
+            instance_count,
+        )?;
+        self.metrics.draw_calls += 1;
+        self.metrics.total_instances += instance_count;
+        Ok(())
+    }
+
+    /// Render marks in multiple passes, automatically tracking draw-call,
+    /// instance, and pipeline-switch metrics.
+    ///
+    /// Tracked variant of [`render_marks_multi_pass`].  Each configured
+    /// pass contributes one draw call and one pipeline switch.
+    pub fn render_marks_multi_pass_tracked<M: Mark>(
+        &mut self,
+        render_pass: &mut RenderPass<'_>,
+        config: &super::advanced_rendering::MultiPassConfig,
+        pipelines: &[wgpu::RenderPipeline],
+        bind_group: &wgpu::BindGroup,
+        instance_count: u32,
+    ) -> GupResult<()> {
+        let pass_count = config.pass_count() as u32;
+        self.render_marks_multi_pass::<M>(
+            render_pass,
+            config,
+            pipelines,
+            bind_group,
+            instance_count,
+        )?;
+        self.metrics.draw_calls += pass_count;
+        self.metrics.total_instances += instance_count * pass_count;
+        self.metrics.pipeline_switches += pass_count;
+        Ok(())
+    }
+
+    /// Render marks with state isolation, automatically tracking metrics.
+    ///
+    /// Tracked variant of [`render_marks_with_state`].
+    pub fn render_marks_with_state_tracked<M: Mark>(
+        &mut self,
+        render_pass: &mut RenderPass<'_>,
+        pipeline: &wgpu::RenderPipeline,
+        bind_group: &wgpu::BindGroup,
+        instance_count: u32,
+        state_manager: &super::advanced_rendering::RenderStateManager,
+    ) -> GupResult<()> {
+        self.render_marks_with_state::<M>(
+            render_pass,
+            pipeline,
+            bind_group,
+            instance_count,
+            state_manager,
+        )?;
+        self.metrics.draw_calls += 1;
+        self.metrics.total_instances += instance_count;
+        Ok(())
+    }
+
+    /// Render marks with dynamic attribute buffers, automatically tracking
+    /// metrics.
+    ///
+    /// Tracked variant of [`render_marks_with_dynamic_attrs`].
+    pub fn render_marks_with_dynamic_attrs_tracked<M: Mark>(
+        &mut self,
+        render_pass: &mut RenderPass,
+        pipeline: &wgpu::RenderPipeline,
+        bind_group: &wgpu::BindGroup,
+        dynamic_attr_bind_group: &wgpu::BindGroup,
+        dynamic_attr_group_index: u32,
+        instance_count: u32,
+    ) -> GupResult<()> {
+        self.render_marks_with_dynamic_attrs::<M>(
+            render_pass,
+            pipeline,
+            bind_group,
+            dynamic_attr_bind_group,
+            dynamic_attr_group_index,
+            instance_count,
+        )?;
+        self.metrics.draw_calls += 1;
+        self.metrics.total_instances += instance_count;
+        Ok(())
+    }
+
+    // ------------------------------------------------------------------
     // Performance metrics
     // ------------------------------------------------------------------
 
@@ -447,6 +575,7 @@ impl Default for MarkRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use wgpu::util::DeviceExt;
 
     // Helper function to create test context - would be implemented in integration tests
     async fn create_test_context() -> GupResult<std::sync::Arc<crate::context::GupContext>> {
@@ -616,5 +745,251 @@ mod tests {
         assert_eq!(renderer.index_len(), Some(0));
 
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_metrics_initial_state() -> GupResult<()> {
+        let context = create_test_context().await?;
+        let renderer = MarkRenderer::new(&context.device);
+
+        let m = renderer.get_performance_metrics();
+        assert_eq!(m.draw_calls, 0);
+        assert_eq!(m.total_instances, 0);
+        assert_eq!(m.pipeline_switches, 0);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_metrics_manual_accumulation() -> GupResult<()> {
+        let context = create_test_context().await?;
+        let mut renderer = MarkRenderer::new(&context.device);
+
+        renderer.metrics_mut().draw_calls += 3;
+        renderer.metrics_mut().total_instances += 100;
+        renderer.metrics_mut().pipeline_switches += 2;
+
+        let m = renderer.get_performance_metrics();
+        assert_eq!(m.draw_calls, 3);
+        assert_eq!(m.total_instances, 100);
+        assert_eq!(m.pipeline_switches, 2);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_reset_performance_counters() -> GupResult<()> {
+        let context = create_test_context().await?;
+        let mut renderer = MarkRenderer::new(&context.device);
+
+        renderer.metrics_mut().draw_calls = 5;
+        renderer.metrics_mut().total_instances = 500;
+        renderer.metrics_mut().pipeline_switches = 3;
+
+        renderer.reset_performance_counters();
+
+        let m = renderer.get_performance_metrics();
+        assert_eq!(m.draw_calls, 0);
+        assert_eq!(m.total_instances, 0);
+        assert_eq!(m.pipeline_switches, 0);
+
+        Ok(())
+    }
+
+    /// Helper to set up a complete rendering context (pipeline, bind group,
+    /// render target) for Circle marks.
+    async fn create_circle_render_context(
+        context: &std::sync::Arc<crate::context::GupContext>,
+    ) -> GupResult<(
+        MarkRenderer,
+        std::sync::Arc<wgpu::RenderPipeline>,
+        wgpu::BindGroup,
+        wgpu::Texture,
+    )> {
+        use crate::CircleInstance;
+        use crate::mark::{Circle, Mark, MarkRegistry};
+
+        let device = &context.device;
+        let queue = &context.queue;
+
+        let mut registry = MarkRegistry::new();
+        registry.register::<Circle>();
+
+        let mut renderer = MarkRenderer::new(device);
+
+        // Upload Circle geometry
+        let vertices = Circle::generate_vertices();
+        renderer.upload_vertices(device, queue, &vertices)?;
+
+        let indices = Circle::generate_indices().unwrap();
+        renderer.upload_indices(device, queue, &indices)?;
+
+        // Create instance data
+        let instances = vec![
+            CircleInstance {
+                center: [0.0, 0.0],
+                radius: 0.1,
+                _pad0: 0.0,
+                fill_color: [1.0, 0.0, 0.0, 1.0],
+                stroke_width: 0.01,
+                _pad1: [0.0; 3],
+                stroke_color: [0.0, 0.0, 0.0, 1.0],
+            };
+            5
+        ];
+        renderer.upload_instances(device, queue, &instances)?;
+
+        // Storage buffer for bind group
+        let instance_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("test_instance_storage"),
+            contents: bytemuck::cast_slice(&instances),
+            usage: wgpu::BufferUsages::STORAGE,
+        });
+
+        let pipeline = registry.get_pipeline::<Circle>(device)?;
+        let bind_group = registry.create_bind_group::<Circle>(device, &instance_buf, &[])?;
+
+        // Offscreen render target
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("test_render_target"),
+            size: wgpu::Extent3d {
+                width: 64,
+                height: 64,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Bgra8UnormSrgb,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+
+        Ok((renderer, pipeline, bind_group, texture))
+    }
+
+    #[tokio::test]
+    async fn test_render_marks_tracked_draw_calls() -> GupResult<()> {
+        use crate::mark::Circle;
+
+        let context = create_test_context().await?;
+        let (mut renderer, pipeline, bind_group, texture) =
+            create_circle_render_context(&context).await?;
+
+        let view = texture.create_view(&Default::default());
+        let mut encoder = context
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+        {
+            let mut pass = begin_test_render_pass(&mut encoder, &view);
+
+            // Render three batches
+            for _ in 0..3 {
+                renderer.render_marks_tracked::<Circle>(&mut pass, &pipeline, &bind_group, 5)?;
+            }
+        }
+
+        context.queue.submit(Some(encoder.finish()));
+
+        let m = renderer.get_performance_metrics();
+        assert_eq!(m.draw_calls, 3, "should record 3 draw calls");
+        assert_eq!(m.total_instances, 15, "should record 5×3 = 15 instances");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_render_marks_tracked_accumulates_across_frames() -> GupResult<()> {
+        use crate::mark::Circle;
+
+        let context = create_test_context().await?;
+        let (mut renderer, pipeline, bind_group, texture) =
+            create_circle_render_context(&context).await?;
+
+        let view = texture.create_view(&Default::default());
+
+        // --- Frame 1 ---
+        let mut encoder = context.device.create_command_encoder(&Default::default());
+        {
+            let mut pass = begin_test_render_pass(&mut encoder, &view);
+            renderer.render_marks_tracked::<Circle>(&mut pass, &pipeline, &bind_group, 10)?;
+        }
+        context.queue.submit(Some(encoder.finish()));
+
+        assert_eq!(renderer.get_performance_metrics().draw_calls, 1);
+        assert_eq!(renderer.get_performance_metrics().total_instances, 10);
+
+        // --- Reset for Frame 2 ---
+        renderer.reset_performance_counters();
+
+        let mut encoder = context.device.create_command_encoder(&Default::default());
+        {
+            let mut pass = begin_test_render_pass(&mut encoder, &view);
+            renderer.render_marks_tracked::<Circle>(&mut pass, &pipeline, &bind_group, 20)?;
+            renderer.render_marks_tracked::<Circle>(&mut pass, &pipeline, &bind_group, 30)?;
+        }
+        context.queue.submit(Some(encoder.finish()));
+
+        let m = renderer.get_performance_metrics();
+        assert_eq!(m.draw_calls, 2, "frame 2 should have exactly 2 draw calls");
+        assert_eq!(
+            m.total_instances, 50,
+            "frame 2 should have 20+30 = 50 instances"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_non_tracked_render_does_not_update_metrics() -> GupResult<()> {
+        use crate::mark::Circle;
+
+        let context = create_test_context().await?;
+        let (renderer, pipeline, bind_group, texture) =
+            create_circle_render_context(&context).await?;
+
+        let view = texture.create_view(&Default::default());
+        let mut encoder = context.device.create_command_encoder(&Default::default());
+
+        {
+            let mut pass = begin_test_render_pass(&mut encoder, &view);
+
+            // Use the non-tracked variant
+            renderer.render_marks::<Circle>(&mut pass, &pipeline, &bind_group, 100)?;
+        }
+
+        context.queue.submit(Some(encoder.finish()));
+
+        let m = renderer.get_performance_metrics();
+        assert_eq!(
+            m.draw_calls, 0,
+            "non-tracked render should not touch counters"
+        );
+        assert_eq!(m.total_instances, 0);
+
+        Ok(())
+    }
+
+    /// Begin a simple render pass for test use.
+    fn begin_test_render_pass<'a>(
+        encoder: &'a mut wgpu::CommandEncoder,
+        view: &'a wgpu::TextureView,
+    ) -> RenderPass<'a> {
+        encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("test_render_pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    store: wgpu::StoreOp::Store,
+                },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        })
     }
 }

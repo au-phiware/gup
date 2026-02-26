@@ -38,6 +38,8 @@ pub enum BufferType {
     Uniform,
     /// Large datasets accessed by compute shaders
     Storage,
+    /// Index data for indexed rendering
+    Index,
 }
 
 impl BufferType {
@@ -59,6 +61,9 @@ impl BufferType {
             BufferType::Storage => {
                 BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC
             }
+            BufferType::Index => {
+                BufferUsages::INDEX | BufferUsages::COPY_DST | BufferUsages::COPY_SRC
+            }
         }
     }
 
@@ -67,7 +72,7 @@ impl BufferType {
         match self {
             BufferType::Vertex | BufferType::Instance => 4, // 4-byte alignment
             BufferType::Uniform => 256,                     // Uniform buffer alignment
-            BufferType::Storage => 4,                       // Storage buffer alignment
+            BufferType::Storage | BufferType::Index => 4,   // Storage/index buffer alignment
         }
     }
 }
