@@ -116,21 +116,21 @@ epic and status.
 _Initiative doc:
 [Phase_2_Rust_to_WGSL_Transpilation.md](../initiatives/Phase_2_Rust_to_WGSL_Transpilation.md)_
 
-| Story                                                         | Title                                     | Status      | Priority | Points |
-| ------------------------------------------------------------- | ----------------------------------------- | ----------- | -------- | ------ |
-| [GUP-054](GUP-054_Existing_Solutions_Analysis.md)             | Existing Solutions Analysis               | ✅ Complete | High     | 8      |
-| [GUP-055](GUP-055_Rust_AST_Parsing_Research.md)               | Rust AST Parsing Research and Prototype   | ✅ Complete | High     | 8      |
-| [GUP-056](GUP-056_Type_System_Mapping.md)                     | Rust-to-WGSL Type System Mapping          | ✅ Complete | High     | 8      |
-| [GUP-057](GUP-057_Expression_Transpilation.md)                | Expression and Operator Transpilation     | ✅ Complete | High     | 13     |
-| [GUP-058](GUP-058_Control_Flow_Handling.md)                   | Control Flow and Statement Transpilation  | ✅ Complete | High     | 10     |
-| [GUP-059](GUP-059_Built_in_Function_Library.md)               | Built-in Function Library                 | ✅ Complete | Medium   | 8      |
-| [GUP-060](GUP-060_Optimization_Error_Reporting.md)            | Optimization Engine and Error Reporting   | ✅ Complete | Medium   | 13     |
-| [GUP-061](GUP-061_Integration_With_Shader_Function_System.md) | Integration with Shader Function System   | ✅ Complete | High     | 8      |
-| [GUP-062](GUP-062_Community_Validation_Prototyping.md)        | Community Validation and Proof-of-Concept | ✅ Complete | High     | 13     |
-| [GUP-210](GUP-210_Switch_Statement_Transpilation.md)          | Switch Statement Transpilation            | 📋 Planned  | Low      | 5      |
-| [GUP-211](GUP-211_Fix_Preexisting_wgsl_function_Test.md)      | Fix Pre-existing wgsl_function Test       | ✅ Complete | Medium   | 1      |
-| [GUP-212](GUP-212_WGSL_Reserved_Keyword_Detection.md)         | WGSL Reserved Keyword Detection           | ✅ Complete | Medium   | 3      |
-| [GUP-213](GUP-213_Transpiler_Custom_Struct_Support.md)        | Transpiler Custom Struct Support          | 📋 Planned  | Low      | 5      |
+| Story                                                         | Title                                     | Status         | Priority | Points |
+| ------------------------------------------------------------- | ----------------------------------------- | -------------- | -------- | ------ |
+| [GUP-054](GUP-054_Existing_Solutions_Analysis.md)             | Existing Solutions Analysis               | ✅ Complete    | High     | 8      |
+| [GUP-055](GUP-055_Rust_AST_Parsing_Research.md)               | Rust AST Parsing Research and Prototype   | ✅ Complete    | High     | 8      |
+| [GUP-056](GUP-056_Type_System_Mapping.md)                     | Rust-to-WGSL Type System Mapping          | ✅ Complete    | High     | 8      |
+| [GUP-057](GUP-057_Expression_Transpilation.md)                | Expression and Operator Transpilation     | ✅ Complete    | High     | 13     |
+| [GUP-058](GUP-058_Control_Flow_Handling.md)                   | Control Flow and Statement Transpilation  | ✅ Complete    | High     | 10     |
+| [GUP-059](GUP-059_Built_in_Function_Library.md)               | Built-in Function Library                 | ✅ Complete    | Medium   | 8      |
+| [GUP-060](GUP-060_Optimization_Error_Reporting.md)            | Optimization Engine and Error Reporting   | ✅ Complete    | Medium   | 13     |
+| [GUP-061](GUP-061_Integration_With_Shader_Function_System.md) | Integration with Shader Function System   | ✅ Complete    | High     | 8      |
+| [GUP-062](GUP-062_Community_Validation_Prototyping.md)        | Community Validation and Proof-of-Concept | ✅ Complete    | High     | 13     |
+| [GUP-210](GUP-210_Switch_Statement_Transpilation.md)          | Switch Statement Transpilation            | 🚧 In Progress | Low      | 5      |
+| [GUP-211](GUP-211_Fix_Preexisting_wgsl_function_Test.md)      | Fix Pre-existing wgsl_function Test       | ✅ Complete    | Medium   | 1      |
+| [GUP-212](GUP-212_WGSL_Reserved_Keyword_Detection.md)         | WGSL Reserved Keyword Detection           | ✅ Complete    | Medium   | 3      |
+| [GUP-213](GUP-213_Transpiler_Custom_Struct_Support.md)        | Transpiler Custom Struct Support          | 📋 Planned     | Low      | 5      |
 
 _Note: GUP-054 here is the Phase 2 research story (Existing Solutions Analysis).
 GUP-054 in the Post-GUP-005/007 tables above refers to the Phase 1 Shader
