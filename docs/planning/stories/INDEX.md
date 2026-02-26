@@ -85,7 +85,7 @@ epic and status.
 | [GUP-188](GUP-188_Automatic_Draw_Call_Metrics.md)              | Automatic Draw Call Metrics in MarkRenderer    | 📋 Planned  | Low      | —      |
 | [GUP-189](GUP-189_AST_Integration_ComposableShaderPipeline.md) | AST Integration with ComposableShaderPipeline  | ✅ Complete | Medium   | 5      |
 | [GUP-190](GUP-190_WGSL_Compute_Shader_AST_Support.md)          | WGSL Compute Shader AST Support                | 📋 Planned  | Low      | 5      |
-| [GUP-191](GUP-191_Enable_AST_Optimization_Default.md)          | Enable AST Optimization by Default             | 📋 Planned  | Low      | 3      |
+| [GUP-191](GUP-191_Enable_AST_Optimization_Default.md)          | Enable AST Optimization by Default             | 🚧 In Progress | Low      | 3      |
 | [GUP-192](GUP-192_Dynamic_Attribute_Readback_Pipeline.md)      | Dynamic Attribute Readback Pipeline            | 📋 Planned  | Low      | —      |
 | [GUP-208](GUP-208_Mark_Derive_Instance_Buffer_Generation.md)   | Mark Derive Instance Buffer Generation         | 📋 Planned  | Low      | —      |
 | [GUP-209](GUP-209_Mark_Validation_CI_Integration.md)           | Mark Validation CI Integration                 | 📋 Planned  | Low      | —      |

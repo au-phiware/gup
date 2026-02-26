@@ -1,7 +1,7 @@
 # GUP-191: Enable AST Optimization by Default
 
 **Story ID**: GUP-191 **Title**: Enable AST Optimization by Default **Status**:
-📋 Planned **Priority**: Low **Effort**: 3 story points **Created**: 2025-08-08
+🚧 In Progress **Priority**: Low **Effort**: 3 story points **Created**: 2025-08-08
 **Dependencies**: GUP-189, GUP-190
 
 ## Overview
