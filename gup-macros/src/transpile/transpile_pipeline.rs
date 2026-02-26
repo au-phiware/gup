@@ -13,7 +13,8 @@ use super::convert::RustToWgsl;
 use super::diagnostics::TranspilationDiagnostic;
 use super::optimizer::{OptimizationConfig, PassResult, optimize_module};
 use super::performance::{PerformanceAnalysisConfig, PerformanceWarning, analyse_performance};
-use super::source_map::{SourceMap, SourceMapBuilder, SourceMapping};
+use super::source_map::{SourceMap, SourceMapBuilder};
+use super::validation::validate_module;
 
 // ---------------------------------------------------------------------------
 // Pipeline configuration
@@ -28,6 +29,8 @@ pub struct TranspilePipelineConfig {
     pub performance_analysis: PerformanceAnalysisConfig,
     /// Whether to generate source maps.
     pub generate_source_map: bool,
+    /// Whether to run validation checks.
+    pub enable_validation: bool,
 }
 
 impl Default for TranspilePipelineConfig {
@@ -36,6 +39,7 @@ impl Default for TranspilePipelineConfig {
             optimization: OptimizationConfig::default(),
             performance_analysis: PerformanceAnalysisConfig::default(),
             generate_source_map: false,
+            enable_validation: true,
         }
     }
 }
@@ -116,7 +120,13 @@ pub fn transpile_function(
         diagnostics.push(warning.to_diagnostic());
     }
 
-    // Phase 4: Generate WGSL text (with optional source map)
+    // Phase 4: Validation
+    if config.enable_validation {
+        let validation_diags = validate_module(&module);
+        diagnostics.extend(validation_diags);
+    }
+
+    // Phase 5: Generate WGSL text (with optional source map)
     let (wgsl, source_map) = if config.generate_source_map {
         let (text, sm) = generate_with_source_map(&module, &func.sig.ident.to_string());
         (text, Some(sm))
@@ -286,5 +296,57 @@ mod tests {
             source_map: None,
         };
         assert!(!result.has_errors());
+    }
+
+    #[test]
+    fn transpile_function_with_validation() {
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn unused_param(x: f32) -> f32 {
+                return 1.0;
+            }
+        };
+
+        let result = transpile_function(
+            &func,
+            std::iter::empty::<String>(),
+            &TranspilePipelineConfig::default(),
+        )
+        .unwrap();
+
+        // Should have a hint about unused parameter.
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("unused")),
+            "expected unused param hint, got: {:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
+    fn transpile_function_validation_disabled() {
+        let func: syn::ItemFn = syn::parse_quote! {
+            fn unused_param(x: f32) -> f32 {
+                return 1.0;
+            }
+        };
+
+        let config = TranspilePipelineConfig {
+            enable_validation: false,
+            ..Default::default()
+        };
+
+        let result = transpile_function(&func, std::iter::empty::<String>(), &config).unwrap();
+
+        // Should have no validation diagnostics.
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .all(|d| !d.message.contains("unused")),
+            "validation disabled but got diagnostics: {:?}",
+            result.diagnostics
+        );
     }
 }
