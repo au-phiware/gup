@@ -113,6 +113,11 @@ pub mod __private {
     pub use crate::shader_pipeline::ComposableShaderPipeline;
 }
 
+// Export color descriptor system
+pub use color_descriptor::{
+    ColorNamer, Hsl, describe_color, describe_color_detailed, describe_color_with, rgba_to_hsl,
+};
+
 // Export accessibility system components
 pub use accessibility::high_contrast::{
     AccessibilityOverrides, Color as AccessibilityColor, calculate_contrast_ratio,
