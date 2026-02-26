@@ -1038,6 +1038,17 @@ pub trait ShaderUniform: bytemuck::Pod + bytemuck::Zeroable {
     ///
     /// This is used for generating uniform buffer bindings and function signatures.
     fn wgsl_type_name() -> &'static str;
+
+    /// Returns the nesting depth for chain uniform types.
+    ///
+    /// For primitive and non-chain uniform types this is 0. For
+    /// [`ChainUniforms<A, B>`] it returns `max(A::chain_depth(),
+    /// B::chain_depth()) + 1`.  The depth is used to generate unique WGSL
+    /// struct names when chains are nested (e.g. `ChainUniforms_1`,
+    /// `ChainUniforms_2`).
+    fn chain_depth() -> usize {
+        0
+    }
 }
 
 // Implement ShaderUniform for basic types (they don't need struct definitions)
@@ -1232,6 +1243,37 @@ where
     }
 }
 
+/// Replaces whole-word occurrences of `word` with `replacement` in WGSL code.
+///
+/// A "whole word" match requires that the character immediately before and after
+/// the match is **not** an ASCII alphanumeric character or underscore.  This
+/// prevents renaming `ChainUniforms_1` when the target word is `ChainUniforms`.
+fn replace_wgsl_identifier(text: &str, word: &str, replacement: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut result = String::with_capacity(text.len() + 64);
+    let mut pos = 0;
+    while let Some(rel) = text[pos..].find(word) {
+        let start = pos + rel;
+        let end = start + word.len();
+        let before_ok = start == 0 || !is_ident_char(bytes[start - 1]);
+        let after_ok = end >= bytes.len() || !is_ident_char(bytes[end]);
+        if before_ok && after_ok {
+            result.push_str(&text[pos..start]);
+            result.push_str(replacement);
+        } else {
+            result.push_str(&text[pos..end]);
+        }
+        pos = end;
+    }
+    result.push_str(&text[pos..]);
+    result
+}
+
+/// Returns `true` if `b` is an ASCII identifier character (`[A-Za-z0-9_]`).
+fn is_ident_char(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
+}
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct ChainUniforms<A, B>
@@ -1266,25 +1308,64 @@ where
         let mut def = String::new();
         // Include nested struct definitions so the generated WGSL is
         // self-contained.  Skip empty definitions (primitive types).
+        //
+        // When a component is itself a ChainUniforms (deep chain), rename its
+        // top-level struct from `ChainUniforms` to `ChainUniforms_<depth>` to
+        // avoid WGSL name collisions.  The outermost chain always keeps the
+        // plain `ChainUniforms` name, matching `wgsl_type_name()`.
         let first_def = A::wgsl_struct_definition();
+        let first_type_name: String;
         if !first_def.is_empty() {
-            def.push_str(&first_def);
+            if A::wgsl_type_name() == "ChainUniforms" {
+                let suffix = format!("_{}", A::chain_depth());
+                def.push_str(&replace_wgsl_identifier(
+                    &first_def,
+                    "ChainUniforms",
+                    &format!("ChainUniforms{suffix}"),
+                ));
+                first_type_name = format!("ChainUniforms{suffix}");
+            } else {
+                def.push_str(&first_def);
+                first_type_name = A::wgsl_type_name().to_string();
+            }
             def.push('\n');
+        } else {
+            first_type_name = A::wgsl_type_name().to_string();
         }
+
         let second_def = B::wgsl_struct_definition();
+        let second_type_name: String;
         if !second_def.is_empty() {
-            def.push_str(&second_def);
+            if B::wgsl_type_name() == "ChainUniforms" {
+                let suffix = format!("_{}", B::chain_depth());
+                def.push_str(&replace_wgsl_identifier(
+                    &second_def,
+                    "ChainUniforms",
+                    &format!("ChainUniforms{suffix}"),
+                ));
+                second_type_name = format!("ChainUniforms{suffix}");
+            } else {
+                def.push_str(&second_def);
+                second_type_name = B::wgsl_type_name().to_string();
+            }
             def.push('\n');
+        } else {
+            second_type_name = B::wgsl_type_name().to_string();
         }
+
         def.push_str("struct ChainUniforms {\n");
-        def.push_str(&format!("    first: {},\n", A::wgsl_type_name()));
-        def.push_str(&format!("    second: {},\n", B::wgsl_type_name()));
+        def.push_str(&format!("    first: {first_type_name},\n"));
+        def.push_str(&format!("    second: {second_type_name},\n"));
         def.push('}');
         def
     }
 
     fn wgsl_type_name() -> &'static str {
         "ChainUniforms"
+    }
+
+    fn chain_depth() -> usize {
+        1 + std::cmp::max(A::chain_depth(), B::chain_depth())
     }
 }
 
@@ -1308,18 +1389,67 @@ where
     fn generate_wgsl(&self) -> String {
         // Include WGSL for both component functions so the composed code is
         // self-contained when injected into a vertex shader.
+        //
+        // When a component is itself a FunctionChain (deep chain), its
+        // `composed_chain` and `ChainUniforms` identifiers are renamed with a
+        // depth suffix to avoid WGSL name collisions.  The outermost chain
+        // always keeps the plain names, matching `function_name()` and
+        // `wgsl_type_name()`.
         let mut wgsl = String::new();
-        wgsl.push_str(self.first.generate_wgsl().trim());
+
+        let first_wgsl = self.first.generate_wgsl();
+        let first_fn_name: String;
+        if A::function_name() == "composed_chain" {
+            let depth = <A::Uniforms as ShaderUniform>::chain_depth();
+            let suffix = format!("_{depth}");
+            let renamed = replace_wgsl_identifier(
+                first_wgsl.trim(),
+                "composed_chain",
+                &format!("composed_chain{suffix}"),
+            );
+            let renamed = replace_wgsl_identifier(
+                &renamed,
+                "ChainUniforms",
+                &format!("ChainUniforms{suffix}"),
+            );
+            wgsl.push_str(&renamed);
+            first_fn_name = format!("composed_chain{suffix}");
+        } else {
+            wgsl.push_str(first_wgsl.trim());
+            first_fn_name = A::function_name().to_string();
+        }
         wgsl.push_str("\n\n");
-        wgsl.push_str(self.second.generate_wgsl().trim());
+
+        let second_wgsl = self.second.generate_wgsl();
+        let second_fn_name: String;
+        if B::function_name() == "composed_chain" {
+            let depth = <B::Uniforms as ShaderUniform>::chain_depth();
+            let suffix = format!("_{depth}");
+            let renamed = replace_wgsl_identifier(
+                second_wgsl.trim(),
+                "composed_chain",
+                &format!("composed_chain{suffix}"),
+            );
+            let renamed = replace_wgsl_identifier(
+                &renamed,
+                "ChainUniforms",
+                &format!("ChainUniforms{suffix}"),
+            );
+            wgsl.push_str(&renamed);
+            second_fn_name = format!("composed_chain{suffix}");
+        } else {
+            wgsl.push_str(second_wgsl.trim());
+            second_fn_name = B::function_name().to_string();
+        }
         wgsl.push_str("\n\n");
+
         // Append the composed entry-point that chains them together.
         wgsl.push_str(&format!(
             "fn composed_chain(input: {}, uniforms: ChainUniforms) -> {} {{\n    let intermediate = {}(input, uniforms.first);\n    return {}(intermediate, uniforms.second);\n}}",
             <A::Input as ShaderType>::wgsl_type_name(),
             <B::Output as ShaderType>::wgsl_type_name(),
-            A::function_name(),
-            B::function_name()
+            first_fn_name,
+            second_fn_name
         ));
         wgsl
     }
