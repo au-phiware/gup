@@ -566,3 +566,84 @@ improvements justify the effort for a high-quality text rendering system.
 - Memory overhead: MSDF = exactly 3× SDF
 - Empty outline and single-edge contour edge cases
 - Debugging helpers (channel grayscale, reconstructed median)
+
+## Retrospective
+
+**Completed**: 2025-07-21
+
+### Key Technical Learnings
+
+#### GUP-108 Already Provided the MSDF Foundation
+
+- **Challenge**: The story described building multi-channel SDF "from scratch"
+  with edge system classification and intersection graphs, but GUP-108 had
+  already implemented a full MSDF pipeline with edge coloring, per-channel
+  distance tracking, and median-of-three reconstruction.
+- **Solution**: Recognised that the real value was in _enhancing_ the existing
+  system rather than rebuilding it: corner detection, sharpness metrics,
+  combination modes, and debugging tools.
+- **Pattern**: When a prerequisite story has already built the core capability,
+  focus the follow-up on measurability, configurability, and developer tooling.
+
+#### Edge Coloring Teardrop Handling
+
+- **Challenge**: The original teardrop split placed the synthetic corner at the
+  naive halfway index, which sometimes put both colour regions on the same
+  geometric side.
+- **Solution**: Changed the split to select the edge whose start point is
+  _furthest_ from the cusp, giving geometrically balanced colour regions.
+- **Pattern**: Distance-based heuristics are more robust than index-based ones
+  for geometric decisions.
+
+#### Corner Sharpness Gradient Metric
+
+- **Challenge**: Needed a quantifiable metric for "how sharp is this corner in
+  the rendered SDF" that works on CPU-side bitmap data.
+- **Solution**: Finite-difference gradient magnitude at known corner positions.
+  High gradient = sharp transition = good corner preservation.
+- **Pattern**: Gradient magnitude is a simple, robust proxy for sharpness in
+  distance fields.
+
+### Architectural Decisions
+
+#### sdf_params.z for Combination Mode
+
+- **Decision**: Encode the combination mode in the previously unused
+  `sdf_params.z` (outline width) slot.
+- **Reasoning**: Zero-cost backward compatibility — existing code passes 0.0
+  which maps to `Median`, the existing behaviour.
+- **Trade-off**: The outline width feature is now unavailable through this
+  parameter (it was never implemented though).
+- **Future**: If outline rendering is needed, it could use a separate uniform
+  buffer or a different encoding scheme.
+
+#### CPU-Side Corner Detection Rather Than GPU
+
+- **Decision**: Corner detection and sharpness metrics run on the CPU, not in a
+  compute shader.
+- **Reasoning**: Corner detection is a one-time analysis per glyph at atlas
+  generation time, not per-frame. CPU is the right place for infrequent
+  geometric analysis.
+- **Trade-off**: Cannot be used for real-time quality monitoring.
+- **Future**: If needed for live quality feedback, a compute-shader approach
+  could sample the atlas at known corner UVs.
+
+### Development Workflow Insights
+
+- The `gen` keyword is reserved in recent Rust editions (2024) — discovered this
+  when using it as a variable name in tests. Using `msdf_gen` consistently
+  avoids the issue.
+- The `mask all-fix` pre-commit hook ran `prettier` on markdown files that were
+  not part of my changeset, creating spurious diffs. Restored them with
+  `git checkout`.
+- `test_registry_scalability` failed intermittently in the full test suite due
+  to GPU resource contention but passed reliably in isolation. This is a known
+  issue documented in CLAUDE.md (always use `--test-threads=1`).
+
+### Follow-up Stories
+
+No new stories needed. The remaining text rendering stories in the INDEX
+(GUP-199 Text Wrapping, GUP-200 Interactive Clipping Reveal, GUP-201 Text
+Clipping Visual Demo, GUP-202 Font-Aware Rendering Pipeline, GUP-203 Multi-Font
+Atlas Manager) are independent of this work and address different aspects of the
+text system.
