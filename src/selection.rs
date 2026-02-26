@@ -257,6 +257,49 @@ fn capitalize(s: &str) -> String {
     }
 }
 
+/// Configuration for ARIA live-region announcements when selection data changes.
+///
+/// Controls how screen readers are notified when data in a [`Selection`]
+/// changes via [`set_data`](Selection::set_data) or attribute updates.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use gup::selection::AriaUpdateConfig;
+/// use gup::accessibility::AriaLive;
+///
+/// let config = AriaUpdateConfig {
+///     urgency: AriaLive::Assertive,
+///     ..Default::default()
+/// };
+/// selection.set_aria_update_config(config);
+/// ```
+#[derive(Debug, Clone)]
+pub struct AriaUpdateConfig {
+    /// The urgency level for live-region announcements.
+    ///
+    /// - [`AriaLive::Polite`] — announced when the screen reader is idle
+    ///   (default).
+    /// - [`AriaLive::Assertive`] — announced immediately, interrupting the
+    ///   current speech.
+    /// - [`AriaLive::Off`] — no announcements.
+    pub urgency: crate::accessibility::aria::AriaLive,
+
+    /// Whether live-region announcements are enabled.  When `false`, data
+    /// changes still update the ARIA tree but no screen reader announcement is
+    /// queued.
+    pub announce_changes: bool,
+}
+
+impl Default for AriaUpdateConfig {
+    fn default() -> Self {
+        Self {
+            urgency: crate::accessibility::aria::AriaLive::Polite,
+            announce_changes: true,
+        }
+    }
+}
+
 /// Trait for marks that provide accessible descriptions.
 ///
 /// Implement this trait to enable automatic ARIA tree generation for a mark
@@ -323,6 +366,15 @@ pub struct Selection<T, M: Mark> {
     auto_aria: bool,
     /// Root ARIA node ID registered for this selection (if any).
     aria_root_node: Option<crate::accessibility::aria::NodeId>,
+    /// Whether the ARIA tree needs to be regenerated due to data or attribute
+    /// changes.  Set by [`set_data`] and [`attr`]/[`attr_parallel`]/[`attr_shader`];
+    /// cleared by [`sync_aria_from_context`] or [`register_aria`].
+    aria_dirty: bool,
+    /// Data count at the time of the last ARIA registration (used for change
+    /// summaries).
+    aria_previous_data_count: Option<usize>,
+    /// Configuration for ARIA live-region announcements on data changes.
+    aria_update_config: AriaUpdateConfig,
 }
 
 impl<T, M: Mark> std::fmt::Debug for Selection<T, M> {
@@ -353,6 +405,9 @@ impl<T, M: Mark> Selection<T, M> {
             shader_attr_bindings: Vec::new(),
             auto_aria: true,
             aria_root_node: None,
+            aria_dirty: false,
+            aria_previous_data_count: None,
+            aria_update_config: AriaUpdateConfig::default(),
         })
     }
 
@@ -374,6 +429,9 @@ impl<T, M: Mark> Selection<T, M> {
             shader_attr_bindings: Vec::new(),
             auto_aria: true,
             aria_root_node: None,
+            aria_dirty: false,
+            aria_previous_data_count: None,
+            aria_update_config: AriaUpdateConfig::default(),
         }
     }
 
@@ -463,6 +521,8 @@ impl<T, M: Mark> Selection<T, M> {
         });
         // Invalidate GPU state — new bindings require re-upload.
         self.render_state = None;
+        // New bindings change data-point descriptions.
+        self.aria_dirty = true;
         self
     }
 
@@ -509,6 +569,8 @@ impl<T, M: Mark> Selection<T, M> {
         });
         // Invalidate GPU state.
         self.render_state = None;
+        // New bindings change data-point descriptions.
+        self.aria_dirty = true;
         self
     }
 
@@ -678,6 +740,8 @@ impl<T, M: Mark> Selection<T, M> {
         }
         // Invalidate GPU state.
         self.render_state = None;
+        // New bindings change data-point descriptions.
+        self.aria_dirty = true;
         self
     }
 
@@ -710,6 +774,8 @@ impl<T, M: Mark> Selection<T, M> {
         self.data = data;
         // Invalidate render state so next prepare_render re-uploads.
         self.render_state = None;
+        // Mark ARIA tree as needing a refresh.
+        self.aria_dirty = true;
     }
 
     /// Prepare GPU resources for rendering this selection.
@@ -1133,6 +1199,24 @@ impl<T, M: Mark> Selection<T, M> {
         self.aria_root_node
     }
 
+    /// Returns `true` if the ARIA tree needs to be regenerated due to data or
+    /// attribute changes since the last [`sync_aria_from_context`] or
+    /// [`register_aria`] call.
+    pub fn is_aria_dirty(&self) -> bool {
+        self.aria_dirty
+    }
+
+    /// Set the configuration for ARIA live-region announcements.
+    pub fn set_aria_update_config(&mut self, config: AriaUpdateConfig) -> &mut Self {
+        self.aria_update_config = config;
+        self
+    }
+
+    /// Get the current ARIA update configuration.
+    pub fn aria_update_config(&self) -> &AriaUpdateConfig {
+        &self.aria_update_config
+    }
+
     /// Generate and register an ARIA tree for this selection.
     ///
     /// Creates a chart-level ARIA node describing the dataset, plus individual
@@ -1143,6 +1227,9 @@ impl<T, M: Mark> Selection<T, M> {
     /// used.
     ///
     /// Any previously registered ARIA tree for this selection is removed first.
+    /// If a focused node is inside the old sub-tree, the focus is restored to
+    /// the equivalent position in the new sub-tree (or the chart root if the
+    /// focused index no longer exists).
     ///
     /// Returns the root [`NodeId`](crate::accessibility::aria::NodeId) of the
     /// newly created sub-tree.
@@ -1155,12 +1242,21 @@ impl<T, M: Mark> Selection<T, M> {
     {
         use crate::accessibility::aria::{AriaNode, AriaRole};
 
+        // --- Focus preservation ---
+        // Determine the index of the currently focused child within this
+        // selection's sub-tree so we can restore it after the rebuild.
+        let focused_child_index = self.focused_child_index(aria_tree);
+
+        // --- Change summary ---
+        let old_count = self.aria_previous_data_count;
+        let new_count = self.data.len();
+
         // Remove any previous registration for this selection.
         if let Some(old_root) = self.aria_root_node.take() {
             aria_tree.remove_subtree(old_root);
         }
 
-        let total = self.data.len();
+        let total = new_count;
         let mark_name = M::describe_mark_type();
         let label = format!(
             "{} chart with {} data point{}",
@@ -1204,6 +1300,29 @@ impl<T, M: Mark> Selection<T, M> {
         }
 
         self.aria_root_node = Some(chart_id);
+        self.aria_dirty = false;
+        self.aria_previous_data_count = Some(new_count);
+
+        // --- Restore focus ---
+        if let Some(idx) = focused_child_index
+            && let Some(chart_node) = aria_tree.get_node(chart_id) {
+                let children = &chart_node.children;
+                // If the previously focused index still exists, refocus it;
+                // otherwise fall back to the chart root.
+                let new_focus = children.get(idx).copied().unwrap_or(chart_id);
+                aria_tree.set_focus(Some(new_focus));
+            }
+
+        // --- Live region announcement ---
+        if self.aria_update_config.announce_changes
+            && let Some(summary) = Self::summarise_change(old_count, new_count, mark_name) {
+                aria_tree.update_live_region_with_urgency(
+                    &format!("selection-{}", self.selection_id),
+                    &summary,
+                    self.aria_update_config.urgency,
+                );
+            }
+
         chart_id
     }
 
@@ -1217,24 +1336,34 @@ impl<T, M: Mark> Selection<T, M> {
         }
     }
 
-    /// Automatically register ARIA from the [`RenderContext`]'s accessibility
-    /// system.
+    /// Automatically register or update the ARIA tree from the
+    /// [`RenderContext`]'s accessibility system.
     ///
-    /// This is the recommended way to enable automatic ARIA registration.
+    /// This is the recommended way to keep the ARIA tree in sync with data.
     /// If `auto_aria` is enabled (the default), and the selection's
     /// [`RenderContext`] has an [`AccessibilitySystem`] attached, this method
-    /// generates and registers the ARIA tree.
+    /// generates or refreshes the ARIA tree.
+    ///
+    /// On the first call, the ARIA tree is always generated.  On subsequent
+    /// calls the tree is only regenerated when a data or attribute change has
+    /// been detected (i.e. [`is_aria_dirty`](Self::is_aria_dirty) is `true`),
+    /// avoiding unnecessary work during steady-state rendering.
     ///
     /// Call this after [`prepare_render`](Self::prepare_render) or
     /// [`prepare_render_bound`](Self::prepare_render_bound) to ensure the
     /// ARIA tree reflects the current data.
     ///
-    /// Returns `true` if a new ARIA tree was registered.
+    /// Returns `true` if the ARIA tree was (re-)registered.
     pub fn sync_aria_from_context(&mut self) -> bool
     where
         M: AccessibleMark,
     {
         if !self.auto_aria {
+            return false;
+        }
+
+        // Skip if tree already exists and nothing has changed.
+        if self.aria_root_node.is_some() && !self.aria_dirty {
             return false;
         }
 
@@ -1293,6 +1422,54 @@ impl<T, M: Mark> Selection<T, M> {
     {
         bridge.sync_focus_elements(&self.data, focus_manager, descriptor_fn)
     }
+
+    // ------------------------------------------------------------------
+    // Private helpers for reactive ARIA updates
+    // ------------------------------------------------------------------
+
+    /// Determine the index of the currently focused child within this
+    /// selection's ARIA sub-tree.  Returns `None` if there is no focus or the
+    /// focus is outside this sub-tree.
+    fn focused_child_index(
+        &self,
+        aria_tree: &crate::accessibility::aria::AriaTree,
+    ) -> Option<usize> {
+        let root = self.aria_root_node?;
+        let focus = aria_tree.get_focus()?;
+        let chart = aria_tree.get_node(root)?;
+        chart.children.iter().position(|c| *c == focus)
+    }
+
+    /// Generate a human-readable summary of a data change.
+    ///
+    /// Returns `None` when this is the initial registration (no previous data).
+    fn summarise_change(
+        old_count: Option<usize>,
+        new_count: usize,
+        mark_name: &str,
+    ) -> Option<String> {
+        let old = old_count?;
+        if old == new_count {
+            // Data count unchanged — could be attribute-only update.
+            Some(format!("{} chart data updated", capitalize(mark_name)))
+        } else if new_count > old {
+            let added = new_count - old;
+            Some(format!(
+                "{} new data point{} added, {} total",
+                added,
+                if added == 1 { "" } else { "s" },
+                new_count,
+            ))
+        } else {
+            let removed = old - new_count;
+            Some(format!(
+                "{} data point{} removed, {} total",
+                removed,
+                if removed == 1 { "" } else { "s" },
+                new_count,
+            ))
+        }
+    }
 }
 
 impl<T, M: Mark> Drop for Selection<T, M> {
@@ -1303,9 +1480,10 @@ impl<T, M: Mark> Drop for Selection<T, M> {
                 .context
                 .as_ref()
                 .and_then(|ctx| ctx.accessibility().cloned())
-                && let Ok(mut system) = acc.lock() {
-                    system.aria_tree.remove_subtree(root);
-                }
+            && let Ok(mut system) = acc.lock()
+        {
+            system.aria_tree.remove_subtree(root);
+        }
     }
 }
 

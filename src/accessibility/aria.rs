@@ -129,6 +129,20 @@ impl AriaTree {
         });
     }
 
+    /// Update a live region with new content and a specified urgency level.
+    pub fn update_live_region_with_urgency(
+        &mut self,
+        region_id: &str,
+        content: &str,
+        urgency: AriaLive,
+    ) {
+        self.queue_update(AriaUpdate::LiveRegion {
+            id: region_id.to_string(),
+            content: content.to_string(),
+            urgency,
+        });
+    }
+
     /// Queue an update for the screen reader.
     fn queue_update(&mut self, update: AriaUpdate) {
         self.update_queue.push(update);
