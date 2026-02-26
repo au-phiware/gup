@@ -97,6 +97,7 @@ pub mod composite;
 pub mod compute_instance_filter;
 pub mod gpu_path_tessellator;
 pub mod line;
+pub mod occlusion_culler;
 pub mod path;
 pub mod performance_opt;
 pub mod rectangle;
@@ -121,6 +122,9 @@ pub use composite::{
 pub use compute_instance_filter::{ComputeInstanceFilter, FilterConfig, FilterResult};
 pub use gpu_path_tessellator::GpuPathTessellator;
 pub use line::{Line, LineAttributes, LineStyle, LineVertex};
+pub use occlusion_culler::{
+    OcclusionCuller, OcclusionGpuConfig, OcclusionParams, OcclusionResult, PooledOcclusionCuller,
+};
 pub use path::{Path, PathAttributes, PathCommand, PathVertex};
 pub use performance_opt::{
     EnhancedCacheStats, EnhancedPipelineCache, MarkBufferPool, MarkBufferPoolStats,

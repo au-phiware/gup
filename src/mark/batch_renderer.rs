@@ -43,6 +43,15 @@ pub struct BatchRendererConfig {
     /// Screen-space pixel thresholds for LOD transitions.
     /// `[full → simplified, simplified → point, point → culled]`
     pub lod_thresholds: [f32; 3],
+    /// Enable GPU occlusion culling for dense datasets (default: false).
+    /// When enabled and the instance count exceeds `occlusion_threshold`,
+    /// a compute-shader Hi-Z pass culls instances that are fully hidden
+    /// behind other instances.
+    pub enable_occlusion_culling: bool,
+    /// Minimum instance count before occlusion culling activates (default: 10_000).
+    pub occlusion_threshold: u32,
+    /// Occlusion culling parameters. Only used when `enable_occlusion_culling` is true.
+    pub occlusion_params: super::occlusion_culler::OcclusionParams,
 }
 
 impl Default for BatchRendererConfig {
@@ -53,6 +62,9 @@ impl Default for BatchRendererConfig {
             enable_culling: true,
             enable_lod: true,
             lod_thresholds: [4.0, 1.0, 0.25],
+            enable_occlusion_culling: false,
+            occlusion_threshold: 10_000,
+            occlusion_params: super::occlusion_culler::OcclusionParams::default(),
         }
     }
 }

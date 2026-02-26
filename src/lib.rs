@@ -200,6 +200,9 @@ pub use mark::compute_instance_filter::{
     ComputeInstanceFilter, FilterConfig, FilterResult, PooledComputeInstanceFilter,
 };
 pub use mark::line::{Line, LineAttributes, LineInstance, LineStyle, LineVertex};
+pub use mark::occlusion_culler::{
+    OcclusionCuller, OcclusionGpuConfig, OcclusionParams, OcclusionResult, PooledOcclusionCuller,
+};
 pub use mark::rectangle::{Rectangle, RectangleAttributes, RectangleInstance, RectangleVertex};
 pub use mark::{Mark, MarkInfo, MarkInfoImpl, MarkRegistry};
 
