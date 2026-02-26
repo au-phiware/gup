@@ -2063,9 +2063,10 @@ fn get_mark_type_id<M: Mark>() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mark::boxplot::BoxPlotAttributes;
     use crate::mark::circle::{CircleAttributes, CircleInstance};
     use crate::mark::rectangle::{RectangleAttributes, RectangleInstance};
-    use crate::mark::{Circle, Rectangle};
+    use crate::mark::{BoxPlot, Circle, Line, Rectangle};
     use crate::shader_function::{Vec2, Vec4};
 
     // --- Unit tests (no GPU) ---
@@ -3797,6 +3798,137 @@ mod tests {
             selection
                 .prepare_render_bound(&context.device, &context.queue, None)
                 .expect("prepare_render_bound should succeed");
+
+            assert!(selection.is_render_ready());
+
+            let mut ctx = Arc::try_unwrap(context).expect("single owner");
+            let mut frame = ctx.begin_frame().expect("begin_frame");
+
+            {
+                let mut render_pass = frame.render_pass(Some(wgpu::Color::BLACK));
+                selection
+                    .render(&mut render_pass)
+                    .expect("render should succeed");
+            }
+
+            frame.finish().expect("finish frame");
+        });
+    }
+
+    #[test]
+    fn gpu_prepare_render_bound_line() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let data = vec![
+                ScatterPoint {
+                    x: -0.8,
+                    y: -0.5,
+                    value: 0.6,
+                },
+                ScatterPoint {
+                    x: 0.3,
+                    y: 0.7,
+                    value: 0.4,
+                },
+                ScatterPoint {
+                    x: -0.2,
+                    y: 0.1,
+                    value: 0.9,
+                },
+            ];
+
+            let mut selection: Selection<ScatterPoint, Line> = Selection::from_data(data);
+
+            selection
+                .attr("start", |d: &ScatterPoint| [d.x, d.y])
+                .attr("end", |d: &ScatterPoint| [d.x + 0.3, d.y + 0.2])
+                .attr("color", |d: &ScatterPoint| {
+                    [d.value, 0.2, 1.0 - d.value, 1.0]
+                })
+                .attr("width", |d: &ScatterPoint| d.value * 0.05);
+
+            selection
+                .prepare_render_bound(&context.device, &context.queue, None)
+                .expect("prepare_render_bound should succeed for Line");
+
+            assert!(selection.is_render_ready());
+
+            let mut ctx = Arc::try_unwrap(context).expect("single owner");
+            let mut frame = ctx.begin_frame().expect("begin_frame");
+
+            {
+                let mut render_pass = frame.render_pass(Some(wgpu::Color::BLACK));
+                selection
+                    .render(&mut render_pass)
+                    .expect("render should succeed");
+            }
+
+            frame.finish().expect("finish frame");
+        });
+    }
+
+    #[test]
+    fn gpu_prepare_render_bound_boxplot() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            #[derive(Debug, Clone)]
+            struct StatsData {
+                category_x: f32,
+                low: f32,
+                first_q: f32,
+                mid: f32,
+                third_q: f32,
+                high: f32,
+            }
+
+            let data = vec![
+                StatsData {
+                    category_x: -0.5,
+                    low: -0.8,
+                    first_q: -0.4,
+                    mid: -0.1,
+                    third_q: 0.2,
+                    high: 0.6,
+                },
+                StatsData {
+                    category_x: 0.3,
+                    low: -0.5,
+                    first_q: -0.2,
+                    mid: 0.1,
+                    third_q: 0.4,
+                    high: 0.8,
+                },
+            ];
+
+            let mut selection: Selection<StatsData, BoxPlot> = Selection::from_data(data);
+
+            selection
+                .attr("position", |d: &StatsData| [d.category_x, 0.0])
+                .attr("min", |d: &StatsData| d.low)
+                .attr("q1", |d: &StatsData| d.first_q)
+                .attr("median", |d: &StatsData| d.mid)
+                .attr("q3", |d: &StatsData| d.third_q)
+                .attr("max", |d: &StatsData| d.high)
+                .attr("width", |_: &StatsData| 0.15f32)
+                .attr("box_fill_color", |_: &StatsData| [0.7, 0.7, 1.0, 0.8]);
+
+            selection
+                .prepare_render_bound(&context.device, &context.queue, None)
+                .expect("prepare_render_bound should succeed for BoxPlot");
 
             assert!(selection.is_render_ready());
 
