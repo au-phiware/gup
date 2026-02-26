@@ -1,6 +1,6 @@
 # GUP-215: Chart Builder Multi-Font Integration
 
-**Status**: 📋 Planned **Priority**: Medium **Complexity**: Low **Created**:
+**Status**: 🚧 In Progress **Priority**: Medium **Complexity**: Low **Created**:
 2025-08-21
 
 ## Overview
