@@ -488,3 +488,105 @@ async fn test_empty_multi_pass_config() -> GupResult<()> {
 
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Multi-Pass Mark Examples Validation (GUP-185)
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_multi_pass_shadow_config_creation() -> GupResult<()> {
+    // Verify the drop-shadow multi-pass config used by the example is valid
+    let config = MultiPassConfig::new()
+        .add_pass(RenderPassConfig {
+            label: "shadow".into(),
+            blend_state: Some(wgpu::BlendState::ALPHA_BLENDING),
+            vertex_entry_point: Some("vs_shadow".into()),
+            fragment_entry_point: Some("fs_shadow".into()),
+            ..Default::default()
+        })
+        .add_pass(RenderPassConfig {
+            label: "main".into(),
+            blend_state: Some(wgpu::BlendState::ALPHA_BLENDING),
+            ..Default::default()
+        });
+
+    assert_eq!(config.pass_count(), 2);
+    assert!(config.is_multi_pass());
+    assert_eq!(config.get_pass(0).unwrap().label, "shadow");
+    assert_eq!(
+        config.get_pass(0).unwrap().vertex_entry_point.as_deref(),
+        Some("vs_shadow")
+    );
+    assert_eq!(
+        config.get_pass(0).unwrap().fragment_entry_point.as_deref(),
+        Some("fs_shadow")
+    );
+    assert_eq!(config.get_pass(1).unwrap().label, "main");
+    assert!(config.get_pass(1).unwrap().vertex_entry_point.is_none());
+    assert!(config.get_pass(1).unwrap().fragment_entry_point.is_none());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_multi_pass_fill_outline_config_creation() -> GupResult<()> {
+    // Verify the fill + outline multi-pass config used by the example is valid
+    let config = MultiPassConfig::new()
+        .add_pass(RenderPassConfig {
+            label: "fill".into(),
+            blend_state: Some(wgpu::BlendState::ALPHA_BLENDING),
+            fragment_entry_point: Some("fs_fill".into()),
+            ..Default::default()
+        })
+        .add_pass(RenderPassConfig {
+            label: "outline".into(),
+            blend_state: Some(wgpu::BlendState::ALPHA_BLENDING),
+            fragment_entry_point: Some("fs_outline".into()),
+            ..Default::default()
+        });
+
+    assert_eq!(config.pass_count(), 2);
+    assert!(config.is_multi_pass());
+    assert_eq!(
+        config.get_pass(0).unwrap().fragment_entry_point.as_deref(),
+        Some("fs_fill")
+    );
+    assert_eq!(
+        config.get_pass(1).unwrap().fragment_entry_point.as_deref(),
+        Some("fs_outline")
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_multi_pass_renderer_pipeline_count_mismatch() -> GupResult<()> {
+    // MultiPassRenderer should reject mismatched pipeline/pass counts
+    let context = create_test_context().await?;
+    let device = &context.device;
+
+    let mut registry = MarkRegistry::new();
+    registry.register::<Circle>();
+
+    let config = MultiPassConfig::new()
+        .add_pass(RenderPassConfig {
+            label: "a".into(),
+            ..Default::default()
+        })
+        .add_pass(RenderPassConfig {
+            label: "b".into(),
+            ..Default::default()
+        });
+
+    // Create only one pipeline (but config has two passes)
+    let single_config = MultiPassConfig::new().add_pass(RenderPassConfig::default());
+    let pipelines = registry.create_multi_pass_pipelines::<Circle>(device, &single_config)?;
+    assert_eq!(pipelines.len(), 1);
+
+    // The render_multi_pass call should fail because we have 1 pipeline but 2 passes.
+    // We can't actually call render_multi_pass without a render pass, but we
+    // verify the config/pipeline mismatch is detectable.
+    assert_ne!(pipelines.len(), config.pass_count());
+
+    Ok(())
+}
