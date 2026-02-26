@@ -300,6 +300,10 @@ pub struct LayoutResult {
     pub bounds: TextBounds,
     /// Whether any text was clipped or hidden
     pub clipped: bool,
+    /// Original (un-truncated) text when clipping was applied with hover
+    /// reveal enabled. `None` when text was not clipped or hover reveal is
+    /// disabled.
+    pub original_text: Option<String>,
 }
 
 impl TextLayoutEngine {
@@ -352,6 +356,7 @@ impl TextLayoutEngine {
             glyphs,
             bounds: final_bounds,
             clipped: false,
+            original_text: None,
         })
     }
 
@@ -376,6 +381,9 @@ impl TextLayoutEngine {
             return self.layout_text(text, position, style, font_atlas, constraints);
         }
 
+        // Whether to store the original text for hover reveal
+        let store_original = clipping_config.enable_hover_reveal;
+
         // Perform initial layout
         let initial_result =
             self.layout_text_inner(text, position, style, font_atlas, constraints)?;
@@ -394,6 +402,11 @@ impl TextLayoutEngine {
                     glyphs: Vec::new(),
                     bounds: initial_result.bounds,
                     clipped: true,
+                    original_text: if store_original {
+                        Some(text.to_string())
+                    } else {
+                        None
+                    },
                 })
             }
             ClippingResult::PartialClipping {
@@ -405,6 +418,11 @@ impl TextLayoutEngine {
                         glyphs: Vec::new(),
                         bounds: initial_result.bounds,
                         clipped: true,
+                        original_text: if store_original {
+                            Some(text.to_string())
+                        } else {
+                            None
+                        },
                     });
                 }
 
@@ -413,7 +431,7 @@ impl TextLayoutEngine {
                     .chain(clipping_config.fallback_strategies.iter());
 
                 for strategy in strategies {
-                    if let Some(result) = self.apply_strategy(
+                    if let Some(mut result) = self.apply_strategy(
                         text,
                         position,
                         style,
@@ -423,6 +441,9 @@ impl TextLayoutEngine {
                         strategy,
                     )? {
                         self.collision_grid.add_bounds(&result.bounds);
+                        if store_original && result.clipped {
+                            result.original_text = Some(text.to_string());
+                        }
                         return Ok(result);
                     }
                 }
@@ -431,6 +452,11 @@ impl TextLayoutEngine {
                 self.collision_grid.add_bounds(&initial_result.bounds);
                 Ok(LayoutResult {
                     clipped: true,
+                    original_text: if store_original {
+                        Some(text.to_string())
+                    } else {
+                        None
+                    },
                     ..initial_result
                 })
             }
@@ -457,6 +483,7 @@ impl TextLayoutEngine {
                 glyphs: Vec::new(),
                 bounds: TextBounds::default(),
                 clipped: false,
+                original_text: None,
             });
         }
 
@@ -475,6 +502,7 @@ impl TextLayoutEngine {
                 glyphs: Vec::new(),
                 bounds: TextBounds::default(),
                 clipped: false,
+                original_text: None,
             });
         }
 
@@ -494,6 +522,7 @@ impl TextLayoutEngine {
             glyphs,
             bounds,
             clipped,
+            original_text: None,
         })
     }
 
@@ -527,6 +556,7 @@ impl TextLayoutEngine {
             glyphs,
             bounds: final_bounds,
             clipped: false,
+            original_text: None,
         })
     }
 
@@ -592,6 +622,7 @@ impl TextLayoutEngine {
                         glyphs: Vec::new(),
                         bounds: result.bounds,
                         clipped: true,
+                        original_text: None,
                     }))
                 } else {
                     Ok(None) // Not hidden — let next strategy try
@@ -697,6 +728,7 @@ impl TextLayoutEngine {
 
         Ok(Some(LayoutResult {
             clipped: true,
+            original_text: None,
             ..result
         }))
     }
@@ -1110,6 +1142,7 @@ impl TextLayoutEngine {
             glyphs,
             bounds,
             clipped: true, // Mark as clipped because text was wrapped
+            original_text: None,
         }))
     }
 

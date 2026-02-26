@@ -330,11 +330,14 @@ impl TextRenderer {
 
     /// Queue text for batched rendering. This handles glyph loading, layout, and accumulation.
     /// Must be called before creating the render pass.
+    ///
+    /// Returns the full [`LayoutResult`] including clipping information and the
+    /// original text when hover reveal is enabled.
     pub fn queue_text(
         &mut self,
         frame: &crate::RenderFrame,
         config: &mut TextRenderConfig,
-    ) -> GupResult<TextBounds> {
+    ) -> GupResult<LayoutResult> {
         // Ensure all glyphs are available in the atlas
         for ch in config.text.chars() {
             config.font_atlas.ensure_glyph(
@@ -370,7 +373,7 @@ impl TextRenderer {
         // Add to internal batches for later rendering
         self.add_glyph_batch(&layout_result.glyphs, config.style.font_size)?;
 
-        Ok(layout_result.bounds)
+        Ok(layout_result)
     }
 
     /// Add a glyph batch to the internal rendering queue.
