@@ -6,7 +6,7 @@
 use crate::error::{GupError, GupResult};
 use crate::mixable::BlendMode;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use wgpu::*;
 
 /// Context for rendering operations, containing GPU resources and state.
@@ -45,6 +45,8 @@ pub struct RenderContext {
     global_alpha_bind_group: Option<BindGroup>,
     /// Global alpha bind group layout
     global_alpha_bind_group_layout: BindGroupLayout,
+    /// Optional accessibility system for automatic ARIA registration.
+    accessibility: Option<Arc<Mutex<crate::accessibility::AccessibilitySystem>>>,
 }
 
 /// Viewport dimensions and properties.
@@ -274,6 +276,7 @@ impl RenderContext {
             global_alpha_buffer: None,
             global_alpha_bind_group: None,
             global_alpha_bind_group_layout,
+            accessibility: None,
         })
     }
 
@@ -331,6 +334,23 @@ impl RenderContext {
     /// Get viewport
     pub fn viewport(&self) -> Viewport {
         self.viewport
+    }
+
+    /// Attach an [`AccessibilitySystem`](crate::accessibility::AccessibilitySystem) to this
+    /// context.
+    ///
+    /// When set, selections that have `auto_aria` enabled will automatically
+    /// register their ARIA trees during [`prepare_render`](crate::selection::Selection::prepare_render).
+    pub fn set_accessibility(
+        &mut self,
+        system: Arc<Mutex<crate::accessibility::AccessibilitySystem>>,
+    ) {
+        self.accessibility = Some(system);
+    }
+
+    /// Get the shared accessibility system, if one has been attached.
+    pub fn accessibility(&self) -> Option<&Arc<Mutex<crate::accessibility::AccessibilitySystem>>> {
+        self.accessibility.as_ref()
     }
 
     /// Update viewport and reconfigure surface if needed

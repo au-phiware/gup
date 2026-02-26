@@ -1217,6 +1217,45 @@ impl<T, M: Mark> Selection<T, M> {
         }
     }
 
+    /// Automatically register ARIA from the [`RenderContext`]'s accessibility
+    /// system.
+    ///
+    /// This is the recommended way to enable automatic ARIA registration.
+    /// If `auto_aria` is enabled (the default), and the selection's
+    /// [`RenderContext`] has an [`AccessibilitySystem`] attached, this method
+    /// generates and registers the ARIA tree.
+    ///
+    /// Call this after [`prepare_render`](Self::prepare_render) or
+    /// [`prepare_render_bound`](Self::prepare_render_bound) to ensure the
+    /// ARIA tree reflects the current data.
+    ///
+    /// Returns `true` if a new ARIA tree was registered.
+    pub fn sync_aria_from_context(&mut self) -> bool
+    where
+        M: AccessibleMark,
+    {
+        if !self.auto_aria {
+            return false;
+        }
+
+        // Clone the Arc to release the immutable borrow on self.
+        let acc = self
+            .context
+            .as_ref()
+            .and_then(|ctx| ctx.accessibility().cloned());
+
+        let Some(acc) = acc else {
+            return false;
+        };
+
+        if let Ok(mut system) = acc.lock() {
+            self.register_aria(&mut system.aria_tree);
+            true
+        } else {
+            false
+        }
+    }
+
     /// Register the data points in this selection as focusable elements.
     ///
     /// This is a convenience wrapper around
