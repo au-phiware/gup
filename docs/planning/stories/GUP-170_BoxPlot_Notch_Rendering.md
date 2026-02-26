@@ -1,6 +1,6 @@
 # GUP-170: BoxPlot Notch Rendering
 
-**Status**: 🚧 In Progress
+**Status**: ✅ Complete (2025-07-19)
 
 ## Story Overview
 
@@ -22,11 +22,11 @@ visually compare medians with confidence interval indicators
 
 ## Acceptance Criteria
 
-- [ ] When `notched` is `true`, the box SDF narrows symmetrically at the median
+- [x] When `notched` is `true`, the box SDF narrows symmetrically at the median
       position by `notch_width` fraction of the box width
-- [ ] Notch shape is smooth (trapezoidal or curved)
-- [ ] Existing non-notched rendering is unaffected (notched defaults to false)
-- [ ] Demo or test exercises both notched and non-notched box plots
+- [x] Notch shape is smooth (trapezoidal or curved)
+- [x] Existing non-notched rendering is unaffected (notched defaults to false)
+- [x] Demo or test exercises both notched and non-notched box plots
 
 ## Dependencies
 
@@ -39,9 +39,38 @@ visually compare medians with confidence interval indicators
 
 ## Definition of Done
 
-- [ ] All acceptance criteria met
-- [ ] All tests pass (`cargo test -- --test-threads=1`)
-- [ ] `mask all-fix` clean
+- [x] All acceptance criteria met
+- [x] All tests pass (`cargo test -- --test-threads=1`)
+- [x] `mask all-fix` clean
+
+## Implementation Summary
+
+### What Was Implemented
+
+Notched box plot rendering via the existing SDF-based fragment shader. When
+`notched == true`, the box narrows symmetrically at the median using a linear
+interpolation from full width at Q1/Q3 to `(1 - notch_width) * width` at the
+median, producing a smooth trapezoidal notch shape.
+
+### Key Files Changed
+
+- **`src/mark/boxplot.rs`**: Added `notched: u32`, `notch_width: f32`, and
+  `_pad_notch: [f32; 2]` fields to `BoxPlotInstance` (256 → 272 bytes). Updated
+  `From<BoxPlotAttributes>`, `build_instance`, and generated shader strings.
+- **`src/mark/shaders/boxplot.frag.wgsl`**: Added notch SDF logic — computes
+  `effective_hw` that varies with position along the value axis.
+- **`src/mark/shaders/boxplot.vert.wgsl`**: Updated WGSL struct to match.
+- **`src/mark/shaders/boxplot_pattern.frag.wgsl`**: Same notch logic for
+  pattern-enabled rendering.
+- **`src/selection.rs`**: Added `gpu_render_notched_boxplot` GPU test.
+- **`examples/boxplot_rendering_demo.rs`**: Updated demo to alternate notched
+  and non-notched box plots.
+
+### Test Counts
+
+- 4 new unit tests (notch field packing and attribute builder)
+- 1 new GPU integration test (notched + non-notched rendering)
+- All 1589 existing tests continue to pass
 
 ---
 
