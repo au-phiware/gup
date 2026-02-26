@@ -6,7 +6,7 @@
 **Theme**: Advanced Text Layout and Rendering  
 **Priority**: Low  
 **Story Points**: 5  
-**Status**: 🚧 In Progress  
+**Status**: ✅ Complete  
 **Dependencies**: GUP-105 (Text Clipping Detection)
 
 ## Problem Statement
@@ -27,13 +27,13 @@ truncation
 
 ## Acceptance Criteria
 
-- [ ] Word-level text wrapping within container width
-- [ ] Configurable maximum number of lines
-- [ ] Line height and spacing calculations using existing
+- [x] Word-level text wrapping within container width
+- [x] Configurable maximum number of lines
+- [x] Line height and spacing calculations using existing
       `TextStyle.line_spacing`
-- [ ] Integration as a `ClippingStrategy::TextWrapping` variant
-- [ ] Hyphenation support (optional, configurable)
-- [ ] Performance: wrapping 100 labels in <5ms
+- [x] Integration as a `ClippingStrategy::TextWrapping` variant
+- [x] Hyphenation support (optional, configurable)
+- [x] Performance: wrapping 100 labels in <5ms
 
 ## Technical Tasks
 
@@ -53,10 +53,49 @@ truncation
 
 ## Definition of Done
 
-- [ ] Text wrapping strategy implemented
-- [ ] Tests passing with >90% coverage
-- [ ] Performance benchmarks meet targets
-- [ ] Integration with existing clipping strategy cascade
+- [x] Text wrapping strategy implemented
+- [x] Tests passing with >90% coverage
+- [x] Performance benchmarks meet targets
+- [x] Integration with existing clipping strategy cascade
+
+---
+
+## Implementation Summary
+
+**Completed**: 2025-07-18
+
+### Key Files Changed
+
+- **`src/text.rs`** — Added `GlyphSource` trait enabling mock-based testing of
+  text layout algorithms. `FontAtlas` implements this trait.
+- **`src/text/layout.rs`** — Core implementation:
+  - Added `ClippingStrategy::TextWrapping` variant with `max_lines`,
+    `line_spacing_factor`, and `hyphenate` fields
+  - `break_into_lines()` — Word-level line breaking algorithm
+  - `hyphenate_word()` — Mid-word breaking with hyphen insertion
+  - `position_multi_line_glyphs()` — Multi-line glyph positioning with proper Y
+    offsets and line spacing
+  - `apply_text_wrapping()` — Clipping strategy handler integrating with the
+    existing cascade
+  - `layout_wrapped_text()` — Public API for standalone multi-line text layout
+  - Made `measure_text()` and `position_glyphs()` generic over `GlyphSource`
+
+### Tests Added
+
+15 new unit tests covering:
+
+- Line breaking: basic wrapping, single-line fit, max lines, empty text, zero
+  width, multiple words
+- Hyphenation: basic, too-short words, long words without hyphenation
+- Multi-line positioning: glyph Y offsets, line spacing factor, bounds
+  calculation
+- Performance: 100 labels wrapped in <5ms
+- Variant construction: `ClippingStrategy::TextWrapping`
+
+### Test Counts
+
+- **Layout module**: 42 tests (27 existing + 15 new)
+- **Full suite**: 1682 passed, 3 pre-existing GPU failures, 4 ignored
 
 ---
 
