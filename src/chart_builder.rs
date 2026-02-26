@@ -1491,3 +1491,246 @@ mod tests {
     }
 }
 */
+
+#[cfg(test)]
+mod tests_multi_font {
+    use super::*;
+    use crate::text::TextStyle;
+
+    // --- ChartConfig text style tests (no GPU required) ---
+
+    #[test]
+    fn test_chart_config_default_label_style() {
+        let config = ChartConfig::default();
+        assert_eq!(config.label_style.font_size, 14.0);
+        assert_eq!(config.label_style.font_family, None);
+    }
+
+    #[test]
+    fn test_chart_config_default_title_style() {
+        let config = ChartConfig::default();
+        assert_eq!(config.title_style.font_size, 18.0);
+        assert_eq!(config.title_style.weight, 1.0); // bold
+        assert_eq!(config.title_style.font_family, None);
+    }
+
+    #[test]
+    fn test_chart_config_with_label_style() {
+        let config = ChartConfig::default()
+            .with_label_style(TextStyle::new(16.0).with_font_family("DejaVu Sans"));
+        assert_eq!(config.label_style.font_size, 16.0);
+        assert_eq!(
+            config.label_style.font_family,
+            Some("DejaVu Sans".to_string())
+        );
+    }
+
+    #[test]
+    fn test_chart_config_with_title_style() {
+        let config = ChartConfig::default()
+            .with_title_style(TextStyle::new(24.0).with_font_family("DejaVu Serif"));
+        assert_eq!(config.title_style.font_size, 24.0);
+        assert_eq!(
+            config.title_style.font_family,
+            Some("DejaVu Serif".to_string())
+        );
+    }
+
+    #[test]
+    fn test_chart_config_with_title() {
+        let config = ChartConfig::default().with_title("My Chart");
+        assert_eq!(config.title, Some("My Chart".to_string()));
+    }
+
+    #[test]
+    fn test_chart_config_title_accepts_string() {
+        let config = ChartConfig::default().with_title(String::from("Dynamic Title"));
+        assert_eq!(config.title, Some("Dynamic Title".to_string()));
+    }
+
+    // --- GPU-dependent tests (require single-threaded test runner) ---
+
+    #[tokio::test]
+    async fn test_queue_chart_text_no_axes() {
+        #[derive(Debug, Clone)]
+        struct D {
+            x: f32,
+        }
+
+        let context = std::sync::Arc::new(crate::RenderContext::new().await.unwrap());
+        let sel = crate::selection::Selection::<D, crate::Circle>::new(vec![], context).unwrap();
+        let config = ChartConfig {
+            show_axes: false,
+            ..ChartConfig::default()
+        };
+        let chart = ComposedChart::new(sel, config);
+
+        let gup_context = crate::GupContext::headless().await.unwrap();
+        let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
+        let frame = gup_ctx.begin_frame().unwrap();
+
+        let mut text_renderer = crate::text::TextRenderer::new(frame.device()).unwrap();
+        let mut font_manager =
+            crate::text::FontAtlasManager::new(crate::text::FontDatabase::empty(), 14.0);
+        let mut layout_engine = crate::text::TextLayoutEngine::new();
+
+        text_renderer.begin_frame();
+        let result = chart.queue_chart_text(
+            &frame,
+            &mut text_renderer,
+            &mut font_manager,
+            &mut layout_engine,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_queue_chart_text_with_default_axes() {
+        #[derive(Debug, Clone)]
+        struct D {
+            x: f32,
+        }
+
+        let context = std::sync::Arc::new(crate::RenderContext::new().await.unwrap());
+        let sel = crate::selection::Selection::<D, crate::Circle>::new(vec![], context).unwrap();
+        let chart = ComposedChart::new(sel, ChartConfig::default()).with_default_axes();
+
+        let gup_context = crate::GupContext::headless().await.unwrap();
+        let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
+        let frame = gup_ctx.begin_frame().unwrap();
+
+        let mut text_renderer = crate::text::TextRenderer::new(frame.device()).unwrap();
+        let mut font_manager =
+            crate::text::FontAtlasManager::new(crate::text::FontDatabase::new(), 14.0);
+        let mut layout_engine = crate::text::TextLayoutEngine::new();
+
+        text_renderer.begin_frame();
+        let result = chart.queue_chart_text(
+            &frame,
+            &mut text_renderer,
+            &mut font_manager,
+            &mut layout_engine,
+        );
+        assert!(result.is_ok(), "queue_chart_text failed: {result:?}");
+
+        // The font manager should have created at least one atlas (the default)
+        assert!(
+            font_manager.atlas_count() > 0,
+            "Expected at least one font atlas"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_queue_chart_text_with_font_family() {
+        #[derive(Debug, Clone)]
+        struct D {
+            x: f32,
+        }
+
+        let context = std::sync::Arc::new(crate::RenderContext::new().await.unwrap());
+        let sel = crate::selection::Selection::<D, crate::Circle>::new(vec![], context).unwrap();
+        let config = ChartConfig::default()
+            .with_label_style(TextStyle::new(14.0).with_font_family("DejaVu Sans"));
+        let chart = ComposedChart::new(sel, config).with_default_axes();
+
+        let gup_context = crate::GupContext::headless().await.unwrap();
+        let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
+        let frame = gup_ctx.begin_frame().unwrap();
+
+        let mut text_renderer = crate::text::TextRenderer::new(frame.device()).unwrap();
+        let mut font_manager =
+            crate::text::FontAtlasManager::new(crate::text::FontDatabase::new(), 14.0);
+        let mut layout_engine = crate::text::TextLayoutEngine::new();
+
+        text_renderer.begin_frame();
+        let result = chart.queue_chart_text(
+            &frame,
+            &mut text_renderer,
+            &mut font_manager,
+            &mut layout_engine,
+        );
+        assert!(result.is_ok(), "queue_chart_text failed: {result:?}");
+
+        // DejaVu Sans atlas should have been created
+        assert!(
+            font_manager.get_atlas(Some("DejaVu Sans")).is_some(),
+            "Expected a DejaVu Sans atlas to be created"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_queue_chart_text_with_title() {
+        #[derive(Debug, Clone)]
+        struct D {
+            x: f32,
+        }
+
+        let context = std::sync::Arc::new(crate::RenderContext::new().await.unwrap());
+        let sel = crate::selection::Selection::<D, crate::Circle>::new(vec![], context).unwrap();
+        let config = ChartConfig::default()
+            .with_title("Test Title")
+            .with_title_style(TextStyle::new(20.0).with_font_family("DejaVu Serif"));
+        let chart = ComposedChart::new(sel, config).with_default_axes();
+
+        let gup_context = crate::GupContext::headless().await.unwrap();
+        let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
+        let frame = gup_ctx.begin_frame().unwrap();
+
+        let mut text_renderer = crate::text::TextRenderer::new(frame.device()).unwrap();
+        let mut font_manager =
+            crate::text::FontAtlasManager::new(crate::text::FontDatabase::new(), 14.0);
+        let mut layout_engine = crate::text::TextLayoutEngine::new();
+
+        text_renderer.begin_frame();
+        let result = chart.queue_chart_text(
+            &frame,
+            &mut text_renderer,
+            &mut font_manager,
+            &mut layout_engine,
+        );
+        assert!(result.is_ok(), "queue_chart_text failed: {result:?}");
+
+        // Both default atlas (for labels) and DejaVu Serif (for title) should exist
+        assert!(
+            font_manager.get_atlas(Some("DejaVu Serif")).is_some(),
+            "Expected a DejaVu Serif atlas for the title"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_queue_chart_text_resolved_with_collision_detection() {
+        #[derive(Debug, Clone)]
+        struct D {
+            x: f32,
+        }
+
+        let context = std::sync::Arc::new(crate::RenderContext::new().await.unwrap());
+        let sel = crate::selection::Selection::<D, crate::Circle>::new(vec![], context).unwrap();
+        let chart = ComposedChart::new(sel, ChartConfig::default()).with_default_axes();
+
+        let gup_context = crate::GupContext::headless().await.unwrap();
+        let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
+        let frame = gup_ctx.begin_frame().unwrap();
+
+        let mut text_renderer = crate::text::TextRenderer::new(frame.device()).unwrap();
+        let mut font_manager =
+            crate::text::FontAtlasManager::new(crate::text::FontDatabase::new(), 14.0);
+        let mut layout_engine = crate::text::TextLayoutEngine::new();
+        let mut positioner = crate::label::LabelPositioner::new();
+        let constraints = crate::label::LabelConstraints::axis_labels();
+
+        text_renderer.begin_frame();
+        let result = chart.queue_chart_text_resolved(
+            &frame,
+            &mut text_renderer,
+            &mut font_manager,
+            &mut layout_engine,
+            &mut positioner,
+            &constraints,
+        );
+        assert!(
+            result.is_ok(),
+            "queue_chart_text_resolved failed: {result:?}"
+        );
+    }
+}
