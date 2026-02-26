@@ -694,6 +694,92 @@ impl BufferPool {
         }
     }
 
+    /// Allocate a raw `wgpu::Buffer` from the pool, sized in bytes.
+    ///
+    /// Unlike [`allocate`](Self::allocate), which returns a typed
+    /// [`GpuBuffer<T>`], this returns the underlying `wgpu::Buffer` directly.
+    /// This is useful when the caller works with untyped byte slices (e.g.
+    /// instance buffers that store `bytemuck::cast_slice` output).
+    ///
+    /// The caller must track `buffer_type` and the returned byte capacity
+    /// (rounded up to a power-of-two size class) so that the buffer can later
+    /// be returned via [`deallocate_raw`](Self::deallocate_raw).
+    pub fn allocate_raw(&mut self, buffer_type: BufferType, byte_size: usize) -> (Buffer, usize) {
+        let size_class = self.calculate_size_class(byte_size.max(1));
+        let key = (buffer_type, size_class);
+
+        let (buffer, operation) = if let Some(pool) = self.pools.get_mut(&key) {
+            if let Some(entry) = pool.pop_front() {
+                self.allocation_stats.pooled_buffers -= 1;
+                self.allocation_stats.pool_hits += 1;
+                (entry.buffer, PoolOperation::Hit)
+            } else {
+                self.allocation_stats.pool_misses += 1;
+                (
+                    self.create_new_buffer(buffer_type, size_class),
+                    PoolOperation::Miss,
+                )
+            }
+        } else {
+            self.allocation_stats.pool_misses += 1;
+            (
+                self.create_new_buffer(buffer_type, size_class),
+                PoolOperation::Miss,
+            )
+        };
+
+        if self.config.enable_adaptive_sizing {
+            self.usage_tracker.record_event(BufferAllocationEvent {
+                timestamp: Instant::now(),
+                buffer_type,
+                size: size_class,
+                operation,
+            });
+        }
+
+        self.allocation_stats.total_allocated += 1;
+        self.allocation_stats.active_buffers += 1;
+
+        (buffer, size_class)
+    }
+
+    /// Return a raw buffer to the pool for reuse.
+    ///
+    /// `byte_capacity` must be the size-class value returned by
+    /// [`allocate_raw`](Self::allocate_raw).
+    pub fn deallocate_raw(
+        &mut self,
+        buffer: Buffer,
+        buffer_type: BufferType,
+        byte_capacity: usize,
+    ) {
+        let key = (buffer_type, byte_capacity);
+
+        if self.config.enable_adaptive_sizing {
+            self.usage_tracker.record_event(BufferAllocationEvent {
+                timestamp: Instant::now(),
+                buffer_type,
+                size: byte_capacity,
+                operation: PoolOperation::Deallocate,
+            });
+        }
+
+        let size = self.calculate_buffer_size::<u8>(byte_capacity, buffer_type);
+        let entry = PooledBufferEntry {
+            buffer,
+            last_used: Instant::now(),
+            size,
+        };
+
+        self.pools.entry(key).or_default().push_back(entry);
+
+        self.allocation_stats.total_deallocated += 1;
+        self.allocation_stats.active_buffers -= 1;
+        self.allocation_stats.pooled_buffers += 1;
+
+        self.check_memory_pressure();
+    }
+
     /// Return a buffer to the pool for reuse.
     pub fn deallocate<T>(&mut self, mut buffer: GpuBuffer<T>) {
         let key = (buffer.buffer_type, buffer.capacity);
