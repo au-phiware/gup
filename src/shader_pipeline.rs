@@ -2216,6 +2216,60 @@ fn vs_main() -> f32 {
         );
     }
 
+    #[test]
+    fn test_ast_roundtrip_generated_vertex_shader() {
+        use crate::shader_ast::parse_wgsl;
+
+        // Build a pipeline with functions and attribute mappings.
+        let mut pipeline = ComposableShaderPipeline::new();
+        let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+        let color = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 1.0, 1.0]);
+        pipeline.add_function(scale);
+        pipeline.add_function(color);
+        pipeline.map_attribute("size", "linear_scale");
+        pipeline.map_attribute("color", "color_map");
+
+        let vertex_shader = pipeline.generate_vertex_shader();
+
+        // The AST parser must handle the generated vertex shader.
+        let module =
+            parse_wgsl(&vertex_shader).expect("AST parser should handle generated vertex shader");
+        assert!(
+            module.functions.iter().any(|f| f.name == "vs_main"),
+            "parsed module must contain vs_main entry point"
+        );
+    }
+
+    #[test]
+    fn test_ast_roundtrip_generated_fragment_shader() {
+        use crate::shader_ast::{Attribute, parse_wgsl};
+
+        let mut pipeline = ComposableShaderPipeline::new();
+        let color = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 1.0, 1.0]);
+        pipeline.add_function(color);
+        pipeline.map_attribute("color", "color_map");
+
+        let fragment_shader = pipeline.generate_fragment_shader();
+
+        // The AST parser must handle the generated fragment shader.
+        let module = parse_wgsl(&fragment_shader)
+            .expect("AST parser should handle generated fragment shader");
+        let fs_main = module
+            .functions
+            .iter()
+            .find(|f| f.name == "fs_main")
+            .expect("parsed module must contain fs_main entry point");
+
+        // Verify @location(0) on the return type is preserved.
+        assert!(
+            fs_main
+                .return_attributes
+                .iter()
+                .any(|a| matches!(a, Attribute::Location(0))),
+            "fs_main return type must have @location(0) attribute"
+        );
+    }
+
     // -----------------------------------------------------------------------
     // Enhanced WGSL optimization tests (AC4)
     // -----------------------------------------------------------------------
