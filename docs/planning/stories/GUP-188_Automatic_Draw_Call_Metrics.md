@@ -85,3 +85,68 @@ rendering performance without manual bookkeeping
 
 - 12 renderer tests pass (7 new + 5 existing)
 - 2,100+ total tests pass across all crates, 0 failures
+
+## Retrospective
+
+**Completed**: 2025-07-25
+
+### Key Technical Learnings
+
+#### Index Buffer Usage Flags
+
+- **Challenge**: The existing `MarkRenderer::new()` created its index buffer
+  with `BufferType::Storage`, which gives `STORAGE | COPY_DST | COPY_SRC` usage
+  flags. When `render_marks()` called `set_index_buffer()`, wgpu raised a
+  validation error because the `INDEX` usage flag was missing. This bug was
+  latent because no existing tests called `render_marks()` with a full GPU
+  pipeline.
+- **Solution**: Added a new `BufferType::Index` variant with
+  `INDEX | COPY_DST | COPY_SRC` flags and updated `MarkRenderer` to use it.
+- **Pattern**: When adding render test infrastructure, always test the full
+  pipeline path (set_pipeline → set_bind_group → set_vertex_buffer →
+  set_index_buffer → draw). Unit tests that only exercise buffer uploads can
+  miss usage-flag mismatches.
+
+#### wgpu v26 RenderPassColorAttachment
+
+- **Challenge**: `wgpu::RenderPassColorAttachment` in v26 requires a
+  `depth_slice: Option<u32>` field. Tests adapted from older examples or
+  AI-generated code often omit this field.
+- **Solution**: Created a `begin_test_render_pass()` helper in the test module
+  that includes all required fields, avoiding duplication.
+- **Pattern**: Centralise render pass creation in test helpers to insulate tests
+  from wgpu API churn.
+
+### Architectural Decisions
+
+#### Tracked Methods Delegate to Non-Tracked
+
+- **Decision**: Each `_tracked` method calls the corresponding non-tracked
+  method, then increments counters. Counters are only updated on success (after
+  the `?` propagation).
+- **Reasoning**: Avoids duplicating the rendering logic. If the render fails,
+  metrics are not inflated with phantom draw calls.
+- **Trade-off**: One extra function call overhead per draw (trivial vs render
+  cost).
+- **Future**: If profiling shows the delegation overhead matters (unlikely), the
+  bodies could be inlined with a macro.
+
+#### Five Tracked Variants Instead of Two
+
+- **Decision**: Added tracked variants for all five render methods (basic,
+  patterns, multi-pass, state, dynamic attrs), not just the two mentioned in the
+  story.
+- **Reasoning**: Consistency — every rendering path should have a tracked
+  equivalent. Leaving some out would force users to mix tracked and manual
+  metrics.
+- **Trade-off**: Slightly more code surface, but each method is trivial
+  (delegate + counter increment).
+
+### Development Workflow Insights
+
+- The story was straightforward — 0.5-day estimate was accurate.
+- Discovering the `BufferType::Index` bug was the most valuable side-effect.
+  Without a full GPU rendering test, this bug would have persisted until someone
+  tried to use `MarkRenderer` with indexed marks in production.
+- The `create_circle_render_context` test helper pattern (setting up pipeline,
+  bind group, and render target) is reusable for future MarkRenderer tests.
