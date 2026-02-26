@@ -729,13 +729,13 @@ impl WgslParser {
         }
         self.expect(&Token::RightParen)?;
 
-        let return_type = if self.peek() == &Token::Arrow {
+        let (return_type, return_attributes) = if self.peek() == &Token::Arrow {
             self.advance();
             // Check for @location(N) attribute before return type
-            let _return_attrs = self.parse_attributes()?;
-            Some(self.parse_type()?)
+            let return_attrs = self.parse_attributes()?;
+            (Some(self.parse_type()?), return_attrs)
         } else {
-            None
+            (None, vec![])
         };
 
         let body = self.parse_block()?;
@@ -744,6 +744,7 @@ impl WgslParser {
             name,
             parameters,
             return_type,
+            return_attributes,
             body,
             attributes,
         })

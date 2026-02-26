@@ -127,7 +127,11 @@ impl WgslGenerator {
         self.write(")");
 
         if let Some(ref ret) = f.return_type {
-            self.write(&format!(" -> {ret}"));
+            self.write(" -> ");
+            for attr in &f.return_attributes {
+                self.write(&format!("{attr} "));
+            }
+            self.write(&format!("{ret}"));
         }
 
         self.write(" {\n");
@@ -417,6 +421,7 @@ mod tests {
                     Box::new(Expr::Literal(Literal::Float(1.0))),
                 )))]),
                 attributes: vec![],
+                return_attributes: vec![],
             }],
         };
 
@@ -555,6 +560,7 @@ fn clamp_val(x: f32) -> f32 {
                 return_type: Some(WgslType::Struct("VertexOutput".to_string())),
                 body: Block::empty(),
                 attributes: vec![Attribute::Vertex],
+                return_attributes: vec![],
             }],
         };
 

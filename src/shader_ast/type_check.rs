@@ -443,6 +443,7 @@ mod tests {
             return_type: Some(WgslType::Scalar(ScalarType::F32)),
             body: Block::empty(),
             attributes: vec![],
+            return_attributes: vec![],
         };
 
         let sig = FunctionSignature::from_function(&func).unwrap();

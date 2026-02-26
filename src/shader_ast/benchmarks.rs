@@ -148,6 +148,7 @@ pub fn bench_optimize(total_functions: usize, unused_count: usize) -> BenchmarkR
                 Box::new(Expr::Literal(Literal::Float(2.0))),
             )))]),
             attributes: vec![],
+            return_attributes: vec![],
         });
     }
 
@@ -162,6 +163,7 @@ pub fn bench_optimize(total_functions: usize, unused_count: usize) -> BenchmarkR
             return_type: Some(WgslType::Scalar(ScalarType::F32)),
             body: Block::new(vec![Statement::Return(Some(Expr::Ident("y".to_string())))]),
             attributes: vec![],
+            return_attributes: vec![],
         });
     }
 
@@ -176,6 +178,7 @@ pub fn bench_optimize(total_functions: usize, unused_count: usize) -> BenchmarkR
         return_type: Some(WgslType::Scalar(ScalarType::F32)),
         body: Block::new(vec![Statement::Return(Some(call_chain))]),
         attributes: vec![Attribute::Vertex],
+        return_attributes: vec![],
     });
 
     let start = Instant::now();

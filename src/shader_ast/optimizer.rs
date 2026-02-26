@@ -881,6 +881,7 @@ mod tests {
                 "value".to_string(),
             )))]),
             attributes: attrs,
+            return_attributes: vec![],
         }
     }
 
@@ -900,6 +901,7 @@ mod tests {
                         vec![Expr::Literal(Literal::Float(1.0))],
                     )))]),
                     attributes: vec![Attribute::Vertex],
+                    return_attributes: vec![],
                 },
                 make_simple_function("used_fn", vec![]),
                 make_simple_function("unused_fn", vec![]),
@@ -929,6 +931,7 @@ mod tests {
                         vec![Expr::Literal(Literal::Float(1.0))],
                     )))]),
                     attributes: vec![Attribute::Vertex],
+                    return_attributes: vec![],
                 },
                 // a calls b
                 Function {
@@ -943,6 +946,7 @@ mod tests {
                         vec![Expr::Ident("x".to_string())],
                     )))]),
                     attributes: vec![],
+                    return_attributes: vec![],
                 },
                 make_simple_function("b", vec![]),
                 make_simple_function("unreachable", vec![]),
@@ -970,6 +974,7 @@ mod tests {
                     Box::new(Expr::Literal(Literal::Float(3.0))),
                 )))]),
                 attributes: vec![],
+                return_attributes: vec![],
             }],
         };
 
@@ -1003,6 +1008,7 @@ mod tests {
                     Box::new(Expr::Literal(Literal::Float(1.0))),
                 )))]),
                 attributes: vec![],
+                return_attributes: vec![],
             }],
         };
 
@@ -1036,6 +1042,7 @@ mod tests {
                     Box::new(Expr::Ident("x".to_string())),
                 )))]),
                 attributes: vec![],
+                return_attributes: vec![],
             }],
         };
 
@@ -1071,6 +1078,7 @@ mod tests {
                         Box::new(Expr::Literal(Literal::Float(2.0))),
                     )))]),
                     attributes: vec![],
+                    return_attributes: vec![],
                 },
                 // Caller
                 Function {
@@ -1085,6 +1093,7 @@ mod tests {
                         vec![Expr::Ident("val".to_string())],
                     )))]),
                     attributes: vec![Attribute::Vertex],
+                    return_attributes: vec![],
                 },
             ],
         };
@@ -1120,6 +1129,7 @@ mod tests {
                         Box::new(Expr::Literal(Literal::Float(3.0))),
                     )))]),
                     attributes: vec![Attribute::Vertex],
+                    return_attributes: vec![],
                 },
                 make_simple_function("unused", vec![]),
             ],

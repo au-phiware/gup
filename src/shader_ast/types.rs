@@ -297,6 +297,8 @@ pub struct Function {
     pub name: String,
     pub parameters: Vec<Parameter>,
     pub return_type: Option<WgslType>,
+    /// Attributes on the return type (e.g., `@location(0)`).
+    pub return_attributes: Vec<Attribute>,
     pub body: Block,
     pub attributes: Vec<Attribute>,
 }
@@ -457,6 +459,7 @@ mod tests {
                 return_type: Some(WgslType::Scalar(ScalarType::F32)),
                 body: Block::empty(),
                 attributes: vec![],
+                return_attributes: vec![],
             }],
         };
 
