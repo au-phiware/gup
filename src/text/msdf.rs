@@ -2900,10 +2900,11 @@ mod tests {
         for ch in 33u8..=126u8 {
             let c = ch as char;
             if let Some(glyph_id) = font.glyph_index(c)
-                && font.glyph_bounding_box(glyph_id).is_some() {
-                    msdf_gen.generate_msdf(glyph_id).unwrap();
-                    count += 1;
-                }
+                && font.glyph_bounding_box(glyph_id).is_some()
+            {
+                msdf_gen.generate_msdf(glyph_id).unwrap();
+                count += 1;
+            }
         }
         let elapsed = start.elapsed();
         // In debug mode the threshold is generous
