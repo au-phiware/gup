@@ -67,6 +67,7 @@ use crate::label::{AxisInfo, LabelConstraints, LabelLayout, LabelPosition, Label
 use crate::render::Vertex;
 use crate::selection::Selection;
 use crate::shader_function::Vec2;
+use crate::text::TextStyle;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -206,6 +207,20 @@ pub struct ChartConfig {
 
     /// Grid system configuration
     pub grid_config: GridConfiguration,
+
+    /// Text style for axis labels.
+    ///
+    /// When `font_family` is set, the chart text rendering methods
+    /// will use `FontAtlasManager` to resolve the correct font atlas
+    /// automatically.
+    pub label_style: TextStyle,
+
+    /// Text style for the chart title.
+    ///
+    /// When `font_family` is set, the chart text rendering methods
+    /// will use `FontAtlasManager` to resolve the correct font atlas
+    /// automatically.
+    pub title_style: TextStyle,
 }
 
 /// Chart margin specification.
@@ -228,6 +243,8 @@ impl Default for ChartConfig {
             show_axes: true,
             show_grid: false,
             grid_config: GridConfiguration::default(),
+            label_style: TextStyle::new(14.0),
+            title_style: TextStyle::new(18.0).bold(),
         }
     }
 }
@@ -249,6 +266,32 @@ impl ChartConfig {
     /// Disable grid rendering.
     pub fn without_grid(mut self) -> Self {
         self.show_grid = false;
+        self
+    }
+
+    /// Set the text style for axis labels.
+    ///
+    /// Use [`TextStyle::with_font_family`] to specify a font; the chart's
+    /// multi-font rendering methods will resolve it through a
+    /// [`FontAtlasManager`](crate::text::FontAtlasManager) automatically.
+    pub fn with_label_style(mut self, style: TextStyle) -> Self {
+        self.label_style = style;
+        self
+    }
+
+    /// Set the text style for the chart title.
+    ///
+    /// Use [`TextStyle::with_font_family`] to specify a font; the chart's
+    /// multi-font rendering methods will resolve it through a
+    /// [`FontAtlasManager`](crate::text::FontAtlasManager) automatically.
+    pub fn with_title_style(mut self, style: TextStyle) -> Self {
+        self.title_style = style;
+        self
+    }
+
+    /// Set the chart title.
+    pub fn with_title(mut self, title: impl Into<String>) -> Self {
+        self.title = Some(title.into());
         self
     }
 }
@@ -783,6 +826,152 @@ where
         };
 
         Ok((all_vertices, combined))
+    }
+
+    /// Queue axis-label and title text for multi-font rendering.
+    ///
+    /// This convenience method calls
+    /// [`generate_axis_geometry`](Self::generate_axis_geometry) to obtain
+    /// axis labels, then queues every label (and the optional chart title)
+    /// through
+    /// [`TextRenderer::queue_text_with_fonts`](crate::text::TextRenderer::queue_text_with_fonts),
+    /// so that [`TextStyle::font_family`] is respected via the
+    /// [`FontAtlasManager`](crate::text::FontAtlasManager).
+    ///
+    /// Call this **before** creating the render pass, then call
+    /// [`TextRenderer::render_queued_text_multi`](crate::text::TextRenderer::render_queued_text_multi)
+    /// inside the pass to draw the text.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::ComposedChart;
+    /// use gup::text::{
+    ///     FontAtlasManager, FontDatabase, TextLayoutEngine, TextRenderer, TextStyle,
+    /// };
+    ///
+    /// # async fn example() -> gup::error::GupResult<()> {
+    /// # let context = std::sync::Arc::new(gup::RenderContext::new().await?);
+    /// # #[derive(Debug, Clone)]
+    /// # struct D { x: f32, y: f32 }
+    /// # let sel = gup::selection::Selection::<D, gup::Circle>::new(vec![], context)?;
+    /// let config = gup::chart_builder::ChartConfig::default()
+    ///     .with_label_style(TextStyle::new(14.0).with_font_family("DejaVu Sans"))
+    ///     .with_title("My Chart")
+    ///     .with_title_style(TextStyle::new(18.0).bold().with_font_family("DejaVu Serif"));
+    /// let chart = ComposedChart::new(sel, config).with_default_axes();
+    ///
+    /// // During frame rendering:
+    /// // text_renderer.begin_frame();
+    /// // chart.queue_chart_text(&frame, &mut text_renderer, &mut font_mgr, &mut layout)?;
+    /// // let mut pass = frame.render_pass(None);
+    /// // text_renderer.render_queued_text_multi(&mut pass, device, queue, &font_mgr, w, h)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn queue_chart_text(
+        &self,
+        frame: &crate::RenderFrame,
+        text_renderer: &mut crate::text::TextRenderer,
+        font_manager: &mut crate::text::FontAtlasManager,
+        layout_engine: &mut crate::text::TextLayoutEngine,
+    ) -> GupResult<()> {
+        let (_, labels) = self.generate_axis_geometry();
+
+        // Queue axis labels
+        for label in &labels {
+            let style = self.config.label_style.clone().with_anchor(label.anchor);
+
+            text_renderer.queue_text_with_fonts(
+                frame,
+                &label.text,
+                label.screen_position,
+                &style,
+                font_manager,
+                layout_engine,
+                None,
+                None,
+            )?;
+        }
+
+        // Queue chart title
+        self.queue_title_text(frame, text_renderer, font_manager, layout_engine)?;
+
+        Ok(())
+    }
+
+    /// Queue axis-label and title text with collision detection.
+    ///
+    /// Like [`queue_chart_text`](Self::queue_chart_text), but first runs
+    /// labels through a [`LabelPositioner`] to resolve overlaps. Hidden
+    /// labels are omitted from the text queue.
+    pub fn queue_chart_text_resolved(
+        &self,
+        frame: &crate::RenderFrame,
+        text_renderer: &mut crate::text::TextRenderer,
+        font_manager: &mut crate::text::FontAtlasManager,
+        layout_engine: &mut crate::text::TextLayoutEngine,
+        positioner: &mut LabelPositioner,
+        constraints: &LabelConstraints,
+    ) -> GupResult<()> {
+        let (_, label_layout) = self.generate_axis_geometry_resolved(positioner, constraints)?;
+
+        // Queue only the resolved (non-hidden) label positions
+        for lp in &label_layout.positions {
+            let style = self.config.label_style.clone().with_anchor(lp.anchor);
+
+            text_renderer.queue_text_with_fonts(
+                frame,
+                &lp.text,
+                lp.position,
+                &style,
+                font_manager,
+                layout_engine,
+                None,
+                None,
+            )?;
+        }
+
+        // Queue chart title
+        self.queue_title_text(frame, text_renderer, font_manager, layout_engine)?;
+
+        Ok(())
+    }
+
+    /// Queue the chart title text (if configured).
+    fn queue_title_text(
+        &self,
+        frame: &crate::RenderFrame,
+        text_renderer: &mut crate::text::TextRenderer,
+        font_manager: &mut crate::text::FontAtlasManager,
+        layout_engine: &mut crate::text::TextLayoutEngine,
+    ) -> GupResult<()> {
+        if let Some(title) = &self.config.title {
+            let title_style = self
+                .config
+                .title_style
+                .clone()
+                .with_anchor(crate::text::TextAnchor::TopCenter);
+
+            // Position the title centered at the top of the chart
+            let title_position = Vec2 {
+                x: self.config.width / 2.0,
+                y: self.config.margins.top / 2.0,
+            };
+
+            text_renderer.queue_text_with_fonts(
+                frame,
+                title,
+                title_position,
+                &title_style,
+                font_manager,
+                layout_engine,
+                None,
+                None,
+            )?;
+        }
+        Ok(())
     }
 }
 
