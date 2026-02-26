@@ -2063,7 +2063,7 @@ fn get_mark_type_id<M: Mark>() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mark::boxplot::BoxPlotAttributes;
+
     use crate::mark::circle::{CircleAttributes, CircleInstance};
     use crate::mark::rectangle::{RectangleAttributes, RectangleInstance};
     use crate::mark::{BoxPlot, Circle, Line, Rectangle};
@@ -3633,6 +3633,93 @@ mod tests {
                 selection
                     .render(&mut render_pass)
                     .expect("render horizontal boxplot");
+            }
+
+            frame.finish().expect("finish frame");
+        });
+    }
+
+    #[test]
+    fn gpu_render_notched_boxplot() {
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            use crate::BoxPlotAttributes;
+            use crate::mark::BoxPlot;
+            use crate::mark::boxplot::{BoxPlotInstance, BoxPlotOrientation};
+
+            // One notched and one non-notched for comparison
+            let data = vec![
+                BoxPlotAttributes {
+                    position: Vec2 { x: -0.3, y: 0.0 },
+                    min: -0.5,
+                    q1: -0.2,
+                    median: 0.0,
+                    q3: 0.2,
+                    max: 0.5,
+                    outliers: vec![-0.7],
+                    width: 0.2,
+                    orientation: BoxPlotOrientation::Vertical,
+                    stroke_width: 0.01,
+                    outlier_radius: 0.02,
+                    notched: true,
+                    notch_width: 0.5,
+                    ..Default::default()
+                },
+                BoxPlotAttributes {
+                    position: Vec2 { x: 0.3, y: 0.0 },
+                    min: -0.5,
+                    q1: -0.2,
+                    median: 0.0,
+                    q3: 0.2,
+                    max: 0.5,
+                    outliers: vec![],
+                    width: 0.2,
+                    orientation: BoxPlotOrientation::Vertical,
+                    stroke_width: 0.01,
+                    outlier_radius: 0.02,
+                    notched: false,
+                    notch_width: 0.5,
+                    ..Default::default()
+                },
+            ];
+
+            // Verify the notch fields are packed correctly
+            let inst0 = BoxPlotInstance::from(&data[0]);
+            assert_eq!(inst0.notched, 1);
+            assert_eq!(inst0.notch_width, 0.5);
+
+            let inst1 = BoxPlotInstance::from(&data[1]);
+            assert_eq!(inst1.notched, 0);
+
+            let mut selection: Selection<BoxPlotAttributes, BoxPlot> = Selection::from_data(data);
+            assert_eq!(selection.len(), 2);
+
+            selection
+                .prepare_render(
+                    &context.device,
+                    &context.queue,
+                    |a| BoxPlotInstance::from(a),
+                    None,
+                )
+                .expect("prepare_render notched");
+
+            assert!(selection.is_render_ready());
+
+            let mut ctx = Arc::try_unwrap(context).expect("single owner");
+            let mut frame = ctx.begin_frame().expect("begin_frame");
+
+            {
+                let mut render_pass = frame.render_pass(Some(wgpu::Color::WHITE));
+                selection
+                    .render(&mut render_pass)
+                    .expect("render notched boxplot should succeed");
             }
 
             frame.finish().expect("finish frame");
