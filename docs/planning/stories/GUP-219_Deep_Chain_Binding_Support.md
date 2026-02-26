@@ -1,4 +1,4 @@
-# GUP-215: Deep Chain Binding Support
+# GUP-219: Deep Chain Binding Support
 
 **Status**: 📋 Planned
 
@@ -36,7 +36,7 @@ transformation pipelines
 ## Dependencies
 
 - **Requires**: GUP-180 (FunctionChain Binding Support) ✅
-- **Recommended**: GUP-214 (Duplicate Struct Definition Prevention)
+- **Recommended**: GUP-218 (Duplicate Struct Definition Prevention)
 
 ## Testing Strategy
 

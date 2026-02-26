@@ -187,13 +187,13 @@ the output type (e.g., `f32 → vec4<f32>`):
 
 ### Follow-up Stories
 
-1. **GUP-214: Duplicate Struct Definition Prevention** — When multiple shader
+1. **GUP-218: Duplicate Struct Definition Prevention** — When multiple shader
    function bindings share component types (e.g., two different chains both
    using `LinearScaleUniforms`), the generated WGSL may contain duplicate struct
    definitions. Add a deduplication pass to `generate_shader_bound_vertex_wgsl`
    that tracks emitted struct names and skips duplicates.
 
-2. **GUP-215: Deep Chain Binding Support** — Currently only two-level chains
+2. **GUP-219: Deep Chain Binding Support** — Currently only two-level chains
    (`A.compose(B)`) are tested. Validate that deeper chains
    (`A.compose(B).compose(C)`) work correctly with `attr_shader()`, including
    nested `ChainUniforms<ChainUniforms<A, B>, C>` serialisation and WGSL

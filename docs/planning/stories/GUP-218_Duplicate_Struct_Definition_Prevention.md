@@ -1,4 +1,4 @@
-# GUP-214: Duplicate Struct Definition Prevention
+# GUP-218: Duplicate Struct Definition Prevention
 
 **Status**: 📋 Planned
 
