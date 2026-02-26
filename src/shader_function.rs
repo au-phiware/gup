@@ -1274,6 +1274,101 @@ fn is_ident_char(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_'
 }
 
+/// Deduplicates WGSL function definitions in a code string.
+///
+/// When composing shader functions that share component functions (e.g.
+/// `LinearScale.compose(LinearScale)`), the generated WGSL may contain the
+/// same function definition multiple times.  This helper scans for `fn `
+/// boundaries, extracts function names, and emits each function only once.
+///
+/// Non-function content (empty lines, comments) is preserved.
+fn deduplicate_wgsl_functions(wgsl: &str) -> String {
+    let mut result = String::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut pos = 0;
+
+    while pos < wgsl.len() {
+        // Find the next `fn ` token that starts a function definition.
+        // It must either be at the start of the string or preceded by a
+        // newline (possibly with whitespace).
+        let fn_start = {
+            let mut found = None;
+            let mut search = pos;
+            while search < wgsl.len() {
+                match wgsl[search..].find("fn ") {
+                    Some(rel) => {
+                        let abs = search + rel;
+                        // Accept if at start or preceded by a newline
+                        // (ignoring any leading whitespace on the line).
+                        let before = &wgsl[pos..abs];
+                        let trimmed = before.trim_end();
+                        if abs == 0
+                            || trimmed.is_empty()
+                            || trimmed.ends_with('\n')
+                            || trimmed.ends_with('}')
+                        {
+                            found = Some(abs);
+                            break;
+                        }
+                        // Not a top-level function definition, skip.
+                        search = abs + 3;
+                    }
+                    None => break,
+                }
+            }
+            found
+        };
+
+        let fn_start = match fn_start {
+            Some(s) => s,
+            None => break,
+        };
+
+        // Emit any content before this function (whitespace, comments).
+        let prefix = &wgsl[pos..fn_start];
+        if !prefix.trim().is_empty() {
+            result.push_str(prefix);
+        }
+
+        // Extract the function name: after `fn ` until `(`.
+        let name_region = &wgsl[fn_start + 3..];
+        let name_end = name_region.find('(').unwrap_or(name_region.len());
+        let fn_name = name_region[..name_end].trim().to_string();
+
+        // Find end of function by matching braces.
+        let mut depth = 0i32;
+        let mut fn_end = fn_start;
+        for (i, c) in wgsl[fn_start..].char_indices() {
+            match c {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        fn_end = fn_start + i + 1;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if seen.insert(fn_name) {
+            result.push_str(&wgsl[fn_start..fn_end]);
+            result.push_str("\n\n");
+        }
+
+        pos = fn_end;
+    }
+
+    // Append remaining content.
+    let remaining = &wgsl[pos..];
+    if !remaining.trim().is_empty() {
+        result.push_str(remaining);
+    }
+
+    result.trim().to_string()
+}
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct ChainUniforms<A, B>
@@ -1451,7 +1546,11 @@ where
             first_fn_name,
             second_fn_name
         ));
-        wgsl
+
+        // Deduplicate function definitions that appear when both components
+        // share the same underlying shader function (e.g. two LinearScale
+        // instances produce two identical `fn linear_scale(...)` blocks).
+        deduplicate_wgsl_functions(&wgsl)
     }
 
     fn create_uniforms(&self) -> Option<Self::Uniforms> {
@@ -6373,6 +6472,186 @@ mod tests {
 
         assert_eq!(chain_uniforms.first.domain_min, 0.0);
         assert_eq!(chain_uniforms.second.min_color[0], 0.0);
+    }
+
+    // --- Deep chain tests (GUP-219) ---
+
+    #[test]
+    fn test_deep_chain_struct_definition_unique_names() {
+        // A three-function chain: LinearScale → LinearScale → ColorMap
+        // produces ChainUniforms<ChainUniforms<LSU, LSU>, CMU>.
+        // The inner ChainUniforms must be renamed to avoid collision.
+        type DeepChain = ChainUniforms<
+            ChainUniforms<LinearScaleUniforms, LinearScaleUniforms>,
+            ColorMapUniforms,
+        >;
+
+        let def = DeepChain::wgsl_struct_definition();
+
+        // Must contain the inner struct with a depth suffix.
+        assert!(
+            def.contains("struct ChainUniforms_1"),
+            "Missing renamed inner ChainUniforms_1:\n{def}"
+        );
+        // Must contain the outer struct without suffix.
+        assert!(
+            def.contains("struct ChainUniforms {"),
+            "Missing outer ChainUniforms:\n{def}"
+        );
+        // The outer struct's first field should reference the renamed inner.
+        assert!(
+            def.contains("first: ChainUniforms_1"),
+            "Outer struct should reference ChainUniforms_1:\n{def}"
+        );
+        // Component structs must be present.
+        assert!(
+            def.contains("struct LinearScaleUniforms"),
+            "Missing LinearScaleUniforms:\n{def}"
+        );
+        assert!(
+            def.contains("struct ColorMapUniforms"),
+            "Missing ColorMapUniforms:\n{def}"
+        );
+    }
+
+    #[test]
+    fn test_deep_chain_depth_values() {
+        assert_eq!(f32::chain_depth(), 0);
+        assert_eq!(LinearScaleUniforms::chain_depth(), 0);
+        assert_eq!(
+            <ChainUniforms<LinearScaleUniforms, ColorMapUniforms>>::chain_depth(),
+            1
+        );
+        assert_eq!(
+            <ChainUniforms<
+                ChainUniforms<LinearScaleUniforms, LinearScaleUniforms>,
+                ColorMapUniforms,
+            >>::chain_depth(),
+            2
+        );
+    }
+
+    #[test]
+    fn test_deep_chain_generate_wgsl_unique_function_names() {
+        // Build scale1.compose(scale2).compose(color_map).
+        let scale1 = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+        let scale2 = LinearScale::new(0.0, 1.0, -1.0, 1.0);
+        let color_map = ColorMap::new(vec4![0.0, 0.0, 1.0, 1.0], vec4![1.0, 0.0, 0.0, 1.0]);
+
+        let deep_chain = scale1.compose(scale2).compose(color_map);
+        let wgsl = deep_chain.generate_wgsl();
+
+        // Inner chain function should be renamed.
+        assert!(
+            wgsl.contains("fn composed_chain_1("),
+            "Missing renamed inner composed_chain_1:\n{wgsl}"
+        );
+        // Outer entry point keeps the plain name.
+        assert!(
+            wgsl.contains("fn composed_chain("),
+            "Missing outer composed_chain:\n{wgsl}"
+        );
+        // The outer function should call the renamed inner.
+        assert!(
+            wgsl.contains("composed_chain_1(input"),
+            "Outer should call composed_chain_1:\n{wgsl}"
+        );
+        // Both component functions must be present.
+        assert!(
+            wgsl.contains("fn linear_scale("),
+            "Missing linear_scale:\n{wgsl}"
+        );
+        assert!(wgsl.contains("fn color_map("), "Missing color_map:\n{wgsl}");
+    }
+
+    #[test]
+    fn test_deep_chain_bytemuck_layout() {
+        // Verify that ChainUniforms<ChainUniforms<LSU, LSU>, CMU> can be
+        // serialised and deserialised correctly via bytemuck.
+        let inner = ChainUniforms {
+            first: LinearScaleUniforms {
+                domain_min: 0.0,
+                domain_max: 100.0,
+                range_min: 0.0,
+                range_max: 1.0,
+            },
+            second: LinearScaleUniforms {
+                domain_min: 0.0,
+                domain_max: 1.0,
+                range_min: -1.0,
+                range_max: 1.0,
+            },
+        };
+        let outer = ChainUniforms {
+            first: inner,
+            second: ColorMapUniforms {
+                min_color: [0.0, 0.0, 1.0, 1.0],
+                max_color: [1.0, 0.0, 0.0, 1.0],
+            },
+        };
+
+        let bytes = bytemuck::bytes_of(&outer);
+        assert!(
+            !bytes.is_empty(),
+            "Nested ChainUniforms should serialise to non-empty bytes"
+        );
+
+        // Round-trip: deserialise back and verify.
+        let restored: &ChainUniforms<
+            ChainUniforms<LinearScaleUniforms, LinearScaleUniforms>,
+            ColorMapUniforms,
+        > = bytemuck::from_bytes(bytes);
+        assert_eq!(restored.first.first.domain_max, 100.0);
+        assert_eq!(restored.first.second.range_min, -1.0);
+        assert_eq!(restored.second.min_color, [0.0, 0.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn test_replace_wgsl_identifier() {
+        // Basic rename.
+        assert_eq!(
+            replace_wgsl_identifier("struct ChainUniforms {", "ChainUniforms", "ChainUniforms_1"),
+            "struct ChainUniforms_1 {"
+        );
+        // Should NOT rename an already-suffixed identifier.
+        assert_eq!(
+            replace_wgsl_identifier(
+                "first: ChainUniforms_1,",
+                "ChainUniforms",
+                "ChainUniforms_2"
+            ),
+            "first: ChainUniforms_1,"
+        );
+        // Multiple occurrences.
+        assert_eq!(
+            replace_wgsl_identifier(
+                "uniforms: ChainUniforms) -> ChainUniforms",
+                "ChainUniforms",
+                "ChainUniforms_1"
+            ),
+            "uniforms: ChainUniforms_1) -> ChainUniforms_1"
+        );
+        // No match.
+        assert_eq!(
+            replace_wgsl_identifier("struct Foo {", "ChainUniforms", "ChainUniforms_1"),
+            "struct Foo {"
+        );
+    }
+
+    #[test]
+    fn test_deep_chain_create_uniforms() {
+        let scale1 = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+        let scale2 = LinearScale::new(0.0, 1.0, -1.0, 1.0);
+        let color_map = ColorMap::new(vec4![0.0, 0.0, 1.0, 1.0], vec4![1.0, 0.0, 0.0, 1.0]);
+
+        let deep_chain = scale1.compose(scale2).compose(color_map);
+        let uniforms = deep_chain.create_uniforms();
+        assert!(uniforms.is_some(), "Deep chain should produce uniforms");
+
+        let u = uniforms.unwrap();
+        assert_eq!(u.first.first.domain_max, 100.0);
+        assert_eq!(u.first.second.range_min, -1.0);
+        assert_eq!(u.second.max_color, [1.0, 0.0, 0.0, 1.0]);
     }
 
     #[test]

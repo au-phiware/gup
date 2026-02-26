@@ -1882,10 +1882,11 @@ fn generate_shader_bound_vertex_wgsl(
         }
         for individual_def in split_wgsl_struct_definitions(struct_def) {
             if let Some(name) = extract_wgsl_struct_name(individual_def)
-                && emitted_structs.insert(name.to_string()) {
-                    result.push_str(individual_def.trim());
-                    result.push('\n');
-                }
+                && emitted_structs.insert(name.to_string())
+            {
+                result.push_str(individual_def.trim());
+                result.push('\n');
+            }
         }
     }
 
@@ -4980,5 +4981,223 @@ fn vs_main() -> VertexOutput {
             chain_count, 1,
             "Expected exactly 1 ChainUniforms definition, found {chain_count}:\n{result}"
         );
+    }
+
+    // --- Deep chain binding tests (GUP-219) ---
+
+    #[test]
+    fn deep_chain_shader_fn_info_metadata() {
+        use crate::shader_function::{ColorMap, ComposableFunction, LinearScale};
+
+        let chain = LinearScale::new(0.0, 100.0, 0.0, 1.0)
+            .compose(LinearScale::new(0.0, 1.0, -1.0, 1.0))
+            .compose(ColorMap::new(
+                Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 1.0,
+                    w: 1.0,
+                },
+                Vec4 {
+                    x: 1.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0,
+                },
+            ));
+        let info = shader_fn_info_from(&chain);
+
+        // Entry point is always composed_chain.
+        assert_eq!(info.function_name, "composed_chain");
+        assert_eq!(info.input_wgsl_type, "f32");
+        assert_eq!(info.output_wgsl_type, "vec4<f32>");
+        // Uniform type is ChainUniforms (outermost).
+        assert_eq!(info.uniform_type_name, "ChainUniforms");
+        // Uniforms must be non-empty (all three functions have uniforms).
+        assert!(
+            !info.uniform_bytes.is_empty(),
+            "Nested ChainUniforms should serialise"
+        );
+    }
+
+    #[test]
+    fn deep_chain_struct_def_includes_renamed_inner() {
+        use crate::shader_function::{ColorMap, ComposableFunction, LinearScale};
+
+        let chain = LinearScale::new(0.0, 100.0, 0.0, 1.0)
+            .compose(LinearScale::new(0.0, 1.0, -1.0, 1.0))
+            .compose(ColorMap::new(
+                Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 1.0,
+                    w: 1.0,
+                },
+                Vec4 {
+                    x: 1.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0,
+                },
+            ));
+        let info = shader_fn_info_from(&chain);
+
+        // Inner chain struct should be renamed.
+        assert!(
+            info.uniform_struct_def.contains("struct ChainUniforms_1"),
+            "Missing ChainUniforms_1:\n{}",
+            info.uniform_struct_def
+        );
+        // Outer struct should keep the plain name.
+        assert!(
+            info.uniform_struct_def.contains("struct ChainUniforms {"),
+            "Missing outer ChainUniforms:\n{}",
+            info.uniform_struct_def
+        );
+    }
+
+    #[test]
+    fn deep_chain_wgsl_injection_produces_valid_shader() {
+        use crate::shader_function::{ColorMap, ComposableFunction, LinearScale};
+
+        let chain = LinearScale::new(0.0, 100.0, 0.0, 1.0)
+            .compose(LinearScale::new(0.0, 1.0, -1.0, 1.0))
+            .compose(ColorMap::new(
+                Vec4 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 1.0,
+                    w: 1.0,
+                },
+                Vec4 {
+                    x: 1.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0,
+                },
+            ));
+        let info = shader_fn_info_from(&chain);
+
+        let base_wgsl = r#"
+struct CircleInstance {
+    center: vec2<f32>,
+    radius: f32,
+    fill_color: vec4<f32>,
+}
+
+@group(0) @binding(0) var<storage, read> instances: array<CircleInstance>;
+
+@vertex
+fn vs_main() -> VertexOutput {
+    let instance = instances[input.instance_index];
+    let c = instance.fill_color;
+    return c;
+}
+"#;
+
+        let bindings: Vec<(&str, &ShaderFnInfo)> = vec![("fill_color", &info)];
+        let result = generate_shader_bound_vertex_wgsl(base_wgsl, &bindings);
+
+        // Must have inner renamed function.
+        assert!(
+            result.contains("fn composed_chain_1("),
+            "Missing composed_chain_1 fn:\n{result}"
+        );
+        // Must have outer entry point.
+        assert!(
+            result.contains("fn composed_chain("),
+            "Missing composed_chain fn:\n{result}"
+        );
+        // Must have inner renamed struct.
+        assert!(
+            result.contains("ChainUniforms_1"),
+            "Missing ChainUniforms_1 struct:\n{result}"
+        );
+        // Must have outer struct.
+        assert!(
+            result.contains("struct ChainUniforms {"),
+            "Missing ChainUniforms struct:\n{result}"
+        );
+        // The binding should reference ChainUniforms.
+        assert!(
+            result.contains("_gup_uniforms_0: ChainUniforms"),
+            "Missing uniform binding:\n{result}"
+        );
+        // The transformation call should use composed_chain.
+        assert!(
+            result.contains("_gup_fill_color = composed_chain("),
+            "Missing transformation call:\n{result}"
+        );
+    }
+
+    #[test]
+    fn gpu_deep_function_chain_render() {
+        use crate::shader_function::{ColorMap, ComposableFunction, LinearScale};
+
+        pollster::block_on(async {
+            let context = match crate::GupContext::headless().await {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    eprintln!("Skipping GPU test — no adapter available");
+                    return;
+                }
+            };
+
+            let data = vec![
+                ScatterPoint {
+                    x: -0.3,
+                    y: 0.0,
+                    value: 20.0,
+                },
+                ScatterPoint {
+                    x: 0.3,
+                    y: 0.0,
+                    value: 80.0,
+                },
+            ];
+
+            let mut selection: Selection<ScatterPoint, Circle> = Selection::from_data(data);
+
+            // CPU bindings for position and radius.
+            selection
+                .attr("center", |d: &ScatterPoint| [d.x, d.y])
+                .attr("radius", |_: &ScatterPoint| 0.1f32);
+
+            // GPU binding: 3-function deep chain for fill_color.
+            let chain = LinearScale::new(0.0, 100.0, 0.0, 1.0)
+                .compose(LinearScale::new(0.0, 1.0, -1.0, 1.0))
+                .compose(ColorMap::new(
+                    Vec4 {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 1.0,
+                        w: 1.0,
+                    },
+                    Vec4 {
+                        x: 1.0,
+                        y: 0.0,
+                        z: 0.0,
+                        w: 1.0,
+                    },
+                ));
+            selection.attr_shader("fill_color", |d: &ScatterPoint| d.value, chain);
+
+            selection
+                .prepare_render_bound(&context.device, &context.queue, None)
+                .expect("prepare_render_bound with deep FunctionChain");
+
+            assert!(selection.is_render_ready());
+
+            // Render to verify pipeline compilation succeeds.
+            let mut ctx = Arc::try_unwrap(context).expect("single owner");
+            let mut frame = ctx.begin_frame().expect("begin_frame");
+            {
+                let mut pass = frame.render_pass(Some(wgpu::Color::BLACK));
+                selection
+                    .render(&mut pass)
+                    .expect("render with deep FunctionChain binding");
+            }
+            frame.finish().expect("finish frame");
+        });
     }
 }
