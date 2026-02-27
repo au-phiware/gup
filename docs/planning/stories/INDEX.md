@@ -319,7 +319,7 @@ system story. The expanded story is also complete._
 | [GUP-215](GUP-215_Chart_Builder_Multi_Font.md)                                     | Chart Builder Multi-Font Integration        | ✅ Complete | Medium   | —      |
 | [GUP-216](GUP-216_Chart_Title_Layout_Configuration.md)                             | Chart Title Layout Configuration            | ✅ Complete | Low      | —      |
 | [GUP-217](GUP-217_Per_Axis_Label_Style_Override.md)                                | Per-Axis Label Style Override               | ✅ Complete | Low      | —      |
-| [GUP-227](GUP-227_Multi_Line_Text_Alignment.md)                                    | Multi-Line Text Alignment Options           | 💡 New      | Low      | 3      |
+| [GUP-227](GUP-227_Multi_Line_Text_Alignment.md)                                    | Multi-Line Text Alignment Options           | 🚧 In Progress      | Low      | 3      |
 | [GUP-228](GUP-228_Ellipsis_Last_Wrapped_Line.md)                                   | Ellipsis on Last Wrapped Line               | 💡 New      | Low      | 2      |
 | [GUP-229](GUP-229_Tooltip_Background_Rendering.md)                                 | Tooltip Background Rendering                | ✅ Complete | Low      | 3      |
 | [GUP-230](GUP-230_Chart_Builder_Hover_Reveal_Integration.md)                       | Chart Builder Hover Reveal Integration      | ✅ Complete | Low      | 3      |
