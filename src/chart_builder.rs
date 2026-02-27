@@ -909,6 +909,73 @@ where
             .is_some_and(|b| b.vertex_count > 0)
     }
 
+    /// Prepare cached axis-line and tick pipelines from the current chart
+    /// geometry.
+    ///
+    /// Call this once per frame **before** issuing draw commands via
+    /// [`draw_axis_lines()`](Self::draw_axis_lines) and
+    /// [`draw_ticks()`](Self::draw_ticks). Pipelines are lazily created on
+    /// the first call and reused on subsequent frames; only the vertex /
+    /// instance buffers are re-uploaded.
+    ///
+    /// This is the public entry-point for callers that manage their own
+    /// render pass (e.g. examples). The private
+    /// [`prepare_tick_pipeline()`](Self::prepare_tick_pipeline) is used
+    /// internally by [`render()`](Self::render).
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// chart.prepare_draw_commands(&device, &queue, surface_format);
+    /// let mut render_pass = /* … */;
+    /// chart.draw_axis_lines(&mut render_pass);
+    /// chart.draw_ticks(&mut render_pass);
+    /// ```
+    pub fn prepare_draw_commands(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        surface_format: wgpu::TextureFormat,
+    ) {
+        // Lazily create pipelines
+        if self.tick_pipeline.is_none() {
+            self.tick_pipeline = Some(TickPipeline::new(device, surface_format));
+        }
+        if self.axis_line_pipeline.is_none() {
+            self.axis_line_pipeline = Some(AxisLinePipeline::new(device, surface_format));
+        }
+
+        let geom = self.generate_axis_geometry_instanced();
+
+        // Axis-line vertices
+        if !geom.line_vertices.is_empty() {
+            if let Some(pipeline) = &self.axis_line_pipeline {
+                let vertex_buf = pipeline.upload(device, &geom.line_vertices);
+                self.axis_line_buffers = Some(AxisLineBuffers {
+                    vertex_buf,
+                    vertex_count: geom.line_vertices.len() as u32,
+                });
+            }
+        } else {
+            self.axis_line_buffers = None;
+        }
+
+        // Tick instances
+        if !geom.tick_instances.is_empty() {
+            if let Some(tick_pipeline) = &self.tick_pipeline {
+                let (base_buf, inst_buf) =
+                    tick_pipeline.upload(device, queue, &geom.tick_instances);
+                self.tick_buffers = Some(TickBuffers {
+                    base_buf,
+                    inst_buf,
+                    instance_count: geom.tick_instances.len() as u32,
+                });
+            }
+        } else {
+            self.tick_buffers = None;
+        }
+    }
+
     /// Prepare grid line instance buffers for GPU-instanced rendering.
     ///
     /// Called automatically by [`render()`](Self::render) when grids are

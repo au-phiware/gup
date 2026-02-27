@@ -17,14 +17,12 @@
 
 use gup::{
     GupContext, PhysicalSize, SurfaceId,
-    axis::{AxisConfiguration, AxisPosition, LinearAxis, TickPipeline},
+    axis::{AxisConfiguration, AxisPosition, LinearAxis},
     chart_builder::{ChartConfig, ComposedChart, TitleAlignment, TitleConfig},
     label::{LabelConstraints, LabelPositioner},
-    render::Vertex,
     text::{FontAtlasManager, FontDatabase, TextLayoutEngine, TextRenderer, TextStyle},
 };
 use std::sync::Arc;
-use wgpu::util::DeviceExt;
 use winit::{
     application::ApplicationHandler,
     event::{ElementState, KeyEvent, WindowEvent},
@@ -44,9 +42,6 @@ struct MultiFontChartApp {
 
     // Chart definition
     chart: Option<ComposedChart<DataPoint, gup::Circle>>,
-
-    // GPU-instanced tick pipeline
-    tick_pipeline: Option<TickPipeline>,
 
     // Text rendering components
     text_renderer: Option<TextRenderer>,
@@ -68,7 +63,6 @@ impl MultiFontChartApp {
             surface_id: None,
             window: None,
             chart: None,
-            tick_pipeline: None,
             text_renderer: None,
             font_manager: None,
             layout_engine: None,
@@ -206,7 +200,6 @@ impl MultiFontChartApp {
 
                     // --- Phase 1: Generate axis geometry and queue text ---
                     let chart = self.chart.as_mut().unwrap();
-                    let geom = chart.generate_axis_geometry_instanced();
 
                     // Queue text using the chart builder's multi-font API
                     if let (Some(text_renderer), Some(font_manager), Some(layout_engine)) = (
@@ -245,109 +238,19 @@ impl MultiFontChartApp {
                         }
                     }
 
-                    // --- Phase 2: Render pass (axes + text) ---
-                    let has_lines = !geom.line_vertices.is_empty();
-                    let has_ticks = !geom.tick_instances.is_empty();
+                    // --- Phase 2: Prepare cached pipelines and render ---
+                    chart.prepare_draw_commands(
+                        &device,
+                        &queue,
+                        wgpu::TextureFormat::Bgra8UnormSrgb,
+                    );
 
-                    if has_lines || has_ticks {
-                        // Axis line vertices (LineList vertex-pair path)
-                        let line_vertex_buffer = if has_lines {
-                            Some(
-                                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                    label: Some("Axis Line Vertex Buffer"),
-                                    contents: bytemuck::cast_slice(&geom.line_vertices),
-                                    usage: wgpu::BufferUsages::VERTEX,
-                                }),
-                            )
-                        } else {
-                            None
-                        };
-
-                        // Instanced tick buffers
-                        let tick_pipeline = self.tick_pipeline.get_or_insert_with(|| {
-                            TickPipeline::new(&device, wgpu::TextureFormat::Bgra8UnormSrgb)
-                        });
-                        let tick_bufs = if has_ticks {
-                            Some(tick_pipeline.upload(&device, &queue, &geom.tick_instances))
-                        } else {
-                            None
-                        };
-
-                        // Axis line pipeline (same shader as before)
-                        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                            label: Some("axis_shader"),
-                            source: wgpu::ShaderSource::Wgsl(AXIS_SHADER_SRC.into()),
-                        });
-
-                        let pipeline_layout =
-                            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                                label: Some("axis_pipeline_layout"),
-                                bind_group_layouts: &[],
-                                push_constant_ranges: &[],
-                            });
-
-                        let render_pipeline =
-                            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                                label: Some("axis_line_pipeline"),
-                                layout: Some(&pipeline_layout),
-                                vertex: wgpu::VertexState {
-                                    module: &shader,
-                                    entry_point: Some("vs_main"),
-                                    buffers: &[wgpu::VertexBufferLayout {
-                                        array_stride: std::mem::size_of::<Vertex>()
-                                            as wgpu::BufferAddress,
-                                        step_mode: wgpu::VertexStepMode::Vertex,
-                                        attributes: &[
-                                            wgpu::VertexAttribute {
-                                                offset: 0,
-                                                shader_location: 0,
-                                                format: wgpu::VertexFormat::Float32x2,
-                                            },
-                                            wgpu::VertexAttribute {
-                                                offset: std::mem::size_of::<[f32; 2]>()
-                                                    as wgpu::BufferAddress,
-                                                shader_location: 1,
-                                                format: wgpu::VertexFormat::Float32x4,
-                                            },
-                                        ],
-                                    }],
-                                    compilation_options: Default::default(),
-                                },
-                                fragment: Some(wgpu::FragmentState {
-                                    module: &shader,
-                                    entry_point: Some("fs_main"),
-                                    targets: &[Some(wgpu::ColorTargetState {
-                                        format: wgpu::TextureFormat::Bgra8UnormSrgb,
-                                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                                        write_mask: wgpu::ColorWrites::ALL,
-                                    })],
-                                    compilation_options: Default::default(),
-                                }),
-                                primitive: wgpu::PrimitiveState {
-                                    topology: wgpu::PrimitiveTopology::LineList,
-                                    ..Default::default()
-                                },
-                                depth_stencil: None,
-                                multisample: wgpu::MultisampleState::default(),
-                                multiview: None,
-                                cache: None,
-                            });
-
-                        let line_count = geom.line_vertices.len() as u32;
-                        let tick_count = geom.tick_instances.len() as u32;
+                    {
                         let mut render_pass = frame.render_pass(Some(clear_color));
 
-                        // Draw axis lines (LineList vertex pairs)
-                        if let Some(buf) = &line_vertex_buffer {
-                            render_pass.set_pipeline(&render_pipeline);
-                            render_pass.set_vertex_buffer(0, buf.slice(..));
-                            render_pass.draw(0..line_count, 0..1);
-                        }
-
-                        // Draw tick marks (GPU instanced)
-                        if let Some((base_buf, inst_buf)) = &tick_bufs {
-                            tick_pipeline.draw(&mut render_pass, base_buf, inst_buf, tick_count);
-                        }
+                        // Draw axis lines and tick marks via cached pipelines
+                        chart.draw_axis_lines(&mut render_pass);
+                        chart.draw_ticks(&mut render_pass);
 
                         // Draw text (multi-font)
                         if let (Some(text_renderer), Some(font_manager)) =
@@ -363,21 +266,6 @@ impl MultiFontChartApp {
                         {
                             eprintln!("⚠️ Failed to render text: {e}");
                         }
-                    } else {
-                        // No axis geometry, just render text
-                        let mut render_pass = frame.render_pass(Some(clear_color));
-                        if let (Some(text_renderer), Some(font_manager)) =
-                            (&mut self.text_renderer, &self.font_manager)
-                        {
-                            let _ = text_renderer.render_queued_text_multi(
-                                &mut render_pass,
-                                &device,
-                                &queue,
-                                font_manager,
-                                w,
-                                h,
-                            );
-                        }
                     }
 
                     frame.finish()?;
@@ -390,29 +278,6 @@ impl MultiFontChartApp {
         Ok(())
     }
 }
-
-const AXIS_SHADER_SRC: &str = r#"
-struct VertexOutput {
-    @builtin(position) clip_position: vec4<f32>,
-    @location(0) color: vec4<f32>,
-};
-
-@vertex
-fn vs_main(
-    @location(0) position: vec2<f32>,
-    @location(1) color: vec4<f32>,
-) -> VertexOutput {
-    var out: VertexOutput;
-    out.clip_position = vec4<f32>(position, 0.0, 1.0);
-    out.color = color;
-    return out;
-}
-
-@fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return in.color;
-}
-"#;
 
 impl ApplicationHandler for MultiFontChartApp {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
