@@ -312,6 +312,63 @@ jobs:
             target/criterion/
           retention-days: 30
 
+  # ── WebAssembly axis performance validation (GUP-226) ──
+  wasm_axis_performance:
+    name: WASM Axis Performance Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v24
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Setup Nix development environment
+        run: nix develop --command bash -c "echo 'Nix environment ready'"
+
+      - name: Add wasm32 target
+        run: nix develop --command bash -c "rustup target add wasm32-unknown-unknown"
+
+      - name: Verify WASM library compilation
+        run: nix develop --command bash -c "cargo build --target wasm32-unknown-unknown --lib"
+
+      - name: Build WASM package
+        run: nix develop --command bash -c "wasm-pack build --target web --out-dir benches/wasm/pkg --release"
+
+      - name: Verify axis benchmark export exists
+        run: |
+          grep -q "run_wasm_axis_benchmarks" benches/wasm/pkg/gup.js \
+            && echo "✅ run_wasm_axis_benchmarks exported" \
+            || (echo "❌ Missing axis benchmark export" && exit 1)
+
+      - name: Run native axis benchmarks (WASM module unit tests)
+        run: |
+          nix develop --command bash -c "cargo test -p gup --lib wasm_bench_axis -- --test-threads=1 --nocapture 2>&1 | tee wasm_axis_test_output.txt"
+
+      # wasm-pack test requires matching chromedriver for headless Chrome.
+      # Once CI has chromedriver matching the installed Chromium version,
+      # uncomment the following step to run axis benchmarks in a real browser:
+      #
+      # - name: Run WASM axis benchmarks in headless Chrome
+      #   run: |
+      #     nix develop --command bash -c "wasm-pack test --headless --chrome -- --test wasm_axis_performance"
+
+      - name: Upload WASM axis results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-axis-performance-${{ github.sha }}
+          path: |
+            wasm_axis_test_output.txt
+            benches/wasm/pkg/
+          retention-days: 30
+
   # ── Pattern-specific benchmarks for PRs (fast feedback) ──
   pattern_benchmarks_pr:
     name: Pattern Performance Benchmarks (PR)
