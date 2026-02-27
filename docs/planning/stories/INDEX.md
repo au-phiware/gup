@@ -289,6 +289,8 @@ reorganisation._
 | [GUP-225](GUP-225_Instanced_Grid_Line_Rendering.md)              | Instanced Grid Line Rendering               | 📋 Planned     | Low      | 3      |
 | [GUP-226](GUP-226_WebAssembly_Axis_Performance_Validation.md)    | WebAssembly Axis Performance Validation     | 📋 Planned     | Low      | 3      |
 | [GUP-231](GUP-231_WASM_Build_Platform_Gating.md)                 | WASM Build Platform Gating                  | ✅ Complete    | Medium   | 5      |
+| [GUP-237](GUP-237_WASM_Integration_Test_Suite.md)                | WASM Integration Test Suite                 | 📋 Planned     | Low      | 5      |
+| [GUP-238](GUP-238_Remaining_Send_Sync_Audit.md)                 | Remaining Send+Sync Audit                   | 📋 Planned     | Low      | 2      |
 
 _Note: GUP-092 appears twice — once as the 8-pt story in the Post-GUP-021 table
 (basic label formatting, complete) and once here as the 10-pt expanded axis/grid
