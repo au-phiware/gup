@@ -118,3 +118,77 @@ registry and state machine themselves.
 **Story Created**: 2026-02-27  
 **Story Completed**: 2025-07-15  
 **Origin**: GUP-200 retrospective follow-up
+
+## Retrospective
+
+**Completed**: 2025-07-15
+
+### Key Technical Learnings
+
+#### Mutable Borrow Propagation Through API Boundaries
+
+- **Challenge**: Changing `queue_chart_text()` from `&self` to `&mut self` to
+  allow the clipped text registry to be mutated required updating all callers —
+  including 11 test functions and 1 example.
+- **Solution**: Used scripted line-number-based sed edits to add `mut` to all
+  affected bindings efficiently.
+- **Pattern**: When adding mutable state to a previously-immutable public
+  method, plan for cascading `mut` requirements across the call chain. Factor
+  state that needs mutation into separate methods with narrow `&mut self` scopes
+  where possible.
+
+#### Parallel Return Type Design for Layout Results
+
+- **Challenge**: `queue_text_with_fonts` returns `TextBounds` but hover reveal
+  needs the full `LayoutResult` (which includes `original_text` for clipping
+  detection). Changing the return type would break existing callers.
+- **Solution**: Added a parallel method `queue_text_with_fonts_layout` that
+  returns the full `LayoutResult`. Both methods share the same internal logic.
+- **Pattern**: When extending a public API, prefer adding a new method with a
+  richer return type over modifying the existing signature. Name it with a
+  suffix that describes what extra information it provides.
+
+### Architectural Decisions
+
+#### Hover State Owned by ComposedChart, Not ChartConfig
+
+- **Decision**: `ClippedTextRegistry` and `HoverRevealState` are fields on
+  `ComposedChart`, not on `ChartConfig`.
+- **Reasoning**: `ChartConfig` is a lightweight, cloneable configuration struct.
+  `ClippedTextRegistry` and `HoverRevealState` are mutable runtime state that
+  shouldn't be cloned between frames.
+- **Trade-off**: Users must call `update_hover()` on the `ComposedChart`
+  instance, not on the config. This is consistent with how `render()` works.
+- **Future**: If charts gain an event loop integration, `update_hover()` could
+  be called automatically.
+
+#### Viewport Bounds Per Axis Position
+
+- **Decision**: `label_viewport_bounds()` computes a separate viewport region
+  for each axis position (bottom, left, top, right) based on the chart area.
+- **Reasoning**: Labels on different axes have different available space. Bottom
+  axis labels are constrained to the bottom margin area, left axis labels to the
+  left margin area, etc.
+- **Trade-off**: Simple box-based clipping may not perfectly match the actual
+  label spacing. For very dense labels, the collision resolution system
+  (LabelPositioner) is a better solution.
+- **Future**: Could be enhanced with per-tick-interval viewport bounds for more
+  precise clipping detection.
+
+### Development Workflow Insights
+
+- The existing `hover_reveal_demo.rs` example was a helpful reference for
+  understanding the standalone hover reveal API, making the integration path
+  clear.
+- The `ConfigurableBuilder` trait required adding methods to all 6 builder
+  implementations. The implementations are identical across builders since they
+  all delegate to `self.config`. A macro or blanket implementation could reduce
+  this boilerplate in future.
+- Pre-commit hooks catching pre-existing clippy warnings in the macros crate
+  occasionally caused false-positive commit failures. The `mask all-fix` command
+  resolved these consistently.
+
+### Follow-up Stories
+
+No new follow-up stories identified. The integration is self-contained and
+builds on the stable foundations from GUP-200 and GUP-018.
