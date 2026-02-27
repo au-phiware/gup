@@ -2538,4 +2538,271 @@ mod tests {
             single_bounds.height()
         );
     }
+
+    // === Text Alignment Tests ===
+
+    #[test]
+    fn test_left_alignment_default() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default(); // Left alignment is default
+        let position = Vec2 { x: 10.0, y: 10.0 };
+
+        let lines = vec!["Hello".to_string(), "Hi".to_string()];
+        let glyphs = engine
+            .position_multi_line_glyphs(&lines, position, &style, &atlas, 1.0, None)
+            .unwrap();
+
+        // With Left alignment and TopLeft anchor, both lines should start at the same X
+        let h_glyph = glyphs.iter().find(|g| g.glyph.character == 'H').unwrap();
+        let second_h = glyphs
+            .iter()
+            .filter(|g| g.glyph.character == 'H')
+            .nth(1)
+            .unwrap();
+
+        assert!(
+            (h_glyph.position.x - second_h.position.x).abs() < 0.1,
+            "Left-aligned lines should start at the same X: first={} second={}",
+            h_glyph.position.x,
+            second_h.position.x
+        );
+    }
+
+    #[test]
+    fn test_center_alignment() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default().with_text_alignment(TextAlignment::Center);
+        let position = Vec2 { x: 100.0, y: 10.0 };
+
+        // "Hello" is 5 chars × 9px = 45px, "Hi" is 2 chars × 9px = 18px
+        // Block width = max(45, 18) = 45px
+        // Center offset for "Hi" = (45 - 18) / 2 = 13.5px
+        let lines = vec!["Hello".to_string(), "Hi".to_string()];
+        let glyphs = engine
+            .position_multi_line_glyphs(&lines, position, &style, &atlas, 1.0, None)
+            .unwrap();
+
+        // First char of line 1 ("H" of "Hello")
+        let line1_h = &glyphs[0];
+        // First char of line 2 ("H" of "Hi") — there are 5 glyphs on line 1
+        let line2_h = &glyphs[5];
+
+        // "Hi" should start further right than "Hello" (centered)
+        assert!(
+            line2_h.position.x > line1_h.position.x,
+            "Center-aligned shorter line should start further right: line1={} line2={}",
+            line1_h.position.x,
+            line2_h.position.x
+        );
+
+        // The offset should be roughly (45 - 18) / 2 = 13.5
+        let x_diff = line2_h.position.x - line1_h.position.x;
+        assert!(
+            (x_diff - 13.5).abs() < 1.0,
+            "Center offset should be ~13.5px, got {}",
+            x_diff
+        );
+    }
+
+    #[test]
+    fn test_right_alignment() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default().with_text_alignment(TextAlignment::Right);
+        let position = Vec2 { x: 100.0, y: 10.0 };
+
+        // "Hello" = 45px, "Hi" = 18px, block width = 45px
+        // Right offset for "Hi" = 45 - 18 = 27px
+        let lines = vec!["Hello".to_string(), "Hi".to_string()];
+        let glyphs = engine
+            .position_multi_line_glyphs(&lines, position, &style, &atlas, 1.0, None)
+            .unwrap();
+
+        let line1_h = &glyphs[0];
+        let line2_h = &glyphs[5];
+
+        let x_diff = line2_h.position.x - line1_h.position.x;
+        assert!(
+            (x_diff - 27.0).abs() < 1.0,
+            "Right alignment offset should be ~27px, got {}",
+            x_diff
+        );
+    }
+
+    #[test]
+    fn test_justify_alignment_distributes_space() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default().with_text_alignment(TextAlignment::Justify);
+        let position = Vec2 { x: 10.0, y: 10.0 };
+
+        // "A B C" = 5 chars × 9px = 45px, container = 90px
+        // Extra space = 90 - 45 = 45px, 2 word gaps => 22.5px per gap
+        let lines = vec!["A B C".to_string(), "end".to_string()];
+        let glyphs = engine
+            .position_multi_line_glyphs(&lines, position, &style, &atlas, 1.0, Some(90.0))
+            .unwrap();
+
+        // Find the 'B' glyph (3rd char on line 1: A, space, B)
+        // The space takes 9px advance, plus ~22.5px justify extra = ~31.5px gap
+        let a_glyph = &glyphs[0]; // 'A'
+        // Find 'B' (visible, after space which has size 0)
+        let b_glyph = glyphs.iter().find(|g| g.glyph.character == 'B').unwrap();
+
+        let gap_a_to_b = b_glyph.position.x - a_glyph.position.x;
+        // Without justify: gap would be 2 chars × 9px = 18px (A + space advance)
+        // With justify: gap ≈ 18 + 22.5 = 40.5px
+        assert!(
+            gap_a_to_b > 30.0,
+            "Justify should add extra space between words: A-to-B gap = {}",
+            gap_a_to_b
+        );
+    }
+
+    #[test]
+    fn test_justify_last_line_left_aligned() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default().with_text_alignment(TextAlignment::Justify);
+        let position = Vec2 { x: 10.0, y: 10.0 };
+
+        // Two lines: first should be justified, last should be left-aligned
+        let lines = vec!["A B".to_string(), "X Y".to_string()];
+
+        // Non-justified positioning for comparison
+        let left_style = TextStyle::default(); // Left alignment
+        let left_glyphs = engine
+            .position_multi_line_glyphs(&lines, position, &left_style, &atlas, 1.0, Some(100.0))
+            .unwrap();
+
+        let justify_glyphs = engine
+            .position_multi_line_glyphs(&lines, position, &style, &atlas, 1.0, Some(100.0))
+            .unwrap();
+
+        // Last line "X Y" should have the same spacing in both modes
+        let left_x = left_glyphs
+            .iter()
+            .find(|g| g.glyph.character == 'X')
+            .unwrap();
+        let justify_x = justify_glyphs
+            .iter()
+            .find(|g| g.glyph.character == 'X')
+            .unwrap();
+
+        assert!(
+            (left_x.position.x - justify_x.position.x).abs() < 0.1,
+            "Last line should be left-aligned even with Justify: left={} justify={}",
+            left_x.position.x,
+            justify_x.position.x
+        );
+    }
+
+    #[test]
+    fn test_justify_single_word_line_left_aligned() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default().with_text_alignment(TextAlignment::Justify);
+        let position = Vec2 { x: 10.0, y: 10.0 };
+
+        // Single-word line should not stretch
+        let lines = vec!["Hello".to_string(), "World".to_string()];
+
+        let left_style = TextStyle::default();
+        let left_glyphs = engine
+            .position_multi_line_glyphs(&lines, position, &left_style, &atlas, 1.0, Some(100.0))
+            .unwrap();
+
+        let justify_glyphs = engine
+            .position_multi_line_glyphs(&lines, position, &style, &atlas, 1.0, Some(100.0))
+            .unwrap();
+
+        // Single-word lines should have identical positioning
+        let left_h = &left_glyphs[0];
+        let justify_h = &justify_glyphs[0];
+        assert!(
+            (left_h.position.x - justify_h.position.x).abs() < 0.1,
+            "Single-word lines should not be stretched"
+        );
+    }
+
+    #[test]
+    fn test_alignment_with_container_width() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default().with_text_alignment(TextAlignment::Center);
+        let position = Vec2 { x: 0.0, y: 10.0 };
+
+        let lines = vec!["Hi".to_string()]; // 18px wide
+
+        // Center within a 100px container
+        let glyphs = engine
+            .position_multi_line_glyphs(&lines, position, &style, &atlas, 1.0, Some(100.0))
+            .unwrap();
+
+        // "Hi" should start at (100 - 18) / 2 = 41px from left
+        let first = &glyphs[0];
+        assert!(
+            (first.position.x - 41.0).abs() < 1.0,
+            "Center in 100px container should start at ~41px, got {}",
+            first.position.x
+        );
+    }
+
+    #[test]
+    fn test_alignment_with_center_anchor() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default()
+            .with_anchor(TextAnchor::Center)
+            .with_text_alignment(TextAlignment::Right);
+        let position = Vec2 { x: 100.0, y: 50.0 };
+
+        // "Hello" = 45px, "Hi" = 18px, block width = 45px
+        // Anchor center: block_left = 100 - 45 * 0.5 = 77.5
+        // Right alignment for "Hi": 77.5 + 45 - 18 = 104.5
+        let lines = vec!["Hello".to_string(), "Hi".to_string()];
+        let glyphs = engine
+            .position_multi_line_glyphs(&lines, position, &style, &atlas, 1.0, None)
+            .unwrap();
+
+        let line2_h = &glyphs[5]; // First glyph of "Hi"
+        assert!(
+            (line2_h.position.x - 104.5).abs() < 1.0,
+            "Right alignment with center anchor: expected ~104.5, got {}",
+            line2_h.position.x
+        );
+    }
+
+    #[test]
+    fn test_alignment_equal_length_lines() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let position = Vec2 { x: 10.0, y: 10.0 };
+
+        // Lines of equal length should be positioned identically in all modes
+        let lines = vec!["ABCD".to_string(), "EFGH".to_string()];
+
+        for alignment in [
+            TextAlignment::Left,
+            TextAlignment::Center,
+            TextAlignment::Right,
+        ] {
+            let style = TextStyle::default().with_text_alignment(alignment);
+            let glyphs = engine
+                .position_multi_line_glyphs(&lines, position, &style, &atlas, 1.0, None)
+                .unwrap();
+
+            let first_a = &glyphs[0]; // 'A'
+            let first_e = &glyphs[4]; // 'E'
+            assert!(
+                (first_a.position.x - first_e.position.x).abs() < 0.1,
+                "Equal-length lines should align identically for {:?}: A.x={} E.x={}",
+                alignment,
+                first_a.position.x,
+                first_e.position.x
+            );
+        }
+    }
 }
