@@ -181,11 +181,118 @@ where
     }
 }
 
+/// Horizontal alignment for chart title text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TitleAlignment {
+    /// Align the title to the left edge of the chart.
+    Left,
+    /// Center the title horizontally (default).
+    #[default]
+    Center,
+    /// Align the title to the right edge of the chart.
+    Right,
+}
+
+/// Configuration for chart title and optional subtitle.
+///
+/// Provides fine-grained control over title text, subtitle text,
+/// alignment, and vertical positioning. When omitted from a
+/// [`ChartConfig`], no title is rendered (backward compatible with
+/// the pre-`TitleConfig` behaviour of `title: None`).
+///
+/// # Examples
+///
+/// ```rust
+/// use gup::chart_builder::{TitleConfig, TitleAlignment};
+/// use gup::text::TextStyle;
+///
+/// let title = TitleConfig::new("Revenue by Quarter")
+///     .with_alignment(TitleAlignment::Left)
+///     .with_subtitle("FY 2024")
+///     .with_subtitle_style(TextStyle::new(14.0).with_rgba(0.5, 0.5, 0.5, 1.0));
+/// ```
+#[derive(Debug, Clone)]
+pub struct TitleConfig {
+    /// Primary title text.
+    pub text: String,
+
+    /// Horizontal alignment within the chart area.
+    pub alignment: TitleAlignment,
+
+    /// Vertical offset from the top edge of the chart (in pixels).
+    ///
+    /// When `None`, the title is positioned at `margins.top / 2.0`
+    /// (the vertical centre of the top margin).
+    pub y_offset: Option<f32>,
+
+    /// Optional subtitle, rendered below the main title.
+    pub subtitle: Option<String>,
+
+    /// Text style for the subtitle.
+    ///
+    /// Defaults to a smaller, lighter variant when not explicitly set.
+    pub subtitle_style: TextStyle,
+
+    /// Line spacing multiplier between lines in a multi-line title.
+    ///
+    /// Applied to both the title and the gap between title and
+    /// subtitle. Defaults to 1.2.
+    pub line_spacing: f32,
+}
+
+impl TitleConfig {
+    /// Create a new title configuration with the given text.
+    pub fn new(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            alignment: TitleAlignment::default(),
+            y_offset: None,
+            subtitle: None,
+            subtitle_style: TextStyle::new(14.0).with_rgba(0.4, 0.4, 0.4, 1.0),
+            line_spacing: 1.2,
+        }
+    }
+
+    /// Set horizontal alignment.
+    pub fn with_alignment(mut self, alignment: TitleAlignment) -> Self {
+        self.alignment = alignment;
+        self
+    }
+
+    /// Set the vertical offset from the top edge (in pixels).
+    pub fn with_y_offset(mut self, offset: f32) -> Self {
+        self.y_offset = Some(offset);
+        self
+    }
+
+    /// Set subtitle text.
+    pub fn with_subtitle(mut self, subtitle: impl Into<String>) -> Self {
+        self.subtitle = Some(subtitle.into());
+        self
+    }
+
+    /// Set the text style for the subtitle.
+    pub fn with_subtitle_style(mut self, style: TextStyle) -> Self {
+        self.subtitle_style = style;
+        self
+    }
+
+    /// Set the line spacing multiplier for multi-line titles.
+    pub fn with_line_spacing(mut self, spacing: f32) -> Self {
+        self.line_spacing = spacing.max(0.1);
+        self
+    }
+}
+
 /// Chart configuration that applies to all chart types.
 #[derive(Debug, Clone)]
 pub struct ChartConfig {
-    /// Chart title (optional)
-    pub title: Option<String>,
+    /// Chart title configuration (optional).
+    ///
+    /// Use [`ChartConfig::with_title`] for simple titles or
+    /// [`ChartConfig::with_title_config`] for full layout control
+    /// (alignment, subtitle, y-offset).
+    pub title_config: Option<TitleConfig>,
 
     /// Chart width in pixels
     pub width: f32,
@@ -235,7 +342,7 @@ pub struct Margins {
 impl Default for ChartConfig {
     fn default() -> Self {
         Self {
-            title: None,
+            title_config: None,
             width: 800.0,
             height: 600.0,
             margins: Margins::default(),
@@ -289,10 +396,40 @@ impl ChartConfig {
         self
     }
 
-    /// Set the chart title.
+    /// Set the chart title (simple, centred by default).
+    ///
+    /// This is a convenience method that creates a [`TitleConfig`] with
+    /// centre alignment and default settings. For full control over
+    /// alignment, subtitle, and offset use [`with_title_config`](Self::with_title_config).
     pub fn with_title(mut self, title: impl Into<String>) -> Self {
-        self.title = Some(title.into());
+        self.title_config = Some(TitleConfig::new(title));
         self
+    }
+
+    /// Set full title configuration (alignment, subtitle, y-offset).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use gup::chart_builder::{ChartConfig, TitleConfig, TitleAlignment};
+    ///
+    /// let config = ChartConfig::default()
+    ///     .with_title_config(
+    ///         TitleConfig::new("Sales Report")
+    ///             .with_alignment(TitleAlignment::Left)
+    ///             .with_subtitle("Q4 2024"),
+    ///     );
+    /// ```
+    pub fn with_title_config(mut self, config: TitleConfig) -> Self {
+        self.title_config = Some(config);
+        self
+    }
+
+    /// Return the title text, if configured.
+    ///
+    /// Convenience accessor that reads through [`TitleConfig`].
+    pub fn title(&self) -> Option<&str> {
+        self.title_config.as_ref().map(|c| c.text.as_str())
     }
 }
 
@@ -940,6 +1077,9 @@ where
     }
 
     /// Queue the chart title text (if configured).
+    ///
+    /// Renders the primary title and an optional subtitle, respecting the
+    /// alignment, y-offset, and line spacing specified in [`TitleConfig`].
     fn queue_title_text(
         &self,
         frame: &crate::RenderFrame,
@@ -947,30 +1087,57 @@ where
         font_manager: &mut crate::text::FontAtlasManager,
         layout_engine: &mut crate::text::TextLayoutEngine,
     ) -> GupResult<()> {
-        if let Some(title) = &self.config.title {
-            let title_style = self
-                .config
-                .title_style
-                .clone()
-                .with_anchor(crate::text::TextAnchor::TopCenter);
+        let title_cfg = match &self.config.title_config {
+            Some(cfg) => cfg,
+            None => return Ok(()),
+        };
 
-            // Position the title centered at the top of the chart
-            let title_position = Vec2 {
-                x: self.config.width / 2.0,
-                y: self.config.margins.top / 2.0,
-            };
+        // Determine anchor and x position from alignment
+        let (anchor, x) = match title_cfg.alignment {
+            TitleAlignment::Left => (crate::text::TextAnchor::TopLeft, self.config.margins.left),
+            TitleAlignment::Center => (crate::text::TextAnchor::TopCenter, self.config.width / 2.0),
+            TitleAlignment::Right => (
+                crate::text::TextAnchor::TopRight,
+                self.config.width - self.config.margins.right,
+            ),
+        };
+
+        let y = title_cfg.y_offset.unwrap_or(self.config.margins.top / 2.0);
+
+        let title_style = self.config.title_style.clone().with_anchor(anchor);
+
+        // Queue the main title
+        let title_position = Vec2 { x, y };
+        text_renderer.queue_text_with_fonts(
+            frame,
+            &title_cfg.text,
+            title_position,
+            &title_style,
+            font_manager,
+            layout_engine,
+            None,
+            None,
+        )?;
+
+        // Queue subtitle (if present), positioned below the main title
+        if let Some(subtitle) = &title_cfg.subtitle {
+            let subtitle_y = y + self.config.title_style.font_size * title_cfg.line_spacing;
+
+            let subtitle_style = title_cfg.subtitle_style.clone().with_anchor(anchor);
+            let subtitle_position = Vec2 { x, y: subtitle_y };
 
             text_renderer.queue_text_with_fonts(
                 frame,
-                title,
-                title_position,
-                &title_style,
+                subtitle,
+                subtitle_position,
+                &subtitle_style,
                 font_manager,
                 layout_engine,
                 None,
                 None,
             )?;
         }
+
         Ok(())
     }
 }
@@ -1223,7 +1390,7 @@ mod tests {
         assert_eq!(config.height, 600.0);
         assert!(config.show_axes);
         assert!(!config.show_grid);
-        assert!(config.title.is_none());
+        assert!(config.title_config.is_none());
         assert!(config.background_color.is_none());
     }
 
@@ -1539,13 +1706,13 @@ mod tests_multi_font {
     #[test]
     fn test_chart_config_with_title() {
         let config = ChartConfig::default().with_title("My Chart");
-        assert_eq!(config.title, Some("My Chart".to_string()));
+        assert_eq!(config.title(), Some("My Chart"));
     }
 
     #[test]
     fn test_chart_config_title_accepts_string() {
         let config = ChartConfig::default().with_title(String::from("Dynamic Title"));
-        assert_eq!(config.title, Some("Dynamic Title".to_string()));
+        assert_eq!(config.title(), Some("Dynamic Title"));
     }
 
     // --- GPU-dependent tests (require single-threaded test runner) ---

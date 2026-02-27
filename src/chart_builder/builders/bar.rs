@@ -126,7 +126,7 @@ impl<T> Default for BarChartBuilder<T> {
 
 impl<T> ConfigurableBuilder for BarChartBuilder<T> {
     fn title(mut self, title: impl Into<String>) -> Self {
-        self.config.title = Some(title.into());
+        self.config.title_config = Some(crate::chart_builder::TitleConfig::new(title));
         self
     }
 

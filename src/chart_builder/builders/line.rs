@@ -212,7 +212,7 @@ impl<T> Default for LineChartBuilder<T> {
 // Implement configurable builder methods
 impl<T> ConfigurableBuilder for LineChartBuilder<T> {
     fn title(mut self, title: impl Into<String>) -> Self {
-        self.config.title = Some(title.into());
+        self.config.title_config = Some(crate::chart_builder::TitleConfig::new(title));
         self
     }
 

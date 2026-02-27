@@ -171,7 +171,7 @@ impl<T> Default for ScatterPlotBuilder<T> {
 // Implement configurable builder methods
 impl<T> ConfigurableBuilder for ScatterPlotBuilder<T> {
     fn title(mut self, title: impl Into<String>) -> Self {
-        self.config.title = Some(title.into());
+        self.config.title_config = Some(crate::chart_builder::TitleConfig::new(title));
         self
     }
 
@@ -391,7 +391,7 @@ mod tests {
             .show_axes(true)
             .show_grid(false);
 
-        assert_eq!(builder.config.title, Some("My Scatter Plot".to_string()));
+        assert_eq!(builder.config.title(), Some("My Scatter Plot"));
         assert_eq!(builder.config.width, 1000.0);
         assert_eq!(builder.config.height, 800.0);
         assert_eq!(builder.config.background_color, Some([0.9, 0.9, 0.9, 1.0]));

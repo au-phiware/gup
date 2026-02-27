@@ -76,7 +76,7 @@ impl<T> Default for AreaChartBuilder<T> {
 
 impl<T> ConfigurableBuilder for AreaChartBuilder<T> {
     fn title(mut self, title: impl Into<String>) -> Self {
-        self.config.title = Some(title.into());
+        self.config.title_config = Some(crate::chart_builder::TitleConfig::new(title));
         self
     }
 

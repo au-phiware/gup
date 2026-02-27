@@ -224,7 +224,8 @@ pub use mark_selection::{
 // Re-export selectively to avoid conflicts with label::Margins
 pub use chart_builder::{
     AreaChartBuilder, AxisLabelConfig, BarChartBuilder, ChartBuilder, ChartConfig, ComposedChart,
-    HeatmapBuilder, LabelCapableBuilder, LabeledChart, LineChartBuilder, ScatterPlotBuilder, plot,
+    HeatmapBuilder, LabelCapableBuilder, LabeledChart, LineChartBuilder, ScatterPlotBuilder,
+    TitleAlignment, TitleConfig, plot,
 };
 
 // Note: Procedural macros from gup_macros must be imported directly due to Rust limitations
