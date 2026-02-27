@@ -68,30 +68,30 @@ epic and status.
 
 ### Post GUP-068/011 Follow-up Stories - Advanced Mark System (Stories 69-75)
 
-| Story                                                          | Title                                          | Status      | Priority | Points |
-| -------------------------------------------------------------- | ---------------------------------------------- | ----------- | -------- | ------ |
-| [GUP-069](GUP-069_Advanced_Mark_Rendering_Features.md)         | Advanced Mark Rendering Features               | ✅ Complete | Medium   | —      |
-| [GUP-070](GUP-070_Mark_Performance_Optimization.md)            | Mark Performance Optimization                  | ✅ Complete | Medium   | —      |
-| [GUP-071](GUP-071_Custom_Mark_Development_Kit.md)              | Custom Mark Development Kit                    | ✅ Complete | Low      | —      |
-| [GUP-072](GUP-072_Mark_System_Documentation.md)                | Mark System Documentation                      | ✅ Complete | Low      | —      |
-| [GUP-073](GUP-073_Advanced_Shader_Composition.md)              | Advanced Shader Composition                    | ✅ Complete | Medium   | —      |
-| [GUP-074](GUP-074_Mark_Performance_Optimization.md)            | Mark Performance Optimization (GPU Instancing) | ✅ Complete | High     | 5      |
-| [GUP-075](GUP-075_Interactive_Mark_Selection.md)               | Interactive Mark Selection                     | ✅ Complete | Medium   | 6      |
-| [GUP-076](GUP-076_GPU_Occlusion_Culling.md)                    | GPU Occlusion Culling for Dense Datasets       | ✅ Complete | Low      | —      |
-| [GUP-077](GUP-077_Compute_Shader_Instance_Filtering.md)        | Compute Shader Instance Sorting and Filtering  | ✅ Complete | Medium   | —      |
-| [GUP-185](GUP-185_Multi_Pass_Mark_Examples.md)                 | Multi-Pass Mark Examples                       | ✅ Complete | Low      | —      |
-| [GUP-186](GUP-186_Dynamic_Attribute_GPU_Upload_Pipeline.md)    | Dynamic Attribute GPU Upload Pipeline          | ✅ Complete | Medium   | —      |
-| [GUP-187](GUP-187_Flaky_Label_Performance_Test_Fix.md)         | Flaky Label Performance Test Fix               | ✅ Complete | Low      | —      |
-| [GUP-188](GUP-188_Automatic_Draw_Call_Metrics.md)              | Automatic Draw Call Metrics in MarkRenderer    | ✅ Complete | Low      | —      |
-| [GUP-189](GUP-189_AST_Integration_ComposableShaderPipeline.md) | AST Integration with ComposableShaderPipeline  | ✅ Complete | Medium   | 5      |
-| [GUP-190](GUP-190_WGSL_Compute_Shader_AST_Support.md)          | WGSL Compute Shader AST Support                | ✅ Complete | Low      | 5      |
-| [GUP-191](GUP-191_Enable_AST_Optimization_Default.md)          | Enable AST Optimization by Default             | ✅ Complete | Low      | 3      |
-| [GUP-192](GUP-192_Dynamic_Attribute_Readback_Pipeline.md)      | Dynamic Attribute Readback Pipeline            | ✅ Complete | Low      | —      |
-| [GUP-208](GUP-208_Mark_Derive_Instance_Buffer_Generation.md)   | Mark Derive Instance Buffer Generation         | ✅ Complete | Low      | —      |
-| [GUP-209](GUP-209_Mark_Validation_CI_Integration.md)           | Mark Validation CI Integration                 | ✅ Complete | Low      | —      |
-| [GUP-222](GUP-222_Unified_Frustum_Occlusion_Pipeline.md)       | Unified Frustum + Occlusion Culling Pipeline   | 💡 New      | Medium   | —      |
-| [GUP-223](GUP-223_Coarse_HiZ_Early_Reject.md)                  | Coarse Hi-Z Early Reject for Large Marks       | 💡 New      | Low      | —      |
-| [GUP-232](GUP-232_Fix_Mark_Renderer_Metric_Tests.md)           | Fix Mark Renderer Metric Test Failures         | 🚧 In Progress | Medium   | —      |
+| Story                                                          | Title                                          | Status         | Priority | Points |
+| -------------------------------------------------------------- | ---------------------------------------------- | -------------- | -------- | ------ |
+| [GUP-069](GUP-069_Advanced_Mark_Rendering_Features.md)         | Advanced Mark Rendering Features               | ✅ Complete    | Medium   | —      |
+| [GUP-070](GUP-070_Mark_Performance_Optimization.md)            | Mark Performance Optimization                  | ✅ Complete    | Medium   | —      |
+| [GUP-071](GUP-071_Custom_Mark_Development_Kit.md)              | Custom Mark Development Kit                    | ✅ Complete    | Low      | —      |
+| [GUP-072](GUP-072_Mark_System_Documentation.md)                | Mark System Documentation                      | ✅ Complete    | Low      | —      |
+| [GUP-073](GUP-073_Advanced_Shader_Composition.md)              | Advanced Shader Composition                    | ✅ Complete    | Medium   | —      |
+| [GUP-074](GUP-074_Mark_Performance_Optimization.md)            | Mark Performance Optimization (GPU Instancing) | ✅ Complete    | High     | 5      |
+| [GUP-075](GUP-075_Interactive_Mark_Selection.md)               | Interactive Mark Selection                     | ✅ Complete    | Medium   | 6      |
+| [GUP-076](GUP-076_GPU_Occlusion_Culling.md)                    | GPU Occlusion Culling for Dense Datasets       | ✅ Complete    | Low      | —      |
+| [GUP-077](GUP-077_Compute_Shader_Instance_Filtering.md)        | Compute Shader Instance Sorting and Filtering  | ✅ Complete    | Medium   | —      |
+| [GUP-185](GUP-185_Multi_Pass_Mark_Examples.md)                 | Multi-Pass Mark Examples                       | ✅ Complete    | Low      | —      |
+| [GUP-186](GUP-186_Dynamic_Attribute_GPU_Upload_Pipeline.md)    | Dynamic Attribute GPU Upload Pipeline          | ✅ Complete    | Medium   | —      |
+| [GUP-187](GUP-187_Flaky_Label_Performance_Test_Fix.md)         | Flaky Label Performance Test Fix               | ✅ Complete    | Low      | —      |
+| [GUP-188](GUP-188_Automatic_Draw_Call_Metrics.md)              | Automatic Draw Call Metrics in MarkRenderer    | ✅ Complete    | Low      | —      |
+| [GUP-189](GUP-189_AST_Integration_ComposableShaderPipeline.md) | AST Integration with ComposableShaderPipeline  | ✅ Complete    | Medium   | 5      |
+| [GUP-190](GUP-190_WGSL_Compute_Shader_AST_Support.md)          | WGSL Compute Shader AST Support                | ✅ Complete    | Low      | 5      |
+| [GUP-191](GUP-191_Enable_AST_Optimization_Default.md)          | Enable AST Optimization by Default             | ✅ Complete    | Low      | 3      |
+| [GUP-192](GUP-192_Dynamic_Attribute_Readback_Pipeline.md)      | Dynamic Attribute Readback Pipeline            | ✅ Complete    | Low      | —      |
+| [GUP-208](GUP-208_Mark_Derive_Instance_Buffer_Generation.md)   | Mark Derive Instance Buffer Generation         | ✅ Complete    | Low      | —      |
+| [GUP-209](GUP-209_Mark_Validation_CI_Integration.md)           | Mark Validation CI Integration                 | ✅ Complete    | Low      | —      |
+| [GUP-222](GUP-222_Unified_Frustum_Occlusion_Pipeline.md)       | Unified Frustum + Occlusion Culling Pipeline   | 💡 New         | Medium   | —      |
+| [GUP-223](GUP-223_Coarse_HiZ_Early_Reject.md)                  | Coarse Hi-Z Early Reject for Large Marks       | 💡 New         | Low      | —      |
+| [GUP-232](GUP-232_Fix_Mark_Renderer_Metric_Tests.md)           | Fix Mark Renderer Metric Test Failures         | ✅ Complete  | Medium   | —      |
 
 ### Post GUP-005 Stories - Shader Function System Enhancement (Stories 51+)
 
@@ -188,31 +188,31 @@ reorganisation._
 
 ### Post GUP-014 Stories - Interaction Performance (Stories 76-79)
 
-| Story                                                      | Title                                 | Status         | Priority | Points |
-| ---------------------------------------------------------- | ------------------------------------- | -------------- | -------- | ------ |
-| [GUP-076](GUP-076_Spatial_Index_Bind_Group_Layout_Fix.md)  | Spatial Index Bind Group Layout Fix   | ✅ Complete    | High     | —      |
-| [GUP-077](GUP-077_Performance_Benchmarking_Suite.md)       | Performance Benchmarking Suite        | ✅ Complete    | Medium   | —      |
-| [GUP-078](GUP-078_Spatial_Index_Algorithm_Optimization.md) | Spatial Index Algorithm Optimization  | ✅ Complete    | Medium   | —      |
-| [GUP-079](GUP-079_GPU_Memory_Pool_Optimization.md)         | GPU Memory Pool Optimization          | ✅ Complete    | Low      | —      |
-| [GUP-172](GUP-172_WebAssembly_Performance_Benchmarks.md)   | WebAssembly Performance Benchmarks    | ✅ Complete    | Low      | —      |
-| [GUP-173](GUP-173_CI_Performance_Alert_System.md)          | CI Performance Alert System           | ✅ Complete    | Low      | —      |
-| [GUP-174](GUP-174_Flaky_Performance_Test_Stabilization.md) | Flaky Performance Test Stabilization  | ✅ Complete    | Low      | —      |
-| [GUP-175](GUP-175_GPU_Side_Morton_Range_Query.md)          | GPU-Side Morton Range Query           | ✅ Complete    | Medium   | —      |
-| [GUP-176](GUP-176_Spatial_Index_Adaptive_Grid_Size.md)     | Spatial Index Adaptive Grid Size      | ✅ Complete    | Low      | —      |
-| [GUP-181](GUP-181_GPU_Selection_Hit_Testing.md)            | GPU-Accelerated Selection Hit Testing | ✅ Complete    | Medium   | 5      |
-| [GUP-182](GUP-182_Touch_Selection_Support.md)              | Touch Selection Support               | ✅ Complete    | Low      | 3      |
-| [GUP-183](GUP-183_Pooled_GPU_Instance_Filter_Buffers.md)   | Pooled GPU Instance Filter Buffers    | ✅ Complete    | Medium   | —      |
-| [GUP-184](GUP-184_GPU_Radix_Sort_Z_Order.md)               | GPU Radix Sort for Z-Order            | ✅ Complete    | Low      | —      |
-| [GUP-193](GUP-193_GPU_Resident_Candidate_Pipeline.md)      | GPU-Resident Candidate Pipeline       | ✅ Complete    | Medium   | —      |
-| [GUP-194](GUP-194_GPU_Resident_Selection_Data_Cache.md)    | GPU-Resident Selection Data Cache     | ✅ Complete    | Medium   | 5      |
-| [GUP-195](GUP-195_Bind_Group_Caching_Pooled_Filter.md)     | Bind Group Caching for Pooled Filter  | ✅ Complete    | Low      | —      |
-| [GUP-196](GUP-196_Hit_Test_Result_Buffer_Query_Count.md)   | Hit Test Result Buffer Query Count    | ✅ Complete    | Medium   | 2      |
-| [GUP-197](GUP-197_Result_Buffer_Readback_Optimization.md)  | Result Buffer Readback Optimization   | ✅ Complete    | Low      | 5      |
-| [GUP-198](GUP-198_Non_Blocking_Query_API.md)               | Non-Blocking Query API                | ✅ Complete    | Low      | 8      |
-| [GUP-233](GUP-233_Winit_Touch_Event_Integration.md)        | Winit Touch Event Integration         | 📋 Planned     | Low      | 2      |
-| [GUP-234](GUP-234_Touch_Lasso_Selection.md)                | Touch Lasso Selection                 | 📋 Planned     | Low      | 3      |
-| [GUP-235](GUP-235_Radix_Sort_Scatter_Optimization.md)      | Radix Sort Scatter Optimization       | 📋 Planned     | Low      | —      |
-| [GUP-236](GUP-236_Sort_Aware_Visual_Demo.md)               | Sort-Aware Visual Demo                | 📋 Planned     | Low      | —      |
+| Story                                                      | Title                                 | Status      | Priority | Points |
+| ---------------------------------------------------------- | ------------------------------------- | ----------- | -------- | ------ |
+| [GUP-076](GUP-076_Spatial_Index_Bind_Group_Layout_Fix.md)  | Spatial Index Bind Group Layout Fix   | ✅ Complete | High     | —      |
+| [GUP-077](GUP-077_Performance_Benchmarking_Suite.md)       | Performance Benchmarking Suite        | ✅ Complete | Medium   | —      |
+| [GUP-078](GUP-078_Spatial_Index_Algorithm_Optimization.md) | Spatial Index Algorithm Optimization  | ✅ Complete | Medium   | —      |
+| [GUP-079](GUP-079_GPU_Memory_Pool_Optimization.md)         | GPU Memory Pool Optimization          | ✅ Complete | Low      | —      |
+| [GUP-172](GUP-172_WebAssembly_Performance_Benchmarks.md)   | WebAssembly Performance Benchmarks    | ✅ Complete | Low      | —      |
+| [GUP-173](GUP-173_CI_Performance_Alert_System.md)          | CI Performance Alert System           | ✅ Complete | Low      | —      |
+| [GUP-174](GUP-174_Flaky_Performance_Test_Stabilization.md) | Flaky Performance Test Stabilization  | ✅ Complete | Low      | —      |
+| [GUP-175](GUP-175_GPU_Side_Morton_Range_Query.md)          | GPU-Side Morton Range Query           | ✅ Complete | Medium   | —      |
+| [GUP-176](GUP-176_Spatial_Index_Adaptive_Grid_Size.md)     | Spatial Index Adaptive Grid Size      | ✅ Complete | Low      | —      |
+| [GUP-181](GUP-181_GPU_Selection_Hit_Testing.md)            | GPU-Accelerated Selection Hit Testing | ✅ Complete | Medium   | 5      |
+| [GUP-182](GUP-182_Touch_Selection_Support.md)              | Touch Selection Support               | ✅ Complete | Low      | 3      |
+| [GUP-183](GUP-183_Pooled_GPU_Instance_Filter_Buffers.md)   | Pooled GPU Instance Filter Buffers    | ✅ Complete | Medium   | —      |
+| [GUP-184](GUP-184_GPU_Radix_Sort_Z_Order.md)               | GPU Radix Sort for Z-Order            | ✅ Complete | Low      | —      |
+| [GUP-193](GUP-193_GPU_Resident_Candidate_Pipeline.md)      | GPU-Resident Candidate Pipeline       | ✅ Complete | Medium   | —      |
+| [GUP-194](GUP-194_GPU_Resident_Selection_Data_Cache.md)    | GPU-Resident Selection Data Cache     | ✅ Complete | Medium   | 5      |
+| [GUP-195](GUP-195_Bind_Group_Caching_Pooled_Filter.md)     | Bind Group Caching for Pooled Filter  | ✅ Complete | Low      | —      |
+| [GUP-196](GUP-196_Hit_Test_Result_Buffer_Query_Count.md)   | Hit Test Result Buffer Query Count    | ✅ Complete | Medium   | 2      |
+| [GUP-197](GUP-197_Result_Buffer_Readback_Optimization.md)  | Result Buffer Readback Optimization   | ✅ Complete | Low      | 5      |
+| [GUP-198](GUP-198_Non_Blocking_Query_API.md)               | Non-Blocking Query API                | ✅ Complete | Low      | 8      |
+| [GUP-233](GUP-233_Winit_Touch_Event_Integration.md)        | Winit Touch Event Integration         | 📋 Planned  | Low      | 2      |
+| [GUP-234](GUP-234_Touch_Lasso_Selection.md)                | Touch Lasso Selection                 | 📋 Planned  | Low      | 3      |
+| [GUP-235](GUP-235_Radix_Sort_Scatter_Optimization.md)      | Radix Sort Scatter Optimization       | 📋 Planned  | Low      | —      |
+| [GUP-236](GUP-236_Sort_Aware_Visual_Demo.md)               | Sort-Aware Visual Demo                | 📋 Planned  | Low      | —      |
 
 ### Post GUP-015 Stories - Advanced Debug Infrastructure (Stories 80+)
 
