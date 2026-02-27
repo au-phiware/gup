@@ -3,7 +3,7 @@
 ## Story Overview
 
 **Epic**: Phase 2 - High-Level Convenience APIs **Theme**: Automatic Scale and
-Axis System **Priority**: Low **Story Points**: 2 **Status**: 📋 Planned
+Axis System **Priority**: Low **Story Points**: 2 **Status**: 🚧 In Progress
 
 ## Overview
 
