@@ -212,7 +212,7 @@ reorganisation._
 | [GUP-198](GUP-198_Non_Blocking_Query_API.md)               | Non-Blocking Query API                | ✅ Complete | Low      | 8      |
 | [GUP-233](GUP-233_Winit_Touch_Event_Integration.md)        | Winit Touch Event Integration         | ✅ Complete | Low      | 2      |
 | [GUP-234](GUP-234_Touch_Lasso_Selection.md)                | Touch Lasso Selection                 | ✅ Complete | Low      | 3      |
-| [GUP-235](GUP-235_Radix_Sort_Scatter_Optimization.md)      | Radix Sort Scatter Optimization       | 📋 Planned  | Low      | —      |
+| [GUP-235](GUP-235_Radix_Sort_Scatter_Optimization.md)      | Radix Sort Scatter Optimization       | 🚧 Active   | Low      | —      |
 | [GUP-236](GUP-236_Sort_Aware_Visual_Demo.md)               | Sort-Aware Visual Demo                | 📋 Planned  | Low      | —      |
 
 ### Post GUP-015 Stories - Advanced Debug Infrastructure (Stories 80+)

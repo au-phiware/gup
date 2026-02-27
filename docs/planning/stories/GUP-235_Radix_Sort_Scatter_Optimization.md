@@ -1,7 +1,7 @@
 # GUP-235: Radix Sort Scatter Optimization
 
-**Story ID**: GUP-235 **Title**: Radix Sort Scatter Optimization **Status**: 📋
-Planned **Priority**: Low **Effort**: — **Created**: 2025-07-20
+**Story ID**: GUP-235 **Title**: Radix Sort Scatter Optimization **Status**: 🚧
+In Progress **Priority**: Low **Effort**: — **Created**: 2025-07-20
 **Dependencies**: GUP-184 (GPU Radix Sort for Z-Order)
 
 ## Overview
