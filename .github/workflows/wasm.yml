@@ -36,7 +36,7 @@ jobs:
         run: nix develop --command bash -c "cargo build --target wasm32-unknown-unknown --lib"
 
       - name: Build WASM package with wasm-pack
-        run: nix develop --command bash -c "wasm-pack build --target web"
+        run: nix develop --command bash -c "wasm-pack build --target web -- --features wasm-start"
 
       - name: Verify package output
         run: |

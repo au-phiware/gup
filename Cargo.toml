@@ -245,3 +245,7 @@ path = "src/bin/wasm_bench_native.rs"
 [features]
 default = []
 web-dashboard = ["tiny_http"]
+## Include `#[wasm_bindgen(start)]` entry point.
+## Disable when running `wasm-pack test` (the test harness provides its own
+## entry point and the duplicate `main` symbol causes a wasm-ld conflict).
+wasm-start = []
