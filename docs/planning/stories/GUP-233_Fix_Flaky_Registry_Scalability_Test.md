@@ -1,7 +1,7 @@
 # GUP-233: Fix Flaky Registry Scalability Performance Test
 
-**Priority**: Low **Complexity**: Low **Created**: 2025-07-18 **Status**: 🚧
-In Progress
+**Priority**: Low **Complexity**: Low **Created**: 2025-07-18 **Status**: ✅
+Complete (2025-07-20)
 
 ## Overview
 
@@ -25,16 +25,16 @@ regressions from environment noise so that test results are trustworthy.
 
 ## Acceptance Criteria
 
-- [ ] `test_registry_scalability` passes reliably across multiple runs
-- [ ] Performance intent is still validated (cached pipeline retrieval is fast)
-- [ ] No other test regressions
+- [x] `test_registry_scalability` passes reliably across multiple runs
+- [x] Performance intent is still validated (cached pipeline retrieval is fast)
+- [x] No other test regressions
 
 ## Technical Tasks
 
-- [ ] Increase the pipeline retrieval threshold from 5ms to a more reasonable
+- [x] Increase the pipeline retrieval threshold from 5ms to a more reasonable
       value (e.g. 20ms) or switch to per-retrieval timing
-- [ ] Consider adding a warm-up loop before measurement to reduce first-run bias
-- [ ] Run the test 5+ times to confirm reliability
+- [x] Consider adding a warm-up loop before measurement to reduce first-run bias
+- [x] Run the test 5+ times to confirm reliability
 
 ## Dependencies
 
@@ -55,5 +55,28 @@ regressions from environment noise so that test results are trustworthy.
 
 ## Definition of Done
 
-- [ ] Test passes reliably
-- [ ] Full test suite has no new failures
+- [x] Test passes reliably
+- [x] Full test suite has no new failures
+
+## Implementation Summary
+
+### What Was Implemented
+
+- Added a warm-up call to `get_pipeline` before the timed measurement loop, so
+  the first-run pipeline creation cost is excluded from the cached retrieval
+  benchmark
+- Increased the pipeline retrieval threshold from 5ms to 20ms to accommodate
+  environment variability while still catching real regressions
+- Updated print message to clarify "cached" pipeline retrievals
+
+### Key Files Changed
+
+- `tests/mark_pipeline_performance_tests.rs` — Modified
+  `test_registry_scalability` test
+
+### Test Results
+
+- 10 consecutive passes confirmed (5 + 5 runs)
+- Cached pipeline retrieval consistently takes ~30µs (well under 20ms threshold)
+- 1843 library unit tests pass with no regressions
+- All examples compile successfully
