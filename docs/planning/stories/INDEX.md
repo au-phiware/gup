@@ -271,29 +271,29 @@ reorganisation._
 
 ### Axis and Grid System (Stories 89-98)
 
-| Story                                                            | Title                                       | Status         | Priority | Points |
-| ---------------------------------------------------------------- | ------------------------------------------- | -------------- | -------- | ------ |
-| [GUP-089](GUP-089_Core_Axis_System_Infrastructure.md)            | Core Axis System Infrastructure             | ✅ Complete    | High     | 13     |
-| [GUP-090](GUP-090_Automatic_Tick_Generation_Algorithm.md)        | Automatic Tick Generation Algorithm         | ✅ Complete    | High     | 8      |
-| [GUP-091](GUP-091_Grid_Line_Rendering_System.md)                 | Grid Line Rendering System                  | ✅ Complete    | High     | 5      |
-| [GUP-092](GUP-092_Label_Formatting_and_Positioning.md)           | Label Formatting and Positioning (expanded) | ✅ Complete    | Medium   | 10     |
-| [GUP-093](GUP-093_Scale_Axis_Integration_System.md)              | Scale-Axis Integration System               | ✅ Complete    | Medium   | 6      |
-| [GUP-094](GUP-094_Axis_Performance_Optimization.md)              | Axis Performance Optimization               | ✅ Complete    | Low      | 4      |
-| [GUP-095](GUP-095_Grid_Visual_Rendering_Integration.md)          | Grid Visual Rendering Integration           | ✅ Complete    | High     | 8      |
-| [GUP-096](GUP-096_Grid_Performance_Benchmarking.md)              | Grid Performance Benchmarking               | ✅ Complete    | Medium   | 5      |
-| [GUP-097](GUP-097_Chart_Builder_Grid_API_Enhancement.md)         | Chart Builder Grid API Enhancement          | ✅ Complete    | Medium   | 6      |
-| [GUP-098](GUP-098_Grid_System_Documentation.md)                  | Grid System Documentation                   | ✅ Complete    | Medium   | 4      |
-| [GUP-204](GUP-204_GPU_Instance_Rendering_Axis_Ticks.md)          | GPU Instance Rendering for Axis Ticks       | ✅ Complete    | Low      | 3      |
-| [GUP-205](GUP-205_SDF_Text_Rendering_Performance_Tuning.md)      | SDF Text Rendering Performance Tuning       | ✅ Complete    | Low      | 3      |
-| [GUP-206](GUP-206_Cross_Platform_Axis_Performance_Validation.md) | Cross-Platform Axis Performance Validation  | ✅ Complete    | Low      | 3      |
-| [GUP-224](GUP-224_Chart_Builder_Instanced_Ticks.md)              | Migrate Chart Builder to Instanced Ticks    | ✅ Complete    | Low      | 3      |
-| [GUP-225](GUP-225_Instanced_Grid_Line_Rendering.md)              | Instanced Grid Line Rendering               | ✅ Complete    | Low      | 3      |
-| [GUP-226](GUP-226_WebAssembly_Axis_Performance_Validation.md)    | WebAssembly Axis Performance Validation     | ✅ Complete    | Low      | 3      |
-| [GUP-231](GUP-231_WASM_Build_Platform_Gating.md)                 | WASM Build Platform Gating                  | ✅ Complete    | Medium   | 5      |
-| [GUP-237](GUP-237_WASM_Integration_Test_Suite.md)                | WASM Integration Test Suite                 | ✅ Complete    | Low      | 5      |
-| [GUP-238](GUP-238_Remaining_Send_Sync_Audit.md)                  | Remaining Send+Sync Audit                   | ✅ Complete    | Low      | 2      |
-| [GUP-239](GUP-239_Pipeline_Caching_Chart_Builder.md)             | Pipeline Caching for Chart Builder          | 🚧 In Progress | Low      | 2      |
-| [GUP-240](GUP-240_ChromeDriver_Puppeteer_CI_Integration.md)      | ChromeDriver/Puppeteer CI Integration       | 💡 New         | Low      | 2      |
+| Story                                                            | Title                                       | Status      | Priority | Points |
+| ---------------------------------------------------------------- | ------------------------------------------- | ----------- | -------- | ------ |
+| [GUP-089](GUP-089_Core_Axis_System_Infrastructure.md)            | Core Axis System Infrastructure             | ✅ Complete | High     | 13     |
+| [GUP-090](GUP-090_Automatic_Tick_Generation_Algorithm.md)        | Automatic Tick Generation Algorithm         | ✅ Complete | High     | 8      |
+| [GUP-091](GUP-091_Grid_Line_Rendering_System.md)                 | Grid Line Rendering System                  | ✅ Complete | High     | 5      |
+| [GUP-092](GUP-092_Label_Formatting_and_Positioning.md)           | Label Formatting and Positioning (expanded) | ✅ Complete | Medium   | 10     |
+| [GUP-093](GUP-093_Scale_Axis_Integration_System.md)              | Scale-Axis Integration System               | ✅ Complete | Medium   | 6      |
+| [GUP-094](GUP-094_Axis_Performance_Optimization.md)              | Axis Performance Optimization               | ✅ Complete | Low      | 4      |
+| [GUP-095](GUP-095_Grid_Visual_Rendering_Integration.md)          | Grid Visual Rendering Integration           | ✅ Complete | High     | 8      |
+| [GUP-096](GUP-096_Grid_Performance_Benchmarking.md)              | Grid Performance Benchmarking               | ✅ Complete | Medium   | 5      |
+| [GUP-097](GUP-097_Chart_Builder_Grid_API_Enhancement.md)         | Chart Builder Grid API Enhancement          | ✅ Complete | Medium   | 6      |
+| [GUP-098](GUP-098_Grid_System_Documentation.md)                  | Grid System Documentation                   | ✅ Complete | Medium   | 4      |
+| [GUP-204](GUP-204_GPU_Instance_Rendering_Axis_Ticks.md)          | GPU Instance Rendering for Axis Ticks       | ✅ Complete | Low      | 3      |
+| [GUP-205](GUP-205_SDF_Text_Rendering_Performance_Tuning.md)      | SDF Text Rendering Performance Tuning       | ✅ Complete | Low      | 3      |
+| [GUP-206](GUP-206_Cross_Platform_Axis_Performance_Validation.md) | Cross-Platform Axis Performance Validation  | ✅ Complete | Low      | 3      |
+| [GUP-224](GUP-224_Chart_Builder_Instanced_Ticks.md)              | Migrate Chart Builder to Instanced Ticks    | ✅ Complete | Low      | 3      |
+| [GUP-225](GUP-225_Instanced_Grid_Line_Rendering.md)              | Instanced Grid Line Rendering               | ✅ Complete | Low      | 3      |
+| [GUP-226](GUP-226_WebAssembly_Axis_Performance_Validation.md)    | WebAssembly Axis Performance Validation     | ✅ Complete | Low      | 3      |
+| [GUP-231](GUP-231_WASM_Build_Platform_Gating.md)                 | WASM Build Platform Gating                  | ✅ Complete | Medium   | 5      |
+| [GUP-237](GUP-237_WASM_Integration_Test_Suite.md)                | WASM Integration Test Suite                 | ✅ Complete | Low      | 5      |
+| [GUP-238](GUP-238_Remaining_Send_Sync_Audit.md)                  | Remaining Send+Sync Audit                   | ✅ Complete | Low      | 2      |
+| [GUP-239](GUP-239_Pipeline_Caching_Chart_Builder.md)             | Pipeline Caching for Chart Builder          | ✅ Complete | Low      | 2      |
+| [GUP-240](GUP-240_ChromeDriver_Puppeteer_CI_Integration.md)      | ChromeDriver/Puppeteer CI Integration       | 💡 New      | Low      | 2      |
 
 _Note: GUP-092 appears twice — once as the 8-pt story in the Post-GUP-021 table
 (basic label formatting, complete) and once here as the 10-pt expanded axis/grid

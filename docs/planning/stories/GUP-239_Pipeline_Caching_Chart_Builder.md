@@ -3,7 +3,8 @@
 ## Story Overview
 
 **Epic**: Phase 2 - High-Level Convenience APIs **Theme**: Automatic Scale and
-Axis System **Priority**: Low **Story Points**: 2 **Status**: 🚧 In Progress
+Axis System **Priority**: Low **Story Points**: 2 **Status**: ✅ Complete
+(2025-02-25)
 
 ## Overview
 
@@ -29,10 +30,10 @@ frames.
 
 ## Acceptance Criteria
 
-- [ ] Axis-line pipeline is created once and reused across frames
-- [ ] `ComposedChart` provides a method to draw axis lines into a render pass
-- [ ] No pipeline recreation on window resize (surface format doesn't change)
-- [ ] All existing tests pass
+- [x] Axis-line pipeline is created once and reused across frames
+- [x] `ComposedChart` provides a method to draw axis lines into a render pass
+- [x] No pipeline recreation on window resize (surface format doesn't change)
+- [x] All existing tests pass
 
 ## Technical Tasks
 
@@ -54,7 +55,49 @@ frames.
 
 ## Definition of Done
 
-- [ ] Axis-line pipeline cached on `ComposedChart`
-- [ ] `draw_axis_lines()` method available
-- [ ] Example updated to use cached pipeline
-- [ ] All existing tests pass
+- [x] Axis-line pipeline cached on `ComposedChart`
+- [x] `draw_axis_lines()` method available
+- [x] Example updated to use cached pipeline
+- [x] All existing tests pass
+
+## Implementation Summary
+
+### What was implemented
+
+- **`AxisLinePipeline`** struct in `src/axis.rs` — a cached
+  `wgpu::RenderPipeline` using `basic.wgsl` with `LineList` topology for
+  axis-line drawing. Mirrors the `TickPipeline` pattern with `new()`,
+  `upload()`, and `draw()` methods.
+- **`draw_axis_lines()`** and **`has_axis_line_data()`** public methods on
+  `ComposedChart` — parallel to the existing `draw_ticks()` / `has_tick_data()`.
+- **`prepare_draw_commands()`** public method on `ComposedChart` — a single
+  entry-point for callers that manage their own render pass to prepare both
+  axis-line and tick pipelines with lazy creation.
+- **`multi_font_chart_demo`** updated to use `ComposedChart` cached pipelines,
+  removing ~60 lines of per-frame inline pipeline construction and the
+  `AXIS_SHADER_SRC` constant.
+
+### Key files changed
+
+| File                                | Change                                                                                                                          |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `src/axis.rs`                       | Added `AxisLinePipeline` struct with `new()`, `upload()`, `draw()`, `pipeline()`                                                |
+| `src/chart_builder.rs`              | Added `axis_line_pipeline` / `axis_line_buffers` fields, `prepare_draw_commands()`, `draw_axis_lines()`, `has_axis_line_data()` |
+| `examples/multi_font_chart_demo.rs` | Replaced inline pipeline creation with cached pipeline calls                                                                    |
+
+### Tests added
+
+- `test_axis_line_pipeline_creation` — GPU pipeline creation sanity
+- `test_axis_line_pipeline_upload_and_draw_zero` — zero-vertex edge case
+- `test_has_axis_line_data_initially_false` — initial state verification
+- `test_prepare_draw_commands_creates_axis_line_data` — pipeline + buffer
+  creation
+- `test_prepare_draw_commands_no_axes_no_data` — no-axis configuration
+- `test_prepare_draw_commands_pipeline_reused_across_calls` — pipeline reuse
+  across frames
+
+### Test results
+
+- 1861 lib tests passed (0 failed, 4 ignored)
+- All examples compile clean
+- All 6 new tests pass
