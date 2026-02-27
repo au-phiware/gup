@@ -6,7 +6,7 @@
 **Theme**: Chart Builder Enhancements  
 **Priority**: Low  
 **Story Points**: 3  
-**Status**: 📋 Planned  
+**Status**: 🚧 In Progress  
 **Dependencies**: GUP-200 (Interactive Clipping Reveal), GUP-018 (Chart
 Builders)
 
