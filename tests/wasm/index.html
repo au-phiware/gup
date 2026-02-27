@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<!--
+  Copyright (C) 2024 Corin Lawson
+  SPDX-License-Identifier: GPL-3.0-or-later
+
+  Minimal HTML harness for manually verifying the Gup WASM package.
+
+  Usage:
+    1. Build the package:   wasm-pack build --target web
+    2. Serve this directory: python3 -m http.server 8080 --directory .
+    3. Open in Chromium:     chromium --enable-features=WebGPU,Vulkan \
+                                     --enable-unsafe-webgpu \
+                                     http://localhost:8080/tests/wasm/index.html
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Gup WASM Integration Test Harness</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 720px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      background: #fafafa;
+      color: #222;
+    }
+    h1 { font-size: 1.4rem; }
+    .result { margin: 0.5rem 0; padding: 0.5rem 0.75rem; border-radius: 4px; }
+    .pass { background: #d4edda; color: #155724; }
+    .fail { background: #f8d7da; color: #721c24; }
+    .warn { background: #fff3cd; color: #856404; }
+    .info { background: #cce5ff; color: #004085; }
+    #log { font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>Gup WASM Integration Test Harness</h1>
+  <p>This page loads the <code>wasm-pack</code> output and runs basic runtime
+     checks.  Open the browser console for detailed output.</p>
+  <div id="log"></div>
+
+  <script type="module">
+    const log = document.getElementById('log');
+
+    function report(cls, msg) {
+      const div = document.createElement('div');
+      div.className = `result ${cls}`;
+      div.textContent = msg;
+      log.appendChild(div);
+      console.log(`[${cls.toUpperCase()}] ${msg}`);
+    }
+
+    async function run() {
+      // 1. Load the WASM package
+      let init, wasm;
+      try {
+        const mod = await import('/pkg/gup.js');
+        init = mod.default;
+        wasm = mod;
+        await init();
+        report('pass', '✅ WASM module loaded and initialised');
+      } catch (e) {
+        report('fail', `❌ Failed to load WASM module: ${e.message}`);
+        return;
+      }
+
+      // 2. Check WebGPU support
+      if (!navigator.gpu) {
+        report('warn', '⚠️  navigator.gpu not available – GPU tests skipped');
+        return;
+      }
+      report('info', 'ℹ️  navigator.gpu is available');
+
+      // 3. Request adapter
+      let adapter;
+      try {
+        adapter = await navigator.gpu.requestAdapter();
+        if (!adapter) throw new Error('requestAdapter returned null');
+        report('pass', `✅ GPU adapter: ${adapter.info?.device || '(unknown)'}`);
+      } catch (e) {
+        report('fail', `❌ GPU adapter request failed: ${e.message}`);
+        return;
+      }
+
+      // 4. Request device
+      let device;
+      try {
+        device = await adapter.requestDevice();
+        report('pass', '✅ GPU device created');
+      } catch (e) {
+        report('fail', `❌ GPU device creation failed: ${e.message}`);
+        return;
+      }
+
+      // 5. Minimal render – clear a texture to a known colour
+      try {
+        const texture = device.createTexture({
+          size: [64, 64],
+          format: 'rgba8unorm-srgb',
+          usage: GPUTextureUsage.RENDER_ATTACHMENT,
+        });
+        const encoder = device.createCommandEncoder();
+        const pass = encoder.beginRenderPass({
+          colorAttachments: [{
+            view: texture.createView(),
+            loadOp: 'clear',
+            storeOp: 'store',
+            clearValue: { r: 1, g: 0, b: 0, a: 1 },
+          }],
+        });
+        pass.end();
+        device.queue.submit([encoder.finish()]);
+        report('pass', '✅ Minimal GPU render pass completed');
+      } catch (e) {
+        report('fail', `❌ Render pass failed: ${e.message}`);
+      }
+
+      report('info', 'ℹ️  All checks finished');
+    }
+
+    run();
+  </script>
+</body>
+</html>
