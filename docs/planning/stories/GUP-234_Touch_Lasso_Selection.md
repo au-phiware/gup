@@ -1,7 +1,7 @@
 # GUP-234: Touch Lasso Selection
 
-**Status**: 📋 Planned **Priority**: Low **Effort**: 3 **Dependencies**: GUP-182
-(Touch Selection Support)
+**Status**: 🚧 In Progress **Priority**: Low **Effort**: 3 **Dependencies**:
+GUP-182 (Touch Selection Support)
 
 ## Overview
 
