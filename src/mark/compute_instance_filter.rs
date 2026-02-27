@@ -700,11 +700,7 @@ impl ComputeInstanceFilter {
 /// Used by the unified culling pipeline to share the visibility buffer
 /// with occlusion passes.
 pub(crate) struct PooledBufferRefs<'a> {
-    pub output_buffer: &'a Buffer,
     pub visibility_buffer: &'a Buffer,
-    pub prefix_sums_buffer: &'a Buffer,
-    pub draw_indirect_buffer: &'a Buffer,
-    pub config_buffer: &'a Buffer,
 }
 
 /// Pre-allocated GPU buffer pool for [`ComputeInstanceFilter`].
@@ -940,11 +936,7 @@ impl PooledComputeInstanceFilter {
     /// [`UnifiedCullingPipeline`]: super::unified_culling_pipeline::UnifiedCullingPipeline
     pub(crate) fn buffer_refs(&self) -> PooledBufferRefs<'_> {
         PooledBufferRefs {
-            output_buffer: &self.output_buffer,
             visibility_buffer: &self.visibility_buffer,
-            prefix_sums_buffer: &self.prefix_sums_buffer,
-            draw_indirect_buffer: &self.draw_indirect_buffer,
-            config_buffer: &self.config_buffer,
         }
     }
 
