@@ -33,14 +33,14 @@ platform-specific bottlenecks.
 
 **Components:**
 
-| Component | Location | Purpose |
-|---|---|---|
-| `wasm_bench` module | `src/wasm_bench.rs` | Timing harness with `Performance.now()` |
-| Interaction benchmarks | `src/wasm_bench_interaction.rs` | Point, region, batch query benchmarks |
-| Native runner binary | `src/bin/wasm_bench_native.rs` | Produces native JSON baseline |
-| HTML benchmark page | `benches/wasm/index.html` | Browser-based benchmark runner |
-| Orchestration script | `scripts/wasm_benchmark.sh` | Build, run, serve, compare |
-| Comparison script | `scripts/benchmark_comparison.sh` | JSON → Markdown report |
+| Component              | Location                          | Purpose                                 |
+| ---------------------- | --------------------------------- | --------------------------------------- |
+| `wasm_bench` module    | `src/wasm_bench.rs`               | Timing harness with `Performance.now()` |
+| Interaction benchmarks | `src/wasm_bench_interaction.rs`   | Point, region, batch query benchmarks   |
+| Native runner binary   | `src/bin/wasm_bench_native.rs`    | Produces native JSON baseline           |
+| HTML benchmark page    | `benches/wasm/index.html`         | Browser-based benchmark runner          |
+| Orchestration script   | `scripts/wasm_benchmark.sh`       | Build, run, serve, compare              |
+| Comparison script      | `scripts/benchmark_comparison.sh` | JSON → Markdown report                  |
 
 ## Quick Start
 
@@ -90,42 +90,42 @@ The WASM benchmark suite mirrors the native criterion benchmarks from
 
 ### Point Queries
 
-| Benchmark | Dataset | Pattern | Query Point |
-|---|---|---|---|
-| `point_queries/grid/1000` | 1K points | Uniform grid | (500, 500) |
-| `point_queries/grid/10000` | 10K points | Uniform grid | (500, 500) |
-| `point_queries/clustered/1000` | 1K points | 10 clusters | (125, 166) |
-| `point_queries/clustered/10000` | 10K points | 10 clusters | (125, 166) |
+| Benchmark                       | Dataset    | Pattern      | Query Point |
+| ------------------------------- | ---------- | ------------ | ----------- |
+| `point_queries/grid/1000`       | 1K points  | Uniform grid | (500, 500)  |
+| `point_queries/grid/10000`      | 10K points | Uniform grid | (500, 500)  |
+| `point_queries/clustered/1000`  | 1K points  | 10 clusters  | (125, 166)  |
+| `point_queries/clustered/10000` | 10K points | 10 clusters  | (125, 166)  |
 
 ### Region Queries
 
-| Benchmark | Dataset | Region Size | Coverage |
-|---|---|---|---|
-| `region_queries/small_region_10k` | 10K grid | 100×100 | ~1% |
-| `region_queries/medium_region_10k` | 10K grid | 300×300 | ~10% |
-| `region_queries/large_region_10k` | 10K grid | 700×700 | ~50% |
+| Benchmark                          | Dataset  | Region Size | Coverage |
+| ---------------------------------- | -------- | ----------- | -------- |
+| `region_queries/small_region_10k`  | 10K grid | 100×100     | ~1%      |
+| `region_queries/medium_region_10k` | 10K grid | 300×300     | ~10%     |
+| `region_queries/large_region_10k`  | 10K grid | 700×700     | ~50%     |
 
 ### Batch Queries
 
-| Benchmark | Dataset | Query Count |
-|---|---|---|
-| `batch_queries/single_query_10k` | 10K grid | 1 |
-| `batch_queries/batch_5_queries_10k` | 10K grid | 5 |
-| `batch_queries/batch_10_queries_10k` | 10K grid | 10 |
+| Benchmark                            | Dataset  | Query Count |
+| ------------------------------------ | -------- | ----------- |
+| `batch_queries/single_query_10k`     | 10K grid | 1           |
+| `batch_queries/batch_5_queries_10k`  | 10K grid | 5           |
+| `batch_queries/batch_10_queries_10k` | 10K grid | 10          |
 
 ## Browser Compatibility Matrix
 
 ### WebGPU Support Status
 
-| Browser | WebGPU | Notes |
-|---|---|---|
-| Chrome 113+ | ✅ Stable | Full WebGPU support since May 2023 |
-| Chrome Canary | ✅ Stable | Latest features |
-| Edge 113+ | ✅ Stable | Chromium-based, same as Chrome |
-| Firefox Nightly | 🔧 Behind flag | `dom.webgpu.enabled` in about:config |
-| Firefox Stable | ❌ Not available | Expected in future releases |
-| Safari 18+ (macOS) | ✅ Stable | WebGPU support since macOS Sequoia |
-| Safari (iOS 18+) | ✅ Stable | Metal-backed WebGPU |
+| Browser            | WebGPU           | Notes                                |
+| ------------------ | ---------------- | ------------------------------------ |
+| Chrome 113+        | ✅ Stable        | Full WebGPU support since May 2023   |
+| Chrome Canary      | ✅ Stable        | Latest features                      |
+| Edge 113+          | ✅ Stable        | Chromium-based, same as Chrome       |
+| Firefox Nightly    | 🔧 Behind flag   | `dom.webgpu.enabled` in about:config |
+| Firefox Stable     | ❌ Not available | Expected in future releases          |
+| Safari 18+ (macOS) | ✅ Stable        | WebGPU support since macOS Sequoia   |
+| Safari (iOS 18+)   | ✅ Stable        | Metal-backed WebGPU                  |
 
 ### Launching with WebGPU Enabled
 
@@ -148,8 +148,8 @@ google-chrome --enable-features=WebGPU,Vulkan \
 
 - **Buffer mapping**: Async buffer mapping adds latency vs native synchronous
   readback.
-- **Compute shader limits**: `maxComputeWorkgroupSizeX` may be lower than
-  native (typically 256 on most GPUs).
+- **Compute shader limits**: `maxComputeWorkgroupSizeX` may be lower than native
+  (typically 256 on most GPUs).
 - **Timestamp queries**: Not available in all configurations; benchmarks use
   `Performance.now()` instead.
 
@@ -165,20 +165,20 @@ google-chrome --enable-features=WebGPU,Vulkan \
   performance characteristics compared to Vulkan/DX12 on other platforms.
 - **Buffer size limits**: Lower maximum buffer sizes compared to desktop
   browsers.
-- **Compute shader support**: Full support, but different workgroup size
-  optimal values.
+- **Compute shader support**: Full support, but different workgroup size optimal
+  values.
 
 ## Platform-Specific Performance Characteristics
 
 ### Expected Performance Differences
 
-| Factor | Impact | Notes |
-|---|---|---|
-| **WASM overhead** | 1.1-2× | WebAssembly vs native code execution overhead |
-| **JS ↔ WASM boundary** | Variable | Each wasm-bindgen call has marshalling cost |
-| **GPU command submission** | 1-3× | Browser WebGPU adds validation layer overhead |
-| **Buffer readback** | 2-5× | Async mapping pipeline vs native staging buffers |
-| **Memory allocation** | 1.5-2× | WASM linear memory + GC pressure in browser |
+| Factor                     | Impact   | Notes                                            |
+| -------------------------- | -------- | ------------------------------------------------ |
+| **WASM overhead**          | 1.1-2×   | WebAssembly vs native code execution overhead    |
+| **JS ↔ WASM boundary**    | Variable | Each wasm-bindgen call has marshalling cost      |
+| **GPU command submission** | 1-3×     | Browser WebGPU adds validation layer overhead    |
+| **Buffer readback**        | 2-5×     | Async mapping pipeline vs native staging buffers |
+| **Memory allocation**      | 1.5-2×   | WASM linear memory + GC pressure in browser      |
 
 ### Interaction System Specifics
 
@@ -242,10 +242,10 @@ To add a new benchmark to the WASM suite:
 ## Known WASM Build Limitations
 
 The full library does not yet compile cleanly for `wasm32-unknown-unknown` due
-to pre-existing issues in the accessibility and DOM integration modules
-(e.g. `LinuxAccessibility`, `TouchEvent`, `Send`/`Sync` bounds on DOM
-callbacks). The benchmark-related modules (`wasm_bench`, `wasm_bench_interaction`)
-compile correctly under the WASM target.
+to pre-existing issues in the accessibility and DOM integration modules (e.g.
+`LinuxAccessibility`, `TouchEvent`, `Send`/`Sync` bounds on DOM callbacks). The
+benchmark-related modules (`wasm_bench`, `wasm_bench_interaction`) compile
+correctly under the WASM target.
 
 A full WASM build will require platform-gating the accessibility backends and
 DOM integration code, which is tracked separately from the benchmarking

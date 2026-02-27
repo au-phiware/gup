@@ -328,10 +328,7 @@ pub async fn bench_batch_queries(
             std::hint::black_box(hits);
             timings.push(timer.now_ms() - start);
         }
-        results.push(from_timings(
-            "batch_queries/batch_10_queries_10k",
-            &timings,
-        ));
+        results.push(from_timings("batch_queries/batch_10_queries_10k", &timings));
     }
 
     results
@@ -347,7 +344,11 @@ pub async fn bench_batch_queries(
 /// initialises a [`RenderContext`], runs point/region/batch benchmarks, and
 /// packages the results into a [`BenchSuite`].
 pub async fn run_interaction_benchmarks(config: &BenchConfig) -> BenchSuite {
-    let context = Arc::new(RenderContext::new().await.expect("Failed to create context"));
+    let context = Arc::new(
+        RenderContext::new()
+            .await
+            .expect("Failed to create context"),
+    );
 
     let mut results = Vec::new();
     results.extend(bench_point_queries(&context, config).await);
