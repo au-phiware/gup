@@ -2638,4 +2638,89 @@ mod tests {
             "Instance data should be smaller than two Vertex structs"
         );
     }
+
+    #[test]
+    fn test_dense_grid_benchmark() {
+        // Simulate a 10×10 minor-subdivision grid to measure data reduction.
+        let bounds = ChartBounds::new(-0.8, 0.8, -0.8, 0.8);
+        let config = GridConfiguration::default().with_minor_grid();
+
+        // 11 major + 100 minor ticks per axis (typical dense grid)
+        let major: Vec<f64> = (0..=10).map(|i| -0.8 + i as f64 * 0.16).collect();
+        let minor: Vec<f64> = (0..=100).map(|i| -0.8 + i as f64 * 0.016).collect();
+
+        // Instanced path
+        let mut renderer = GridRenderer::new();
+        let instances =
+            renderer.generate_grid_instances(&major, &major, &minor, &minor, bounds, &config);
+        let instance_count = instances.len();
+        let instance_bytes = instance_count * std::mem::size_of::<TickInstance>();
+
+        // LineAttributes path (for comparison)
+        let mut lines = Vec::new();
+        GridRenderer::generate_horizontal_lines_static(
+            &major,
+            bounds,
+            &config.major_grid,
+            &mut lines,
+        )
+        .unwrap();
+        GridRenderer::generate_vertical_lines_static(
+            &major,
+            bounds,
+            &config.major_grid,
+            &mut lines,
+        )
+        .unwrap();
+        GridRenderer::generate_horizontal_lines_static(
+            &minor,
+            bounds,
+            &config.minor_grid,
+            &mut lines,
+        )
+        .unwrap();
+        GridRenderer::generate_vertical_lines_static(
+            &minor,
+            bounds,
+            &config.minor_grid,
+            &mut lines,
+        )
+        .unwrap();
+
+        // The counts should be equal (same number of lines)
+        assert_eq!(instance_count, lines.len());
+        assert!(
+            instance_count > 200,
+            "Dense grid should produce 200+ lines, got {instance_count}"
+        );
+
+        // Vertex-pair cost: each line = 2 × Vertex
+        let vertex_bytes = lines.len() * 2 * std::mem::size_of::<crate::render::Vertex>();
+
+        // Instanced data should be meaningfully smaller
+        assert!(
+            instance_bytes < vertex_bytes,
+            "Instanced ({instance_bytes} B) should be less than vertex-pair ({vertex_bytes} B)"
+        );
+
+        // Calculate and verify reduction percentage
+        let reduction_pct = (1.0 - instance_bytes as f64 / vertex_bytes as f64) * 100.0;
+        assert!(
+            reduction_pct > 30.0,
+            "Expected >30% reduction, got {reduction_pct:.1}%"
+        );
+    }
+
+    #[test]
+    fn test_grid_system_generate_instances() {
+        // Verify the GridSystem delegate works correctly
+        let mut gs = GridSystem::new(GridConfiguration::default());
+        let bounds = ChartBounds::new(0.0, 100.0, 0.0, 100.0);
+        let h = vec![25.0, 50.0, 75.0];
+        let v = vec![25.0, 50.0, 75.0];
+
+        let instances = gs.generate_grid_instances(&h, &v, &[], &[], bounds);
+        // 3 horizontal + 3 vertical
+        assert_eq!(instances.len(), 6);
+    }
 }
