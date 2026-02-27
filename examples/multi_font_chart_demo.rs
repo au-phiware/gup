@@ -17,7 +17,7 @@
 
 use gup::{
     GupContext, PhysicalSize, SurfaceId,
-    axis::{AxisConfiguration, AxisPosition, LinearAxis},
+    axis::{AxisConfiguration, AxisPosition, LinearAxis, TickPipeline},
     chart_builder::{ChartConfig, ComposedChart, TitleAlignment, TitleConfig},
     label::{LabelConstraints, LabelPositioner},
     render::Vertex,
@@ -45,6 +45,9 @@ struct MultiFontChartApp {
     // Chart definition
     chart: Option<ComposedChart<DataPoint, gup::Circle>>,
 
+    // GPU-instanced tick pipeline
+    tick_pipeline: Option<TickPipeline>,
+
     // Text rendering components
     text_renderer: Option<TextRenderer>,
     font_manager: Option<FontAtlasManager>,
@@ -65,6 +68,7 @@ impl MultiFontChartApp {
             surface_id: None,
             window: None,
             chart: None,
+            tick_pipeline: None,
             text_renderer: None,
             font_manager: None,
             layout_engine: None,
@@ -202,7 +206,7 @@ impl MultiFontChartApp {
 
                     // --- Phase 1: Generate axis geometry and queue text ---
                     let chart = self.chart.as_ref().unwrap();
-                    let (vertices, _labels) = chart.generate_axis_geometry();
+                    let geom = chart.generate_axis_geometry_instanced();
 
                     // Queue text using the chart builder's multi-font API
                     if let (Some(text_renderer), Some(font_manager), Some(layout_engine)) = (
@@ -242,14 +246,34 @@ impl MultiFontChartApp {
                     }
 
                     // --- Phase 2: Render pass (axes + text) ---
-                    if !vertices.is_empty() {
-                        let vertex_buffer =
-                            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("Axis Vertex Buffer"),
-                                contents: bytemuck::cast_slice(&vertices),
-                                usage: wgpu::BufferUsages::VERTEX,
-                            });
+                    let has_lines = !geom.line_vertices.is_empty();
+                    let has_ticks = !geom.tick_instances.is_empty();
 
+                    if has_lines || has_ticks {
+                        // Axis line vertices (LineList vertex-pair path)
+                        let line_vertex_buffer = if has_lines {
+                            Some(
+                                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                    label: Some("Axis Line Vertex Buffer"),
+                                    contents: bytemuck::cast_slice(&geom.line_vertices),
+                                    usage: wgpu::BufferUsages::VERTEX,
+                                }),
+                            )
+                        } else {
+                            None
+                        };
+
+                        // Instanced tick buffers
+                        let tick_pipeline = self.tick_pipeline.get_or_insert_with(|| {
+                            TickPipeline::new(&device, wgpu::TextureFormat::Bgra8UnormSrgb)
+                        });
+                        let tick_bufs = if has_ticks {
+                            Some(tick_pipeline.upload(&device, &queue, &geom.tick_instances))
+                        } else {
+                            None
+                        };
+
+                        // Axis line pipeline (same shader as before)
                         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                             label: Some("axis_shader"),
                             source: wgpu::ShaderSource::Wgsl(AXIS_SHADER_SRC.into()),
@@ -264,7 +288,7 @@ impl MultiFontChartApp {
 
                         let render_pipeline =
                             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                                label: Some("axis_pipeline"),
+                                label: Some("axis_line_pipeline"),
                                 layout: Some(&pipeline_layout),
                                 vertex: wgpu::VertexState {
                                     module: &shader,
@@ -309,12 +333,21 @@ impl MultiFontChartApp {
                                 cache: None,
                             });
 
+                        let line_count = geom.line_vertices.len() as u32;
+                        let tick_count = geom.tick_instances.len() as u32;
                         let mut render_pass = frame.render_pass(Some(clear_color));
 
-                        // Draw axis lines
-                        render_pass.set_pipeline(&render_pipeline);
-                        render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-                        render_pass.draw(0..vertices.len() as u32, 0..1);
+                        // Draw axis lines (LineList vertex pairs)
+                        if let Some(buf) = &line_vertex_buffer {
+                            render_pass.set_pipeline(&render_pipeline);
+                            render_pass.set_vertex_buffer(0, buf.slice(..));
+                            render_pass.draw(0..line_count, 0..1);
+                        }
+
+                        // Draw tick marks (GPU instanced)
+                        if let Some((base_buf, inst_buf)) = &tick_bufs {
+                            tick_pipeline.draw(&mut render_pass, base_buf, inst_buf, tick_count);
+                        }
 
                         // Draw text (multi-font)
                         if let (Some(text_renderer), Some(font_manager)) =
