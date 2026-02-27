@@ -102,6 +102,7 @@ pub mod text;
 pub mod tick_generator;
 pub mod visual_test_utils;
 pub mod wasm_bench;
+pub mod wasm_bench_interaction;
 
 /// Hidden module for procedural macro support.
 ///

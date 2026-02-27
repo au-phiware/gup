@@ -176,6 +176,15 @@ where
     compute_stats(name, &timings)
 }
 
+/// Collect timing measurements into a [`BenchResult`].
+///
+/// This is a convenience function for benchmarks that manage their own
+/// timing loop (e.g. when async closures would cause borrow issues).
+/// Pass in a vector of per-iteration durations in milliseconds.
+pub fn from_timings(name: &str, timings: &[f64]) -> BenchResult {
+    compute_stats(name, timings)
+}
+
 /// Compute descriptive statistics from a vector of timing measurements.
 fn compute_stats(name: &str, timings: &[f64]) -> BenchResult {
     let n = timings.len() as f64;
