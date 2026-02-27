@@ -293,7 +293,7 @@ reorganisation._
 | [GUP-237](GUP-237_WASM_Integration_Test_Suite.md)                | WASM Integration Test Suite                 | ✅ Complete | Low      | 5      |
 | [GUP-238](GUP-238_Remaining_Send_Sync_Audit.md)                  | Remaining Send+Sync Audit                   | ✅ Complete | Low      | 2      |
 | [GUP-239](GUP-239_Pipeline_Caching_Chart_Builder.md)             | Pipeline Caching for Chart Builder          | ✅ Complete | Low      | 2      |
-| [GUP-240](GUP-240_ChromeDriver_Puppeteer_CI_Integration.md)      | ChromeDriver/Puppeteer CI Integration       | 💡 New      | Low      | 2      |
+| [GUP-240](GUP-240_ChromeDriver_Puppeteer_CI_Integration.md)      | ChromeDriver/Puppeteer CI Integration       | 🚧 In Progress | Low      | 2      |
 
 _Note: GUP-092 appears twice — once as the 8-pt story in the Post-GUP-021 table
 (basic label formatting, complete) and once here as the 10-pt expanded axis/grid

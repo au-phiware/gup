@@ -3,7 +3,7 @@
 ## Story Overview
 
 **Epic**: Phase 2 - Testing Infrastructure **Theme**: CI/CD **Priority**: Low
-**Story Points**: 2 **Status**: 💡 New
+**Story Points**: 2 **Status**: 🚧 In Progress
 
 ## Overview
 
@@ -24,7 +24,8 @@ execution of the HTML benchmark runners in `benches/wasm/`.
 ## User Story
 
 > "As a CI pipeline, I want matching ChromeDriver and Chromium versions so that
-> wasm-pack tests can run in headless Chrome for automated WebAssembly validation."
+> wasm-pack tests can run in headless Chrome for automated WebAssembly
+> validation."
 
 ## Acceptance Criteria
 
@@ -32,7 +33,8 @@ execution of the HTML benchmark runners in `benches/wasm/`.
 - [ ] `wasm-pack test --headless --chrome` runs successfully for at least one
       test file
 - [ ] CI workflow uses the matching ChromeDriver for WebAssembly tests
-- [ ] HTML benchmark runners can be executed in headless mode with result capture
+- [ ] HTML benchmark runners can be executed in headless mode with result
+      capture
 
 ## Technical Tasks
 
@@ -60,7 +62,8 @@ execution of the HTML benchmark runners in `benches/wasm/`.
 
 ## Risk Assessment
 
-- **Nix packaging complexity**: ChromeDriver may need to be packaged or overlayed.
+- **Nix packaging complexity**: ChromeDriver may need to be packaged or
+  overlayed.
 - **CI browser availability**: GitHub Actions may need additional Chrome setup.
 
 ## Definition of Done
