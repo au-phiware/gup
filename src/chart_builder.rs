@@ -3198,3 +3198,288 @@ mod tests_multi_font {
         );
     }
 }
+
+#[cfg(test)]
+mod tests_hover_reveal {
+    use super::*;
+    use crate::text::hover_reveal::TooltipConfig;
+
+    #[derive(Debug, Clone)]
+    struct D {
+        x: f32,
+    }
+
+    // --- Non-GPU tests (ChartConfig, ComposedChart state) ---
+
+    #[test]
+    fn test_chart_config_hover_reveal_default_off() {
+        let config = ChartConfig::default();
+        assert!(!config.hover_reveal, "hover reveal should default to off");
+    }
+
+    #[test]
+    fn test_chart_config_with_hover_reveal() {
+        let config = ChartConfig::default().with_hover_reveal(true);
+        assert!(config.hover_reveal);
+    }
+
+    #[test]
+    fn test_chart_config_with_tooltip_config_enables_hover_reveal() {
+        let tooltip = TooltipConfig {
+            show_delay: 0.5,
+            ..TooltipConfig::default()
+        };
+        let config = ChartConfig::default().with_tooltip_config(tooltip);
+        assert!(
+            config.hover_reveal,
+            "with_tooltip_config should enable hover_reveal"
+        );
+        assert!(
+            (config.tooltip_config.show_delay - 0.5).abs() < f32::EPSILON,
+            "custom show_delay should be preserved"
+        );
+    }
+
+    #[test]
+    fn test_scatter_builder_hover_reveal() {
+        use crate::chart_builder::builders::{ConfigurableBuilder, scatter};
+        let builder = scatter::<D>().hover_reveal(true);
+        assert!(builder.config.hover_reveal);
+    }
+
+    #[test]
+    fn test_scatter_builder_tooltip_config() {
+        use crate::chart_builder::builders::{ConfigurableBuilder, scatter};
+        let tooltip = TooltipConfig {
+            font_size: 20.0,
+            ..TooltipConfig::default()
+        };
+        let builder = scatter::<D>().tooltip_config(tooltip);
+        assert!(builder.config.hover_reveal);
+        assert!((builder.config.tooltip_config.font_size - 20.0).abs() < f32::EPSILON);
+    }
+
+    // --- GPU-dependent tests ---
+
+    #[tokio::test]
+    async fn test_composed_chart_owns_registry_and_state() {
+        let context = std::sync::Arc::new(crate::RenderContext::new().await.unwrap());
+        let sel = crate::selection::Selection::<D, crate::Circle>::new(vec![], context).unwrap();
+        let config = ChartConfig::default().with_hover_reveal(true);
+        let chart = ComposedChart::new(sel, config);
+
+        assert!(chart.hover_reveal_enabled());
+        assert!(chart.clipped_text_registry().is_empty());
+        assert!(!chart.hover_state().is_active());
+    }
+
+    #[tokio::test]
+    async fn test_update_hover_noop_when_disabled() {
+        let context = std::sync::Arc::new(crate::RenderContext::new().await.unwrap());
+        let sel = crate::selection::Selection::<D, crate::Circle>::new(vec![], context).unwrap();
+        let config = ChartConfig::default(); // hover_reveal defaults to false
+        let mut chart = ComposedChart::new(sel, config);
+
+        // Should be a no-op
+        chart.update_hover(100.0, 200.0, 0.016);
+        assert!(!chart.hover_state().is_active());
+    }
+
+    #[tokio::test]
+    async fn test_queue_chart_text_clears_registry() {
+        let context = std::sync::Arc::new(crate::RenderContext::new().await.unwrap());
+        let sel = crate::selection::Selection::<D, crate::Circle>::new(vec![], context).unwrap();
+        let config = ChartConfig::default().with_hover_reveal(true);
+        let mut chart = ComposedChart::new(sel, config);
+
+        // Manually register an entry
+        chart
+            .clipped_text_registry_mut()
+            .register(crate::text::TextBounds::new(0.0, 0.0, 10.0, 10.0), "test");
+        assert_eq!(chart.clipped_text_registry().len(), 1);
+
+        // queue_chart_text should clear it
+        let gup_context = crate::GupContext::headless().await.unwrap();
+        let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
+        let frame = gup_ctx.begin_frame().unwrap();
+
+        let mut text_renderer = crate::text::TextRenderer::new(frame.device()).unwrap();
+        let mut font_manager =
+            crate::text::FontAtlasManager::new(crate::text::FontDatabase::new(), 14.0);
+        let mut layout_engine = crate::text::TextLayoutEngine::new();
+
+        text_renderer.begin_frame();
+        let result = chart.queue_chart_text(
+            &frame,
+            &mut text_renderer,
+            &mut font_manager,
+            &mut layout_engine,
+        );
+        assert!(result.is_ok(), "queue_chart_text failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn test_queue_tooltip_text_returns_false_when_disabled() {
+        let context = std::sync::Arc::new(crate::RenderContext::new().await.unwrap());
+        let sel = crate::selection::Selection::<D, crate::Circle>::new(vec![], context).unwrap();
+        let config = ChartConfig::default(); // hover_reveal off
+        let chart = ComposedChart::new(sel, config);
+
+        let gup_context = crate::GupContext::headless().await.unwrap();
+        let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
+        let frame = gup_ctx.begin_frame().unwrap();
+
+        let mut text_renderer = crate::text::TextRenderer::new(frame.device()).unwrap();
+        let mut font_manager =
+            crate::text::FontAtlasManager::new(crate::text::FontDatabase::new(), 14.0);
+        let mut layout_engine = crate::text::TextLayoutEngine::new();
+
+        text_renderer.begin_frame();
+        let queued = chart
+            .queue_tooltip_text(
+                &frame,
+                &mut text_renderer,
+                &mut font_manager,
+                &mut layout_engine,
+            )
+            .unwrap();
+        assert!(
+            !queued,
+            "Should not queue tooltip when hover reveal is disabled"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_queue_tooltip_text_returns_false_when_no_hover() {
+        let context = std::sync::Arc::new(crate::RenderContext::new().await.unwrap());
+        let sel = crate::selection::Selection::<D, crate::Circle>::new(vec![], context).unwrap();
+        let config = ChartConfig::default().with_hover_reveal(true);
+        let chart = ComposedChart::new(sel, config);
+
+        let gup_context = crate::GupContext::headless().await.unwrap();
+        let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
+        let frame = gup_ctx.begin_frame().unwrap();
+
+        let mut text_renderer = crate::text::TextRenderer::new(frame.device()).unwrap();
+        let mut font_manager =
+            crate::text::FontAtlasManager::new(crate::text::FontDatabase::new(), 14.0);
+        let mut layout_engine = crate::text::TextLayoutEngine::new();
+
+        text_renderer.begin_frame();
+        let queued = chart
+            .queue_tooltip_text(
+                &frame,
+                &mut text_renderer,
+                &mut font_manager,
+                &mut layout_engine,
+            )
+            .unwrap();
+        assert!(!queued, "Should not queue tooltip when nothing is hovered");
+    }
+
+    #[tokio::test]
+    async fn test_queue_chart_text_with_hover_reveal_and_axes() {
+        let context = std::sync::Arc::new(crate::RenderContext::new().await.unwrap());
+        let sel = crate::selection::Selection::<D, crate::Circle>::new(vec![], context).unwrap();
+        let config = ChartConfig::default().with_hover_reveal(true);
+        let mut chart = ComposedChart::new(sel, config).with_default_axes();
+
+        let gup_context = crate::GupContext::headless().await.unwrap();
+        let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
+        let frame = gup_ctx.begin_frame().unwrap();
+
+        let mut text_renderer = crate::text::TextRenderer::new(frame.device()).unwrap();
+        let mut font_manager =
+            crate::text::FontAtlasManager::new(crate::text::FontDatabase::new(), 14.0);
+        let mut layout_engine = crate::text::TextLayoutEngine::new();
+
+        text_renderer.begin_frame();
+        let result = chart.queue_chart_text(
+            &frame,
+            &mut text_renderer,
+            &mut font_manager,
+            &mut layout_engine,
+        );
+        assert!(
+            result.is_ok(),
+            "queue_chart_text with hover reveal failed: {result:?}"
+        );
+    }
+
+    #[test]
+    fn test_label_viewport_bounds_bottom_axis() {
+        let config = ChartConfig::default();
+        let chart_area = ChartArea {
+            x: 60.0,
+            y: 40.0,
+            width: 700.0,
+            height: 500.0,
+            margins: Margins::default(),
+        };
+        let bounds = ComposedChart::<D, crate::Circle>::label_viewport_bounds(
+            AxisPosition::Bottom,
+            &chart_area,
+            &config,
+        );
+        // Bottom axis viewport should be below the chart area
+        assert!(bounds.viewport_rect.top >= chart_area.y + chart_area.height);
+        assert!((bounds.viewport_rect.bottom - config.height).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_label_viewport_bounds_left_axis() {
+        let config = ChartConfig::default();
+        let chart_area = ChartArea {
+            x: 60.0,
+            y: 40.0,
+            width: 700.0,
+            height: 500.0,
+            margins: Margins::default(),
+        };
+        let bounds = ComposedChart::<D, crate::Circle>::label_viewport_bounds(
+            AxisPosition::Left,
+            &chart_area,
+            &config,
+        );
+        // Left axis viewport should be to the left of chart area
+        assert!((bounds.viewport_rect.left - 0.0).abs() < f32::EPSILON);
+        assert!((bounds.viewport_rect.right - chart_area.x).abs() < f32::EPSILON);
+    }
+
+    // --- Builder trait conformance tests ---
+
+    #[test]
+    fn test_line_builder_hover_reveal() {
+        use crate::chart_builder::builders::{ConfigurableBuilder, line};
+        let builder = line::<D>().hover_reveal(true);
+        assert!(builder.config.hover_reveal);
+    }
+
+    #[test]
+    fn test_bar_builder_hover_reveal() {
+        use crate::chart_builder::builders::{ConfigurableBuilder, bar};
+        let builder = bar::<D>().hover_reveal(true);
+        assert!(builder.config.hover_reveal);
+    }
+
+    #[test]
+    fn test_area_builder_hover_reveal() {
+        use crate::chart_builder::builders::{ConfigurableBuilder, area};
+        let builder = area::<D>().hover_reveal(true);
+        assert!(builder.config.hover_reveal);
+    }
+
+    #[test]
+    fn test_heatmap_builder_hover_reveal() {
+        use crate::chart_builder::builders::{ConfigurableBuilder, heatmap};
+        let builder = heatmap::<D>().hover_reveal(true);
+        assert!(builder.config.hover_reveal);
+    }
+
+    #[test]
+    fn test_boxplot_builder_hover_reveal() {
+        use crate::chart_builder::builders::{BoxPlotBuilder, ConfigurableBuilder};
+        let builder = BoxPlotBuilder::<D>::new().hover_reveal(true);
+        assert!(builder.config.hover_reveal);
+    }
+}
