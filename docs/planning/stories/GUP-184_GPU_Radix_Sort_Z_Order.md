@@ -121,3 +121,103 @@ end-to-end benchmark numbers suggest. For production use, the staging buffer
 approach (pre-computing all configs and using copy_buffer_to_buffer) ensures
 minimal per-frame CPU overhead. A follow-up story could optimize the scatter
 pass's O(workgroup_size) local rank computation.
+
+## Retrospective
+
+**Completed**: 2025-07-20
+
+### Key Technical Learnings
+
+#### queue.write_buffer Ordering with Command Encoders
+
+- **Challenge**: The initial implementation used `queue.write_buffer` to update
+  the sort configuration uniform between compute passes within the same command
+  encoder. All dispatches saw only the last config.
+- **Solution**: Pre-compute all configs into a staging buffer, then use
+  `encoder.copy_buffer_to_buffer()` to copy each config before its corresponding
+  compute pass. This ensures correct ordering within the command buffer.
+- **Pattern**: In wgpu, `queue.write_buffer` writes are batched and executed
+  BEFORE any submitted command buffers. To sequence uniform updates between
+  compute passes in the same command buffer, use staging buffers with
+  `copy_buffer_to_buffer`.
+
+#### WGSL Reserved Keywords
+
+- **Challenge**: Used `pass` as a function parameter name in WGSL, which is a
+  reserved keyword.
+- **Solution**: Renamed to `radix_pass`.
+- **Pattern**: Always check WGSL reserved keyword list when naming shader
+  variables. Common traps: `pass`, `input`, `output`, `texture`, `sampler`.
+
+#### Multi-Level Prefix Sum for Arbitrary Sizes
+
+- **Challenge**: The 8-bit radix sort histogram has `256 * num_workgroups`
+  entries, which for 1M instances is ~1M entries. The existing 2-level prefix sum
+  only handles up to 65K entries.
+- **Solution**: Implemented a 3-level prefix sum by adding a `prefix_data_offset`
+  field to the config, allowing the scan to operate on data at arbitrary offsets
+  within the histogram buffer.
+- **Pattern**: When extending Blelloch scans to 3+ levels, parameterize the
+  data offset and block total offset separately in the config uniform.
+
+### Architectural Decisions
+
+#### Separate Module vs. Extending ComputeInstanceFilter
+
+- **Decision**: Created `radix_sort.rs` as a separate module rather than adding
+  sort code to `compute_instance_filter.rs`.
+- **Reasoning**: The radix sort has its own WGSL shader, bind group layout, and 7
+  compute pipelines. Mixing this into the filter module would make it hard to
+  maintain. Separation also allows the sorter to be used independently.
+- **Trade-off**: Requires a second bind group and staging buffer allocation per
+  sort dispatch.
+- **Future**: The sort could be optimized by sharing a common prefix sum module
+  between filter and sort.
+
+#### 8-bit Radix (4 Passes) over 1-bit (32 Passes)
+
+- **Decision**: Used 8-bit radix digits with 4 passes instead of the originally
+  planned 1-bit-per-pass approach.
+- **Reasoning**: 4 passes means 4× fewer dispatch calls than 32 passes. The
+  tradeoff is more complex histogram and scatter logic, but the reduced dispatch
+  overhead is significant.
+- **Trade-off**: Requires 256-entry per-workgroup histograms and a multi-level
+  prefix sum, adding implementation complexity.
+- **Future**: A 4-bit radix (8 passes) would simplify the prefix sum
+  requirements while keeping dispatch count moderate.
+
+#### Stable Sort via Serial Local Rank
+
+- **Decision**: Compute local rank in the scatter pass by serially scanning
+  preceding threads in shared memory.
+- **Reasoning**: Guarantees sort stability (preserving input order for equal
+  keys). Simpler to implement correctly than workgroup-level prefix sum
+  decomposition.
+- **Trade-off**: O(workgroup_size) per thread = O(workgroup_size²) total per
+  workgroup. For 256-thread workgroups this is 65K operations, which is
+  acceptable but not optimal.
+- **Future**: GUP-235 could optimize this using per-digit shared memory prefix
+  sums for O(workgroup_size) total per workgroup.
+
+### Development Workflow Insights
+
+- The `queue.write_buffer` ordering bug was the hardest issue to diagnose. The
+  symptom (output matching input order) was misleading — it looked like the sort
+  was a no-op. Adding diagnostic tests to verify individual stages (key
+  extraction) helped narrow down the issue.
+- Pre-commit hooks running cargo checks add significant latency (~2 min per
+  commit). Using `mask all-fix` before commit catches most issues but doesn't
+  eliminate hook overhead.
+- The wgpu headless test infrastructure works well for GPU compute testing. The
+  `PollType::WaitForSubmissionIndex` pattern reliably synchronizes GPU work.
+
+### Follow-up Stories
+
+1. **GUP-235: Radix Sort Scatter Optimization** — Replace the O(n²) serial local
+   rank computation in the scatter pass with per-digit shared memory prefix sums
+   for O(n) total work per workgroup. This would significantly improve sort
+   performance for large datasets.
+
+2. **GUP-236: Sort-Aware Visual Demo** — Create an example demonstrating
+   transparent overlapping marks rendered correctly with Z-order sorting enabled
+   vs. disabled, showing the visual difference.
