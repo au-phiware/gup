@@ -8,7 +8,8 @@
 //! chart titles — no manual font atlas management required.
 //!
 //! Features shown:
-//! - Chart title rendered in a serif font
+//! - Left-aligned chart title in a serif font with a subtitle
+//! - Subtitle in a lighter, smaller sans-serif font
 //! - Axis labels rendered in a sans-serif font
 //! - Automatic font atlas creation via `FontAtlasManager`
 //! - Label collision detection with `queue_chart_text_resolved`
@@ -17,7 +18,7 @@
 use gup::{
     GupContext, PhysicalSize, SurfaceId,
     axis::{AxisConfiguration, AxisPosition, LinearAxis},
-    chart_builder::{ChartConfig, ComposedChart},
+    chart_builder::{ChartConfig, ComposedChart, TitleAlignment, TitleConfig},
     label::{LabelConstraints, LabelPositioner},
     render::Vertex,
     text::{FontAtlasManager, FontDatabase, TextLayoutEngine, TextRenderer, TextStyle},
@@ -107,13 +108,22 @@ impl MultiFontChartApp {
 
         let sel = gup::selection::Selection::<DataPoint, gup::Circle>::new(vec![], render_context)?;
 
-        // Configure chart with multi-font styles
+        // Configure chart with multi-font styles and title layout
         let config = ChartConfig {
             width: WINDOW_WIDTH as f32,
             height: WINDOW_HEIGHT as f32,
             ..ChartConfig::default()
         }
-        .with_title("Revenue by Quarter (Multi-Font Demo)")
+        .with_title_config(
+            TitleConfig::new("Revenue by Quarter")
+                .with_alignment(TitleAlignment::Left)
+                .with_subtitle("Multi-Font Demo · FY 2024")
+                .with_subtitle_style(
+                    TextStyle::new(13.0)
+                        .with_font_family("DejaVu Sans")
+                        .with_rgba(0.45, 0.45, 0.45, 1.0),
+                ),
+        )
         .with_title_style(
             TextStyle::new(20.0)
                 .bold()
@@ -316,9 +326,10 @@ impl MultiFontChartApp {
                                 font_manager,
                                 w,
                                 h,
-                            ) {
-                                eprintln!("⚠️ Failed to render text: {e}");
-                            }
+                            )
+                        {
+                            eprintln!("⚠️ Failed to render text: {e}");
+                        }
                     } else {
                         // No axis geometry, just render text
                         let mut render_pass = frame.render_pass(Some(clear_color));
