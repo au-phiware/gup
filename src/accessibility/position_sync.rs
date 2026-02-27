@@ -272,7 +272,7 @@ mod tests {
     #[test]
     fn test_position_manager() {
         let mut manager = PositionManager::new();
-        let node_id = NodeId::from(1);
+        let node_id = NodeId::new();
 
         // Initially no position
         assert!(manager.get_screen_position(node_id).is_none());
@@ -296,7 +296,7 @@ mod tests {
     #[test]
     fn test_position_manager_viewport_changes() {
         let mut manager = PositionManager::new();
-        let node_id = NodeId::from(1);
+        let node_id = NodeId::new();
 
         manager.set_position(node_id, GpuPosition { x: 0.0, y: 0.0 });
         manager.clear_dirty();

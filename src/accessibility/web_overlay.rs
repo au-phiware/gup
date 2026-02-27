@@ -1166,6 +1166,8 @@ mod tests {
             pointer_enabled: false,
             show_focus_indicators: false,
             z_index: 500,
+            forward_events: false,
+            deduplicate_events: false,
         };
 
         assert_eq!(config.container_id, "custom-overlay");

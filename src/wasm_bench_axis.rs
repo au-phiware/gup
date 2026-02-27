@@ -283,7 +283,7 @@ pub fn run_native_axis_benchmarks() -> String {
 /// Run all axis benchmarks from JavaScript and return JSON results.
 ///
 /// Call from JS: `const json = await gup.run_wasm_axis_benchmarks();`
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", not(test)))]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn run_wasm_axis_benchmarks() -> String {
     let config = bench_config();

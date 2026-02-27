@@ -15,6 +15,14 @@
 //! ```
 
 fn main() {
-    let json = gup::wasm_bench_interaction::run_native_benchmarks();
-    println!("{json}");
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let json = gup::wasm_bench_interaction::run_native_benchmarks();
+        println!("{json}");
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        eprintln!("This binary is not supported on wasm32 targets.");
+        std::process::exit(1);
+    }
 }

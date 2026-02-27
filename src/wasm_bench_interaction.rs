@@ -390,7 +390,7 @@ pub fn run_native_benchmarks() -> String {
 /// Run all benchmarks from JavaScript and return JSON results.
 ///
 /// Call from JS: `const json = await gup.run_wasm_benchmarks();`
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", not(test)))]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub async fn run_wasm_benchmarks() -> String {
     let config = BenchConfig::default();

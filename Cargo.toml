@@ -92,9 +92,11 @@ log = "0.4"
 tokio = { version = "1.0", features = ["rt", "macros", "time", "sync"] }
 uuid = { version = "1.0", features = ["v4", "serde", "js"] }
 
-[dev-dependencies]
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports"] }
 tokio-test = "0.4"
+
+[dev-dependencies]
 futures-channel = "0.3"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]

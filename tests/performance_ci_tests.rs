@@ -5,6 +5,9 @@
 //!
 //! This test suite is designed to run in CI/CD pipelines and detect performance
 //! regressions by comparing against stored baselines.
+//!
+//! Requires native (non-WASM) target due to `Send` + `Sync` bounds on GPU futures.
+#![cfg(not(target_arch = "wasm32"))]
 
 use gup::GupContext;
 use gup::debug::{
