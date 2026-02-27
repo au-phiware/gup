@@ -162,7 +162,8 @@ pub use scale::*;
 pub use interaction::{
     CustomInteractionQuery, ElementData, ElementHit, EventHandler, GestureRecognizer, GestureType,
     GpuInteractionQuery, InteractionElement, InteractionEvent, InteractionResult,
-    InteractionSystem, InteractionType, PropagationPhase, QueryStats, Rect, Renderable, TouchPoint,
+    InteractionSystem, InteractionType, PropagationPhase, QueryHandle, QueryStats, Rect,
+    Renderable, TouchPoint,
 };
 pub use mixable::*;
 pub use plugins::*;

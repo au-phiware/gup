@@ -47,6 +47,7 @@ use crate::spatial_index::{
 use futures_channel;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use wgpu::{
     BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Buffer,
     BufferBindingType, BufferDescriptor, BufferUsages, ComputePassDescriptor, ComputePipeline,
@@ -667,6 +668,11 @@ pub struct InteractionSystem {
     /// Reuses MAP_READ staging buffers across Morton count/candidate readbacks
     /// instead of creating and destroying them per query.
     staging_pool: BufferPool,
+
+    /// Double-buffered staging slots for non-blocking queries (GUP-198).
+    /// Two slots allow a new query to be submitted while a previous result is
+    /// still being read, enabling CPU-GPU overlap.
+    async_staging_slots: [AsyncStagingSlot; 2],
 }
 
 impl InteractionSystem {
@@ -880,6 +886,27 @@ impl InteractionSystem {
             },
         );
 
+        // Double-buffered staging for non-blocking queries (GUP-198).
+        let async_staging_size = (max_results * std::mem::size_of::<InteractionResult>()) as u64;
+        let async_staging_a = AsyncStagingSlot {
+            buffer: Arc::new(device.create_buffer(&BufferDescriptor {
+                label: Some("async_staging_a"),
+                size: async_staging_size,
+                usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            })),
+            in_use: Arc::new(AtomicBool::new(false)),
+        };
+        let async_staging_b = AsyncStagingSlot {
+            buffer: Arc::new(device.create_buffer(&BufferDescriptor {
+                label: Some("async_staging_b"),
+                size: async_staging_size,
+                usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            })),
+            in_use: Arc::new(AtomicBool::new(false)),
+        };
+
         Ok(Self {
             hit_test_pipeline,
             spatial_index_pipeline,
@@ -925,6 +952,7 @@ impl InteractionSystem {
             cached_element_count: 0,
             last_dispatch_result_slots: 0,
             staging_pool,
+            async_staging_slots: [async_staging_a, async_staging_b],
         })
     }
 
@@ -1375,6 +1403,123 @@ impl InteractionSystem {
     pub async fn query_region_cached(&mut self, region: Rect) -> GupResult<Vec<ElementHit>> {
         let query = GpuInteractionQuery::region(region, 10000);
         self.execute_query_cached(query).await
+    }
+
+    // -- Non-blocking query API (GUP-198) --
+
+    /// Submit a point query and return a [`QueryHandle`] without waiting for
+    /// the GPU to finish.
+    ///
+    /// The caller must have uploaded element data via
+    /// [`upload_element_data_cached`](Self::upload_element_data_cached) before
+    /// calling this method.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let handle = system.query_point_async(Vec2::new(100.0, 200.0)).await?;
+    /// // … do CPU work …
+    /// let hits = handle.await_result().await?;
+    /// ```
+    pub async fn query_point_async(&mut self, position: Vec2) -> GupResult<QueryHandle> {
+        let query = GpuInteractionQuery::point(position, 1000);
+        self.execute_query_cached_async(query).await
+    }
+
+    /// Submit a region query and return a [`QueryHandle`] without waiting for
+    /// the GPU to finish.
+    ///
+    /// See [`query_point_async`](Self::query_point_async) for usage.
+    pub async fn query_region_async(&mut self, region: Rect) -> GupResult<QueryHandle> {
+        let query = GpuInteractionQuery::region(region, 10000);
+        self.execute_query_cached_async(query).await
+    }
+
+    /// Internal: dispatch a cached query and start an asynchronous readback,
+    /// returning a [`QueryHandle`] that can be polled or awaited.
+    async fn execute_query_cached_async(
+        &mut self,
+        query: GpuInteractionQuery,
+    ) -> GupResult<QueryHandle> {
+        if self.cached_element_count == 0 {
+            return Ok(QueryHandle::empty());
+        }
+
+        let element_count = self.cached_element_count;
+
+        // Upload query data.
+        self.upload_query_data(&[query])?;
+
+        // Dispatch compute shader (same paths as the sync cached API).
+        if element_count > 1000 && self.morton_gpu_index_built {
+            self.dispatch_gpu_morton_query_cached(query).await?;
+        } else {
+            self.dispatch_hit_test_compute(element_count, 1).await?;
+        }
+
+        // Start non-blocking readback via double-buffered staging.
+        self.start_async_download()
+    }
+
+    /// Pick a free async staging slot, copy the result buffer into it, and
+    /// initiate `map_async`.  Returns a [`QueryHandle`] wrapping the pending
+    /// readback.
+    fn start_async_download(&mut self) -> GupResult<QueryHandle> {
+        let slot_idx = self.pick_async_staging_slot()?;
+        let slot = &self.async_staging_slots[slot_idx];
+
+        let result_entry_size = std::mem::size_of::<InteractionResult>() as u64;
+        let staging_size = slot.buffer.size();
+
+        // Copy only the portion that was actually written (GUP-197 pattern).
+        let copy_size = if self.last_dispatch_result_slots > 0 {
+            let needed = self.last_dispatch_result_slots as u64 * result_entry_size;
+            needed.min(staging_size)
+        } else {
+            staging_size
+        };
+
+        // Copy result buffer → async staging buffer.
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("async_result_copy"),
+            });
+        encoder.copy_buffer_to_buffer(&self.result_buffer, 0, &slot.buffer, 0, copy_size);
+        self.queue.submit([encoder.finish()]);
+
+        // Initiate non-blocking map.
+        let buffer_slice = slot.buffer.slice(..copy_size);
+        let (sender, receiver) = futures_channel::oneshot::channel();
+        buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = sender.send(result);
+        });
+
+        // Mark the slot as in-use.
+        slot.in_use.store(true, Ordering::Release);
+
+        Ok(QueryHandle {
+            inner: Some(QueryHandleInner {
+                map_receiver: receiver,
+                staging_buffer: Arc::clone(&slot.buffer),
+                copy_size,
+                device: Arc::clone(&self.device),
+                slot_in_use: Arc::clone(&slot.in_use),
+            }),
+        })
+    }
+
+    /// Find a free async staging slot.  Returns an error if both are busy.
+    fn pick_async_staging_slot(&self) -> GupResult<usize> {
+        for (i, slot) in self.async_staging_slots.iter().enumerate() {
+            if !slot.in_use.load(Ordering::Acquire) {
+                return Ok(i);
+            }
+        }
+        Err(GupError::render_error(
+            "Both async staging buffers are in use; consume or drop pending QueryHandles first"
+                .to_string(),
+        ))
     }
 
     /// Returns the current cached element data version.
@@ -2759,6 +2904,183 @@ pub struct InteractionElement {
     pub position: [f32; 2],
     pub size: [f32; 2],
     pub mark_type: u32,
+}
+
+// -- Non-blocking query API (GUP-198) --
+
+/// Internal state for a double-buffered async staging slot.
+struct AsyncStagingSlot {
+    buffer: Arc<Buffer>,
+    in_use: Arc<AtomicBool>,
+}
+
+/// Handle for a pending non-blocking GPU hit test query (GUP-198).
+///
+/// Created by [`InteractionSystem::query_point_async`] or
+/// [`InteractionSystem::query_region_async`]. The result can be polled
+/// non-blockingly via [`poll_result`](Self::poll_result) or consumed
+/// via [`await_result`](Self::await_result).
+///
+/// # Frame-aligned usage
+///
+/// In a render loop the typical pattern is:
+///
+/// ```rust,ignore
+/// // Frame N: submit query
+/// let handle = system.query_point_async(position).await?;
+///
+/// // Frame N+1: consume result (GPU has already finished)
+/// if let Some(hits) = handle.poll_result()? {
+///     process(hits);
+/// }
+/// ```
+///
+/// Because the GPU completes the work between frames, `poll_result`
+/// returns the answer with effectively zero perceived latency.
+pub struct QueryHandle {
+    inner: Option<QueryHandleInner>,
+}
+
+struct QueryHandleInner {
+    /// Receives the `map_async` completion signal.
+    map_receiver: futures_channel::oneshot::Receiver<Result<(), wgpu::BufferAsyncError>>,
+    /// Staging buffer holding the mapped result data.
+    staging_buffer: Arc<Buffer>,
+    /// Byte count of the valid region in the staging buffer.
+    copy_size: u64,
+    /// Device handle for driving non-blocking polls.
+    device: Arc<Device>,
+    /// Shared flag — cleared when this handle releases the staging slot.
+    slot_in_use: Arc<AtomicBool>,
+}
+
+impl QueryHandle {
+    /// Create a handle that immediately resolves to an empty result set.
+    fn empty() -> Self {
+        Self { inner: None }
+    }
+
+    /// Returns `true` if the result has already been consumed or was empty.
+    pub fn is_consumed(&self) -> bool {
+        self.inner.is_none()
+    }
+
+    /// Poll for the query result without blocking.
+    ///
+    /// Returns `Ok(None)` if the GPU has not yet finished, `Ok(Some(hits))`
+    /// once the result is available, or `Err` on failure.
+    ///
+    /// Each call performs a non-blocking `device.poll(PollType::Poll)` to
+    /// drive any pending callbacks, so results may become available on
+    /// successive calls even without external device polling.
+    pub fn poll_result(&mut self) -> GupResult<Option<Vec<ElementHit>>> {
+        let inner = match self.inner.as_mut() {
+            None => return Ok(Some(Vec::new())),
+            Some(inner) => inner,
+        };
+
+        // Drive the device without blocking.
+        let _ = inner.device.poll(PollType::Poll);
+
+        match inner.map_receiver.try_recv() {
+            Ok(Some(Ok(()))) => {
+                // Mapping complete — read data and release the slot.
+                let results = Self::read_and_unmap(&inner.staging_buffer, inner.copy_size)?;
+                inner.slot_in_use.store(false, Ordering::Release);
+                self.inner = None;
+                Ok(Some(results))
+            }
+            Ok(Some(Err(e))) => {
+                inner.slot_in_use.store(false, Ordering::Release);
+                self.inner = None;
+                Err(GupError::render_error(format!(
+                    "Buffer mapping failed: {e:?}"
+                )))
+            }
+            Ok(None) => Ok(None), // Not ready yet.
+            Err(futures_channel::oneshot::Canceled) => {
+                inner.slot_in_use.store(false, Ordering::Release);
+                self.inner = None;
+                Err(GupError::render_error(
+                    "Query handle channel closed unexpectedly".to_string(),
+                ))
+            }
+        }
+    }
+
+    /// Await the query result.
+    ///
+    /// Performs a blocking `device.poll(PollType::Wait)` so the map callback
+    /// fires, then reads and returns the hit test results. In frame-aligned
+    /// usage where the GPU has already finished, this returns almost
+    /// immediately.
+    pub async fn await_result(mut self) -> GupResult<Vec<ElementHit>> {
+        let inner = match self.inner.take() {
+            None => return Ok(Vec::new()),
+            Some(inner) => inner,
+        };
+
+        let QueryHandleInner {
+            map_receiver,
+            staging_buffer,
+            copy_size,
+            device,
+            slot_in_use,
+        } = inner;
+
+        // Block until GPU work completes and the map callback fires.
+        let _ = device.poll(PollType::Wait);
+
+        let map_result = map_receiver.await.map_err(|_| {
+            slot_in_use.store(false, Ordering::Release);
+            GupError::render_error("Query channel closed".to_string())
+        })?;
+
+        map_result.map_err(|e| {
+            slot_in_use.store(false, Ordering::Release);
+            staging_buffer.unmap();
+            GupError::render_error(format!("Buffer mapping failed: {e:?}"))
+        })?;
+
+        let results = Self::read_and_unmap(&staging_buffer, copy_size)?;
+        slot_in_use.store(false, Ordering::Release);
+        Ok(results)
+    }
+
+    /// Read interaction results from a mapped staging buffer and unmap it.
+    fn read_and_unmap(staging_buffer: &Buffer, copy_size: u64) -> GupResult<Vec<ElementHit>> {
+        let buffer_slice = staging_buffer.slice(..copy_size);
+        let data = buffer_slice.get_mapped_range();
+        let results: &[InteractionResult] = bytemuck::cast_slice(&data);
+
+        let hits: Vec<ElementHit> = results
+            .iter()
+            .filter(|r| r.is_hit != 0)
+            .map(|r| {
+                ElementHit::new(
+                    r.element_id,
+                    r.selection_id,
+                    r.distance,
+                    Vec2::new(r.intersection_point[0], r.intersection_point[1]),
+                )
+            })
+            .collect();
+
+        drop(data);
+        staging_buffer.unmap();
+        Ok(hits)
+    }
+}
+
+impl Drop for QueryHandle {
+    fn drop(&mut self) {
+        if let Some(inner) = self.inner.take() {
+            // Release the staging slot so it can be reused.
+            // Unmapping an unmapped buffer is a safe no-op in wgpu.
+            inner.staging_buffer.unmap();
+            inner.slot_in_use.store(false, Ordering::Release);
+        }
+    }
 }
 
 #[cfg(test)]
