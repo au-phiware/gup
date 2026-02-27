@@ -29,6 +29,7 @@ use gup::mark::{
 use gup::{Vec2, Vec4, vec2, vec4};
 use std::sync::Arc;
 use std::time::Instant;
+use wgpu::util::DeviceExt;
 
 /// Helper function to create test context for GPU operations.
 async fn create_test_context() -> GupResult<Arc<GupContext>> {
@@ -107,7 +108,19 @@ async fn test_bind_group_creation_performance() -> GupResult<()> {
 
     // Create instance buffer for bind group creation
     let instance_buffer = GpuBuffer::<u8>::new(device, BufferType::Instance, 100);
-    let uniform_buffers = vec![];
+
+    // Viewport uniform buffer — required by the bind group layout for
+    // custom-shader marks (binding 1).
+    let viewport = gup::ViewportUniforms {
+        width: 64.0,
+        height: 64.0,
+    };
+    let viewport_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("test_viewport_uniform"),
+        contents: bytemuck::bytes_of(&viewport),
+        usage: wgpu::BufferUsages::UNIFORM,
+    });
+    let uniform_buffers: Vec<&wgpu::Buffer> = vec![&viewport_buf];
 
     // Measure bind group creation time
     let start = Instant::now();
@@ -379,7 +392,17 @@ async fn test_end_to_end_workflow_performance() -> GupResult<()> {
 
     // Step 5: Bind group creation
     let instance_buffer = GpuBuffer::<u8>::new(device, BufferType::Instance, instances.len());
-    let bind_group = registry.create_bind_group::<Circle>(device, instance_buffer.buffer(), &[])?;
+    let viewport = gup::ViewportUniforms {
+        width: 64.0,
+        height: 64.0,
+    };
+    let viewport_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("test_viewport_uniform"),
+        contents: bytemuck::bytes_of(&viewport),
+        usage: wgpu::BufferUsages::UNIFORM,
+    });
+    let bind_group =
+        registry.create_bind_group::<Circle>(device, instance_buffer.buffer(), &[&viewport_buf])?;
 
     let total_workflow_time = workflow_start.elapsed();
 
