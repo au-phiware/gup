@@ -493,6 +493,38 @@ impl ComputeInstanceFilter {
         viewport: &Viewport2D,
         lod_thresholds: &[f32; 3],
     ) {
+        self.encode_frustum_cull_with_bind_group(
+            queue,
+            encoder,
+            bind_group,
+            config_buffer,
+            instance_count,
+            vertex_count,
+            viewport,
+            lod_thresholds,
+        );
+
+        self.encode_prefix_sum_and_compact_with_bind_group(encoder, bind_group, instance_count);
+    }
+
+    /// Encode only the frustum cull_and_classify pass.
+    ///
+    /// Uploads the config uniform and dispatches the cull pass. The
+    /// visibility buffer is written but prefix-sum / compaction are NOT
+    /// performed. Call [`encode_prefix_sum_and_compact_with_bind_group`]
+    /// afterwards (possibly after additional passes that modify visibility).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn encode_frustum_cull_with_bind_group(
+        &self,
+        queue: &Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        bind_group: &BindGroup,
+        config_buffer: &Buffer,
+        instance_count: u32,
+        vertex_count: u32,
+        viewport: &Viewport2D,
+        lod_thresholds: &[f32; 3],
+    ) {
         let num_workgroups = instance_count.div_ceil(WORKGROUP_SIZE);
 
         // Upload config.
@@ -500,7 +532,7 @@ impl ComputeInstanceFilter {
             FilterConfig::from_viewport(viewport, lod_thresholds, instance_count, vertex_count);
         queue.write_buffer(config_buffer, 0, bytemuck::bytes_of(&config));
 
-        // Compute passes.
+        // Cull + classify pass.
         {
             let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
                 label: Some("cull_and_classify"),
@@ -510,6 +542,20 @@ impl ComputeInstanceFilter {
             pass.set_bind_group(0, bind_group, &[]);
             pass.dispatch_workgroups(num_workgroups, 1, 1);
         }
+    }
+
+    /// Encode prefix-sum and compact passes.
+    ///
+    /// Assumes the visibility buffer has already been populated (by
+    /// [`encode_frustum_cull_with_bind_group`] and possibly additional
+    /// passes like occlusion culling).
+    pub(crate) fn encode_prefix_sum_and_compact_with_bind_group(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        bind_group: &BindGroup,
+        instance_count: u32,
+    ) {
+        let num_workgroups = instance_count.div_ceil(WORKGROUP_SIZE);
 
         {
             let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
@@ -648,6 +694,18 @@ impl ComputeInstanceFilter {
 // ---------------------------------------------------------------------------
 // Pooled compute instance filter
 // ---------------------------------------------------------------------------
+
+/// References to the pooled filter's internal GPU buffers.
+///
+/// Used by the unified culling pipeline to share the visibility buffer
+/// with occlusion passes.
+pub(crate) struct PooledBufferRefs<'a> {
+    pub output_buffer: &'a Buffer,
+    pub visibility_buffer: &'a Buffer,
+    pub prefix_sums_buffer: &'a Buffer,
+    pub draw_indirect_buffer: &'a Buffer,
+    pub config_buffer: &'a Buffer,
+}
 
 /// Pre-allocated GPU buffer pool for [`ComputeInstanceFilter`].
 ///
@@ -872,6 +930,104 @@ impl PooledComputeInstanceFilter {
         if min_instances > self.capacity {
             self.grow(device, min_instances);
         }
+    }
+
+    /// References to the pool's internal buffers.
+    ///
+    /// Used by [`UnifiedCullingPipeline`] to create bind groups that share
+    /// the visibility buffer with occlusion culling passes.
+    ///
+    /// [`UnifiedCullingPipeline`]: super::unified_culling_pipeline::UnifiedCullingPipeline
+    pub(crate) fn buffer_refs(&self) -> PooledBufferRefs<'_> {
+        PooledBufferRefs {
+            output_buffer: &self.output_buffer,
+            visibility_buffer: &self.visibility_buffer,
+            prefix_sums_buffer: &self.prefix_sums_buffer,
+            draw_indirect_buffer: &self.draw_indirect_buffer,
+            config_buffer: &self.config_buffer,
+        }
+    }
+
+    /// Get an `Arc` reference to the output buffer.
+    pub(crate) fn output_buffer_arc(&self) -> Arc<Buffer> {
+        Arc::clone(&self.output_buffer)
+    }
+
+    /// Get an `Arc` reference to the draw indirect buffer.
+    pub(crate) fn draw_indirect_buffer_arc(&self) -> Arc<Buffer> {
+        Arc::clone(&self.draw_indirect_buffer)
+    }
+
+    /// Encode only the frustum cull_and_classify pass using pooled buffers.
+    ///
+    /// Resolves the bind group (with caching) and encodes the cull pass
+    /// into the given command encoder. Does NOT perform prefix-sum or
+    /// compaction — call [`encode_prefix_sum_and_compact`] afterwards.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn encode_frustum_cull(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        input_buffer: &Buffer,
+        instance_count: u32,
+        vertex_count: u32,
+        viewport: &Viewport2D,
+        lod_thresholds: &[f32; 3],
+    ) {
+        // Resolve bind group: reuse cached or create new.
+        let input_ptr: *const Buffer = input_buffer;
+        let cache_hit = self
+            .cached_bind_group
+            .as_ref()
+            .is_some_and(|c| std::ptr::eq(input_ptr, c.input_buffer_id));
+
+        if !cache_hit {
+            let bind_group = self.inner.create_bind_group(
+                device,
+                input_buffer,
+                &self.output_buffer,
+                &self.visibility_buffer,
+                &self.prefix_sums_buffer,
+                &self.draw_indirect_buffer,
+                &self.config_buffer,
+            );
+            self.cached_bind_group = Some(CachedBindGroup {
+                bind_group,
+                input_buffer_id: input_ptr,
+            });
+        }
+
+        let bind_group = &self.cached_bind_group.as_ref().unwrap().bind_group;
+
+        self.inner.encode_frustum_cull_with_bind_group(
+            queue,
+            encoder,
+            bind_group,
+            &self.config_buffer,
+            instance_count,
+            vertex_count,
+            viewport,
+            lod_thresholds,
+        );
+    }
+
+    /// Encode prefix-sum and compact passes using pooled buffers.
+    ///
+    /// Must be called after [`encode_frustum_cull`] (and any additional
+    /// passes that modify the visibility buffer).
+    pub(crate) fn encode_prefix_sum_and_compact(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        instance_count: u32,
+    ) {
+        let bind_group = &self.cached_bind_group.as_ref().unwrap().bind_group;
+
+        self.inner.encode_prefix_sum_and_compact_with_bind_group(
+            encoder,
+            bind_group,
+            instance_count,
+        );
     }
 
     /// Run the full filter pipeline with optional Z-order sorting.

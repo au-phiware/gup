@@ -104,6 +104,7 @@ pub mod radix_sort;
 pub mod rectangle;
 pub mod renderer;
 pub mod text;
+pub mod unified_culling_pipeline;
 pub mod validation;
 
 pub use advanced_rendering::{
@@ -134,6 +135,7 @@ pub use performance_opt::{
 pub use rectangle::{Rectangle, RectangleAttributes, RectangleVertex};
 pub use renderer::MarkRenderer;
 pub use text::{Text, TextMarkAttributes, TextVertex};
+pub use unified_culling_pipeline::UnifiedCullingPipeline;
 
 use crate::error::GupResult;
 use crate::shader_pipeline::ComposableShaderPipeline;

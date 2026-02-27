@@ -240,6 +240,7 @@ pub use mark::occlusion_culler::{
 };
 pub use mark::radix_sort::{RadixSorter, SortBuffers, SortConfig};
 pub use mark::rectangle::{Rectangle, RectangleAttributes, RectangleInstance, RectangleVertex};
+pub use mark::unified_culling_pipeline::UnifiedCullingPipeline;
 pub use mark::{Mark, MarkInfo, MarkInfoImpl, MarkRegistry};
 
 // Export selection system
