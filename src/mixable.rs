@@ -17,7 +17,7 @@
 //! // let composed = chart1.mix(chart2);
 //! ```
 
-use crate::{GupError, GupResult, RenderContext, Viewport};
+use crate::{GupError, GupResult, MaybeSend, MaybeSync, RenderContext, Viewport};
 use std::fmt::Debug;
 
 pub mod composition_recovery;
@@ -178,7 +178,7 @@ impl CustomCompositionBehavior {
 /// let composed = viz1.mix(viz2);
 /// assert!(composed.is_valid());
 /// ```
-pub trait Mixable: Debug + Send + Sync {
+pub trait Mixable: Debug + MaybeSend + MaybeSync {
     /// The output type produced by rendering this mixable component.
     type Output;
 

@@ -619,11 +619,28 @@ struct CachedRenderResult;
 /// Extension trait for Mixable types to add error recovery capabilities
 pub trait MixableErrorRecovery: Mixable {
     /// Render with comprehensive error recovery
+    #[cfg(not(target_arch = "wasm32"))]
     fn render_with_recovery(
         &mut self,
         context: &mut RenderContext,
         policy: &ErrorHandlingPolicy,
     ) -> impl std::future::Future<Output = CompositionResult> + Send
+    where
+        Self: Sized,
+    {
+        async move {
+            let mut executor = RobustCompositionExecutor::new(policy.clone());
+            executor.execute_robust(self, context).await
+        }
+    }
+
+    /// Render with comprehensive error recovery (WASM variant without Send bound)
+    #[cfg(target_arch = "wasm32")]
+    fn render_with_recovery(
+        &mut self,
+        context: &mut RenderContext,
+        policy: &ErrorHandlingPolicy,
+    ) -> impl std::future::Future<Output = CompositionResult>
     where
         Self: Sized,
     {

@@ -38,12 +38,12 @@
 //! }
 //! ```
 
-use crate::RenderContext;
 use crate::buffer::{BufferPool, BufferPoolConfig, BufferType as PoolBufferType};
 use crate::error::{GupError, GupResult};
 use crate::spatial_index::{
     Aabb, ElementPosition, MortonEntry, SpatialAlgorithm, SpatialIndex, SpatialQuery,
 };
+use crate::{MaybeSend, MaybeSync, RenderContext};
 use futures_channel;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -2890,7 +2890,7 @@ impl InteractionSystem {
 }
 
 /// Trait for objects that can be queried for interactions
-pub trait Renderable: Send + Sync {
+pub trait Renderable: MaybeSend + MaybeSync {
     /// Get elements for interaction processing
     fn get_elements_for_interaction(&self) -> GupResult<Vec<InteractionElement>>;
 

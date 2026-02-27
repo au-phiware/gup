@@ -4,7 +4,7 @@
 //! Progressive loading support for large datasets.
 
 use super::{AsyncMixable, RenderProgress};
-use crate::{GupError, GupResult, RenderContext};
+use crate::{GupError, GupResult, MaybeSend, MaybeSync, RenderContext};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -111,8 +111,9 @@ impl LoadProgress {
 }
 
 /// Trait for progressive data loaders.
-#[async_trait]
-pub trait ProgressiveDataLoader<T>: Send + Sync {
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+pub trait ProgressiveDataLoader<T>: MaybeSend + MaybeSync {
     /// Load a chunk of data at the specified offset and size.
     async fn load_chunk(&mut self, offset: usize, size: usize) -> GupResult<Vec<T>>;
 
@@ -179,7 +180,7 @@ pub struct ProgressiveVisualization<T, L> {
 
 impl<T, L> ProgressiveVisualization<T, L>
 where
-    T: Clone + Send + Sync + 'static,
+    T: Clone + MaybeSend + MaybeSync + 'static,
     L: ProgressiveDataLoader<T> + 'static,
 {
     /// Create a new progressive visualization.
@@ -222,6 +223,7 @@ where
         let cancellation_token = self.cancellation_token.clone();
         let chunk_cache = self.chunk_cache.clone();
 
+        #[cfg(not(target_arch = "wasm32"))]
         let task = tokio::spawn(async move {
             Self::background_loading_task(
                 data_loader,
@@ -233,6 +235,24 @@ where
             )
             .await;
         });
+        #[cfg(target_arch = "wasm32")]
+        let task = {
+            // On WASM, spawn_local doesn't return a JoinHandle so we wrap in a
+            // stub. Background loading still runs but cannot be joined.
+            wasm_bindgen_futures::spawn_local(async move {
+                Self::background_loading_task(
+                    data_loader,
+                    loaded_data,
+                    load_progress,
+                    config,
+                    cancellation_token,
+                    chunk_cache,
+                )
+                .await;
+            });
+            // Return a dummy handle that resolves immediately
+            tokio::spawn(async {})
+        };
 
         if let Ok(mut background_task) = self.background_task.try_lock() {
             *background_task = Some(task);
@@ -516,10 +536,11 @@ impl<T, L> std::fmt::Debug for ProgressiveVisualization<T, L> {
     }
 }
 
-#[async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl<T, L> AsyncMixable for ProgressiveVisualization<T, L>
 where
-    T: Clone + Send + Sync + 'static,
+    T: Clone + MaybeSend + MaybeSync + 'static,
     L: ProgressiveDataLoader<T> + 'static,
 {
     type Output = ();
@@ -607,10 +628,11 @@ where
     }
 }
 
-#[async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl<T> ProgressiveDataLoader<T> for MockProgressiveDataLoader<T>
 where
-    T: Clone + Send + Sync + 'static,
+    T: Clone + MaybeSend + MaybeSync + 'static,
 {
     async fn load_chunk(&mut self, offset: usize, size: usize) -> GupResult<Vec<T>> {
         // Track access for testing

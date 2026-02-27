@@ -29,7 +29,44 @@ pub use crate::accessibility::windows::WindowsAccessibility;
 /// Different platforms have different accessibility frameworks. This trait
 /// provides a unified interface for translating Gup's accessibility system
 /// into platform-native APIs.
+///
+/// On native platforms, implementations must be `Send + Sync` for multi-threaded
+/// access. On WASM (single-threaded), these bounds are relaxed because DOM types
+/// (e.g. `Rc`, JS objects) are inherently non-Send.
+#[cfg(not(target_arch = "wasm32"))]
 pub trait PlatformAccessibility: Send + Sync {
+    /// Initialize platform-specific accessibility.
+    fn initialize(&mut self) -> Result<(), AccessibilityError>;
+
+    /// Update the platform accessibility tree with ARIA node information.
+    fn update_accessibility_tree(
+        &mut self,
+        updates: &[AriaUpdate],
+    ) -> Result<(), AccessibilityError>;
+
+    /// Announce a message to the screen reader.
+    fn announce(
+        &mut self,
+        message: &str,
+        priority: AnnouncementPriority,
+    ) -> Result<(), AccessibilityError>;
+
+    /// Set the currently focused element.
+    fn set_focus(&mut self, element_id: &str) -> Result<(), AccessibilityError>;
+
+    /// Get the platform name for debugging.
+    fn platform_name(&self) -> &str;
+
+    /// Check if the platform accessibility API is available.
+    fn is_available(&self) -> bool;
+}
+
+/// Platform abstraction for accessibility integration (WASM variant).
+///
+/// On WASM, `Send + Sync` bounds are relaxed because JavaScript/DOM types
+/// cannot be shared across threads (WASM is single-threaded).
+#[cfg(target_arch = "wasm32")]
+pub trait PlatformAccessibility {
     /// Initialize platform-specific accessibility.
     fn initialize(&mut self) -> Result<(), AccessibilityError>;
 
@@ -147,6 +184,7 @@ impl Default for LinuxAccessibility {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl LinuxAccessibility {
     pub fn new() -> Self {
         Self {
@@ -311,6 +349,8 @@ impl WebAccessibility {
             AriaRole::DataPoint => "listitem",
             AriaRole::Legend => "list",
             AriaRole::Axis => "group",
+            AriaRole::Tooltip => "tooltip",
+            AriaRole::Control => "button",
         }
     }
 

@@ -534,7 +534,7 @@ impl WebDomOverlay {
             return;
         }
 
-        let touch = match touches.get(0) {
+        let touch: web_sys::Touch = match touches.get(0) {
             Some(t) => t,
             None => return,
         };
@@ -666,7 +666,7 @@ impl WebDomOverlay {
     ) -> Result<(), AccessibilityError> {
         let container = self
             .container
-            .as_ref()
+            .clone()
             .ok_or_else(|| AccessibilityError::Other("Container not initialized".to_string()))?;
 
         for update in updates {
@@ -679,15 +679,13 @@ impl WebDomOverlay {
                         ))
                     })?;
 
-                    self.create_or_update_element(container, *node_id, node)?;
+                    self.create_or_update_element(&container, *node_id, node)?;
                 }
                 AriaUpdate::NodeRemoved { node_id } => {
                     self.remove_element(*node_id)?;
                 }
                 AriaUpdate::FocusChanged { node_id } => {
-                    if let Some(node_id) = node_id {
-                        self.set_focus(*node_id)?;
-                    }
+                    self.set_focus(*node_id)?;
                 }
                 AriaUpdate::LiveRegion { .. } => {
                     // Live regions handled by platform layer
@@ -724,6 +722,8 @@ impl WebDomOverlay {
                 AriaRole::DataPoint => "data-point",
                 AriaRole::Legend => "legend",
                 AriaRole::Axis => "axis",
+                AriaRole::Tooltip => "tooltip",
+                AriaRole::Control => "control",
             };
             el.set_class_name(&format!("focusable {}", role_class));
 
@@ -840,6 +840,8 @@ impl WebDomOverlay {
             AriaRole::DataPoint => "listitem",
             AriaRole::Legend => "list",
             AriaRole::Axis => "group",
+            AriaRole::Tooltip => "tooltip",
+            AriaRole::Control => "button",
         }
     }
 
@@ -1055,7 +1057,7 @@ impl WebDomOverlay {
             return;
         }
 
-        let touch = match touches.get(0) {
+        let touch: web_sys::Touch = match touches.get(0) {
             Some(t) => t,
             None => return,
         };

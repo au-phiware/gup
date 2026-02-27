@@ -6,7 +6,7 @@
 //! This module provides traits and strategies for combining data sources
 //! from multiple visualizations into unified datasets.
 
-use crate::{GupError, GupResult};
+use crate::{GupError, GupResult, MaybeSend, MaybeSync};
 use std::any::TypeId;
 use std::fmt::Debug;
 use std::marker::PhantomData;
@@ -42,7 +42,7 @@ use std::marker::PhantomData;
 ///     }
 /// }
 /// ```
-pub trait Mergeable<T: 'static>: Debug + Send + Sync {
+pub trait Mergeable<T: 'static>: Debug + MaybeSend + MaybeSync {
     /// Get a reference to the underlying data for merging.
     ///
     /// This method should return a slice of all data items in the visualization.

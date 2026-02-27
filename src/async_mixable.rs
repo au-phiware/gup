@@ -20,7 +20,7 @@
 //! streaming datasets, and progressive rendering, enabling visualizations that work
 //! with large or real-time data sources.
 
-use crate::{CompositionMode, GupError, GupResult, Mixable, RenderContext};
+use crate::{CompositionMode, GupError, GupResult, MaybeSend, MaybeSync, Mixable, RenderContext};
 use async_trait::async_trait;
 use futures::future;
 use std::fmt::Debug;
@@ -90,8 +90,13 @@ pub enum AsyncRenderStrategy {
 ///
 /// This trait enables components to render asynchronously without blocking
 /// the main thread, supporting cancellation, progress tracking, and streaming data.
-#[async_trait]
-pub trait AsyncMixable: Send + Sync + Debug {
+///
+/// On native platforms, implementations must be `Send + Sync` for multi-threaded
+/// access. On WASM (single-threaded), these bounds are relaxed because wgpu
+/// WebGPU backend types are not `Send`/`Sync`.
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+pub trait AsyncMixable: MaybeSend + MaybeSync + Debug {
     type Output;
 
     /// Asynchronously render this component.
@@ -262,7 +267,8 @@ where
     }
 }
 
-#[async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl<A, B> AsyncMixable for AsyncComposedVisualization<A, B>
 where
     A: AsyncMixable + 'static,
@@ -431,7 +437,8 @@ impl<T: Debug> Debug for TimeoutComposition<T> {
     }
 }
 
-#[async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl<T: AsyncMixable> AsyncMixable for TimeoutComposition<T> {
     type Output = T::Output;
 
@@ -506,7 +513,8 @@ impl<T: Debug> Debug for SyncAdapter<T> {
     }
 }
 
-#[async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl<T: Mixable> AsyncMixable for SyncAdapter<T> {
     type Output = T::Output;
 
@@ -548,7 +556,8 @@ impl<T: Mixable> AsyncMixable for SyncAdapter<T> {
 }
 
 /// Implement AsyncMixable for Box<dyn AsyncMixable> to enable trait object usage
-#[async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl<T> AsyncMixable for Box<T>
 where
     T: AsyncMixable + ?Sized,
@@ -650,7 +659,8 @@ mod tests {
         }
     }
 
-    #[async_trait]
+    #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+    #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
     impl AsyncMixable for TestAsyncComponent {
         type Output = ();
 

@@ -115,7 +115,38 @@ pub mod __private {
     pub use crate::shader_pipeline::ComposableShaderPipeline;
 }
 
-// Export color descriptor system
+// ---------------------------------------------------------------------------
+// Conditional Send/Sync marker traits for cross-platform (native + WASM) support.
+//
+// On native targets wgpu types are Send + Sync, so async futures and trait
+// objects must be Send/Sync too.  On WASM the WebGPU backend wraps JS objects
+// (Rc, *mut u8, RefCell…) that are inherently !Send/!Sync, but WASM is
+// single-threaded so this is fine.  These helper traits let the rest of the
+// crate express "Send if native" without duplicating every trait definition.
+// ---------------------------------------------------------------------------
+
+/// Marker trait that equals `Send` on native and is auto-implemented on WASM.
+#[cfg(not(target_arch = "wasm32"))]
+pub trait MaybeSend: Send {}
+#[cfg(not(target_arch = "wasm32"))]
+impl<T: Send> MaybeSend for T {}
+
+#[cfg(target_arch = "wasm32")]
+pub trait MaybeSend {}
+#[cfg(target_arch = "wasm32")]
+impl<T> MaybeSend for T {}
+
+/// Marker trait that equals `Sync` on native and is auto-implemented on WASM.
+#[cfg(not(target_arch = "wasm32"))]
+pub trait MaybeSync: Sync {}
+#[cfg(not(target_arch = "wasm32"))]
+impl<T: Sync> MaybeSync for T {}
+
+#[cfg(target_arch = "wasm32")]
+pub trait MaybeSync {}
+#[cfg(target_arch = "wasm32")]
+impl<T> MaybeSync for T {}
+
 pub use color_descriptor::{
     ColorNamer, Hsl, describe_color, describe_color_detailed, describe_color_with, rgba_to_hsl,
 };

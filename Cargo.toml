@@ -59,9 +59,13 @@ features = [
   "Document",
   "Element",
   "HtmlCanvasElement",
+  "HtmlHeadElement",
   "Window",
   "Location",
   "Performance",
+  "Touch",
+  "TouchEvent",
+  "TouchList",
 ]
 
 [target.'cfg(target_os = "macos")'.dependencies]

@@ -4,7 +4,7 @@
 //! Streaming data support for real-time visualizations.
 
 use super::{AsyncMixable, RenderProgress};
-use crate::{GupResult, RenderContext};
+use crate::{GupResult, MaybeSend, MaybeSync, RenderContext};
 use async_trait::async_trait;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -54,8 +54,9 @@ impl Default for StreamStats {
 }
 
 /// Trait for streaming data sources.
-#[async_trait]
-pub trait StreamingDataSource<T>: Send + Sync {
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+pub trait StreamingDataSource<T>: MaybeSend + MaybeSync {
     /// Get the next batch of data from the stream.
     async fn next_batch(&mut self) -> Option<GupResult<Vec<T>>>;
 
@@ -145,9 +146,18 @@ where
         let state_handle = render_state.clone();
         let token = cancellation_token.clone();
 
+        #[cfg(not(target_arch = "wasm32"))]
         let task_handle = tokio::spawn(async move {
             Self::stream_processor_task(stream_handle, update_sender, state_handle, token).await;
         });
+        #[cfg(target_arch = "wasm32")]
+        let task_handle = {
+            wasm_bindgen_futures::spawn_local(async move {
+                Self::stream_processor_task(stream_handle, update_sender, state_handle, token)
+                    .await;
+            });
+            tokio::spawn(async {})
+        };
 
         Self {
             data_stream,
@@ -296,7 +306,8 @@ impl<T> std::fmt::Debug for StreamingScatterPlot<T> {
     }
 }
 
-#[async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl<T> AsyncMixable for StreamingScatterPlot<T>
 where
     T: StreamingDataSource<Point2D> + 'static,
@@ -408,7 +419,8 @@ impl MockStreamingDataSource {
     }
 }
 
-#[async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl StreamingDataSource<Point2D> for MockStreamingDataSource {
     async fn next_batch(&mut self) -> Option<GupResult<Vec<Point2D>>> {
         // Check rate limiting
@@ -464,7 +476,8 @@ impl StreamingDataSource<Point2D> for MockStreamingDataSource {
 /// Null data source for placeholder purposes.
 pub struct NullDataSource;
 
-#[async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl StreamingDataSource<Point2D> for NullDataSource {
     async fn next_batch(&mut self) -> Option<GupResult<Vec<Point2D>>> {
         None
