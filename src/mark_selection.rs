@@ -1650,6 +1650,499 @@ impl MarkSelectionSystem {
 }
 
 // ---------------------------------------------------------------------------
+// Touch selection adapter
+// ---------------------------------------------------------------------------
+
+/// Configuration for touch-based selection behaviour.
+///
+/// Controls accessibility settings like minimum touch target sizes and
+/// timing thresholds for gesture recognition (e.g. long-press duration).
+#[derive(Debug, Clone)]
+pub struct TouchSelectionConfig {
+    /// Minimum touch target size in screen pixels.
+    ///
+    /// Marks smaller than this value will use this as their effective
+    /// hit-test radius. The default of 44.0 follows platform accessibility
+    /// guidelines (Apple HIG / WCAG 2.5.5).
+    pub min_touch_target_px: f32,
+    /// Duration in seconds a touch must be held before it is recognised as
+    /// a long-press (toggle mode). Default: 0.5 s.
+    pub long_press_duration: f64,
+    /// Maximum movement in screen pixels allowed during a tap or long-press.
+    /// Movements larger than this threshold convert the gesture into a drag.
+    /// Default: 10.0 px.
+    pub tap_tolerance_px: f32,
+    /// Maximum duration in seconds between two-finger touches to be
+    /// recognised as a two-finger tap (clear gesture). Default: 0.3 s.
+    pub two_finger_tap_window: f64,
+    /// Maximum movement in screen pixels for a two-finger tap. Default: 20.0 px.
+    pub two_finger_tap_tolerance_px: f32,
+    /// Whether to request haptic feedback on selection events.
+    pub haptic_feedback_enabled: bool,
+}
+
+impl Default for TouchSelectionConfig {
+    fn default() -> Self {
+        Self {
+            min_touch_target_px: 44.0,
+            long_press_duration: 0.5,
+            tap_tolerance_px: 10.0,
+            two_finger_tap_window: 0.3,
+            two_finger_tap_tolerance_px: 20.0,
+            haptic_feedback_enabled: true,
+        }
+    }
+}
+
+/// Haptic feedback intensity levels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HapticFeedback {
+    /// Light tap — used for hover feedback.
+    Light,
+    /// Medium tap — used for selection confirmation.
+    Medium,
+    /// Heavy tap — used for clear / deselect-all.
+    Heavy,
+}
+
+/// Phase of an individual touch contact.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TouchPhase {
+    /// Finger touched the screen.
+    Started,
+    /// Finger moved while on the screen.
+    Moved,
+    /// Finger lifted from the screen.
+    Ended,
+    /// Touch was cancelled by the system.
+    Cancelled,
+}
+
+/// A single touch event as received from the windowing system.
+#[derive(Debug, Clone, Copy)]
+pub struct TouchEvent {
+    /// Unique identifier for the touch contact.
+    pub id: u64,
+    /// Screen-space position in pixels.
+    pub position: [f32; 2],
+    /// Phase of this touch contact.
+    pub phase: TouchPhase,
+    /// Timestamp of the event (seconds since an arbitrary epoch).
+    pub timestamp: f64,
+}
+
+/// Internal tracking state for one finger.
+#[derive(Debug, Clone, Copy)]
+struct TrackedTouch {
+    /// Position where the finger first touched down.
+    start_position: [f32; 2],
+    /// Latest known position of the finger.
+    current_position: [f32; 2],
+    /// Timestamp of the initial touch-down.
+    start_time: f64,
+    /// Maximum distance the finger has moved from the start.
+    max_displacement: f32,
+}
+
+/// Internal state machine for the touch adapter.
+#[derive(Debug, Clone)]
+enum TouchState {
+    /// No fingers are touching the screen.
+    Idle,
+    /// Exactly one finger is down — could become a tap, long-press, or drag.
+    OneFinger { touch: TrackedTouch, id: u64 },
+    /// A single-finger drag is in progress (rectangle selection tool).
+    Dragging { id: u64 },
+    /// A long-press was already committed; waiting for finger lift.
+    LongPressCommitted { id: u64 },
+    /// Two fingers are down simultaneously — could become a two-finger tap.
+    TwoFingers {
+        ids: [u64; 2],
+        start_positions: [[f32; 2]; 2],
+        start_time: f64,
+    },
+}
+
+/// Adapter that converts raw touch events into [`MarkSelectionSystem`]
+/// actions.
+///
+/// The adapter recognises the following gestures:
+///
+/// | Gesture | Selection action |
+/// |---------|-----------------|
+/// | Single tap | Select / deselect mark at position |
+/// | Long-press | Toggle mode (equivalent to Ctrl+Click) |
+/// | Two-finger tap | Clear selection |
+/// | Single-finger drag | Rectangle selection tool |
+///
+/// # Usage
+///
+/// ```rust
+/// use gup::mark_selection::{
+///     MarkSelectionSystem, TouchSelectionAdapter, TouchSelectionConfig,
+///     TouchEvent, TouchPhase,
+/// };
+///
+/// let mut selection = MarkSelectionSystem::new(1000);
+/// let mut adapter = TouchSelectionAdapter::new(TouchSelectionConfig::default());
+///
+/// // Feed touch events from the windowing system
+/// let event = TouchEvent {
+///     id: 0,
+///     position: [100.0, 200.0],
+///     phase: TouchPhase::Started,
+///     timestamp: 0.0,
+/// };
+/// let feedback = adapter.on_touch_event(event, &mut selection);
+/// ```
+#[derive(Debug, Clone)]
+pub struct TouchSelectionAdapter {
+    config: TouchSelectionConfig,
+    state: TouchState,
+    /// Active touch contacts keyed by touch ID.
+    active_touches: std::collections::HashMap<u64, TrackedTouch>,
+}
+
+impl TouchSelectionAdapter {
+    /// Create a new adapter with the given configuration.
+    pub fn new(config: TouchSelectionConfig) -> Self {
+        Self {
+            config,
+            state: TouchState::Idle,
+            active_touches: std::collections::HashMap::new(),
+        }
+    }
+
+    /// Create a new adapter with default configuration.
+    pub fn with_defaults() -> Self {
+        Self::new(TouchSelectionConfig::default())
+    }
+
+    /// Access the current configuration.
+    pub fn config(&self) -> &TouchSelectionConfig {
+        &self.config
+    }
+
+    /// Mutably access the configuration.
+    pub fn config_mut(&mut self) -> &mut TouchSelectionConfig {
+        &mut self.config
+    }
+
+    /// Returns the effective hit-test radius for a mark given its native
+    /// radius. If the mark is smaller than the minimum touch target, the
+    /// minimum is used instead.
+    pub fn effective_hit_radius(&self, native_radius: f32) -> f32 {
+        let min_half = self.config.min_touch_target_px / 2.0;
+        native_radius.max(min_half)
+    }
+
+    /// Process a raw touch event and apply corresponding actions to the
+    /// selection system.
+    ///
+    /// Returns an optional [`HapticFeedback`] hint that the caller may
+    /// use to trigger platform-specific vibration.
+    pub fn on_touch_event(
+        &mut self,
+        event: TouchEvent,
+        selection: &mut MarkSelectionSystem,
+    ) -> Option<HapticFeedback> {
+        match event.phase {
+            TouchPhase::Started => self.on_touch_start(event, selection),
+            TouchPhase::Moved => self.on_touch_move(event, selection),
+            TouchPhase::Ended => self.on_touch_end(event, selection),
+            TouchPhase::Cancelled => self.on_touch_cancel(event, selection),
+        }
+    }
+
+    /// Call this periodically (e.g. each frame) so the adapter can fire
+    /// time-based gestures such as long-press.
+    ///
+    /// `now` is the current timestamp in the same unit as [`TouchEvent::timestamp`].
+    pub fn tick(
+        &mut self,
+        now: f64,
+        selection: &mut MarkSelectionSystem,
+    ) -> Option<HapticFeedback> {
+        // Check for long-press while in one-finger state.
+        if let TouchState::OneFinger { touch, id } = &self.state {
+            let elapsed = now - touch.start_time;
+            if elapsed >= self.config.long_press_duration
+                && touch.max_displacement <= self.config.tap_tolerance_px
+            {
+                // Long-press detected — enter toggle mode and commit.
+                let pos = touch.current_position;
+                let id = *id;
+
+                // Set toggle modifiers temporarily.
+                let prev = selection.modifiers();
+                selection.set_modifiers(KeyModifiers {
+                    ctrl: true,
+                    ..KeyModifiers::default()
+                });
+
+                // Execute a point-select with toggle semantics.
+                selection.on_mouse_down(pos);
+                let hit_ids = selection.hit_test(pos, self.effective_hit_radius(0.0));
+                selection.on_mouse_up(pos, &hit_ids);
+
+                // Restore modifiers.
+                selection.set_modifiers(prev);
+
+                // Transition — the finger is still down but we have
+                // already committed the long-press action.
+                self.state = TouchState::LongPressCommitted { id };
+                return Some(HapticFeedback::Medium);
+            }
+        }
+        None
+    }
+
+    // -- Internal phase handlers --
+
+    fn on_touch_start(
+        &mut self,
+        event: TouchEvent,
+        _selection: &mut MarkSelectionSystem,
+    ) -> Option<HapticFeedback> {
+        let tracked = TrackedTouch {
+            start_position: event.position,
+            current_position: event.position,
+            start_time: event.timestamp,
+            max_displacement: 0.0,
+        };
+        self.active_touches.insert(event.id, tracked);
+
+        match &self.state {
+            TouchState::Idle => {
+                self.state = TouchState::OneFinger {
+                    touch: tracked,
+                    id: event.id,
+                };
+                None
+            }
+            TouchState::OneFinger { touch, id } => {
+                // A second finger arrived — transition to two-finger state.
+                let first_id = *id;
+                let first_start = touch.start_position;
+                self.state = TouchState::TwoFingers {
+                    ids: [first_id, event.id],
+                    start_positions: [first_start, event.position],
+                    start_time: event.timestamp,
+                };
+                None
+            }
+            _ => None,
+        }
+    }
+
+    fn on_touch_move(
+        &mut self,
+        event: TouchEvent,
+        selection: &mut MarkSelectionSystem,
+    ) -> Option<HapticFeedback> {
+        // Update tracked touch.
+        if let Some(tracked) = self.active_touches.get_mut(&event.id) {
+            tracked.current_position = event.position;
+            let dx = event.position[0] - tracked.start_position[0];
+            let dy = event.position[1] - tracked.start_position[1];
+            let dist = (dx * dx + dy * dy).sqrt();
+            tracked.max_displacement = tracked.max_displacement.max(dist);
+        }
+
+        match &mut self.state {
+            TouchState::OneFinger { touch, id } if *id == event.id => {
+                touch.current_position = event.position;
+                let dx = event.position[0] - touch.start_position[0];
+                let dy = event.position[1] - touch.start_position[1];
+                let dist = (dx * dx + dy * dy).sqrt();
+                touch.max_displacement = touch.max_displacement.max(dist);
+
+                // If movement exceeds tap tolerance, switch to drag (rect select).
+                if touch.max_displacement > self.config.tap_tolerance_px {
+                    let id = *id;
+                    let start = touch.start_position;
+                    // Save current tool and switch to rectangle for the drag.
+                    selection.set_tool(SelectionToolKind::Rectangle);
+                    selection.on_mouse_down(start);
+                    selection.on_mouse_move(event.position);
+                    self.state = TouchState::Dragging { id };
+                }
+                None
+            }
+            TouchState::Dragging { id } if *id == event.id => {
+                selection.on_mouse_move(event.position);
+                None
+            }
+            TouchState::LongPressCommitted { .. } => {
+                // Movement after long-press is ignored — already committed.
+                None
+            }
+            _ => None,
+        }
+    }
+
+    fn on_touch_end(
+        &mut self,
+        event: TouchEvent,
+        selection: &mut MarkSelectionSystem,
+    ) -> Option<HapticFeedback> {
+        self.active_touches.remove(&event.id);
+
+        match &self.state {
+            TouchState::OneFinger { touch, id } if *id == event.id => {
+                // Single finger lifted — this is a tap if displacement is small.
+                let feedback = if touch.max_displacement <= self.config.tap_tolerance_px {
+                    // Simple tap — point select.
+                    let pos = touch.current_position;
+                    selection.on_mouse_down(pos);
+                    let hit_ids = selection.hit_test(pos, self.effective_hit_radius(0.0));
+                    selection.on_mouse_up(pos, &hit_ids);
+                    if self.config.haptic_feedback_enabled {
+                        Some(HapticFeedback::Light)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                self.state = TouchState::Idle;
+                feedback
+            }
+            TouchState::Dragging { id } if *id == event.id => {
+                // Drag ended — finish rectangle selection.
+                let pos = event.position;
+                if let Some(rect) = selection.current_drag_rect() {
+                    let hit_ids = selection.rect_hit_test(&rect);
+                    selection.on_mouse_up(pos, &hit_ids);
+                } else {
+                    selection.on_mouse_up(pos, &[]);
+                }
+                // Restore point tool after drag.
+                selection.set_tool(SelectionToolKind::Point);
+                self.state = TouchState::Idle;
+                if self.config.haptic_feedback_enabled {
+                    Some(HapticFeedback::Medium)
+                } else {
+                    None
+                }
+            }
+            TouchState::LongPressCommitted { id } if *id == event.id => {
+                // The long-press action was already committed during tick().
+                // Simply return to idle without further selection changes.
+                self.state = TouchState::Idle;
+                None
+            }
+            TouchState::TwoFingers {
+                ids,
+                start_positions,
+                start_time,
+            } => {
+                // Check if both fingers were close together and brief => two-finger tap.
+                let within_window =
+                    (event.timestamp - start_time) < self.config.two_finger_tap_window;
+
+                // Calculate how far each finger moved.
+                let movement_ok = ids.iter().zip(start_positions.iter()).all(|(tid, sp)| {
+                    self.active_touches
+                        .get(tid)
+                        .or_else(|| {
+                            // The touch being ended may already be removed.
+                            if *tid == event.id {
+                                None
+                            } else {
+                                self.active_touches.get(tid)
+                            }
+                        })
+                        .map(|t| {
+                            let dx = t.current_position[0] - sp[0];
+                            let dy = t.current_position[1] - sp[1];
+                            (dx * dx + dy * dy).sqrt() <= self.config.two_finger_tap_tolerance_px
+                        })
+                        .unwrap_or(true) // If the touch was already removed, check displacement
+                });
+
+                // Also check the ended touch displacement.
+                let ended_start = if event.id == ids[0] {
+                    start_positions[0]
+                } else {
+                    start_positions[1]
+                };
+                let edx = event.position[0] - ended_start[0];
+                let edy = event.position[1] - ended_start[1];
+                let ended_ok =
+                    (edx * edx + edy * edy).sqrt() <= self.config.two_finger_tap_tolerance_px;
+
+                if within_window && movement_ok && ended_ok {
+                    // Two-finger tap — clear selection.
+                    selection.state_mut().clear();
+                    selection.drain_events(); // consume internal events
+                    self.state = TouchState::Idle;
+                    if self.config.haptic_feedback_enabled {
+                        return Some(HapticFeedback::Heavy);
+                    }
+                }
+
+                // Otherwise, treat as cancelled / no-op.
+                self.state = if self.active_touches.is_empty() {
+                    TouchState::Idle
+                } else if self.active_touches.len() == 1 {
+                    let (&remaining_id, &remaining) = self.active_touches.iter().next().unwrap();
+                    TouchState::OneFinger {
+                        touch: remaining,
+                        id: remaining_id,
+                    }
+                } else {
+                    TouchState::Idle
+                };
+                None
+            }
+            _ => {
+                if self.active_touches.is_empty() {
+                    self.state = TouchState::Idle;
+                }
+                None
+            }
+        }
+    }
+
+    fn on_touch_cancel(
+        &mut self,
+        event: TouchEvent,
+        selection: &mut MarkSelectionSystem,
+    ) -> Option<HapticFeedback> {
+        self.active_touches.remove(&event.id);
+
+        match &self.state {
+            TouchState::Dragging { id } if *id == event.id => {
+                selection.cancel();
+                selection.set_tool(SelectionToolKind::Point);
+            }
+            _ => {}
+        }
+
+        if self.active_touches.is_empty() {
+            self.state = TouchState::Idle;
+        }
+        None
+    }
+
+    /// Returns `true` if a touch gesture is currently in progress.
+    pub fn is_active(&self) -> bool {
+        !matches!(self.state, TouchState::Idle)
+    }
+
+    /// Reset the adapter, cancelling any in-progress gesture.
+    pub fn reset(&mut self, selection: &mut MarkSelectionSystem) {
+        if let TouchState::Dragging { .. } = &self.state {
+            selection.cancel();
+            selection.set_tool(SelectionToolKind::Point);
+        }
+        self.state = TouchState::Idle;
+        self.active_touches.clear();
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -2519,5 +3012,232 @@ mod tests {
         // Setting the same positions again should still increment
         system.set_positions(positions);
         assert_eq!(system.element_data_version(), 2);
+    }
+
+    // -- TouchSelectionAdapter tests --
+
+    fn make_touch_system(mark_count: usize, positions: Vec<[f32; 2]>) -> MarkSelectionSystem {
+        let mut sys = MarkSelectionSystem::new(mark_count);
+        sys.set_positions(positions);
+        sys
+    }
+
+    fn touch(id: u64, pos: [f32; 2], phase: TouchPhase, ts: f64) -> TouchEvent {
+        TouchEvent {
+            id,
+            position: pos,
+            phase,
+            timestamp: ts,
+        }
+    }
+
+    #[test]
+    fn test_touch_single_tap_selects_mark() {
+        // Mark at (50, 50); tap at (50, 50) should select it.
+        let mut sel = make_touch_system(3, vec![[50.0, 50.0], [200.0, 200.0], [300.0, 300.0]]);
+        sel.set_positions_with_sizes(
+            vec![[50.0, 50.0], [200.0, 200.0], [300.0, 300.0]],
+            vec![[25.0, 25.0], [25.0, 25.0], [25.0, 25.0]],
+        );
+        let mut adapter = TouchSelectionAdapter::with_defaults();
+
+        // Touch down
+        adapter.on_touch_event(touch(0, [50.0, 50.0], TouchPhase::Started, 0.0), &mut sel);
+        // Touch up (no movement)
+        let fb = adapter.on_touch_event(touch(0, [50.0, 50.0], TouchPhase::Ended, 0.1), &mut sel);
+
+        assert_eq!(sel.state().count(), 1);
+        assert!(sel.state().is_selected(0));
+        // Should give light haptic feedback
+        assert_eq!(fb, Some(HapticFeedback::Light));
+    }
+
+    #[test]
+    fn test_touch_tap_miss_clears_selection() {
+        let mut sel = make_touch_system(2, vec![[50.0, 50.0], [200.0, 200.0]]);
+        // Pre-select mark 0.
+        sel.state_mut().select(0);
+        assert_eq!(sel.state().count(), 1);
+
+        let mut adapter = TouchSelectionAdapter::with_defaults();
+
+        // Tap on empty area (far from both marks).
+        adapter.on_touch_event(touch(0, [999.0, 999.0], TouchPhase::Started, 0.0), &mut sel);
+        adapter.on_touch_event(touch(0, [999.0, 999.0], TouchPhase::Ended, 0.1), &mut sel);
+
+        // Selection should be cleared (point tool single mode).
+        assert_eq!(sel.state().count(), 0);
+    }
+
+    #[test]
+    fn test_touch_long_press_toggle() {
+        let mut sel = make_touch_system(3, vec![[50.0, 50.0], [200.0, 200.0], [300.0, 300.0]]);
+        let mut adapter = TouchSelectionAdapter::with_defaults();
+
+        // Touch down
+        adapter.on_touch_event(touch(0, [50.0, 50.0], TouchPhase::Started, 0.0), &mut sel);
+
+        // Simulate time passing past long-press threshold (0.5s default).
+        let fb = adapter.tick(0.6, &mut sel);
+
+        assert_eq!(fb, Some(HapticFeedback::Medium));
+        // Mark 0 should be toggled on.
+        assert!(sel.state().is_selected(0));
+
+        // Now touch up — should not trigger another selection.
+        let count_before = sel.state().count();
+        adapter.on_touch_event(touch(0, [50.0, 50.0], TouchPhase::Ended, 0.7), &mut sel);
+        // Count should remain the same (long-press already committed).
+        assert_eq!(sel.state().count(), count_before);
+    }
+
+    #[test]
+    fn test_touch_long_press_cancelled_by_movement() {
+        let mut sel = make_touch_system(1, vec![[50.0, 50.0]]);
+        let mut adapter = TouchSelectionAdapter::with_defaults();
+
+        // Touch down
+        adapter.on_touch_event(touch(0, [50.0, 50.0], TouchPhase::Started, 0.0), &mut sel);
+        // Move finger well beyond tap tolerance (>10px default).
+        adapter.on_touch_event(touch(0, [100.0, 100.0], TouchPhase::Moved, 0.1), &mut sel);
+
+        // Try tick — should NOT fire long-press because movement exceeded tolerance.
+        let fb = adapter.tick(0.6, &mut sel);
+        assert_eq!(fb, None);
+        // The state should now be Dragging, not OneFinger.
+        assert!(adapter.is_active());
+    }
+
+    #[test]
+    fn test_touch_two_finger_tap_clears_selection() {
+        let mut sel = make_touch_system(2, vec![[50.0, 50.0], [200.0, 200.0]]);
+        // Pre-select marks.
+        sel.state_mut().select(0);
+        sel.state_mut().select(1);
+        assert_eq!(sel.state().count(), 2);
+
+        let mut adapter = TouchSelectionAdapter::with_defaults();
+
+        // First finger down
+        adapter.on_touch_event(touch(0, [100.0, 100.0], TouchPhase::Started, 0.0), &mut sel);
+        // Second finger down (quickly)
+        adapter.on_touch_event(
+            touch(1, [150.0, 100.0], TouchPhase::Started, 0.05),
+            &mut sel,
+        );
+        // First finger up (within window)
+        let fb = adapter.on_touch_event(touch(0, [100.0, 100.0], TouchPhase::Ended, 0.1), &mut sel);
+
+        // Selection should be cleared, heavy haptic.
+        assert_eq!(sel.state().count(), 0);
+        assert_eq!(fb, Some(HapticFeedback::Heavy));
+    }
+
+    #[test]
+    fn test_touch_two_finger_tap_too_slow() {
+        let mut sel = make_touch_system(2, vec![[50.0, 50.0], [200.0, 200.0]]);
+        sel.state_mut().select(0);
+
+        let mut adapter = TouchSelectionAdapter::with_defaults();
+
+        // First finger down
+        adapter.on_touch_event(touch(0, [100.0, 100.0], TouchPhase::Started, 0.0), &mut sel);
+        // Second finger down
+        adapter.on_touch_event(
+            touch(1, [150.0, 100.0], TouchPhase::Started, 0.05),
+            &mut sel,
+        );
+        // First finger up *after* the tap window (0.3s default)
+        adapter.on_touch_event(touch(0, [100.0, 100.0], TouchPhase::Ended, 0.5), &mut sel);
+
+        // Selection should NOT be cleared — gesture was too slow.
+        assert_eq!(sel.state().count(), 1);
+    }
+
+    #[test]
+    fn test_touch_drag_activates_rectangle_selection() {
+        let positions: Vec<[f32; 2]> = (0..5).map(|i| [20.0 + i as f32 * 20.0, 50.0]).collect();
+        let mut sel = make_touch_system(5, positions);
+        let mut adapter = TouchSelectionAdapter::with_defaults();
+
+        // Touch down
+        adapter.on_touch_event(touch(0, [10.0, 40.0], TouchPhase::Started, 0.0), &mut sel);
+        // Move beyond tap tolerance to trigger drag
+        adapter.on_touch_event(touch(0, [25.0, 40.0], TouchPhase::Moved, 0.05), &mut sel);
+        // Continue drag
+        adapter.on_touch_event(touch(0, [90.0, 60.0], TouchPhase::Moved, 0.1), &mut sel);
+        // End drag
+        adapter.on_touch_event(touch(0, [90.0, 60.0], TouchPhase::Ended, 0.15), &mut sel);
+
+        // Marks at x=20,40,60,80 in range [10..90] x [40..60] should be selected.
+        assert!(sel.state().count() > 0);
+        // After drag, tool should be restored to Point.
+        assert_eq!(*sel.tool_kind(), SelectionToolKind::Point);
+    }
+
+    #[test]
+    fn test_touch_min_target_size_effective_radius() {
+        let adapter = TouchSelectionAdapter::new(TouchSelectionConfig {
+            min_touch_target_px: 44.0,
+            ..Default::default()
+        });
+
+        // A tiny 5px mark should get the minimum touch target (22px radius).
+        assert_eq!(adapter.effective_hit_radius(5.0), 22.0);
+        // A 30px mark should still get the minimum (22px radius).
+        assert_eq!(adapter.effective_hit_radius(15.0), 22.0);
+        // A large 50px mark keeps its own radius.
+        assert_eq!(adapter.effective_hit_radius(25.0), 25.0);
+    }
+
+    #[test]
+    fn test_touch_haptic_disabled() {
+        let mut sel = make_touch_system(1, vec![[50.0, 50.0]]);
+        let mut adapter = TouchSelectionAdapter::new(TouchSelectionConfig {
+            haptic_feedback_enabled: false,
+            ..Default::default()
+        });
+
+        // Tap on mark — should not produce haptic when disabled.
+        adapter.on_touch_event(touch(0, [50.0, 50.0], TouchPhase::Started, 0.0), &mut sel);
+        let fb = adapter.on_touch_event(touch(0, [50.0, 50.0], TouchPhase::Ended, 0.1), &mut sel);
+        assert_eq!(fb, None);
+    }
+
+    #[test]
+    fn test_touch_cancel_resets() {
+        let mut sel = make_touch_system(1, vec![[50.0, 50.0]]);
+        let mut adapter = TouchSelectionAdapter::with_defaults();
+
+        adapter.on_touch_event(touch(0, [50.0, 50.0], TouchPhase::Started, 0.0), &mut sel);
+        assert!(adapter.is_active());
+
+        adapter.on_touch_event(touch(0, [50.0, 50.0], TouchPhase::Cancelled, 0.1), &mut sel);
+        assert!(!adapter.is_active());
+    }
+
+    #[test]
+    fn test_touch_adapter_reset() {
+        let mut sel = make_touch_system(1, vec![[50.0, 50.0]]);
+        let mut adapter = TouchSelectionAdapter::with_defaults();
+
+        adapter.on_touch_event(touch(0, [50.0, 50.0], TouchPhase::Started, 0.0), &mut sel);
+        // Move to trigger drag
+        adapter.on_touch_event(touch(0, [100.0, 100.0], TouchPhase::Moved, 0.05), &mut sel);
+        assert!(adapter.is_active());
+
+        // Explicit reset
+        adapter.reset(&mut sel);
+        assert!(!adapter.is_active());
+    }
+
+    #[test]
+    fn test_touch_config_defaults() {
+        let config = TouchSelectionConfig::default();
+        assert_eq!(config.min_touch_target_px, 44.0);
+        assert_eq!(config.long_press_duration, 0.5);
+        assert_eq!(config.tap_tolerance_px, 10.0);
+        assert_eq!(config.two_finger_tap_window, 0.3);
+        assert!(config.haptic_feedback_enabled);
     }
 }
