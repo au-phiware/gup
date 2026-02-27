@@ -1,7 +1,7 @@
 # GUP-233: Fix Flaky Registry Scalability Performance Test
 
-**Priority**: Low **Complexity**: Low **Created**: 2025-07-18 **Status**: 📋
-Planned
+**Priority**: Low **Complexity**: Low **Created**: 2025-07-18 **Status**: 🚧
+In Progress
 
 ## Overview
 
