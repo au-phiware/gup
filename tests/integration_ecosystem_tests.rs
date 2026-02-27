@@ -10,6 +10,9 @@
 //! - Cross-platform compatibility
 //! - Performance characteristics
 
+// Plugin system uses Send + Sync bounds that differ on wasm32.
+#![cfg(not(target_arch = "wasm32"))]
+
 use gup::integration::*;
 use gup::plugins::development::*;
 use gup::plugins::*;
