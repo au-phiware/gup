@@ -114,9 +114,10 @@ pub enum ClippingStrategy {
     },
     /// Wrap text to multiple lines within container width
     TextWrapping {
-        max_lines: usize,         // Maximum number of lines (0 = unlimited)
-        line_spacing_factor: f32, // Multiplier for line height spacing
-        hyphenate: bool,          // Whether to break mid-word with hyphens
+        max_lines: usize,              // Maximum number of lines (0 = unlimited)
+        line_spacing_factor: f32,      // Multiplier for line height spacing
+        hyphenate: bool,               // Whether to break mid-word with hyphens
+        ellipsis_text: Option<String>, // Append to last line when truncated (e.g. "...")
     },
 }
 
@@ -633,6 +634,7 @@ impl TextLayoutEngine {
                 max_lines,
                 line_spacing_factor,
                 hyphenate,
+                ellipsis_text,
             } => self.apply_text_wrapping(
                 text,
                 position,
@@ -643,6 +645,7 @@ impl TextLayoutEngine {
                 *max_lines,
                 *line_spacing_factor,
                 *hyphenate,
+                ellipsis_text.as_deref(),
             ),
         }
     }
@@ -1090,6 +1093,7 @@ impl TextLayoutEngine {
         max_lines: usize,
         line_spacing_factor: f32,
         hyphenate: bool,
+        ellipsis_text: Option<&str>,
     ) -> GupResult<Option<LayoutResult>> {
         let effective = viewport_bounds.effective_bounds();
         let anchor_offset = style.anchor.offset();
@@ -1109,7 +1113,7 @@ impl TextLayoutEngine {
         }
 
         // Break text into lines
-        let lines = self.break_into_lines(
+        let mut lines = self.break_into_lines(
             text,
             available_width,
             max_lines,
@@ -1120,6 +1124,29 @@ impl TextLayoutEngine {
 
         if lines.is_empty() {
             return Ok(None);
+        }
+
+        // Append ellipsis to the last line when text was truncated at max_lines
+        if let Some(ellipsis) = ellipsis_text {
+            let effective_max = if max_lines == 0 {
+                usize::MAX
+            } else {
+                max_lines
+            };
+            // Determine if text was truncated: the wrapped lines don't cover all words
+            let all_words: Vec<&str> = text.split_whitespace().collect();
+            let wrapped_words: usize = lines.iter().map(|l| l.split_whitespace().count()).sum();
+            let was_truncated = wrapped_words < all_words.len() && lines.len() >= effective_max;
+
+            if was_truncated {
+                self.append_ellipsis_to_last_line(
+                    &mut lines,
+                    available_width,
+                    ellipsis,
+                    style,
+                    font_atlas,
+                )?;
+            }
         }
 
         // Position glyphs for each line
@@ -1146,6 +1173,82 @@ impl TextLayoutEngine {
             clipped: true, // Mark as clipped because text was wrapped
             original_text: None,
         }))
+    }
+
+    /// Append ellipsis to the last line of wrapped text, truncating characters
+    /// to keep the result within `available_width`.
+    ///
+    /// Uses word boundary preservation when possible: truncation backs up to the
+    /// nearest whitespace so partial words are not shown before the ellipsis.
+    fn append_ellipsis_to_last_line(
+        &self,
+        lines: &mut [String],
+        available_width: f32,
+        ellipsis: &str,
+        style: &TextStyle,
+        font_atlas: &impl GlyphSource,
+    ) -> GupResult<()> {
+        let last = match lines.last_mut() {
+            Some(l) => l,
+            None => return Ok(()),
+        };
+
+        let ellipsis_width = self.measure_text(ellipsis, style, font_atlas)?.width();
+        let target_width = available_width - ellipsis_width;
+
+        if target_width <= 0.0 {
+            // Container is too narrow even for the ellipsis alone — just set
+            // the line to the ellipsis text (best effort).
+            *last = ellipsis.to_string();
+            return Ok(());
+        }
+
+        let last_width = self.measure_text(last, style, font_atlas)?.width();
+        if last_width + ellipsis_width <= available_width {
+            // Ellipsis fits without removing any characters.
+            last.push_str(ellipsis);
+            return Ok(());
+        }
+
+        // Need to truncate the last line to make room for the ellipsis.
+        let chars: Vec<char> = last.chars().collect();
+        let char_count = chars.len();
+
+        // Binary search for the largest prefix that fits in target_width.
+        let mut lo: usize = 0;
+        let mut hi: usize = char_count;
+        let mut best_fit: usize = 0;
+
+        while lo <= hi {
+            let mid = (lo + hi) / 2;
+            let slice: String = chars[..mid].iter().collect();
+            let slice_width = self.measure_text(&slice, style, font_atlas)?.width();
+            if slice_width <= target_width {
+                best_fit = mid;
+                if mid == char_count {
+                    break;
+                }
+                lo = mid + 1;
+            } else {
+                if mid == 0 {
+                    break;
+                }
+                hi = mid - 1;
+            }
+        }
+
+        // Adjust to word boundary
+        let truncate_at = Self::adjust_for_word_boundary(&chars, best_fit);
+        let truncate_at = if truncate_at == 0 {
+            best_fit
+        } else {
+            truncate_at
+        };
+
+        let truncated: String = chars[..truncate_at].iter().collect();
+        *last = format!("{}{}", truncated.trim_end(), ellipsis);
+
+        Ok(())
     }
 
     /// Generate positioned glyphs for multiple lines of text.
@@ -2375,16 +2478,19 @@ mod tests {
             max_lines: 3,
             line_spacing_factor: 1.2,
             hyphenate: true,
+            ellipsis_text: None,
         };
         match strategy {
             ClippingStrategy::TextWrapping {
                 max_lines,
                 line_spacing_factor,
                 hyphenate,
+                ellipsis_text,
             } => {
                 assert_eq!(max_lines, 3);
                 assert!((line_spacing_factor - 1.2).abs() < f32::EPSILON);
                 assert!(hyphenate);
+                assert!(ellipsis_text.is_none());
             }
             _ => panic!("Expected TextWrapping variant"),
         }
