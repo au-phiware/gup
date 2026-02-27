@@ -1558,4 +1558,176 @@ mod tests {
             );
         }
     }
+
+    #[tokio::test]
+    async fn test_sort_stability_equal_keys() {
+        // Verify that instances with identical Z values preserve their
+        // original input order (stable sort).
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let sorter = RadixSorter::new(&ctx.device).unwrap();
+
+        // 16 instances with 4 distinct Z values, 4 instances per Z.
+        // Each instance has a unique X coordinate encoding its original index.
+        let instances: Vec<InstanceAttributes> = (0..16)
+            .map(|i| {
+                let z = match i % 4 {
+                    0 => 10.0,
+                    1 => 5.0,
+                    2 => 1.0,
+                    _ => -3.0,
+                };
+                // Encode original index in the X position for verification.
+                instance_with_z(i as f32, 0.0, z, 0.1, [0.0, 0.0, 0.0, 1.0])
+            })
+            .collect();
+
+        let count = instances.len() as u32;
+        let instance_size = std::mem::size_of::<InstanceAttributes>() as u64;
+
+        let src_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &src_buf, &instances);
+
+        let dst_buf = ctx.device.create_buffer(&BufferDescriptor {
+            label: Some("test_sort_dst"),
+            size: count as u64 * instance_size,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        let draw_indirect = create_draw_indirect(&ctx.device, &ctx.queue, count);
+        let sort_buffers = SortBuffers::new(&ctx.device, count);
+
+        let mut encoder = ctx
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("test_sort_encoder"),
+            });
+
+        sorter.encode_sort(
+            &ctx.device,
+            &ctx.queue,
+            &mut encoder,
+            &src_buf,
+            &dst_buf,
+            &draw_indirect,
+            &sort_buffers,
+            count,
+        );
+
+        let sub_idx = ctx.queue.submit([encoder.finish()]);
+        let _ = ctx.device.poll(PollType::WaitForSubmissionIndex(sub_idx));
+
+        let sorted = read_sorted_instances(&ctx.device, &ctx.queue, &dst_buf, count)
+            .await
+            .unwrap();
+
+        // Expected back-to-front order (descending Z): 10.0, 5.0, 1.0, -3.0.
+        // Within each Z group, original input order must be preserved (stability).
+
+        // Extract (z, original_index) for each sorted instance.
+        let sorted_pairs: Vec<(f32, f32)> = sorted
+            .iter()
+            .map(|inst| (inst.transform[14], inst.transform[12]))
+            .collect();
+
+        // Verify descending Z order.
+        for i in 0..sorted_pairs.len() - 1 {
+            assert!(
+                sorted_pairs[i].0 >= sorted_pairs[i + 1].0,
+                "Z must be descending at position {i}: {:?}",
+                sorted_pairs
+            );
+        }
+
+        // Verify stability: within each Z group, original indices must be ascending.
+        let mut prev_z = f32::INFINITY;
+        let mut prev_orig_idx = -1.0_f32;
+        for (i, &(z, orig_idx)) in sorted_pairs.iter().enumerate() {
+            if (z - prev_z).abs() < 1e-5 {
+                // Same Z group — original index must be increasing.
+                assert!(
+                    orig_idx > prev_orig_idx,
+                    "Stability violated at position {i}: orig_idx {orig_idx} <= prev {prev_orig_idx} (z={z})"
+                );
+            }
+            prev_z = z;
+            prev_orig_idx = orig_idx;
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sort_1024_instances() {
+        // Test with 1024 instances (4 workgroups) to verify multi-workgroup
+        // correctness after the bitmask-based scatter optimization.
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let sorter = RadixSorter::new(&ctx.device).unwrap();
+
+        let count = 1024u32;
+        let instances: Vec<InstanceAttributes> = (0..count)
+            .map(|i| {
+                let t = i as f32 / count as f32;
+                let z = (t * 73.0).sin() * 50.0 + (t * 17.0).cos() * 25.0;
+                instance_with_z(t * 0.5, 0.0, z, 0.05, [t, 1.0 - t, 0.5, 1.0])
+            })
+            .collect();
+
+        // CPU reference.
+        let mut cpu_sorted = instances.clone();
+        cpu_sorted.sort_by(|a, b| b.transform[14].partial_cmp(&a.transform[14]).unwrap());
+
+        let instance_size = std::mem::size_of::<InstanceAttributes>() as u64;
+
+        let src_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &src_buf, &instances);
+
+        let dst_buf = ctx.device.create_buffer(&BufferDescriptor {
+            label: Some("test_sort_dst"),
+            size: count as u64 * instance_size,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        let draw_indirect = create_draw_indirect(&ctx.device, &ctx.queue, count);
+        let sort_buffers = SortBuffers::new(&ctx.device, count);
+
+        let mut encoder = ctx
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("test_sort_encoder"),
+            });
+
+        sorter.encode_sort(
+            &ctx.device,
+            &ctx.queue,
+            &mut encoder,
+            &src_buf,
+            &dst_buf,
+            &draw_indirect,
+            &sort_buffers,
+            count,
+        );
+
+        let sub_idx = ctx.queue.submit([encoder.finish()]);
+        let _ = ctx.device.poll(PollType::WaitForSubmissionIndex(sub_idx));
+
+        let gpu_sorted = read_sorted_instances(&ctx.device, &ctx.queue, &dst_buf, count)
+            .await
+            .unwrap();
+
+        // Compare Z order with CPU reference.
+        for (i, (gpu, cpu)) in gpu_sorted.iter().zip(cpu_sorted.iter()).enumerate() {
+            assert!(
+                (gpu.transform[14] - cpu.transform[14]).abs() < 1e-3,
+                "Instance {i}: GPU z={} != CPU z={}",
+                gpu.transform[14],
+                cpu.transform[14]
+            );
+        }
+    }
 }

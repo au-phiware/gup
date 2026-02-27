@@ -302,11 +302,126 @@ fn bench_gpu_sort(c: &mut Criterion) {
     group.finish();
 }
 
+// ---------------------------------------------------------------------------
+// GPU radix sort-only benchmark (isolates sort performance)
+// ---------------------------------------------------------------------------
+
+fn bench_gpu_sort_only(c: &mut Criterion) {
+    use gup::mark::radix_sort::{RadixSorter, SortBuffers};
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let ctx = match rt.block_on(GupContext::headless()) {
+        Ok(c) => c,
+        Err(_) => {
+            eprintln!("No GPU available — skipping sort-only benchmarks");
+            return;
+        }
+    };
+    let device = &ctx.device;
+    let queue = &ctx.queue;
+
+    let sorter = match RadixSorter::new(device) {
+        Ok(s) => s,
+        Err(_) => {
+            eprintln!("Failed to create RadixSorter");
+            return;
+        }
+    };
+
+    let mut group = c.benchmark_group("radix_sort_only");
+
+    for &size in &[100_000usize, 1_000_000] {
+        let instances: Vec<InstanceAttributes> = generate_instances(size)
+            .into_iter()
+            .enumerate()
+            .map(|(i, mut inst)| {
+                inst.transform[14] = (i as f32 / size as f32 * 37.0).sin() * 10.0;
+                inst
+            })
+            .collect();
+        let attr_bytes: &[u8] = bytemuck::cast_slice(&instances);
+        let instance_size = std::mem::size_of::<InstanceAttributes>() as u64;
+
+        let src_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("bench_sort_src"),
+            size: attr_bytes.len() as u64,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        queue.write_buffer(&src_buffer, 0, attr_bytes);
+
+        let dst_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("bench_sort_dst"),
+            size: size as u64 * instance_size,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        let draw_data: [u32; 4] = [6, size as u32, 0, 0];
+        let draw_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("bench_draw_indirect"),
+            size: 16,
+            usage: BufferUsages::STORAGE
+                | BufferUsages::INDIRECT
+                | BufferUsages::COPY_SRC
+                | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        queue.write_buffer(&draw_buffer, 0, bytemuck::cast_slice(&draw_data));
+
+        let sort_buffers = SortBuffers::new(device, size as u32);
+
+        // Warm up.
+        {
+            let mut encoder =
+                device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            sorter.encode_sort(
+                device,
+                queue,
+                &mut encoder,
+                &src_buffer,
+                &dst_buffer,
+                &draw_buffer,
+                &sort_buffers,
+                size as u32,
+            );
+            let idx = queue.submit([encoder.finish()]);
+            let _ = device.poll(wgpu::PollType::WaitForSubmissionIndex(idx));
+        }
+
+        group.bench_with_input(
+            BenchmarkId::new("encode_and_submit", size),
+            &size,
+            |b, _| {
+                b.iter(|| {
+                    let mut encoder = device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+                    sorter.encode_sort(
+                        device,
+                        queue,
+                        &mut encoder,
+                        black_box(&src_buffer),
+                        &dst_buffer,
+                        &draw_buffer,
+                        &sort_buffers,
+                        size as u32,
+                    );
+                    let idx = queue.submit([encoder.finish()]);
+                    let _ = device.poll(wgpu::PollType::WaitForSubmissionIndex(idx));
+                });
+            },
+        );
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_cpu_culling,
     bench_gpu_culling,
     bench_gpu_culling_pooled,
-    bench_gpu_sort
+    bench_gpu_sort,
+    bench_gpu_sort_only
 );
 criterion_main!(benches);
