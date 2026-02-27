@@ -194,7 +194,7 @@ reorganisation._
 | [GUP-078](GUP-078_Spatial_Index_Algorithm_Optimization.md) | Spatial Index Algorithm Optimization  | ✅ Complete    | Medium   | —      |
 | [GUP-079](GUP-079_GPU_Memory_Pool_Optimization.md)         | GPU Memory Pool Optimization          | ✅ Complete    | Low      | —      |
 | [GUP-172](GUP-172_WebAssembly_Performance_Benchmarks.md)   | WebAssembly Performance Benchmarks    | ✅ Complete | Low      | —      |
-| [GUP-173](GUP-173_CI_Performance_Alert_System.md)          | CI Performance Alert System           | 📋 Planned     | Low      | —      |
+| [GUP-173](GUP-173_CI_Performance_Alert_System.md)          | CI Performance Alert System           | 🚧 In Progress | Low      | —      |
 | [GUP-174](GUP-174_Flaky_Performance_Test_Stabilization.md) | Flaky Performance Test Stabilization  | ✅ Complete    | Low      | —      |
 | [GUP-175](GUP-175_GPU_Side_Morton_Range_Query.md)          | GPU-Side Morton Range Query           | ✅ Complete    | Medium   | —      |
 | [GUP-176](GUP-176_Spatial_Index_Adaptive_Grid_Size.md)     | Spatial Index Adaptive Grid Size      | 📋 Planned     | Low      | —      |
