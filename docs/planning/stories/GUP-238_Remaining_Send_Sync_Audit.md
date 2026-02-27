@@ -142,3 +142,105 @@ Migrated all remaining `Send + Sync` trait bounds to use the conditional
 - [x] No direct `Send + Sync` bounds remain on public traits
 - [x] Native and WASM builds pass
 - [x] All tests pass
+
+## Retrospective
+
+**Completed**: 2025-07-26
+
+### Key Technical Learnings
+
+#### MaybeSend/MaybeSync Cannot Be Used in Trait Object Position
+
+- **Challenge**: `MaybeSend` and `MaybeSync` are regular marker traits, not
+  Rust auto traits. Rust only allows auto traits (`Send`, `Sync`) to appear as
+  additional bounds in `dyn` trait objects (e.g., `Box<dyn Fn() + Send + Sync>`).
+  Using `Box<dyn Fn() + MaybeSend + MaybeSync>` is a compiler error.
+- **Solution**: For trait object fields and type aliases, use `#[cfg]` gating to
+  produce `+ Send + Sync` on native and bare `dyn Trait` on WASM. For generic
+  type parameter bounds (e.g., `F: Fn() + MaybeSend + MaybeSync + 'static`),
+  the marker traits work fine because these are compile-time constraints, not
+  trait objects.
+- **Pattern**: Always distinguish between generic bounds (where MaybeSend works)
+  and trait objects (where cfg-gating is required). This is a fundamental Rust
+  type system constraint.
+
+#### Global Statics Require Send+Sync Regardless of Platform
+
+- **Challenge**: `static GLOBAL_REGISTRY: OnceLock<Mutex<...>>` requires its
+  content to implement `Send + Sync` because Rust statics must be `Sync`. When
+  `MixablePlugin` was changed from `Send + Sync` to `MaybeSend + MaybeSync`,
+  `dyn MixablePlugin` no longer satisfied `Send` on WASM, breaking the static.
+- **Solution**: Cfg-gate the HashMap storage to use `Box<dyn MixablePlugin +
+  Send + Sync>` on native and `Box<dyn MixablePlugin>` on WASM. Add `unsafe
+  impl Send + Sync for MixablePluginRegistry` on WASM (safe because WASM is
+  single-threaded). Also cfg-gate all methods that pass `Box<dyn Any + Send +
+  Sync>` since `Any` downcasting requires matching trait object types.
+- **Pattern**: Any type stored in a global static needs explicit `Send + Sync`
+  guarantees. On WASM, `unsafe impl Send + Sync` is safe for single-threaded
+  types, but should be documented clearly.
+
+#### Scope of "Mechanical Replacement" Was Underestimated
+
+- **Challenge**: The story was rated as "Low complexity" and described as
+  "purely mechanical replacement of bounds." In practice, the interactions
+  between trait definitions, trait objects, generic bounds, global statics,
+  and `Box<dyn Any>` downcasting created several non-obvious complications.
+- **Solution**: Methodical approach: update trait definitions first, then
+  generic bounds, then cfg-gate trait objects, then fix WASM-specific issues.
+  Frequent `cargo check` after each batch of changes.
+- **Pattern**: Cross-cutting type system changes are rarely truly "mechanical."
+  Always plan for edge cases in trait objects, statics, and Any downcasting.
+
+### Architectural Decisions
+
+#### cfg-Gating Trait Objects vs. Defining Wrapper Types
+
+- **Decision**: Used `#[cfg]` attributes directly on struct fields and type
+  aliases to provide `+ Send + Sync` on native and bare `dyn` on WASM, rather
+  than creating wrapper newtypes or custom trait aliases.
+- **Reasoning**: Cfg-gating is the most direct and transparent approach. It's
+  immediately clear at each usage site what the platform difference is. Wrapper
+  types would add indirection and make the codebase harder to understand.
+- **Trade-off**: Duplication — many struct fields and type aliases now have two
+  cfg-gated variants. This is verbose but maintainable.
+- **Future**: If Rust stabilises auto trait definitions or trait aliases, these
+  could be consolidated. The `auto trait MaybeSend {}` feature is on nightly.
+
+#### Unsafe Send+Sync for MixablePluginRegistry on WASM
+
+- **Decision**: Used `unsafe impl Send for MixablePluginRegistry` on WASM
+  rather than cfg-gating the entire global registry out of WASM.
+- **Reasoning**: The global registry is a useful feature even on WASM (for
+  plugin ecosystem). WASM is inherently single-threaded, so `Send + Sync` is
+  a no-op safety requirement. Removing the registry from WASM would reduce
+  cross-platform parity.
+- **Trade-off**: Unsafe code requires careful documentation. If WASM ever gets
+  threads (SharedArrayBuffer + wasm-threads), this would need revisiting.
+- **Future**: If the WASM threads proposal becomes standard, these unsafe impls
+  should be audited or replaced with proper thread-safe implementations.
+
+#### Intentional Exclusions
+
+- **`Box<dyn Any + Send + Sync>`**: Left unchanged throughout the codebase.
+  These are used for type-erased downcasting via `std::any::Any`, which provides
+  specific impl blocks for `dyn Any + Send + Sync`. Changing these would break
+  downcasting.
+- **`PlatformAccessibility`**: Left with its existing cfg-gated dual trait
+  definitions per the GUP-231 architectural decision. This trait has
+  platform-specific semantics that benefit from explicit `Send + Sync` on native.
+- **`shader_pipeline.rs` uniform bounds**: `F::Uniforms: Send + Sync + 'static`
+  left as-is because these are used to box into `Box<dyn Any + Send + Sync>`.
+
+### Development Workflow Insights
+
+- **Incremental compilation checks**: Running `cargo check` after each batch of
+  changes was essential. The WASM compilation error in plugins.rs was caught
+  early, allowing targeted fixes rather than a large debugging session.
+- **Disk space constraints**: The build artifacts for this project consume ~30GB.
+  Running full `cargo test` required cleaning between attempts due to disk space
+  limits. The `--lib` flag was sufficient for regression testing since the
+  integration tests are separate binaries that consume additional space.
+- **Grep-driven audit**: Starting with `grep -rn "Send + Sync" src/` to build a
+  complete inventory was the right approach. Categorising occurrences by type
+  (trait definitions, generic bounds, trait objects, Any boxing) before making
+  changes prevented rework.
