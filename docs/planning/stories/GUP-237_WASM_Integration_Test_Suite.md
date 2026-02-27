@@ -1,7 +1,7 @@
 # GUP-237: WASM Integration Test Suite
 
-**Priority**: Low **Complexity**: Medium **Created**: 2026-02-27 **Status**:
-📋 Planned
+**Priority**: Low **Complexity**: Medium **Created**: 2026-02-27 **Status**: 📋
+Planned
 
 ## Overview
 
@@ -12,10 +12,10 @@ compiles for WASM but does not validate runtime behaviour.
 ## Context
 
 With GUP-231 complete, the library builds for `wasm32-unknown-unknown` and
-`wasm-pack build --target web` produces a loadable package. However, there is
-no automated verification that the WASM module initialises correctly, creates a
-GPU context, or renders marks in the browser. A headless browser test suite
-would close this gap.
+`wasm-pack build --target web` produces a loadable package. However, there is no
+automated verification that the WASM module initialises correctly, creates a GPU
+context, or renders marks in the browser. A headless browser test suite would
+close this gap.
 
 ## User Story
 

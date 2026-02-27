@@ -2654,7 +2654,7 @@ mod tests {
         let instances =
             renderer.generate_grid_instances(&major, &major, &minor, &minor, bounds, &config);
         let instance_count = instances.len();
-        let instance_bytes = instance_count * std::mem::size_of::<TickInstance>();
+        let instance_bytes = std::mem::size_of_val(instances);
 
         // LineAttributes path (for comparison)
         let mut lines = Vec::new();

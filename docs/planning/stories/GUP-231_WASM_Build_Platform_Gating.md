@@ -87,7 +87,8 @@ Resolved all 56 WASM compilation errors to enable full library compilation for
    `Send + Sync` on native, no bounds on WASM.
 
 4. **async_trait gating**: All `#[async_trait]` attributes replaced with
-   `cfg_attr` that selects `async_trait` (native) vs `async_trait(?Send)` (WASM).
+   `cfg_attr` that selects `async_trait` (native) vs `async_trait(?Send)`
+   (WASM).
 
 5. **Background task spawning**: `tokio::spawn` calls in progressive and
    streaming modules gated to use `wasm_bindgen_futures::spawn_local` on WASM.
@@ -110,8 +111,10 @@ Resolved all 56 WASM compilation errors to enable full library compilation for
 - `src/mixable/merge.rs` — Mergeable trait bounds
 - `src/mixable/composition_recovery.rs` — Future Send bound cfg
 - `src/interaction.rs` — Renderable trait bounds
-- `src/accessibility/platform.rs` — PlatformAccessibility cfg split, LinuxAccessibility cfg, AriaRole match
-- `src/accessibility/web_overlay.rs` — Bug fixes, AriaRole matches, type annotations
+- `src/accessibility/platform.rs` — PlatformAccessibility cfg split,
+  LinuxAccessibility cfg, AriaRole match
+- `src/accessibility/web_overlay.rs` — Bug fixes, AriaRole matches, type
+  annotations
 - `src/async_mixable.rs` — AsyncMixable trait bounds, async_trait cfg
 - `src/async_mixable/progressive.rs` — spawn_local, trait bounds
 - `src/async_mixable/streaming.rs` — spawn_local, trait bounds
@@ -149,8 +152,9 @@ Resolved all 56 WASM compilation errors to enable full library compilation for
 
 #### async_trait Conditional Send Bounds
 
-- **Challenge**: `#[async_trait]` by default desugars async methods into `Pin<Box<dyn Future + Send>>`. On WASM, the `Send` bound is impossible to satisfy
-  because wgpu types aren't `Send`.
+- **Challenge**: `#[async_trait]` by default desugars async methods into
+  `Pin<Box<dyn Future + Send>>`. On WASM, the `Send` bound is impossible to
+  satisfy because wgpu types aren't `Send`.
 - **Solution**: Used `cfg_attr` to switch between `#[async_trait]` (native) and
   `#[async_trait(?Send)]` (WASM) on every trait definition and impl block. This
   was a mechanical but widespread change (13 occurrences across 4 files).
@@ -189,7 +193,8 @@ Resolved all 56 WASM compilation errors to enable full library compilation for
 - **Reasoning**: This trait had only 2 definitions needed and the `Send + Sync`
   bounds are part of the trait's public contract for platform bridge types.
   Keeping them explicit makes the platform-specific semantics clearer.
-- **Trade-off**: Two trait blocks to maintain, but the trait is small and stable.
+- **Trade-off**: Two trait blocks to maintain, but the trait is small and
+  stable.
 - **Future**: Could consolidate to use `MaybeSend`/`MaybeSync` if preferred.
 
 ### Development Workflow Insights

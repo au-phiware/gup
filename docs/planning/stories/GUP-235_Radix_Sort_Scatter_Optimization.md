@@ -6,9 +6,9 @@ Planned **Priority**: Low **Effort**: — **Created**: 2025-07-20
 
 ## Overview
 
-Optimize the scatter pass in the GPU radix sort to replace the O(workgroup_size²)
-serial local rank computation with per-digit shared memory prefix sums for O(n)
-total work per workgroup.
+Optimize the scatter pass in the GPU radix sort to replace the
+O(workgroup_size²) serial local rank computation with per-digit shared memory
+prefix sums for O(n) total work per workgroup.
 
 ## Context
 

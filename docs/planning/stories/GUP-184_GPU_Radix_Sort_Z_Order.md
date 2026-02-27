@@ -1,9 +1,9 @@
 # GUP-184: GPU Radix Sort for Z-Order
 
 **Story ID**: GUP-184 **Title**: GPU Radix Sort for Z-Order **Status**: ✅
-Complete **Priority**: Low **Effort**: — **Created**: 2026-07-19
-**Completed**: 2025-07-20 **Dependencies**: GUP-077 (Compute Shader Instance
-Sorting and Filtering)
+Complete **Priority**: Low **Effort**: — **Created**: 2026-07-19 **Completed**:
+2025-07-20 **Dependencies**: GUP-077 (Compute Shader Instance Sorting and
+Filtering)
 
 ## Overview
 
@@ -76,8 +76,8 @@ without CPU intervention.
 
 ### What was implemented
 
-- **WGSL shader** (`src/shaders/radix_sort.compute.wgsl`): 8-bit radix sort
-  with 7 compute entry points (extract_sort_keys, radix_histogram,
+- **WGSL shader** (`src/shaders/radix_sort.compute.wgsl`): 8-bit radix sort with
+  7 compute entry points (extract_sort_keys, radix_histogram,
   histogram_scan_workgroup, histogram_scan_blocks, histogram_scan_add_offsets,
   radix_scatter, reorder_instances).
 - **Rust module** (`src/mark/radix_sort.rs`): `RadixSorter` struct with 7
@@ -96,16 +96,16 @@ without CPU intervention.
 
 ### Key files changed
 
-| File                                           | Change              |
-| ---------------------------------------------- | ------------------- |
-| `src/shaders/radix_sort.compute.wgsl`          | New (WGSL shader)   |
-| `src/mark/radix_sort.rs`                       | New (Rust module)   |
-| `src/mark/compute_instance_filter.rs`          | dispatch_sorted()   |
-| `src/mark/batch_renderer.rs`                   | z_depth() helper    |
-| `src/mark.rs`                                  | pub mod radix_sort  |
-| `src/lib.rs`                                   | Re-exports          |
-| `benches/compute_filter_benchmarks.rs`         | Sort benchmarks     |
-| `docs/planning/stories/GUP-184_*.md`           | Story updates       |
+| File                                   | Change             |
+| -------------------------------------- | ------------------ |
+| `src/shaders/radix_sort.compute.wgsl`  | New (WGSL shader)  |
+| `src/mark/radix_sort.rs`               | New (Rust module)  |
+| `src/mark/compute_instance_filter.rs`  | dispatch_sorted()  |
+| `src/mark/batch_renderer.rs`           | z_depth() helper   |
+| `src/mark.rs`                          | pub mod radix_sort |
+| `src/lib.rs`                           | Re-exports         |
+| `benches/compute_filter_benchmarks.rs` | Sort benchmarks    |
+| `docs/planning/stories/GUP-184_*.md`   | Story updates      |
 
 ### Test counts
 
@@ -152,13 +152,13 @@ pass's O(workgroup_size) local rank computation.
 #### Multi-Level Prefix Sum for Arbitrary Sizes
 
 - **Challenge**: The 8-bit radix sort histogram has `256 * num_workgroups`
-  entries, which for 1M instances is ~1M entries. The existing 2-level prefix sum
-  only handles up to 65K entries.
-- **Solution**: Implemented a 3-level prefix sum by adding a `prefix_data_offset`
-  field to the config, allowing the scan to operate on data at arbitrary offsets
-  within the histogram buffer.
-- **Pattern**: When extending Blelloch scans to 3+ levels, parameterize the
-  data offset and block total offset separately in the config uniform.
+  entries, which for 1M instances is ~1M entries. The existing 2-level prefix
+  sum only handles up to 65K entries.
+- **Solution**: Implemented a 3-level prefix sum by adding a
+  `prefix_data_offset` field to the config, allowing the scan to operate on data
+  at arbitrary offsets within the histogram buffer.
+- **Pattern**: When extending Blelloch scans to 3+ levels, parameterize the data
+  offset and block total offset separately in the config uniform.
 
 ### Architectural Decisions
 
@@ -166,8 +166,8 @@ pass's O(workgroup_size) local rank computation.
 
 - **Decision**: Created `radix_sort.rs` as a separate module rather than adding
   sort code to `compute_instance_filter.rs`.
-- **Reasoning**: The radix sort has its own WGSL shader, bind group layout, and 7
-  compute pipelines. Mixing this into the filter module would make it hard to
+- **Reasoning**: The radix sort has its own WGSL shader, bind group layout, and
+  7 compute pipelines. Mixing this into the filter module would make it hard to
   maintain. Separation also allows the sorter to be used independently.
 - **Trade-off**: Requires a second bind group and staging buffer allocation per
   sort dispatch.

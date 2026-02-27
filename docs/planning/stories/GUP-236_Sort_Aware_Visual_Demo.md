@@ -1,8 +1,8 @@
 # GUP-236: Sort-Aware Visual Demo
 
 **Story ID**: GUP-236 **Title**: Sort-Aware Visual Demo **Status**: 📋 Planned
-**Priority**: Low **Effort**: — **Created**: 2025-07-20 **Dependencies**: GUP-184
-(GPU Radix Sort for Z-Order)
+**Priority**: Low **Effort**: — **Created**: 2025-07-20 **Dependencies**:
+GUP-184 (GPU Radix Sort for Z-Order)
 
 ## Overview
 

@@ -79,15 +79,16 @@ responsive during GPU readback.
    Implements `Drop` to release the staging slot if the handle is discarded
    without consuming.
 
-2. **Double-buffered async staging**: Two `AsyncStagingSlot` instances (each with
-   an `Arc<Buffer>` and `Arc<AtomicBool>` in-use flag) allow submitting a new
-   query while a previous result is still being read. If both slots are busy,
-   `query_point_async` returns a descriptive error.
+2. **Double-buffered async staging**: Two `AsyncStagingSlot` instances (each
+   with an `Arc<Buffer>` and `Arc<AtomicBool>` in-use flag) allow submitting a
+   new query while a previous result is still being read. If both slots are
+   busy, `query_point_async` returns a descriptive error.
 
 3. **`query_point_async` / `query_region_async` public API**: Dispatches the
    cached compute pipeline (same paths as the sync API — brute-force or Morton
-   depending on element count), then copies the result buffer to an async staging
-   slot and initiates `map_async` without blocking. Returns `QueryHandle`.
+   depending on element count), then copies the result buffer to an async
+   staging slot and initiates `map_async` without blocking. Returns
+   `QueryHandle`.
 
 4. **Copy-size optimisation reuse**: The async path reuses the GUP-197
    `last_dispatch_result_slots` tracking so only the written portion of the
@@ -95,11 +96,11 @@ responsive during GPU readback.
 
 ### Key Files Changed
 
-| File                                   | Changes                                               |
-| -------------------------------------- | ----------------------------------------------------- |
-| `src/interaction.rs`                   | +324 lines: QueryHandle, AsyncStagingSlot, async API  |
-| `src/lib.rs`                           | +1 line: export QueryHandle                           |
-| `tests/non_blocking_query_tests.rs`    | +472 lines: 14 integration tests                      |
+| File                                | Changes                                              |
+| ----------------------------------- | ---------------------------------------------------- |
+| `src/interaction.rs`                | +324 lines: QueryHandle, AsyncStagingSlot, async API |
+| `src/lib.rs`                        | +1 line: export QueryHandle                          |
+| `tests/non_blocking_query_tests.rs` | +472 lines: 14 integration tests                     |
 
 ### Test Count
 
@@ -142,9 +143,9 @@ responsive during GPU readback.
 
 #### Separate Sync and Async Staging Buffers
 
-- **Challenge**: The sync API (GUP-197) uses a persistent `result_staging_buffer`
-  that is mapped/unmapped synchronously. Reusing it for async would create
-  conflicts if sync and async queries are interleaved.
+- **Challenge**: The sync API (GUP-197) uses a persistent
+  `result_staging_buffer` that is mapped/unmapped synchronously. Reusing it for
+  async would create conflicts if sync and async queries are interleaved.
 - **Solution**: Keep the existing sync staging buffer untouched and add two
   separate async staging buffers. This means zero changes to the sync path and
   zero risk of regression.
@@ -157,11 +158,12 @@ responsive during GPU readback.
 
 #### Two Slots (Not N)
 
-- **Decision**: Fixed double-buffering (2 slots) rather than a configurable pool.
+- **Decision**: Fixed double-buffering (2 slots) rather than a configurable
+  pool.
 - **Reasoning**: In a typical render loop, at most 1 query is in-flight at a
   time. Two slots handle the "submit frame N, consume frame N+1" pipeline
-  perfectly. A pool would add complexity (slot selection, growth, shrink) with no
-  practical benefit.
+  perfectly. A pool would add complexity (slot selection, growth, shrink) with
+  no practical benefit.
 - **Trade-off**: If a user submits 3+ concurrent async queries, they get an
   error. This is by design — the API is optimised for the common pipeline case.
 - **Future**: If a use case arises for more than 2 concurrent async queries, the
@@ -170,8 +172,8 @@ responsive during GPU readback.
 
 #### QueryHandle Owns Results Processing
 
-- **Decision**: `QueryHandle` reads and processes the mapped buffer itself
-  (via `read_and_unmap`), rather than delegating back to `InteractionSystem`.
+- **Decision**: `QueryHandle` reads and processes the mapped buffer itself (via
+  `read_and_unmap`), rather than delegating back to `InteractionSystem`.
 - **Reasoning**: If the handle delegated back to the system, the user would need
   `&mut InteractionSystem` to consume results, which defeats the purpose of
   decoupling submission from consumption. Self-contained handles enable patterns
@@ -189,9 +191,9 @@ responsive during GPU readback.
 - `futures_channel::oneshot` was already a dependency (used by the existing
   `download_results` method), so no new dependencies were needed.
 - The test for `both_slots_busy_returns_error` validates an important safety
-  property: the system never silently blocks or overwrites a pending result. This
-  kind of negative-path test is easy to forget but crucial for correctness in
-  concurrent GPU APIs.
+  property: the system never silently blocks or overwrites a pending result.
+  This kind of negative-path test is easy to forget but crucial for correctness
+  in concurrent GPU APIs.
 - Frame-aligned latency tests use `tokio::time::sleep(16ms)` to simulate the
   inter-frame gap. This is realistic for 60 FPS render loops and reliably
   demonstrates that the GPU finishes well within one frame.
