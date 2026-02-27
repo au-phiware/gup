@@ -209,6 +209,8 @@ reorganisation._
 | [GUP-196](GUP-196_Hit_Test_Result_Buffer_Query_Count.md)   | Hit Test Result Buffer Query Count    | ✅ Complete    | Medium   | 2      |
 | [GUP-197](GUP-197_Result_Buffer_Readback_Optimization.md)  | Result Buffer Readback Optimization   | ✅ Complete    | Low      | 5      |
 | [GUP-198](GUP-198_Non_Blocking_Query_API.md)               | Non-Blocking Query API                | 📋 Planned     | Low      | 8      |
+| [GUP-233](GUP-233_Winit_Touch_Event_Integration.md)       | Winit Touch Event Integration         | 📋 Planned     | Low      | 2      |
+| [GUP-234](GUP-234_Touch_Lasso_Selection.md)               | Touch Lasso Selection                 | 📋 Planned     | Low      | 3      |
 
 ### Post GUP-015 Stories - Advanced Debug Infrastructure (Stories 80+)
 
