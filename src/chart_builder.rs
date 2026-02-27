@@ -967,13 +967,15 @@ where
 
     /// Queue axis-label and title text for multi-font rendering.
     ///
-    /// This convenience method calls
-    /// [`generate_axis_geometry`](Self::generate_axis_geometry) to obtain
-    /// axis labels, then queues every label (and the optional chart title)
-    /// through
+    /// This convenience method generates axis labels for each axis and
+    /// queues them (and the optional chart title) through
     /// [`TextRenderer::queue_text_with_fonts`](crate::text::TextRenderer::queue_text_with_fonts),
     /// so that [`TextStyle::font_family`] is respected via the
     /// [`FontAtlasManager`](crate::text::FontAtlasManager).
+    ///
+    /// When an axis has a per-axis
+    /// [`AxisConfiguration::label_style`](crate::axis::AxisConfiguration::label_style),
+    /// that style is used instead of [`ChartConfig::label_style`].
     ///
     /// Call this **before** creating the render pass, then call
     /// [`TextRenderer::render_queued_text_multi`](crate::text::TextRenderer::render_queued_text_multi)
@@ -1014,22 +1016,53 @@ where
         font_manager: &mut crate::text::FontAtlasManager,
         layout_engine: &mut crate::text::TextLayoutEngine,
     ) -> GupResult<()> {
-        let (_, labels) = self.generate_axis_geometry();
+        let chart_area = self.calculate_chart_area();
+        let viewport_size = (self.config.width, self.config.height);
+        let renderer = AxisRenderer::new();
 
-        // Queue axis labels
-        for label in &labels {
-            let style = self.config.label_style.clone().with_anchor(label.anchor);
+        let axes: [(AxisPosition, &Option<Box<dyn Axis>>); 4] = [
+            (AxisPosition::Bottom, &self.bottom_axis),
+            (AxisPosition::Left, &self.left_axis),
+            (AxisPosition::Top, &self.top_axis),
+            (AxisPosition::Right, &self.right_axis),
+        ];
 
-            text_renderer.queue_text_with_fonts(
-                frame,
-                &label.text,
-                label.screen_position,
-                &style,
-                font_manager,
-                layout_engine,
-                None,
-                None,
-            )?;
+        for (position, axis_opt) in &axes {
+            if let Some(axis) = axis_opt {
+                let pixel_bounds = self.calculate_axis_bounds(*position, &chart_area);
+                let ndc_bounds = self.pixel_bounds_to_ndc(&pixel_bounds);
+                let config = axis.configuration();
+
+                let labels = renderer.generate_label_data(
+                    &ndc_bounds,
+                    config,
+                    *position,
+                    None,
+                    viewport_size,
+                    None,
+                );
+
+                // Per-axis style overrides chart-level style
+                let base_style = config
+                    .label_style
+                    .as_ref()
+                    .unwrap_or(&self.config.label_style);
+
+                for label in &labels {
+                    let style = base_style.clone().with_anchor(label.anchor);
+
+                    text_renderer.queue_text_with_fonts(
+                        frame,
+                        &label.text,
+                        label.screen_position,
+                        &style,
+                        font_manager,
+                        layout_engine,
+                        None,
+                        None,
+                    )?;
+                }
+            }
         }
 
         // Queue chart title
@@ -1043,6 +1076,10 @@ where
     /// Like [`queue_chart_text`](Self::queue_chart_text), but first runs
     /// labels through a [`LabelPositioner`] to resolve overlaps. Hidden
     /// labels are omitted from the text queue.
+    ///
+    /// When an axis has a per-axis
+    /// [`AxisConfiguration::label_style`](crate::axis::AxisConfiguration::label_style),
+    /// that style is used instead of [`ChartConfig::label_style`].
     pub fn queue_chart_text_resolved(
         &self,
         frame: &crate::RenderFrame,
@@ -1052,22 +1089,56 @@ where
         positioner: &mut LabelPositioner,
         constraints: &LabelConstraints,
     ) -> GupResult<()> {
-        let (_, label_layout) = self.generate_axis_geometry_resolved(positioner, constraints)?;
+        let chart_area = self.calculate_chart_area();
+        let viewport_size = (self.config.width, self.config.height);
+        let renderer = AxisRenderer::new();
 
-        // Queue only the resolved (non-hidden) label positions
-        for lp in &label_layout.positions {
-            let style = self.config.label_style.clone().with_anchor(lp.anchor);
+        let axes: [(AxisPosition, &Option<Box<dyn Axis>>); 4] = [
+            (AxisPosition::Bottom, &self.bottom_axis),
+            (AxisPosition::Left, &self.left_axis),
+            (AxisPosition::Top, &self.top_axis),
+            (AxisPosition::Right, &self.right_axis),
+        ];
 
-            text_renderer.queue_text_with_fonts(
-                frame,
-                &lp.text,
-                lp.position,
-                &style,
-                font_manager,
-                layout_engine,
-                None,
-                None,
-            )?;
+        for (position, axis_opt) in &axes {
+            if let Some(axis) = axis_opt {
+                let pixel_bounds = self.calculate_axis_bounds(*position, &chart_area);
+                let ndc_bounds = self.pixel_bounds_to_ndc(&pixel_bounds);
+                let config = axis.configuration();
+
+                let labels = renderer.generate_label_data(
+                    &ndc_bounds,
+                    config,
+                    *position,
+                    None,
+                    viewport_size,
+                    None,
+                );
+
+                let axis_info = AxisInfo::from_bounds(&pixel_bounds, *position);
+                let layout = positioner.resolve_labels(&labels, &axis_info, constraints)?;
+
+                // Per-axis style overrides chart-level style
+                let base_style = config
+                    .label_style
+                    .as_ref()
+                    .unwrap_or(&self.config.label_style);
+
+                for lp in &layout.positions {
+                    let style = base_style.clone().with_anchor(lp.anchor);
+
+                    text_renderer.queue_text_with_fonts(
+                        frame,
+                        &lp.text,
+                        lp.position,
+                        &style,
+                        font_manager,
+                        layout_engine,
+                        None,
+                        None,
+                    )?;
+                }
+            }
         }
 
         // Queue chart title

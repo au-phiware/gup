@@ -36,7 +36,7 @@ use crate::error::GupResult;
 use crate::label::{LabelFormatter, NumericFormatter};
 use crate::render::{RenderContext, Vertex};
 use crate::shader_function::Vec2;
-use crate::text::TextAnchor;
+use crate::text::{TextAnchor, TextStyle};
 use crate::tick_generator::{LinearTickGenerator, Scale, TickGenerator};
 
 /// Position of an axis relative to the chart area.
@@ -138,6 +138,11 @@ pub struct AxisConfiguration {
     pub target_tick_count: Option<usize>,
     /// Number of minor tick subdivisions between major ticks
     pub minor_tick_subdivisions: usize,
+    /// Optional per-axis text style for labels.
+    ///
+    /// When set, this style overrides the chart-level `ChartConfig::label_style`
+    /// for labels on this axis. When `None`, the chart-level style is used.
+    pub label_style: Option<TextStyle>,
 }
 
 impl Default for AxisConfiguration {
@@ -152,6 +157,7 @@ impl Default for AxisConfiguration {
             line_width: 1.0,
             target_tick_count: None,    // Automatic tick count
             minor_tick_subdivisions: 5, // 5 subdivisions between major ticks
+            label_style: None,          // Uses chart-level style
         }
     }
 }
@@ -204,6 +210,27 @@ impl AxisConfiguration {
     /// Set number of minor tick subdivisions.
     pub fn with_minor_subdivisions(mut self, subdivisions: usize) -> Self {
         self.minor_tick_subdivisions = subdivisions;
+        self
+    }
+
+    /// Set a per-axis label text style.
+    ///
+    /// When set, this style overrides the chart-level `ChartConfig::label_style`
+    /// for labels rendered on this axis. This enables different fonts, sizes,
+    /// or colours for each axis.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use gup::axis::AxisConfiguration;
+    /// use gup::text::TextStyle;
+    ///
+    /// let config = AxisConfiguration::default()
+    ///     .with_label_style(TextStyle::new(12.0).with_font_family("Monospace"));
+    /// assert!(config.label_style.is_some());
+    /// ```
+    pub fn with_label_style(mut self, style: TextStyle) -> Self {
+        self.label_style = Some(style);
         self
     }
 }
