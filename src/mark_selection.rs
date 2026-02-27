@@ -1844,8 +1844,11 @@ enum TouchState {
     OneFinger { touch: TrackedTouch, id: u64 },
     /// A single-finger drag is in progress (rectangle selection tool).
     Dragging { id: u64 },
-    /// A long-press was already committed; waiting for finger lift.
-    LongPressCommitted { id: u64 },
+    /// Long-press threshold reached; waiting for finger lift (toggle) or
+    /// movement (lasso).
+    LongPressHeld { touch: TrackedTouch, id: u64 },
+    /// Drawing a lasso path after a long-press-then-drag gesture.
+    LassoDrawing { id: u64 },
     /// Two fingers are down simultaneously — could become a two-finger tap.
     TwoFingers {
         ids: [u64; 2],
@@ -1865,6 +1868,7 @@ enum TouchState {
 /// | Long-press | Toggle mode (equivalent to Ctrl+Click) |
 /// | Two-finger tap | Clear selection |
 /// | Single-finger drag | Rectangle selection tool |
+/// | Long-press then drag | Lasso (free-form) selection tool |
 ///
 /// # Usage
 ///
@@ -1952,7 +1956,7 @@ impl TouchSelectionAdapter {
     pub fn tick(
         &mut self,
         now: f64,
-        selection: &mut MarkSelectionSystem,
+        _selection: &mut MarkSelectionSystem,
     ) -> Option<HapticFeedback> {
         // Check for long-press while in one-finger state.
         if let TouchState::OneFinger { touch, id } = &self.state {
@@ -1960,28 +1964,12 @@ impl TouchSelectionAdapter {
             if elapsed >= self.config.long_press_duration
                 && touch.max_displacement <= self.config.tap_tolerance_px
             {
-                // Long-press detected — enter toggle mode and commit.
-                let pos = touch.current_position;
+                // Long-press detected — transition to held state.
+                // The actual toggle action is deferred until finger-lift.
+                // If the user drags from this state, it becomes a lasso.
+                let touch = *touch;
                 let id = *id;
-
-                // Set toggle modifiers temporarily.
-                let prev = selection.modifiers();
-                selection.set_modifiers(KeyModifiers {
-                    ctrl: true,
-                    ..KeyModifiers::default()
-                });
-
-                // Execute a point-select with toggle semantics.
-                selection.on_mouse_down(pos);
-                let hit_ids = selection.hit_test(pos, self.effective_hit_radius(0.0));
-                selection.on_mouse_up(pos, &hit_ids);
-
-                // Restore modifiers.
-                selection.set_modifiers(prev);
-
-                // Transition — the finger is still down but we have
-                // already committed the long-press action.
-                self.state = TouchState::LongPressCommitted { id };
+                self.state = TouchState::LongPressHeld { touch, id };
                 return Some(HapticFeedback::Medium);
             }
         }
@@ -2064,8 +2052,25 @@ impl TouchSelectionAdapter {
                 selection.on_mouse_move(event.position);
                 None
             }
-            TouchState::LongPressCommitted { .. } => {
-                // Movement after long-press is ignored — already committed.
+            TouchState::LongPressHeld { touch, id } if *id == event.id => {
+                // Check if movement exceeds tap tolerance — start lasso.
+                let dx = event.position[0] - touch.start_position[0];
+                let dy = event.position[1] - touch.start_position[1];
+                let dist = (dx * dx + dy * dy).sqrt();
+
+                if dist > self.config.tap_tolerance_px {
+                    let id = *id;
+                    let start = touch.start_position;
+                    // Switch to lasso tool and begin drawing.
+                    selection.set_tool(SelectionToolKind::Lasso);
+                    selection.on_mouse_down(start);
+                    selection.on_mouse_move(event.position);
+                    self.state = TouchState::LassoDrawing { id };
+                }
+                None
+            }
+            TouchState::LassoDrawing { id } if *id == event.id => {
+                selection.on_mouse_move(event.position);
                 None
             }
             _ => None,
@@ -2117,11 +2122,49 @@ impl TouchSelectionAdapter {
                     None
                 }
             }
-            TouchState::LongPressCommitted { id } if *id == event.id => {
-                // The long-press action was already committed during tick().
-                // Simply return to idle without further selection changes.
+            TouchState::LongPressHeld { touch, id } if *id == event.id => {
+                // Finger lifted without dragging after long-press threshold.
+                // Commit the toggle action now.
+                let pos = touch.current_position;
+
+                // Set toggle modifiers temporarily.
+                let prev = selection.modifiers();
+                selection.set_modifiers(KeyModifiers {
+                    ctrl: true,
+                    ..KeyModifiers::default()
+                });
+
+                selection.on_mouse_down(pos);
+                let hit_ids = selection.hit_test(pos, self.effective_hit_radius(0.0));
+                selection.on_mouse_up(pos, &hit_ids);
+
+                // Restore modifiers.
+                selection.set_modifiers(prev);
+
                 self.state = TouchState::Idle;
-                None
+                if self.config.haptic_feedback_enabled {
+                    Some(HapticFeedback::Medium)
+                } else {
+                    None
+                }
+            }
+            TouchState::LassoDrawing { id } if *id == event.id => {
+                // Lasso gesture ended — finish lasso tool and apply selection.
+                if let Some(lasso_points) = selection.current_lasso_points() {
+                    let points = lasso_points.to_vec();
+                    let hit_ids = selection.lasso_hit_test(&points);
+                    selection.on_mouse_up(event.position, &hit_ids);
+                } else {
+                    selection.on_mouse_up(event.position, &[]);
+                }
+                // Restore point tool after lasso.
+                selection.set_tool(SelectionToolKind::Point);
+                self.state = TouchState::Idle;
+                if self.config.haptic_feedback_enabled {
+                    Some(HapticFeedback::Medium)
+                } else {
+                    None
+                }
             }
             TouchState::TwoFingers {
                 ids,
@@ -2208,6 +2251,10 @@ impl TouchSelectionAdapter {
                 selection.cancel();
                 selection.set_tool(SelectionToolKind::Point);
             }
+            TouchState::LassoDrawing { id } if *id == event.id => {
+                selection.cancel();
+                selection.set_tool(SelectionToolKind::Point);
+            }
             _ => {}
         }
 
@@ -2224,9 +2271,12 @@ impl TouchSelectionAdapter {
 
     /// Reset the adapter, cancelling any in-progress gesture.
     pub fn reset(&mut self, selection: &mut MarkSelectionSystem) {
-        if let TouchState::Dragging { .. } = &self.state {
-            selection.cancel();
-            selection.set_tool(SelectionToolKind::Point);
+        match &self.state {
+            TouchState::Dragging { .. } | TouchState::LassoDrawing { .. } => {
+                selection.cancel();
+                selection.set_tool(SelectionToolKind::Point);
+            }
+            _ => {}
         }
         self.state = TouchState::Idle;
         self.active_touches.clear();
@@ -3172,14 +3222,13 @@ mod tests {
         let fb = adapter.tick(0.6, &mut sel);
 
         assert_eq!(fb, Some(HapticFeedback::Medium));
-        // Mark 0 should be toggled on.
-        assert!(sel.state().is_selected(0));
+        // Toggle is deferred until finger lift — not committed yet.
+        assert!(!sel.state().is_selected(0));
 
-        // Now touch up — should not trigger another selection.
-        let count_before = sel.state().count();
-        adapter.on_touch_event(touch(0, [50.0, 50.0], TouchPhase::Ended, 0.7), &mut sel);
-        // Count should remain the same (long-press already committed).
-        assert_eq!(sel.state().count(), count_before);
+        // Now touch up — toggle fires.
+        let fb = adapter.on_touch_event(touch(0, [50.0, 50.0], TouchPhase::Ended, 0.7), &mut sel);
+        assert!(sel.state().is_selected(0));
+        assert_eq!(fb, Some(HapticFeedback::Medium));
     }
 
     #[test]
