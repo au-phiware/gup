@@ -343,7 +343,7 @@ impl ZSortRenderer {
         render_pass.set_bind_group(0, &self.unsorted_bind_group, &[]);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         if let Some(ic) = index_count {
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.draw_indexed(0..ic, 0, 0..self.instance_count);
         } else {
             render_pass.draw(0..Circle::vertex_count() as u32, 0..self.instance_count);
