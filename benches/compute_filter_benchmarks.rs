@@ -221,10 +221,92 @@ fn bench_gpu_culling_pooled(c: &mut Criterion) {
     group.finish();
 }
 
+// ---------------------------------------------------------------------------
+// GPU radix sort benchmark (sort after filter)
+// ---------------------------------------------------------------------------
+
+fn bench_gpu_sort(c: &mut Criterion) {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let ctx = match rt.block_on(GupContext::headless()) {
+        Ok(c) => c,
+        Err(_) => {
+            eprintln!("No GPU available — skipping sort benchmarks");
+            return;
+        }
+    };
+    let device = &ctx.device;
+    let queue = &ctx.queue;
+
+    let viewport = Viewport2D::default();
+    let thresholds = [4.0f32, 1.0, 0.25];
+
+    let mut group = c.benchmark_group("instance_sort_gpu");
+
+    for &size in &[100_000usize, 1_000_000] {
+        let instances: Vec<InstanceAttributes> = generate_instances(size)
+            .into_iter()
+            .enumerate()
+            .map(|(i, mut inst)| {
+                // Add Z-depth variation for meaningful sort work.
+                inst.transform[14] = (i as f32 / size as f32 * 37.0).sin() * 10.0;
+                inst
+            })
+            .collect();
+        let attr_bytes: &[u8] = bytemuck::cast_slice(&instances);
+
+        let input_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("bench_sort_input"),
+            size: attr_bytes.len() as u64,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        queue.write_buffer(&input_buffer, 0, attr_bytes);
+
+        let filter = ComputeInstanceFilter::new(device).unwrap();
+        let mut pooled = PooledComputeInstanceFilter::new(device, filter, size as u32);
+
+        // Warm up.
+        rt.block_on(pooled.dispatch_sorted(
+            device,
+            queue,
+            &input_buffer,
+            size as u32,
+            6,
+            &viewport,
+            &thresholds,
+            true,
+        ))
+        .unwrap();
+
+        group.bench_with_input(
+            criterion::BenchmarkId::new("dispatch_filter_and_sort", size),
+            &size,
+            |b, _| {
+                b.iter(|| {
+                    let result = rt.block_on(pooled.dispatch_sorted(
+                        device,
+                        queue,
+                        black_box(&input_buffer),
+                        size as u32,
+                        6,
+                        &viewport,
+                        &thresholds,
+                        true,
+                    ));
+                    black_box(result.unwrap());
+                });
+            },
+        );
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_cpu_culling,
     bench_gpu_culling,
-    bench_gpu_culling_pooled
+    bench_gpu_culling_pooled,
+    bench_gpu_sort
 );
 criterion_main!(benches);
