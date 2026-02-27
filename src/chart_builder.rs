@@ -1900,4 +1900,199 @@ mod tests_multi_font {
             "queue_chart_text_resolved failed: {result:?}"
         );
     }
+
+    // --- TitleConfig and TitleAlignment tests (no GPU required) ---
+
+    #[test]
+    fn test_title_config_new() {
+        let tc = TitleConfig::new("Hello");
+        assert_eq!(tc.text, "Hello");
+        assert_eq!(tc.alignment, TitleAlignment::Center);
+        assert!(tc.y_offset.is_none());
+        assert!(tc.subtitle.is_none());
+        assert_eq!(tc.line_spacing, 1.2);
+    }
+
+    #[test]
+    fn test_title_config_builders() {
+        let tc = TitleConfig::new("Main")
+            .with_alignment(TitleAlignment::Left)
+            .with_y_offset(10.0)
+            .with_subtitle("Sub")
+            .with_subtitle_style(TextStyle::new(12.0))
+            .with_line_spacing(1.5);
+
+        assert_eq!(tc.alignment, TitleAlignment::Left);
+        assert_eq!(tc.y_offset, Some(10.0));
+        assert_eq!(tc.subtitle, Some("Sub".to_string()));
+        assert_eq!(tc.subtitle_style.font_size, 12.0);
+        assert_eq!(tc.line_spacing, 1.5);
+    }
+
+    #[test]
+    fn test_title_alignment_default_is_center() {
+        assert_eq!(TitleAlignment::default(), TitleAlignment::Center);
+    }
+
+    #[test]
+    fn test_title_config_line_spacing_min() {
+        let tc = TitleConfig::new("X").with_line_spacing(-5.0);
+        assert_eq!(tc.line_spacing, 0.1);
+    }
+
+    #[test]
+    fn test_chart_config_with_title_creates_title_config() {
+        let config = ChartConfig::default().with_title("My Title");
+        let tc = config.title_config.as_ref().unwrap();
+        assert_eq!(tc.text, "My Title");
+        assert_eq!(tc.alignment, TitleAlignment::Center);
+    }
+
+    #[test]
+    fn test_chart_config_with_title_config_full() {
+        let config = ChartConfig::default().with_title_config(
+            TitleConfig::new("Revenue")
+                .with_alignment(TitleAlignment::Right)
+                .with_subtitle("Q4 2024"),
+        );
+        let tc = config.title_config.as_ref().unwrap();
+        assert_eq!(tc.text, "Revenue");
+        assert_eq!(tc.alignment, TitleAlignment::Right);
+        assert_eq!(tc.subtitle, Some("Q4 2024".to_string()));
+    }
+
+    #[test]
+    fn test_chart_config_title_accessor() {
+        let config = ChartConfig::default();
+        assert!(config.title().is_none());
+
+        let config = config.with_title("Test");
+        assert_eq!(config.title(), Some("Test"));
+    }
+
+    #[test]
+    fn test_chart_config_no_title_by_default() {
+        let config = ChartConfig::default();
+        assert!(config.title_config.is_none());
+    }
+
+    // --- GPU tests for title rendering with TitleConfig ---
+
+    #[tokio::test]
+    async fn test_queue_title_text_with_subtitle() {
+        #[derive(Debug, Clone)]
+        struct D {
+            x: f32,
+        }
+
+        let context = std::sync::Arc::new(crate::RenderContext::new().await.unwrap());
+        let sel = crate::selection::Selection::<D, crate::Circle>::new(vec![], context).unwrap();
+        let config = ChartConfig::default()
+            .with_title_config(
+                TitleConfig::new("Main Title")
+                    .with_subtitle("Subtitle Here")
+                    .with_subtitle_style(
+                        TextStyle::new(12.0)
+                            .with_font_family("DejaVu Sans")
+                            .with_rgba(0.5, 0.5, 0.5, 1.0),
+                    ),
+            )
+            .with_title_style(TextStyle::new(20.0).bold().with_font_family("DejaVu Serif"));
+
+        let chart = ComposedChart::new(sel, config).with_default_axes();
+
+        let gup_context = crate::GupContext::headless().await.unwrap();
+        let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
+        let frame = gup_ctx.begin_frame().unwrap();
+
+        let mut text_renderer = crate::text::TextRenderer::new(frame.device()).unwrap();
+        let mut font_manager =
+            crate::text::FontAtlasManager::new(crate::text::FontDatabase::new(), 14.0);
+        let mut layout_engine = crate::text::TextLayoutEngine::new();
+
+        text_renderer.begin_frame();
+        let result = chart.queue_chart_text(
+            &frame,
+            &mut text_renderer,
+            &mut font_manager,
+            &mut layout_engine,
+        );
+        assert!(result.is_ok(), "queue_chart_text failed: {result:?}");
+
+        // Title font atlas should exist
+        assert!(
+            font_manager.get_atlas(Some("DejaVu Serif")).is_some(),
+            "Expected DejaVu Serif atlas for the title"
+        );
+        // Subtitle font atlas should exist
+        assert!(
+            font_manager.get_atlas(Some("DejaVu Sans")).is_some(),
+            "Expected DejaVu Sans atlas for the subtitle"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_queue_title_text_left_aligned() {
+        #[derive(Debug, Clone)]
+        struct D {
+            x: f32,
+        }
+
+        let context = std::sync::Arc::new(crate::RenderContext::new().await.unwrap());
+        let sel = crate::selection::Selection::<D, crate::Circle>::new(vec![], context).unwrap();
+        let config = ChartConfig::default()
+            .with_title_config(TitleConfig::new("Left Title").with_alignment(TitleAlignment::Left));
+
+        let chart = ComposedChart::new(sel, config);
+
+        let gup_context = crate::GupContext::headless().await.unwrap();
+        let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
+        let frame = gup_ctx.begin_frame().unwrap();
+
+        let mut text_renderer = crate::text::TextRenderer::new(frame.device()).unwrap();
+        let mut font_manager =
+            crate::text::FontAtlasManager::new(crate::text::FontDatabase::new(), 14.0);
+        let mut layout_engine = crate::text::TextLayoutEngine::new();
+
+        text_renderer.begin_frame();
+        let result = chart.queue_chart_text(
+            &frame,
+            &mut text_renderer,
+            &mut font_manager,
+            &mut layout_engine,
+        );
+        assert!(result.is_ok(), "queue_chart_text failed: {result:?}");
+    }
+
+    #[tokio::test]
+    async fn test_queue_title_text_no_title() {
+        #[derive(Debug, Clone)]
+        struct D {
+            x: f32,
+        }
+
+        let context = std::sync::Arc::new(crate::RenderContext::new().await.unwrap());
+        let sel = crate::selection::Selection::<D, crate::Circle>::new(vec![], context).unwrap();
+        // No title set — should render without error
+        let config = ChartConfig::default();
+        let chart = ComposedChart::new(sel, config);
+
+        let gup_context = crate::GupContext::headless().await.unwrap();
+        let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
+        let frame = gup_ctx.begin_frame().unwrap();
+
+        let mut text_renderer = crate::text::TextRenderer::new(frame.device()).unwrap();
+        let mut font_manager =
+            crate::text::FontAtlasManager::new(crate::text::FontDatabase::new(), 14.0);
+        let mut layout_engine = crate::text::TextLayoutEngine::new();
+
+        text_renderer.begin_frame();
+        let result = chart.queue_chart_text(
+            &frame,
+            &mut text_renderer,
+            &mut font_manager,
+            &mut layout_engine,
+        );
+        assert!(result.is_ok(), "queue_chart_text failed: {result:?}");
+    }
 }
