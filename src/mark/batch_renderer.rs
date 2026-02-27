@@ -331,6 +331,20 @@ impl InstanceAttributes {
     pub fn scale(&self) -> [f32; 2] {
         [self.transform[0], self.transform[5]]
     }
+
+    /// Extract the Z-depth from the transform matrix (col 3, row 2).
+    pub fn z_depth(&self) -> f32 {
+        self.transform[14]
+    }
+
+    /// Return a copy with the given Z-depth set in the transform matrix.
+    ///
+    /// Useful for setting draw order: instances with larger Z are drawn
+    /// first when the radix sort is enabled.
+    pub fn with_z_depth(mut self, z: f32) -> Self {
+        self.transform[14] = z;
+        self
+    }
 }
 
 // ---------------------------------------------------------------------------
