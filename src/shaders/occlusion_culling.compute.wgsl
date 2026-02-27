@@ -297,3 +297,81 @@ fn occlusion_test(@builtin(global_invocation_id) global_id: vec3<u32>) {
         visibility[idx] = 1u;
     }
 }
+
+// ---------------------------------------------------------------------------
+// Pass 3b: Combined occlusion test (for unified frustum+occlusion pipeline)
+// ---------------------------------------------------------------------------
+//
+// Like occlusion_test, but preserves existing visibility flags from a prior
+// frustum culling pass. Instances already marked invisible (visibility == 0)
+// are skipped. Visible instances that are found to be occluded are set to 0.
+// Visible instances that are NOT occluded are left unchanged (remain 1).
+//
+// This avoids overwriting frustum-cull decisions, allowing both stages to
+// share a single visibility buffer.
+
+@compute @workgroup_size(256)
+fn occlusion_test_combined(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let idx = global_id.x;
+    if (idx >= config.instance_count) {
+        return;
+    }
+
+    // Skip instances already culled by frustum pass.
+    if (visibility[idx] == 0u) {
+        return;
+    }
+
+    let inst = instances[idx];
+    let cx = inst.transform[3].x;
+    let cy = inst.transform[3].y;
+    let sx = length(inst.transform[0].xy);
+    let sy = length(inst.transform[1].xy);
+    let radius = max(sx, sy);
+
+    let padded_radius = radius + config.conservative_margin;
+    let z_value = idx + 1u;
+
+    // Skip if completely outside viewport — already visible from frustum pass.
+    if (cx + padded_radius < config.viewport_min_x ||
+        cx - padded_radius > config.viewport_max_x ||
+        cy + padded_radius < config.viewport_min_y ||
+        cy - padded_radius > config.viewport_max_y) {
+        return;
+    }
+
+    let test_level = 0u;
+
+    let cell_min = clip_to_cell(cx - padded_radius, cy - padded_radius, test_level);
+    let cell_max = clip_to_cell(cx + padded_radius, cy + padded_radius, test_level);
+    let w = i32(lev_width(test_level));
+    let h = i32(lev_height(test_level));
+    let level_off = get_level_offset(test_level);
+
+    if (cell_min.x < 0 || cell_min.y < 0 || cell_max.x >= w || cell_max.y >= h) {
+        return;
+    }
+
+    var is_occluded = true;
+    let max_test_cells = 4096;
+    var cells_tested = 0;
+
+    for (var y = cell_min.y; y <= cell_max.y && is_occluded; y = y + 1) {
+        for (var x = cell_min.x; x <= cell_max.x && is_occluded; x = x + 1) {
+            let cell_idx = level_off + u32(y) * u32(w) + u32(x);
+            let hiz_z = atomicLoad(&hiz_buffer[cell_idx]);
+            if (hiz_z == 0u || z_value >= hiz_z) {
+                is_occluded = false;
+            }
+            cells_tested = cells_tested + 1;
+            if (cells_tested >= max_test_cells) {
+                is_occluded = false;
+            }
+        }
+    }
+
+    // Only clear to 0 if occluded; never write 1 (preserve frustum result).
+    if (is_occluded) {
+        visibility[idx] = 0u;
+    }
+}

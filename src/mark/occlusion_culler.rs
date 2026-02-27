@@ -126,13 +126,13 @@ pub struct OcclusionResult {
 // ---------------------------------------------------------------------------
 
 /// Compute the width or height of a mip level using ceiling division.
-fn level_dim(base: u32, level: u32) -> u32 {
+pub(crate) fn level_dim(base: u32, level: u32) -> u32 {
     base.div_ceil(1u32 << level).max(1)
 }
 
 /// Compute byte offsets (in u32 elements) for each mip level in the
 /// concatenated Hi-Z buffer.
-fn compute_level_offsets(
+pub(crate) fn compute_level_offsets(
     base_width: u32,
     base_height: u32,
     num_levels: u32,
@@ -149,7 +149,7 @@ fn compute_level_offsets(
 }
 
 /// Total number of u32 cells across all mip levels.
-fn total_hiz_cells(base_width: u32, base_height: u32, num_levels: u32) -> u32 {
+pub(crate) fn total_hiz_cells(base_width: u32, base_height: u32, num_levels: u32) -> u32 {
     let mut total = 0u32;
     for level in 0..num_levels.min(MAX_HIZ_LEVELS as u32) {
         total += level_dim(base_width, level) * level_dim(base_height, level);
@@ -158,7 +158,7 @@ fn total_hiz_cells(base_width: u32, base_height: u32, num_levels: u32) -> u32 {
 }
 
 /// Number of mip levels needed for the given base dimensions (until 1×1).
-fn mip_count(base_width: u32, base_height: u32) -> u32 {
+pub(crate) fn mip_count(base_width: u32, base_height: u32) -> u32 {
     let max_dim = base_width.max(base_height);
     if max_dim == 0 {
         return 1;
@@ -180,6 +180,8 @@ pub struct OcclusionCuller {
     build_coverage_pipeline: ComputePipeline,
     generate_hiz_pipeline: ComputePipeline,
     occlusion_test_pipeline: ComputePipeline,
+    /// Combined occlusion test that preserves existing visibility flags.
+    occlusion_test_combined_pipeline: ComputePipeline,
     bind_group_layout: BindGroupLayout,
 }
 
@@ -264,11 +266,14 @@ impl OcclusionCuller {
         let generate_hiz_pipeline =
             make_pipeline("generate_hiz_level_pipeline", "generate_hiz_level");
         let occlusion_test_pipeline = make_pipeline("occlusion_test_pipeline", "occlusion_test");
+        let occlusion_test_combined_pipeline =
+            make_pipeline("occlusion_test_combined_pipeline", "occlusion_test_combined");
 
         Ok(Self {
             build_coverage_pipeline,
             generate_hiz_pipeline,
             occlusion_test_pipeline,
+            occlusion_test_combined_pipeline,
             bind_group_layout,
         })
     }
@@ -443,6 +448,154 @@ impl OcclusionCuller {
             visibility_buffer,
             instance_count,
             hiz_buffer,
+        })
+    }
+
+    /// Encode occlusion culling passes into an existing command encoder.
+    ///
+    /// This is used by the unified culling pipeline to combine frustum and
+    /// occlusion culling in a single command encoder. Unlike [`dispatch`],
+    /// this method does not create its own encoder or submit work.
+    ///
+    /// The `visibility_buffer` is expected to already contain frustum-cull
+    /// flags from a prior pass. The combined occlusion test will only clear
+    /// visible instances to 0 if they are occluded — it never writes 1.
+    ///
+    /// `hiz_buffer` must be pre-allocated with at least `total_hiz_cells()`
+    /// elements. `occlusion_config_buffer` must be pre-allocated for
+    /// [`OcclusionGpuConfig`].
+    ///
+    /// [`dispatch`]: Self::dispatch
+    #[allow(clippy::too_many_arguments)]
+    pub fn encode_combined(
+        &self,
+        queue: &Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        bind_group: &BindGroup,
+        occlusion_config_buffer: &Buffer,
+        level_staging: &Buffer,
+        hiz_buffer: &Buffer,
+        instance_count: u32,
+        viewport: &Viewport2D,
+        params: &OcclusionParams,
+    ) {
+        let base_width = (viewport.pixel_width as u32)
+            .div_ceil(params.tile_size)
+            .max(1);
+        let base_height = (viewport.pixel_height as u32)
+            .div_ceil(params.tile_size)
+            .max(1);
+        let num_levels = mip_count(base_width, base_height);
+        let offsets = compute_level_offsets(base_width, base_height, num_levels);
+
+        // Upload level staging data.
+        let level_data: Vec<u32> = (0..num_levels).collect();
+        queue.write_buffer(level_staging, 0, bytemuck::cast_slice(&level_data));
+
+        // Upload config.
+        let gpu_config = OcclusionGpuConfig {
+            base_width,
+            base_height,
+            num_levels,
+            instance_count,
+            viewport_min_x: viewport.min_x,
+            viewport_max_x: viewport.max_x,
+            viewport_min_y: viewport.min_y,
+            viewport_max_y: viewport.max_y,
+            pixel_width: viewport.pixel_width,
+            pixel_height: viewport.pixel_height,
+            conservative_margin: params.conservative_margin,
+            current_level: 0,
+            level_offsets_0: [offsets[0], offsets[1], offsets[2], offsets[3]],
+            level_offsets_1: [offsets[4], offsets[5], offsets[6], offsets[7]],
+            level_offsets_2: [offsets[8], offsets[9], offsets[10], offsets[11]],
+        };
+        queue.write_buffer(occlusion_config_buffer, 0, bytemuck::bytes_of(&gpu_config));
+
+        // Clear Hi-Z buffer.
+        encoder.clear_buffer(hiz_buffer, 0, None);
+
+        let num_instance_workgroups = instance_count.div_ceil(WORKGROUP_SIZE);
+
+        // Build coverage (level 0).
+        {
+            let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("unified_build_coverage"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(&self.build_coverage_pipeline);
+            pass.set_bind_group(0, bind_group, &[]);
+            pass.dispatch_workgroups(num_instance_workgroups, 1, 1);
+        }
+
+        // Generate Hi-Z mip levels.
+        const CURRENT_LEVEL_OFFSET: u64 = 44;
+        for level in 1..num_levels {
+            encoder.copy_buffer_to_buffer(
+                level_staging,
+                level as u64 * 4,
+                occlusion_config_buffer,
+                CURRENT_LEVEL_OFFSET,
+                4,
+            );
+            let level_cells = level_dim(base_width, level) * level_dim(base_height, level);
+            let workgroups = level_cells.div_ceil(WORKGROUP_SIZE);
+            let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("unified_generate_hiz_level"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(&self.generate_hiz_pipeline);
+            pass.set_bind_group(0, bind_group, &[]);
+            pass.dispatch_workgroups(workgroups, 1, 1);
+        }
+
+        // Combined occlusion test (preserves existing visibility flags).
+        {
+            let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("unified_occlusion_test_combined"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(&self.occlusion_test_combined_pipeline);
+            pass.set_bind_group(0, bind_group, &[]);
+            pass.dispatch_workgroups(num_instance_workgroups, 1, 1);
+        }
+    }
+
+    /// Create a bind group for occlusion passes.
+    ///
+    /// Used by [`UnifiedCullingPipeline`] to create a bind group that
+    /// references the filter's visibility buffer.
+    ///
+    /// [`UnifiedCullingPipeline`]: super::unified_culling_pipeline::UnifiedCullingPipeline
+    pub fn create_bind_group(
+        &self,
+        device: &Device,
+        input_buffer: &Buffer,
+        hiz_buffer: &Buffer,
+        visibility_buffer: &Buffer,
+        config_buffer: &Buffer,
+    ) -> BindGroup {
+        device.create_bind_group(&BindGroupDescriptor {
+            label: Some("occlusion_culling_bg"),
+            layout: &self.bind_group_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: input_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: hiz_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: visibility_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 3,
+                    resource: config_buffer.as_entire_binding(),
+                },
+            ],
         })
     }
 
