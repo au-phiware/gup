@@ -1,7 +1,7 @@
 # GUP-182: Touch Selection Support
 
-**Status**: 📋 Planned **Priority**: Low **Effort**: 3 **Dependencies**: GUP-075
-(Interactive Mark Selection), GUP-012 (GPU Interaction System)
+**Status**: 🚧 In Progress **Priority**: Low **Effort**: 3 **Dependencies**:
+GUP-075 (Interactive Mark Selection), GUP-012 (GPU Interaction System)
 
 ## Overview
 
