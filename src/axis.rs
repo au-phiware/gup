@@ -1586,6 +1586,14 @@ pub struct TickPipeline {
     pipeline: wgpu::RenderPipeline,
 }
 
+impl std::fmt::Debug for TickPipeline {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TickPipeline")
+            .field("pipeline", &"<wgpu::RenderPipeline>")
+            .finish()
+    }
+}
+
 impl TickPipeline {
     /// Create a new instanced tick pipeline for the given surface format.
     pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {

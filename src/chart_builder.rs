@@ -60,7 +60,7 @@ pub use shader_specialization::*;
 use crate::RenderContext;
 use crate::axis::{
     Axis, AxisBounds, AxisConfiguration, AxisLabel, AxisPosition, AxisRenderer, LinearAxis,
-    TickInstance,
+    TickInstance, TickPipeline,
 };
 use crate::error::{GupError, GupResult};
 use crate::grid::GridConfiguration;
@@ -122,6 +122,17 @@ impl AxisGeometry {
     pub fn tick_count(&self) -> usize {
         self.tick_instances.len()
     }
+}
+
+/// Uploaded GPU buffers for instanced tick rendering.
+///
+/// Created by [`ComposedChart::render`] and consumed by
+/// [`ComposedChart::draw_ticks`].
+#[derive(Debug)]
+struct TickBuffers {
+    base_buf: wgpu::Buffer,
+    inst_buf: wgpu::Buffer,
+    instance_count: u32,
 }
 
 /// Core trait for all chart builders providing fluent API construction.
@@ -543,6 +554,10 @@ where
     pub config: ChartConfig,
     /// Grid system for rendering grid lines
     pub grid_system: Option<crate::grid::GridSystem>,
+    /// GPU-instanced tick rendering pipeline (lazily created on first render).
+    tick_pipeline: Option<TickPipeline>,
+    /// Uploaded tick buffers ready for drawing.
+    tick_buffers: Option<TickBuffers>,
 }
 
 impl<T, M> ComposedChart<T, M>
@@ -566,6 +581,8 @@ where
             right_axis: None,
             config,
             grid_system,
+            tick_pipeline: None,
+            tick_buffers: None,
         }
     }
 
@@ -621,6 +638,14 @@ where
     }
 
     /// Render the complete chart including axes and grid.
+    ///
+    /// Axis lines are rendered via each axis's `render()` method. Tick
+    /// marks are prepared for GPU-instanced rendering through
+    /// [`TickPipeline`](crate::axis::TickPipeline), which is lazily
+    /// created on the first call.
+    ///
+    /// After calling `render()`, use [`draw_ticks`](Self::draw_ticks) to
+    /// record the instanced tick draw command into your render pass.
     pub fn render(&mut self, context: &mut RenderContext) -> GupResult<()> {
         // Calculate chart area based on margins and axis requirements
         let chart_area = self.calculate_chart_area();
@@ -637,27 +662,88 @@ where
         // For now, we acknowledge that the visualization is prepared for rendering
 
         // Phase 3: Render axes (on top of everything)
-        if let Some(axis) = &self.bottom_axis {
-            let bounds = self.calculate_axis_bounds(AxisPosition::Bottom, &chart_area);
-            axis.render(context, bounds)?;
+        for (position, axis_opt) in [
+            (AxisPosition::Bottom, &self.bottom_axis),
+            (AxisPosition::Left, &self.left_axis),
+            (AxisPosition::Top, &self.top_axis),
+            (AxisPosition::Right, &self.right_axis),
+        ] {
+            if let Some(axis) = axis_opt {
+                let bounds = self.calculate_axis_bounds(position, &chart_area);
+                axis.render(context, bounds)?;
+            }
         }
 
-        if let Some(axis) = &self.left_axis {
-            let bounds = self.calculate_axis_bounds(AxisPosition::Left, &chart_area);
-            axis.render(context, bounds)?;
-        }
-
-        if let Some(axis) = &self.top_axis {
-            let bounds = self.calculate_axis_bounds(AxisPosition::Top, &chart_area);
-            axis.render(context, bounds)?;
-        }
-
-        if let Some(axis) = &self.right_axis {
-            let bounds = self.calculate_axis_bounds(AxisPosition::Right, &chart_area);
-            axis.render(context, bounds)?;
-        }
+        // Phase 4: Prepare instanced tick rendering resources
+        self.prepare_tick_pipeline(context);
 
         Ok(())
+    }
+
+    /// Lazily create the `TickPipeline` and upload tick instance data.
+    ///
+    /// Called automatically by [`render()`](Self::render). After this,
+    /// [`draw_ticks()`](Self::draw_ticks) can record the instanced draw
+    /// command into a render pass.
+    fn prepare_tick_pipeline(&mut self, context: &RenderContext) {
+        // Lazily create the tick pipeline
+        if self.tick_pipeline.is_none() {
+            self.tick_pipeline = Some(TickPipeline::new(
+                context.device(),
+                context.surface_format(),
+            ));
+        }
+
+        let geom = self.generate_axis_geometry_instanced();
+
+        if !geom.tick_instances.is_empty() {
+            if let Some(tick_pipeline) = &self.tick_pipeline {
+                let (base_buf, inst_buf) =
+                    tick_pipeline.upload(context.device(), context.queue(), &geom.tick_instances);
+                self.tick_buffers = Some(TickBuffers {
+                    base_buf,
+                    inst_buf,
+                    instance_count: geom.tick_instances.len() as u32,
+                });
+            }
+        } else {
+            self.tick_buffers = None;
+        }
+    }
+
+    /// Record instanced tick draw commands into an active render pass.
+    ///
+    /// Call this after [`render()`](Self::render) has prepared the tick
+    /// pipeline. Returns the number of tick instances drawn (0 if there
+    /// are no ticks or the pipeline is not yet initialised).
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// chart.render(&mut context)?;
+    /// // ... create render pass ...
+    /// let ticks_drawn = chart.draw_ticks(&mut render_pass);
+    /// ```
+    pub fn draw_ticks<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) -> u32 {
+        if let (Some(tick_pipeline), Some(bufs)) = (&self.tick_pipeline, &self.tick_buffers) {
+            tick_pipeline.draw(
+                render_pass,
+                &bufs.base_buf,
+                &bufs.inst_buf,
+                bufs.instance_count,
+            );
+            bufs.instance_count
+        } else {
+            0
+        }
+    }
+
+    /// Returns `true` if the tick pipeline has been initialised and there
+    /// are tick instances ready to draw.
+    pub fn has_tick_data(&self) -> bool {
+        self.tick_buffers
+            .as_ref()
+            .is_some_and(|b| b.instance_count > 0)
     }
 
     /// Render grid lines with proper tick alignment.
