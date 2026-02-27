@@ -1,6 +1,6 @@
 # GUP-198: Non-Blocking Query API
 
-**Status**: 📋 Planned **Priority**: Low **Effort**: 8 **Dependencies**: GUP-197
+**Status**: 🚧 In Progress **Priority**: Low **Effort**: 8 **Dependencies**: GUP-197
 (Result Buffer Readback Optimization)
 
 ## Overview
