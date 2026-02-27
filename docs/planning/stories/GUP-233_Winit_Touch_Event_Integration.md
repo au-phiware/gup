@@ -1,6 +1,6 @@
 # GUP-233: Winit Touch Event Integration
 
-**Status**: 📋 Planned **Priority**: Low **Effort**: 2 **Dependencies**: GUP-182
+**Status**: 🚧 In Progress **Priority**: Low **Effort**: 2 **Dependencies**: GUP-182
 (Touch Selection Support)
 
 ## Overview
