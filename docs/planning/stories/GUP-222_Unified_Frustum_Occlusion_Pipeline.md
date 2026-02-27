@@ -1,7 +1,7 @@
 # GUP-222: Unified Frustum + Occlusion Culling Pipeline
 
 **Story ID**: GUP-222 **Title**: Unified Frustum + Occlusion Culling Pipeline
-**Status**: 💡 New **Priority**: Medium **Effort**: — **Created**: 2026-02-27
+**Status**: 🚧 In Progress **Priority**: Medium **Effort**: — **Created**: 2026-02-27
 **Dependencies**: GUP-076 (GPU Occlusion Culling), GUP-077 (Compute Shader
 Instance Filtering)
 
