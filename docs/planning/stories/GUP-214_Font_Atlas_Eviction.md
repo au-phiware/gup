@@ -1,7 +1,7 @@
 # GUP-214: Font Atlas Eviction and Memory Management
 
-**Status**: 📋 Planned **Priority**: Low **Complexity**: Medium **Created**:
-2025-08-21
+**Status**: ✅ Complete (2025-08-22) **Priority**: Low **Complexity**: Medium
+**Created**: 2025-08-21
 
 ## Overview
 
@@ -15,6 +15,10 @@ font family. Each atlas allocates a 1024×1024 RGBA GPU texture (~4 MB). In
 applications that dynamically render many fonts (e.g., user-supplied data with
 font metadata), atlases accumulate without bound.
 
+**Note**: All acceptance criteria were implemented as part of
+[GUP-203](GUP-203_Multi_Font_Atlas_Manager.md) (Multi-Font Atlas Manager), which
+was the parent story covering the same functionality.
+
 ## User Story
 
 As a developer building data visualizations with user-supplied font
@@ -23,40 +27,22 @@ GPU memory doesn't grow unbounded as different fonts are requested.
 
 ## Acceptance Criteria
 
-- [ ] `FontAtlasManager` supports a configurable maximum atlas count
-- [ ] Least-recently-used atlases are evicted when the limit is reached
-- [ ] Evicted atlases are transparently re-created if requested again
-- [ ] GPU memory usage is bounded by the configured limit
-- [ ] Default limit is generous enough for typical visualisations (e.g., 16)
+- [x] `FontAtlasManager` supports a configurable maximum atlas count
+- [x] Least-recently-used atlases are evicted when the limit is reached
+- [x] Evicted atlases are transparently re-created if requested again
+- [x] GPU memory usage is bounded by the configured limit
+- [x] Default limit is generous enough for typical visualisations (e.g., 16)
 
-## Technical Tasks
-
-1. Add `max_atlases` configuration to `FontAtlasManager`
-2. Track last-use timestamps or access order for LRU eviction
-3. Implement eviction logic in `get_or_create()`
-4. Add tests for eviction behavior
+_All criteria delivered by GUP-203._
 
 ## Dependencies
 
 - GUP-202 ✅ (Font-Aware Text Rendering Pipeline)
+- GUP-203 ✅ (Multi-Font Atlas Manager — delivered this functionality)
 
-## Testing Strategy
+## Implementation Summary
 
-- Unit tests for LRU eviction ordering
-- GPU integration tests verifying atlas count stays within limits
-- Memory usage measurement tests
-
-## Risk Assessment
-
-- **Low**: Eviction is a straightforward LRU cache pattern. The main risk is
-  thrashing if the limit is too low for the workload.
-
-## Definition of Done
-
-- [ ] Atlas eviction works correctly under the configured limit
-- [ ] All existing tests pass
-- [ ] Documentation updated with memory management guidance
-- [ ] Example or test demonstrates eviction behavior
+Subsumed by GUP-203. See that story for implementation details.
 
 ---
 

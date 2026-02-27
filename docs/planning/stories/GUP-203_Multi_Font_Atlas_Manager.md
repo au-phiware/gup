@@ -100,3 +100,90 @@ budget, telemetry, aliasing, and configuration).
 ---
 
 **Estimated Effort**: 1-2 weeks **Prerequisites**: GUP-202 **Blockers**: None
+
+## Retrospective
+
+**Completed**: 2025-08-22
+
+### Key Technical Learnings
+
+#### LRU Eviction with Vec-Based Access Order
+
+- **Challenge**: Implementing LRU eviction without adding an external dependency
+  (e.g., `lru` crate). The atlas count is small (typically ≤16), so O(n) is
+  acceptable.
+- **Solution**: A `Vec<String>` tracks access order with most-recently-used at
+  the back. `touch_lru()` removes and re-appends, `evict_lru()` removes from the
+  front (skipping the default atlas).
+- **Pattern**: For small bounded caches, a simple Vec+HashMap combo is simpler
+  and faster than a full LRU data structure. Only consider `LinkedHashMap` or a
+  dedicated crate when the cache grows large.
+
+#### Alias Deduplication for System Fonts
+
+- **Challenge**: Different font family names (e.g., "Helvetica", "Arial") can
+  resolve to the same underlying system font (e.g., "DejaVu Sans" on Linux).
+  Creating duplicate atlases wastes GPU memory.
+- **Solution**: After resolving a font name to its canonical family, check if
+  that canonical name already has an atlas. If so, add an alias instead of a new
+  atlas. Only alias non-fallback fonts — fallback fonts keep separate entries
+  per requested name.
+- **Pattern**: When caching resolved resources, track the canonical key and
+  alias requested keys to it. But skip aliasing when the resolution is a
+  fallback/ default, since the user's intent was to use different fonts.
+
+#### Fallback Font Aliasing Decision
+
+- **Challenge**: With an empty `FontDatabase`, every requested font name
+  resolves to the same embedded fallback ("Squada One"). Aliasing all of them to
+  one atlas is memory-efficient but breaks existing test expectations and means
+  LRU eviction can't differentiate between them.
+- **Solution**: Only alias non-fallback (real system) fonts. Fallback fonts are
+  stored per-requested-name so each conceptually-different font request gets its
+  own LRU entry and can be evicted independently.
+- **Pattern**: Resource sharing optimizations should respect conceptual
+  distinctness. Two resources that happen to have the same data but different
+  intent should remain separate for lifecycle management.
+
+### Architectural Decisions
+
+#### Enhancing Existing Manager vs New Type
+
+- **Decision**: Enhanced the existing `FontAtlasManager` in-place rather than
+  creating a separate `LruFontAtlasManager`.
+- **Reasoning**: The existing manager was only used in GUP-202 and had a simple
+  HashMap-based implementation. Enhancing it keeps the API stable — all callers
+  (`TextRenderer`, `ChartBuilder`, examples) continue to work without changes.
+- **Trade-off**: The `new()` constructor's signature is unchanged, so existing
+  code gets the default config (16 atlases, 64 MB budget) automatically. Users
+  who want custom limits use `with_config()`.
+- **Future**: If atlas management grows more complex (e.g., shared texture
+  arrays, atlas packing across fonts), a more specialized manager could be
+  warranted.
+
+#### GUP-214 Subsumed
+
+- **Decision**: Marked GUP-214 (Font Atlas Eviction) as complete since all its
+  acceptance criteria were delivered by this story.
+- **Reasoning**: GUP-214 was a subset of GUP-203 — both covered LRU eviction and
+  memory limits. Implementing them separately would have been redundant.
+- **Future**: If more sophisticated eviction strategies are needed (e.g.,
+  cost-based, frequency-weighted), a new story can be created.
+
+### Development Workflow Insights
+
+- The story was implemented in 3 focused commits: (1) core manager enhancement,
+  (2) doc/constant polish, (3) story completion. Each was a clean, testable
+  unit.
+- Pre-existing test failures in `mark::renderer::tests` (3 tests) were confirmed
+  by running tests on the pre-change commit via `git stash`. This avoided
+  wasting time debugging unrelated issues.
+- The `FontAtlas::from_resolved()` method had to be promoted from `fn` to
+  `pub(crate)` so the manager could call it directly with resolved font data.
+  This was the only change needed outside the font module.
+
+### Follow-up Stories
+
+No new follow-up stories identified. GUP-214 was already planned and is now
+subsumed. The remaining planned text stories (GUP-216, GUP-217, GUP-227,
+GUP-228) are independent of this work.
