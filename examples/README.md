@@ -70,6 +70,7 @@ For understanding the library internals:
 | Example                | Description                                     |
 | ---------------------- | ----------------------------------------------- |
 | `multi_pass_mark_demo` | Multi-pass rendering (shadow + outline)         |
+| `z_sort_demo`          | Z-order sorting effect on transparent marks     |
 | `text_rendering_demo`  | MSDF text rendering system                      |
 | `text_clipping_demo`   | All text clipping strategies with visual bounds |
 | `hover_reveal_demo`    | Interactive hover tooltips for clipped text     |
