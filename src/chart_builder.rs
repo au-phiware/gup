@@ -60,6 +60,7 @@ pub use shader_specialization::*;
 use crate::RenderContext;
 use crate::axis::{
     Axis, AxisBounds, AxisConfiguration, AxisLabel, AxisPosition, AxisRenderer, LinearAxis,
+    TickInstance,
 };
 use crate::error::{GupError, GupResult};
 use crate::grid::GridConfiguration;
@@ -70,6 +71,58 @@ use crate::shader_function::Vec2;
 use crate::text::TextStyle;
 use std::marker::PhantomData;
 use std::sync::Arc;
+
+/// Rich axis geometry output containing line vertices and instanced tick data.
+///
+/// Instead of combining axis lines and ticks into a single `Vec<Vertex>`,
+/// this struct separates them so that ticks can be rendered via GPU
+/// instancing (one draw call per tick type) while axis lines continue to
+/// use the standard `LineList` vertex-pair path.
+///
+/// Use [`ComposedChart::generate_axis_geometry_instanced`] to obtain this
+/// struct.
+#[derive(Debug, Clone)]
+pub struct AxisGeometry {
+    /// Vertex pairs for axis lines only (rendered with a `LineList` pipeline).
+    pub line_vertices: Vec<Vertex>,
+    /// Per-tick instance data for GPU-instanced rendering via [`crate::axis::TickPipeline`].
+    pub tick_instances: Vec<TickInstance>,
+    /// Label data for text rendering.
+    pub labels: Vec<AxisLabel>,
+}
+
+impl AxisGeometry {
+    /// Flatten into the legacy `(Vec<Vertex>, Vec<AxisLabel>)` format.
+    ///
+    /// This is a convenience for callers that still use a single `LineList`
+    /// draw call for both axis lines and ticks.  Each [`TickInstance`] is
+    /// expanded into two [`Vertex`] entries (the two endpoints of the tick
+    /// line segment).
+    pub fn into_legacy(self) -> (Vec<Vertex>, Vec<AxisLabel>) {
+        let mut vertices = self.line_vertices;
+        for inst in &self.tick_instances {
+            // Start point: the on-axis position
+            vertices.push(Vertex {
+                position: inst.position,
+                color: inst.color,
+            });
+            // End point: position + tick_vector
+            vertices.push(Vertex {
+                position: [
+                    inst.position[0] + inst.tick_vector[0],
+                    inst.position[1] + inst.tick_vector[1],
+                ],
+                color: inst.color,
+            });
+        }
+        (vertices, self.labels)
+    }
+
+    /// Return the total number of tick instances.
+    pub fn tick_count(&self) -> usize {
+        self.tick_instances.len()
+    }
+}
 
 /// Core trait for all chart builders providing fluent API construction.
 ///
@@ -808,11 +861,52 @@ where
     /// # }
     /// ```
     pub fn generate_axis_geometry(&self) -> (Vec<Vertex>, Vec<AxisLabel>) {
+        self.generate_axis_geometry_instanced().into_legacy()
+    }
+
+    /// Generate axis geometry with instanced tick data.
+    ///
+    /// Returns an [`AxisGeometry`] struct that separates axis line vertices
+    /// from tick instance data.  Axis lines are in
+    /// [`AxisGeometry::line_vertices`] (rendered with a `LineList` pipeline)
+    /// and tick marks are in [`AxisGeometry::tick_instances`] (rendered via
+    /// [`TickPipeline`](crate::axis::TickPipeline)).
+    ///
+    /// This method produces the same visual result as
+    /// [`generate_axis_geometry`](Self::generate_axis_geometry), but enables
+    /// callers to use the more efficient instanced rendering path introduced
+    /// in GUP-204.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::ComposedChart;
+    /// use gup::axis::{LinearAxis, AxisPosition, AxisConfiguration};
+    /// use std::sync::Arc;
+    ///
+    /// # async fn example() -> gup::error::GupResult<()> {
+    /// # let context = Arc::new(gup::RenderContext::new().await?);
+    /// # #[derive(Debug, Clone)]
+    /// # struct D { x: f32, y: f32 }
+    /// # let sel = gup::selection::Selection::<D, gup::Circle>::new(vec![], context)?;
+    /// # let config = gup::chart_builder::ChartConfig::default();
+    /// let chart = ComposedChart::new(sel, config).with_default_axes();
+    /// let geom = chart.generate_axis_geometry_instanced();
+    ///
+    /// // `geom.line_vertices` — draw with LineList pipeline
+    /// // `geom.tick_instances` — draw with TickPipeline
+    /// // `geom.labels` — render with TextRenderer
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn generate_axis_geometry_instanced(&self) -> AxisGeometry {
         let chart_area = self.calculate_chart_area();
         let viewport_size = (self.config.width, self.config.height);
         let renderer = AxisRenderer::new();
 
-        let mut all_vertices = Vec::new();
+        let mut all_line_vertices = Vec::new();
+        let mut all_tick_instances = Vec::new();
         let mut all_labels = Vec::new();
 
         let axes: [(AxisPosition, &Option<Box<dyn Axis>>); 4] = [
@@ -828,14 +922,19 @@ where
                 let ndc_bounds = self.pixel_bounds_to_ndc(&pixel_bounds);
                 let config = axis.configuration();
 
-                let vertices = renderer.generate_axis_vertices(
+                // Axis line vertices (LineList)
+                let line_verts = renderer.generate_line_vertices(&ndc_bounds, config);
+                all_line_vertices.extend(line_verts);
+
+                // Tick instances (GPU instancing)
+                let tick_insts = renderer.generate_tick_instances(
                     &ndc_bounds,
                     config,
                     *position,
                     None, // TODO: pass scale when available from axis
                     viewport_size,
                 );
-                all_vertices.extend(vertices);
+                all_tick_instances.extend(tick_insts);
 
                 let labels = renderer.generate_label_data(
                     &ndc_bounds,
@@ -849,7 +948,11 @@ where
             }
         }
 
-        (all_vertices, all_labels)
+        AxisGeometry {
+            line_vertices: all_line_vertices,
+            tick_instances: all_tick_instances,
+            labels: all_labels,
+        }
     }
 
     /// Generate axis geometry with label collision resolution.
@@ -899,11 +1002,31 @@ where
         positioner: &mut LabelPositioner,
         constraints: &LabelConstraints,
     ) -> GupResult<(Vec<Vertex>, LabelLayout)> {
+        let (geom, layout) =
+            self.generate_axis_geometry_instanced_resolved(positioner, constraints)?;
+        let (vertices, _labels) = geom.into_legacy();
+        Ok((vertices, layout))
+    }
+
+    /// Generate instanced axis geometry with label collision resolution.
+    ///
+    /// Combines [`generate_axis_geometry_instanced`](Self::generate_axis_geometry_instanced)
+    /// with label collision resolution via the given [`LabelPositioner`].
+    ///
+    /// Returns `(geometry, layout)` where `geometry` contains separated line
+    /// vertices and tick instances, and `layout` contains the resolved
+    /// [`LabelPosition`] entries and a list of hidden label indices.
+    pub fn generate_axis_geometry_instanced_resolved(
+        &self,
+        positioner: &mut LabelPositioner,
+        constraints: &LabelConstraints,
+    ) -> GupResult<(AxisGeometry, LabelLayout)> {
         let chart_area = self.calculate_chart_area();
         let viewport_size = (self.config.width, self.config.height);
         let renderer = AxisRenderer::new();
 
-        let mut all_vertices = Vec::new();
+        let mut all_line_vertices = Vec::new();
+        let mut all_tick_instances = Vec::new();
         let mut all_positions: Vec<LabelPosition> = Vec::new();
         let mut all_hidden: Vec<usize> = Vec::new();
         let mut offset = 0usize;
@@ -922,14 +1045,19 @@ where
                 let ndc_bounds = self.pixel_bounds_to_ndc(&pixel_bounds);
                 let config = axis.configuration();
 
-                let vertices = renderer.generate_axis_vertices(
+                // Axis line vertices (LineList)
+                let line_verts = renderer.generate_line_vertices(&ndc_bounds, config);
+                all_line_vertices.extend(line_verts);
+
+                // Tick instances (GPU instancing)
+                let tick_insts = renderer.generate_tick_instances(
                     &ndc_bounds,
                     config,
                     *position,
                     None,
                     viewport_size,
                 );
-                all_vertices.extend(vertices);
+                all_tick_instances.extend(tick_insts);
 
                 let labels = renderer.generate_label_data(
                     &ndc_bounds,
@@ -962,7 +1090,13 @@ where
             rotated: any_rotated,
         };
 
-        Ok((all_vertices, combined))
+        let geom = AxisGeometry {
+            line_vertices: all_line_vertices,
+            tick_instances: all_tick_instances,
+            labels: Vec::new(), // Labels are in the LabelLayout
+        };
+
+        Ok((geom, combined))
     }
 
     /// Queue axis-label and title text for multi-font rendering.
