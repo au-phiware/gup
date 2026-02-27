@@ -1,8 +1,8 @@
 # GUP-223: Coarse Hi-Z Early Reject for Large Marks
 
 **Story ID**: GUP-223 **Title**: Coarse Hi-Z Early Reject for Large Marks
-**Status**: 🚧 In Progress **Priority**: Low **Effort**: — **Created**:
-2026-02-27 **Dependencies**: GUP-076 (GPU Occlusion Culling)
+**Status**: ✅ Complete **Priority**: Low **Effort**: — **Created**: 2026-02-27
+**Completed**: 2026-02-28 **Dependencies**: GUP-076 (GPU Occlusion Culling)
 
 ## Overview
 
@@ -29,11 +29,11 @@ excessive per-thread iteration in the compute shader.
 
 ## Acceptance Criteria
 
-- [ ] Two-level test: coarse level rejects clearly visible marks quickly
-- [ ] Level-0 fallback for marks that cannot be resolved at coarse level
-- [ ] Interior-cell shrinking avoids false positives at coarse levels
-- [ ] No visual regressions compared to level-0-only testing
-- [ ] Measurable improvement for datasets with large marks (>32 pixels radius)
+- [x] Two-level test: coarse level rejects clearly visible marks quickly
+- [x] Level-0 fallback for marks that cannot be resolved at coarse level
+- [x] Interior-cell shrinking avoids false positives at coarse levels
+- [x] No visual regressions compared to level-0-only testing
+- [x] Measurable improvement for datasets with large marks (>32 pixels radius)
 
 ## Technical Tasks
 
@@ -70,7 +70,38 @@ excessive per-thread iteration in the compute shader.
 
 ## Definition of Done
 
-- [ ] Two-level test implemented and tested
-- [ ] Benchmarks show improvement for mixed-size datasets
-- [ ] No visual regressions
-- [ ] Documentation updated
+- [x] Two-level test implemented and tested
+- [x] Benchmarks show improvement for mixed-size datasets
+- [x] No visual regressions
+- [x] Documentation updated
+
+## Implementation Summary
+
+### What was implemented
+
+- **WGSL shader** (`src/shaders/occlusion_culling.compute.wgsl`): Added
+  `coarse_hiz_test()` helper function that implements the two-level Hi-Z
+  approach. Both `occlusion_test` and `occlusion_test_combined` entry points now
+  call this helper before falling back to the existing level-0 test.
+- **Algorithm**: Iterates mip levels 1..N to find the coarsest where the mark
+  covers ≥ 4 cells per axis, shrinks by 1 cell on each edge (interior only),
+  checks all interior cells with early exit on ambiguity.
+- **Rust tests** (`src/mark/occlusion_culler.rs`): 5 new GPU tests covering
+  visible large marks, occluded large marks, mixed sizes, stacked large marks,
+  and partially visible large marks.
+- **Benchmarks** (`benches/occlusion_culling_benchmarks.rs`): New
+  `bench_mixed_size_dispatch` benchmark with mixed small scatter + large
+  background datasets.
+
+### Key files changed
+
+| File                                         | Change                                               |
+| -------------------------------------------- | ---------------------------------------------------- |
+| `src/shaders/occlusion_culling.compute.wgsl` | Added `coarse_hiz_test()`, updated both test entries |
+| `src/mark/occlusion_culler.rs`               | Updated module doc, added 5 GPU tests                |
+| `benches/occlusion_culling_benchmarks.rs`    | Added mixed-size benchmark                           |
+
+### Test counts
+
+- 17 occlusion culler tests (12 existing + 5 new), all passing
+- 7 unified culling pipeline tests, all passing
