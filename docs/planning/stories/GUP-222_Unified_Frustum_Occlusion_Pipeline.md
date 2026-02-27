@@ -133,3 +133,111 @@ output.
   - Zero-instances error
 - All 1850 existing tests continue to pass
 - 1 new criterion benchmark file
+
+## Retrospective
+
+**Completed**: 2026-02-28
+
+### Key Technical Learnings
+
+#### Split-encode pattern for pipeline composition
+
+- **Challenge**: The `ComputeInstanceFilter` and `OcclusionCuller` have
+  incompatible bind group layouts (6 vs 4 bindings). Merging them into a
+  single bind group would require rewriting both WGSL shaders and
+  breaking the existing API.
+- **Solution**: Split `encode_with_bind_group` into two phases:
+  `encode_frustum_cull_with_bind_group` and
+  `encode_prefix_sum_and_compact_with_bind_group`. The unified pipeline
+  encodes into a single command encoder using two separate bind groups
+  that share the visibility buffer. The occlusion culler's bind group
+  references the filter's visibility buffer at binding 2.
+- **Pattern**: When composing GPU pipelines with different bind group
+  layouts, use separate bind groups with shared buffer references rather
+  than merging layouts. This preserves backward compatibility and keeps
+  each module self-contained.
+
+#### Combined occlusion test entry point for flag preservation
+
+- **Challenge**: The existing `occlusion_test` WGSL entry point writes
+  both 0 (occluded) and 1 (visible) to the visibility buffer, which
+  would overwrite frustum-cull results. In the unified pipeline, the
+  visibility buffer must preserve 0s from frustum culling.
+- **Solution**: Added `occlusion_test_combined` entry point that reads
+  existing visibility first: if already 0 (frustum-culled), skip; if 1
+  but occluded, write 0; if 1 and not occluded, leave unchanged. This
+  ensures both culling stages compose correctly.
+- **Pattern**: When chaining compute passes that modify a shared flag
+  buffer, use "monotonic clearing" (only clear to 0, never set to 1)
+  for subsequent passes. This makes passes composable without ordering
+  dependencies on individual flag values.
+
+#### Pre-allocated buffer sharing across pipeline modules
+
+- **Challenge**: The `PooledComputeInstanceFilter` encapsulates its
+  buffers privately. The unified pipeline needs access to the visibility
+  buffer to share it with the occlusion culler's bind group.
+- **Solution**: Added `buffer_refs()` method returning a `PooledBufferRefs`
+  struct with `pub(crate)` visibility. Only the `visibility_buffer`
+  reference is exposed (other fields were trimmed after initial design).
+- **Pattern**: Use `pub(crate)` accessor structs for inter-module buffer
+  sharing rather than making fields public. This limits the API surface
+  while enabling composition.
+
+### Architectural Decisions
+
+#### New struct vs extending PooledComputeInstanceFilter
+
+- **Decision**: Created `UnifiedCullingPipeline` as a new struct that
+  owns a `PooledComputeInstanceFilter` and an `OcclusionCuller`, rather
+  than adding occlusion support directly to `PooledComputeInstanceFilter`.
+- **Reasoning**: The filter and occlusion culler have fundamentally
+  different data models (frustum bounds vs. Hi-Z coverage maps) and
+  configuration (LOD thresholds vs. tile size/margin). Embedding
+  occlusion into the filter would violate single responsibility and
+  complicate the filter's already complex API.
+- **Trade-off**: Users who want the unified pipeline must create a
+  `UnifiedCullingPipeline` instead of using `PooledComputeInstanceFilter`
+  directly.
+- **Future**: The unified pipeline could be integrated into higher-level
+  `BatchRenderer` APIs that automatically select the optimal culling
+  strategy based on dataset size and density.
+
+#### Optional occlusion via `Option<&OcclusionParams>`
+
+- **Decision**: The `dispatch` method takes `Option<&OcclusionParams>`.
+  When `None`, it delegates to the plain filter path with zero overhead.
+- **Reasoning**: Users who don't need occlusion culling should not pay
+  for it. The `None` path avoids creating occlusion bind groups,
+  uploading occlusion config, or dispatching occlusion passes.
+- **Trade-off**: The API signature is slightly more complex than a
+  simple `enable_occlusion: bool` flag.
+- **Future**: Could add `dispatch_frustum_only()` and
+  `dispatch_with_occlusion()` convenience methods for cleaner ergonomics.
+
+### Development Workflow Insights
+
+- The existing `ComputeInstanceFilter` and `OcclusionCuller` modules
+  were well-structured for composition. The `encode` / `dispatch`
+  separation pattern (where `encode` fills a command encoder and
+  `dispatch` also creates the encoder and submits) made it straightforward
+  to extract individual phases.
+- GPU tests with `--test-threads=1` remain essential. All 7 new tests
+  passed on the first run, which is unusual for GPU code — the existing
+  test patterns and `GupContext::headless()` helper made it easy to
+  write correct tests.
+- The `mask all-fix` pre-commit hook has persistent issues with
+  `gup-macros` (42 warnings). Using `cargo clippy -p gup --lib` is
+  sufficient for verifying the main crate.
+- The story's original technical tasks suggested extending `FilterConfig`
+  with occlusion parameters, but the split-encode composition pattern
+  turned out cleaner and more backward-compatible. Story tasks should
+  be treated as guidance, not rigid specs.
+
+### Follow-up Stories
+
+1. **GUP-223: Coarse Hi-Z Early Reject for Large Marks** — (already
+   planned) Would improve the unified pipeline's occlusion test for
+   scenes with mixed mark sizes by testing large marks at coarse
+   Hi-Z levels first.
+
