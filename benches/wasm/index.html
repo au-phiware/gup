@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gup WASM Performance Benchmarks</title>
+  <style>
+    :root {
+      --bg: #1e1e2e;
+      --fg: #cdd6f4;
+      --accent: #89b4fa;
+      --green: #a6e3a1;
+      --red: #f38ba8;
+      --surface: #313244;
+      --overlay: #45475a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      padding: 2rem;
+      line-height: 1.6;
+    }
+    h1 { color: var(--accent); margin-bottom: 0.5rem; }
+    h2 { color: var(--accent); margin: 1.5rem 0 0.5rem; font-size: 1.2rem; }
+    .subtitle { color: var(--overlay); margin-bottom: 2rem; }
+    #status {
+      padding: 1rem;
+      border-radius: 8px;
+      background: var(--surface);
+      margin-bottom: 1.5rem;
+      font-family: monospace;
+      white-space: pre-wrap;
+    }
+    .status-running { border-left: 4px solid var(--accent); }
+    .status-done    { border-left: 4px solid var(--green); }
+    .status-error   { border-left: 4px solid var(--red); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1.5rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.5rem 1rem;
+      border-bottom: 1px solid var(--overlay);
+    }
+    th { color: var(--accent); font-weight: 600; }
+    td.num { text-align: right; font-family: monospace; }
+    tr:hover { background: var(--surface); }
+    button {
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      padding: 0.6rem 1.5rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1rem;
+      font-weight: 600;
+      margin-right: 0.5rem;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button:hover:not(:disabled) { filter: brightness(1.1); }
+    .actions { margin-bottom: 1.5rem; }
+    #json-output {
+      background: var(--surface);
+      padding: 1rem;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 0.85rem;
+      max-height: 400px;
+      overflow: auto;
+      white-space: pre;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Gup WASM Performance Benchmarks</h1>
+  <p class="subtitle">Interaction system benchmark suite — WebGPU / WebAssembly</p>
+
+  <div class="actions">
+    <button id="run-btn" onclick="runBenchmarks()">▶ Run Benchmarks</button>
+    <button id="download-btn" onclick="downloadResults()" disabled>⬇ Download JSON</button>
+    <button id="copy-btn" onclick="copyResults()" disabled>📋 Copy JSON</button>
+  </div>
+
+  <div id="status" class="status-running">Initialising WASM module…</div>
+
+  <div id="results-container" style="display:none">
+    <h2>Point Queries</h2>
+    <table id="point-table">
+      <thead><tr><th>Benchmark</th><th>Mean (ms)</th><th>Median (ms)</th><th>Min (ms)</th><th>Max (ms)</th><th>Std Dev</th><th>Iters</th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <h2>Region Queries</h2>
+    <table id="region-table">
+      <thead><tr><th>Benchmark</th><th>Mean (ms)</th><th>Median (ms)</th><th>Min (ms)</th><th>Max (ms)</th><th>Std Dev</th><th>Iters</th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <h2>Batch Queries</h2>
+    <table id="batch-table">
+      <thead><tr><th>Benchmark</th><th>Mean (ms)</th><th>Median (ms)</th><th>Min (ms)</th><th>Max (ms)</th><th>Std Dev</th><th>Iters</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <h2>Raw JSON</h2>
+  <pre id="json-output"></pre>
+
+  <script type="module">
+    // Import the WASM module built by wasm-pack
+    import init, { run_wasm_benchmarks } from './pkg/gup.js';
+
+    let benchResults = null;
+
+    window.runBenchmarks = async function() {
+      const btn = document.getElementById('run-btn');
+      const status = document.getElementById('status');
+      btn.disabled = true;
+      status.className = 'status-running';
+      status.textContent = '⏳ Running benchmarks… this may take a few minutes.';
+
+      try {
+        const json = await run_wasm_benchmarks();
+        benchResults = json;
+
+        const suite = JSON.parse(json);
+        displayResults(suite);
+
+        status.className = 'status-done';
+        status.textContent = `✅ Complete — ${suite.results.length} benchmarks in ${suite.platform}\nTimestamp: ${suite.timestamp}\nUser Agent: ${suite.user_agent || 'N/A'}`;
+
+        document.getElementById('download-btn').disabled = false;
+        document.getElementById('copy-btn').disabled = false;
+
+        const jsonEl = document.getElementById('json-output');
+        jsonEl.style.display = 'block';
+        jsonEl.textContent = json;
+      } catch (e) {
+        status.className = 'status-error';
+        status.textContent = `❌ Error: ${e.message}\n\nCheck that WebGPU is available in this browser.`;
+      } finally {
+        btn.disabled = false;
+      }
+    };
+
+    window.downloadResults = function() {
+      if (!benchResults) return;
+      const blob = new Blob([benchResults], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `gup-wasm-bench-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    window.copyResults = function() {
+      if (!benchResults) return;
+      navigator.clipboard.writeText(benchResults);
+    };
+
+    function displayResults(suite) {
+      const container = document.getElementById('results-container');
+      container.style.display = 'block';
+
+      for (const r of suite.results) {
+        let tableId;
+        if (r.name.startsWith('point_queries'))  tableId = 'point-table';
+        else if (r.name.startsWith('region_queries')) tableId = 'region-table';
+        else if (r.name.startsWith('batch_queries'))  tableId = 'batch-table';
+        else continue;
+
+        const tbody = document.getElementById(tableId).querySelector('tbody');
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.name}</td>
+          <td class="num">${r.mean_ms.toFixed(3)}</td>
+          <td class="num">${r.median_ms.toFixed(3)}</td>
+          <td class="num">${r.min_ms.toFixed(3)}</td>
+          <td class="num">${r.max_ms.toFixed(3)}</td>
+          <td class="num">${r.std_dev_ms.toFixed(3)}</td>
+          <td class="num">${r.iterations}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    // Initialise WASM module on page load
+    try {
+      await init();
+      document.getElementById('status').textContent = '✅ WASM module loaded. Click "Run Benchmarks" to start.';
+      document.getElementById('status').className = 'status-done';
+    } catch (e) {
+      const status = document.getElementById('status');
+      status.className = 'status-error';
+      status.textContent = `❌ Failed to load WASM module: ${e.message}\n\nMake sure you built with: wasm-pack build --target web`;
+    }
+  </script>
+</body>
+</html>
