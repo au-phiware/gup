@@ -1,0 +1,94 @@
+# Performance threshold configuration for CI regression detection.
+#
+# Each [[group]] defines a benchmark group with:
+#   - name: identifier matching a benchmark or test group
+#   - description: human-readable label for reports
+#   - max_regression_percent: maximum allowed regression before failing CI (%)
+#   - warning_percent: threshold for warning without failing (%)
+#   - min_improvement_percent: notable improvement threshold for reporting (%)
+#
+# Thresholds apply to both criterion benchmarks and threshold-based tests.
+# Criterion benchmarks compare wall-clock time; threshold tests use absolute
+# limits that vary by build profile (debug vs release).
+
+[defaults]
+max_regression_percent = 15.0
+warning_percent = 10.0
+min_improvement_percent = 5.0
+
+[[group]]
+name = "interaction"
+description = "Interaction system (point/region/batch queries)"
+max_regression_percent = 20.0
+warning_percent = 10.0
+min_improvement_percent = 5.0
+
+[[group]]
+name = "rendering"
+description = "Core rendering operations"
+max_regression_percent = 15.0
+warning_percent = 10.0
+min_improvement_percent = 5.0
+
+[[group]]
+name = "compilation"
+description = "Shader compilation"
+max_regression_percent = 20.0
+warning_percent = 10.0
+min_improvement_percent = 5.0
+
+[[group]]
+name = "gpu_transfer"
+description = "GPU buffer uploads and transfers"
+max_regression_percent = 15.0
+warning_percent = 10.0
+min_improvement_percent = 5.0
+
+[[group]]
+name = "pattern"
+description = "Pattern rendering benchmarks"
+max_regression_percent = 15.0
+warning_percent = 10.0
+min_improvement_percent = 5.0
+
+[[group]]
+name = "spatial_index"
+description = "Spatial index build and query"
+max_regression_percent = 20.0
+warning_percent = 10.0
+min_improvement_percent = 5.0
+
+[[group]]
+name = "axis"
+description = "Axis layout and rendering"
+max_regression_percent = 15.0
+warning_percent = 10.0
+min_improvement_percent = 5.0
+
+[[group]]
+name = "transpilation"
+description = "Rust-to-WGSL transpilation"
+max_regression_percent = 25.0
+warning_percent = 15.0
+min_improvement_percent = 5.0
+
+[[group]]
+name = "mark"
+description = "Mark system rendering"
+max_regression_percent = 15.0
+warning_percent = 10.0
+min_improvement_percent = 5.0
+
+[[group]]
+name = "sdf"
+description = "SDF text generation"
+max_regression_percent = 20.0
+warning_percent = 10.0
+min_improvement_percent = 5.0
+
+[[group]]
+name = "composition"
+description = "Mixable composition operations"
+max_regression_percent = 15.0
+warning_percent = 10.0
+min_improvement_percent = 5.0
