@@ -1,7 +1,7 @@
 # GUP-231: WASM Build Platform Gating
 
 **Priority**: Medium **Complexity**: Medium **Created**: 2025-08-07 **Status**:
-📋 Planned
+🚧 In Progress
 
 ## Overview
 

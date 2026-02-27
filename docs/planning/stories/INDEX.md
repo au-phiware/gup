@@ -288,7 +288,7 @@ reorganisation._
 | [GUP-224](GUP-224_Chart_Builder_Instanced_Ticks.md)              | Migrate Chart Builder to Instanced Ticks    | 📋 Planned  | Low      | 3      |
 | [GUP-225](GUP-225_Instanced_Grid_Line_Rendering.md)              | Instanced Grid Line Rendering               | 📋 Planned  | Low      | 3      |
 | [GUP-226](GUP-226_WebAssembly_Axis_Performance_Validation.md)    | WebAssembly Axis Performance Validation     | 📋 Planned  | Low      | 3      |
-| [GUP-231](GUP-231_WASM_Build_Platform_Gating.md)                 | WASM Build Platform Gating                  | 📋 Planned  | Medium   | 5      |
+| [GUP-231](GUP-231_WASM_Build_Platform_Gating.md)                 | WASM Build Platform Gating                  | 🚧 In Progress | Medium   | 5      |
 
 _Note: GUP-092 appears twice — once as the 8-pt story in the Post-GUP-021 table
 (basic label formatting, complete) and once here as the 10-pt expanded axis/grid
