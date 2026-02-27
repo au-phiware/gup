@@ -2723,6 +2723,86 @@ mod tests_instanced_ticks {
             "Instanced ({instanced_bytes} B) should be smaller than vertex pairs ({vertex_pair_bytes} B)"
         );
     }
+
+    #[tokio::test]
+    async fn test_has_axis_line_data_initially_false() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let sel =
+            crate::selection::Selection::<TestData, crate::Circle>::new(vec![], context).unwrap();
+        let chart = ComposedChart::new(sel, ChartConfig::default()).with_default_axes();
+        assert!(
+            !chart.has_axis_line_data(),
+            "Before prepare_draw_commands(), axis-line data should not be available"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_prepare_draw_commands_creates_axis_line_data() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let sel =
+            crate::selection::Selection::<TestData, crate::Circle>::new(vec![], context.clone())
+                .unwrap();
+        let mut chart = ComposedChart::new(sel, ChartConfig::default()).with_default_axes();
+
+        chart.prepare_draw_commands(
+            context.device(),
+            context.queue(),
+            wgpu::TextureFormat::Bgra8Unorm,
+        );
+
+        assert!(
+            chart.has_axis_line_data(),
+            "After prepare_draw_commands(), axis-line data should be available"
+        );
+        assert!(
+            chart.has_tick_data(),
+            "After prepare_draw_commands(), tick data should also be available"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_prepare_draw_commands_no_axes_no_data() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let sel =
+            crate::selection::Selection::<TestData, crate::Circle>::new(vec![], context.clone())
+                .unwrap();
+        let config = ChartConfig {
+            show_axes: false,
+            ..ChartConfig::default()
+        };
+        let mut chart = ComposedChart::new(sel, config);
+
+        chart.prepare_draw_commands(
+            context.device(),
+            context.queue(),
+            wgpu::TextureFormat::Bgra8Unorm,
+        );
+
+        assert!(
+            !chart.has_axis_line_data(),
+            "No axes means no axis-line data"
+        );
+        assert!(!chart.has_tick_data(), "No axes means no tick data");
+    }
+
+    #[tokio::test]
+    async fn test_prepare_draw_commands_pipeline_reused_across_calls() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let sel =
+            crate::selection::Selection::<TestData, crate::Circle>::new(vec![], context.clone())
+                .unwrap();
+        let mut chart = ComposedChart::new(sel, ChartConfig::default()).with_default_axes();
+        let format = wgpu::TextureFormat::Bgra8Unorm;
+
+        // First call creates the pipeline
+        chart.prepare_draw_commands(context.device(), context.queue(), format);
+        assert!(chart.has_axis_line_data());
+
+        // Pipeline fields should remain Some after a second call
+        chart.prepare_draw_commands(context.device(), context.queue(), format);
+        assert!(chart.has_axis_line_data());
+        assert!(chart.has_tick_data());
+    }
 }
 
 #[cfg(test)]

@@ -3124,4 +3124,24 @@ mod tests {
             "Should have at least one cache hit"
         );
     }
+
+    // ---- AxisLinePipeline tests (GPU required) ----
+
+    #[tokio::test]
+    async fn test_axis_line_pipeline_creation() {
+        let context = crate::RenderContext::new().await.unwrap();
+        let pipeline = AxisLinePipeline::new(context.device(), wgpu::TextureFormat::Bgra8Unorm);
+        // Pipeline should be valid — just verify we can access it.
+        let _ = pipeline.pipeline();
+    }
+
+    #[tokio::test]
+    async fn test_axis_line_pipeline_upload_and_draw_zero() {
+        let context = crate::RenderContext::new().await.unwrap();
+        let pipeline = AxisLinePipeline::new(context.device(), wgpu::TextureFormat::Bgra8Unorm);
+        let vertices: Vec<crate::render::Vertex> = vec![];
+        let buf = pipeline.upload(context.device(), &vertices);
+        // Zero-vertex draw should be a no-op (no panic).
+        assert_eq!(buf.size(), 0);
+    }
 }
