@@ -351,13 +351,14 @@ jobs:
         run: |
           nix develop --command bash -c "cargo test -p gup --lib wasm_bench_axis -- --test-threads=1 --nocapture 2>&1 | tee wasm_axis_test_output.txt"
 
-      # wasm-pack test requires matching chromedriver for headless Chrome.
-      # Once CI has chromedriver matching the installed Chromium version,
-      # uncomment the following step to run axis benchmarks in a real browser:
-      #
-      # - name: Run WASM axis benchmarks in headless Chrome
-      #   run: |
-      #     nix develop --command bash -c "wasm-pack test --headless --chrome -- --test wasm_axis_performance"
+      # ChromeDriver now matches Chromium version (GUP-240).
+      # Note: headless Chrome tests require WebGPU support which may not
+      # be available on standard GitHub Actions runners (no GPU). The step
+      # uses continue-on-error to allow graceful degradation.
+      - name: Run WASM axis benchmarks in headless Chrome
+        continue-on-error: true
+        run: |
+          nix develop --command bash -c "wasm-pack test --headless --chrome -- --test wasm_axis_performance"
 
       - name: Upload WASM axis results
         if: always()

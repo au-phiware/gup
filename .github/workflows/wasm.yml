@@ -56,12 +56,18 @@ jobs:
           && echo '✅ WASM tests compile'
           || echo '❌ WASM test compilation failed'"
 
-      # NOTE: wasm-pack test --headless --chrome requires a WebGPU-capable
-      # browser (Chromium with --enable-features=WebGPU).  Standard GitHub
-      # Actions runners lack GPU access so GPU-tier tests will gracefully
-      # degrade.  See GUP-240 for the full ChromeDriver/Puppeteer CI story.
+      # NOTE: ChromeDriver now matches Chromium version (GUP-240).
+      # Standard GitHub Actions runners lack GPU access so GPU-tier tests
+      # will gracefully degrade.  CPU-only tests (mark types, registries)
+      # should pass on any runner with headless Chrome.
       - name: Run WASM integration tests (best-effort)
         continue-on-error: true
         run: >
           nix develop --command bash -c
           "wasm-pack test --headless --chrome -- --test wasm_integration"
+
+      - name: Run WASM axis performance tests (best-effort)
+        continue-on-error: true
+        run: >
+          nix develop --command bash -c
+          "wasm-pack test --headless --chrome -- --test wasm_axis_performance"

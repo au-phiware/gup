@@ -10,9 +10,8 @@
 //! # Running locally
 //!
 //! ```bash
-//! # Browser (requires matching ChromeDriver – see GUP-240)
-//! CHROMEDRIVER=/path/to/chromedriver \
-//!   cargo test --target wasm32-unknown-unknown --test wasm_integration
+//! # Browser (ChromeDriver is in the nix devShell, see GUP-240)
+//! wasm-pack test --headless --chrome -- --test wasm_integration
 //!
 //! # Or with Node.js (if available)
 //! wasm-pack test --node -- --test wasm_integration
