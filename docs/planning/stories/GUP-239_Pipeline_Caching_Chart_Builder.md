@@ -101,3 +101,73 @@ frames.
 - 1861 lib tests passed (0 failed, 4 ignored)
 - All examples compile clean
 - All 6 new tests pass
+
+## Retrospective
+
+**Completed**: 2025-02-25
+
+### Key Technical Learnings
+
+#### Consistent Pipeline Caching Pattern
+
+- **Challenge**: The `TickPipeline` was already cached on `ComposedChart` but
+  the axis-line pipeline was created inline every frame — two different patterns
+  for essentially the same concern.
+- **Solution**: Created `AxisLinePipeline` as a sibling to `TickPipeline`,
+  following the identical lazy-init pattern. Both are now cached side-by-side in
+  `ComposedChart`.
+- **Pattern**: For any GPU pipeline that doesn't change between frames, create a
+  named struct that wraps `wgpu::RenderPipeline` with `new()`, `upload()`, and
+  `draw()` methods. Cache it as `Option<T>` with lazy initialization.
+
+#### Public vs Private Preparation APIs
+
+- **Challenge**: `ComposedChart::render()` calls internal
+  `prepare_tick_pipeline()` which takes a `RenderContext`. But the
+  `multi_font_chart_demo` example bypasses `render()` and manages its own render
+  pass, so it needed a way to trigger pipeline preparation.
+- **Solution**: Added `prepare_draw_commands(device, queue, surface_format)` as
+  a public method that accepts raw wgpu handles instead of `RenderContext`,
+  serving callers that own their render loop.
+- **Pattern**: When a struct has both internal render methods and
+  externally-managed render passes, provide public "prepare" + "draw" methods
+  that accept the minimal set of GPU handles.
+
+### Architectural Decisions
+
+#### Reuse basic.wgsl for Axis Lines
+
+- **Decision**: Use the existing `basic.wgsl` shader for axis-line rendering
+  rather than a separate shader.
+- **Reasoning**: The shader in the example's `AXIS_SHADER_SRC` was byte-for-byte
+  identical to `basic.wgsl` (position+color passthrough). Reusing the existing
+  file avoids duplication.
+- **Trade-off**: `basic.wgsl` uses `PointList` topology in `BasicPipeline`,
+  while `AxisLinePipeline` uses `LineList`. The shader source is shared but the
+  pipelines are separate — this is correct since topology is a pipeline
+  property, not a shader property.
+- **Future**: If axis lines need different rendering (e.g., dashed lines), the
+  shader can be swapped without affecting the caching pattern.
+
+#### prepare_draw_commands as a Single Entry-Point
+
+- **Decision**: Combine axis-line and tick preparation into one
+  `prepare_draw_commands()` call instead of two separate public methods.
+- **Reasoning**: Callers always need both; having a single method reduces
+  boilerplate and ensures consistent state. The geometry is generated once and
+  split between the two pipelines.
+- **Trade-off**: Slightly less flexible than two independent prepare methods,
+  but the typical usage pattern always prepares both together.
+- **Future**: If grid-line preparation needs to be included, the method can be
+  extended or a variant added.
+
+### Development Workflow Insights
+
+- The 2-point story estimate was accurate — the implementation was
+  straightforward once the existing `TickPipeline` pattern was understood.
+- `cargo clean` was needed mid-story due to disk space exhaustion. The full
+  target directory was 20+ GB. Worth noting for development environments with
+  limited disk.
+- The `multi_font_chart_demo` example exited quickly in the test environment (no
+  interactive window focus), so visual verification was limited to confirming no
+  errors in stdout/stderr. All rendering logic was validated through unit tests.
