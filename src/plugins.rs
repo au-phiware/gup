@@ -96,9 +96,20 @@ use std::sync::{Arc, Mutex, OnceLock};
 /// be queried to determine if they can handle specific types.
 #[derive(Debug)]
 pub struct MixablePluginRegistry {
+    #[cfg(not(target_arch = "wasm32"))]
+    plugins: HashMap<String, Box<dyn MixablePlugin + Send + Sync>>,
+    #[cfg(target_arch = "wasm32")]
     plugins: HashMap<String, Box<dyn MixablePlugin>>,
     type_mappings: HashMap<TypeId, String>,
 }
+
+// SAFETY: On WASM, the runtime is single-threaded so Send+Sync is safe.
+// The MixablePlugin trait uses MaybeSend+MaybeSync which relaxes bounds on
+// WASM, but the registry must be stored in a static OnceLock<Mutex<...>>.
+#[cfg(target_arch = "wasm32")]
+unsafe impl Send for MixablePluginRegistry {}
+#[cfg(target_arch = "wasm32")]
+unsafe impl Sync for MixablePluginRegistry {}
 
 /// Trait for Mixable plugins that can wrap external visualization types.
 ///
@@ -144,7 +155,12 @@ pub trait MixablePlugin: MaybeSend + MaybeSync + Debug {
     ///
     /// May panic if the object cannot be downcast to the expected type.
     /// Use `can_handle` to check compatibility first.
+    #[cfg(not(target_arch = "wasm32"))]
     fn create_mixable(&self, object: Box<dyn Any + Send + Sync>) -> Box<dyn Mixable<Output = ()>>;
+
+    /// Create a Mixable wrapper for the given object (WASM variant).
+    #[cfg(target_arch = "wasm32")]
+    fn create_mixable(&self, object: Box<dyn Any>) -> Box<dyn Mixable<Output = ()>>;
 
     /// Validate plugin compatibility and dependencies.
     ///
@@ -258,6 +274,7 @@ impl MixablePluginRegistry {
     /// # Returns
     ///
     /// `Some(mixable)` if a compatible plugin is found, `None` otherwise
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn create_mixable<T: Any + Send + Sync>(
         &self,
         object: T,
@@ -283,6 +300,30 @@ impl MixablePluginRegistry {
         None
     }
 
+    /// Create a Mixable wrapper for the given external object (WASM variant).
+    #[cfg(target_arch = "wasm32")]
+    pub fn create_mixable<T: Any>(&self, object: T) -> Option<Box<dyn Mixable<Output = ()>>> {
+        let type_id = TypeId::of::<T>();
+
+        // Check if we have a cached mapping for this type
+        if let Some(plugin_name) = self.type_mappings.get(&type_id)
+            && let Some(plugin) = self.plugins.get(plugin_name)
+        {
+            let boxed_object: Box<dyn Any> = Box::new(object);
+            return Some(plugin.create_mixable(boxed_object));
+        }
+
+        // Search through all plugins for one that can handle this type
+        for plugin in self.plugins.values() {
+            if plugin.can_handle(type_id) {
+                let boxed_object: Box<dyn Any> = Box::new(object);
+                return Some(plugin.create_mixable(boxed_object));
+            }
+        }
+
+        None
+    }
+
     /// Create a Mixable from a boxed Any object.
     ///
     /// This is useful when you have an already-boxed object and want to avoid
@@ -296,9 +337,34 @@ impl MixablePluginRegistry {
     /// # Returns
     ///
     /// `Some(mixable)` if a compatible plugin is found, `None` otherwise
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn create_mixable_from_any(
         &self,
         object: Box<dyn Any + Send + Sync>,
+        type_id: TypeId,
+    ) -> Option<Box<dyn Mixable<Output = ()>>> {
+        // Check if we have a cached mapping for this type
+        if let Some(plugin_name) = self.type_mappings.get(&type_id)
+            && let Some(plugin) = self.plugins.get(plugin_name)
+        {
+            return Some(plugin.create_mixable(object));
+        }
+
+        // Search through all plugins for one that can handle this type
+        for plugin in self.plugins.values() {
+            if plugin.can_handle(type_id) {
+                return Some(plugin.create_mixable(object));
+            }
+        }
+
+        None
+    }
+
+    /// Create a Mixable from a boxed Any object (WASM variant).
+    #[cfg(target_arch = "wasm32")]
+    pub fn create_mixable_from_any(
+        &self,
+        object: Box<dyn Any>,
         type_id: TypeId,
     ) -> Option<Box<dyn Mixable<Output = ()>>> {
         // Check if we have a cached mapping for this type
@@ -418,9 +484,15 @@ impl MixablePlugin for ExampleExternalLibraryPlugin {
         false // Placeholder - no actual types supported
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn create_mixable(&self, _object: Box<dyn Any + Send + Sync>) -> Box<dyn Mixable<Output = ()>> {
         // In a real implementation, this would downcast the object and create
         // an appropriate wrapper
+        Box::new(PlaceholderMixable)
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn create_mixable(&self, _object: Box<dyn Any>) -> Box<dyn Mixable<Output = ()>> {
         Box::new(PlaceholderMixable)
     }
 
@@ -539,9 +611,16 @@ macro_rules! register_mixable_plugin {
 ///     println!("No plugin available for MyExternalData");
 /// }
 /// ```
+#[cfg(not(target_arch = "wasm32"))]
 pub fn try_make_mixable<T: Any + MaybeSend + MaybeSync>(
     object: T,
 ) -> Option<Box<dyn Mixable<Output = ()>>> {
+    global_registry().lock().ok()?.create_mixable(object)
+}
+
+/// Create a Mixable from external data using the global plugin registry (WASM variant).
+#[cfg(target_arch = "wasm32")]
+pub fn try_make_mixable<T: Any>(object: T) -> Option<Box<dyn Mixable<Output = ()>>> {
     global_registry().lock().ok()?.create_mixable(object)
 }
 
@@ -656,10 +735,23 @@ pub mod development {
             type_id == TypeId::of::<T>()
         }
 
+        #[cfg(not(target_arch = "wasm32"))]
         fn create_mixable(
             &self,
             object: Box<dyn Any + Send + Sync>,
         ) -> Box<dyn Mixable<Output = ()>> {
+            if let Ok(typed_object) = object.downcast::<T>() {
+                let extractor = self.extractor.clone();
+                let wrapped =
+                    crate::integration::wrap_point_data(*typed_object, move |data| extractor(data));
+                Box::new(wrapped)
+            } else {
+                panic!("Plugin received unexpected type");
+            }
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        fn create_mixable(&self, object: Box<dyn Any>) -> Box<dyn Mixable<Output = ()>> {
             if let Ok(typed_object) = object.downcast::<T>() {
                 let extractor = self.extractor.clone();
                 let wrapped =
