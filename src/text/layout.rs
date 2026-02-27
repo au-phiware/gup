@@ -2911,4 +2911,207 @@ mod tests {
             );
         }
     }
+
+    // === Ellipsis on Last Wrapped Line Tests ===
+
+    #[test]
+    fn test_ellipsis_appended_when_truncated_at_max_lines() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default();
+
+        // "one two three four five" at width 40 with max_lines=2
+        // Each char ≈ 9px, "one" ≈ 27px, "two" ≈ 27px → each word is ≤40px
+        // Line 1: "one", Line 2: "two" (truncated, 3 more words remain)
+        let mut lines = engine
+            .break_into_lines("one two three four five", 40.0, 2, false, &style, &atlas)
+            .unwrap();
+        assert!(lines.len() <= 2);
+
+        // Simulate the truncation check and append ellipsis
+        let all_words: Vec<&str> = "one two three four five".split_whitespace().collect();
+        let wrapped_words: usize = lines.iter().map(|l| l.split_whitespace().count()).sum();
+        let was_truncated = wrapped_words < all_words.len() && lines.len() >= 2;
+        assert!(was_truncated, "Text should have been truncated");
+
+        engine
+            .append_ellipsis_to_last_line(&mut lines, 40.0, "...", &style, &atlas)
+            .unwrap();
+
+        let last = lines.last().unwrap();
+        assert!(
+            last.ends_with("..."),
+            "Last line should end with ellipsis: '{last}'"
+        );
+    }
+
+    #[test]
+    fn test_no_ellipsis_when_text_fits() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default();
+
+        // "Hi there" with wide container — fits in 1 line, no truncation
+        let lines = engine
+            .break_into_lines("Hi there", 200.0, 2, false, &style, &atlas)
+            .unwrap();
+        assert_eq!(lines.len(), 1);
+
+        let all_words: Vec<&str> = "Hi there".split_whitespace().collect();
+        let wrapped_words: usize = lines.iter().map(|l| l.split_whitespace().count()).sum();
+        let was_truncated = wrapped_words < all_words.len() && lines.len() >= 2;
+        assert!(
+            !was_truncated,
+            "Text fits — should NOT be considered truncated"
+        );
+    }
+
+    #[test]
+    fn test_ellipsis_with_custom_text() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default();
+
+        let mut lines = engine
+            .break_into_lines("alpha beta gamma delta", 50.0, 1, false, &style, &atlas)
+            .unwrap();
+        assert_eq!(lines.len(), 1);
+
+        engine
+            .append_ellipsis_to_last_line(&mut lines, 50.0, "…", &style, &atlas)
+            .unwrap();
+
+        let last = lines.last().unwrap();
+        assert!(
+            last.ends_with('…'),
+            "Should use custom ellipsis character: '{last}'"
+        );
+    }
+
+    #[test]
+    fn test_ellipsis_very_narrow_container() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default();
+
+        // Width of 15px — barely fits 1 char (~9px), ellipsis "..." ≈ 27px
+        // target_width = 15 - 27 = -12 → fallback: line becomes just "..."
+        let mut lines = vec!["X".to_string()];
+
+        engine
+            .append_ellipsis_to_last_line(&mut lines, 15.0, "...", &style, &atlas)
+            .unwrap();
+
+        let last = lines.last().unwrap();
+        assert_eq!(
+            last, "...",
+            "When container is too narrow, last line should be just the ellipsis"
+        );
+    }
+
+    #[test]
+    fn test_ellipsis_fits_without_truncation() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default();
+
+        // "Hi" ≈ 18px, "..." ≈ 27px, total ≈ 45px, container 200px → fits
+        let mut lines = vec!["Hi".to_string()];
+
+        engine
+            .append_ellipsis_to_last_line(&mut lines, 200.0, "...", &style, &atlas)
+            .unwrap();
+
+        assert_eq!(
+            lines.last().unwrap(),
+            "Hi...",
+            "Ellipsis should be appended without removing characters"
+        );
+    }
+
+    #[test]
+    fn test_ellipsis_preserves_word_boundary() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default();
+
+        // "Hello World" ≈ 99px, "..." ≈ 27px
+        // Container: 90px → target_width = 63px
+        // "Hello" ≈ 45px fits, "Hello W" ≈ 72px exceeds → truncate to "Hello"
+        let mut lines = vec!["Hello World".to_string()];
+
+        engine
+            .append_ellipsis_to_last_line(&mut lines, 90.0, "...", &style, &atlas)
+            .unwrap();
+
+        let last = lines.last().unwrap();
+        assert!(last.ends_with("..."), "Should end with ellipsis: '{last}'");
+        // Should truncate at word boundary, not mid-word
+        assert!(
+            !last.contains("Wor"),
+            "Should not contain partial word 'Wor': '{last}'"
+        );
+    }
+
+    #[test]
+    fn test_ellipsis_on_empty_lines() {
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default();
+
+        let mut lines: Vec<String> = vec![];
+        // Should not panic on empty lines
+        engine
+            .append_ellipsis_to_last_line(&mut lines, 100.0, "...", &style, &atlas)
+            .unwrap();
+        assert!(lines.is_empty());
+    }
+
+    #[test]
+    fn test_clipping_strategy_text_wrapping_with_ellipsis() {
+        // Verify the variant can be constructed with ellipsis_text
+        let strategy = ClippingStrategy::TextWrapping {
+            max_lines: 2,
+            line_spacing_factor: 1.0,
+            hyphenate: false,
+            ellipsis_text: Some("...".to_string()),
+        };
+        match strategy {
+            ClippingStrategy::TextWrapping { ellipsis_text, .. } => {
+                assert_eq!(ellipsis_text.as_deref(), Some("..."));
+            }
+            _ => panic!("Expected TextWrapping variant"),
+        }
+    }
+
+    #[test]
+    fn test_ellipsis_performance() {
+        use std::time::Instant;
+
+        let engine = TextLayoutEngine::new();
+        let atlas = MockFontAtlas::new();
+        let style = TextStyle::default();
+
+        let mut lines_batch: Vec<Vec<String>> = (0..100)
+            .map(|i| vec![format!("Label number {} with extra wrapping text here", i)])
+            .collect();
+
+        let start = Instant::now();
+        for lines in &mut lines_batch {
+            engine
+                .append_ellipsis_to_last_line(lines, 80.0, "...", &style, &atlas)
+                .unwrap();
+        }
+        let duration = start.elapsed();
+
+        #[cfg(debug_assertions)]
+        let threshold_ms: u128 = 50;
+        #[cfg(not(debug_assertions))]
+        let threshold_ms: u128 = 5;
+
+        assert!(
+            duration.as_millis() < threshold_ms,
+            "Ellipsis too slow: {duration:?} (threshold: {threshold_ms}ms)"
+        );
+    }
 }
