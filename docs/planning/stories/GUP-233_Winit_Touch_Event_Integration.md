@@ -94,3 +94,70 @@ selection without writing manual mapping code.
 - `test_touch_event_from_winit`
 - `test_touch_event_from_winit_with_timestamp`
 - `test_touch_event_from_winit_position_truncation`
+
+## Retrospective
+
+**Completed**: 2025-07-19
+
+### Key Technical Learnings
+
+#### Winit Touch Lacks Timestamps
+
+- **Challenge**: `winit::event::Touch` does not carry a timestamp, but Gup's
+  `TouchEvent` requires one for long-press and two-finger-tap gesture timing.
+- **Solution**: Provided two conversion paths: `From<winit::event::Touch>` sets
+  `timestamp` to `0.0` for simple cases, and `TouchEvent::from_winit(touch, ts)`
+  accepts an explicit timestamp derived from `Instant::now()`.
+- **Pattern**: When mapping between two types where the target has more fields
+  than the source, provide both a lossy `From` impl (with documented defaults)
+  and a named constructor that accepts the missing data. Document the trade-off.
+
+#### DeviceId Construction in Doc-Tests
+
+- **Challenge**: Creating a `winit::event::Touch` in doc-tests requires a
+  `DeviceId`, which is an opaque platform type.
+- **Solution**: `DeviceId::dummy()` exists precisely for this use case.
+  Initially considered `unsafe { std::mem::zeroed() }` but the dummy constructor
+  is the correct, safe approach.
+- **Pattern**: Check library types for `dummy()`, `default()`, or test helpers
+  before reaching for `unsafe` in doc-tests.
+
+### Architectural Decisions
+
+#### Always-Available vs Feature-Gated Conversions
+
+- **Decision**: Made the `From` impls always available without a feature flag.
+- **Reasoning**: `winit` is already a required (non-optional) dependency in
+  Cargo.toml. Adding a feature flag would add complexity without benefit since
+  every build already links winit.
+- **Trade-off**: If winit becomes optional in the future, these impls would need
+  to be gated behind `#[cfg(feature = "winit")]`.
+- **Future**: If Gup supports alternative windowing systems (e.g. SDL2, glutin),
+  the touch types remain windowing-agnostic and new `From` impls can be added
+  per-backend.
+
+#### Rebuilding Instances on Every Touch Event
+
+- **Decision**: The demo calls `rebuild_instances()` on every touch event, not
+  just on gesture completion.
+- **Reasoning**: Touch events can trigger intermediate visual feedback (e.g.
+  rectangle selection preview during drag). For 200 data points this is
+  negligible.
+- **Trade-off**: For larger datasets, a dirty flag or event-result-based
+  approach would be more efficient.
+
+### Development Workflow Insights
+
+- This was a small, well-scoped story (effort 2) that took minimal time. The
+  GUP-182 retrospective explicitly called out this exact follow-up, making the
+  scope crystal clear.
+- The `mask all-fix` workflow continues to be reliable — no issues with
+  formatting or lint.
+- Doc-tests serve as both documentation and regression tests. The three new
+  doc-tests exercise the conversion paths and serve as copy-paste examples for
+  users.
+
+### Follow-up Stories
+
+No new follow-up stories were identified. The existing GUP-234 (Touch Lasso
+Selection) remains the natural next step for the touch interaction subsystem.
