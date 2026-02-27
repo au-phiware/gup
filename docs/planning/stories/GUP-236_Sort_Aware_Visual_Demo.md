@@ -1,8 +1,8 @@
 # GUP-236: Sort-Aware Visual Demo
 
-**Story ID**: GUP-236 **Title**: Sort-Aware Visual Demo **Status**: 🚧 In
-Progress **Priority**: Low **Effort**: — **Created**: 2025-07-20
-**Dependencies**: GUP-184 (GPU Radix Sort for Z-Order)
+**Story ID**: GUP-236 **Title**: Sort-Aware Visual Demo **Status**: ✅ Complete
+**Priority**: Low **Effort**: S **Created**: 2025-07-20 **Completed**:
+2025-07-21 **Dependencies**: GUP-184 (GPU Radix Sort for Z-Order)
 
 ## Overview
 
@@ -23,11 +23,11 @@ rendering.
 
 ## Acceptance Criteria
 
-- [ ] Example renders two views: sorted and unsorted transparent marks
-- [ ] Overlapping transparent circles show visible rendering artifacts without
+- [x] Example renders two views: sorted and unsorted transparent marks
+- [x] Overlapping transparent circles show visible rendering artifacts without
       sort
-- [ ] Sorted view shows correct back-to-front compositing
-- [ ] Example includes toggle or side-by-side comparison
+- [x] Sorted view shows correct back-to-front compositing
+- [x] Example includes toggle or side-by-side comparison
 
 ## Technical Tasks
 
@@ -57,6 +57,37 @@ rendering.
 
 ## Definition of Done
 
-- [ ] Example compiles and runs
-- [ ] Visual difference is clearly visible
-- [ ] Added to examples README
+- [x] Example compiles and runs
+- [x] Visual difference is clearly visible
+- [x] Added to examples README
+
+## Implementation Summary
+
+### What Was Implemented
+
+A side-by-side visual demo (`examples/z_sort_demo.rs`) showing the effect of
+Z-order sorting on transparent overlapping circle marks:
+
+- **Left cluster**: 6 overlapping semi-transparent circles rendered in
+  front-to-back order (incorrect for alpha blending — farther circles overdraw
+  nearer ones, producing washed-out indistinct layering).
+- **Right cluster**: Same 6 circles rendered in back-to-front order (correct
+  compositing — nearer circles properly appear on top of farther ones with clear
+  color distinction).
+
+### Key Files Changed
+
+| File                      | Change                                      |
+| ------------------------- | ------------------------------------------- |
+| `examples/z_sort_demo.rs` | New example — 380 lines                     |
+| `Cargo.toml`              | Registered `z_sort_demo` as `[[example]]`   |
+| `examples/README.md`      | Added `z_sort_demo` to Technical Deep Dives |
+
+### Architecture
+
+- Uses the same circle shaders (`circle.vert.wgsl`, `circle.frag.wgsl`) and
+  `CircleInstance` storage buffer layout as the core mark renderer.
+- Two separate instance storage buffers with different orderings of the same
+  circle data, rendered in a single render pass with alpha blending.
+- Follows the `ApplicationHandler` + `GupContext` window pattern established by
+  `multi_pass_mark_demo.rs`.
