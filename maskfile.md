@@ -246,3 +246,27 @@ Run performance regression tests (CI-friendly)
 ```bash
 cargo test --test interaction_performance_tests -- --test-threads=1
 ```
+
+## perf-alert
+
+Run performance alert system (threshold tests + report generation)
+
+```bash
+scripts/perf_alert.sh --skip-benchmarks "$@"
+```
+
+## perf-trend-record
+
+Record a performance trend data point
+
+```bash
+scripts/perf_trend.sh record
+```
+
+## perf-trend-report
+
+Generate a performance trend report
+
+```bash
+scripts/perf_trend.sh report "${1:-10}"
+```
