@@ -117,3 +117,93 @@ Sort-only (encode + submit + GPU sync) on integrated GPU:
 These include significant CPU-side staging buffer allocation and GPU
 synchronization overhead (as noted in GUP-184). Actual GPU compute time is
 substantially lower.
+
+## Retrospective
+
+**Completed**: 2025-07-21
+
+### Key Technical Learnings
+
+#### Bitmask + Popcount as a GPU-Friendly Alternative to Prefix Sums
+
+- **Challenge**: The story originally specified "per-digit prefix sums" as the
+  optimization approach. A naive implementation — iterating over all 256 digit
+  values and running a Blelloch exclusive prefix sum for each — would require
+  256 iterations × 16 barrier steps = 4096 barrier synchronizations per
+  workgroup, which is _worse_ than the serial approach.
+- **Solution**: Used a per-digit 256-bit bitmask (stored as 8 u32 words per
+  digit, 2048 words total in shared atomic memory) combined with WGSL's
+  `countOneBits` (hardware popcount). Each thread sets one bit via `atomicOr`,
+  then counts set bits below its TID to determine its stable local rank. This
+  requires only 2 barriers and O(8) work per thread.
+- **Pattern**: When computing "count of preceding matching items" on a GPU, the
+  bitmask + popcount pattern is often superior to running many small prefix
+  sums. It leverages hardware popcount instructions and minimizes barrier
+  synchronization.
+
+#### WGSL Shared Memory Budget for Radix Sort
+
+- **Challenge**: The bitmask adds 2048 atomic u32 words (8192 bytes) of
+  workgroup storage. WGSL guarantees only 16,384 bytes minimum.
+- **Solution**: Verified that WGSL only counts workgroup variables _statically
+  accessed_ by each entry point against its limit. The scatter pass accesses
+  `digit_member_bits` (8192 bytes) but not `shared_data` or `shared_hist`, so
+  its total is 8192 bytes — well within limits.
+- **Pattern**: For multi-entry-point compute shaders, workgroup variables are
+  budgeted per-entry-point based on static access, not per-module total. This
+  allows different entry points to have different shared memory layouts.
+
+#### Stability Preserved by Construction
+
+- **Challenge**: Ensuring the optimized scatter maintains sort stability (equal
+  keys preserve input order) without introducing subtle ordering bugs.
+- **Solution**: The bitmask approach preserves stability by construction:
+  `countOneBits(mask & ((1 << tid%32) - 1))` counts threads with strictly lower
+  TID that share the same digit. This is mathematically identical to the serial
+  scan's `if (i < tid && digit[i] == my_digit) rank++` loop.
+- **Pattern**: When optimizing GPU algorithms, prove correctness algebraically
+  before implementation. The bitmask rank formula can be verified with a simple
+  hand trace (e.g., threads 0,2,3 with same digit → ranks 0,1,2).
+
+### Architectural Decisions
+
+#### Bitmask + Popcount vs. Per-Digit Prefix Sums
+
+- **Decision**: Used bitmask + `countOneBits` instead of per-digit Blelloch
+  scans.
+- **Reasoning**: Per-digit prefix sums require 256 iterations × 16 barriers =
+  4096 barriers vs. 2 barriers for the bitmask approach. The bitmask uses more
+  shared memory (8KB vs. 1KB) but drastically reduces synchronization overhead.
+- **Trade-off**: Higher shared memory usage (8192 bytes vs. 1024 bytes for the
+  serial approach), but O(n) total work vs. O(n²).
+- **Future**: If workgroup sizes increase beyond 256, the bitmask would grow
+  proportionally (e.g., 512 threads → 16 words per digit → 4096 entries). This
+  could approach shared memory limits on some devices.
+
+#### Keeping the Optimization Unconditional
+
+- **Decision**: Always use the bitmask approach rather than conditionally
+  falling back to the serial approach based on workgroup size or instance count.
+- **Reasoning**: The bitmask approach is strictly better for 256-thread
+  workgroups: fewer barriers, less total work, same correctness. No scenario
+  where the serial approach would be faster.
+- **Trade-off**: Added 8KB of workgroup shared memory usage for the scatter
+  entry point.
+- **Future**: If targeting devices with very limited shared memory (<8KB), a
+  fallback would be needed.
+
+### Development Workflow Insights
+
+- The implementation was straightforward once the correct algorithm (bitmask +
+  popcount) was identified. The challenge was in analyzing the many alternative
+  approaches (per-digit prefix sums, single-thread ranking, atomic-based
+  ranking) and determining which was actually optimal for WGSL's constraints.
+- All 11 existing GPU tests passed on the first try after the shader change,
+  confirming the mathematical equivalence of the serial and bitmask approaches.
+- The pre-commit hook's clippy check caught a `use of moved value` error in the
+  benchmark code (`SubmissionIndex` doesn't implement `Copy`), which was a quick
+  fix.
+- The benchmark numbers include substantial CPU-side overhead (staging buffer
+  allocation, GPU synchronization). Isolating the actual scatter pass
+  improvement requires GPU timestamp queries, which is out of scope for this
+  story.
