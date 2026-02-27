@@ -1,7 +1,7 @@
 # GUP-176: Spatial Index Adaptive Grid Size
 
-**Priority**: Low **Complexity**: Low **Created**: 2025-08-06 **Status**: 🚧 In
-Progress
+**Priority**: Low **Complexity**: Low **Created**: 2025-08-06 **Status**: ✅
+Complete (2025-08-07)
 
 ## Overview
 
@@ -23,11 +23,11 @@ dataset size so that the grid provides good performance without manual tuning.
 
 ## Acceptance Criteria
 
-- [ ] Grid size adapts based on element count (e.g., √N × √N)
-- [ ] Minimum grid size (e.g., 4×4) for small datasets
-- [ ] Maximum grid size capped at buffer limits
-- [ ] No regression in existing spatial index tests
-- [ ] Measurable improvement for datasets where 100×100 is suboptimal
+- [x] Grid size adapts based on element count (e.g., √N × √N)
+- [x] Minimum grid size (e.g., 4×4) for small datasets
+- [x] Maximum grid size capped at buffer limits
+- [x] No regression in existing spatial index tests
+- [x] Measurable improvement for datasets where 100×100 is suboptimal
 
 ## Technical Tasks
 
@@ -53,6 +53,28 @@ dataset size so that the grid provides good performance without manual tuning.
 
 ## Definition of Done
 
-- [ ] Adaptive grid size implemented
-- [ ] All existing tests pass
-- [ ] `mask all-fix` passes
+- [x] Adaptive grid size implemented
+- [x] All existing tests pass
+- [x] `mask all-fix` passes
+
+## Implementation Summary
+
+### What was implemented
+
+Added an `adaptive_grid_side` static method to `InteractionSystem` that computes
+grid resolution as `ceil(√N)`, clamped between a minimum of 4 and the maximum
+side that fits within `max_spatial_cells` (√10000 = 100). This is called at the
+start of `build_spatial_index` before any cell computations.
+
+### Key files changed
+
+- `src/interaction.rs` — Added `adaptive_grid_side()` method and integrated it
+  into `build_spatial_index()`; added 6 unit tests
+- `tests/spatial_index_tests.rs` — Added 4 GPU integration tests for adaptive
+  grid behaviour
+
+### Test counts
+
+- 6 unit tests for the heuristic function
+- 4 GPU integration tests for end-to-end adaptive behaviour
+- 51 total spatial index tests pass (0 regressions)
