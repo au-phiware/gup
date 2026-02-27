@@ -68,30 +68,31 @@ epic and status.
 
 ### Post GUP-068/011 Follow-up Stories - Advanced Mark System (Stories 69-75)
 
-| Story                                                          | Title                                          | Status         | Priority | Points |
-| -------------------------------------------------------------- | ---------------------------------------------- | -------------- | -------- | ------ |
-| [GUP-069](GUP-069_Advanced_Mark_Rendering_Features.md)         | Advanced Mark Rendering Features               | ✅ Complete    | Medium   | —      |
-| [GUP-070](GUP-070_Mark_Performance_Optimization.md)            | Mark Performance Optimization                  | ✅ Complete    | Medium   | —      |
-| [GUP-071](GUP-071_Custom_Mark_Development_Kit.md)              | Custom Mark Development Kit                    | ✅ Complete    | Low      | —      |
-| [GUP-072](GUP-072_Mark_System_Documentation.md)                | Mark System Documentation                      | ✅ Complete    | Low      | —      |
-| [GUP-073](GUP-073_Advanced_Shader_Composition.md)              | Advanced Shader Composition                    | ✅ Complete    | Medium   | —      |
-| [GUP-074](GUP-074_Mark_Performance_Optimization.md)            | Mark Performance Optimization (GPU Instancing) | ✅ Complete    | High     | 5      |
-| [GUP-075](GUP-075_Interactive_Mark_Selection.md)               | Interactive Mark Selection                     | ✅ Complete    | Medium   | 6      |
-| [GUP-076](GUP-076_GPU_Occlusion_Culling.md)                    | GPU Occlusion Culling for Dense Datasets       | ✅ Complete    | Low      | —      |
-| [GUP-077](GUP-077_Compute_Shader_Instance_Filtering.md)        | Compute Shader Instance Sorting and Filtering  | ✅ Complete    | Medium   | —      |
-| [GUP-185](GUP-185_Multi_Pass_Mark_Examples.md)                 | Multi-Pass Mark Examples                       | ✅ Complete    | Low      | —      |
-| [GUP-186](GUP-186_Dynamic_Attribute_GPU_Upload_Pipeline.md)    | Dynamic Attribute GPU Upload Pipeline          | ✅ Complete    | Medium   | —      |
-| [GUP-187](GUP-187_Flaky_Label_Performance_Test_Fix.md)         | Flaky Label Performance Test Fix               | ✅ Complete    | Low      | —      |
-| [GUP-188](GUP-188_Automatic_Draw_Call_Metrics.md)              | Automatic Draw Call Metrics in MarkRenderer    | ✅ Complete    | Low      | —      |
-| [GUP-189](GUP-189_AST_Integration_ComposableShaderPipeline.md) | AST Integration with ComposableShaderPipeline  | ✅ Complete    | Medium   | 5      |
-| [GUP-190](GUP-190_WGSL_Compute_Shader_AST_Support.md)          | WGSL Compute Shader AST Support                | ✅ Complete    | Low      | 5      |
-| [GUP-191](GUP-191_Enable_AST_Optimization_Default.md)          | Enable AST Optimization by Default             | ✅ Complete    | Low      | 3      |
-| [GUP-192](GUP-192_Dynamic_Attribute_Readback_Pipeline.md)      | Dynamic Attribute Readback Pipeline            | ✅ Complete    | Low      | —      |
-| [GUP-208](GUP-208_Mark_Derive_Instance_Buffer_Generation.md)   | Mark Derive Instance Buffer Generation         | ✅ Complete    | Low      | —      |
-| [GUP-209](GUP-209_Mark_Validation_CI_Integration.md)           | Mark Validation CI Integration                 | ✅ Complete    | Low      | —      |
-| [GUP-222](GUP-222_Unified_Frustum_Occlusion_Pipeline.md)       | Unified Frustum + Occlusion Culling Pipeline   | 💡 New         | Medium   | —      |
-| [GUP-223](GUP-223_Coarse_HiZ_Early_Reject.md)                  | Coarse Hi-Z Early Reject for Large Marks       | 💡 New         | Low      | —      |
-| [GUP-232](GUP-232_Fix_Mark_Renderer_Metric_Tests.md)           | Fix Mark Renderer Metric Test Failures         | ✅ Complete  | Medium   | —      |
+| Story                                                          | Title                                          | Status      | Priority | Points |
+| -------------------------------------------------------------- | ---------------------------------------------- | ----------- | -------- | ------ |
+| [GUP-069](GUP-069_Advanced_Mark_Rendering_Features.md)         | Advanced Mark Rendering Features               | ✅ Complete | Medium   | —      |
+| [GUP-070](GUP-070_Mark_Performance_Optimization.md)            | Mark Performance Optimization                  | ✅ Complete | Medium   | —      |
+| [GUP-071](GUP-071_Custom_Mark_Development_Kit.md)              | Custom Mark Development Kit                    | ✅ Complete | Low      | —      |
+| [GUP-072](GUP-072_Mark_System_Documentation.md)                | Mark System Documentation                      | ✅ Complete | Low      | —      |
+| [GUP-073](GUP-073_Advanced_Shader_Composition.md)              | Advanced Shader Composition                    | ✅ Complete | Medium   | —      |
+| [GUP-074](GUP-074_Mark_Performance_Optimization.md)            | Mark Performance Optimization (GPU Instancing) | ✅ Complete | High     | 5      |
+| [GUP-075](GUP-075_Interactive_Mark_Selection.md)               | Interactive Mark Selection                     | ✅ Complete | Medium   | 6      |
+| [GUP-076](GUP-076_GPU_Occlusion_Culling.md)                    | GPU Occlusion Culling for Dense Datasets       | ✅ Complete | Low      | —      |
+| [GUP-077](GUP-077_Compute_Shader_Instance_Filtering.md)        | Compute Shader Instance Sorting and Filtering  | ✅ Complete | Medium   | —      |
+| [GUP-185](GUP-185_Multi_Pass_Mark_Examples.md)                 | Multi-Pass Mark Examples                       | ✅ Complete | Low      | —      |
+| [GUP-186](GUP-186_Dynamic_Attribute_GPU_Upload_Pipeline.md)    | Dynamic Attribute GPU Upload Pipeline          | ✅ Complete | Medium   | —      |
+| [GUP-187](GUP-187_Flaky_Label_Performance_Test_Fix.md)         | Flaky Label Performance Test Fix               | ✅ Complete | Low      | —      |
+| [GUP-188](GUP-188_Automatic_Draw_Call_Metrics.md)              | Automatic Draw Call Metrics in MarkRenderer    | ✅ Complete | Low      | —      |
+| [GUP-189](GUP-189_AST_Integration_ComposableShaderPipeline.md) | AST Integration with ComposableShaderPipeline  | ✅ Complete | Medium   | 5      |
+| [GUP-190](GUP-190_WGSL_Compute_Shader_AST_Support.md)          | WGSL Compute Shader AST Support                | ✅ Complete | Low      | 5      |
+| [GUP-191](GUP-191_Enable_AST_Optimization_Default.md)          | Enable AST Optimization by Default             | ✅ Complete | Low      | 3      |
+| [GUP-192](GUP-192_Dynamic_Attribute_Readback_Pipeline.md)      | Dynamic Attribute Readback Pipeline            | ✅ Complete | Low      | —      |
+| [GUP-208](GUP-208_Mark_Derive_Instance_Buffer_Generation.md)   | Mark Derive Instance Buffer Generation         | ✅ Complete | Low      | —      |
+| [GUP-209](GUP-209_Mark_Validation_CI_Integration.md)           | Mark Validation CI Integration                 | ✅ Complete | Low      | —      |
+| [GUP-222](GUP-222_Unified_Frustum_Occlusion_Pipeline.md)       | Unified Frustum + Occlusion Culling Pipeline   | 💡 New      | Medium   | —      |
+| [GUP-223](GUP-223_Coarse_HiZ_Early_Reject.md)                  | Coarse Hi-Z Early Reject for Large Marks       | 💡 New      | Low      | —      |
+| [GUP-232](GUP-232_Fix_Mark_Renderer_Metric_Tests.md)           | Fix Mark Renderer Metric Test Failures         | ✅ Complete | Medium   | —      |
+| [GUP-233](GUP-233_Fix_Flaky_Registry_Scalability_Test.md)      | Fix Flaky Registry Scalability Test            | 📋 Planned  | Low      | —      |
 
 ### Post GUP-005 Stories - Shader Function System Enhancement (Stories 51+)
 
