@@ -835,6 +835,41 @@ text_renderer.render_queued_text_multi(
 The font manager lazily creates a font atlas for each unique `font_family` the
 first time it is referenced. Subsequent frames reuse the cached atlases.
 
+## Per-Axis Label Style Overrides (GUP-217)
+
+Individual axes can override the chart-level `label_style` from `ChartConfig`.
+This is useful when each axis displays a different data domain (e.g., dates on
+the X-axis, currency values on the Y-axis) and benefits from its own font, size,
+or colour.
+
+### Configuration
+
+Set `label_style` on an `AxisConfiguration` before attaching the axis to the
+chart:
+
+```rust
+use gup::axis::{AxisConfiguration, AxisPosition, LinearAxis};
+use gup::chart_builder::{ChartConfig, ComposedChart};
+use gup::text::TextStyle;
+
+let config = ChartConfig::default()
+    .with_label_style(TextStyle::new(14.0)); // chart-level fallback
+
+let x_axis_config = AxisConfiguration::default()
+    .with_label_style(TextStyle::new(12.0).with_font_family("Monospace"));
+
+let y_axis_config = AxisConfiguration::default()
+    .with_label_style(TextStyle::new(16.0).with_font_family("DejaVu Serif"));
+
+// let chart = ComposedChart::new(sel, config)
+//     .with_bottom_axis(Box::new(LinearAxis::new(AxisPosition::Bottom, x_axis_config)))
+//     .with_left_axis(Box::new(LinearAxis::new(AxisPosition::Left, y_axis_config)));
+```
+
+When a per-axis style is set, it replaces the chart-level `label_style` for that
+axis. Axes without a per-axis override continue to use the chart-level style,
+ensuring full backward compatibility.
+
 ---
 
 This documentation provides a comprehensive foundation for understanding and
