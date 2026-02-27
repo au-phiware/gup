@@ -223,6 +223,10 @@ path = "examples/showcase/business_dashboard.rs"
 name = "validate_marks"
 path = "src/bin/validate_marks.rs"
 
+[[bin]]
+name = "wasm_bench_native"
+path = "src/bin/wasm_bench_native.rs"
+
 [features]
 default = []
 web-dashboard = ["tiny_http"]
