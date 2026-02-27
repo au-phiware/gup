@@ -3,7 +3,7 @@
 ## Story Overview
 
 **Epic**: Phase 2 - High-Level Convenience APIs **Theme**: Advanced Text Layout
-and Rendering **Priority**: Low **Story Points**: 3 **Status**: 🚧 In Progress
+and Rendering **Priority**: Low **Story Points**: 3 **Status**: ✅ Complete
 **Dependencies**: GUP-199 (Text Wrapping and Multi-Line Layout)
 
 ## Problem Statement
@@ -21,11 +21,11 @@ annotations have professional typography
 
 ## Acceptance Criteria
 
-- [ ] Left, center, and right alignment options for wrapped text
-- [ ] Justify alignment that distributes extra space between words
-- [ ] Alignment configurable via `TextStyle` or wrapping parameters
-- [ ] Works with existing `TextWrapping` clipping strategy
-- [ ] Works with standalone `layout_wrapped_text()` API
+- [x] Left, center, and right alignment options for wrapped text
+- [x] Justify alignment that distributes extra space between words
+- [x] Alignment configurable via `TextStyle` or wrapping parameters
+- [x] Works with existing `TextWrapping` clipping strategy
+- [x] Works with standalone `layout_wrapped_text()` API
 
 ## Technical Tasks
 
@@ -42,9 +42,47 @@ annotations have professional typography
 
 ## Definition of Done
 
-- [ ] All alignment modes implemented and tested
-- [ ] Integration with both clipping strategy and standalone API
-- [ ] Performance not degraded by alignment calculations
+- [x] All alignment modes implemented and tested
+- [x] Integration with both clipping strategy and standalone API
+- [x] Performance not degraded by alignment calculations
+
+---
+
+## Implementation Summary
+
+**Completed**: 2025-07-21
+
+### Key Files Changed
+
+- **`src/text.rs`** — Added `TextAlignment` enum with Left, Center, Right, and
+  Justify variants.
+- **`src/text/style.rs`** — Added `text_alignment` field to `TextStyle` with
+  `with_text_alignment()` builder method. Default is `TextAlignment::Left`.
+- **`src/text/layout.rs`** — Redesigned `position_multi_line_glyphs()` to:
+  - Accept optional `container_width` for alignment reference
+  - Compute block width from widest line or container
+  - Apply per-line horizontal offset for Left/Center/Right
+  - Distribute extra space between words for Justify
+  - Fall back to Left alignment for last lines and single-word lines in Justify
+
+### Tests Added
+
+9 new unit tests covering:
+
+- Left alignment default behavior
+- Center alignment with offset calculation
+- Right alignment with offset calculation
+- Justify distributing space between words
+- Justify last-line fallback to left
+- Justify single-word-line fallback to left
+- Alignment with explicit container width
+- Alignment combined with center anchor
+- Equal-length lines aligning identically
+
+### Test Counts
+
+- **Layout module**: 51 tests (42 existing + 9 new)
+- **Full suite**: 1870 passed, 4 ignored
 
 ---
 
