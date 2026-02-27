@@ -558,6 +558,8 @@ where
     tick_pipeline: Option<TickPipeline>,
     /// Uploaded tick buffers ready for drawing.
     tick_buffers: Option<TickBuffers>,
+    /// Uploaded grid line instance buffers for instanced drawing.
+    grid_buffers: Option<TickBuffers>,
 }
 
 impl<T, M> ComposedChart<T, M>
@@ -583,6 +585,7 @@ where
             grid_system,
             tick_pipeline: None,
             tick_buffers: None,
+            grid_buffers: None,
         }
     }
 
@@ -640,21 +643,20 @@ where
     /// Render the complete chart including axes and grid.
     ///
     /// Axis lines are rendered via each axis's `render()` method. Tick
-    /// marks are prepared for GPU-instanced rendering through
-    /// [`TickPipeline`](crate::axis::TickPipeline), which is lazily
-    /// created on the first call.
+    /// marks and grid lines are prepared for GPU-instanced rendering
+    /// through [`TickPipeline`](crate::axis::TickPipeline), which is
+    /// lazily created on the first call.
     ///
-    /// After calling `render()`, use [`draw_ticks`](Self::draw_ticks) to
-    /// record the instanced tick draw command into your render pass.
+    /// After calling `render()`, use [`draw_grid_lines`](Self::draw_grid_lines)
+    /// followed by [`draw_ticks`](Self::draw_ticks) to record the
+    /// instanced draw commands into your render pass.
     pub fn render(&mut self, context: &mut RenderContext) -> GupResult<()> {
         // Calculate chart area based on margins and axis requirements
         let chart_area = self.calculate_chart_area();
 
-        // Phase 1: Render grid lines (behind everything else)
-        if self.config.show_grid
-            && let Some(grid_system) = &mut self.grid_system
-        {
-            Self::render_grid_lines_static(grid_system, context, &chart_area)?;
+        // Phase 1: Prepare instanced grid line instances (behind everything)
+        if self.config.show_grid {
+            self.prepare_grid_pipeline(context, &chart_area);
         }
 
         // Phase 2: Render main visualization (data points, on top of grid)
@@ -746,7 +748,102 @@ where
             .is_some_and(|b| b.instance_count > 0)
     }
 
-    /// Render grid lines with proper tick alignment.
+    /// Prepare grid line instance buffers for GPU-instanced rendering.
+    ///
+    /// Called automatically by [`render()`](Self::render) when grids are
+    /// enabled. After this, [`draw_grid_lines()`](Self::draw_grid_lines)
+    /// can record the instanced draw command into a render pass.
+    fn prepare_grid_pipeline(&mut self, context: &RenderContext, chart_area: &ChartArea) {
+        use crate::grid::ChartBounds;
+
+        // Ensure tick pipeline exists (shared with tick marks)
+        if self.tick_pipeline.is_none() {
+            self.tick_pipeline = Some(TickPipeline::new(
+                context.device(),
+                context.surface_format(),
+            ));
+        }
+
+        let chart_bounds = ChartBounds::new(
+            chart_area.x,
+            chart_area.x + chart_area.width,
+            chart_area.y,
+            chart_area.y + chart_area.height,
+        );
+
+        let horizontal_ticks = Self::generate_sample_horizontal_ticks(chart_bounds);
+        let vertical_ticks = Self::generate_sample_vertical_ticks(chart_bounds);
+        let horizontal_minor_ticks: Vec<f64> = Vec::new();
+        let vertical_minor_ticks: Vec<f64> = Vec::new();
+
+        if let Some(grid_system) = &mut self.grid_system {
+            let instances = grid_system.generate_grid_instances(
+                &horizontal_ticks,
+                &vertical_ticks,
+                &horizontal_minor_ticks,
+                &vertical_minor_ticks,
+                chart_bounds,
+            );
+
+            if !instances.is_empty() {
+                if let Some(tick_pipeline) = &self.tick_pipeline {
+                    let (base_buf, inst_buf) =
+                        tick_pipeline.upload(context.device(), context.queue(), instances);
+                    self.grid_buffers = Some(TickBuffers {
+                        base_buf,
+                        inst_buf,
+                        instance_count: instances.len() as u32,
+                    });
+                }
+            } else {
+                self.grid_buffers = None;
+            }
+        }
+    }
+
+    /// Record instanced grid line draw commands into an active render pass.
+    ///
+    /// Call this after [`render()`](Self::render) has prepared the grid
+    /// pipeline, and **before** [`draw_ticks()`](Self::draw_ticks) so that
+    /// grid lines appear behind tick marks.
+    ///
+    /// Returns the number of grid line instances drawn.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// chart.render(&mut context)?;
+    /// // ... create render pass ...
+    /// chart.draw_grid_lines(&mut render_pass);
+    /// chart.draw_ticks(&mut render_pass);
+    /// ```
+    pub fn draw_grid_lines<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) -> u32 {
+        if let (Some(tick_pipeline), Some(bufs)) = (&self.tick_pipeline, &self.grid_buffers) {
+            tick_pipeline.draw(
+                render_pass,
+                &bufs.base_buf,
+                &bufs.inst_buf,
+                bufs.instance_count,
+            );
+            bufs.instance_count
+        } else {
+            0
+        }
+    }
+
+    /// Returns `true` if the grid pipeline has been initialised and there
+    /// are grid line instances ready to draw.
+    pub fn has_grid_data(&self) -> bool {
+        self.grid_buffers
+            .as_ref()
+            .is_some_and(|b| b.instance_count > 0)
+    }
+
+    /// Render grid lines via the legacy `LineAttributes` path.
+    ///
+    /// Superseded by [`prepare_grid_pipeline`](Self::prepare_grid_pipeline)
+    /// which uses GPU instancing.  Retained for reference and fallback.
+    #[allow(dead_code)]
     fn render_grid_lines_static(
         grid_system: &mut crate::grid::GridSystem,
         context: &mut RenderContext,
