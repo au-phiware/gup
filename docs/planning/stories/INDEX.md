@@ -286,7 +286,7 @@ reorganisation._
 | [GUP-205](GUP-205_SDF_Text_Rendering_Performance_Tuning.md)      | SDF Text Rendering Performance Tuning       | ✅ Complete | Low      | 3      |
 | [GUP-206](GUP-206_Cross_Platform_Axis_Performance_Validation.md) | Cross-Platform Axis Performance Validation  | ✅ Complete | Low      | 3      |
 | [GUP-224](GUP-224_Chart_Builder_Instanced_Ticks.md)              | Migrate Chart Builder to Instanced Ticks    | ✅ Complete | Low      | 3      |
-| [GUP-225](GUP-225_Instanced_Grid_Line_Rendering.md)              | Instanced Grid Line Rendering               | 📋 Planned  | Low      | 3      |
+| [GUP-225](GUP-225_Instanced_Grid_Line_Rendering.md)              | Instanced Grid Line Rendering               | 🚧 In Progress | Low      | 3      |
 | [GUP-226](GUP-226_WebAssembly_Axis_Performance_Validation.md)    | WebAssembly Axis Performance Validation     | 📋 Planned  | Low      | 3      |
 | [GUP-231](GUP-231_WASM_Build_Platform_Gating.md)                 | WASM Build Platform Gating                  | ✅ Complete | Medium   | 5      |
 | [GUP-237](GUP-237_WASM_Integration_Test_Suite.md)                | WASM Integration Test Suite                 | 📋 Planned  | Low      | 5      |
