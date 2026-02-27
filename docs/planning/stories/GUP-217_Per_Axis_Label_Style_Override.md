@@ -86,3 +86,82 @@ that I can optimise readability for each axis's data domain.
 ---
 
 **Estimated Effort**: 1-2 days **Prerequisites**: GUP-215 ✅ **Blockers**: None
+
+## Retrospective
+
+**Completed**: 2025-07-27
+
+### Key Technical Learnings
+
+#### Labels lose axis provenance after generation
+
+- **Challenge**: `generate_axis_geometry()` merges labels from all axes into a
+  flat `Vec<AxisLabel>`. Once merged, there is no way to determine which axis
+  produced which label, making it impossible to apply per-axis styles after the
+  fact.
+- **Solution**: Refactored `queue_chart_text` and `queue_chart_text_resolved` to
+  iterate per-axis directly (inlining the label generation loop), rather than
+  delegating to `generate_axis_geometry()` first. This keeps axis context
+  available when resolving styles.
+- **Pattern**: When per-element metadata (like axis origin) matters for
+  downstream processing, either enrich the element struct or keep the processing
+  co-located with the iteration that has context. Avoid flattening data when
+  context is needed later.
+
+#### Option-based style override is ergonomic and backward-compatible
+
+- **Challenge**: Adding a required `TextStyle` field to `AxisConfiguration`
+  would break every existing construction site.
+- **Solution**: `Option<TextStyle>` with `None` default. The resolution pattern
+  `config.label_style.as_ref().unwrap_or(&chart_config.label_style)` is concise
+  and clear.
+- **Pattern**: Use `Option<T>` for override fields that should fall back to a
+  parent-level default. This follows the same pattern as CSS specificity —
+  element-level overrides parent-level.
+
+### Architectural Decisions
+
+#### Per-axis style on AxisConfiguration rather than on ComposedChart
+
+- **Decision**: Added `label_style: Option<TextStyle>` directly to
+  `AxisConfiguration`, not as a per-axis wrapper on `ComposedChart`.
+- **Reasoning**: `AxisConfiguration` is the natural home for per-axis visual
+  configuration. Users already interact with it when customising tick
+  appearance. Adding the style there keeps the API consistent and discoverable.
+- **Trade-off**: Requires `AxisConfiguration` to import `TextStyle`, adding a
+  coupling between the axis and text modules. This is acceptable since axis
+  labels inherently involve text rendering.
+- **Future**: If additional per-axis overrides are needed (e.g., tick label
+  formatters), they can follow the same `Option<T>` pattern on
+  `AxisConfiguration`.
+
+#### Inlined per-axis iteration in queue methods
+
+- **Decision**: `queue_chart_text` and `queue_chart_text_resolved` now inline
+  the per-axis iteration instead of calling `generate_axis_geometry()`.
+- **Reasoning**: The existing `generate_axis_geometry()` returns a flat list
+  that discards axis provenance. Rather than changing its return type (which
+  would affect external callers), the queue methods were refactored to iterate
+  directly.
+- **Trade-off**: Slight code duplication between `generate_axis_geometry` and
+  the queue methods (both iterate the same axis list and call
+  `generate_label_data`). The queue methods now have ~15 more lines each.
+- **Future**: If more axis-aware processing is needed, a private helper
+  `for_each_axis_labels()` could reduce duplication.
+
+### Development Workflow Insights
+
+- The story was straightforward — a clean additive change. The main design
+  question was where to place the per-axis style (AxisConfiguration vs
+  ComposedChart wrapper) and how to handle the flat label list from
+  `generate_axis_geometry`. Both resolved quickly.
+- GPU tests with `FontAtlasManager.get_atlas(Some("FontName"))` assertions
+  provided strong verification that per-axis font families are actually resolved
+  to separate atlases.
+- Pre-existing failures in `mark::renderer::tests` are a noise source — not
+  caused by these changes but should be investigated separately.
+
+### Follow-up Stories
+
+No new follow-up stories identified. The per-axis label style override is
+self-contained and complete.
