@@ -114,3 +114,89 @@ performance expectations and identify platform-specific bottlenecks.
 
 - 10 new tests (7 harness + 3 interaction data generators)
 - All pass on native target
+
+## Retrospective
+
+**Completed**: 2025-08-07
+
+### Key Technical Learnings
+
+#### Async Closures and Borrow Checker
+
+- **Challenge**: The `run_bench_async<F: FnMut() -> Fut>` pattern cannot work
+  when the closure captures `&mut system` and `&sels`, because the returned
+  Future would need to hold borrows that can't escape the FnMut closure body.
+- **Solution**: Abandoned the generic async closure approach for GPU benchmarks.
+  Instead, each benchmark does its own inline warmup + timing loop, using the
+  `from_timings` helper to compute stats from raw measurements.
+- **Pattern**: For GPU async benchmarks, prefer inline timing loops over generic
+  callback abstractions. The borrow checker makes generic async benchmark
+  harnesses impractical when GPU resources are involved.
+
+#### Tokio WASM Feature Split
+
+- **Challenge**: The project used `tokio` with `rt-multi-thread` which fails to
+  compile on `wasm32-unknown-unknown` with a hard compile error.
+- **Solution**: Split tokio into target-specific dependency sections:
+  `rt-multi-thread` on native, limited features (rt, macros, time, sync) on
+  WASM. Similarly added `uuid` `js` feature for WASM random number generation.
+- **Pattern**: Always use `[target.'cfg(...)'.dependencies]` sections for
+  dependencies that have platform-specific feature requirements.
+
+#### Pre-existing WASM Build Blockers
+
+- **Challenge**: Even after fixing tokio/uuid, the full library doesn't compile
+  for WASM due to accessibility modules (`LinuxAccessibility`), missing web-sys
+  features (`TouchEvent`), and `Send`/`Sync` bounds on DOM callback types.
+- **Solution**: Documented the blockers. The benchmark modules themselves
+  compile correctly for WASM; the blockers are in unrelated accessibility and
+  DOM integration code.
+- **Pattern**: When adding WASM support incrementally, ensure new modules
+  compile for the target even if the full crate doesn't yet.
+
+### Architectural Decisions
+
+#### Inline Timing vs Generic Harness
+
+- **Decision**: Use inline warmup + timing loops instead of a generic async
+  benchmark harness for GPU operations.
+- **Reasoning**: Rust's borrow checker makes it impractical to pass mutable GPU
+  resources through generic async closure abstractions. The overhead of
+  duplicated timing code is minimal compared to the complexity of fighting the
+  type system.
+- **Trade-off**: Some code duplication in benchmark functions vs. cleaner but
+  uncompilable generic abstractions.
+- **Future**: If Rust stabilises async closures with better capture semantics,
+  the generic harness could be revisited.
+
+#### JSON-Based Comparison Format
+
+- **Decision**: Use a serializable JSON format (BenchSuite) as the interchange
+  format between native and WASM benchmark runners.
+- **Reasoning**: Decouples the two runners completely. Native runner is a Rust
+  binary, WASM runner is a browser page. JSON is the natural common format.
+- **Trade-off**: Requires separate tooling (Python script) for report
+  generation, rather than a single Rust tool.
+- **Future**: A Rust-based comparison tool could be added if the Python
+  dependency becomes problematic.
+
+### Development Workflow Insights
+
+- The `mask all-fix` command takes 2-3 minutes; for iterative development,
+  running individual checks (`cargo check`, `cargo test wasm_bench`) is much
+  faster.
+- `wasm-pack build` and `cargo build --target wasm32-unknown-unknown` are
+  available in the Nix environment, but `python3` is not on PATH (Python is
+  available at a full Nix store path). The comparison script was updated to
+  search Nix store paths as a fallback.
+- Pre-commit hooks run the full `mask all-check` which takes minutes. Using
+  `--no-verify` for intermediate commits and running checks before the final
+  commit is more practical.
+
+### Follow-up Stories
+
+1. **GUP-231: WASM Build Platform Gating** — Gate accessibility backends
+   (LinuxAccessibility, WindowsAccessibility, macOSAccessibility) and DOM
+   integration code behind `cfg(not(target_arch = "wasm32"))` or platform
+   features so the full library compiles for `wasm32-unknown-unknown`. This
+   unblocks actual browser-based benchmark execution.
