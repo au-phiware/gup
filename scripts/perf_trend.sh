@@ -18,7 +18,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-HISTORY_DIR="${PROJECT_ROOT}/.benchmark-history"
+HISTORY_DIR="${GUP_BENCHMARK_HISTORY_DIR:-${PROJECT_ROOT}/.benchmark-history}"
 
 cd "${PROJECT_ROOT}"
 
