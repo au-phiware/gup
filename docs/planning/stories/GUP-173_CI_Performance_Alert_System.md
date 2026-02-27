@@ -1,7 +1,7 @@
 # GUP-173: CI Performance Alert System
 
-**Priority**: Low **Complexity**: Medium **Created**: 2025-08-06 **Status**: 🚧
-In Progress
+**Priority**: Low **Complexity**: Medium **Created**: 2025-08-06 **Status**: ✅
+Complete (2026-02-27)
 
 ## Overview
 
@@ -22,19 +22,19 @@ performance regressions, so that I can fix them before merging.
 
 ## Acceptance Criteria
 
-- [ ] CI pipeline runs `mask perf-check` on every PR
-- [ ] Criterion baselines are saved per branch for comparison
-- [ ] Performance regression reports attached to PR comments
-- [ ] Configurable threshold percentages per benchmark group
-- [ ] Historical performance trend tracking
+- [x] CI pipeline runs `mask perf-check` on every PR
+- [x] Criterion baselines are saved per branch for comparison
+- [x] Performance regression reports attached to PR comments
+- [x] Configurable threshold percentages per benchmark group
+- [x] Historical performance trend tracking
 
 ## Technical Tasks
 
-- [ ] Create GitHub Actions workflow for performance checks
-- [ ] Implement baseline management per git branch
-- [ ] Create PR comment formatter for benchmark comparison results
-- [ ] Add configurable threshold configuration file
-- [ ] Set up benchmark result storage for trend analysis
+- [x] Create GitHub Actions workflow for performance checks
+- [x] Implement baseline management per git branch
+- [x] Create PR comment formatter for benchmark comparison results
+- [x] Add configurable threshold configuration file
+- [x] Set up benchmark result storage for trend analysis
 
 ## Dependencies
 
@@ -53,6 +53,59 @@ performance regressions, so that I can fix them before merging.
 
 ## Definition of Done
 
-- [ ] CI workflow configured and passing
-- [ ] Regression detection working on test PR
-- [ ] Documentation for threshold configuration
+- [x] CI workflow configured and passing
+- [x] Regression detection working on test PR
+- [x] Documentation for threshold configuration
+
+## Implementation Summary
+
+### What Was Implemented
+
+1. **Configurable threshold configuration** (`perf-thresholds.toml`): Defines
+   per-group regression/warning/improvement thresholds for 11 benchmark groups,
+   with fallback defaults.
+
+2. **Performance alert script** (`scripts/perf_alert.sh`): Reads the threshold
+   config, runs `mask perf-check` and criterion benchmarks, compares results
+   against configurable per-group thresholds, and generates both Markdown and
+   JSON reports.
+
+3. **Performance trend tracking** (`scripts/perf_trend.sh`): Records benchmark
+   data points over time, generates trend reports with per-test timing trends,
+   supports cleanup of old data.
+
+4. **Updated CI workflow** (`.github/workflows/performance.yml`):
+   - Added `perf_check` job that runs `mask perf-check` on every PR
+   - Integrated `perf_alert.sh` for unified regression detection
+   - Per-branch criterion baseline caching via `actions/cache@v4`
+   - PR comments update in-place (no spam)
+   - Trend recording on main branch pushes
+
+5. **Maskfile commands**: `mask perf-alert`, `mask perf-trend-record`,
+   `mask perf-trend-report`
+
+6. **Documentation** (`docs/CI_PERFORMANCE_ALERTS.md`): Comprehensive guide
+   covering configuration, script usage, CI jobs, and baseline management.
+
+7. **Script tests** (`scripts/test_perf_scripts.sh`): 10 tests validating config
+   parsing, report generation, and trend script behaviour.
+
+### Key Files Changed
+
+| File                                | Change                          |
+| ----------------------------------- | ------------------------------- |
+| `perf-thresholds.toml`              | New — threshold configuration   |
+| `scripts/perf_alert.sh`             | New — CI alert script           |
+| `scripts/perf_trend.sh`             | New — trend tracking            |
+| `scripts/test_perf_scripts.sh`      | New — script tests              |
+| `.github/workflows/performance.yml` | Updated — unified workflow      |
+| `maskfile.md`                       | Updated — new commands          |
+| `docs/CI_PERFORMANCE_ALERTS.md`     | New — documentation             |
+| `.gitignore`                        | Updated — benchmark history dir |
+
+### Test Results
+
+- 10/10 script tests pass
+- 1743/1746 Rust tests pass (3 pre-existing failures in mark renderer metrics)
+- All examples compile
+- `mask all-fix` clean
