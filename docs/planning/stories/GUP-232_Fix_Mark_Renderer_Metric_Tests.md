@@ -1,7 +1,7 @@
 # GUP-232: Fix Pre-existing Mark Renderer Metric Test Failures
 
-**Priority**: Medium **Complexity**: Low **Created**: 2026-02-27 **Status**: 📋
-Planned
+**Priority**: Medium **Complexity**: Low **Created**: 2026-02-27 **Status**: 🚧
+In Progress
 
 ## Overview
 
