@@ -60,10 +60,10 @@
             wayland
 
             # X11 support
-            xorg.libX11
-            xorg.libXcursor
-            xorg.libXi
-            xorg.libXrandr
+            libx11
+            libxcursor
+            libxi
+            libxrandr
 
             # Vulkan support
             vulkan-loader
@@ -89,14 +89,15 @@
             mprocs
             concurrently
             mdl
-            nixfmt-rfc-style
+            nixfmt
             statix
 
             # Prettier for markdown formatting
             nodePackages.prettier
 
-            # WebGPU-enabled Chromium script
+            # WebGPU-enabled Chromium and matching ChromeDriver for headless tests
             chromium-webgpu
+            chromedriver
           ];
 
           shellHook = ''
@@ -116,6 +117,7 @@
             echo "Rust version: $(rustc --version)"
             echo "Cargo version: $(cargo --version)"
             echo "Chromium available for WebGPU testing: $(chromium --version 2>/dev/null || echo 'Not found')"
+            echo "ChromeDriver version: $(chromedriver --version 2>/dev/null || echo 'Not found')"
             echo "🌐 Use 'chromium-webgpu http://127.0.0.1:8080' to test WebGPU apps"
           '';
 
@@ -124,10 +126,10 @@
             pkgs.libGL
             pkgs.libxkbcommon
             pkgs.wayland
-            pkgs.xorg.libX11
-            pkgs.xorg.libXcursor
-            pkgs.xorg.libXi
-            pkgs.xorg.libXrandr
+            pkgs.libx11
+            pkgs.libxcursor
+            pkgs.libxi
+            pkgs.libxrandr
             pkgs.vulkan-loader
             pkgs.openssl
           ];
