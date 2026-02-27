@@ -215,6 +215,30 @@ Run interaction system benchmarks only
 cargo bench --bench interaction_benchmarks --bench interaction_memory_benchmarks
 ```
 
+## bench-wasm-native
+
+Run native benchmarks in WASM-compatible format (JSON output)
+
+```bash
+scripts/wasm_benchmark.sh native
+```
+
+## bench-wasm-build
+
+Build WASM benchmark package for browser testing
+
+```bash
+scripts/wasm_benchmark.sh build
+```
+
+## bench-wasm-serve
+
+Build WASM and serve the benchmark runner
+
+```bash
+scripts/wasm_benchmark.sh serve
+```
+
 ## perf-check
 
 Run performance regression tests (CI-friendly)

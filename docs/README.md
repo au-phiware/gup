@@ -85,6 +85,12 @@ matrix, and strategic recommendation for Gup's transpilation approach.
 
 Technical details of the SDF-based GPU text rendering pipeline.
 
+### [⚡ WASM Performance Benchmarks](./WASM_PERFORMANCE.md)
+
+Cross-platform performance benchmarking infrastructure: WASM vs native
+comparison tooling, browser compatibility matrix, and platform-specific
+performance characteristics.
+
 ## Quick Navigation
 
 **New to Gup?** Start with [Mission and Goals](./MISSION_AND_GOALS.md) to
