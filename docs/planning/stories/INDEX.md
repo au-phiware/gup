@@ -91,6 +91,7 @@ epic and status.
 | [GUP-209](GUP-209_Mark_Validation_CI_Integration.md)           | Mark Validation CI Integration                 | ✅ Complete | Low      | —      |
 | [GUP-222](GUP-222_Unified_Frustum_Occlusion_Pipeline.md)       | Unified Frustum + Occlusion Culling Pipeline   | 💡 New      | Medium   | —      |
 | [GUP-223](GUP-223_Coarse_HiZ_Early_Reject.md)                  | Coarse Hi-Z Early Reject for Large Marks       | 💡 New      | Low      | —      |
+| [GUP-232](GUP-232_Fix_Mark_Renderer_Metric_Tests.md)           | Fix Mark Renderer Metric Test Failures         | 📋 Planned  | Medium   | —      |
 
 ### Post GUP-005 Stories - Shader Function System Enhancement (Stories 51+)
 
