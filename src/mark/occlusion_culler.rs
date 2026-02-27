@@ -266,8 +266,10 @@ impl OcclusionCuller {
         let generate_hiz_pipeline =
             make_pipeline("generate_hiz_level_pipeline", "generate_hiz_level");
         let occlusion_test_pipeline = make_pipeline("occlusion_test_pipeline", "occlusion_test");
-        let occlusion_test_combined_pipeline =
-            make_pipeline("occlusion_test_combined_pipeline", "occlusion_test_combined");
+        let occlusion_test_combined_pipeline = make_pipeline(
+            "occlusion_test_combined_pipeline",
+            "occlusion_test_combined",
+        );
 
         Ok(Self {
             build_coverage_pipeline,
@@ -1295,5 +1297,256 @@ mod tests {
             "Dense cluster should achieve ≥30% culling rate, got {:.1}% ({culled_count}/{n})",
             cull_rate * 100.0,
         );
+    }
+
+    // --- Coarse Hi-Z (two-level) tests ---
+
+    #[tokio::test]
+    async fn test_large_mark_visible_coarse_early_out() {
+        // A single large mark covering most of the viewport should be visible.
+        // With no other marks on top, the coarse Hi-Z test should return
+        // VISIBLE immediately (all coarse interior cells are empty / z=0).
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let culler = OcclusionCuller::new(&ctx.device).unwrap();
+
+        // One large mark covering the centre of the viewport.
+        let instances = vec![InstanceAttributes::from_circle(
+            [0.0, 0.0],
+            0.8,
+            [1.0, 0.0, 0.0, 1.0],
+        )];
+
+        let input_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &input_buf, &instances);
+
+        let viewport = Viewport2D::default();
+        // Use tile_size=16 so large marks don't exceed the build_coverage
+        // 4096-cell-per-instance limit (base grid ~50×38 = ~1900 cells).
+        let params = OcclusionParams {
+            tile_size: 16,
+            conservative_margin: 0.0,
+        };
+
+        let result = culler
+            .dispatch(&ctx.device, &ctx.queue, &input_buf, 1, &viewport, &params)
+            .await
+            .unwrap();
+
+        let flags =
+            OcclusionCuller::read_visibility(&ctx.device, &ctx.queue, &result.visibility_buffer, 1)
+                .await
+                .unwrap();
+
+        assert_eq!(flags[0], 1, "Single large mark should be visible");
+    }
+
+    #[tokio::test]
+    async fn test_large_mark_occluded_by_larger_mark() {
+        // A large mark completely behind a larger mark that covers the whole
+        // viewport should be occluded. The coarse Hi-Z interior cells should
+        // all show the mark is behind.
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let culler = OcclusionCuller::new(&ctx.device).unwrap();
+
+        // Instance 0: large mark (radius 0.4) at centre.
+        // Instance 1: even larger mark (radius 0.9) at centre, drawn on top.
+        let instances = vec![
+            InstanceAttributes::from_circle([0.0, 0.0], 0.4, [1.0, 0.0, 0.0, 1.0]),
+            InstanceAttributes::from_circle([0.0, 0.0], 0.9, [0.0, 0.0, 1.0, 1.0]),
+        ];
+
+        let input_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &input_buf, &instances);
+
+        let viewport = Viewport2D::default();
+        // tile_size=16: instance 1 (radius 0.9) covers ~45×34 = ~1530 cells,
+        // well under the 4096-cell build_coverage limit.
+        let params = OcclusionParams {
+            tile_size: 16,
+            conservative_margin: 0.0,
+        };
+
+        let result = culler
+            .dispatch(&ctx.device, &ctx.queue, &input_buf, 2, &viewport, &params)
+            .await
+            .unwrap();
+
+        let flags =
+            OcclusionCuller::read_visibility(&ctx.device, &ctx.queue, &result.visibility_buffer, 2)
+                .await
+                .unwrap();
+
+        // Instance 0 (earlier, smaller) should be occluded by instance 1.
+        assert_eq!(
+            flags[0], 0,
+            "Large mark behind an even larger mark should be occluded"
+        );
+        // Instance 1 (later, on top) is always visible.
+        assert_eq!(flags[1], 1, "Top mark should be visible");
+    }
+
+    #[tokio::test]
+    async fn test_mixed_small_and_large_marks_correctness() {
+        // A mix of small and large marks should produce correct results.
+        // Small marks use level-0, large marks use the coarse path.
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let culler = OcclusionCuller::new(&ctx.device).unwrap();
+
+        let mut instances = Vec::new();
+
+        // 10 small marks spread across the viewport (non-overlapping).
+        for i in 0..10 {
+            let x = (i as f32 - 4.5) * 0.15;
+            instances.push(InstanceAttributes::from_circle(
+                [x, -0.5],
+                0.03,
+                [1.0, 1.0, 1.0, 1.0],
+            ));
+        }
+
+        // 1 large mark covering the centre (drawn last / on top).
+        instances.push(InstanceAttributes::from_circle(
+            [0.0, 0.0],
+            0.6,
+            [0.0, 1.0, 0.0, 1.0],
+        ));
+
+        let n = instances.len() as u32;
+        let input_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &input_buf, &instances);
+
+        let viewport = Viewport2D::default();
+        // tile_size=16 keeps large mark coverage under 4096-cell limit.
+        let params = OcclusionParams {
+            tile_size: 16,
+            conservative_margin: 0.0,
+        };
+
+        let result = culler
+            .dispatch(&ctx.device, &ctx.queue, &input_buf, n, &viewport, &params)
+            .await
+            .unwrap();
+
+        let flags =
+            OcclusionCuller::read_visibility(&ctx.device, &ctx.queue, &result.visibility_buffer, n)
+                .await
+                .unwrap();
+
+        // The large mark (last, index 10) should always be visible.
+        assert_eq!(flags[10], 1, "Large mark (drawn last) should be visible");
+
+        // The total visible count should be at least 1 (the large mark).
+        let visible_count: u32 = flags.iter().sum();
+        assert!(
+            visible_count >= 1,
+            "At least the large mark should be visible, got {visible_count}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_large_marks_stacked_culling() {
+        // Multiple large marks stacked at the same position. The coarse Hi-Z
+        // path should be used for the occlusion test and produce correct
+        // culling results.
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let culler = OcclusionCuller::new(&ctx.device).unwrap();
+
+        let n = 20u32;
+        let instances: Vec<InstanceAttributes> = (0..n)
+            .map(|_| InstanceAttributes::from_circle([0.0, 0.0], 0.5, [1.0, 0.0, 0.0, 1.0]))
+            .collect();
+
+        let input_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &input_buf, &instances);
+
+        let viewport = Viewport2D::default();
+        // tile_size=16: radius 0.5 covers ~25×19 = ~475 cells at level 0.
+        let params = OcclusionParams {
+            tile_size: 16,
+            conservative_margin: 0.0,
+        };
+
+        let result = culler
+            .dispatch(&ctx.device, &ctx.queue, &input_buf, n, &viewport, &params)
+            .await
+            .unwrap();
+
+        let flags =
+            OcclusionCuller::read_visibility(&ctx.device, &ctx.queue, &result.visibility_buffer, n)
+                .await
+                .unwrap();
+
+        // Last instance (top) must be visible.
+        assert_eq!(
+            flags[(n - 1) as usize],
+            1,
+            "Last (top) large mark must be visible"
+        );
+
+        // Significant culling expected for stacked large marks.
+        let visible_count: u32 = flags.iter().sum();
+        let culled_count = n - visible_count;
+        assert!(
+            culled_count > 0,
+            "Stacked large marks should have occlusion culling: visible={visible_count}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_large_mark_partially_visible_falls_back_to_level0() {
+        // A large mark that is only partially occluded should remain visible.
+        // The coarse test should be AMBIGUOUS (mixed cells) and fall back to
+        // level-0 which correctly identifies the visible portion.
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let culler = OcclusionCuller::new(&ctx.device).unwrap();
+
+        // Instance 0: large mark at centre.
+        // Instance 1: another mark offset to the right, partially covering instance 0.
+        let instances = vec![
+            InstanceAttributes::from_circle([0.0, 0.0], 0.5, [1.0, 0.0, 0.0, 1.0]),
+            InstanceAttributes::from_circle([0.4, 0.0], 0.3, [0.0, 1.0, 0.0, 1.0]),
+        ];
+
+        let input_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &input_buf, &instances);
+
+        let viewport = Viewport2D::default();
+        let params = OcclusionParams {
+            tile_size: 4,
+            conservative_margin: 0.0,
+        };
+
+        let result = culler
+            .dispatch(&ctx.device, &ctx.queue, &input_buf, 2, &viewport, &params)
+            .await
+            .unwrap();
+
+        let flags =
+            OcclusionCuller::read_visibility(&ctx.device, &ctx.queue, &result.visibility_buffer, 2)
+                .await
+                .unwrap();
+
+        // Instance 0 is only partially covered → should be visible.
+        assert_eq!(
+            flags[0], 1,
+            "Partially occluded large mark should remain visible"
+        );
+        // Instance 1 is on top → visible.
+        assert_eq!(flags[1], 1, "Top mark should be visible");
     }
 }
