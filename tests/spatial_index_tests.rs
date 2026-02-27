@@ -264,7 +264,11 @@ async fn test_adaptive_grid_small_dataset() {
     let config = system.spatial_config();
 
     // 10 elements → √10 ≈ 3.16, below MIN_GRID_SIDE (4)
-    assert_eq!(config.grid_size, [4, 4], "tiny dataset should use minimum grid");
+    assert_eq!(
+        config.grid_size,
+        [4, 4],
+        "tiny dataset should use minimum grid"
+    );
 }
 
 #[tokio::test]
@@ -279,7 +283,11 @@ async fn test_adaptive_grid_medium_dataset() {
     let config = system.spatial_config();
 
     // 100 elements → √100 = 10
-    assert_eq!(config.grid_size, [10, 10], "100 elements should use 10×10 grid");
+    assert_eq!(
+        config.grid_size,
+        [10, 10],
+        "100 elements should use 10×10 grid"
+    );
 }
 
 #[tokio::test]
