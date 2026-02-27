@@ -85,10 +85,12 @@ accommodate this.
 | Linux Desktop   | ✅ Tested  | All operations within 1 ms budget         |
 | macOS Desktop   | 📋 Pending | Expected similar to Linux (Metal backend) |
 | Windows Desktop | 📋 Pending | Expected similar to Linux (DX12/Vulkan)   |
-| WebAssembly     | 📋 Pending | 2 ms relaxed budget, aggressive LOD       |
+| WebAssembly     | ✅ Ready   | Module ported (GUP-226), 2 ms budget      |
 
-> **Note**: macOS, Windows, and WebAssembly results will be collected when the
-> corresponding CI runners are enabled in `.github/workflows/performance.yml`.
+> **Note**: macOS and Windows results will be collected when the corresponding
+> CI runners are enabled in `.github/workflows/performance.yml`. WebAssembly axis
+> benchmarks are available via `wasm_bench_axis` module and the HTML runner at
+> `benches/wasm/axis_benchmarks.html`.
 
 ## CI Integration
 
@@ -100,15 +102,29 @@ cargo test --test cross_platform_axis_performance_tests -- --test-threads=1 --no
 
 # Run Criterion benchmarks
 cargo bench --bench axis_performance_benchmarks
+
+# Run WASM axis benchmark unit tests (native, same code path)
+cargo test -p gup --lib wasm_bench_axis -- --test-threads=1
+
+# Build WASM package with axis benchmarks
+wasm-pack build --target web --out-dir benches/wasm/pkg --release
+
+# Open browser benchmark runner
+# chromium-webgpu benches/wasm/axis_benchmarks.html
 ```
 
 ### GitHub Actions
 
-The `performance.yml` workflow includes an `axis_performance` matrix job that
-runs on Linux by default. To enable cross-platform validation:
+The `performance.yml` workflow includes:
 
-1. Uncomment the macOS and Windows entries in the matrix
-2. Optionally add WebAssembly via `wasm-pack test`
+- `axis_performance` — Native axis performance tests on Linux (baseline)
+- `wasm_axis_performance` — WASM compilation check, package build, and unit tests
+
+To enable cross-platform validation:
+
+1. Uncomment the macOS and Windows entries in the axis_performance matrix
+2. Install matching chromedriver for headless browser testing in
+   `wasm_axis_performance`
 3. The cross-platform comparison job collects all reports and compares
 
 ### Programmatic API
@@ -136,12 +152,26 @@ let md = generate_variance_report(&[linux_report, wasm_report], 0);
 println!("{md}");
 ```
 
+### WASM Benchmark API
+
+```rust
+use gup::wasm_bench::{BenchConfig, BenchSuite};
+use gup::wasm_bench_axis::run_axis_benchmarks;
+
+// Run all 8 axis benchmarks
+let config = BenchConfig { warmup_iterations: 5, measured_iterations: 50 };
+let suite: BenchSuite = run_axis_benchmarks(&config);
+
+// Serialize for cross-platform comparison
+let json = serde_json::to_string_pretty(&suite)?;
+```
+
 ## Future Work
 
 1. **Enable macOS/Windows CI runners** — The workflow is ready; only runner
    labels need to be uncommented.
-2. **WebAssembly benchmarks** — Requires `wasm-pack test` integration and a
-   headless browser environment in CI.
+2. **Headless Chrome in CI** — Requires matching chromedriver version for
+   `wasm-pack test --headless --chrome` integration.
 3. **GPU-side benchmarks** — Current benchmarks are CPU-side only. GPU-side axis
    rendering (pipeline creation, draw calls) should be profiled separately.
 4. **Historical trend tracking** — Store Criterion baselines per-platform in the
