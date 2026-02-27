@@ -1,7 +1,7 @@
 # GUP-238: Remaining Send+Sync Audit
 
-**Priority**: Low **Complexity**: Low **Created**: 2026-02-27 **Status**: 📋
-Planned
+**Priority**: Low **Complexity**: Low **Created**: 2026-02-27 **Status**: 🚧 In
+Progress
 
 ## Overview
 

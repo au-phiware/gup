@@ -290,7 +290,7 @@ reorganisation._
 | [GUP-226](GUP-226_WebAssembly_Axis_Performance_Validation.md)    | WebAssembly Axis Performance Validation     | ✅ Complete | Low      | 3      |
 | [GUP-231](GUP-231_WASM_Build_Platform_Gating.md)                 | WASM Build Platform Gating                  | ✅ Complete | Medium   | 5      |
 | [GUP-237](GUP-237_WASM_Integration_Test_Suite.md)                | WASM Integration Test Suite                 | ✅ Complete | Low      | 5      |
-| [GUP-238](GUP-238_Remaining_Send_Sync_Audit.md)                  | Remaining Send+Sync Audit                   | 📋 Planned  | Low      | 2      |
+| [GUP-238](GUP-238_Remaining_Send_Sync_Audit.md)                  | Remaining Send+Sync Audit                   | 🚧 Active   | Low      | 2      |
 | [GUP-239](GUP-239_Pipeline_Caching_Chart_Builder.md)             | Pipeline Caching for Chart Builder          | 💡 New      | Low      | 2      |
 | [GUP-240](GUP-240_ChromeDriver_Puppeteer_CI_Integration.md)      | ChromeDriver/Puppeteer CI Integration       | 💡 New      | Low      | 2      |
 
