@@ -692,6 +692,12 @@ pub struct PooledComputeInstanceFilter {
     capacity: u32,
     /// Cached bind group, reused when the input buffer is stable.
     cached_bind_group: Option<CachedBindGroup>,
+    /// Optional radix sorter for Z-order sorting.
+    sorter: Option<super::radix_sort::RadixSorter>,
+    /// Optional sort working buffers (allocated when sorting is enabled).
+    sort_buffers: Option<super::radix_sort::SortBuffers>,
+    /// Second output buffer for sorted instances (destination for reorder).
+    sort_output_buffer: Option<Arc<Buffer>>,
 }
 
 /// A cached bind group along with the input buffer pointer used to
@@ -735,6 +741,9 @@ impl PooledComputeInstanceFilter {
             config_buffer,
             capacity: max_instances,
             cached_bind_group: None,
+            sorter: None,
+            sort_buffers: None,
+            sort_output_buffer: None,
         }
     }
 
@@ -865,6 +874,133 @@ impl PooledComputeInstanceFilter {
         }
     }
 
+    /// Run the full filter pipeline with optional Z-order sorting.
+    ///
+    /// Like [`dispatch`](Self::dispatch), but when `enable_sort` is `true`
+    /// the compacted visible instances are sorted by Z-depth in back-to-front
+    /// order (descending Z). This enables correct rendering of overlapping
+    /// transparent marks.
+    ///
+    /// The sort runs entirely on the GPU using an 8-bit radix sort (4 passes
+    /// for 32-bit keys). Sort buffers are lazily allocated on first use and
+    /// reused across subsequent dispatches.
+    ///
+    /// When `enable_sort` is `false`, this behaves identically to
+    /// [`dispatch`](Self::dispatch).
+    #[allow(clippy::too_many_arguments)]
+    pub async fn dispatch_sorted(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        input_buffer: &Buffer,
+        instance_count: u32,
+        vertex_count: u32,
+        viewport: &Viewport2D,
+        lod_thresholds: &[f32; 3],
+        enable_sort: bool,
+    ) -> GupResult<FilterResult> {
+        if !enable_sort {
+            return self
+                .dispatch(
+                    device,
+                    queue,
+                    input_buffer,
+                    instance_count,
+                    vertex_count,
+                    viewport,
+                    lod_thresholds,
+                )
+                .await;
+        }
+
+        if instance_count == 0 {
+            return Err(GupError::invalid_operation(
+                "Cannot filter zero instances".to_string(),
+            ));
+        }
+
+        if instance_count > MAX_INSTANCES {
+            return Err(GupError::invalid_operation(format!(
+                "Instance count {instance_count} exceeds maximum {MAX_INSTANCES}"
+            )));
+        }
+
+        // Grow filter buffers if needed.
+        if instance_count > self.capacity {
+            self.grow(device, instance_count);
+        }
+
+        // Ensure sort resources are allocated.
+        self.ensure_sort_resources(device, instance_count)?;
+
+        // Resolve filter bind group.
+        let input_ptr: *const Buffer = input_buffer;
+        let cache_hit = self
+            .cached_bind_group
+            .as_ref()
+            .is_some_and(|c| std::ptr::eq(input_ptr, c.input_buffer_id));
+
+        if !cache_hit {
+            let bind_group = self.inner.create_bind_group(
+                device,
+                input_buffer,
+                &self.output_buffer,
+                &self.visibility_buffer,
+                &self.prefix_sums_buffer,
+                &self.draw_indirect_buffer,
+                &self.config_buffer,
+            );
+            self.cached_bind_group = Some(CachedBindGroup {
+                bind_group,
+                input_buffer_id: input_ptr,
+            });
+        }
+
+        let bind_group = &self.cached_bind_group.as_ref().unwrap().bind_group;
+
+        // --- Encode & submit ---
+        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+            label: Some("pooled_sorted_filter_encoder"),
+        });
+
+        // Filter pipeline (cull + prefix sum + compact).
+        self.inner.encode_with_bind_group(
+            queue,
+            &mut encoder,
+            bind_group,
+            &self.config_buffer,
+            instance_count,
+            vertex_count,
+            viewport,
+            lod_thresholds,
+        );
+
+        // Sort pipeline (extract + 4×(histogram + prefix sum + scatter) + reorder).
+        let sorter = self.sorter.as_ref().unwrap();
+        let sort_buffers = self.sort_buffers.as_ref().unwrap();
+        let sort_output = self.sort_output_buffer.as_ref().unwrap();
+
+        sorter.encode_sort(
+            device,
+            queue,
+            &mut encoder,
+            &self.output_buffer,
+            sort_output,
+            &self.draw_indirect_buffer,
+            sort_buffers,
+            instance_count,
+        );
+
+        queue.submit([encoder.finish()]);
+
+        // Return the sorted output buffer (sort_output_buffer) instead of
+        // the filter's output_buffer.
+        Ok(FilterResult {
+            output_buffer: Arc::clone(sort_output),
+            draw_indirect_buffer: Arc::clone(&self.draw_indirect_buffer),
+        })
+    }
+
     // ---------------------------------------------------------------
     // Internal helpers
     // ---------------------------------------------------------------
@@ -885,6 +1021,37 @@ impl PooledComputeInstanceFilter {
         self.capacity = new_capacity;
         // Buffers changed — invalidate cached bind group.
         self.cached_bind_group = None;
+        // Also grow sort buffers if they exist.
+        if self.sort_buffers.is_some() {
+            let instance_size = std::mem::size_of::<InstanceAttributes>() as u64;
+            self.sort_buffers = Some(super::radix_sort::SortBuffers::new(device, new_capacity));
+            self.sort_output_buffer = Some(Arc::new(device.create_buffer(&BufferDescriptor {
+                label: Some("sort_output_instances"),
+                size: new_capacity as u64 * instance_size,
+                usage: BufferUsages::STORAGE | BufferUsages::VERTEX | BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            })));
+        }
+    }
+
+    /// Ensure the radix sorter and sort buffers are allocated.
+    fn ensure_sort_resources(&mut self, device: &Device, _instance_count: u32) -> GupResult<()> {
+        if self.sorter.is_none() {
+            self.sorter = Some(super::radix_sort::RadixSorter::new(device)?);
+        }
+        if self.sort_buffers.is_none() {
+            self.sort_buffers = Some(super::radix_sort::SortBuffers::new(device, self.capacity));
+        }
+        if self.sort_output_buffer.is_none() {
+            let instance_size = std::mem::size_of::<InstanceAttributes>() as u64;
+            self.sort_output_buffer = Some(Arc::new(device.create_buffer(&BufferDescriptor {
+                label: Some("sort_output_instances"),
+                size: self.capacity as u64 * instance_size,
+                usage: BufferUsages::STORAGE | BufferUsages::VERTEX | BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            })));
+        }
+        Ok(())
     }
 
     /// Allocate a full set of transient buffers for `cap` instances.
@@ -2345,5 +2512,130 @@ mod tests {
         pooled.reserve(&ctx.device, 512);
         assert!(!pooled.has_cached_bind_group());
         assert!(pooled.capacity() >= 512);
+    }
+
+    // ---------------------------------------------------------------
+    // Sorted dispatch tests (GUP-184)
+    // ---------------------------------------------------------------
+
+    /// Create an InstanceAttributes with a specific Z-depth.
+    fn instance_with_z(x: f32, y: f32, z: f32, radius: f32, color: [f32; 4]) -> InstanceAttributes {
+        let mut inst = InstanceAttributes::from_circle([x, y], radius, color);
+        inst.transform[14] = z; // col 3, z component
+        inst
+    }
+
+    #[tokio::test]
+    async fn test_dispatch_sorted_back_to_front() {
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let filter = ComputeInstanceFilter::new(&ctx.device).unwrap();
+        let mut pooled = PooledComputeInstanceFilter::new(&ctx.device, filter, 256);
+
+        // Instances with different Z depths, all within viewport.
+        let instances = vec![
+            instance_with_z(0.0, 0.0, 1.0, 0.1, [1.0, 0.0, 0.0, 1.0]),
+            instance_with_z(0.1, 0.0, 5.0, 0.1, [0.0, 1.0, 0.0, 1.0]),
+            instance_with_z(0.2, 0.0, 3.0, 0.1, [0.0, 0.0, 1.0, 1.0]),
+            instance_with_z(-0.1, 0.0, 10.0, 0.1, [1.0, 1.0, 0.0, 1.0]),
+        ];
+
+        let input_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &input_buf, &instances);
+
+        let viewport = Viewport2D::default();
+        let thresholds = [4.0, 1.0, 0.25];
+
+        let result = pooled
+            .dispatch_sorted(
+                &ctx.device,
+                &ctx.queue,
+                &input_buf,
+                4,
+                6,
+                &viewport,
+                &thresholds,
+                true,
+            )
+            .await
+            .unwrap();
+
+        // Check visible count.
+        let args = ComputeInstanceFilter::read_draw_indirect(
+            &ctx.device,
+            &ctx.queue,
+            &result.draw_indirect_buffer,
+        )
+        .await
+        .unwrap();
+        assert_eq!(args[1], 4, "All 4 instances should be visible");
+
+        // Check Z-order is back-to-front (descending Z).
+        let sorted = ComputeInstanceFilter::read_output_instances(
+            &ctx.device,
+            &ctx.queue,
+            &result.output_buffer,
+            args[1],
+        )
+        .await
+        .unwrap();
+
+        let z_values: Vec<f32> = sorted.iter().map(|i| i.transform[14]).collect();
+        for i in 0..z_values.len() - 1 {
+            assert!(
+                z_values[i] >= z_values[i + 1],
+                "Z-values should be descending (back-to-front): {:?}",
+                z_values
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_dispatch_sorted_false_matches_unsorted() {
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let filter = ComputeInstanceFilter::new(&ctx.device).unwrap();
+        let mut pooled = PooledComputeInstanceFilter::new(&ctx.device, filter, 256);
+
+        let instances: Vec<InstanceAttributes> = (0..8)
+            .map(|i| {
+                let x = (i as f32 - 3.5) * 0.2;
+                InstanceAttributes::from_circle([x, 0.0], 0.08, [0.0, 1.0, 1.0, 1.0])
+            })
+            .collect();
+
+        let input_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &input_buf, &instances);
+
+        let viewport = Viewport2D::default();
+        let thresholds = [4.0, 1.0, 0.25];
+
+        // Dispatch without sort.
+        let result_unsorted = pooled
+            .dispatch_sorted(
+                &ctx.device,
+                &ctx.queue,
+                &input_buf,
+                8,
+                6,
+                &viewport,
+                &thresholds,
+                false,
+            )
+            .await
+            .unwrap();
+
+        let args = ComputeInstanceFilter::read_draw_indirect(
+            &ctx.device,
+            &ctx.queue,
+            &result_unsorted.draw_indirect_buffer,
+        )
+        .await
+        .unwrap();
+        assert_eq!(args[1], 8, "All 8 visible (unsorted path)");
     }
 }
