@@ -1,8 +1,8 @@
 # GUP-223: Coarse Hi-Z Early Reject for Large Marks
 
 **Story ID**: GUP-223 **Title**: Coarse Hi-Z Early Reject for Large Marks
-**Status**: 💡 New **Priority**: Low **Effort**: — **Created**: 2026-02-27
-**Dependencies**: GUP-076 (GPU Occlusion Culling)
+**Status**: 🚧 In Progress **Priority**: Low **Effort**: — **Created**:
+2026-02-27 **Dependencies**: GUP-076 (GPU Occlusion Culling)
 
 ## Overview
 
