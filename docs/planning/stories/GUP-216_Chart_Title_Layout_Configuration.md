@@ -1,6 +1,6 @@
 # GUP-216: Chart Title Layout Configuration
 
-**Status**: 📋 Planned **Priority**: Low **Complexity**: Low **Created**:
+**Status**: 🚧 In Progress **Priority**: Low **Complexity**: Low **Created**:
 2025-07-22
 
 ## Overview
