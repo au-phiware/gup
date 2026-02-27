@@ -239,6 +239,18 @@ To add a new benchmark to the WASM suite:
 4. Update the HTML page's table categories in `benches/wasm/index.html` if
    adding a new category.
 
+## Known WASM Build Limitations
+
+The full library does not yet compile cleanly for `wasm32-unknown-unknown` due
+to pre-existing issues in the accessibility and DOM integration modules
+(e.g. `LinuxAccessibility`, `TouchEvent`, `Send`/`Sync` bounds on DOM
+callbacks). The benchmark-related modules (`wasm_bench`, `wasm_bench_interaction`)
+compile correctly under the WASM target.
+
+A full WASM build will require platform-gating the accessibility backends and
+DOM integration code, which is tracked separately from the benchmarking
+infrastructure.
+
 ## Troubleshooting
 
 ### "Failed to create context" in WASM
