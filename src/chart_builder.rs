@@ -1788,7 +1788,7 @@ mod tests {
     async fn test_pixel_bounds_to_ndc_center() {
         let context = Arc::new(RenderContext::new().await.unwrap());
         let sel =
-            crate::selection::Selection::<TestData, crate::selection::Circle>::new(vec![], context)
+            crate::selection::Selection::<TestData, crate::Circle>::new(vec![], context)
                 .unwrap();
         let config = ChartConfig {
             width: 800.0,
@@ -1812,7 +1812,7 @@ mod tests {
     async fn test_pixel_bounds_to_ndc_corners() {
         let context = Arc::new(RenderContext::new().await.unwrap());
         let sel =
-            crate::selection::Selection::<TestData, crate::selection::Circle>::new(vec![], context)
+            crate::selection::Selection::<TestData, crate::Circle>::new(vec![], context)
                 .unwrap();
         let config = ChartConfig {
             width: 800.0,
@@ -1837,7 +1837,7 @@ mod tests {
     async fn test_generate_axis_geometry_no_axes() {
         let context = Arc::new(RenderContext::new().await.unwrap());
         let sel =
-            crate::selection::Selection::<TestData, crate::selection::Circle>::new(vec![], context)
+            crate::selection::Selection::<TestData, crate::Circle>::new(vec![], context)
                 .unwrap();
         let config = ChartConfig {
             show_axes: false,
@@ -1854,7 +1854,7 @@ mod tests {
     async fn test_generate_axis_geometry_default_axes() {
         let context = Arc::new(RenderContext::new().await.unwrap());
         let sel =
-            crate::selection::Selection::<TestData, crate::selection::Circle>::new(vec![], context)
+            crate::selection::Selection::<TestData, crate::Circle>::new(vec![], context)
                 .unwrap();
         let chart = ComposedChart::new(sel, ChartConfig::default()).with_default_axes();
 
@@ -1872,7 +1872,7 @@ mod tests {
     async fn test_generate_axis_geometry_vertices_in_ndc_range() {
         let context = Arc::new(RenderContext::new().await.unwrap());
         let sel =
-            crate::selection::Selection::<TestData, crate::selection::Circle>::new(vec![], context)
+            crate::selection::Selection::<TestData, crate::Circle>::new(vec![], context)
                 .unwrap();
         let chart = ComposedChart::new(sel, ChartConfig::default()).with_default_axes();
 
@@ -1896,7 +1896,7 @@ mod tests {
     async fn test_generate_axis_geometry_labels_in_screen_range() {
         let context = Arc::new(RenderContext::new().await.unwrap());
         let sel =
-            crate::selection::Selection::<TestData, crate::selection::Circle>::new(vec![], context)
+            crate::selection::Selection::<TestData, crate::Circle>::new(vec![], context)
                 .unwrap();
         let config = ChartConfig::default(); // 800x600
         let chart = ComposedChart::new(sel, config).with_default_axes();
@@ -1921,7 +1921,7 @@ mod tests {
     async fn test_generate_axis_geometry_all_four_axes() {
         let context = Arc::new(RenderContext::new().await.unwrap());
         let sel =
-            crate::selection::Selection::<TestData, crate::selection::Circle>::new(vec![], context)
+            crate::selection::Selection::<TestData, crate::Circle>::new(vec![], context)
                 .unwrap();
         let config = ChartConfig::default();
         let axis_config = AxisConfiguration::default();
@@ -1949,6 +1949,279 @@ mod tests {
     }
 }
 */
+
+#[cfg(test)]
+mod tests_instanced_ticks {
+    use super::*;
+
+    #[derive(Debug, Clone)]
+    #[allow(dead_code)]
+    struct TestData {
+        x: f32,
+        y: f32,
+    }
+
+    // ---- AxisGeometry unit tests (no GPU needed) ----
+
+    #[test]
+    fn test_axis_geometry_into_legacy_empty() {
+        let geom = AxisGeometry {
+            line_vertices: vec![],
+            tick_instances: vec![],
+            labels: vec![],
+        };
+        let (verts, labels) = geom.into_legacy();
+        assert!(verts.is_empty());
+        assert!(labels.is_empty());
+    }
+
+    #[test]
+    fn test_axis_geometry_into_legacy_preserves_line_vertices() {
+        let line_v = Vertex {
+            position: [0.0, 0.0],
+            color: [1.0, 0.0, 0.0, 1.0],
+        };
+        let geom = AxisGeometry {
+            line_vertices: vec![line_v, line_v],
+            tick_instances: vec![],
+            labels: vec![],
+        };
+        let (verts, _) = geom.into_legacy();
+        assert_eq!(verts.len(), 2);
+        assert_eq!(verts[0], line_v);
+    }
+
+    #[test]
+    fn test_axis_geometry_into_legacy_expands_tick_instances() {
+        use crate::axis::TickInstance;
+
+        let inst = TickInstance {
+            position: [0.5, -0.8],
+            tick_vector: [0.0, -0.05],
+            color: [1.0, 1.0, 1.0, 1.0],
+        };
+
+        let geom = AxisGeometry {
+            line_vertices: vec![],
+            tick_instances: vec![inst],
+            labels: vec![],
+        };
+        let (verts, _) = geom.into_legacy();
+        // One tick instance should produce two vertices (start + end)
+        assert_eq!(verts.len(), 2);
+        assert_eq!(verts[0].position, [0.5, -0.8], "start = instance position");
+        assert_eq!(
+            verts[1].position,
+            [0.5, -0.85],
+            "end = position + tick_vector"
+        );
+        assert_eq!(verts[0].color, inst.color);
+        assert_eq!(verts[1].color, inst.color);
+    }
+
+    #[test]
+    fn test_axis_geometry_into_legacy_combines_lines_and_ticks() {
+        use crate::axis::TickInstance;
+
+        let line_v = Vertex {
+            position: [-1.0, 0.0],
+            color: [0.0, 0.0, 0.0, 1.0],
+        };
+        let inst = TickInstance {
+            position: [0.0, 0.0],
+            tick_vector: [0.1, 0.0],
+            color: [1.0, 0.0, 0.0, 1.0],
+        };
+
+        let geom = AxisGeometry {
+            line_vertices: vec![line_v, line_v],
+            tick_instances: vec![inst, inst],
+            labels: vec![],
+        };
+        let (verts, _) = geom.into_legacy();
+        // 2 line verts + 2 ticks * 2 verts each = 6
+        assert_eq!(verts.len(), 6);
+    }
+
+    #[test]
+    fn test_axis_geometry_tick_count() {
+        use crate::axis::TickInstance;
+
+        let inst = TickInstance {
+            position: [0.0, 0.0],
+            tick_vector: [0.0, -0.05],
+            color: [1.0; 4],
+        };
+        let geom = AxisGeometry {
+            line_vertices: vec![],
+            tick_instances: vec![inst; 10],
+            labels: vec![],
+        };
+        assert_eq!(geom.tick_count(), 10);
+    }
+
+    // ---- generate_axis_geometry_instanced tests (GPU required) ----
+
+    #[tokio::test]
+    async fn test_instanced_no_axes_empty() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let sel =
+            crate::selection::Selection::<TestData, crate::Circle>::new(vec![], context).unwrap();
+        let config = ChartConfig {
+            show_axes: false,
+            ..ChartConfig::default()
+        };
+        let chart = ComposedChart::new(sel, config);
+        let geom = chart.generate_axis_geometry_instanced();
+        assert!(geom.line_vertices.is_empty());
+        assert!(geom.tick_instances.is_empty());
+        assert!(geom.labels.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_instanced_default_axes_separates_lines_and_ticks() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let sel =
+            crate::selection::Selection::<TestData, crate::Circle>::new(vec![], context).unwrap();
+        let chart = ComposedChart::new(sel, ChartConfig::default()).with_default_axes();
+        let geom = chart.generate_axis_geometry_instanced();
+
+        // Default axes: bottom + left, each with show_line = true -> 2 verts each = 4 line verts
+        assert_eq!(geom.line_vertices.len(), 4, "2 axes × 2 line vertices each");
+
+        // Default AxisConfiguration has 6 major ticks per axis, show_minor_ticks = false
+        // 2 axes × 6 ticks = 12 tick instances
+        assert_eq!(
+            geom.tick_instances.len(),
+            12,
+            "2 axes × 6 major tick instances"
+        );
+
+        // Labels
+        assert_eq!(geom.labels.len(), 12, "6 labels per axis × 2 axes");
+    }
+
+    #[tokio::test]
+    async fn test_instanced_matches_legacy_vertex_count() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let sel =
+            crate::selection::Selection::<TestData, crate::Circle>::new(vec![], context).unwrap();
+        let chart = ComposedChart::new(sel, ChartConfig::default()).with_default_axes();
+
+        // Legacy path
+        let (legacy_verts, legacy_labels) = chart.generate_axis_geometry();
+
+        // Instanced path flattened to legacy
+        let geom = chart.generate_axis_geometry_instanced();
+        let (instanced_verts, instanced_labels) = geom.into_legacy();
+
+        assert_eq!(
+            legacy_verts.len(),
+            instanced_verts.len(),
+            "Legacy and instanced should produce same vertex count"
+        );
+        assert_eq!(
+            legacy_labels.len(),
+            instanced_labels.len(),
+            "Legacy and instanced should produce same label count"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_instanced_matches_legacy_vertex_positions() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let sel =
+            crate::selection::Selection::<TestData, crate::Circle>::new(vec![], context).unwrap();
+        let chart = ComposedChart::new(sel, ChartConfig::default()).with_default_axes();
+
+        let (legacy_verts, _) = chart.generate_axis_geometry();
+        let geom = chart.generate_axis_geometry_instanced();
+        let (instanced_verts, _) = geom.into_legacy();
+
+        for (i, (lv, iv)) in legacy_verts.iter().zip(instanced_verts.iter()).enumerate() {
+            assert!(
+                (lv.position[0] - iv.position[0]).abs() < 1e-6,
+                "Vertex {i} X mismatch: legacy={} instanced={}",
+                lv.position[0],
+                iv.position[0],
+            );
+            assert!(
+                (lv.position[1] - iv.position[1]).abs() < 1e-6,
+                "Vertex {i} Y mismatch: legacy={} instanced={}",
+                lv.position[1],
+                iv.position[1],
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_instanced_four_axes() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let sel =
+            crate::selection::Selection::<TestData, crate::Circle>::new(vec![], context).unwrap();
+        let config = ChartConfig::default();
+        let axis_config = AxisConfiguration::default();
+        let chart = ComposedChart::new(sel, config)
+            .with_bottom_axis(Box::new(LinearAxis::new(
+                AxisPosition::Bottom,
+                axis_config.clone(),
+            )))
+            .with_left_axis(Box::new(LinearAxis::new(
+                AxisPosition::Left,
+                axis_config.clone(),
+            )))
+            .with_top_axis(Box::new(LinearAxis::new(
+                AxisPosition::Top,
+                axis_config.clone(),
+            )))
+            .with_right_axis(Box::new(LinearAxis::new(AxisPosition::Right, axis_config)));
+
+        let geom = chart.generate_axis_geometry_instanced();
+
+        // 4 axes × 2 line verts = 8
+        assert_eq!(geom.line_vertices.len(), 8, "4 axes × 2 line verts each");
+        // 4 axes × 6 tick instances = 24
+        assert_eq!(
+            geom.tick_instances.len(),
+            24,
+            "4 axes × 6 tick instances each"
+        );
+        // 4 axes × 6 labels = 24
+        assert_eq!(geom.labels.len(), 24, "4 axes × 6 labels each");
+    }
+
+    #[tokio::test]
+    async fn test_has_tick_data_initially_false() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let sel =
+            crate::selection::Selection::<TestData, crate::Circle>::new(vec![], context).unwrap();
+        let chart = ComposedChart::new(sel, ChartConfig::default()).with_default_axes();
+        assert!(
+            !chart.has_tick_data(),
+            "Before render(), tick data should not be available"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_instanced_data_reduction() {
+        use crate::axis::TickInstance;
+        use std::mem::size_of;
+
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let sel =
+            crate::selection::Selection::<TestData, crate::Circle>::new(vec![], context).unwrap();
+        let chart = ComposedChart::new(sel, ChartConfig::default()).with_default_axes();
+        let geom = chart.generate_axis_geometry_instanced();
+
+        let instanced_bytes = geom.tick_instances.len() * size_of::<TickInstance>() + 8; // base geometry (2 × f32)
+        let vertex_pair_bytes = geom.tick_instances.len() * 2 * size_of::<Vertex>();
+
+        assert!(
+            instanced_bytes < vertex_pair_bytes,
+            "Instanced ({instanced_bytes} B) should be smaller than vertex pairs ({vertex_pair_bytes} B)"
+        );
+    }
+}
 
 #[cfg(test)]
 mod tests_multi_font {
