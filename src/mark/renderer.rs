@@ -846,8 +846,21 @@ mod tests {
             usage: wgpu::BufferUsages::STORAGE,
         });
 
+        // Viewport uniform buffer — required by the bind group layout for
+        // custom-shader marks (binding 1).
+        let viewport = crate::selection::ViewportUniforms {
+            width: 64.0,
+            height: 64.0,
+        };
+        let viewport_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("test_viewport_uniform"),
+            contents: bytemuck::bytes_of(&viewport),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+
         let pipeline = registry.get_pipeline::<Circle>(device)?;
-        let bind_group = registry.create_bind_group::<Circle>(device, &instance_buf, &[])?;
+        let bind_group =
+            registry.create_bind_group::<Circle>(device, &instance_buf, &[&viewport_buf])?;
 
         // Offscreen render target
         let texture = device.create_texture(&wgpu::TextureDescriptor {
