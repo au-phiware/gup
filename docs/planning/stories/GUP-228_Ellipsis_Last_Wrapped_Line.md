@@ -57,7 +57,8 @@ text has been truncated
 
 ### What Was Implemented
 
-- Added `ellipsis_text: Option<String>` field to `ClippingStrategy::TextWrapping`
+- Added `ellipsis_text: Option<String>` field to
+  `ClippingStrategy::TextWrapping`
 - New `append_ellipsis_to_last_line()` method that truncates the last wrapped
   line and appends the ellipsis string, staying within the container width
 - Truncation detection in `apply_text_wrapping()`: compares wrapped word count
@@ -101,9 +102,9 @@ text has been truncated
 
 - **Challenge**: `break_into_lines()` returns lines but doesn't indicate whether
   text was truncated or naturally ended
-- **Solution**: Compare total words in the original text against words covered by
-  the wrapped lines. If fewer words are covered AND lines reached `max_lines`,
-  text was truncated
+- **Solution**: Compare total words in the original text against words covered
+  by the wrapped lines. If fewer words are covered AND lines reached
+  `max_lines`, text was truncated
 - **Pattern**: Post-hoc truncation detection is simpler than modifying the
   wrapping function to return a flag, keeping the existing API stable
 
@@ -125,8 +126,8 @@ text has been truncated
 
 - **Decision**: Ellipsis is applied after line breaking, not during
 - **Reasoning**: Keeps `break_into_lines` focused on line splitting, and the
-  ellipsis is an output formatting concern. This preserves the function for reuse
-  in contexts that don't want ellipsis
+  ellipsis is an output formatting concern. This preserves the function for
+  reuse in contexts that don't want ellipsis
 - **Trade-off**: Requires a separate truncation detection step
 - **Future**: Clean separation makes it easy to add other post-processing (e.g.
   "show more" link text)
@@ -140,4 +141,3 @@ text has been truncated
   (`src/text/layout.rs`), which made iteration fast.
 - The existing `MockFontAtlas` test helper with ~9px per character made it easy
   to reason about widths in test assertions.
-

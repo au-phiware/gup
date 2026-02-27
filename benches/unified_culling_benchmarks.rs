@@ -60,8 +60,7 @@ fn bench_separate_pipelines(c: &mut Criterion) {
         ctx.queue.write_buffer(&input_buffer, 0, data);
 
         let filter = ComputeInstanceFilter::new(&ctx.device).unwrap();
-        let mut pooled_filter =
-            PooledComputeInstanceFilter::new(&ctx.device, filter, n);
+        let mut pooled_filter = PooledComputeInstanceFilter::new(&ctx.device, filter, n);
 
         let occlusion = OcclusionCuller::new(&ctx.device).unwrap();
         let viewport = Viewport2D::default();
@@ -140,8 +139,7 @@ fn bench_unified_pipeline(c: &mut Criterion) {
             tile_size: 4,
             conservative_margin: 0.0,
         };
-        let mut pipeline =
-            UnifiedCullingPipeline::new(&ctx.device, n, &viewport, &params).unwrap();
+        let mut pipeline = UnifiedCullingPipeline::new(&ctx.device, n, &viewport, &params).unwrap();
 
         let thresholds = [4.0, 1.0, 0.25];
 
@@ -169,9 +167,5 @@ fn bench_unified_pipeline(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(
-    benches,
-    bench_separate_pipelines,
-    bench_unified_pipeline,
-);
+criterion_group!(benches, bench_separate_pipelines, bench_unified_pipeline,);
 criterion_main!(benches);

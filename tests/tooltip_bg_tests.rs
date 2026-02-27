@@ -6,13 +6,13 @@
 //! These tests verify that `TooltipBackgroundRenderer` can be created with a
 //! real GPU context and renders correctly within a render pass.
 
+use gup::GupContext;
 use gup::shader_function::Vec2;
 use gup::text::hover_reveal::{
     ActiveTooltip, TooltipConfig, TooltipLayout, compute_tooltip_layout,
 };
 use gup::text::tooltip_bg::TooltipBackgroundRenderer;
 use gup::text::{FontAtlas, TextBounds, TextLayoutEngine, TextStyle};
-use gup::GupContext;
 use std::sync::Arc;
 
 /// Helper: create a headless GPU context.

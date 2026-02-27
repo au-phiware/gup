@@ -3,7 +3,8 @@
 ## Story Overview
 
 **Epic**: Phase 2 - High-Level Convenience APIs **Theme**: Automatic Scale and
-Axis System **Priority**: Low **Story Points**: 3 **Status**: ✅ Complete (2026-02-27)
+Axis System **Priority**: Low **Story Points**: 3 **Status**: ✅ Complete
+(2026-02-27)
 
 ## Overview
 
@@ -69,15 +70,15 @@ instead of tick length).
 
 Reused the existing `TickInstance` struct and `TickPipeline` from GUP-204 to
 render grid lines via GPU instancing. Each grid line is represented by a single
-32-byte `TickInstance` (position, direction+length vector, colour) instead of two
-full `Vertex` structs (56+ bytes).
+32-byte `TickInstance` (position, direction+length vector, colour) instead of
+two full `Vertex` structs (56+ bytes).
 
 ### Key Files Changed
 
-| File                   | Changes                                                                 |
-| ---------------------- | ----------------------------------------------------------------------- |
+| File                   | Changes                                                                    |
+| ---------------------- | -------------------------------------------------------------------------- |
 | `src/grid.rs`          | Added instance generation methods, caching, benchmark tests (12 new tests) |
-| `src/chart_builder.rs` | Added `prepare_grid_pipeline()`, `draw_grid_lines()`, `has_grid_data()` |
+| `src/chart_builder.rs` | Added `prepare_grid_pipeline()`, `draw_grid_lines()`, `has_grid_data()`    |
 
 ### New Public API
 
@@ -111,8 +112,8 @@ full `Vertex` structs (56+ bytes).
 
 #### Reusing TickInstance for Grid Lines
 
-- **Challenge**: Deciding whether to create a dedicated `GridLineInstance` struct
-  or reuse `TickInstance`.
+- **Challenge**: Deciding whether to create a dedicated `GridLineInstance`
+  struct or reuse `TickInstance`.
 - **Solution**: Reused `TickInstance` directly — grid lines are geometrically
   identical to tick marks (a positioned line segment with colour), just with
   different parameterisation (full chart width/height instead of tick length).
@@ -123,14 +124,14 @@ full `Vertex` structs (56+ bytes).
 #### Shared TickPipeline Eliminates Pipeline Proliferation
 
 - **Challenge**: Grid lines and tick marks need the same instanced rendering
-  infrastructure but are drawn at different render phases (grids first,
-  ticks on top).
+  infrastructure but are drawn at different render phases (grids first, ticks on
+  top).
 - **Solution**: Share the single `TickPipeline` instance but maintain separate
   buffer sets (`tick_buffers` vs `grid_buffers`) so each can issue an
   independent draw call at the right z-order.
-- **Pattern**: When two visual elements share the same shader and vertex
-  layout, separate the data (buffers) but share the pipeline. This halves
-  pipeline creation cost and shader compilation.
+- **Pattern**: When two visual elements share the same shader and vertex layout,
+  separate the data (buffers) but share the pipeline. This halves pipeline
+  creation cost and shader compilation.
 
 ### Architectural Decisions
 
@@ -152,8 +153,8 @@ full `Vertex` structs (56+ bytes).
 #### Legacy LineAttributes Path Retained
 
 - **Decision**: The existing `generate_horizontal_lines_static` /
-  `generate_vertical_lines_static` methods and `render_grid_lines_static` in
-  the chart builder are kept (marked `#[allow(dead_code)]`), not deleted.
+  `generate_vertical_lines_static` methods and `render_grid_lines_static` in the
+  chart builder are kept (marked `#[allow(dead_code)]`), not deleted.
 - **Reasoning**: They serve as reference implementations and potential fallback
   for platforms where instancing is not available or not beneficial.
 - **Future**: Could be removed in a future cleanup story if the instanced path
@@ -173,6 +174,6 @@ full `Vertex` structs (56+ bytes).
 
 ### Follow-up Stories
 
-No new follow-up stories identified. The instanced grid line rendering
-completes the grid rendering optimisation arc started in GUP-095 → GUP-096 →
-GUP-204 → GUP-224 → GUP-225.
+No new follow-up stories identified. The instanced grid line rendering completes
+the grid rendering optimisation arc started in GUP-095 → GUP-096 → GUP-204 →
+GUP-224 → GUP-225.

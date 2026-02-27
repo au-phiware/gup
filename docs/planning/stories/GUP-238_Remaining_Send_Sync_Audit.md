@@ -100,9 +100,10 @@ Migrated all remaining `Send + Sync` trait bounds to use the conditional
 
 **4. Generic Bounds Updated (~60+ locations):**
 
-- All `T: Clone + Send + Sync + Debug + 'static` bounds across
-  `chart_builder`, `axis_system`, `integration`, `plugins`, `selection`
-- Closure bounds: `F: Fn(...) + Send + Sync` → `F: Fn(...) + MaybeSend + MaybeSync`
+- All `T: Clone + Send + Sync + Debug + 'static` bounds across `chart_builder`,
+  `axis_system`, `integration`, `plugins`, `selection`
+- Closure bounds: `F: Fn(...) + Send + Sync` →
+  `F: Fn(...) + MaybeSend + MaybeSync`
 - `IntoAccessor` trait and impls (cfg-gated)
 
 **5. WASM-Specific Fixes:**
@@ -122,10 +123,8 @@ Migrated all remaining `Send + Sync` trait bounds to use the conditional
 `src/debug/buffer_validation.rs`, `src/integration.rs`, `src/plugins.rs`,
 `src/chart_builder.rs`, `src/chart_builder/accessor.rs`,
 `src/chart_builder/optimized_accessor.rs`, `src/chart_builder/builders.rs`,
-`src/chart_builder/builders/scatter.rs`,
-`src/chart_builder/builders/bar.rs`,
-`src/chart_builder/builders/line.rs`,
-`src/chart_builder/builders/area.rs`,
+`src/chart_builder/builders/scatter.rs`, `src/chart_builder/builders/bar.rs`,
+`src/chart_builder/builders/line.rs`, `src/chart_builder/builders/area.rs`,
 `src/chart_builder/builders/heatmap.rs`,
 `src/chart_builder/builders/boxplot.rs`, `src/chart_builder/labels.rs`,
 `src/chart_builder/plot_api.rs`, `src/axis_system.rs`
@@ -151,15 +150,16 @@ Migrated all remaining `Send + Sync` trait bounds to use the conditional
 
 #### MaybeSend/MaybeSync Cannot Be Used in Trait Object Position
 
-- **Challenge**: `MaybeSend` and `MaybeSync` are regular marker traits, not
-  Rust auto traits. Rust only allows auto traits (`Send`, `Sync`) to appear as
-  additional bounds in `dyn` trait objects (e.g., `Box<dyn Fn() + Send + Sync>`).
-  Using `Box<dyn Fn() + MaybeSend + MaybeSync>` is a compiler error.
+- **Challenge**: `MaybeSend` and `MaybeSync` are regular marker traits, not Rust
+  auto traits. Rust only allows auto traits (`Send`, `Sync`) to appear as
+  additional bounds in `dyn` trait objects (e.g.,
+  `Box<dyn Fn() + Send + Sync>`). Using `Box<dyn Fn() + MaybeSend + MaybeSync>`
+  is a compiler error.
 - **Solution**: For trait object fields and type aliases, use `#[cfg]` gating to
   produce `+ Send + Sync` on native and bare `dyn Trait` on WASM. For generic
-  type parameter bounds (e.g., `F: Fn() + MaybeSend + MaybeSync + 'static`),
-  the marker traits work fine because these are compile-time constraints, not
-  trait objects.
+  type parameter bounds (e.g., `F: Fn() + MaybeSend + MaybeSync + 'static`), the
+  marker traits work fine because these are compile-time constraints, not trait
+  objects.
 - **Pattern**: Always distinguish between generic bounds (where MaybeSend works)
   and trait objects (where cfg-gating is required). This is a fundamental Rust
   type system constraint.
@@ -170,11 +170,12 @@ Migrated all remaining `Send + Sync` trait bounds to use the conditional
   content to implement `Send + Sync` because Rust statics must be `Sync`. When
   `MixablePlugin` was changed from `Send + Sync` to `MaybeSend + MaybeSync`,
   `dyn MixablePlugin` no longer satisfied `Send` on WASM, breaking the static.
-- **Solution**: Cfg-gate the HashMap storage to use `Box<dyn MixablePlugin +
-  Send + Sync>` on native and `Box<dyn MixablePlugin>` on WASM. Add `unsafe
-  impl Send + Sync for MixablePluginRegistry` on WASM (safe because WASM is
-  single-threaded). Also cfg-gate all methods that pass `Box<dyn Any + Send +
-  Sync>` since `Any` downcasting requires matching trait object types.
+- **Solution**: Cfg-gate the HashMap storage to use
+  `Box<dyn MixablePlugin + Send + Sync>` on native and `Box<dyn MixablePlugin>`
+  on WASM. Add `unsafe impl Send + Sync for MixablePluginRegistry` on WASM (safe
+  because WASM is single-threaded). Also cfg-gate all methods that pass
+  `Box<dyn Any + Send + Sync>` since `Any` downcasting requires matching trait
+  object types.
 - **Pattern**: Any type stored in a global static needs explicit `Send + Sync`
   guarantees. On WASM, `unsafe impl Send + Sync` is safe for single-threaded
   types, but should be documented clearly.
@@ -183,8 +184,8 @@ Migrated all remaining `Send + Sync` trait bounds to use the conditional
 
 - **Challenge**: The story was rated as "Low complexity" and described as
   "purely mechanical replacement of bounds." In practice, the interactions
-  between trait definitions, trait objects, generic bounds, global statics,
-  and `Box<dyn Any>` downcasting created several non-obvious complications.
+  between trait definitions, trait objects, generic bounds, global statics, and
+  `Box<dyn Any>` downcasting created several non-obvious complications.
 - **Solution**: Methodical approach: update trait definitions first, then
   generic bounds, then cfg-gate trait objects, then fix WASM-specific issues.
   Frequent `cargo check` after each batch of changes.
@@ -208,11 +209,11 @@ Migrated all remaining `Send + Sync` trait bounds to use the conditional
 
 #### Unsafe Send+Sync for MixablePluginRegistry on WASM
 
-- **Decision**: Used `unsafe impl Send for MixablePluginRegistry` on WASM
-  rather than cfg-gating the entire global registry out of WASM.
+- **Decision**: Used `unsafe impl Send for MixablePluginRegistry` on WASM rather
+  than cfg-gating the entire global registry out of WASM.
 - **Reasoning**: The global registry is a useful feature even on WASM (for
-  plugin ecosystem). WASM is inherently single-threaded, so `Send + Sync` is
-  a no-op safety requirement. Removing the registry from WASM would reduce
+  plugin ecosystem). WASM is inherently single-threaded, so `Send + Sync` is a
+  no-op safety requirement. Removing the registry from WASM would reduce
   cross-platform parity.
 - **Trade-off**: Unsafe code requires careful documentation. If WASM ever gets
   threads (SharedArrayBuffer + wasm-threads), this would need revisiting.
@@ -227,7 +228,8 @@ Migrated all remaining `Send + Sync` trait bounds to use the conditional
   downcasting.
 - **`PlatformAccessibility`**: Left with its existing cfg-gated dual trait
   definitions per the GUP-231 architectural decision. This trait has
-  platform-specific semantics that benefit from explicit `Send + Sync` on native.
+  platform-specific semantics that benefit from explicit `Send + Sync` on
+  native.
 - **`shader_pipeline.rs` uniform bounds**: `F::Uniforms: Send + Sync + 'static`
   left as-is because these are used to box into `Box<dyn Any + Send + Sync>`.
 
@@ -236,10 +238,11 @@ Migrated all remaining `Send + Sync` trait bounds to use the conditional
 - **Incremental compilation checks**: Running `cargo check` after each batch of
   changes was essential. The WASM compilation error in plugins.rs was caught
   early, allowing targeted fixes rather than a large debugging session.
-- **Disk space constraints**: The build artifacts for this project consume ~30GB.
-  Running full `cargo test` required cleaning between attempts due to disk space
-  limits. The `--lib` flag was sufficient for regression testing since the
-  integration tests are separate binaries that consume additional space.
+- **Disk space constraints**: The build artifacts for this project consume
+  ~30GB. Running full `cargo test` required cleaning between attempts due to
+  disk space limits. The `--lib` flag was sufficient for regression testing
+  since the integration tests are separate binaries that consume additional
+  space.
 - **Grep-driven audit**: Starting with `grep -rn "Send + Sync" src/` to build a
   complete inventory was the right approach. Categorising occurrences by type
   (trait definitions, generic bounds, trait objects, Any boxing) before making

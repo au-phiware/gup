@@ -88,9 +88,9 @@ accommodate this.
 | WebAssembly     | ✅ Ready   | Module ported (GUP-226), 2 ms budget      |
 
 > **Note**: macOS and Windows results will be collected when the corresponding
-> CI runners are enabled in `.github/workflows/performance.yml`. WebAssembly axis
-> benchmarks are available via `wasm_bench_axis` module and the HTML runner at
-> `benches/wasm/axis_benchmarks.html`.
+> CI runners are enabled in `.github/workflows/performance.yml`. WebAssembly
+> axis benchmarks are available via `wasm_bench_axis` module and the HTML runner
+> at `benches/wasm/axis_benchmarks.html`.
 
 ## CI Integration
 
@@ -118,7 +118,8 @@ wasm-pack build --target web --out-dir benches/wasm/pkg --release
 The `performance.yml` workflow includes:
 
 - `axis_performance` — Native axis performance tests on Linux (baseline)
-- `wasm_axis_performance` — WASM compilation check, package build, and unit tests
+- `wasm_axis_performance` — WASM compilation check, package build, and unit
+  tests
 
 To enable cross-platform validation:
 

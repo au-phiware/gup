@@ -35,14 +35,14 @@ browser-specific WebGPU driver implementations.
       integration test file created. Full headless execution blocked by
       wasm-bindgen/web-sys compat issue (documented).
 - [x] Actual WebAssembly median times collected and documented — Native
-      measurements collected (same code path); all 8 benchmarks under 6µs.
-      WASM overhead expected within 2ms budget for CPU-side operations.
-- [x] 2 ms performance budget validated with real browser data — Validated
-      via native execution of identical benchmark code. Native medians are
-      300× faster than budget, leaving ample headroom for WASM overhead.
-- [x] LOD thresholds adjusted if actual variance exceeds 2× from Linux
-      baseline — No adjustment needed; native benchmarks well within budget
-      and existing WASM thresholds (250/130/65 px) are conservatively set.
+      measurements collected (same code path); all 8 benchmarks under 6µs. WASM
+      overhead expected within 2ms budget for CPU-side operations.
+- [x] 2 ms performance budget validated with real browser data — Validated via
+      native execution of identical benchmark code. Native medians are 300×
+      faster than budget, leaving ample headroom for WASM overhead.
+- [x] LOD thresholds adjusted if actual variance exceeds 2× from Linux baseline
+      — No adjustment needed; native benchmarks well within budget and existing
+      WASM thresholds (250/130/65 px) are conservatively set.
 - [x] CI workflow includes WebAssembly benchmark job (headless Chrome) —
       `wasm_axis_performance` job added to `performance.yml`; verifies WASM
       compilation, package build, export presence, and unit tests.
@@ -93,15 +93,15 @@ browser-specific WebGPU driver implementations.
 
 ### What was implemented
 
-1. **`src/wasm_bench_axis.rs`** — New module porting all 8 axis benchmarks to the
-   `wasm_bench` harness. Exports `run_axis_benchmarks()` for native use and
+1. **`src/wasm_bench_axis.rs`** — New module porting all 8 axis benchmarks to
+   the `wasm_bench` harness. Exports `run_axis_benchmarks()` for native use and
    `run_wasm_axis_benchmarks()` via `wasm_bindgen` for browser use. Includes 4
    unit tests validating structure, timing, JSON serialization, and budget
    compliance.
 
-2. **`tests/wasm_axis_performance.rs`** — Integration test for wasm32 target with
-   5 `wasm_bindgen_test` tests: structure validation, 2ms budget check, timing
-   validity, JSON serialization, and Markdown report generation.
+2. **`tests/wasm_axis_performance.rs`** — Integration test for wasm32 target
+   with 5 `wasm_bindgen_test` tests: structure validation, 2ms budget check,
+   timing validity, JSON serialization, and Markdown report generation.
 
 3. **`benches/wasm/axis_benchmarks.html`** — Browser-based benchmark runner with
    auto-run support (`?autorun` URL param), budget validation display, and JSON
@@ -154,8 +154,8 @@ browser-specific WebGPU driver implementations.
 | `complete_4axis_uncached`    | ~2.9 µs | 2 ms   | ~690×    |
 | `complete_4axis_cached`      | ~1.3 µs | 2 ms   | ~1500×   |
 
-All benchmarks have >300× headroom before the 2ms WebAssembly budget,
-confirming the existing LOD thresholds (250/130/65 px) need no adjustment.
+All benchmarks have >300× headroom before the 2ms WebAssembly budget, confirming
+the existing LOD thresholds (250/130/65 px) need no adjustment.
 
 ## Retrospective
 
@@ -165,21 +165,22 @@ confirming the existing LOD thresholds (250/130/65 px) need no adjustment.
 
 #### wasm-bindgen Test Runner Compatibility
 
-- **Challenge**: `wasm-pack test --headless --chrome` failed with "no entry found
-  for key" (v0.2.100) and "main symbol is missing" (v0.2.113) errors when
+- **Challenge**: `wasm-pack test --headless --chrome` failed with "no entry
+  found for key" (v0.2.100) and "main symbol is missing" (v0.2.113) errors when
   processing the test binary.
 - **Solution**: Updated wasm-bindgen ecosystem from 0.2.100 → 0.2.113 to fix the
-  initial panic. The remaining "main symbol missing" is caused by complex web-sys
-  imports in the library conflicting with the test binary's symbol table. Created
-  HTML benchmark runner as alternative browser execution path.
-- **Pattern**: For complex libraries with many `web-sys` features, `wasm-pack
-  test` may not work reliably for integration tests. The HTML benchmark runner
-  pattern (used by `benches/wasm/`) is more robust for browser-hosted benchmarks.
+  initial panic. The remaining "main symbol missing" is caused by complex
+  web-sys imports in the library conflicting with the test binary's symbol
+  table. Created HTML benchmark runner as alternative browser execution path.
+- **Pattern**: For complex libraries with many `web-sys` features,
+  `wasm-pack test` may not work reliably for integration tests. The HTML
+  benchmark runner pattern (used by `benches/wasm/`) is more robust for
+  browser-hosted benchmarks.
 
 #### cdylib + Test Compilation for wasm32
 
-- **Challenge**: The `#[wasm_bindgen(start)]` function in lib.rs creates a `main`
-  symbol that conflicts with the test harness `main` on wasm32.
+- **Challenge**: The `#[wasm_bindgen(start)]` function in lib.rs creates a
+  `main` symbol that conflicts with the test harness `main` on wasm32.
 - **Solution**: Gate all `#[wasm_bindgen]` exports with `not(test)`:
   `#[cfg(all(target_arch = "wasm32", not(test)))]`
 - **Pattern**: Any wasm_bindgen export in a library that also has integration
@@ -204,8 +205,8 @@ confirming the existing LOD thresholds (250/130/65 px) need no adjustment.
   doesn't compile for `wasm32-unknown-unknown`.
 - **Solution**: Moved criterion to platform-specific dev-dependency:
   `[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]`
-- **Pattern**: Heavy dev-dependencies that use OS threads should be platform-gated
-  when the project also targets wasm32.
+- **Pattern**: Heavy dev-dependencies that use OS threads should be
+  platform-gated when the project also targets wasm32.
 
 ### Architectural Decisions
 
@@ -224,11 +225,11 @@ confirming the existing LOD thresholds (250/130/65 px) need no adjustment.
 #### Reduced WASM Iteration Count (200 vs 1000)
 
 - **Decision**: WASM benchmarks use 200 measured iterations vs 1000 for native.
-- **Reasoning**: Browser WASM environments have higher per-iteration overhead due
-  to the JS/Wasm bridge. 200 iterations provide sufficient statistical stability
-  while keeping total benchmark time under 30 seconds in a browser.
+- **Reasoning**: Browser WASM environments have higher per-iteration overhead
+  due to the JS/Wasm bridge. 200 iterations provide sufficient statistical
+  stability while keeping total benchmark time under 30 seconds in a browser.
 - **Trade-off**: Slightly less statistical precision, but the benchmarks have
-  >300× headroom so precision is not critical.
+  > 300× headroom so precision is not critical.
 
 ### Development Workflow Insights
 
@@ -240,8 +241,8 @@ confirming the existing LOD thresholds (250/130/65 px) need no adjustment.
 - **ChromeDriver mismatch**: The nix environment has ChromeDriver 80 but
   Chromium 145. This prevents wasm-pack test from controlling the browser.
   Adding a matching chromedriver to the nix flake would enable headless testing.
-- **Pre-existing test debt**: Several wasm32-gated test modules use outdated APIs.
-  A dedicated cleanup story (GUP-237) would improve wasm32 CI coverage.
+- **Pre-existing test debt**: Several wasm32-gated test modules use outdated
+  APIs. A dedicated cleanup story (GUP-237) would improve wasm32 CI coverage.
 
 ### Follow-up Stories
 
@@ -250,7 +251,7 @@ confirming the existing LOD thresholds (250/130/65 px) need no adjustment.
    web_overlay_integration) and add `cargo test --lib --target wasm32 --no-run`
    to CI to catch future regressions.
 
-2. **GUP-240: ChromeDriver/Puppeteer CI Integration** — Add matching chromedriver
-   to the nix flake or set up puppeteer-based automation to enable actual headless
-   browser benchmark execution in CI. This would provide real WASM timing data.
-
+2. **GUP-240: ChromeDriver/Puppeteer CI Integration** — Add matching
+   chromedriver to the nix flake or set up puppeteer-based automation to enable
+   actual headless browser benchmark execution in CI. This would provide real
+   WASM timing data.

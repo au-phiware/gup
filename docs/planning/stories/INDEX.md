@@ -271,28 +271,28 @@ reorganisation._
 
 ### Axis and Grid System (Stories 89-98)
 
-| Story                                                            | Title                                       | Status      | Priority | Points |
-| ---------------------------------------------------------------- | ------------------------------------------- | ----------- | -------- | ------ |
-| [GUP-089](GUP-089_Core_Axis_System_Infrastructure.md)            | Core Axis System Infrastructure             | ✅ Complete | High     | 13     |
-| [GUP-090](GUP-090_Automatic_Tick_Generation_Algorithm.md)        | Automatic Tick Generation Algorithm         | ✅ Complete | High     | 8      |
-| [GUP-091](GUP-091_Grid_Line_Rendering_System.md)                 | Grid Line Rendering System                  | ✅ Complete | High     | 5      |
-| [GUP-092](GUP-092_Label_Formatting_and_Positioning.md)           | Label Formatting and Positioning (expanded) | ✅ Complete | Medium   | 10     |
-| [GUP-093](GUP-093_Scale_Axis_Integration_System.md)              | Scale-Axis Integration System               | ✅ Complete | Medium   | 6      |
-| [GUP-094](GUP-094_Axis_Performance_Optimization.md)              | Axis Performance Optimization               | ✅ Complete | Low      | 4      |
-| [GUP-095](GUP-095_Grid_Visual_Rendering_Integration.md)          | Grid Visual Rendering Integration           | ✅ Complete | High     | 8      |
-| [GUP-096](GUP-096_Grid_Performance_Benchmarking.md)              | Grid Performance Benchmarking               | ✅ Complete | Medium   | 5      |
-| [GUP-097](GUP-097_Chart_Builder_Grid_API_Enhancement.md)         | Chart Builder Grid API Enhancement          | ✅ Complete | Medium   | 6      |
-| [GUP-098](GUP-098_Grid_System_Documentation.md)                  | Grid System Documentation                   | ✅ Complete | Medium   | 4      |
-| [GUP-204](GUP-204_GPU_Instance_Rendering_Axis_Ticks.md)          | GPU Instance Rendering for Axis Ticks       | ✅ Complete | Low      | 3      |
-| [GUP-205](GUP-205_SDF_Text_Rendering_Performance_Tuning.md)      | SDF Text Rendering Performance Tuning       | ✅ Complete | Low      | 3      |
-| [GUP-206](GUP-206_Cross_Platform_Axis_Performance_Validation.md) | Cross-Platform Axis Performance Validation  | ✅ Complete | Low      | 3      |
-| [GUP-224](GUP-224_Chart_Builder_Instanced_Ticks.md)              | Migrate Chart Builder to Instanced Ticks    | ✅ Complete | Low      | 3      |
-| [GUP-225](GUP-225_Instanced_Grid_Line_Rendering.md)              | Instanced Grid Line Rendering               | ✅ Complete | Low      | 3      |
-| [GUP-226](GUP-226_WebAssembly_Axis_Performance_Validation.md)    | WebAssembly Axis Performance Validation     | ✅ Complete | Low      | 3      |
-| [GUP-231](GUP-231_WASM_Build_Platform_Gating.md)                 | WASM Build Platform Gating                  | ✅ Complete | Medium   | 5      |
-| [GUP-237](GUP-237_WASM_Integration_Test_Suite.md)                | WASM Integration Test Suite                 | ✅ Complete | Low      | 5      |
-| [GUP-238](GUP-238_Remaining_Send_Sync_Audit.md)                  | Remaining Send+Sync Audit                   | ✅ Complete | Low      | 2      |
-| [GUP-239](GUP-239_Pipeline_Caching_Chart_Builder.md)             | Pipeline Caching for Chart Builder          | ✅ Complete | Low      | 2      |
+| Story                                                            | Title                                       | Status         | Priority | Points |
+| ---------------------------------------------------------------- | ------------------------------------------- | -------------- | -------- | ------ |
+| [GUP-089](GUP-089_Core_Axis_System_Infrastructure.md)            | Core Axis System Infrastructure             | ✅ Complete    | High     | 13     |
+| [GUP-090](GUP-090_Automatic_Tick_Generation_Algorithm.md)        | Automatic Tick Generation Algorithm         | ✅ Complete    | High     | 8      |
+| [GUP-091](GUP-091_Grid_Line_Rendering_System.md)                 | Grid Line Rendering System                  | ✅ Complete    | High     | 5      |
+| [GUP-092](GUP-092_Label_Formatting_and_Positioning.md)           | Label Formatting and Positioning (expanded) | ✅ Complete    | Medium   | 10     |
+| [GUP-093](GUP-093_Scale_Axis_Integration_System.md)              | Scale-Axis Integration System               | ✅ Complete    | Medium   | 6      |
+| [GUP-094](GUP-094_Axis_Performance_Optimization.md)              | Axis Performance Optimization               | ✅ Complete    | Low      | 4      |
+| [GUP-095](GUP-095_Grid_Visual_Rendering_Integration.md)          | Grid Visual Rendering Integration           | ✅ Complete    | High     | 8      |
+| [GUP-096](GUP-096_Grid_Performance_Benchmarking.md)              | Grid Performance Benchmarking               | ✅ Complete    | Medium   | 5      |
+| [GUP-097](GUP-097_Chart_Builder_Grid_API_Enhancement.md)         | Chart Builder Grid API Enhancement          | ✅ Complete    | Medium   | 6      |
+| [GUP-098](GUP-098_Grid_System_Documentation.md)                  | Grid System Documentation                   | ✅ Complete    | Medium   | 4      |
+| [GUP-204](GUP-204_GPU_Instance_Rendering_Axis_Ticks.md)          | GPU Instance Rendering for Axis Ticks       | ✅ Complete    | Low      | 3      |
+| [GUP-205](GUP-205_SDF_Text_Rendering_Performance_Tuning.md)      | SDF Text Rendering Performance Tuning       | ✅ Complete    | Low      | 3      |
+| [GUP-206](GUP-206_Cross_Platform_Axis_Performance_Validation.md) | Cross-Platform Axis Performance Validation  | ✅ Complete    | Low      | 3      |
+| [GUP-224](GUP-224_Chart_Builder_Instanced_Ticks.md)              | Migrate Chart Builder to Instanced Ticks    | ✅ Complete    | Low      | 3      |
+| [GUP-225](GUP-225_Instanced_Grid_Line_Rendering.md)              | Instanced Grid Line Rendering               | ✅ Complete    | Low      | 3      |
+| [GUP-226](GUP-226_WebAssembly_Axis_Performance_Validation.md)    | WebAssembly Axis Performance Validation     | ✅ Complete    | Low      | 3      |
+| [GUP-231](GUP-231_WASM_Build_Platform_Gating.md)                 | WASM Build Platform Gating                  | ✅ Complete    | Medium   | 5      |
+| [GUP-237](GUP-237_WASM_Integration_Test_Suite.md)                | WASM Integration Test Suite                 | ✅ Complete    | Low      | 5      |
+| [GUP-238](GUP-238_Remaining_Send_Sync_Audit.md)                  | Remaining Send+Sync Audit                   | ✅ Complete    | Low      | 2      |
+| [GUP-239](GUP-239_Pipeline_Caching_Chart_Builder.md)             | Pipeline Caching for Chart Builder          | ✅ Complete    | Low      | 2      |
 | [GUP-240](GUP-240_ChromeDriver_Puppeteer_CI_Integration.md)      | ChromeDriver/Puppeteer CI Integration       | 🚧 In Progress | Low      | 2      |
 
 _Note: GUP-092 appears twice — once as the 8-pt story in the Post-GUP-021 table
@@ -301,30 +301,30 @@ system story. The expanded story is also complete._
 
 ### Text Rendering Stories (Stories 104-110)
 
-| Story                                                                              | Title                                       | Status         | Priority | Points |
-| ---------------------------------------------------------------------------------- | ------------------------------------------- | -------------- | -------- | ------ |
-| [GUP-104](GUP-104_SDF_Glyph_Texture_Upload.md)                                     | SDF Glyph Texture Upload                    | ✅ Complete    | High     | —      |
-| [GUP-105](GUP-105_Text_Clipping_Detection_and_Viewport_Bounds_Management.md)       | Text Clipping Detection and Viewport Bounds | ✅ Complete    | Medium   | 8      |
-| [GUP-106](GUP-106_System_Font_Loading.md)                                          | System Font Loading                         | ✅ Complete    | Medium   | —      |
-| [GUP-107](GUP-107_Text_Character_Positioning_Bug.md)                               | Text Character Positioning Bug              | ✅ Complete    | Medium   | —      |
-| [GUP-108](GUP-108_Correct_SDF_Font_Atlas_Generation.md)                            | Correct SDF Font Atlas Generation           | ✅ Complete    | High     | —      |
-| [GUP-109](GUP-109_TTF_Outline_Based_SDF_Generation_with_Performance_Comparison.md) | TTF Outline-Based SDF Generation            | ✅ Complete    | Medium   | —      |
-| [GUP-110](GUP-110_Multi_Channel_SDF_Sharp_Corner_Preservation.md)                  | Multi-Channel SDF Sharp Corner Preservation | ✅ Complete    | Medium   | —      |
-| [GUP-199](GUP-199_Text_Wrapping_Multi_Line_Layout.md)                              | Text Wrapping and Multi-Line Layout         | ✅ Complete    | Low      | 5      |
-| [GUP-200](GUP-200_Interactive_Clipping_Reveal.md)                                  | Interactive Clipping Reveal                 | ✅ Complete    | Low      | 3      |
-| [GUP-201](GUP-201_Text_Clipping_Visual_Demo.md)                                    | Text Clipping Visual Demo                   | ✅ Complete    | Low      | 2      |
-| [GUP-202](GUP-202_Font_Aware_Text_Rendering_Pipeline.md)                           | Font-Aware Text Rendering Pipeline          | ✅ Complete    | Medium   | —      |
-| [GUP-203](GUP-203_Multi_Font_Atlas_Manager.md)                                     | Multi-Font Atlas Manager                    | ✅ Complete    | Low      | —      |
-| [GUP-214](GUP-214_Font_Atlas_Eviction.md)                                          | Font Atlas Eviction and Memory Management   | ✅ Complete    | Low      | —      |
-| [GUP-215](GUP-215_Chart_Builder_Multi_Font.md)                                     | Chart Builder Multi-Font Integration        | ✅ Complete    | Medium   | —      |
-| [GUP-216](GUP-216_Chart_Title_Layout_Configuration.md)                             | Chart Title Layout Configuration            | ✅ Complete    | Low      | —      |
-| [GUP-217](GUP-217_Per_Axis_Label_Style_Override.md)                                | Per-Axis Label Style Override               | ✅ Complete    | Low      | —      |
+| Story                                                                              | Title                                       | Status      | Priority | Points |
+| ---------------------------------------------------------------------------------- | ------------------------------------------- | ----------- | -------- | ------ |
+| [GUP-104](GUP-104_SDF_Glyph_Texture_Upload.md)                                     | SDF Glyph Texture Upload                    | ✅ Complete | High     | —      |
+| [GUP-105](GUP-105_Text_Clipping_Detection_and_Viewport_Bounds_Management.md)       | Text Clipping Detection and Viewport Bounds | ✅ Complete | Medium   | 8      |
+| [GUP-106](GUP-106_System_Font_Loading.md)                                          | System Font Loading                         | ✅ Complete | Medium   | —      |
+| [GUP-107](GUP-107_Text_Character_Positioning_Bug.md)                               | Text Character Positioning Bug              | ✅ Complete | Medium   | —      |
+| [GUP-108](GUP-108_Correct_SDF_Font_Atlas_Generation.md)                            | Correct SDF Font Atlas Generation           | ✅ Complete | High     | —      |
+| [GUP-109](GUP-109_TTF_Outline_Based_SDF_Generation_with_Performance_Comparison.md) | TTF Outline-Based SDF Generation            | ✅ Complete | Medium   | —      |
+| [GUP-110](GUP-110_Multi_Channel_SDF_Sharp_Corner_Preservation.md)                  | Multi-Channel SDF Sharp Corner Preservation | ✅ Complete | Medium   | —      |
+| [GUP-199](GUP-199_Text_Wrapping_Multi_Line_Layout.md)                              | Text Wrapping and Multi-Line Layout         | ✅ Complete | Low      | 5      |
+| [GUP-200](GUP-200_Interactive_Clipping_Reveal.md)                                  | Interactive Clipping Reveal                 | ✅ Complete | Low      | 3      |
+| [GUP-201](GUP-201_Text_Clipping_Visual_Demo.md)                                    | Text Clipping Visual Demo                   | ✅ Complete | Low      | 2      |
+| [GUP-202](GUP-202_Font_Aware_Text_Rendering_Pipeline.md)                           | Font-Aware Text Rendering Pipeline          | ✅ Complete | Medium   | —      |
+| [GUP-203](GUP-203_Multi_Font_Atlas_Manager.md)                                     | Multi-Font Atlas Manager                    | ✅ Complete | Low      | —      |
+| [GUP-214](GUP-214_Font_Atlas_Eviction.md)                                          | Font Atlas Eviction and Memory Management   | ✅ Complete | Low      | —      |
+| [GUP-215](GUP-215_Chart_Builder_Multi_Font.md)                                     | Chart Builder Multi-Font Integration        | ✅ Complete | Medium   | —      |
+| [GUP-216](GUP-216_Chart_Title_Layout_Configuration.md)                             | Chart Title Layout Configuration            | ✅ Complete | Low      | —      |
+| [GUP-217](GUP-217_Per_Axis_Label_Style_Override.md)                                | Per-Axis Label Style Override               | ✅ Complete | Low      | —      |
 | [GUP-227](GUP-227_Multi_Line_Text_Alignment.md)                                    | Multi-Line Text Alignment Options           | ✅ Complete | Low      | 3      |
-| [GUP-228](GUP-228_Ellipsis_Last_Wrapped_Line.md)                                   | Ellipsis on Last Wrapped Line               | ✅ Complete    | Low      | 2      |
-| [GUP-229](GUP-229_Tooltip_Background_Rendering.md)                                 | Tooltip Background Rendering                | ✅ Complete    | Low      | 3      |
-| [GUP-230](GUP-230_Chart_Builder_Hover_Reveal_Integration.md)                       | Chart Builder Hover Reveal Integration      | ✅ Complete    | Low      | 3      |
-| [GUP-241](GUP-241_Tooltip_Arrow_Pointer.md)                                        | Tooltip Arrow/Pointer                       | 💡 New         | Low      | 2      |
-| [GUP-242](GUP-242_Shared_UI_Chrome_Renderer.md)                                    | Shared UI Chrome Renderer                   | 💡 New         | Low      | 5      |
+| [GUP-228](GUP-228_Ellipsis_Last_Wrapped_Line.md)                                   | Ellipsis on Last Wrapped Line               | ✅ Complete | Low      | 2      |
+| [GUP-229](GUP-229_Tooltip_Background_Rendering.md)                                 | Tooltip Background Rendering                | ✅ Complete | Low      | 3      |
+| [GUP-230](GUP-230_Chart_Builder_Hover_Reveal_Integration.md)                       | Chart Builder Hover Reveal Integration      | ✅ Complete | Low      | 3      |
+| [GUP-241](GUP-241_Tooltip_Arrow_Pointer.md)                                        | Tooltip Arrow/Pointer                       | 💡 New      | Low      | 2      |
+| [GUP-242](GUP-242_Shared_UI_Chrome_Renderer.md)                                    | Shared UI Chrome Renderer                   | 💡 New      | Low      | 5      |
 
 ### Post GUP-016 Stories - Accessibility System (Stories 111-130)
 
