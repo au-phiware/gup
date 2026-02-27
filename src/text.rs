@@ -126,6 +126,26 @@ impl TextAnchor {
     }
 }
 
+/// Horizontal alignment for multi-line text.
+///
+/// Controls how each line is positioned horizontally within the text block.
+/// This is independent of [`TextAnchor`], which positions the entire block.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TextAlignment {
+    /// Align each line to the left edge (default).
+    #[default]
+    Left,
+    /// Center each line horizontally.
+    Center,
+    /// Align each line to the right edge.
+    Right,
+    /// Distribute extra space between words to fill the line width.
+    ///
+    /// Single-word lines and the last line of a paragraph fall back to
+    /// left alignment.
+    Justify,
+}
+
 /// Bounding rectangle for text layout.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TextBounds {

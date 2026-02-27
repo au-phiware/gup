@@ -512,6 +512,7 @@ impl TextLayoutEngine {
             style,
             font_atlas,
             line_spacing_factor,
+            Some(max_width),
         )?;
 
         let bounds = self.calculate_glyph_bounds(&glyphs);
@@ -1128,6 +1129,7 @@ impl TextLayoutEngine {
             style,
             font_atlas,
             line_spacing_factor,
+            Some(available_width),
         )?;
 
         let bounds = self.calculate_glyph_bounds(&glyphs);
@@ -1149,6 +1151,14 @@ impl TextLayoutEngine {
     /// Generate positioned glyphs for multiple lines of text.
     ///
     /// Each line is offset vertically by line_height * line_spacing_factor.
+    /// Horizontal alignment is controlled by [`TextAlignment`] in the style:
+    /// - **Left**: each line starts from the left edge (default)
+    /// - **Center**: each line is centered within the block width
+    /// - **Right**: each line is right-aligned within the block width
+    /// - **Justify**: extra space is distributed between words
+    ///
+    /// The `container_width` parameter, when provided, sets the reference width
+    /// for alignment. Otherwise the widest line is used.
     fn position_multi_line_glyphs(
         &self,
         lines: &[String],
@@ -1156,6 +1166,7 @@ impl TextLayoutEngine {
         style: &TextStyle,
         font_atlas: &impl GlyphSource,
         line_spacing_factor: f32,
+        container_width: Option<f32>,
     ) -> GupResult<GlyphBatch> {
         let metrics = font_atlas.metrics();
         let scale = style.font_size / metrics.size;
@@ -1164,29 +1175,52 @@ impl TextLayoutEngine {
 
         let mut all_glyphs = Vec::new();
 
+        // Measure each line width upfront
+        let line_widths: Vec<f32> = lines
+            .iter()
+            .map(|line| {
+                self.measure_text(line, style, font_atlas)
+                    .map(|b| b.width())
+            })
+            .collect::<GupResult<Vec<f32>>>()?;
+
+        let max_line_width = line_widths.iter().copied().fold(0.0f32, f32::max);
+        let block_width = container_width.unwrap_or(max_line_width);
+
         // Calculate total height for anchor adjustment
         let total_height = line_height * lines.len() as f32;
         let anchor_offset = style.anchor.offset();
         let y_anchor_offset = total_height * anchor_offset.y;
+        let block_left = position.x - block_width * anchor_offset.x;
 
         for (line_idx, line) in lines.iter().enumerate() {
             let line_y = position.y - y_anchor_offset + line_idx as f32 * line_height;
-            let line_position = Vec2 {
-                x: position.x,
-                y: line_y,
+            let line_width = line_widths[line_idx];
+            let is_last_line = line_idx == lines.len() - 1;
+
+            // Determine per-line x offset based on alignment
+            let line_x = match style.text_alignment {
+                TextAlignment::Left => block_left,
+                TextAlignment::Center => block_left + (block_width - line_width) * 0.5,
+                TextAlignment::Right => block_left + block_width - line_width,
+                TextAlignment::Justify => block_left, // justify adjusts inter-word spacing instead
             };
 
-            // Position glyphs for this line (re-use single-line logic)
-            // Apply only horizontal anchor offset, vertical was already handled
-            let line_bounds = self.measure_text(line, style, font_atlas)?;
-            let x_offset = line_bounds.width() * anchor_offset.x;
-            let adjusted_position = Vec2 {
-                x: line_position.x - x_offset,
-                y: line_position.y,
+            // For Justify, compute extra space per word gap
+            let justify_extra = if style.text_alignment == TextAlignment::Justify && !is_last_line {
+                let word_count = line.split_whitespace().count();
+                let gap_count = word_count.saturating_sub(1);
+                if gap_count > 0 {
+                    (block_width - line_width) / gap_count as f32
+                } else {
+                    0.0
+                }
+            } else {
+                0.0
             };
 
-            let mut cursor_x = adjusted_position.x;
-            let baseline_y = adjusted_position.y + metrics.ascent * scale;
+            let mut cursor_x = line_x;
+            let baseline_y = line_y + metrics.ascent * scale;
 
             for ch in line.chars() {
                 if let Some(glyph_info) = font_atlas.get_glyph(ch) {
@@ -1233,7 +1267,13 @@ impl TextLayoutEngine {
                         });
                     }
 
-                    cursor_x += glyph_info.advance * scale * style.letter_spacing;
+                    let advance = glyph_info.advance * scale * style.letter_spacing;
+                    cursor_x += advance;
+
+                    // Add extra space after whitespace for justify alignment
+                    if ch == ' ' && justify_extra > 0.0 {
+                        cursor_x += justify_extra;
+                    }
                 } else {
                     cursor_x += metrics.size * 0.5 * scale * style.letter_spacing;
                 }
@@ -2397,7 +2437,7 @@ mod tests {
         let lines = vec!["Hello".to_string(), "World".to_string()];
 
         let glyphs = engine
-            .position_multi_line_glyphs(&lines, position, &style, &atlas, 1.0)
+            .position_multi_line_glyphs(&lines, position, &style, &atlas, 1.0, None)
             .unwrap();
 
         // Should have glyphs from both lines (5 chars each, excluding spaces)
@@ -2426,12 +2466,12 @@ mod tests {
 
         // Normal spacing
         let glyphs_normal = engine
-            .position_multi_line_glyphs(&lines, position, &style, &atlas, 1.0)
+            .position_multi_line_glyphs(&lines, position, &style, &atlas, 1.0, None)
             .unwrap();
 
         // Double spacing
         let glyphs_wide = engine
-            .position_multi_line_glyphs(&lines, position, &style, &atlas, 2.0)
+            .position_multi_line_glyphs(&lines, position, &style, &atlas, 2.0, None)
             .unwrap();
 
         let a_normal = glyphs_normal
@@ -2471,7 +2511,7 @@ mod tests {
 
         let lines = vec!["Hello".to_string(), "World!".to_string()];
         let glyphs = engine
-            .position_multi_line_glyphs(&lines, position, &style, &atlas, 1.0)
+            .position_multi_line_glyphs(&lines, position, &style, &atlas, 1.0, None)
             .unwrap();
 
         let bounds = engine.calculate_glyph_bounds(&glyphs);
@@ -2488,7 +2528,7 @@ mod tests {
 
         // Height should be roughly 2 lines worth
         let single_line_glyphs = engine
-            .position_multi_line_glyphs(&["Hello".to_string()], position, &style, &atlas, 1.0)
+            .position_multi_line_glyphs(&["Hello".to_string()], position, &style, &atlas, 1.0, None)
             .unwrap();
         let single_bounds = engine.calculate_glyph_bounds(&single_line_glyphs);
         assert!(

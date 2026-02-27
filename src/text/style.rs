@@ -29,6 +29,12 @@ pub struct TextStyle {
     /// When set, used with `FontDatabase` to resolve the font.
     /// When `None`, uses the embedded default font.
     pub font_family: Option<String>,
+    /// Horizontal alignment for multi-line text.
+    ///
+    /// Controls how each line is positioned within the text block's width.
+    /// Only affects multi-line (wrapped) text; single-line text uses
+    /// [`TextAnchor`] positioning exclusively.
+    pub text_alignment: TextAlignment,
 }
 
 impl Default for TextStyle {
@@ -48,6 +54,7 @@ impl Default for TextStyle {
             letter_spacing: 1.0,
             line_spacing: 1.0,
             font_family: None,
+            text_alignment: TextAlignment::Left,
         }
     }
 }
@@ -142,6 +149,15 @@ impl TextStyle {
         self
     }
 
+    /// Set horizontal alignment for multi-line text.
+    ///
+    /// This controls how each line is positioned within the text block.
+    /// Only applies to multi-line (wrapped) text layout.
+    pub fn with_text_alignment(mut self, alignment: TextAlignment) -> Self {
+        self.text_alignment = alignment;
+        self
+    }
+
     /// Check if the text should be rotated.
     pub fn is_rotated(&self) -> bool {
         self.rotation.abs() > 0.001
@@ -228,6 +244,7 @@ mod tests {
         assert_eq!(style.letter_spacing, 1.0);
         assert_eq!(style.line_spacing, 1.0);
         assert_eq!(style.font_family, None);
+        assert_eq!(style.text_alignment, TextAlignment::Left);
     }
 
     #[test]
