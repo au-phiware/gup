@@ -199,6 +199,16 @@ impl<T> ConfigurableBuilder for ScatterPlotBuilder<T> {
         self.config.show_grid = show;
         self
     }
+
+    fn hover_reveal(mut self, enabled: bool) -> Self {
+        self.config.hover_reveal = enabled;
+        self
+    }
+
+    fn tooltip_config(mut self, config: crate::text::hover_reveal::TooltipConfig) -> Self {
+        self.config = self.config.with_tooltip_config(config);
+        self
+    }
 }
 
 // Implement advanced grid configuration methods

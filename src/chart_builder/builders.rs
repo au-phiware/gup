@@ -59,6 +59,17 @@ pub trait ConfigurableBuilder: Sized {
 
     /// Enable or disable grid display.
     fn show_grid(self, show: bool) -> Self;
+
+    /// Enable or disable hover reveal for clipped text.
+    ///
+    /// When enabled, truncated axis labels and chart titles show a
+    /// tooltip with the full text on hover.
+    fn hover_reveal(self, enabled: bool) -> Self;
+
+    /// Set the tooltip configuration for hover reveal.
+    ///
+    /// Implicitly enables hover reveal.
+    fn tooltip_config(self, config: crate::text::hover_reveal::TooltipConfig) -> Self;
 }
 
 /// Extended trait for chart builders that support advanced grid configuration.

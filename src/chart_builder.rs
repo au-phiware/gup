@@ -69,6 +69,7 @@ use crate::render::Vertex;
 use crate::selection::Selection;
 use crate::shader_function::Vec2;
 use crate::text::TextStyle;
+use crate::text::hover_reveal::{ClippedTextRegistry, HoverRevealState, TooltipConfig};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -392,6 +393,21 @@ pub struct ChartConfig {
     /// will use `FontAtlasManager` to resolve the correct font atlas
     /// automatically.
     pub title_style: TextStyle,
+
+    /// Whether hover reveal is enabled for clipped text.
+    ///
+    /// When `true`, truncated axis labels and titles automatically
+    /// register with a [`ClippedTextRegistry`] so that hovering over
+    /// them reveals the full text in a tooltip.
+    pub hover_reveal: bool,
+
+    /// Tooltip configuration for hover reveal.
+    ///
+    /// Controls appearance (colours, padding, font size) and timing
+    /// (show delay, fade durations) of the tooltip shown when hovering
+    /// over clipped text. Only used when [`hover_reveal`](Self::hover_reveal)
+    /// is `true`.
+    pub tooltip_config: TooltipConfig,
 }
 
 /// Chart margin specification.
@@ -416,6 +432,8 @@ impl Default for ChartConfig {
             grid_config: GridConfiguration::default(),
             label_style: TextStyle::new(14.0),
             title_style: TextStyle::new(18.0).bold(),
+            hover_reveal: false,
+            tooltip_config: TooltipConfig::default(),
         }
     }
 }
@@ -495,6 +513,26 @@ impl ChartConfig {
     pub fn title(&self) -> Option<&str> {
         self.title_config.as_ref().map(|c| c.text.as_str())
     }
+
+    /// Enable or disable hover reveal for clipped text.
+    ///
+    /// When enabled, axis labels and chart titles that are truncated
+    /// due to limited space automatically show a tooltip with the full
+    /// text when the user hovers over them.
+    pub fn with_hover_reveal(mut self, enabled: bool) -> Self {
+        self.hover_reveal = enabled;
+        self
+    }
+
+    /// Set the tooltip configuration for hover reveal.
+    ///
+    /// Implicitly enables hover reveal. Use this to customise tooltip
+    /// appearance and timing.
+    pub fn with_tooltip_config(mut self, config: TooltipConfig) -> Self {
+        self.tooltip_config = config;
+        self.hover_reveal = true;
+        self
+    }
 }
 
 impl Default for Margins {
@@ -560,6 +598,10 @@ where
     tick_buffers: Option<TickBuffers>,
     /// Uploaded grid line instance buffers for instanced drawing.
     grid_buffers: Option<TickBuffers>,
+    /// Registry of clipped/truncated text for hover reveal.
+    clipped_text_registry: ClippedTextRegistry,
+    /// Hover reveal state machine managing tooltip visibility.
+    hover_state: HoverRevealState,
 }
 
 impl<T, M> ComposedChart<T, M>
@@ -575,6 +617,8 @@ where
             None
         };
 
+        let hover_state = HoverRevealState::new(config.tooltip_config.clone());
+
         Self {
             visualization,
             bottom_axis: None,
@@ -586,6 +630,8 @@ where
             tick_pipeline: None,
             tick_buffers: None,
             grid_buffers: None,
+            clipped_text_registry: ClippedTextRegistry::new(),
+            hover_state,
         }
     }
 
@@ -638,6 +684,44 @@ where
     /// Check if the visualization has no data elements.
     pub fn is_empty(&self) -> bool {
         self.visualization.data().is_empty()
+    }
+
+    /// Return whether hover reveal is enabled for this chart.
+    pub fn hover_reveal_enabled(&self) -> bool {
+        self.config.hover_reveal
+    }
+
+    /// Get a reference to the clipped text registry.
+    pub fn clipped_text_registry(&self) -> &ClippedTextRegistry {
+        &self.clipped_text_registry
+    }
+
+    /// Get a mutable reference to the clipped text registry.
+    pub fn clipped_text_registry_mut(&mut self) -> &mut ClippedTextRegistry {
+        &mut self.clipped_text_registry
+    }
+
+    /// Get a reference to the hover reveal state.
+    pub fn hover_state(&self) -> &HoverRevealState {
+        &self.hover_state
+    }
+
+    /// Get a mutable reference to the hover reveal state.
+    pub fn hover_state_mut(&mut self) -> &mut HoverRevealState {
+        &mut self.hover_state
+    }
+
+    /// Update hover reveal state with the current mouse position.
+    ///
+    /// Call this once per frame (or on mouse-move) with the cursor's
+    /// screen-space coordinates and the frame's delta time.
+    ///
+    /// When hover reveal is disabled this is a no-op.
+    pub fn update_hover(&mut self, mouse_x: f32, mouse_y: f32, dt: f32) {
+        if self.config.hover_reveal {
+            self.hover_state
+                .update(&self.clipped_text_registry, mouse_x, mouse_y, dt);
+        }
     }
 
     /// Render the complete chart including axes and grid.

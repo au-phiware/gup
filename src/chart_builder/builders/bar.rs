@@ -154,6 +154,16 @@ impl<T> ConfigurableBuilder for BarChartBuilder<T> {
         self.config.show_grid = show;
         self
     }
+
+    fn hover_reveal(mut self, enabled: bool) -> Self {
+        self.config.hover_reveal = enabled;
+        self
+    }
+
+    fn tooltip_config(mut self, config: crate::text::hover_reveal::TooltipConfig) -> Self {
+        self.config = self.config.with_tooltip_config(config);
+        self
+    }
 }
 
 impl<T> ChartBuilder<T> for BarChartBuilder<T>
