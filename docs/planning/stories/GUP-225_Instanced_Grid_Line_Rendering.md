@@ -102,3 +102,77 @@ full `Vertex` structs (56+ bytes).
 - 12 new tests (10 in `grid.rs`, 2 benchmark/integration)
 - All 53 grid tests pass (43 existing + 10 new)
 - All 40 chart_builder tests pass
+
+## Retrospective
+
+**Completed**: 2026-02-27
+
+### Key Technical Learnings
+
+#### Reusing TickInstance for Grid Lines
+
+- **Challenge**: Deciding whether to create a dedicated `GridLineInstance` struct
+  or reuse `TickInstance`.
+- **Solution**: Reused `TickInstance` directly — grid lines are geometrically
+  identical to tick marks (a positioned line segment with colour), just with
+  different parameterisation (full chart width/height instead of tick length).
+- **Pattern**: When the data layout is identical, reuse the existing struct even
+  if the name doesn't perfectly match. This avoids code duplication and allows
+  sharing the GPU pipeline (shader, vertex buffer layout, render pipeline).
+
+#### Shared TickPipeline Eliminates Pipeline Proliferation
+
+- **Challenge**: Grid lines and tick marks need the same instanced rendering
+  infrastructure but are drawn at different render phases (grids first,
+  ticks on top).
+- **Solution**: Share the single `TickPipeline` instance but maintain separate
+  buffer sets (`tick_buffers` vs `grid_buffers`) so each can issue an
+  independent draw call at the right z-order.
+- **Pattern**: When two visual elements share the same shader and vertex
+  layout, separate the data (buffers) but share the pipeline. This halves
+  pipeline creation cost and shader compilation.
+
+### Architectural Decisions
+
+#### Caching Shares Fingerprint Mechanism
+
+- **Decision**: The instanced path reuses the existing FNV-style fingerprint
+  caching from the `LineAttributes` path — same hash inputs, same
+  `cache_fingerprint` field.
+- **Reasoning**: The cache invalidation condition is identical (tick positions,
+  bounds, or config changed). Reusing the fingerprint avoids dual-cache
+  bookkeeping.
+- **Trade-off**: The `LineAttributes` and `TickInstance` caches cannot be
+  independent — calling `generate_grid_lines` then `generate_grid_instances`
+  with the same inputs will still show a cache hit on the second call even
+  though the first populated a different data structure.
+- **Future**: If the two paths need independent lifecycle, split into two
+  fingerprint fields.
+
+#### Legacy LineAttributes Path Retained
+
+- **Decision**: The existing `generate_horizontal_lines_static` /
+  `generate_vertical_lines_static` methods and `render_grid_lines_static` in
+  the chart builder are kept (marked `#[allow(dead_code)]`), not deleted.
+- **Reasoning**: They serve as reference implementations and potential fallback
+  for platforms where instancing is not available or not beneficial.
+- **Future**: Could be removed in a future cleanup story if the instanced path
+  is confirmed sufficient on all target platforms.
+
+### Development Workflow Insights
+
+- The story was straightforward because GUP-204 had already established a clean,
+  well-documented instancing pattern. Applying it to grid lines was mostly
+  mechanical: same struct, same pipeline, different parameterisation.
+- Writing the `test_instances_match_line_attributes` test was the highest-value
+  verification — it confirmed visual equivalence without needing a GPU.
+- The dense grid benchmark (`test_dense_grid_benchmark`) with 222+ lines was a
+  good exercise in verifying the >30% reduction claim quantitatively.
+- Total implementation time was minimal (3 story points is accurate) because the
+  foundation was solid.
+
+### Follow-up Stories
+
+No new follow-up stories identified. The instanced grid line rendering
+completes the grid rendering optimisation arc started in GUP-095 → GUP-096 →
+GUP-204 → GUP-224 → GUP-225.
