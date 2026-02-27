@@ -59,8 +59,8 @@ pub use shader_specialization::*;
 
 use crate::RenderContext;
 use crate::axis::{
-    Axis, AxisBounds, AxisConfiguration, AxisLabel, AxisPosition, AxisRenderer, LinearAxis,
-    TickInstance, TickPipeline,
+    Axis, AxisBounds, AxisConfiguration, AxisLabel, AxisLinePipeline, AxisPosition, AxisRenderer,
+    LinearAxis, TickInstance, TickPipeline,
 };
 use crate::error::{GupError, GupResult};
 use crate::grid::GridConfiguration;
@@ -135,6 +135,16 @@ struct TickBuffers {
     base_buf: wgpu::Buffer,
     inst_buf: wgpu::Buffer,
     instance_count: u32,
+}
+
+/// Uploaded GPU buffer for axis-line vertex rendering.
+///
+/// Created by [`ComposedChart::render`] and consumed by
+/// [`ComposedChart::draw_axis_lines`].
+#[derive(Debug)]
+struct AxisLineBuffers {
+    vertex_buf: wgpu::Buffer,
+    vertex_count: u32,
 }
 
 /// Core trait for all chart builders providing fluent API construction.
@@ -599,6 +609,10 @@ where
     tick_buffers: Option<TickBuffers>,
     /// Uploaded grid line instance buffers for instanced drawing.
     grid_buffers: Option<TickBuffers>,
+    /// Cached axis-line render pipeline (lazily created on first render).
+    axis_line_pipeline: Option<AxisLinePipeline>,
+    /// Uploaded axis-line vertex buffer ready for drawing.
+    axis_line_buffers: Option<AxisLineBuffers>,
     /// Registry of clipped/truncated text for hover reveal.
     clipped_text_registry: ClippedTextRegistry,
     /// Hover reveal state machine managing tooltip visibility.
@@ -631,6 +645,8 @@ where
             tick_pipeline: None,
             tick_buffers: None,
             grid_buffers: None,
+            axis_line_pipeline: None,
+            axis_line_buffers: None,
             clipped_text_registry: ClippedTextRegistry::new(),
             hover_state,
         }
@@ -796,6 +812,35 @@ where
         } else {
             self.tick_buffers = None;
         }
+
+        // Prepare axis-line pipeline and buffers alongside tick data
+        self.prepare_axis_line_pipeline(context, &geom.line_vertices);
+    }
+
+    /// Lazily create the [`AxisLinePipeline`] and upload axis-line vertices.
+    ///
+    /// Called automatically by [`prepare_tick_pipeline()`](Self::prepare_tick_pipeline).
+    /// After this, [`draw_axis_lines()`](Self::draw_axis_lines) can record the
+    /// draw command into a render pass.
+    fn prepare_axis_line_pipeline(&mut self, context: &RenderContext, line_vertices: &[Vertex]) {
+        if self.axis_line_pipeline.is_none() {
+            self.axis_line_pipeline = Some(AxisLinePipeline::new(
+                context.device(),
+                context.surface_format(),
+            ));
+        }
+
+        if !line_vertices.is_empty() {
+            if let Some(pipeline) = &self.axis_line_pipeline {
+                let vertex_buf = pipeline.upload(context.device(), line_vertices);
+                self.axis_line_buffers = Some(AxisLineBuffers {
+                    vertex_buf,
+                    vertex_count: line_vertices.len() as u32,
+                });
+            }
+        } else {
+            self.axis_line_buffers = None;
+        }
     }
 
     /// Record instanced tick draw commands into an active render pass.
@@ -831,6 +876,37 @@ where
         self.tick_buffers
             .as_ref()
             .is_some_and(|b| b.instance_count > 0)
+    }
+
+    /// Record axis-line draw commands into an active render pass.
+    ///
+    /// Call this after [`render()`](Self::render) has prepared the axis-line
+    /// pipeline. Returns the number of vertices drawn (0 if there are no
+    /// axis lines or the pipeline is not yet initialised).
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// chart.render(&mut context)?;
+    /// // ... create render pass ...
+    /// chart.draw_axis_lines(&mut render_pass);
+    /// chart.draw_ticks(&mut render_pass);
+    /// ```
+    pub fn draw_axis_lines<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) -> u32 {
+        if let (Some(pipeline), Some(bufs)) = (&self.axis_line_pipeline, &self.axis_line_buffers) {
+            pipeline.draw(render_pass, &bufs.vertex_buf, bufs.vertex_count);
+            bufs.vertex_count
+        } else {
+            0
+        }
+    }
+
+    /// Returns `true` if the axis-line pipeline has been initialised and
+    /// there are axis-line vertices ready to draw.
+    pub fn has_axis_line_data(&self) -> bool {
+        self.axis_line_buffers
+            .as_ref()
+            .is_some_and(|b| b.vertex_count > 0)
     }
 
     /// Prepare grid line instance buffers for GPU-instanced rendering.

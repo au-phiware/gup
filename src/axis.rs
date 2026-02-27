@@ -1718,6 +1718,154 @@ impl TickPipeline {
     }
 }
 
+/// Cached render pipeline for axis-line drawing (`LineList` topology).
+///
+/// Axis lines (the spine of each axis) use a simple position+color vertex
+/// layout identical to [`crate::render::Vertex`]. This pipeline is created
+/// once and reused across frames, eliminating the overhead of rebuilding a
+/// `wgpu::RenderPipeline` every frame.
+///
+/// # Usage
+///
+/// ```rust,no_run
+/// use gup::axis::AxisLinePipeline;
+/// use gup::render::Vertex;
+/// use gup::RenderContext;
+/// use std::sync::Arc;
+///
+/// # async fn example() -> gup::error::GupResult<()> {
+/// let context = Arc::new(RenderContext::new().await?);
+/// let pipeline = AxisLinePipeline::new(context.device(), wgpu::TextureFormat::Bgra8Unorm);
+///
+/// // Upload axis line vertices
+/// let vertices: Vec<Vertex> = vec![]; // generated from AxisGeometry::line_vertices
+/// let buf = pipeline.upload(context.device(), &vertices);
+///
+/// // ... in a render pass:
+/// // pipeline.draw(&mut render_pass, &buf, vertices.len() as u32);
+/// # Ok(())
+/// # }
+/// ```
+pub struct AxisLinePipeline {
+    pipeline: wgpu::RenderPipeline,
+}
+
+impl std::fmt::Debug for AxisLinePipeline {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AxisLinePipeline")
+            .field("pipeline", &"<wgpu::RenderPipeline>")
+            .finish()
+    }
+}
+
+impl AxisLinePipeline {
+    /// Create a new axis-line pipeline for the given surface format.
+    pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("axis_line_shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/basic.wgsl").into()),
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("axis_line_pipeline_layout"),
+            bind_group_layouts: &[],
+            push_constant_ranges: &[],
+        });
+
+        let vertex_layout = wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<crate::render::Vertex>() as u64,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 2]>() as u64,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+            ],
+        };
+
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("axis_line_pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                buffers: &[vertex_layout],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: surface_format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::LineList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+            cache: None,
+        });
+
+        Self { pipeline }
+    }
+
+    /// Upload axis-line vertices to a GPU buffer.
+    pub fn upload(
+        &self,
+        device: &wgpu::Device,
+        vertices: &[crate::render::Vertex],
+    ) -> wgpu::Buffer {
+        use wgpu::util::{BufferInitDescriptor, DeviceExt};
+
+        device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("axis_line_vertex_buffer"),
+            contents: bytemuck::cast_slice(vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        })
+    }
+
+    /// Record axis-line draw commands into an active render pass.
+    pub fn draw<'a>(
+        &'a self,
+        render_pass: &mut wgpu::RenderPass<'a>,
+        vertex_buf: &'a wgpu::Buffer,
+        vertex_count: u32,
+    ) {
+        if vertex_count == 0 {
+            return;
+        }
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_vertex_buffer(0, vertex_buf.slice(..));
+        render_pass.draw(0..vertex_count, 0..1);
+    }
+
+    /// Access the underlying render pipeline.
+    pub fn pipeline(&self) -> &wgpu::RenderPipeline {
+        &self.pipeline
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
