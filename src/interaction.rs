@@ -2274,6 +2274,13 @@ impl InteractionSystem {
         self.spatial_config.world_bounds_min = [min_bounds.x, min_bounds.y];
         self.spatial_config.world_bounds_max = [max_bounds.x, max_bounds.y];
 
+        // Adapt grid resolution based on element count (GUP-176).
+        // Heuristic: side = clamp(√N, MIN_GRID_SIDE, max_side) so that
+        // small datasets don't waste memory on empty cells and large
+        // datasets get finer resolution up to the buffer limit.
+        let adaptive_side = Self::adaptive_grid_side(elements.len(), self.max_spatial_cells);
+        self.spatial_config.grid_size = [adaptive_side as u32, adaptive_side as u32];
+
         let grid_w = self.spatial_config.grid_size[0] as usize;
         let grid_h = self.spatial_config.grid_size[1] as usize;
         let total_cells = grid_w * grid_h;
@@ -2462,6 +2469,24 @@ impl InteractionSystem {
             Vec2::new(min_x - padding, min_y - padding),
             Vec2::new(max_x + padding, max_y + padding),
         )
+    }
+
+    /// Compute the adaptive grid side length for the spatial index (GUP-176).
+    ///
+    /// The heuristic uses `√N` (square-root of element count) so that each cell
+    /// contains roughly one element on average for a uniform distribution.
+    /// The result is clamped between [`Self::MIN_GRID_SIDE`] and the largest
+    /// side that still fits within `max_cells` (the pre-allocated buffer).
+    fn adaptive_grid_side(element_count: usize, max_cells: usize) -> usize {
+        /// Minimum grid side length – avoids degenerate grids for tiny datasets.
+        const MIN_GRID_SIDE: usize = 4;
+
+        let sqrt = (element_count as f64).sqrt().ceil() as usize;
+        let side = sqrt.max(MIN_GRID_SIDE);
+
+        // Cap so that side² ≤ max_cells.
+        let max_side = (max_cells as f64).sqrt() as usize;
+        side.min(max_side.max(MIN_GRID_SIDE))
     }
 
     /// Create bind group for spatial indexing compute shader.
