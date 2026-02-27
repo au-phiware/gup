@@ -249,3 +249,79 @@ fn test_spatial_cell_wgsl_alignment() {
     assert_eq!(offset_of!(SpatialCell, bounds_min), 8);
     assert_eq!(offset_of!(SpatialCell, bounds_max), 16);
 }
+
+// --- Adaptive grid size tests (GUP-176) ---
+
+#[tokio::test]
+async fn test_adaptive_grid_small_dataset() {
+    let mut system = create_test_interaction_system().await;
+    let elements = make_elements(10, 100.0);
+
+    system
+        .build_spatial_index_from_elements(&elements)
+        .await
+        .unwrap();
+    let config = system.spatial_config();
+
+    // 10 elements → √10 ≈ 3.16, below MIN_GRID_SIDE (4)
+    assert_eq!(config.grid_size, [4, 4], "tiny dataset should use minimum grid");
+}
+
+#[tokio::test]
+async fn test_adaptive_grid_medium_dataset() {
+    let mut system = create_test_interaction_system().await;
+    let elements = make_elements(100, 500.0);
+
+    system
+        .build_spatial_index_from_elements(&elements)
+        .await
+        .unwrap();
+    let config = system.spatial_config();
+
+    // 100 elements → √100 = 10
+    assert_eq!(config.grid_size, [10, 10], "100 elements should use 10×10 grid");
+}
+
+#[tokio::test]
+async fn test_adaptive_grid_large_dataset() {
+    let mut system = create_test_interaction_system().await;
+    let elements = make_elements(5_000, 1000.0);
+
+    system
+        .build_spatial_index_from_elements(&elements)
+        .await
+        .unwrap();
+    let config = system.spatial_config();
+
+    // 5000 elements → √5000 ≈ 70.7, ceil → 71
+    // max_spatial_cells = 10_000 → max_side = 100, so 71 fits
+    assert_eq!(config.grid_size[0], 71);
+    assert_eq!(config.grid_size[1], 71);
+}
+
+#[tokio::test]
+async fn test_adaptive_grid_different_sizes_produce_different_grids() {
+    let mut system = create_test_interaction_system().await;
+
+    // Build with small dataset
+    let small = make_elements(10, 100.0);
+    system
+        .build_spatial_index_from_elements(&small)
+        .await
+        .unwrap();
+    let small_grid = system.spatial_config().grid_size;
+
+    // Rebuild with large dataset
+    system.invalidate_spatial_index();
+    let large = make_elements(2_500, 1000.0);
+    system
+        .build_spatial_index_from_elements(&large)
+        .await
+        .unwrap();
+    let large_grid = system.spatial_config().grid_size;
+
+    assert!(
+        large_grid[0] > small_grid[0],
+        "larger dataset should produce finer grid: small={small_grid:?} large={large_grid:?}"
+    );
+}

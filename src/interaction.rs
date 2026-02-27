@@ -3118,6 +3118,56 @@ mod tests {
         let stats = system.staging_pool_stats();
         assert_eq!(stats.pooled_buffers, 0);
     }
+
+    // --- Adaptive grid size tests (GUP-176) ---
+
+    #[test]
+    fn test_adaptive_grid_side_tiny_dataset() {
+        // Datasets smaller than MIN_GRID_SIDE² should still get MIN_GRID_SIDE.
+        assert_eq!(InteractionSystem::adaptive_grid_side(1, 10_000), 4);
+        assert_eq!(InteractionSystem::adaptive_grid_side(9, 10_000), 4);
+        assert_eq!(InteractionSystem::adaptive_grid_side(15, 10_000), 4);
+    }
+
+    #[test]
+    fn test_adaptive_grid_side_uses_sqrt() {
+        // √100 = 10
+        assert_eq!(InteractionSystem::adaptive_grid_side(100, 10_000), 10);
+        // √10000 = 100
+        assert_eq!(InteractionSystem::adaptive_grid_side(10_000, 10_000), 100);
+        // √2500 = 50
+        assert_eq!(InteractionSystem::adaptive_grid_side(2_500, 10_000), 50);
+    }
+
+    #[test]
+    fn test_adaptive_grid_side_caps_at_max() {
+        // √1_000_000 = 1000, but max_cells = 10_000 → max_side = 100
+        assert_eq!(
+            InteractionSystem::adaptive_grid_side(1_000_000, 10_000),
+            100
+        );
+    }
+
+    #[test]
+    fn test_adaptive_grid_side_non_perfect_sqrt() {
+        // √50 ≈ 7.07, ceil → 8
+        assert_eq!(InteractionSystem::adaptive_grid_side(50, 10_000), 8);
+        // √200 ≈ 14.14, ceil → 15
+        assert_eq!(InteractionSystem::adaptive_grid_side(200, 10_000), 15);
+    }
+
+    #[test]
+    fn test_adaptive_grid_side_zero_elements() {
+        // build_spatial_index returns early for 0 elements, but the
+        // function itself should still return MIN_GRID_SIDE.
+        assert_eq!(InteractionSystem::adaptive_grid_side(0, 10_000), 4);
+    }
+
+    #[test]
+    fn test_adaptive_grid_side_small_max_cells() {
+        // max_cells = 16 → max_side = 4
+        assert_eq!(InteractionSystem::adaptive_grid_side(10_000, 16), 4);
+    }
 }
 
 /// Multi-touch gesture recognizer that processes touch events to detect gestures.
