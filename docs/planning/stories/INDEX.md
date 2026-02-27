@@ -202,13 +202,13 @@ reorganisation._
 | [GUP-181](GUP-181_GPU_Selection_Hit_Testing.md)            | GPU-Accelerated Selection Hit Testing | ✅ Complete    | Medium   | 5      |
 | [GUP-182](GUP-182_Touch_Selection_Support.md)              | Touch Selection Support               | ✅ Complete    | Low      | 3      |
 | [GUP-183](GUP-183_Pooled_GPU_Instance_Filter_Buffers.md)   | Pooled GPU Instance Filter Buffers    | ✅ Complete    | Medium   | —      |
-| [GUP-184](GUP-184_GPU_Radix_Sort_Z_Order.md)               | GPU Radix Sort for Z-Order            | ✅ Complete     | Low      | —      |
+| [GUP-184](GUP-184_GPU_Radix_Sort_Z_Order.md)               | GPU Radix Sort for Z-Order            | ✅ Complete    | Low      | —      |
 | [GUP-193](GUP-193_GPU_Resident_Candidate_Pipeline.md)      | GPU-Resident Candidate Pipeline       | ✅ Complete    | Medium   | —      |
 | [GUP-194](GUP-194_GPU_Resident_Selection_Data_Cache.md)    | GPU-Resident Selection Data Cache     | ✅ Complete    | Medium   | 5      |
 | [GUP-195](GUP-195_Bind_Group_Caching_Pooled_Filter.md)     | Bind Group Caching for Pooled Filter  | ✅ Complete    | Low      | —      |
 | [GUP-196](GUP-196_Hit_Test_Result_Buffer_Query_Count.md)   | Hit Test Result Buffer Query Count    | ✅ Complete    | Medium   | 2      |
 | [GUP-197](GUP-197_Result_Buffer_Readback_Optimization.md)  | Result Buffer Readback Optimization   | ✅ Complete    | Low      | 5      |
-| [GUP-198](GUP-198_Non_Blocking_Query_API.md)               | Non-Blocking Query API                | 🚧 In Progress | Low      | 8      |
+| [GUP-198](GUP-198_Non_Blocking_Query_API.md)               | Non-Blocking Query API                | ✅ Complete    | Low      | 8      |
 | [GUP-233](GUP-233_Winit_Touch_Event_Integration.md)        | Winit Touch Event Integration         | 📋 Planned     | Low      | 2      |
 | [GUP-234](GUP-234_Touch_Lasso_Selection.md)                | Touch Lasso Selection                 | 📋 Planned     | Low      | 3      |
 | [GUP-235](GUP-235_Radix_Sort_Scatter_Optimization.md)      | Radix Sort Scatter Optimization       | 📋 Planned     | Low      | —      |
