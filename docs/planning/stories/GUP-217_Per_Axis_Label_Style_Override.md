@@ -1,6 +1,6 @@
 # GUP-217: Per-Axis Label Style Override
 
-**Status**: 📋 Planned **Priority**: Low **Complexity**: Low **Created**:
+**Status**: 🚧 In Progress **Priority**: Low **Complexity**: Low **Created**:
 2025-07-22
 
 ## Overview
