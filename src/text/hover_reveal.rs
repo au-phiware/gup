@@ -134,6 +134,8 @@ pub struct TooltipConfig {
     pub border_color: [f32; 4],
     /// Border width in pixels.
     pub border_width: f32,
+    /// Corner radius for rounded tooltip boxes (pixels). 0 = square corners.
+    pub corner_radius: f32,
     /// Font size for tooltip text.
     pub font_size: f32,
     /// Vertical offset from the hovered text (pixels). Positive = below.
@@ -147,6 +149,12 @@ pub struct TooltipConfig {
     pub show_delay: f32,
     /// Maximum tooltip width before wrapping (pixels). 0 = no limit.
     pub max_width: f32,
+    /// Drop-shadow blur radius (pixels). 0 = no shadow.
+    pub shadow_radius: f32,
+    /// Drop-shadow colour (RGBA, 0.0–1.0).
+    pub shadow_color: [f32; 4],
+    /// Drop-shadow offset (pixels).
+    pub shadow_offset: [f32; 2],
 }
 
 impl Default for TooltipConfig {
@@ -158,12 +166,16 @@ impl Default for TooltipConfig {
             text_color: [1.0, 1.0, 1.0, 1.0],
             border_color: [0.4, 0.4, 0.4, 1.0],
             border_width: 1.0,
+            corner_radius: 4.0,
             font_size: 14.0,
             offset_y: 4.0,
             fade_in_duration: 0.15,
             fade_out_duration: 0.1,
             show_delay: 0.3,
             max_width: 300.0,
+            shadow_radius: 0.0,
+            shadow_color: [0.0, 0.0, 0.0, 0.3],
+            shadow_offset: [0.0, 2.0],
         }
     }
 }
