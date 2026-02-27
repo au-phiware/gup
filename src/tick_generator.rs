@@ -30,13 +30,14 @@
 //! let minor_ticks = generator.generate_minor_ticks(&scale, &major_ticks, 5);
 //! ```
 
+use crate::{MaybeSend, MaybeSync};
 use std::fmt::Debug;
 
 /// Core trait for scale implementations that can generate ticks.
 ///
 /// This trait provides the basic interface that tick generators need
 /// to understand scale properties and calculate appropriate tick positions.
-pub trait Scale: Send + Sync + Debug + 'static {
+pub trait Scale: MaybeSend + MaybeSync + Debug + 'static {
     /// Get the minimum value of the scale domain.
     fn domain_min(&self) -> f64;
 
@@ -71,7 +72,7 @@ pub trait Scale: Send + Sync + Debug + 'static {
 /// determining optimal tick positions based on scale properties and
 /// display constraints. Different algorithms are optimized for different
 /// scale types (linear, logarithmic, time).
-pub trait TickGenerator: Send + Sync + Debug + 'static {
+pub trait TickGenerator: MaybeSend + MaybeSync + Debug + 'static {
     /// Generate major tick positions for given scale and display constraints.
     ///
     /// Returns domain values where major ticks should be placed.

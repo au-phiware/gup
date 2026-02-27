@@ -83,7 +83,7 @@
 //! }
 //! ```
 
-use crate::{GupResult, Mixable, RenderContext};
+use crate::{GupResult, MaybeSend, MaybeSync, Mixable, RenderContext};
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -104,7 +104,7 @@ pub struct MixablePluginRegistry {
 ///
 /// Implement this trait to create plugins that integrate external visualization
 /// libraries with Gup's composition system.
-pub trait MixablePlugin: Send + Sync + Debug {
+pub trait MixablePlugin: MaybeSend + MaybeSync + Debug {
     /// Get the plugin name.
     ///
     /// This should be a unique identifier for the plugin, typically matching
@@ -539,7 +539,9 @@ macro_rules! register_mixable_plugin {
 ///     println!("No plugin available for MyExternalData");
 /// }
 /// ```
-pub fn try_make_mixable<T: Any + Send + Sync>(object: T) -> Option<Box<dyn Mixable<Output = ()>>> {
+pub fn try_make_mixable<T: Any + MaybeSend + MaybeSync>(
+    object: T,
+) -> Option<Box<dyn Mixable<Output = ()>>> {
     global_registry().lock().ok()?.create_mixable(object)
 }
 
@@ -549,10 +551,16 @@ pub mod development {
     use super::*;
 
     /// Type alias for point extraction functions to reduce complexity
+    #[cfg(not(target_arch = "wasm32"))]
     type PointExtractor<T> = Box<dyn Fn(&T) -> Vec<[f32; 2]> + Send + Sync>;
+    #[cfg(target_arch = "wasm32")]
+    type PointExtractor<T> = Box<dyn Fn(&T) -> Vec<[f32; 2]>>;
 
     /// Type alias for shared point extraction functions
+    #[cfg(not(target_arch = "wasm32"))]
     type SharedPointExtractor<T> = Arc<dyn Fn(&T) -> Vec<[f32; 2]> + Send + Sync>;
+    #[cfg(target_arch = "wasm32")]
+    type SharedPointExtractor<T> = Arc<dyn Fn(&T) -> Vec<[f32; 2]>>;
 
     /// Helper for creating simple point-based plugins.
     ///
@@ -562,10 +570,13 @@ pub mod development {
         name: String,
         version: String,
         extractor: PointExtractor<T>,
+        #[cfg(not(target_arch = "wasm32"))]
         validator: Option<Box<dyn Fn() -> Result<(), String> + Send + Sync>>,
+        #[cfg(target_arch = "wasm32")]
+        validator: Option<Box<dyn Fn() -> Result<(), String>>>,
     }
 
-    impl<T: Any + Send + Sync + Debug + 'static> PointBasedPluginBuilder<T> {
+    impl<T: Any + MaybeSend + MaybeSync + Debug + 'static> PointBasedPluginBuilder<T> {
         /// Create a new point-based plugin builder.
         ///
         /// # Arguments
@@ -576,7 +587,7 @@ pub mod development {
         pub fn new(
             name: String,
             version: String,
-            extractor: impl Fn(&T) -> Vec<[f32; 2]> + Send + Sync + 'static,
+            extractor: impl Fn(&T) -> Vec<[f32; 2]> + MaybeSend + MaybeSync + 'static,
         ) -> Self {
             Self {
                 name,
@@ -593,7 +604,7 @@ pub mod development {
         /// * `validator` - Function that validates plugin compatibility
         pub fn with_validator(
             mut self,
-            validator: impl Fn() -> Result<(), String> + Send + Sync + 'static,
+            validator: impl Fn() -> Result<(), String> + MaybeSend + MaybeSync + 'static,
         ) -> Self {
             self.validator = Some(Box::new(validator));
             self
@@ -616,7 +627,10 @@ pub mod development {
         name: String,
         version: String,
         extractor: SharedPointExtractor<T>,
+        #[cfg(not(target_arch = "wasm32"))]
         validator: Option<Box<dyn Fn() -> Result<(), String> + Send + Sync>>,
+        #[cfg(target_arch = "wasm32")]
+        validator: Option<Box<dyn Fn() -> Result<(), String>>>,
         _phantom: std::marker::PhantomData<T>,
     }
 
@@ -629,7 +643,7 @@ pub mod development {
         }
     }
 
-    impl<T: Any + Send + Sync + Debug + 'static> MixablePlugin for PointBasedPlugin<T> {
+    impl<T: Any + MaybeSend + MaybeSync + Debug + 'static> MixablePlugin for PointBasedPlugin<T> {
         fn name(&self) -> &str {
             &self.name
         }

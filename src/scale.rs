@@ -51,11 +51,15 @@ use crate::tick_generator::{
     LinearScale, LinearTickGenerator, LogarithmicScale, LogarithmicTickGenerator,
     Scale as TickScale, TickGenerator, TimeScale, TimeTickGenerator,
 };
+use crate::{MaybeSend, MaybeSync};
 use std::fmt::Debug;
 
 /// Generic accessor function for extracting data values.
 pub struct AccessorFunction<T> {
+    #[cfg(not(target_arch = "wasm32"))]
     function: Box<dyn Fn(&T) -> AccessorValue + Send + Sync>,
+    #[cfg(target_arch = "wasm32")]
+    function: Box<dyn Fn(&T) -> AccessorValue>,
     name: String,
 }
 
@@ -72,7 +76,7 @@ impl<T> AccessorFunction<T> {
     /// Create a new accessor function from a closure.
     pub fn new<F>(f: F) -> Self
     where
-        F: Fn(&T) -> f64 + Send + Sync + 'static,
+        F: Fn(&T) -> f64 + MaybeSend + MaybeSync + 'static,
     {
         Self {
             function: Box::new(move |data| AccessorValue::Numeric(f(data))),
@@ -83,7 +87,7 @@ impl<T> AccessorFunction<T> {
     /// Create a categorical accessor function.
     pub fn categorical<F>(f: F) -> Self
     where
-        F: Fn(&T) -> String + Send + Sync + 'static,
+        F: Fn(&T) -> String + MaybeSend + MaybeSync + 'static,
     {
         Self {
             function: Box::new(move |data| AccessorValue::Categorical(f(data))),
@@ -94,7 +98,7 @@ impl<T> AccessorFunction<T> {
     /// Create a temporal accessor function.
     pub fn temporal<F>(f: F) -> Self
     where
-        F: Fn(&T) -> i64 + Send + Sync + 'static,
+        F: Fn(&T) -> i64 + MaybeSend + MaybeSync + 'static,
     {
         Self {
             function: Box::new(move |data| {
@@ -223,7 +227,7 @@ pub enum TimeUnit {
 }
 
 /// Enhanced scale trait that integrates with the complete axis system.
-pub trait Scale: TickScale + Send + Sync + Debug + 'static {
+pub trait Scale: TickScale + MaybeSend + MaybeSync + Debug + 'static {
     /// Map data value to coordinate space (0.0 to 1.0)
     fn scale_value(&self, value: f64) -> f64;
 

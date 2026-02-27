@@ -55,12 +55,13 @@ pub use positioner::*;
 use crate::axis::{AxisBounds, AxisPosition};
 use crate::shader_function::Vec2;
 use crate::text::{TextAnchor, TextBounds, TextStyle};
+use crate::{MaybeSend, MaybeSync};
 
 /// Core trait for label formatters.
 ///
 /// Label formatters convert raw numeric values into human-readable strings
 /// that follow established conventions for different data types and locales.
-pub trait LabelFormatter: Send + Sync + std::fmt::Debug + 'static {
+pub trait LabelFormatter: MaybeSend + MaybeSync + std::fmt::Debug + 'static {
     /// Format a numeric value for display.
     fn format_value(&self, value: f64) -> String;
 

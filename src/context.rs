@@ -23,6 +23,7 @@
 use crate::buffer::{BufferPool, BufferType, GpuBuffer};
 use crate::error::{GupError, GupResult};
 use crate::performance::PerformanceProfiler;
+use crate::{MaybeSend, MaybeSync};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -242,19 +243,26 @@ pub enum ContextState {
 }
 
 /// Context recovery callback type.
+#[cfg(not(target_arch = "wasm32"))]
 pub type RecoveryCallback = Box<dyn Fn(ContextState) + Send + Sync>;
+/// Context recovery callback type.
+#[cfg(target_arch = "wasm32")]
+pub type RecoveryCallback = Box<dyn Fn(ContextState)>;
 
 /// Trait for window handles that can be used for surface creation.
 ///
 /// This combines the required traits for wgpu surface creation with thread safety.
 pub trait WindowHandle:
-    raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle + Send + Sync
+    raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle + MaybeSend + MaybeSync
 {
 }
 
 // Blanket implementation for all types that satisfy the bounds
 impl<T> WindowHandle for T where
-    T: raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle + Send + Sync
+    T: raw_window_handle::HasWindowHandle
+        + raw_window_handle::HasDisplayHandle
+        + MaybeSend
+        + MaybeSync
 {
 }
 
@@ -263,8 +271,12 @@ impl<T> WindowHandle for T where
 /// This callback is invoked during recovery to allow the application to provide
 /// a new window handle for a surface that needs to be recreated. Returns `Some(window)`
 /// if the window is still available, or `None` if the window has been destroyed.
+#[cfg(not(target_arch = "wasm32"))]
 pub type WindowHandleRenewalCallback =
     Box<dyn Fn(SurfaceId) -> Option<Arc<dyn WindowHandle>> + Send + Sync>;
+/// Window handle renewal callback type for surface recreation after device loss.
+#[cfg(target_arch = "wasm32")]
+pub type WindowHandleRenewalCallback = Box<dyn Fn(SurfaceId) -> Option<Arc<dyn WindowHandle>>>;
 
 /// Recovery attempt result.
 #[derive(Debug, Clone)]
@@ -608,7 +620,7 @@ impl SurfaceConfigBuilder {
 }
 
 /// Trait for handling surface events.
-pub trait SurfaceEventHandler: Send + Sync {
+pub trait SurfaceEventHandler: MaybeSend + MaybeSync {
     /// Called when DPI/scale factor changes.
     fn on_dpi_changed(&mut self, surface_id: SurfaceId, scale_factor: f64) -> GupResult<()> {
         let _ = (surface_id, scale_factor);

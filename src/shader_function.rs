@@ -85,6 +85,7 @@ pub mod macros;
 
 use crate::buffer::{BufferType, GpuBuffer};
 use crate::error::{GupError, GupResult};
+use crate::{MaybeSend, MaybeSync};
 use std::marker::PhantomData;
 use std::sync::Arc;
 use wgpu::{Device, Queue};
@@ -353,7 +354,7 @@ pub use macros::*;
 use crate::wgsl_function;
 pub use conversions::AutoConvert;
 
-pub trait ShaderType: Clone + Send + Sync + 'static {
+pub trait ShaderType: Clone + MaybeSend + MaybeSync + 'static {
     /// Returns the WGSL type name for this type
     fn wgsl_type_name() -> &'static str;
 
@@ -3034,7 +3035,11 @@ impl AnimationTimeline {
 /// Callback type for animation events.
 ///
 /// Events receive the timeline reference and event time for context.
+#[cfg(not(target_arch = "wasm32"))]
 pub type AnimationEventCallback = Box<dyn FnMut(&AnimationTimeline, f32) + Send + Sync>;
+/// Callback type for animation events (WASM: relaxed Send+Sync bounds).
+#[cfg(target_arch = "wasm32")]
+pub type AnimationEventCallback = Box<dyn FnMut(&AnimationTimeline, f32)>;
 
 /// Types of animation events that can be triggered.
 #[derive(Clone, Debug, PartialEq)]

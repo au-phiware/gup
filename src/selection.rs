@@ -28,7 +28,7 @@ use crate::shader_function::{
     ComposableShaderFunction, ShaderType, ShaderUniform, deduplicate_wgsl_functions,
     replace_wgsl_identifier,
 };
-use crate::{GupResult, RenderContext};
+use crate::{GupResult, MaybeSend, MaybeSync, RenderContext};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -81,7 +81,7 @@ pub enum AttrValue {
 /// that are valid GPU attribute values should implement this trait, which
 /// provides compile-time safety — attempting to bind an unsupported type
 /// (e.g., `String`) will produce a compiler error.
-pub trait IntoAttrValue: Send + Sync + 'static {
+pub trait IntoAttrValue: MaybeSend + MaybeSync + 'static {
     /// Convert this value into an [`AttrValue`].
     fn into_attr_value(self) -> AttrValue;
 }
@@ -119,7 +119,10 @@ impl IntoAttrValue for crate::shader_function::Vec4 {
 /// A named attribute binding that extracts a value from data item `T`.
 struct AttributeBinding<T> {
     name: String,
+    #[cfg(not(target_arch = "wasm32"))]
     extractor: Box<dyn Fn(&T) -> AttrValue + Send + Sync>,
+    #[cfg(target_arch = "wasm32")]
+    extractor: Box<dyn Fn(&T) -> AttrValue>,
 }
 
 // ---------------------------------------------------------------------------
@@ -157,7 +160,10 @@ struct ShaderAttributeBinding<T> {
     /// Attribute name (must match a field recognised by the mark's vertex shader).
     name: String,
     /// CPU-side extractor that provides the shader function's raw input value.
+    #[cfg(not(target_arch = "wasm32"))]
     extractor: Box<dyn Fn(&T) -> AttrValue + Send + Sync>,
+    #[cfg(target_arch = "wasm32")]
+    extractor: Box<dyn Fn(&T) -> AttrValue>,
     /// Type-erased shader function metadata for WGSL generation.
     shader_fn: ShaderFnInfo,
 }
@@ -184,14 +190,14 @@ fn shader_fn_info_from<S: ComposableShaderFunction>(shader_fn: &S) -> ShaderFnIn
 /// This trait enables [`Selection::attr_parallel`] to accept closures that
 /// return tuples of attribute values. Each tuple element is mapped to a
 /// corresponding attribute name.
-pub trait IntoAttrValues<T, const N: usize>: Send + Sync + 'static {
+pub trait IntoAttrValues<T, const N: usize>: MaybeSend + MaybeSync + 'static {
     /// Extract `N` attribute values from a data item.
     fn extract(&self, data: &T) -> [AttrValue; N];
 }
 
 impl<T, V1, V2, F> IntoAttrValues<T, 2> for F
 where
-    F: Fn(&T) -> (V1, V2) + Send + Sync + 'static,
+    F: Fn(&T) -> (V1, V2) + MaybeSend + MaybeSync + 'static,
     V1: IntoAttrValue,
     V2: IntoAttrValue,
 {
@@ -203,7 +209,7 @@ where
 
 impl<T, V1, V2, V3, F> IntoAttrValues<T, 3> for F
 where
-    F: Fn(&T) -> (V1, V2, V3) + Send + Sync + 'static,
+    F: Fn(&T) -> (V1, V2, V3) + MaybeSend + MaybeSync + 'static,
     V1: IntoAttrValue,
     V2: IntoAttrValue,
     V3: IntoAttrValue,
@@ -251,12 +257,16 @@ static NEXT_SELECTION_ID: AtomicU32 = AtomicU32::new(0);
 /// Event handler function type
 ///
 /// Event handlers receive a mutable reference to the event to support propagation control.
+#[cfg(not(target_arch = "wasm32"))]
 pub type EventHandlerFn<T> = Box<dyn Fn(&mut InteractionEvent, &T) + Send + Sync>;
+/// Event handler function type (WASM: relaxed Send+Sync bounds).
+#[cfg(target_arch = "wasm32")]
+pub type EventHandlerFn<T> = Box<dyn Fn(&mut InteractionEvent, &T)>;
 
 /// Trait for data types that can provide interaction geometry.
 ///
 /// Implement this trait to enable your data types to work with the interaction system.
-pub trait InteractionData: Send + Sync {
+pub trait InteractionData: MaybeSend + MaybeSync {
     /// Extract position for this data item
     fn position(&self) -> [f32; 2];
 
@@ -478,7 +488,7 @@ impl<T, M: Mark> Selection<T, M> {
     /// ```
     pub fn on<F>(&mut self, event_type: &str, handler: F) -> &mut Self
     where
-        F: Fn(&mut InteractionEvent, &T) + Send + Sync + 'static,
+        F: Fn(&mut InteractionEvent, &T) + MaybeSend + MaybeSync + 'static,
     {
         {
             let mut handlers = self.event_handlers.lock().unwrap();
@@ -534,7 +544,7 @@ impl<T, M: Mark> Selection<T, M> {
     /// ```
     pub fn attr<V, F>(&mut self, name: &str, binding: F) -> &mut Self
     where
-        F: Fn(&T) -> V + Send + Sync + 'static,
+        F: Fn(&T) -> V + MaybeSend + MaybeSync + 'static,
         V: IntoAttrValue,
     {
         self.attr_bindings.push(AttributeBinding {
@@ -578,7 +588,7 @@ impl<T, M: Mark> Selection<T, M> {
     /// ```
     pub fn attr_shader<V, F, S>(&mut self, name: &str, extractor: F, shader_fn: S) -> &mut Self
     where
-        F: Fn(&T) -> V + Send + Sync + 'static,
+        F: Fn(&T) -> V + MaybeSend + MaybeSync + 'static,
         V: IntoAttrValue,
         S: ComposableShaderFunction + 'static,
         S::Uniforms: ShaderUniform,

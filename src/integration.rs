@@ -54,7 +54,7 @@
 //! });
 //! ```
 
-use crate::{GupResult, Mixable, RenderContext};
+use crate::{GupResult, MaybeSend, MaybeSync, Mixable, RenderContext};
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
@@ -113,7 +113,7 @@ pub struct ExternalVisualizationWrapper<T> {
 ///
 /// Implement this trait to define how your external visualization type should be
 /// rendered using Gup's GPU-accelerated rendering pipeline.
-pub trait ExternalRenderer<T>: Send + Sync + Debug {
+pub trait ExternalRenderer<T>: MaybeSend + MaybeSync + Debug {
     /// Render the external visualization using the provided render context.
     ///
     /// # Arguments
@@ -149,7 +149,7 @@ pub trait ExternalRenderer<T>: Send + Sync + Debug {
     fn description(&self, visualization: &T) -> String;
 }
 
-impl<T: Send + Sync + Debug> ExternalVisualizationWrapper<T> {
+impl<T: MaybeSend + MaybeSync + Debug> ExternalVisualizationWrapper<T> {
     /// Create a new wrapper with the specified external data and renderer.
     ///
     /// # Arguments
@@ -178,7 +178,7 @@ impl<T: Send + Sync + Debug> ExternalVisualizationWrapper<T> {
     }
 }
 
-impl<T: Send + Sync + Debug> Mixable for ExternalVisualizationWrapper<T> {
+impl<T: MaybeSend + MaybeSync + Debug> Mixable for ExternalVisualizationWrapper<T> {
     type Output = ();
 
     fn render(&mut self, context: &mut RenderContext) -> GupResult<()> {
@@ -206,7 +206,7 @@ pub struct ExternalVisualizationBuilder<T> {
     _phantom: PhantomData<T>,
 }
 
-impl<T: Send + Sync + Debug> ExternalVisualizationBuilder<T> {
+impl<T: MaybeSend + MaybeSync + Debug> ExternalVisualizationBuilder<T> {
     /// Create a new builder instance.
     pub fn new() -> Self {
         Self {
@@ -238,7 +238,7 @@ impl<T: Send + Sync + Debug> ExternalVisualizationBuilder<T> {
     }
 }
 
-impl<T: Send + Sync + Debug> Default for ExternalVisualizationBuilder<T> {
+impl<T: MaybeSend + MaybeSync + Debug> Default for ExternalVisualizationBuilder<T> {
     fn default() -> Self {
         Self::new()
     }
@@ -252,7 +252,7 @@ pub struct ExternalPointRendererBuilder<T> {
     _phantom: PhantomData<T>,
 }
 
-impl<T: Send + Sync + Debug> ExternalPointRendererBuilder<T> {
+impl<T: MaybeSend + MaybeSync + Debug> ExternalPointRendererBuilder<T> {
     fn new() -> Self {
         Self {
             _phantom: PhantomData,
@@ -276,7 +276,7 @@ impl<T: Send + Sync + Debug> ExternalPointRendererBuilder<T> {
         extractor: F,
     ) -> impl FnOnce(T) -> ExternalVisualizationWrapper<T>
     where
-        F: Fn(&T) -> Vec<[f32; 2]> + Send + Sync + 'static,
+        F: Fn(&T) -> Vec<[f32; 2]> + MaybeSend + MaybeSync + 'static,
         T: Debug,
     {
         move |inner| {
@@ -307,7 +307,7 @@ impl<F> std::fmt::Debug for PointExtractorRenderer<F> {
 
 impl<T, F> ExternalRenderer<T> for PointExtractorRenderer<F>
 where
-    F: Fn(&T) -> Vec<[f32; 2]> + Send + Sync,
+    F: Fn(&T) -> Vec<[f32; 2]> + MaybeSend + MaybeSync,
     T: Debug,
 {
     fn render(&self, visualization: &T, _context: &mut RenderContext) -> GupResult<()> {
@@ -369,10 +369,10 @@ where
 /// ```
 pub fn wrap_point_data<T>(
     data: T,
-    point_extractor: impl Fn(&T) -> Vec<[f32; 2]> + Send + Sync + 'static,
+    point_extractor: impl Fn(&T) -> Vec<[f32; 2]> + MaybeSend + MaybeSync + 'static,
 ) -> ExternalVisualizationWrapper<T>
 where
-    T: Send + Sync + Debug,
+    T: MaybeSend + MaybeSync + Debug,
 {
     ExternalVisualizationBuilder::new()
         .with_point_renderer()
@@ -411,10 +411,10 @@ where
 /// ```
 pub fn wrap_with_custom_render<T>(
     data: T,
-    render_fn: impl Fn(&T, &mut RenderContext) -> GupResult<()> + Send + Sync + 'static,
+    render_fn: impl Fn(&T, &mut RenderContext) -> GupResult<()> + MaybeSend + MaybeSync + 'static,
 ) -> ExternalVisualizationWrapper<T>
 where
-    T: Send + Sync + Debug,
+    T: MaybeSend + MaybeSync + Debug,
 {
     struct CustomRenderer<F> {
         render_fn: F,
@@ -430,7 +430,7 @@ where
 
     impl<T, F> ExternalRenderer<T> for CustomRenderer<F>
     where
-        F: Fn(&T, &mut RenderContext) -> GupResult<()> + Send + Sync,
+        F: Fn(&T, &mut RenderContext) -> GupResult<()> + MaybeSend + MaybeSync,
         T: Debug,
     {
         fn render(&self, visualization: &T, context: &mut RenderContext) -> GupResult<()> {
@@ -548,8 +548,8 @@ pub mod adapters {
 
     impl<T, D> ChartAdapter<T, D>
     where
-        T: Send + Sync + Debug,
-        D: Fn(&T) -> Vec<[f32; 2]> + Send + Sync,
+        T: MaybeSend + MaybeSync + Debug,
+        D: Fn(&T) -> Vec<[f32; 2]> + MaybeSend + MaybeSync,
     {
         /// Create a new chart adapter.
         ///
@@ -582,7 +582,7 @@ pub mod adapters {
 
     impl<T> TraitAdapter<T>
     where
-        T: Send + Sync + Debug,
+        T: MaybeSend + MaybeSync + Debug,
     {
         /// Create a new trait adapter.
         pub fn new(data: T) -> Self {
@@ -592,7 +592,7 @@ pub mod adapters {
 
     impl<T> TraitAdapter<T>
     where
-        T: Send + Sync + Debug,
+        T: MaybeSend + MaybeSync + Debug,
         for<'a> &'a T: IntoIterator<Item = [f32; 2]>,
     {
         /// Convert an iterable external type into a Mixable wrapper.

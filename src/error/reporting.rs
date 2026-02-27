@@ -9,6 +9,7 @@ use std::time::{Duration, SystemTime};
 use serde::{Deserialize, Serialize};
 
 use super::{ErrorCategory, ErrorContext, ErrorSeverity, GupError, GupResult, RecoveryAttempt};
+use crate::{MaybeSend, MaybeSync};
 
 /// Main error reporting system with aggregation and rate limiting.
 #[derive(Debug)]
@@ -30,7 +31,7 @@ pub struct ReportingConfig {
 }
 
 /// Trait for error reporting destinations.
-pub trait ErrorSink: std::fmt::Debug + Send + Sync {
+pub trait ErrorSink: std::fmt::Debug + MaybeSend + MaybeSync {
     /// Send an error report to the configured destination.
     fn send_error(&self, context: &ErrorContext) -> GupResult<()>;
 

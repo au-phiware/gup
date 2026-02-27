@@ -137,6 +137,7 @@ pub use text::{Text, TextMarkAttributes, TextVertex};
 
 use crate::error::GupResult;
 use crate::shader_pipeline::ComposableShaderPipeline;
+use crate::{MaybeSend, MaybeSync};
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -208,12 +209,12 @@ use wgpu::{
 ///     }
 /// }
 /// ```
-pub trait Mark: Clone + Send + Sync + 'static {
+pub trait Mark: Clone + MaybeSend + MaybeSync + 'static {
     /// GPU vertex type with required bytemuck traits for safe GPU transfer
-    type Vertex: bytemuck::Pod + bytemuck::Zeroable + Send + Sync + 'static;
+    type Vertex: bytemuck::Pod + bytemuck::Zeroable + MaybeSend + MaybeSync + 'static;
 
     /// High-level attribute type for mark configuration
-    type AttributeValue: Send + Sync + 'static;
+    type AttributeValue: MaybeSend + MaybeSync + 'static;
 
     /// Pre-written vertex shader (fastest) - None means generate shaders
     const VERTEX_SHADER: Option<&'static str> = None;
@@ -354,7 +355,7 @@ pub trait MarkTypeIdProvider {
 }
 
 /// Type-erased information about a mark type for runtime management
-pub trait MarkInfo: Send + Sync {
+pub trait MarkInfo: MaybeSend + MaybeSync {
     /// Get the type name for debugging
     fn type_name(&self) -> &'static str;
 

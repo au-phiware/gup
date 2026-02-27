@@ -134,7 +134,7 @@ pub enum InteractionType {
 }
 
 /// Trait for custom interaction queries
-pub trait CustomInteractionQuery: Send + Sync + std::fmt::Debug {
+pub trait CustomInteractionQuery: MaybeSend + MaybeSync + std::fmt::Debug {
     /// Execute the query against GPU data
     fn execute(&self, system: &mut InteractionSystem) -> GupResult<Vec<ElementHit>>;
 
@@ -244,7 +244,7 @@ pub enum GestureType {
 }
 
 /// Event handler trait for processing interaction events
-pub trait EventHandler: Send + Sync {
+pub trait EventHandler: MaybeSend + MaybeSync {
     /// Handle an interaction event
     fn handle_event(&self, event: &InteractionEvent);
 }
@@ -2828,7 +2828,7 @@ impl InteractionSystem {
     /// Register an event handler for a specific event type
     pub fn register_event_handler<F>(&mut self, event_type: &str, handler: F)
     where
-        F: Fn(&InteractionEvent) + Send + Sync + 'static,
+        F: Fn(&InteractionEvent) + MaybeSend + MaybeSync + 'static,
     {
         struct FnHandler<F> {
             f: F,
@@ -2836,7 +2836,7 @@ impl InteractionSystem {
 
         impl<F> EventHandler for FnHandler<F>
         where
-            F: Fn(&InteractionEvent) + Send + Sync + 'static,
+            F: Fn(&InteractionEvent) + MaybeSend + MaybeSync + 'static,
         {
             fn handle_event(&self, event: &InteractionEvent) {
                 (self.f)(event);

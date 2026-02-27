@@ -7,6 +7,7 @@
 //! enabling automated detection of common issues like NaN values, out-of-range
 //! data, and buffer utilization problems.
 
+use crate::{MaybeSend, MaybeSync};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -103,7 +104,7 @@ impl BufferMetadata {
 }
 
 /// Trait for validation rules that can be applied to buffer data
-pub trait ValidationRule<T>: Send + Sync {
+pub trait ValidationRule<T>: MaybeSend + MaybeSync {
     /// Validate the buffer data
     fn validate(&self, data: &[T], metadata: &BufferMetadata) -> ValidationResult;
 

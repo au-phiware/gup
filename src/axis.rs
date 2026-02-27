@@ -38,6 +38,7 @@ use crate::render::{RenderContext, Vertex};
 use crate::shader_function::Vec2;
 use crate::text::{TextAnchor, TextStyle};
 use crate::tick_generator::{LinearTickGenerator, Scale, TickGenerator};
+use crate::{MaybeSend, MaybeSync};
 
 /// Position of an axis relative to the chart area.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -240,7 +241,7 @@ impl AxisConfiguration {
 /// The Axis trait defines the interface that all axis types must implement.
 /// It provides methods for rendering, layout calculation, and tick positioning
 /// that integrate with the GPU-accelerated rendering system.
-pub trait Axis: Send + Sync + std::fmt::Debug + 'static {
+pub trait Axis: MaybeSend + MaybeSync + std::fmt::Debug + 'static {
     /// Get the position of this axis relative to the chart area.
     fn position(&self) -> AxisPosition;
 

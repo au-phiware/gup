@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 
 use super::{ErrorContext, GupError, GupResult, RecoveryAction, RecoveryResult, RecoveryType};
+use crate::{MaybeSend, MaybeSync};
 
 /// Manages recovery operations and state restoration.
 #[derive(Debug)]
@@ -31,7 +32,7 @@ pub struct RecoveryConfig {
 }
 
 /// Trait for implementing custom recovery handlers.
-pub trait RecoveryHandler: std::fmt::Debug + Send + Sync {
+pub trait RecoveryHandler: std::fmt::Debug + MaybeSend + MaybeSync {
     /// Attempt to recover from an error.
     fn recover(&self, context: &ErrorContext, action: &RecoveryAction)
     -> GupResult<RecoveryResult>;
