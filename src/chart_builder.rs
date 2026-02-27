@@ -2166,4 +2166,203 @@ mod tests_multi_font {
         );
         assert!(result.is_ok(), "queue_chart_text failed: {result:?}");
     }
+
+    // --- Per-axis label style override tests (GUP-217) ---
+
+    #[test]
+    fn test_axis_config_default_has_no_label_style() {
+        let config = AxisConfiguration::default();
+        assert!(
+            config.label_style.is_none(),
+            "Default AxisConfiguration should have no label_style override"
+        );
+    }
+
+    #[test]
+    fn test_axis_config_with_label_style() {
+        let style = TextStyle::new(12.0).with_font_family("Monospace");
+        let config = AxisConfiguration::default().with_label_style(style.clone());
+        assert_eq!(config.label_style, Some(style));
+    }
+
+    #[test]
+    fn test_axis_config_label_style_preserves_font_family() {
+        let config = AxisConfiguration::default()
+            .with_label_style(TextStyle::new(10.0).with_font_family("DejaVu Serif"));
+        let ls = config.label_style.unwrap();
+        assert_eq!(ls.font_family, Some("DejaVu Serif".to_string()));
+        assert_eq!(ls.font_size, 10.0);
+    }
+
+    #[tokio::test]
+    async fn test_queue_chart_text_per_axis_style() {
+        #[derive(Debug, Clone)]
+        struct D {
+            x: f32,
+        }
+
+        let context = std::sync::Arc::new(crate::RenderContext::new().await.unwrap());
+        let sel = crate::selection::Selection::<D, crate::Circle>::new(vec![], context).unwrap();
+
+        // Chart-level label style uses default font
+        let config = ChartConfig::default();
+
+        // Create axes with per-axis label styles
+        let bottom_config = AxisConfiguration::default()
+            .with_label_style(TextStyle::new(12.0).with_font_family("DejaVu Sans"));
+        let left_config = AxisConfiguration::default()
+            .with_label_style(TextStyle::new(16.0).with_font_family("DejaVu Serif"));
+
+        let chart = ComposedChart::new(sel, config)
+            .with_bottom_axis(Box::new(LinearAxis::new(
+                AxisPosition::Bottom,
+                bottom_config,
+            )))
+            .with_left_axis(Box::new(LinearAxis::new(AxisPosition::Left, left_config)));
+
+        let gup_context = crate::GupContext::headless().await.unwrap();
+        let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
+        let frame = gup_ctx.begin_frame().unwrap();
+
+        let mut text_renderer = crate::text::TextRenderer::new(frame.device()).unwrap();
+        let mut font_manager =
+            crate::text::FontAtlasManager::new(crate::text::FontDatabase::new(), 14.0);
+        let mut layout_engine = crate::text::TextLayoutEngine::new();
+
+        text_renderer.begin_frame();
+        let result = chart.queue_chart_text(
+            &frame,
+            &mut text_renderer,
+            &mut font_manager,
+            &mut layout_engine,
+        );
+        assert!(result.is_ok(), "queue_chart_text failed: {result:?}");
+
+        // Both per-axis fonts should have atlases created
+        assert!(
+            font_manager.get_atlas(Some("DejaVu Sans")).is_some(),
+            "Expected a DejaVu Sans atlas for the bottom axis"
+        );
+        assert!(
+            font_manager.get_atlas(Some("DejaVu Serif")).is_some(),
+            "Expected a DejaVu Serif atlas for the left axis"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_queue_chart_text_mixed_chart_and_axis_styles() {
+        // Chart-level style applies to axes without per-axis overrides
+        #[derive(Debug, Clone)]
+        struct D {
+            x: f32,
+        }
+
+        let context = std::sync::Arc::new(crate::RenderContext::new().await.unwrap());
+        let sel = crate::selection::Selection::<D, crate::Circle>::new(vec![], context).unwrap();
+
+        // Chart-level label style
+        let config = ChartConfig::default()
+            .with_label_style(TextStyle::new(14.0).with_font_family("DejaVu Sans"));
+
+        // Only bottom axis gets a per-axis override; left axis uses chart-level
+        let bottom_config = AxisConfiguration::default()
+            .with_label_style(TextStyle::new(12.0).with_font_family("DejaVu Serif"));
+
+        let chart = ComposedChart::new(sel, config)
+            .with_bottom_axis(Box::new(LinearAxis::new(
+                AxisPosition::Bottom,
+                bottom_config,
+            )))
+            .with_left_axis(Box::new(LinearAxis::new(
+                AxisPosition::Left,
+                AxisConfiguration::default(),
+            )));
+
+        let gup_context = crate::GupContext::headless().await.unwrap();
+        let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
+        let frame = gup_ctx.begin_frame().unwrap();
+
+        let mut text_renderer = crate::text::TextRenderer::new(frame.device()).unwrap();
+        let mut font_manager =
+            crate::text::FontAtlasManager::new(crate::text::FontDatabase::new(), 14.0);
+        let mut layout_engine = crate::text::TextLayoutEngine::new();
+
+        text_renderer.begin_frame();
+        let result = chart.queue_chart_text(
+            &frame,
+            &mut text_renderer,
+            &mut font_manager,
+            &mut layout_engine,
+        );
+        assert!(result.is_ok(), "queue_chart_text failed: {result:?}");
+
+        // Bottom axis per-axis font
+        assert!(
+            font_manager.get_atlas(Some("DejaVu Serif")).is_some(),
+            "Expected a DejaVu Serif atlas for the bottom axis override"
+        );
+        // Left axis falls back to chart-level font
+        assert!(
+            font_manager.get_atlas(Some("DejaVu Sans")).is_some(),
+            "Expected a DejaVu Sans atlas for the left axis (chart-level fallback)"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_queue_chart_text_resolved_per_axis_style() {
+        #[derive(Debug, Clone)]
+        struct D {
+            x: f32,
+        }
+
+        let context = std::sync::Arc::new(crate::RenderContext::new().await.unwrap());
+        let sel = crate::selection::Selection::<D, crate::Circle>::new(vec![], context).unwrap();
+
+        let bottom_config = AxisConfiguration::default()
+            .with_label_style(TextStyle::new(12.0).with_font_family("DejaVu Sans"));
+        let left_config = AxisConfiguration::default()
+            .with_label_style(TextStyle::new(16.0).with_font_family("DejaVu Serif"));
+
+        let chart = ComposedChart::new(sel, ChartConfig::default())
+            .with_bottom_axis(Box::new(LinearAxis::new(
+                AxisPosition::Bottom,
+                bottom_config,
+            )))
+            .with_left_axis(Box::new(LinearAxis::new(AxisPosition::Left, left_config)));
+
+        let gup_context = crate::GupContext::headless().await.unwrap();
+        let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
+        let frame = gup_ctx.begin_frame().unwrap();
+
+        let mut text_renderer = crate::text::TextRenderer::new(frame.device()).unwrap();
+        let mut font_manager =
+            crate::text::FontAtlasManager::new(crate::text::FontDatabase::new(), 14.0);
+        let mut layout_engine = crate::text::TextLayoutEngine::new();
+        let mut positioner = crate::label::LabelPositioner::new();
+        let constraints = crate::label::LabelConstraints::axis_labels();
+
+        text_renderer.begin_frame();
+        let result = chart.queue_chart_text_resolved(
+            &frame,
+            &mut text_renderer,
+            &mut font_manager,
+            &mut layout_engine,
+            &mut positioner,
+            &constraints,
+        );
+        assert!(
+            result.is_ok(),
+            "queue_chart_text_resolved with per-axis styles failed: {result:?}"
+        );
+
+        // Both per-axis fonts should have atlases
+        assert!(
+            font_manager.get_atlas(Some("DejaVu Sans")).is_some(),
+            "Expected DejaVu Sans atlas for bottom axis"
+        );
+        assert!(
+            font_manager.get_atlas(Some("DejaVu Serif")).is_some(),
+            "Expected DejaVu Serif atlas for left axis"
+        );
+    }
 }
