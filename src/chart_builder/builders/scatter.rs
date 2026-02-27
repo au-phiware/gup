@@ -16,6 +16,7 @@ use crate::chart_builder::{ChartBuilder, ChartBuilderError, ChartConfig, Compose
 use crate::error::GupResult;
 use crate::grid::{GridConfiguration, GridLineConfig};
 use crate::selection::Selection;
+use crate::{MaybeSend, MaybeSync};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -255,7 +256,7 @@ impl<T> GridCapableBuilder for ScatterPlotBuilder<T> {
 
 impl<T> ChartBuilder<T> for ScatterPlotBuilder<T>
 where
-    T: Clone + Send + Sync + std::fmt::Debug + 'static,
+    T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
 {
     type Output = ComposedChart<T, Circle>;
 

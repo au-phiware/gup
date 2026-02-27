@@ -12,6 +12,7 @@ use crate::RenderContext;
 use crate::chart_builder::{ChartBuilder, ChartBuilderError, ChartConfig};
 use crate::error::GupResult;
 use crate::selection::Selection;
+use crate::{MaybeSend, MaybeSync};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -168,7 +169,7 @@ impl<T> ConfigurableBuilder for BarChartBuilder<T> {
 
 impl<T> ChartBuilder<T> for BarChartBuilder<T>
 where
-    T: Clone + Send + Sync + std::fmt::Debug + 'static,
+    T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
 {
     type Output = Selection<T, Circle>; // TODO: Replace with Rectangle mark
 

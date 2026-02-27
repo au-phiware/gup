@@ -7,6 +7,7 @@ use crate::chart_builder::{ChartBuilder, ComposedChart};
 use crate::error::GupResult;
 use crate::label::{DateTimeFormatter, LabelConstraints, LabelFormatter, NumericFormatter};
 use crate::text::TextStyle;
+use crate::{MaybeSend, MaybeSync};
 
 /// Extension trait for chart builders that adds label formatting capabilities.
 pub trait LabelCapableBuilder<T>: ChartBuilder<T> {
@@ -42,7 +43,7 @@ pub trait LabelCapableBuilder<T>: ChartBuilder<T> {
     /// Custom label formatter function.
     fn custom_labels<F>(self, formatter: F) -> Self
     where
-        F: Fn(f64) -> String + Send + Sync + 'static,
+        F: Fn(f64) -> String + MaybeSend + MaybeSync + 'static,
         Self: Sized;
 
     /// Set minimum spacing between labels.
@@ -128,7 +129,7 @@ impl AxisLabelConfig {
 #[derive(Debug)]
 pub struct LabeledChart<T, M>
 where
-    T: Clone + Send + Sync + std::fmt::Debug + 'static,
+    T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
     M: crate::selection::Mark,
 {
     /// Base composed chart
@@ -139,7 +140,7 @@ where
 
 impl<T, M> LabeledChart<T, M>
 where
-    T: Clone + Send + Sync + std::fmt::Debug + 'static,
+    T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
     M: crate::selection::Mark,
 {
     /// Create a new labeled chart.
@@ -268,7 +269,7 @@ pub fn date_format(pattern: &str) -> Box<dyn LabelFormatter> {
 /// Create a custom formatter.
 pub fn custom_format<F>(formatter: F) -> Box<dyn LabelFormatter>
 where
-    F: Fn(f64) -> String + Send + Sync + 'static,
+    F: Fn(f64) -> String + MaybeSend + MaybeSync + 'static,
 {
     Box::new(crate::label::formatter::CustomFormatter::new(formatter))
 }

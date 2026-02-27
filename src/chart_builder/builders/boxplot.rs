@@ -14,6 +14,7 @@ use crate::grid::{GridConfiguration, GridLineConfig};
 use crate::mark::boxplot::{BoxPlot, BoxPlotAttributes, BoxPlotOrientation};
 use crate::selection::Selection;
 use crate::shader_function::Vec2;
+use crate::{MaybeSend, MaybeSync};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -323,7 +324,7 @@ impl<T> GridCapableBuilder for BoxPlotBuilder<T> {
 
 impl<T> ChartBuilder<T> for BoxPlotBuilder<T>
 where
-    T: Clone + Send + Sync + std::fmt::Debug + 'static,
+    T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
 {
     type Output = ComposedChart<BoxPlotAttributes, BoxPlot>;
 
@@ -357,7 +358,7 @@ where
 
 impl<T> BoxPlotBuilder<T>
 where
-    T: Clone + Send + Sync + std::fmt::Debug + 'static,
+    T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
 {
     /// Compute box plot attributes from raw data using statistical functions.
     ///

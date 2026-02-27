@@ -5,6 +5,7 @@
 
 use super::*;
 use crate::error::{GupError, GupResult};
+use crate::{MaybeSend, MaybeSync};
 use chrono::{DateTime, Local};
 
 /// Numeric formatter for general numeric data.
@@ -369,7 +370,10 @@ impl LabelFormatter for DateTimeFormatter {
 /// Custom formatter using a user-provided function.
 pub struct CustomFormatter {
     /// Formatting function
+    #[cfg(not(target_arch = "wasm32"))]
     formatter_fn: Box<dyn Fn(f64) -> String + Send + Sync>,
+    #[cfg(target_arch = "wasm32")]
+    formatter_fn: Box<dyn Fn(f64) -> String>,
     /// Preferred spacing
     spacing: f32,
     /// Estimated width
@@ -380,7 +384,7 @@ impl CustomFormatter {
     /// Create a new custom formatter.
     pub fn new<F>(formatter_fn: F) -> Self
     where
-        F: Fn(f64) -> String + Send + Sync + 'static,
+        F: Fn(f64) -> String + MaybeSend + MaybeSync + 'static,
     {
         Self {
             formatter_fn: Box::new(formatter_fn),
@@ -426,10 +430,15 @@ impl LabelFormatter for CustomFormatter {
 }
 
 /// Type alias for formatter selection criteria and formatter pairs
+#[cfg(not(target_arch = "wasm32"))]
 type FormatterPair = (
     Box<dyn Fn(f64, f64) -> bool + Send + Sync>,
     Box<dyn LabelFormatter>,
 );
+
+/// Type alias for formatter selection criteria and formatter pairs
+#[cfg(target_arch = "wasm32")]
+type FormatterPair = (Box<dyn Fn(f64, f64) -> bool>, Box<dyn LabelFormatter>);
 
 /// Composite formatter that selects appropriate formatter based on data range.
 pub struct AdaptiveFormatter {
@@ -451,7 +460,7 @@ impl AdaptiveFormatter {
     /// Add a formatter with selection criteria.
     pub fn add_formatter<F, L>(mut self, criteria: F, formatter: L) -> Self
     where
-        F: Fn(f64, f64) -> bool + Send + Sync + 'static,
+        F: Fn(f64, f64) -> bool + MaybeSend + MaybeSync + 'static,
         L: LabelFormatter + 'static,
     {
         self.formatters

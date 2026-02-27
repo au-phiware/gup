@@ -6,6 +6,7 @@
 //! This module provides type-safe field accessors that bridge between
 //! high-level Observable Plot syntax and GPU shader functions.
 
+use crate::{MaybeSend, MaybeSync};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
@@ -93,7 +94,7 @@ pub trait Accessor<T> {
 #[derive(Debug)]
 pub struct ClosureAccessor<T, Output, F>
 where
-    F: Fn(&T) -> Output + Send + Sync,
+    F: Fn(&T) -> Output + MaybeSend + MaybeSync,
 {
     function: F,
     name: String,
@@ -102,7 +103,7 @@ where
 
 impl<T, Output, F> ClosureAccessor<T, Output, F>
 where
-    F: Fn(&T) -> Output + Send + Sync,
+    F: Fn(&T) -> Output + MaybeSend + MaybeSync,
 {
     /// Create a new closure accessor.
     pub fn new(name: &str, function: F) -> Self {
@@ -116,8 +117,8 @@ where
 
 impl<T, Output, F> Accessor<T> for ClosureAccessor<T, Output, F>
 where
-    F: Fn(&T) -> Output + Send + Sync,
-    Output: Send + Sync,
+    F: Fn(&T) -> Output + MaybeSend + MaybeSync,
+    Output: MaybeSend + MaybeSync,
 {
     type Output = Output;
 
@@ -152,7 +153,7 @@ where
 
 impl<T, Output> Accessor<T> for ConstantAccessor<Output>
 where
-    Output: Clone + Send + Sync,
+    Output: Clone + MaybeSend + MaybeSync,
 {
     type Output = Output;
 
@@ -170,7 +171,10 @@ where
 /// This registry maps field names to accessor functions, enabling
 /// Observable Plot-style syntax while maintaining type safety.
 pub struct AccessorRegistry<T> {
+    #[cfg(not(target_arch = "wasm32"))]
     field_accessors: HashMap<String, Box<dyn Accessor<T, Output = AccessorValue> + Send + Sync>>,
+    #[cfg(target_arch = "wasm32")]
+    field_accessors: HashMap<String, Box<dyn Accessor<T, Output = AccessorValue>>>,
     _phantom: PhantomData<T>,
 }
 
@@ -357,7 +361,7 @@ impl<T> AccessorRegistry<T> {
     /// Register a field accessor.
     pub fn register_field<A>(&mut self, field_name: &str, accessor: A)
     where
-        A: Accessor<T, Output = AccessorValue> + Send + Sync + 'static,
+        A: Accessor<T, Output = AccessorValue> + MaybeSend + MaybeSync + 'static,
     {
         self.field_accessors
             .insert(field_name.to_string(), Box::new(accessor));
@@ -391,12 +395,12 @@ impl<T> Default for AccessorRegistry<T> {
 pub trait IntoAccessor<T, Output> {
     fn into_accessor(self, name: &str) -> ClosureAccessor<T, Output, Self>
     where
-        Self: Sized + Fn(&T) -> Output + Send + Sync;
+        Self: Sized + Fn(&T) -> Output + MaybeSend + MaybeSync;
 }
 
 impl<T, Output, F> IntoAccessor<T, Output> for F
 where
-    F: Fn(&T) -> Output + Send + Sync,
+    F: Fn(&T) -> Output + MaybeSend + MaybeSync,
 {
     fn into_accessor(self, name: &str) -> ClosureAccessor<T, Output, Self> {
         ClosureAccessor::new(name, self)

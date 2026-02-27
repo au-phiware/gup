@@ -14,6 +14,7 @@ use super::builders::{
 };
 use crate::RenderContext;
 use crate::error::{GupError, GupResult};
+use crate::{MaybeSend, MaybeSync};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -66,7 +67,7 @@ impl PlotBuilder {
     /// Bind data to this plot, creating a data-bound plot builder.
     pub fn data<T>(self, data: Vec<T>) -> BoundPlotBuilder<T>
     where
-        T: Clone + Send + Sync + std::fmt::Debug + 'static,
+        T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
     {
         BoundPlotBuilder::new(data, self.context)
     }
@@ -90,7 +91,7 @@ pub struct BoundPlotBuilder<T> {
 
 impl<T> BoundPlotBuilder<T>
 where
-    T: Clone + Send + Sync + std::fmt::Debug + 'static,
+    T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
 {
     /// Create a new bound plot builder.
     pub fn new(data: Vec<T>, context: Option<Arc<RenderContext>>) -> Self {
@@ -256,7 +257,7 @@ macro_rules! impl_configured_chart {
 
         impl<T> $chart_type<T>
         where
-            T: Clone + Send + Sync + std::fmt::Debug + 'static,
+            T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
         {
             pub fn new(
                 data: Vec<T>,
@@ -318,7 +319,7 @@ macro_rules! impl_configured_chart {
 
         impl<T> ConfiguredChart<T> for $chart_type<T>
         where
-            T: Clone + Send + Sync + std::fmt::Debug + 'static,
+            T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
         {
             type Builder = $builder_type;
             type Output = <$builder_type as ChartBuilder<T>>::Output;
@@ -344,7 +345,7 @@ macro_rules! impl_configured_chart {
 
         impl<T> $chart_type<T>
         where
-            T: Clone + Send + Sync + std::fmt::Debug + 'static,
+            T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
         {
             /// Build the chart (async version).
             pub async fn build_async(

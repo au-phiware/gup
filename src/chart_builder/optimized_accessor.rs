@@ -7,6 +7,7 @@
 //! eliminating the dynamic dispatch and type-erased value overhead of the
 //! standard accessor system.
 
+use crate::{MaybeSend, MaybeSync};
 use std::marker::PhantomData;
 
 /// Zero-cost generic field accessor.
@@ -93,7 +94,7 @@ macro_rules! field_accessor {
 /// - `F`: The accessor function type
 pub struct OptimizedAccessorFunction<T, Output, F>
 where
-    F: Fn(&T) -> Output + Send + Sync,
+    F: Fn(&T) -> Output + MaybeSend + MaybeSync,
 {
     function: F,
     _phantom: PhantomData<(T, Output)>,
@@ -101,7 +102,7 @@ where
 
 impl<T, Output, F> OptimizedAccessorFunction<T, Output, F>
 where
-    F: Fn(&T) -> Output + Send + Sync,
+    F: Fn(&T) -> Output + MaybeSend + MaybeSync,
 {
     /// Create a new optimized accessor function.
     #[inline(always)]
@@ -125,7 +126,7 @@ where
 /// while preserving type information for zero-cost abstraction.
 pub trait IntoOptimizedAccessor<T, Output> {
     /// The accessor function type that this converts to.
-    type Accessor: Fn(&T) -> Output + Send + Sync;
+    type Accessor: Fn(&T) -> Output + MaybeSend + MaybeSync;
 
     /// Convert this type into an optimized accessor.
     fn into_optimized_accessor(self) -> OptimizedAccessorFunction<T, Output, Self::Accessor>
@@ -135,7 +136,7 @@ pub trait IntoOptimizedAccessor<T, Output> {
 
 impl<T, Output, F> IntoOptimizedAccessor<T, Output> for F
 where
-    F: Fn(&T) -> Output + Send + Sync,
+    F: Fn(&T) -> Output + MaybeSend + MaybeSync,
 {
     type Accessor = F;
 

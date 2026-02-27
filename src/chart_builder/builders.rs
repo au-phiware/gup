@@ -38,6 +38,7 @@ use super::accessor::{AccessorValue, FieldAccessor};
 use crate::error::GupResult;
 use crate::grid::{Color, GridConfiguration, GridLineConfig};
 use crate::selection::Selection;
+use crate::{MaybeSend, MaybeSync};
 use std::marker::PhantomData;
 
 /// Base trait for all chart builders providing common configuration methods.
@@ -451,21 +452,34 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
 /// Helper trait for converting accessor values to attribute binding closures.
 pub trait AccessorToShaderFunction<T> {
     /// Convert an accessor value to a position binding closure.
+    #[cfg(not(target_arch = "wasm32"))]
     fn to_position_shader(
         &self,
         accessor: AccessorFunction<T>,
     ) -> Box<dyn Fn(&T) -> [f32; 2] + Send + Sync>;
 
+    /// Convert an accessor value to a position binding closure.
+    #[cfg(target_arch = "wasm32")]
+    fn to_position_shader(&self, accessor: AccessorFunction<T>) -> Box<dyn Fn(&T) -> [f32; 2]>;
+
     /// Convert an accessor value to a colour binding closure.
+    #[cfg(not(target_arch = "wasm32"))]
     fn to_color_shader(
         &self,
         accessor: AccessorFunction<T>,
     ) -> Box<dyn Fn(&T) -> [f32; 4] + Send + Sync>;
+
+    /// Convert an accessor value to a colour binding closure.
+    #[cfg(target_arch = "wasm32")]
+    fn to_color_shader(&self, accessor: AccessorFunction<T>) -> Box<dyn Fn(&T) -> [f32; 4]>;
 }
 
 /// Type-erased accessor function for dynamic dispatch.
 pub struct AccessorFunction<T> {
+    #[cfg(not(target_arch = "wasm32"))]
     function: Box<dyn Fn(&T) -> AccessorValue + Send + Sync>,
+    #[cfg(target_arch = "wasm32")]
+    function: Box<dyn Fn(&T) -> AccessorValue>,
     field_name: Option<String>,
     _phantom: PhantomData<T>,
 }
@@ -474,7 +488,7 @@ impl<T> AccessorFunction<T> {
     /// Create a new accessor function from a closure.
     pub fn new<F>(function: F) -> Self
     where
-        F: Fn(&T) -> AccessorValue + Send + Sync + 'static,
+        F: Fn(&T) -> AccessorValue + MaybeSend + MaybeSync + 'static,
     {
         Self {
             function: Box::new(function),
@@ -534,7 +548,7 @@ impl<T> From<FieldAccessor> for AccessorFunction<T> {
 
 impl<T, F> From<F> for AccessorFunction<T>
 where
-    F: Fn(&T) -> AccessorValue + Send + Sync + 'static,
+    F: Fn(&T) -> AccessorValue + MaybeSend + MaybeSync + 'static,
 {
     fn from(function: F) -> Self {
         AccessorFunction::new(function)
@@ -572,7 +586,7 @@ pub fn apply_accessors_to_selection<T, M>(
     size_accessor: &Option<AccessorFunction<T>>,
 ) -> GupResult<()>
 where
-    T: Clone + Send + Sync + std::fmt::Debug + 'static,
+    T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
     M: crate::selection::Mark,
     M::AttributeValue: Default + Clone,
 {

@@ -67,6 +67,7 @@ use crate::scale::{
     AccessorFunction, AxisId, DataAnalyzer, DataCharacteristics, Scale, ScaleFactory,
 };
 use crate::shader_function::Vec2;
+use crate::{MaybeSend, MaybeSync};
 use std::collections::HashMap;
 
 /// Main axis system coordinator managing all axis components.
@@ -135,7 +136,7 @@ impl AxisSystem {
         mappings: &AxisMappings<T>,
     ) -> GupResult<AxisConfiguration>
     where
-        T: Clone + Send + Sync + std::fmt::Debug + 'static,
+        T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
     {
         if data.is_empty() {
             return Err(GupError::validation_error(
@@ -228,7 +229,7 @@ impl AxisSystem {
         mappings: &AxisMappings<T>,
     ) -> GupResult<HashMap<AxisId, DataCharacteristics>>
     where
-        T: Clone + Send + Sync + std::fmt::Debug + 'static,
+        T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
     {
         let mut scale_specs = HashMap::new();
 

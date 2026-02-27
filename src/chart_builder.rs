@@ -70,6 +70,7 @@ use crate::selection::Selection;
 use crate::shader_function::Vec2;
 use crate::text::TextStyle;
 use crate::text::hover_reveal::{ClippedTextRegistry, HoverRevealState, TooltipConfig};
+use crate::{MaybeSend, MaybeSync};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -222,7 +223,7 @@ where
     /*
     pub fn into_selection<M>(self) -> GupResult<Selection<T, M>>
     where
-        T: Clone + Send + Sync + std::fmt::Debug + 'static,
+        T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
         M: crate::selection::Mark,
         M::AttributeValue: Default + Clone,
     {
@@ -575,7 +576,7 @@ impl Margins {
 #[derive(Debug)]
 pub struct ComposedChart<T, M>
 where
-    T: Clone + Send + Sync + std::fmt::Debug + 'static,
+    T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
     M: crate::selection::Mark,
 {
     /// The main data visualization
@@ -606,7 +607,7 @@ where
 
 impl<T, M> ComposedChart<T, M>
 where
-    T: Clone + Send + Sync + std::fmt::Debug + 'static,
+    T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
     M: crate::selection::Mark,
 {
     /// Create a new composed chart from a visualization and configuration.
@@ -1981,18 +1982,39 @@ pub trait IntoAccessor<T> {
 
     /// Convert to an internal accessor function representation
     #[allow(clippy::type_complexity)]
+    #[cfg(not(target_arch = "wasm32"))]
     fn into_accessor_fn(self) -> Box<dyn Fn(&T) -> Self::Output + Send + Sync>;
+
+    /// Convert to an internal accessor function representation
+    #[allow(clippy::type_complexity)]
+    #[cfg(target_arch = "wasm32")]
+    fn into_accessor_fn(self) -> Box<dyn Fn(&T) -> Self::Output>;
 }
 
 // Implementation for closure-based accessors
+#[cfg(not(target_arch = "wasm32"))]
 impl<T, F, Output> IntoAccessor<T> for F
 where
-    F: Fn(&T) -> Output + Send + Sync + 'static,
-    Output: Send + Sync + 'static,
+    F: Fn(&T) -> Output + MaybeSend + MaybeSync + 'static,
+    Output: MaybeSend + MaybeSync + 'static,
 {
     type Output = Output;
 
     fn into_accessor_fn(self) -> Box<dyn Fn(&T) -> Self::Output + Send + Sync> {
+        Box::new(self)
+    }
+}
+
+// Implementation for closure-based accessors
+#[cfg(target_arch = "wasm32")]
+impl<T, F, Output> IntoAccessor<T> for F
+where
+    F: Fn(&T) -> Output + 'static,
+    Output: 'static,
+{
+    type Output = Output;
+
+    fn into_accessor_fn(self) -> Box<dyn Fn(&T) -> Self::Output> {
         Box::new(self)
     }
 }
@@ -2112,12 +2134,10 @@ mod tests {
         };
 
         // Test closure-based accessor
-        let accessor: Box<dyn Fn(&TestData) -> f32 + Send + Sync> =
-            (|d: &TestData| d.x).into_accessor_fn();
+        let accessor = (|d: &TestData| d.x).into_accessor_fn();
         assert_eq!(accessor(&data), 5.0);
 
-        let string_accessor: Box<dyn Fn(&TestData) -> String + Send + Sync> =
-            (|d: &TestData| d.category.clone()).into_accessor_fn();
+        let string_accessor = (|d: &TestData| d.category.clone()).into_accessor_fn();
         assert_eq!(string_accessor(&data), "Test");
     }
 
