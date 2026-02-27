@@ -100,6 +100,7 @@ pub mod line;
 pub mod occlusion_culler;
 pub mod path;
 pub mod performance_opt;
+pub mod radix_sort;
 pub mod rectangle;
 pub mod renderer;
 pub mod text;

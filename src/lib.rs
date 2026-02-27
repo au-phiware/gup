@@ -205,6 +205,7 @@ pub use mark::line::{Line, LineAttributes, LineInstance, LineStyle, LineVertex};
 pub use mark::occlusion_culler::{
     OcclusionCuller, OcclusionGpuConfig, OcclusionParams, OcclusionResult, PooledOcclusionCuller,
 };
+pub use mark::radix_sort::{RadixSorter, SortBuffers, SortConfig};
 pub use mark::rectangle::{Rectangle, RectangleAttributes, RectangleInstance, RectangleVertex};
 pub use mark::{Mark, MarkInfo, MarkInfoImpl, MarkRegistry};
 
