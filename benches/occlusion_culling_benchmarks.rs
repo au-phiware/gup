@@ -38,6 +38,38 @@ fn generate_stacked_instances(n: usize) -> Vec<InstanceAttributes> {
         .collect()
 }
 
+/// Mixed mark sizes: small scatter points + large background rectangles.
+/// This exercises the coarse Hi-Z early-reject path (GUP-223).
+fn generate_mixed_size_dataset(n_small: usize, n_large: usize) -> Vec<InstanceAttributes> {
+    let mut instances = Vec::with_capacity(n_small + n_large);
+
+    // Large background marks drawn first (lower z / earlier draw order).
+    for i in 0..n_large {
+        let t = i as f32 / n_large as f32;
+        let x = (t * 7.0).sin() * 0.4;
+        let y = (t * 11.0).cos() * 0.4;
+        instances.push(InstanceAttributes::from_circle(
+            [x, y],
+            0.3,
+            [0.2, 0.2, 0.8, 1.0],
+        ));
+    }
+
+    // Small scatter points drawn on top (higher z).
+    for i in 0..n_small {
+        let t = i as f32 / n_small as f32;
+        let x = (t * 37.0).sin() * 0.5;
+        let y = (t * 53.0).cos() * 0.5;
+        instances.push(InstanceAttributes::from_circle(
+            [x, y],
+            0.02,
+            [1.0, 0.0, 0.0, 1.0],
+        ));
+    }
+
+    instances
+}
+
 // ---------------------------------------------------------------------------
 // Occlusion culling dispatch benchmark
 // ---------------------------------------------------------------------------
@@ -198,10 +230,76 @@ fn bench_culling_effectiveness(c: &mut Criterion) {
     group.finish();
 }
 
+// ---------------------------------------------------------------------------
+// Mixed-size dataset benchmark (GUP-223: coarse Hi-Z early reject)
+// ---------------------------------------------------------------------------
+
+fn bench_mixed_size_dispatch(c: &mut Criterion) {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let ctx = match rt.block_on(GupContext::headless()) {
+        Ok(c) => c,
+        Err(_) => {
+            eprintln!("No GPU available — skipping mixed-size benchmarks");
+            return;
+        }
+    };
+
+    let mut group = c.benchmark_group("occlusion_culling_mixed_size");
+
+    // tile_size=16 keeps large marks under the 4096-cell build_coverage limit.
+    let viewport = Viewport2D::default();
+    let params = OcclusionParams {
+        tile_size: 16,
+        conservative_margin: 0.01,
+    };
+
+    for &(n_small, n_large) in &[(1_000usize, 50usize), (5_000, 100), (10_000, 200)] {
+        let instances = generate_mixed_size_dataset(n_small, n_large);
+        let total = instances.len();
+        let data: &[u8] = bytemuck::cast_slice(&instances);
+
+        let input_buffer = ctx.device.create_buffer(&BufferDescriptor {
+            label: Some("bench_mixed_input"),
+            size: data.len() as u64,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        ctx.queue.write_buffer(&input_buffer, 0, data);
+
+        let inner = OcclusionCuller::new(&ctx.device).unwrap();
+        let mut pooled =
+            PooledOcclusionCuller::new(&ctx.device, inner, total as u32, &viewport, &params);
+
+        group.bench_with_input(
+            BenchmarkId::new(
+                "mixed_small_large",
+                format!("{n_small}s_{n_large}l"),
+            ),
+            &total,
+            |b, _| {
+                b.iter(|| {
+                    let result = rt.block_on(pooled.dispatch(
+                        &ctx.device,
+                        &ctx.queue,
+                        &input_buffer,
+                        total as u32,
+                        &viewport,
+                        &params,
+                    ));
+                    criterion::black_box(result.unwrap());
+                });
+            },
+        );
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_occlusion_dispatch,
     bench_pooled_occlusion_dispatch,
     bench_culling_effectiveness,
+    bench_mixed_size_dispatch,
 );
 criterion_main!(benches);
