@@ -198,7 +198,7 @@ reorganisation._
 | [GUP-173](GUP-173_CI_Performance_Alert_System.md)          | CI Performance Alert System           | ✅ Complete | Low      | —      |
 | [GUP-174](GUP-174_Flaky_Performance_Test_Stabilization.md) | Flaky Performance Test Stabilization  | ✅ Complete | Low      | —      |
 | [GUP-175](GUP-175_GPU_Side_Morton_Range_Query.md)          | GPU-Side Morton Range Query           | ✅ Complete | Medium   | —      |
-| [GUP-176](GUP-176_Spatial_Index_Adaptive_Grid_Size.md)     | Spatial Index Adaptive Grid Size      | 📋 Planned  | Low      | —      |
+| [GUP-176](GUP-176_Spatial_Index_Adaptive_Grid_Size.md)     | Spatial Index Adaptive Grid Size      | 🚧 In Progress  | Low      | —      |
 | [GUP-181](GUP-181_GPU_Selection_Hit_Testing.md)            | GPU-Accelerated Selection Hit Testing | ✅ Complete | Medium   | 5      |
 | [GUP-182](GUP-182_Touch_Selection_Support.md)              | Touch Selection Support               | 📋 Planned  | Low      | 3      |
 | [GUP-183](GUP-183_Pooled_GPU_Instance_Filter_Buffers.md)   | Pooled GPU Instance Filter Buffers    | ✅ Complete | Medium   | —      |
