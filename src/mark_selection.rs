@@ -3381,6 +3381,185 @@ mod tests {
         assert!(config.haptic_feedback_enabled);
     }
 
+    // -- Lasso gesture tests --
+
+    #[test]
+    fn test_touch_lasso_long_press_then_drag_selects_marks() {
+        // Place marks in a cluster that a lasso can surround.
+        let positions = vec![
+            [50.0, 50.0],
+            [60.0, 55.0],
+            [55.0, 60.0],
+            [200.0, 200.0], // outside the lasso
+        ];
+        let mut sel = make_touch_system(4, positions);
+        let mut adapter = TouchSelectionAdapter::with_defaults();
+
+        // Touch down
+        adapter.on_touch_event(touch(0, [40.0, 40.0], TouchPhase::Started, 0.0), &mut sel);
+
+        // Wait for long-press to fire
+        let fb = adapter.tick(0.6, &mut sel);
+        assert_eq!(fb, Some(HapticFeedback::Medium));
+
+        // No marks selected yet — we're in LongPressHeld, not committed.
+        assert_eq!(sel.state().count(), 0);
+
+        // Start dragging — this should switch to lasso mode.
+        adapter.on_touch_event(touch(0, [30.0, 40.0], TouchPhase::Moved, 0.65), &mut sel);
+        assert!(adapter.is_active());
+
+        // Draw a lasso path around the cluster (roughly a triangle).
+        adapter.on_touch_event(touch(0, [70.0, 40.0], TouchPhase::Moved, 0.7), &mut sel);
+        adapter.on_touch_event(touch(0, [70.0, 70.0], TouchPhase::Moved, 0.75), &mut sel);
+        adapter.on_touch_event(touch(0, [40.0, 70.0], TouchPhase::Moved, 0.8), &mut sel);
+
+        // Lift finger — lasso should close and select marks inside.
+        let fb = adapter.on_touch_event(touch(0, [40.0, 40.0], TouchPhase::Ended, 0.85), &mut sel);
+
+        // Marks 0, 1, 2 are inside the lasso; mark 3 is outside.
+        assert!(sel.state().is_selected(0));
+        assert!(sel.state().is_selected(1));
+        assert!(sel.state().is_selected(2));
+        assert!(!sel.state().is_selected(3));
+        assert_eq!(fb, Some(HapticFeedback::Medium));
+
+        // Tool should be restored to Point after lasso completes.
+        assert_eq!(*sel.tool_kind(), SelectionToolKind::Point);
+        assert!(!adapter.is_active());
+    }
+
+    #[test]
+    fn test_touch_lasso_visual_feedback_available() {
+        // Verify that during lasso drawing, the selection system exposes
+        // the lasso path for visual feedback rendering.
+        let mut sel = make_touch_system(1, vec![[50.0, 50.0]]);
+        let mut adapter = TouchSelectionAdapter::with_defaults();
+
+        // Touch down, wait for long-press
+        adapter.on_touch_event(touch(0, [40.0, 40.0], TouchPhase::Started, 0.0), &mut sel);
+        adapter.tick(0.6, &mut sel);
+
+        // Start dragging to enter lasso mode
+        adapter.on_touch_event(touch(0, [60.0, 40.0], TouchPhase::Moved, 0.65), &mut sel);
+
+        // The selection system should now have lasso points for rendering.
+        let points = sel.current_lasso_points();
+        assert!(points.is_some());
+        let pts = points.unwrap();
+        // At least the start position and the moved position.
+        assert!(pts.len() >= 2);
+    }
+
+    #[test]
+    fn test_touch_lasso_empty_selects_nothing() {
+        // If the lasso path doesn't enclose any marks, nothing is selected.
+        let mut sel = make_touch_system(2, vec![[200.0, 200.0], [300.0, 300.0]]);
+        let mut adapter = TouchSelectionAdapter::with_defaults();
+
+        adapter.on_touch_event(touch(0, [10.0, 10.0], TouchPhase::Started, 0.0), &mut sel);
+        adapter.tick(0.6, &mut sel);
+
+        // Draw lasso far from all marks.
+        adapter.on_touch_event(touch(0, [30.0, 10.0], TouchPhase::Moved, 0.65), &mut sel);
+        adapter.on_touch_event(touch(0, [30.0, 30.0], TouchPhase::Moved, 0.7), &mut sel);
+        adapter.on_touch_event(touch(0, [10.0, 30.0], TouchPhase::Moved, 0.75), &mut sel);
+        adapter.on_touch_event(touch(0, [10.0, 10.0], TouchPhase::Ended, 0.8), &mut sel);
+
+        assert_eq!(sel.state().count(), 0);
+        assert_eq!(*sel.tool_kind(), SelectionToolKind::Point);
+    }
+
+    #[test]
+    fn test_touch_lasso_cancel_aborts() {
+        // Cancelling during lasso drawing should not select anything.
+        let mut sel = make_touch_system(2, vec![[50.0, 50.0], [60.0, 55.0]]);
+        let mut adapter = TouchSelectionAdapter::with_defaults();
+
+        adapter.on_touch_event(touch(0, [40.0, 40.0], TouchPhase::Started, 0.0), &mut sel);
+        adapter.tick(0.6, &mut sel);
+
+        // Start lasso
+        adapter.on_touch_event(touch(0, [60.0, 40.0], TouchPhase::Moved, 0.65), &mut sel);
+        adapter.on_touch_event(touch(0, [60.0, 60.0], TouchPhase::Moved, 0.7), &mut sel);
+
+        // Cancel
+        adapter.on_touch_event(
+            touch(0, [60.0, 60.0], TouchPhase::Cancelled, 0.75),
+            &mut sel,
+        );
+
+        assert_eq!(sel.state().count(), 0);
+        assert!(!adapter.is_active());
+        assert_eq!(*sel.tool_kind(), SelectionToolKind::Point);
+    }
+
+    #[test]
+    fn test_touch_lasso_haptic_disabled() {
+        // Lasso completion should not produce haptic when disabled.
+        let mut sel = make_touch_system(2, vec![[50.0, 50.0], [60.0, 55.0]]);
+        let mut adapter = TouchSelectionAdapter::new(TouchSelectionConfig {
+            haptic_feedback_enabled: false,
+            ..Default::default()
+        });
+
+        adapter.on_touch_event(touch(0, [40.0, 40.0], TouchPhase::Started, 0.0), &mut sel);
+        // Long-press fires — even with haptic disabled, tick returns Medium
+        // to indicate the gesture threshold was reached (haptic hint is advisory).
+        let fb = adapter.tick(0.6, &mut sel);
+        assert_eq!(fb, Some(HapticFeedback::Medium));
+
+        // Start lasso and draw
+        adapter.on_touch_event(touch(0, [70.0, 40.0], TouchPhase::Moved, 0.65), &mut sel);
+        adapter.on_touch_event(touch(0, [70.0, 70.0], TouchPhase::Moved, 0.7), &mut sel);
+        adapter.on_touch_event(touch(0, [40.0, 70.0], TouchPhase::Moved, 0.75), &mut sel);
+        let fb = adapter.on_touch_event(touch(0, [40.0, 40.0], TouchPhase::Ended, 0.8), &mut sel);
+
+        // No haptic on completion because feedback is disabled.
+        assert_eq!(fb, None);
+    }
+
+    #[test]
+    fn test_touch_lasso_reset_during_drawing() {
+        // Reset should cleanly abort an in-progress lasso.
+        let mut sel = make_touch_system(1, vec![[50.0, 50.0]]);
+        let mut adapter = TouchSelectionAdapter::with_defaults();
+
+        adapter.on_touch_event(touch(0, [40.0, 40.0], TouchPhase::Started, 0.0), &mut sel);
+        adapter.tick(0.6, &mut sel);
+
+        // Enter lasso mode
+        adapter.on_touch_event(touch(0, [60.0, 40.0], TouchPhase::Moved, 0.65), &mut sel);
+        assert!(adapter.is_active());
+
+        adapter.reset(&mut sel);
+        assert!(!adapter.is_active());
+        assert_eq!(*sel.tool_kind(), SelectionToolKind::Point);
+    }
+
+    #[test]
+    fn test_touch_long_press_then_lift_without_movement_toggles() {
+        // Verify that a pure long-press (hold-then-lift, no drag) still
+        // works as a toggle — the refactoring should preserve this.
+        let mut sel = make_touch_system(2, vec![[50.0, 50.0], [200.0, 200.0]]);
+        let mut adapter = TouchSelectionAdapter::with_defaults();
+
+        // Pre-select mark 0 so we can verify toggle deselects it.
+        sel.state_mut().select(0);
+        assert!(sel.state().is_selected(0));
+
+        // Touch down on mark 0
+        adapter.on_touch_event(touch(0, [50.0, 50.0], TouchPhase::Started, 0.0), &mut sel);
+        adapter.tick(0.6, &mut sel);
+
+        // Still selected — toggle hasn't fired yet.
+        assert!(sel.state().is_selected(0));
+
+        // Lift — toggle should deselect.
+        adapter.on_touch_event(touch(0, [50.0, 50.0], TouchPhase::Ended, 0.7), &mut sel);
+        assert!(!sel.state().is_selected(0));
+    }
+
     // -- Winit conversion tests --
 
     #[test]
