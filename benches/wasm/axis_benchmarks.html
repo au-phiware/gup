@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gup WASM Axis Performance Benchmarks</title>
+  <style>
+    :root {
+      --bg: #1e1e2e;
+      --fg: #cdd6f4;
+      --accent: #89b4fa;
+      --green: #a6e3a1;
+      --red: #f38ba8;
+      --yellow: #f9e2af;
+      --surface: #313244;
+      --overlay: #45475a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      padding: 2rem;
+      line-height: 1.6;
+    }
+    h1 { color: var(--accent); margin-bottom: 0.5rem; }
+    h2 { color: var(--accent); margin: 1.5rem 0 0.5rem; font-size: 1.2rem; }
+    .subtitle { color: var(--overlay); margin-bottom: 2rem; }
+    #status {
+      padding: 1rem;
+      border-radius: 8px;
+      background: var(--surface);
+      margin-bottom: 1.5rem;
+      font-family: monospace;
+      white-space: pre-wrap;
+    }
+    .status-running { border-left: 4px solid var(--accent); }
+    .status-done    { border-left: 4px solid var(--green); }
+    .status-error   { border-left: 4px solid var(--red); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1.5rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.5rem 1rem;
+      border-bottom: 1px solid var(--overlay);
+    }
+    th { color: var(--accent); font-weight: 600; }
+    td.num { text-align: right; font-family: monospace; }
+    td.pass { color: var(--green); }
+    td.fail { color: var(--red); }
+    tr:hover { background: var(--surface); }
+    button {
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      padding: 0.6rem 1.5rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1rem;
+      font-weight: 600;
+      margin-right: 0.5rem;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button:hover:not(:disabled) { filter: brightness(1.1); }
+    .actions { margin-bottom: 1.5rem; }
+    .budget-info {
+      padding: 0.5rem 1rem;
+      background: var(--surface);
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      font-family: monospace;
+    }
+    #json-output {
+      background: var(--surface);
+      padding: 1rem;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 0.85rem;
+      max-height: 400px;
+      overflow: auto;
+      white-space: pre;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Gup WASM Axis Performance Benchmarks</h1>
+  <p class="subtitle">Axis rendering performance validation — WebAssembly (GUP-226)</p>
+
+  <div class="actions">
+    <button id="run-btn" onclick="runBenchmarks()">▶ Run Axis Benchmarks</button>
+    <button id="download-btn" onclick="downloadResults()" disabled>⬇ Download JSON</button>
+    <button id="copy-btn" onclick="copyResults()" disabled>📋 Copy JSON</button>
+  </div>
+
+  <div class="budget-info">
+    Budget: <strong>2.0 ms</strong> per benchmark (WebAssembly target)
+    | LOD thresholds: 250/130/65 px | Max variance: 2×
+  </div>
+
+  <div id="status" class="status-running">Initialising WASM module…</div>
+
+  <div id="results-container" style="display:none">
+    <h2>Axis Benchmarks</h2>
+    <table id="axis-table">
+      <thead><tr>
+        <th>Benchmark</th>
+        <th>Median (ms)</th>
+        <th>Mean (ms)</th>
+        <th>Min (ms)</th>
+        <th>Max (ms)</th>
+        <th>Std Dev</th>
+        <th>Iters</th>
+        <th>Budget</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <h2>Raw JSON</h2>
+  <pre id="json-output"></pre>
+
+  <script type="module">
+    import init, { run_wasm_axis_benchmarks } from './pkg/gup.js';
+
+    const BUDGET_MS = 2.0;
+    let benchResults = null;
+
+    window.runBenchmarks = async function() {
+      const btn = document.getElementById('run-btn');
+      const status = document.getElementById('status');
+      btn.disabled = true;
+      status.className = 'status-running';
+      status.textContent = '⏳ Running axis benchmarks… (8 benchmarks, ~10s)';
+
+      try {
+        const json = run_wasm_axis_benchmarks();
+        benchResults = json;
+
+        const suite = JSON.parse(json);
+        displayResults(suite);
+
+        const allPass = suite.results.every(r => r.median_ms < BUDGET_MS);
+        status.className = allPass ? 'status-done' : 'status-error';
+        status.textContent = [
+          allPass ? '✅ All benchmarks within budget' : '❌ Some benchmarks exceed budget',
+          `Platform: ${suite.platform}`,
+          `Timestamp: ${suite.timestamp}`,
+          `User Agent: ${suite.user_agent || 'N/A'}`,
+          `Benchmarks: ${suite.results.length}`,
+          `Budget: ${BUDGET_MS} ms`,
+        ].join('\n');
+
+        document.getElementById('download-btn').disabled = false;
+        document.getElementById('copy-btn').disabled = false;
+
+        const jsonEl = document.getElementById('json-output');
+        jsonEl.style.display = 'block';
+        jsonEl.textContent = json;
+
+        // For automated headless collection, write to a global
+        window.__gupAxisResults = suite;
+      } catch (e) {
+        status.className = 'status-error';
+        status.textContent = `❌ Error: ${e.message}\n\nStack: ${e.stack}`;
+      } finally {
+        btn.disabled = false;
+      }
+    };
+
+    window.downloadResults = function() {
+      if (!benchResults) return;
+      const blob = new Blob([benchResults], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `gup-wasm-axis-bench-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    window.copyResults = function() {
+      if (!benchResults) return;
+      navigator.clipboard.writeText(benchResults);
+    };
+
+    function displayResults(suite) {
+      const container = document.getElementById('results-container');
+      container.style.display = 'block';
+      const tbody = document.getElementById('axis-table').querySelector('tbody');
+      tbody.innerHTML = '';
+
+      for (const r of suite.results) {
+        const pass = r.median_ms < BUDGET_MS;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.name}</td>
+          <td class="num">${r.median_ms.toFixed(4)}</td>
+          <td class="num">${r.mean_ms.toFixed(4)}</td>
+          <td class="num">${r.min_ms.toFixed(4)}</td>
+          <td class="num">${r.max_ms.toFixed(4)}</td>
+          <td class="num">${r.std_dev_ms.toFixed(4)}</td>
+          <td class="num">${r.iterations}</td>
+          <td class="${pass ? 'pass' : 'fail'}">${pass ? '✅' : '❌'} ${r.median_ms.toFixed(3)}/${BUDGET_MS}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    // Initialise WASM module on page load
+    try {
+      await init();
+      document.getElementById('status').textContent =
+        '✅ WASM module loaded. Click "Run Axis Benchmarks" to start.';
+      document.getElementById('status').className = 'status-done';
+
+      // Auto-run in headless mode (detected by URL param)
+      if (new URLSearchParams(location.search).has('autorun')) {
+        await window.runBenchmarks();
+      }
+    } catch (e) {
+      const status = document.getElementById('status');
+      status.className = 'status-error';
+      status.textContent = `❌ Failed to load WASM module: ${e.message}\n\nMake sure you built with: wasm-pack build --target web --out-dir benches/wasm/pkg`;
+    }
+  </script>
+</body>
+</html>
