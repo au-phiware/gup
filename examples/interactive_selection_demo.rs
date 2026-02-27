@@ -9,6 +9,8 @@
 //! - Ctrl+click to toggle individual marks
 //! - Rectangle drag selection (press R to toggle tool)
 //! - Undo/Redo with Z/Y keys
+//! - Touch: tap to select, long-press to toggle, drag for rectangle selection,
+//!   two-finger tap to clear
 //! - Visual feedback: selected marks highlighted, others dimmed
 //!
 //! # Controls
@@ -22,12 +24,20 @@
 //! - **Z**: Undo
 //! - **Y**: Redo
 //! - **Q**: Quit
+//! - **Touch tap**: Select mark at position
+//! - **Touch long-press**: Toggle selection (Ctrl+Click equivalent)
+//! - **Touch drag**: Rectangle selection
+//! - **Two-finger tap**: Clear selection
 
 use gup::mark::circle::{Circle, CircleInstance};
-use gup::mark_selection::{KeyModifiers, MarkSelectionSystem, SelectionStyle, SelectionToolKind};
+use gup::mark_selection::{
+    KeyModifiers, MarkSelectionSystem, SelectionStyle, SelectionToolKind, TouchEvent,
+    TouchSelectionAdapter,
+};
 use gup::selection::Selection;
 use gup::{GupContext, PipelineCache};
 use std::sync::Arc;
+use std::time::Instant;
 use wgpu::Color;
 use winit::{
     application::ApplicationHandler,
@@ -81,6 +91,8 @@ struct App {
     selection: Option<Selection<DataPoint, Circle>>,
     cache: PipelineCache,
     sel_sys: MarkSelectionSystem,
+    touch_adapter: TouchSelectionAdapter,
+    start_time: Instant,
     win_size: [f32; 2],
     mouse: [f32; 2],
     modifiers: ModifiersState,
@@ -97,6 +109,8 @@ impl App {
             selection: None,
             cache: PipelineCache::new(),
             sel_sys,
+            touch_adapter: TouchSelectionAdapter::with_defaults(),
+            start_time: Instant::now(),
             win_size: [800.0, 600.0],
             mouse: [0.0, 0.0],
             modifiers: ModifiersState::empty(),
@@ -219,7 +233,7 @@ impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         pollster::block_on(async {
             let attrs = WindowAttributes::default()
-                .with_title("Gup Interactive Selection — Click/Drag, R=rect, Z=undo, Q=quit")
+                .with_title("Gup Interactive Selection — Click/Drag/Touch, R=rect, Z=undo, Q=quit")
                 .with_inner_size(winit::dpi::LogicalSize::new(800, 600));
             let window = match event_loop.create_window(attrs) {
                 Ok(w) => Arc::new(w),
@@ -236,7 +250,7 @@ impl ApplicationHandler for App {
                     self.selection =
                         Some(Selection::<DataPoint, Circle>::from_data(self.data.clone()));
                     self.rebuild_instances();
-                    println!("✓ Ready! Click marks, R=rect, Shift/Ctrl+Click, Z=undo");
+                    println!("✓ Ready! Click/tap marks, R=rect, Shift/Ctrl+Click, Z=undo");
                 }
                 Err(e) => {
                     eprintln!("GPU init: {e}");
@@ -378,6 +392,15 @@ impl ApplicationHandler for App {
                 _ => {}
             },
 
+            WindowEvent::Touch(touch) => {
+                let ts = self.start_time.elapsed().as_secs_f64();
+                let event = TouchEvent::from_winit(touch, ts);
+                let _feedback = self.touch_adapter.on_touch_event(event, &mut self.sel_sys);
+                self.rebuild_instances();
+                let s = self.sel_sys.statistics();
+                println!("[touch] {} / {} selected", s.selected_count, s.total_marks);
+            }
+
             WindowEvent::RedrawRequested => {
                 let _ = self.render_frame();
             }
@@ -386,6 +409,11 @@ impl ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        // Tick the touch adapter so time-based gestures (long-press) fire.
+        let ts = self.start_time.elapsed().as_secs_f64();
+        if let Some(_feedback) = self.touch_adapter.tick(ts, &mut self.sel_sys) {
+            self.rebuild_instances();
+        }
         if let Some(w) = &self.window {
             w.request_redraw();
         }
