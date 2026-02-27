@@ -79,3 +79,65 @@ text has been truncated
 - **All project tests pass** including doctests
 
 **Story Created**: 2025-07-18 **Origin**: GUP-199 follow-up
+
+## Retrospective
+
+**Completed**: 2025-02-28
+
+### Key Technical Learnings
+
+#### Reusing Existing Truncation Patterns
+
+- **Challenge**: Needed to fit an ellipsis into a last line that may already be
+  at or near the container width limit
+- **Solution**: Adapted the binary search + word boundary adjustment pattern
+  already used by `TruncateWithEllipsis` into a standalone
+  `append_ellipsis_to_last_line()` helper
+- **Pattern**: When adding a feature similar to an existing one, extract the
+  shared algorithm (binary search for fit + `adjust_for_word_boundary`) rather
+  than duplicating code
+
+#### Truncation Detection via Word Count Comparison
+
+- **Challenge**: `break_into_lines()` returns lines but doesn't indicate whether
+  text was truncated or naturally ended
+- **Solution**: Compare total words in the original text against words covered by
+  the wrapped lines. If fewer words are covered AND lines reached `max_lines`,
+  text was truncated
+- **Pattern**: Post-hoc truncation detection is simpler than modifying the
+  wrapping function to return a flag, keeping the existing API stable
+
+### Architectural Decisions
+
+#### Option<String> Rather Than Default Ellipsis
+
+- **Decision**: Used `ellipsis_text: Option<String>` defaulting to `None`
+  instead of a non-optional field defaulting to `"..."`
+- **Reasoning**: Backward compatibility — all existing code constructs
+  `TextWrapping` without this field, so `None` preserves the previous behaviour
+  (no ellipsis). Users opt in explicitly.
+- **Trade-off**: Requires `Some("...".to_string())` at the call site instead of
+  getting ellipsis by default
+- **Future**: Could add a convenience constructor or builder method to simplify
+  common usage
+
+#### Ellipsis Logic in `apply_text_wrapping` Not `break_into_lines`
+
+- **Decision**: Ellipsis is applied after line breaking, not during
+- **Reasoning**: Keeps `break_into_lines` focused on line splitting, and the
+  ellipsis is an output formatting concern. This preserves the function for reuse
+  in contexts that don't want ellipsis
+- **Trade-off**: Requires a separate truncation detection step
+- **Future**: Clean separation makes it easy to add other post-processing (e.g.
+  "show more" link text)
+
+### Development Workflow Insights
+
+- Disk space was the main bottleneck — the ZFS dataset for `/home/corin/src` was
+  at 100%, preventing `sed` temp files and large link steps. Resolved by
+  symlinking `target/` to `/tmp/gup-target`.
+- The story was small and self-contained; all changes fit in a single file
+  (`src/text/layout.rs`), which made iteration fast.
+- The existing `MockFontAtlas` test helper with ~9px per character made it easy
+  to reason about widths in test assertions.
+
