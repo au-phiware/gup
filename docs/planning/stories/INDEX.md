@@ -320,7 +320,7 @@ system story. The expanded story is also complete._
 | [GUP-217](GUP-217_Per_Axis_Label_Style_Override.md)                                | Per-Axis Label Style Override               | ✅ Complete | Low      | —      |
 | [GUP-227](GUP-227_Multi_Line_Text_Alignment.md)                                    | Multi-Line Text Alignment Options           | 💡 New      | Low      | 3      |
 | [GUP-228](GUP-228_Ellipsis_Last_Wrapped_Line.md)                                   | Ellipsis on Last Wrapped Line               | 💡 New      | Low      | 2      |
-| [GUP-229](GUP-229_Tooltip_Background_Rendering.md)                                 | Tooltip Background Rendering                | 📋 Planned  | Low      | 3      |
+| [GUP-229](GUP-229_Tooltip_Background_Rendering.md)                                 | Tooltip Background Rendering                | 🚧 In Progress | Low      | 3      |
 | [GUP-230](GUP-230_Chart_Builder_Hover_Reveal_Integration.md)                       | Chart Builder Hover Reveal Integration      | 📋 Planned  | Low      | 3      |
 
 ### Post GUP-016 Stories - Accessibility System (Stories 111-130)
