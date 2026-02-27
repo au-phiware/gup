@@ -1,7 +1,7 @@
 # GUP-217: Per-Axis Label Style Override
 
-**Status**: 🚧 In Progress **Priority**: Low **Complexity**: Low **Created**:
-2025-07-22
+**Status**: ✅ Complete **Priority**: Low **Complexity**: Low **Created**:
+2025-07-22 **Completed**: 2025-07-27
 
 ## Overview
 
@@ -22,11 +22,11 @@ that I can optimise readability for each axis's data domain.
 
 ## Acceptance Criteria
 
-- [ ] `AxisConfiguration` or a new wrapper accepts an optional `TextStyle`
+- [x] `AxisConfiguration` or a new wrapper accepts an optional `TextStyle`
       override
-- [ ] When set, the per-axis style is used instead of `ChartConfig.label_style`
-- [ ] `font_family` is respected per-axis via `FontAtlasManager`
-- [ ] Backward compatible — omitting the override uses the chart-level style
+- [x] When set, the per-axis style is used instead of `ChartConfig.label_style`
+- [x] `font_family` is respected per-axis via `FontAtlasManager`
+- [x] Backward compatible — omitting the override uses the chart-level style
 
 ## Technical Tasks
 
@@ -50,9 +50,38 @@ that I can optimise readability for each axis's data domain.
 
 ## Definition of Done
 
-- [ ] Per-axis label style override works
-- [ ] All existing chart tests pass
-- [ ] Documentation shows per-axis styling example
+- [x] Per-axis label style override works
+- [x] All existing chart tests pass
+- [x] Documentation shows per-axis styling example
+
+## Implementation Summary
+
+### What was implemented
+
+- **`AxisConfiguration.label_style`**: Added `label_style: Option<TextStyle>`
+  field to `AxisConfiguration` with `with_label_style()` builder method.
+- **`queue_chart_text` refactor**: Refactored from using
+  `generate_axis_geometry` (which merges labels from all axes) to iterating
+  per-axis directly, resolving per-axis style override vs chart-level
+  `label_style` fallback.
+- **`queue_chart_text_resolved` refactor**: Same per-axis iteration approach,
+  with collision detection via `LabelPositioner`.
+- **Documentation**: Added "Per-Axis Label Style Overrides (GUP-217)" section to
+  `docs/text-rendering-architecture.md`.
+
+### Key files changed
+
+| File                                  | Change                                       |
+| ------------------------------------- | -------------------------------------------- |
+| `src/axis.rs`                         | Added `label_style` field and builder method |
+| `src/chart_builder.rs`                | Refactored queue methods, added 7 tests      |
+| `docs/text-rendering-architecture.md` | Added per-axis style override documentation  |
+
+### Tests
+
+- 7 new tests (3 unit, 4 GPU integration) in `chart_builder::tests_multi_font`
+- All 1733 existing lib tests pass (3 pre-existing failures in unrelated
+  `mark::renderer` module)
 
 ---
 
