@@ -3,7 +3,7 @@
 ## Story Overview
 
 **Epic**: Phase 2 - High-Level Convenience APIs **Theme**: Advanced Text Layout
-and Rendering **Priority**: Low **Story Points**: 2 **Status**: 🚧 In Progress
+and Rendering **Priority**: Low **Story Points**: 2 **Status**: ✅ Complete
 **Dependencies**: GUP-199 (Text Wrapping and Multi-Line Layout)
 
 ## Problem Statement
@@ -22,11 +22,11 @@ text has been truncated
 
 ## Acceptance Criteria
 
-- [ ] Last wrapped line appends configurable ellipsis text (default "...")
-- [ ] Ellipsis replaces trailing characters to stay within container width
-- [ ] Configurable via a new field on `TextWrapping` variant
-- [ ] Word boundary preservation when truncating last line for ellipsis
-- [ ] No change when text fits within `max_lines` (no false ellipsis)
+- [x] Last wrapped line appends configurable ellipsis text (default "...")
+- [x] Ellipsis replaces trailing characters to stay within container width
+- [x] Configurable via a new field on `TextWrapping` variant
+- [x] Word boundary preservation when truncating last line for ellipsis
+- [x] No change when text fits within `max_lines` (no false ellipsis)
 
 ## Technical Tasks
 
@@ -45,10 +45,37 @@ text has been truncated
 
 ## Definition of Done
 
-- [ ] Ellipsis appended to truncated wrapped text
-- [ ] All tests passing
-- [ ] Backward compatible (existing TextWrapping usage unchanged)
+- [x] Ellipsis appended to truncated wrapped text
+- [x] All tests passing
+- [x] Backward compatible (existing TextWrapping usage unchanged)
 
 ---
+
+## Implementation Summary
+
+**Completed**: 2025-02-28
+
+### What Was Implemented
+
+- Added `ellipsis_text: Option<String>` field to `ClippingStrategy::TextWrapping`
+- New `append_ellipsis_to_last_line()` method that truncates the last wrapped
+  line and appends the ellipsis string, staying within the container width
+- Truncation detection in `apply_text_wrapping()`: compares wrapped word count
+  against total word count to determine if text was actually truncated
+- Word boundary preservation reusing the existing `adjust_for_word_boundary()`
+  helper
+- Graceful fallback for very narrow containers (line becomes just the ellipsis)
+
+### Key Files Changed
+
+- `src/text/layout.rs` — all changes in one file: enum field, strategy
+  pass-through, helper method, and tests
+
+### Test Count
+
+- **9 new tests** added (7 ellipsis-specific + 1 variant construction + 1
+  performance)
+- **60 total** text layout tests pass
+- **All project tests pass** including doctests
 
 **Story Created**: 2025-07-18 **Origin**: GUP-199 follow-up
