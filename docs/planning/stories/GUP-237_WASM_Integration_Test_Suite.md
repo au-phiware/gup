@@ -99,3 +99,96 @@ browser, plus infrastructure fixes enabling the tests to run.
 - **WASM GPU tests**: 3 passed (headless Chrome with WebGPU)
 - **Native tests**: 2,500+ passed (0 failures)
 - All examples compile
+
+## Retrospective
+
+**Completed**: 2026-02-27
+
+### Key Technical Learnings
+
+#### wasm-bindgen `main` Symbol Conflict with Integration Tests
+
+- **Challenge**: `#[wasm_bindgen(start)] pub fn main()` in `lib.rs` was gated
+  with `#[cfg(all(target_arch = "wasm32", not(test)))]`. However, for
+  integration tests (`tests/` directory), the library is compiled as a
+  **dependency**, not in test mode. Therefore `cfg(test)` is false and the
+  `main` function IS compiled into the library — conflicting with the test
+  harness entry point. This caused the error: "main symbol is missing, may be
+  because there are multiple exports with the same name but different
+  signatures, and discarded by wasm-ld."
+- **Solution**: Replaced `not(test)` with a Cargo feature flag `wasm-start`.
+  When building the library for production
+  (`wasm-pack build --target web -- --features wasm-start`), the `main` entry
+  point is included. When running tests, the feature is absent so no conflict
+  occurs.
+- **Pattern**: Never use `cfg(test)` to gate `#[wasm_bindgen(start)]` functions
+  — it only applies when the crate itself is being compiled with `--test`, not
+  when it's a dependency. Use a Cargo feature flag instead.
+
+#### ChromeDriver Version Must Match Chromium
+
+- **Challenge**: The nix development environment included ChromeDriver v80 but
+  Chromium v145. `wasm-pack test --headless --chrome` failed with "http status:
+  404" because ChromeDriver v80 can't drive Chromium v145.
+- **Solution**: Used `nix build nixpkgs#chromedriver` to obtain a matching v145
+  ChromeDriver and set `CHROMEDRIVER=/nix/store/.../chromedriver` when running
+  tests via `cargo test` directly (wasm-pack overrides the env var).
+- **Pattern**: Always verify ChromeDriver and Chromium versions match before
+  attempting headless browser tests. This is tracked in GUP-240.
+
+#### wgpu v26 API Differences
+
+- **Challenge**: wgpu v26 changed several APIs from earlier versions:
+  `request_adapter` returns `Result` instead of `Option`, `request_device` takes
+  a single argument (no trace path), `RenderPassColorAttachment` requires
+  `depth_slice` field.
+- **Solution**: Used `.ok()` on `request_adapter`, removed the second argument
+  from `request_device`, added `depth_slice: None`.
+- **Pattern**: Always consult the crate's actual type signatures rather than
+  relying on documentation or examples from earlier versions.
+
+### Architectural Decisions
+
+#### Feature Flag vs cfg(test) for WASM Start
+
+- **Decision**: Introduced `wasm-start` feature flag in Cargo.toml.
+- **Reasoning**: `cfg(test)` is semantically incorrect for this use case — the
+  library isn't being tested, it's being used as a dependency by the test
+  binary. A feature flag explicitly communicates intent: "include the WASM entry
+  point."
+- **Trade-off**: Users building for WASM must now pass `--features wasm-start`
+  to `wasm-pack build`. This is a minor ergonomic cost documented in CI and the
+  test harness.
+- **Future**: Could add `wasm-start` to the `default` features, but that would
+  cause issues for any project using gup as a library dependency in their own
+  WASM binary (duplicate entry point). Keeping it opt-in is safer.
+
+#### Two-File Test Split (CPU vs GPU)
+
+- **Decision**: Separated tests into `wasm_integration.rs` (CPU) and
+  `wasm_gpu_integration.rs` (GPU with `run_in_browser`).
+- **Reasoning**: CPU tests are portable — they can run in Node.js if available,
+  or in a browser. GPU tests require a browser with WebGPU support and are more
+  likely to fail in CI environments without GPU hardware.
+- **Trade-off**: Two test files to maintain instead of one. But clear separation
+  makes it easier to run just the CPU tests in resource-constrained
+  environments.
+- **Future**: Once GUP-240 ensures matching ChromeDriver in CI, both files can
+  be run together seamlessly.
+
+### Development Workflow Insights
+
+- The `wasm-pack test` command overrides the `CHROMEDRIVER` environment variable
+  with its own PATH-based discovery. To use a specific ChromeDriver, run
+  `cargo test --target wasm32-unknown-unknown` directly with `CHROMEDRIVER` and
+  `CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER` environment variables set.
+- `wasm_bindgen_test_configure!(run_in_browser)` is required for any test that
+  needs browser APIs (DOM, WebGPU, etc.). Without it, tests are configured for
+  Node.js which doesn't have WebGPU.
+- The "main symbol is missing" error from wasm-bindgen is actually the **wasm-ld
+  linker** silently discarding an export due to a name+signature conflict, and
+  then wasm-bindgen failing because it expected that export. The error message
+  is misleading — the real issue is the conflict, not a missing symbol.
+- GPU tests should always gracefully degrade with `Option`-based adapter/device
+  creation. Not all environments have GPU access, and a failing test is worse
+  than a skipped test with a warning message.
