@@ -93,20 +93,20 @@ position and length.
 
 ### Key Files Changed
 
-| File | Change |
-|------|--------|
-| `src/axis.rs` | TickInstance struct, generation methods, TickPipeline |
-| `src/axis_performance.rs` | Instance caching in AxisGeometryCache |
-| `src/shaders/tick_instanced.wgsl` | New instanced tick shader |
+| File                              | Change                                                |
+| --------------------------------- | ----------------------------------------------------- |
+| `src/axis.rs`                     | TickInstance struct, generation methods, TickPipeline |
+| `src/axis_performance.rs`         | Instance caching in AxisGeometryCache                 |
+| `src/shaders/tick_instanced.wgsl` | New instanced tick shader                             |
 
 ### Performance Comparison
 
-| Metric | Vertex Pairs | Instanced |
-|--------|-------------|-----------|
+| Metric        | Vertex Pairs          | Instanced                   |
+| ------------- | --------------------- | --------------------------- |
 | Data per tick | 48 bytes (2 × Vertex) | 32 bytes (1 × TickInstance) |
-| Base geometry | 0 bytes | 8 bytes (shared) |
-| 6 major ticks | 288 bytes | 200 bytes (31% smaller) |
-| Draw calls | 1 | 1 per tick type |
+| Base geometry | 0 bytes               | 8 bytes (shared)            |
+| 6 major ticks | 288 bytes             | 200 bytes (31% smaller)     |
+| Draw calls    | 1                     | 1 per tick type             |
 
 ### Test Counts
 
@@ -131,8 +131,8 @@ position and length.
   scalar length avoids per-instance direction calculation in the shader and
   keeps the CPU-side generation symmetric with the existing vertex-pair code.
 - **Pattern**: When instancing line segments, encode the full offset vector
-  rather than decomposing into length + direction. This simplifies the shader
-  to a single multiply-add.
+  rather than decomposing into length + direction. This simplifies the shader to
+  a single multiply-add.
 
 #### Base Geometry Design for Line Instancing
 
@@ -140,10 +140,10 @@ position and length.
   geometry. For line-list ticks, the base geometry is just two vertices.
 - **Solution**: Used a single `f32` parameter `t ∈ {0.0, 1.0}` as the base
   vertex buffer (8 bytes total). The vertex shader computes
-  `pos = instance.position + instance.tick_vector * t`, which gives the
-  on-axis point at t=0 and the tick endpoint at t=1.
-- **Pattern**: For instanced line segments, a 1D parameter buffer is the
-  minimal base geometry — no index buffer needed, just `draw(0..2, 0..N)`.
+  `pos = instance.position + instance.tick_vector * t`, which gives the on-axis
+  point at t=0 and the tick endpoint at t=1.
+- **Pattern**: For instanced line segments, a 1D parameter buffer is the minimal
+  base geometry — no index buffer needed, just `draw(0..2, 0..N)`.
 
 #### Cache Dual-Keying
 
@@ -186,9 +186,9 @@ position and length.
   to the vertex-pair path, satisfying the "visual output identical" AC.
 - The `bytemuck::Pod` + `#[repr(C)]` pattern made GPU buffer serialization
   trivial — the struct can be uploaded directly with `bytemuck::cast_slice`.
-- Pre-existing test failures in `mark::renderer::tests` (3 tests) and
-  pre-commit hook failures (markdown formatting, deprecated criterion API) were
-  unrelated to this story.
+- Pre-existing test failures in `mark::renderer::tests` (3 tests) and pre-commit
+  hook failures (markdown formatting, deprecated criterion API) were unrelated
+  to this story.
 
 ### Follow-up Stories
 

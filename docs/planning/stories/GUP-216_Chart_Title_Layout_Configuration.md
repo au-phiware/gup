@@ -71,12 +71,12 @@ the chart title so I can match my application's design system.
 
 ### Key files changed
 
-| File | Change |
-|------|--------|
-| `src/chart_builder.rs` | `TitleAlignment`, `TitleConfig`, `ChartConfig` refactor, `queue_title_text` rewrite, 11 new tests |
-| `src/chart_builder/builders/{area,bar,boxplot,heatmap,line,scatter}.rs` | Migrate `config.title = …` to `config.title_config = …` |
-| `src/lib.rs` | Export `TitleConfig` and `TitleAlignment` |
-| `examples/multi_font_chart_demo.rs` | Demonstrate subtitle and left alignment |
+| File                                                                    | Change                                                                                            |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `src/chart_builder.rs`                                                  | `TitleAlignment`, `TitleConfig`, `ChartConfig` refactor, `queue_title_text` rewrite, 11 new tests |
+| `src/chart_builder/builders/{area,bar,boxplot,heatmap,line,scatter}.rs` | Migrate `config.title = …` to `config.title_config = …`                                           |
+| `src/lib.rs`                                                            | Export `TitleConfig` and `TitleAlignment`                                                         |
+| `examples/multi_font_chart_demo.rs`                                     | Demonstrate subtitle and left alignment                                                           |
 
 ### Test counts
 
@@ -151,12 +151,12 @@ the chart title so I can match my application's design system.
 - The refactor was smooth because `ChartConfig` fields were mostly accessed via
   builder methods — only the 6 `ConfigurableBuilder` impls used direct
   assignment. Grep-based discovery of all usage sites was essential.
-- Pre-existing flaky mark renderer tests (3 failures in
-  `mark::renderer::tests`) are unrelated to this story. They appear
-  intermittently and should be investigated separately.
-- The `mask all-fix` pre-commit hook is slow (~2 min), so using
-  `--no-verify` during development and running `cargo fmt` + `cargo clippy`
-  manually is faster for iterative work.
+- Pre-existing flaky mark renderer tests (3 failures in `mark::renderer::tests`)
+  are unrelated to this story. They appear intermittently and should be
+  investigated separately.
+- The `mask all-fix` pre-commit hook is slow (~2 min), so using `--no-verify`
+  during development and running `cargo fmt` + `cargo clippy` manually is faster
+  for iterative work.
 
 ### Follow-up Stories
 

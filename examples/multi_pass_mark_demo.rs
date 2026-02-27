@@ -352,20 +352,19 @@ impl MultiPassDemoRenderer {
         });
 
         // ── Shared bind group layout ───────────────────────────────────
-        let bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("multi_pass_bind_group_layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-            });
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("multi_pass_bind_group_layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
 
         // ── Shadow demo data (left half) ───────────────────────────────
         let shadow_data = generate_shadow_data();
@@ -608,13 +607,12 @@ impl ApplicationHandler for MultiPassApp {
             WindowEvent::Resized(size) => {
                 if let Some(surface_id) = self.surface_id
                     && let Some(context) = self.context.take()
-                        && let Ok(mut ctx) = Arc::try_unwrap(context) {
-                            let _ = ctx.resize_surface(
-                                surface_id,
-                                PhysicalSize::new(size.width, size.height),
-                            );
-                            self.context = Some(Arc::new(ctx));
-                        }
+                    && let Ok(mut ctx) = Arc::try_unwrap(context)
+                {
+                    let _ =
+                        ctx.resize_surface(surface_id, PhysicalSize::new(size.width, size.height));
+                    self.context = Some(Arc::new(ctx));
+                }
             }
             WindowEvent::KeyboardInput {
                 event:

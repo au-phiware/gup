@@ -13,8 +13,8 @@ for lasso selection, such as a long-press-then-drag or a dedicated mode toggle.
 ## Context
 
 GUP-182 mapped the most common touch gestures to selection actions but deferred
-lasso support. Lasso selection is useful for irregularly shaped clusters of marks
-that cannot be captured with a rectangle.
+lasso support. Lasso selection is useful for irregularly shaped clusters of
+marks that cannot be captured with a rectangle.
 
 ## User Story
 

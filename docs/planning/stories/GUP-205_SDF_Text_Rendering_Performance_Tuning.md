@@ -83,7 +83,8 @@ labels may appear blurry or aliased without proper SDF parameter adjustment.
 
 - 12 unit tests in `sdf_tuning::tests` covering interpolation, clamping,
   backward compatibility, monotonicity, and custom profiles
-- All 1656 existing tests pass (3 pre-existing GPU bind-group failures unrelated)
+- All 1656 existing tests pass (3 pre-existing GPU bind-group failures
+  unrelated)
 - Examples compile and run without errors
 
 ## Retrospective
@@ -102,24 +103,24 @@ labels may appear blurry or aliased without proper SDF parameter adjustment.
   boundary offset for optical weight compensation at small sizes) and
   `smoothing_factor` (controls anti-aliasing width in pixels). The fwidth-based
   approach handles resolution adaptation automatically; our tuning adjusts the
-  *aesthetic* balance per size range.
+  _aesthetic_ balance per size range.
 - **Pattern**: When adaptive algorithms are already in place, tuning is about
-  adjusting the *policy* parameters (e.g., how aggressive to smooth) rather than
-  the *mechanism* (how to compute the smooth region).
+  adjusting the _policy_ parameters (e.g., how aggressive to smooth) rather than
+  the _mechanism_ (how to compute the smooth region).
 
 #### Vertex Attribute Packing for Backward Compatibility
 
 - **Challenge**: The existing `sdf_params` vec4 vertex attribute had 4 fields:
-  `sdf_scale`, `edge_threshold`, `combination_mode`, `debug_mode`. Needed to
-  add `smoothing_factor` without expanding the vertex layout.
+  `sdf_scale`, `edge_threshold`, `combination_mode`, `debug_mode`. Needed to add
+  `smoothing_factor` without expanding the vertex layout.
 - **Solution**: Repurposed `sdf_params[2]` from `combination_mode` (always 0 in
   production) to `smoothing_factor`, and packed `combination_mode` into the
-  fractional part of `sdf_params[3]` (`floor` = debug_mode,
-  `fract * 10` = combination_mode). When all params are 0.0 (the old default),
-  the shader produces identical output via `select(raw, 1.5, raw <= 0.0)`.
+  fractional part of `sdf_params[3]` (`floor` = debug_mode, `fract * 10` =
+  combination_mode). When all params are 0.0 (the old default), the shader
+  produces identical output via `select(raw, 1.5, raw <= 0.0)`.
 - **Pattern**: Floating-point packing of integer + fractional modes is fragile
-  but workable for low-cardinality enums (0–5 debug modes × 0–2 combo modes).
-  If more fields are needed in future, consider a uniform buffer for per-batch
+  but workable for low-cardinality enums (0–5 debug modes × 0–2 combo modes). If
+  more fields are needed in future, consider a uniform buffer for per-batch
   tuning rather than per-vertex attributes.
 
 #### Piecewise Linear Interpolation for Tuning Profiles
@@ -127,8 +128,8 @@ labels may appear blurry or aliased without proper SDF parameter adjustment.
 - **Challenge**: Hard step functions between size ranges would produce visible
   seams if text elements are near a boundary (e.g., 15.9px vs 16.1px).
 - **Solution**: `SdfTuningProfile` stores breakpoints and uses piecewise linear
-  interpolation via `windows(2)`. This ensures smooth transitions with no
-  visual discontinuities.
+  interpolation via `windows(2)`. This ensures smooth transitions with no visual
+  discontinuities.
 - **Pattern**: Any parameter that varies continuously should be interpolated,
   not switched. Breakpoint-based profiles are a good fit: easy to add/adjust
   values while keeping the interpolation logic generic.
@@ -176,5 +177,5 @@ labels may appear blurry or aliased without proper SDF parameter adjustment.
 
 No new stories identified during this implementation. The existing planned
 stories GUP-206 (Cross-Platform Axis Performance Validation) and GUP-224
-(Migrate Chart Builder to Instanced Ticks) are appropriate next steps that
-could exercise the tuning under different conditions.
+(Migrate Chart Builder to Instanced Ticks) are appropriate next steps that could
+exercise the tuning under different conditions.

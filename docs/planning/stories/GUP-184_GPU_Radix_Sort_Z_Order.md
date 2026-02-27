@@ -1,7 +1,7 @@
 # GUP-184: GPU Radix Sort for Z-Order
 
-**Story ID**: GUP-184 **Title**: GPU Radix Sort for Z-Order **Status**: 📋
-Planned **Priority**: Low **Effort**: — **Created**: 2026-07-19
+**Story ID**: GUP-184 **Title**: GPU Radix Sort for Z-Order **Status**: 🚧 In
+Progress **Priority**: Low **Effort**: — **Created**: 2026-07-19
 **Dependencies**: GUP-077 (Compute Shader Instance Sorting and Filtering)
 
 ## Overview

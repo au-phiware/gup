@@ -196,10 +196,11 @@ impl<'a> Lexer<'a> {
                 self.advance();
                 // Optional sign after exponent
                 if let Some(&sign) = self.peek()
-                    && (sign == '+' || sign == '-') {
-                        s.push(sign);
-                        self.advance();
-                    }
+                    && (sign == '+' || sign == '-')
+                {
+                    s.push(sign);
+                    self.advance();
+                }
             } else if c == 'u' && !has_dot && !has_exponent {
                 is_uint = true;
                 self.advance();

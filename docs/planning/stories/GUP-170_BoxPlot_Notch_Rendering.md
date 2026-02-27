@@ -86,11 +86,11 @@ _Identified during GUP-166 retrospective (2025-07-17)._
 
 - **Challenge**: Adding two new fields (`notched: u32` and `notch_width: f32`)
   before the `outliers: array<vec4<f32>, 8>` array required careful alignment
-  handling. WGSL arrays of `vec4<f32>` require 16-byte alignment, and adding
-  8 bytes of data would misalign the array.
+  handling. WGSL arrays of `vec4<f32>` require 16-byte alignment, and adding 8
+  bytes of data would misalign the array.
 - **Solution**: Added explicit `_pad_notch: [f32; 2]` padding (8 bytes) on the
-  Rust side to match the implicit padding WGSL inserts between `f32` fields
-  and a 16-byte-aligned array. Struct size went from 256 → 272 bytes.
+  Rust side to match the implicit padding WGSL inserts between `f32` fields and
+  a 16-byte-aligned array. Struct size went from 256 → 272 bytes.
 - **Pattern**: When extending GPU structs with fixed-size arrays, always check
   the alignment requirement of the next field. With `#[repr(C)]` in Rust, no
   automatic padding is inserted for WGSL alignment — it must be explicit.
@@ -102,8 +102,8 @@ _Identified during GUP-166 retrospective (2025-07-17)._
 - **Solution**: Introduced `effective_hw` — a variable half-width that equals
   the full `hw` outside the box or when `notched == 0`, and linearly
   interpolates to `hw * (1 - notch_width)` at the median when inside the box
-  with `notched == 1`. This required only replacing `hw` with `effective_hw`
-  in two lines of the existing SDF check.
+  with `notched == 1`. This required only replacing `hw` with `effective_hw` in
+  two lines of the existing SDF check.
 - **Pattern**: SDF shape modifications are cleanly expressible as parameterised
   half-width or radius functions, keeping the core SDF logic untouched.
 

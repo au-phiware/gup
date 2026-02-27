@@ -80,17 +80,18 @@ following the project's "single render pass per frame" convention.
 
 ### Key Files
 
-| File                                              | Change                                      |
-| ------------------------------------------------- | ------------------------------------------- |
-| `examples/multi_pass_mark_demo.rs`                | **New**: Windowed example with both demos   |
-| `src/mark/shaders/circle_multi_pass.vert.wgsl`    | **New**: Vertex shader with vs_main/vs_shadow |
-| `src/mark/shaders/circle_multi_pass.frag.wgsl`    | **New**: Fragment shader with 4 entry points |
-| `tests/advanced_mark_rendering_tests.rs`          | +3 tests for multi-pass config validation   |
-| `examples/README.md`                              | Added multi_pass_mark_demo entry            |
+| File                                           | Change                                        |
+| ---------------------------------------------- | --------------------------------------------- |
+| `examples/multi_pass_mark_demo.rs`             | **New**: Windowed example with both demos     |
+| `src/mark/shaders/circle_multi_pass.vert.wgsl` | **New**: Vertex shader with vs_main/vs_shadow |
+| `src/mark/shaders/circle_multi_pass.frag.wgsl` | **New**: Fragment shader with 4 entry points  |
+| `tests/advanced_mark_rendering_tests.rs`       | +3 tests for multi-pass config validation     |
+| `examples/README.md`                           | Added multi_pass_mark_demo entry              |
 
 ### Test Counts
 
-- 3 new integration tests (shadow config, fill+outline config, pipeline mismatch)
+- 3 new integration tests (shadow config, fill+outline config, pipeline
+  mismatch)
 - All 23 advanced_mark_rendering_tests pass
 - All examples compile (`cargo check --examples`)
 
@@ -106,10 +107,10 @@ following the project's "single render pass per frame" convention.
   `StrokedCircle`) for multi-pass rendering. But creating a whole new `Mark`
   implementation just to demonstrate the API seemed over-engineered.
 - **Solution**: Used a single WGSL shader module with multiple entry points
-  (`vs_main`, `vs_shadow`, `fs_main`, `fs_fill`, `fs_outline`, `fs_shadow`).
-  The `RenderPassConfig` struct's `vertex_entry_point` and
-  `fragment_entry_point` fields select which entry point each pass uses. This
-  avoided any new Rust types while exercising the full multi-pass API.
+  (`vs_main`, `vs_shadow`, `fs_main`, `fs_fill`, `fs_outline`, `fs_shadow`). The
+  `RenderPassConfig` struct's `vertex_entry_point` and `fragment_entry_point`
+  fields select which entry point each pass uses. This avoided any new Rust
+  types while exercising the full multi-pass API.
 - **Pattern**: When demonstrating multi-pass rendering, prefer multiple entry
   points in a shared shader over creating separate mark types. This keeps the
   example focused on the multi-pass pattern rather than mark boilerplate.
@@ -136,8 +137,8 @@ following the project's "single render pass per frame" convention.
   already taken out of the `Option` and unwrapped. This is the same pattern used
   by other examples (`scatter_plot_demo`, `windowed_demo`).
 - **Pattern**: Never `Arc::clone` + `Arc::try_unwrap` — the clone guarantees
-  failure. Instead, restructure code so exclusive access happens naturally (e.g.,
-  inside a `take()` + `try_unwrap()` sequence).
+  failure. Instead, restructure code so exclusive access happens naturally
+  (e.g., inside a `take()` + `try_unwrap()` sequence).
 
 ### Architectural Decisions
 

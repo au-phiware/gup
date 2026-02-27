@@ -69,9 +69,9 @@ typically tens to hundreds (not millions) of elements.
 - **`src/text/hover_reveal.rs`** (new) — Core module with `ClippedTextRegistry`,
   `HoverRevealState`, `TooltipConfig`, `ActiveTooltip`, `TooltipLayout`, and
   `compute_tooltip_layout()`.
-- **`src/text/layout.rs`** — Extended `LayoutResult` with `original_text: Option<String>`.
-  Modified `layout_text_with_clipping()` to store the original text when
-  `enable_hover_reveal` is `true`.
+- **`src/text/layout.rs`** — Extended `LayoutResult` with
+  `original_text: Option<String>`. Modified `layout_text_with_clipping()` to
+  store the original text when `enable_hover_reveal` is `true`.
 - **`src/text/renderer.rs`** — Changed `queue_text()` return type from
   `GupResult<TextBounds>` to `GupResult<LayoutResult>` for richer caller info.
 - **`src/text.rs`** — Added `hover_reveal` submodule.
@@ -84,8 +84,8 @@ typically tens to hundreds (not millions) of elements.
 
 - **23 unit tests** in `text::hover_reveal::tests` (registry, state machine,
   tooltip layout)
-- **7 integration tests** in `tests/hover_reveal_tests.rs` (GPU context,
-  layout pipeline integration, performance)
+- **7 integration tests** in `tests/hover_reveal_tests.rs` (GPU context, layout
+  pipeline integration, performance)
 - **Performance**: 10K hover updates with 100 entries completes in <100ms
 
 ### Design Decisions
@@ -93,14 +93,14 @@ typically tens to hundreds (not millions) of elements.
 - **CPU-side hit testing** via `ClippedTextRegistry` instead of GPU interaction
   system compute shaders. Text labels are a low-cardinality problem; GPU
   dispatch overhead would dominate.
-- **State machine with looping** for zero-duration transitions — enables
-  instant show/hide when delays and fades are set to 0.
+- **State machine with looping** for zero-duration transitions — enables instant
+  show/hide when delays and fades are set to 0.
 - **`LayoutResult.original_text`** as `Option<String>` — only allocated when
-  `enable_hover_reveal` is true AND text was clipped, so zero overhead when
-  the feature is disabled.
+  `enable_hover_reveal` is true AND text was clipped, so zero overhead when the
+  feature is disabled.
 - **`queue_text` returns `LayoutResult`** — breaking change from
-  `GupResult<TextBounds>`, but existing callers only checked for errors (not
-  the bounds value), so migration is trivial.
+  `GupResult<TextBounds>`, but existing callers only checked for errors (not the
+  bounds value), so migration is trivial.
 
 ---
 
@@ -120,8 +120,8 @@ typically tens to hundreds (not millions) of elements.
   Hidden→Waiting→FadingIn→Visible in a single `update()` call, otherwise the
   tooltip never appears until the next frame.
 - **Solution**: Loop within `update()` until `prev_phase == current_phase`
-  (settled). This allows any number of zero-duration transitions to chain in
-  one frame without special-casing.
+  (settled). This allows any number of zero-duration transitions to chain in one
+  frame without special-casing.
 - **Pattern**: When building state machines with configurable durations, always
   design for the zero-duration case by iterating until stable.
 
@@ -142,8 +142,8 @@ typically tens to hundreds (not millions) of elements.
   interaction/hit testing system," but text labels are typically few (tens to
   hundreds) not millions.
 - **Solution**: Implemented CPU-side AABB hit testing in
-  `ClippedTextRegistry.hit_test()`. GPU compute dispatch overhead would
-  dominate for such small element counts.
+  `ClippedTextRegistry.hit_test()`. GPU compute dispatch overhead would dominate
+  for such small element counts.
 - **Pattern**: Match the parallelism strategy to the data size. GPU compute
   shines at 10K+ elements; for <1K elements, a simple CPU loop is faster and
   simpler.
@@ -170,8 +170,8 @@ typically tens to hundreds (not millions) of elements.
 - **Decision**: Changed `TextRenderer::queue_text()` from returning
   `GupResult<TextBounds>` to `GupResult<LayoutResult>`.
 - **Reasoning**: Callers need to know whether text was clipped and access
-  `original_text` for registry registration. Returning the full
-  `LayoutResult` provides all information without additional API surface.
+  `original_text` for registry registration. Returning the full `LayoutResult`
+  provides all information without additional API surface.
 - **Trade-off**: Minor breaking change for callers that destructured the
   `TextBounds` return. Existing callers all used `.is_err()` or `?`, so
   migration was zero-cost.
@@ -184,8 +184,8 @@ typically tens to hundreds (not millions) of elements.
   cumbersome but well-established in the codebase. Following the existing
   `text_rendering_demo.rs` pattern exactly saved time.
 - Pre-commit hooks run `cargo check` which takes 30+ seconds. Using
-  `--no-verify` during iterative development and running quality checks
-  manually was more efficient.
+  `--no-verify` during iterative development and running quality checks manually
+  was more efficient.
 - The 3 pre-existing failures in `mark::renderer::tests::test_*` are unrelated
   to text rendering and should be tracked separately.
 
@@ -197,6 +197,6 @@ typically tens to hundreds (not millions) of elements.
    visually distinct from surrounding content.
 
 2. **GUP-230: Chart Builder Hover Reveal Integration** — Wire
-   `ClippedTextRegistry` and `HoverRevealState` into the chart builder
-   pipeline so that chart builders automatically support hover reveal for axis
-   labels and titles without manual setup.
+   `ClippedTextRegistry` and `HoverRevealState` into the chart builder pipeline
+   so that chart builders automatically support hover reveal for axis labels and
+   titles without manual setup.

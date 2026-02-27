@@ -45,8 +45,8 @@ instead of tick length).
 
 ## Dependencies
 
-- **GUP-204**: GPU Instance Rendering for Axis Ticks ✅ (provides the
-  instancing pattern)
+- **GUP-204**: GPU Instance Rendering for Axis Ticks ✅ (provides the instancing
+  pattern)
 - **GUP-095**: GPU-Accelerated Grid Lines ✅ (provides grid rendering
   infrastructure)
 

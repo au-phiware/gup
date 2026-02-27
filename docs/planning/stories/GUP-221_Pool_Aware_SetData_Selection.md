@@ -81,8 +81,8 @@ recycling works correctly regardless of how the Selection's data is updated
 
 ### Key Files Changed
 
-| File             | Change                                                    |
-| ---------------- | --------------------------------------------------------- |
+| File               | Change                                                               |
+| ------------------ | -------------------------------------------------------------------- |
 | `src/selection.rs` | `set_data_with_pool` method + shader-bound pool wiring + 3 GPU tests |
 
 ### Test Count
@@ -113,16 +113,18 @@ recycling works correctly regardless of how the Selection's data is updated
 
 #### Shader-Bound Path Consistency
 
-- **Challenge**: The shader-function binding path (`prepare_render_shader_bound`,
-  `create_shader_bound_buffers_and_bind_group`, `new_with_shader_fns`) was
-  creating instance buffers directly via `device.create_buffer_init()` without
-  pool support, even though the non-shader path had pool support.
+- **Challenge**: The shader-function binding path
+  (`prepare_render_shader_bound`, `create_shader_bound_buffers_and_bind_group`,
+  `new_with_shader_fns`) was creating instance buffers directly via
+  `device.create_buffer_init()` without pool support, even though the non-shader
+  path had pool support.
 - **Solution**: Added `pool: Option<&mut BufferPool>` parameters and reused the
   same pool allocation pattern (allocate from pool + `queue.write_buffer`, or
   fall back to `create_buffer_init`). Also added pool return on reallocation in
   the shader-bound path.
-- **Pattern**: When a subsystem has parallel code paths (direct vs shader-bound),
-  ensure both paths support the same resource management patterns.
+- **Pattern**: When a subsystem has parallel code paths (direct vs
+  shader-bound), ensure both paths support the same resource management
+  patterns.
 
 ### Architectural Decisions
 
@@ -143,8 +145,8 @@ recycling works correctly regardless of how the Selection's data is updated
 
 - The story was small and well-scoped (2 story points). Implementation took one
   focused pass: core method + shader-bound wiring + tests.
-- The existing test patterns from GUP-167 made writing new tests
-  straightforward — copy the pattern, adjust for `set_data_with_pool`.
+- The existing test patterns from GUP-167 made writing new tests straightforward
+  — copy the pattern, adjust for `set_data_with_pool`.
 - `mask all-fix` caught indentation inconsistencies in the let-chain syntax
   (rustfmt reformatted the combined `if let ... && let` block).
 - Running `--test-threads=1` continues to be essential for GPU tests.

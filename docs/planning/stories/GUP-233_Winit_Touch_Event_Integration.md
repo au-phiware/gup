@@ -7,8 +7,8 @@
 
 Add a convenience `From<winit::event::Touch>` conversion for
 `TouchEvent`/`TouchPhase` and update the `interactive_selection_demo` example to
-handle `WindowEvent::Touch` events through the `TouchSelectionAdapter`, providing
-an end-to-end touch selection workflow on desktop touch screens.
+handle `WindowEvent::Touch` events through the `TouchSelectionAdapter`,
+providing an end-to-end touch selection workflow on desktop touch screens.
 
 ## Context
 
@@ -29,8 +29,8 @@ selection without writing manual mapping code.
 1. `From<winit::event::Touch>` and `From<winit::event::TouchPhase>` impls
    convert winit touch events to Gup types
 2. The `interactive_selection_demo` handles `WindowEvent::Touch` events
-3. Conversions are behind a `winit` feature flag (or always available if winit is
-   already a required dependency)
+3. Conversions are behind a `winit` feature flag (or always available if winit
+   is already a required dependency)
 4. Documentation and doc-tests cover the conversion
 
 ## Technical Tasks

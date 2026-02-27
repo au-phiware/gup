@@ -256,10 +256,10 @@ impl App {
                             clipping_config: Some(&clipping_config),
                         };
 
-                        if let Ok(result) = text_renderer.queue_text(&frame, &mut cfg) {
-                            if let Some(original) = &result.original_text {
-                                self.registry.register(result.bounds, original);
-                            }
+                        if let Ok(result) = text_renderer.queue_text(&frame, &mut cfg)
+                            && let Some(original) = &result.original_text
+                        {
+                            self.registry.register(result.bounds, original);
                         }
                     }
 
@@ -378,16 +378,13 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::Resized(size) => {
-                if let Some(surface_id) = self.surface_id {
-                    if let Some(ctx_arc) = self.context.take() {
-                        if let Ok(mut ctx) = Arc::try_unwrap(ctx_arc) {
-                            let _ = ctx.resize_surface(
-                                surface_id,
-                                PhysicalSize::new(size.width, size.height),
-                            );
-                            self.context = Some(Arc::new(ctx));
-                        }
-                    }
+                if let Some(surface_id) = self.surface_id
+                    && let Some(ctx_arc) = self.context.take()
+                    && let Ok(mut ctx) = Arc::try_unwrap(ctx_arc)
+                {
+                    let _ =
+                        ctx.resize_surface(surface_id, PhysicalSize::new(size.width, size.height));
+                    self.context = Some(Arc::new(ctx));
                 }
             }
             WindowEvent::RedrawRequested => {

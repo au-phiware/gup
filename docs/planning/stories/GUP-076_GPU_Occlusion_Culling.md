@@ -2,8 +2,8 @@
 
 **Story ID**: GUP-076 **Title**: GPU Occlusion Culling for Dense Datasets
 **Status**: ✅ Complete **Priority**: Low **Effort**: — **Created**: 2026-02-25
-**Completed**: 2026-02-27
-**Dependencies**: GUP-074 (Mark Performance Optimization)
+**Completed**: 2026-02-27 **Dependencies**: GUP-074 (Mark Performance
+Optimization)
 
 ## Overview
 
@@ -145,24 +145,24 @@ invisible geometry.
 
 #### Coverage map cell limit trade-off
 
-- **Challenge**: The initial implementation capped per-instance cell writes at 64
-  to prevent GPU thread stalls on very large marks. But large marks (radius 0.2
-  in clip-space ≈ 1600 cells at 4-pixel tile size) need full coverage for
+- **Challenge**: The initial implementation capped per-instance cell writes at
+  64 to prevent GPU thread stalls on very large marks. But large marks (radius
+  0.2 in clip-space ≈ 1600 cells at 4-pixel tile size) need full coverage for
   correct occlusion detection.
 - **Solution**: Raised the limit to 4096. For the target use case (small marks,
   1–4 cells each), the limit is never hit. For large marks, 4096 iterations per
   thread is fast on modern GPUs. Users can increase `tile_size` for very large
   viewports.
-- **Pattern**: Cell limits should be set based on the maximum expected mark size,
-  not a fixed constant. `tile_size` is the user's primary control for trading
-  accuracy vs. performance.
+- **Pattern**: Cell limits should be set based on the maximum expected mark
+  size, not a fixed constant. `tile_size` is the user's primary control for
+  trading accuracy vs. performance.
 
 #### Instance index as implicit z-order
 
 - **Challenge**: The story describes "front-to-back marks" but most 2D scatter
   plots don't have explicit z-values. Instance index implicitly determines draw
-  order (later = on top), but this breaks the traditional depth-buffer convention
-  (closer objects have smaller depth).
+  order (later = on top), but this breaks the traditional depth-buffer
+  convention (closer objects have smaller depth).
 - **Solution**: Used `z = instance_index + 1` (0 reserved for "empty cell"). The
   `atomicMax` in the build pass naturally keeps the highest z (latest-drawn
   mark), and the occlusion test correctly identifies marks whose z is less than
@@ -179,9 +179,9 @@ invisible geometry.
 - **Solution**: Used `encoder.copy_buffer_to_buffer` from a pre-staged buffer
   containing all level numbers. Copies between compute passes are properly
   ordered within a single command encoder.
-- **Pattern**: For per-pass parameter updates within a single encoder, use buffer
-  copies rather than `queue.write_buffer`. Pre-stage all parameter values in a
-  single COPY_SRC buffer.
+- **Pattern**: For per-pass parameter updates within a single encoder, use
+  buffer copies rather than `queue.write_buffer`. Pre-stage all parameter values
+  in a single COPY_SRC buffer.
 
 ### Architectural Decisions
 
@@ -204,14 +204,16 @@ invisible geometry.
 
 - **Decision**: Test all marks at Hi-Z level 0 rather than using the mip
   hierarchy for early rejection.
-- **Reasoning**: Coarse-level edge effects caused false negatives in testing. For
-  the target use case (dense scatter plots with small marks), level-0 testing is
-  O(1–4 cells) per mark—fast enough that the mip hierarchy adds no benefit.
+- **Reasoning**: Coarse-level edge effects caused false negatives in testing.
+  For the target use case (dense scatter plots with small marks), level-0
+  testing is O(1–4 cells) per mark—fast enough that the mip hierarchy adds no
+  benefit.
 - **Trade-off**: Large marks (covering hundreds of cells) are tested at level 0,
   which is slower. But large marks are rarely fully occluded and are uncommon in
   dense scatter plots.
 - **Future**: A two-level approach (coarse reject, then level-0 confirm) could
-  benefit scenes with mixed mark sizes, but is not needed for the current target.
+  benefit scenes with mixed mark sizes, but is not needed for the current
+  target.
 
 ### Development Workflow Insights
 
@@ -224,8 +226,8 @@ invisible geometry.
   (`read_visibility`, `read_hiz_buffer`). These are "test-only" methods but
   essential for understanding shader behaviour during development.
 - The `mask all-fix` pre-commit hook has persistent issues with the `gup-macros`
-  crate (42+ pre-existing warnings treated as errors). Running `cargo clippy -p
-  gup --lib` is a faster way to verify the main crate.
+  crate (42+ pre-existing warnings treated as errors). Running
+  `cargo clippy -p gup --lib` is a faster way to verify the main crate.
 - GPU tests with `--test-threads=1` ran in ~0.5s for all 12 occlusion culler
   tests—headless GPU context creation is well-optimised in this project.
 

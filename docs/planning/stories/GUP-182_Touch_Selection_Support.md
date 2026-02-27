@@ -1,8 +1,8 @@
 # GUP-182: Touch Selection Support
 
-**Status**: ✅ Complete **Completed**: 2025-07-18 **Priority**: Low **Effort**: 3
-**Dependencies**: GUP-075 (Interactive Mark Selection), GUP-012 (GPU Interaction
-System)
+**Status**: ✅ Complete **Completed**: 2025-07-18 **Priority**: Low **Effort**:
+3 **Dependencies**: GUP-075 (Interactive Mark Selection), GUP-012 (GPU
+Interaction System)
 
 ## Overview
 
@@ -55,8 +55,9 @@ mouse or keyboard.
 - [x] Touch gestures work for point and rectangle selection
 - [x] Long-press toggle mode works
 - [x] Minimum touch target sizes are configurable
-- [x] Manual testing on at least one touch platform (tested via simulated events;
-  physical device testing deferred — no touch hardware available in CI)
+- [x] Manual testing on at least one touch platform (tested via simulated
+      events; physical device testing deferred — no touch hardware available in
+      CI)
 - [x] All tests pass
 
 ## Implementation Summary
@@ -65,14 +66,12 @@ mouse or keyboard.
 
 1. **`TouchSelectionAdapter`** — State-machine adapter that converts raw touch
    events into `MarkSelectionSystem` actions:
-
    - **Single tap** → point selection (select/deselect mark at position)
    - **Long-press** (≥0.5 s, configurable) → toggle mode (Ctrl+Click equivalent)
    - **Two-finger tap** (within 0.3 s window) → clear selection
    - **Single-finger drag** (beyond 10 px tolerance) → rectangle selection tool
 
 2. **`TouchSelectionConfig`** — Configuration struct with:
-
    - `min_touch_target_px` (default 44.0) — follows Apple HIG / WCAG 2.5.5
    - `long_press_duration` (default 0.5 s)
    - `tap_tolerance_px` (default 10.0)
@@ -87,10 +86,10 @@ mouse or keyboard.
 
 ### Key Files Changed
 
-| File                  | Change                                                |
-| --------------------- | ----------------------------------------------------- |
-| `src/mark_selection.rs` | +700 lines: adapter, config, types, 12 tests        |
-| `src/lib.rs`           | Updated public exports                               |
+| File                    | Change                                       |
+| ----------------------- | -------------------------------------------- |
+| `src/mark_selection.rs` | +700 lines: adapter, config, types, 12 tests |
+| `src/lib.rs`            | Updated public exports                       |
 
 ### Test Count
 
@@ -117,9 +116,10 @@ mouse or keyboard.
 
 #### Touch State Machine Design
 
-- **Challenge**: A single finger contact can become three different gestures (tap,
-  long-press, drag) depending on timing and movement. These gestures cannot be
-  distinguished at touch-start time — only after observing subsequent events.
+- **Challenge**: A single finger contact can become three different gestures
+  (tap, long-press, drag) depending on timing and movement. These gestures
+  cannot be distinguished at touch-start time — only after observing subsequent
+  events.
 - **Solution**: Explicit state machine with `OneFinger` → `Dragging` |
   `LongPressCommitted` | `Idle` transitions. The `tick()` method handles
   time-based transitions (long-press) separately from event-based transitions.
@@ -130,8 +130,8 @@ mouse or keyboard.
 
 #### Post-Commit State Separation
 
-- **Challenge**: After a long-press fires, the finger is still on screen. Lifting
-  it must NOT trigger another selection action.
+- **Challenge**: After a long-press fires, the finger is still on screen.
+  Lifting it must NOT trigger another selection action.
 - **Solution**: Introduced `LongPressCommitted` state distinct from `Dragging`.
   The `on_touch_end` handler for this state simply returns to `Idle` without
   forwarding anything to `MarkSelectionSystem`.
@@ -143,9 +143,9 @@ mouse or keyboard.
 
 - **Challenge**: Small marks (e.g. 2 px scatter points) are impossible to tap
   accurately on touch screens.
-- **Solution**: `effective_hit_radius()` returns `max(native_radius,
-  min_touch_target_px / 2)`. The 44 px default follows Apple HIG and
-  WCAG 2.5.5.
+- **Solution**: `effective_hit_radius()` returns
+  `max(native_radius, min_touch_target_px / 2)`. The 44 px default follows Apple
+  HIG and WCAG 2.5.5.
 - **Pattern**: Always inflate hit-test radii for touch input — even marks that
   look tiny visually should have a generous touch target. This is a universal
   accessibility win.
@@ -170,9 +170,10 @@ mouse or keyboard.
 
 - **Decision**: `on_touch_event()` returns `Option<HapticFeedback>` rather than
   accepting a callback or trait object for triggering vibration.
-- **Reasoning**: Haptic APIs are deeply platform-specific (iOS UIFeedbackGenerator,
-  Android VibrationEffect, Web Navigator.vibrate). Returning a hint keeps the
-  adapter platform-agnostic and lets the caller choose the platform API.
+- **Reasoning**: Haptic APIs are deeply platform-specific (iOS
+  UIFeedbackGenerator, Android VibrationEffect, Web Navigator.vibrate).
+  Returning a hint keeps the adapter platform-agnostic and lets the caller
+  choose the platform API.
 - **Trade-off**: The caller must check the return value and dispatch to the
   platform API manually.
 - **Future**: A platform-integration layer (e.g. in a winit helper module) could
@@ -191,17 +192,18 @@ mouse or keyboard.
 
 ### Development Workflow Insights
 
-- The pre-commit hooks in this project modify files (prettier on markdown, clippy
-  fixes) which can cause commits to fail silently when the staged content changes.
-  Using `--no-verify` for intermediate commits and running `mask all-fix` before
-  the final commit is the most reliable workflow.
+- The pre-commit hooks in this project modify files (prettier on markdown,
+  clippy fixes) which can cause commits to fail silently when the staged content
+  changes. Using `--no-verify` for intermediate commits and running
+  `mask all-fix` before the final commit is the most reliable workflow.
 - All 12 touch tests run in <1 ms because they are pure CPU state-machine tests.
   No GPU resources needed. This validates the architectural decision to keep the
   selection system decoupled from the GPU pipeline.
-- The existing `MarkSelectionSystem::hit_test()` method was a perfect integration
-  point — the touch adapter calls it during tap and long-press to resolve hit IDs,
-  which means the touch path benefits from any future improvements to hit testing
-  (e.g. GPU acceleration) without changes to the adapter.
+- The existing `MarkSelectionSystem::hit_test()` method was a perfect
+  integration point — the touch adapter calls it during tap and long-press to
+  resolve hit IDs, which means the touch path benefits from any future
+  improvements to hit testing (e.g. GPU acceleration) without changes to the
+  adapter.
 
 ### Follow-up Stories
 

@@ -69,7 +69,8 @@ performance expectations and identify platform-specific bottlenecks.
    `BenchConfig`, `Timer`, `run_bench`, `run_bench_async`, and `from_timings`.
 
 2. **Interaction Benchmarks** (`src/wasm_bench_interaction.rs`): WASM-compatible
-   port of the native criterion benchmarks from `benches/interaction_benchmarks.rs`:
+   port of the native criterion benchmarks from
+   `benches/interaction_benchmarks.rs`:
    - 4 point query benchmarks (grid/clustered × 1K/10K)
    - 3 region query benchmarks (small/medium/large coverage)
    - 3 batch query benchmarks (single/5/10 queries)
@@ -79,8 +80,8 @@ performance expectations and identify platform-specific bottlenecks.
 3. **Native Runner Binary** (`src/bin/wasm_bench_native.rs`): Produces JSON
    results in the same `BenchSuite` format as the WASM runner.
 
-4. **HTML Benchmark Page** (`benches/wasm/index.html`): Interactive browser-based
-   runner with results tables, JSON download, and clipboard copy.
+4. **HTML Benchmark Page** (`benches/wasm/index.html`): Interactive
+   browser-based runner with results tables, JSON download, and clipboard copy.
 
 5. **Automation Scripts**:
    - `scripts/wasm_benchmark.sh`: Build, native run, serve, compare, all-in-one
@@ -96,19 +97,19 @@ performance expectations and identify platform-specific bottlenecks.
 
 ### Key Files Changed
 
-| File | Change |
-|---|---|
-| `src/wasm_bench.rs` | New: benchmark harness (7 tests) |
-| `src/wasm_bench_interaction.rs` | New: interaction benchmarks (3 tests) |
-| `src/bin/wasm_bench_native.rs` | New: native JSON runner binary |
-| `src/lib.rs` | Added wasm_bench modules |
-| `Cargo.toml` | Performance feature, WASM deps, binary |
-| `benches/wasm/index.html` | New: browser benchmark UI |
-| `scripts/wasm_benchmark.sh` | New: orchestration script |
-| `scripts/benchmark_comparison.sh` | New: comparison report generator |
-| `docs/WASM_PERFORMANCE.md` | New: comprehensive documentation |
-| `docs/README.md` | Added WASM performance docs link |
-| `maskfile.md` | Added bench-wasm-* tasks |
+| File                              | Change                                 |
+| --------------------------------- | -------------------------------------- |
+| `src/wasm_bench.rs`               | New: benchmark harness (7 tests)       |
+| `src/wasm_bench_interaction.rs`   | New: interaction benchmarks (3 tests)  |
+| `src/bin/wasm_bench_native.rs`    | New: native JSON runner binary         |
+| `src/lib.rs`                      | Added wasm_bench modules               |
+| `Cargo.toml`                      | Performance feature, WASM deps, binary |
+| `benches/wasm/index.html`         | New: browser benchmark UI              |
+| `scripts/wasm_benchmark.sh`       | New: orchestration script              |
+| `scripts/benchmark_comparison.sh` | New: comparison report generator       |
+| `docs/WASM_PERFORMANCE.md`        | New: comprehensive documentation       |
+| `docs/README.md`                  | Added WASM performance docs link       |
+| `maskfile.md`                     | Added bench-wasm-\* tasks              |
 
 ### Test Count
 

@@ -87,9 +87,9 @@ This analysis covers the landscape as of mid-2025, focusing on:
 
 ### 2.1 rust-gpu (Embark Studios)
 
-**Repository**: github.com/EmbarkStudios/rust-gpu
-**Architecture**: Custom `rustc` codegen backend → SPIR-V
-**Status**: Experimental, actively maintained (as of 2025)
+**Repository**: github.com/EmbarkStudios/rust-gpu **Architecture**: Custom
+`rustc` codegen backend → SPIR-V **Status**: Experimental, actively maintained
+(as of 2025)
 
 #### Architecture Deep Dive
 
@@ -137,9 +137,9 @@ HLSL) via naga or SPIRV-Cross.
    with Rust version updates. The project maintains its own fork of key rustc
    components.
 
-4. **SPIR-V indirection**: Targeting WGSL requires two translation steps
-   (Rust → SPIR-V → WGSL), each potentially introducing translation artifacts
-   or unsupported feature interactions.
+4. **SPIR-V indirection**: Targeting WGSL requires two translation steps (Rust →
+   SPIR-V → WGSL), each potentially introducing translation artifacts or
+   unsupported feature interactions.
 
 5. **Limited GPU feature coverage**: While Rust syntax is broadly supported,
    GPU-specific features (workgroup shared memory, barriers, atomic operations)
@@ -213,8 +213,8 @@ intermediate representation or generate WGSL directly.
 
 **Disadvantages**:
 
-- WGSL-specific: cannot directly target Vulkan (SPIR-V), Metal (MSL), or
-  DirectX (HLSL) — but wgpu handles this translation via naga internally
+- WGSL-specific: cannot directly target Vulkan (SPIR-V), Metal (MSL), or DirectX
+  (HLSL) — but wgpu handles this translation via naga internally
 - WGSL specification is still evolving (though stabilising)
 - Fewer established optimisation passes compared to SPIR-V tooling
 
@@ -241,9 +241,8 @@ translated correctly across platforms.
 
 #### Emu
 
-**Status**: Archived/inactive
-**Approach**: Procedural macro that translates a subset of Rust to OpenCL/Vulkan
-compute shaders.
+**Status**: Archived/inactive **Approach**: Procedural macro that translates a
+subset of Rust to OpenCL/Vulkan compute shaders.
 
 Emu demonstrated that proc-macro-based GPU code generation is viable for simple
 compute workloads but struggled with the complexity of a full shader language
@@ -252,14 +251,13 @@ supporting "all of Rust" is intractable, but a well-defined subset is workable.
 
 #### Rasen
 
-**Status**: Archived/inactive
-**Approach**: Builder pattern for constructing SPIR-V shaders in Rust using a
-fluent API.
+**Status**: Archived/inactive **Approach**: Builder pattern for constructing
+SPIR-V shaders in Rust using a fluent API.
 
 Rasen took an eDSL approach where shader programs are constructed via method
 chains rather than transpilation. While this provides maximum control over
-generated code, it requires learning a new API rather than writing familiar Rust.
-This conflicts with Gup's goal of natural Rust syntax.
+generated code, it requires learning a new API rather than writing familiar
+Rust. This conflicts with Gup's goal of natural Rust syntax.
 
 ---
 
@@ -268,17 +266,17 @@ This conflicts with Gup's goal of natural Rust syntax.
 ### 3.1 Naga Crate
 
 **Repository**: github.com/gfx-rs/wgpu (naga is part of the wgpu monorepo)
-**Architecture**: Multi-frontend, multi-backend shader IR
-**Status**: Production-ready, actively maintained
+**Architecture**: Multi-frontend, multi-backend shader IR **Status**:
+Production-ready, actively maintained
 
 #### Architecture
 
 Naga defines a rich intermediate representation (`naga::Module`) that captures
 the full semantics of GPU shader programs. It provides:
 
-**Frontends** (parsers): WGSL, GLSL, SPIR-V
-**Backends** (generators): WGSL, SPIR-V, MSL, HLSL, GLSL
-**Validation**: Comprehensive type checking and GPU compatibility validation
+**Frontends** (parsers): WGSL, GLSL, SPIR-V **Backends** (generators): WGSL,
+SPIR-V, MSL, HLSL, GLSL **Validation**: Comprehensive type checking and GPU
+compatibility validation
 
 ```
 ┌───────────┐     ┌────────────┐     ┌───────────┐
@@ -321,11 +319,11 @@ backend to emit WGSL text.
 - naga's IR is significantly more complex than necessary for our use case. A
   simple `let x = a + b;` requires constructing multiple IR nodes:
   `Expression::Compose`, `Expression::Access`, `Statement::Store`, etc.
-- naga's IR uses an arena-based allocation system with index-based references
-  — building this programmatically is verbose and error-prone
+- naga's IR uses an arena-based allocation system with index-based references —
+  building this programmatically is verbose and error-prone
 - naga is designed for shader language translation, not for Rust → shader
-  compilation. Its IR assumes GPU execution semantics from the start, making
-  it awkward to map from Rust's expression-oriented semantics.
+  compilation. Its IR assumes GPU execution semantics from the start, making it
+  awkward to map from Rust's expression-oriented semantics.
 - Adding naga as a direct dependency of gup-macros would increase compile times
   and coupling. (naga is already a transitive dependency via wgpu, but using it
   in the proc macro crate would require it as a direct dependency.)
@@ -399,8 +397,8 @@ Working Group. Key evolution points:
 - WGSL 1.0 is stable enough to target reliably
 - The subset of WGSL we generate (functions, structs, basic control flow) is
   unlikely to change
-- Future WGSL features (subgroups, modules) could enhance our transpiler but
-  are not required
+- Future WGSL features (subgroups, modules) could enhance our transpiler but are
+  not required
 - The lack of a WGSL module system means our approach of concatenating function
   definitions is the standard pattern
 
@@ -437,9 +435,9 @@ to our compile-time transpilation approach. The `#[shader_fn]` macro represents
 a staging boundary: Rust code inside the macro body is "staged" for GPU
 execution rather than CPU execution.
 
-**Key insight**: Staging systems that operate at the syntactic level (rather than
-semantic) are simpler to implement and maintain. Our approach of operating on
-`syn` AST (syntax) rather than trying to perform full type resolution is
+**Key insight**: Staging systems that operate at the syntactic level (rather
+than semantic) are simpler to implement and maintain. Our approach of operating
+on `syn` AST (syntax) rather than trying to perform full type resolution is
 well-aligned with this principle.
 
 #### Lightweight Modular Staging (LMS)
@@ -455,8 +453,8 @@ high-level host-language syntax. Our transpiler follows this principle.
 
 #### Futhark
 
-**Repository**: github.com/diku-dk/futhark
-**Approach**: Standalone functional programming language compiled to GPU kernels
+**Repository**: github.com/diku-dk/futhark **Approach**: Standalone functional
+programming language compiled to GPU kernels
 
 Futhark is a pure functional language designed specifically for GPU programming.
 It compiles to OpenCL or CUDA via a sophisticated optimising compiler that
@@ -483,24 +481,24 @@ enhance Gup's compute shader story in the future.
 
 #### Accelerate (Haskell)
 
-**Repository**: github.com/AccelerateHS/accelerate
-**Approach**: Embedded DSL in Haskell for GPU array programming
+**Repository**: github.com/AccelerateHS/accelerate **Approach**: Embedded DSL in
+Haskell for GPU array programming
 
 Accelerate uses Haskell's type system and overloaded syntax to build GPU
 programs that look like regular Haskell code. It compiles to CUDA via
 compile-time code generation.
 
 **Relevance**: Accelerate's approach of using the host language's type system
-for compile-time validation is similar to our approach. However, Haskell's
-lazy evaluation and type class system make this more natural than in Rust, where
-proc macros are the primary metaprogramming mechanism.
+for compile-time validation is similar to our approach. However, Haskell's lazy
+evaluation and type class system make this more natural than in Rust, where proc
+macros are the primary metaprogramming mechanism.
 
 ### 4.2 Industry Shader Language Approaches
 
 #### NVIDIA Slang
 
-**Repository**: github.com/shader-slang/slang
-**Architecture**: Modern shader language with advanced type system features
+**Repository**: github.com/shader-slang/slang **Architecture**: Modern shader
+language with advanced type system features
 
 Slang is NVIDIA's next-generation shader language that extends HLSL with:
 
@@ -526,8 +524,8 @@ Slang is NVIDIA's next-generation shader language that extends HLSL with:
 **Relevance to Gup**: Slang's generic and interface system demonstrates that
 advanced type system features are valuable for shader programming. However,
 Slang is a standalone language with its own compiler — Gup's approach of
-transpiling from Rust provides these benefits through Rust's own type system
-(at the host level) and proc macro validation (at the shader level).
+transpiling from Rust provides these benefits through Rust's own type system (at
+the host level) and proc macro validation (at the shader level).
 
 **Future consideration**: If Gup requires generic shader functions in the
 future, Slang's approach to specialisation-based generics (generating concrete
@@ -535,12 +533,12 @@ instantiations at compile time) could inform our implementation strategy.
 
 #### Microsoft HLSL Evolution
 
-HLSL (High-Level Shading Language) has evolved significantly from its
-DirectX 9 origins:
+HLSL (High-Level Shading Language) has evolved significantly from its DirectX 9
+origins:
 
 - **HLSL 2021**: Added templates, operator overloading, and bitfield members
-- **HLSL 6.x**: Shader Model 6 features (wave intrinsics, mesh shaders,
-  ray tracing)
+- **HLSL 6.x**: Shader Model 6 features (wave intrinsics, mesh shaders, ray
+  tracing)
 - **DXC (DirectX Shader Compiler)**: Open-source HLSL compiler based on LLVM
 
 **Key takeaway**: HLSL's evolution shows that shader languages tend to grow
@@ -550,9 +548,9 @@ accommodate new WGSL features as they are standardised.
 
 #### Metal Shading Language (MSL)
 
-Apple's MSL is based on C++14 with GPU-specific extensions. It demonstrates
-that a "subset of a general-purpose language" approach works well for GPU
-programming — which is exactly what Gup's transpiler does with Rust.
+Apple's MSL is based on C++14 with GPU-specific extensions. It demonstrates that
+a "subset of a general-purpose language" approach works well for GPU programming
+— which is exactly what Gup's transpiler does with Rust.
 
 **Key insight**: MSL's success shows that developers prefer writing GPU code in
 a familiar host-language syntax rather than learning a completely new language.
@@ -566,14 +564,15 @@ Research on linear types for GPU programming (e.g., Blelloch & Greiner, 1996;
 more recently, Sarah et al., 2020) explores how ownership and linearity can
 prevent common GPU programming errors:
 
-- **Use-after-free**: Linear types ensure GPU resources are consumed exactly once
+- **Use-after-free**: Linear types ensure GPU resources are consumed exactly
+  once
 - **Data races**: Ownership tracking prevents concurrent access to GPU buffers
 - **Memory leaks**: Linear types ensure GPU allocations are freed
 
 **Relevance to Gup**: Rust's ownership system already provides these guarantees
 at the host level. Our transpiler strips ownership semantics when generating
-WGSL (since WGSL has value semantics), but the host-level type checking
-prevents the classes of errors that linear types are designed to catch.
+WGSL (since WGSL has value semantics), but the host-level type checking prevents
+the classes of errors that linear types are designed to catch.
 
 #### Effect Systems
 
@@ -621,9 +620,9 @@ macro_rules! wgsl_fn {
 }
 ```
 
-**Pros**: Simple, no proc macro dependency, fast compilation
-**Cons**: Limited pattern matching, poor error messages, cannot inspect expression
-trees, no type information
+**Pros**: Simple, no proc macro dependency, fast compilation **Cons**: Limited
+pattern matching, poor error messages, cannot inspect expression trees, no type
+information
 
 **Assessment**: Template macros are insufficient for non-trivial transpilation.
 They can match syntactic patterns but cannot transform expression semantics
@@ -641,10 +640,9 @@ fn linear_scale(value: f32, scale_min: f32, scale_max: f32) -> f32 {
 }
 ```
 
-**Pros**: Full access to Rust AST, excellent error reporting with spans, compile-
-time execution, standard Rust tooling
-**Cons**: Operates on syntax only (no type resolution), requires `syn` dependency,
-proc macro compilation overhead
+**Pros**: Full access to Rust AST, excellent error reporting with spans,
+compile- time execution, standard Rust tooling **Cons**: Operates on syntax only
+(no type resolution), requires `syn` dependency, proc macro compilation overhead
 
 **Assessment**: This is the sweet spot for Gup. Proc macros provide sufficient
 power for Rust-to-WGSL transpilation while maintaining the library-friendly,
@@ -683,9 +681,9 @@ let shader = ShaderBuilder::new()
 **Cons**: Verbose, unfamiliar syntax, no IDE support for shader logic, steep
 learning curve
 
-**Assessment**: Builder-pattern eDSLs sacrifice developer experience for control.
-Since Gup's primary goal is making GPU programming approachable, this approach
-conflicts with our design philosophy.
+**Assessment**: Builder-pattern eDSLs sacrifice developer experience for
+control. Since Gup's primary goal is making GPU programming approachable, this
+approach conflicts with our design philosophy.
 
 #### Overloaded Operator eDSL
 
@@ -697,14 +695,15 @@ wgsl! {
 }
 ```
 
-**Pros**: Looks like Rust, provides some IDE support
-**Cons**: Limited to what Rust's syntax allows (no custom operators), `wgsl!`
-block has different semantics from surrounding Rust, can confuse IDEs and linters
+**Pros**: Looks like Rust, provides some IDE support **Cons**: Limited to what
+Rust's syntax allows (no custom operators), `wgsl!` block has different
+semantics from surrounding Rust, can confuse IDEs and linters
 
-**Assessment**: Operator-overloaded eDSLs are a reasonable middle ground but still
-require the developer to understand that the `wgsl!` block has different
+**Assessment**: Operator-overloaded eDSLs are a reasonable middle ground but
+still require the developer to understand that the `wgsl!` block has different
 semantics. Gup's `#[shader_fn]` approach is superior because the function body
-uses standard Rust syntax with standard Rust semantics (in the supported subset).
+uses standard Rust syntax with standard Rust semantics (in the supported
+subset).
 
 ### 5.3 Runtime Compilation vs Compile-Time Generation
 
@@ -712,9 +711,9 @@ uses standard Rust syntax with standard Rust semantics (in the supported subset)
 
 Generate WGSL at application runtime based on configuration or data.
 
-**Pros**: Maximum flexibility, can adapt to runtime conditions
-**Cons**: Runtime overhead, cannot validate at compile time, harder to debug,
-potential for runtime failures
+**Pros**: Maximum flexibility, can adapt to runtime conditions **Cons**: Runtime
+overhead, cannot validate at compile time, harder to debug, potential for
+runtime failures
 
 **Assessment**: Runtime compilation is necessary for certain use cases (dynamic
 shader composition based on user configuration), which Gup's `ShaderPipeline`
@@ -726,9 +725,8 @@ individual shader functions should be transpiled at compile time for safety.
 Generate WGSL at Rust compile time via proc macros.
 
 **Pros**: Zero runtime overhead, compile-time validation, IDE integration,
-deterministic output
-**Cons**: Cannot adapt to runtime conditions (individual functions are static),
-proc macro compilation overhead
+deterministic output **Cons**: Cannot adapt to runtime conditions (individual
+functions are static), proc macro compilation overhead
 
 **Assessment**: Compile-time generation is the correct default for Gup. The
 `#[shader_fn]` macro produces a `&'static str` WGSL fragment at compile time.
@@ -741,8 +739,8 @@ application startup, providing the right balance of safety and flexibility.
 
 This is the approach Gup has implemented:
 
-1. **Compile time**: Individual shader functions are transpiled from Rust to WGSL
-   via `#[shader_fn]` proc macro → static WGSL strings
+1. **Compile time**: Individual shader functions are transpiled from Rust to
+   WGSL via `#[shader_fn]` proc macro → static WGSL strings
 2. **Application startup**: `ShaderPipeline` composes multiple WGSL functions
    into a complete shader module → validated by naga/wgpu
 3. **Runtime**: Composed shader module executes on GPU with zero overhead
@@ -780,21 +778,21 @@ future enhancement but not required for the current implementation.
 
 ### 6.1 Solution Comparison Matrix
 
-| Criterion              | rust-gpu    | naga IR     | syn + custom | eDSL       | Runtime    |
-| ---------------------- | ----------- | ----------- | ------------ | ---------- | ---------- |
-| **Setup complexity**   | Very High   | Medium      | **Low**      | Low        | Low        |
-| **Rust coverage**      | **Full**    | N/A         | Subset       | Minimal    | N/A        |
-| **Build time impact**  | Very High   | Medium      | **Minimal**  | Minimal    | **None**   |
-| **WGSL output**        | Indirect    | Direct      | **Direct**   | Direct     | Direct     |
-| **Validation**         | Strong      | **Best**    | Good (+naga) | Manual     | Runtime    |
-| **Maintenance burden** | High        | Low         | **Medium**   | Low        | Medium     |
-| **Library-friendly**   | No          | Partial     | **Yes**      | Yes        | Yes        |
-| **IDE support**        | **Full**    | N/A         | **Full**     | Partial    | None       |
-| **Error messages**     | **Best**    | N/A         | Good         | Manual     | Runtime    |
-| **Runtime overhead**   | **None**    | **None**    | **None**     | **None**   | High       |
-| **Debugging**          | Good        | Good        | **Good**     | Poor       | Poor       |
-| **Community size**     | Small       | **Large**   | Growing      | Tiny       | N/A        |
-| **Maturity**           | Experimental| **Mature**  | Proven       | Varies     | Varies     |
+| Criterion              | rust-gpu     | naga IR    | syn + custom | eDSL     | Runtime  |
+| ---------------------- | ------------ | ---------- | ------------ | -------- | -------- |
+| **Setup complexity**   | Very High    | Medium     | **Low**      | Low      | Low      |
+| **Rust coverage**      | **Full**     | N/A        | Subset       | Minimal  | N/A      |
+| **Build time impact**  | Very High    | Medium     | **Minimal**  | Minimal  | **None** |
+| **WGSL output**        | Indirect     | Direct     | **Direct**   | Direct   | Direct   |
+| **Validation**         | Strong       | **Best**   | Good (+naga) | Manual   | Runtime  |
+| **Maintenance burden** | High         | Low        | **Medium**   | Low      | Medium   |
+| **Library-friendly**   | No           | Partial    | **Yes**      | Yes      | Yes      |
+| **IDE support**        | **Full**     | N/A        | **Full**     | Partial  | None     |
+| **Error messages**     | **Best**     | N/A        | Good         | Manual   | Runtime  |
+| **Runtime overhead**   | **None**     | **None**   | **None**     | **None** | High     |
+| **Debugging**          | Good         | Good       | **Good**     | Poor     | Poor     |
+| **Community size**     | Small        | **Large**  | Growing      | Tiny     | N/A      |
+| **Maturity**           | Experimental | **Mature** | Proven       | Varies   | Varies   |
 
 ### 6.2 Weighted Scoring
 
@@ -823,12 +821,12 @@ cross-platform support.
 ### 7.1 Compilation Time
 
 | Approach                | Per-function overhead | Total build impact |
-| ----------------------- | -------------------- | ------------------ |
-| `#[shader_fn]` (ours)   | < 1ms                | Negligible         |
-| `#[wgsl_function]`      | < 1ms                | Negligible         |
-| rust-gpu                | ~500ms+              | Significant        |
-| naga IR construction    | ~5ms                 | Moderate           |
-| Runtime string building | 0 (at compile time)  | None               |
+| ----------------------- | --------------------- | ------------------ |
+| `#[shader_fn]` (ours)   | < 1ms                 | Negligible         |
+| `#[wgsl_function]`      | < 1ms                 | Negligible         |
+| rust-gpu                | ~500ms+               | Significant        |
+| naga IR construction    | ~5ms                  | Moderate           |
+| Runtime string building | 0 (at compile time)   | None               |
 
 Both `#[shader_fn]` and `#[wgsl_function]` produce static strings at compile
 time, so the per-function overhead is the proc macro expansion cost only.
@@ -862,23 +860,23 @@ input regardless of how it was generated.
 
 ### 8.1 Authoring Experience
 
-| Aspect                    | `#[shader_fn]`        | `#[wgsl_function]`   | rust-gpu              |
-| ------------------------- | --------------------- | -------------------- | --------------------- |
-| Syntax highlighting       | ✅ Full (Rust syntax)  | ❌ String literal      | ✅ Full (Rust syntax)  |
-| Code completion           | ✅ Standard Rust       | ❌ None               | ✅ Standard Rust       |
-| Go-to-definition          | ✅ Works               | ❌ N/A                | ✅ Works               |
-| Refactoring               | ✅ IDE refactoring     | ❌ Manual             | ✅ IDE refactoring     |
-| Error location            | ✅ Span-accurate       | ❌ Macro-level only   | ✅ Span-accurate       |
-| Type checking             | ⚠️ Syntax-level only  | ❌ Runtime only       | ✅ Full rustc checking |
-| Learning curve            | ✅ Low (Rust subset)   | ⚠️ Must know WGSL    | ✅ Low (full Rust)     |
-| Setup requirements        | ✅ None (proc macro)   | ✅ None (proc macro)  | ❌ Custom toolchain    |
+| Aspect              | `#[shader_fn]`        | `#[wgsl_function]`   | rust-gpu               |
+| ------------------- | --------------------- | -------------------- | ---------------------- |
+| Syntax highlighting | ✅ Full (Rust syntax) | ❌ String literal    | ✅ Full (Rust syntax)  |
+| Code completion     | ✅ Standard Rust      | ❌ None              | ✅ Standard Rust       |
+| Go-to-definition    | ✅ Works              | ❌ N/A               | ✅ Works               |
+| Refactoring         | ✅ IDE refactoring    | ❌ Manual            | ✅ IDE refactoring     |
+| Error location      | ✅ Span-accurate      | ❌ Macro-level only  | ✅ Span-accurate       |
+| Type checking       | ⚠️ Syntax-level only  | ❌ Runtime only      | ✅ Full rustc checking |
+| Learning curve      | ✅ Low (Rust subset)  | ⚠️ Must know WGSL    | ✅ Low (full Rust)     |
+| Setup requirements  | ✅ None (proc macro)  | ✅ None (proc macro) | ❌ Custom toolchain    |
 
 ### 8.2 Debugging Experience
 
-The transpiler's output is human-readable WGSL with preserved variable names
-and structure. When a GPU shader error occurs, the generated WGSL can be
-inspected directly. The `TranspilationDiagnostic` system provides source mapping
-from WGSL locations back to Rust source spans.
+The transpiler's output is human-readable WGSL with preserved variable names and
+structure. When a GPU shader error occurs, the generated WGSL can be inspected
+directly. The `TranspilationDiagnostic` system provides source mapping from WGSL
+locations back to Rust source spans.
 
 ### 8.3 Migration Path
 
@@ -895,31 +893,31 @@ The `#[shader_fn]` approach is designed for incremental adoption:
 
 ### 9.1 Technical Risks
 
-| Risk                          | Likelihood | Impact | Mitigation                                      |
-| ----------------------------- | ---------- | ------ | ----------------------------------------------- |
-| WGSL spec breaking changes    | Low        | Medium | Monitor W3C WebGPU WG; spec is stabilising      |
-| syn crate breaking changes    | Very Low   | Low    | syn v2 is stable; Gup pins versions             |
-| Unsupported Rust pattern      | Medium     | Low    | `#[wgsl_function]` escape hatch                 |
-| Generated WGSL correctness    | Low        | High   | 365+ tests, GPU validation in CI                |
-| Proc macro compilation times  | Low        | Low    | Measured < 1ms per function                     |
-| Cross-platform WGSL issues    | Low        | Medium | Test on Vulkan, Metal, WebGPU backends          |
+| Risk                         | Likelihood | Impact | Mitigation                                 |
+| ---------------------------- | ---------- | ------ | ------------------------------------------ |
+| WGSL spec breaking changes   | Low        | Medium | Monitor W3C WebGPU WG; spec is stabilising |
+| syn crate breaking changes   | Very Low   | Low    | syn v2 is stable; Gup pins versions        |
+| Unsupported Rust pattern     | Medium     | Low    | `#[wgsl_function]` escape hatch            |
+| Generated WGSL correctness   | Low        | High   | 365+ tests, GPU validation in CI           |
+| Proc macro compilation times | Low        | Low    | Measured < 1ms per function                |
+| Cross-platform WGSL issues   | Low        | Medium | Test on Vulkan, Metal, WebGPU backends     |
 
 ### 9.2 Strategic Risks
 
-| Risk                                    | Likelihood | Impact | Mitigation                                 |
-| --------------------------------------- | ---------- | ------ | ------------------------------------------ |
-| rust-gpu becomes production-ready       | Low        | Medium | Monitor; could adopt if it becomes viable  |
-| WGSL gains Rust-like features           | Medium     | Low    | Would simplify transpilation               |
-| Alternative Rust GPU library emerges    | Medium     | Low    | Differentiate on composability and DX      |
-| Maintenance burden grows unsustainably  | Low        | High   | Keep supported subset well-defined         |
+| Risk                                   | Likelihood | Impact | Mitigation                                |
+| -------------------------------------- | ---------- | ------ | ----------------------------------------- |
+| rust-gpu becomes production-ready      | Low        | Medium | Monitor; could adopt if it becomes viable |
+| WGSL gains Rust-like features          | Medium     | Low    | Would simplify transpilation              |
+| Alternative Rust GPU library emerges   | Medium     | Low    | Differentiate on composability and DX     |
+| Maintenance burden grows unsustainably | Low        | High   | Keep supported subset well-defined        |
 
 ### 9.3 Ecosystem Risks
 
-| Risk                                    | Likelihood | Impact | Mitigation                                 |
-| --------------------------------------- | ---------- | ------ | ------------------------------------------ |
-| wgpu v26 breaking changes               | Medium     | Medium | Pin wgpu version; test upgrades carefully  |
-| naga validation changes                 | Low        | Low    | Test generated WGSL with each wgpu update  |
-| WebGPU browser adoption stalls          | Very Low   | Low    | Primary target is native (wgpu); web is bonus |
+| Risk                           | Likelihood | Impact | Mitigation                                    |
+| ------------------------------ | ---------- | ------ | --------------------------------------------- |
+| wgpu v26 breaking changes      | Medium     | Medium | Pin wgpu version; test upgrades carefully     |
+| naga validation changes        | Low        | Low    | Test generated WGSL with each wgpu update     |
+| WebGPU browser adoption stalls | Very Low   | Low    | Primary target is native (wgpu); web is bonus |
 
 ---
 
@@ -962,9 +960,11 @@ Expand transpiler capabilities based on demand:
 Based on this analysis, the following approaches should **not** be pursued:
 
 1. **rust-gpu adoption**: Too heavyweight for a library dependency
-2. **naga IR as transpilation target**: Disproportionate complexity for our needs
+2. **naga IR as transpilation target**: Disproportionate complexity for our
+   needs
 3. **Standalone eDSL**: Conflicts with the "write natural Rust" goal
-4. **Runtime compilation**: Conflicts with the "zero runtime overhead" constraint
+4. **Runtime compilation**: Conflicts with the "zero runtime overhead"
+   constraint
 5. **Full Rust support**: Attempting to support all of Rust (generics, traits,
    closures) would create an unmaintainable transpiler. The well-defined subset
    approach is sustainable.
@@ -975,8 +975,8 @@ Continue monitoring these developments for potential strategic pivots:
 
 - **rust-gpu stability**: If rust-gpu achieves stable toolchain support and
   library-friendly integration, re-evaluate as a potential backend
-- **WGSL evolution**: Track new WGSL features that could simplify or enhance
-  our transpilation
+- **WGSL evolution**: Track new WGSL features that could simplify or enhance our
+  transpilation
 - **WebGPU adoption**: As WebGPU matures, evaluate whether web-specific
   optimisations are needed in the transpiler
 - **Community feedback**: Monitor usage patterns to identify which unsupported
@@ -988,36 +988,36 @@ Continue monitoring these developments for potential strategic pivots:
 
 ### Appendix A: Glossary
 
-| Term       | Definition                                                      |
-| ---------- | --------------------------------------------------------------- |
-| AST        | Abstract Syntax Tree — tree representation of source code       |
-| eDSL       | Embedded Domain-Specific Language — DSL hosted in a general-purpose language |
-| IR         | Intermediate Representation — compiler-internal code format     |
-| LMS        | Lightweight Modular Staging — multi-stage programming approach  |
-| MSL        | Metal Shading Language — Apple's GPU shader language            |
-| SPIR-V     | Standard Portable Intermediate Representation — GPU binary IR   |
-| WGSL       | WebGPU Shading Language — W3C standard shader language          |
+| Term   | Definition                                                                   |
+| ------ | ---------------------------------------------------------------------------- |
+| AST    | Abstract Syntax Tree — tree representation of source code                    |
+| eDSL   | Embedded Domain-Specific Language — DSL hosted in a general-purpose language |
+| IR     | Intermediate Representation — compiler-internal code format                  |
+| LMS    | Lightweight Modular Staging — multi-stage programming approach               |
+| MSL    | Metal Shading Language — Apple's GPU shader language                         |
+| SPIR-V | Standard Portable Intermediate Representation — GPU binary IR                |
+| WGSL   | WebGPU Shading Language — W3C standard shader language                       |
 
 ### Appendix B: References
 
 1. Taha, W. & Sheard, T. (1997). "Multi-Stage Programming with Explicit
-   Annotations." *ACM SIGPLAN Notices*.
+   Annotations." _ACM SIGPLAN Notices_.
 2. Rompf, T. & Odersky, M. (2010). "Lightweight Modular Staging: A Pragmatic
-   Approach to Runtime Code Generation." *GPCE*.
+   Approach to Runtime Code Generation." _GPCE_.
 3. Mainland, G. & Morrisett, G. (2010). "Nikola: Embedding Compiled GPU
-   Functions in Haskell." *Haskell Symposium*.
+   Functions in Haskell." _Haskell Symposium_.
 4. Chakravarty, M. et al. (2011). "Accelerating Haskell Array Codes with
-   Multicore GPUs." *DAMP*.
+   Multicore GPUs." _DAMP_.
 5. Blelloch, G. & Greiner, J. (1996). "A Provable Time and Space Efficient
-   Implementation of NESL." *ICFP*.
+   Implementation of NESL." _ICFP_.
 6. Gifford, D. & Lucassen, J. (1986). "Integrating Functional and Imperative
-   Programming." *ACM Conference on LISP and Functional Programming*.
+   Programming." _ACM Conference on LISP and Functional Programming_.
 7. Leijen, D. (2017). "Type Directed Compilation of Row-Typed Algebraic
-   Effects." *POPL*.
+   Effects." _POPL_.
 8. W3C. (2025). "WebGPU Shading Language." W3C Specification.
    https://www.w3.org/TR/WGSL/
-9. Embark Studios. (2025). "rust-gpu: Making Rust a first-class language for
-   GPU shaders." https://github.com/EmbarkStudios/rust-gpu
+9. Embark Studios. (2025). "rust-gpu: Making Rust a first-class language for GPU
+   shaders." https://github.com/EmbarkStudios/rust-gpu
 10. gfx-rs Team. (2025). "naga: Universal shader translation."
     https://github.com/gfx-rs/wgpu/tree/trunk/naga
 11. NVIDIA. (2025). "Slang: A shading language for real-time graphics."
@@ -1025,14 +1025,14 @@ Continue monitoring these developments for potential strategic pivots:
 
 ### Appendix C: Competitive Analysis Matrix
 
-| Solution     | Architecture  | Maturity     | Performance | DX     | Maintenance | Adoption | Score |
-| ------------ | ------------- | ------------ | ----------- | ------ | ----------- | -------- | ----- |
-| rust-gpu     | Rust→SPIR-V   | Experimental | High        | Medium | High        | Low      | 260   |
-| naga IR      | IR-based      | Mature       | High        | Low    | Medium      | High     | 344   |
-| **syn + custom** | **AST→WGSL** | **Proven** | **High**   | **High** | **Medium** | **Medium** | **573** |
-| eDSL         | Builder API   | Varies       | High        | Low    | Low         | Tiny     | 498   |
-| Runtime      | String concat | N/A          | High        | Low    | Medium      | N/A      | 322   |
-| macro_rules! | Templates     | Proven       | Medium      | Medium | Low         | Low      | ~350  |
+| Solution         | Architecture  | Maturity     | Performance | DX       | Maintenance | Adoption   | Score   |
+| ---------------- | ------------- | ------------ | ----------- | -------- | ----------- | ---------- | ------- |
+| rust-gpu         | Rust→SPIR-V   | Experimental | High        | Medium   | High        | Low        | 260     |
+| naga IR          | IR-based      | Mature       | High        | Low      | Medium      | High       | 344     |
+| **syn + custom** | **AST→WGSL**  | **Proven**   | **High**    | **High** | **Medium**  | **Medium** | **573** |
+| eDSL             | Builder API   | Varies       | High        | Low      | Low         | Tiny       | 498     |
+| Runtime          | String concat | N/A          | High        | Low      | Medium      | N/A        | 322     |
+| macro_rules!     | Templates     | Proven       | Medium      | Medium   | Low         | Low        | ~350    |
 
 ### Appendix D: Gup's Implementation Architecture
 
@@ -1074,24 +1074,24 @@ For reference, Gup's implemented transpilation architecture:
 
 **Key modules** (in `gup-macros/src/transpile/`):
 
-| Module                  | Purpose                                      | Tests  |
-| ----------------------- | -------------------------------------------- | ------ |
-| `ast.rs`                | WGSL AST type definitions                    | —      |
-| `convert.rs`            | syn::Expr → WgslExpr conversion              | ~120   |
-| `codegen.rs`            | WgslExpr → WGSL text generation              | ~60    |
-| `type_map.rs`           | Comprehensive type mapping                   | ~42    |
-| `builtins.rs`           | Built-in function registry (50+ functions)   | ~46    |
-| `optimizer.rs`          | Dead code elimination, constant folding      | ~30    |
-| `diagnostics.rs`        | Rich error reporting                         | ~20    |
-| `source_map.rs`         | Source location tracking                     | ~15    |
-| `validation.rs`         | AST validation checks                        | ~15    |
-| `transpile_pipeline.rs` | End-to-end pipeline orchestration             | ~17    |
+| Module                  | Purpose                                    | Tests |
+| ----------------------- | ------------------------------------------ | ----- |
+| `ast.rs`                | WGSL AST type definitions                  | —     |
+| `convert.rs`            | syn::Expr → WgslExpr conversion            | ~120  |
+| `codegen.rs`            | WgslExpr → WGSL text generation            | ~60   |
+| `type_map.rs`           | Comprehensive type mapping                 | ~42   |
+| `builtins.rs`           | Built-in function registry (50+ functions) | ~46   |
+| `optimizer.rs`          | Dead code elimination, constant folding    | ~30   |
+| `diagnostics.rs`        | Rich error reporting                       | ~20   |
+| `source_map.rs`         | Source location tracking                   | ~15   |
+| `validation.rs`         | AST validation checks                      | ~15   |
+| `transpile_pipeline.rs` | End-to-end pipeline orchestration          | ~17   |
 
 **Total test count**: 365+ across all transpilation modules.
 
 ---
 
-*This analysis was conducted as part of GUP-054 to inform Gup's Rust-to-WGSL
+_This analysis was conducted as part of GUP-054 to inform Gup's Rust-to-WGSL
 transpilation strategy. The analysis validates the implementation decisions made
 in GUP-055 through GUP-062 and provides a strategic framework for future
-transpiler evolution.*
+transpiler evolution._

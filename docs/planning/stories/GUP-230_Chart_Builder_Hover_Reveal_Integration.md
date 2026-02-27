@@ -27,8 +27,8 @@ registry and state machine themselves.
 ## Acceptance Criteria
 
 - [ ] `ChartBuilder` owns a `ClippedTextRegistry` and `HoverRevealState`
-- [ ] Axis labels and chart titles automatically register with the registry
-      when clipped
+- [ ] Axis labels and chart titles automatically register with the registry when
+      clipped
 - [ ] `ChartBuilder` accepts mouse position updates for hover detection
 - [ ] Tooltip text is automatically queued for rendering during chart draw
 - [ ] Hover reveal can be enabled/disabled via a chart builder configuration
@@ -37,8 +37,8 @@ registry and state machine themselves.
 
 ## Technical Tasks
 
-1. Add `ClippedTextRegistry` and `HoverRevealState` fields to the chart
-   builder state
+1. Add `ClippedTextRegistry` and `HoverRevealState` fields to the chart builder
+   state
 2. Wire axis label rendering to register clipped text
 3. Add `with_hover_reveal(bool)` and `with_tooltip_config(TooltipConfig)`
    builder methods

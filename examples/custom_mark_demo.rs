@@ -214,7 +214,8 @@ fn main() {
     println!("    bytemuck bytes: {} bytes", bytes.len());
 
     // Batch conversion for storage buffer
-    let diamonds = [Diamond {
+    let diamonds = [
+        Diamond {
             center: Vec2 { x: -0.5, y: 0.5 },
             size: 0.08,
             color: Vec4 {
@@ -235,7 +236,8 @@ fn main() {
                 w: 0.9,
             },
             angle: 1.0,
-        }];
+        },
+    ];
     let instances: Vec<DiamondInstance> = diamonds.iter().map(DiamondInstance::from).collect();
     let buffer_bytes: &[u8] = bytemuck::cast_slice(&instances);
     println!(

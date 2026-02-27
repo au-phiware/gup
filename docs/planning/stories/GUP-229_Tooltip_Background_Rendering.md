@@ -34,8 +34,8 @@ background box, border, and optional corner radius.
 
 ## Technical Tasks
 
-1. Create a tooltip background renderer using the Rectangle mark or a
-   dedicated solid-color quad shader
+1. Create a tooltip background renderer using the Rectangle mark or a dedicated
+   solid-color quad shader
 2. Wire background rendering into the `TooltipLayout` positioning system
 3. Ensure background renders behind (before) the tooltip text
 4. Add corner radius support to the background rectangle
@@ -59,8 +59,8 @@ background box, border, and optional corner radius.
 
 ## Risk Assessment
 
-- **GPU pipeline complexity**: May need a new simple-quad render pipeline if
-  the mark system is too heavy for this use case.
+- **GPU pipeline complexity**: May need a new simple-quad render pipeline if the
+  mark system is too heavy for this use case.
 - **Z-ordering**: Background must render before text in the same render pass.
 
 ## Definition of Done
