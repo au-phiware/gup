@@ -63,6 +63,9 @@ const WG_SIZE: u32 = 256u;
 // Shared memory for workgroup operations.
 var<workgroup> shared_data: array<u32, 256>;
 var<workgroup> shared_hist: array<atomic<u32>, 256>;
+// Per-digit thread membership bitmask (256 digits × 8 u32 words = 256 bits per digit).
+// Used by radix_scatter for O(n) local rank computation via popcount.
+var<workgroup> digit_member_bits: array<atomic<u32>, 2048>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -293,8 +296,11 @@ fn histogram_scan_add_offsets(
 //
 // Each thread determines its output position from:
 //   global_offset = prefix_sum[digit * num_sort_wg + wg_id]
-//   local_rank    = number of threads with lower TID in same workgroup
-//                   that have the same digit (ensures stability)
+//   local_rank    = popcount of lower-TID bits in same-digit bitmask
+//                   (ensures stability — threads with lower TID get lower rank)
+//
+// Uses a per-digit 256-bit bitmask in shared memory for O(n) total work
+// per workgroup, replacing the previous O(n²) serial scan.
 
 @compute @workgroup_size(256)
 fn radix_scatter(
@@ -318,19 +324,34 @@ fn radix_scatter(
         my_digit = extract_digit(my_key, sort_config.radix_pass);
     }
 
-    // Store digits in shared memory for stable local ranking.
-    shared_data[tid] = my_digit;
+    // Phase 1: Clear the per-digit bitmask.
+    // 256 threads × 8 words each = 2048 words total.
+    for (var i = 0u; i < 8u; i = i + 1u) {
+        atomicStore(&digit_member_bits[tid * 8u + i], 0u);
+    }
     workgroupBarrier();
 
-    // Compute stable local rank: count threads with lower TID and same digit.
-    var local_rank = 0u;
-    let wg_start = wg_id * WG_SIZE;
-    for (var i = 0u; i < tid; i = i + 1u) {
-        let i_gid = wg_start + i;
-        if (i_gid < sort_config.num_elements && shared_data[i] == my_digit) {
-            local_rank = local_rank + 1u;
-        }
+    // Phase 2: Each in-range thread sets its bit in its digit's bitmask.
+    if (in_range) {
+        let word_idx = my_digit * 8u + tid / 32u;
+        let bit = 1u << (tid % 32u);
+        atomicOr(&digit_member_bits[word_idx], bit);
     }
+    workgroupBarrier();
+
+    // Phase 3: Compute stable local rank via popcount of lower-TID bits.
+    // For each thread, count how many threads with lower TID share the same
+    // digit. This is equivalent to the serial scan but runs in O(8) per thread
+    // instead of O(tid).
+    var local_rank = 0u;
+    let base = my_digit * 8u;
+    let full_words = tid / 32u;
+    for (var w = 0u; w < full_words; w = w + 1u) {
+        local_rank = local_rank + countOneBits(atomicLoad(&digit_member_bits[base + w]));
+    }
+    let partial_word = atomicLoad(&digit_member_bits[base + full_words]);
+    let lower_mask = (1u << (tid % 32u)) - 1u;
+    local_rank = local_rank + countOneBits(partial_word & lower_mask);
 
     // Look up global offset from prefix-summed histogram.
     // histograms[digit * num_sort_wg + wg_id] is the exclusive prefix sum
