@@ -320,7 +320,7 @@ system story. The expanded story is also complete._
 | [GUP-216](GUP-216_Chart_Title_Layout_Configuration.md)                             | Chart Title Layout Configuration            | ✅ Complete    | Low      | —      |
 | [GUP-217](GUP-217_Per_Axis_Label_Style_Override.md)                                | Per-Axis Label Style Override               | ✅ Complete    | Low      | —      |
 | [GUP-227](GUP-227_Multi_Line_Text_Alignment.md)                                    | Multi-Line Text Alignment Options           | ✅ Complete | Low      | 3      |
-| [GUP-228](GUP-228_Ellipsis_Last_Wrapped_Line.md)                                   | Ellipsis on Last Wrapped Line               | 💡 New         | Low      | 2      |
+| [GUP-228](GUP-228_Ellipsis_Last_Wrapped_Line.md)                                   | Ellipsis on Last Wrapped Line               | 🚧 In Progress | Low      | 2      |
 | [GUP-229](GUP-229_Tooltip_Background_Rendering.md)                                 | Tooltip Background Rendering                | ✅ Complete    | Low      | 3      |
 | [GUP-230](GUP-230_Chart_Builder_Hover_Reveal_Integration.md)                       | Chart Builder Hover Reveal Integration      | ✅ Complete    | Low      | 3      |
 | [GUP-241](GUP-241_Tooltip_Arrow_Pointer.md)                                        | Tooltip Arrow/Pointer                       | 💡 New         | Low      | 2      |

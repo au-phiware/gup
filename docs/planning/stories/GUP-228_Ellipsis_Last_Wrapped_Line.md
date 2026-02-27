@@ -3,7 +3,7 @@
 ## Story Overview
 
 **Epic**: Phase 2 - High-Level Convenience APIs **Theme**: Advanced Text Layout
-and Rendering **Priority**: Low **Story Points**: 2 **Status**: 💡 New
+and Rendering **Priority**: Low **Story Points**: 2 **Status**: 🚧 In Progress
 **Dependencies**: GUP-199 (Text Wrapping and Multi-Line Layout)
 
 ## Problem Statement
