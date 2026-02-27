@@ -205,7 +205,7 @@ impl MultiFontChartApp {
                     let (w, h) = (WINDOW_WIDTH as f32, WINDOW_HEIGHT as f32);
 
                     // --- Phase 1: Generate axis geometry and queue text ---
-                    let chart = self.chart.as_ref().unwrap();
+                    let chart = self.chart.as_mut().unwrap();
                     let geom = chart.generate_axis_geometry_instanced();
 
                     // Queue text using the chart builder's multi-font API

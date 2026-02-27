@@ -1411,15 +1411,27 @@ where
     /// # }
     /// ```
     pub fn queue_chart_text(
-        &self,
+        &mut self,
         frame: &crate::RenderFrame,
         text_renderer: &mut crate::text::TextRenderer,
         font_manager: &mut crate::text::FontAtlasManager,
         layout_engine: &mut crate::text::TextLayoutEngine,
     ) -> GupResult<()> {
+        let hover_reveal = self.config.hover_reveal;
+
+        // Clear registry at start of each frame when hover reveal is active
+        if hover_reveal {
+            self.clipped_text_registry.clear();
+        }
+
         let chart_area = self.calculate_chart_area();
         let viewport_size = (self.config.width, self.config.height);
         let renderer = AxisRenderer::new();
+
+        let clipping_config = crate::text::ClippingStrategyConfig {
+            enable_hover_reveal: true,
+            ..crate::text::ClippingStrategyConfig::default()
+        };
 
         let axes: [(AxisPosition, &Option<Box<dyn Axis>>); 4] = [
             (AxisPosition::Bottom, &self.bottom_axis),
@@ -1452,16 +1464,37 @@ where
                 for label in &labels {
                     let style = base_style.clone().with_anchor(label.anchor);
 
-                    text_renderer.queue_text_with_fonts(
-                        frame,
-                        &label.text,
-                        label.screen_position,
-                        &style,
-                        font_manager,
-                        layout_engine,
-                        None,
-                        None,
-                    )?;
+                    if hover_reveal {
+                        let vp_bounds =
+                            Self::label_viewport_bounds(*position, &chart_area, &self.config);
+                        let layout_result = text_renderer.queue_text_with_fonts_layout(
+                            frame,
+                            &label.text,
+                            label.screen_position,
+                            &style,
+                            font_manager,
+                            layout_engine,
+                            Some(&vp_bounds),
+                            Some(&clipping_config),
+                        )?;
+
+                        // Register clipped text for hover reveal
+                        if let Some(original) = &layout_result.original_text {
+                            self.clipped_text_registry
+                                .register(layout_result.bounds, original);
+                        }
+                    } else {
+                        text_renderer.queue_text_with_fonts(
+                            frame,
+                            &label.text,
+                            label.screen_position,
+                            &style,
+                            font_manager,
+                            layout_engine,
+                            None,
+                            None,
+                        )?;
+                    }
                 }
             }
         }
@@ -1482,7 +1515,7 @@ where
     /// [`AxisConfiguration::label_style`](crate::axis::AxisConfiguration::label_style),
     /// that style is used instead of [`ChartConfig::label_style`].
     pub fn queue_chart_text_resolved(
-        &self,
+        &mut self,
         frame: &crate::RenderFrame,
         text_renderer: &mut crate::text::TextRenderer,
         font_manager: &mut crate::text::FontAtlasManager,
@@ -1490,9 +1523,21 @@ where
         positioner: &mut LabelPositioner,
         constraints: &LabelConstraints,
     ) -> GupResult<()> {
+        let hover_reveal = self.config.hover_reveal;
+
+        // Clear registry at start of each frame when hover reveal is active
+        if hover_reveal {
+            self.clipped_text_registry.clear();
+        }
+
         let chart_area = self.calculate_chart_area();
         let viewport_size = (self.config.width, self.config.height);
         let renderer = AxisRenderer::new();
+
+        let clipping_config = crate::text::ClippingStrategyConfig {
+            enable_hover_reveal: true,
+            ..crate::text::ClippingStrategyConfig::default()
+        };
 
         let axes: [(AxisPosition, &Option<Box<dyn Axis>>); 4] = [
             (AxisPosition::Bottom, &self.bottom_axis),
@@ -1528,16 +1573,36 @@ where
                 for lp in &layout.positions {
                     let style = base_style.clone().with_anchor(lp.anchor);
 
-                    text_renderer.queue_text_with_fonts(
-                        frame,
-                        &lp.text,
-                        lp.position,
-                        &style,
-                        font_manager,
-                        layout_engine,
-                        None,
-                        None,
-                    )?;
+                    if hover_reveal {
+                        let vp_bounds =
+                            Self::label_viewport_bounds(*position, &chart_area, &self.config);
+                        let layout_result = text_renderer.queue_text_with_fonts_layout(
+                            frame,
+                            &lp.text,
+                            lp.position,
+                            &style,
+                            font_manager,
+                            layout_engine,
+                            Some(&vp_bounds),
+                            Some(&clipping_config),
+                        )?;
+
+                        if let Some(original) = &layout_result.original_text {
+                            self.clipped_text_registry
+                                .register(layout_result.bounds, original);
+                        }
+                    } else {
+                        text_renderer.queue_text_with_fonts(
+                            frame,
+                            &lp.text,
+                            lp.position,
+                            &style,
+                            font_manager,
+                            layout_engine,
+                            None,
+                            None,
+                        )?;
+                    }
                 }
             }
         }
@@ -1612,9 +1677,102 @@ where
 
         Ok(())
     }
+
+    /// Compute viewport bounds for label clipping based on axis position.
+    ///
+    /// Returns a [`ViewportBounds`](crate::text::ViewportBounds) that
+    /// constrains labels to their axis margin area, causing overlong
+    /// labels to be clipped and eligible for hover reveal registration.
+    fn label_viewport_bounds(
+        position: AxisPosition,
+        chart_area: &ChartArea,
+        config: &ChartConfig,
+    ) -> crate::text::ViewportBounds {
+        use crate::text::{TextBounds, TextMargins, ViewportBounds};
+
+        let viewport_rect = match position {
+            AxisPosition::Bottom => TextBounds::new(
+                chart_area.x,
+                chart_area.y + chart_area.height,
+                chart_area.x + chart_area.width,
+                config.height,
+            ),
+            AxisPosition::Top => TextBounds::new(
+                chart_area.x,
+                0.0,
+                chart_area.x + chart_area.width,
+                chart_area.y,
+            ),
+            AxisPosition::Left => TextBounds::new(
+                0.0,
+                chart_area.y,
+                chart_area.x,
+                chart_area.y + chart_area.height,
+            ),
+            AxisPosition::Right => TextBounds::new(
+                chart_area.x + chart_area.width,
+                chart_area.y,
+                config.width,
+                chart_area.y + chart_area.height,
+            ),
+        };
+
+        ViewportBounds {
+            viewport_rect,
+            container_bounds: None,
+            text_margins: TextMargins::zero(),
+        }
+    }
+
+    /// Queue tooltip text for the currently active hover reveal.
+    ///
+    /// If a tooltip is active (the user is hovering over truncated text),
+    /// this queues the tooltip text for rendering. Call this after
+    /// [`queue_chart_text`](Self::queue_chart_text) so that tooltip text
+    /// renders on top of axis labels.
+    ///
+    /// Returns `true` if a tooltip was queued.
+    pub fn queue_tooltip_text(
+        &self,
+        frame: &crate::RenderFrame,
+        text_renderer: &mut crate::text::TextRenderer,
+        font_manager: &mut crate::text::FontAtlasManager,
+        layout_engine: &mut crate::text::TextLayoutEngine,
+    ) -> GupResult<bool> {
+        if !self.config.hover_reveal {
+            return Ok(false);
+        }
+
+        let tooltip = match self.hover_state.active_tooltip() {
+            Some(t) => t,
+            None => return Ok(false),
+        };
+
+        let tooltip_cfg = &self.config.tooltip_config;
+        let style = crate::text::TextStyle::new(tooltip_cfg.font_size)
+            .with_rgba(
+                tooltip_cfg.text_color[0],
+                tooltip_cfg.text_color[1],
+                tooltip_cfg.text_color[2],
+                tooltip_cfg.text_color[3] * tooltip.opacity,
+            )
+            .with_anchor(crate::text::TextAnchor::TopLeft);
+
+        text_renderer.queue_text_with_fonts(
+            frame,
+            &tooltip.text,
+            tooltip.position,
+            &style,
+            font_manager,
+            layout_engine,
+            None,
+            None,
+        )?;
+
+        Ok(true)
+    }
 }
 
-/// Calculated chart area after accounting for margins and axes.
 #[derive(Debug, Clone)]
 struct ChartArea {
     /// X position of chart area
@@ -2475,7 +2633,7 @@ mod tests_multi_font {
             show_axes: false,
             ..ChartConfig::default()
         };
-        let chart = ComposedChart::new(sel, config);
+        let mut chart = ComposedChart::new(sel, config);
 
         let gup_context = crate::GupContext::headless().await.unwrap();
         let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
@@ -2505,7 +2663,7 @@ mod tests_multi_font {
 
         let context = std::sync::Arc::new(crate::RenderContext::new().await.unwrap());
         let sel = crate::selection::Selection::<D, crate::Circle>::new(vec![], context).unwrap();
-        let chart = ComposedChart::new(sel, ChartConfig::default()).with_default_axes();
+        let mut chart = ComposedChart::new(sel, ChartConfig::default()).with_default_axes();
 
         let gup_context = crate::GupContext::headless().await.unwrap();
         let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
@@ -2543,7 +2701,7 @@ mod tests_multi_font {
         let sel = crate::selection::Selection::<D, crate::Circle>::new(vec![], context).unwrap();
         let config = ChartConfig::default()
             .with_label_style(TextStyle::new(14.0).with_font_family("DejaVu Sans"));
-        let chart = ComposedChart::new(sel, config).with_default_axes();
+        let mut chart = ComposedChart::new(sel, config).with_default_axes();
 
         let gup_context = crate::GupContext::headless().await.unwrap();
         let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
@@ -2582,7 +2740,7 @@ mod tests_multi_font {
         let config = ChartConfig::default()
             .with_title("Test Title")
             .with_title_style(TextStyle::new(20.0).with_font_family("DejaVu Serif"));
-        let chart = ComposedChart::new(sel, config).with_default_axes();
+        let mut chart = ComposedChart::new(sel, config).with_default_axes();
 
         let gup_context = crate::GupContext::headless().await.unwrap();
         let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
@@ -2618,7 +2776,7 @@ mod tests_multi_font {
 
         let context = std::sync::Arc::new(crate::RenderContext::new().await.unwrap());
         let sel = crate::selection::Selection::<D, crate::Circle>::new(vec![], context).unwrap();
-        let chart = ComposedChart::new(sel, ChartConfig::default()).with_default_axes();
+        let mut chart = ComposedChart::new(sel, ChartConfig::default()).with_default_axes();
 
         let gup_context = crate::GupContext::headless().await.unwrap();
         let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
@@ -2744,7 +2902,7 @@ mod tests_multi_font {
             )
             .with_title_style(TextStyle::new(20.0).bold().with_font_family("DejaVu Serif"));
 
-        let chart = ComposedChart::new(sel, config).with_default_axes();
+        let mut chart = ComposedChart::new(sel, config).with_default_axes();
 
         let gup_context = crate::GupContext::headless().await.unwrap();
         let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
@@ -2788,7 +2946,7 @@ mod tests_multi_font {
         let config = ChartConfig::default()
             .with_title_config(TitleConfig::new("Left Title").with_alignment(TitleAlignment::Left));
 
-        let chart = ComposedChart::new(sel, config);
+        let mut chart = ComposedChart::new(sel, config);
 
         let gup_context = crate::GupContext::headless().await.unwrap();
         let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
@@ -2820,7 +2978,7 @@ mod tests_multi_font {
         let sel = crate::selection::Selection::<D, crate::Circle>::new(vec![], context).unwrap();
         // No title set — should render without error
         let config = ChartConfig::default();
-        let chart = ComposedChart::new(sel, config);
+        let mut chart = ComposedChart::new(sel, config);
 
         let gup_context = crate::GupContext::headless().await.unwrap();
         let mut gup_ctx = std::sync::Arc::try_unwrap(gup_context).unwrap();
@@ -2887,7 +3045,7 @@ mod tests_multi_font {
         let left_config = AxisConfiguration::default()
             .with_label_style(TextStyle::new(16.0).with_font_family("DejaVu Serif"));
 
-        let chart = ComposedChart::new(sel, config)
+        let mut chart = ComposedChart::new(sel, config)
             .with_bottom_axis(Box::new(LinearAxis::new(
                 AxisPosition::Bottom,
                 bottom_config,
@@ -2942,7 +3100,7 @@ mod tests_multi_font {
         let bottom_config = AxisConfiguration::default()
             .with_label_style(TextStyle::new(12.0).with_font_family("DejaVu Serif"));
 
-        let chart = ComposedChart::new(sel, config)
+        let mut chart = ComposedChart::new(sel, config)
             .with_bottom_axis(Box::new(LinearAxis::new(
                 AxisPosition::Bottom,
                 bottom_config,
@@ -2997,7 +3155,7 @@ mod tests_multi_font {
         let left_config = AxisConfiguration::default()
             .with_label_style(TextStyle::new(16.0).with_font_family("DejaVu Serif"));
 
-        let chart = ComposedChart::new(sel, ChartConfig::default())
+        let mut chart = ComposedChart::new(sel, ChartConfig::default())
             .with_bottom_axis(Box::new(LinearAxis::new(
                 AxisPosition::Bottom,
                 bottom_config,

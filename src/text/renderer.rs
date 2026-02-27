@@ -461,6 +461,49 @@ impl TextRenderer {
         Ok(layout_result.bounds)
     }
 
+    /// Queue text for multi-font batched rendering, returning the full
+    /// [`LayoutResult`].
+    ///
+    /// Behaves identically to [`queue_text_with_fonts`](Self::queue_text_with_fonts)
+    /// but returns the complete [`LayoutResult`] instead of just [`TextBounds`].
+    /// This is useful when callers need the [`LayoutResult::original_text`]
+    /// field to detect clipping (e.g. for hover reveal registration).
+    pub fn queue_text_with_fonts_layout(
+        &mut self,
+        frame: &crate::RenderFrame,
+        text: &str,
+        position: Vec2,
+        style: &TextStyle,
+        font_manager: &mut FontAtlasManager,
+        layout_engine: &mut TextLayoutEngine,
+        viewport_bounds: Option<&ViewportBounds>,
+        clipping_config: Option<&ClippingStrategyConfig>,
+    ) -> GupResult<LayoutResult> {
+        let atlas_key = FontAtlasManager::atlas_key(style.font_family.as_deref());
+
+        let font_atlas = font_manager.get_or_create(
+            frame.device(),
+            frame.queue(),
+            style.font_family.as_deref(),
+        )?;
+
+        for ch in text.chars() {
+            font_atlas.ensure_glyph(frame.device(), frame.queue(), ch, style.font_size)?;
+        }
+
+        let layout_result = if let Some(vb) = viewport_bounds {
+            let cc = clipping_config.cloned().unwrap_or_default();
+            layout_engine
+                .layout_text_with_clipping(text, position, style, font_atlas, None, vb, &cc)?
+        } else {
+            layout_engine.layout_text(text, position, style, font_atlas, None)?
+        };
+
+        self.add_glyph_batch_for_font(&atlas_key, &layout_result.glyphs, style.font_size)?;
+
+        Ok(layout_result)
+    }
+
     /// Render all multi-font queued text.
     ///
     /// Iterates over each per-atlas vertex batch and issues a separate
