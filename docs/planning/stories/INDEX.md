@@ -322,6 +322,8 @@ system story. The expanded story is also complete._
 | [GUP-228](GUP-228_Ellipsis_Last_Wrapped_Line.md)                                   | Ellipsis on Last Wrapped Line               | 💡 New      | Low      | 2      |
 | [GUP-229](GUP-229_Tooltip_Background_Rendering.md)                                 | Tooltip Background Rendering                | ✅ Complete | Low      | 3      |
 | [GUP-230](GUP-230_Chart_Builder_Hover_Reveal_Integration.md)                       | Chart Builder Hover Reveal Integration      | 📋 Planned  | Low      | 3      |
+| [GUP-241](GUP-241_Tooltip_Arrow_Pointer.md)                                        | Tooltip Arrow/Pointer                       | 💡 New      | Low      | 2      |
+| [GUP-242](GUP-242_Shared_UI_Chrome_Renderer.md)                                    | Shared UI Chrome Renderer                   | 💡 New      | Low      | 5      |
 
 ### Post GUP-016 Stories - Accessibility System (Stories 111-130)
 
