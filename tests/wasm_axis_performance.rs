@@ -15,6 +15,16 @@
 //! ```bash
 //! wasm-pack test --headless --chrome -- --test wasm_axis_performance
 //! ```
+//!
+//! These tests are only compiled for the `wasm32` target.
+#![cfg(target_arch = "wasm32")]
+//! * Results can be serialized and deserialized for cross-platform comparison
+//!
+//! # Running
+//!
+//! ```bash
+//! wasm-pack test --headless --chrome -- --test wasm_axis_performance
+//! ```
 
 use wasm_bindgen_test::*;
 
