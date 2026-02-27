@@ -1706,6 +1706,19 @@ pub enum HapticFeedback {
 }
 
 /// Phase of an individual touch contact.
+///
+/// This maps 1:1 to [`winit::event::TouchPhase`] and a [`From`] impl is
+/// provided for zero-boilerplate conversion.
+///
+/// # Converting from winit
+///
+/// ```rust
+/// use gup::mark_selection::TouchPhase;
+///
+/// let winit_phase = winit::event::TouchPhase::Started;
+/// let gup_phase: TouchPhase = winit_phase.into();
+/// assert_eq!(gup_phase, TouchPhase::Started);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TouchPhase {
     /// Finger touched the screen.
@@ -1718,7 +1731,39 @@ pub enum TouchPhase {
     Cancelled,
 }
 
+impl From<winit::event::TouchPhase> for TouchPhase {
+    fn from(phase: winit::event::TouchPhase) -> Self {
+        match phase {
+            winit::event::TouchPhase::Started => Self::Started,
+            winit::event::TouchPhase::Moved => Self::Moved,
+            winit::event::TouchPhase::Ended => Self::Ended,
+            winit::event::TouchPhase::Cancelled => Self::Cancelled,
+        }
+    }
+}
+
 /// A single touch event as received from the windowing system.
+///
+/// # Converting from winit
+///
+/// The [`From<winit::event::Touch>`] impl maps all fields directly, setting
+/// [`timestamp`](Self::timestamp) to `0.0` because winit's `Touch` type does
+/// not carry a timestamp. For correct long-press recognition, prefer
+/// [`TouchEvent::from_winit`] which lets you supply the current time.
+///
+/// ```rust
+/// # use gup::mark_selection::TouchEvent;
+/// # let winit_touch = winit::event::Touch {
+/// #     device_id: winit::event::DeviceId::dummy(),
+/// #     phase: winit::event::TouchPhase::Started,
+/// #     location: winit::dpi::PhysicalPosition::new(100.0, 200.0),
+/// #     force: None,
+/// #     id: 1,
+/// # };
+/// let gup_event: TouchEvent = winit_touch.into();
+/// assert_eq!(gup_event.id, 1);
+/// assert_eq!(gup_event.position, [100.0, 200.0]);
+/// ```
 #[derive(Debug, Clone, Copy)]
 pub struct TouchEvent {
     /// Unique identifier for the touch contact.
@@ -1729,6 +1774,52 @@ pub struct TouchEvent {
     pub phase: TouchPhase,
     /// Timestamp of the event (seconds since an arbitrary epoch).
     pub timestamp: f64,
+}
+
+impl TouchEvent {
+    /// Create a [`TouchEvent`] from a [`winit::event::Touch`] with an
+    /// explicit timestamp.
+    ///
+    /// Use this instead of the [`From`] impl when you need accurate timing
+    /// for long-press and two-finger-tap gesture recognition.
+    ///
+    /// ```rust
+    /// # use gup::mark_selection::TouchEvent;
+    /// # let winit_touch = winit::event::Touch {
+    /// #     device_id: winit::event::DeviceId::dummy(),
+    /// #     phase: winit::event::TouchPhase::Moved,
+    /// #     location: winit::dpi::PhysicalPosition::new(50.0, 75.0),
+    /// #     force: None,
+    /// #     id: 2,
+    /// # };
+    /// let now = std::time::Instant::now();
+    /// let event = TouchEvent::from_winit(winit_touch, now.elapsed().as_secs_f64());
+    /// assert_eq!(event.id, 2);
+    /// ```
+    pub fn from_winit(touch: winit::event::Touch, timestamp: f64) -> Self {
+        Self {
+            id: touch.id,
+            position: [touch.location.x as f32, touch.location.y as f32],
+            phase: touch.phase.into(),
+            timestamp,
+        }
+    }
+}
+
+impl From<winit::event::Touch> for TouchEvent {
+    /// Converts a winit touch into a Gup touch event.
+    ///
+    /// **Note:** The [`timestamp`](Self::timestamp) is set to `0.0` because
+    /// winit does not include a timestamp in its `Touch` type. For correct
+    /// long-press detection, use [`TouchEvent::from_winit`] instead.
+    fn from(touch: winit::event::Touch) -> Self {
+        Self {
+            id: touch.id,
+            position: [touch.location.x as f32, touch.location.y as f32],
+            phase: touch.phase.into(),
+            timestamp: 0.0,
+        }
+    }
 }
 
 /// Internal tracking state for one finger.
@@ -3239,5 +3330,78 @@ mod tests {
         assert_eq!(config.tap_tolerance_px, 10.0);
         assert_eq!(config.two_finger_tap_window, 0.3);
         assert!(config.haptic_feedback_enabled);
+    }
+
+    // -- Winit conversion tests --
+
+    #[test]
+    fn test_touch_phase_from_winit_started() {
+        let phase: TouchPhase = winit::event::TouchPhase::Started.into();
+        assert_eq!(phase, TouchPhase::Started);
+    }
+
+    #[test]
+    fn test_touch_phase_from_winit_moved() {
+        let phase: TouchPhase = winit::event::TouchPhase::Moved.into();
+        assert_eq!(phase, TouchPhase::Moved);
+    }
+
+    #[test]
+    fn test_touch_phase_from_winit_ended() {
+        let phase: TouchPhase = winit::event::TouchPhase::Ended.into();
+        assert_eq!(phase, TouchPhase::Ended);
+    }
+
+    #[test]
+    fn test_touch_phase_from_winit_cancelled() {
+        let phase: TouchPhase = winit::event::TouchPhase::Cancelled.into();
+        assert_eq!(phase, TouchPhase::Cancelled);
+    }
+
+    #[test]
+    fn test_touch_event_from_winit() {
+        let winit_touch = winit::event::Touch {
+            device_id: winit::event::DeviceId::dummy(),
+            phase: winit::event::TouchPhase::Started,
+            location: winit::dpi::PhysicalPosition::new(120.0, 240.0),
+            force: None,
+            id: 42,
+        };
+        let event: TouchEvent = winit_touch.into();
+        assert_eq!(event.id, 42);
+        assert_eq!(event.position, [120.0, 240.0]);
+        assert_eq!(event.phase, TouchPhase::Started);
+        assert_eq!(event.timestamp, 0.0);
+    }
+
+    #[test]
+    fn test_touch_event_from_winit_with_timestamp() {
+        let winit_touch = winit::event::Touch {
+            device_id: winit::event::DeviceId::dummy(),
+            phase: winit::event::TouchPhase::Moved,
+            location: winit::dpi::PhysicalPosition::new(55.5, 77.25),
+            force: None,
+            id: 7,
+        };
+        let event = TouchEvent::from_winit(winit_touch, 1.234);
+        assert_eq!(event.id, 7);
+        assert_eq!(event.position, [55.5, 77.25]);
+        assert_eq!(event.phase, TouchPhase::Moved);
+        assert_eq!(event.timestamp, 1.234);
+    }
+
+    #[test]
+    fn test_touch_event_from_winit_position_truncation() {
+        // Verify f64→f32 truncation works correctly for typical screen coords.
+        let winit_touch = winit::event::Touch {
+            device_id: winit::event::DeviceId::dummy(),
+            phase: winit::event::TouchPhase::Ended,
+            location: winit::dpi::PhysicalPosition::new(1920.0, 1080.0),
+            force: None,
+            id: 0,
+        };
+        let event: TouchEvent = winit_touch.into();
+        assert_eq!(event.position, [1920.0, 1080.0]);
+        assert_eq!(event.phase, TouchPhase::Ended);
     }
 }
