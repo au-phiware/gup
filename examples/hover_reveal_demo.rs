@@ -22,6 +22,7 @@ use gup::shader_function::Vec2;
 use gup::text::hover_reveal::{
     ClippedTextRegistry, HoverRevealState, TooltipConfig, compute_tooltip_layout,
 };
+use gup::text::tooltip_bg::TooltipBackgroundRenderer;
 use gup::text::{
     ClippingStrategy, ClippingStrategyConfig, FontAtlas, TextLayoutEngine, TextRenderConfig,
     TextRenderer, TextStyle, ViewportBounds,
@@ -48,6 +49,7 @@ struct App {
     surface_id: Option<SurfaceId>,
     window: Option<Arc<Window>>,
     text_renderer: Option<TextRenderer>,
+    tooltip_bg: Option<TooltipBackgroundRenderer>,
     font_atlas: Option<FontAtlas>,
     layout_engine: Option<TextLayoutEngine>,
 
@@ -114,6 +116,7 @@ impl App {
             surface_id: None,
             window: None,
             text_renderer: None,
+            tooltip_bg: None,
             font_atlas: None,
             layout_engine: None,
             registry: ClippedTextRegistry::new(),
@@ -122,6 +125,10 @@ impl App {
                 fade_in_duration: 0.15,
                 fade_out_duration: 0.1,
                 font_size: 13.0,
+                corner_radius: 4.0,
+                shadow_radius: 6.0,
+                shadow_color: [0.0, 0.0, 0.0, 0.25],
+                shadow_offset: [0.0, 2.0],
                 ..Default::default()
             }),
             mouse_x: 0.0,
@@ -159,10 +166,12 @@ impl App {
 
             // Initialise rendering components
             let text_renderer = TextRenderer::new(&ctx.device)?;
+            let tooltip_bg = TooltipBackgroundRenderer::new(&ctx.device)?;
             let font_atlas = FontAtlas::new(&ctx.device, &ctx.queue, 32.0)?;
             let layout_engine = TextLayoutEngine::new();
 
             self.text_renderer = Some(text_renderer);
+            self.tooltip_bg = Some(tooltip_bg);
             self.font_atlas = Some(font_atlas);
             self.layout_engine = Some(layout_engine);
             self.context = Some(Arc::new(ctx));
@@ -200,14 +209,21 @@ impl App {
                 let dt = (now - self.last_frame_time).as_secs_f32().min(0.1);
                 self.last_frame_time = now;
 
-                if let (Some(text_renderer), Some(font_atlas), Some(layout_engine)) = (
+                if let (
+                    Some(text_renderer),
+                    Some(tooltip_bg),
+                    Some(font_atlas),
+                    Some(layout_engine),
+                ) = (
                     &mut self.text_renderer,
+                    &mut self.tooltip_bg,
                     &mut self.font_atlas,
                     &mut self.layout_engine,
                 ) {
                     // Clear per-frame state
                     self.registry.clear();
                     text_renderer.begin_frame();
+                    tooltip_bg.begin_frame();
 
                     // ── Queue title ──────────────────────────────────
                     let title_style = TextStyle::new(20.0).with_rgba(0.2, 0.2, 0.55, 1.0);
@@ -267,7 +283,7 @@ impl App {
                     self.hover_state
                         .update(&self.registry, self.mouse_x, self.mouse_y, dt);
 
-                    // ── Queue tooltip text if active ─────────────────
+                    // ── Queue tooltip background + text if active ────
                     if let Some(tooltip) = self.hover_state.active_tooltip() {
                         let tooltip_style = TextStyle::new(self.hover_state.config().font_size)
                             .with_rgba(1.0, 1.0, 1.0, tooltip.opacity);
@@ -288,6 +304,9 @@ impl App {
                                 screen_w,
                                 screen_h,
                             );
+
+                            // Queue background (renders before text)
+                            tooltip_bg.queue(&layout, self.hover_state.config());
 
                             let mut tt_cfg = TextRenderConfig {
                                 text: &layout.text,
@@ -314,6 +333,16 @@ impl App {
 
                     {
                         let mut render_pass = frame.render_pass(Some(clear_color));
+
+                        // Render tooltip background BEFORE text
+                        let _ = tooltip_bg.render(
+                            &mut render_pass,
+                            &device,
+                            &queue,
+                            screen_w,
+                            screen_h,
+                        );
+
                         let _ = text_renderer.render_queued_text(
                             &mut render_pass,
                             &device,
