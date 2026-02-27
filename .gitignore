@@ -7,3 +7,5 @@ performance_report.*
 # Visual regression test outputs (regenerated)
 /target/visual_test_outputs/
 /target/visual_test_diffs/
+# Local benchmark history (tracked on benchmark-history branch in CI)
+.benchmark-history/
