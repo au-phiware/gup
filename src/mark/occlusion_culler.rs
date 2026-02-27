@@ -14,10 +14,13 @@
 //! 2. **Generate Hi-Z** — Successive mip levels store the *minimum* z of
 //!    their 2×2 children, so a cell value represents the shallowest
 //!    (earliest-drawn) mark in the region.
-//! 3. **Occlusion test** — Each instance's bounding box is tested against
-//!    the Hi-Z at an appropriate mip level. If the instance's z is less
-//!    than all covering cells' Hi-Z values, it is fully behind later-drawn
-//!    marks and can be culled.
+//! 3. **Occlusion test** — Two-level approach:
+//!    - **Coarse test**: For large marks (≥ 4 cells per axis at a coarse
+//!      mip level), test only interior cells (shrunk by 1 cell on each
+//!      edge to avoid boundary effects). If all interior cells agree
+//!      (all visible or all occluded), return immediately.
+//!    - **Level-0 fallback**: For small marks or ambiguous coarse results,
+//!      test at the finest resolution (level 0).
 //!
 //! # Example
 //!

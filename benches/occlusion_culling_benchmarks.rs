@@ -271,10 +271,7 @@ fn bench_mixed_size_dispatch(c: &mut Criterion) {
             PooledOcclusionCuller::new(&ctx.device, inner, total as u32, &viewport, &params);
 
         group.bench_with_input(
-            BenchmarkId::new(
-                "mixed_small_large",
-                format!("{n_small}s_{n_large}l"),
-            ),
+            BenchmarkId::new("mixed_small_large", format!("{n_small}s_{n_large}l")),
             &total,
             |b, _| {
                 b.iter(|| {
