@@ -3,7 +3,7 @@
 ## Story Overview
 
 **Epic**: Phase 2 - High-Level Convenience APIs **Theme**: Automatic Scale and
-Axis System **Priority**: Low **Story Points**: 3 **Status**: 🚧 In Progress
+Axis System **Priority**: Low **Story Points**: 3 **Status**: ✅ Complete (2026-02-27)
 
 ## Overview
 
@@ -29,11 +29,11 @@ instead of tick length).
 
 ## Acceptance Criteria
 
-- [ ] Grid lines rendered via GPU instancing
-- [ ] Per-instance data: position along perpendicular axis, line length, color
-- [ ] Performance improvement measured for dense grids
-- [ ] Visual output identical to current vertex-pair approach
-- [ ] Backward compatible with existing grid API
+- [x] Grid lines rendered via GPU instancing
+- [x] Per-instance data: position along perpendicular axis, line length, color
+- [x] Performance improvement measured for dense grids
+- [x] Visual output identical to current vertex-pair approach
+- [x] Backward compatible with existing grid API
 
 ## Technical Tasks
 
@@ -58,7 +58,47 @@ instead of tick length).
 
 ## Definition of Done
 
-- [ ] GPU instancing implemented for grid lines
-- [ ] Benchmark shows measurable improvement for dense grids
-- [ ] All existing grid tests pass
-- [ ] Visual output unchanged
+- [x] GPU instancing implemented for grid lines
+- [x] Benchmark shows measurable improvement for dense grids
+- [x] All existing grid tests pass
+- [x] Visual output unchanged
+
+## Implementation Summary
+
+### What Was Implemented
+
+Reused the existing `TickInstance` struct and `TickPipeline` from GUP-204 to
+render grid lines via GPU instancing. Each grid line is represented by a single
+32-byte `TickInstance` (position, direction+length vector, colour) instead of two
+full `Vertex` structs (56+ bytes).
+
+### Key Files Changed
+
+| File                   | Changes                                                                 |
+| ---------------------- | ----------------------------------------------------------------------- |
+| `src/grid.rs`          | Added instance generation methods, caching, benchmark tests (12 new tests) |
+| `src/chart_builder.rs` | Added `prepare_grid_pipeline()`, `draw_grid_lines()`, `has_grid_data()` |
+
+### New Public API
+
+- `GridRenderer::generate_horizontal_instances_static()` — horizontal grid line
+  instances
+- `GridRenderer::generate_vertical_instances_static()` — vertical grid line
+  instances
+- `GridRenderer::generate_grid_instances()` — all grid instances with caching
+- `GridRenderer::grid_instance_count()` — cached instance count
+- `GridSystem::generate_grid_instances()` — delegate to renderer
+- `ComposedChart::draw_grid_lines()` — record instanced draw for grids
+- `ComposedChart::has_grid_data()` — check if grid buffers are ready
+
+### Performance Results
+
+- Dense grid (10×10 minor subdivisions, 222+ lines): **>30% data reduction**
+- Instance data: 32 bytes per line vs 56+ bytes per vertex pair
+- Shared `TickPipeline` — no new shader or pipeline allocation
+
+### Test Count
+
+- 12 new tests (10 in `grid.rs`, 2 benchmark/integration)
+- All 53 grid tests pass (43 existing + 10 new)
+- All 40 chart_builder tests pass
