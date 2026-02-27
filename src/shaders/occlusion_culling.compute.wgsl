@@ -10,13 +10,21 @@
 // Pipeline:
 //   1. build_coverage      — populate level-0 coverage map via atomicMax(z)
 //   2. generate_hiz_level  — build one Hi-Z mip level from the previous level
-//   3. occlusion_test      — test each instance against Hi-Z for occlusion
+//   3. occlusion_test      — two-level test: coarse Hi-Z first, level-0 fallback
 //
 // The Hi-Z buffer is stored as a flat array with consecutive mip levels.
 // Level 0 is the base coverage map at tile resolution. Each subsequent
 // level stores the MINIMUM z-value of its 2×2 children, so a mark is
 // occluded only if ALL covering cells have a higher z (i.e., something
 // drawn later covers them).
+//
+// Two-level approach (GUP-223):
+// For large marks that cover >= 4 cells per axis at a coarse mip level,
+// the occlusion test first checks interior cells at the coarse level
+// (shrunk by 1 cell on each edge to avoid boundary effects). If all
+// interior cells agree (all visible or all occluded), the result is
+// returned immediately without testing level-0 cells. For small marks
+// or ambiguous coarse results, the test falls back to level-0.
 
 struct InstanceData {
     transform: mat4x4<f32>,  // 64 bytes
@@ -213,12 +221,101 @@ fn generate_hiz_level(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 
 // ---------------------------------------------------------------------------
+// Coarse Hi-Z helper
+// ---------------------------------------------------------------------------
+//
+// Result codes for the two-level Hi-Z test.
+const COARSE_VISIBLE: u32 = 0u;
+const COARSE_OCCLUDED: u32 = 1u;
+const COARSE_AMBIGUOUS: u32 = 2u;
+
+// Perform a two-level Hi-Z test using interior cells at a coarse mip level.
+//
+// Finds the coarsest mip level where the mark covers >= 4 cells per axis,
+// then tests only interior cells (inset by 1 cell on each edge) to avoid
+// edge effects from cells that straddle the bounding box boundary.
+//
+// Returns COARSE_VISIBLE (all interior cells show the mark is visible),
+//         COARSE_OCCLUDED (all interior cells show the mark is occluded),
+//      or COARSE_AMBIGUOUS (mixed result or no suitable coarse level).
+fn coarse_hiz_test(
+    mark_min_x: f32, mark_min_y: f32,
+    mark_max_x: f32, mark_max_y: f32,
+    z_value: u32
+) -> u32 {
+    // Find the coarsest mip level where the mark covers >= 4 cells per axis.
+    // Iterate from level 1 upward; higher levels are coarser (fewer cells).
+    // Once the mark covers < 4 cells on any axis, all coarser levels will
+    // also fail the threshold, so we break early.
+    var coarse_level = 0u;
+    for (var level = 1u; level < config.num_levels; level = level + 1u) {
+        let cmin = clip_to_cell(mark_min_x, mark_min_y, level);
+        let cmax = clip_to_cell(mark_max_x, mark_max_y, level);
+        if (cmax.x - cmin.x >= 3 && cmax.y - cmin.y >= 3) {
+            coarse_level = level;
+        } else {
+            break;
+        }
+    }
+
+    // No suitable coarse level: mark is too small for the two-level test.
+    if (coarse_level == 0u) {
+        return COARSE_AMBIGUOUS;
+    }
+
+    let cmin = clip_to_cell(mark_min_x, mark_min_y, coarse_level);
+    let cmax = clip_to_cell(mark_max_x, mark_max_y, coarse_level);
+    let w = i32(lev_width(coarse_level));
+    let h = i32(lev_height(coarse_level));
+    let level_off = get_level_offset(coarse_level);
+
+    // Shrink by 1 cell on each edge for interior-only test.
+    let inner_min_x = max(cmin.x + 1, 0);
+    let inner_min_y = max(cmin.y + 1, 0);
+    let inner_max_x = min(cmax.x - 1, w - 1);
+    let inner_max_y = min(cmax.y - 1, h - 1);
+
+    // Interior must cover at least 2×2 cells after shrinking.
+    if (inner_max_x < inner_min_x || inner_max_y < inner_min_y) {
+        return COARSE_AMBIGUOUS;
+    }
+
+    var any_visible = false;
+    var any_occluded = false;
+
+    for (var y = inner_min_y; y <= inner_max_y; y = y + 1) {
+        for (var x = inner_min_x; x <= inner_max_x; x = x + 1) {
+            let cell_idx = level_off + u32(y) * u32(w) + u32(x);
+            let hiz_z = atomicLoad(&hiz_buffer[cell_idx]);
+            if (hiz_z == 0u || z_value >= hiz_z) {
+                any_visible = true;
+            } else {
+                any_occluded = true;
+            }
+            // Early exit: mixed result means we must fall back to level-0.
+            if (any_visible && any_occluded) {
+                return COARSE_AMBIGUOUS;
+            }
+        }
+    }
+
+    if (any_visible && !any_occluded) {
+        return COARSE_VISIBLE;
+    }
+    if (any_occluded && !any_visible) {
+        return COARSE_OCCLUDED;
+    }
+    return COARSE_AMBIGUOUS;
+}
+
+// ---------------------------------------------------------------------------
 // Pass 3: Occlusion test
 // ---------------------------------------------------------------------------
 //
 // Tests each instance's screen-space bounding box against the Hi-Z buffer.
-// Selects the coarsest mip level where the mark covers at least 2 cells
-// per axis for efficiency while maintaining accuracy.
+// Uses a two-level approach: first tries a coarse mip level for large marks
+// (early reject/accept), then falls back to level-0 for small marks or
+// ambiguous coarse results.
 // Writes visibility[idx] = 1 (visible) or 0 (occluded).
 
 @compute @workgroup_size(256)
@@ -249,13 +346,22 @@ fn occlusion_test(@builtin(global_invocation_id) global_id: vec3<u32>) {
         return;
     }
 
-    // Always test at level 0 (finest resolution) for correctness.
-    // Coarse Hi-Z levels suffer from edge effects when cells straddle the
-    // mark's bounding box boundary. For the target use case (small marks in
-    // dense scatter plots), level 0 is both correct and fast because each
-    // mark covers only a few cells and the early exit triggers quickly.
-    // The Hi-Z mip chain is still built for potential future coarse-reject
-    // optimisations with large marks.
+    // Two-level test: try coarse Hi-Z first for large marks.
+    let coarse_result = coarse_hiz_test(
+        cx - padded_radius, cy - padded_radius,
+        cx + padded_radius, cy + padded_radius,
+        z_value
+    );
+    if (coarse_result == COARSE_VISIBLE) {
+        visibility[idx] = 1u;
+        return;
+    }
+    if (coarse_result == COARSE_OCCLUDED) {
+        visibility[idx] = 0u;
+        return;
+    }
+
+    // Fallback: level-0 test for small marks or ambiguous coarse results.
     let test_level = 0u;
 
     let cell_min = clip_to_cell(cx - padded_radius, cy - padded_radius, test_level);
@@ -307,6 +413,8 @@ fn occlusion_test(@builtin(global_invocation_id) global_id: vec3<u32>) {
 // are skipped. Visible instances that are found to be occluded are set to 0.
 // Visible instances that are NOT occluded are left unchanged (remain 1).
 //
+// Uses the same two-level approach: coarse Hi-Z first, level-0 fallback.
+//
 // This avoids overwriting frustum-cull decisions, allowing both stages to
 // share a single visibility buffer.
 
@@ -340,6 +448,22 @@ fn occlusion_test_combined(@builtin(global_invocation_id) global_id: vec3<u32>) 
         return;
     }
 
+    // Two-level test: try coarse Hi-Z first for large marks.
+    let coarse_result = coarse_hiz_test(
+        cx - padded_radius, cy - padded_radius,
+        cx + padded_radius, cy + padded_radius,
+        z_value
+    );
+    if (coarse_result == COARSE_VISIBLE) {
+        // Visible — leave visibility flag as 1 (from frustum pass).
+        return;
+    }
+    if (coarse_result == COARSE_OCCLUDED) {
+        visibility[idx] = 0u;
+        return;
+    }
+
+    // Fallback: level-0 test.
     let test_level = 0u;
 
     let cell_min = clip_to_cell(cx - padded_radius, cy - padded_radius, test_level);
