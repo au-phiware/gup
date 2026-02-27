@@ -58,6 +58,7 @@ features = [
   "HtmlCanvasElement",
   "Window",
   "Location",
+  "Performance",
 ]
 
 [target.'cfg(target_os = "macos")'.dependencies]
