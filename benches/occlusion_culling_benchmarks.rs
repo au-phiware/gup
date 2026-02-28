@@ -246,10 +246,11 @@ fn bench_mixed_size_dispatch(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("occlusion_culling_mixed_size");
 
-    // tile_size=16 keeps large marks under the 4096-cell build_coverage limit.
+    // With adaptive build_coverage (GUP-234), tile_size=4 works correctly
+    // for large marks — no need for the tile_size=16 workaround.
     let viewport = Viewport2D::default();
     let params = OcclusionParams {
-        tile_size: 16,
+        tile_size: 4,
         conservative_margin: 0.01,
     };
 
