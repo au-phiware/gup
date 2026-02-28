@@ -8,7 +8,10 @@
 // index as implicit z-order (higher index = drawn later = on top).
 //
 // Pipeline:
-//   1. build_coverage      — populate level-0 coverage map via atomicMax(z)
+//   1. build_coverage      — populate coverage map via atomicMax(z),
+//                            writing at the finest level that fits within
+//                            a per-instance cell budget (adaptive level)
+//   1b. fill_coverage_down — propagate coarse-level writes down to level 0
 //   2. generate_hiz_level  — build one Hi-Z mip level from the previous level
 //   3. occlusion_test      — two-level test: coarse Hi-Z first, level-0 fallback
 //
@@ -100,8 +103,13 @@ fn clip_to_cell(clip_x: f32, clip_y: f32, level: u32) -> vec2<i32> {
 }
 
 // ---------------------------------------------------------------------------
-// Pass 1: Build coverage map (level 0)
+// Pass 1: Build coverage map (adaptive level)
 // ---------------------------------------------------------------------------
+//
+// For each instance, writes its z-value to the coverage map. Small marks
+// (≤ 4096 cells) write directly to level 0. Large marks that would exceed
+// the cell budget write to the finest mip level where they fit, and a
+// subsequent fill_coverage_down pass propagates the values back to level 0.
 
 @compute @workgroup_size(256)
 fn build_coverage(@builtin(global_invocation_id) global_id: vec3<u32>) {
@@ -133,30 +141,102 @@ fn build_coverage(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // Z-value: instance index + 1 (0 = empty cell).
     let z_value = idx + 1u;
 
-    // Bounding box in cell coordinates.
-    let cell_min = clip_to_cell(cx - radius, cy - radius, 0u);
-    let cell_max = clip_to_cell(cx + radius, cy + radius, 0u);
+    // Find the finest mip level where the mark's cell count fits within
+    // the budget. Level 0 is tried first; if it exceeds the limit, we
+    // move to coarser levels until the count is manageable.
+    let max_cells = 4096;
+    var write_level = 0u;
+    for (var level = 0u; level < config.num_levels; level = level + 1u) {
+        let cmin = clip_to_cell(cx - radius, cy - radius, level);
+        let cmax = clip_to_cell(cx + radius, cy + radius, level);
+        let lw = i32(lev_width(level));
+        let lh = i32(lev_height(level));
+        let x0 = max(cmin.x, 0);
+        let y0 = max(cmin.y, 0);
+        let x1 = min(cmax.x, lw - 1);
+        let y1 = min(cmax.y, lh - 1);
+        let count = (x1 - x0 + 1) * (y1 - y0 + 1);
+        if (count <= max_cells) {
+            write_level = level;
+            break;
+        }
+        // If we reach the coarsest level without fitting, use it anyway
+        // (cell count at 1×1 or 2×2 is always within budget).
+        write_level = level;
+    }
 
-    let w = i32(lev_width(0u));
-    let h = i32(lev_height(0u));
-    let base = get_level_offset(0u);
+    // Write coverage at the chosen level.
+    let cell_min = clip_to_cell(cx - radius, cy - radius, write_level);
+    let cell_max = clip_to_cell(cx + radius, cy + radius, write_level);
+
+    let w = i32(lev_width(write_level));
+    let h = i32(lev_height(write_level));
+    let base = get_level_offset(write_level);
 
     let cmin_x = max(cell_min.x, 0);
     let cmin_y = max(cell_min.y, 0);
     let cmax_x = min(cell_max.x, w - 1);
     let cmax_y = min(cell_max.y, h - 1);
 
-    // Limit per-instance cell writes to avoid very long loops for huge marks.
-    let max_cells = 4096;
-    var cells_written = 0;
-
     for (var y = cmin_y; y <= cmax_y; y = y + 1) {
         for (var x = cmin_x; x <= cmax_x; x = x + 1) {
             let cell_idx = base + u32(y) * u32(w) + u32(x);
             atomicMax(&hiz_buffer[cell_idx], z_value);
-            cells_written = cells_written + 1;
-            if (cells_written >= max_cells) {
-                return;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Pass 1b: Fill coarse coverage writes down to level 0
+// ---------------------------------------------------------------------------
+//
+// Propagates non-zero values at `current_level` to their 2×2 children at
+// `current_level - 1` using atomicMax. Dispatched once per level from the
+// coarsest down to level 1. After all fill passes complete, level 0 is
+// fully populated even for marks that wrote at coarser levels.
+
+@compute @workgroup_size(256)
+fn fill_coverage_down(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let src_level = config.current_level;
+    if (src_level == 0u) {
+        return;
+    }
+
+    let src_w = lev_width(src_level);
+    let src_h = lev_height(src_level);
+    let cell_count = src_w * src_h;
+
+    let idx = global_id.x;
+    if (idx >= cell_count) {
+        return;
+    }
+
+    let src_x = idx % src_w;
+    let src_y = idx / src_w;
+    let src_off = get_level_offset(src_level);
+    let z_val = atomicLoad(&hiz_buffer[src_off + src_y * src_w + src_x]);
+
+    // Only propagate non-zero (covered) cells.
+    if (z_val == 0u) {
+        return;
+    }
+
+    // Write to 2×2 children at the next finer level.
+    let dst_level = src_level - 1u;
+    let dst_w = lev_width(dst_level);
+    let dst_h = lev_height(dst_level);
+    let dst_off = get_level_offset(dst_level);
+
+    let dx = src_x * 2u;
+    let dy = src_y * 2u;
+
+    for (var cy = 0u; cy < 2u; cy = cy + 1u) {
+        for (var cx = 0u; cx < 2u; cx = cx + 1u) {
+            let child_x = dx + cx;
+            let child_y = dy + cy;
+            if (child_x < dst_w && child_y < dst_h) {
+                let child_idx = dst_off + child_y * dst_w + child_x;
+                atomicMax(&hiz_buffer[child_idx], z_val);
             }
         }
     }

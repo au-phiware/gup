@@ -10,7 +10,12 @@
 //! # Algorithm
 //!
 //! 1. **Build coverage** — Each instance writes its z-value (based on draw
-//!    order / instance index) to a coarse coverage map via `atomicMax`.
+//!    order / instance index) to a coverage map via `atomicMax`. Small marks
+//!    write to level 0 directly; large marks write to the finest mip level
+//!    where their cell count fits within a 4096-cell budget.
+//! 1b. **Fill coverage down** — Coarse-level writes are propagated to their
+//!    2×2 children at the next finer level, repeated from coarsest to level 1,
+//!    so that level 0 is fully populated even for large marks.
 //! 2. **Generate Hi-Z** — Successive mip levels store the *minimum* z of
 //!    their 2×2 children, so a cell value represents the shallowest
 //!    (earliest-drawn) mark in the region.
@@ -181,6 +186,7 @@ pub(crate) fn mip_count(base_width: u32, base_height: u32) -> u32 {
 /// enough.
 pub struct OcclusionCuller {
     build_coverage_pipeline: ComputePipeline,
+    fill_coverage_down_pipeline: ComputePipeline,
     generate_hiz_pipeline: ComputePipeline,
     occlusion_test_pipeline: ComputePipeline,
     /// Combined occlusion test that preserves existing visibility flags.
@@ -266,6 +272,8 @@ impl OcclusionCuller {
         };
 
         let build_coverage_pipeline = make_pipeline("build_coverage_pipeline", "build_coverage");
+        let fill_coverage_down_pipeline =
+            make_pipeline("fill_coverage_down_pipeline", "fill_coverage_down");
         let generate_hiz_pipeline =
             make_pipeline("generate_hiz_level_pipeline", "generate_hiz_level");
         let occlusion_test_pipeline = make_pipeline("occlusion_test_pipeline", "occlusion_test");
@@ -276,6 +284,7 @@ impl OcclusionCuller {
 
         Ok(Self {
             build_coverage_pipeline,
+            fill_coverage_down_pipeline,
             generate_hiz_pipeline,
             occlusion_test_pipeline,
             occlusion_test_combined_pipeline,
@@ -402,7 +411,7 @@ impl OcclusionCuller {
 
         let num_instance_workgroups = instance_count.div_ceil(WORKGROUP_SIZE);
 
-        // Pass 1: Build coverage (level 0).
+        // Pass 1: Build coverage (adaptive level).
         {
             let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
                 label: Some("build_coverage"),
@@ -413,9 +422,29 @@ impl OcclusionCuller {
             pass.dispatch_workgroups(num_instance_workgroups, 1, 1);
         }
 
-        // Pass 2: Generate Hi-Z mip levels 1..num_levels.
-        // Byte offset of `current_level` in OcclusionGpuConfig.
+        // Pass 1b: Fill coarse coverage writes down to level 0.
+        // Runs from coarsest to finest so each level propagates to its children.
         const CURRENT_LEVEL_OFFSET: u64 = 44;
+        for level in (1..num_levels).rev() {
+            encoder.copy_buffer_to_buffer(
+                &level_staging,
+                level as u64 * 4,
+                &config_buffer,
+                CURRENT_LEVEL_OFFSET,
+                4,
+            );
+            let level_cells = level_dim(base_width, level) * level_dim(base_height, level);
+            let workgroups = level_cells.div_ceil(WORKGROUP_SIZE);
+            let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("fill_coverage_down"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(&self.fill_coverage_down_pipeline);
+            pass.set_bind_group(0, &bind_group, &[]);
+            pass.dispatch_workgroups(workgroups, 1, 1);
+        }
+
+        // Pass 2: Generate Hi-Z mip levels 1..num_levels.
         for level in 1..num_levels {
             // Update current_level in the config buffer.
             encoder.copy_buffer_to_buffer(
@@ -522,7 +551,7 @@ impl OcclusionCuller {
 
         let num_instance_workgroups = instance_count.div_ceil(WORKGROUP_SIZE);
 
-        // Build coverage (level 0).
+        // Build coverage (adaptive level).
         {
             let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
                 label: Some("unified_build_coverage"),
@@ -533,8 +562,28 @@ impl OcclusionCuller {
             pass.dispatch_workgroups(num_instance_workgroups, 1, 1);
         }
 
-        // Generate Hi-Z mip levels.
+        // Fill coarse coverage writes down to level 0.
         const CURRENT_LEVEL_OFFSET: u64 = 44;
+        for level in (1..num_levels).rev() {
+            encoder.copy_buffer_to_buffer(
+                level_staging,
+                level as u64 * 4,
+                occlusion_config_buffer,
+                CURRENT_LEVEL_OFFSET,
+                4,
+            );
+            let level_cells = level_dim(base_width, level) * level_dim(base_height, level);
+            let workgroups = level_cells.div_ceil(WORKGROUP_SIZE);
+            let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("unified_fill_coverage_down"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(&self.fill_coverage_down_pipeline);
+            pass.set_bind_group(0, bind_group, &[]);
+            pass.dispatch_workgroups(workgroups, 1, 1);
+        }
+
+        // Generate Hi-Z mip levels.
         for level in 1..num_levels {
             encoder.copy_buffer_to_buffer(
                 level_staging,
@@ -917,7 +966,27 @@ impl PooledOcclusionCuller {
             pass.dispatch_workgroups(num_instance_workgroups, 1, 1);
         }
 
+        // Fill coarse coverage writes down to level 0.
         const CURRENT_LEVEL_OFFSET: u64 = 44;
+        for level in (1..num_levels).rev() {
+            encoder.copy_buffer_to_buffer(
+                &self.level_staging,
+                level as u64 * 4,
+                &self.config_buffer,
+                CURRENT_LEVEL_OFFSET,
+                4,
+            );
+            let level_cells = level_dim(base_width, level) * level_dim(base_height, level);
+            let workgroups = level_cells.div_ceil(WORKGROUP_SIZE);
+            let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("fill_coverage_down"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(&self.inner.fill_coverage_down_pipeline);
+            pass.set_bind_group(0, bind_group, &[]);
+            pass.dispatch_workgroups(workgroups, 1, 1);
+        }
+
         for level in 1..num_levels {
             encoder.copy_buffer_to_buffer(
                 &self.level_staging,
