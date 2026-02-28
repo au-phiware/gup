@@ -1395,10 +1395,10 @@ mod tests {
         upload_instances(&ctx.queue, &input_buf, &instances);
 
         let viewport = Viewport2D::default();
-        // Use tile_size=16 so large marks don't exceed the build_coverage
-        // 4096-cell-per-instance limit (base grid ~50×38 = ~1900 cells).
+        // With adaptive build_coverage (GUP-234), large marks write at
+        // coarser mip levels and fill down, so tile_size=4 works correctly.
         let params = OcclusionParams {
-            tile_size: 16,
+            tile_size: 4,
             conservative_margin: 0.0,
         };
 
@@ -1437,10 +1437,9 @@ mod tests {
         upload_instances(&ctx.queue, &input_buf, &instances);
 
         let viewport = Viewport2D::default();
-        // tile_size=16: instance 1 (radius 0.9) covers ~45×34 = ~1530 cells,
-        // well under the 4096-cell build_coverage limit.
+        // With adaptive build_coverage (GUP-234), tile_size=4 works for large marks.
         let params = OcclusionParams {
-            tile_size: 16,
+            tile_size: 4,
             conservative_margin: 0.0,
         };
 
@@ -1497,9 +1496,9 @@ mod tests {
         upload_instances(&ctx.queue, &input_buf, &instances);
 
         let viewport = Viewport2D::default();
-        // tile_size=16 keeps large mark coverage under 4096-cell limit.
+        // With adaptive build_coverage (GUP-234), tile_size=4 works for large marks.
         let params = OcclusionParams {
-            tile_size: 16,
+            tile_size: 4,
             conservative_margin: 0.0,
         };
 
@@ -1544,9 +1543,9 @@ mod tests {
         upload_instances(&ctx.queue, &input_buf, &instances);
 
         let viewport = Viewport2D::default();
-        // tile_size=16: radius 0.5 covers ~25×19 = ~475 cells at level 0.
+        // With adaptive build_coverage (GUP-234), tile_size=4 works for large marks.
         let params = OcclusionParams {
-            tile_size: 16,
+            tile_size: 4,
             conservative_margin: 0.0,
         };
 
