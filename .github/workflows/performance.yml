@@ -360,6 +360,19 @@ jobs:
         run: |
           nix develop --command bash -c "wasm-pack test --headless --chrome -- --test wasm_axis_performance"
 
+      # GUP-243: Capture HTML benchmark results via Puppeteer.
+      # Loads axis_benchmarks.html?autorun in headless Chrome and extracts
+      # window.__gupAxisResults as JSON. Uses continue-on-error because
+      # the WASM benchmarks may require WebGPU which is unavailable on
+      # standard GitHub Actions runners.
+      - name: Install Puppeteer dependencies
+        run: nix develop --command bash -c "cd scripts && npm ci"
+
+      - name: Capture HTML benchmark results via Puppeteer
+        continue-on-error: true
+        run: |
+          nix develop --command bash -c "node scripts/capture_wasm_benchmarks.js target/bench-results/wasm_axis_benchmarks.json"
+
       - name: Upload WASM axis results
         if: always()
         uses: actions/upload-artifact@v4
@@ -367,6 +380,7 @@ jobs:
           name: wasm-axis-performance-${{ github.sha }}
           path: |
             wasm_axis_test_output.txt
+            target/bench-results/wasm_axis_benchmarks.json
             benches/wasm/pkg/
           retention-days: 30
 
