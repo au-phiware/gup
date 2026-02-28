@@ -1,7 +1,7 @@
 # GUP-234: Adaptive Build Coverage Cell Budget
 
 **Story ID**: GUP-234 **Title**: Adaptive Build Coverage Cell Budget **Status**:
-💡 New **Priority**: Low **Effort**: — **Created**: 2026-02-28 **Dependencies**:
+🚧 In Progress **Priority**: Low **Effort**: — **Created**: 2026-02-28 **Dependencies**:
 GUP-076 (GPU Occlusion Culling), GUP-223 (Coarse Hi-Z Early Reject)
 
 ## Overview

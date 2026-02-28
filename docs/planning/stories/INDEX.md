@@ -91,7 +91,7 @@ epic and status.
 | [GUP-209](GUP-209_Mark_Validation_CI_Integration.md)           | Mark Validation CI Integration                 | ✅ Complete | Low      | —      |
 | [GUP-222](GUP-222_Unified_Frustum_Occlusion_Pipeline.md)       | Unified Frustum + Occlusion Culling Pipeline   | ✅ Complete | Medium   | —      |
 | [GUP-223](GUP-223_Coarse_HiZ_Early_Reject.md)                  | Coarse Hi-Z Early Reject for Large Marks       | ✅ Complete | Low      | —      |
-| [GUP-234](GUP-234_Adaptive_Build_Coverage_Budget.md)           | Adaptive Build Coverage Cell Budget            | 💡 New      | Low      | —      |
+| [GUP-234](GUP-234_Adaptive_Build_Coverage_Budget.md)           | Adaptive Build Coverage Cell Budget            | 🚧 In Progress | Low   | —      |
 | [GUP-232](GUP-232_Fix_Mark_Renderer_Metric_Tests.md)           | Fix Mark Renderer Metric Test Failures         | ✅ Complete | Medium   | —      |
 | [GUP-233](GUP-233_Fix_Flaky_Registry_Scalability_Test.md)      | Fix Flaky Registry Scalability Test            | ✅ Complete | Low      | —      |
 
