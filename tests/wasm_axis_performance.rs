@@ -18,15 +18,10 @@
 //!
 //! These tests are only compiled for the `wasm32` target.
 #![cfg(target_arch = "wasm32")]
-//! * Results can be serialized and deserialized for cross-platform comparison
-//!
-//! # Running
-//!
-//! ```bash
-//! wasm-pack test --headless --chrome -- --test wasm_axis_performance
-//! ```
 
 use wasm_bindgen_test::*;
+
+wasm_bindgen_test_configure!(run_in_browser);
 
 use gup::wasm_bench::{BenchConfig, BenchSuite};
 use gup::wasm_bench_axis::run_axis_benchmarks;
