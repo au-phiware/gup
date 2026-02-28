@@ -6,7 +6,8 @@
 **Theme**: Rendering Infrastructure  
 **Priority**: Low  
 **Story Points**: 5  
-**Status**: 🚧 In Progress  
+**Status**: ✅ Complete  
+**Completed**: 2025-07-20  
 **Dependencies**: GUP-229 (Tooltip Background Rendering)
 
 ## Problem Statement
@@ -27,11 +28,11 @@ rendering without duplicating shader and pipeline code
 
 ## Acceptance Criteria
 
-- [ ] A general-purpose `UiQuadRenderer` that renders rounded rectangles with
+- [x] A general-purpose `UiQuadRenderer` that renders rounded rectangles with
       configurable fill, border, corner radius, and shadow
-- [ ] Tooltip background rendering migrated to use the shared renderer
-- [ ] API supports queuing multiple heterogeneous UI elements per frame
-- [ ] Suitable for future legend boxes, annotation backgrounds, and focus
+- [x] Tooltip background rendering migrated to use the shared renderer
+- [x] API supports queuing multiple heterogeneous UI elements per frame
+- [x] Suitable for future legend boxes, annotation backgrounds, and focus
       highlights
 
 ## Technical Tasks
@@ -66,10 +67,40 @@ rendering without duplicating shader and pipeline code
 
 ## Definition of Done
 
-- [ ] `UiQuadRenderer` implemented and tested
-- [ ] Tooltip background delegates to shared renderer
-- [ ] Documentation and usage examples
-- [ ] Tests passing
+- [x] `UiQuadRenderer` implemented and tested
+- [x] Tooltip background delegates to shared renderer
+- [x] Documentation and usage examples
+- [x] Tests passing
+
+## Implementation Summary
+
+### What Was Implemented
+
+A general-purpose `UiQuadRenderer` that consolidates all UI chrome rendering
+(rounded rectangles with fill, border, corner radius, shadow, and arrow pointer)
+into a single shared shader and GPU pipeline.  `TooltipBackgroundRenderer` was
+refactored into a thin facade that delegates to the shared renderer.
+
+### Key Files Changed
+
+- **`src/text/ui_quad.rs`** (new) — `UiQuadRenderer`, `UiQuadInstance`,
+  `UiQuadConfig` builder, `UiQuadArrow` enum
+- **`src/shaders/ui_quad.wgsl`** (new) — Shared SDF shader for all UI chrome
+  rendering (rounded rect + arrow + shadow + border)
+- **`src/text/tooltip_bg.rs`** — Rewritten to delegate to `UiQuadRenderer`
+- **`src/shaders/tooltip_bg.wgsl`** (removed) — Replaced by `ui_quad.wgsl`
+- **`src/text.rs`** — Added `ui_quad` submodule and re-exports
+- **`src/prelude.rs`** — Exported `UiQuadRenderer`, `UiQuadInstance`,
+  `UiQuadConfig`, `UiQuadArrow`
+- **`tests/ui_quad_tests.rs`** (new) — 9 GPU integration tests
+
+### Test Counts
+
+- 6 unit tests in `text::ui_quad::tests`
+- 5 unit tests in `text::tooltip_bg::tests`
+- 9 integration tests in `tests/ui_quad_tests.rs`
+- 8 existing integration tests in `tests/tooltip_bg_tests.rs` (all pass
+  unchanged)
 
 ---
 
