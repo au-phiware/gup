@@ -113,4 +113,112 @@ the junction.
 ---
 
 **Story Created**: 2025-07-18  
+**Story Completed**: 2025-07-19  
 **Origin**: GUP-229 retrospective follow-up
+
+## Retrospective
+
+**Completed**: 2025-07-19
+
+### Key Technical Learnings
+
+#### SDF Union for Composite Shapes
+
+- **Challenge**: Merging a triangular arrow with the rounded rectangle tooltip
+  body so they appear as a single seamless shape (fill, border, shadow all
+  unified).
+- **Solution**: Used `min(d_rect, d_triangle)` — the SDF union operator. Because
+  both `sdf_rounded_rect` and `sdf_triangle` produce exact Euclidean distance
+  fields, the union is also an exact distance field. This means the same
+  anti-aliasing (`fwidth`), border (`d + border_width`), and shadow
+  (`smoothstep`) logic works on the combined shape without modification.
+- **Pattern**: SDF union via `min()` is the go-to technique for combining
+  geometric primitives in a single fragment shader. For future UI shapes
+  (callouts, pill buttons, badges), the same approach applies: define the
+  component SDFs, union them, and the existing rendering pipeline handles fill,
+  border, and shadow automatically.
+
+#### SDF Border via Offset Instead of Separate Geometry
+
+- **Challenge**: The original shader computed the border as the annulus between
+  the outer rounded rect SDF and a separately-computed inner rounded rect SDF.
+  With the triangle addition, computing a separate inner triangle (shrunk by
+  `border_width`) would add complexity.
+- **Solution**: Replaced the separate inner rect SDF with `d + border_width`.
+  For an exact distance field, `d + c` is the SDF of the shape inset by `c` —
+  mathematically equivalent to the original approach but works on any SDF shape,
+  not just rounded rects.
+- **Pattern**: Use SDF offset (`d + c`) for borders/insets on composite shapes.
+  This is simpler, handles arbitrary SDF shapes, and produces identical results
+  for exact distance fields.
+
+#### Triangle SDF Vertex Winding
+
+- **Challenge**: The Inigo Quilez triangle SDF formula is sensitive to vertex
+  winding order. Counter-clockwise vertices produce negative distances inside
+  the triangle; clockwise gives positive inside. Getting the winding wrong
+  inverts the shape.
+- **Solution**: Carefully defined triangle vertices for each direction to ensure
+  counter-clockwise winding. For example, the "bottom" arrow (pointing down)
+  uses `(center, half_size.y + size)`, `(center + size, half_size.y)`,
+  `(center - size, half_size.y)` — the base corners are ordered right-to-left
+  to maintain CCW winding.
+- **Pattern**: When using the Quilez triangle SDF, always verify winding order
+  by visualisation or by checking the sign convention: CCW = negative inside.
+
+### Architectural Decisions
+
+#### ArrowDirection::Auto Over Implicit Direction
+
+- **Decision**: Added an explicit `Auto` variant to `ArrowDirection` that
+  resolves to `Top` or `Bottom` in `compute_tooltip_layout`, rather than always
+  computing direction from tooltip position.
+- **Reasoning**: Explicit variants (`Top`, `Bottom`, `Left`, `Right`) let
+  callers force a specific direction for custom layouts. `Auto` is a convenience
+  that picks based on tooltip flip state. `None` disables the arrow entirely.
+  This three-tier approach (disabled/auto/explicit) follows the pattern of
+  `shadow_radius: 0.0` for opt-in shadows.
+- **Trade-off**: The `Auto` variant cannot be sent to the GPU — it must be
+  resolved on the CPU before encoding. This is by design (GPU shader uses float
+  encoding 0–4), but it means `ArrowDirection::Auto.to_f32()` returns 0.0
+  (none) as a safety fallback.
+- **Future**: If tooltips need to point left/right (e.g., side-anchored
+  tooltips), the `Left`/`Right` variants are already implemented and the shader
+  handles them.
+
+#### Extra Vertical Gap for Arrow
+
+- **Decision**: When the arrow is enabled, `compute_tooltip_layout` adds
+  `arrow_size` to the vertical gap between source bounds and tooltip rect. This
+  prevents the arrow from overlapping the source text.
+- **Reasoning**: Without this adjustment, a 6px arrow with a 4px `offset_y`
+  would have its tip 2px above the tooltip top — overlapping the source text by
+  2px. Adding `arrow_size` to the gap keeps the tooltip-to-source distance
+  consistent regardless of whether the arrow is enabled.
+- **Trade-off**: The tooltip appears slightly further from the source when the
+  arrow is enabled. This is intentional and matches standard tooltip behaviour.
+
+### Development Workflow Insights
+
+- The implementation was straightforward because GUP-229 had established a clean
+  architecture: the SDF shader, instance buffer, and rendering pipeline all
+  extended naturally. The arrow was essentially "one more SDF" unioned into the
+  existing shape.
+- The `bytemuck::Pod` struct change from `_padding: [f32; 2]` to
+  `arrow_params: [f32; 4]` changed the struct size from 96 to 104 bytes. This
+  is fine — `repr(C)` with all `[f32; N]` fields has 4-byte alignment and no
+  implicit padding.
+- Integration tests that create a real GPU context and run the render pass are
+  essential for validating shader compilation with the new `@location(8)` vertex
+  input.
+- The `mask all-fix` → `cargo check` → `cargo test` workflow caught a module
+  path issue (`super::hover_reveal::ArrowDirection` vs the imported form)
+  immediately.
+
+### Follow-up Stories
+
+1. **GUP-242: Shared UI Chrome Renderer** — Already planned. With both the
+   tooltip background (rounded rect + border + shadow) and now the arrow using
+   SDF techniques, there's a growing body of "UI chrome" rendering code. If
+   legends, annotations, or other UI overlays need similar rendering, GUP-242
+   would consolidate these into a general-purpose SDF-based UI renderer.
