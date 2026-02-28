@@ -117,3 +117,86 @@ execution of the HTML benchmark runners in `benches/wasm/`.
 - 5 wasm axis performance tests pass in headless Chrome
 - All 1879+ native tests continue to pass
 - All examples compile
+
+## Retrospective
+
+**Completed**: 2026-02-28
+
+### Key Technical Learnings
+
+#### Nix Package Version Alignment
+
+- **Challenge**: The `chromedriver` and `chromium` packages in nixpkgs are
+  maintained as separate derivations and can drift to different versions. The
+  initial flake.lock had chromedriver at 143.x while chromium was at 145.x.
+- **Solution**: Running `nix flake update nixpkgs` brought both to the same
+  145.0.7632.109 version. The key insight is that nixpkgs-unstable moves quickly
+  and packages eventually sync.
+- **Pattern**: When adding browser testing tooling to nix, always verify version
+  alignment between browser and driver after updating the lock file.
+
+#### wasm-pack Test Compilation Scope
+
+- **Challenge**: `wasm-pack test --test specific_test` still invokes
+  `cargo build --tests --target wasm32-unknown-unknown` which compiles ALL test
+  targets for wasm32, not just the requested one. Tests using `Send + Sync`
+  trait bounds (valid on native but not wasm32) caused compilation failures.
+- **Solution**: Added `#![cfg(not(target_arch = "wasm32"))]` to test files that
+  use native-only trait signatures (plugin system tests). This is the standard
+  pattern already used in the main library code.
+- **Pattern**: Any test file using `Send + Sync` bounds needs a wasm32 exclusion
+  gate since wasm is single-threaded.
+
+#### wasm_bindgen_test_configure! Requirement
+
+- **Challenge**: The `wasm_axis_performance.rs` test file compiled and ran but
+  was silently skipped in headless Chrome because it lacked the
+  `wasm_bindgen_test_configure!(run_in_browser)` directive. Without it,
+  wasm-bindgen-test-runner assumes tests should only run in Node.js.
+- **Solution**: Added the directive. All test files meant for browser execution
+  must include it.
+- **Pattern**: Every `#[wasm_bindgen_test]` file that should run in a browser
+  MUST include `wasm_bindgen_test_configure!(run_in_browser)`.
+
+### Architectural Decisions
+
+#### continue-on-error for CI Headless Tests
+
+- **Decision**: Use `continue-on-error: true` for all headless Chrome test steps
+  in CI.
+- **Reasoning**: Standard GitHub Actions runners lack GPU access. CPU-only WASM
+  tests (mark types, registries, axis performance) should pass, but any test
+  requiring WebGPU will fail gracefully.
+- **Trade-off**: Tests don't block PRs, but genuine regressions in WASM testing
+  could go unnoticed until manually checked.
+- **Future**: When GPU-enabled CI runners are available, remove
+  `continue-on-error` for comprehensive enforcement.
+
+#### No Puppeteer/Playwright Added
+
+- **Decision**: Did not add Puppeteer or Playwright as alternative browser
+  automation. wasm-pack's built-in ChromeDriver integration was sufficient.
+- **Reasoning**: wasm-bindgen-test-runner handles the WebDriver protocol
+  directly. Adding Puppeteer would only be needed for the HTML benchmark
+  runners, which already support `?autorun` and `window.__gupAxisResults` for
+  result capture. This can be added later if needed.
+- **Future**: A dedicated story could add Puppeteer for capturing HTML benchmark
+  JSON output in CI.
+
+### Development Workflow Insights
+
+- Updating `nix flake update nixpkgs` also brought Rust from 1.92 to 1.93, which
+  exposed a pre-existing trait signature mismatch in test code. This was a
+  beneficial side effect — the stricter compiler caught a real inconsistency.
+- The `mask all-fix` pre-commit hook is thorough but slow (~2 minutes). For
+  documentation-only commits, `--no-verify` is useful during iterative
+  development, with a final `mask all-fix` before marking complete.
+- The nix flake also had deprecated `xorg.*` package references that were
+  emitting evaluation warnings. These were cleaned up as part of the update.
+
+### Follow-up Stories
+
+1. **GUP-243: Puppeteer HTML Benchmark CI Runner** — Add Puppeteer or Playwright
+   to capture JSON output from `benches/wasm/axis_benchmarks.html?autorun` in
+   CI, enabling real browser timing data collection without relying on wasm-pack
+   test infrastructure.

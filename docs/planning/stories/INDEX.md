@@ -294,6 +294,7 @@ reorganisation._
 | [GUP-238](GUP-238_Remaining_Send_Sync_Audit.md)                  | Remaining Send+Sync Audit                   | ✅ Complete | Low      | 2      |
 | [GUP-239](GUP-239_Pipeline_Caching_Chart_Builder.md)             | Pipeline Caching for Chart Builder          | ✅ Complete | Low      | 2      |
 | [GUP-240](GUP-240_ChromeDriver_Puppeteer_CI_Integration.md)      | ChromeDriver/Puppeteer CI Integration       | ✅ Complete | Low      | 2      |
+| [GUP-243](GUP-243_Puppeteer_HTML_Benchmark_CI_Runner.md)         | Puppeteer HTML Benchmark CI Runner          | 📋 Planned  | Low      | 3      |
 
 _Note: GUP-092 appears twice — once as the 8-pt story in the Post-GUP-021 table
 (basic label formatting, complete) and once here as the 10-pt expanded axis/grid
