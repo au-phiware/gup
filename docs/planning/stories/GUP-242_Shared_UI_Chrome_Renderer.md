@@ -6,7 +6,7 @@
 **Theme**: Rendering Infrastructure  
 **Priority**: Low  
 **Story Points**: 5  
-**Status**: 💡 New  
+**Status**: 🚧 In Progress  
 **Dependencies**: GUP-229 (Tooltip Background Rendering)
 
 ## Problem Statement

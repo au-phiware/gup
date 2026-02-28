@@ -325,7 +325,7 @@ system story. The expanded story is also complete._
 | [GUP-229](GUP-229_Tooltip_Background_Rendering.md)                                 | Tooltip Background Rendering                | ✅ Complete    | Low      | 3      |
 | [GUP-230](GUP-230_Chart_Builder_Hover_Reveal_Integration.md)                       | Chart Builder Hover Reveal Integration      | ✅ Complete    | Low      | 3      |
 | [GUP-241](GUP-241_Tooltip_Arrow_Pointer.md)                                        | Tooltip Arrow/Pointer                       | ✅ Complete | Low      | 2      |
-| [GUP-242](GUP-242_Shared_UI_Chrome_Renderer.md)                                    | Shared UI Chrome Renderer                   | 💡 New         | Low      | 5      |
+| [GUP-242](GUP-242_Shared_UI_Chrome_Renderer.md)                                    | Shared UI Chrome Renderer                   | 🚧 In Progress | Low      | 5      |
 
 ### Post GUP-016 Stories - Accessibility System (Stories 111-130)
 
