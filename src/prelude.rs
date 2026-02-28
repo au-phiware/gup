@@ -138,7 +138,7 @@ pub use crate::selection::{AttrValue, IntoAttrValue, IntoAttrValues, MarkInstanc
 
 // Text rendering system
 pub use crate::text::hover_reveal::{
-    ClippedTextRegistry, HoverRevealState, TooltipConfig, TooltipLayout,
+    ArrowDirection, ClippedTextRegistry, HoverRevealState, TooltipConfig, TooltipLayout,
 };
 pub use crate::text::tooltip_bg::TooltipBackgroundRenderer;
 pub use crate::text::{

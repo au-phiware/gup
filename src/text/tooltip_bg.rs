@@ -369,7 +369,7 @@ fn orthographic_projection(width: f32, height: f32) -> [[f32; 4]; 4] {
 mod tests {
     use super::*;
     use crate::text::TextBounds;
-    use crate::text::hover_reveal::TooltipConfig;
+    use crate::text::hover_reveal::{ArrowDirection, TooltipConfig};
 
     #[test]
     fn tooltip_bg_instance_is_pod() {
@@ -413,6 +413,9 @@ mod tests {
             text_position: crate::shader_function::Vec2 { x: 16.0, y: 24.0 },
             text: "Hello".to_string(),
             opacity: 0.8,
+            arrow_direction: ArrowDirection::None,
+            arrow_size: 0.0,
+            arrow_offset: 0.0,
         };
 
         let mut instances: Vec<TooltipBgInstance> = Vec::new();

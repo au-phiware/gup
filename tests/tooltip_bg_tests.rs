@@ -9,7 +9,7 @@
 use gup::GupContext;
 use gup::shader_function::Vec2;
 use gup::text::hover_reveal::{
-    ActiveTooltip, TooltipConfig, TooltipLayout, compute_tooltip_layout,
+    ActiveTooltip, ArrowDirection, TooltipConfig, TooltipLayout, compute_tooltip_layout,
 };
 use gup::text::tooltip_bg::TooltipBackgroundRenderer;
 use gup::text::{FontAtlas, TextBounds, TextLayoutEngine, TextStyle};
@@ -48,6 +48,9 @@ async fn test_queue_and_begin_frame() {
         text_position: Vec2 { x: 16.0, y: 24.0 },
         text: "Hello".to_string(),
         opacity: 1.0,
+        arrow_direction: ArrowDirection::None,
+        arrow_size: 0.0,
+        arrow_offset: 0.0,
     };
 
     renderer.begin_frame();
@@ -101,6 +104,9 @@ async fn test_render_in_render_pass() {
         text_position: Vec2 { x: 26.0, y: 34.0 },
         text: "Tooltip text".to_string(),
         opacity: 0.9,
+        arrow_direction: ArrowDirection::None,
+        arrow_size: 0.0,
+        arrow_offset: 0.0,
     };
 
     renderer.begin_frame();
@@ -158,6 +164,9 @@ async fn test_multiple_tooltips_per_frame() {
             },
             text: format!("Tooltip #{}", i),
             opacity: 1.0,
+            arrow_direction: ArrowDirection::None,
+            arrow_size: 0.0,
+            arrow_offset: 0.0,
         };
         renderer.queue(&layout, &config);
     }
@@ -196,6 +205,9 @@ async fn test_config_variants() {
         text_position: Vec2 { x: 56.0, y: 54.0 },
         text: "Test".to_string(),
         opacity: 1.0,
+        arrow_direction: ArrowDirection::None,
+        arrow_size: 0.0,
+        arrow_offset: 0.0,
     };
 
     renderer.begin_frame();

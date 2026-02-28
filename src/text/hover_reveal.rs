@@ -119,6 +119,46 @@ impl ClippedTextRegistry {
     }
 }
 
+/// Direction for the tooltip arrow/pointer.
+///
+/// Controls which edge of the tooltip the triangular arrow extends from.
+/// Use [`ArrowDirection::Auto`] to let the layout engine choose based on
+/// the tooltip's position relative to its source element.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ArrowDirection {
+    /// No arrow is rendered.
+    #[default]
+    None,
+    /// Arrow extends from the top edge (points upward toward the source).
+    Top,
+    /// Arrow extends from the bottom edge (points downward toward the source).
+    Bottom,
+    /// Arrow extends from the left edge (points left toward the source).
+    Left,
+    /// Arrow extends from the right edge (points right toward the source).
+    Right,
+    /// Arrow direction is chosen automatically based on tooltip placement.
+    /// When the tooltip is below the source, the arrow points up (top);
+    /// when above, it points down (bottom).
+    Auto,
+}
+
+impl ArrowDirection {
+    /// Encode direction as a `f32` for the GPU shader.
+    ///
+    /// `0.0` = none, `1.0` = top, `2.0` = bottom, `3.0` = left, `4.0` = right.
+    /// [`ArrowDirection::Auto`] should be resolved before calling this.
+    pub fn to_f32(self) -> f32 {
+        match self {
+            ArrowDirection::None | ArrowDirection::Auto => 0.0,
+            ArrowDirection::Top => 1.0,
+            ArrowDirection::Bottom => 2.0,
+            ArrowDirection::Left => 3.0,
+            ArrowDirection::Right => 4.0,
+        }
+    }
+}
+
 /// Configuration for tooltip appearance and behaviour.
 #[derive(Debug, Clone)]
 pub struct TooltipConfig {
@@ -155,6 +195,11 @@ pub struct TooltipConfig {
     pub shadow_color: [f32; 4],
     /// Drop-shadow offset (pixels).
     pub shadow_offset: [f32; 2],
+    /// Arrow direction. `None` disables the arrow, `Auto` chooses based on
+    /// tooltip placement.
+    pub arrow_direction: ArrowDirection,
+    /// Height of the arrow triangle in pixels (also controls base half-width).
+    pub arrow_size: f32,
 }
 
 impl Default for TooltipConfig {
@@ -176,6 +221,8 @@ impl Default for TooltipConfig {
             shadow_radius: 0.0,
             shadow_color: [0.0, 0.0, 0.0, 0.3],
             shadow_offset: [0.0, 2.0],
+            arrow_direction: ArrowDirection::None,
+            arrow_size: 6.0,
         }
     }
 }
@@ -449,6 +496,15 @@ pub struct TooltipLayout {
     pub text: String,
     /// Opacity for the tooltip (0.0–1.0).
     pub opacity: f32,
+    /// Resolved arrow direction (`None` = no arrow).
+    pub arrow_direction: ArrowDirection,
+    /// Arrow triangle height in pixels.
+    pub arrow_size: f32,
+    /// Arrow centre offset along the relevant edge, relative to the rect
+    /// centre.  For [`ArrowDirection::Top`] / [`ArrowDirection::Bottom`] this
+    /// is an x-offset; for [`ArrowDirection::Left`] / [`ArrowDirection::Right`]
+    /// it is a y-offset.
+    pub arrow_offset: f32,
 }
 
 /// Compute the tooltip layout from an [`ActiveTooltip`] and text measurements.
@@ -468,9 +524,19 @@ pub fn compute_tooltip_layout(
     let total_width = text_width + config.padding_x * 2.0 + config.border_width * 2.0;
     let total_height = text_height + config.padding_y * 2.0 + config.border_width * 2.0;
 
+    // Determine whether an arrow is requested and how much extra vertical
+    // space it needs.
+    let arrow_requested = config.arrow_direction != ArrowDirection::None;
+    let arrow_extra = if arrow_requested {
+        config.arrow_size
+    } else {
+        0.0
+    };
+
     // Start centred on tooltip.position.x, clamped to screen bounds.
     let mut left = tooltip.position.x - total_width * 0.5;
-    let mut top = tooltip.position.y;
+    let mut top = tooltip.position.y + arrow_extra;
+    let mut flipped = false;
 
     // Clamp horizontally
     if left < 0.0 {
@@ -482,11 +548,43 @@ pub fn compute_tooltip_layout(
 
     // If tooltip would extend below the screen, flip it above the source.
     if top + total_height > screen_height {
-        top = tooltip.source_bounds.top - total_height - config.offset_y;
+        top = tooltip.source_bounds.top - total_height - config.offset_y - arrow_extra;
         if top < 0.0 {
             top = 0.0;
         }
+        flipped = true;
     }
+
+    // Resolve arrow direction
+    let resolved_direction = match config.arrow_direction {
+        ArrowDirection::Auto => {
+            if flipped {
+                ArrowDirection::Bottom
+            } else {
+                ArrowDirection::Top
+            }
+        }
+        ArrowDirection::None => ArrowDirection::None,
+        other => other,
+    };
+
+    // Compute arrow offset along the relevant edge (relative to rect centre).
+    let arrow_offset = match resolved_direction {
+        ArrowDirection::Top | ArrowDirection::Bottom => {
+            let source_cx = (tooltip.source_bounds.left + tooltip.source_bounds.right) * 0.5;
+            let rect_cx = left + total_width * 0.5;
+            let half_w = total_width * 0.5;
+            // Clamp so the triangle base stays within the rect.
+            (source_cx - rect_cx).clamp(-(half_w - config.arrow_size), half_w - config.arrow_size)
+        }
+        ArrowDirection::Left | ArrowDirection::Right => {
+            let source_cy = (tooltip.source_bounds.top + tooltip.source_bounds.bottom) * 0.5;
+            let rect_cy = top + total_height * 0.5;
+            let half_h = total_height * 0.5;
+            (source_cy - rect_cy).clamp(-(half_h - config.arrow_size), half_h - config.arrow_size)
+        }
+        _ => 0.0,
+    };
 
     let background_bounds = TextBounds::new(left, top, left + total_width, top + total_height);
 
@@ -500,6 +598,9 @@ pub fn compute_tooltip_layout(
         text_position,
         text: tooltip.text.clone(),
         opacity: tooltip.opacity,
+        arrow_direction: resolved_direction,
+        arrow_size: config.arrow_size,
+        arrow_offset,
     }
 }
 
