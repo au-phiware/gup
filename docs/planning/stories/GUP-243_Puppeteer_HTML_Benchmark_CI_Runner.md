@@ -119,3 +119,89 @@ browser timing data collection in CI.
 - All 1900+ Rust tests continue to pass
 - All examples compile
 - `mask all-fix` passes cleanly
+
+## Retrospective
+
+**Completed**: 2026-02-28
+
+### Key Technical Learnings
+
+#### puppeteer-core vs puppeteer
+
+- **Challenge**: Puppeteer's default npm package bundles its own Chromium
+  (~170MB), which conflicts with the nix-managed Chromium already in the
+  devShell. Bundled Chromium may also have library incompatibilities with the nix
+  environment.
+- **Solution**: Used `puppeteer-core` instead, which requires an explicit
+  `executablePath` pointing to the system Chromium. This keeps the dependency
+  lightweight (~2MB) and avoids duplication.
+- **Pattern**: When adding browser automation to a nix-managed project, always
+  use the `-core` variant of Puppeteer and point it at the nix-provided browser.
+
+#### Node.js in the Nix devShell
+
+- **Challenge**: The flake already had `nodePackages.prettier` which implicitly
+  makes Node.js available as a build dependency, but it does not guarantee `node`
+  and `npm` are on PATH for user scripts.
+- **Solution**: Added `nodejs` explicitly to `buildInputs`. This ensures `node`,
+  `npm`, and `npx` are all available in the devShell.
+- **Pattern**: Always explicitly include `nodejs` in buildInputs when you need
+  Node.js-based scripting, even if individual nodePackages are already present.
+
+#### Built-in HTTP Server in Capture Script
+
+- **Challenge**: The HTML benchmark page loads WASM modules via ES module
+  imports, which requires proper MIME types and CORS headers — a file:// URL
+  won't work.
+- **Solution**: Embedded a minimal Node.js HTTP server in the capture script
+  itself, serving the `benches/wasm/` directory with correct MIME types and CORS
+  headers. This removes the dependency on external servers (python3, miniserve).
+- **Pattern**: For CI scripts that need to serve files to a browser, embedding a
+  minimal HTTP server in the script itself is more reliable than depending on
+  external tools.
+
+### Architectural Decisions
+
+#### puppeteer-core over Chromium --headless --dump-dom
+
+- **Decision**: Use `puppeteer-core` with proper page lifecycle management
+  instead of the existing `chromium --headless=new --dump-dom` approach in
+  `wasm_axis_benchmark.sh`.
+- **Reasoning**: The `--dump-dom` approach dumps the DOM at a
+  nondeterministic point and requires fragile HTML parsing to extract results.
+  Puppeteer's `waitForFunction` API provides deterministic waiting for
+  `window.__gupAxisResults` to be populated.
+- **Trade-off**: Adds a Node.js dependency and `npm install` step to CI, but
+  gains reliable, deterministic result capture.
+- **Future**: The existing `wasm_axis_benchmark.sh` script could be deprecated
+  in favour of this Puppeteer approach, or kept as a no-dependency fallback.
+
+#### continue-on-error in CI
+
+- **Decision**: Both the Puppeteer capture step and the wasm-pack test step use
+  `continue-on-error: true` in CI.
+- **Reasoning**: Standard GitHub Actions runners lack GPU access. The axis
+  benchmarks are CPU-only and work in headless Chrome, but the WASM module may
+  fail to initialise if it attempts WebGPU operations. Using `continue-on-error`
+  allows the CI to collect data when possible without blocking PRs.
+- **Trade-off**: Genuine failures in the capture script won't block CI.
+- **Future**: When GPU-enabled CI runners are available, remove
+  `continue-on-error` for strict enforcement.
+
+### Development Workflow Insights
+
+- The story was straightforward because GUP-240 had already aligned the
+  ChromeDriver/Chromium versions and established the pattern for headless browser
+  testing in CI. The main work was adding the proper automation layer on top.
+- The `scripts/package.json` + `scripts/node_modules/` pattern keeps Node.js
+  dependencies isolated from the Rust project root, avoiding confusion with
+  Cargo.toml-based tooling.
+- Testing the capture script locally was essential — it caught the need for CORS
+  headers in the built-in HTTP server, which wouldn't have been caught from CI
+  alone.
+
+### Follow-up Stories
+
+No new follow-up stories identified. The existing `wasm_axis_benchmark.sh`
+script could optionally be simplified to delegate to the Puppeteer script, but
+this is a minor cleanup rather than a story-worthy effort.
