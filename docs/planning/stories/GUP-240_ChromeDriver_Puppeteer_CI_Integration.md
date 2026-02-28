@@ -3,7 +3,7 @@
 ## Story Overview
 
 **Epic**: Phase 2 - Testing Infrastructure **Theme**: CI/CD **Priority**: Low
-**Story Points**: 2 **Status**: 🚧 In Progress
+**Story Points**: 2 **Status**: ✅ Complete **Completed**: 2026-02-28
 
 ## Overview
 
@@ -29,11 +29,11 @@ execution of the HTML benchmark runners in `benches/wasm/`.
 
 ## Acceptance Criteria
 
-- [ ] ChromeDriver version matches installed Chromium version in nix flake
-- [ ] `wasm-pack test --headless --chrome` runs successfully for at least one
+- [x] ChromeDriver version matches installed Chromium version in nix flake
+- [x] `wasm-pack test --headless --chrome` runs successfully for at least one
       test file
-- [ ] CI workflow uses the matching ChromeDriver for WebAssembly tests
-- [ ] HTML benchmark runners can be executed in headless mode with result
+- [x] CI workflow uses the matching ChromeDriver for WebAssembly tests
+- [x] HTML benchmark runners can be executed in headless mode with result
       capture
 
 ## Technical Tasks
@@ -68,6 +68,52 @@ execution of the HTML benchmark runners in `benches/wasm/`.
 
 ## Definition of Done
 
-- [ ] ChromeDriver version alignment verified
-- [ ] At least one wasm-pack test passes in headless Chrome
-- [ ] CI workflow updated to run headless browser tests
+- [x] ChromeDriver version alignment verified
+- [x] At least one wasm-pack test passes in headless Chrome
+- [x] CI workflow updated to run headless browser tests
+
+## Implementation Summary
+
+### What Was Implemented
+
+1. **Nix flake updates** (`flake.nix`, `flake.lock`):
+   - Added `chromedriver` package to devShell buildInputs
+   - Updated `nixpkgs` flake input to get matching versions (Chromium
+     145.0.7632.109 and ChromeDriver 145.0.7632.109)
+   - Updated `rust-overlay` flake input to latest
+   - Fixed deprecated `xorg.*` package references (now top-level `libx11`,
+     `libxcursor`, etc.)
+   - Added ChromeDriver version display to shell hook
+
+2. **WASM test compatibility fixes**:
+   - Added `#[cfg(not(target_arch = "wasm32"))]` to `plugins.rs` test module
+     (uses Send+Sync bounds unavailable on wasm32)
+   - Added same gate to `integration_ecosystem_tests.rs`
+   - Added `wasm_bindgen_test_configure!(run_in_browser)` to
+     `wasm_axis_performance.rs`
+   - Fixed duplicated doc comment in `wasm_axis_performance.rs`
+
+3. **CI workflow updates**:
+   - Uncommented headless Chrome step in `performance.yml` for axis benchmarks
+   - Added axis performance test step to `wasm.yml`
+   - Updated GUP-240 references in comments to reflect resolution
+   - Both use `continue-on-error` for graceful degradation on runners without
+     GPU
+
+### Key Files Changed
+
+- `flake.nix` — Added chromedriver, fixed deprecated packages
+- `flake.lock` — Updated nixpkgs and rust-overlay
+- `src/plugins.rs` — Added wasm32 cfg gate to test module
+- `tests/integration_ecosystem_tests.rs` — Added wasm32 cfg gate
+- `tests/wasm_integration.rs` — Updated doc comment
+- `tests/wasm_axis_performance.rs` — Added run_in_browser, fixed docs
+- `.github/workflows/performance.yml` — Enabled headless Chrome step
+- `.github/workflows/wasm.yml` — Added axis performance test step
+
+### Test Results
+
+- 6 wasm integration tests pass in headless Chrome
+- 5 wasm axis performance tests pass in headless Chrome
+- All 1879+ native tests continue to pass
+- All examples compile
