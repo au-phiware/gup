@@ -129,6 +129,8 @@ impl App {
                 shadow_radius: 6.0,
                 shadow_color: [0.0, 0.0, 0.0, 0.25],
                 shadow_offset: [0.0, 2.0],
+                arrow_direction: gup::text::hover_reveal::ArrowDirection::Auto,
+                arrow_size: 6.0,
                 ..Default::default()
             }),
             mouse_x: 0.0,
