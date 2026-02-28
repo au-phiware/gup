@@ -92,6 +92,9 @@
             nixfmt
             statix
 
+            # Node.js for Puppeteer benchmark capture scripts
+            nodejs
+
             # Prettier for markdown formatting
             nodePackages.prettier
 
@@ -118,6 +121,7 @@
             echo "Cargo version: $(cargo --version)"
             echo "Chromium available for WebGPU testing: $(chromium --version 2>/dev/null || echo 'Not found')"
             echo "ChromeDriver version: $(chromedriver --version 2>/dev/null || echo 'Not found')"
+            echo "Node.js version: $(node --version 2>/dev/null || echo 'Not found')"
             echo "🌐 Use 'chromium-webgpu http://127.0.0.1:8080' to test WebGPU apps"
           '';
 

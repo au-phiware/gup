@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "name": "gup-benchmark-scripts",
+  "version": "0.1.0",
+  "description": "Benchmark capture scripts for the Gup project",
+  "dependencies": {
+    "puppeteer-core": "^24.0.0"
+  }
+}

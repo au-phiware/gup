@@ -9,3 +9,5 @@ performance_report.*
 /target/visual_test_diffs/
 # Local benchmark history (tracked on benchmark-history branch in CI)
 .benchmark-history/
+# Node.js dependencies for benchmark scripts
+scripts/node_modules/
