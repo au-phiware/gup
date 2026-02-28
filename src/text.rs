@@ -50,6 +50,7 @@ pub mod renderer;
 pub mod sdf_tuning;
 pub mod style;
 pub mod tooltip_bg;
+pub mod ui_quad;
 
 pub use atlas::*;
 pub use font::*;
@@ -60,6 +61,7 @@ pub use renderer::*;
 pub use sdf_tuning::*;
 pub use style::*;
 pub use tooltip_bg::*;
+pub use ui_quad::*;
 
 use crate::shader_function::{Vec2, Vec4};
 

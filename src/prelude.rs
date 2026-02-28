@@ -141,6 +141,7 @@ pub use crate::text::hover_reveal::{
     ArrowDirection, ClippedTextRegistry, HoverRevealState, TooltipConfig, TooltipLayout,
 };
 pub use crate::text::tooltip_bg::TooltipBackgroundRenderer;
+pub use crate::text::ui_quad::{UiQuadArrow, UiQuadConfig, UiQuadInstance, UiQuadRenderer};
 pub use crate::text::{
     FontAtlas, GlyphBatch, PositionedGlyph, TextAnchor, TextBounds, TextLayoutEngine, TextRenderer,
     TextStyle,
