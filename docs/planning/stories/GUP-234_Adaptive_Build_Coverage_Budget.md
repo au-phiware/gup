@@ -1,8 +1,9 @@
 # GUP-234: Adaptive Build Coverage Cell Budget
 
 **Story ID**: GUP-234 **Title**: Adaptive Build Coverage Cell Budget **Status**:
-🚧 In Progress **Priority**: Low **Effort**: — **Created**: 2026-02-28 **Dependencies**:
-GUP-076 (GPU Occlusion Culling), GUP-223 (Coarse Hi-Z Early Reject)
+✅ Complete **Priority**: Low **Effort**: — **Created**: 2026-02-28
+**Completed**: 2026-07-16 **Dependencies**: GUP-076 (GPU Occlusion Culling),
+GUP-223 (Coarse Hi-Z Early Reject)
 
 ## Overview
 
@@ -32,10 +33,10 @@ effective regardless of mark size.
 
 ## Acceptance Criteria
 
-- [ ] Large marks fully populate the coverage map regardless of tile size
-- [ ] Small marks are not affected (performance maintained)
-- [ ] No increase in GPU memory usage for small-mark-only datasets
-- [ ] Coarse Hi-Z early reject (GUP-223) works with tile_size=4 for large marks
+- [x] Large marks fully populate the coverage map regardless of tile size
+- [x] Small marks are not affected (performance maintained)
+- [x] No increase in GPU memory usage for small-mark-only datasets
+- [x] Coarse Hi-Z early reject (GUP-223) works with tile_size=4 for large marks
 
 ## Technical Tasks
 
@@ -71,6 +72,39 @@ effective regardless of mark size.
 
 ## Definition of Done
 
-- [ ] Adaptive coverage implemented and tested
-- [ ] Benchmarks confirm no regression
-- [ ] Documentation updated
+- [x] Adaptive coverage implemented and tested
+- [x] Benchmarks confirm no regression
+- [x] Documentation updated
+
+## Implementation Summary
+
+### What was implemented
+
+- **WGSL shader** (`src/shaders/occlusion_culling.compute.wgsl`):
+  - `build_coverage` now computes the finest mip level where each mark's cell
+    count fits within the 4096-cell budget. Small marks still write directly to
+    level 0. Large marks write to coarser levels.
+  - New `fill_coverage_down` entry point propagates non-zero values at a coarse
+    level to their 2×2 children at the next finer level using `atomicMax`.
+    Dispatched once per level from coarsest to level 1.
+- **Rust pipeline** (`src/mark/occlusion_culler.rs`):
+  - Added `fill_coverage_down_pipeline` to `OcclusionCuller`.
+  - Updated `dispatch`, `encode_combined`, and `PooledOcclusionCuller::dispatch`
+    to run fill-down passes between `build_coverage` and `generate_hiz_level`.
+  - Updated module documentation to describe the 4-pass pipeline.
+- **Tests**: 3 new GPU tests, 4 existing tests updated to use `tile_size=4`.
+- **Benchmarks**: Mixed-size benchmark updated from `tile_size=16` to
+  `tile_size=4`.
+
+### Key files changed
+
+| File                                         | Change                                       |
+| -------------------------------------------- | -------------------------------------------- |
+| `src/shaders/occlusion_culling.compute.wgsl` | Adaptive build_coverage + fill_coverage_down |
+| `src/mark/occlusion_culler.rs`               | Pipeline + dispatch changes + 3 new tests    |
+| `benches/occlusion_culling_benchmarks.rs`    | Mixed-size benchmark uses tile_size=4        |
+
+### Test counts
+
+- 20 occlusion culler tests (17 existing + 3 new), all passing
+- 7 unified culling pipeline tests, all passing
