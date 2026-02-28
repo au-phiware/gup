@@ -490,4 +490,59 @@ mod tests {
         assert_eq!(config.shadow_radius, 0.0); // Shadow off by default
         assert!(config.shadow_color[3] > 0.0); // But colour is set for easy opt-in
     }
+
+    #[test]
+    fn default_config_has_arrow_disabled() {
+        let config = TooltipConfig::default();
+        assert_eq!(config.arrow_direction, ArrowDirection::None);
+        assert!(config.arrow_size > 0.0); // Size pre-configured for easy opt-in
+    }
+
+    #[test]
+    fn queue_populates_arrow_params() {
+        let config = TooltipConfig {
+            arrow_direction: ArrowDirection::Top,
+            arrow_size: 8.0,
+            ..Default::default()
+        };
+
+        let layout = TooltipLayout {
+            background_bounds: TextBounds::new(50.0, 50.0, 200.0, 80.0),
+            text_position: crate::shader_function::Vec2 { x: 56.0, y: 54.0 },
+            text: "Arrow test".to_string(),
+            opacity: 1.0,
+            arrow_direction: ArrowDirection::Top,
+            arrow_size: 8.0,
+            arrow_offset: 3.5,
+        };
+
+        let mut instances: Vec<TooltipBgInstance> = Vec::new();
+        let bounds = &layout.background_bounds;
+        instances.push(TooltipBgInstance {
+            rect_min: [bounds.left, bounds.top],
+            rect_max: [bounds.right, bounds.bottom],
+            bg_color: config.background_color,
+            border_color: config.border_color,
+            params: [
+                config.corner_radius,
+                config.border_width,
+                layout.opacity,
+                config.shadow_radius,
+            ],
+            shadow_color: config.shadow_color,
+            shadow_offset: config.shadow_offset,
+            arrow_params: [
+                layout.arrow_direction.to_f32(),
+                layout.arrow_size,
+                layout.arrow_offset,
+                0.0,
+            ],
+        });
+
+        let inst = &instances[0];
+        assert_eq!(inst.arrow_params[0], 1.0); // ArrowDirection::Top
+        assert_eq!(inst.arrow_params[1], 8.0); // arrow_size
+        assert_eq!(inst.arrow_params[2], 3.5); // arrow_offset
+        assert_eq!(inst.arrow_params[3], 0.0); // unused
+    }
 }

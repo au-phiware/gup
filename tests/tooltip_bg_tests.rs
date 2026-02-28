@@ -314,3 +314,158 @@ async fn test_tooltip_layout_to_render_flow() {
     renderer.queue(&layout, &config);
     assert_eq!(renderer.queued_count(), 1);
 }
+
+// =============================================================================
+// Arrow rendering: shader compilation with arrow params
+// =============================================================================
+
+#[tokio::test]
+async fn test_render_with_arrow_enabled() {
+    let ctx = create_context().await;
+
+    let texture = ctx.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("Arrow Test RT"),
+        size: wgpu::Extent3d {
+            width: 256,
+            height: 256,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Bgra8UnormSrgb,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+    let mut renderer = TooltipBackgroundRenderer::new(&ctx.device).unwrap();
+
+    let config = TooltipConfig {
+        corner_radius: 4.0,
+        arrow_direction: ArrowDirection::Auto,
+        arrow_size: 6.0,
+        ..Default::default()
+    };
+
+    let layout = TooltipLayout {
+        background_bounds: TextBounds::new(50.0, 50.0, 200.0, 80.0),
+        text_position: Vec2 { x: 56.0, y: 54.0 },
+        text: "Arrow tooltip".to_string(),
+        opacity: 1.0,
+        arrow_direction: ArrowDirection::Top,
+        arrow_size: 6.0,
+        arrow_offset: 0.0,
+    };
+
+    renderer.begin_frame();
+    renderer.queue(&layout, &config);
+
+    let mut encoder = ctx
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+    {
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: None,
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    store: wgpu::StoreOp::Store,
+                },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+        let result = renderer.render(&mut pass, &ctx.device, &ctx.queue, 256.0, 256.0);
+        assert!(
+            result.is_ok(),
+            "Render with arrow should succeed: {:?}",
+            result.err()
+        );
+    }
+    ctx.queue.submit(Some(encoder.finish()));
+}
+
+#[tokio::test]
+async fn test_render_with_all_arrow_directions() {
+    let ctx = create_context().await;
+    let mut renderer = TooltipBackgroundRenderer::new(&ctx.device).unwrap();
+
+    let config = TooltipConfig {
+        arrow_direction: ArrowDirection::Auto,
+        arrow_size: 8.0,
+        ..Default::default()
+    };
+
+    renderer.begin_frame();
+
+    let directions = [
+        ArrowDirection::Top,
+        ArrowDirection::Bottom,
+        ArrowDirection::Left,
+        ArrowDirection::Right,
+    ];
+
+    for (i, dir) in directions.iter().enumerate() {
+        let y = 30.0 + i as f32 * 50.0;
+        let layout = TooltipLayout {
+            background_bounds: TextBounds::new(40.0, y, 200.0, y + 30.0),
+            text_position: Vec2 {
+                x: 46.0,
+                y: y + 4.0,
+            },
+            text: format!("Arrow {:?}", dir),
+            opacity: 1.0,
+            arrow_direction: *dir,
+            arrow_size: 8.0,
+            arrow_offset: 5.0,
+        };
+        renderer.queue(&layout, &config);
+    }
+
+    assert_eq!(renderer.queued_count(), 4);
+
+    // Verify it renders without errors
+    let texture = ctx.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("Directions Test RT"),
+        size: wgpu::Extent3d {
+            width: 256,
+            height: 256,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Bgra8UnormSrgb,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let mut encoder = ctx
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+    {
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: None,
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    store: wgpu::StoreOp::Store,
+                },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+        let result = renderer.render(&mut pass, &ctx.device, &ctx.queue, 256.0, 256.0);
+        assert!(result.is_ok());
+    }
+    ctx.queue.submit(Some(encoder.finish()));
+}

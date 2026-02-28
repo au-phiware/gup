@@ -963,4 +963,133 @@ mod tests {
         assert_eq!(layout.text, "Full label text here");
         assert_eq!(layout.opacity, 0.75);
     }
+
+    // ── Arrow direction tests ───────────────────────────────────────────
+
+    #[test]
+    fn arrow_direction_to_f32_encoding() {
+        assert_eq!(ArrowDirection::None.to_f32(), 0.0);
+        assert_eq!(ArrowDirection::Top.to_f32(), 1.0);
+        assert_eq!(ArrowDirection::Bottom.to_f32(), 2.0);
+        assert_eq!(ArrowDirection::Left.to_f32(), 3.0);
+        assert_eq!(ArrowDirection::Right.to_f32(), 4.0);
+        assert_eq!(ArrowDirection::Auto.to_f32(), 0.0); // Auto resolves before encoding
+    }
+
+    #[test]
+    fn arrow_none_when_not_configured() {
+        let tooltip = make_active_tooltip("Hello", 400.0, 104.0, 100.0);
+        let config = TooltipConfig {
+            arrow_direction: ArrowDirection::None,
+            ..Default::default()
+        };
+        let layout = compute_tooltip_layout(&tooltip, &config, 60.0, 14.0, 800.0, 600.0);
+
+        assert_eq!(layout.arrow_direction, ArrowDirection::None);
+    }
+
+    #[test]
+    fn arrow_auto_resolves_to_top_when_below_source() {
+        // Tooltip positioned below source (normal case)
+        let tooltip = make_active_tooltip("Hello", 400.0, 104.0, 100.0);
+        let config = TooltipConfig {
+            arrow_direction: ArrowDirection::Auto,
+            arrow_size: 6.0,
+            ..Default::default()
+        };
+        let layout = compute_tooltip_layout(&tooltip, &config, 60.0, 14.0, 800.0, 600.0);
+
+        assert_eq!(layout.arrow_direction, ArrowDirection::Top);
+    }
+
+    #[test]
+    fn arrow_auto_resolves_to_bottom_when_flipped_above() {
+        // Position near screen bottom so tooltip flips above
+        let tooltip = make_active_tooltip("text", 400.0, 590.0, 586.0);
+        let config = TooltipConfig {
+            offset_y: 4.0,
+            arrow_direction: ArrowDirection::Auto,
+            arrow_size: 6.0,
+            ..Default::default()
+        };
+        let layout = compute_tooltip_layout(&tooltip, &config, 60.0, 14.0, 800.0, 600.0);
+
+        assert_eq!(layout.arrow_direction, ArrowDirection::Bottom);
+        assert!(layout.background_bounds.bottom < 586.0);
+    }
+
+    #[test]
+    fn arrow_explicit_direction_preserved() {
+        let tooltip = make_active_tooltip("Hello", 400.0, 104.0, 100.0);
+        let config = TooltipConfig {
+            arrow_direction: ArrowDirection::Left,
+            arrow_size: 8.0,
+            ..Default::default()
+        };
+        let layout = compute_tooltip_layout(&tooltip, &config, 60.0, 14.0, 800.0, 600.0);
+
+        assert_eq!(layout.arrow_direction, ArrowDirection::Left);
+        assert_eq!(layout.arrow_size, 8.0);
+    }
+
+    #[test]
+    fn arrow_offset_points_toward_source_centre() {
+        // Source centred at x=400, tooltip rect should also be centred near there
+        let tooltip = make_active_tooltip("Hello", 400.0, 104.0, 100.0);
+        let config = TooltipConfig {
+            arrow_direction: ArrowDirection::Top,
+            arrow_size: 6.0,
+            ..Default::default()
+        };
+        let layout = compute_tooltip_layout(&tooltip, &config, 60.0, 14.0, 800.0, 600.0);
+
+        // When source and tooltip are horizontally centred, offset should be ~0
+        assert!(layout.arrow_offset.abs() < 1.0);
+    }
+
+    #[test]
+    fn arrow_offset_clamped_when_source_off_centre() {
+        // Source at x=50, tooltip is wide so its centre is further right
+        let mut tooltip = make_active_tooltip("Hello", 50.0, 104.0, 100.0);
+        tooltip.source_bounds = make_bounds(10.0, 80.0, 90.0, 100.0); // centre at x=50
+
+        let config = TooltipConfig {
+            arrow_direction: ArrowDirection::Top,
+            arrow_size: 6.0,
+            ..Default::default()
+        };
+        // Make tooltip very wide so its centre is far from source centre
+        let layout = compute_tooltip_layout(&tooltip, &config, 300.0, 14.0, 800.0, 600.0);
+
+        let total_w = 300.0 + config.padding_x * 2.0 + config.border_width * 2.0;
+        let half_w = total_w * 0.5;
+        let max_offset = half_w - config.arrow_size;
+        assert!(layout.arrow_offset >= -max_offset - 0.01);
+        assert!(layout.arrow_offset <= max_offset + 0.01);
+    }
+
+    #[test]
+    fn arrow_adds_extra_gap_below_source() {
+        // Without arrow: tooltip top = position.y
+        let tooltip = make_active_tooltip("Hello", 400.0, 104.0, 100.0);
+        let config_no_arrow = TooltipConfig {
+            arrow_direction: ArrowDirection::None,
+            arrow_size: 6.0,
+            ..Default::default()
+        };
+        let layout_no =
+            compute_tooltip_layout(&tooltip, &config_no_arrow, 60.0, 14.0, 800.0, 600.0);
+
+        // With arrow: tooltip top should be pushed down by arrow_size
+        let config_arrow = TooltipConfig {
+            arrow_direction: ArrowDirection::Auto,
+            arrow_size: 6.0,
+            ..Default::default()
+        };
+        let layout_yes = compute_tooltip_layout(&tooltip, &config_arrow, 60.0, 14.0, 800.0, 600.0);
+
+        assert!(
+            (layout_yes.background_bounds.top - layout_no.background_bounds.top - 6.0).abs() < 0.01
+        );
+    }
 }
