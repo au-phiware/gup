@@ -340,7 +340,11 @@ async fn test_instance_buffer_growth() {
             occlusion_query_set: None,
         });
         let result = renderer.render(&mut pass, &ctx.device, &ctx.queue, 256.0, 256.0);
-        assert!(result.is_ok(), "Buffer growth should work: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Buffer growth should work: {:?}",
+            result.err()
+        );
     }
     ctx.queue.submit(Some(encoder.finish()));
 }

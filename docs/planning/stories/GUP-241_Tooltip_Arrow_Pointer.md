@@ -87,8 +87,8 @@ the junction.
   `TooltipConfig` with `arrow_direction` and `arrow_size` fields. Extended
   `TooltipLayout` with `arrow_direction`, `arrow_size`, and `arrow_offset`.
   Updated `compute_tooltip_layout` to resolve Auto direction based on tooltip
-  flip state, compute arrow offset from source bounds, and add extra gap for
-  the arrow height. Added 8 unit tests.
+  flip state, compute arrow offset from source bounds, and add extra gap for the
+  arrow height. Added 8 unit tests.
 - **`src/shaders/tooltip_bg.wgsl`** — Added `sdf_triangle()` (exact 2D triangle
   SDF), `sdf_tooltip()` (rect+arrow union). Added `arrow_params` vertex input
   (`@location(8)`). Updated vertex shader to expand the quad for arrow size.
@@ -105,9 +105,11 @@ the junction.
 
 ### Test Counts
 
-- **31 unit tests** in `text::hover_reveal::tests` (23 existing + 8 new arrow tests)
+- **31 unit tests** in `text::hover_reveal::tests` (23 existing + 8 new arrow
+  tests)
 - **7 unit tests** in `text::tooltip_bg::tests` (5 existing + 2 new arrow tests)
-- **8 integration tests** in `tests/tooltip_bg_tests.rs` (6 existing + 2 new arrow tests)
+- **8 integration tests** in `tests/tooltip_bg_tests.rs` (6 existing + 2 new
+  arrow tests)
 - All existing hover_reveal integration tests continue to pass
 
 ---
@@ -161,8 +163,8 @@ the junction.
 - **Solution**: Carefully defined triangle vertices for each direction to ensure
   counter-clockwise winding. For example, the "bottom" arrow (pointing down)
   uses `(center, half_size.y + size)`, `(center + size, half_size.y)`,
-  `(center - size, half_size.y)` — the base corners are ordered right-to-left
-  to maintain CCW winding.
+  `(center - size, half_size.y)` — the base corners are ordered right-to-left to
+  maintain CCW winding.
 - **Pattern**: When using the Quilez triangle SDF, always verify winding order
   by visualisation or by checking the sign convention: CCW = negative inside.
 
@@ -180,8 +182,8 @@ the junction.
   `shadow_radius: 0.0` for opt-in shadows.
 - **Trade-off**: The `Auto` variant cannot be sent to the GPU — it must be
   resolved on the CPU before encoding. This is by design (GPU shader uses float
-  encoding 0–4), but it means `ArrowDirection::Auto.to_f32()` returns 0.0
-  (none) as a safety fallback.
+  encoding 0–4), but it means `ArrowDirection::Auto.to_f32()` returns 0.0 (none)
+  as a safety fallback.
 - **Future**: If tooltips need to point left/right (e.g., side-anchored
   tooltips), the `Left`/`Right` variants are already implemented and the shader
   handles them.
@@ -205,8 +207,8 @@ the junction.
   extended naturally. The arrow was essentially "one more SDF" unioned into the
   existing shape.
 - The `bytemuck::Pod` struct change from `_padding: [f32; 2]` to
-  `arrow_params: [f32; 4]` changed the struct size from 96 to 104 bytes. This
-  is fine — `repr(C)` with all `[f32; N]` fields has 4-byte alignment and no
+  `arrow_params: [f32; 4]` changed the struct size from 96 to 104 bytes. This is
+  fine — `repr(C)` with all `[f32; N]` fields has 4-byte alignment and no
   implicit padding.
 - Integration tests that create a real GPU context and run the render pass are
   essential for validating shader compilation with the new `@location(8)` vertex

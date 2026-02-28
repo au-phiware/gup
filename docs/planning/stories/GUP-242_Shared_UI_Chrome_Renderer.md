@@ -78,7 +78,7 @@ rendering without duplicating shader and pipeline code
 
 A general-purpose `UiQuadRenderer` that consolidates all UI chrome rendering
 (rounded rectangles with fill, border, corner radius, shadow, and arrow pointer)
-into a single shared shader and GPU pipeline.  `TooltipBackgroundRenderer` was
+into a single shared shader and GPU pipeline. `TooltipBackgroundRenderer` was
 refactored into a thin facade that delegates to the shared renderer.
 
 ### Key Files Changed
@@ -116,23 +116,23 @@ refactored into a thin facade that delegates to the shared renderer.
 #### Facade Pattern for GPU Renderer Migration
 
 - **Challenge**: The existing `TooltipBackgroundRenderer` had a large public API
-  surface (used in prelude, integration tests, and examples).  Refactoring it
-  to use a shared renderer risked breaking all call sites.
+  surface (used in prelude, integration tests, and examples). Refactoring it to
+  use a shared renderer risked breaking all call sites.
 - **Solution**: Made `TooltipBackgroundRenderer` a thin facade that wraps
   `UiQuadRenderer` and translates tooltip-specific types (`TooltipLayout`,
-  `TooltipConfig`) into `UiQuadInstance`.  The public API remained identical.
+  `TooltipConfig`) into `UiQuadInstance`. The public API remained identical.
 - **Pattern**: When extracting shared infrastructure from a purpose-built
-  component, keep the original type as a thin wrapper.  This provides zero
+  component, keep the original type as a thin wrapper. This provides zero
   breaking changes while enabling new use cases through the shared type.
 
 #### Instance Struct Reuse Across Renderers
 
 - **Challenge**: The old `TooltipBgInstance` was `pub(crate)`, defined inside
-  `tooltip_bg.rs`.  The new `UiQuadInstance` needed to be the single canonical
+  `tooltip_bg.rs`. The new `UiQuadInstance` needed to be the single canonical
   type.
 - **Solution**: Made `UiQuadInstance` fully `pub` with public fields so callers
   can construct instances directly (maximum control) or via `UiQuadConfig`
-  (convenience).  The tooltip wrapper constructs `UiQuadInstance` internally.
+  (convenience). The tooltip wrapper constructs `UiQuadInstance` internally.
 - **Pattern**: For GPU data structs (`#[repr(C)]` + `Pod`), public fields are
   fine because the struct's layout is its API — hiding fields would just force
   callers to use a builder for every case.
@@ -144,12 +144,12 @@ refactored into a thin facade that delegates to the shared renderer.
 - **Decision**: Created `ui_quad.wgsl` as a copy of `tooltip_bg.wgsl` and
   deleted the original.
 - **Reasoning**: The SDF shader for rounded rectangles with borders, shadows,
-  and arrows is already maximally general.  There was no code to change in the
+  and arrows is already maximally general. There was no code to change in the
   shader itself — only the file name and comment header needed updating.
 - **Trade-off**: Two renderer types (`UiQuadRenderer` and
   `TooltipBackgroundRenderer`) share the exact same shader, which means they
-  create identical GPU pipelines.  If both are instantiated in the same app,
-  that is two pipelines for the same shader.  In practice, callers should use
+  create identical GPU pipelines. If both are instantiated in the same app, that
+  is two pipelines for the same shader. In practice, callers should use
   `UiQuadRenderer` directly or access the inner renderer via
   `TooltipBackgroundRenderer::inner_mut()`.
 - **Future**: If legend/annotation renderers need their own convenience
@@ -161,21 +161,21 @@ refactored into a thin facade that delegates to the shared renderer.
 - **Decision**: Created `UiQuadConfig` as a fluent builder that produces
   `UiQuadInstance`.
 - **Reasoning**: The raw `UiQuadInstance` has 8 fields with packed parameters
-  that are not self-documenting.  A builder with named methods
+  that are not self-documenting. A builder with named methods
   (`.corner_radius()`, `.shadow()`, `.arrow()`) is much clearer.
 - **Trade-off**: Two ways to construct instances (builder vs direct struct
-  literal).  Kept both because the builder is nicer for ad-hoc use while
-  direct construction is better for high-volume or data-driven scenarios.
+  literal). Kept both because the builder is nicer for ad-hoc use while direct
+  construction is better for high-volume or data-driven scenarios.
 
 ### Development Workflow Insights
 
-- The refactoring was clean because the existing `TooltipBackgroundRenderer`
-  had comprehensive integration tests (8 tests with real GPU contexts).  These
-  served as a regression gate during the migration — running them after the
-  refactoring immediately confirmed backward compatibility.
+- The refactoring was clean because the existing `TooltipBackgroundRenderer` had
+  comprehensive integration tests (8 tests with real GPU contexts). These served
+  as a regression gate during the migration — running them after the refactoring
+  immediately confirmed backward compatibility.
 - The `UiQuadInstance` type is identical in layout to the old
-  `TooltipBgInstance`, so the shader did not need any changes.  This is the
-  ideal outcome of an extraction refactoring: no GPU-side changes at all.
+  `TooltipBgInstance`, so the shader did not need any changes. This is the ideal
+  outcome of an extraction refactoring: no GPU-side changes at all.
 - `mask all-fix` could not complete due to pre-existing issues in the project,
   but `cargo fmt` and `cargo check` ran cleanly for the new code.
 
