@@ -1620,4 +1620,190 @@ mod tests {
         // Instance 1 is on top → visible.
         assert_eq!(flags[1], 1, "Top mark should be visible");
     }
+
+    // --- Adaptive coverage (GUP-234) tests ---
+
+    #[tokio::test]
+    async fn test_coverage_completeness_large_mark_tile_size_4() {
+        // Verifies that a large mark (radius 0.8) at tile_size=4 produces
+        // a complete coverage map at level 0. Before GUP-234, this would
+        // hit the 4096-cell limit and leave most cells unfilled.
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let culler = OcclusionCuller::new(&ctx.device).unwrap();
+
+        let instances = vec![InstanceAttributes::from_circle(
+            [0.0, 0.0],
+            0.8,
+            [1.0, 0.0, 0.0, 1.0],
+        )];
+
+        let input_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &input_buf, &instances);
+
+        let viewport = Viewport2D::default();
+        let params = OcclusionParams {
+            tile_size: 4,
+            conservative_margin: 0.0,
+        };
+
+        let result = culler
+            .dispatch(&ctx.device, &ctx.queue, &input_buf, 1, &viewport, &params)
+            .await
+            .unwrap();
+
+        // Read back the Hi-Z buffer to inspect level-0 coverage.
+        let base_width = (viewport.pixel_width as u32).div_ceil(params.tile_size);
+        let base_height = (viewport.pixel_height as u32).div_ceil(params.tile_size);
+        let num_levels = mip_count(base_width, base_height);
+        let total_cells = total_hiz_cells(base_width, base_height, num_levels);
+
+        let hiz_data = OcclusionCuller::read_hiz_buffer(
+            &ctx.device,
+            &ctx.queue,
+            &result.hiz_buffer,
+            total_cells,
+        )
+        .await
+        .unwrap();
+
+        // Count non-zero cells at level 0. The mark's bounding box at
+        // tile_size=4 covers ~160×120 = ~19200 cells, which exceeds the
+        // old 4096 limit. With adaptive coverage, all cells should be filled.
+        let level0_cells = (base_width * base_height) as usize;
+        let level0_data = &hiz_data[0..level0_cells];
+        let filled_count = level0_data.iter().filter(|&&v| v > 0).count();
+
+        // The mark covers a large bounding box. Expect > 10000 cells filled
+        // (well above the old 4096 limit).
+        assert!(
+            filled_count > 10000,
+            "Level-0 coverage should be complete for large mark at tile_size=4, \
+             got {filled_count} filled cells (base grid: {base_width}×{base_height})"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_full_viewport_mark_radius_1_tile_size_4() {
+        // Success metric: complete coverage for marks up to radius 1.0
+        // at tile_size=4. A radius-1.0 mark covers the entire viewport
+        // bounding box (~200×150 = 30000 cells at level 0).
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let culler = OcclusionCuller::new(&ctx.device).unwrap();
+
+        let instances = vec![InstanceAttributes::from_circle(
+            [0.0, 0.0],
+            1.0,
+            [1.0, 1.0, 1.0, 1.0],
+        )];
+
+        let input_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &input_buf, &instances);
+
+        let viewport = Viewport2D::default();
+        let params = OcclusionParams {
+            tile_size: 4,
+            conservative_margin: 0.0,
+        };
+
+        let result = culler
+            .dispatch(&ctx.device, &ctx.queue, &input_buf, 1, &viewport, &params)
+            .await
+            .unwrap();
+
+        // The single mark should be visible.
+        let flags =
+            OcclusionCuller::read_visibility(&ctx.device, &ctx.queue, &result.visibility_buffer, 1)
+                .await
+                .unwrap();
+        assert_eq!(flags[0], 1, "Full-viewport mark should be visible");
+
+        // Verify coverage completeness at level 0.
+        let base_width = (viewport.pixel_width as u32).div_ceil(params.tile_size);
+        let base_height = (viewport.pixel_height as u32).div_ceil(params.tile_size);
+        let num_levels = mip_count(base_width, base_height);
+        let total_cells = total_hiz_cells(base_width, base_height, num_levels);
+
+        let hiz_data = OcclusionCuller::read_hiz_buffer(
+            &ctx.device,
+            &ctx.queue,
+            &result.hiz_buffer,
+            total_cells,
+        )
+        .await
+        .unwrap();
+
+        let level0_cells = (base_width * base_height) as usize;
+        let level0_data = &hiz_data[0..level0_cells];
+        let filled_count = level0_data.iter().filter(|&&v| v > 0).count();
+
+        // At radius 1.0 the bounding box covers the full viewport. All
+        // or nearly all level-0 cells should be filled. Allow a small
+        // margin for edge rounding.
+        let fill_ratio = filled_count as f32 / level0_cells as f32;
+        assert!(
+            fill_ratio > 0.95,
+            "Full-viewport mark should fill >95% of level-0 cells, \
+             got {:.1}% ({filled_count}/{level0_cells})",
+            fill_ratio * 100.0,
+        );
+    }
+
+    #[tokio::test]
+    async fn test_small_marks_unaffected_by_adaptive_coverage() {
+        // Verify small marks produce identical results with the adaptive
+        // approach. Small marks (< 4096 cells at level 0) should still
+        // write directly to level 0 with no fill-down overhead affecting
+        // correctness.
+        let ctx = match GupContext::headless().await {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let culler = OcclusionCuller::new(&ctx.device).unwrap();
+
+        // 50 small marks stacked at the same position.
+        let n = 50u32;
+        let instances: Vec<InstanceAttributes> = (0..n)
+            .map(|_| InstanceAttributes::from_circle([0.0, 0.0], 0.05, [1.0, 0.0, 0.0, 1.0]))
+            .collect();
+
+        let input_buf = create_instance_buffer(&ctx.device, &instances);
+        upload_instances(&ctx.queue, &input_buf, &instances);
+
+        let viewport = Viewport2D::default();
+        let params = OcclusionParams {
+            tile_size: 4,
+            conservative_margin: 0.0,
+        };
+
+        let result = culler
+            .dispatch(&ctx.device, &ctx.queue, &input_buf, n, &viewport, &params)
+            .await
+            .unwrap();
+
+        let flags =
+            OcclusionCuller::read_visibility(&ctx.device, &ctx.queue, &result.visibility_buffer, n)
+                .await
+                .unwrap();
+
+        // Last mark must be visible.
+        assert_eq!(
+            flags[(n - 1) as usize],
+            1,
+            "Last (top) small mark must be visible"
+        );
+
+        // Significant culling expected for stacked small marks.
+        let visible: u32 = flags.iter().sum();
+        let culled = n - visible;
+        assert!(
+            culled > 0,
+            "Stacked small marks should be culled, visible={visible}/{n}"
+        );
+    }
 }
