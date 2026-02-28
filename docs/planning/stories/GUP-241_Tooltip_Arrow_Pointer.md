@@ -6,7 +6,7 @@
 **Theme**: Advanced Text Layout and Rendering  
 **Priority**: Low  
 **Story Points**: 2  
-**Status**: 💡 New  
+**Status**: 🚧 In Progress  
 **Dependencies**: GUP-229 (Tooltip Background Rendering)
 
 ## Problem Statement
