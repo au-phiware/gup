@@ -108,3 +108,95 @@ effective regardless of mark size.
 
 - 20 occlusion culler tests (17 existing + 3 new), all passing
 - 7 unified culling pipeline tests, all passing
+
+## Retrospective
+
+**Completed**: 2026-07-16
+
+### Key Technical Learnings
+
+#### Multi-Level Write + Fill-Down is Cleanest Approach
+
+- **Challenge**: Several approaches were considered — removing the budget,
+  strided writes, direct coarse-level writes, or multi-level writes with
+  fill-down. The key constraint is that `generate_hiz_level` uses `atomicStore`
+  (not `atomicMin`), so any direct writes to coarser levels would be
+  overwritten.
+- **Solution**: Write at the finest level that fits within the 4096-cell budget,
+  then run a fill-down pass (`fill_coverage_down`) from coarsest to finest. Each
+  fill step reads one coarse cell and writes `atomicMax` to its 4 children.
+  After all fill passes, level 0 is complete, and `generate_hiz_level` runs on
+  the fully-populated data.
+- **Pattern**: When GPU passes have write-order dependencies (later passes
+  overwrite earlier writes), use a separate fill/propagation pass between them
+  rather than trying to merge the logic.
+
+#### Fill-Down Pass Cost is Negligible
+
+- **Challenge**: Adding up to 7 extra compute dispatches (one per mip level)
+  could add overhead.
+- **Solution**: The coarser levels have very few cells (4, 12, 35, 130, 475,
+  1900, 7500 for a 200×150 base grid). Each dispatch is ≤30 workgroups. The
+  total fill-down work (~10K cells) is trivial compared to the build_coverage
+  pass (~30K+ cells) and the occlusion test.
+- **Pattern**: Mip-chain operations have exponentially decreasing cost at
+  coarser levels, making multi-dispatch approaches practical.
+
+#### atomicMax Preserves Correctness Across Small and Large Marks
+
+- **Challenge**: When fill-down propagates a large mark's z-value to level 0,
+  small marks that already wrote their own z-values to those same cells must not
+  be overwritten incorrectly.
+- **Solution**: Both build_coverage (small marks) and fill_coverage_down use
+  `atomicMax`, so the highest z-value (latest-drawn mark) always wins. This is
+  correct for the coverage semantics (coverage map records the frontmost mark at
+  each cell).
+- **Pattern**: `atomicMax` is the correct merge operation for z-order coverage
+  maps where higher z = drawn later = on top.
+
+### Architectural Decisions
+
+#### Fill-Down as Separate Entry Point
+
+- **Decision**: Added `fill_coverage_down` as a new WGSL entry point rather than
+  modifying `generate_hiz_level` or `build_coverage`.
+- **Reasoning**: Clean separation of concerns. `build_coverage` handles
+  per-instance logic, `fill_coverage_down` handles per-cell propagation,
+  `generate_hiz_level` handles MIN-based mip chain construction. Each pass has a
+  single, well-defined responsibility.
+- **Trade-off**: One more pipeline to create and dispatch vs. cleaner code.
+- **Future**: The fill-down pass could potentially be fused with
+  `generate_hiz_level` by using `atomicMax` for the first (downward) pass and
+  then a separate MIN pass, but the current approach is simpler and fast enough.
+
+#### No Configuration Changes
+
+- **Decision**: No new fields in `OcclusionParams` or `OcclusionGpuConfig`. The
+  adaptive behavior is entirely internal to the shader.
+- **Reasoning**: The 4096-cell budget is an implementation detail, not a
+  user-tunable parameter. Users control tile_size and conservative_margin; the
+  adaptive level selection is an optimization that should "just work."
+- **Trade-off**: No way to disable the adaptive behavior from Rust, but there's
+  no reason to want to.
+- **Future**: If profiling reveals the fill-down is a bottleneck for some
+  workload (unlikely), a config flag could skip it.
+
+### Development Workflow Insights
+
+- The implementation was straightforward once the correct approach was
+  identified. The key insight — that fill-down must run before
+  `generate_hiz_level` to avoid atomicStore overwrites — required careful
+  analysis of the data flow between passes.
+- All 17 existing occlusion tests passed immediately after the shader change,
+  confirming backward compatibility. The only change needed was updating the 4
+  large-mark tests from tile_size=16 to tile_size=4.
+- Three dispatch methods needed updating (`dispatch`, `encode_combined`,
+  `PooledOcclusionCuller::dispatch`). This highlights that the occlusion
+  pipeline encoding logic could benefit from a shared helper method to reduce
+  duplication.
+
+### Follow-up Stories
+
+No follow-up stories identified. The adaptive coverage approach fully resolves
+the 4096-cell constraint. The existing occlusion pipeline architecture is
+well-factored and doesn't need further refactoring for this feature.
