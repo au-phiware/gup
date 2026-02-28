@@ -51,9 +51,12 @@ struct TooltipBgInstance {
     shadow_color: [f32; 4],
     /// Shadow offset (x, y).
     shadow_offset: [f32; 2],
-    /// Padding to align struct to 4-byte boundary (already aligned, but
-    /// explicit for clarity).
-    _padding: [f32; 2],
+    /// Arrow parameters: (direction, size, offset_along_edge, 0).
+    ///
+    /// direction: 0=none, 1=top, 2=bottom, 3=left, 4=right.
+    /// size: triangle height in pixels.
+    /// offset_along_edge: arrow centre relative to rect centre.
+    arrow_params: [f32; 4],
 }
 
 /// Uniform data shared by all tooltip backgrounds in a frame.
@@ -186,6 +189,12 @@ impl TooltipBackgroundRenderer {
                                 shader_location: 7,
                                 format: VertexFormat::Float32x2,
                             },
+                            // arrow_params
+                            VertexAttribute {
+                                offset: 88,
+                                shader_location: 8,
+                                format: VertexFormat::Float32x4,
+                            },
                         ],
                     },
                 ],
@@ -279,7 +288,12 @@ impl TooltipBackgroundRenderer {
             ],
             shadow_color: config.shadow_color,
             shadow_offset: config.shadow_offset,
-            _padding: [0.0; 2],
+            arrow_params: [
+                layout.arrow_direction.to_f32(),
+                layout.arrow_size,
+                layout.arrow_offset,
+                0.0,
+            ],
         });
     }
 
@@ -387,9 +401,10 @@ mod tests {
         assert_eq!(mem::offset_of!(TooltipBgInstance, params), 48);
         assert_eq!(mem::offset_of!(TooltipBgInstance, shadow_color), 64);
         assert_eq!(mem::offset_of!(TooltipBgInstance, shadow_offset), 80);
+        assert_eq!(mem::offset_of!(TooltipBgInstance, arrow_params), 88);
         assert_eq!(
             mem::size_of::<TooltipBgInstance>(),
-            96, // 22 × f32 + 2 × f32 padding = 96 bytes
+            104, // 26 × f32 = 104 bytes
         );
     }
 
@@ -435,7 +450,12 @@ mod tests {
             ],
             shadow_color: config.shadow_color,
             shadow_offset: config.shadow_offset,
-            _padding: [0.0; 2],
+            arrow_params: [
+                layout.arrow_direction.to_f32(),
+                layout.arrow_size,
+                layout.arrow_offset,
+                0.0,
+            ],
         });
 
         let inst = &instances[0];
