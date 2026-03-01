@@ -1,0 +1,44 @@
+[
+  {
+    "position": [
+      100.0,
+      200.0
+    ],
+    "size": [
+      10.0,
+      10.0
+    ],
+    "mark_type": 0,
+    "element_id": 1,
+    "selection_id": 0,
+    "_padding": 0
+  },
+  {
+    "position": [
+      150.0,
+      250.0
+    ],
+    "size": [
+      15.0,
+      15.0
+    ],
+    "mark_type": 1,
+    "element_id": 2,
+    "selection_id": 0,
+    "_padding": 0
+  },
+  {
+    "position": [
+      200.0,
+      300.0
+    ],
+    "size": [
+      5.0,
+      20.0
+    ],
+    "mark_type": 2,
+    "element_id": 3,
+    "selection_id": 1,
+    "_padding": 0
+  }
+]

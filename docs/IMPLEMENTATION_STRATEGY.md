@@ -15,9 +15,9 @@
 
 ### Why This Approach
 
-**The refined roadmap that suggested building high-level APIs first is
-fundamentally flawed** - you cannot build a reliable high-level API without
-first having a solid, well-tested low-level foundation.
+**High-level APIs cannot be built reliably without a solid, well-tested
+low-level foundation.** Building convenience APIs on an unproven base leads to
+compounding technical debt that becomes increasingly expensive to unwind.
 
 **Dog-fooding Requirement**: We must use our own low-level API to build
 everything else. This ensures:
@@ -27,16 +27,19 @@ everything else. This ensures:
 - Complex compositions work reliably
 - Performance architecture scales with complexity
 
-## Phase 1: Low-Level Foundation - Version 0.1.0
+### Development Model
 
-### Phase 1: Goals
+Work is organised into **stories** — self-contained units of work with clear
+acceptance criteria. Stories may optionally belong to **initiatives** (thematic
+groupings). **Dependencies between stories** are the primary tool for managing
+complexity and sequencing work.
 
-- Build fundamental composable primitives that everything else depends on
-- Establish rock-solid wgpu integration and unified shader function system
-- Create universal composability trait for D3-style flexibility
-- Prove GPU architecture with 100K+ point performance
+There are no phases, milestones, or delivery targets. Progress is tracked in
+[`docs/planning/stories/INDEX.md`](planning/stories/INDEX.md).
 
-### Initiative 1: Core GPU Primitives and Selection API
+---
+
+## Initiative 1: Core GPU Primitives and Selection API
 
 **Universal Composability Foundation**:
 
@@ -83,7 +86,9 @@ impl<T, M: Mark> Selection<T, M> {
 }
 ```
 
-### Initiative 2: Unified Shader Function System
+---
+
+## Initiative 2: Unified Shader Function System
 
 **ShaderFunction Trait and Composition**:
 
@@ -146,7 +151,9 @@ impl ShaderPipeline {
 }
 ```
 
-### Initiative 3: Mark System and Type Integration
+---
+
+## Initiative 3: Mark System and Type Integration
 
 **Enhanced Mark Trait with Generated Shaders**:
 
@@ -191,7 +198,9 @@ chart.select_all::<Circle>()
     );
 ```
 
-### Initiative 4: Interaction System and Performance
+---
+
+## Initiative 4: Interaction System and Performance
 
 **GPU-Based Interaction System**:
 
@@ -229,7 +238,7 @@ impl<T, M: Mark> Selection<T, M> {
 }
 ```
 
-### Phase 1: Success Metrics
+### Foundation Success Metrics
 
 #### Technical Validation
 
@@ -258,10 +267,11 @@ impl<T, M: Mark> Selection<T, M> {
 - **Flexibility**: Both manual WGSL and macro-generated functions work
   seamlessly
 
-## Phase 2: High-Level Convenience APIs - Version 0.2.0
+---
 
-**Only after Phase 1 is rock-solid**, build convenience APIs on proven
-foundation:
+## High-Level Convenience APIs
+
+Build convenience APIs only on a proven foundation:
 
 ### Observable Plot-Style API
 
@@ -328,23 +338,18 @@ chart.select_all::<Circle>()
     .attr("stroke_width", 2.0);
 ```
 
-### Phase 2: Deliverables
+### High-Level API Goals
 
-- [ ] Observable Plot-equivalent convenience APIs for common chart types
-- [ ] All high-level APIs built using low-level Selection and shader function
-      primitives
-- [ ] Migration guide from D3.js showing low-level API power
-- [ ] Performance maintained: 100K+ points with high-level APIs
-- [ ] External validation with teams using both API levels
+- Observable Plot-equivalent convenience APIs for common chart types
+- All high-level APIs built using low-level Selection and shader function
+  primitives
+- Migration guide from D3.js showing low-level API power
+- Performance maintained: 100K+ points with high-level APIs
+- External validation with teams using both API levels
 
-## Phase 3: Advanced Features and Scale - Version 0.3.0
+---
 
-### Phase 3: Goals
-
-- Achieve billion-point rendering performance
-- Implement complex layout algorithms on GPU
-- Add 3D visualization capabilities
-- Create professional chart components
+## Advanced Features and Scale
 
 ### Billion-Point Architecture
 
@@ -407,15 +412,17 @@ impl LayoutEngine {
 }
 ```
 
-### Phase 3: Deliverables
+### Scale Goals
 
-- [ ] 1 billion points rendering at 30+ FPS with adaptive LOD
-- [ ] GPU-accelerated force-directed layout for 100K+ nodes
-- [ ] 3D visualization support with lighting and materials
-- [ ] Professional axes, legends, and annotations
-- [ ] Real-world validation with scientific datasets
+- 1 billion points rendering at 30+ FPS with adaptive LOD
+- GPU-accelerated force-directed layout for 100K+ nodes
+- 3D visualization support with lighting and materials
+- Professional axes, legends, and annotations
+- Real-world validation with scientific datasets
 
-## Phase 4: Ecosystem Integration - Version 0.4.0
+---
+
+## Ecosystem Integration
 
 ### Framework Integrations
 
@@ -474,23 +481,24 @@ impl ExportEngine {
 }
 ```
 
-### Phase 4: Deliverables
+### Ecosystem Goals
 
-- [ ] Production-ready integrations for Bevy, egui, Tauri, winit
-- [ ] High-quality export to SVG, PDF, PNG, HTML formats
-- [ ] Comprehensive test suite with performance regression detection
-- [ ] Production monitoring and telemetry system
-- [ ] Enterprise deployment documentation
+- Production-ready integrations for Bevy, egui, Tauri, winit
+- High-quality export to SVG, PDF, PNG, HTML formats
+- Comprehensive test suite with performance regression detection
+- Enterprise deployment documentation
+
+---
 
 ## Development Methodology
 
 ### Quality Gates
 
-Each phase must demonstrate:
+Each story must demonstrate:
 
-- **Engineering Excellence**: Reliable, well-tested, high-performance foundation
+- **Engineering Excellence**: Reliable, well-tested, high-performance code
 - **Dog-fooding Success**: All features built using our own APIs
-- **Performance Targets**: Measurable improvements over existing solutions
+- **Performance**: Measurable, no regressions against benchmarks
 - **Cross-Platform Consistency**: Identical behavior on native, web, mobile
 - **External Validation**: Real users solving real problems
 
@@ -529,13 +537,17 @@ Each phase must demonstrate:
 - **Community Building**: Start open development early
 - **Funding**: Consider sponsorship/grants for open source development
 
-## Timeline Summary
+## Summary
 
-- **Phase 1**: Low-level foundation with unified shader functions
-- **Phase 2**: High-level convenience APIs built on proven foundation
-- **Phase 3**: Advanced features and billion-point performance
-- **Phase 4**: Ecosystem integration and production readiness
+Gup is built on the principle that composability and engineering excellence must
+be established at the foundation before convenience APIs are layered on top.
+Work is driven by stories with explicit dependency mapping — this replaces
+phases and milestones as the primary organising principle.
 
-This implementation strategy ensures Gup will have the engineering excellence
-and composability that made D3 successful, while achieving the GPU performance
-that will make it revolutionary.
+The four technical initiatives (GPU Primitives, Shader Functions, Mark System,
+Interaction) form the foundation. High-level APIs, advanced scale features, and
+ecosystem integrations build on that foundation as stories are completed and
+dependencies are satisfied.
+
+See [`docs/planning/stories/INDEX.md`](planning/stories/INDEX.md) for the
+current state of all stories.

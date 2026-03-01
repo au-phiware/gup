@@ -86,8 +86,8 @@ browser timing data collection in CI.
    - Waits for `window.__gupAxisResults` with configurable timeout
    - Validates result structure and writes pretty-printed JSON to output file
    - Prints summary table with budget comparison
-   - Handles errors gracefully: missing WASM package (exit 2), no Chrome
-     (exit 2), timeout (exit 1), invalid results (exit 1)
+   - Handles errors gracefully: missing WASM package (exit 2), no Chrome (exit
+     2), timeout (exit 1), invalid results (exit 1)
    - Supports `CHROME_PATH`, `BENCH_PORT`, and `BENCH_TIMEOUT` env vars
 
 3. **Node.js dependency management** (`scripts/package.json`,
@@ -130,8 +130,8 @@ browser timing data collection in CI.
 
 - **Challenge**: Puppeteer's default npm package bundles its own Chromium
   (~170MB), which conflicts with the nix-managed Chromium already in the
-  devShell. Bundled Chromium may also have library incompatibilities with the nix
-  environment.
+  devShell. Bundled Chromium may also have library incompatibilities with the
+  nix environment.
 - **Solution**: Used `puppeteer-core` instead, which requires an explicit
   `executablePath` pointing to the system Chromium. This keeps the dependency
   lightweight (~2MB) and avoids duplication.
@@ -141,8 +141,8 @@ browser timing data collection in CI.
 #### Node.js in the Nix devShell
 
 - **Challenge**: The flake already had `nodePackages.prettier` which implicitly
-  makes Node.js available as a build dependency, but it does not guarantee `node`
-  and `npm` are on PATH for user scripts.
+  makes Node.js available as a build dependency, but it does not guarantee
+  `node` and `npm` are on PATH for user scripts.
 - **Solution**: Added `nodejs` explicitly to `buildInputs`. This ensures `node`,
   `npm`, and `npx` are all available in the devShell.
 - **Pattern**: Always explicitly include `nodejs` in buildInputs when you need
@@ -167,9 +167,9 @@ browser timing data collection in CI.
 - **Decision**: Use `puppeteer-core` with proper page lifecycle management
   instead of the existing `chromium --headless=new --dump-dom` approach in
   `wasm_axis_benchmark.sh`.
-- **Reasoning**: The `--dump-dom` approach dumps the DOM at a
-  nondeterministic point and requires fragile HTML parsing to extract results.
-  Puppeteer's `waitForFunction` API provides deterministic waiting for
+- **Reasoning**: The `--dump-dom` approach dumps the DOM at a nondeterministic
+  point and requires fragile HTML parsing to extract results. Puppeteer's
+  `waitForFunction` API provides deterministic waiting for
   `window.__gupAxisResults` to be populated.
 - **Trade-off**: Adds a Node.js dependency and `npm install` step to CI, but
   gains reliable, deterministic result capture.
@@ -191,8 +191,9 @@ browser timing data collection in CI.
 ### Development Workflow Insights
 
 - The story was straightforward because GUP-240 had already aligned the
-  ChromeDriver/Chromium versions and established the pattern for headless browser
-  testing in CI. The main work was adding the proper automation layer on top.
+  ChromeDriver/Chromium versions and established the pattern for headless
+  browser testing in CI. The main work was adding the proper automation layer on
+  top.
 - The `scripts/package.json` + `scripts/node_modules/` pattern keeps Node.js
   dependencies isolated from the Rust project root, avoiding confusion with
   Cargo.toml-based tooling.

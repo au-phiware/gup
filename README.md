@@ -213,12 +213,26 @@ cargo run --example visual_blend_demo
 cargo run --example buffer_demo
 ```
 
+See [examples/INDEX.md](examples/INDEX.md) for a full listing, or
+[examples/README.md](examples/README.md) for a guided learning path.
+
 For WebAssembly builds:
 
 ```bash
 # Build and serve examples in browser
 mask start
 ```
+
+## Documentation
+
+Full documentation is in the [`docs/`](docs/) directory. See
+[docs/INDEX.md](docs/INDEX.md) for a complete listing, or start with:
+
+- [docs/README.md](docs/README.md) — Architecture overview and reading guide
+- [docs/IMPLEMENTATION_STRATEGY.md](docs/IMPLEMENTATION_STRATEGY.md) —
+  Development strategy
+- [docs/planning/stories/INDEX.md](docs/planning/stories/INDEX.md) — All stories
+  and their status
 
 ## Project Structure
 
