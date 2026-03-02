@@ -519,6 +519,63 @@ impl<T, M: Mark> Selection<T, M> {
         }
     }
 
+    /// Register a handler for `"click"` events (alias for `mouseup`).
+    ///
+    /// This is a convenience wrapper around [`on`](Self::on).
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// selection.on_click(|event, data| {
+    ///     println!("Clicked: {:?}", data);
+    /// });
+    /// ```
+    pub fn on_click<F>(&mut self, handler: F) -> &mut Self
+    where
+        F: Fn(&mut InteractionEvent, &T) + MaybeSend + MaybeSync + 'static,
+    {
+        self.on("click", handler)
+    }
+
+    /// Register a handler for `"mouseenter"` events.
+    ///
+    /// Fires when the cursor enters an element's bounds.  This is a
+    /// convenience wrapper around [`on`](Self::on).
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// selection.on_hover(|event, data| {
+    ///     // Highlight the element
+    /// });
+    /// ```
+    pub fn on_hover<F>(&mut self, handler: F) -> &mut Self
+    where
+        F: Fn(&mut InteractionEvent, &T) + MaybeSend + MaybeSync + 'static,
+    {
+        self.on("mouseenter", handler)
+    }
+
+    /// Register a handler for `"mousemove"` events while a button is held.
+    ///
+    /// This is a convenience wrapper around [`on`](Self::on) that registers
+    /// the handler on `"mousemove"`.  A full drag gesture system (tracking
+    /// start/move/end with position deltas) is planned in a follow-up story.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// selection.on_drag(|event, data| {
+    ///     println!("Drag at {:?}", event.screen_position);
+    /// });
+    /// ```
+    pub fn on_drag<F>(&mut self, handler: F) -> &mut Self
+    where
+        F: Fn(&mut InteractionEvent, &T) + MaybeSend + MaybeSync + 'static,
+    {
+        self.on("mousemove", handler)
+    }
+
     /// Bind a named attribute to a closure that extracts a value from each data item.
     ///
     /// The closure `binding` is called once per data item when
@@ -2920,6 +2977,121 @@ mod tests {
             "expected size in label: {}",
             child.label
         );
+    }
+
+    // --- Event handler convenience method tests (GUP-013) ---
+
+    #[test]
+    fn on_registers_handler_by_event_name() {
+        let data = vec![1.0f32, 2.0, 3.0];
+        let mut selection: Selection<f32, Circle> = Selection::from_data(data);
+
+        selection.on("click", |_event, _data| {});
+
+        let handlers = selection.event_handlers.lock().unwrap();
+        assert!(handlers.contains_key("click"));
+        assert_eq!(handlers["click"].len(), 1);
+    }
+
+    #[test]
+    fn on_multiple_handlers_same_event() {
+        let data = vec![1.0f32];
+        let mut selection: Selection<f32, Circle> = Selection::from_data(data);
+
+        selection
+            .on("click", |_event, _data| {})
+            .on("click", |_event, _data| {})
+            .on("click", |_event, _data| {});
+
+        let handlers = selection.event_handlers.lock().unwrap();
+        assert_eq!(handlers["click"].len(), 3);
+    }
+
+    #[test]
+    fn on_click_registers_click() {
+        let data = vec![1.0f32];
+        let mut selection: Selection<f32, Circle> = Selection::from_data(data);
+
+        selection.on_click(|_event, _data| {});
+
+        let handlers = selection.event_handlers.lock().unwrap();
+        assert!(handlers.contains_key("click"));
+    }
+
+    #[test]
+    fn on_hover_registers_mouseenter() {
+        let data = vec![1.0f32];
+        let mut selection: Selection<f32, Circle> = Selection::from_data(data);
+
+        selection.on_hover(|_event, _data| {});
+
+        let handlers = selection.event_handlers.lock().unwrap();
+        assert!(handlers.contains_key("mouseenter"));
+    }
+
+    #[test]
+    fn on_drag_registers_mousemove() {
+        let data = vec![1.0f32];
+        let mut selection: Selection<f32, Circle> = Selection::from_data(data);
+
+        selection.on_drag(|_event, _data| {});
+
+        let handlers = selection.event_handlers.lock().unwrap();
+        assert!(handlers.contains_key("mousemove"));
+    }
+
+    #[test]
+    fn trigger_event_invokes_handler_with_data() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        let counter = std::sync::Arc::new(AtomicU32::new(0));
+
+        let data = vec![10u32, 20, 30];
+        let mut selection: Selection<u32, Circle> = Selection::from_data(data);
+
+        let c = counter.clone();
+        selection.on("click", move |_event, &val| {
+            c.fetch_add(val, Ordering::Relaxed);
+        });
+
+        let mut event = InteractionEvent::new("click", crate::interaction::Vec2::new(0.0, 0.0));
+        // element_id 1 → data[1] = 20
+        selection.trigger_event("click", &mut event, 1);
+        assert_eq!(counter.load(Ordering::Relaxed), 20);
+    }
+
+    #[test]
+    fn trigger_event_stops_on_immediate_propagation() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        let counter = std::sync::Arc::new(AtomicU32::new(0));
+
+        let data = vec![1u32];
+        let mut selection: Selection<u32, Circle> = Selection::from_data(data);
+
+        let c1 = counter.clone();
+        selection.on("click", move |event, _| {
+            c1.fetch_add(1, Ordering::Relaxed);
+            event.stop_immediate_propagation();
+        });
+        let c2 = counter.clone();
+        selection.on("click", move |_event, _| {
+            c2.fetch_add(100, Ordering::Relaxed);
+        });
+
+        let mut event = InteractionEvent::new("click", crate::interaction::Vec2::new(0.0, 0.0));
+        selection.trigger_event("click", &mut event, 0);
+
+        // Only first handler should run
+        assert_eq!(counter.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn trigger_event_out_of_bounds_element_no_panic() {
+        let data = vec![1u32];
+        let selection: Selection<u32, Circle> = Selection::from_data(data);
+
+        let mut event = InteractionEvent::new("click", crate::interaction::Vec2::new(0.0, 0.0));
+        // element_id 999 is out of bounds — should not panic
+        selection.trigger_event("click", &mut event, 999);
     }
 
     // --- GPU integration tests (sync_aria_from_context) ---
