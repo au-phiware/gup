@@ -204,7 +204,7 @@ integration, and Rust→WGSL transpilation.
 - [GUP-254](GUP-254_OrdinalScale_GPU_Shader_Function.md) ✅ — OrdinalScale
   (BandScale + PointScale) GPU shader functions mapping integer category indices
   to positions. Deps: GUP-252 ✅, GUP-053 ✅.
-- [GUP-255](GUP-255_ColorScale_GPU_Shader_Function.md) 📋 — ColorScale
+- [GUP-255](GUP-255_ColorScale_GPU_Shader_Function.md) 🚧 — ColorScale
   ShaderFunction (f32 → vec4) with built-in palettes (Viridis, Plasma, etc.)
   composable with LinearScale. Deps: GUP-134 ✅, GUP-252 ✅.
 - [GUP-273](GUP-273_Geographic_Projection_Shader_System.md) 📋 — Mercator,
