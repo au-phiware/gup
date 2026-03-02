@@ -1411,6 +1411,15 @@ impl<T, M: Mark> Selection<T, M> {
         self.render_state.is_some()
     }
 
+    /// Returns a reference to the GPU instance buffer, if render state has
+    /// been initialised via [`prepare_render`](Self::prepare_render).
+    ///
+    /// This is useful for GPU-side operations that need to read from or
+    /// write to the instance buffer directly (e.g., compute shader dimming).
+    pub fn instance_buffer(&self) -> Option<&wgpu::Buffer> {
+        self.render_state.as_ref().map(|s| &s.instance_buffer)
+    }
+
     /// Release the instance buffer back to a [`BufferPool`] for reuse.
     ///
     /// Call this before dropping a Selection whose instance buffer was

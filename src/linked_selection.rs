@@ -366,12 +366,26 @@ impl<K: Hash + Eq + Send + Sync + 'static> SharedSelectionState<K> {
 /// Implement this for each GPU instance struct so that
 /// [`build_dimmed_instances`] can reduce the opacity of unselected items
 /// without modifying shader code.
+///
+/// Types that also support GPU-side dimming via [`SelectionMaskBuffer`]
+/// should override [`alpha_offsets`](Self::alpha_offsets) to return the
+/// corresponding [`AlphaOffsets`].
 pub trait DimInstance {
     /// Multiply the instance's alpha channel(s) by `factor`.
     ///
     /// Typically this means `fill_color[3] *= factor` and, if present,
     /// `stroke_color[3] *= factor`.
     fn dim_alpha(&mut self, factor: f32);
+
+    /// Returns [`AlphaOffsets`] for GPU-side dimming via
+    /// [`SelectionMaskBuffer`], or `None` if only CPU dimming is supported.
+    ///
+    /// The default implementation returns `None`.  Built-in mark instance
+    /// types override this to enable automatic GPU dimming in
+    /// [`LinkedSelection`].
+    fn alpha_offsets() -> Option<crate::selection_mask::AlphaOffsets> {
+        None
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -456,6 +470,10 @@ impl DimInstance for CircleInstance {
         self.fill_color[3] *= factor;
         self.stroke_color[3] *= factor;
     }
+
+    fn alpha_offsets() -> Option<crate::selection_mask::AlphaOffsets> {
+        Some(crate::selection_mask::AlphaOffsets::for_circle())
+    }
 }
 
 impl DimInstance for RectangleInstance {
@@ -463,11 +481,19 @@ impl DimInstance for RectangleInstance {
         self.fill_color[3] *= factor;
         self.stroke_color[3] *= factor;
     }
+
+    fn alpha_offsets() -> Option<crate::selection_mask::AlphaOffsets> {
+        Some(crate::selection_mask::AlphaOffsets::for_rectangle())
+    }
 }
 
 impl DimInstance for LineInstance {
     fn dim_alpha(&mut self, factor: f32) {
         self.color[3] *= factor;
+    }
+
+    fn alpha_offsets() -> Option<crate::selection_mask::AlphaOffsets> {
+        Some(crate::selection_mask::AlphaOffsets::for_line())
     }
 }
 
@@ -482,6 +508,10 @@ impl DimInstance for BoxPlotInstance {
         self.whisker_color[3] *= factor;
         self.outlier_color[3] *= factor;
     }
+
+    fn alpha_offsets() -> Option<crate::selection_mask::AlphaOffsets> {
+        Some(crate::selection_mask::AlphaOffsets::for_boxplot())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -492,6 +522,7 @@ use crate::buffer::BufferPool;
 use crate::error::GupResult;
 use crate::pipeline_cache::PipelineCache;
 use crate::selection::{Mark, Selection};
+use crate::selection_mask::SelectionMaskBuffer;
 use wgpu::{Device, Queue, RenderPass};
 
 /// A wrapper that combines a [`Selection`] with a [`SharedSelectionState`]
@@ -504,6 +535,15 @@ use wgpu::{Device, Queue, RenderPass};
 /// [`prepare_render`](Self::prepare_render) on each frame and the wrapper
 /// takes care of the rest: it checks whether the shared selection state has
 /// changed and only rebuilds the dimmed instance buffer when necessary.
+///
+/// # GPU Dimming
+///
+/// When the instance count exceeds [`gpu_dimming_threshold`](Self::gpu_dimming_threshold)
+/// (default: 10 000) and the instance type provides
+/// [`alpha_offsets`](DimInstance::alpha_offsets), dimming is performed on the
+/// GPU via a [`SelectionMaskBuffer`] compute shader instead of the CPU-side
+/// [`build_dimmed_instances`] path.  The transition is transparent to the
+/// caller.
 ///
 /// # Type Parameters
 ///
@@ -533,6 +573,12 @@ pub struct LinkedSelection<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> {
     key_fn: Box<dyn Fn(&T, usize) -> K>,
     dim_opacity: f32,
     last_generation: u64,
+    /// Instance count threshold above which the GPU dimming path is used.
+    gpu_threshold: u32,
+    /// GPU-side selection mask buffer (lazily initialised on the GPU path).
+    mask_buffer: Option<SelectionMaskBuffer>,
+    /// GPU buffer holding undimmed (source) instances for the compute shader.
+    source_buffer: Option<wgpu::Buffer>,
 }
 
 impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> {
@@ -561,6 +607,9 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
             key_fn: Box::new(key_fn),
             dim_opacity: 0.2,
             last_generation: 0,
+            gpu_threshold: 10_000,
+            mask_buffer: None,
+            source_buffer: None,
         }
     }
 
@@ -580,6 +629,9 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
             key_fn: Box::new(key_fn),
             dim_opacity: 0.2,
             last_generation: 0,
+            gpu_threshold: 10_000,
+            mask_buffer: None,
+            source_buffer: None,
         }
     }
 
@@ -593,6 +645,28 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
         self
     }
 
+    /// Set the instance count threshold for GPU-side dimming (default 10 000).
+    ///
+    /// When the number of instances in
+    /// [`prepare_render`](Self::prepare_render) meets or exceeds this
+    /// threshold **and** the instance type provides
+    /// [`DimInstance::alpha_offsets`], dimming is performed entirely on the
+    /// GPU via a compute shader.  Below this threshold the CPU-based
+    /// [`build_dimmed_instances`] path is used instead.
+    ///
+    /// Set to `u32::MAX` to force the CPU path regardless of dataset size.
+    /// Set to `0` to always use the GPU path (useful for testing).
+    #[must_use]
+    pub fn gpu_dimming_threshold(mut self, threshold: u32) -> Self {
+        self.gpu_threshold = threshold;
+        self
+    }
+
+    /// Returns the current GPU dimming threshold.
+    pub fn gpu_threshold(&self) -> u32 {
+        self.gpu_threshold
+    }
+
     /// Prepare GPU resources for rendering, automatically rebuilding the
     /// dimmed instance buffer when the shared selection state has changed.
     ///
@@ -600,6 +674,12 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
     /// calls it checks the generation counter of the shared state and only
     /// rebuilds when a change is detected, or when the inner selection has
     /// no render state (e.g. after [`set_data`](Self::set_data)).
+    ///
+    /// When the instance count meets or exceeds
+    /// [`gpu_dimming_threshold`](Self::gpu_dimming_threshold) and the
+    /// instance type supports GPU dimming (via [`DimInstance::alpha_offsets`]),
+    /// a compute shader is used instead of CPU-side dimming.  The transition
+    /// is transparent.
     ///
     /// The `mapper` closure converts each data item `T` into a GPU-ready
     /// instance struct `I`.  The wrapper applies selection-based dimming on
@@ -619,15 +699,38 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
     where
         I: DimInstance + bytemuck::Pod + bytemuck::Zeroable,
     {
-        let needs_rebuild = match has_changed_since(&self.shared_state, self.last_generation) {
+        let data_changed = !self.selection.is_render_ready();
+        let selection_changed = match has_changed_since(&self.shared_state, self.last_generation) {
             Some(new_gen) => {
                 self.last_generation = new_gen;
                 true
             }
-            None => !self.selection.is_render_ready(),
+            None => false,
         };
 
-        if needs_rebuild {
+        let needs_rebuild = data_changed || selection_changed;
+        if !needs_rebuild {
+            return Ok(());
+        }
+
+        let instance_count = self.selection.data().len();
+        let use_gpu = instance_count as u32 >= self.gpu_threshold && I::alpha_offsets().is_some();
+
+        if use_gpu {
+            self.prepare_render_gpu(
+                device,
+                queue,
+                &mapper,
+                instance_count,
+                data_changed,
+                cache,
+                pool,
+            )
+        } else {
+            // Drop GPU resources when falling back to CPU path.
+            self.mask_buffer = None;
+            self.source_buffer = None;
+
             let instances = build_dimmed_instances(
                 self.selection.data(),
                 mapper,
@@ -636,7 +739,103 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
                 self.dim_opacity,
             );
             self.selection
+                .prepare_render_raw(device, queue, &instances, cache, pool)
+        }
+    }
+
+    /// GPU dimming path: upload undimmed instances, run the compute shader,
+    /// then copy the dimmed output into the Selection's instance buffer.
+    fn prepare_render_gpu<I>(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        mapper: &dyn Fn(&T) -> I,
+        instance_count: usize,
+        data_changed: bool,
+        cache: Option<&mut PipelineCache>,
+        pool: Option<&mut BufferPool>,
+    ) -> GupResult<()>
+    where
+        I: DimInstance + bytemuck::Pod + bytemuck::Zeroable,
+    {
+        let alpha_offsets =
+            I::alpha_offsets().expect("GPU path requires DimInstance::alpha_offsets");
+        let count = instance_count as u32;
+
+        // -- 1. Rebuild undimmed instances & source buffer when data changed --
+        if data_changed {
+            let instances: Vec<I> = self.selection.data().iter().map(mapper).collect();
+
+            // Set up the render pipeline (vertex buffers, bind group, etc.)
+            // by uploading the undimmed instances.
+            self.selection
                 .prepare_render_raw(device, queue, &instances, cache, pool)?;
+
+            // Create / resize the source buffer with undimmed instance data.
+            let instance_bytes: &[u8] = bytemuck::cast_slice(&instances);
+            let src_buf = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("linked_selection_source"),
+                size: instance_bytes.len() as u64,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            queue.write_buffer(&src_buf, 0, instance_bytes);
+            self.source_buffer = Some(src_buf);
+
+            // (Re)create the mask buffer for the new capacity.
+            self.mask_buffer = Some(SelectionMaskBuffer::new(device, count, &alpha_offsets)?);
+        }
+
+        // -- 2. Update mask & dispatch dimming compute shader ---------------
+        let mask = self.mask_buffer.as_mut().expect("mask_buffer initialised");
+        mask.ensure_capacity(device, count);
+
+        let source = self
+            .source_buffer
+            .as_ref()
+            .expect("source_buffer initialised");
+
+        // Force a mask update when data changed (even if generation hasn't
+        // advanced since the mask buffer was just recreated).
+        let mask_changed = if data_changed {
+            // Reset mask generation so update_mask always runs.
+            // We do this by calling update_mask which will see a generation
+            // difference because we set last_generation on the mask to 0
+            // when it was recreated above.
+            mask.update_mask(
+                queue,
+                self.selection.data(),
+                &*self.key_fn,
+                &self.shared_state,
+            )
+        } else {
+            mask.update_mask(
+                queue,
+                self.selection.data(),
+                &*self.key_fn,
+                &self.shared_state,
+            )
+        };
+
+        // If mask or data changed, run the compute shader and copy result.
+        if mask_changed || data_changed {
+            let instance_byte_size = (std::mem::size_of::<I>() * instance_count) as u64;
+
+            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("linked_selection_dim_encoder"),
+            });
+
+            // Encode the dimming compute pass.
+            mask.encode_dimming(device, queue, &mut encoder, source, count, self.dim_opacity);
+
+            // Copy the dimmed output into the Selection's instance buffer.
+            let dst = self
+                .selection
+                .instance_buffer()
+                .expect("render state initialised");
+            encoder.copy_buffer_to_buffer(mask.output_buffer(), 0, dst, 0, instance_byte_size);
+
+            queue.submit([encoder.finish()]);
         }
 
         Ok(())
@@ -682,12 +881,24 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
     /// [`prepare_render`](Self::prepare_render) will rebuild everything.
     pub fn set_data(&mut self, data: Vec<T>) {
         self.selection.set_data(data);
+        // Invalidate GPU dimming resources — they will be recreated on the
+        // next prepare_render call.
+        self.mask_buffer = None;
+        self.source_buffer = None;
     }
 
     /// Returns the generation counter value that was last observed by
     /// [`prepare_render`](Self::prepare_render).
     pub fn last_generation(&self) -> u64 {
         self.last_generation
+    }
+
+    /// Returns `true` if the GPU dimming path is currently active.
+    ///
+    /// This is `true` after [`prepare_render`](Self::prepare_render) has
+    /// been called with an instance count at or above the GPU threshold.
+    pub fn is_gpu_dimming_active(&self) -> bool {
+        self.mask_buffer.is_some()
     }
 }
 
