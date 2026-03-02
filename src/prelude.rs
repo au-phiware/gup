@@ -166,6 +166,13 @@ pub use crate::shader_function::{
 // Attribute binding types
 pub use crate::selection::{AttrValue, IntoAttrValue, IntoAttrValues, MarkInstanceBuilder};
 
+// Transition system (enter/update/exit data animations)
+pub use crate::transition::builder::{
+    CommittedTransition, EasingFn, ElementTransition, TransitionGroup,
+};
+pub use crate::transition::diff::{DiffResult, diff_by_key};
+pub use crate::transition::{TransitionBuilder, TransitionConfig, TransitionState};
+
 // Text rendering system
 pub use crate::text::hover_reveal::{
     ArrowDirection, ClippedTextRegistry, HoverRevealState, TooltipConfig, TooltipLayout,
