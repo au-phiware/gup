@@ -3741,10 +3741,33 @@ impl ComposableShaderFunction for PositionTransform {
 // Additional Scale Functions (AC2: Common Transformation Functions)
 // ============================================================================
 
-/// Logarithmic scale transformation.
+/// Logarithmic scale transformation for numeric data on the GPU.
 ///
-/// Maps values from a domain to a range using logarithmic scaling.
-/// Useful for data that spans multiple orders of magnitude.
+/// Maps values from a data domain `[domain_min, domain_max]` to an output range
+/// `[range_min, range_max]` using logarithmic interpolation.  Values that span
+/// multiple orders of magnitude (e.g. 1 to 1 000 000) are spread out evenly on
+/// a log axis, making patterns across magnitudes visible.
+///
+/// # Symmetric-log mode
+///
+/// When `symmetric` is `true`, the scale handles negative values and zero by
+/// applying `sign(x) * log_base(|x| + 1)`, preserving sign symmetry around
+/// zero.  This is useful for profit-and-loss or other data that straddles zero.
+///
+/// # Builder API
+///
+/// ```
+/// use gup::shader_function::LogScale;
+///
+/// let scale = LogScale::new(10.0)
+///     .domain(1.0, 1000.0)
+///     .range(0.0, 800.0);
+///
+/// let symlog = LogScale::new(10.0)
+///     .domain(-1000.0, 1000.0)
+///     .range(0.0, 800.0)
+///     .symmetric(true);
+/// ```
 #[derive(Clone, Debug)]
 pub struct LogScale {
     pub domain_min: f32,
@@ -3752,17 +3775,58 @@ pub struct LogScale {
     pub range_min: f32,
     pub range_max: f32,
     pub base: f32,
+    pub is_symmetric: bool,
 }
 
 impl LogScale {
-    /// Creates a new logarithmic scale with base 10.
-    pub fn new(domain_min: f32, domain_max: f32, range_min: f32, range_max: f32) -> Self {
+    /// Create a logarithmic scale with the given base and sensible defaults.
+    ///
+    /// Defaults: `domain = [1, 10]`, `range = [0, 1]`, `symmetric = false`.
+    pub fn new(base: f32) -> Self {
+        Self {
+            domain_min: 1.0,
+            domain_max: 10.0,
+            range_min: 0.0,
+            range_max: 1.0,
+            base,
+            is_symmetric: false,
+        }
+    }
+
+    /// Set the input domain `[min, max]`.
+    pub fn domain(mut self, min: f32, max: f32) -> Self {
+        self.domain_min = min;
+        self.domain_max = max;
+        self
+    }
+
+    /// Set the output range `[min, max]`.
+    pub fn range(mut self, min: f32, max: f32) -> Self {
+        self.range_min = min;
+        self.range_max = max;
+        self
+    }
+
+    /// Enable or disable symmetric-log mode.
+    ///
+    /// When enabled, negative values are mapped as `-log_base(|x| + 1)` and
+    /// zero maps to `0.0`, preserving sign symmetry around zero.
+    pub fn symmetric(mut self, enabled: bool) -> Self {
+        self.is_symmetric = enabled;
+        self
+    }
+
+    // -- Legacy constructors (preserved for backward compatibility) -----------
+
+    /// Creates a new logarithmic scale with base 10 (legacy four-argument form).
+    pub fn base10(domain_min: f32, domain_max: f32, range_min: f32, range_max: f32) -> Self {
         Self {
             domain_min,
             domain_max,
             range_min,
             range_max,
             base: 10.0,
+            is_symmetric: false,
         }
     }
 
@@ -3774,10 +3838,11 @@ impl LogScale {
             range_min,
             range_max,
             base: std::f32::consts::E,
+            is_symmetric: false,
         }
     }
 
-    /// Creates a new logarithmic scale with custom base.
+    /// Creates a new logarithmic scale with custom base (legacy form).
     pub fn with_base(
         domain_min: f32,
         domain_max: f32,
@@ -3791,10 +3856,81 @@ impl LogScale {
             range_min,
             range_max,
             base,
+            is_symmetric: false,
+        }
+    }
+
+    /// Evaluate the log scale on the CPU (for testing).
+    ///
+    /// Mirrors the WGSL `log_scale` function exactly.
+    pub fn apply(&self, value: f32) -> f32 {
+        let uniforms = self.create_uniforms().unwrap();
+        Self::apply_uniforms(value, &uniforms)
+    }
+
+    /// CPU-side evaluation using a `LogScaleUniforms` struct.
+    fn apply_uniforms(value: f32, u: &LogScaleUniforms) -> f32 {
+        let inv_log2_base = 1.0 / u.base.log2();
+
+        if u.symmetric != 0 {
+            // Symmetric-log: sign(x) * log_base(|x| + 1)
+            let sym_val = if value >= 0.0 {
+                ((value.abs() + 1.0).log2()) * inv_log2_base
+            } else {
+                -((-value + 1.0).log2()) * inv_log2_base
+            };
+            let sym_min = if u.domain_min >= 0.0 {
+                ((u.domain_min.abs() + 1.0).log2()) * inv_log2_base
+            } else {
+                -(((-u.domain_min) + 1.0).log2()) * inv_log2_base
+            };
+            let sym_max = if u.domain_max >= 0.0 {
+                ((u.domain_max.abs() + 1.0).log2()) * inv_log2_base
+            } else {
+                -(((-u.domain_max) + 1.0).log2()) * inv_log2_base
+            };
+            let normalized = (sym_val - sym_min) / (sym_max - sym_min);
+            u.range_min + normalized * (u.range_max - u.range_min)
+        } else {
+            // Standard log scale: clamp to domain_min (which must be > 0)
+            // to guard against log(0) = -inf.
+            let safe_min = u.domain_min.max(1e-10);
+            let safe_max = u.domain_max.max(1e-10);
+            let safe_value = value.max(safe_min);
+            let log_min = safe_min.log2() * inv_log2_base;
+            let log_max = safe_max.log2() * inv_log2_base;
+            let log_value = safe_value.log2() * inv_log2_base;
+            let normalized = (log_value - log_min) / (log_max - log_min);
+            u.range_min + normalized * (u.range_max - u.range_min)
         }
     }
 }
 
+/// Uniform buffer layout for [`LogScale`].
+///
+/// The struct is `#[repr(C)]` with `bytemuck::Pod` + `bytemuck::Zeroable` so it
+/// can be uploaded directly to a GPU uniform buffer.  The `symmetric` field uses
+/// `u32` (rather than `bool`) for WGSL alignment compatibility — `0` means
+/// standard log scale and `1` means symmetric-log.
+///
+/// Two padding fields (`_pad0`, `_pad1`) round the struct up to 32 bytes,
+/// ensuring correct WGSL layout when embedded inside `ChainUniforms` alongside
+/// types that contain `vec4<f32>` (which require 16-byte alignment).
+///
+/// # Layout
+///
+/// | Offset | Field        | Type  |
+/// |--------|-------------|-------|
+/// | 0      | `domain_min` | `f32` |
+/// | 4      | `domain_max` | `f32` |
+/// | 8      | `range_min`  | `f32` |
+/// | 12     | `range_max`  | `f32` |
+/// | 16     | `base`       | `f32` |
+/// | 20     | `symmetric`  | `u32` |
+/// | 24     | `_pad0`      | `u32` |
+/// | 28     | `_pad1`      | `u32` |
+///
+/// Total size: 32 bytes.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct LogScaleUniforms {
@@ -3803,12 +3939,17 @@ pub struct LogScaleUniforms {
     pub range_min: f32,
     pub range_max: f32,
     pub base: f32,
-    pub _padding: [f32; 3],
+    /// 0 = standard log scale, 1 = symmetric-log (sign-preserving).
+    pub symmetric: u32,
+    /// Padding for GPU alignment (must be 0).
+    pub _pad0: u32,
+    /// Padding for GPU alignment (must be 0).
+    pub _pad1: u32,
 }
 
 impl ShaderUniform for LogScaleUniforms {
     fn wgsl_struct_definition() -> String {
-        "struct LogScaleUniforms {\n    domain_min: f32,\n    domain_max: f32,\n    range_min: f32,\n    range_max: f32,\n    base: f32,\n}".to_string()
+        "struct LogScaleUniforms {\n    domain_min: f32,\n    domain_max: f32,\n    range_min: f32,\n    range_max: f32,\n    base: f32,\n    symmetric: u32,\n    _pad0: u32,\n    _pad1: u32,\n}".to_string()
     }
 
     fn wgsl_type_name() -> &'static str {
@@ -3823,13 +3964,45 @@ impl ComposableShaderFunction for LogScale {
 
     fn wgsl_function() -> &'static str {
         r#"
-        fn log_scale(value: f32, scale: LogScaleUniforms) -> f32 {
-            let log_min = log(scale.domain_min) / log(scale.base);
-            let log_max = log(scale.domain_max) / log(scale.base);
-            let log_value = log(max(value, 0.0001)) / log(scale.base);
-            let normalized = (log_value - log_min) / (log_max - log_min);
-            return scale.range_min + normalized * (scale.range_max - scale.range_min);
-        }
+fn log_scale(value: f32, scale: LogScaleUniforms) -> f32 {
+    let inv_log2_base = 1.0 / log2(scale.base);
+
+    if (scale.symmetric != 0u) {
+        // Symmetric-log: sign(x) * log_base(|x| + 1, base), normalised to domain.
+        // Use select() to avoid sub-group divergence on non-uniform values.
+        let abs_val = abs(value);
+        let sym_val = select(
+            -(log2(abs_val + 1.0) * inv_log2_base),
+            log2(abs_val + 1.0) * inv_log2_base,
+            value >= 0.0
+        );
+        let abs_dmin = abs(scale.domain_min);
+        let sym_min = select(
+            -(log2(abs_dmin + 1.0) * inv_log2_base),
+            log2(abs_dmin + 1.0) * inv_log2_base,
+            scale.domain_min >= 0.0
+        );
+        let abs_dmax = abs(scale.domain_max);
+        let sym_max = select(
+            -(log2(abs_dmax + 1.0) * inv_log2_base),
+            log2(abs_dmax + 1.0) * inv_log2_base,
+            scale.domain_max >= 0.0
+        );
+        let normalized = (sym_val - sym_min) / (sym_max - sym_min);
+        return scale.range_min + normalized * (scale.range_max - scale.range_min);
+    } else {
+        // Standard log scale: clamp value to domain_min (which must be > 0)
+        // to guard against log(0) = -inf and log(negative).
+        let safe_min = max(scale.domain_min, 1e-10);
+        let safe_max = max(scale.domain_max, 1e-10);
+        let safe_value = max(value, safe_min);
+        let log_min = log2(safe_min) * inv_log2_base;
+        let log_max = log2(safe_max) * inv_log2_base;
+        let log_value = log2(safe_value) * inv_log2_base;
+        let normalized = (log_value - log_min) / (log_max - log_min);
+        return scale.range_min + normalized * (scale.range_max - scale.range_min);
+    }
+}
         "#
     }
 
@@ -3840,7 +4013,9 @@ impl ComposableShaderFunction for LogScale {
             range_min: self.range_min,
             range_max: self.range_max,
             base: self.base,
-            _padding: [0.0; 3],
+            symmetric: if self.is_symmetric { 1 } else { 0 },
+            _pad0: 0,
+            _pad1: 0,
         })
     }
 
@@ -7919,12 +8094,13 @@ mod tests {
 
     #[test]
     fn test_log_scale_creation() {
-        let log_scale = LogScale::new(1.0, 1000.0, 0.0, 1.0);
+        let log_scale = LogScale::new(10.0).domain(1.0, 1000.0).range(0.0, 1.0);
         assert_eq!(log_scale.domain_min, 1.0);
         assert_eq!(log_scale.domain_max, 1000.0);
         assert_eq!(log_scale.range_min, 0.0);
         assert_eq!(log_scale.range_max, 1.0);
         assert_eq!(log_scale.base, 10.0);
+        assert!(!log_scale.is_symmetric);
 
         let natural_log = LogScale::natural(1.0, 100.0, 0.0, 1.0);
         assert_eq!(natural_log.base, std::f32::consts::E);
@@ -7935,12 +8111,219 @@ mod tests {
 
     #[test]
     fn test_log_scale_uniforms() {
-        let log_scale = LogScale::new(1.0, 1000.0, 0.0, 1.0);
+        let log_scale = LogScale::new(10.0).domain(1.0, 1000.0).range(0.0, 1.0);
         let uniforms = log_scale.create_uniforms().unwrap();
         assert_eq!(uniforms.domain_min, 1.0);
         assert_eq!(uniforms.domain_max, 1000.0);
         assert_eq!(uniforms.base, 10.0);
+        assert_eq!(uniforms.symmetric, 0);
         assert_eq!(LogScale::function_name(), "log_scale");
+    }
+
+    // ---- GUP-253: LogScale GPU Shader Function tests ----
+
+    #[test]
+    fn test_log_scale_uniforms_layout() {
+        // AC1: LogScaleUniforms must be 32 bytes (padded to 16-byte boundary
+        // for ChainUniforms compatibility) and 4-byte aligned.
+        assert_eq!(std::mem::size_of::<LogScaleUniforms>(), 32);
+        assert_eq!(std::mem::align_of::<LogScaleUniforms>(), 4);
+
+        // Verify field offsets match the documented layout.
+        assert_eq!(std::mem::offset_of!(LogScaleUniforms, domain_min), 0);
+        assert_eq!(std::mem::offset_of!(LogScaleUniforms, domain_max), 4);
+        assert_eq!(std::mem::offset_of!(LogScaleUniforms, range_min), 8);
+        assert_eq!(std::mem::offset_of!(LogScaleUniforms, range_max), 12);
+        assert_eq!(std::mem::offset_of!(LogScaleUniforms, base), 16);
+        assert_eq!(std::mem::offset_of!(LogScaleUniforms, symmetric), 20);
+        assert_eq!(std::mem::offset_of!(LogScaleUniforms, _pad0), 24);
+        assert_eq!(std::mem::offset_of!(LogScaleUniforms, _pad1), 28);
+
+        // Verify bytemuck round-trip.
+        let uniforms = LogScaleUniforms {
+            domain_min: 1.0,
+            domain_max: 1000.0,
+            range_min: 0.0,
+            range_max: 1.0,
+            base: 10.0,
+            symmetric: 0,
+            _pad0: 0,
+            _pad1: 0,
+        };
+        let bytes = bytemuck::bytes_of(&uniforms);
+        assert_eq!(bytes.len(), 32);
+        let round_trip: &LogScaleUniforms = bytemuck::from_bytes(bytes);
+        assert_eq!(round_trip.domain_min, 1.0);
+        assert_eq!(round_trip.domain_max, 1000.0);
+        assert_eq!(round_trip.base, 10.0);
+    }
+
+    #[test]
+    fn test_log_scale_boundary_values() {
+        // AC2: log_scale(domain_min) == range_min, log_scale(domain_max) == range_max
+        let scale = LogScale::new(10.0).domain(1.0, 1000.0).range(0.0, 1.0);
+        let at_min = scale.apply(1.0);
+        let at_max = scale.apply(1000.0);
+        assert!(
+            (at_min - 0.0).abs() < 1e-5,
+            "log_scale(domain_min) should be range_min, got {at_min}"
+        );
+        assert!(
+            (at_max - 1.0).abs() < 1e-5,
+            "log_scale(domain_max) should be range_max, got {at_max}"
+        );
+    }
+
+    #[test]
+    fn test_log_scale_midpoint_value() {
+        // AC2: log_scale(100) with domain=[1,1000], range=[0,1], base=10
+        // should be ≈ log10(100)/log10(1000) = 2/3 ≈ 0.667
+        let scale = LogScale::new(10.0).domain(1.0, 1000.0).range(0.0, 1.0);
+        let result = scale.apply(100.0);
+        assert!(
+            (result - 2.0 / 3.0).abs() < 1e-5,
+            "log_scale(100) should be ~0.667, got {result}"
+        );
+    }
+
+    #[test]
+    fn test_log_scale_base2() {
+        // Verify base conversion with base=2: log2(4)/log2(16) = 2/4 = 0.5
+        let scale = LogScale::new(2.0).domain(1.0, 16.0).range(0.0, 1.0);
+        let result = scale.apply(4.0);
+        assert!(
+            (result - 0.5).abs() < 1e-5,
+            "base-2 log_scale(4) should be 0.5, got {result}"
+        );
+    }
+
+    #[test]
+    fn test_log_scale_base_e() {
+        // Verify with natural logarithm base.
+        let scale = LogScale::new(std::f32::consts::E)
+            .domain(1.0, std::f32::consts::E * std::f32::consts::E)
+            .range(0.0, 1.0);
+        let result = scale.apply(std::f32::consts::E);
+        assert!(
+            (result - 0.5).abs() < 1e-4,
+            "base-e log_scale(e) should be ~0.5, got {result}"
+        );
+    }
+
+    #[test]
+    fn test_log_scale_zero_guard() {
+        // AC3: log_scale(0) and log_scale(-1) should return range_min,
+        // not NaN or ±infinity.  Values ≤ 0 are clamped to domain_min.
+        let scale = LogScale::new(10.0).domain(1.0, 1000.0).range(0.0, 1.0);
+
+        let at_zero = scale.apply(0.0);
+        assert!(
+            at_zero.is_finite(),
+            "log_scale(0.0) must be finite, got {at_zero}"
+        );
+        assert!(
+            (at_zero - 0.0).abs() < 1e-5,
+            "log_scale(0.0) should be range_min (clamped to domain_min), got {at_zero}"
+        );
+
+        let at_neg = scale.apply(-1.0);
+        assert!(
+            at_neg.is_finite(),
+            "log_scale(-1.0) must be finite, got {at_neg}"
+        );
+        assert!(
+            (at_neg - 0.0).abs() < 1e-5,
+            "log_scale(-1.0) should be range_min (clamped to domain_min), got {at_neg}"
+        );
+    }
+
+    #[test]
+    fn test_log_scale_symmetric_sign_symmetry() {
+        // AC4: log_scale(-v) == -log_scale(v) when symmetric=true and domain
+        // is centred on zero (i.e. the raw symmetric-log values are symmetric).
+        let scale = LogScale::new(10.0)
+            .domain(-1000.0, 1000.0)
+            .range(-1.0, 1.0)
+            .symmetric(true);
+
+        let pos = scale.apply(100.0);
+        let neg = scale.apply(-100.0);
+        assert!(
+            (pos + neg).abs() < 1e-5,
+            "Symmetric log_scale should satisfy f(-v) == -f(v): pos={pos}, neg={neg}"
+        );
+    }
+
+    #[test]
+    fn test_log_scale_symmetric_zero() {
+        // AC4: log_scale(0.0) returns the midpoint (0.0 mapped through
+        // the normalisation) when symmetric=true and domain is centred on zero.
+        let scale = LogScale::new(10.0)
+            .domain(-1000.0, 1000.0)
+            .range(-1.0, 1.0)
+            .symmetric(true);
+
+        let at_zero = scale.apply(0.0);
+        assert!(
+            at_zero.abs() < 1e-5,
+            "Symmetric log_scale(0.0) should map to 0.0, got {at_zero}"
+        );
+    }
+
+    #[test]
+    fn test_log_scale_builder_api() {
+        // AC5: Builder chaining with new(base), domain(), range(), symmetric().
+        let scale = LogScale::new(10.0)
+            .domain(1.0, 10.0)
+            .range(0.0, 1.0)
+            .symmetric(false);
+
+        assert_eq!(scale.base, 10.0);
+        assert_eq!(scale.domain_min, 1.0);
+        assert_eq!(scale.domain_max, 10.0);
+        assert_eq!(scale.range_min, 0.0);
+        assert_eq!(scale.range_max, 1.0);
+        assert!(!scale.is_symmetric);
+
+        // Defaults: domain=[1,10], range=[0,1], symmetric=false
+        let defaults = LogScale::new(2.0);
+        assert_eq!(defaults.domain_min, 1.0);
+        assert_eq!(defaults.domain_max, 10.0);
+        assert_eq!(defaults.range_min, 0.0);
+        assert_eq!(defaults.range_max, 1.0);
+        assert!(!defaults.is_symmetric);
+    }
+
+    #[test]
+    fn test_log_scale_wgsl_struct_definition() {
+        let def = LogScaleUniforms::wgsl_struct_definition();
+        assert!(
+            def.contains("symmetric: u32"),
+            "WGSL struct should contain symmetric field"
+        );
+        assert!(
+            def.contains("base: f32"),
+            "WGSL struct should contain base field"
+        );
+        assert!(
+            def.contains("LogScaleUniforms"),
+            "WGSL struct name should be LogScaleUniforms"
+        );
+    }
+
+    #[test]
+    fn test_log_scale_wgsl_function_contents() {
+        let wgsl = LogScale::wgsl_function();
+        assert!(
+            wgsl.contains("fn log_scale("),
+            "WGSL should contain log_scale function"
+        );
+        assert!(wgsl.contains("log2("), "WGSL should use log2 built-in");
+        assert!(wgsl.contains("1e-10"), "WGSL should contain epsilon guard");
+        assert!(
+            wgsl.contains("symmetric"),
+            "WGSL should reference symmetric flag"
+        );
     }
 
     #[test]
@@ -8029,7 +8412,7 @@ mod tests {
     #[test]
     fn test_scale_composition() {
         // Test composing log scale with color map
-        let log_scale = LogScale::new(1.0, 1000.0, 0.0, 1.0);
+        let log_scale = LogScale::new(10.0).domain(1.0, 1000.0).range(0.0, 1.0);
         let color_map = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 1.0, 1.0]);
         let composed = log_scale.compose(color_map);
 

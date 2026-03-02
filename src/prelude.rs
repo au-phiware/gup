@@ -105,6 +105,7 @@ pub use crate::shader_function::{
     LinearScale,
     // Advanced scales (GUP-033)
     LogScale,
+    LogScaleUniforms,
     MAX_KEYFRAMES,
 
     Mat2,

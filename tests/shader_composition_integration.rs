@@ -56,7 +56,7 @@ fn test_scale_function_variety() {
     // Test that we have 10+ composable function types (AC4 success metric)
     let functions: Vec<Box<dyn std::any::Any>> = vec![
         Box::new(LinearScale::new(0.0, 1.0, 0.0, 1.0)),
-        Box::new(LogScale::new(1.0, 100.0, 0.0, 1.0)),
+        Box::new(LogScale::new(10.0).domain(1.0, 100.0).range(0.0, 1.0)),
         Box::new(PowerScale::new(0.0, 1.0, 0.0, 1.0, 2.0)),
         Box::new(Clamp::new(0.0, 1.0)),
         Box::new(Threshold::new(0.5)),
@@ -150,7 +150,7 @@ fn test_type_safety_enforcement() {
 #[test]
 fn test_logarithmic_scale_composition() {
     // Test log scale for data spanning multiple orders of magnitude
-    let log_scale = LogScale::new(1.0, 10000.0, 0.0, 1.0);
+    let log_scale = LogScale::new(10.0).domain(1.0, 10000.0).range(0.0, 1.0);
     let color_map = ColorGradient::with_colors(vec![
         vec4![0.0, 0.0, 0.5, 1.0],
         vec4![0.0, 0.5, 1.0, 1.0],
