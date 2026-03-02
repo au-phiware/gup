@@ -124,3 +124,102 @@ the threshold at runtime would eliminate this manual tuning.
 - 3 new GPU integration tests (calibration settling, correct output, disabled
   static threshold)
 - All 138 existing tests pass unchanged
+
+## Retrospective
+
+**Completed**: 2026-03-03
+
+### Key Technical Learnings
+
+#### CPU→GPU Transition During Calibration
+
+- **Challenge**: When auto-tune forces the CPU path during the ProbeCpu phase,
+  it clears `mask_buffer` and `source_buffer`. Transitioning to the ProbeGpu
+  phase then calls `prepare_render_gpu`, which expects these resources to exist
+  when `data_changed` is false (the Selection was already prepared by the CPU
+  path).
+- **Solution**: Added a guard in `prepare_render_gpu` that treats
+  `mask_buffer.is_none()` as equivalent to `data_changed = true`, forcing
+  resource recreation when GPU resources don't exist yet.
+- **Pattern**: When dynamically switching between alternative execution paths
+  that manage different resource sets, always check for resource existence
+  rather than relying solely on data-change flags. Resources may have been
+  intentionally cleared by the other path.
+
+#### CPU-Side Timing as a Universal Fallback
+
+- **Challenge**: The risk assessment noted that accurate GPU timing requires
+  pipeline statistics or timestamp queries, which are not universally supported
+  across all wgpu backends.
+- **Solution**: Used `std::time::Instant` to measure the entire `prepare_render`
+  call wall-clock time. This captures both CPU work (instance mapping, buffer
+  creation) and GPU submission latency.
+- **Pattern**: For adaptive performance tuning, wall-clock timing of the full
+  operation is often sufficient and more portable than fine-grained GPU
+  profiling. The goal is "which path is faster end-to-end?", not "how long does
+  each GPU dispatch take?".
+
+#### State Machine Enum Design for Multi-Phase Calibration
+
+- **Challenge**: The ProbeGpu phase needs access to the CPU timing results to
+  compute the final comparison. The naive approach of storing the CPU total in a
+  separate field complicates the state machine.
+- **Solution**: Extended the `ProbeGpu` variant with a `cpu_total_ns` field,
+  carrying the CPU timing forward through the enum transition. This keeps all
+  phase-specific data co-located with its phase.
+- **Pattern**: When an enum-based state machine needs data from a previous
+  phase, embed it in the next phase's variant rather than using external fields.
+  This makes invalid states unrepresentable — you can't access CPU timing data
+  in the ProbeCpu phase because it doesn't exist yet.
+
+### Architectural Decisions
+
+#### Disabled by Default
+
+- **Decision**: Auto-tune is disabled by default; users must opt in via
+  `gpu_dimming_auto_tune(true)`.
+- **Reasoning**: The calibration phase introduces visual inconsistency (CPU and
+  GPU paths may produce slightly different alpha values due to floating-point
+  order-of-operations differences) and the static threshold works well for most
+  use cases. Auto-tune is most valuable when deploying to heterogeneous hardware
+  where the optimal threshold varies.
+- **Trade-off**: Users on unusual hardware must know about the feature to
+  benefit from it. The default 10K threshold may not be optimal everywhere.
+- **Future**: Could be made the default once the calibration phase is refined to
+  be visually imperceptible (e.g., by using only the CPU path during ProbeCpu
+  and not rendering the GPU probe frames).
+
+#### Single-Point Calibration vs Binary Search
+
+- **Decision**: Profile both paths at the current data size and pick the faster
+  one, rather than doing a full binary search across multiple data sizes.
+- **Reasoning**: In practice, the data size is relatively stable within a single
+  visualization session. Binary search across sizes would require synthetic
+  workloads or waiting for natural data size changes, adding complexity with
+  marginal benefit.
+- **Trade-off**: The calibration result is only valid for the current data size.
+  If the data size changes significantly (>50%), re-calibration is triggered
+  automatically.
+- **Future**: If users report issues with threshold accuracy across varying data
+  sizes, a multi-point binary search could be added as a calibration strategy
+  option.
+
+### Development Workflow Insights
+
+- **GUP-289's clean abstraction boundaries made integration smooth**: The
+  `prepare_render`/`prepare_render_gpu` split from GUP-289 was ideal for
+  inserting auto-tune logic. The timing instrumentation wraps cleanly around the
+  existing path selection code.
+- **Enum state machines are easy to test**: Each phase transition is a pure
+  function of the current state and input sample. Unit testing the state machine
+  in isolation (without GPU resources) caught the design issues early.
+- **GPU integration tests need generation counter management**: Tests must
+  explicitly change the shared selection state between frames to trigger
+  `prepare_render` rebuilds. This is a pattern that could be simplified with a
+  test helper.
+
+### Follow-up Stories
+
+1. **GUP-292: GPU Timestamp Query Profiling** — Use wgpu timestamp queries
+   (where available) for more accurate GPU-side timing during auto-tune
+   calibration, with fallback to Instant timing on unsupported backends.
