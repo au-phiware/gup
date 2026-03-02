@@ -86,6 +86,7 @@ use std::collections::HashSet;
 use std::fmt;
 use std::hash::Hash;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 // ---------------------------------------------------------------------------
 // KeyedSelectionState — inner state
@@ -461,6 +462,192 @@ where
 // DimInstance implementations for built-in marks
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// AutoTuneState — calibration state machine
+// ---------------------------------------------------------------------------
+
+/// Phase of the auto-tune calibration state machine.
+///
+/// The calibration proceeds through three phases:
+/// 1. **ProbeCpu** — time the CPU dimming path for `calibration_frames` frames.
+/// 2. **ProbeGpu** — time the GPU dimming path for `calibration_frames` frames.
+/// 3. **Settled** — calibration complete; the effective threshold is fixed.
+///
+/// If the dataset size changes significantly after settling, calibration
+/// restarts from `ProbeCpu`.
+#[derive(Debug, Clone)]
+enum AutoTunePhase {
+    /// Measuring CPU path performance.
+    ProbeCpu { remaining: u32, total_ns: u128 },
+    /// Measuring GPU path performance (carries forward the CPU total).
+    ProbeGpu {
+        remaining: u32,
+        total_ns: u128,
+        cpu_total_ns: u128,
+    },
+    /// Calibration complete.
+    Settled {
+        /// Mean CPU time per frame in nanoseconds.
+        cpu_mean_ns: u128,
+        /// Mean GPU time per frame in nanoseconds.
+        gpu_mean_ns: u128,
+    },
+}
+
+/// Auto-tune state for adaptive CPU/GPU threshold selection.
+///
+/// When enabled, the auto-tune system profiles both the CPU and GPU dimming
+/// paths during an initial calibration phase and then sets the effective
+/// threshold based on which path is faster for the current dataset size.
+#[derive(Debug, Clone)]
+struct AutoTuneState {
+    /// Whether auto-tune is enabled.
+    enabled: bool,
+    /// Number of frames to sample each path during calibration.
+    calibration_frames: u32,
+    /// Current calibration phase.
+    phase: AutoTunePhase,
+    /// The instance count at the time of the last calibration.
+    calibrated_instance_count: u32,
+    /// The effective threshold determined by calibration (or the initial
+    /// estimate if calibration has not yet completed).
+    effective_threshold: u32,
+}
+
+impl AutoTuneState {
+    /// Create a new disabled auto-tune state.
+    fn new(initial_threshold: u32) -> Self {
+        Self {
+            enabled: false,
+            calibration_frames: 5,
+            phase: AutoTunePhase::ProbeCpu {
+                remaining: 5,
+                total_ns: 0,
+            },
+            calibrated_instance_count: 0,
+            effective_threshold: initial_threshold,
+        }
+    }
+
+    /// Reset calibration to the beginning (ProbeCpu).
+    fn reset(&mut self) {
+        let frames = self.calibration_frames;
+        self.phase = AutoTunePhase::ProbeCpu {
+            remaining: frames,
+            total_ns: 0,
+        };
+    }
+
+    /// Returns the effective threshold. When auto-tune is disabled this
+    /// returns the initial threshold set via `gpu_dimming_threshold`.
+    fn effective_threshold(&self) -> u32 {
+        self.effective_threshold
+    }
+
+    /// Returns `true` if calibration has settled.
+    fn is_settled(&self) -> bool {
+        matches!(self.phase, AutoTunePhase::Settled { .. })
+    }
+
+    /// Returns `true` if we should force the CPU path this frame
+    /// (for calibration purposes).
+    fn force_cpu(&self) -> bool {
+        self.enabled && matches!(self.phase, AutoTunePhase::ProbeCpu { .. })
+    }
+
+    /// Returns `true` if we should force the GPU path this frame
+    /// (for calibration purposes).
+    fn force_gpu(&self) -> bool {
+        self.enabled && matches!(self.phase, AutoTunePhase::ProbeGpu { .. })
+    }
+
+    /// Record a timing sample and advance the calibration state machine.
+    ///
+    /// `elapsed_ns` is the wall-clock time of the `prepare_render` call
+    /// for this frame. `instance_count` is the current dataset size.
+    fn record_sample(&mut self, elapsed_ns: u128, instance_count: u32) {
+        if !self.enabled {
+            return;
+        }
+
+        match &mut self.phase {
+            AutoTunePhase::ProbeCpu {
+                remaining,
+                total_ns,
+            } => {
+                *total_ns += elapsed_ns;
+                *remaining = remaining.saturating_sub(1);
+                if *remaining == 0 {
+                    let cpu_total = *total_ns;
+                    let frames = self.calibration_frames;
+                    self.phase = AutoTunePhase::ProbeGpu {
+                        remaining: frames,
+                        total_ns: 0,
+                        cpu_total_ns: cpu_total,
+                    };
+                }
+            }
+            AutoTunePhase::ProbeGpu {
+                remaining,
+                total_ns,
+                cpu_total_ns,
+            } => {
+                *total_ns += elapsed_ns;
+                *remaining = remaining.saturating_sub(1);
+                if *remaining == 0 {
+                    let frames = self.calibration_frames as u128;
+                    let cpu_mean = *cpu_total_ns / frames;
+                    let gpu_mean = *total_ns / frames;
+
+                    // Set the effective threshold based on which path was
+                    // faster.  If GPU is faster (or equal), set the
+                    // threshold to the current instance count so the GPU
+                    // path activates for this size and larger.  If CPU is
+                    // faster, set it above the current count so we stay on
+                    // the CPU path.
+                    self.effective_threshold = if gpu_mean <= cpu_mean {
+                        instance_count
+                    } else {
+                        instance_count.saturating_add(1)
+                    };
+
+                    self.calibrated_instance_count = instance_count;
+                    self.phase = AutoTunePhase::Settled {
+                        cpu_mean_ns: cpu_mean,
+                        gpu_mean_ns: gpu_mean,
+                    };
+                }
+            }
+            AutoTunePhase::Settled { .. } => {
+                // Already settled — nothing to do.
+            }
+        }
+    }
+
+    /// Check whether re-calibration is needed because the instance count
+    /// has changed significantly since the last calibration.
+    ///
+    /// A change of more than 50% triggers re-calibration.
+    fn maybe_recalibrate(&mut self, instance_count: u32) {
+        if !self.enabled || !self.is_settled() {
+            return;
+        }
+        let prev = self.calibrated_instance_count;
+        if prev == 0 {
+            // First calibration — nothing to compare against.
+            return;
+        }
+        let diff = (instance_count as i64 - prev as i64).unsigned_abs();
+        if diff > (prev as u64) / 2 {
+            self.reset();
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// DimInstance implementations for built-in marks (continued)
+// ---------------------------------------------------------------------------
+
 use crate::mark::circle::CircleInstance;
 use crate::mark::line::LineInstance;
 use crate::mark::rectangle::RectangleInstance;
@@ -579,6 +766,8 @@ pub struct LinkedSelection<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> {
     mask_buffer: Option<SelectionMaskBuffer>,
     /// GPU buffer holding undimmed (source) instances for the compute shader.
     source_buffer: Option<wgpu::Buffer>,
+    /// Auto-tune state machine for adaptive threshold selection.
+    auto_tune: AutoTuneState,
 }
 
 impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> {
@@ -601,15 +790,17 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
         shared_state: SharedSelectionState<K>,
         key_fn: impl Fn(&T, usize) -> K + 'static,
     ) -> Self {
+        let gpu_threshold = 10_000;
         Self {
             selection: Selection::from_data(data),
             shared_state,
             key_fn: Box::new(key_fn),
             dim_opacity: 0.2,
             last_generation: 0,
-            gpu_threshold: 10_000,
+            gpu_threshold,
             mask_buffer: None,
             source_buffer: None,
+            auto_tune: AutoTuneState::new(gpu_threshold),
         }
     }
 
@@ -623,15 +814,17 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
         shared_state: SharedSelectionState<K>,
         key_fn: impl Fn(&T, usize) -> K + 'static,
     ) -> Self {
+        let gpu_threshold = 10_000;
         Self {
             selection,
             shared_state,
             key_fn: Box::new(key_fn),
             dim_opacity: 0.2,
             last_generation: 0,
-            gpu_threshold: 10_000,
+            gpu_threshold,
             mask_buffer: None,
             source_buffer: None,
+            auto_tune: AutoTuneState::new(gpu_threshold),
         }
     }
 
@@ -659,12 +852,72 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
     #[must_use]
     pub fn gpu_dimming_threshold(mut self, threshold: u32) -> Self {
         self.gpu_threshold = threshold;
+        self.auto_tune.effective_threshold = threshold;
         self
     }
 
     /// Returns the current GPU dimming threshold.
     pub fn gpu_threshold(&self) -> u32 {
         self.gpu_threshold
+    }
+
+    /// Enable or disable adaptive auto-tuning of the CPU/GPU dimming
+    /// threshold (default: disabled).
+    ///
+    /// When enabled, `LinkedSelection` profiles both the CPU and GPU
+    /// dimming paths during an initial calibration phase (default: 5 frames
+    /// per path) and selects the faster path automatically.  The static
+    /// [`gpu_dimming_threshold`](Self::gpu_dimming_threshold) serves as the
+    /// initial estimate until calibration completes.
+    ///
+    /// When disabled, the static threshold is used directly.
+    #[must_use]
+    pub fn gpu_dimming_auto_tune(mut self, enabled: bool) -> Self {
+        self.auto_tune.enabled = enabled;
+        if enabled {
+            self.auto_tune.reset();
+        }
+        self
+    }
+
+    /// Set the number of frames used per path during auto-tune calibration
+    /// (default: 5).
+    ///
+    /// Higher values give more accurate profiling but extend the
+    /// calibration period.  Has no effect when auto-tune is disabled.
+    #[must_use]
+    pub fn auto_tune_calibration_frames(mut self, frames: u32) -> Self {
+        let frames = frames.max(1);
+        self.auto_tune.calibration_frames = frames;
+        self.auto_tune.reset();
+        self
+    }
+
+    /// Returns the current effective threshold.
+    ///
+    /// When auto-tune is disabled, this equals
+    /// [`gpu_threshold`](Self::gpu_threshold).  When auto-tune is enabled
+    /// and calibration has settled, this reflects the profiling result.
+    /// During calibration it returns the initial estimate.
+    pub fn effective_threshold(&self) -> u32 {
+        if self.auto_tune.enabled {
+            self.auto_tune.effective_threshold()
+        } else {
+            self.gpu_threshold
+        }
+    }
+
+    /// Returns `true` if auto-tune is enabled.
+    pub fn is_auto_tune_enabled(&self) -> bool {
+        self.auto_tune.enabled
+    }
+
+    /// Returns `true` if auto-tune calibration has settled.
+    ///
+    /// Returns `false` when auto-tune is disabled or calibration is still
+    /// in progress.
+    pub fn is_auto_tune_settled(&self) -> bool {
+        self.auto_tune.enabled && self.auto_tune.is_settled()
     }
 
     /// Prepare GPU resources for rendering, automatically rebuilding the
@@ -714,9 +967,32 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
         }
 
         let instance_count = self.selection.data().len();
-        let use_gpu = instance_count as u32 >= self.gpu_threshold && I::alpha_offsets().is_some();
+        let count_u32 = instance_count as u32;
 
-        if use_gpu {
+        // -- Auto-tune: check if re-calibration is needed --
+        if self.auto_tune.enabled {
+            self.auto_tune.maybe_recalibrate(count_u32);
+        }
+
+        // -- Determine which path to use --
+        let has_gpu_support = I::alpha_offsets().is_some();
+        let use_gpu = if self.auto_tune.force_gpu() && has_gpu_support {
+            // Calibration: force GPU path.
+            true
+        } else if self.auto_tune.force_cpu() {
+            // Calibration: force CPU path.
+            false
+        } else {
+            // Normal path: use effective threshold.
+            let threshold = self.effective_threshold();
+            count_u32 >= threshold && has_gpu_support
+        };
+
+        // -- Time the execution when auto-tune is active and calibrating --
+        let timing = self.auto_tune.enabled && !self.auto_tune.is_settled();
+        let start = if timing { Some(Instant::now()) } else { None };
+
+        let result = if use_gpu {
             self.prepare_render_gpu(
                 device,
                 queue,
@@ -740,7 +1016,15 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
             );
             self.selection
                 .prepare_render_raw(device, queue, &instances, cache, pool)
+        };
+
+        // -- Record timing sample --
+        if let Some(start) = start {
+            let elapsed_ns = start.elapsed().as_nanos();
+            self.auto_tune.record_sample(elapsed_ns, count_u32);
         }
+
+        result
     }
 
     /// GPU dimming path: upload undimmed instances, run the compute shader,
@@ -904,6 +1188,22 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
     /// been called with an instance count at or above the GPU threshold.
     pub fn is_gpu_dimming_active(&self) -> bool {
         self.mask_buffer.is_some()
+    }
+
+    /// Returns the mean timings (CPU, GPU) in nanoseconds from the last
+    /// completed auto-tune calibration, or `None` if calibration has not
+    /// settled or auto-tune is disabled.
+    pub fn auto_tune_timings(&self) -> Option<(u128, u128)> {
+        if !self.auto_tune.enabled {
+            return None;
+        }
+        match &self.auto_tune.phase {
+            AutoTunePhase::Settled {
+                cpu_mean_ns,
+                gpu_mean_ns,
+            } => Some((*cpu_mean_ns, *gpu_mean_ns)),
+            _ => None,
+        }
     }
 }
 
@@ -1449,5 +1749,241 @@ mod tests {
 
         assert_eq!(linked.gpu_threshold(), 10_000);
         assert!(!linked.is_gpu_dimming_active());
+    }
+
+    // -- AutoTuneState unit tests --
+
+    #[test]
+    fn auto_tune_state_new_is_disabled() {
+        let state = AutoTuneState::new(10_000);
+        assert!(!state.enabled);
+        assert_eq!(state.effective_threshold(), 10_000);
+        assert!(!state.is_settled());
+    }
+
+    #[test]
+    fn auto_tune_state_initial_phase_is_probe_cpu() {
+        let state = AutoTuneState::new(10_000);
+        assert!(matches!(
+            state.phase,
+            AutoTunePhase::ProbeCpu {
+                remaining: 5,
+                total_ns: 0
+            }
+        ));
+    }
+
+    #[test]
+    fn auto_tune_state_reset_returns_to_probe_cpu() {
+        let mut state = AutoTuneState::new(10_000);
+        state.enabled = true;
+        state.calibration_frames = 3;
+        state.reset(); // start fresh with calibration_frames=3
+
+        // Advance past ProbeCpu by recording 3 samples
+        for _ in 0..3 {
+            state.record_sample(1000, 500);
+        }
+        assert!(
+            state.force_gpu(),
+            "Should be in ProbeGpu after completing ProbeCpu"
+        );
+
+        // Reset should return to ProbeCpu
+        state.reset();
+        assert!(state.force_cpu());
+        assert!(matches!(
+            state.phase,
+            AutoTunePhase::ProbeCpu {
+                remaining: 3,
+                total_ns: 0
+            }
+        ));
+    }
+
+    #[test]
+    fn auto_tune_record_sample_disabled_is_noop() {
+        let mut state = AutoTuneState::new(10_000);
+        // Disabled by default
+        state.record_sample(999_999, 500);
+        // Phase should not have changed
+        assert!(matches!(state.phase, AutoTunePhase::ProbeCpu { .. }));
+    }
+
+    #[test]
+    fn auto_tune_probe_cpu_then_gpu_then_settled() {
+        let mut state = AutoTuneState::new(10_000);
+        state.enabled = true;
+        state.calibration_frames = 2;
+        state.reset();
+
+        // Phase: ProbeCpu
+        assert!(state.force_cpu());
+        assert!(!state.force_gpu());
+        assert!(!state.is_settled());
+
+        // Record 2 CPU samples (total 2000 ns)
+        state.record_sample(1000, 500);
+        assert!(state.force_cpu());
+        state.record_sample(1000, 500);
+
+        // Should have transitioned to ProbeGpu
+        assert!(!state.force_cpu());
+        assert!(state.force_gpu());
+        assert!(!state.is_settled());
+
+        // Record 2 GPU samples (total 600 ns — GPU is faster)
+        state.record_sample(300, 500);
+        state.record_sample(300, 500);
+
+        // Should be settled now
+        assert!(state.is_settled());
+        assert!(!state.force_cpu());
+        assert!(!state.force_gpu());
+
+        // GPU was faster → threshold should be set to instance_count (500)
+        assert_eq!(state.effective_threshold(), 500);
+    }
+
+    #[test]
+    fn auto_tune_cpu_wins_sets_threshold_above_count() {
+        let mut state = AutoTuneState::new(10_000);
+        state.enabled = true;
+        state.calibration_frames = 2;
+        state.reset();
+
+        // CPU is faster: 500ns mean
+        state.record_sample(500, 1000);
+        state.record_sample(500, 1000);
+
+        // GPU is slower: 2000ns mean
+        state.record_sample(2000, 1000);
+        state.record_sample(2000, 1000);
+
+        assert!(state.is_settled());
+        // CPU wins → threshold = instance_count + 1
+        assert_eq!(state.effective_threshold(), 1001);
+    }
+
+    #[test]
+    fn auto_tune_maybe_recalibrate_no_change() {
+        let mut state = AutoTuneState::new(10_000);
+        state.enabled = true;
+        state.calibrated_instance_count = 1000;
+        state.phase = AutoTunePhase::Settled {
+            cpu_mean_ns: 100,
+            gpu_mean_ns: 50,
+        };
+
+        // Same count — no re-calibration
+        state.maybe_recalibrate(1000);
+        assert!(state.is_settled());
+
+        // Small change (20%) — no re-calibration
+        state.maybe_recalibrate(1200);
+        assert!(state.is_settled());
+    }
+
+    #[test]
+    fn auto_tune_maybe_recalibrate_on_large_change() {
+        let mut state = AutoTuneState::new(10_000);
+        state.enabled = true;
+        state.calibrated_instance_count = 1000;
+        state.phase = AutoTunePhase::Settled {
+            cpu_mean_ns: 100,
+            gpu_mean_ns: 50,
+        };
+
+        // Large change (>50%) — should trigger re-calibration
+        state.maybe_recalibrate(2000);
+        assert!(!state.is_settled());
+        assert!(matches!(state.phase, AutoTunePhase::ProbeCpu { .. }));
+    }
+
+    #[test]
+    fn auto_tune_maybe_recalibrate_disabled_is_noop() {
+        let mut state = AutoTuneState::new(10_000);
+        state.calibrated_instance_count = 1000;
+        state.phase = AutoTunePhase::Settled {
+            cpu_mean_ns: 100,
+            gpu_mean_ns: 50,
+        };
+
+        // Disabled — should not re-calibrate
+        state.maybe_recalibrate(5000);
+        assert!(state.is_settled());
+    }
+
+    // -- LinkedSelection auto-tune builder tests --
+
+    #[test]
+    fn linked_selection_auto_tune_default_disabled() {
+        let shared = SharedSelectionState::<usize>::new();
+        let linked: LinkedSelection<f32, crate::Circle, usize> =
+            LinkedSelection::new(vec![1.0], shared, |_item, idx| idx);
+
+        assert!(!linked.is_auto_tune_enabled());
+        assert!(!linked.is_auto_tune_settled());
+    }
+
+    #[test]
+    fn linked_selection_auto_tune_builder() {
+        let shared = SharedSelectionState::<usize>::new();
+        let linked: LinkedSelection<f32, crate::Circle, usize> =
+            LinkedSelection::new(vec![1.0], shared, |_item, idx| idx).gpu_dimming_auto_tune(true);
+
+        assert!(linked.is_auto_tune_enabled());
+        assert!(!linked.is_auto_tune_settled());
+    }
+
+    #[test]
+    fn linked_selection_effective_threshold_without_auto_tune() {
+        let shared = SharedSelectionState::<usize>::new();
+        let linked: LinkedSelection<f32, crate::Circle, usize> =
+            LinkedSelection::new(vec![1.0], shared, |_item, idx| idx).gpu_dimming_threshold(5000);
+
+        assert_eq!(linked.effective_threshold(), 5000);
+    }
+
+    #[test]
+    fn linked_selection_effective_threshold_with_auto_tune_uses_initial() {
+        let shared = SharedSelectionState::<usize>::new();
+        let linked: LinkedSelection<f32, crate::Circle, usize> =
+            LinkedSelection::new(vec![1.0], shared, |_item, idx| idx)
+                .gpu_dimming_threshold(7500)
+                .gpu_dimming_auto_tune(true);
+
+        // Before calibration settles, effective_threshold returns the initial
+        assert_eq!(linked.effective_threshold(), 7500);
+    }
+
+    #[test]
+    fn linked_selection_calibration_frames_builder() {
+        let shared = SharedSelectionState::<usize>::new();
+        let linked: LinkedSelection<f32, crate::Circle, usize> =
+            LinkedSelection::new(vec![1.0], shared, |_item, idx| idx)
+                .gpu_dimming_auto_tune(true)
+                .auto_tune_calibration_frames(10);
+
+        assert!(linked.is_auto_tune_enabled());
+        assert_eq!(linked.auto_tune.calibration_frames, 10);
+    }
+
+    #[test]
+    fn linked_selection_auto_tune_timings_none_when_disabled() {
+        let shared = SharedSelectionState::<usize>::new();
+        let linked: LinkedSelection<f32, crate::Circle, usize> =
+            LinkedSelection::new(vec![1.0], shared, |_item, idx| idx);
+
+        assert!(linked.auto_tune_timings().is_none());
+    }
+
+    #[test]
+    fn linked_selection_auto_tune_timings_none_during_calibration() {
+        let shared = SharedSelectionState::<usize>::new();
+        let linked: LinkedSelection<f32, crate::Circle, usize> =
+            LinkedSelection::new(vec![1.0], shared, |_item, idx| idx).gpu_dimming_auto_tune(true);
+
+        assert!(linked.auto_tune_timings().is_none());
     }
 }
