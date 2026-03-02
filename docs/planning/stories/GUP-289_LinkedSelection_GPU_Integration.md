@@ -111,3 +111,114 @@ to the GPU path when instance counts exceed a configurable threshold.
 - 8 new GPU integration tests (path activation, correctness, selection changes,
   data rebuild, clear, no-op)
 - All 32 existing `linked_selection` unit tests pass unchanged
+
+## Retrospective
+
+**Completed**: 2025-07-23
+
+### Key Technical Learnings
+
+#### Buffer Usage Flag Planning for GPU Pipelines
+
+- **Challenge**: The GPU dimming compute shader writes dimmed instances to an
+  output buffer, which then needs to be copied into the Selection's instance
+  buffer. However, the instance buffer was created with `STORAGE | COPY_DST`
+  only — it lacked `COPY_SRC` which is needed for test readback. Separately, the
+  output buffer already had `COPY_SRC` (from GUP-288's design), so the copy
+  chain was: output → instance buffer (fine), instance buffer → staging (failed
+  without COPY_SRC).
+- **Solution**: Added `COPY_SRC` to the Selection's instance buffer usage flags.
+  This is a safe change since the flag only permits additional operations and
+  doesn't affect existing render pipeline bindings.
+- **Pattern**: When designing GPU buffer pipelines that span multiple systems
+  (compute → render), plan usage flags to include `COPY_SRC` early. It enables
+  debugging readback and inter-system buffer transfers without retroactive
+  changes.
+
+#### Trait-Based Auto-Configuration for GPU Features
+
+- **Challenge**: The GPU dimming path needs per-mark-type `AlphaOffsets`
+  (float-index positions of alpha channels). Requiring callers to provide this
+  information would break the "transparent transition" requirement.
+- **Solution**: Extended the existing `DimInstance` trait with a
+  `fn alpha_offsets() -> Option<AlphaOffsets>` associated method (default
+  `None`), overridden for all built-in marks. The `prepare_render` method checks
+  this at compile time to determine if GPU dimming is available.
+- **Pattern**: When adding optional GPU-accelerated paths for existing
+  functionality, extend the existing trait with a provided method returning
+  `Option<Config>` rather than creating a new trait. This preserves backward
+  compatibility — types that don't implement the method continue to use the CPU
+  path.
+
+#### Source Buffer Lifecycle Management
+
+- **Challenge**: The GPU compute shader reads undimmed instance data from a
+  source buffer and writes dimmed data to the output buffer. The source buffer
+  must persist across frames (for selection changes that only update the mask,
+  not the instances), but must be rebuilt when data changes.
+- **Solution**: Tied the source buffer lifecycle to `set_data()` and the
+  `data_changed` flag in `prepare_render`. When data changes, both the
+  SelectionMaskBuffer and source buffer are recreated from scratch. When only
+  the selection changes, only the mask is updated and the compute shader re-runs
+  with the existing source buffer.
+- **Pattern**: For GPU compute pipelines with multiple input buffers, use a
+  "dirty flag" approach to independently track which buffers need recreation vs
+  which only need re-dispatch.
+
+### Architectural Decisions
+
+#### Copy Output to Instance Buffer (vs. Rebinding)
+
+- **Decision**: Copy the compute shader's output buffer into the Selection's
+  instance buffer via `copy_buffer_to_buffer`, rather than creating a new bind
+  group pointing to the output buffer.
+- **Reasoning**: The Selection's render state (pipeline, bind group, vertex
+  buffers) is private and designed to be self-contained. Creating a new bind
+  group would require exposing pipeline internals or significantly modifying
+  Selection's API. The buffer copy is a single GPU operation (~0.01ms for 100K
+  instances) with negligible overhead.
+- **Trade-off**: One extra GPU copy per dimming update. For the target use case
+  (selection changes on 10K+ datasets), this is far cheaper than the CPU-side
+  `build_dimmed_instances` it replaces.
+- **Future**: If profiling shows the copy is a bottleneck, the Selection API
+  could be extended with a `set_instance_buffer()` method to allow direct bind
+  group replacement.
+
+#### Threshold-Based Path Selection
+
+- **Decision**: Use a configurable threshold (default 10K) to switch between CPU
+  and GPU paths, rather than always using GPU.
+- **Reasoning**: The GPU path has fixed overhead (pipeline creation, buffer
+  allocation, compute dispatch) that makes it slower than CPU for small
+  datasets. The 10K default was chosen based on GUP-288's benchmarks showing the
+  GPU path breaks even around 5K-10K instances.
+- **Trade-off**: Users with unusual hardware may want different thresholds. The
+  builder method provides escape hatches (`0` = always GPU, `u32::MAX` = always
+  CPU).
+- **Future**: An adaptive threshold based on runtime profiling could be
+  implemented, but the current approach is simpler and sufficient.
+
+### Development Workflow Insights
+
+- **GUP-288 provided excellent foundations**: The `SelectionMaskBuffer` API from
+  GUP-288 was well-designed for integration. The `update_and_dispatch`,
+  `encode_dimming`, `ensure_capacity`, and `update_mask` methods were exactly
+  what the integration needed. This validates the decision to implement the
+  standalone API first, then integrate.
+- **Test-driven GPU verification**: Using `read_buffer_f32` to verify GPU
+  compute output at the float level catches subtle issues (wrong offset, wrong
+  opacity formula) that would be invisible in visual testing.
+- **Minimal API surface change**: The only public API addition to `Selection`
+  was `instance_buffer()`. The COPY_SRC flag change is backward-compatible. The
+  `DimInstance` trait change is also backward-compatible (default method). This
+  minimises risk of breaking existing code.
+
+### Follow-up Stories
+
+1. **GUP-290: GPU Mask Buffer Pool Integration** — Already planned. Integrate
+   `SelectionMaskBuffer` with the `BufferPool` system from GUP-003 to reuse mask
+   and output buffers across frames, reducing allocation churn.
+
+2. **GUP-291: Adaptive GPU Dimming Threshold** — Automatically tune the CPU/GPU
+   cutover threshold based on runtime profiling of actual frame times. This
+   would replace the static default with a self-optimising system.
