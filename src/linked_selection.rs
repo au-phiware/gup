@@ -732,6 +732,16 @@ use wgpu::{Device, Queue, RenderPass};
 /// [`build_dimmed_instances`] path.  The transition is transparent to the
 /// caller.
 ///
+/// # Adaptive Auto-Tune
+///
+/// Enable [`gpu_dimming_auto_tune`](Self::gpu_dimming_auto_tune) to let the
+/// system profile both CPU and GPU paths during an initial calibration
+/// phase and automatically select the faster one.  The static
+/// [`gpu_dimming_threshold`](Self::gpu_dimming_threshold) serves as the
+/// initial estimate until calibration completes.  Use
+/// [`effective_threshold`](Self::effective_threshold) to read the current
+/// threshold after calibration.
+///
 /// # Type Parameters
 ///
 /// - `T` — The data item type stored in the inner [`Selection`].
