@@ -41,9 +41,11 @@
 
 use std::collections::HashMap;
 use std::fmt;
+use std::hash::Hash;
 
 use crate::event::ViewportTransform;
 use crate::interaction::{Rect, Vec2};
+use crate::linked_selection::SharedSelectionState;
 use crate::mark_selection::MarkSelectionSystem;
 
 // ---------------------------------------------------------------------------
@@ -479,6 +481,71 @@ impl BrushBehavior {
         self.overlay.hide();
     }
 
+    /// Wire this brush to automatically update a [`SharedSelectionState`]
+    /// on every brush and brushend event.
+    ///
+    /// `index_to_key` maps each selected mark index (`u32`) to the
+    /// corresponding cross-chart identity key of type `K`. Typically this
+    /// is a closure that looks up the data item by index and extracts
+    /// the key.
+    ///
+    /// On each `"brush"` event the shared state is **replaced** (via
+    /// [`SharedSelectionState::set`]) with the keys of the currently
+    /// brushed marks. On `"brushend"` the final selection is written
+    /// and on drag cancel or zero-area brush the selection is cleared.
+    ///
+    /// This method consumes `self` and returns it with the handlers
+    /// registered, fitting the builder pattern.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use gup::brush::BrushBehavior;
+    /// use gup::linked_selection::SharedSelectionState;
+    ///
+    /// let shared = SharedSelectionState::<usize>::new();
+    /// let brush = BrushBehavior::new()
+    ///     .with_shared_selection(shared.clone(), |idx| idx as usize);
+    ///
+    /// // After a brush gesture, `shared` will contain the selected keys.
+    /// ```
+    pub fn with_shared_selection<K>(
+        self,
+        state: SharedSelectionState<K>,
+        index_to_key: impl Fn(u32) -> K + Send + Sync + 'static,
+    ) -> Self
+    where
+        K: Hash + Eq + Send + Sync + 'static,
+    {
+        let brush_state = state.clone();
+        let brush_key_fn = {
+            // Share the key fn between two closures via Arc
+            let key_fn = std::sync::Arc::new(index_to_key);
+            let end_key_fn = key_fn.clone();
+
+            let s = self.on("brush", move |event: &BrushEvent| {
+                let keys: Vec<K> = event.selection.iter().map(|&id| (*key_fn)(id)).collect();
+                brush_state.set(keys);
+            });
+
+            let end_state = state;
+            s.on("brushend", move |event: &BrushEvent| {
+                if event.selection.is_empty() {
+                    end_state.clear();
+                } else {
+                    let keys: Vec<K> = event
+                        .selection
+                        .iter()
+                        .map(|&id| (*end_key_fn)(id))
+                        .collect();
+                    end_state.set(keys);
+                }
+            })
+        };
+
+        brush_key_fn
+    }
+
     /// Cancel the current brush without firing `"brushend"`.
     pub fn cancel(&mut self) {
         self.drag_start = None;
@@ -846,5 +913,82 @@ mod tests {
         );
         brush2.fire("brushend", &event);
         assert_eq!(counter.load(Ordering::Relaxed), 100);
+    }
+
+    // -- with_shared_selection integration ---------------------------------
+
+    #[test]
+    fn brush_with_shared_selection_writes_keys() {
+        let shared = SharedSelectionState::<usize>::new();
+        let brush = BrushBehavior::new().with_shared_selection(shared.clone(), |idx| idx as usize);
+
+        // Simulate a brush event with some selected marks
+        let event = BrushEvent::new(
+            BrushExtent::new(0.0, 0.0, 1.0, 1.0),
+            BrushExtent::new(0.0, 0.0, 100.0, 100.0),
+            vec![2, 5, 8],
+        );
+        brush.fire("brush", &event);
+
+        // SharedSelectionState should contain the keys
+        assert!(shared.is_selected(&2));
+        assert!(shared.is_selected(&5));
+        assert!(shared.is_selected(&8));
+        assert!(!shared.is_selected(&0));
+        assert_eq!(shared.selected_count(), 3);
+    }
+
+    #[test]
+    fn brush_with_shared_selection_clears_on_empty_brushend() {
+        let shared = SharedSelectionState::<usize>::new();
+        let brush = BrushBehavior::new().with_shared_selection(shared.clone(), |idx| idx as usize);
+
+        // First brush selects some items
+        let event = BrushEvent::new(
+            BrushExtent::new(0.0, 0.0, 1.0, 1.0),
+            BrushExtent::new(0.0, 0.0, 100.0, 100.0),
+            vec![1, 2, 3],
+        );
+        brush.fire("brush", &event);
+        assert_eq!(shared.selected_count(), 3);
+
+        // Empty brushend clears
+        let end_event = BrushEvent::new(
+            BrushExtent::new(0.0, 0.0, 0.0, 0.0),
+            BrushExtent::new(0.0, 0.0, 0.0, 0.0),
+            vec![],
+        );
+        brush.fire("brushend", &end_event);
+        assert!(shared.is_empty());
+    }
+
+    #[test]
+    fn brush_with_shared_selection_replaces_on_new_brush() {
+        let shared = SharedSelectionState::<String>::new();
+        let data = vec!["alice", "bob", "carol", "dave", "eve"];
+        let brush = BrushBehavior::new()
+            .with_shared_selection(shared.clone(), move |idx| data[idx as usize].to_string());
+
+        // First brush: alice and bob
+        let event1 = BrushEvent::new(
+            BrushExtent::new(0.0, 0.0, 1.0, 1.0),
+            BrushExtent::new(0.0, 0.0, 100.0, 100.0),
+            vec![0, 1],
+        );
+        brush.fire("brush", &event1);
+        assert!(shared.is_selected(&"alice".to_string()));
+        assert!(shared.is_selected(&"bob".to_string()));
+
+        // Second brush: carol and dave (replaces, doesn't add)
+        let event2 = BrushEvent::new(
+            BrushExtent::new(0.0, 0.0, 1.0, 1.0),
+            BrushExtent::new(0.0, 0.0, 100.0, 100.0),
+            vec![2, 3],
+        );
+        brush.fire("brush", &event2);
+        assert!(!shared.is_selected(&"alice".to_string()));
+        assert!(shared.is_selected(&"carol".to_string()));
+        assert!(shared.is_selected(&"dave".to_string()));
+        assert_eq!(shared.selected_count(), 2);
     }
 }
