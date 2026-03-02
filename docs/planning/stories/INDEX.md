@@ -198,7 +198,7 @@ integration, and Rust→WGSL transpilation.
 - [GUP-252](GUP-252_LinearScale_GPU_Shader_Function.md) ✅ — LinearScaleUniforms
   and WGSL linear_scale/linear_scale_invert shader functions with clamping and
   inversion support. Deps: GUP-005 ✅, GUP-007 ✅, GUP-053 ✅.
-- [GUP-253](GUP-253_LogScale_GPU_Shader_Function.md) 🚧 — LogScale
+- [GUP-253](GUP-253_LogScale_GPU_Shader_Function.md) ✅ — LogScale
   ShaderFunction with configurable base, zero/epsilon guard, and symmetric-log
   mode for data straddling zero. Deps: GUP-252 ✅.
 - [GUP-254](GUP-254_OrdinalScale_GPU_Shader_Function.md) 📋 — OrdinalScale
