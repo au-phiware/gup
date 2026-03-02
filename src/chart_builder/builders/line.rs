@@ -16,6 +16,7 @@ use crate::chart_builder::{ChartBuilder, ChartBuilderError, ChartConfig};
 use crate::error::GupResult;
 use crate::grid::{GridConfiguration, GridLineConfig};
 use crate::selection::Selection;
+use crate::shader_function::LinearScale;
 use crate::{MaybeSend, MaybeSync};
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -200,6 +201,24 @@ impl<T> LineChartBuilder<T> {
         A: Into<AccessorFunction<T>>,
     {
         self.stroke_accessor = Some(accessor.into());
+        self
+    }
+
+    /// Set the X-axis scale.
+    ///
+    /// The scale's domain is used to auto-configure axis tick generation and
+    /// the `linear_scale` WGSL function is included in the shader pipeline.
+    pub fn x_scale(mut self, scale: LinearScale) -> Self {
+        self.config.x_scale = Some(scale);
+        self
+    }
+
+    /// Set the Y-axis scale.
+    ///
+    /// The scale's domain is used to auto-configure axis tick generation and
+    /// the `linear_scale` WGSL function is included in the shader pipeline.
+    pub fn y_scale(mut self, scale: LinearScale) -> Self {
+        self.config.y_scale = Some(scale);
         self
     }
 }

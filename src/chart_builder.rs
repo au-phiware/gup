@@ -67,7 +67,7 @@ use crate::grid::GridConfiguration;
 use crate::label::{AxisInfo, LabelConstraints, LabelLayout, LabelPosition, LabelPositioner};
 use crate::render::Vertex;
 use crate::selection::Selection;
-use crate::shader_function::Vec2;
+use crate::shader_function::{LinearScale, Vec2};
 use crate::text::TextStyle;
 use crate::text::hover_reveal::{ClippedTextRegistry, HoverRevealState, TooltipConfig};
 use crate::{MaybeSend, MaybeSync};
@@ -419,6 +419,20 @@ pub struct ChartConfig {
     /// over clipped text. Only used when [`hover_reveal`](Self::hover_reveal)
     /// is `true`.
     pub tooltip_config: TooltipConfig,
+
+    /// Optional X-axis shader-function scale.
+    ///
+    /// When set, the scale's domain is used to auto-configure axis tick
+    /// generation and the corresponding `linear_scale` WGSL function is
+    /// included in the shader pipeline.
+    pub x_scale: Option<LinearScale>,
+
+    /// Optional Y-axis shader-function scale.
+    ///
+    /// When set, the scale's domain is used to auto-configure axis tick
+    /// generation and the corresponding `linear_scale` WGSL function is
+    /// included in the shader pipeline.
+    pub y_scale: Option<LinearScale>,
 }
 
 /// Chart margin specification.
@@ -445,6 +459,8 @@ impl Default for ChartConfig {
             title_style: TextStyle::new(18.0).bold(),
             hover_reveal: false,
             tooltip_config: TooltipConfig::default(),
+            x_scale: None,
+            y_scale: None,
         }
     }
 }
@@ -542,6 +558,26 @@ impl ChartConfig {
     pub fn with_tooltip_config(mut self, config: TooltipConfig) -> Self {
         self.tooltip_config = config;
         self.hover_reveal = true;
+        self
+    }
+
+    /// Set the X-axis scale (shader-function [`LinearScale`]).
+    ///
+    /// When set, the scale's domain is used to auto-configure axis tick
+    /// generation and the `linear_scale` WGSL function is included in the
+    /// shader pipeline.
+    pub fn with_x_scale(mut self, scale: LinearScale) -> Self {
+        self.x_scale = Some(scale);
+        self
+    }
+
+    /// Set the Y-axis scale (shader-function [`LinearScale`]).
+    ///
+    /// When set, the scale's domain is used to auto-configure axis tick
+    /// generation and the `linear_scale` WGSL function is included in the
+    /// shader pipeline.
+    pub fn with_y_scale(mut self, scale: LinearScale) -> Self {
+        self.y_scale = Some(scale);
         self
     }
 }
@@ -1316,6 +1352,15 @@ where
         let viewport_size = (self.config.width, self.config.height);
         let renderer = AxisRenderer::new();
 
+        // Build tick_generator::LinearScale objects from the shader-function
+        // scales when present, so axis tick generation uses the correct domain.
+        let x_tick_scale = self.config.x_scale.as_ref().map(|s| {
+            crate::tick_generator::LinearScale::new(s.domain_min as f64, s.domain_max as f64)
+        });
+        let y_tick_scale = self.config.y_scale.as_ref().map(|s| {
+            crate::tick_generator::LinearScale::new(s.domain_min as f64, s.domain_max as f64)
+        });
+
         let mut all_line_vertices = Vec::new();
         let mut all_tick_instances = Vec::new();
         let mut all_labels = Vec::new();
@@ -1333,6 +1378,16 @@ where
                 let ndc_bounds = self.pixel_bounds_to_ndc(&pixel_bounds);
                 let config = axis.configuration();
 
+                // Select the appropriate tick scale for this axis position.
+                let tick_scale: Option<&dyn crate::tick_generator::Scale> = match position {
+                    AxisPosition::Bottom | AxisPosition::Top => x_tick_scale
+                        .as_ref()
+                        .map(|s| s as &dyn crate::tick_generator::Scale),
+                    AxisPosition::Left | AxisPosition::Right => y_tick_scale
+                        .as_ref()
+                        .map(|s| s as &dyn crate::tick_generator::Scale),
+                };
+
                 // Axis line vertices (LineList)
                 let line_verts = renderer.generate_line_vertices(&ndc_bounds, config);
                 all_line_vertices.extend(line_verts);
@@ -1342,7 +1397,7 @@ where
                     &ndc_bounds,
                     config,
                     *position,
-                    None, // TODO: pass scale when available from axis
+                    tick_scale,
                     viewport_size,
                 );
                 all_tick_instances.extend(tick_insts);
@@ -1351,7 +1406,7 @@ where
                     &ndc_bounds,
                     config,
                     *position,
-                    None, // TODO: pass scale when available from axis
+                    tick_scale,
                     viewport_size,
                     None, // default NumericFormatter
                 );
@@ -1436,6 +1491,15 @@ where
         let viewport_size = (self.config.width, self.config.height);
         let renderer = AxisRenderer::new();
 
+        // Build tick_generator::LinearScale objects from the shader-function
+        // scales when present, so axis tick generation uses the correct domain.
+        let x_tick_scale = self.config.x_scale.as_ref().map(|s| {
+            crate::tick_generator::LinearScale::new(s.domain_min as f64, s.domain_max as f64)
+        });
+        let y_tick_scale = self.config.y_scale.as_ref().map(|s| {
+            crate::tick_generator::LinearScale::new(s.domain_min as f64, s.domain_max as f64)
+        });
+
         let mut all_line_vertices = Vec::new();
         let mut all_tick_instances = Vec::new();
         let mut all_positions: Vec<LabelPosition> = Vec::new();
@@ -1456,6 +1520,16 @@ where
                 let ndc_bounds = self.pixel_bounds_to_ndc(&pixel_bounds);
                 let config = axis.configuration();
 
+                // Select the appropriate tick scale for this axis position.
+                let tick_scale: Option<&dyn crate::tick_generator::Scale> = match position {
+                    AxisPosition::Bottom | AxisPosition::Top => x_tick_scale
+                        .as_ref()
+                        .map(|s| s as &dyn crate::tick_generator::Scale),
+                    AxisPosition::Left | AxisPosition::Right => y_tick_scale
+                        .as_ref()
+                        .map(|s| s as &dyn crate::tick_generator::Scale),
+                };
+
                 // Axis line vertices (LineList)
                 let line_verts = renderer.generate_line_vertices(&ndc_bounds, config);
                 all_line_vertices.extend(line_verts);
@@ -1465,7 +1539,7 @@ where
                     &ndc_bounds,
                     config,
                     *position,
-                    None,
+                    tick_scale,
                     viewport_size,
                 );
                 all_tick_instances.extend(tick_insts);
@@ -1474,7 +1548,7 @@ where
                     &ndc_bounds,
                     config,
                     *position,
-                    None,
+                    tick_scale,
                     viewport_size,
                     None,
                 );

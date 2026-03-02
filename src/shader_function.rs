@@ -3454,6 +3454,7 @@ impl ShaderUniform for LinearScaleUniforms {
 /// let u = clamped.create_uniforms().unwrap();
 /// assert_eq!(u.clamp, 1);
 /// ```
+#[derive(Debug, Clone)]
 pub struct LinearScale {
     pub domain_min: f32,
     pub domain_max: f32,
@@ -3551,6 +3552,7 @@ fn linear_scale_invert(value: f32, scale: LinearScaleUniforms) -> f32 {
 ///
 /// The underlying WGSL delegates to `linear_scale_invert` which is emitted
 /// alongside `linear_scale` from the same [`LinearScale`] WGSL block.
+#[derive(Debug, Clone)]
 pub struct LinearScaleInvert {
     pub domain_min: f32,
     pub domain_max: f32,
