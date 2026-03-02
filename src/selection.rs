@@ -472,6 +472,12 @@ impl<T, M: Mark> Selection<T, M> {
         self.selection_id
     }
 
+    /// Get a clone of the internal event handler map (for use with
+    /// [`EventManager`](crate::event::EventManager) registration).
+    pub fn event_handlers_ref(&self) -> Arc<Mutex<HashMap<String, Vec<EventHandlerFn<T>>>>> {
+        Arc::clone(&self.event_handlers)
+    }
+
     /// Register an event handler for a specific event type.
     ///
     /// # Arguments
