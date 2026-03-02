@@ -388,7 +388,7 @@ selection, and radix sort.
 - [GUP-277](GUP-277_Zoom_Pan_Interactions.md) ✅ — ZoomBehavior with GPU
   ViewportTransform uniform, inertia panning, zoom-to-cursor, and configurable
   scale limits. Deps: GUP-012 ✅, GUP-013 ✅.
-- [GUP-278](GUP-278_Brush_Mark_Rectangular_Selection.md) 🚧 — BrushMark overlay
+- [GUP-278](GUP-278_Brush_Mark_Rectangular_Selection.md) ✅ — BrushMark overlay
   with drag-to-select, GPU region query, visual feedback, and viewport-aware
   coordinate transform. Deps: GUP-012 ✅, GUP-067 ✅, GUP-075 ✅, GUP-013 ✅.
 - [GUP-279](GUP-279_Linked_View_Coordination.md) 📋 — SharedSelectionState
