@@ -195,7 +195,7 @@ integration, and Rust→WGSL transpilation.
   composition system from GUP-005 and WGSL code generation from….
 - [GUP-053](GUP-053_Advanced_Shader_Function_Library.md) ✅ — GUP-005
   implemented basic shader functions (LinearScale, ColorMap, PositionTransform).
-- [GUP-252](GUP-252_LinearScale_GPU_Shader_Function.md) 📋 — LinearScaleUniforms
+- [GUP-252](GUP-252_LinearScale_GPU_Shader_Function.md) 🚧 — LinearScaleUniforms
   and WGSL linear_scale/linear_scale_invert shader functions with clamping and
   inversion support. Deps: GUP-005 ✅, GUP-007 ✅, GUP-053 ✅.
 - [GUP-253](GUP-253_LogScale_GPU_Shader_Function.md) 📋 — LogScale
