@@ -18,7 +18,7 @@ struct ViewportTransform {
 @group(0) @binding(0)
 var<storage, read> instances: array<PathInstance>;
 
-@group(0) @binding(2)
+@group(1) @binding(0)
 var<uniform> vp_transform: ViewportTransform;
 
 struct VertexOutput {

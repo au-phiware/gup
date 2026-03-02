@@ -23,7 +23,7 @@ struct ViewportTransform {
 
 @group(0) @binding(0) var<storage, read> instances: array<CircleInstance>;
 
-@group(0) @binding(2) var<uniform> vp_transform: ViewportTransform;
+@group(1) @binding(0) var<uniform> vp_transform: ViewportTransform;
 
 struct VertexInput {
     @location(0) position: vec2<f32>,

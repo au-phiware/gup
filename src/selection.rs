@@ -1316,7 +1316,6 @@ impl<T, M: Mark> Selection<T, M> {
                         &state.pipeline,
                         instance_bytes,
                         state.viewport_buffer.as_ref(),
-                        state.viewport_transform_buffer.as_ref(),
                         queue,
                         pool.as_deref_mut(),
                     );
@@ -1367,6 +1366,9 @@ impl<T, M: Mark> Selection<T, M> {
 
         render_pass.set_pipeline(&state.pipeline);
         render_pass.set_bind_group(0, &state.bind_group, &[]);
+        if let Some(ref vt_bg) = state.viewport_transform_bind_group {
+            render_pass.set_bind_group(1, vt_bg, &[]);
+        }
         render_pass.set_vertex_buffer(0, state.vertex_buffer.slice(..));
 
         if let (Some(index_count), Some(index_buffer)) = (state.index_count, &state.index_buffer) {
@@ -1786,10 +1788,12 @@ struct SelectionRenderState {
     /// Viewport dimensions uniform buffer (for marks with custom shaders).
     /// Enables pixel-space SDF calculations in shaders.
     viewport_buffer: Option<wgpu::Buffer>,
-    /// Viewport transform uniform buffer (zoom/pan) at binding 2.
+    /// Viewport transform uniform buffer (zoom/pan).
     /// Contains `GpuViewportTransform` (scale_x, scale_y, translate_x,
     /// translate_y). Created with identity transform by default.
     viewport_transform_buffer: Option<wgpu::Buffer>,
+    /// Bind group for the viewport transform (set at @group(1)).
+    viewport_transform_bind_group: Option<wgpu::BindGroup>,
     /// Uniform buffers for GPU shader function bindings (empty when no shader
     /// functions are used).
     uniform_buffers: Vec<wgpu::Buffer>,
@@ -1874,10 +1878,22 @@ impl SelectionRenderState {
             &pipeline,
             instance_bytes,
             viewport_buffer.as_ref(),
-            viewport_transform_buffer.as_ref(),
             queue,
             pool,
         );
+
+        // --- Viewport transform bind group (group 1) -----------------
+        let viewport_transform_bind_group = viewport_transform_buffer.as_ref().map(|vt_buf| {
+            let vt_bgl = pipeline.get_bind_group_layout(1);
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("selection_viewport_transform_bind_group"),
+                layout: &vt_bgl,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: vt_buf.as_entire_binding(),
+                }],
+            })
+        });
 
         let vertex_count = M::vertex_count() as u32;
         let index_count = M::index_count().map(|c| c as u32);
@@ -1894,6 +1910,7 @@ impl SelectionRenderState {
             instance_buffer_capacity: instance_bytes.len(),
             viewport_buffer,
             viewport_transform_buffer,
+            viewport_transform_bind_group,
             uniform_buffers: Vec::new(),
             pool_meta,
         })
@@ -1911,7 +1928,6 @@ impl SelectionRenderState {
         pipeline: &wgpu::RenderPipeline,
         instance_bytes: &[u8],
         viewport_buffer: Option<&wgpu::Buffer>,
-        viewport_transform_buffer: Option<&wgpu::Buffer>,
         queue: &Queue,
         pool: Option<&mut BufferPool>,
     ) -> (wgpu::Buffer, wgpu::BindGroup, Option<(BufferType, usize)>) {
@@ -1945,13 +1961,6 @@ impl SelectionRenderState {
             entries.push(wgpu::BindGroupEntry {
                 binding: 1,
                 resource: vp_buf.as_entire_binding(),
-            });
-        }
-
-        if let Some(vt_buf) = viewport_transform_buffer {
-            entries.push(wgpu::BindGroupEntry {
-                binding: 2,
-                resource: vt_buf.as_entire_binding(),
             });
         }
 
@@ -2017,9 +2026,24 @@ impl SelectionRenderState {
             entries: &bgl_entries,
         });
 
+        let vt_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("selection_shader_fn_vt_bgl"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("selection_shader_fn_pipeline_layout"),
-            bind_group_layouts: &[&bind_group_layout],
+            bind_group_layouts: &[&bind_group_layout, &vt_bind_group_layout],
             push_constant_ranges: &[],
         });
 
@@ -2140,6 +2164,25 @@ impl SelectionRenderState {
             entries: &bg_entries,
         });
 
+        // --- Viewport transform buffer + bind group (group 1) --------
+        let identity = crate::zoom::GpuViewportTransform::IDENTITY;
+        let viewport_transform_buffer =
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("selection_shader_fn_viewport_transform"),
+                contents: bytemuck::bytes_of(&identity),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+
+        let vt_bgl = pipeline.get_bind_group_layout(1);
+        let viewport_transform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("selection_shader_fn_vt_bind_group"),
+            layout: &vt_bgl,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: viewport_transform_buffer.as_entire_binding(),
+            }],
+        });
+
         let vertex_count = M::vertex_count() as u32;
         let index_count = M::index_count().map(|c| c as u32);
 
@@ -2154,7 +2197,8 @@ impl SelectionRenderState {
             instance_count,
             instance_buffer_capacity: instance_bytes.len(),
             viewport_buffer: None,
-            viewport_transform_buffer: None,
+            viewport_transform_buffer: Some(viewport_transform_buffer),
+            viewport_transform_bind_group: Some(viewport_transform_bind_group),
             uniform_buffers,
             pool_meta,
         })

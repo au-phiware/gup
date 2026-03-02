@@ -48,7 +48,7 @@ struct ViewportTransform {
     translate_y: f32,
 }
 
-@group(0) @binding(2)
+@group(1) @binding(0)
 var<uniform> vp_transform: ViewportTransform;
 
 struct VertexInput {

@@ -20,7 +20,7 @@ struct PatternUniforms {
     _padding: vec2<f32>,
 }
 
-@group(1) @binding(0)
+@group(2) @binding(0)
 var<uniform> pattern: PatternUniforms;
 
 // Pattern type constants

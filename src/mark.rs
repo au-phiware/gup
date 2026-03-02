@@ -445,10 +445,25 @@ impl<M: Mark> MarkInfoImpl<M> {
         // Create bind group layout
         let bind_group_layout = self.create_bind_group_layout(device)?;
 
+        // Viewport transform bind group layout (group 1)
+        let vt_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some(&format!("{}_viewport_transform_bgl", self.type_name())),
+            entries: &[BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStages::VERTEX,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+
         // Create pipeline layout
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some(&format!("{}_pipeline_layout", self.type_name())),
-            bind_group_layouts: &[&bind_group_layout],
+            bind_group_layouts: &[&bind_group_layout, &vt_bind_group_layout],
             push_constant_ranges: &[],
         });
 
@@ -537,13 +552,32 @@ impl<M: Mark> MarkInfoImpl<M> {
 
         let bind_group_layout = self.create_bind_group_layout(device)?;
 
+        // Viewport transform bind group layout (group 1)
+        let vt_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some(&format!(
+                "{}_{}_viewport_transform_bgl",
+                self.type_name(),
+                pass_config.label
+            )),
+            entries: &[BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStages::VERTEX,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some(&format!(
                 "{}_{}_pipeline_layout",
                 self.type_name(),
                 pass_config.label
             )),
-            bind_group_layouts: &[&bind_group_layout],
+            bind_group_layouts: &[&bind_group_layout, &vt_bind_group_layout],
             push_constant_ranges: &[],
         });
 
@@ -638,10 +672,32 @@ impl<M: Mark> MarkInfoImpl<M> {
         let instance_bind_group_layout = self.create_bind_group_layout(device)?;
         let pattern_bind_group_layout = self.create_pattern_bind_group_layout(device);
 
-        // Create pipeline layout with both bind groups
+        // Viewport transform bind group layout (group 1)
+        let vt_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some(&format!(
+                "{}_pattern_viewport_transform_bgl",
+                self.type_name()
+            )),
+            entries: &[BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStages::VERTEX,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+
+        // Create pipeline layout: group 0 = instances, group 1 = viewport transform, group 2 = patterns
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some(&format!("{}_pattern_pipeline_layout", self.type_name())),
-            bind_group_layouts: &[&instance_bind_group_layout, &pattern_bind_group_layout],
+            bind_group_layouts: &[
+                &instance_bind_group_layout,
+                &vt_bind_group_layout,
+                &pattern_bind_group_layout,
+            ],
             push_constant_ranges: &[],
         });
 
@@ -730,20 +786,6 @@ impl<M: Mark> MarkInfoImpl<M> {
             entries.push(BindGroupLayoutEntry {
                 binding: 1,
                 visibility: ShaderStages::VERTEX_FRAGMENT,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            });
-
-            // Viewport transform uniform (zoom/pan).
-            // Contains scale_x, scale_y, translate_x, translate_y for applying
-            // zoom and pan in clip space. Default is identity (no zoom/pan).
-            entries.push(BindGroupLayoutEntry {
-                binding: 2,
-                visibility: ShaderStages::VERTEX,
                 ty: BindingType::Buffer {
                     ty: BufferBindingType::Uniform,
                     has_dynamic_offset: false,
