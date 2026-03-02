@@ -67,7 +67,7 @@ use crate::grid::GridConfiguration;
 use crate::label::{AxisInfo, LabelConstraints, LabelLayout, LabelPosition, LabelPositioner};
 use crate::render::Vertex;
 use crate::selection::Selection;
-use crate::shader_function::{LinearScale, Vec2};
+use crate::shader_function::{LinearScale, LogScale, Vec2};
 use crate::text::TextStyle;
 use crate::text::hover_reveal::{ClippedTextRegistry, HoverRevealState, TooltipConfig};
 use crate::{MaybeSend, MaybeSync};
@@ -360,6 +360,64 @@ impl TitleConfig {
     }
 }
 
+/// Axis scale variant, supporting different scale types for chart axes.
+///
+/// This enum wraps the shader-function scale types ([`LinearScale`] and
+/// [`LogScale`]) so that `ChartConfig::x_scale` / `ChartConfig::y_scale` can
+/// accept either kind.
+#[derive(Debug, Clone)]
+pub enum AxisScale {
+    /// Linear interpolation between domain and range.
+    Linear(LinearScale),
+    /// Logarithmic interpolation between domain and range.
+    Log(LogScale),
+}
+
+impl AxisScale {
+    /// Return the domain minimum value.
+    pub fn domain_min(&self) -> f32 {
+        match self {
+            AxisScale::Linear(s) => s.domain_min,
+            AxisScale::Log(s) => s.domain_min,
+        }
+    }
+
+    /// Return the domain maximum value.
+    pub fn domain_max(&self) -> f32 {
+        match self {
+            AxisScale::Linear(s) => s.domain_max,
+            AxisScale::Log(s) => s.domain_max,
+        }
+    }
+
+    /// Create a tick-generator [`Scale`](crate::tick_generator::Scale) trait
+    /// object matching this axis scale's type and domain.
+    pub fn to_tick_scale(&self) -> Box<dyn crate::tick_generator::Scale> {
+        match self {
+            AxisScale::Linear(s) => Box::new(crate::tick_generator::LinearScale::new(
+                s.domain_min as f64,
+                s.domain_max as f64,
+            )),
+            AxisScale::Log(s) => Box::new(crate::tick_generator::LogarithmicScale::base_10(
+                s.domain_min as f64,
+                s.domain_max as f64,
+            )),
+        }
+    }
+}
+
+impl From<LinearScale> for AxisScale {
+    fn from(s: LinearScale) -> Self {
+        AxisScale::Linear(s)
+    }
+}
+
+impl From<LogScale> for AxisScale {
+    fn from(s: LogScale) -> Self {
+        AxisScale::Log(s)
+    }
+}
+
 /// Chart configuration that applies to all chart types.
 #[derive(Debug, Clone)]
 pub struct ChartConfig {
@@ -423,16 +481,18 @@ pub struct ChartConfig {
     /// Optional X-axis shader-function scale.
     ///
     /// When set, the scale's domain is used to auto-configure axis tick
-    /// generation and the corresponding `linear_scale` WGSL function is
-    /// included in the shader pipeline.
-    pub x_scale: Option<LinearScale>,
+    /// generation and the corresponding WGSL function is included in the
+    /// shader pipeline.  Accepts [`LinearScale`] or [`LogScale`] via the
+    /// [`AxisScale`] enum.
+    pub x_scale: Option<AxisScale>,
 
     /// Optional Y-axis shader-function scale.
     ///
     /// When set, the scale's domain is used to auto-configure axis tick
-    /// generation and the corresponding `linear_scale` WGSL function is
-    /// included in the shader pipeline.
-    pub y_scale: Option<LinearScale>,
+    /// generation and the corresponding WGSL function is included in the
+    /// shader pipeline.  Accepts [`LinearScale`] or [`LogScale`] via the
+    /// [`AxisScale`] enum.
+    pub y_scale: Option<AxisScale>,
 }
 
 /// Chart margin specification.
@@ -561,23 +621,23 @@ impl ChartConfig {
         self
     }
 
-    /// Set the X-axis scale (shader-function [`LinearScale`]).
+    /// Set the X-axis scale.
     ///
-    /// When set, the scale's domain is used to auto-configure axis tick
-    /// generation and the `linear_scale` WGSL function is included in the
-    /// shader pipeline.
-    pub fn with_x_scale(mut self, scale: LinearScale) -> Self {
-        self.x_scale = Some(scale);
+    /// Accepts any scale type that implements `Into<AxisScale>`, including
+    /// [`LinearScale`] and [`LogScale`].  When set, the scale's domain is
+    /// used to auto-configure axis tick generation.
+    pub fn with_x_scale(mut self, scale: impl Into<AxisScale>) -> Self {
+        self.x_scale = Some(scale.into());
         self
     }
 
-    /// Set the Y-axis scale (shader-function [`LinearScale`]).
+    /// Set the Y-axis scale.
     ///
-    /// When set, the scale's domain is used to auto-configure axis tick
-    /// generation and the `linear_scale` WGSL function is included in the
-    /// shader pipeline.
-    pub fn with_y_scale(mut self, scale: LinearScale) -> Self {
-        self.y_scale = Some(scale);
+    /// Accepts any scale type that implements `Into<AxisScale>`, including
+    /// [`LinearScale`] and [`LogScale`].  When set, the scale's domain is
+    /// used to auto-configure axis tick generation.
+    pub fn with_y_scale(mut self, scale: impl Into<AxisScale>) -> Self {
+        self.y_scale = Some(scale.into());
         self
     }
 }
@@ -1352,14 +1412,11 @@ where
         let viewport_size = (self.config.width, self.config.height);
         let renderer = AxisRenderer::new();
 
-        // Build tick_generator::LinearScale objects from the shader-function
+        // Build tick_generator Scale objects from the shader-function
         // scales when present, so axis tick generation uses the correct domain.
-        let x_tick_scale = self.config.x_scale.as_ref().map(|s| {
-            crate::tick_generator::LinearScale::new(s.domain_min as f64, s.domain_max as f64)
-        });
-        let y_tick_scale = self.config.y_scale.as_ref().map(|s| {
-            crate::tick_generator::LinearScale::new(s.domain_min as f64, s.domain_max as f64)
-        });
+        // For LogScale, LogarithmicScale produces properly log-spaced ticks.
+        let x_tick_scale = self.config.x_scale.as_ref().map(|s| s.to_tick_scale());
+        let y_tick_scale = self.config.y_scale.as_ref().map(|s| s.to_tick_scale());
 
         let mut all_line_vertices = Vec::new();
         let mut all_tick_instances = Vec::new();
@@ -1382,10 +1439,10 @@ where
                 let tick_scale: Option<&dyn crate::tick_generator::Scale> = match position {
                     AxisPosition::Bottom | AxisPosition::Top => x_tick_scale
                         .as_ref()
-                        .map(|s| s as &dyn crate::tick_generator::Scale),
+                        .map(|s| &**s as &dyn crate::tick_generator::Scale),
                     AxisPosition::Left | AxisPosition::Right => y_tick_scale
                         .as_ref()
-                        .map(|s| s as &dyn crate::tick_generator::Scale),
+                        .map(|s| &**s as &dyn crate::tick_generator::Scale),
                 };
 
                 // Axis line vertices (LineList)
@@ -1491,14 +1548,10 @@ where
         let viewport_size = (self.config.width, self.config.height);
         let renderer = AxisRenderer::new();
 
-        // Build tick_generator::LinearScale objects from the shader-function
+        // Build tick_generator Scale objects from the shader-function
         // scales when present, so axis tick generation uses the correct domain.
-        let x_tick_scale = self.config.x_scale.as_ref().map(|s| {
-            crate::tick_generator::LinearScale::new(s.domain_min as f64, s.domain_max as f64)
-        });
-        let y_tick_scale = self.config.y_scale.as_ref().map(|s| {
-            crate::tick_generator::LinearScale::new(s.domain_min as f64, s.domain_max as f64)
-        });
+        let x_tick_scale = self.config.x_scale.as_ref().map(|s| s.to_tick_scale());
+        let y_tick_scale = self.config.y_scale.as_ref().map(|s| s.to_tick_scale());
 
         let mut all_line_vertices = Vec::new();
         let mut all_tick_instances = Vec::new();
@@ -1524,10 +1577,10 @@ where
                 let tick_scale: Option<&dyn crate::tick_generator::Scale> = match position {
                     AxisPosition::Bottom | AxisPosition::Top => x_tick_scale
                         .as_ref()
-                        .map(|s| s as &dyn crate::tick_generator::Scale),
+                        .map(|s| &**s as &dyn crate::tick_generator::Scale),
                     AxisPosition::Left | AxisPosition::Right => y_tick_scale
                         .as_ref()
-                        .map(|s| s as &dyn crate::tick_generator::Scale),
+                        .map(|s| &**s as &dyn crate::tick_generator::Scale),
                 };
 
                 // Axis line vertices (LineList)

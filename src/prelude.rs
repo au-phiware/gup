@@ -12,7 +12,7 @@ pub use crate::error::{GupError, GupResult};
 
 // Chart builder API (Observable Plot style)
 pub use crate::chart_builder::{
-    ChartBuilder, ChartConfig,
+    AxisScale, ChartBuilder, ChartConfig,
     accessor::{AccessorValue, ConstantAccessor, FieldAccessor, color, size, x, y},
     builders::{
         AccessorFunction, AreaChartBuilder, BarChartBuilder, ConfigurableBuilder,
