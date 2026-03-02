@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Interaction & Spatial Index **Status**: 📋 Planned **Created**:
-2025-07-19
+**Initiative**: Interaction & Spatial Index **Status**: 🚧 In Progress
+**Created**: 2025-07-19
 
 ## Context
 
@@ -29,8 +29,8 @@ type that automatically detects state changes and rebuilds instances.
       has changed
 - [ ] The type provides the same `render` method as `Selection` for seamless
       substitution
-- [ ] Builder pattern: `LinkedSelection::new(data, shared_state, key_fn)
-      .dim_opacity(0.2)`
+- [ ] Builder pattern:
+      `LinkedSelection::new(data, shared_state, key_fn)     .dim_opacity(0.2)`
 - [ ] All existing linked_selection tests continue to pass
 - [ ] New tests verify automatic rebuild on state change and skip on no change
 

@@ -518,7 +518,8 @@ impl BrushBehavior {
         K: Hash + Eq + Send + Sync + 'static,
     {
         let brush_state = state.clone();
-        let brush_key_fn = {
+
+        {
             // Share the key fn between two closures via Arc
             let key_fn = std::sync::Arc::new(index_to_key);
             let end_key_fn = key_fn.clone();
@@ -541,9 +542,7 @@ impl BrushBehavior {
                     end_state.set(keys);
                 }
             })
-        };
-
-        brush_key_fn
+        }
     }
 
     /// Cancel the current brush without firing `"brushend"`.
@@ -965,7 +964,7 @@ mod tests {
     #[test]
     fn brush_with_shared_selection_replaces_on_new_brush() {
         let shared = SharedSelectionState::<String>::new();
-        let data = vec!["alice", "bob", "carol", "dave", "eve"];
+        let data = ["alice", "bob", "carol", "dave", "eve"];
         let brush = BrushBehavior::new()
             .with_shared_selection(shared.clone(), move |idx| data[idx as usize].to_string());
 

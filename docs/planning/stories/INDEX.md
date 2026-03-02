@@ -405,7 +405,7 @@ selection, and radix sort.
 - [GUP-286](GUP-286_GPU_Accelerated_Brush_Region_Query.md) 📋 — Replace CPU
   filter_by_rect with GPU rect_hit_test_gpu for brush selection on 500K+ mark
   datasets. Deps: GUP-278 ✅, GUP-012 ✅, GUP-075 ✅.
-- [GUP-287](GUP-287_LinkedSelection_Wrapper_Type.md) 📋 — Wrap Selection +
+- [GUP-287](GUP-287_LinkedSelection_Wrapper_Type.md) 🚧 — Wrap Selection +
   SharedSelectionState + key_fn into a single LinkedSelection type with
   automatic generation-based rebuild. Deps: GUP-279 ✅.
 - [GUP-288](GUP-288_GPU_Selection_Mask_Buffer.md) 📋 — GPU-side selection mask

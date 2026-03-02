@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Interaction & Spatial Index **Status**: ✅ Complete
-**Created**: 2025-07-14 **Completed**: 2025-07-19
+**Initiative**: Interaction & Spatial Index **Status**: ✅ Complete **Created**:
+2025-07-14 **Completed**: 2025-07-19
 
 ## Context
 
@@ -39,6 +39,8 @@ cross-chart communication layer that makes such compositions interactive.
 > "As a visualization developer, I want to pass a shared selection state to
 > multiple charts so that brushing or clicking in one chart automatically
 > highlights the same data items across all linked charts."
+
+<!-- -->
 
 > "As an end user exploring a multi-chart dashboard, I want unselected data
 > items to be visually dimmed so that I can clearly see which items are
@@ -233,7 +235,8 @@ cross-chart communication layer that makes such compositions interactive.
 ### What Was Implemented
 
 1. **`src/linked_selection.rs`** — New module (core of this story):
-   - `KeyedSelectionState<K>` — inner state with `HashSet<K>` + generation counter
+   - `KeyedSelectionState<K>` — inner state with `HashSet<K>` + generation
+     counter
    - `SharedSelectionState<K>` — `Arc<Mutex<...>>` newtype with ergonomic API
    - `DimInstance` trait — alpha-channel modification for mark instance types
    - `build_dimmed_instances()` — helper to produce dimmed instance vectors
@@ -256,13 +259,13 @@ cross-chart communication layer that makes such compositions interactive.
 
 ### Key Files Changed
 
-| File | Change |
-|------|--------|
-| `src/linked_selection.rs` | New — core types and 29 tests |
-| `src/brush.rs` | Added `with_shared_selection()` + 3 tests |
-| `examples/linked_views.rs` | New — linked scatter plot demo |
-| `src/lib.rs` | Module registration + exports |
-| `src/prelude.rs` | Prelude exports |
+| File                       | Change                                    |
+| -------------------------- | ----------------------------------------- |
+| `src/linked_selection.rs`  | New — core types and 29 tests             |
+| `src/brush.rs`             | Added `with_shared_selection()` + 3 tests |
+| `examples/linked_views.rs` | New — linked scatter plot demo            |
+| `src/lib.rs`               | Module registration + exports             |
+| `src/prelude.rs`           | Prelude exports                           |
 
 ### Test Counts
 
@@ -279,8 +282,8 @@ cross-chart communication layer that makes such compositions interactive.
 - **Free function `build_dimmed_instances`** instead of chart builder method:
   provides maximum flexibility without requiring changes to the Selection or
   ChartBuilder types. The dim opacity is a parameter, not stored state.
-- **`key_fn` takes `(&T, usize)`** (item ref + index): supports both
-  index-based and field-based keys from the same API.
+- **`key_fn` takes `(&T, usize)`** (item ref + index): supports both index-based
+  and field-based keys from the same API.
 - **`KeyedSelectionState`** name avoids conflict with existing `SelectionState`
   in `mark_selection.rs` which is index-based with `BitSet`.
 
@@ -317,8 +320,8 @@ cross-chart communication layer that makes such compositions interactive.
 - **Challenge**: The codebase already has `SelectionState` in
   `mark_selection.rs` (index-based with `BitSet`). Adding another
   `SelectionState` would cause confusion.
-- **Solution**: Named the inner type `KeyedSelectionState<K>` to distinguish
-  it from the existing index-based `SelectionState`. The public-facing type
+- **Solution**: Named the inner type `KeyedSelectionState<K>` to distinguish it
+  from the existing index-based `SelectionState`. The public-facing type
   `SharedSelectionState<K>` is the primary API.
 - **Pattern**: When adding new types that conceptually overlap with existing
   ones, use descriptive prefixes that highlight the distinguishing feature.
@@ -336,9 +339,8 @@ cross-chart communication layer that makes such compositions interactive.
 - **Trade-off**: The user must call `build_dimmed_instances` explicitly rather
   than having it automatic. This is more explicit but requires more code in the
   render loop.
-- **Future**: A future story could add a `LinkedSelection<T, M, K>` wrapper
-  type that integrates the generation-based change detection and automatic
-  rebuild.
+- **Future**: A future story could add a `LinkedSelection<T, M, K>` wrapper type
+  that integrates the generation-based change detection and automatic rebuild.
 
 #### Instance Data Modification vs Separate Selection Buffer
 
@@ -355,14 +357,14 @@ cross-chart communication layer that makes such compositions interactive.
 ### Development Workflow Insights
 
 - **Rust 2024 edition reserved keywords**: `gen` is reserved in Rust 2024
-  edition. Hit this when naming a variable in `has_changed_since`. Quick fix
-  to rename to `current_gen`.
+  edition. Hit this when naming a variable in `has_changed_since`. Quick fix to
+  rename to `current_gen`.
 - **Test isolation**: All 26 linked_selection tests and 26 brush tests passed
   immediately without GPU contention issues — these are pure CPU logic tests
   that don't need `--test-threads=1`.
 - **Example verification**: The linked_views example compiled and initialised
-  successfully but couldn't render visually in the headless CI environment.
-  The init sequence (GPU device creation, surface setup, selection creation)
+  successfully but couldn't render visually in the headless CI environment. The
+  init sequence (GPU device creation, surface setup, selection creation)
   completing without panics provides strong confidence.
 
 ### Follow-up Stories

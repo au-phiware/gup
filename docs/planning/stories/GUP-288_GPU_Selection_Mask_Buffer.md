@@ -23,9 +23,9 @@ applies dimming directly on the GPU, avoiding the CPU rebuild entirely.
 
 - [ ] A `SelectionMaskBuffer` type maintains a GPU buffer of per-instance
       selection flags (0 or 1)
-- [ ] A compute shader reads the mask buffer and multiplies the alpha channel
-      of each instance's fill_color and stroke_color by dim_opacity when the
-      flag is 0
+- [ ] A compute shader reads the mask buffer and multiplies the alpha channel of
+      each instance's fill_color and stroke_color by dim_opacity when the flag
+      is 0
 - [ ] The mask buffer is updated incrementally: only changed flags are uploaded
       rather than rebuilding the entire buffer
 - [ ] Performance: applying a 10K-item selection to a 100K-point chart completes
