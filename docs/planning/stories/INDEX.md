@@ -201,7 +201,7 @@ integration, and Rust→WGSL transpilation.
 - [GUP-253](GUP-253_LogScale_GPU_Shader_Function.md) ✅ — LogScale
   ShaderFunction with configurable base, zero/epsilon guard, and symmetric-log
   mode for data straddling zero. Deps: GUP-252 ✅.
-- [GUP-254](GUP-254_OrdinalScale_GPU_Shader_Function.md) 📋 — OrdinalScale
+- [GUP-254](GUP-254_OrdinalScale_GPU_Shader_Function.md) 🚧 — OrdinalScale
   (BandScale + PointScale) GPU shader functions mapping integer category indices
   to positions. Deps: GUP-252 ✅, GUP-053 ✅.
 - [GUP-255](GUP-255_ColorScale_GPU_Shader_Function.md) 📋 — ColorScale
