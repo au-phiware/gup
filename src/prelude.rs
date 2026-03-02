@@ -65,6 +65,10 @@ pub use crate::shader_function::{
     // Storage buffer-based gradient (GUP-134)
     ColorGradientStorage,
     ColorMap,
+    // ColorScale (GUP-255)
+    ColorScale,
+    ColorScaleKind,
+    ColorScaleUniforms,
     // Color space conversion (GUP-053)
     ColorSpaceConverter,
     ColorSpaceDirection,

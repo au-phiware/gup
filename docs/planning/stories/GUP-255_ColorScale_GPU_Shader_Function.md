@@ -40,7 +40,7 @@ a complete, GPU-resident domain → color pipeline.
 > function that maps numeric domain values to colors on the GPU, so that I can
 > build value-encoded charts (heatmaps, choropleths, density plots) without
 > performing color mapping on the CPU."
-
+>
 > "As a chart builder author, I want `.color_scale(ColorScale::viridis())`
 > available on `ChartBuilder`, so that I can wire up color encoding with a
 > single ergonomic call."
