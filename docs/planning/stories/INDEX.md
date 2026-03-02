@@ -213,7 +213,7 @@ integration, and Rust→WGSL transpilation.
 - [GUP-255](GUP-255_ColorScale_GPU_Shader_Function.md) ✅ — ColorScale
   ShaderFunction (f32 → vec4) with built-in palettes (Viridis, Plasma, etc.)
   composable with LinearScale. Deps: GUP-134 ✅, GUP-252 ✅.
-- [GUP-273](GUP-273_Geographic_Projection_Shader_System.md) 📋 — Mercator,
+- [GUP-273](GUP-273_Geographic_Projection_Shader_System.md) 🚧 — Mercator,
   Equirectangular, Stereographic, and Orthographic projections as composable
   WGSL ShaderFunctions with GeoPoint coordinate type and boundary clipping.
   Deps: GUP-005 ✅, GUP-007 ✅, GUP-052 ✅, GUP-053 ✅.
