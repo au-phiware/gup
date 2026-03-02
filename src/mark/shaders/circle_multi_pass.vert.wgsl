@@ -14,7 +14,16 @@ struct CircleInstance {
     stroke_color: vec4<f32>,
 }
 
+struct ViewportTransform {
+    scale_x: f32,
+    scale_y: f32,
+    translate_x: f32,
+    translate_y: f32,
+}
+
 @group(0) @binding(0) var<storage, read> instances: array<CircleInstance>;
+
+@group(0) @binding(2) var<uniform> vp_transform: ViewportTransform;
 
 struct VertexInput {
     @location(0) position: vec2<f32>,
@@ -35,7 +44,12 @@ struct VertexOutput {
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
     let instance = instances[input.instance_index];
-    let world_pos = input.position * instance.radius + instance.center;
+    let scaled_radius = instance.radius * vp_transform.scale_x;
+    let center_transformed = vec2<f32>(
+        instance.center.x * vp_transform.scale_x + vp_transform.translate_x,
+        instance.center.y * vp_transform.scale_y + vp_transform.translate_y,
+    );
+    let world_pos = input.position * scaled_radius + center_transformed;
 
     var output: VertexOutput;
     output.clip_position = vec4<f32>(world_pos, 0.0, 1.0);
@@ -43,7 +57,7 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     output.local_position = input.position;
     output.fill_color = instance.fill_color;
     output.stroke_color = instance.stroke_color;
-    output.radius = instance.radius;
+    output.radius = scaled_radius;
     output.stroke_width = instance.stroke_width;
 
     return output;
@@ -57,8 +71,12 @@ fn vs_shadow(input: VertexInput) -> VertexOutput {
     // Offset the shadow down-right in clip space
     let shadow_offset = vec2<f32>(0.03, -0.03);
     // Make shadow slightly larger than the main circle
-    let shadow_radius = instance.radius * 1.1;
-    let world_pos = input.position * shadow_radius + instance.center + shadow_offset;
+    let shadow_radius = instance.radius * 1.1 * vp_transform.scale_x;
+    let center_transformed = vec2<f32>(
+        instance.center.x * vp_transform.scale_x + vp_transform.translate_x,
+        instance.center.y * vp_transform.scale_y + vp_transform.translate_y,
+    );
+    let world_pos = input.position * shadow_radius + center_transformed + shadow_offset;
 
     // Semi-transparent dark shadow colour
     let shadow_color = vec4<f32>(0.0, 0.0, 0.0, 0.4);

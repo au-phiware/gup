@@ -203,12 +203,14 @@ pub use interaction::{
 pub use event::{
     EventManager, EventResult, EventType, ModifierFlags, RawInputEvent, ViewportTransform,
 };
+// Export zoom/pan behaviour
 pub use mixable::*;
 pub use plugins::*;
 pub use render::*;
 pub use shader_function::*;
 pub use shader_pipeline::*;
 pub use text::*;
+pub use zoom::{GpuViewportTransform, ZoomBehavior};
 // Export tick generator with explicit types to avoid conflicts
 pub use tick_generator::{
     LinearScale as TickLinearScale, // Renamed to avoid conflict with shader_function::LinearScale

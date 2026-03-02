@@ -11,7 +11,16 @@ struct RectangleInstance {
     _padding: f32,
 }
 
+struct ViewportTransform {
+    scale_x: f32,
+    scale_y: f32,
+    translate_x: f32,
+    translate_y: f32,
+}
+
 @group(0) @binding(0) var<storage, read> instances: array<RectangleInstance>;
+
+@group(0) @binding(2) var<uniform> vp_transform: ViewportTransform;
 
 struct VertexInput {
     @location(0) position: vec2<f32>,
@@ -33,8 +42,18 @@ struct VertexOutput {
 fn vs_main(input: VertexInput) -> VertexOutput {
     let instance = instances[input.instance_index];
     
+    // Scale size by the viewport transform so rectangles zoom proportionally.
+    let scaled_size = vec2<f32>(
+        instance.size.x * vp_transform.scale_x,
+        instance.size.y * vp_transform.scale_y,
+    );
+    let center_transformed = vec2<f32>(
+        instance.center.x * vp_transform.scale_x + vp_transform.translate_x,
+        instance.center.y * vp_transform.scale_y + vp_transform.translate_y,
+    );
+    
     // Calculate world position by scaling unit quad and translating to center
-    let world_pos = input.position * instance.size + instance.center;
+    let world_pos = input.position * scaled_size + center_transformed;
     
     var output: VertexOutput;
     output.clip_position = vec4<f32>(world_pos, 0.0, 1.0);
@@ -42,7 +61,7 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     output.local_position = input.position;
     output.fill_color = instance.fill_color;
     output.stroke_color = instance.stroke_color;
-    output.size = instance.size;
+    output.size = scaled_size;
     output.stroke_width = instance.stroke_width;
     output.corner_radius = instance.corner_radius;
     

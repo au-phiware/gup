@@ -1316,6 +1316,7 @@ impl<T, M: Mark> Selection<T, M> {
                         &state.pipeline,
                         instance_bytes,
                         state.viewport_buffer.as_ref(),
+                        state.viewport_transform_buffer.as_ref(),
                         queue,
                         pool.as_deref_mut(),
                     );
@@ -1420,6 +1421,26 @@ impl<T, M: Mark> Selection<T, M> {
         {
             let viewport = ViewportUniforms { width, height };
             queue.write_buffer(vp_buf, 0, bytemuck::bytes_of(&viewport));
+        }
+    }
+
+    /// Upload a new viewport transform (zoom/pan) to the GPU uniform buffer.
+    ///
+    /// The transform is applied by the vertex shader to all mark positions
+    /// in clip space, enabling smooth zoom and pan without rebuilding
+    /// geometry buffers.
+    ///
+    /// This method is a no-op if [`prepare_render`](Self::prepare_render) has
+    /// not been called yet or if the mark does not use custom shaders.
+    pub fn set_viewport_transform(
+        &self,
+        queue: &Queue,
+        transform: &crate::zoom::GpuViewportTransform,
+    ) {
+        if let Some(ref state) = self.render_state
+            && let Some(ref vt_buf) = state.viewport_transform_buffer
+        {
+            queue.write_buffer(vt_buf, 0, bytemuck::bytes_of(transform));
         }
     }
 
@@ -1765,6 +1786,10 @@ struct SelectionRenderState {
     /// Viewport dimensions uniform buffer (for marks with custom shaders).
     /// Enables pixel-space SDF calculations in shaders.
     viewport_buffer: Option<wgpu::Buffer>,
+    /// Viewport transform uniform buffer (zoom/pan) at binding 2.
+    /// Contains `GpuViewportTransform` (scale_x, scale_y, translate_x,
+    /// translate_y). Created with identity transform by default.
+    viewport_transform_buffer: Option<wgpu::Buffer>,
     /// Uniform buffers for GPU shader function bindings (empty when no shader
     /// functions are used).
     uniform_buffers: Vec<wgpu::Buffer>,
@@ -1829,12 +1854,27 @@ impl SelectionRenderState {
             None
         };
 
+        // --- Viewport transform buffer (zoom/pan, for custom-shader marks) -
+        let viewport_transform_buffer = if has_custom {
+            let identity = crate::zoom::GpuViewportTransform::IDENTITY;
+            Some(
+                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("selection_viewport_transform_uniform"),
+                    contents: bytemuck::bytes_of(&identity),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                }),
+            )
+        } else {
+            None
+        };
+
         // --- Instance buffer + bind group ----------------------------
         let (instance_buffer, bind_group, pool_meta) = Self::create_instance_buffer_and_bind_group(
             device,
             &pipeline,
             instance_bytes,
             viewport_buffer.as_ref(),
+            viewport_transform_buffer.as_ref(),
             queue,
             pool,
         );
@@ -1853,6 +1893,7 @@ impl SelectionRenderState {
             instance_count,
             instance_buffer_capacity: instance_bytes.len(),
             viewport_buffer,
+            viewport_transform_buffer,
             uniform_buffers: Vec::new(),
             pool_meta,
         })
@@ -1870,6 +1911,7 @@ impl SelectionRenderState {
         pipeline: &wgpu::RenderPipeline,
         instance_bytes: &[u8],
         viewport_buffer: Option<&wgpu::Buffer>,
+        viewport_transform_buffer: Option<&wgpu::Buffer>,
         queue: &Queue,
         pool: Option<&mut BufferPool>,
     ) -> (wgpu::Buffer, wgpu::BindGroup, Option<(BufferType, usize)>) {
@@ -1903,6 +1945,13 @@ impl SelectionRenderState {
             entries.push(wgpu::BindGroupEntry {
                 binding: 1,
                 resource: vp_buf.as_entire_binding(),
+            });
+        }
+
+        if let Some(vt_buf) = viewport_transform_buffer {
+            entries.push(wgpu::BindGroupEntry {
+                binding: 2,
+                resource: vt_buf.as_entire_binding(),
             });
         }
 
@@ -2105,6 +2154,7 @@ impl SelectionRenderState {
             instance_count,
             instance_buffer_capacity: instance_bytes.len(),
             viewport_buffer: None,
+            viewport_transform_buffer: None,
             uniform_buffers,
             pool_meta,
         })

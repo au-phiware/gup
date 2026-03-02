@@ -737,6 +737,20 @@ impl<M: Mark> MarkInfoImpl<M> {
                 },
                 count: None,
             });
+
+            // Viewport transform uniform (zoom/pan).
+            // Contains scale_x, scale_y, translate_x, translate_y for applying
+            // zoom and pan in clip space. Default is identity (no zoom/pan).
+            entries.push(BindGroupLayoutEntry {
+                binding: 2,
+                visibility: ShaderStages::VERTEX,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            });
         } else {
             // Add uniform buffers if the mark uses generated shaders
             // Position transform uniforms

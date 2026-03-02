@@ -9,7 +9,16 @@ struct CircleInstance {
     stroke_color: vec4<f32>,
 }
 
+struct ViewportTransform {
+    scale_x: f32,
+    scale_y: f32,
+    translate_x: f32,
+    translate_y: f32,
+}
+
 @group(0) @binding(0) var<storage, read> instances: array<CircleInstance>;
+
+@group(0) @binding(2) var<uniform> vp_transform: ViewportTransform;
 
 struct VertexInput {
     @location(0) position: vec2<f32>,
@@ -30,8 +39,17 @@ struct VertexOutput {
 fn vs_main(input: VertexInput) -> VertexOutput {
     let instance = instances[input.instance_index];
     
-    // Calculate world position by scaling unit quad and translating to center
-    let world_pos = input.position * instance.radius + instance.center;
+    // Scale the radius by the viewport transform scale so that circles
+    // grow/shrink proportionally during zoom.
+    let scaled_radius = instance.radius * vp_transform.scale_x;
+
+    // Calculate world position by scaling unit quad and translating to center,
+    // then apply the viewport transform (zoom + pan) in clip space.
+    let center_transformed = vec2<f32>(
+        instance.center.x * vp_transform.scale_x + vp_transform.translate_x,
+        instance.center.y * vp_transform.scale_y + vp_transform.translate_y,
+    );
+    let world_pos = input.position * scaled_radius + center_transformed;
     
     var output: VertexOutput;
     output.clip_position = vec4<f32>(world_pos, 0.0, 1.0);
@@ -39,7 +57,7 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     output.local_position = input.position;
     output.fill_color = instance.fill_color;
     output.stroke_color = instance.stroke_color;
-    output.radius = instance.radius;
+    output.radius = scaled_radius;
     output.stroke_width = instance.stroke_width;
     
     return output;

@@ -41,6 +41,16 @@ var<storage, read> instances: array<BoxPlotInstance>;
 @group(0) @binding(1)
 var<uniform> viewport: ViewportUniforms;
 
+struct ViewportTransform {
+    scale_x: f32,
+    scale_y: f32,
+    translate_x: f32,
+    translate_y: f32,
+}
+
+@group(0) @binding(2)
+var<uniform> vp_transform: ViewportTransform;
+
 struct VertexInput {
     @location(0) position: vec2<f32>,
     @builtin(instance_index) instance_index: u32,
@@ -93,7 +103,11 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     }
 
     var output: VertexOutput;
-    output.clip_position = vec4<f32>(world_pos, 0.0, 1.0);
+    output.clip_position = vec4<f32>(
+        world_pos.x * vp_transform.scale_x + vp_transform.translate_x,
+        world_pos.y * vp_transform.scale_y + vp_transform.translate_y,
+        0.0, 1.0,
+    );
     output.world_position = world_pos;
     output.instance_index = input.instance_index;
     return output;

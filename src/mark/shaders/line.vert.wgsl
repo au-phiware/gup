@@ -10,7 +10,16 @@ struct LineInstance {
     _padding: vec2<f32>,
 }
 
+struct ViewportTransform {
+    scale_x: f32,
+    scale_y: f32,
+    translate_x: f32,
+    translate_y: f32,
+}
+
 @group(0) @binding(0) var<storage, read> instances: array<LineInstance>;
+
+@group(0) @binding(2) var<uniform> vp_transform: ViewportTransform;
 
 struct VertexInput {
     @location(0) position: vec2<f32>,
@@ -32,15 +41,28 @@ struct VertexOutput {
 fn vs_main(input: VertexInput) -> VertexOutput {
     let instance = instances[input.instance_index];
     
+    // Apply viewport transform to start and end points.
+    let start_t = vec2<f32>(
+        instance.start.x * vp_transform.scale_x + vp_transform.translate_x,
+        instance.start.y * vp_transform.scale_y + vp_transform.translate_y,
+    );
+    let end_t = vec2<f32>(
+        instance.end.x * vp_transform.scale_x + vp_transform.translate_x,
+        instance.end.y * vp_transform.scale_y + vp_transform.translate_y,
+    );
+
     // Calculate line direction and length
-    let line_vec = instance.end - instance.start;
+    let line_vec = end_t - start_t;
     let line_length = length(line_vec);
     let line_dir = normalize(line_vec);
     let line_normal = vec2<f32>(-line_dir.y, line_dir.x);
     
+    // Scale the width by viewport scale for consistent appearance.
+    let scaled_width = instance.width * vp_transform.scale_x;
+    
     // Calculate world position along the line
-    let along_line = instance.start + line_dir * (input.position.x * line_length);
-    let across_line = line_normal * (input.normal.y * instance.width * 0.5);
+    let along_line = start_t + line_dir * (input.position.x * line_length);
+    let across_line = line_normal * (input.normal.y * scaled_width * 0.5);
     let world_pos = along_line + across_line;
     
     var output: VertexOutput;
@@ -48,7 +70,7 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     output.world_position = world_pos;
     output.local_position = input.position;
     output.color = instance.color;
-    output.width = instance.width;
+    output.width = scaled_width;
     output.style = instance.style;
     output.line_length = line_length;
     
