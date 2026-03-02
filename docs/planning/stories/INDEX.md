@@ -417,7 +417,7 @@ selection, and radix sort.
 - [GUP-290](GUP-290_GPU_Mask_Buffer_Pool_Integration.md) ✅ — Integrate
   SelectionMaskBuffer with BufferPool for GPU buffer reuse. Deps: GUP-288 ✅,
   GUP-003 ✅.
-- [GUP-291](GUP-291_Adaptive_GPU_Dimming_Threshold.md) 🚧 — Auto-tune the
+- [GUP-291](GUP-291_Adaptive_GPU_Dimming_Threshold.md) ✅ — Auto-tune the
   CPU/GPU dimming threshold based on runtime profiling. Deps: GUP-289 ✅.
 
 ## Axis & Grid System
