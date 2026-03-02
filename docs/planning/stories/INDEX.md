@@ -408,7 +408,7 @@ selection, and radix sort.
 - [GUP-287](GUP-287_LinkedSelection_Wrapper_Type.md) ✅ — Wrap Selection +
   SharedSelectionState + key_fn into a single LinkedSelection type with
   automatic generation-based rebuild. Deps: GUP-279 ✅.
-- [GUP-288](GUP-288_GPU_Selection_Mask_Buffer.md) 🚧 — GPU-side selection mask
+- [GUP-288](GUP-288_GPU_Selection_Mask_Buffer.md) ✅ — GPU-side selection mask
   buffer + compute shader for alpha dimming at 100K+ scale without CPU rebuild.
   Deps: GUP-279 ✅, GUP-003 ✅.
 
