@@ -414,7 +414,7 @@ selection, and radix sort.
 - [GUP-289](GUP-289_LinkedSelection_GPU_Integration.md) ✅ — Wire
   SelectionMaskBuffer into LinkedSelection for automatic GPU dimming above a
   configurable threshold. Deps: GUP-288 ✅, GUP-279 ✅.
-- [GUP-290](GUP-290_GPU_Mask_Buffer_Pool_Integration.md) 📋 — Integrate
+- [GUP-290](GUP-290_GPU_Mask_Buffer_Pool_Integration.md) 🚧 — Integrate
   SelectionMaskBuffer with BufferPool for GPU buffer reuse. Deps: GUP-288 ✅,
   GUP-003 ✅.
 - [GUP-291](GUP-291_Adaptive_GPU_Dimming_Threshold.md) 📋 — Auto-tune the
