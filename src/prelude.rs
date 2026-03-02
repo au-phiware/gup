@@ -158,7 +158,7 @@ pub use crate::interaction::{InteractionEvent, InteractionSystem, InteractionTyp
 
 // Linked view coordination
 pub use crate::linked_selection::{
-    DimInstance, SharedSelectionState, build_dimmed_instances, has_changed_since,
+    DimInstance, LinkedSelection, SharedSelectionState, build_dimmed_instances, has_changed_since,
 };
 
 // Zoom and pan behaviour

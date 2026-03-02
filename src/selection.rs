@@ -936,7 +936,32 @@ impl<T, M: Mark> Selection<T, M> {
     {
         // Convert data items to GPU instances.
         let instances: Vec<I> = self.data.iter().map(&mapper).collect();
-        let instance_bytes: &[u8] = bytemuck::cast_slice(&instances);
+        self.prepare_render_raw(device, queue, &instances, cache, pool)
+    }
+
+    /// Prepare GPU resources from pre-built instance data.
+    ///
+    /// Like [`prepare_render`](Self::prepare_render), but accepts a pre-built
+    /// slice of GPU instances instead of a mapper closure.  This is useful
+    /// when the instance data has been constructed externally (e.g., with
+    /// selection-based dimming applied by
+    /// [`build_dimmed_instances`](crate::linked_selection::build_dimmed_instances)).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if pipeline or buffer creation fails.
+    pub fn prepare_render_raw<I>(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        instances: &[I],
+        cache: Option<&mut PipelineCache>,
+        pool: Option<&mut BufferPool>,
+    ) -> GupResult<()>
+    where
+        I: bytemuck::Pod + bytemuck::Zeroable,
+    {
+        let instance_bytes: &[u8] = bytemuck::cast_slice(instances);
         let instance_count = instances.len() as u32;
 
         self.upload_instances(device, queue, instance_bytes, instance_count, cache, pool)

@@ -485,6 +485,213 @@ impl DimInstance for BoxPlotInstance {
 }
 
 // ---------------------------------------------------------------------------
+// LinkedSelection — wrapper combining Selection + SharedSelectionState
+// ---------------------------------------------------------------------------
+
+use crate::buffer::BufferPool;
+use crate::error::GupResult;
+use crate::pipeline_cache::PipelineCache;
+use crate::selection::{Mark, Selection};
+use wgpu::{Device, Queue, RenderPass};
+
+/// A wrapper that combines a [`Selection`] with a [`SharedSelectionState`]
+/// and a key function, providing automatic generation-based change detection
+/// and instance rebuild with dimming.
+///
+/// `LinkedSelection` eliminates the manual orchestration that was previously
+/// required when using [`build_dimmed_instances`] and [`has_changed_since`]
+/// directly.  Instead of tracking generation counters yourself, call
+/// [`prepare_render`](Self::prepare_render) on each frame and the wrapper
+/// takes care of the rest: it checks whether the shared selection state has
+/// changed and only rebuilds the dimmed instance buffer when necessary.
+///
+/// # Type Parameters
+///
+/// - `T` — The data item type stored in the inner [`Selection`].
+/// - `M` — The mark type (e.g. [`Circle`](crate::Circle),
+///   [`Rectangle`](crate::Rectangle)).
+/// - `K` — The cross-chart identity key type (must be `Hash + Eq + Send +
+///   Sync + 'static`).
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use gup::linked_selection::{LinkedSelection, SharedSelectionState};
+/// use gup::mark::circle::CircleInstance;
+/// use gup::Circle;
+///
+/// let shared = SharedSelectionState::<usize>::new();
+/// let data = vec![1.0f32, 2.0, 3.0];
+///
+/// let mut linked: LinkedSelection<f32, Circle, usize> =
+///     LinkedSelection::new(data, shared.clone(), |_item, idx| idx)
+///         .dim_opacity(0.2);
+/// ```
+pub struct LinkedSelection<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> {
+    selection: Selection<T, M>,
+    shared_state: SharedSelectionState<K>,
+    key_fn: Box<dyn Fn(&T, usize) -> K>,
+    dim_opacity: f32,
+    last_generation: u64,
+}
+
+impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> {
+    /// Create a new `LinkedSelection` from data, a shared selection state,
+    /// and a key function that maps each data item to its cross-chart
+    /// identity key.
+    ///
+    /// The default dim opacity is `0.2` (20% of original alpha for
+    /// unselected items).  Use [`dim_opacity`](Self::dim_opacity) to
+    /// customise this.
+    ///
+    /// # Arguments
+    ///
+    /// - `data` — The data items to render.
+    /// - `shared_state` — The shared selection state to observe.
+    /// - `key_fn` — A function that takes a reference to a data item and
+    ///   its index and returns the cross-chart identity key.
+    pub fn new(
+        data: Vec<T>,
+        shared_state: SharedSelectionState<K>,
+        key_fn: impl Fn(&T, usize) -> K + 'static,
+    ) -> Self {
+        Self {
+            selection: Selection::from_data(data),
+            shared_state,
+            key_fn: Box::new(key_fn),
+            dim_opacity: 0.2,
+            last_generation: 0,
+        }
+    }
+
+    /// Wrap an existing [`Selection`] with linked-view state.
+    ///
+    /// Use this when you already have a `Selection` (e.g. one created with
+    /// a [`RenderContext`](crate::RenderContext) for interaction support)
+    /// and want to add linked-view dimming.
+    pub fn from_selection(
+        selection: Selection<T, M>,
+        shared_state: SharedSelectionState<K>,
+        key_fn: impl Fn(&T, usize) -> K + 'static,
+    ) -> Self {
+        Self {
+            selection,
+            shared_state,
+            key_fn: Box::new(key_fn),
+            dim_opacity: 0.2,
+            last_generation: 0,
+        }
+    }
+
+    /// Set the opacity factor applied to unselected items (default `0.2`).
+    ///
+    /// A value of `0.0` makes unselected items fully transparent; `1.0`
+    /// disables dimming entirely.
+    #[must_use]
+    pub fn dim_opacity(mut self, opacity: f32) -> Self {
+        self.dim_opacity = opacity;
+        self
+    }
+
+    /// Prepare GPU resources for rendering, automatically rebuilding the
+    /// dimmed instance buffer when the shared selection state has changed.
+    ///
+    /// On the first call this always creates GPU resources.  On subsequent
+    /// calls it checks the generation counter of the shared state and only
+    /// rebuilds when a change is detected, or when the inner selection has
+    /// no render state (e.g. after [`set_data`](Self::set_data)).
+    ///
+    /// The `mapper` closure converts each data item `T` into a GPU-ready
+    /// instance struct `I`.  The wrapper applies selection-based dimming on
+    /// top of the mapper output.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if pipeline or buffer creation fails.
+    pub fn prepare_render<I>(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        mapper: impl Fn(&T) -> I,
+        cache: Option<&mut PipelineCache>,
+        pool: Option<&mut BufferPool>,
+    ) -> GupResult<()>
+    where
+        I: DimInstance + bytemuck::Pod + bytemuck::Zeroable,
+    {
+        let needs_rebuild = match has_changed_since(&self.shared_state, self.last_generation) {
+            Some(new_gen) => {
+                self.last_generation = new_gen;
+                true
+            }
+            None => !self.selection.is_render_ready(),
+        };
+
+        if needs_rebuild {
+            let instances = build_dimmed_instances(
+                self.selection.data(),
+                mapper,
+                &*self.key_fn,
+                &self.shared_state,
+                self.dim_opacity,
+            );
+            self.selection
+                .prepare_render_raw(device, queue, &instances, cache, pool)?;
+        }
+
+        Ok(())
+    }
+
+    /// Render to an active render pass.
+    ///
+    /// Delegates to the inner [`Selection::render`].  You must call
+    /// [`prepare_render`](Self::prepare_render) at least once before the
+    /// first render call.
+    pub fn render<'a>(&'a self, render_pass: &mut RenderPass<'a>) -> GupResult<()> {
+        self.selection.render(render_pass)
+    }
+
+    /// Returns `true` if the inner selection has been prepared for rendering.
+    pub fn is_render_ready(&self) -> bool {
+        self.selection.is_render_ready()
+    }
+
+    /// Get a reference to the underlying data.
+    pub fn data(&self) -> &[T] {
+        self.selection.data()
+    }
+
+    /// Get a reference to the inner selection.
+    pub fn selection(&self) -> &Selection<T, M> {
+        &self.selection
+    }
+
+    /// Get a mutable reference to the inner selection.
+    pub fn selection_mut(&mut self) -> &mut Selection<T, M> {
+        &mut self.selection
+    }
+
+    /// Get a reference to the shared selection state.
+    pub fn shared_state(&self) -> &SharedSelectionState<K> {
+        &self.shared_state
+    }
+
+    /// Replace the data in this linked selection.
+    ///
+    /// This invalidates the GPU render state; the next call to
+    /// [`prepare_render`](Self::prepare_render) will rebuild everything.
+    pub fn set_data(&mut self, data: Vec<T>) {
+        self.selection.set_data(data);
+    }
+
+    /// Returns the generation counter value that was last observed by
+    /// [`prepare_render`](Self::prepare_render).
+    pub fn last_generation(&self) -> u64 {
+        self.last_generation
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
