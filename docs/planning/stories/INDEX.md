@@ -195,18 +195,18 @@ integration, and Rust→WGSL transpilation.
   composition system from GUP-005 and WGSL code generation from….
 - [GUP-053](GUP-053_Advanced_Shader_Function_Library.md) ✅ — GUP-005
   implemented basic shader functions (LinearScale, ColorMap, PositionTransform).
-- [GUP-252](GUP-252_LinearScale_GPU_Shader_Function.md) 🚧 — LinearScaleUniforms
+- [GUP-252](GUP-252_LinearScale_GPU_Shader_Function.md) ✅ — LinearScaleUniforms
   and WGSL linear_scale/linear_scale_invert shader functions with clamping and
   inversion support. Deps: GUP-005 ✅, GUP-007 ✅, GUP-053 ✅.
 - [GUP-253](GUP-253_LogScale_GPU_Shader_Function.md) 📋 — LogScale
   ShaderFunction with configurable base, zero/epsilon guard, and symmetric-log
-  mode for data straddling zero. Deps: GUP-252 📋.
+  mode for data straddling zero. Deps: GUP-252 ✅.
 - [GUP-254](GUP-254_OrdinalScale_GPU_Shader_Function.md) 📋 — OrdinalScale
   (BandScale + PointScale) GPU shader functions mapping integer category indices
-  to positions. Deps: GUP-252 📋, GUP-053 ✅.
+  to positions. Deps: GUP-252 ✅, GUP-053 ✅.
 - [GUP-255](GUP-255_ColorScale_GPU_Shader_Function.md) 📋 — ColorScale
   ShaderFunction (f32 → vec4) with built-in palettes (Viridis, Plasma, etc.)
-  composable with LinearScale. Deps: GUP-134 ✅, GUP-252 📋.
+  composable with LinearScale. Deps: GUP-134 ✅, GUP-252 ✅.
 - [GUP-273](GUP-273_Geographic_Projection_Shader_System.md) 📋 — Mercator,
   Equirectangular, Stereographic, and Orthographic projections as composable
   WGSL ShaderFunctions with GeoPoint coordinate type and boundary clipping.
