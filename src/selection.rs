@@ -28,8 +28,11 @@ use crate::shader_function::{
     ComposableShaderFunction, ShaderType, ShaderUniform, deduplicate_wgsl_functions,
     replace_wgsl_identifier,
 };
+use crate::transition::builder::{CommittedTransition, TransitionBuilder};
+use crate::transition::diff::{DiffResult, diff_by_key};
 use crate::{GupResult, MaybeSend, MaybeSync, RenderContext};
 use std::collections::HashMap;
+use std::hash::Hash;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
@@ -407,6 +410,17 @@ pub struct Selection<T, M: Mark> {
     aria_previous_data_count: Option<usize>,
     /// Configuration for ARIA live-region announcements on data changes.
     aria_update_config: AriaUpdateConfig,
+    /// Pending diff result from a `data_keyed()` call, consumed by
+    /// `transition().commit()`.
+    pending_diff: Option<DiffResult<T>>,
+    /// Currently active committed transition (if any).
+    committed_transition: Option<CommittedTransition>,
+    /// Callback to invoke when the transition ends.
+    #[cfg(not(target_arch = "wasm32"))]
+    transition_end_callback: Option<Box<dyn Fn() + Send + Sync>>,
+    /// Callback to invoke when the transition ends.
+    #[cfg(target_arch = "wasm32")]
+    transition_end_callback: Option<Box<dyn Fn()>>,
 }
 
 impl<T, M: Mark> std::fmt::Debug for Selection<T, M> {
@@ -440,6 +454,9 @@ impl<T, M: Mark> Selection<T, M> {
             aria_dirty: false,
             aria_previous_data_count: None,
             aria_update_config: AriaUpdateConfig::default(),
+            pending_diff: None,
+            committed_transition: None,
+            transition_end_callback: None,
         })
     }
 
@@ -464,6 +481,9 @@ impl<T, M: Mark> Selection<T, M> {
             aria_dirty: false,
             aria_previous_data_count: None,
             aria_update_config: AriaUpdateConfig::default(),
+            pending_diff: None,
+            committed_transition: None,
+            transition_end_callback: None,
         }
     }
 
@@ -898,6 +918,130 @@ impl<T, M: Mark> Selection<T, M> {
         self.data = data;
         // Mark ARIA tree as needing a refresh.
         self.aria_dirty = true;
+    }
+
+    // -----------------------------------------------------------------------
+    // Key-based data rebinding and transitions
+    // -----------------------------------------------------------------------
+
+    /// Rebind the selection to new data using a key function for identity.
+    ///
+    /// Computes the diff between the current data and `new_data` using
+    /// `key_fn` to determine element identity. The result partitions elements
+    /// into enter (new), update (changed), and exit (removed) groups.
+    ///
+    /// The diff is stored internally and consumed by a subsequent
+    /// [`transition()`](Self::transition) call. The selection's data is **not**
+    /// updated until the transition is committed.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// selection.data_keyed(new_points, |p| p.id);
+    /// // Now call .transition() to animate the change.
+    /// ```
+    pub fn data_keyed<K, F>(&mut self, new_data: Vec<T>, key_fn: F) -> &mut Self
+    where
+        T: Clone,
+        K: Eq + Hash,
+        F: Fn(&T) -> K,
+    {
+        let diff = diff_by_key(&self.data, &new_data, key_fn);
+        self.pending_diff = Some(diff);
+        self
+    }
+
+    /// Start building a transition for this selection.
+    ///
+    /// Returns a [`TransitionBuilder`] that lets you configure duration,
+    /// delay, easing, and per-attribute target values. Call `.commit()` on
+    /// the builder to capture from-state and schedule animations.
+    ///
+    /// If `data_keyed()` was called beforehand, the transition operates on
+    /// the enter/update/exit groups. Otherwise, the entire selection is
+    /// treated as the update group.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// selection
+    ///     .data_keyed(new_data, |p| p.id)
+    ///     .transition()
+    ///     .duration(800)
+    ///     .ease(EasingFn::EaseInOut)
+    ///     .attr("cx", |p| p.x)
+    ///     .attr("cy", |p| p.y)
+    ///     .commit();
+    /// ```
+    pub fn transition(&mut self) -> TransitionBuilder<'_, T, M>
+    where
+        T: Clone + MaybeSend + MaybeSync + 'static,
+    {
+        TransitionBuilder::new(self)
+    }
+
+    /// Take and return the pending diff result (if any), clearing it from the
+    /// selection.
+    ///
+    /// This is called internally by [`TransitionBuilder::commit`].
+    pub(crate) fn take_diff_result(&mut self) -> Option<DiffResult<T>> {
+        self.pending_diff.take()
+    }
+
+    /// Store a committed transition on this selection.
+    pub(crate) fn set_committed_transition(&mut self, ct: Option<CommittedTransition>) {
+        self.committed_transition = ct;
+    }
+
+    /// Get a reference to the currently committed transition (if any).
+    pub fn committed_transition(&self) -> Option<&CommittedTransition> {
+        self.committed_transition.as_ref()
+    }
+
+    /// Store the transition end callback.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn set_transition_end_callback(&mut self, cb: Option<Box<dyn Fn() + Send + Sync>>) {
+        self.transition_end_callback = cb;
+    }
+
+    /// Store the transition end callback (WASM variant).
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn set_transition_end_callback(&mut self, cb: Option<Box<dyn Fn()>>) {
+        self.transition_end_callback = cb;
+    }
+
+    /// Complete the current transition: remove exit elements and fire the
+    /// on_end callback.
+    ///
+    /// Call this when the transition duration has fully elapsed. Exit elements
+    /// are removed from the data buffer and the committed transition is
+    /// cleared.
+    pub fn complete_transition(&mut self) {
+        if let Some(ct) = self.committed_transition.take() {
+            if ct.exit_count > 0 {
+                // Exit elements are appended at the end of the data vec
+                // after the new_data_len boundary.
+                self.data.truncate(ct.new_data_len);
+                // Invalidate GPU state so next render picks up the change.
+                self.render_state = None;
+                self.aria_dirty = true;
+            }
+
+            // Fire the on_end callback.
+            if let Some(cb) = self.transition_end_callback.take() {
+                cb();
+            }
+        }
+    }
+
+    /// Check whether the selection has a pending diff result.
+    pub fn has_pending_diff(&self) -> bool {
+        self.pending_diff.is_some()
+    }
+
+    /// Check whether the selection has an active transition.
+    pub fn has_active_transition(&self) -> bool {
+        self.committed_transition.is_some()
     }
 
     /// Prepare GPU resources for rendering this selection.

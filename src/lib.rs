@@ -104,6 +104,7 @@ pub mod spatial_index;
 pub mod test_utils;
 pub mod text;
 pub mod tick_generator;
+pub mod transition;
 pub mod visual_test_utils;
 pub mod wasm_bench;
 pub mod wasm_bench_axis;
@@ -265,6 +266,13 @@ pub use pipeline_cache::PipelineCache;
 pub use selection::{
     AccessibleMark, AriaUpdateConfig, AttrValue, InteractionData, IntoAttrValue, IntoAttrValues,
     MarkInstanceBuilder, Selection, ViewportUniforms,
+};
+
+// Export transition system
+pub use transition::{
+    TransitionBuilder, TransitionConfig, TransitionState,
+    builder::{CommittedTransition, EasingFn, ElementTransition, TransitionGroup},
+    diff::{DiffResult, diff_by_key},
 };
 
 // Export interactive mark selection system
