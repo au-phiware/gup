@@ -177,23 +177,24 @@ impl App {
         };
 
         if let Some(sel) = &mut self.selection
-            && !sel.is_render_ready() {
-                let _ = sel.prepare_render(
-                    &ctx.device,
-                    &ctx.queue,
-                    |p: &Point| CircleInstance {
-                        center: [p.x, p.y],
-                        radius: p.radius,
-                        _pad0: 0.0,
-                        fill_color: p.color,
-                        stroke_width: 0.0,
-                        _pad1: [0.0; 3],
-                        stroke_color: [0.0; 4],
-                    },
-                    Some(&mut self.cache),
-                    None,
-                );
-            }
+            && !sel.is_render_ready()
+        {
+            let _ = sel.prepare_render(
+                &ctx.device,
+                &ctx.queue,
+                |p: &Point| CircleInstance {
+                    center: [p.x, p.y],
+                    radius: p.radius,
+                    _pad0: 0.0,
+                    fill_color: p.color,
+                    stroke_width: 0.0,
+                    _pad1: [0.0; 3],
+                    stroke_color: [0.0; 4],
+                },
+                Some(&mut self.cache),
+                None,
+            );
+        }
 
         match ctx.begin_frame() {
             Ok(mut frame) => {

@@ -176,7 +176,7 @@ fn viewport_transform_applied_in_dispatch() {
     let hits = vec![ElementHit::new(0, 1, 0.0, Vec2::new(0.0, 0.0))];
     mgr.dispatch(&mut ie, &hits);
 
-    let wp = world_pos.lock().unwrap().clone();
+    let wp = *world_pos.lock().unwrap();
     assert_eq!(wp, Some(Vec2::new(50.0, 100.0)));
 }
 
