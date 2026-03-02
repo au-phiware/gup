@@ -411,7 +411,7 @@ selection, and radix sort.
 - [GUP-288](GUP-288_GPU_Selection_Mask_Buffer.md) ✅ — GPU-side selection mask
   buffer + compute shader for alpha dimming at 100K+ scale without CPU rebuild.
   Deps: GUP-279 ✅, GUP-003 ✅.
-- [GUP-289](GUP-289_LinkedSelection_GPU_Integration.md) 📋 — Wire
+- [GUP-289](GUP-289_LinkedSelection_GPU_Integration.md) 🚧 — Wire
   SelectionMaskBuffer into LinkedSelection for automatic GPU dimming above a
   configurable threshold. Deps: GUP-288 ✅, GUP-279 ✅.
 - [GUP-290](GUP-290_GPU_Mask_Buffer_Pool_Integration.md) 📋 — Integrate

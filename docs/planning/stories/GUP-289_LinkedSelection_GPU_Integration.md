@@ -2,15 +2,15 @@
 
 ## Story Overview
 
-**Initiative**: Interaction & Spatial Index **Status**: 📋 Planned **Created**:
-2025-07-22
+**Initiative**: Interaction & Spatial Index **Status**: 🚧 In Progress
+**Created**: 2025-07-22
 
 ## Context
 
 GUP-288 introduced the `SelectionMaskBuffer` type with a GPU compute shader for
 alpha dimming. Currently this is a standalone API — the caller must manually
-create the buffer, upload the source instances, update the mask, and dispatch the
-compute shader. The existing `LinkedSelection` type still uses the CPU-based
+create the buffer, upload the source instances, update the mask, and dispatch
+the compute shader. The existing `LinkedSelection` type still uses the CPU-based
 `build_dimmed_instances` path for all dataset sizes. This story wires the GPU
 path into `LinkedSelection::prepare_render` so that charts transparently switch
 to the GPU path when instance counts exceed a configurable threshold.
@@ -56,8 +56,8 @@ to the GPU path when instance counts exceed a configurable threshold.
 
 ## Risk Assessment
 
-- **Low**: The GPU path is already tested in GUP-288. The main risk is
-  correctly managing the source instance buffer lifetime.
+- **Low**: The GPU path is already tested in GUP-288. The main risk is correctly
+  managing the source instance buffer lifetime.
 
 ## Definition of Done
 
