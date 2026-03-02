@@ -8707,6 +8707,124 @@ mod tests {
         );
         assert_eq!(mem::align_of::<StatisticsResult>(), 4);
     }
+
+    // ========================================================================
+    // LinearScale / LinearScaleInvert tests (GUP-252)
+    // ========================================================================
+
+    #[test]
+    fn test_linear_scale_uniforms_layout() {
+        use std::mem;
+
+        // Total size should be exactly 20 bytes (5 × 4-byte fields).
+        assert_eq!(
+            mem::size_of::<LinearScaleUniforms>(),
+            20,
+            "LinearScaleUniforms should be 20 bytes"
+        );
+
+        // Field offsets (verified via bytemuck round-trip).
+        let u = LinearScaleUniforms {
+            domain_min: 1.0,
+            domain_max: 2.0,
+            range_min: 3.0,
+            range_max: 4.0,
+            clamp: 1,
+        };
+        let bytes = bytemuck::bytes_of(&u);
+        assert_eq!(bytes.len(), 20);
+
+        // Verify field order by reading back as f32/u32 slices.
+        let f32_vals: &[f32] = bytemuck::cast_slice(&bytes[0..16]);
+        assert_eq!(f32_vals[0], 1.0); // domain_min at offset 0
+        assert_eq!(f32_vals[1], 2.0); // domain_max at offset 4
+        assert_eq!(f32_vals[2], 3.0); // range_min at offset 8
+        assert_eq!(f32_vals[3], 4.0); // range_max at offset 12
+
+        let clamp_val: u32 = u32::from_ne_bytes(bytes[16..20].try_into().unwrap());
+        assert_eq!(clamp_val, 1); // clamp at offset 16
+    }
+
+    #[test]
+    fn test_linear_scale_wgsl_contains_both_functions() {
+        let wgsl = LinearScale::wgsl_function();
+        assert!(
+            wgsl.contains("fn linear_scale("),
+            "Should contain forward function: {wgsl}"
+        );
+        assert!(
+            wgsl.contains("fn linear_scale_invert("),
+            "Should contain inverse function: {wgsl}"
+        );
+        assert!(
+            wgsl.contains("clamp_flag"),
+            "Should reference clamp_flag: {wgsl}"
+        );
+        assert!(
+            wgsl.contains("LinearScaleUniforms"),
+            "Should reference uniform struct: {wgsl}"
+        );
+    }
+
+    #[test]
+    fn test_linear_scale_unclamped_in_range() {
+        // domain [0, 100] → range [0, 1], input 50 → 0.5
+        let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+        let u = scale.create_uniforms().unwrap();
+        assert_eq!(u.domain_min, 0.0);
+        assert_eq!(u.domain_max, 100.0);
+        assert_eq!(u.range_min, 0.0);
+        assert_eq!(u.range_max, 1.0);
+        assert_eq!(u.clamp, 0);
+    }
+
+    #[test]
+    fn test_linear_scale_clamped_constructor() {
+        let scale = LinearScale::with_clamp(0.0, 100.0, 0.0, 1.0);
+        let u = scale.create_uniforms().unwrap();
+        assert_eq!(u.clamp, 1);
+    }
+
+    #[test]
+    fn test_linear_scale_identity_mapping() {
+        // domain == range should be identity
+        let scale = LinearScale::new(0.0, 100.0, 0.0, 100.0);
+        let u = scale.create_uniforms().unwrap();
+        assert_eq!(u.domain_min, u.range_min);
+        assert_eq!(u.domain_max, u.range_max);
+    }
+
+    #[test]
+    fn test_linear_scale_invert_creates_companion() {
+        let scale = LinearScale::with_clamp(0.0, 100.0, 0.0, 1.0);
+        let inv = scale.invert();
+        assert_eq!(inv.domain_min, 0.0);
+        assert_eq!(inv.domain_max, 100.0);
+        assert_eq!(inv.range_min, 0.0);
+        assert_eq!(inv.range_max, 1.0);
+        assert!(inv.clamp);
+
+        // LinearScaleInvert should use the invert function name.
+        assert_eq!(LinearScaleInvert::function_name(), "linear_scale_invert");
+    }
+
+    #[test]
+    fn test_linear_scale_invert_wgsl_shares_code() {
+        // LinearScaleInvert::wgsl_function() should contain both forward and
+        // inverse functions (same code block as LinearScale).
+        let wgsl = LinearScaleInvert::wgsl_function();
+        assert!(wgsl.contains("fn linear_scale("));
+        assert!(wgsl.contains("fn linear_scale_invert("));
+    }
+
+    #[test]
+    fn test_linear_scale_round_trip_composition() {
+        // Composing LinearScale → LinearScaleInvert should type-check.
+        let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+        let inv = scale.invert();
+        let composed = scale.compose(inv);
+        assert!(composed.create_uniforms().is_some());
+    }
 }
 
 #[cfg(test)]
