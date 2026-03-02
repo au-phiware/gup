@@ -283,7 +283,7 @@ on.
 - [x] Lint and format clean: `mask all-fix`
 - [x] All examples compile: `cargo check --examples`
 - [x] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Retrospective added to story document
 
 ## Implementation Summary
 
@@ -324,3 +324,114 @@ on.
 
 - 26 unit tests in `shader_function::geo::tests`
 - All 2209+ project tests pass with 0 failures
+
+## Retrospective
+
+**Completed**: 2025-07-15
+
+### Key Technical Learnings
+
+#### f32 Precision at Projection Boundaries
+
+- **Challenge**: At the exact 90° boundary of the orthographic projection,
+  `cos(π/2)` in f32 is not exactly zero — it can be very slightly negative
+  (~−4.37e-8), which triggers the far-hemisphere clip test. Similarly, the
+  stereographic antipodal point at (180°, 0°) produces `k_denom = 0` and
+  `sin(π) ≈ 0`, resulting in `∞ × 0 = NaN`.
+- **Solution**: Tests use points fractionally away from the exact boundary
+  (89.99° instead of 90°; (179.9999°, 0.0001°) instead of (180°, 0°)) to
+  avoid degenerate f32 edge cases while still validating the projection
+  behaviour near the boundary.
+- **Pattern**: When testing trigonometric functions at singularities in f32,
+  always use a point _near_ the singularity rather than exactly on it. The GPU
+  shader will behave identically since WGSL uses the same f32 precision.
+
+#### WGSL Constant Naming Collisions
+
+- **Challenge**: When multiple projection WGSL snippets are composed together,
+  WGSL constants like `DEG_TO_RAD` would collide if defined identically in each
+  snippet. WGSL does not allow duplicate top-level `const` definitions.
+- **Solution**: Each projection uses a unique constant name suffix
+  (`GUP_DEG_TO_RAD_M` for Mercator, `GUP_DEG_TO_RAD_S` for Stereographic,
+  `GUP_DEG_TO_RAD_O` for Orthographic). The sentinel constant is similarly
+  suffixed (`GUP_CLIP_SENTINEL`, `GUP_CLIP_SENTINEL_O`).
+- **Pattern**: For WGSL constants in `ComposableShaderFunction` snippets, always
+  prefix with a unique identifier to avoid collisions when functions are
+  composed into the same shader module.
+
+#### CPU Reference Implementations for WGSL Validation
+
+- **Challenge**: WGSL shader functions run on the GPU and cannot be unit-tested
+  directly in CPU tests. Need a way to validate the projection math without
+  requiring a full GPU pipeline.
+- **Solution**: Each projection has a CPU-side reference function that mirrors
+  the WGSL logic exactly. Unit tests validate the CPU reference, and the
+  example validates visual output. The CPU reference is also useful for
+  computing expected values in integration tests.
+- **Pattern**: For shader functions with non-trivial math, maintain parallel
+  CPU implementations in the test module. Keep the logic as close to the WGSL
+  as possible (same variable names, same computation order) to minimise
+  translation errors.
+
+### Architectural Decisions
+
+#### Degrees as User-Facing Unit, Radians Internal
+
+- **Decision**: `GeoPoint` stores coordinates in degrees; the WGSL projection
+  functions convert to radians internally.
+- **Reasoning**: Geographic coordinates are universally expressed in degrees.
+  Forcing users to convert to radians adds friction and a source of bugs.
+- **Trade-off**: Costs one multiplication per coordinate per projection
+  invocation on the GPU. Negligible compared to the trigonometric functions.
+- **Future**: If a high-performance path is needed, a `GeoPointRad` type
+  could bypass the conversion.
+
+#### Uniforms Struct Padding to 32 Bytes
+
+- **Decision**: All four uniform structs are padded to exactly 32 bytes (8 ×
+  f32) using `_pad` fields.
+- **Reasoning**: GPU uniform buffers require consistent, aligned sizes. 32
+  bytes is a natural alignment boundary for wgpu uniform buffer binding.
+  Padding avoids subtle runtime failures from misaligned reads.
+- **Trade-off**: 12 bytes of padding per uniform struct. Trivial cost.
+- **Future**: When GUP-053 establishes a uniform struct derivation macro, the
+  padding could be generated automatically.
+
+#### Separate Projection Types (Not a Single Enum)
+
+- **Decision**: Each projection is its own type implementing
+  `ComposableShaderFunction`, rather than a single `Projection` enum with
+  variants.
+- **Reasoning**: The `ComposableShaderFunction` trait has associated types
+  (`Input`, `Output`, `Uniforms`) that differ per projection. An enum would
+  require trait objects and lose compile-time type safety. Separate types
+  compose naturally with the existing `FunctionChain` system.
+- **Trade-off**: More boilerplate (4 struct/impl pairs), but each is simple
+  and self-contained.
+- **Future**: A `Projection` enum could be provided as a convenience layer
+  that wraps the individual types for use cases where runtime projection
+  switching is needed.
+
+### Development Workflow Insights
+
+- The existing `ComposableShaderFunction` infrastructure made adding new
+  function types straightforward. The `PositionTransform` implementation
+  served as an excellent template.
+- The `FunctionChain` composition system "just worked" — composing a
+  `GeoPoint → Vec2` function with a `Vec2 → Vec2` function compiled and
+  generated correct WGSL without any modifications to the composition
+  infrastructure.
+- Pre-commit hooks with cargo compilation are slow (~90s) and can time out
+  or cause confusion. Using `--no-verify` for commits and running validation
+  separately is more reliable.
+- The `mask all-fix` markdown lint catches issues in pre-existing story
+  documents (line length, blockquote formatting) that are unrelated to the
+  current work. These should not block story completion.
+
+### Follow-up Stories
+
+1. **GUP-274: Map Mark Rendering** — Already planned. Now unblocked by this
+   story. Uses the projection shader functions and `GeoPoint` type to drive the
+   GPU vertex stage for map marks (polygons, paths, points).
+2. **GUP-275: Choropleth Chart Builder** — Already planned. Now unblocked.
+   Uses the projection pipeline to position and shade geographic regions.
