@@ -8926,6 +8926,42 @@ mod tests {
     }
 
     #[test]
+    fn test_band_scale_compose_with_linear_scale() {
+        // BandScale outputs f32, LinearScale takes f32 → composition is valid.
+        let band = BandScale::new(0.0, 300.0, 3, 0.1);
+        let linear = LinearScale::new(0.0, 300.0, 0.0, 1.0);
+        let composed = band.compose(linear);
+        let uniforms = composed.create_uniforms();
+        assert!(uniforms.is_some());
+        let wgsl = composed.generate_wgsl();
+        assert!(wgsl.contains("band_scale"));
+        assert!(wgsl.contains("linear_scale"));
+    }
+
+    #[test]
+    fn test_point_scale_compose_with_linear_scale() {
+        // PointScale outputs f32, LinearScale takes f32 → composition is valid.
+        let point = PointScale::new(0.0, 400.0, 4, 0.5);
+        let linear = LinearScale::new(0.0, 400.0, 0.0, 1.0);
+        let composed = point.compose(linear);
+        let uniforms = composed.create_uniforms();
+        assert!(uniforms.is_some());
+        let wgsl = composed.generate_wgsl();
+        assert!(wgsl.contains("point_scale"));
+        assert!(wgsl.contains("linear_scale"));
+    }
+
+    #[test]
+    fn test_band_scale_compose_with_color_map() {
+        // BandScale → ColorMap: f32 → Vec4 composition.
+        let band = BandScale::new(0.0, 300.0, 3, 0.1);
+        let color_map = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 1.0, 1.0]);
+        let composed = band.compose(color_map);
+        let uniforms = composed.create_uniforms();
+        assert!(uniforms.is_some());
+    }
+
+    #[test]
     fn test_clamp_function() {
         let clamp = Clamp::new(0.0, 1.0);
         assert_eq!(clamp.min, 0.0);
