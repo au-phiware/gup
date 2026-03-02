@@ -307,9 +307,10 @@ impl ApplicationHandler for App {
             } => {
                 self.zoom.on_drag_end();
                 if self.zoom.is_animating()
-                    && let Some(w) = &self.window {
-                        w.request_redraw();
-                    }
+                    && let Some(w) = &self.window
+                {
+                    w.request_redraw();
+                }
             }
 
             WindowEvent::RedrawRequested => {
@@ -326,9 +327,10 @@ impl ApplicationHandler for App {
 
                 // Request another frame if animating.
                 if (inertia_moved || self.zoom.is_dragging())
-                    && let Some(w) = &self.window {
-                        w.request_redraw();
-                    }
+                    && let Some(w) = &self.window
+                {
+                    w.request_redraw();
+                }
             }
 
             _ => {}
@@ -336,9 +338,10 @@ impl ApplicationHandler for App {
 
         // While dragging, request continuous redraws.
         if self.zoom.is_dragging()
-            && let Some(w) = &self.window {
-                w.request_redraw();
-            }
+            && let Some(w) = &self.window
+        {
+            w.request_redraw();
+        }
     }
 }
 

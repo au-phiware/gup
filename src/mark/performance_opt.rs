@@ -22,10 +22,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use wgpu::{
-    BlendState, ColorTargetState, ColorWrites, Device, FragmentState, FrontFace, MultisampleState,
+    BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, BlendState, BufferBindingType,
+    ColorTargetState, ColorWrites, Device, FragmentState, FrontFace, MultisampleState,
     PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology, RenderPipeline,
-    RenderPipelineDescriptor, ShaderModuleDescriptor, ShaderSource, TextureFormat, VertexState,
-    VertexStepMode,
+    RenderPipelineDescriptor, ShaderModuleDescriptor, ShaderSource, ShaderStages, TextureFormat,
+    VertexState, VertexStepMode,
 };
 
 // ---------------------------------------------------------------------------
@@ -309,13 +310,32 @@ fn create_pipeline_with_blend<M: Mark>(
     // Bind group layout (reuse from MarkInfoImpl)
     let bind_group_layout = mark_info.create_bind_group_layout(device)?;
 
+    // Viewport transform bind group layout (group 1)
+    let vt_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+        label: Some(&format!(
+            "{}_{:?}_viewport_transform_bgl",
+            mark_info.type_name(),
+            blend_mode
+        )),
+        entries: &[BindGroupLayoutEntry {
+            binding: 0,
+            visibility: ShaderStages::VERTEX,
+            ty: BindingType::Buffer {
+                ty: BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        }],
+    });
+
     let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: Some(&format!(
             "{}_{:?}_pipeline_layout",
             mark_info.type_name(),
             blend_mode
         )),
-        bind_group_layouts: &[&bind_group_layout],
+        bind_group_layouts: &[&bind_group_layout, &vt_bind_group_layout],
         push_constant_ranges: &[],
     });
 

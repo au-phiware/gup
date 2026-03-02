@@ -21,7 +21,7 @@
 //!
 //! # Quick Start
 //!
-//! ```rust
+//! ```rust,no_run
 //! use gup::zoom::{ZoomBehavior, GpuViewportTransform};
 //!
 //! let mut zoom = ZoomBehavior::new()
@@ -29,6 +29,7 @@
 //!     .inertia_decay(0.85);
 //!
 //! // On mouse wheel: zoom centered on cursor
+//! let (delta_y, cursor_clip_x, cursor_clip_y) = (0.0, 0.0, 0.0);
 //! zoom.on_wheel(delta_y, cursor_clip_x, cursor_clip_y);
 //!
 //! // On drag: pan the viewport

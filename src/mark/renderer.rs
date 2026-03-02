@@ -60,16 +60,24 @@ pub struct MarkRenderer {
     index_buffer: Option<GpuBuffer<u32>>,
     /// Running performance counters.
     metrics: super::performance_opt::MarkPerformanceMetrics,
+    /// Default identity viewport transform bind group (lazily created).
+    /// Set at @group(1) to satisfy the pipeline layout when no zoom is active.
+    vt_bind_group: Option<wgpu::BindGroup>,
+    /// Buffer backing the default viewport transform bind group.
+    _vt_buffer: Option<wgpu::Buffer>,
 }
 
 impl MarkRenderer {
     /// Create a new mark renderer with default buffer capacities.
     pub fn new(device: &Device) -> Self {
+        let (vt_buffer, vt_bind_group) = Self::create_default_vt_bind_group(device);
         Self {
             vertex_buffer: GpuBuffer::new(device, BufferType::Vertex, 4096), // 4KB initial capacity
             instance_buffer: GpuBuffer::new(device, BufferType::Instance, 8192), // 8KB initial capacity
             index_buffer: Some(GpuBuffer::new(device, BufferType::Index, 2048)), // 2KB for indices
             metrics: Default::default(),
+            vt_bind_group: Some(vt_bind_group),
+            _vt_buffer: Some(vt_buffer),
         }
     }
 
@@ -80,13 +88,49 @@ impl MarkRenderer {
         instance_capacity: usize,
         index_capacity: Option<usize>,
     ) -> Self {
+        let (vt_buffer, vt_bind_group) = Self::create_default_vt_bind_group(device);
         Self {
             vertex_buffer: GpuBuffer::new(device, BufferType::Vertex, vertex_capacity),
             instance_buffer: GpuBuffer::new(device, BufferType::Instance, instance_capacity),
             index_buffer: index_capacity
                 .map(|cap| GpuBuffer::new(device, BufferType::Storage, cap)),
             metrics: Default::default(),
+            vt_bind_group: Some(vt_bind_group),
+            _vt_buffer: Some(vt_buffer),
         }
+    }
+
+    /// Create a default identity viewport transform bind group.
+    fn create_default_vt_bind_group(device: &Device) -> (wgpu::Buffer, wgpu::BindGroup) {
+        use wgpu::util::DeviceExt;
+        let identity = crate::zoom::GpuViewportTransform::IDENTITY;
+        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("mark_renderer_default_vt_uniform"),
+            contents: bytemuck::bytes_of(&identity),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("mark_renderer_vt_bgl"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("mark_renderer_default_vt_bind_group"),
+            layout: &layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: buffer.as_entire_binding(),
+            }],
+        });
+        (buffer, bind_group)
     }
 
     /// Upload vertex data to the GPU.
@@ -158,6 +202,11 @@ impl MarkRenderer {
         render_pass.set_pipeline(pipeline);
         render_pass.set_bind_group(0, bind_group, &[]);
 
+        // Set default viewport transform at group 1 (identity).
+        if let Some(ref vt_bg) = self.vt_bind_group {
+            render_pass.set_bind_group(1, vt_bg, &[]);
+        }
+
         // Set vertex buffer
         render_pass.set_vertex_buffer(0, self.vertex_buffer.buffer().slice(..));
 
@@ -184,7 +233,8 @@ impl MarkRenderer {
     /// Render mark instances with pattern support for accessibility.
     ///
     /// This method extends the basic rendering to include pattern bind groups
-    /// for accessibility features. The pattern bind group should be set at group 1.
+    /// for accessibility features. The pattern bind group is set at group 2
+    /// (group 1 is reserved for the viewport transform).
     pub fn render_marks_with_patterns<M: Mark>(
         &self,
         render_pass: &mut RenderPass,
@@ -196,7 +246,11 @@ impl MarkRenderer {
         // Set pipeline and bind groups
         render_pass.set_pipeline(pipeline);
         render_pass.set_bind_group(0, bind_group, &[]);
-        render_pass.set_bind_group(1, pattern_bind_group, &[]);
+        // Viewport transform at group 1 (identity).
+        if let Some(ref vt_bg) = self.vt_bind_group {
+            render_pass.set_bind_group(1, vt_bg, &[]);
+        }
+        render_pass.set_bind_group(2, pattern_bind_group, &[]);
 
         // Set vertex buffer
         render_pass.set_vertex_buffer(0, self.vertex_buffer.buffer().slice(..));
@@ -311,6 +365,10 @@ impl MarkRenderer {
         {
             render_pass.set_pipeline(pipeline);
             render_pass.set_bind_group(0, bind_group, &[]);
+            // Viewport transform at group 1 (identity).
+            if let Some(ref vt_bg) = self.vt_bind_group {
+                render_pass.set_bind_group(1, vt_bg, &[]);
+            }
             render_pass.set_vertex_buffer(0, self.vertex_buffer.buffer().slice(..));
 
             if let Some(stencil_ref) = pass_config.stencil_reference {
@@ -384,6 +442,10 @@ impl MarkRenderer {
         // Set pipeline and bind groups
         render_pass.set_pipeline(pipeline);
         render_pass.set_bind_group(0, bind_group, &[]);
+        // Viewport transform at group 1 (identity).
+        if let Some(ref vt_bg) = self.vt_bind_group {
+            render_pass.set_bind_group(1, vt_bg, &[]);
+        }
         render_pass.set_bind_group(dynamic_attr_group_index, dynamic_attr_bind_group, &[]);
 
         // Set vertex buffer

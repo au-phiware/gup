@@ -156,6 +156,9 @@ pub use crate::label::{
 // Interaction system
 pub use crate::interaction::{InteractionEvent, InteractionSystem, InteractionType, Renderable};
 
+// Zoom and pan behaviour
+pub use crate::zoom::{GpuViewportTransform, ZoomBehavior};
+
 // Integration and plugin system
 pub use crate::integration::{
     ExternalRenderer, ExternalVisualizationBuilder, ExternalVisualizationWrapper, wrap_point_data,
