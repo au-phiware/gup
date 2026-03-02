@@ -3397,6 +3397,11 @@ impl AnimationTimelineWithEvents {
 /// `u32` (rather than `bool`) for WGSL alignment compatibility — `0` means
 /// unclamped and `1` means clamped.
 ///
+/// Three padding fields (`_pad0`, `_pad1`, `_pad2`) round the struct up to 32
+/// bytes, ensuring correct WGSL layout when the struct is embedded inside
+/// `ChainUniforms` alongside types that contain `vec4<f32>` (which require
+/// 16-byte alignment).
+///
 /// # Layout
 ///
 /// | Offset | Field        | Type  |
@@ -3406,8 +3411,11 @@ impl AnimationTimelineWithEvents {
 /// | 8      | `range_min`  | `f32` |
 /// | 12     | `range_max`  | `f32` |
 /// | 16     | `clamp`      | `u32` |
+/// | 20     | `_pad0`      | `u32` |
+/// | 24     | `_pad1`      | `u32` |
+/// | 28     | `_pad2`      | `u32` |
 ///
-/// Total size: 20 bytes.
+/// Total size: 32 bytes.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct LinearScaleUniforms {
@@ -3417,11 +3425,17 @@ pub struct LinearScaleUniforms {
     pub range_max: f32,
     /// 0 = unclamped (extrapolates beyond domain), 1 = clamped to range.
     pub clamp: u32,
+    /// Padding for GPU alignment (must be 0).
+    pub _pad0: u32,
+    /// Padding for GPU alignment (must be 0).
+    pub _pad1: u32,
+    /// Padding for GPU alignment (must be 0).
+    pub _pad2: u32,
 }
 
 impl ShaderUniform for LinearScaleUniforms {
     fn wgsl_struct_definition() -> String {
-        "struct LinearScaleUniforms {\n    domain_min: f32,\n    domain_max: f32,\n    range_min: f32,\n    range_max: f32,\n    clamp_flag: u32,\n}".to_string()
+        "struct LinearScaleUniforms {\n    domain_min: f32,\n    domain_max: f32,\n    range_min: f32,\n    range_max: f32,\n    clamp_flag: u32,\n    _pad0: u32,\n    _pad1: u32,\n    _pad2: u32,\n}".to_string()
     }
 
     fn wgsl_type_name() -> &'static str {
@@ -3536,6 +3550,9 @@ fn linear_scale_invert(value: f32, scale: LinearScaleUniforms) -> f32 {
             range_min: self.range_min,
             range_max: self.range_max,
             clamp: if self.clamp { 1 } else { 0 },
+            _pad0: 0,
+            _pad1: 0,
+            _pad2: 0,
         })
     }
 
@@ -3578,6 +3595,9 @@ impl ComposableShaderFunction for LinearScaleInvert {
             range_min: self.range_min,
             range_max: self.range_max,
             clamp: if self.clamp { 1 } else { 0 },
+            _pad0: 0,
+            _pad1: 0,
+            _pad2: 0,
         })
     }
 
@@ -7602,6 +7622,9 @@ mod tests {
             range_min: 0.0,
             range_max: 1.0,
             clamp: 0,
+            _pad0: 0,
+            _pad1: 0,
+            _pad2: 0,
         };
 
         let color_uniforms = ColorMapUniforms {
@@ -7719,6 +7742,9 @@ mod tests {
                 range_min: 0.0,
                 range_max: 1.0,
                 clamp: 0,
+                _pad0: 0,
+                _pad1: 0,
+                _pad2: 0,
             },
             second: LinearScaleUniforms {
                 domain_min: 0.0,
@@ -7726,6 +7752,9 @@ mod tests {
                 range_min: -1.0,
                 range_max: 1.0,
                 clamp: 0,
+                _pad0: 0,
+                _pad1: 0,
+                _pad2: 0,
             },
         };
         let outer = ChainUniforms {
@@ -8718,11 +8747,11 @@ mod tests {
     fn test_linear_scale_uniforms_layout() {
         use std::mem;
 
-        // Total size should be exactly 20 bytes (5 × 4-byte fields).
+        // Total size should be exactly 32 bytes (8 × 4-byte fields, including padding).
         assert_eq!(
             mem::size_of::<LinearScaleUniforms>(),
-            20,
-            "LinearScaleUniforms should be 20 bytes"
+            32,
+            "LinearScaleUniforms should be 32 bytes"
         );
 
         // Field offsets (verified via bytemuck round-trip).
@@ -8732,9 +8761,12 @@ mod tests {
             range_min: 3.0,
             range_max: 4.0,
             clamp: 1,
+            _pad0: 0,
+            _pad1: 0,
+            _pad2: 0,
         };
         let bytes = bytemuck::bytes_of(&u);
-        assert_eq!(bytes.len(), 20);
+        assert_eq!(bytes.len(), 32);
 
         // Verify field order by reading back as f32/u32 slices.
         let f32_vals: &[f32] = bytemuck::cast_slice(&bytes[0..16]);
@@ -8745,6 +8777,10 @@ mod tests {
 
         let clamp_val: u32 = u32::from_ne_bytes(bytes[16..20].try_into().unwrap());
         assert_eq!(clamp_val, 1); // clamp at offset 16
+
+        // Padding fields should be zero.
+        let pad_vals: &[u32] = bytemuck::cast_slice(&bytes[20..32]);
+        assert_eq!(pad_vals, &[0, 0, 0]);
     }
 
     #[test]

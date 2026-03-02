@@ -128,7 +128,7 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4<f32> {{
 
 @fragment
 fn fs_main() -> @location(0) vec4<f32> {{
-    let u = LinearScaleUniforms(0.0, 100.0, 0.0, 1.0, 0u);
+    let u = LinearScaleUniforms(0.0, 100.0, 0.0, 1.0, 0u, 0u, 0u, 0u);
     let forward = linear_scale(50.0, u);
     let inverse = linear_scale_invert(0.5, u);
     return vec4<f32>(forward, inverse, 0.0, 1.0);
@@ -168,7 +168,7 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4<f32> {{
 
 @fragment
 fn fs_main() -> @location(0) vec4<f32> {{
-    let u = LinearScaleUniforms(0.0, 100.0, 0.0, 1.0, 1u);
+    let u = LinearScaleUniforms(0.0, 100.0, 0.0, 1.0, 1u, 0u, 0u, 0u);
     // Value outside domain should be clamped.
     let forward = linear_scale(150.0, u);
     let inverse = linear_scale_invert(1.5, u);

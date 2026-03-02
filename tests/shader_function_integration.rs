@@ -230,6 +230,9 @@ async fn test_wgsl_compilation_validation() -> GupResult<()> {
             range_min: f32,
             range_max: f32,
             clamp_flag: u32,
+            _pad0: u32,
+            _pad1: u32,
+            _pad2: u32,
         }}
 
         {wgsl_code}
@@ -241,7 +244,7 @@ async fn test_wgsl_compilation_validation() -> GupResult<()> {
 
         @fragment
         fn fs_main() -> @location(0) vec4<f32> {{
-            let u = LinearScaleUniforms(0.0, 1.0, 0.0, 10.0, 0u);
+            let u = LinearScaleUniforms(0.0, 1.0, 0.0, 10.0, 0u, 0u, 0u, 0u);
             let result = linear_scale(0.5, u);
             return vec4<f32>(result, 0.0, 0.0, 1.0);
         }}
