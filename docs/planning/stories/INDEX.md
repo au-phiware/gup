@@ -168,8 +168,8 @@ data, and parallel output.
   GPU-interpolated 2-keyframe animations for smooth data rebinding. Deps:
   GUP-002 ✅, GUP-138 ✅, GUP-141 ✅, GUP-142 ✅, GUP-168 ✅.
 - [GUP-277](GUP-277_GPU_Render_Loop_Transition_Integration.md) 📋 — Wire
-  CommittedTransition into the GPU render loop with KeyframeAnimation
-  instances for automatic per-frame interpolation. Deps: GUP-276 ✅.
+  CommittedTransition into the GPU render loop with KeyframeAnimation instances
+  for automatic per-frame interpolation. Deps: GUP-276 ✅.
 - [GUP-278](GUP-278_Staggered_Transition_Delays.md) 📋 — Per-element delay
   offsets via `.delay_fn()` for cascading/staggered animation effects. Deps:
   GUP-276 ✅.
@@ -213,7 +213,7 @@ integration, and Rust→WGSL transpilation.
 - [GUP-255](GUP-255_ColorScale_GPU_Shader_Function.md) ✅ — ColorScale
   ShaderFunction (f32 → vec4) with built-in palettes (Viridis, Plasma, etc.)
   composable with LinearScale. Deps: GUP-134 ✅, GUP-252 ✅.
-- [GUP-273](GUP-273_Geographic_Projection_Shader_System.md) 🚧 — Mercator,
+- [GUP-273](GUP-273_Geographic_Projection_Shader_System.md) ✅ — Mercator,
   Equirectangular, Stereographic, and Orthographic projections as composable
   WGSL ShaderFunctions with GeoPoint coordinate type and boundary clipping.
   Deps: GUP-005 ✅, GUP-007 ✅, GUP-052 ✅, GUP-053 ✅.
