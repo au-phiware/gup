@@ -4313,8 +4313,11 @@ impl OrdinalScale {
     pub fn from_categories(labels: &[&str]) -> Self {
         let mut index_map = std::collections::HashMap::with_capacity(labels.len());
         let mut unique_labels = Vec::with_capacity(labels.len());
-        for (i, &label) in labels.iter().enumerate() {
-            if index_map.insert(label.to_string(), i as u32).is_none() {
+        for &label in labels {
+            let next_idx = unique_labels.len() as u32;
+            if let std::collections::hash_map::Entry::Vacant(e) = index_map.entry(label.to_string())
+            {
+                e.insert(next_idx);
                 unique_labels.push(label.to_string());
             }
         }
@@ -8677,6 +8680,249 @@ mod tests {
         let uniforms = power_scale.create_uniforms().unwrap();
         assert_eq!(uniforms.exponent, 0.5);
         assert_eq!(PowerScale::function_name(), "power_scale");
+    }
+
+    // ---------------------------------------------------------------
+    // Ordinal scale tests
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_ordinal_scale_uniforms_bytemuck_round_trip() {
+        let uniforms = OrdinalScaleUniforms {
+            range_start: 10.0,
+            step_size: 50.0,
+            padding: 0.1,
+            category_count: 5,
+        };
+
+        // Cast to bytes and back — verifies Pod/Zeroable/repr(C) correctness.
+        let bytes: &[u8] = bytemuck::bytes_of(&uniforms);
+        assert_eq!(bytes.len(), 16);
+        let round_tripped: &OrdinalScaleUniforms = bytemuck::from_bytes(bytes);
+        assert_eq!(round_tripped.range_start, 10.0);
+        assert_eq!(round_tripped.step_size, 50.0);
+        assert_eq!(round_tripped.padding, 0.1);
+        assert_eq!(round_tripped.category_count, 5);
+    }
+
+    #[test]
+    fn test_ordinal_scale_uniforms_size_and_alignment() {
+        assert_eq!(std::mem::size_of::<OrdinalScaleUniforms>(), 16);
+        assert_eq!(std::mem::align_of::<OrdinalScaleUniforms>(), 4);
+    }
+
+    #[test]
+    fn test_band_scale_three_categories() {
+        // 3 categories over [0, 300] with 10% padding.
+        let scale = BandScale::new(0.0, 300.0, 3, 0.1);
+        let step = 300.0 / 3.0; // 100.0
+        let _bw = step * 0.9; // 90.0
+
+        assert!((scale.step_size() - 100.0).abs() < 1e-5);
+        assert!((scale.bandwidth() - 90.0).abs() < 1e-5);
+
+        // Centre positions: bw/2, step + bw/2, 2*step + bw/2
+        let expected = [45.0, 145.0, 245.0];
+        for (i, &exp) in expected.iter().enumerate() {
+            let pos = scale.apply(i as u32);
+            assert!(
+                (pos - exp).abs() < 1e-4,
+                "band_scale({i}) = {pos}, expected {exp}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_band_scale_two_categories_no_padding() {
+        let scale = BandScale::new(0.0, 200.0, 2, 0.0);
+        assert!((scale.step_size() - 100.0).abs() < 1e-5);
+        assert!((scale.bandwidth() - 100.0).abs() < 1e-5);
+        assert!((scale.apply(0) - 50.0).abs() < 1e-5);
+        assert!((scale.apply(1) - 150.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_band_scale_zero_categories() {
+        let scale = BandScale::new(0.0, 300.0, 0, 0.1);
+        assert_eq!(scale.step_size(), 0.0);
+        assert_eq!(scale.bandwidth(), 0.0);
+    }
+
+    #[test]
+    fn test_band_scale_uniforms() {
+        let scale = BandScale::new(0.0, 300.0, 3, 0.1);
+        let u = scale.uniforms();
+        assert_eq!(u.range_start, 0.0);
+        assert!((u.step_size - 100.0).abs() < 1e-5);
+        assert_eq!(u.padding, 0.1);
+        assert_eq!(u.category_count, 3);
+    }
+
+    #[test]
+    fn test_band_scale_shader_function() {
+        let wgsl = BandScale::wgsl_function();
+        assert!(wgsl.contains("band_scale"));
+        assert!(wgsl.contains("band_scale_bandwidth"));
+        assert!(wgsl.contains("OrdinalScaleUniforms"));
+        assert_eq!(BandScale::function_name(), "band_scale");
+    }
+
+    #[test]
+    fn test_point_scale_four_categories() {
+        // 4 categories over [0, 400] with padding = 0.5.
+        // step = 400 / (4 - 1 + 0.5) = 400 / 3.5 ≈ 114.2857
+        // effective_start = 0 + step * 0.25 ≈ 28.5714
+        // Positions: 28.5714, 142.857, 257.143, 371.429
+        let scale = PointScale::new(0.0, 400.0, 4, 0.5);
+        let step = 400.0 / 3.5;
+
+        assert!((scale.step_size() - step).abs() < 1e-4);
+
+        let start = step * 0.25;
+        let expected = [start, start + step, start + 2.0 * step, start + 3.0 * step];
+        for (i, &exp) in expected.iter().enumerate() {
+            let pos = scale.apply(i as u32);
+            assert!(
+                (pos - exp).abs() < 1e-3,
+                "point_scale({i}) = {pos}, expected {exp}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_point_scale_two_categories_no_padding() {
+        // 2 categories over [0, 100] with no padding → endpoints.
+        let scale = PointScale::new(0.0, 100.0, 2, 0.0);
+        assert!((scale.apply(0) - 0.0).abs() < 1e-5);
+        assert!((scale.apply(1) - 100.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_point_scale_single_category() {
+        // 1 category → midpoint of range.
+        let scale = PointScale::new(0.0, 400.0, 1, 0.5);
+        assert!((scale.apply(0) - 200.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_point_scale_uniforms() {
+        let scale = PointScale::new(0.0, 400.0, 4, 0.5);
+        let u = scale.uniforms();
+        // range_start should be the effective start (with outer padding)
+        let expected_start = scale.step_size() * 0.25;
+        assert!((u.range_start - expected_start).abs() < 1e-4);
+        assert!((u.step_size - scale.step_size()).abs() < 1e-4);
+        assert_eq!(u.category_count, 4);
+    }
+
+    #[test]
+    fn test_point_scale_shader_function() {
+        let wgsl = PointScale::wgsl_function();
+        assert!(wgsl.contains("point_scale"));
+        assert!(wgsl.contains("OrdinalScaleUniforms"));
+        assert_eq!(PointScale::function_name(), "point_scale");
+    }
+
+    #[test]
+    fn test_ordinal_scale_category_index() {
+        let scale = OrdinalScale::from_categories(&["Apple", "Banana", "Cherry"]);
+        assert_eq!(scale.category_index("Apple"), Some(0));
+        assert_eq!(scale.category_index("Banana"), Some(1));
+        assert_eq!(scale.category_index("Cherry"), Some(2));
+        assert_eq!(scale.category_index("Durian"), None);
+        assert_eq!(scale.category_count(), 3);
+    }
+
+    #[test]
+    fn test_ordinal_scale_duplicate_labels() {
+        let scale = OrdinalScale::from_categories(&["A", "B", "A", "C"]);
+        assert_eq!(scale.category_count(), 3); // "A" deduped
+        assert_eq!(scale.category_index("A"), Some(0));
+        assert_eq!(scale.category_index("C"), Some(2)); // originally index 3, but stored as 2
+    }
+
+    #[test]
+    fn test_ordinal_scale_empty() {
+        let scale = OrdinalScale::from_categories(&[]);
+        assert_eq!(scale.category_count(), 0);
+        assert_eq!(scale.category_index("anything"), None);
+    }
+
+    #[test]
+    fn test_ordinal_scale_labels() {
+        let scale = OrdinalScale::from_categories(&["X", "Y", "Z"]);
+        assert_eq!(scale.labels(), &["X", "Y", "Z"]);
+    }
+
+    #[test]
+    fn test_ordinal_scale_band_scale_integration() {
+        let scale = OrdinalScale::from_categories(&["A", "B", "C"]);
+        let band = scale.band_scale((0.0, 300.0), 0.1);
+        assert_eq!(band.category_count, 3);
+        assert!((band.bandwidth() - 90.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn test_ordinal_scale_point_scale_integration() {
+        let scale = OrdinalScale::from_categories(&["A", "B", "C", "D"]);
+        let point = scale.point_scale((0.0, 400.0), 0.5);
+        assert_eq!(point.category_count, 4);
+    }
+
+    #[test]
+    fn test_ordinal_scale_round_trip_five_categories() {
+        // AC4 round-trip: from_categories → category_index → uniform → apply
+        let labels = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+        let scale = OrdinalScale::from_categories(&labels);
+        let band = scale.band_scale((0.0, 500.0), 0.2);
+        let step = 500.0 / 5.0; // 100.0
+        let bw = step * 0.8; // 80.0
+
+        for (i, &label) in labels.iter().enumerate() {
+            let idx = scale.category_index(label).unwrap();
+            assert_eq!(idx, i as u32);
+            let pos = band.apply(idx);
+            let expected = i as f32 * step + bw * 0.5;
+            assert!(
+                (pos - expected).abs() < 1e-4,
+                "round-trip for {label}: got {pos}, expected {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_ordinal_scale_uniforms() {
+        let scale = OrdinalScale::from_categories(&["A", "B", "C"]);
+        let u = scale.uniforms((0.0, 300.0), 0.1);
+        assert_eq!(u.range_start, 0.0);
+        assert!((u.step_size - 100.0).abs() < 1e-5);
+        assert_eq!(u.padding, 0.1);
+        assert_eq!(u.category_count, 3);
+    }
+
+    #[test]
+    fn test_band_scale_composable_shader_function() {
+        let scale = BandScale::new(0.0, 300.0, 3, 0.1);
+        let uniforms = scale.create_uniforms().unwrap();
+        assert_eq!(uniforms.category_count, 3);
+        assert!((uniforms.step_size - 100.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_point_scale_composable_shader_function() {
+        let scale = PointScale::new(0.0, 400.0, 4, 0.5);
+        let uniforms = scale.create_uniforms().unwrap();
+        assert_eq!(uniforms.category_count, 4);
+    }
+
+    #[test]
+    fn test_ordinal_scale_wgsl_struct_definition() {
+        let def = OrdinalScaleUniforms::wgsl_struct_definition();
+        assert!(def.contains("OrdinalScaleUniforms"));
+        assert!(def.contains("range_start"));
+        assert!(def.contains("step_size"));
+        assert!(def.contains("padding"));
+        assert!(def.contains("category_count"));
     }
 
     #[test]
