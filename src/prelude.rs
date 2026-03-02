@@ -44,6 +44,8 @@ pub use crate::mixable::Mixable;
 
 // Shader functions
 pub use crate::shader_function::{
+    // Alpha blending (GUP-053)
+    AlphaBlending,
     // Animation event system (GUP-142)
     AnimationEventCallback,
     AnimationEventType,
@@ -52,6 +54,8 @@ pub use crate::shader_function::{
     AnimationTimeline,
     AnimationTimelineWithEvents,
     BandwidthMethod,
+    // Binning (GUP-053)
+    BinningFunction,
     BinningStrategy,
     // Filtering and clamping (GUP-033)
     Clamp,
@@ -61,15 +65,24 @@ pub use crate::shader_function::{
     // Storage buffer-based gradient (GUP-134)
     ColorGradientStorage,
     ColorMap,
+    // Color space conversion (GUP-053)
+    ColorSpaceConverter,
+    ColorSpaceDirection,
     ComposableFunction,
     // Core traits
     ComposableShaderFunction as ShaderFunction,
     // Advanced composition patterns (GUP-033 AC3)
     ConditionalFunction,
     CubicBezierTiming,
+    // Distance function (GUP-053)
+    DistanceFunction,
     Easing,
     EasingFunction,
+    // Exponential scale (GUP-053)
+    ExponentialScale,
 
+    // HSV color mapping (GUP-053)
+    HSVColorMap,
     // Histogram functions (GUP-143)
     Histogram,
     HistogramCompute,
@@ -97,19 +110,29 @@ pub use crate::shader_function::{
     Mat2,
     Mat3,
     Mat4,
+    // Matrix transform (GUP-053)
+    MatrixTransform,
     // Statistical functions (GUP-139)
     Mean,
     MinMax,
+    // Normalize function (GUP-053)
+    NormalizeFunction,
     // Parallel composition (GUP-136)
     ParallelComposable,
     ParallelComposition,
     ParallelOutput,
     // Statistical functions (GUP-139)
     Percentile,
+    // Polar transform (GUP-053)
+    PolarTransform,
 
     PositionTransform,
 
     PowerScale,
+    // Projection transform (GUP-053)
+    ProjectionTransform,
+    // Quantile function (GUP-053)
+    QuantileFunction,
 
     ShaderCompatible,
 
@@ -118,6 +141,8 @@ pub use crate::shader_function::{
     SmoothStep,
     // Statistical functions (GUP-139)
     StandardDeviation,
+    // Standardize function (GUP-053)
+    StandardizeFunction,
     StatisticsCompute,
     StatisticsResult,
     // Streaming statistics (GUP-146)

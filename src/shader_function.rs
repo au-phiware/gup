@@ -3819,6 +3819,107 @@ impl ComposableShaderFunction for PowerScale {
     }
 }
 
+/// Exponential scale transformation.
+///
+/// Maps values from a domain to a range using exponential scaling.
+/// The inverse of logarithmic scale — useful for emphasizing differences
+/// in large values while compressing small value differences.
+#[derive(Clone, Debug)]
+pub struct ExponentialScale {
+    pub domain_min: f32,
+    pub domain_max: f32,
+    pub range_min: f32,
+    pub range_max: f32,
+    pub base: f32,
+}
+
+impl ExponentialScale {
+    pub fn new(
+        domain_min: f32,
+        domain_max: f32,
+        range_min: f32,
+        range_max: f32,
+        base: f32,
+    ) -> Self {
+        Self {
+            domain_min,
+            domain_max,
+            range_min,
+            range_max,
+            base,
+        }
+    }
+
+    /// Creates an exponential scale with base 10.
+    pub fn base10(domain_min: f32, domain_max: f32, range_min: f32, range_max: f32) -> Self {
+        Self::new(domain_min, domain_max, range_min, range_max, 10.0)
+    }
+
+    /// Creates an exponential scale with base e.
+    pub fn natural(domain_min: f32, domain_max: f32, range_min: f32, range_max: f32) -> Self {
+        Self::new(
+            domain_min,
+            domain_max,
+            range_min,
+            range_max,
+            std::f32::consts::E,
+        )
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ExponentialScaleUniforms {
+    pub domain_min: f32,
+    pub domain_max: f32,
+    pub range_min: f32,
+    pub range_max: f32,
+    pub base: f32,
+    pub _padding: [f32; 3],
+}
+
+impl ShaderUniform for ExponentialScaleUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct ExponentialScaleUniforms {\n    domain_min: f32,\n    domain_max: f32,\n    range_min: f32,\n    range_max: f32,\n    base: f32,\n}".to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "ExponentialScaleUniforms"
+    }
+}
+
+impl ComposableShaderFunction for ExponentialScale {
+    type Input = f32;
+    type Output = f32;
+    type Uniforms = ExponentialScaleUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn exponential_scale(value: f32, scale: ExponentialScaleUniforms) -> f32 {
+            let normalized = (value - scale.domain_min) / (scale.domain_max - scale.domain_min);
+            let t = clamp(normalized, 0.0, 1.0);
+            let exp_value = (pow(scale.base, t) - 1.0) / (scale.base - 1.0);
+            return scale.range_min + exp_value * (scale.range_max - scale.range_min);
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(ExponentialScaleUniforms {
+            domain_min: self.domain_min,
+            domain_max: self.domain_max,
+            range_min: self.range_min,
+            range_max: self.range_max,
+            base: self.base,
+            _padding: [0.0; 3],
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "exponential_scale"
+    }
+}
+
 // ============================================================================
 // Filtering and Clamping Functions (AC2)
 // ============================================================================
@@ -4358,6 +4459,940 @@ impl ColorGradientBuilder {
 impl Default for ColorGradientBuilder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// ============================================================================
+// HSV Color Mapping and Color Space Conversion (GUP-053 AC2)
+// ============================================================================
+
+/// HSV-based color mapping from a scalar value to RGBA color.
+///
+/// Maps a normalized [0..1] input to a color specified by hue range,
+/// saturation, and value (brightness). The hue is interpolated linearly
+/// across the given range in degrees.
+#[derive(Clone, Debug)]
+pub struct HSVColorMap {
+    /// Start hue in degrees (0..360)
+    pub hue_start: f32,
+    /// End hue in degrees (0..360)
+    pub hue_end: f32,
+    /// Saturation (0..1)
+    pub saturation: f32,
+    /// Value / brightness (0..1)
+    pub value: f32,
+}
+
+impl HSVColorMap {
+    pub fn new(hue_start: f32, hue_end: f32, saturation: f32, value: f32) -> Self {
+        Self {
+            hue_start,
+            hue_end,
+            saturation,
+            value,
+        }
+    }
+
+    /// Creates a full-spectrum rainbow mapping (0°–360°).
+    pub fn rainbow() -> Self {
+        Self::new(0.0, 360.0, 1.0, 1.0)
+    }
+
+    /// Creates a cool-to-warm mapping (240° blue → 0° red).
+    pub fn cool_warm() -> Self {
+        Self::new(240.0, 0.0, 0.9, 0.9)
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct HSVColorMapUniforms {
+    pub hue_start: f32,
+    pub hue_end: f32,
+    pub saturation: f32,
+    pub value: f32,
+}
+
+impl ShaderUniform for HSVColorMapUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct HSVColorMapUniforms {\n    hue_start: f32,\n    hue_end: f32,\n    saturation: f32,\n    value: f32,\n}".to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "HSVColorMapUniforms"
+    }
+}
+
+impl ComposableShaderFunction for HSVColorMap {
+    type Input = f32;
+    type Output = Vec4;
+    type Uniforms = HSVColorMapUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn hsv_to_rgb(h: f32, s: f32, v: f32) -> vec3<f32> {
+            let c = v * s;
+            let hp = h / 60.0;
+            let x = c * (1.0 - abs(hp % 2.0 - 1.0));
+            let m = v - c;
+            var rgb: vec3<f32>;
+            if (hp < 1.0) { rgb = vec3<f32>(c, x, 0.0); }
+            else if (hp < 2.0) { rgb = vec3<f32>(x, c, 0.0); }
+            else if (hp < 3.0) { rgb = vec3<f32>(0.0, c, x); }
+            else if (hp < 4.0) { rgb = vec3<f32>(0.0, x, c); }
+            else if (hp < 5.0) { rgb = vec3<f32>(x, 0.0, c); }
+            else { rgb = vec3<f32>(c, 0.0, x); }
+            return rgb + vec3<f32>(m, m, m);
+        }
+
+        fn hsv_color_map(value: f32, params: HSVColorMapUniforms) -> vec4<f32> {
+            let t = clamp(value, 0.0, 1.0);
+            let hue = params.hue_start + t * (params.hue_end - params.hue_start);
+            let h = ((hue % 360.0) + 360.0) % 360.0;
+            let rgb = hsv_to_rgb(h, params.saturation, params.value);
+            return vec4<f32>(rgb.x, rgb.y, rgb.z, 1.0);
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(HSVColorMapUniforms {
+            hue_start: self.hue_start,
+            hue_end: self.hue_end,
+            saturation: self.saturation,
+            value: self.value,
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "hsv_color_map"
+    }
+}
+
+/// Alpha blending shader function for transparency control.
+///
+/// Applies an alpha multiplier to an RGBA color, useful for controlling
+/// opacity in visualization layers.
+#[derive(Clone, Debug)]
+pub struct AlphaBlending {
+    /// Alpha multiplier (0.0 = transparent, 1.0 = opaque)
+    pub alpha: f32,
+}
+
+impl AlphaBlending {
+    pub fn new(alpha: f32) -> Self {
+        Self { alpha }
+    }
+
+    /// Creates a semi-transparent blending (alpha = 0.5).
+    pub fn semi_transparent() -> Self {
+        Self::new(0.5)
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct AlphaBlendingUniforms {
+    pub alpha: f32,
+    pub _padding: [f32; 3],
+}
+
+impl ShaderUniform for AlphaBlendingUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct AlphaBlendingUniforms {\n    alpha: f32,\n}".to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "AlphaBlendingUniforms"
+    }
+}
+
+impl ComposableShaderFunction for AlphaBlending {
+    type Input = Vec4;
+    type Output = Vec4;
+    type Uniforms = AlphaBlendingUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn alpha_blending(color: vec4<f32>, params: AlphaBlendingUniforms) -> vec4<f32> {
+            return vec4<f32>(color.xyz, color.w * params.alpha);
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(AlphaBlendingUniforms {
+            alpha: self.alpha,
+            _padding: [0.0; 3],
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "alpha_blending"
+    }
+}
+
+/// Direction of color space conversion.
+#[derive(Clone, Debug, Copy)]
+pub enum ColorSpaceDirection {
+    /// Convert from RGB to HSV
+    RGBToHSV,
+    /// Convert from HSV to RGB
+    HSVToRGB,
+}
+
+/// Color space converter between RGB and HSV.
+///
+/// Converts colors between RGB and HSV color spaces on the GPU.
+/// Input and output are Vec4 where xyz = color components, w = alpha (preserved).
+#[derive(Clone, Debug)]
+pub struct ColorSpaceConverter {
+    /// The conversion direction (0 = RGB→HSV, 1 = HSV→RGB)
+    pub direction: ColorSpaceDirection,
+}
+
+impl ColorSpaceConverter {
+    pub fn new(direction: ColorSpaceDirection) -> Self {
+        Self { direction }
+    }
+
+    /// Creates an RGB-to-HSV converter.
+    pub fn rgb_to_hsv() -> Self {
+        Self::new(ColorSpaceDirection::RGBToHSV)
+    }
+
+    /// Creates an HSV-to-RGB converter.
+    pub fn hsv_to_rgb() -> Self {
+        Self::new(ColorSpaceDirection::HSVToRGB)
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ColorSpaceConverterUniforms {
+    /// 0 = RGB→HSV, 1 = HSV→RGB
+    pub direction: u32,
+    pub _padding: [u32; 3],
+}
+
+impl ShaderUniform for ColorSpaceConverterUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct ColorSpaceConverterUniforms {\n    direction: u32,\n}".to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "ColorSpaceConverterUniforms"
+    }
+}
+
+impl ComposableShaderFunction for ColorSpaceConverter {
+    type Input = Vec4;
+    type Output = Vec4;
+    type Uniforms = ColorSpaceConverterUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn rgb_to_hsv_convert(rgb: vec3<f32>) -> vec3<f32> {
+            let cmax = max(rgb.x, max(rgb.y, rgb.z));
+            let cmin = min(rgb.x, min(rgb.y, rgb.z));
+            let delta = cmax - cmin;
+            var h: f32 = 0.0;
+            if (delta > 0.0001) {
+                if (cmax == rgb.x) {
+                    h = 60.0 * (((rgb.y - rgb.z) / delta) % 6.0);
+                } else if (cmax == rgb.y) {
+                    h = 60.0 * (((rgb.z - rgb.x) / delta) + 2.0);
+                } else {
+                    h = 60.0 * (((rgb.x - rgb.y) / delta) + 4.0);
+                }
+            }
+            if (h < 0.0) { h = h + 360.0; }
+            let s = select(0.0, delta / cmax, cmax > 0.0);
+            return vec3<f32>(h, s, cmax);
+        }
+
+        fn hsv_to_rgb_convert(hsv: vec3<f32>) -> vec3<f32> {
+            let c = hsv.z * hsv.y;
+            let hp = hsv.x / 60.0;
+            let x = c * (1.0 - abs(hp % 2.0 - 1.0));
+            let m = hsv.z - c;
+            var rgb: vec3<f32>;
+            if (hp < 1.0) { rgb = vec3<f32>(c, x, 0.0); }
+            else if (hp < 2.0) { rgb = vec3<f32>(x, c, 0.0); }
+            else if (hp < 3.0) { rgb = vec3<f32>(0.0, c, x); }
+            else if (hp < 4.0) { rgb = vec3<f32>(0.0, x, c); }
+            else if (hp < 5.0) { rgb = vec3<f32>(x, 0.0, c); }
+            else { rgb = vec3<f32>(c, 0.0, x); }
+            return rgb + vec3<f32>(m, m, m);
+        }
+
+        fn color_space_converter(color: vec4<f32>, params: ColorSpaceConverterUniforms) -> vec4<f32> {
+            var result: vec3<f32>;
+            if (params.direction == 0u) {
+                result = rgb_to_hsv_convert(color.xyz);
+            } else {
+                result = hsv_to_rgb_convert(color.xyz);
+            }
+            return vec4<f32>(result.x, result.y, result.z, color.w);
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(ColorSpaceConverterUniforms {
+            direction: match self.direction {
+                ColorSpaceDirection::RGBToHSV => 0,
+                ColorSpaceDirection::HSVToRGB => 1,
+            },
+            _padding: [0; 3],
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "color_space_converter"
+    }
+}
+
+// ============================================================================
+// Geometric and Spatial Functions (GUP-053 AC3)
+// ============================================================================
+
+/// Polar coordinate transform.
+///
+/// Converts 2D Cartesian coordinates to polar form (angle, radius)
+/// or from polar to Cartesian, relative to a configurable center point.
+#[derive(Clone, Debug)]
+pub struct PolarTransform {
+    /// Center point for the polar coordinate system
+    pub center: Vec2,
+    /// Angle offset in radians
+    pub angle_offset: f32,
+    /// If true, converts Cartesian → Polar; if false, Polar → Cartesian
+    pub to_polar: bool,
+}
+
+impl PolarTransform {
+    pub fn new(center: Vec2, angle_offset: f32) -> Self {
+        Self {
+            center,
+            angle_offset,
+            to_polar: true,
+        }
+    }
+
+    /// Creates a transform that converts Cartesian → Polar.
+    pub fn to_polar(center: Vec2) -> Self {
+        Self {
+            center,
+            angle_offset: 0.0,
+            to_polar: true,
+        }
+    }
+
+    /// Creates a transform that converts Polar → Cartesian.
+    pub fn to_cartesian(center: Vec2) -> Self {
+        Self {
+            center,
+            angle_offset: 0.0,
+            to_polar: false,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct PolarTransformUniforms {
+    pub center_x: f32,
+    pub center_y: f32,
+    pub angle_offset: f32,
+    /// 0 = Cartesian→Polar, 1 = Polar→Cartesian
+    pub direction: u32,
+}
+
+impl ShaderUniform for PolarTransformUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct PolarTransformUniforms {\n    center_x: f32,\n    center_y: f32,\n    angle_offset: f32,\n    direction: u32,\n}".to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "PolarTransformUniforms"
+    }
+}
+
+impl ComposableShaderFunction for PolarTransform {
+    type Input = Vec2;
+    type Output = Vec2;
+    type Uniforms = PolarTransformUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn polar_transform(pos: vec2<f32>, params: PolarTransformUniforms) -> vec2<f32> {
+            if (params.direction == 0u) {
+                // Cartesian to Polar
+                let dx = pos.x - params.center_x;
+                let dy = pos.y - params.center_y;
+                let radius = sqrt(dx * dx + dy * dy);
+                let angle = atan2(dy, dx) + params.angle_offset;
+                return vec2<f32>(angle, radius);
+            } else {
+                // Polar to Cartesian (x=angle, y=radius)
+                let angle = pos.x + params.angle_offset;
+                let radius = pos.y;
+                return vec2<f32>(
+                    params.center_x + radius * cos(angle),
+                    params.center_y + radius * sin(angle)
+                );
+            }
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(PolarTransformUniforms {
+            center_x: self.center.x,
+            center_y: self.center.y,
+            angle_offset: self.angle_offset,
+            direction: if self.to_polar { 0 } else { 1 },
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "polar_transform"
+    }
+}
+
+/// General 2D affine matrix transformation.
+///
+/// Applies a 3×3 affine transformation matrix (stored as 2×3) to 2D points.
+/// Supports rotation, scaling, shearing, and translation.
+#[derive(Clone, Debug)]
+pub struct MatrixTransform {
+    /// 2×3 affine matrix stored as [a, b, c, d, tx, ty]
+    /// where the transform is: x' = a*x + c*y + tx, y' = b*x + d*y + ty
+    pub matrix: [f32; 6],
+}
+
+impl MatrixTransform {
+    pub fn new(matrix: [f32; 6]) -> Self {
+        Self { matrix }
+    }
+
+    /// Creates an identity transform (no change).
+    pub fn identity() -> Self {
+        Self::new([1.0, 0.0, 0.0, 1.0, 0.0, 0.0])
+    }
+
+    /// Creates a rotation transform (angle in radians).
+    pub fn rotation(angle: f32) -> Self {
+        let c = angle.cos();
+        let s = angle.sin();
+        Self::new([c, s, -s, c, 0.0, 0.0])
+    }
+
+    /// Creates a scaling transform.
+    pub fn scaling(sx: f32, sy: f32) -> Self {
+        Self::new([sx, 0.0, 0.0, sy, 0.0, 0.0])
+    }
+
+    /// Creates a translation transform.
+    pub fn translation(tx: f32, ty: f32) -> Self {
+        Self::new([1.0, 0.0, 0.0, 1.0, tx, ty])
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct MatrixTransformUniforms {
+    /// Row-major: a, b, c, d
+    pub matrix: [f32; 4],
+    /// Translation: tx, ty
+    pub translation: [f32; 2],
+    pub _padding: [f32; 2],
+}
+
+impl ShaderUniform for MatrixTransformUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct MatrixTransformUniforms {\n    matrix: vec4<f32>,\n    translation: vec2<f32>,\n}"
+            .to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "MatrixTransformUniforms"
+    }
+}
+
+impl ComposableShaderFunction for MatrixTransform {
+    type Input = Vec2;
+    type Output = Vec2;
+    type Uniforms = MatrixTransformUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn matrix_transform(pos: vec2<f32>, params: MatrixTransformUniforms) -> vec2<f32> {
+            let x = params.matrix.x * pos.x + params.matrix.z * pos.y + params.translation.x;
+            let y = params.matrix.y * pos.x + params.matrix.w * pos.y + params.translation.y;
+            return vec2<f32>(x, y);
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(MatrixTransformUniforms {
+            matrix: [
+                self.matrix[0],
+                self.matrix[1],
+                self.matrix[2],
+                self.matrix[3],
+            ],
+            translation: [self.matrix[4], self.matrix[5]],
+            _padding: [0.0; 2],
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "matrix_transform"
+    }
+}
+
+/// Viewport projection transform.
+///
+/// Maps data coordinates (domain) to screen coordinates (viewport).
+/// Supports independent X and Y axis mapping with configurable inversion.
+#[derive(Clone, Debug)]
+pub struct ProjectionTransform {
+    /// Minimum data coordinate
+    pub data_min: Vec2,
+    /// Maximum data coordinate
+    pub data_max: Vec2,
+    /// Minimum screen coordinate (top-left)
+    pub viewport_min: Vec2,
+    /// Maximum screen coordinate (bottom-right)
+    pub viewport_max: Vec2,
+}
+
+impl ProjectionTransform {
+    pub fn new(data_min: Vec2, data_max: Vec2, viewport_min: Vec2, viewport_max: Vec2) -> Self {
+        Self {
+            data_min,
+            data_max,
+            viewport_min,
+            viewport_max,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ProjectionTransformUniforms {
+    pub data_min: [f32; 2],
+    pub data_max: [f32; 2],
+    pub viewport_min: [f32; 2],
+    pub viewport_max: [f32; 2],
+}
+
+impl ShaderUniform for ProjectionTransformUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct ProjectionTransformUniforms {\n    data_min: vec2<f32>,\n    data_max: vec2<f32>,\n    viewport_min: vec2<f32>,\n    viewport_max: vec2<f32>,\n}".to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "ProjectionTransformUniforms"
+    }
+}
+
+impl ComposableShaderFunction for ProjectionTransform {
+    type Input = Vec2;
+    type Output = Vec2;
+    type Uniforms = ProjectionTransformUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn projection_transform(pos: vec2<f32>, params: ProjectionTransformUniforms) -> vec2<f32> {
+            let data_min = vec2<f32>(params.data_min);
+            let data_max = vec2<f32>(params.data_max);
+            let vp_min = vec2<f32>(params.viewport_min);
+            let vp_max = vec2<f32>(params.viewport_max);
+            let normalized = (pos - data_min) / (data_max - data_min);
+            return vp_min + normalized * (vp_max - vp_min);
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(ProjectionTransformUniforms {
+            data_min: [self.data_min.x, self.data_min.y],
+            data_max: [self.data_max.x, self.data_max.y],
+            viewport_min: [self.viewport_min.x, self.viewport_min.y],
+            viewport_max: [self.viewport_max.x, self.viewport_max.y],
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "projection_transform"
+    }
+}
+
+/// Distance function for computing distance between a point and a reference.
+///
+/// Computes Euclidean distance from each input point to a configurable
+/// reference point. Useful for radial visualizations and proximity-based
+/// visual encoding.
+#[derive(Clone, Debug)]
+pub struct DistanceFunction {
+    /// Reference point to measure distance from
+    pub reference_point: Vec2,
+}
+
+impl DistanceFunction {
+    pub fn new(reference_point: Vec2) -> Self {
+        Self { reference_point }
+    }
+
+    /// Creates a distance function from the origin.
+    pub fn from_origin() -> Self {
+        Self::new(Vec2::zero())
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct DistanceFunctionUniforms {
+    pub ref_x: f32,
+    pub ref_y: f32,
+    pub _padding: [f32; 2],
+}
+
+impl ShaderUniform for DistanceFunctionUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct DistanceFunctionUniforms {\n    ref_x: f32,\n    ref_y: f32,\n}".to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "DistanceFunctionUniforms"
+    }
+}
+
+impl ComposableShaderFunction for DistanceFunction {
+    type Input = Vec2;
+    type Output = f32;
+    type Uniforms = DistanceFunctionUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn distance_fn(pos: vec2<f32>, params: DistanceFunctionUniforms) -> f32 {
+            let dx = pos.x - params.ref_x;
+            let dy = pos.y - params.ref_y;
+            return sqrt(dx * dx + dy * dy);
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(DistanceFunctionUniforms {
+            ref_x: self.reference_point.x,
+            ref_y: self.reference_point.y,
+            _padding: [0.0; 2],
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "distance_fn"
+    }
+}
+
+// ============================================================================
+// Statistical Shader Functions (GUP-053 AC4)
+// ============================================================================
+
+/// Normalization shader function.
+///
+/// Normalizes a value from a data range [min, max] to [0, 1].
+/// This is a composable GPU shader function for real-time data normalization.
+#[derive(Clone, Debug)]
+pub struct NormalizeFunction {
+    /// Minimum value of the input range
+    pub min: f32,
+    /// Maximum value of the input range
+    pub max: f32,
+}
+
+impl NormalizeFunction {
+    pub fn new(min: f32, max: f32) -> Self {
+        Self { min, max }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct NormalizeFunctionUniforms {
+    pub min: f32,
+    pub max: f32,
+    pub _padding: [f32; 2],
+}
+
+impl ShaderUniform for NormalizeFunctionUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct NormalizeFunctionUniforms {\n    min: f32,\n    max: f32,\n}".to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "NormalizeFunctionUniforms"
+    }
+}
+
+impl ComposableShaderFunction for NormalizeFunction {
+    type Input = f32;
+    type Output = f32;
+    type Uniforms = NormalizeFunctionUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn normalize_fn(value: f32, params: NormalizeFunctionUniforms) -> f32 {
+            let range = params.max - params.min;
+            if (range == 0.0) {
+                return 0.5;
+            }
+            return (value - params.min) / range;
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(NormalizeFunctionUniforms {
+            min: self.min,
+            max: self.max,
+            _padding: [0.0; 2],
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "normalize_fn"
+    }
+}
+
+/// Standardization (z-score) shader function.
+///
+/// Transforms a value to its z-score: (value - mean) / std_dev.
+/// Produces output centered at 0 with unit variance.
+#[derive(Clone, Debug)]
+pub struct StandardizeFunction {
+    /// Mean of the dataset
+    pub mean: f32,
+    /// Standard deviation of the dataset
+    pub std_dev: f32,
+}
+
+impl StandardizeFunction {
+    pub fn new(mean: f32, std_dev: f32) -> Self {
+        Self { mean, std_dev }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct StandardizeFunctionUniforms {
+    pub mean: f32,
+    pub std_dev: f32,
+    pub _padding: [f32; 2],
+}
+
+impl ShaderUniform for StandardizeFunctionUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct StandardizeFunctionUniforms {\n    mean: f32,\n    std_dev: f32,\n}".to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "StandardizeFunctionUniforms"
+    }
+}
+
+impl ComposableShaderFunction for StandardizeFunction {
+    type Input = f32;
+    type Output = f32;
+    type Uniforms = StandardizeFunctionUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn standardize_fn(value: f32, params: StandardizeFunctionUniforms) -> f32 {
+            if (params.std_dev == 0.0) {
+                return 0.0;
+            }
+            return (value - params.mean) / params.std_dev;
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(StandardizeFunctionUniforms {
+            mean: self.mean,
+            std_dev: self.std_dev,
+            _padding: [0.0; 2],
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "standardize_fn"
+    }
+}
+
+/// Quantile mapping shader function.
+///
+/// Maps a value to its quantile position within pre-computed quantile
+/// boundaries. Given N quantile boundaries, maps input to [0, 1] based
+/// on which quantile bin the value falls in.
+#[derive(Clone, Debug)]
+pub struct QuantileFunction {
+    /// Sorted quantile boundaries (e.g., quartile edges)
+    pub boundaries: Vec<f32>,
+}
+
+impl QuantileFunction {
+    pub fn new(boundaries: Vec<f32>) -> Self {
+        Self { boundaries }
+    }
+
+    /// Creates a quantile function from quartile boundaries (Q1, Q2, Q3).
+    pub fn from_quartiles(q1: f32, q2: f32, q3: f32) -> Self {
+        Self::new(vec![q1, q2, q3])
+    }
+}
+
+/// Uniform structure for quantile function (supports up to 16 boundaries).
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct QuantileFunctionUniforms {
+    pub boundaries: [f32; 16],
+    pub count: u32,
+    pub _padding: [u32; 3],
+}
+
+impl ShaderUniform for QuantileFunctionUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct QuantileFunctionUniforms {\n    boundaries: array<f32, 16>,\n    count: u32,\n}"
+            .to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "QuantileFunctionUniforms"
+    }
+}
+
+impl ComposableShaderFunction for QuantileFunction {
+    type Input = f32;
+    type Output = f32;
+    type Uniforms = QuantileFunctionUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn quantile_fn(value: f32, params: QuantileFunctionUniforms) -> f32 {
+            if (params.count == 0u) {
+                return 0.0;
+            }
+            // Count how many boundaries the value exceeds
+            var bin = 0u;
+            for (var i = 0u; i < params.count; i = i + 1u) {
+                if (value >= params.boundaries[i]) {
+                    bin = i + 1u;
+                }
+            }
+            // Normalize to [0, 1]
+            return f32(bin) / f32(params.count + 1u);
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        let count = self.boundaries.len().min(16);
+        let mut boundaries = [0.0f32; 16];
+        for (i, &b) in self.boundaries.iter().take(count).enumerate() {
+            boundaries[i] = b;
+        }
+        Some(QuantileFunctionUniforms {
+            boundaries,
+            count: count as u32,
+            _padding: [0; 3],
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "quantile_fn"
+    }
+}
+
+/// Binning (discretization) shader function.
+///
+/// Maps continuous values into discrete bin indices, normalized to [0, 1].
+/// Useful for histogram-like visual encoding.
+#[derive(Clone, Debug)]
+pub struct BinningFunction {
+    /// Lower bound of the data range
+    pub min: f32,
+    /// Upper bound of the data range
+    pub max: f32,
+    /// Number of bins
+    pub bin_count: u32,
+}
+
+impl BinningFunction {
+    pub fn new(min: f32, max: f32, bin_count: u32) -> Self {
+        Self {
+            min,
+            max,
+            bin_count,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct BinningFunctionUniforms {
+    pub min: f32,
+    pub max: f32,
+    pub bin_count: u32,
+    pub _padding: u32,
+}
+
+impl ShaderUniform for BinningFunctionUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct BinningFunctionUniforms {\n    min: f32,\n    max: f32,\n    bin_count: u32,\n}"
+            .to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "BinningFunctionUniforms"
+    }
+}
+
+impl ComposableShaderFunction for BinningFunction {
+    type Input = f32;
+    type Output = f32;
+    type Uniforms = BinningFunctionUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn binning_fn(value: f32, params: BinningFunctionUniforms) -> f32 {
+            let range = params.max - params.min;
+            if (range == 0.0 || params.bin_count == 0u) {
+                return 0.0;
+            }
+            let normalized = clamp((value - params.min) / range, 0.0, 1.0);
+            let bin = min(u32(normalized * f32(params.bin_count)), params.bin_count - 1u);
+            return (f32(bin) + 0.5) / f32(params.bin_count);
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(BinningFunctionUniforms {
+            min: self.min,
+            max: self.max,
+            bin_count: self.bin_count,
+            _padding: 0,
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "binning_fn"
     }
 }
 
