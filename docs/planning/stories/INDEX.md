@@ -163,7 +163,7 @@ data, and parallel output.
   API (query_point_cached, query_region_cached, etc.) blocks the….
 - [GUP-221](GUP-221_Pool_Aware_SetData_Selection.md) ✅ — GUP-167 integrated
   BufferPool into Selection::prepare_render(), but Selection::set_data()….
-- [GUP-276](GUP-276_D3_Style_Data_Transitions.md) 🚧 — D3-style
+- [GUP-276](GUP-276_D3_Style_Data_Transitions.md) ✅ — D3-style
   enter/update/exit transitions via Selection::data_keyed() with
   GPU-interpolated 2-keyframe animations for smooth data rebinding. Deps:
   GUP-002 ✅, GUP-138 ✅, GUP-141 ✅, GUP-142 ✅, GUP-168 ✅.

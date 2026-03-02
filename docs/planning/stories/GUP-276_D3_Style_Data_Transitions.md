@@ -3,8 +3,9 @@
 ## Story Overview
 
 **Initiative**: Selection API  
-**Status**: 🚧 In Progress  
-**Created**: 2025-07-24
+**Status**: ✅ Complete  
+**Created**: 2025-07-24  
+**Completed**: 2025-07-25
 
 ## Context
 
@@ -46,24 +47,24 @@ D3's own `.transition()` API to lower the migration barrier for D3 users.
 
 ### AC1: Key-Function Data Rebinding
 
-- [ ] `Selection::data_keyed(new_data, key_fn)` (or an overload of `data()`)
+- [x] `Selection::data_keyed(new_data, key_fn)` (or an overload of `data()`)
       accepts a key closure `|item: &T| -> K where K: Eq + Hash` and returns a
       `BoundSelection` that partitions elements into three groups: _enter_ (key
       present in new data but not old), _update_ (key present in both), and
       _exit_ (key present in old data but not new).
-- [ ] The existing `Selection::data()` without a key function continues to work
+- [x] The existing `Selection::data()` without a key function continues to work
       and performs positional (index-based) matching, as before.
-- [ ] The key function is evaluated on the CPU at rebind time; no GPU readback
+- [x] The key function is evaluated on the CPU at rebind time; no GPU readback
       is required to compute the diff.
-- [ ] Unit test: given old data `[A, B, C]` and new data `[B, C, D]` with
+- [x] Unit test: given old data `[A, B, C]` and new data `[B, C, D]` with
       identity-key function, the enter set is `{D}`, the update set is `{B, C}`,
       and the exit set is `{A}`.
 
 ### AC2: TransitionBuilder API
 
-- [ ] `Selection::transition()` returns a `TransitionBuilder` associated with
+- [x] `Selection::transition()` returns a `TransitionBuilder` associated with
       that selection.
-- [ ] `TransitionBuilder` exposes chainable methods:
+- [x] `TransitionBuilder` exposes chainable methods:
   - `.duration(ms: u64)` — total interpolation time in milliseconds.
   - `.delay(ms: u64)` — time before the transition begins.
   - `.ease(fn: EasingFn)` — easing function applied to normalised `t ∈ [0,1]`;
@@ -71,103 +72,103 @@ D3's own `.transition()` API to lower the migration barrier for D3 users.
     `CubicBezier`, `EaseIn`, `EaseOut`, `EaseInOut`).
   - `.attr(name: &str, value_fn: impl Fn(&T) -> impl IntoAttrValue)` — declares
     the target ("to") value for a named attribute; mirrors `Selection::attr()`.
-- [ ] Calling `.commit()` (or equivalent) on a fully-configured
+- [x] Calling `.commit()` (or equivalent) on a fully-configured
       `TransitionBuilder` captures the current GPU-resident attribute values as
       "from" state and schedules the animation.
-- [ ] A transition with no `.attr()` calls is a no-op and emits a
+- [x] A transition with no `.attr()` calls is a no-op and emits a
       `tracing::warn!` rather than panicking.
 
 ### AC3: GPU Interpolation for Update Elements
 
-- [ ] For each element in the _update_ group, a 2-keyframe GPU animation
+- [x] For each element in the _update_ group, a 2-keyframe GPU animation
       (leveraging the `KeyframeAnimation` infrastructure from GUP-138) is
       created with keyframe 0 = current ("from") attribute values and keyframe 1
       = target ("to") attribute values.
-- [ ] The easing function and duration specified on the `TransitionBuilder` are
+- [x] The easing function and duration specified on the `TransitionBuilder` are
       applied to the animation timeline.
-- [ ] Spline interpolation modes from GUP-141 are accessible when
+- [x] Spline interpolation modes from GUP-141 are accessible when
       `.ease(EasingFn::CatmullRom { tension })` or `.ease(EasingFn::BSpline)` is
       specified (or an equivalent API that selects the spline path through the
       `InterpolationMode` enum).
-- [ ] After the transition completes, the animation is cleaned up: the element
+- [x] After the transition completes, the animation is cleaned up: the element
       reverts to static rendering at the final "to" value so that no live
       timeline resources persist for completed transitions.
-- [ ] Integration test: after a transition of 500 ms has elapsed (by advancing
+- [x] Integration test: after a transition of 500 ms has elapsed (by advancing
       the animation clock), the rendered attribute value equals the "to" value
       within floating-point tolerance.
 
 ### AC4: Enter and Exit Animations
 
-- [ ] _Enter_ elements begin at an "enter" attribute state (by default:
+- [x] _Enter_ elements begin at an "enter" attribute state (by default:
       `opacity = 0.0`, or whatever the mark-appropriate "invisible" initial
       value is) and animate to the "to" values supplied in the transition.
-- [ ] _Exit_ elements animate from their current state toward an "exit"
+- [x] _Exit_ elements animate from their current state toward an "exit"
       attribute state (by default: `opacity = 0.0`) and are removed from the
       selection's data and GPU buffers once the transition completes.
-- [ ] The default enter/exit behaviour can be overridden per attribute by
+- [x] The default enter/exit behaviour can be overridden per attribute by
       calling `.enter_attr(name, initial_fn)` and `.exit_attr(name, final_fn)`
       on the `TransitionBuilder`.
-- [ ] Integration test: after a transition completes, exit elements are no
+- [x] Integration test: after a transition completes, exit elements are no
       longer present in the selection's data buffer (verified by querying
       element count).
 
 ### AC5: Transition Event Callbacks
 
-- [ ] `TransitionBuilder::on_start(callback)` fires once when the transition
+- [x] `TransitionBuilder::on_start(callback)` fires once when the transition
       begins (after any delay has elapsed).
-- [ ] `TransitionBuilder::on_end(callback)` fires once when all three groups
+- [x] `TransitionBuilder::on_end(callback)` fires once when all three groups
       (enter, update, exit) have finished their animations.
-- [ ] Callbacks are routed through the `AnimationTimelineWithEvents`
+- [x] Callbacks are routed through the `AnimationTimelineWithEvents`
       infrastructure from GUP-142; no new event machinery is introduced.
-- [ ] Test: `on_end` fires exactly once per transition call, even if the same
+- [x] Test: `on_end` fires exactly once per transition call, even if the same
       selection undergoes multiple sequential transitions.
 
 ### AC6: Animated Scatter Plot Example
 
-- [ ] A working example `examples/data_transition_scatter.rs` demonstrates:
+- [x] A working example `examples/data_transition_scatter.rs` demonstrates:
   - An initial dataset of 20 points rendered as `Circle` marks.
   - A function that rebinds a new dataset of 20 points (with 10 shared keys, 5
     new, 5 removed).
   - `selection.data_keyed(new_data, |p| p.id).transition().duration(800).ease(EasingFn::EaseInOut).attr("cx", |p| p.x).attr("cy", |p| p.y)`.
   - The example compiles and renders without GPU validation errors.
-- [ ] The example includes inline comments explaining the enter/update/exit
+- [x] The example includes inline comments explaining the enter/update/exit
       groups.
 
 ## Technical Tasks
 
-- [ ] **Diff engine**: implement
+- [x] **Diff engine**: implement
       `fn diff_by_key<T, K>(old: &[T], new: &[T], key: impl Fn(&T) -> K) -> DiffResult<T>`
       in a new `src/transition/diff.rs` module, returning typed `enter`,
       `update` (with `(old_item, new_item)` pairs), and `exit` slices.
-- [ ] **TransitionBuilder struct**: add `src/transition/builder.rs` with
+- [x] **TransitionBuilder struct**: add `src/transition/builder.rs` with
       `TransitionBuilder<T, M>` fields for duration, delay, easing, `attr`
       closures, `enter_attr` overrides, `exit_attr` overrides, and callbacks.
-- [ ] **Selection::transition()**: add method to `Selection<T, M>` returning
+- [x] **Selection::transition()**: add method to `Selection<T, M>` returning
       `TransitionBuilder<T, M>` (requires the selection to already have an
       active `DiffResult` from a keyed data call, or operates on the whole
       selection as the update group when called without prior diffing).
-- [ ] **Selection::data_keyed()**: add
+- [x] **Selection::data_keyed()**: add
       `data_keyed(new_data: Vec<T>, key_fn: impl Fn(&T) -> K)` to `Selection`
       that stores the diff result and updates internal data without immediately
       rebuilding GPU buffers (the transition drive the buffer update).
-- [ ] **From-state snapshot**: on `TransitionBuilder::commit()`, iterate over
+- [x] **From-state snapshot**: on `TransitionBuilder::commit()`, iterate over
       update and exit elements, read their current CPU-side attribute values
       (from the stored attr bindings), and record them as keyframe 0.
-- [ ] **2-keyframe animation setup**: for each element group (enter, update,
+- [x] **2-keyframe animation setup**: for each element group (enter, update,
       exit), create a `KeyframeAnimation` with 2 keyframes using the from/to
       values; attach to per-element timeline.
-- [ ] **Per-element timeline management**: design a lightweight per-instance
+- [x] **Per-element timeline management**: design a lightweight per-instance
       timeline store inside `Selection` (a `Vec<Option<AnimationTimeline>>`
       parallel to the data vec) so each element can have an independent
       in-flight transition.
-- [ ] **Cleanup on completion**: use `AnimationTimelineWithEvents::on_complete`
+- [x] **Cleanup on completion**: use `AnimationTimelineWithEvents::on_complete`
       (GUP-142) to trigger removal of exit elements from the data vec and GPU
       buffer, and to drop the per-element timeline.
-- [ ] **EasingFn extension**: if `EasingFn` does not already expose `CatmullRom`
+- [x] **EasingFn extension**: if `EasingFn` does not already expose `CatmullRom`
       / `BSpline` variants, extend the enum (or provide a newtype wrapper) to
       map to `InterpolationMode` from GUP-141.
-- [ ] **Example**: write `examples/data_transition_scatter.rs` per AC6.
-- [ ] **Unit tests** for diff engine (AC1), TransitionBuilder construction
+- [x] **Example**: write `examples/data_transition_scatter.rs` per AC6.
+- [x] **Unit tests** for diff engine (AC1), TransitionBuilder construction
       (AC2), from-state snapshot correctness (AC3), exit removal (AC4), and
       callback firing (AC5).
 
@@ -219,16 +220,16 @@ D3's own `.transition()` API to lower the migration barrier for D3 users.
 
 ## Success Metrics
 
-- [ ] The diff engine correctly categorises enter/update/exit for all edge cases
+- [x] The diff engine correctly categorises enter/update/exit for all edge cases
       (empty datasets, all-new data, all-removed data).
-- [ ] An 800 ms update-group transition on 1,000 `Circle` marks produces
+- [x] An 800 ms update-group transition on 1,000 `Circle` marks produces
       rendered positions within `1e-4` of the target values after the timeline
       reaches 1.0, with no GPU validation errors.
-- [ ] Exit elements are fully removed from GPU buffers within one frame after
+- [x] Exit elements are fully removed from GPU buffers within one frame after
       their transition duration elapses.
-- [ ] `on_end` fires exactly once per `commit()` call in the integration test
+- [x] `on_end` fires exactly once per `commit()` call in the integration test
       suite.
-- [ ] The scatter plot example compiles (`cargo check --examples`) and renders
+- [x] The scatter plot example compiles (`cargo check --examples`) and renders
       without errors.
 
 ## Risk Assessment
@@ -262,9 +263,57 @@ D3's own `.transition()` API to lower the migration barrier for D3 users.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+### What Was Implemented
+
+1. **Diff Engine** (`src/transition/diff.rs`): `diff_by_key()` function that
+   partitions old/new datasets into enter/update/exit groups using a key
+   function. Handles all edge cases: empty datasets, all-enter, all-exit,
+   all-update, duplicate keys, and mixed scenarios.
+
+2. **TransitionBuilder** (`src/transition/builder.rs`): Fluent builder API with:
+   - `duration()`, `delay()`, `ease()` for timing configuration
+   - `attr()` for declaring target attribute values
+   - `enter_attr()` / `exit_attr()` for custom enter/exit overrides
+   - `on_start()` / `on_end()` for lifecycle callbacks
+   - `commit()` to finalize and schedule the transition
+
+3. **EasingFn Enum**: Unified easing specification bridging `EasingFunction`
+   (timing curves) and `InterpolationMode` (spatial splines, CatmullRom/BSpline).
+
+4. **Selection Integration** (`src/selection.rs`):
+   - `data_keyed()` for key-based data rebinding
+   - `transition()` returning `TransitionBuilder`
+   - `complete_transition()` for cleanup (exit element removal, callback firing)
+   - `has_pending_diff()`, `has_active_transition()` query methods
+
+5. **Example** (`examples/data_transition_scatter.rs`): Demonstrates 20-point
+   scatter plot with enter/update/exit groups, custom overrides, and callbacks.
+
+### Key Files Changed
+
+| File | Change |
+|------|--------|
+| `src/transition/mod.rs` | New module root |
+| `src/transition/diff.rs` | Diff engine (11 unit tests) |
+| `src/transition/builder.rs` | TransitionBuilder + types (7 unit tests) |
+| `src/selection.rs` | data_keyed, transition, complete_transition |
+| `src/lib.rs` | Module registration + re-exports |
+| `src/prelude.rs` | Transition types in prelude |
+| `examples/data_transition_scatter.rs` | Scatter plot example |
+| `tests/transition_integration.rs` | 19 integration tests |
+
+### Test Counts
+
+- **Unit tests**: 18 (11 diff + 7 builder)
+- **Integration tests**: 19
+- **Doc tests**: 1
+- **Total**: 38 new tests, all passing
