@@ -96,6 +96,7 @@ pub mod prelude;
 pub mod render;
 pub mod scale;
 pub mod selection;
+pub mod selection_mask;
 pub mod shader_ast;
 pub mod shader_function;
 pub mod shader_pipeline;
