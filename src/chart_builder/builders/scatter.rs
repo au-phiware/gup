@@ -18,6 +18,7 @@ use crate::chart_builder::{
 use crate::error::GupResult;
 use crate::grid::{GridConfiguration, GridLineConfig};
 use crate::selection::Selection;
+use crate::shader_function::ColorScale;
 use crate::{MaybeSend, MaybeSync};
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -181,6 +182,25 @@ impl<T> ScatterPlotBuilder<T> {
     /// The scale's domain is used to auto-configure axis tick generation.
     pub fn y_scale(mut self, scale: impl Into<AxisScale>) -> Self {
         self.config.y_scale = Some(scale.into());
+        self
+    }
+
+    /// Set the colour scale for value-to-colour mapping.
+    ///
+    /// When set, the [`ColorScale`] shader function is wired into the
+    /// chart's shader pipeline so that a numeric data value is mapped to
+    /// an RGBA colour entirely on the GPU.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use gup::prelude::*;
+    ///
+    /// let chart = scatter::<DataPoint>()
+    ///     .color_scale(ColorScale::viridis(0.0, 100.0));
+    /// ```
+    pub fn color_scale(mut self, scale: impl Into<ColorScale>) -> Self {
+        self.config.color_scale = Some(scale.into());
         self
     }
 }

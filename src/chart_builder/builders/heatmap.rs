@@ -12,6 +12,7 @@ use crate::RenderContext;
 use crate::chart_builder::{ChartBuilder, ChartBuilderError, ChartConfig};
 use crate::error::GupResult;
 use crate::selection::Selection;
+use crate::shader_function::ColorScale;
 use crate::{MaybeSend, MaybeSync};
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -65,6 +66,16 @@ impl<T> HeatmapBuilder<T> {
         A: Into<AccessorFunction<T>>,
     {
         self.fill_accessor = Some(accessor.into());
+        self
+    }
+
+    /// Set the colour scale for value-to-colour mapping.
+    ///
+    /// When set, the [`ColorScale`] shader function is wired into the
+    /// chart's shader pipeline so that the fill value is mapped to an
+    /// RGBA colour entirely on the GPU.
+    pub fn color_scale(mut self, scale: impl Into<ColorScale>) -> Self {
+        self.config.color_scale = Some(scale.into());
         self
     }
 }

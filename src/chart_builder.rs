@@ -67,7 +67,7 @@ use crate::grid::GridConfiguration;
 use crate::label::{AxisInfo, LabelConstraints, LabelLayout, LabelPosition, LabelPositioner};
 use crate::render::Vertex;
 use crate::selection::Selection;
-use crate::shader_function::{BandScale, LinearScale, LogScale, PointScale, Vec2};
+use crate::shader_function::{BandScale, ColorScale, LinearScale, LogScale, PointScale, Vec2};
 use crate::text::TextStyle;
 use crate::text::hover_reveal::{ClippedTextRegistry, HoverRevealState, TooltipConfig};
 use crate::{MaybeSend, MaybeSync};
@@ -520,6 +520,13 @@ pub struct ChartConfig {
     /// shader pipeline.  Accepts [`LinearScale`] or [`LogScale`] via the
     /// [`AxisScale`] enum.
     pub y_scale: Option<AxisScale>,
+
+    /// Optional colour-scale shader function.
+    ///
+    /// When set, the [`ColorScale`] is wired into the chart's shader
+    /// pipeline so that a numeric data value is mapped to an RGBA colour
+    /// on the GPU.
+    pub color_scale: Option<ColorScale>,
 }
 
 /// Chart margin specification.
@@ -548,6 +555,7 @@ impl Default for ChartConfig {
             tooltip_config: TooltipConfig::default(),
             x_scale: None,
             y_scale: None,
+            color_scale: None,
         }
     }
 }
@@ -665,6 +673,20 @@ impl ChartConfig {
     /// used to auto-configure axis tick generation.
     pub fn with_y_scale(mut self, scale: impl Into<AxisScale>) -> Self {
         self.y_scale = Some(scale.into());
+        self
+    }
+
+    /// Set the colour scale for value-to-colour mapping.
+    ///
+    /// When set, the [`ColorScale`] shader function is wired into the
+    /// chart's shader pipeline so that a numeric data value is mapped to an
+    /// RGBA colour entirely on the GPU.
+    ///
+    /// Built-in palettes such as [`ColorScale::viridis`],
+    /// [`ColorScale::plasma`], and [`ColorScale::rd_bu`] are accepted
+    /// directly.
+    pub fn with_color_scale(mut self, scale: impl Into<ColorScale>) -> Self {
+        self.color_scale = Some(scale.into());
         self
     }
 }
