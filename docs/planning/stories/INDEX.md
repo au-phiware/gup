@@ -211,6 +211,12 @@ integration, and Rust→WGSL transpilation.
   Equirectangular, Stereographic, and Orthographic projections as composable
   WGSL ShaderFunctions with GeoPoint coordinate type and boundary clipping.
   Deps: GUP-005 ✅, GUP-007 ✅, GUP-052 ✅, GUP-053 ✅.
+- [GUP-293](GUP-293_LAB_OKLab_Color_Space_Shader_Functions.md) 📋 — LAB/OKLab
+  perceptual color space conversions as composable shader functions. Deps:
+  GUP-053 ✅.
+- [GUP-294](GUP-294_Shader_Function_Module_Reorganization.md) 📋 — Split
+  shader_function.rs (7700+ lines) into category-based submodules. Deps: GUP-053
+  ✅.
 - [GUP-053](GUP-053_Shader_Pipeline_Performance_Optimization.md) ✅ — Enhance
   the ComposableShaderPipeline system with advanced performance optimizations
   based on….

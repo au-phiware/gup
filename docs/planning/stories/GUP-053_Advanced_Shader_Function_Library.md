@@ -173,3 +173,102 @@ let spatial_transform = PolarTransform::new(center, 0.0)
 - 107 shader function unit tests passing (including ~50 new GUP-053 tests)
 - Composition tests verify multi-stage pipelines (up to 3 stages)
 - All 2099+ project tests pass with 0 failures
+
+## Retrospective
+
+**Completed**: 2025-07-14
+
+### Key Technical Learnings
+
+#### Composable Shader Function Pattern Is Mature
+
+- **Challenge**: Adding 12 new functions to an already-large file (7100+ lines)
+  without introducing regressions.
+- **Solution**: The existing `ComposableShaderFunction` trait pattern (struct +
+  uniforms + ShaderUniform impl + ComposableShaderFunction impl) is very
+  consistent and mechanical. Each function follows the same 5-step recipe.
+- **Pattern**: New shader functions can be added by copying an existing one and
+  modifying the WGSL body, uniform fields, and type signatures. The type system
+  catches composition errors at compile time.
+
+#### WGSL Helper Functions Require Unique Naming
+
+- **Challenge**: HSVColorMap and ColorSpaceConverter both need an HSV→RGB helper
+  function. Duplicate function names in WGSL are a compilation error.
+- **Solution**: Used distinct function names (`hsv_to_rgb` in HSVColorMap vs
+  `hsv_to_rgb_convert` in ColorSpaceConverter). When composing these together,
+  the WGSL deduplication logic in `FunctionChain::generate_wgsl()` handles
+  duplicate `fn` definitions, but only exact duplicates — not functions with the
+  same name but different bodies.
+- **Pattern**: Always use globally unique WGSL function names, even for helper
+  functions within a shader function's WGSL block.
+
+#### Uniform Padding for GPU Alignment
+
+- **Challenge**: `bytemuck::Pod` requires every byte to be initialized. Structs
+  with odd numbers of f32 fields need explicit padding for 16-byte alignment.
+- **Solution**: Added `_padding: [f32; N]` fields to all uniform structs that
+  need them. Mixed types (f32 + u32) also require careful padding.
+- **Pattern**: Always pad uniform structs to 16-byte boundaries. Use `[f32; 2]`
+  or `[f32; 3]` padding as needed.
+
+### Architectural Decisions
+
+#### Pre-existing Functions Counted Toward AC Satisfaction
+
+- **Decision**: LogScale, PowerScale, Clamp, and ColorGradient were already
+  implemented in prior stories. Rather than re-implementing them, I counted them
+  as satisfying their respective AC items.
+- **Reasoning**: The story's goal is "a rich library of shader functions" — not
+  specifically to implement each item from scratch. The library now has all 16
+  listed functions available.
+- **Trade-off**: Less new code for AC1, but the AC items are genuinely
+  satisfied.
+- **Future**: If more mathematical functions are needed (e.g., trigonometric
+  scales, symlog), they can be added following the same pattern.
+
+#### RGB↔HSV Only (No LAB Color Space)
+
+- **Decision**: Implemented RGB↔HSV conversion but not LAB color space.
+- **Reasoning**: LAB conversion requires illuminant reference values and more
+  complex math (XYZ intermediate space). HSV covers the most common
+  visualization use cases. LAB can be added as a follow-up if needed.
+- **Trade-off**: Less complete color space coverage, but avoids complexity and
+  keeps the scope manageable.
+- **Future**: A dedicated GUP story for perceptual color spaces (LAB, LCH,
+  OKLab) would be valuable for advanced color work.
+
+#### Shader Functions in Single File vs Separate Modules
+
+- **Decision**: Added all functions to the existing `shader_function.rs` file
+  rather than splitting into separate module files.
+- **Reasoning**: The existing pattern has all shader functions in one file with
+  section markers. Splitting would require restructuring and potentially
+  breaking existing imports.
+- **Trade-off**: File is now 7700+ lines, which is large. Module splitting may
+  be warranted in the future.
+- **Future**: Consider splitting `shader_function.rs` into submodules (e.g.,
+  `shader_function/math.rs`, `shader_function/color.rs`,
+  `shader_function/geometric.rs`, `shader_function/statistical.rs`).
+
+### Development Workflow Insights
+
+- The implementation was straightforward due to the well-established
+  `ComposableShaderFunction` pattern. Each function took ~5 minutes to implement
+  once the pattern was clear.
+- The type system's compile-time validation of composition chains (via
+  `ShaderCompatible`) is very powerful — it caught a potential Vec2→f32→Vec4
+  chain issue during testing.
+- Running `mask all-fix` before every commit is essential — it catches
+  formatting and clippy issues that would otherwise accumulate.
+- Pre-commit hooks with cargo check add ~20s per commit but catch issues early.
+  The lock file contention when running in parallel can cause delays.
+
+### Follow-up Stories
+
+1. **GUP-293: LAB/OKLab Perceptual Color Space Shader Functions** — Add
+   perceptual color space conversions (RGB↔XYZ↔LAB, RGB↔OKLab) for advanced
+   color work in data visualization.
+2. **GUP-294: Shader Function Module Reorganization** — Split the 7700+ line
+   `shader_function.rs` into submodules organized by category (math, color,
+   geometric, statistical, temporal) for better maintainability.
