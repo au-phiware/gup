@@ -85,6 +85,7 @@ pub mod grid;
 pub mod integration;
 pub mod interaction;
 pub mod label;
+pub mod linked_selection;
 pub mod mark;
 pub mod mark_selection;
 pub mod mixable;
@@ -267,6 +268,12 @@ pub use mark_selection::{
     SelectionOperation, SelectionState, SelectionStatistics, SelectionStyle, SelectionTool,
     SelectionToolKind, ToolResult, ToolState, TouchEvent, TouchPhase, TouchSelectionAdapter,
     TouchSelectionConfig, point_in_polygon,
+};
+
+// Export linked-view coordination system
+pub use linked_selection::{
+    DimInstance, KeyedSelectionState, SharedSelectionState, build_dimmed_instances,
+    has_changed_since,
 };
 
 // Export chart builder system (Observable Plot-style API)

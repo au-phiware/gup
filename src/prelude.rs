@@ -156,6 +156,11 @@ pub use crate::label::{
 // Interaction system
 pub use crate::interaction::{InteractionEvent, InteractionSystem, InteractionType, Renderable};
 
+// Linked view coordination
+pub use crate::linked_selection::{
+    DimInstance, SharedSelectionState, build_dimmed_instances, has_changed_since,
+};
+
 // Zoom and pan behaviour
 pub use crate::zoom::{GpuViewportTransform, ZoomBehavior};
 
