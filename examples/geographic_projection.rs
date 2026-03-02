@@ -184,7 +184,7 @@ fn demo_mercator(context: &Arc<RenderContext>, cities: &[City]) -> GupResult<()>
         } else {
             // Apply screen transform
             let sx = x * 1.0 + 0.0;
-            let sy = y * -1.0 + 600.0;
+            let sy = -y + 600.0;
             println!(
                 "  {} ({:.1}°, {:.1}°) → ({:.1}, {:.1})",
                 city.name, city.lon, city.lat, sx, sy
@@ -341,7 +341,7 @@ fn mercator_cpu(lon: f32, lat: f32, u: &MercatorUniforms) -> (f32, f32) {
     if lat.abs() > u.clip_lat {
         return (CLIP_SENTINEL, CLIP_SENTINEL);
     }
-    let max_safe: f32 = 85.051129_f32 * DEG_TO_RAD;
+    let max_safe: f32 = 85.051_13_f32 * DEG_TO_RAD;
     let lon_rad = (lon - u.center_lon) * DEG_TO_RAD;
     let lat_rad = (lat * DEG_TO_RAD).clamp(-max_safe, max_safe);
     let x = lon_rad;
