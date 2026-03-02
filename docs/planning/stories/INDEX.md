@@ -193,7 +193,7 @@ integration, and Rust→WGSL transpilation.
   established the foundation for composable shader functions, the WGSL code….
 - [GUP-052](GUP-052_Shader_Pipeline_Builder.md) ✅ — With the shader function
   composition system from GUP-005 and WGSL code generation from….
-- [GUP-053](GUP-053_Advanced_Shader_Function_Library.md) 📋 — GUP-005
+- [GUP-053](GUP-053_Advanced_Shader_Function_Library.md) 🚧 — GUP-005
   implemented basic shader functions (LinearScale, ColorMap, PositionTransform).
 - [GUP-252](GUP-252_LinearScale_GPU_Shader_Function.md) 📋 — LinearScaleUniforms
   and WGSL linear_scale/linear_scale_invert shader functions with clamping and

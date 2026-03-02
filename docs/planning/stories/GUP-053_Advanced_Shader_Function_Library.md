@@ -4,7 +4,7 @@
 
 **Title**: Expand Shader Function Library with Advanced Transformations
 **Epic**: Phase 1 Initiative 2 - Unified Shader Function System **Priority**:
-Medium **Story Points**: 8
+Medium **Story Points**: 8 **Status**: 🚧 In Progress
 
 ## Context
 
