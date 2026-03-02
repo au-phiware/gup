@@ -489,3 +489,183 @@ async fn test_selection_clear_restores_full_opacity() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Pool integration tests
+// ---------------------------------------------------------------------------
+
+use gup::buffer::BufferPool;
+use std::sync::Arc;
+
+#[tokio::test]
+async fn test_new_with_pool_creates_pooled_buffer() {
+    let Some((device, _queue)) = create_gpu_context().await else {
+        eprintln!("Skipping GPU test: no adapter available");
+        return;
+    };
+
+    let device = Arc::new(device);
+    let mut pool = BufferPool::new(device.clone());
+    let offsets = AlphaOffsets::for_circle();
+    let mask_buf = SelectionMaskBuffer::new(&device, 1000, &offsets, Some(&mut pool)).unwrap();
+
+    assert!(mask_buf.is_pooled());
+    assert_eq!(mask_buf.capacity(), 1000);
+    assert!(!mask_buf.has_active_selection());
+
+    // Pool stats should show 3 allocations (mask, output, config).
+    let stats = pool.get_stats();
+    assert_eq!(stats.active_buffers, 3);
+}
+
+#[tokio::test]
+async fn test_new_without_pool_not_pooled() {
+    let Some((device, _queue)) = create_gpu_context().await else {
+        eprintln!("Skipping GPU test: no adapter available");
+        return;
+    };
+
+    let offsets = AlphaOffsets::for_circle();
+    let mask_buf = SelectionMaskBuffer::new(&device, 1000, &offsets, None).unwrap();
+
+    assert!(!mask_buf.is_pooled());
+}
+
+#[tokio::test]
+async fn test_release_to_pool_returns_buffers() {
+    let Some((device, _queue)) = create_gpu_context().await else {
+        eprintln!("Skipping GPU test: no adapter available");
+        return;
+    };
+
+    let device = Arc::new(device);
+    let mut pool = BufferPool::new(device.clone());
+    let offsets = AlphaOffsets::for_circle();
+    let mut mask_buf = SelectionMaskBuffer::new(&device, 1000, &offsets, Some(&mut pool)).unwrap();
+
+    assert!(mask_buf.is_pooled());
+    assert_eq!(pool.get_stats().active_buffers, 3);
+    assert_eq!(pool.get_stats().pooled_buffers, 0);
+
+    // Release buffers back to the pool.
+    mask_buf.release_to_pool(&mut pool, &device);
+
+    assert!(!mask_buf.is_pooled());
+    // 3 buffers should be back in the pool.
+    assert_eq!(pool.get_stats().active_buffers, 0);
+    assert_eq!(pool.get_stats().pooled_buffers, 3);
+}
+
+#[tokio::test]
+async fn test_pooled_buffer_reuse() {
+    let Some((device, _queue)) = create_gpu_context().await else {
+        eprintln!("Skipping GPU test: no adapter available");
+        return;
+    };
+
+    let device = Arc::new(device);
+    let mut pool = BufferPool::new(device.clone());
+    let offsets = AlphaOffsets::for_circle();
+
+    // Allocate and release.
+    let mut mask_buf = SelectionMaskBuffer::new(&device, 100, &offsets, Some(&mut pool)).unwrap();
+    mask_buf.release_to_pool(&mut pool, &device);
+
+    // Second allocation of same size should reuse pooled buffers.
+    let mask_buf2 = SelectionMaskBuffer::new(&device, 100, &offsets, Some(&mut pool)).unwrap();
+
+    assert!(mask_buf2.is_pooled());
+    // Should have pool hits from buffer reuse.
+    let hits_after = pool.get_stats().pool_hits;
+    assert!(hits_after > 0, "Expected pool hits from buffer reuse");
+
+    assert_eq!(mask_buf2.capacity(), 100);
+}
+
+#[tokio::test]
+async fn test_pooled_ensure_capacity_returns_old_buffers() {
+    let Some((device, _queue)) = create_gpu_context().await else {
+        eprintln!("Skipping GPU test: no adapter available");
+        return;
+    };
+
+    let device = Arc::new(device);
+    let mut pool = BufferPool::new(device.clone());
+    let offsets = AlphaOffsets::for_circle();
+    let mut mask_buf = SelectionMaskBuffer::new(&device, 10, &offsets, Some(&mut pool)).unwrap();
+
+    assert_eq!(pool.get_stats().active_buffers, 3);
+
+    // Grow the buffer — old mask+output returned to pool, new ones allocated.
+    mask_buf.ensure_capacity(&device, 100, Some(&mut pool));
+    assert!(mask_buf.capacity() >= 100);
+    assert!(mask_buf.is_pooled());
+
+    // Old mask + output buffers returned (2 returned), then 2 new allocated.
+    // Config buffer wasn't resized so stays the same.
+    // Active: still 3 (config + new mask + new output)
+    assert_eq!(pool.get_stats().active_buffers, 3);
+    // 2 old buffers should be in the pool
+    assert_eq!(pool.get_stats().pooled_buffers, 2);
+}
+
+#[tokio::test]
+async fn test_pooled_dimming_produces_correct_output() {
+    let Some((device, queue)) = create_gpu_context().await else {
+        eprintln!("Skipping GPU test: no adapter available");
+        return;
+    };
+
+    let device = Arc::new(device);
+    let mut pool = BufferPool::new(device.clone());
+    let instances = make_circle_instances(4);
+    let offsets = AlphaOffsets::for_circle();
+    let mut mask_buf = SelectionMaskBuffer::new(&device, 4, &offsets, Some(&mut pool)).unwrap();
+
+    let source_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("source_instances"),
+        size: (4 * std::mem::size_of::<CircleInstance>()) as u64,
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+    queue.write_buffer(&source_buffer, 0, bytemuck::cast_slice(&instances));
+
+    // Select items 0 and 2 only.
+    let state = SharedSelectionState::<usize>::new();
+    state.select([0, 2]);
+
+    let data: Vec<usize> = (0..4).collect();
+    mask_buf.update_mask(&queue, &data, |_item, idx| idx, &state);
+    mask_buf.dispatch_dimming(&device, &queue, &source_buffer, 4, 0.2);
+
+    // Read back output.
+    let floats_per_instance = offsets.floats_per_instance() as usize;
+    let total_floats = 4 * floats_per_instance;
+    let output = read_buffer_f32(&device, &queue, mask_buf.output_buffer(), total_floats).await;
+
+    // Instance 0 (selected): fill alpha should be 1.0.
+    assert!(
+        (output[0 * floats_per_instance + 7] - 1.0).abs() < 1e-5,
+        "Pooled: selected instance 0 fill alpha should be 1.0, got {}",
+        output[0 * floats_per_instance + 7]
+    );
+
+    // Instance 1 (unselected): fill alpha should be 0.2.
+    assert!(
+        (output[floats_per_instance + 7] - 0.2).abs() < 1e-5,
+        "Pooled: unselected instance 1 fill alpha should be 0.2, got {}",
+        output[floats_per_instance + 7]
+    );
+
+    // Instance 2 (selected): full alpha.
+    assert!(
+        (output[2 * floats_per_instance + 7] - 1.0).abs() < 1e-5,
+        "Pooled: selected instance 2 fill alpha should be 1.0"
+    );
+
+    // Instance 3 (unselected): dimmed.
+    assert!(
+        (output[3 * floats_per_instance + 7] - 0.2).abs() < 1e-5,
+        "Pooled: unselected instance 3 fill alpha should be 0.2"
+    );
+}
