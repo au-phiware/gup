@@ -81,6 +81,7 @@
 //! - GUP-054: Performance optimization
 
 pub mod conversions;
+pub mod geo;
 pub mod macros;
 
 use crate::buffer::{BufferType, GpuBuffer};
