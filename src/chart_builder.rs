@@ -67,7 +67,7 @@ use crate::grid::GridConfiguration;
 use crate::label::{AxisInfo, LabelConstraints, LabelLayout, LabelPosition, LabelPositioner};
 use crate::render::Vertex;
 use crate::selection::Selection;
-use crate::shader_function::{LinearScale, LogScale, Vec2};
+use crate::shader_function::{BandScale, LinearScale, LogScale, PointScale, Vec2};
 use crate::text::TextStyle;
 use crate::text::hover_reveal::{ClippedTextRegistry, HoverRevealState, TooltipConfig};
 use crate::{MaybeSend, MaybeSync};
@@ -362,15 +362,19 @@ impl TitleConfig {
 
 /// Axis scale variant, supporting different scale types for chart axes.
 ///
-/// This enum wraps the shader-function scale types ([`LinearScale`] and
-/// [`LogScale`]) so that `ChartConfig::x_scale` / `ChartConfig::y_scale` can
-/// accept either kind.
+/// This enum wraps the shader-function scale types ([`LinearScale`],
+/// [`LogScale`], [`BandScale`], and [`PointScale`]) so that
+/// `ChartConfig::x_scale` / `ChartConfig::y_scale` can accept any kind.
 #[derive(Debug, Clone)]
 pub enum AxisScale {
     /// Linear interpolation between domain and range.
     Linear(LinearScale),
     /// Logarithmic interpolation between domain and range.
     Log(LogScale),
+    /// Band scale for categorical data (maps index to band centre).
+    Band(BandScale),
+    /// Point scale for categorical data (maps index to point position).
+    Point(PointScale),
 }
 
 impl AxisScale {
@@ -379,6 +383,7 @@ impl AxisScale {
         match self {
             AxisScale::Linear(s) => s.domain_min,
             AxisScale::Log(s) => s.domain_min,
+            AxisScale::Band(_) | AxisScale::Point(_) => 0.0,
         }
     }
 
@@ -387,6 +392,8 @@ impl AxisScale {
         match self {
             AxisScale::Linear(s) => s.domain_max,
             AxisScale::Log(s) => s.domain_max,
+            AxisScale::Band(s) => s.category_count.saturating_sub(1) as f32,
+            AxisScale::Point(s) => s.category_count.saturating_sub(1) as f32,
         }
     }
 
@@ -402,6 +409,14 @@ impl AxisScale {
                 s.domain_min as f64,
                 s.domain_max as f64,
             )),
+            AxisScale::Band(s) => Box::new(crate::tick_generator::LinearScale::new(
+                0.0,
+                s.category_count.saturating_sub(1) as f64,
+            )),
+            AxisScale::Point(s) => Box::new(crate::tick_generator::LinearScale::new(
+                0.0,
+                s.category_count.saturating_sub(1) as f64,
+            )),
         }
     }
 }
@@ -415,6 +430,18 @@ impl From<LinearScale> for AxisScale {
 impl From<LogScale> for AxisScale {
     fn from(s: LogScale) -> Self {
         AxisScale::Log(s)
+    }
+}
+
+impl From<BandScale> for AxisScale {
+    fn from(s: BandScale) -> Self {
+        AxisScale::Band(s)
+    }
+}
+
+impl From<PointScale> for AxisScale {
+    fn from(s: PointScale) -> Self {
+        AxisScale::Point(s)
     }
 }
 

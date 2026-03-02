@@ -45,7 +45,7 @@ both chart builders from having to fall back to CPU-side position computation.
 > `ShaderFunction` that maps integer category indices to pixel positions on the
 > GPU, so that bar charts, box plots, and categorical comparisons with large
 > datasets render without CPU bottlenecks."
-
+>
 > "As a visualization developer, I want a CPU-side `OrdinalScale` builder that
 > accepts a slice of category labels and produces the correct GPU uniforms and a
 > `category_index()` lookup function, so that I can work with string category

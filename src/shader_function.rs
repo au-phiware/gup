@@ -4024,6 +4024,339 @@ fn log_scale(value: f32, scale: LogScaleUniforms) -> f32 {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Ordinal (categorical) scales — BandScale & PointScale
+// ---------------------------------------------------------------------------
+
+/// GPU uniform layout for ordinal (categorical) scales.
+///
+/// Both [`BandScale`] and [`PointScale`] share this struct.  The fields are
+/// pre-computed on the CPU so that the WGSL function needs only a single
+/// multiply-add per invocation.
+///
+/// # Layout
+///
+/// | Offset | Field            | Type  |
+/// |--------|-----------------|-------|
+/// | 0      | `range_start`    | `f32` |
+/// | 4      | `step_size`      | `f32` |
+/// | 8      | `padding`        | `f32` |
+/// | 12     | `category_count` | `u32` |
+///
+/// Total size: 16 bytes (naturally aligned, no explicit padding needed).
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct OrdinalScaleUniforms {
+    /// Start of the output pixel range.
+    pub range_start: f32,
+    /// Distance from the start of one band to the start of the next.
+    pub step_size: f32,
+    /// Fraction of `step_size` reserved as inner padding (0.0–1.0).
+    pub padding: f32,
+    /// Number of categories.
+    pub category_count: u32,
+}
+
+impl ShaderUniform for OrdinalScaleUniforms {
+    fn wgsl_struct_definition() -> String {
+        "struct OrdinalScaleUniforms {\n    range_start: f32,\n    step_size: f32,\n    padding: f32,\n    category_count: u32,\n}".to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "OrdinalScaleUniforms"
+    }
+}
+
+/// Band scale — maps integer category indices to the **centre** of equal-width
+/// bands within a pixel range.
+///
+/// This is the categorical analogue of a linear scale: given *n* categories and
+/// a pixel range, the range is divided into *n* equal steps.  Each band's
+/// usable width is `step_size * (1.0 - padding)` and the centre of band *i* is:
+///
+/// ```text
+/// range_start + (f32(i) + 0.5) * step_size * (1.0 - padding)
+/// ```
+///
+/// Use [`BandScale::bandwidth()`] to obtain the band width for downstream
+/// sizing (e.g. bar widths).
+///
+/// # Examples
+///
+/// ```
+/// use gup::shader_function::{BandScale, OrdinalScaleUniforms, ComposableShaderFunction};
+///
+/// let scale = BandScale::new(0.0, 300.0, 3, 0.1);
+/// assert!(BandScale::wgsl_function().contains("band_scale"));
+///
+/// let bw = scale.bandwidth();
+/// assert!((bw - 90.0).abs() < 1e-4); // 100 * 0.9
+/// ```
+#[derive(Clone, Debug)]
+pub struct BandScale {
+    pub range_start: f32,
+    pub range_end: f32,
+    pub category_count: u32,
+    pub padding: f32,
+}
+
+impl BandScale {
+    /// Create a new band scale.
+    ///
+    /// * `range_start` / `range_end` — output pixel range.
+    /// * `category_count` — number of categories.
+    /// * `padding` — fraction of each step reserved as inner padding (0.0–1.0).
+    pub fn new(range_start: f32, range_end: f32, category_count: u32, padding: f32) -> Self {
+        Self {
+            range_start,
+            range_end,
+            category_count,
+            padding,
+        }
+    }
+
+    /// The step size: distance from the start of one band to the next.
+    pub fn step_size(&self) -> f32 {
+        if self.category_count == 0 {
+            return 0.0;
+        }
+        (self.range_end - self.range_start) / self.category_count as f32
+    }
+
+    /// The usable band width (excluding inner padding).
+    ///
+    /// Matches the GPU formula: `step_size * (1.0 - padding)`.
+    pub fn bandwidth(&self) -> f32 {
+        self.step_size() * (1.0 - self.padding)
+    }
+
+    /// Evaluate the band scale on the CPU (for testing / cross-checking).
+    ///
+    /// Returns the **centre** of band `index`.
+    pub fn apply(&self, index: u32) -> f32 {
+        let step = self.step_size();
+        let bw = step * (1.0 - self.padding);
+        self.range_start + index as f32 * step + bw * 0.5
+    }
+
+    /// Build the [`OrdinalScaleUniforms`] for this band scale.
+    pub fn uniforms(&self) -> OrdinalScaleUniforms {
+        OrdinalScaleUniforms {
+            range_start: self.range_start,
+            step_size: self.step_size(),
+            padding: self.padding,
+            category_count: self.category_count,
+        }
+    }
+}
+
+impl ComposableShaderFunction for BandScale {
+    type Input = u32;
+    type Output = f32;
+    type Uniforms = OrdinalScaleUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+fn band_scale(index: u32, scale: OrdinalScaleUniforms) -> f32 {
+    let bw = scale.step_size * (1.0 - scale.padding);
+    return scale.range_start + f32(index) * scale.step_size + bw * 0.5;
+}
+
+fn band_scale_bandwidth(scale: OrdinalScaleUniforms) -> f32 {
+    return scale.step_size * (1.0 - scale.padding);
+}
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(self.uniforms())
+    }
+
+    fn function_name() -> &'static str {
+        "band_scale"
+    }
+}
+
+/// Point scale — distributes points evenly across a pixel range with outer
+/// padding.
+///
+/// Unlike [`BandScale`], a point scale places each category at a single
+/// coordinate (no band width).  Outer padding shifts the first and last points
+/// inward by `padding * step` on each side, where *step* is calculated as:
+///
+/// ```text
+/// step = (range_end - range_start) / (n - 1 + padding)
+/// ```
+///
+/// For a single category the point is placed at the midpoint of the range.
+///
+/// # Examples
+///
+/// ```
+/// use gup::shader_function::{PointScale, OrdinalScaleUniforms, ComposableShaderFunction};
+///
+/// let scale = PointScale::new(0.0, 400.0, 4, 0.5);
+/// assert!(PointScale::wgsl_function().contains("point_scale"));
+/// ```
+#[derive(Clone, Debug)]
+pub struct PointScale {
+    pub range_start: f32,
+    pub range_end: f32,
+    pub category_count: u32,
+    pub padding: f32,
+}
+
+impl PointScale {
+    /// Create a new point scale.
+    ///
+    /// * `range_start` / `range_end` — output pixel range.
+    /// * `category_count` — number of categories.
+    /// * `padding` — outer padding expressed as a multiple of the step size.
+    pub fn new(range_start: f32, range_end: f32, category_count: u32, padding: f32) -> Self {
+        Self {
+            range_start,
+            range_end,
+            category_count,
+            padding,
+        }
+    }
+
+    /// The step size between adjacent points.
+    pub fn step_size(&self) -> f32 {
+        if self.category_count <= 1 {
+            return 0.0;
+        }
+        let n = self.category_count as f32;
+        (self.range_end - self.range_start) / (n - 1.0 + self.padding)
+    }
+
+    /// The effective start position (accounting for outer padding).
+    fn effective_start(&self) -> f32 {
+        if self.category_count <= 1 {
+            return (self.range_start + self.range_end) / 2.0;
+        }
+        self.range_start + self.step_size() * self.padding / 2.0
+    }
+
+    /// Evaluate the point scale on the CPU (for testing / cross-checking).
+    pub fn apply(&self, index: u32) -> f32 {
+        self.effective_start() + index as f32 * self.step_size()
+    }
+
+    /// Build the [`OrdinalScaleUniforms`] for this point scale.
+    ///
+    /// `range_start` and `step_size` are pre-adjusted for outer padding so the
+    /// WGSL function only needs `range_start + f32(i) * step_size`.
+    pub fn uniforms(&self) -> OrdinalScaleUniforms {
+        OrdinalScaleUniforms {
+            range_start: self.effective_start(),
+            step_size: self.step_size(),
+            padding: self.padding,
+            category_count: self.category_count,
+        }
+    }
+}
+
+impl ComposableShaderFunction for PointScale {
+    type Input = u32;
+    type Output = f32;
+    type Uniforms = OrdinalScaleUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+fn point_scale(index: u32, scale: OrdinalScaleUniforms) -> f32 {
+    return scale.range_start + f32(index) * scale.step_size;
+}
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(self.uniforms())
+    }
+
+    fn function_name() -> &'static str {
+        "point_scale"
+    }
+}
+
+/// CPU-side ordinal scale that maps string category labels to integer indices.
+///
+/// This struct maintains a string-to-index hash map for O(1) lookups.  It can
+/// produce [`BandScale`] or [`PointScale`] shader functions that use the
+/// integer indices on the GPU.
+///
+/// # Examples
+///
+/// ```
+/// use gup::shader_function::OrdinalScale;
+///
+/// let scale = OrdinalScale::from_categories(&["Apple", "Banana", "Cherry"]);
+/// assert_eq!(scale.category_index("Apple"), Some(0));
+/// assert_eq!(scale.category_index("Banana"), Some(1));
+/// assert_eq!(scale.category_index("Cherry"), Some(2));
+/// assert_eq!(scale.category_index("Durian"), None);
+///
+/// let band = scale.band_scale((0.0, 300.0), 0.1);
+/// assert!((band.bandwidth() - 90.0).abs() < 1e-4);
+/// ```
+#[derive(Clone, Debug)]
+pub struct OrdinalScale {
+    labels: Vec<String>,
+    index_map: std::collections::HashMap<String, u32>,
+}
+
+impl OrdinalScale {
+    /// Build an ordinal scale from a slice of category labels.
+    ///
+    /// Indices are assigned in the order the labels appear.  Duplicate labels
+    /// keep the first occurrence's index.
+    pub fn from_categories(labels: &[&str]) -> Self {
+        let mut index_map = std::collections::HashMap::with_capacity(labels.len());
+        let mut unique_labels = Vec::with_capacity(labels.len());
+        for (i, &label) in labels.iter().enumerate() {
+            if index_map.insert(label.to_string(), i as u32).is_none() {
+                unique_labels.push(label.to_string());
+            }
+        }
+        Self {
+            labels: unique_labels,
+            index_map,
+        }
+    }
+
+    /// O(1) lookup of a category's integer index.
+    ///
+    /// Returns `None` for labels not present in the original set.
+    pub fn category_index(&self, label: &str) -> Option<u32> {
+        self.index_map.get(label).copied()
+    }
+
+    /// Number of categories.
+    pub fn category_count(&self) -> u32 {
+        self.labels.len() as u32
+    }
+
+    /// The category labels in index order.
+    pub fn labels(&self) -> &[String] {
+        &self.labels
+    }
+
+    /// Produce a [`BandScale`] for the given pixel range and inner padding.
+    pub fn band_scale(&self, range: (f32, f32), padding: f32) -> BandScale {
+        BandScale::new(range.0, range.1, self.category_count(), padding)
+    }
+
+    /// Produce a [`PointScale`] for the given pixel range and outer padding.
+    pub fn point_scale(&self, range: (f32, f32), padding: f32) -> PointScale {
+        PointScale::new(range.0, range.1, self.category_count(), padding)
+    }
+
+    /// Produce the GPU uniform struct for a band scale configuration.
+    pub fn uniforms(&self, range: (f32, f32), padding: f32) -> OrdinalScaleUniforms {
+        self.band_scale(range, padding).uniforms()
+    }
+}
+
 /// Power scale transformation (exponential scaling).
 ///
 /// Maps values using a power function: output = (normalized_input)^exponent.
