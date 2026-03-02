@@ -1076,4 +1076,77 @@ mod tests {
         // Bob is not selected → dimmed
         assert!((instances[1].fill_color[3] - 0.2).abs() < f32::EPSILON);
     }
+
+    // -- LinkedSelection unit tests --
+
+    #[test]
+    fn linked_selection_new_creates_wrapper() {
+        let shared = SharedSelectionState::<usize>::new();
+        let data = vec![1.0f32, 2.0, 3.0];
+
+        let linked: LinkedSelection<f32, crate::Circle, usize> =
+            LinkedSelection::new(data, shared.clone(), |_item, idx| idx);
+
+        assert_eq!(linked.data().len(), 3);
+        assert!(!linked.is_render_ready());
+        assert_eq!(linked.last_generation(), 0);
+    }
+
+    #[test]
+    fn linked_selection_builder_dim_opacity() {
+        let shared = SharedSelectionState::<usize>::new();
+
+        let linked: LinkedSelection<f32, crate::Circle, usize> =
+            LinkedSelection::new(vec![1.0], shared, |_item, idx| idx).dim_opacity(0.5);
+
+        // Just verify it builds without error; dim_opacity is tested
+        // via prepare_render in the GPU integration tests.
+        assert_eq!(linked.data().len(), 1);
+    }
+
+    #[test]
+    fn linked_selection_from_selection() {
+        let shared = SharedSelectionState::<usize>::new();
+        let sel: Selection<f32, crate::Circle> = Selection::from_data(vec![1.0, 2.0]);
+
+        let linked = LinkedSelection::from_selection(sel, shared, |_item, idx| idx);
+
+        assert_eq!(linked.data().len(), 2);
+        assert!(!linked.is_render_ready());
+    }
+
+    #[test]
+    fn linked_selection_set_data() {
+        let shared = SharedSelectionState::<usize>::new();
+        let mut linked: LinkedSelection<f32, crate::Circle, usize> =
+            LinkedSelection::new(vec![1.0], shared, |_item, idx| idx);
+
+        linked.set_data(vec![1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(linked.data().len(), 4);
+    }
+
+    #[test]
+    fn linked_selection_accessors() {
+        let shared = SharedSelectionState::<usize>::new();
+        let linked: LinkedSelection<f32, crate::Circle, usize> =
+            LinkedSelection::new(vec![1.0, 2.0], shared.clone(), |_item, idx| idx);
+
+        // shared_state returns a reference to the same shared state
+        shared.select([42usize]);
+        assert!(linked.shared_state().is_selected(&42));
+
+        // selection() and selection_mut() provide access
+        assert_eq!(linked.selection().data().len(), 2);
+    }
+
+    #[test]
+    fn linked_selection_last_generation_tracks_state() {
+        let shared = SharedSelectionState::<usize>::new();
+        let linked: LinkedSelection<f32, crate::Circle, usize> =
+            LinkedSelection::new(vec![1.0], shared.clone(), |_item, idx| idx);
+
+        assert_eq!(linked.last_generation(), 0);
+        // last_generation only updates after prepare_render, which
+        // requires GPU resources.  We verify the initial value here.
+    }
 }
