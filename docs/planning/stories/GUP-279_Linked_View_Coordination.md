@@ -283,3 +283,97 @@ cross-chart communication layer that makes such compositions interactive.
   index-based and field-based keys from the same API.
 - **`KeyedSelectionState`** name avoids conflict with existing `SelectionState`
   in `mark_selection.rs` which is index-based with `BitSet`.
+
+## Retrospective
+
+**Completed**: 2025-07-19
+
+### Key Technical Learnings
+
+#### Alpha-Channel Dimming vs Shader-Level Selection Flags
+
+- **Challenge**: The story suggested adding a per-instance `u32` selection flag
+  and modifying vertex/fragment shaders to multiply alpha by dim_opacity when
+  the flag is 0. This would require changes to every mark type's shader.
+- **Solution**: Instead, multiply the fill_color and stroke_color alpha channels
+  directly in the instance data before GPU upload. This works with all existing
+  mark shaders unchanged.
+- **Pattern**: When a visual effect can be achieved by modifying instance data
+  before upload vs modifying shaders, prefer instance data modification. It's
+  more portable across mark types and doesn't risk shader regressions.
+
+#### Generation Counter for Change Detection
+
+- **Challenge**: Efficiently detecting when the shared selection state has
+  changed without busy-waiting or holding locks during render.
+- **Solution**: `u64` generation counter incremented on every mutation, plus
+  `try_generation()` using `try_lock()` for non-blocking reads in hot render
+  paths.
+- **Pattern**: Generation counters are a lightweight alternative to subscription
+  systems. Store `last_seen_generation` per-consumer and compare on each tick.
+
+#### Naming Conflicts with Existing Types
+
+- **Challenge**: The codebase already has `SelectionState` in
+  `mark_selection.rs` (index-based with `BitSet`). Adding another
+  `SelectionState` would cause confusion.
+- **Solution**: Named the inner type `KeyedSelectionState<K>` to distinguish
+  it from the existing index-based `SelectionState`. The public-facing type
+  `SharedSelectionState<K>` is the primary API.
+- **Pattern**: When adding new types that conceptually overlap with existing
+  ones, use descriptive prefixes that highlight the distinguishing feature.
+
+### Architectural Decisions
+
+#### Free Function vs Builder Method for Dimming
+
+- **Decision**: Implemented dimming via a free function `build_dimmed_instances`
+  rather than a builder method on Selection or ChartBuilder.
+- **Reasoning**: The Selection type is already complex (~250KB source). Adding
+  generic parameter `K` for the key type would be a breaking change. A free
+  function is composable, testable, and doesn't couple the dimming logic to the
+  Selection type.
+- **Trade-off**: The user must call `build_dimmed_instances` explicitly rather
+  than having it automatic. This is more explicit but requires more code in the
+  render loop.
+- **Future**: A future story could add a `LinkedSelection<T, M, K>` wrapper
+  type that integrates the generation-based change detection and automatic
+  rebuild.
+
+#### Instance Data Modification vs Separate Selection Buffer
+
+- **Decision**: Modify fill_color/stroke_color alpha in-place in instance data
+  rather than adding a separate selection flag buffer.
+- **Reasoning**: Avoids shader changes, works with all mark types, and avoids
+  the complexity of managing an additional GPU buffer per selection.
+- **Trade-off**: The mapper function is called on every rebuild (not just when
+  selection changes). For very large datasets, a separate selection buffer that
+  only updates the changed flags would be more efficient.
+- **Future**: For 100K+ point scenarios, consider a compute shader that applies
+  dimming to a pre-uploaded instance buffer using a selection mask buffer.
+
+### Development Workflow Insights
+
+- **Rust 2024 edition reserved keywords**: `gen` is reserved in Rust 2024
+  edition. Hit this when naming a variable in `has_changed_since`. Quick fix
+  to rename to `current_gen`.
+- **Test isolation**: All 26 linked_selection tests and 26 brush tests passed
+  immediately without GPU contention issues — these are pure CPU logic tests
+  that don't need `--test-threads=1`.
+- **Example verification**: The linked_views example compiled and initialised
+  successfully but couldn't render visually in the headless CI environment.
+  The init sequence (GPU device creation, surface setup, selection creation)
+  completing without panics provides strong confidence.
+
+### Follow-up Stories
+
+1. **GUP-287: LinkedSelection Wrapper Type** — Wrap `Selection<T, M>` +
+   `SharedSelectionState<K>` + key_fn + dim_opacity into a single type that
+   automatically detects state changes and rebuilds instances. This would
+   eliminate the manual `build_dimmed_instances` + `has_changed_since` pattern.
+
+2. **GUP-288: GPU Selection Mask Buffer** — For large datasets (100K+ points),
+   maintain a separate GPU buffer of selection flags and apply dimming via a
+   compute shader rather than rebuilding all instance data on the CPU. This
+   would be needed for the 100K-point performance target in the story's success
+   metrics.
