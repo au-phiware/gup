@@ -1046,6 +1046,11 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
             I::alpha_offsets().expect("GPU path requires DimInstance::alpha_offsets");
         let count = instance_count as u32;
 
+        // If GPU resources don't exist yet (e.g. first GPU call after CPU
+        // path, or after a CPU calibration phase), treat as data_changed
+        // so that source buffer and mask buffer are created.
+        let data_changed = data_changed || self.mask_buffer.is_none();
+
         // -- 1. Rebuild undimmed instances & source buffer when data changed --
         if data_changed {
             let instances: Vec<I> = self.selection.data().iter().map(mapper).collect();

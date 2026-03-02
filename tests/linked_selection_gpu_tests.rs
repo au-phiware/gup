@@ -446,3 +446,157 @@ async fn small_dataset_uses_cpu_path() {
     assert!(linked.is_render_ready());
     assert!(!linked.is_gpu_dimming_active());
 }
+
+// ---------------------------------------------------------------------------
+// Auto-tune GPU integration tests
+// ---------------------------------------------------------------------------
+
+/// Verify that auto-tune calibration settles after the expected number of frames.
+#[tokio::test]
+async fn auto_tune_settles_after_calibration() {
+    let Some((device, queue)) = create_gpu_context().await else {
+        eprintln!("Skipping GPU test: no adapter available");
+        return;
+    };
+
+    let shared = SharedSelectionState::<usize>::new();
+    shared.select([0usize]);
+
+    let data = make_data(50);
+    let mut linked: LinkedSelection<f32, gup::Circle, usize> = LinkedSelection::new(data, shared.clone(), |_item, idx| idx)
+            .gpu_dimming_threshold(10) // Low threshold so GPU is possible
+            .gpu_dimming_auto_tune(true)
+            .auto_tune_calibration_frames(2);
+
+    assert!(linked.is_auto_tune_enabled());
+    assert!(!linked.is_auto_tune_settled());
+
+    // Each frame requires a selection change to trigger rebuild.
+    // Run 2 CPU probe frames + 2 GPU probe frames = 4 frames.
+    for i in 0..4 {
+        // Toggle selection to force rebuild
+        shared.set([(i % 50) as usize]);
+        linked
+            .prepare_render(&device, &queue, circle_mapper, None, None)
+            .unwrap();
+    }
+
+    assert!(
+        linked.is_auto_tune_settled(),
+        "Auto-tune should be settled after 4 frames (2 CPU + 2 GPU)"
+    );
+
+    // The effective threshold should have been adjusted
+    let threshold = linked.effective_threshold();
+    assert!(
+        threshold > 0,
+        "Effective threshold should be positive, got {threshold}"
+    );
+
+    // Timings should be available
+    let timings = linked.auto_tune_timings();
+    assert!(
+        timings.is_some(),
+        "Timings should be available after settling"
+    );
+    let (cpu_ns, gpu_ns) = timings.unwrap();
+    assert!(
+        cpu_ns > 0 || gpu_ns > 0,
+        "At least one timing should be > 0"
+    );
+}
+
+/// Verify that auto-tune produces correct dimming output regardless of
+/// which path it picks.
+#[tokio::test]
+async fn auto_tune_produces_correct_output() {
+    let Some((device, queue)) = create_gpu_context().await else {
+        eprintln!("Skipping GPU test: no adapter available");
+        return;
+    };
+
+    let shared = SharedSelectionState::<usize>::new();
+    shared.select([0usize, 2]);
+
+    let data = make_data(10);
+    let mut linked: LinkedSelection<f32, gup::Circle, usize> = LinkedSelection::new(data, shared.clone(), |_item, idx| idx)
+            .gpu_dimming_threshold(5) // So GPU is viable for 10 items
+            .gpu_dimming_auto_tune(true)
+            .auto_tune_calibration_frames(2)
+            .dim_opacity(0.2);
+
+    // Run enough frames to settle (2 CPU + 2 GPU = 4)
+    for i in 0..4 {
+        shared.set([0usize, 2]);
+        // Force generation change each time
+        shared.select([(i + 10) as usize]); // add a temporary extra
+        shared.set([0usize, 2]); // restore expected selection
+        linked
+            .prepare_render(&device, &queue, circle_mapper, None, None)
+            .unwrap();
+    }
+
+    assert!(linked.is_auto_tune_settled());
+
+    // Now do one final render with the settled threshold
+    shared.set([0usize, 2]);
+    linked
+        .prepare_render(&device, &queue, circle_mapper, None, None)
+        .unwrap();
+
+    // Read back and verify dimming is correct
+    let instance_buffer = linked.selection().instance_buffer().unwrap();
+    let floats_per_instance = 16;
+    let total_floats = 10 * floats_per_instance;
+    let output = read_buffer_f32(&device, &queue, instance_buffer, total_floats).await;
+
+    // Instance 0 (selected): full alpha
+    assert!(
+        (output[0 * floats_per_instance + 7] - 1.0).abs() < 1e-5,
+        "Selected instance 0 fill alpha should be 1.0, got {}",
+        output[0 * floats_per_instance + 7]
+    );
+
+    // Instance 1 (unselected): dimmed
+    assert!(
+        (output[floats_per_instance + 7] - 0.2).abs() < 1e-5,
+        "Unselected instance 1 fill alpha should be 0.2, got {}",
+        output[floats_per_instance + 7]
+    );
+
+    // Instance 2 (selected): full alpha
+    assert!(
+        (output[2 * floats_per_instance + 7] - 1.0).abs() < 1e-5,
+        "Selected instance 2 fill alpha should be 1.0, got {}",
+        output[2 * floats_per_instance + 7]
+    );
+}
+
+/// Verify auto-tune defaults to disabled and the static threshold is used.
+#[tokio::test]
+async fn auto_tune_disabled_uses_static_threshold() {
+    let Some((device, queue)) = create_gpu_context().await else {
+        eprintln!("Skipping GPU test: no adapter available");
+        return;
+    };
+
+    let shared = SharedSelectionState::<usize>::new();
+    shared.select([0usize]);
+
+    let data = make_data(20);
+    let mut linked: LinkedSelection<f32, gup::Circle, usize> =
+        LinkedSelection::new(data, shared.clone(), |_item, idx| idx).gpu_dimming_threshold(10); // threshold=10, 20 items → GPU
+
+    // Without auto-tune, should use static threshold
+    assert!(!linked.is_auto_tune_enabled());
+
+    linked
+        .prepare_render(&device, &queue, circle_mapper, None, None)
+        .unwrap();
+
+    assert!(
+        linked.is_gpu_dimming_active(),
+        "GPU path should activate with 20 items and threshold 10"
+    );
+    assert_eq!(linked.effective_threshold(), 10);
+}
