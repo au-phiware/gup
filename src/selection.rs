@@ -1979,7 +1979,9 @@ impl SelectionRenderState {
             let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("selection_instance_buffer"),
                 contents: effective_bytes,
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                usage: wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::COPY_DST
+                    | wgpu::BufferUsages::COPY_SRC,
             });
             (buf, None)
         };

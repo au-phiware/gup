@@ -1360,4 +1360,89 @@ mod tests {
         // last_generation only updates after prepare_render, which
         // requires GPU resources.  We verify the initial value here.
     }
+
+    // -- GPU dimming threshold / builder tests --
+
+    #[test]
+    fn gpu_dimming_threshold_default_is_10k() {
+        let shared = SharedSelectionState::<usize>::new();
+        let linked: LinkedSelection<f32, crate::Circle, usize> =
+            LinkedSelection::new(vec![1.0], shared, |_item, idx| idx);
+
+        assert_eq!(linked.gpu_threshold(), 10_000);
+    }
+
+    #[test]
+    fn gpu_dimming_threshold_builder() {
+        let shared = SharedSelectionState::<usize>::new();
+        let linked: LinkedSelection<f32, crate::Circle, usize> =
+            LinkedSelection::new(vec![1.0], shared, |_item, idx| idx).gpu_dimming_threshold(500);
+
+        assert_eq!(linked.gpu_threshold(), 500);
+    }
+
+    #[test]
+    fn is_gpu_dimming_active_false_initially() {
+        let shared = SharedSelectionState::<usize>::new();
+        let linked: LinkedSelection<f32, crate::Circle, usize> =
+            LinkedSelection::new(vec![1.0], shared, |_item, idx| idx);
+
+        assert!(!linked.is_gpu_dimming_active());
+    }
+
+    #[test]
+    fn alpha_offsets_circle() {
+        let offsets = CircleInstance::alpha_offsets();
+        assert!(offsets.is_some());
+        let offsets = offsets.unwrap();
+        assert_eq!(offsets.offsets(), &[7, 15]);
+    }
+
+    #[test]
+    fn alpha_offsets_rectangle() {
+        let offsets = RectangleInstance::alpha_offsets();
+        assert!(offsets.is_some());
+        let offsets = offsets.unwrap();
+        assert_eq!(offsets.offsets(), &[7, 15]);
+    }
+
+    #[test]
+    fn alpha_offsets_line() {
+        let offsets = LineInstance::alpha_offsets();
+        assert!(offsets.is_some());
+        let offsets = offsets.unwrap();
+        assert_eq!(offsets.offsets(), &[7]);
+    }
+
+    #[test]
+    fn alpha_offsets_boxplot() {
+        let offsets = BoxPlotInstance::alpha_offsets();
+        assert!(offsets.is_some());
+        let offsets = offsets.unwrap();
+        assert_eq!(offsets.offsets(), &[11, 15, 19, 23, 27]);
+    }
+
+    #[test]
+    fn set_data_clears_gpu_resources() {
+        let shared = SharedSelectionState::<usize>::new();
+        let mut linked: LinkedSelection<f32, crate::Circle, usize> =
+            LinkedSelection::new(vec![1.0], shared, |_item, idx| idx);
+
+        // GPU resources start cleared.
+        assert!(!linked.is_gpu_dimming_active());
+        // set_data should also ensure GPU resources are cleared.
+        linked.set_data(vec![1.0, 2.0]);
+        assert!(!linked.is_gpu_dimming_active());
+    }
+
+    #[test]
+    fn from_selection_has_default_threshold() {
+        let shared = SharedSelectionState::<usize>::new();
+        let sel = crate::selection::Selection::<f32, crate::Circle>::from_data(vec![1.0]);
+        let linked: LinkedSelection<f32, crate::Circle, usize> =
+            LinkedSelection::from_selection(sel, shared, |_item, idx| idx);
+
+        assert_eq!(linked.gpu_threshold(), 10_000);
+        assert!(!linked.is_gpu_dimming_active());
+    }
 }
