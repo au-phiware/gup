@@ -2,575 +2,176 @@
 
 ## Story Overview
 
-**Title**: Implement High-Level Event Handling System **Epic**: Phase 1
-Initiative 4 - Interaction System and Performance **Priority**: High **Story
-Points**: 8
+**Initiative**: Interaction & Spatial Index
+**Status**: 🚧 In Progress
+**Created**: 2025-01-30
 
 ## Context
 
-The event handling system provides the high-level interface for developers to
-respond to user interactions. It must connect GPU interaction results with
-familiar event handling patterns, support event propagation and bubbling, and
-provide a clean API that feels natural to developers coming from web or desktop
-UI frameworks.
+GUP-012 delivered a GPU-accelerated interaction system capable of performing
+hit tests and element picks at high throughput. However, that system operates at
+a low level — it returns raw hit results but provides no way for a developer to
+register interest in those results or act on them. This story builds the
+developer-facing event layer that sits on top of GUP-012.
+
+The design is directly inspired by D3.js's `.on(event, handler)` API and DOM
+event semantics, which are already familiar to the target audience of
+visualization developers. The goal is that attaching a click handler to a
+`Selection<T, Circle>` should feel as natural as it does in D3 or a modern
+frontend framework — while internally routing through the GPU interaction
+pipeline established in GUP-012.
+
+GUP-002 established the `Selection<T, M>` type that developers work with day
+to day. This story extends that type with the `.on()` method and the supporting
+`EventManager` that bridges raw window input, GPU hit results, and typed Rust
+closures. Event propagation (bubbling and cancellation) is required so that
+overlapping elements and layered selections behave predictably.
 
 ## User Story
 
-**As a** visualization developer **I want** a familiar, powerful event handling
-system **So that** I can easily create interactive visualizations with hover
-effects, click handlers, drag operations, and complex interaction patterns
+> "As a visualization developer, I want to register typed event handlers on
+> selections using a familiar `.on(event, handler)` API so that I can add hover
+> effects, click responses, drag behaviour, and other interactions without
+> reasoning about low-level GPU hit-test plumbing."
 
 ## Acceptance Criteria
 
-### AC1: Event System Features
+### AC1: `.on()` API on Selection
 
-- [ ] **Familiar API**: Event handling that feels like DOM events or modern UI
-      frameworks
-- [ ] **Event Types**: Support for mouse, touch, keyboard, and custom events
-- [ ] **Event Propagation**: Bubbling, capturing, and cancellation mechanisms
-- [ ] **Event Filtering**: Ability to filter events by conditions and priorities
+- [ ] `Selection<T, M>` exposes a chainable `.on(event: &str, handler: F) -> &mut Self`
+      method where `F: Fn(InteractionEvent, &T) + Send + Sync + 'static`
+- [ ] Handlers are keyed by a string event name (e.g. `"click"`, `"mouseenter"`,
+      `"mousemove"`, `"mousedown"`, `"mouseup"`, `"touchstart"`, `"touchmove"`,
+      `"touchend"`)
+- [ ] Multiple handlers for the same event name on the same selection are all
+      invoked in registration order
+- [ ] The method compiles and passes `cargo check --examples`
 
-### AC2: Developer Experience
+### AC2: Event types and data structures
 
-```rust
-// Familiar event handling API
-chart.select_all::<Circle>()
-    .on("click", |event, data| {
-        println!("Clicked circle with data: {:?}", data);
-    })
-    .on("hover", |event, data| {
-        // Update tooltip or highlight
-    })
-    .on("drag", |event, data| {
-        // Handle drag operations
-    });
-```
+- [ ] `InteractionEvent` carries: event kind, cursor/touch position in
+      visualization-space coordinates, a timestamp, keyboard modifier flags, and
+      the `ElementHit` from GUP-012 (element id, selection id, data index)
+- [ ] `EventType` covers mouse events (`Move`, `Down`, `Up`, `Enter`, `Leave`)
+      and touch events (`Start`, `Move`, `End`)
+- [ ] `EventResult` has at least two variants: `Continue` (allow propagation to
+      continue) and `StopPropagation` (halt further bubbling for this event)
+- [ ] All public types implement `Debug`
 
-### AC3: Event Performance
+### AC3: Event routing and propagation
 
-- [ ] **Low Latency**: <16ms from user input to event handler execution
-- [ ] **High Throughput**: Handle 1000+ events per second without performance
-      degradation
-- [ ] **Memory Efficiency**: Minimal memory overhead for event handler storage
-- [ ] **Async Support**: Support for both synchronous and asynchronous event
-      handlers
+- [ ] `EventManager` receives a raw window input event, invokes GUP-012's hit
+      test, and dispatches the resulting `InteractionEvent` to registered
+      handlers in hit-depth order (front-most element first)
+- [ ] When a handler returns `EventResult::StopPropagation`, no further handlers
+      are invoked for that event dispatch
+- [ ] A handler registered on selection A does not fire when the hit resolves to
+      an element belonging to selection B
+- [ ] Global (selection-independent) handlers can be registered and receive
+      every dispatched event regardless of hit result
+
+### AC4: Performance baseline
+
+- [ ] End-to-end latency from raw input receipt to handler return is measurably
+      below 16 ms for a chart with 10 000 visible elements and 50 registered
+      handlers, verified by a benchmark or timing assertion in the test suite
+- [ ] `EventManager` does not allocate per-event heap memory in the hot path
+      (handler lookup and dispatch must be allocation-free for the common case)
 
 ## Technical Tasks
 
-### 1. Core Event System
-
-- [ ] Define event types and event data structures
-- [ ] Implement event handler registration and management
-- [ ] Create event propagation and bubbling mechanism
-- [ ] Add event filtering and priority systems
-
-### 2. Input Event Processing
-
-- [ ] Integrate with window/canvas input events
-- [ ] Convert raw input to visualization-space coordinates
-- [ ] Handle different input devices (mouse, touch, keyboard)
-- [ ] Support platform-specific input patterns
-
-### 3. Event-Interaction Bridge
-
-- [ ] Connect GPU interaction results with event handlers
-- [ ] Map interaction hits to data objects and event contexts
-- [ ] Handle multi-selection and overlapping elements
-- [ ] Provide event context and metadata
-
-### 4. Advanced Event Features
-
-- [ ] Implement gesture recognition (pinch, zoom, rotation)
-- [ ] Add animation and transition support for event responses
-- [ ] Create event recording and playback for testing
-- [ ] Support custom event types and user-defined events
-
-## Detailed Requirements
-
-### Core Event Types
-
-```rust
-#[derive(Debug, Clone)]
-pub enum EventType {
-    // Mouse events
-    MouseMove(Vec2),
-    MouseDown(Vec2, MouseButton),
-    MouseUp(Vec2, MouseButton),
-    MouseEnter(Vec2),
-    MouseLeave(Vec2),
-
-    // Touch events
-    TouchStart(Vec<TouchPoint>),
-    TouchMove(Vec<TouchPoint>),
-    TouchEnd(Vec<TouchPoint>),
-
-    // Gesture events
-    Pinch(PinchGesture),
-    Zoom(ZoomGesture),
-    Rotate(RotateGesture),
-
-    // Custom events
-    Custom(String, Box<dyn Any + Send + Sync>),
-}
-
-#[derive(Debug, Clone)]
-pub struct InteractionEvent {
-    pub event_type: EventType,
-    pub position: Vec2,
-    pub timestamp: Instant,
-    pub modifiers: KeyModifiers,
-    pub hit: Option<ElementHit>,
-    pub propagation_stopped: bool,
-    pub default_prevented: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct ElementHit {
-    pub element_id: u32,
-    pub selection_id: SelectionId,
-    pub distance: f32,
-    pub intersection_point: Vec2,
-    pub data_index: usize,
-}
-```
-
-### Event Handler System
-
-```rust
-pub trait EventHandler: Send + Sync {
-    fn handle_event(&self, event: &InteractionEvent, data: &dyn Any) -> EventResult;
-    fn event_filter(&self) -> Option<EventFilter>;
-    fn priority(&self) -> EventPriority { EventPriority::Normal }
-}
-
-pub struct EventManager {
-    handlers: HashMap<EventType, Vec<HandlerEntry>>,
-    global_handlers: Vec<HandlerEntry>,
-    event_queue: AsyncQueue<InteractionEvent>,
-    filter_cache: HashMap<EventFilter, bool>,
-}
-
-impl EventManager {
-    pub fn register_handler<F, T>(&mut self,
-        event_type: EventType,
-        handler: F,
-    ) where
-        F: Fn(&InteractionEvent, &T) -> EventResult + Send + Sync + 'static,
-        T: 'static,
-    {
-        let wrapped_handler = move |event: &InteractionEvent, data: &dyn Any| {
-            if let Some(typed_data) = data.downcast_ref::<T>() {
-                handler(event, typed_data)
-            } else {
-                EventResult::Continue
-            }
-        };
-
-        self.handlers.entry(event_type)
-            .or_default()
-            .push(HandlerEntry::new(Box::new(wrapped_handler)));
-    }
-
-    pub async fn process_event(&mut self, event: InteractionEvent) {
-        // Find affected elements through GPU interaction system
-        let hits = self.interaction_system.query_event(&event).await;
-
-        // Process event for each hit element
-        for hit in hits {
-            let mut event_with_hit = event.clone();
-            event_with_hit.hit = Some(hit.clone());
-
-            // Get data for hit element
-            if let Some(data) = self.get_data_for_hit(&hit) {
-                self.execute_handlers(&event_with_hit, data).await;
-            }
-
-            if event_with_hit.propagation_stopped {
-                break;
-            }
-        }
-
-        // Process global handlers
-        self.execute_global_handlers(&event).await;
-    }
-}
-```
-
-### Selection Event Integration
-
-```rust
-impl<T, M: Mark> Selection<T, M> {
-    pub fn on<F>(&mut self, event_type: &str, handler: F) -> &mut Self
-    where F: Fn(&InteractionEvent, &T) + Send + Sync + 'static
-    {
-        let selection_id = self.id();
-        let event_type = event_type.parse().unwrap_or(EventType::Custom(event_type.to_string(), Box::new(())));
-
-        // Create handler that only fires for this selection's elements
-        let filtered_handler = move |event: &InteractionEvent, data: &dyn Any| {
-            if let Some(hit) = &event.hit {
-                if hit.selection_id == selection_id {
-                    if let Some(element_data) = data.downcast_ref::<T>() {
-                        handler(event, element_data);
-                        return EventResult::Handled;
-                    }
-                }
-            }
-            EventResult::Continue
-        };
-
-        self.event_manager.register_handler(event_type, filtered_handler);
-        self
-    }
-
-    pub fn on_hover<F>(&mut self, handler: F) -> &mut Self
-    where F: Fn(&T) + Send + Sync + 'static
-    {
-        self.on("mouseenter", move |_event, data| handler(data))
-    }
-
-    pub fn on_click<F>(&mut self, handler: F) -> &mut Self
-    where F: Fn(&T) + Send + Sync + 'static
-    {
-        self.on("click", move |_event, data| handler(data))
-    }
-
-    pub fn on_drag<F>(&mut self, handler: F) -> &mut Self
-    where F: Fn(&T, Vec2, Vec2) + Send + Sync + 'static
-    {
-        let mut drag_start = None;
-
-        self.on("mousedown", move |event, _data| {
-            drag_start = Some(event.position);
-        });
-
-        self.on("mousemove", move |event, data| {
-            if let Some(start_pos) = drag_start {
-                handler(data, start_pos, event.position);
-            }
-        });
-
-        self.on("mouseup", move |_event, _data| {
-            drag_start = None;
-        });
-
-        self
-    }
-}
-```
-
-### Gesture Recognition System
-
-```rust
-pub struct GestureRecognizer {
-    active_gestures: HashMap<GestureId, Box<dyn Gesture>>,
-    gesture_history: VecDeque<InputEvent>,
-    recognition_timeout: Duration,
-}
-
-pub trait Gesture: Send + Sync {
-    fn update(&mut self, input: &InputEvent) -> GestureState;
-    fn complete(&self) -> Option<EventType>;
-    fn reset(&mut self);
-}
-
-pub struct PinchGesture {
-    initial_distance: f32,
-    current_distance: f32,
-    center_point: Vec2,
-    threshold: f32,
-}
-
-impl Gesture for PinchGesture {
-    fn update(&mut self, input: &InputEvent) -> GestureState {
-        match input {
-            InputEvent::TouchMove(touches) if touches.len() == 2 => {
-                let distance = (touches[0].position - touches[1].position).length();
-                self.current_distance = distance;
-                self.center_point = (touches[0].position + touches[1].position) * 0.5;
-
-                if (self.current_distance - self.initial_distance).abs() > self.threshold {
-                    GestureState::Active
-                } else {
-                    GestureState::Possible
-                }
-            }
-            _ => GestureState::Failed
-        }
-    }
-
-    fn complete(&self) -> Option<EventType> {
-        Some(EventType::Pinch(PinchGestureData {
-            scale: self.current_distance / self.initial_distance,
-            center: self.center_point,
-        }))
-    }
-}
-```
+- [ ] Define `EventType`, `InteractionEvent`, `ElementHit` (re-export or
+      re-use from GUP-012 where possible), and `EventResult` in a new
+      `src/event.rs` module
+- [ ] Implement `EventManager` with:
+  - handler registration keyed by `(SelectionId, event name)`
+  - global handler registration
+  - `dispatch(&mut self, raw_input: RawInputEvent)` that calls GUP-012 hit
+    test, builds `InteractionEvent`, and invokes matching handlers in order
+  - `StopPropagation` short-circuit logic
+- [ ] Add `.on()` method to `Selection<T, M>` that registers a typed closure
+      with `EventManager`, wrapping the downcast from `&dyn Any` to `&T`
+- [ ] Wire `EventManager::dispatch` to the window/surface event loop so that
+      `winit` (or equivalent) input events reach the manager
+- [ ] Convert raw cursor coordinates to visualization-space coordinates using
+      the viewport transform already available in `GupContext`
+- [ ] Add convenience methods `.on_click()`, `.on_hover()`, and `.on_drag()`
+      to `Selection` as thin wrappers over `.on()`
+- [ ] Write unit tests for: handler registration, propagation with
+      `StopPropagation`, per-selection filtering (handler A does not fire for
+      selection B's hit), and global handler receipt
+- [ ] Write an integration test that constructs a chart, binds `.on("click")`
+      to a selection, simulates a synthetic input event, and asserts the handler
+      was invoked with the correct data
+- [ ] Write or extend a benchmark asserting the <16 ms end-to-end latency
+      requirement (AC4)
+- [ ] Add a runnable example (`examples/interactive_circles.rs` or similar)
+      demonstrating hover highlighting and click logging
 
 ## Dependencies
 
 ### Prerequisite Stories
 
-- GUP-012: GPU Interaction System (provides interaction results)
-- GUP-002: Core Selection Type (provides selections to add events to)
+- GUP-002: Core Selection Type ✅ — provides `Selection<T, M>` that `.on()` is
+  added to
+- GUP-012: GPU Interaction System ✅ — provides the hit-test pipeline that
+  `EventManager` calls to resolve raw input to element hits
 
 ### Enables Stories
 
-- GUP-014: Performance Validation (validates event handling performance)
-- All interactive visualization features
+- GUP-014: Performance Validation — event handling latency is one of the
+  performance targets validated in that story
+- GUP-277: Zoom/Pan Interactions — zoom and pan are built as event handlers
+  registered via the API delivered here
 
 ## Testing Strategy
 
-### Unit Tests
-
-```rust
-#[test]
-fn test_event_handler_registration() {
-    let mut manager = EventManager::new();
-    let mut handler_called = false;
-
-    manager.register_handler(EventType::MouseDown, |_event, _data: &TestData| {
-        handler_called = true;
-        EventResult::Handled
-    });
-
-    let event = create_test_mouse_event();
-    manager.process_event(event).await;
-
-    assert!(handler_called);
-}
-
-#[test]
-fn test_event_propagation() {
-    let mut manager = EventManager::new();
-    let mut call_order = Vec::new();
-
-    // Register multiple handlers with different priorities
-    manager.register_handler_with_priority(
-        EventType::MouseDown,
-        EventPriority::High,
-        |_event, _data: &TestData| {
-            call_order.push("high");
-            EventResult::Continue
-        }
-    );
-
-    manager.register_handler_with_priority(
-        EventType::MouseDown,
-        EventPriority::Normal,
-        |_event, _data: &TestData| {
-            call_order.push("normal");
-            EventResult::StopPropagation
-        }
-    );
-
-    manager.register_handler_with_priority(
-        EventType::MouseDown,
-        EventPriority::Low,
-        |_event, _data: &TestData| {
-            call_order.push("low");
-            EventResult::Continue
-        }
-    );
-
-    let event = create_test_mouse_event();
-    manager.process_event(event).await;
-
-    assert_eq!(call_order, vec!["high", "normal"]);
-    // "low" should not be called due to StopPropagation
-}
-
-#[test]
-fn test_selection_event_filtering() {
-    let mut selection1 = create_test_selection::<TestData, Circle>(1);
-    let mut selection2 = create_test_selection::<TestData, Rectangle>(2);
-
-    let mut selection1_clicked = false;
-    let mut selection2_clicked = false;
-
-    selection1.on("click", |_event, _data| {
-        selection1_clicked = true;
-    });
-
-    selection2.on("click", |_event, _data| {
-        selection2_clicked = true;
-    });
-
-    // Simulate click on selection1 element
-    let event = create_click_event_for_selection(1, 0);
-    process_event(event).await;
-
-    assert!(selection1_clicked);
-    assert!(!selection2_clicked);
-}
-```
-
-### Integration Tests
-
-```rust
-#[test]
-async fn test_complete_interaction_flow() {
-    let device = create_test_device();
-    let mut chart = Chart::new(&device);
-
-    let mut tooltip_data = None;
-    let mut click_count = 0;
-
-    chart.select_all::<Circle>()
-        .data(test_data)
-        .on("hover", |_event, data| {
-            tooltip_data = Some(data.clone());
-        })
-        .on("click", |_event, _data| {
-            click_count += 1;
-        });
-
-    // Simulate mouse hover
-    let hover_event = MouseEvent::Move(Vec2::new(50.0, 50.0));
-    chart.process_input_event(hover_event).await;
-
-    assert!(tooltip_data.is_some());
-    assert_eq!(click_count, 0);
-
-    // Simulate mouse click
-    let click_event = MouseEvent::Down(Vec2::new(50.0, 50.0), MouseButton::Left);
-    chart.process_input_event(click_event).await;
-
-    assert_eq!(click_count, 1);
-}
-
-#[test]
-async fn test_gesture_recognition() {
-    let mut recognizer = GestureRecognizer::new();
-    let mut pinch_detected = false;
-
-    recognizer.register_gesture_handler("pinch", |gesture_data| {
-        pinch_detected = true;
-    });
-
-    // Simulate pinch gesture
-    let touch1_start = TouchEvent::Start(TouchPoint { id: 1, position: Vec2::new(100.0, 100.0) });
-    let touch2_start = TouchEvent::Start(TouchPoint { id: 2, position: Vec2::new(200.0, 200.0) });
-
-    recognizer.process_input(touch1_start).await;
-    recognizer.process_input(touch2_start).await;
-
-    // Move touches closer together
-    let touch1_move = TouchEvent::Move(TouchPoint { id: 1, position: Vec2::new(120.0, 120.0) });
-    let touch2_move = TouchEvent::Move(TouchPoint { id: 2, position: Vec2::new(180.0, 180.0) });
-
-    recognizer.process_input(touch1_move).await;
-    recognizer.process_input(touch2_move).await;
-
-    assert!(pinch_detected);
-}
-```
-
-### Performance Tests
-
-```rust
-#[bench]
-async fn bench_event_processing_throughput(b: &mut Bencher) {
-    let manager = create_event_manager_with_handlers(1000);
-    let events = create_test_events(1000);
-
-    b.iter(|| async {
-        for event in &events {
-            manager.process_event(event.clone()).await;
-        }
-    });
-}
-
-#[bench]
-async fn bench_event_handler_latency(b: &mut Bencher) {
-    let manager = create_event_manager();
-    let event = create_test_event();
-
-    b.iter(|| async {
-        let start = Instant::now();
-        manager.process_event(event.clone()).await;
-        let latency = start.elapsed();
-        assert!(latency < Duration::from_millis(16)); // <16ms target
-    });
-}
-```
+- **Unit tests**: handler registration and dispatch in isolation (no GPU
+  required); propagation halts correctly on `StopPropagation`; per-selection
+  filtering prevents cross-selection handler leakage; global handlers receive
+  all events
+- **Integration tests**: full round-trip from synthetic `winit` cursor event →
+  GPU hit test → typed Rust handler invoked with correct `&T` data; multiple
+  overlapping selections dispatch in correct order
+- **Performance**: benchmark or `assert!(elapsed < 16ms)` test covering the
+  dispatch path with a realistically-sized chart (10 000 elements, 50 handlers)
+- **Visual validation**: run the interactive example, hover over elements to
+  confirm highlight updates, click to confirm console output — no GPU validation
+  errors in the wgpu debug layer
 
 ## Success Metrics
 
-### Performance Requirements
-
-- [ ] **Event Latency**: <16ms from input to handler execution
-- [ ] **Throughput**: Handle 1000+ events per second
-- [ ] **Memory Usage**: <1MB overhead for 10,000 event handlers
-- [ ] **CPU Usage**: <5% CPU usage during typical interaction patterns
-
-### API Usability Requirements
-
-- [ ] **Intuitive API**: Event handling feels familiar to web/desktop developers
-- [ ] **Type Safety**: Invalid event handler registrations caught at compile
-      time
-- [ ] **Error Handling**: Clear error messages for event handling failures
-- [ ] **Documentation**: Complete examples for all common interaction patterns
-
-### Feature Completeness Requirements
-
-- [ ] **Event Types**: Support all common mouse, touch, and gesture events
-- [ ] **Event Propagation**: Bubbling, capturing, and cancellation working
-      correctly
-- [ ] **Gesture Recognition**: Basic gestures (pinch, zoom, rotate) working
-- [ ] **Custom Events**: Support for user-defined event types
+- [ ] The `.on("click", handler)` pattern from the implementation strategy
+      compiles and behaves correctly against a live wgpu surface
+- [ ] All unit and integration tests pass: `cargo test -- --test-threads=1`
+- [ ] The end-to-end event latency benchmark meets the <16 ms target
+- [ ] An interactive example runs without GPU validation errors or panics
 
 ## Risk Assessment
 
-### Technical Risks
+- **Medium**: Bridging the async GPU hit-test from GUP-012 with synchronous
+  closure dispatch may require care around `Send + Sync` bounds and lifetime
+  management for captured references.
+  _Mitigation_: Scope handlers to `'static` (owned data only) and poll the
+  hit-test result synchronously within the dispatch call rather than spawning
+  async tasks.
 
-- **Medium**: Event handler performance could degrade with large numbers of
-  handlers
-- **Medium**: Event propagation complexity could introduce bugs
-- **Low**: Platform differences in input handling could cause inconsistencies
+- **Medium**: Type-erasing `T` to `&dyn Any` for storage and recovering it via
+  `downcast_ref` is a known Rust pattern but can produce confusing silent
+  mismatches if `SelectionId` tracking is off by one.
+  _Mitigation_: Assert in debug builds that every registered handler's
+  `TypeId` matches the hit element's selection before downcasting.
 
-### Mitigation Strategies
-
-- **Performance Testing**: Continuous benchmarking of event processing
-  performance
-- **Reference Implementation**: Compare against established event systems for
-  correctness
-- **Platform Testing**: Test on all supported platforms for consistency
-
-## Implementation Notes
-
-### Design Decisions
-
-- Use trait objects for event handlers to allow different closure types
-- Implement event propagation similar to DOM events for familiarity
-- Support both synchronous and asynchronous event handlers
-- Use weak references to prevent memory leaks from event handler retention
-
-### Event Processing Strategy
-
-- Process events asynchronously to avoid blocking the main thread
-- Use event queuing to handle bursts of input events smoothly
-- Implement event coalescing for high-frequency events like mouse move
-- Cache event handler lookups for performance
-
-### Memory Management Strategy
-
-- Use weak references for event handler storage to allow automatic cleanup
-- Implement event handler cleanup when selections are dropped
-- Pool event objects to reduce allocation overhead
-- Use efficient data structures for handler lookup and iteration
+- **Low**: Event coalescing for high-frequency `mousemove` events is not in
+  scope for this story. If the event queue grows unbounded under rapid mouse
+  movement, the latency target may be violated.
+  _Mitigation_: Document the known limitation; coalescing is deferred to a
+  follow-up story.
 
 ## Definition of Done
 
-- [ ] Event handling system integrated with GPU interaction system
-- [ ] Familiar API for registering event handlers on selections
-- [ ] Event propagation and bubbling working correctly
-- [ ] Support for mouse, touch, and basic gesture events
-- [ ] Performance targets met for latency and throughput
-- [ ] Integration tests passing for complete interaction flows
-- [ ] Gesture recognition working for basic gestures
-- [ ] Cross-platform input handling consistency verified
-- [ ] Memory management preventing leaks from event handlers
-- [ ] Documentation complete with interaction examples
-- [ ] Code review completed and approved
+- [ ] All Acceptance Criteria are satisfied and checked
+- [ ] All tests pass: `cargo test -- --test-threads=1`
+- [ ] Lint and format clean: `mask all-fix`
+- [ ] All examples compile: `cargo check --examples`
+- [ ] Story status updated to ✅ Complete in story file and INDEX.md

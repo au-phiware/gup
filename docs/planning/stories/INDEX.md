@@ -13,9 +13,10 @@ and WebGPU integration.
 - [GUP-004](GUP-004_Basic_Render_Context.md) ✅ — The render context
   (GupContext) provides the foundation for all GPU operations in Gup. Deps:
   GUP-003 ✅.
-- [GUP-013](GUP-013_Event_Handling_System.md) 📋 — The event handling system
-  provides the high-level interface for developers to respond to user
-  interactions. Deps: GUP-002 ✅, GUP-012 ✅.
+- [GUP-013](GUP-013_Event_Handling_System.md) 🚧 — Implements the high-level
+  event handling API connecting GPU interaction results (hit tests, picks) with
+  .on(event, handler) patterns on Selection<T, M>. Deps: GUP-002 ✅,
+  GUP-012 ✅.
 - [GUP-013](GUP-013_GPU_Shader_Position_Precision_Fix.md) ✅ — GPU Shader
   Position Precision Fix.
 - [GUP-017](GUP-017_Error_Handling_Framework.md) ✅ — A robust error handling
@@ -163,6 +164,10 @@ data, and parallel output.
   API (query_point_cached, query_region_cached, etc.) blocks the….
 - [GUP-221](GUP-221_Pool_Aware_SetData_Selection.md) ✅ — GUP-167 integrated
   BufferPool into Selection::prepare_render(), but Selection::set_data()….
+- [GUP-276](GUP-276_D3_Style_Data_Transitions.md) 📋 — D3-style enter/update/exit
+  transitions via Selection::data_keyed() with GPU-interpolated 2-keyframe
+  animations for smooth data rebinding. Deps: GUP-002 ✅, GUP-138 ✅,
+  GUP-141 ✅, GUP-142 ✅, GUP-168 ✅.
 
 ## Shader Function System
 
@@ -191,6 +196,22 @@ integration, and Rust→WGSL transpilation.
   composition system from GUP-005 and WGSL code generation from….
 - [GUP-053](GUP-053_Advanced_Shader_Function_Library.md) 📋 — GUP-005
   implemented basic shader functions (LinearScale, ColorMap, PositionTransform).
+- [GUP-252](GUP-252_LinearScale_GPU_Shader_Function.md) 📋 — LinearScaleUniforms
+  and WGSL linear_scale/linear_scale_invert shader functions with clamping and
+  inversion support. Deps: GUP-005 ✅, GUP-007 ✅, GUP-053 📋.
+- [GUP-253](GUP-253_LogScale_GPU_Shader_Function.md) 📋 — LogScale ShaderFunction
+  with configurable base, zero/epsilon guard, and symmetric-log mode for data
+  straddling zero. Deps: GUP-252 📋.
+- [GUP-254](GUP-254_OrdinalScale_GPU_Shader_Function.md) 📋 — OrdinalScale
+  (BandScale + PointScale) GPU shader functions mapping integer category indices
+  to positions. Deps: GUP-252 📋, GUP-053 📋.
+- [GUP-255](GUP-255_ColorScale_GPU_Shader_Function.md) 📋 — ColorScale
+  ShaderFunction (f32 → vec4) with built-in palettes (Viridis, Plasma, etc.)
+  composable with LinearScale. Deps: GUP-134 ✅, GUP-252 📋.
+- [GUP-273](GUP-273_Geographic_Projection_Shader_System.md) 📋 — Mercator,
+  Equirectangular, Stereographic, and Orthographic projections as composable WGSL
+  ShaderFunctions with GeoPoint coordinate type and boundary clipping. Deps:
+  GUP-005 ✅, GUP-007 ✅, GUP-052 ✅, GUP-053 📋.
 - [GUP-053](GUP-053_Shader_Pipeline_Performance_Optimization.md) ✅ — Enhance
   the ComposableShaderPipeline system with advanced performance optimizations
   based on….
@@ -303,6 +324,9 @@ derive macros, and custom mark kit.
   use multi-pass rendering to validate the multi-pass API with visual output.
 - [GUP-208](GUP-208_Mark_Derive_Instance_Buffer_Generation.md) ✅ — Mark Derive
   Macro GPU Instance Buffer Generation.
+- [GUP-274](GUP-274_Map_Mark_Rendering.md) 📋 — GeoPathMark that loads GeoJSON
+  boundaries, tessellates polygons via GUP-132, and renders them with a
+  geographic projection shader. Deps: GUP-009 ✅, GUP-132 ✅, GUP-273 📋.
 
 ## Interaction & Spatial Index
 
@@ -362,6 +386,15 @@ selection, and radix sort.
   local….
 - [GUP-236](GUP-236_Sort_Aware_Visual_Demo.md) ✅ — Create an example
   application demonstrating transparent overlapping marks rendered with and….
+- [GUP-277](GUP-277_Zoom_Pan_Interactions.md) 📋 — ZoomBehavior with GPU
+  ViewportTransform uniform, inertia panning, zoom-to-cursor, and configurable
+  scale limits. Deps: GUP-012 ✅, GUP-013 📋.
+- [GUP-278](GUP-278_Brush_Mark_Rectangular_Selection.md) 📋 — BrushMark overlay
+  with drag-to-select, GPU region query, visual feedback, and viewport-aware
+  coordinate transform. Deps: GUP-012 ✅, GUP-067 ✅, GUP-075 ✅, GUP-013 📋.
+- [GUP-279](GUP-279_Linked_View_Coordination.md) 📋 — SharedSelectionState
+  coordinating brush/click selections across multiple charts with opacity-based
+  visual dimming. Deps: GUP-001 ✅, GUP-075 ✅, GUP-013 📋, GUP-278 📋.
 
 ## Axis & Grid System
 
@@ -503,6 +536,10 @@ screen reader testing, focus elements.
 - [GUP-127](GUP-127_Focus_Elements_for_Data_Points.md) ✅ — GUP-111 implemented
   ARIA tree generation, but screen reader users still cannot navigate…. Deps:
   GUP-016 ✅, GUP-111 ✅.
+- [GUP-272](GUP-272_WCAG_2_1_AA_Compliance_Validation.md) 📋 — Systematic WCAG
+  2.1 AA audit of all 50 success criteria, gap fixes, conformance statement, and
+  automated accessibility checks in CI. Deps: GUP-016 ✅, GUP-111 ✅,
+  GUP-112 ✅, GUP-122 ✅, GUP-124 ✅, GUP-127 ✅.
 
 ## Animation & Streaming
 
@@ -534,14 +571,15 @@ aggregation.
   statistical functions are limited by GPU memory size.
 - [GUP-147](GUP-147_Box_Plot_Visualization.md) ✅ — GUP-139 provides the
   statistical foundation (min, max, quartiles) needed for box plots.
-- [GUP-147](GUP-147_GPU_Memory_Bandwidth_Profiling.md) 📋 — GUP-046 implemented
-  comprehensive performance profiling, but left memory bandwidth estimation as a
-  placeholder.
+- [GUP-147](GUP-147_GPU_Memory_Bandwidth_Profiling.md) 📋 — Adds actual GPU
+  memory bandwidth measurement (upload/download throughput, texture access
+  patterns, memory pressure detection) to the profiling system. Deps:
+  GUP-046 ✅, GUP-080 ✅.
 - [GUP-148](GUP-148_Fix_Statistics_Shader_Bug.md) ✅ — GUP-145 discovered a
   critical bug in the statistics compute shader from GUP-139.
-- [GUP-148](GUP-148_Profiling_Data_Export_Visualization.md) 📋 — The performance
-  profiling system (GUP-046) collects rich performance data but lacks export
-  and….
+- [GUP-148](GUP-148_Profiling_Data_Export_Visualization.md) 📋 — Exports
+  profiling data to JSON/CSV/Chrome trace, generates SVG flame graphs, and
+  provides a live web dashboard. Deps: GUP-046 ✅, GUP-080 ✅, GUP-147 📋.
 - [GUP-150](GUP-150_Recovery_Metrics_and_Analytics.md) ✅ — The error recovery
   system currently tracks individual recovery attempts but doesn't aggregate
   metrics over time.
@@ -612,6 +650,36 @@ integration, pipeline caching.
 - [GUP-239](GUP-239_Pipeline_Caching_Chart_Builder.md) ✅ — The
   multi_font_chart_demo (and likely other chart rendering code) recreates the
   axis-line….
+- [GUP-245](GUP-245_Bar_Chart_Builder.md) 📋 — BarChartBuilder with
+  vertical/horizontal, grouped, and stacked variants using instanced Rectangle
+  marks and OrdinalScale. Deps: GUP-018 ✅, GUP-067 ✅, GUP-093 ✅,
+  GUP-254 📋.
+- [GUP-246](GUP-246_Line_Chart_Builder.md) 📋 — LineChartBuilder with
+  multi-series support, automatic x-sorting, point markers, and four curve
+  interpolation modes. Deps: GUP-018 ✅, GUP-067 ✅, GUP-093 ✅, GUP-168 ✅.
+- [GUP-247](GUP-247_Area_Chart_Builder.md) 📋 — AreaChartBuilder with stacked,
+  normalized-stacked, gradient-fill, and band/ribbon area variants via tessellated
+  path polygons. Deps: GUP-018 ✅, GUP-246 📋, GUP-132 ✅.
+- [GUP-248](GUP-248_Heatmap_Chart_Builder.md) 📋 — HeatmapChartBuilder with
+  automatic 2D binning, ColorScale value→color mapping, and GPU-instanced
+  Rectangle rendering for 1M+ cells at 60 FPS. Deps: GUP-018 ✅, GUP-067 ✅,
+  GUP-093 ✅, GUP-255 📋.
+- [GUP-249](GUP-249_Violin_Plot_Builder.md) 📋 — ViolinPlotBuilder using KDE
+  (GUP-144) for smooth mirrored density curves with optional embedded box plots
+  and half-violin split mode. Deps: GUP-018 ✅, GUP-132 ✅, GUP-144 ✅,
+  GUP-166 ✅.
+- [GUP-250](GUP-250_Density_Plot_Builder.md) 📋 — DensityPlotBuilder with 2D GPU
+  KDE compute shader and marching-squares contour extraction, rendered as filled
+  contours or line isolevels. Deps: GUP-018 ✅, GUP-144 ✅, GUP-132 ✅,
+  GUP-248 📋.
+- [GUP-251](GUP-251_Custom_Composite_Chart_Support.md) 📋 — CompositeChartBuilder
+  composing multiple chart layers with shared axes, unified scale domains, and
+  optional dual-y-axis support. Deps: GUP-001 ✅, GUP-018 ✅, GUP-093 ✅,
+  GUP-245 📋, GUP-246 📋.
+- [GUP-275](GUP-275_Choropleth_Chart_Builder.md) 📋 — ChoroplethChartBuilder
+  mapping GeoJSON region values to colors with projection selection, colorbar
+  legend, and zoom/pan. Deps: GUP-018 ✅, GUP-273 📋, GUP-274 📋,
+  GUP-255 📋.
 
 ## Performance & Profiling
 
@@ -647,9 +715,13 @@ validation.
 
 - [GUP-015](GUP-015_GPU_Debugging_Tools.md) ✅ — GPU Debugging and Profiling
   Tools.
-- [GUP-015](GUP-015_Real_Time_Data_Streaming.md) 📋 — Gup's mission promises
-  "<1ms data update latency for real-time streams" which requires…. Deps:
+- [GUP-015](GUP-015_Real_Time_Data_Streaming.md) 📋 — Implements
+  StreamingBuffer<T> with keyed insert/update/remove, dirty-region tracking,
+  double-buffering swap, and GPU-flush of only mutated byte ranges. Deps:
   GUP-002 ✅, GUP-003 ✅, GUP-004 ✅.
+- [GUP-244](GUP-244_Streaming_Data_Builder_API.md) 📋 — Ergonomic DataStream<T>
+  builder API (capacity, mode, backpressure) with Selection::stream() integration
+  on top of GUP-015's low-level primitives. Deps: GUP-002 ✅, GUP-015 📋.
 - [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md) ✅ — During GUP-002
   development, debugging GPU resource issues was challenging.
 - [GUP-037](GUP-037_Buffer_Validation_and_Debugging_Tools.md) ✅ — During
@@ -701,3 +773,92 @@ test fixes.
 - [GUP-243](GUP-243_Puppeteer_HTML_Benchmark_CI_Runner.md) ✅ — Add Puppeteer
   (or Playwright) to the development environment and CI workflow to capture
   JSON….
+
+## Advanced Scale
+
+Billion-point LOD rendering, adaptive viewport, streaming LOD, GPU-accelerated
+layouts, and 3D visualization.
+
+- [GUP-256](GUP-256_Level_of_Detail_Pyramid.md) 📋 — LodPyramid struct with GPU
+  compute shader pyramid builder for up to 1B points using grid-based point
+  aggregation across 5+ LOD levels. Deps: GUP-003 ✅, GUP-004 ✅, GUP-030 ✅,
+  GUP-077 ✅.
+- [GUP-257](GUP-257_Adaptive_Viewport_Renderer.md) 📋 — AdaptiveRenderer that
+  selects the coarsest LOD tier by pixels-per-data-point heuristic and issues a
+  frustum-culled indirect draw with no CPU readback. Deps: GUP-256 📋,
+  GUP-076 ✅, GUP-077 ✅.
+- [GUP-258](GUP-258_Streaming_Data_Manager_LOD.md) 📋 — StreamingLodManager
+  combining DataStream<T> (GUP-015) with LodPyramid for incremental cell-level
+  LOD updates and memory-budget eviction. Deps: GUP-015 📋, GUP-244 📋,
+  GUP-256 📋.
+- [GUP-259](GUP-259_GPU_Force_Directed_Graph_Layout.md) 📋 — GPU compute shader
+  force-directed layout (repulsion, spring, gravity, convergence detection)
+  targeting 100K nodes in ≤5 seconds. Deps: GUP-003 ✅, GUP-004 ✅,
+  GUP-077 ✅.
+- [GUP-260](GUP-260_GPU_Treemap_Layout.md) 📋 — GPU compute shader treemap layout
+  with four algorithm variants (Squarified, Binary, Strip, SliceDice) outputting
+  Rectangle-compatible cells. Deps: GUP-003 ✅, GUP-004 ✅, GUP-067 ✅.
+- [GUP-261](GUP-261_3D_Visualization_Support.md) 📋 — Depth buffer,
+  Camera/projection uniforms, Phong lighting, and Sphere3D/Box3D/Line3D marks
+  enabling 3D scatter plots with materials. Deps: GUP-004 ✅, GUP-009 ✅,
+  GUP-010 ✅, GUP-131 ✅.
+
+## Ecosystem Integration
+
+Framework integrations (Bevy, egui, Tauri, winit), export formats (SVG, PDF,
+PNG, HTML), and platform targets.
+
+- [GUP-262](GUP-262_Bevy_Integration.md) 📋 — gup-bevy crate with GupChart Bevy
+  Component and GupPlugin sharing the wgpu device/queue with Bevy's renderer.
+  Deps: GUP-004 ✅, GUP-018 ✅, GUP-039 ✅.
+- [GUP-263](GUP-263_egui_Integration.md) 📋 — GupWidget implementing egui::Widget
+  via render-to-texture, with dirty-tracking and interaction bridge forwarding
+  egui pointer events. Deps: GUP-004 ✅, GUP-018 ✅, GUP-268 📋.
+- [GUP-264](GUP-264_Tauri_Integration.md) 📋 — gup-tauri example running Gup WASM
+  in a Tauri WebView with a Rust IPC bridge feeding data to the chart. Deps:
+  GUP-004 ✅, GUP-018 ✅, GUP-172 ✅, GUP-237 ✅.
+- [GUP-265](GUP-265_winit_Application_Shell.md) 📋 — GupApp application shell
+  wrapping the full winit event loop (surface, resize, device-loss recovery) into
+  a 5-line builder entry point. Deps: GUP-039 ✅, GUP-047 ✅, GUP-049 ✅,
+  GUP-013 📋.
+- [GUP-266](GUP-266_SVG_Export.md) 📋 — SvgRenderer extracting vector paths from
+  marks and generating a valid SVG document with correct clip-space→viewport
+  coordinate mapping. Deps: GUP-009 ✅, GUP-018 ✅, GUP-099 ✅.
+- [GUP-267](GUP-267_PDF_Export.md) 📋 — PdfRenderer converting the GUP-266 SVG
+  intermediate to a PDF with embedded font subsets, configurable page sizes, and
+  multi-page support. Deps: GUP-018 ✅, GUP-266 📋.
+- [GUP-268](GUP-268_PNG_Export.md) 📋 — Off-screen GPU render-to-texture with
+  staging-buffer readback and PNG encoding via the image crate, supporting HiDPI
+  scale factors. Deps: GUP-004 ✅, GUP-035 ✅, GUP-018 ✅.
+- [GUP-269](GUP-269_HTML_Export.md) 📋 — HtmlExporter generating a single-file
+  interactive HTML page with embedded WASM, data JSON, SVG fallback, and OG
+  thumbnail meta tags. Deps: GUP-266 📋, GUP-268 📋, GUP-172 ✅.
+
+## Mobile
+
+iOS and Android platform support for GPU-accelerated Gup charts.
+
+- [GUP-270](GUP-270_iOS_Platform_Support.md) 📋 — CAMetalLayer Metal surface,
+  Swift/Obj-C UIKit/SwiftUI integration shim, and UITouch→InteractionEvent
+  translation for iOS/iPadOS. Deps: GUP-004 ✅, GUP-039 ✅, GUP-182 ✅,
+  GUP-013 📋.
+- [GUP-271](GUP-271_Android_Platform_Support.md) 📋 — Android SurfaceView
+  lifecycle, JNI NDK wrapper, MotionEvent→InteractionEvent bridge, and APK example
+  for Kotlin/Java embedding. Deps: GUP-004 ✅, GUP-039 ✅, GUP-182 ✅,
+  GUP-013 📋, GUP-270 📋.
+
+## Documentation
+
+API reference generation, tutorials, and example gallery.
+
+- [GUP-280](GUP-280_API_Reference_Generation.md) 📋 — Comprehensive rustdoc
+  coverage of all public APIs with runnable doc examples, docs.rs configuration,
+  and a CI gate enforcing zero doc warnings. Deps: GUP-002 ✅, GUP-005 ✅,
+  GUP-009 ✅, GUP-018 ✅.
+- [GUP-281](GUP-281_Tutorial_and_Guide_Suite.md) 📋 — Six step-by-step tutorials
+  in docs/tutorials/ covering Getting Started, Data Binding, Custom Shaders,
+  Interactions, Streaming, and Custom Marks. Deps: GUP-002 ✅, GUP-018 ✅,
+  GUP-103 ✅, GUP-280 📋.
+- [GUP-282](GUP-282_Example_Gallery.md) 📋 — Automated thumbnail generation (via
+  GUP-268 PNG Export) and GitHub Pages gallery grouped by category with CI
+  deployment. Deps: GUP-103 ✅, GUP-268 📋.
