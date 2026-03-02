@@ -275,3 +275,96 @@ a complete, GPU-resident domain → color pipeline.
 - **21 unit tests** in `src/shader_function.rs::color_scale_tests`
 - **12 integration tests** in `tests/color_scale_integration.rs`
 - **33 total new tests** — all passing
+
+## Retrospective
+
+**Completed**: 2025-07-26
+
+### Key Technical Learnings
+
+#### Unified WGSL Function with Runtime Branching
+
+- **Challenge**: The story required three distinct normalisation modes
+  (continuous, diverging, quantize) to be emitted from a single
+  `wgsl_function()` return value, since `ComposableShaderFunction` returns
+  `&'static str`.
+- **Solution**: A single `fn color_scale(...)` branches on
+  `params.scale_kind: u32` at runtime. This keeps the `ComposableShaderFunction`
+  interface unchanged while supporting all three modes from one bind-group slot.
+- **Pattern**: When a `ShaderFunction` has multiple logical variants, prefer a
+  uniform-field discriminator over multiple WGSL functions. This avoids
+  duplicating bindings and keeps the compose() chain simple.
+
+#### Inlining the Binary-Search Gradient Lookup
+
+- **Challenge**: The GUP-134 `ColorGradientStorage` has its binary-search WGSL
+  as a standalone function that reads global `gradient_colors` /
+  `gradient_stops` storage buffers. `ColorScale` needs the same lookup but
+  within its own function body.
+- **Solution**: The gradient lookup was inlined directly into the
+  `fn color_scale(...)` body rather than calling a separate helper. This avoids
+  the WGSL name-collision risk when both `ColorGradientStorage` and `ColorScale`
+  appear in the same pipeline, and keeps the generated code self-contained.
+- **Pattern**: When wrapping an existing GPU primitive, inline its WGSL rather
+  than composing at the WGSL level. This is simpler and avoids issues with
+  global binding assumptions.
+
+#### Palette Data Management
+
+- **Challenge**: GUP-134 shipped viridis, plasma, inferno, rainbow, cool_warm,
+  and grayscale. This story required magma and rd_bu.
+- **Solution**: Added 11-sample colour tables for magma and rd_bu as private
+  `fn magma_gradient_data()` / `fn rd_bu_gradient_data()` methods on
+  `ColorScale`. These are also exposed as `ColorScale::magma_gradient()` and
+  `ColorScale::rd_bu_gradient()` for use with diverging/quantize constructors.
+- **Pattern**: Palette stop data lives on the struct that uses it. If a future
+  story needs the same data elsewhere, extract to a shared constant.
+
+### Architectural Decisions
+
+#### ColorScaleKind Enum vs. Optional Fields
+
+- **Decision**: Used a `ColorScaleKind` enum (Continuous / Diverging { midpoint
+  } / Quantize { n_bins }) instead of `midpoint: Option<f32>` +
+  `n_bins: Option<u32>`.
+- **Reasoning**: Matches the project's "prefer enums over optionals for known
+  variant sets" pattern. The enum makes invalid states unrepresentable (e.g.,
+  cannot have a midpoint without being Diverging).
+- **Trade-off**: Slightly more verbose pattern matching compared to option
+  checks.
+- **Future**: If additional scale modes are needed (e.g., quantile, threshold),
+  adding new enum variants is straightforward.
+
+#### ChartBuilder `.color_scale()` Per-Builder vs. Trait
+
+- **Decision**: Added `.color_scale()` as a per-builder method on
+  `ScatterPlotBuilder`, `LineChartBuilder`, and `HeatmapBuilder` rather than
+  adding it to the `ConfigurableBuilder` trait.
+- **Reasoning**: Mirrors the existing `x_scale()` / `y_scale()` pattern which is
+  also per-builder. Not all chart types necessarily benefit from a colour scale
+  (e.g., boxplot).
+- **Trade-off**: Some code duplication across builders.
+- **Future**: If more builders need `.color_scale()`, it could be moved to a
+  `ColorCapableBuilder` trait (similar to `GridCapableBuilder`).
+
+### Development Workflow Insights
+
+- The `ComposableShaderFunction` trait's `wgsl_function() -> &'static str`
+  signature means all WGSL must be compile-time constant. The `generate_wgsl()`
+  default implementation converts this to a `String`, which is where runtime
+  composition happens. This two-tier approach works well.
+- GPU WGSL validation via `wgpu::Device::create_shader_module()` in integration
+  tests is the most reliable way to catch WGSL errors. The test harness requires
+  wrapping the function in a complete module with struct definitions and storage
+  bindings — this is a good pattern to extract into a shared test utility.
+- The `--test-threads=1` requirement for GPU tests is well-established by now
+  and causes no friction.
+- `mask all-fix` catches formatting and clippy issues reliably; running it
+  before every commit is essential.
+
+### Follow-up Stories
+
+No new follow-up stories were identified. The story was cleanly scoped and all
+acceptance criteria were met within the planned boundaries. The downstream
+stories (GUP-248 Heatmap, GUP-250 Density Plot, GUP-275 Choropleth) are now
+unblocked by this completion.
