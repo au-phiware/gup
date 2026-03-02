@@ -174,6 +174,10 @@ harness = false
 name = "sdf_generation_benchmarks"
 harness = false
 
+[[bench]]
+name = "linear_scale_composition"
+harness = false
+
 [[example]]
 name = "custom_mark_demo"
 path = "examples/custom_mark_demo.rs"
