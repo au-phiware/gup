@@ -93,3 +93,96 @@ existing buffer pool to reduce allocation overhead.
 
 - 14 unit tests (CPU-only, selection_mask module) — all passing
 - 15 GPU integration tests (9 existing + 6 new pool tests) — all passing
+
+## Retrospective
+
+**Completed**: 2025-07-27
+
+### Key Technical Learnings
+
+#### Buffer Pool Integration Pattern
+
+- **Challenge**: The original story AC specified "Buffers are returned to the
+  pool when SelectionMaskBuffer is dropped", which would require storing an
+  `Arc<Mutex<BufferPool>>` inside the struct for automatic Drop-based cleanup.
+- **Solution**: Followed the established codebase pattern from GUP-167
+  (Selection API Pool Integration): store pool metadata
+  `Option<(BufferType, usize)>` per buffer and provide an explicit
+  `release_to_pool()` method. This avoids introducing `Arc<Mutex<>>` overhead
+  and matches how every other component in the codebase handles pool
+  integration.
+- **Pattern**: For GPU buffer pool integration, the standard approach is:
+  1. Store `Option<(BufferType, usize)>` pool metadata alongside each buffer
+  2. Provide `release_to_pool()` for explicit return
+  3. Caller (e.g. LinkedSelection) is responsible for calling release before
+     drop
+
+#### BufferType to Usage Flag Mapping
+
+- **Challenge**: SelectionMaskBuffer uses specific buffer usage flag
+  combinations (e.g. STORAGE | VERTEX | COPY_SRC for the output buffer) that
+  don't exactly match any single BufferType's flags.
+- **Solution**: BufferPool's BufferType variants provide _supersets_ of the
+  needed flags: `Instance` = VERTEX | STORAGE | COPY_DST | COPY_SRC, which
+  covers the output buffer's needs. This wastes no extra memory — the additional
+  flags just enable more operations on the buffer.
+- **Pattern**: When integrating with BufferPool, choose the BufferType whose
+  flags are a superset of what you need. The extra flags have zero runtime cost.
+
+#### Placeholder Buffer Technique
+
+- **Challenge**: `std::mem::replace` requires a replacement value when
+  extracting a buffer for deallocation, but we want to avoid creating an
+  expensive full-size buffer just as a placeholder.
+- **Solution**: Created a `placeholder_buffer()` helper that allocates a minimal
+  4-byte buffer as a temporary replacement. The placeholder is immediately
+  overwritten by the new pooled buffer on the next line.
+- **Pattern**: When using `std::mem::replace` to extract GPU resources, use a
+  minimal placeholder to satisfy the type system without wasting GPU memory.
+
+### Architectural Decisions
+
+#### Manual Release vs Automatic Drop
+
+- **Decision**: Use explicit `release_to_pool()` instead of implementing `Drop`
+  with stored pool reference.
+- **Reasoning**: Matches the established Selection API pattern from GUP-167.
+  Avoids introducing `Arc<Mutex<BufferPool>>` which would add lock contention
+  overhead and require all callers to wrap their BufferPool.
+- **Trade-off**: Callers must remember to call `release_to_pool()` before
+  dropping, or buffers are simply freed (not returned to pool). This is the same
+  trade-off Selection makes.
+- **Future**: If automatic pool return becomes important, a
+  `PooledSelectionMaskBuffer` wrapper type could be introduced that stores an
+  `Arc<Mutex<BufferPool>>` and implements Drop.
+
+#### Config Buffer Pooling
+
+- **Decision**: Pool the config buffer (96-byte uniform) alongside the larger
+  mask and output buffers.
+- **Reasoning**: Consistency — all three buffers follow the same pool lifecycle.
+  The config buffer is tiny so pool overhead is negligible, but it still avoids
+  a GPU allocation call on recreation.
+- **Trade-off**: The config buffer never grows (fixed size), so pooling it adds
+  metadata overhead without capacity-growth benefits.
+- **Future**: Could exclude config from pooling if profiling shows the metadata
+  is not worthwhile for sub-256-byte buffers.
+
+### Development Workflow Insights
+
+- The implementation was straightforward because the `BufferPool` API
+  (`allocate_raw` / `deallocate_raw`) is well-designed for this exact use case.
+  The `allocate_raw` method returns the size class alongside the buffer, which
+  is exactly what's needed for later deallocation.
+- All existing GPU tests continued to pass unchanged after adding the pool
+  parameter (with `None`), confirming backward compatibility.
+- The `--test-threads=1` constraint for GPU tests remains essential — all 15 GPU
+  tests pass reliably in serial mode.
+- The `mask all-fix` command reformats unrelated markdown files, requiring
+  careful `git add` to stage only relevant changes.
+
+### Follow-up Stories
+
+1. **GUP-291: Adaptive GPU Dimming Threshold** — Already planned. Could benefit
+   from pool integration when the threshold triggers SelectionMaskBuffer
+   creation/destruction at runtime.
