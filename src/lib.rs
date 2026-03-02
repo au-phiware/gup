@@ -218,7 +218,11 @@ pub use zoom::{GpuViewportTransform, ZoomBehavior};
 pub use brush::{BrushBehavior, BrushEvent, BrushExtent, BrushMark, BrushStyle};
 // Export tick generator with explicit types to avoid conflicts
 pub use tick_generator::{
-    LinearScale as TickLinearScale, // Renamed to avoid conflict with shader_function::LinearScale
+    // Renamed to avoid conflict with shader_function::LinearScale (the GPU
+    // shader function). tick_generator::LinearScale is a CPU-side type used for
+    // axis tick generation; shader_function::LinearScale is the GPU-side type
+    // that generates WGSL code for data scaling on the GPU.
+    LinearScale as TickLinearScale,
     LinearTickGenerator,
     LogarithmicScale,
     LogarithmicTickGenerator,

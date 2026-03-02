@@ -351,7 +351,6 @@ macro_rules! mat4 {
 // Re-export macros for easier access
 pub use macros::*;
 // Bring macro into scope for this module
-use crate::wgsl_function;
 pub use conversions::AutoConvert;
 
 pub trait ShaderType: Clone + MaybeSend + MaybeSync + 'static {
@@ -3391,6 +3390,24 @@ impl AnimationTimelineWithEvents {
 // End of Advanced Temporal Animation System
 // ============================================================================
 
+/// Uniform buffer layout for [`LinearScale`] and [`LinearScaleInvert`].
+///
+/// The struct is `#[repr(C)]` with `bytemuck::Pod` + `bytemuck::Zeroable` so it
+/// can be uploaded directly to a GPU uniform buffer.  The `clamp` field uses
+/// `u32` (rather than `bool`) for WGSL alignment compatibility — `0` means
+/// unclamped and `1` means clamped.
+///
+/// # Layout
+///
+/// | Offset | Field        | Type  |
+/// |--------|-------------|-------|
+/// | 0      | `domain_min` | `f32` |
+/// | 4      | `domain_max` | `f32` |
+/// | 8      | `range_min`  | `f32` |
+/// | 12     | `range_max`  | `f32` |
+/// | 16     | `clamp`      | `u32` |
+///
+/// Total size: 20 bytes.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct LinearScaleUniforms {
@@ -3398,11 +3415,13 @@ pub struct LinearScaleUniforms {
     pub domain_max: f32,
     pub range_min: f32,
     pub range_max: f32,
+    /// 0 = unclamped (extrapolates beyond domain), 1 = clamped to range.
+    pub clamp: u32,
 }
 
 impl ShaderUniform for LinearScaleUniforms {
     fn wgsl_struct_definition() -> String {
-        "struct LinearScaleUniforms {\n    domain_min: f32,\n    domain_max: f32,\n    range_min: f32,\n    range_max: f32,\n}".to_string()
+        "struct LinearScaleUniforms {\n    domain_min: f32,\n    domain_max: f32,\n    range_min: f32,\n    range_max: f32,\n    clamp_flag: u32,\n}".to_string()
     }
 
     fn wgsl_type_name() -> &'static str {
@@ -3410,24 +3429,76 @@ impl ShaderUniform for LinearScaleUniforms {
     }
 }
 
-/// Linear scaling transformation for numeric data.
+/// Linear scaling transformation for numeric data on the GPU.
 ///
-/// This is a basic example shader function. Advanced mathematical transformations
-/// (logarithmic, exponential, power law) will be added in GUP-053.
+/// Maps values from a data domain `[domain_min, domain_max]` to an output range
+/// `[range_min, range_max]` using linear interpolation.  When clamping is
+/// enabled, out-of-domain values are clamped to the output range boundaries
+/// instead of extrapolating.
+///
+/// The generated WGSL includes both a forward function (`linear_scale`) and an
+/// inverse function (`linear_scale_invert`) that maps output range values back
+/// to domain values.
+///
+/// # Examples
+///
+/// ```
+/// use gup::shader_function::{LinearScale, ComposableShaderFunction};
+///
+/// // Unclamped scale: domain [0, 100] → range [0, 1]
+/// let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+/// assert!(LinearScale::wgsl_function().contains("linear_scale"));
+///
+/// // Clamped scale: values outside domain are clamped to range
+/// let clamped = LinearScale::with_clamp(0.0, 100.0, 0.0, 1.0);
+/// let u = clamped.create_uniforms().unwrap();
+/// assert_eq!(u.clamp, 1);
+/// ```
 pub struct LinearScale {
     pub domain_min: f32,
     pub domain_max: f32,
     pub range_min: f32,
     pub range_max: f32,
+    /// Whether to clamp the output to `[range_min, range_max]`.
+    pub clamp: bool,
 }
 
 impl LinearScale {
+    /// Create an unclamped linear scale.
+    ///
+    /// Values outside the domain are extrapolated linearly.
     pub fn new(domain_min: f32, domain_max: f32, range_min: f32, range_max: f32) -> Self {
         Self {
             domain_min,
             domain_max,
             range_min,
             range_max,
+            clamp: false,
+        }
+    }
+
+    /// Create a clamped linear scale.
+    ///
+    /// Values outside the domain are clamped to `range_min` / `range_max`.
+    pub fn with_clamp(domain_min: f32, domain_max: f32, range_min: f32, range_max: f32) -> Self {
+        Self {
+            domain_min,
+            domain_max,
+            range_min,
+            range_max,
+            clamp: true,
+        }
+    }
+
+    /// Return a [`LinearScaleInvert`] that performs the mathematical inverse of
+    /// this scale, mapping output range values back to domain values.
+    pub fn invert(&self) -> LinearScaleInvert {
+        LinearScaleInvert {
+            domain_min: self.domain_min,
+            domain_max: self.domain_max,
+            range_min: self.range_min,
+            range_max: self.range_max,
+            clamp: self.clamp,
         }
     }
 }
@@ -3439,10 +3510,21 @@ impl ComposableShaderFunction for LinearScale {
 
     fn wgsl_function() -> &'static str {
         r#"
-        fn linear_scale(value: f32, scale: LinearScaleUniforms) -> f32 {
-            let normalized = (value - scale.domain_min) / (scale.domain_max - scale.domain_min);
-            return scale.range_min + normalized * (scale.range_max - scale.range_min);
-        }
+fn linear_scale(value: f32, scale: LinearScaleUniforms) -> f32 {
+    var normalized = (value - scale.domain_min) / (scale.domain_max - scale.domain_min);
+    if (scale.clamp_flag == 1u) {
+        normalized = clamp(normalized, 0.0, 1.0);
+    }
+    return scale.range_min + normalized * (scale.range_max - scale.range_min);
+}
+
+fn linear_scale_invert(value: f32, scale: LinearScaleUniforms) -> f32 {
+    var normalized = (value - scale.range_min) / (scale.range_max - scale.range_min);
+    if (scale.clamp_flag == 1u) {
+        normalized = clamp(normalized, 0.0, 1.0);
+    }
+    return scale.domain_min + normalized * (scale.domain_max - scale.domain_min);
+}
         "#
     }
 
@@ -3452,6 +3534,7 @@ impl ComposableShaderFunction for LinearScale {
             domain_max: self.domain_max,
             range_min: self.range_min,
             range_max: self.range_max,
+            clamp: if self.clamp { 1 } else { 0 },
         })
     }
 
@@ -3460,26 +3543,44 @@ impl ComposableShaderFunction for LinearScale {
     }
 }
 
-// Example of new shader function using the template macro system
-wgsl_function! {
-    struct LinearScaleTemplate {
-        domain_min: f32,
-        domain_max: f32,
-        range_min: f32,
-        range_max: f32,
+/// Inverse of [`LinearScale`] — maps output range values back to domain values.
+///
+/// Created via [`LinearScale::invert()`].  Implements
+/// [`ComposableShaderFunction`] with `Input = f32`, `Output = f32` so it can be
+/// composed with other shader functions through the pipeline builder.
+///
+/// The underlying WGSL delegates to `linear_scale_invert` which is emitted
+/// alongside `linear_scale` from the same [`LinearScale`] WGSL block.
+pub struct LinearScaleInvert {
+    pub domain_min: f32,
+    pub domain_max: f32,
+    pub range_min: f32,
+    pub range_max: f32,
+    pub clamp: bool,
+}
+
+impl ComposableShaderFunction for LinearScaleInvert {
+    type Input = f32;
+    type Output = f32;
+    type Uniforms = LinearScaleUniforms;
+
+    fn wgsl_function() -> &'static str {
+        // The invert function is defined together with the forward function.
+        LinearScale::wgsl_function()
     }
 
-    uniforms LinearScaleTemplateUniforms {
-        domain_min: f32,
-        domain_max: f32,
-        range_min: f32,
-        range_max: f32,
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(LinearScaleUniforms {
+            domain_min: self.domain_min,
+            domain_max: self.domain_max,
+            range_min: self.range_min,
+            range_max: self.range_max,
+            clamp: if self.clamp { 1 } else { 0 },
+        })
     }
 
-    fn linear_scale_template(f32) -> f32,
-
-    wgsl {
-        "fn linear_scale_template(value: f32, scale: LinearScaleTemplateUniforms) -> f32 {\n    let normalized = (value - scale.domain_min) / (scale.domain_max - scale.domain_min);\n    return scale.range_min + normalized * (scale.range_max - scale.range_min);\n}"
+    fn function_name() -> &'static str {
+        "linear_scale_invert"
     }
 }
 
@@ -7498,6 +7599,7 @@ mod tests {
             domain_max: 10.0,
             range_min: 0.0,
             range_max: 1.0,
+            clamp: 0,
         };
 
         let color_uniforms = ColorMapUniforms {
@@ -7614,12 +7716,14 @@ mod tests {
                 domain_max: 100.0,
                 range_min: 0.0,
                 range_max: 1.0,
+                clamp: 0,
             },
             second: LinearScaleUniforms {
                 domain_min: 0.0,
                 domain_max: 1.0,
                 range_min: -1.0,
                 range_max: 1.0,
+                clamp: 0,
             },
         };
         let outer = ChainUniforms {

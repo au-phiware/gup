@@ -158,9 +158,9 @@ async fn test_template_shader_function_gpu_integration() -> GupResult<()> {
     let device = &context.device;
     let queue = &context.queue;
 
-    let scale = LinearScaleTemplate::new(0.0, 100.0, 0.0, 1.0);
+    let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
 
-    let mut uniform_buffer: UniformBuffer<LinearScaleTemplateUniforms> = UniformBuffer::new();
+    let mut uniform_buffer: UniformBuffer<LinearScaleUniforms> = UniformBuffer::new();
 
     if let Some(uniforms) = scale.create_uniforms() {
         uniform_buffer.upload(device, queue, &uniforms)?;
@@ -193,20 +193,20 @@ async fn test_dynamic_wgsl_generation() -> GupResult<()> {
 
 #[tokio::test]
 async fn test_template_wgsl_generation() -> GupResult<()> {
-    // Test template-based WGSL generation
-    let template_scale = LinearScaleTemplate::new(0.0, 10.0, 0.0, 1.0);
+    // Test WGSL generation for LinearScale (replaces old LinearScaleTemplate test)
+    let scale = LinearScale::new(0.0, 10.0, 0.0, 1.0);
 
-    let wgsl = LinearScaleTemplate::wgsl_function();
-    assert!(wgsl.contains("fn linear_scale_template"));
-    assert!(wgsl.contains("LinearScaleTemplateUniforms"));
+    let wgsl = LinearScale::wgsl_function();
+    assert!(wgsl.contains("fn linear_scale"));
+    assert!(wgsl.contains("LinearScaleUniforms"));
     assert!(wgsl.contains("value"));
     assert!(wgsl.contains("scale"));
 
-    let function_name = LinearScaleTemplate::function_name();
-    assert_eq!(function_name, "linear_scale_template");
+    let function_name = LinearScale::function_name();
+    assert_eq!(function_name, "linear_scale");
 
     // Test dynamic generation works too
-    let dynamic_wgsl = template_scale.generate_wgsl();
+    let dynamic_wgsl = scale.generate_wgsl();
     assert_eq!(dynamic_wgsl, wgsl);
 
     Ok(())
@@ -218,17 +218,18 @@ async fn test_wgsl_compilation_validation() -> GupResult<()> {
     let device = &context.device;
 
     // Test that the generated WGSL can be used in actual shader modules
-    let _template_scale = LinearScaleTemplate::new(0.0, 10.0, 0.0, 1.0);
-    let wgsl_code = LinearScaleTemplate::wgsl_function();
+    let _scale = LinearScale::new(0.0, 10.0, 0.0, 1.0);
+    let wgsl_code = LinearScale::wgsl_function();
 
     // Create a complete shader module with the generated WGSL
     let complete_shader = format!(
         r#"
-        struct LinearScaleTemplateUniforms {{
+        struct LinearScaleUniforms {{
             domain_min: f32,
             domain_max: f32,
             range_min: f32,
             range_max: f32,
+            clamp_flag: u32,
         }}
 
         {wgsl_code}
@@ -240,7 +241,8 @@ async fn test_wgsl_compilation_validation() -> GupResult<()> {
 
         @fragment
         fn fs_main() -> @location(0) vec4<f32> {{
-            let result = linear_scale_template(0.5, LinearScaleTemplateUniforms(0.0, 1.0, 0.0, 10.0));
+            let u = LinearScaleUniforms(0.0, 1.0, 0.0, 10.0, 0u);
+            let result = linear_scale(0.5, u);
             return vec4<f32>(result, 0.0, 0.0, 1.0);
         }}
         "#
@@ -285,12 +287,9 @@ async fn test_shader_uniform_backward_compatibility() -> GupResult<()> {
         "PositionTransformUniforms"
     );
 
-    // Test that template macro also generates ShaderUniform implementations
-    assert!(!LinearScaleTemplateUniforms::wgsl_struct_definition().is_empty());
-    assert_eq!(
-        LinearScaleTemplateUniforms::wgsl_type_name(),
-        "LinearScaleTemplateUniforms"
-    );
+    // Test that other uniform types also implement ShaderUniform
+    assert!(!ClampUniforms::wgsl_struct_definition().is_empty());
+    assert_eq!(ClampUniforms::wgsl_type_name(), "ClampUniforms");
 
     Ok(())
 }
