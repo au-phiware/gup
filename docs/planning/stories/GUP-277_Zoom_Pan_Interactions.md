@@ -231,3 +231,92 @@ D3's design.
 - 18 new unit tests in `zoom::tests`
 - 1942 total tests pass (0 failures, 4 ignored)
 - All doctests pass
+
+## Retrospective
+
+**Completed**: 2025-07-15
+
+### Key Technical Learnings
+
+#### Bind Group Slot Architecture
+
+- **Challenge**: Initially placed the viewport transform uniform at
+  `@group(0) @binding(2)`, which collided with the shader-bound rendering path
+  that dynamically injects shader function uniforms at bindings 1..N within
+  group 0.
+- **Solution**: Moved the viewport transform to its own bind group at
+  `@group(1) @binding(0)`. This gives it a dedicated slot that never conflicts
+  with any mark-specific bindings in group 0.
+- **Pattern**: When adding a cross-cutting uniform that ALL pipelines need, use
+  a separate bind group rather than squeezing it into an existing group. This
+  avoids collision with dynamic bind group layouts.
+
+#### Pattern Bind Group Cascade
+
+- **Challenge**: Moving viewport transform to `@group(1)` pushed the pattern
+  bind group (used for accessibility patterns) from `@group(1)` to `@group(2)`.
+  This required updating all 5 pattern fragment shaders and the renderer's
+  `render_marks_with_patterns` call.
+- **Solution**: Updated all pattern shaders and the renderer in one pass.
+- **Pattern**: When inserting a new bind group between existing groups, audit
+  all downstream group indices. Use `grep -rn '@group('` across all `.wgsl`
+  files to find every binding.
+
+#### Uniform-Only Zoom (No Geometry Rebuild)
+
+- **Challenge**: The story requires that geometry buffers are never touched
+  during navigation — only a 16-byte uniform changes per frame.
+- **Solution**: The viewport transform is applied in the vertex shader to
+  clip-space positions. Instance data (centres, radii, endpoints) stays static.
+  `Selection::set_viewport_transform()` does a single `queue.write_buffer()` per
+  frame.
+- **Pattern**: For any visual property that changes every frame (zoom, pan,
+  time-based animation), prefer a small uniform buffer over re-uploading
+  instance data. The vertex shader can apply the transform cheaply.
+
+### Architectural Decisions
+
+#### Separate Bind Group for Viewport Transform
+
+- **Decision**: Use `@group(1)` for the viewport transform instead of sharing
+  group 0 with mark-specific bindings.
+- **Reasoning**: The shader-bound path dynamically generates pipeline layouts
+  with variable numbers of bindings in group 0. A fixed binding index in group 0
+  would either collide with shader functions or require complex reservation
+  logic.
+- **Trade-off**: Every pipeline now has two bind groups instead of one, adding
+  one extra `set_bind_group` call per draw. This cost is negligible compared to
+  the draw call itself.
+- **Future**: This pattern enables adding more cross-cutting uniforms (e.g.,
+  time, resolution) to group 1 without touching mark-specific code.
+
+#### CPU f64 / GPU f32 Split
+
+- **Decision**: Maintain zoom state in `f64` on the CPU but transmit to the GPU
+  as `f32`.
+- **Reasoning**: `f64` prevents cumulative floating-point drift during hundreds
+  of scroll events. `f32` is sufficient for the final clip-space transform since
+  clip coordinates are in `[-1, 1]` range.
+- **Trade-off**: At extreme zoom levels (>10 000×) the f32 downcast may lose
+  precision. Acceptable for the vast majority of use cases.
+- **Future**: If sub-pixel jitter becomes visible at extreme zoom, a
+  centre-relative decomposition can be added without API changes.
+
+### Development Workflow Insights
+
+- **GPU test discipline**: `--test-threads=1` caught the bind group mismatch
+  immediately. Running a quick `cargo test` without the flag would have produced
+  confusing segfaults instead of clear validation errors.
+- **Incremental pipeline fixes**: After the initial shader changes, the test
+  suite revealed exactly which pipeline creation paths were missing the new bind
+  group layout. Each failure pointed to a specific code path (performance_opt,
+  renderer, shader-bound) that needed the same fix.
+- **Sub-agent effectiveness**: Delegating the group(0)→group(1) refactor to a
+  general-purpose sub-agent with precise instructions was very effective. The
+  agent handled all 11 shader files and both Rust modules in one pass.
+
+### Follow-up Stories
+
+1. **GUP-278: Brush Mark / Rectangular Selection** — Already planned. Now that
+   viewport transform is in place, brush coordinates need to account for the
+   current zoom/pan state when mapping screen pixels to data space.
