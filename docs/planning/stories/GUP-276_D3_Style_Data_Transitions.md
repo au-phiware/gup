@@ -317,3 +317,114 @@ D3's own `.transition()` API to lower the migration barrier for D3 users.
 - **Integration tests**: 19
 - **Doc tests**: 1
 - **Total**: 38 new tests, all passing
+
+## Retrospective
+
+**Completed**: 2025-07-25
+
+### Key Technical Learnings
+
+#### Type-Erased Attribute Closures
+
+- **Challenge**: The `TransitionBuilder` needs to store closures that produce
+  `AttrValue` from data items of type `T`, but these closures have different
+  concrete types (the user provides `|T| -> f32`, `|T| -> [f32; 2]`, etc.).
+- **Solution**: Wrapped closures in `AttrTargetFn<T>` which uses
+  `Box<dyn Fn(&T) -> AttrValue>` internally, mirroring the existing
+  `AttributeBinding<T>` pattern in `selection.rs`.
+- **Pattern**: When you need to store heterogeneous closures, box them behind
+  a trait object that produces a common type (here `AttrValue`). The
+  `IntoAttrValue` trait provides the bridge from concrete types to the enum.
+
+#### Conditional Send+Sync Bounds
+
+- **Challenge**: The `Selection` struct does not require `T: Clone + Send + Sync`
+  on all methods, but `TransitionBuilder` needs `T: Clone` for the diff and
+  `T: MaybeSend + MaybeSync + 'static` for boxed closures.
+- **Solution**: Added where-clause bounds only on the `transition()` method
+  rather than on the Selection struct itself. This preserves backward
+  compatibility: existing code that doesn't use transitions is unaffected.
+- **Pattern**: Apply trait bounds at the method level, not the struct level,
+  to maintain maximum flexibility.
+
+#### HashMap-Based Diff with Stable Ordering
+
+- **Challenge**: Need to diff two datasets by key while preserving meaningful
+  ordering (new data order for updates, old data order for exits).
+- **Solution**: Build a `HashMap<K, usize>` index from old data, iterate over
+  new data in order for update/enter, then scan old data for unmatched exits.
+  This gives O(n+m) performance with clear ordering semantics.
+- **Pattern**: Index the "lookup" side (old data) in a HashMap, iterate the
+  "driving" side (new data) in order.
+
+### Architectural Decisions
+
+#### CommittedTransition as Snapshot vs Live Object
+
+- **Decision**: `CommittedTransition` is a `Clone`-able data snapshot rather
+  than a live object that drives GPU animation.
+- **Reasoning**: The transition system stores from/to values per element per
+  attribute. The actual GPU animation can be wired up separately by a render
+  loop that reads these snapshots. This keeps the transition logic pure and
+  testable without requiring a GPU context.
+- **Trade-off**: The render loop needs to interpret `CommittedTransition` and
+  create actual `KeyframeAnimation` instances. This is slightly more work at
+  integration time but much easier to test.
+- **Future**: A follow-up story can add `Selection::tick_transition(dt)` that
+  automatically creates and manages `KeyframeAnimation` instances from the
+  committed data.
+
+#### Callbacks Stored on Selection vs Transition
+
+- **Decision**: The `on_end` callback is stored on the `Selection` rather than
+  on the `CommittedTransition`.
+- **Reasoning**: `CommittedTransition` is `Clone` and `Debug` — storing boxed
+  closures would break both. The Selection is the long-lived owner that
+  manages the lifecycle, so it's the natural home for callbacks.
+- **Trade-off**: Only one `on_end` callback can be active at a time (per
+  selection). This matches the semantics: a new transition replaces the old.
+- **Future**: If multiple concurrent transitions per selection are needed,
+  callbacks could be stored in a parallel `Vec<Option<Box<dyn Fn()>>>`.
+
+#### EasingFn as Unified Enum
+
+- **Decision**: Created `EasingFn` as a new enum that bridges `EasingFunction`
+  (timing curves from GUP-138) and `InterpolationMode` (spatial splines from
+  GUP-141), rather than modifying either existing enum.
+- **Reasoning**: The two existing enums serve different purposes (timing vs
+  spatial interpolation). Adding CatmullRom/BSpline to EasingFunction would
+  conflate timing and spatial concerns. A new enum cleanly wraps both.
+- **Trade-off**: Users need to learn the `EasingFn` type rather than reusing
+  existing enums directly. Conversion methods `to_easing_function()` and
+  `to_interpolation_mode()` provide the bridge.
+- **Future**: If the easing system is reworked, `EasingFn` can be deprecated
+  in favor of a unified approach.
+
+### Development Workflow Insights
+
+- **Test-first approach worked well**: Writing the diff engine with comprehensive
+  unit tests first gave confidence that the foundation was solid before building
+  the more complex TransitionBuilder on top.
+- **Integration tests caught real issues**: The 19-test integration suite
+  exercises the full workflow (data_keyed → transition → commit → complete) and
+  verified callback behavior that unit tests alone couldn't cover.
+- **The example served as a smoke test**: Running `data_transition_scatter`
+  validated that the API was ergonomic and the output made sense (correct
+  enter/update/exit counts, reasonable from→to values).
+- **Minimal changes to existing code**: Only `selection.rs` and `lib.rs` were
+  modified (adding imports, fields, and methods). All new code went into
+  `src/transition/`. This reduces risk of breaking existing functionality.
+
+### Follow-up Stories
+
+1. **GUP-277: GPU Render Loop Transition Integration** — Wire
+   `CommittedTransition` data into the actual GPU render loop by creating
+   `KeyframeAnimation` instances from the per-element from/to snapshots and
+   advancing them each frame. Currently the transition system computes and
+   stores the animation data, but the render loop needs to consume it.
+
+2. **GUP-278: Staggered Transition Delays** — Add
+   `.delay_fn(|index, data| index as u64 * 50)` to `TransitionBuilder` for
+   per-element delay offsets, enabling cascading/staggered animation effects.
+   The core diff and builder infrastructure supports this; only the delay
+   computation needs per-element parameterisation.
