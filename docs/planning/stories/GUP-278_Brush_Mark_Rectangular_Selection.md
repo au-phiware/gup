@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Interaction & Spatial Index **Status**: 🚧 In Progress **Created**:
-2025-07-25
+**Initiative**: Interaction & Spatial Index **Status**: 🚧 In Progress
+**Created**: 2025-07-25
 
 ## Context
 
@@ -36,7 +36,7 @@ under pan and zoom.
 > "As a visualization developer, I want to attach a rectangular brush to a chart
 > so that users can drag to select a region and my application receives the IDs
 > of all data points inside it."
-
+>
 > "As an end user, I want to see a semi-transparent rectangle track my drag so
 > that I understand the current selection region before I release the mouse."
 

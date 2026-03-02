@@ -72,6 +72,7 @@ pub mod async_mixable;
 pub mod axis;
 pub mod axis_performance;
 pub mod axis_system;
+pub mod brush;
 pub mod buffer;
 pub mod chart_builder;
 pub mod color_descriptor;
@@ -211,6 +212,8 @@ pub use shader_function::*;
 pub use shader_pipeline::*;
 pub use text::*;
 pub use zoom::{GpuViewportTransform, ZoomBehavior};
+// Export brush selection system
+pub use brush::{BrushBehavior, BrushEvent, BrushExtent, BrushMark, BrushStyle};
 // Export tick generator with explicit types to avoid conflicts
 pub use tick_generator::{
     LinearScale as TickLinearScale, // Renamed to avoid conflict with shader_function::LinearScale
