@@ -204,7 +204,7 @@ integration, and Rust→WGSL transpilation.
 - [GUP-254](GUP-254_OrdinalScale_GPU_Shader_Function.md) ✅ — OrdinalScale
   (BandScale + PointScale) GPU shader functions mapping integer category indices
   to positions. Deps: GUP-252 ✅, GUP-053 ✅.
-- [GUP-255](GUP-255_ColorScale_GPU_Shader_Function.md) 🚧 — ColorScale
+- [GUP-255](GUP-255_ColorScale_GPU_Shader_Function.md) ✅ — ColorScale
   ShaderFunction (f32 → vec4) with built-in palettes (Viridis, Plasma, etc.)
   composable with LinearScale. Deps: GUP-134 ✅, GUP-252 ✅.
 - [GUP-273](GUP-273_Geographic_Projection_Shader_System.md) 📋 — Mercator,
@@ -694,7 +694,7 @@ integration, pipeline caching.
 - [GUP-248](GUP-248_Heatmap_Chart_Builder.md) 📋 — HeatmapChartBuilder with
   automatic 2D binning, ColorScale value→color mapping, and GPU-instanced
   Rectangle rendering for 1M+ cells at 60 FPS. Deps: GUP-018 ✅, GUP-067 ✅,
-  GUP-093 ✅, GUP-255 📋.
+  GUP-093 ✅, GUP-255 ✅.
 - [GUP-249](GUP-249_Violin_Plot_Builder.md) 📋 — ViolinPlotBuilder using KDE
   (GUP-144) for smooth mirrored density curves with optional embedded box plots
   and half-violin split mode. Deps: GUP-018 ✅, GUP-132 ✅, GUP-144 ✅, GUP-166
@@ -709,7 +709,7 @@ integration, pipeline caching.
   GUP-018 ✅, GUP-093 ✅, GUP-245 📋, GUP-246 📋.
 - [GUP-275](GUP-275_Choropleth_Chart_Builder.md) 📋 — ChoroplethChartBuilder
   mapping GeoJSON region values to colors with projection selection, colorbar
-  legend, and zoom/pan. Deps: GUP-018 ✅, GUP-273 📋, GUP-274 📋, GUP-255 📋.
+  legend, and zoom/pan. Deps: GUP-018 ✅, GUP-273 📋, GUP-274 📋, GUP-255 ✅.
 
 ## Performance & Profiling
 
