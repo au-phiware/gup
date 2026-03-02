@@ -8017,6 +8017,527 @@ mod tests {
         assert!(uniforms.is_some());
     }
 
+    // ======================================================================
+    // GUP-053: Advanced Shader Function Library Tests
+    // ======================================================================
+
+    // AC1: Mathematical Transform Functions
+
+    #[test]
+    fn test_exponential_scale_creation() {
+        let scale = ExponentialScale::new(0.0, 1.0, 0.0, 100.0, 10.0);
+        assert_eq!(scale.domain_min, 0.0);
+        assert_eq!(scale.domain_max, 1.0);
+        assert_eq!(scale.range_min, 0.0);
+        assert_eq!(scale.range_max, 100.0);
+        assert_eq!(scale.base, 10.0);
+    }
+
+    #[test]
+    fn test_exponential_scale_base10() {
+        let scale = ExponentialScale::base10(0.0, 100.0, 0.0, 1.0);
+        assert_eq!(scale.base, 10.0);
+    }
+
+    #[test]
+    fn test_exponential_scale_natural() {
+        let scale = ExponentialScale::natural(0.0, 100.0, 0.0, 1.0);
+        assert!((scale.base - std::f32::consts::E).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_exponential_scale_uniforms() {
+        let scale = ExponentialScale::new(0.0, 1.0, 0.0, 100.0, 2.0);
+        let uniforms = scale.create_uniforms().unwrap();
+        assert_eq!(uniforms.domain_min, 0.0);
+        assert_eq!(uniforms.domain_max, 1.0);
+        assert_eq!(uniforms.range_min, 0.0);
+        assert_eq!(uniforms.range_max, 100.0);
+        assert_eq!(uniforms.base, 2.0);
+    }
+
+    #[test]
+    fn test_exponential_scale_wgsl() {
+        let wgsl = ExponentialScale::wgsl_function();
+        assert!(wgsl.contains("fn exponential_scale"));
+        assert!(wgsl.contains("ExponentialScaleUniforms"));
+        assert!(wgsl.contains("pow(scale.base, t)"));
+    }
+
+    #[test]
+    fn test_exponential_scale_function_name() {
+        assert_eq!(ExponentialScale::function_name(), "exponential_scale");
+    }
+
+    // AC2: Color and Visual Functions
+
+    #[test]
+    fn test_hsv_color_map_creation() {
+        let map = HSVColorMap::new(0.0, 360.0, 1.0, 1.0);
+        assert_eq!(map.hue_start, 0.0);
+        assert_eq!(map.hue_end, 360.0);
+        assert_eq!(map.saturation, 1.0);
+        assert_eq!(map.value, 1.0);
+    }
+
+    #[test]
+    fn test_hsv_color_map_rainbow() {
+        let map = HSVColorMap::rainbow();
+        assert_eq!(map.hue_start, 0.0);
+        assert_eq!(map.hue_end, 360.0);
+    }
+
+    #[test]
+    fn test_hsv_color_map_cool_warm() {
+        let map = HSVColorMap::cool_warm();
+        assert_eq!(map.hue_start, 240.0);
+        assert_eq!(map.hue_end, 0.0);
+    }
+
+    #[test]
+    fn test_hsv_color_map_uniforms() {
+        let map = HSVColorMap::new(120.0, 240.0, 0.8, 0.9);
+        let uniforms = map.create_uniforms().unwrap();
+        assert_eq!(uniforms.hue_start, 120.0);
+        assert_eq!(uniforms.hue_end, 240.0);
+        assert_eq!(uniforms.saturation, 0.8);
+        assert_eq!(uniforms.value, 0.9);
+    }
+
+    #[test]
+    fn test_hsv_color_map_wgsl() {
+        let wgsl = HSVColorMap::wgsl_function();
+        assert!(wgsl.contains("fn hsv_color_map"));
+        assert!(wgsl.contains("fn hsv_to_rgb"));
+        assert!(wgsl.contains("HSVColorMapUniforms"));
+    }
+
+    #[test]
+    fn test_hsv_color_map_type_signature() {
+        // Input: f32, Output: Vec4
+        assert_eq!(<f32 as ShaderType>::wgsl_type_name(), "f32");
+        assert_eq!(<Vec4 as ShaderType>::wgsl_type_name(), "vec4<f32>");
+    }
+
+    #[test]
+    fn test_alpha_blending_creation() {
+        let blend = AlphaBlending::new(0.75);
+        assert_eq!(blend.alpha, 0.75);
+    }
+
+    #[test]
+    fn test_alpha_blending_semi_transparent() {
+        let blend = AlphaBlending::semi_transparent();
+        assert_eq!(blend.alpha, 0.5);
+    }
+
+    #[test]
+    fn test_alpha_blending_uniforms() {
+        let blend = AlphaBlending::new(0.3);
+        let uniforms = blend.create_uniforms().unwrap();
+        assert_eq!(uniforms.alpha, 0.3);
+    }
+
+    #[test]
+    fn test_alpha_blending_wgsl() {
+        let wgsl = AlphaBlending::wgsl_function();
+        assert!(wgsl.contains("fn alpha_blending"));
+        assert!(wgsl.contains("color.w * params.alpha"));
+    }
+
+    #[test]
+    fn test_color_space_converter_rgb_to_hsv() {
+        let conv = ColorSpaceConverter::rgb_to_hsv();
+        let uniforms = conv.create_uniforms().unwrap();
+        assert_eq!(uniforms.direction, 0);
+    }
+
+    #[test]
+    fn test_color_space_converter_hsv_to_rgb() {
+        let conv = ColorSpaceConverter::hsv_to_rgb();
+        let uniforms = conv.create_uniforms().unwrap();
+        assert_eq!(uniforms.direction, 1);
+    }
+
+    #[test]
+    fn test_color_space_converter_wgsl() {
+        let wgsl = ColorSpaceConverter::wgsl_function();
+        assert!(wgsl.contains("fn color_space_converter"));
+        assert!(wgsl.contains("fn rgb_to_hsv_convert"));
+        assert!(wgsl.contains("fn hsv_to_rgb_convert"));
+    }
+
+    // AC3: Geometric and Spatial Functions
+
+    #[test]
+    fn test_polar_transform_to_polar() {
+        let t = PolarTransform::to_polar(Vec2::new(100.0, 100.0));
+        assert!(t.to_polar);
+        assert_eq!(t.center.x, 100.0);
+        assert_eq!(t.center.y, 100.0);
+        assert_eq!(t.angle_offset, 0.0);
+    }
+
+    #[test]
+    fn test_polar_transform_to_cartesian() {
+        let t = PolarTransform::to_cartesian(Vec2::new(50.0, 50.0));
+        assert!(!t.to_polar);
+    }
+
+    #[test]
+    fn test_polar_transform_uniforms() {
+        let t = PolarTransform::new(Vec2::new(10.0, 20.0), 0.5);
+        let uniforms = t.create_uniforms().unwrap();
+        assert_eq!(uniforms.center_x, 10.0);
+        assert_eq!(uniforms.center_y, 20.0);
+        assert_eq!(uniforms.angle_offset, 0.5);
+        assert_eq!(uniforms.direction, 0); // to_polar = true → 0
+    }
+
+    #[test]
+    fn test_polar_transform_wgsl() {
+        let wgsl = PolarTransform::wgsl_function();
+        assert!(wgsl.contains("fn polar_transform"));
+        assert!(wgsl.contains("atan2"));
+        assert!(wgsl.contains("cos(angle)"));
+    }
+
+    #[test]
+    fn test_matrix_transform_identity() {
+        let t = MatrixTransform::identity();
+        assert_eq!(t.matrix, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_matrix_transform_rotation() {
+        let t = MatrixTransform::rotation(std::f32::consts::FRAC_PI_2);
+        // 90-degree rotation: cos(π/2) ≈ 0, sin(π/2) ≈ 1
+        assert!((t.matrix[0] - 0.0).abs() < 0.001); // cos
+        assert!((t.matrix[1] - 1.0).abs() < 0.001); // sin
+        assert!((t.matrix[2] - -1.0).abs() < 0.001); // -sin
+        assert!((t.matrix[3] - 0.0).abs() < 0.001); // cos
+    }
+
+    #[test]
+    fn test_matrix_transform_scaling() {
+        let t = MatrixTransform::scaling(2.0, 3.0);
+        assert_eq!(t.matrix, [2.0, 0.0, 0.0, 3.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_matrix_transform_translation() {
+        let t = MatrixTransform::translation(10.0, 20.0);
+        assert_eq!(t.matrix, [1.0, 0.0, 0.0, 1.0, 10.0, 20.0]);
+    }
+
+    #[test]
+    fn test_matrix_transform_uniforms() {
+        let t = MatrixTransform::new([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        let uniforms = t.create_uniforms().unwrap();
+        assert_eq!(uniforms.matrix, [1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(uniforms.translation, [5.0, 6.0]);
+    }
+
+    #[test]
+    fn test_matrix_transform_wgsl() {
+        let wgsl = MatrixTransform::wgsl_function();
+        assert!(wgsl.contains("fn matrix_transform"));
+        assert!(wgsl.contains("params.matrix"));
+        assert!(wgsl.contains("params.translation"));
+    }
+
+    #[test]
+    fn test_projection_transform_creation() {
+        let t = ProjectionTransform::new(
+            Vec2::new(0.0, 0.0),
+            Vec2::new(100.0, 100.0),
+            Vec2::new(0.0, 0.0),
+            Vec2::new(800.0, 600.0),
+        );
+        assert_eq!(t.data_min.x, 0.0);
+        assert_eq!(t.data_max.x, 100.0);
+        assert_eq!(t.viewport_max.x, 800.0);
+        assert_eq!(t.viewport_max.y, 600.0);
+    }
+
+    #[test]
+    fn test_projection_transform_uniforms() {
+        let t = ProjectionTransform::new(
+            Vec2::new(-1.0, -1.0),
+            Vec2::new(1.0, 1.0),
+            Vec2::new(0.0, 0.0),
+            Vec2::new(800.0, 600.0),
+        );
+        let uniforms = t.create_uniforms().unwrap();
+        assert_eq!(uniforms.data_min, [-1.0, -1.0]);
+        assert_eq!(uniforms.data_max, [1.0, 1.0]);
+        assert_eq!(uniforms.viewport_min, [0.0, 0.0]);
+        assert_eq!(uniforms.viewport_max, [800.0, 600.0]);
+    }
+
+    #[test]
+    fn test_projection_transform_wgsl() {
+        let wgsl = ProjectionTransform::wgsl_function();
+        assert!(wgsl.contains("fn projection_transform"));
+        assert!(wgsl.contains("ProjectionTransformUniforms"));
+    }
+
+    #[test]
+    fn test_distance_function_creation() {
+        let d = DistanceFunction::new(Vec2::new(5.0, 10.0));
+        assert_eq!(d.reference_point.x, 5.0);
+        assert_eq!(d.reference_point.y, 10.0);
+    }
+
+    #[test]
+    fn test_distance_function_from_origin() {
+        let d = DistanceFunction::from_origin();
+        assert_eq!(d.reference_point.x, 0.0);
+        assert_eq!(d.reference_point.y, 0.0);
+    }
+
+    #[test]
+    fn test_distance_function_uniforms() {
+        let d = DistanceFunction::new(Vec2::new(3.0, 4.0));
+        let uniforms = d.create_uniforms().unwrap();
+        assert_eq!(uniforms.ref_x, 3.0);
+        assert_eq!(uniforms.ref_y, 4.0);
+    }
+
+    #[test]
+    fn test_distance_function_wgsl() {
+        let wgsl = DistanceFunction::wgsl_function();
+        assert!(wgsl.contains("fn distance_fn"));
+        assert!(wgsl.contains("sqrt"));
+    }
+
+    // AC4: Statistical and Data Functions
+
+    #[test]
+    fn test_normalize_function_creation() {
+        let n = NormalizeFunction::new(10.0, 50.0);
+        assert_eq!(n.min, 10.0);
+        assert_eq!(n.max, 50.0);
+    }
+
+    #[test]
+    fn test_normalize_function_uniforms() {
+        let n = NormalizeFunction::new(0.0, 100.0);
+        let uniforms = n.create_uniforms().unwrap();
+        assert_eq!(uniforms.min, 0.0);
+        assert_eq!(uniforms.max, 100.0);
+    }
+
+    #[test]
+    fn test_normalize_function_wgsl() {
+        let wgsl = NormalizeFunction::wgsl_function();
+        assert!(wgsl.contains("fn normalize_fn"));
+        assert!(wgsl.contains("NormalizeFunctionUniforms"));
+        // Handles zero range
+        assert!(wgsl.contains("range == 0.0"));
+    }
+
+    #[test]
+    fn test_standardize_function_creation() {
+        let s = StandardizeFunction::new(50.0, 10.0);
+        assert_eq!(s.mean, 50.0);
+        assert_eq!(s.std_dev, 10.0);
+    }
+
+    #[test]
+    fn test_standardize_function_uniforms() {
+        let s = StandardizeFunction::new(0.0, 1.0);
+        let uniforms = s.create_uniforms().unwrap();
+        assert_eq!(uniforms.mean, 0.0);
+        assert_eq!(uniforms.std_dev, 1.0);
+    }
+
+    #[test]
+    fn test_standardize_function_wgsl() {
+        let wgsl = StandardizeFunction::wgsl_function();
+        assert!(wgsl.contains("fn standardize_fn"));
+        assert!(wgsl.contains("params.mean"));
+        assert!(wgsl.contains("params.std_dev"));
+    }
+
+    #[test]
+    fn test_quantile_function_creation() {
+        let q = QuantileFunction::new(vec![25.0, 50.0, 75.0]);
+        assert_eq!(q.boundaries.len(), 3);
+    }
+
+    #[test]
+    fn test_quantile_function_from_quartiles() {
+        let q = QuantileFunction::from_quartiles(25.0, 50.0, 75.0);
+        assert_eq!(q.boundaries, vec![25.0, 50.0, 75.0]);
+    }
+
+    #[test]
+    fn test_quantile_function_uniforms() {
+        let q = QuantileFunction::new(vec![10.0, 20.0, 30.0, 40.0]);
+        let uniforms = q.create_uniforms().unwrap();
+        assert_eq!(uniforms.count, 4);
+        assert_eq!(uniforms.boundaries[0], 10.0);
+        assert_eq!(uniforms.boundaries[1], 20.0);
+        assert_eq!(uniforms.boundaries[2], 30.0);
+        assert_eq!(uniforms.boundaries[3], 40.0);
+    }
+
+    #[test]
+    fn test_quantile_function_max_boundaries() {
+        // Test that we cap at 16 boundaries
+        let boundaries: Vec<f32> = (0..20).map(|i| i as f32).collect();
+        let q = QuantileFunction::new(boundaries);
+        let uniforms = q.create_uniforms().unwrap();
+        assert_eq!(uniforms.count, 16); // Capped at 16
+    }
+
+    #[test]
+    fn test_quantile_function_wgsl() {
+        let wgsl = QuantileFunction::wgsl_function();
+        assert!(wgsl.contains("fn quantile_fn"));
+        assert!(wgsl.contains("params.boundaries"));
+    }
+
+    #[test]
+    fn test_binning_function_creation() {
+        let b = BinningFunction::new(0.0, 100.0, 10);
+        assert_eq!(b.min, 0.0);
+        assert_eq!(b.max, 100.0);
+        assert_eq!(b.bin_count, 10);
+    }
+
+    #[test]
+    fn test_binning_function_uniforms() {
+        let b = BinningFunction::new(0.0, 50.0, 5);
+        let uniforms = b.create_uniforms().unwrap();
+        assert_eq!(uniforms.min, 0.0);
+        assert_eq!(uniforms.max, 50.0);
+        assert_eq!(uniforms.bin_count, 5);
+    }
+
+    #[test]
+    fn test_binning_function_wgsl() {
+        let wgsl = BinningFunction::wgsl_function();
+        assert!(wgsl.contains("fn binning_fn"));
+        assert!(wgsl.contains("BinningFunctionUniforms"));
+        assert!(wgsl.contains("params.bin_count"));
+    }
+
+    // GUP-053: Composition tests
+
+    #[test]
+    fn test_exponential_scale_compose_with_color_map() {
+        let scale = ExponentialScale::new(0.0, 100.0, 0.0, 1.0, 10.0);
+        let color = ColorMap::new(vec4![0.0, 0.0, 1.0, 1.0], vec4![1.0, 0.0, 0.0, 1.0]);
+        let composed = scale.compose(color);
+        let wgsl = composed.generate_wgsl();
+        assert!(wgsl.contains("exponential_scale"));
+        assert!(wgsl.contains("color_map"));
+    }
+
+    #[test]
+    fn test_normalize_compose_with_hsv_color() {
+        let normalize = NormalizeFunction::new(0.0, 100.0);
+        let color = HSVColorMap::rainbow();
+        let composed = normalize.compose(color);
+        let wgsl = composed.generate_wgsl();
+        assert!(wgsl.contains("normalize_fn"));
+        assert!(wgsl.contains("hsv_color_map"));
+    }
+
+    #[test]
+    fn test_distance_compose_with_normalize() {
+        // Vec2 -> f32 (distance), then f32 -> f32 (normalize)
+        let distance = DistanceFunction::from_origin();
+        let normalize = NormalizeFunction::new(0.0, 500.0);
+        let composed = distance.compose(normalize);
+        let wgsl = composed.generate_wgsl();
+        assert!(wgsl.contains("distance_fn"));
+        assert!(wgsl.contains("normalize_fn"));
+    }
+
+    #[test]
+    fn test_standardize_compose_with_clamp() {
+        let standardize = StandardizeFunction::new(50.0, 10.0);
+        let clamp = Clamp::new(-3.0, 3.0);
+        let composed = standardize.compose(clamp);
+        let wgsl = composed.generate_wgsl();
+        assert!(wgsl.contains("standardize_fn"));
+        assert!(wgsl.contains("clamp_fn"));
+    }
+
+    #[test]
+    fn test_polar_transform_compose_with_projection() {
+        // Both Vec2 -> Vec2
+        let polar = PolarTransform::to_cartesian(Vec2::new(400.0, 300.0));
+        let proj = ProjectionTransform::new(
+            Vec2::new(-500.0, -500.0),
+            Vec2::new(500.0, 500.0),
+            Vec2::new(0.0, 0.0),
+            Vec2::new(800.0, 600.0),
+        );
+        let composed = polar.compose(proj);
+        let wgsl = composed.generate_wgsl();
+        assert!(wgsl.contains("polar_transform"));
+        assert!(wgsl.contains("projection_transform"));
+    }
+
+    #[test]
+    fn test_matrix_transform_compose_with_matrix_transform() {
+        // Chain two matrix transforms (rotate then scale)
+        let rotate = MatrixTransform::rotation(std::f32::consts::FRAC_PI_4);
+        let scale = MatrixTransform::scaling(2.0, 2.0);
+        let composed = rotate.compose(scale);
+        let wgsl = composed.generate_wgsl();
+        assert!(wgsl.contains("matrix_transform"));
+    }
+
+    #[test]
+    fn test_binning_compose_with_color_gradient() {
+        let binning = BinningFunction::new(0.0, 100.0, 10);
+        let gradient =
+            ColorGradient::with_colors(vec![vec4![0.0, 0.0, 1.0, 1.0], vec4![1.0, 0.0, 0.0, 1.0]]);
+        let composed = binning.compose(gradient);
+        let wgsl = composed.generate_wgsl();
+        assert!(wgsl.contains("binning_fn"));
+        assert!(wgsl.contains("color_gradient"));
+    }
+
+    #[test]
+    fn test_three_stage_pipeline() {
+        // standardize → normalize → color map
+        let standardize = StandardizeFunction::new(50.0, 15.0);
+        let normalize = NormalizeFunction::new(-3.0, 3.0);
+        let color = HSVColorMap::cool_warm();
+        let pipeline = standardize.compose(normalize).compose(color);
+        let wgsl = pipeline.generate_wgsl();
+        assert!(wgsl.contains("standardize_fn"));
+        assert!(wgsl.contains("normalize_fn"));
+        assert!(wgsl.contains("hsv_color_map"));
+    }
+
+    #[test]
+    fn test_hsv_compose_alpha_blending() {
+        // HSVColorMap (f32 → Vec4) then AlphaBlending (Vec4 → Vec4)
+        let hsv = HSVColorMap::rainbow();
+        let alpha = AlphaBlending::new(0.5);
+        let composed = hsv.compose(alpha);
+        let wgsl = composed.generate_wgsl();
+        assert!(wgsl.contains("hsv_color_map"));
+        assert!(wgsl.contains("alpha_blending"));
+    }
+
+    #[test]
+    fn test_color_space_roundtrip_composition() {
+        // RGB → HSV then HSV → RGB
+        let to_hsv = ColorSpaceConverter::rgb_to_hsv();
+        let to_rgb = ColorSpaceConverter::hsv_to_rgb();
+        let roundtrip = to_hsv.compose(to_rgb);
+        let wgsl = roundtrip.generate_wgsl();
+        assert!(wgsl.contains("color_space_converter"));
+    }
+
     // GUP-139: Statistical function tests
     #[test]
     fn test_mean_cpu() {
