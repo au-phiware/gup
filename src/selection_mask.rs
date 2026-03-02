@@ -540,24 +540,17 @@ impl SelectionMaskBuffer {
             if let Some((bt, sc)) = self.mask_pool_meta.take() {
                 let old = std::mem::replace(
                     &mut self.mask_buffer,
-                    device.create_buffer(&BufferDescriptor {
-                        label: Some("placeholder"),
-                        size: 4,
-                        usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-                        mapped_at_creation: false,
-                    }),
+                    Self::placeholder_buffer(device, BufferUsages::STORAGE | BufferUsages::COPY_DST),
                 );
                 pool.deallocate_raw(old, bt, sc);
             }
             if let Some((bt, sc)) = self.output_pool_meta.take() {
                 let old = std::mem::replace(
                     &mut self.output_buffer,
-                    device.create_buffer(&BufferDescriptor {
-                        label: Some("placeholder"),
-                        size: 4,
-                        usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-                        mapped_at_creation: false,
-                    }),
+                    Self::placeholder_buffer(
+                        device,
+                        BufferUsages::STORAGE | BufferUsages::VERTEX | BufferUsages::COPY_SRC,
+                    ),
                 );
                 pool.deallocate_raw(old, bt, sc);
             }
