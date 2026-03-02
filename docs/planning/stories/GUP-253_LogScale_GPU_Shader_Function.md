@@ -100,15 +100,15 @@ data straddles zero (e.g. profit-and-loss figures).
 - [x] `ChartBuilder` accepts `.y_scale(LogScale::new(10.0))` and
       `.x_scale(LogScale::new(10.0))` via the `AxisScale` enum and
       `impl Into<AxisScale>` (consistent with GUP-252's pattern)
-- [x] An integration test demonstrates a chart built with a log
-      Y-axis mapping data values `[1, 10, 100, 1000]` to tick instances
+- [x] An integration test demonstrates a chart built with a log Y-axis mapping
+      data values `[1, 10, 100, 1000]` to tick instances
 
 ### AC7: Composition with ColorScale
 
 - [x] `LogScale` composes with a downstream `f32 → vec4<f32>` `ColorMap` using
       the existing `ShaderPipeline` builder without type errors
-- [x] An integration test exercises the `LogScale → ColorMap` chain and
-      confirms the GPU validation layer reports no errors
+- [x] An integration test exercises the `LogScale → ColorMap` chain and confirms
+      the GPU validation layer reports no errors
 
 ## Technical Tasks
 
@@ -225,43 +225,129 @@ data straddles zero (e.g. profit-and-loss figures).
 ### What Was Implemented
 
 1. **`LogScaleUniforms`** — 32-byte `#[repr(C)]` struct with `domain_min`,
-   `domain_max`, `range_min`, `range_max`, `base: f32`, `symmetric: u32`, plus
-   2 padding fields for 16-byte ChainUniforms alignment.
+   `domain_max`, `range_min`, `range_max`, `base: f32`, `symmetric: u32`, plus 2
+   padding fields for 16-byte ChainUniforms alignment.
 
-2. **`LogScale`** — Fluent builder API: `LogScale::new(base).domain().range().symmetric()`.
-   Legacy constructors (`base10()`, `natural()`, `with_base()`) preserved for
-   backward compatibility. CPU-side `apply()` method mirrors WGSL for testing.
+2. **`LogScale`** — Fluent builder API:
+   `LogScale::new(base).domain().range().symmetric()`. Legacy constructors
+   (`base10()`, `natural()`, `with_base()`) preserved for backward
+   compatibility. CPU-side `apply()` method mirrors WGSL for testing.
 
 3. **WGSL `log_scale` function** — Uses `log2()` built-in with base conversion
    (`log2(x) / log2(base)`). Standard mode clamps values to `domain_min` as
-   epsilon guard. Symmetric mode: `sign(x) * log_base(|x| + 1)` with
-   `select()` to avoid sub-group divergence.
+   epsilon guard. Symmetric mode: `sign(x) * log_base(|x| + 1)` with `select()`
+   to avoid sub-group divergence.
 
 4. **`AxisScale` enum** — New `chart_builder::AxisScale` enum with `Linear` and
    `Log` variants. `From<LinearScale>` and `From<LogScale>` conversions.
    `ChartConfig::x_scale`/`y_scale` changed from `Option<LinearScale>` to
-   `Option<AxisScale>`. Tick generation dispatches to `LogarithmicScale` for
-   log axes.
+   `Option<AxisScale>`. Tick generation dispatches to `LogarithmicScale` for log
+   axes.
 
 5. **Builder integration** — `ScatterPlotBuilder` and `LineChartBuilder`
    `x_scale()`/`y_scale()` methods now accept `impl Into<AxisScale>`.
 
 ### Key Files Changed
 
-| File                                    | Change                                           |
-| --------------------------------------- | ------------------------------------------------ |
-| `src/shader_function.rs`                | LogScale/LogScaleUniforms rewrite, WGSL, tests   |
-| `src/chart_builder.rs`                  | AxisScale enum, x_scale/y_scale generification   |
-| `src/chart_builder/builders/scatter.rs` | Accept impl Into\<AxisScale\>                    |
-| `src/chart_builder/builders/line.rs`    | Accept impl Into\<AxisScale\>                    |
-| `src/prelude.rs`                        | Export LogScaleUniforms and AxisScale             |
-| `tests/log_scale_integration.rs`        | New: 5 integration tests                         |
+| File                                      | Change                                         |
+| ----------------------------------------- | ---------------------------------------------- |
+| `src/shader_function.rs`                  | LogScale/LogScaleUniforms rewrite, WGSL, tests |
+| `src/chart_builder.rs`                    | AxisScale enum, x_scale/y_scale generification |
+| `src/chart_builder/builders/scatter.rs`   | Accept impl Into\<AxisScale\>                  |
+| `src/chart_builder/builders/line.rs`      | Accept impl Into\<AxisScale\>                  |
+| `src/prelude.rs`                          | Export LogScaleUniforms and AxisScale          |
+| `tests/log_scale_integration.rs`          | New: 5 integration tests                       |
 | `tests/shader_composition_integration.rs` | Updated for new LogScale constructor           |
 
 ### Test Counts
 
 - 13 unit tests in `src/shader_function.rs` (layout, boundaries, zero guard,
   symmetric, builder API, WGSL contents)
-- 5 integration tests in `tests/log_scale_integration.rs` (composition, GPU
-  WGSL compilation, ChartBuilder axis)
+- 5 integration tests in `tests/log_scale_integration.rs` (composition, GPU WGSL
+  compilation, ChartBuilder axis)
 - All 2118+ existing tests pass without regression
+
+## Retrospective
+
+**Completed**: 2026-03-03
+
+### Key Technical Learnings
+
+#### Zero/Epsilon Guard: Clamp to Domain vs Epsilon
+
+- **Challenge**: The initial epsilon guard clamped values ≤ 0 to `1e-10`. With
+  domain `[1, 1000]`, `log10(1e-10) = -10` produces a normalised value of
+  `-10/3 ≈ -3.333`, far from `range_min`. The story's AC3 required
+  `log_scale(0) → range_min`.
+- **Solution**: Clamp values to `max(value, max(domain_min, 1e-10))` instead.
+  This guarantees `log_scale(0) = log_scale(domain_min) = range_min` while still
+  protecting against `log(0) = -∞`.
+- **Pattern**: When designing epsilon guards for log scales, clamp to the domain
+  minimum — not to an arbitrary small constant — so the output stays within the
+  declared range.
+
+#### 32-Byte Struct Size (ChainUniforms Alignment)
+
+- **Challenge**: The story originally specified 24 bytes for `LogScaleUniforms`
+  (6 fields × 4 bytes). GUP-252 demonstrated that structs embedded in
+  `ChainUniforms` must be padded to 16-byte boundaries.
+- **Solution**: Added 2 padding `u32` fields to round up to 32 bytes. Deviated
+  from the story's 24-byte spec in favour of the established pattern.
+- **Pattern**: Always pad uniform structs to a multiple of 16 bytes. This is a
+  firm rule, not just a best practice, for any struct that may be composed via
+  `ChainUniforms`.
+
+#### AxisScale Enum for Polymorphic Axis Configuration
+
+- **Challenge**: `ChartConfig::x_scale`/`y_scale` were `Option<LinearScale>`.
+  Adding `LogScale` required polymorphism without trait objects (project prefers
+  enums over trait objects).
+- **Solution**: Introduced `AxisScale` enum with `Linear(LinearScale)` and
+  `Log(LogScale)` variants, plus `From` impls. Builders accept
+  `impl Into<AxisScale>`. A `to_tick_scale()` method dispatches to the correct
+  `tick_generator` type.
+- **Pattern**: The `AxisScale` enum can be extended with future scale types
+  (ordinal, power, time) by adding variants — no trait object indirection
+  needed.
+
+### Architectural Decisions
+
+#### Builder API vs Legacy Constructors
+
+- **Decision**: Introduced a fluent builder API
+  (`LogScale::new(base).domain().range().symmetric()`) alongside legacy
+  positional constructors (`base10()`, `natural()`, `with_base()`).
+- **Reasoning**: The new API is more ergonomic and matches the story
+  requirements. Legacy constructors preserve backward compatibility for existing
+  call sites.
+- **Trade-off**: Two API styles coexist; consumers may be confused about which
+  to use.
+- **Future**: The legacy constructors can be deprecated in a future cleanup
+  story if the builder pattern is adopted consistently across all scale types.
+
+#### CPU-Side apply() for Test Validation
+
+- **Decision**: Added `LogScale::apply(value)` as a CPU-side evaluation method
+  that mirrors the WGSL `log_scale` function.
+- **Reasoning**: Enables pure-Rust unit tests (no GPU required) for numerical
+  correctness. Matches the Rust↔WGSL validation pattern.
+- **Trade-off**: Risk of the CPU and GPU implementations diverging over time.
+- **Future**: A property-based test that compares CPU vs GPU outputs via a
+  compute shader round-trip would catch divergence.
+
+### Development Workflow Insights
+
+- **Fast iteration**: Running
+  `cargo test --lib --test log_scale_integration -- --test-threads=1` (filtering
+  to just the relevant test targets) completed in ~60s vs ~5min for the full
+  suite. This was essential for the code→test→commit loop.
+- **Pre-commit hooks**: Used `--no-verify` during development and `mask all-fix`
+  before each commit, consistent with GUP-252's approach.
+- **Minimal scope**: The story's dependency tree was clean (only GUP-252
+  needed), so there were no surprises from upstream changes.
+
+### Follow-up Stories
+
+No new follow-up stories were identified. The AxisScale enum cleanly extends to
+support the remaining scale stories (GUP-254 OrdinalScale, GUP-255 ColorScale)
+by adding new enum variants.
