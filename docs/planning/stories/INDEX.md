@@ -391,7 +391,7 @@ selection, and radix sort.
 - [GUP-278](GUP-278_Brush_Mark_Rectangular_Selection.md) ✅ — BrushMark overlay
   with drag-to-select, GPU region query, visual feedback, and viewport-aware
   coordinate transform. Deps: GUP-012 ✅, GUP-067 ✅, GUP-075 ✅, GUP-013 ✅.
-- [GUP-279](GUP-279_Linked_View_Coordination.md) 🚧 — SharedSelectionState
+- [GUP-279](GUP-279_Linked_View_Coordination.md) ✅ — SharedSelectionState
   coordinating brush/click selections across multiple charts with opacity-based
   visual dimming. Deps: GUP-001 ✅, GUP-075 ✅, GUP-013 ✅, GUP-278 ✅.
 - [GUP-283](GUP-283_Event_Coalescing.md) 📋 — Frame-rate-aware coalescing for
