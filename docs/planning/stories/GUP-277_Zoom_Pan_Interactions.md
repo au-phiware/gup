@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Interaction & Spatial Index **Status**: 🚧 In Progress **Created**:
-2025-07-14
+**Initiative**: Interaction & Spatial Index **Status**: 🚧 In Progress
+**Created**: 2025-07-14
 
 ## Context
 
@@ -32,7 +32,7 @@ D3's design.
 > "As a visualization developer, I want to attach zoom and pan behaviour to a
 > chart with a single API call so that my users can navigate large datasets
 > smoothly at 60 FPS without any scene rebuild cost."
-
+>
 > "As an end user exploring a chart, I want panning to have natural inertia
 > after I release the mouse so that the interaction feels fluid and responsive."
 

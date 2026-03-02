@@ -105,6 +105,7 @@ pub mod visual_test_utils;
 pub mod wasm_bench;
 pub mod wasm_bench_axis;
 pub mod wasm_bench_interaction;
+pub mod zoom;
 
 /// Hidden module for procedural macro support.
 ///
