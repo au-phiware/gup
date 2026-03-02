@@ -298,11 +298,15 @@ impl EventManager {
     pub fn dispatch(&self, event: &mut InteractionEvent, hits: &[ElementHit]) -> EventResult {
         let event_name = event.interaction_type.clone();
 
+        // Re-usable key — only the selection_id component changes per hit.
+        // This avoids allocating a new String for each hit in the loop.
+        let mut key = (0u32, event_name.clone());
+
         // 1. Dispatch to selection-scoped handlers in hit-depth order.
         for hit in hits {
             event.hit = Some(hit.clone());
 
-            let key = (hit.selection_id, event_name.clone());
+            key.0 = hit.selection_id;
             if let Some(handlers) = self.selection_handlers.get(&key) {
                 for handler in handlers {
                     if event.is_propagation_stopped() {
