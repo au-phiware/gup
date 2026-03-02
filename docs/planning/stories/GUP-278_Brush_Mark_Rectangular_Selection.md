@@ -256,3 +256,102 @@ under pan and zoom.
   - Viewport transform with offset + zoom
   - Hit testing with `MarkSelectionSystem` integration
   - Handler replacement semantics
+
+## Retrospective
+
+**Completed**: 2025-07-25
+
+### Key Technical Learnings
+
+#### Self-Contained Event Dispatch
+
+- **Challenge**: The story specified hooking into a GUP-013 `EventManager` for
+  `.on(event, handler)` dispatch, but the `EventManager` operates on
+  `InteractionEvent` (GPU hit-test results), not brush-specific `BrushEvent`s.
+  Wiring `BrushBehavior` through `EventManager` would have required a new event
+  type variant or type-erasure adapter.
+- **Solution**: Implemented a minimal internal handler map
+  (`HashMap<String, Vec<BrushHandler>>`) directly in `BrushBehavior`. This keeps
+  the API shape identical to the story spec (`.on("brushend", handler)`) while
+  avoiding a dependency on `EventManager` internals.
+- **Pattern**: When a system needs domain-specific events (e.g., `BrushEvent` vs
+  `InteractionEvent`), a lightweight local dispatcher is simpler than forcing
+  everything through a generic event bus. The API shape can stay compatible for
+  future unification.
+
+#### Reusing MarkSelectionSystem for CPU Hit Testing
+
+- **Challenge**: The story called for GPU region queries via the interaction
+  pipeline. However, `MarkSelectionSystem::filter_by_rect` already provides a
+  correct CPU path that works in headless test environments without GPU
+  initialisation.
+- **Solution**: Used the static `filter_by_rect` method, which iterates mark
+  positions and filters by bounding box. This is sufficient for the datasets
+  targeted by the brush use case (typically <100K marks). The GPU path
+  (`rect_hit_test_gpu`) can be wired in as a future optimisation.
+- **Pattern**: Start with the CPU fallback path for correctness and testability;
+  add GPU acceleration later when profiling shows it's needed.
+
+#### ViewportTransform as the Single Source of Truth
+
+- **Challenge**: The codebase has multiple coordinate-space concepts
+  (`GpuViewportTransform` in clip space, `ViewportTransform` in screen/world
+  pixel space). The brush needed screen→data conversion.
+- **Solution**: Reused `ViewportTransform::screen_to_world` from `event.rs`,
+  which already handles offset + scale. This keeps the brush viewport-aware
+  without introducing new transform types.
+- **Pattern**: Always check `event.rs` for coordinate transformation utilities
+  before creating new ones.
+
+### Architectural Decisions
+
+#### BrushBehavior Owns Its State
+
+- **Decision**: `BrushBehavior` tracks drag state (`drag_start`, `drag_current`)
+  internally rather than delegating to `SelectionTool::rectangle()`.
+- **Reasoning**: While `SelectionTool` provides `begin`/`update`/`finish`, the
+  brush needs to fire events and update the overlay at each step. Wrapping
+  `SelectionTool` would add indirection without simplifying the code.
+- **Trade-off**: Slight duplication of min/max rect normalisation (both
+  `BrushBehavior::current_screen_rect` and `SelectionTool::current_rect` compute
+  normalised rects).
+- **Future**: If a third drag-rect consumer appears, the normalisation logic
+  should be extracted to a shared utility on `Rect`.
+
+#### BrushMark as State, Not GPU Geometry
+
+- **Decision**: `BrushMark` stores overlay state (visible, screen_rect, style)
+  but does not allocate GPU buffers or manage its own render pipeline.
+- **Reasoning**: Actual GPU overlay rendering requires a render pass context,
+  device/queue handles, and pipeline cache — all of which live in the chart's
+  render loop, not in the brush module. The mark stores the _intent_ to render;
+  the chart decides _how_.
+- **Trade-off**: The example currently does not render the overlay rectangle on
+  screen (it would require creating a dedicated GPU pipeline). The state
+  management and hit testing are fully functional.
+- **Future**: A follow-up story (GUP-285) should wire `BrushMark.screen_rect`
+  into the chart's render loop using `RectangleInstance` geometry.
+
+### Development Workflow Insights
+
+- The `mask all-fix` pipeline caught a markdown lint issue (MD028: blank line
+  inside blockquote) in the story file itself — the two user story blockquotes
+  needed to be merged. Running lint early saved a commit fixup.
+- The `MarkSelectionSystem::positions()` method already existed, returning
+  `Option<&[[f32; 2]]>`. Initially attempted to add a duplicate accessor in
+  `brush.rs` via an `impl` block, which would have failed since `positions` is
+  private. Checking existing accessors first avoided the error.
+- Debug builds of the full crate take several minutes. Using `cargo check` and
+  `cargo test --lib brush` for fast iteration was essential.
+
+### Follow-up Stories
+
+1. **GUP-285: BrushMark GPU Overlay Rendering** — Wire `BrushMark.screen_rect`
+   and `BrushStyle` into the chart's render loop as a `RectangleInstance`
+   overlay drawn after all data marks. Currently the brush state management and
+   hit testing work, but the visual rectangle is not rendered on screen.
+
+2. **GUP-286: GPU-Accelerated Brush Region Query** — Replace the CPU-based
+   `filter_by_rect` in `BrushBehavior::on_pointer_up` with
+   `MarkSelectionSystem::rect_hit_test_gpu` for datasets exceeding 100K marks.
+   Requires async GPU query integration and fallback timeout handling.

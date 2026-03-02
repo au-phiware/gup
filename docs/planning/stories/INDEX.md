@@ -393,12 +393,18 @@ selection, and radix sort.
   coordinate transform. Deps: GUP-012 ✅, GUP-067 ✅, GUP-075 ✅, GUP-013 ✅.
 - [GUP-279](GUP-279_Linked_View_Coordination.md) 📋 — SharedSelectionState
   coordinating brush/click selections across multiple charts with opacity-based
-  visual dimming. Deps: GUP-001 ✅, GUP-075 ✅, GUP-013 ✅, GUP-278 📋.
+  visual dimming. Deps: GUP-001 ✅, GUP-075 ✅, GUP-013 ✅, GUP-278 ✅.
 - [GUP-283](GUP-283_Event_Coalescing.md) 📋 — Frame-rate-aware coalescing for
   high-frequency mousemove/touchmove events in EventManager. Deps: GUP-013 ✅.
 - [GUP-284](GUP-284_Unified_Vec2_Type.md) 📋 — Unify interaction::Vec2,
   shader_function::Vec2, and [f32; 2] into a single ergonomic type with
   arithmetic ops.
+- [GUP-285](GUP-285_BrushMark_GPU_Overlay_Rendering.md) 📋 — Wire BrushMark
+  screen_rect into the chart render loop as a visible RectangleInstance overlay.
+  Deps: GUP-278 ✅, GUP-067 ✅.
+- [GUP-286](GUP-286_GPU_Accelerated_Brush_Region_Query.md) 📋 — Replace CPU
+  filter_by_rect with GPU rect_hit_test_gpu for brush selection on 500K+ mark
+  datasets. Deps: GUP-278 ✅, GUP-012 ✅, GUP-075 ✅.
 
 ## Axis & Grid System
 
