@@ -40,6 +40,7 @@
 
 use crate::buffer::{BufferPool, BufferPoolConfig, BufferType as PoolBufferType};
 use crate::error::{GupError, GupResult};
+use crate::event::ModifierFlags;
 use crate::spatial_index::{
     Aabb, ElementPosition, MortonEntry, SpatialAlgorithm, SpatialIndex, SpatialQuery,
 };
@@ -48,6 +49,7 @@ use futures_channel;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 use wgpu::{
     BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Buffer,
     BufferBindingType, BufferDescriptor, BufferUsages, ComputePassDescriptor, ComputePipeline,
@@ -285,6 +287,10 @@ pub struct InteractionEvent {
     pub touch_points: Vec<TouchPoint>,
     /// Recognized gesture (if any)
     pub gesture: Option<GestureType>,
+    /// Monotonic timestamp of the input event (if available).
+    pub timestamp: Option<Instant>,
+    /// Keyboard modifier flags at the time the event was dispatched.
+    pub modifiers: ModifierFlags,
 }
 
 impl InteractionEvent {
@@ -301,6 +307,8 @@ impl InteractionEvent {
             phase: PropagationPhase::Target,
             touch_points: Vec::new(),
             gesture: None,
+            timestamp: None,
+            modifiers: ModifierFlags::NONE,
         }
     }
 

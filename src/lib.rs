@@ -78,6 +78,7 @@ pub mod color_descriptor;
 pub mod context;
 pub mod debug;
 pub mod error;
+pub mod event;
 pub mod examples;
 pub mod grid;
 pub mod integration;
@@ -196,6 +197,10 @@ pub use interaction::{
     GpuInteractionQuery, InteractionElement, InteractionEvent, InteractionResult,
     InteractionSystem, InteractionType, PropagationPhase, QueryHandle, QueryStats, Rect,
     Renderable, TouchPoint,
+};
+// Export event handling system
+pub use event::{
+    EventManager, EventResult, EventType, ModifierFlags, RawInputEvent, ViewportTransform,
 };
 pub use mixable::*;
 pub use plugins::*;
