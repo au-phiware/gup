@@ -385,7 +385,7 @@ selection, and radix sort.
   local….
 - [GUP-236](GUP-236_Sort_Aware_Visual_Demo.md) ✅ — Create an example
   application demonstrating transparent overlapping marks rendered with and….
-- [GUP-277](GUP-277_Zoom_Pan_Interactions.md) 📋 — ZoomBehavior with GPU
+- [GUP-277](GUP-277_Zoom_Pan_Interactions.md) 🚧 — ZoomBehavior with GPU
   ViewportTransform uniform, inertia panning, zoom-to-cursor, and configurable
   scale limits. Deps: GUP-012 ✅, GUP-013 ✅.
 - [GUP-278](GUP-278_Brush_Mark_Rectangular_Selection.md) 📋 — BrushMark overlay
