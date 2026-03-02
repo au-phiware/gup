@@ -387,13 +387,19 @@ selection, and radix sort.
   application demonstrating transparent overlapping marks rendered with and….
 - [GUP-277](GUP-277_Zoom_Pan_Interactions.md) 📋 — ZoomBehavior with GPU
   ViewportTransform uniform, inertia panning, zoom-to-cursor, and configurable
-  scale limits. Deps: GUP-012 ✅, GUP-013 📋.
+  scale limits. Deps: GUP-012 ✅, GUP-013 ✅.
 - [GUP-278](GUP-278_Brush_Mark_Rectangular_Selection.md) 📋 — BrushMark overlay
   with drag-to-select, GPU region query, visual feedback, and viewport-aware
-  coordinate transform. Deps: GUP-012 ✅, GUP-067 ✅, GUP-075 ✅, GUP-013 📋.
+  coordinate transform. Deps: GUP-012 ✅, GUP-067 ✅, GUP-075 ✅, GUP-013 ✅.
 - [GUP-279](GUP-279_Linked_View_Coordination.md) 📋 — SharedSelectionState
   coordinating brush/click selections across multiple charts with opacity-based
-  visual dimming. Deps: GUP-001 ✅, GUP-075 ✅, GUP-013 📋, GUP-278 📋.
+  visual dimming. Deps: GUP-001 ✅, GUP-075 ✅, GUP-013 ✅, GUP-278 📋.
+- [GUP-283](GUP-283_Event_Coalescing.md) 📋 — Frame-rate-aware coalescing
+  for high-frequency mousemove/touchmove events in EventManager. Deps:
+  GUP-013 ✅.
+- [GUP-284](GUP-284_Unified_Vec2_Type.md) 📋 — Unify interaction::Vec2,
+  shader_function::Vec2, and [f32; 2] into a single ergonomic type with
+  arithmetic ops.
 
 ## Axis & Grid System
 
