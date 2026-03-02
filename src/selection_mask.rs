@@ -30,7 +30,7 @@
 //! use gup::selection_mask::{SelectionMaskBuffer, AlphaOffsets};
 //!
 //! let alpha_offsets = AlphaOffsets::for_circle();
-//! let mut mask_buf = SelectionMaskBuffer::new(&device, 100_000, &alpha_offsets)?;
+//! let mut mask_buf = SelectionMaskBuffer::new(&device, 100_000, &alpha_offsets, None)?;
 //!
 //! // Each frame:
 //! if mask_buf.update_mask(&queue, &data, |_item, idx| idx, &shared_state) {
@@ -40,6 +40,7 @@
 //! // Use mask_buf.output_buffer() in your render pass.
 //! ```
 
+use crate::buffer::{BufferPool, BufferType};
 use crate::error::{GupError, GupResult};
 use crate::linked_selection::SharedSelectionState;
 use std::hash::Hash;
@@ -248,6 +249,13 @@ pub struct SelectionMaskBuffer {
     last_generation: u64,
     /// Whether a selection is currently active (non-empty).
     has_active_selection: bool,
+    /// Pool metadata for the mask buffer: `(BufferType, size_class)`.
+    /// Present when the buffer was allocated from a [`BufferPool`].
+    mask_pool_meta: Option<(BufferType, usize)>,
+    /// Pool metadata for the output buffer.
+    output_pool_meta: Option<(BufferType, usize)>,
+    /// Pool metadata for the config buffer.
+    config_pool_meta: Option<(BufferType, usize)>,
 }
 
 impl SelectionMaskBuffer {
@@ -259,11 +267,20 @@ impl SelectionMaskBuffer {
     /// - `capacity` — Maximum number of instances this buffer can hold.
     /// - `alpha_offsets` — Describes which float offsets contain alpha
     ///   channels in the instance struct.
+    /// - `pool` — Optional buffer pool for GPU buffer reuse. When
+    ///   `Some`, mask, output, and config buffers are acquired from the
+    ///   pool (or freshly allocated by it). When `None`, buffers are
+    ///   created directly on the device.
     ///
     /// # Errors
     ///
     /// Returns an error if shader compilation or pipeline creation fails.
-    pub fn new(device: &Device, capacity: u32, alpha_offsets: &AlphaOffsets) -> GupResult<Self> {
+    pub fn new(
+        device: &Device,
+        capacity: u32,
+        alpha_offsets: &AlphaOffsets,
+        pool: Option<&mut BufferPool>,
+    ) -> GupResult<Self> {
         if capacity == 0 {
             return Err(GupError::invalid_operation(
                 "SelectionMaskBuffer capacity must be > 0".to_string(),
@@ -343,26 +360,55 @@ impl SelectionMaskBuffer {
 
         let instance_byte_size = alpha_offsets.floats_per_instance() as u64 * 4;
 
-        let mask_buffer = device.create_buffer(&BufferDescriptor {
-            label: Some("selection_mask"),
-            size: capacity as u64 * 4,
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let (
+            mask_buffer,
+            mask_pool_meta,
+            output_buffer,
+            output_pool_meta,
+            config_buffer,
+            config_pool_meta,
+        ) = if let Some(pool) = pool {
+            let mask_bytes = capacity as usize * 4;
+            let (mask_buf, mask_sc) = pool.allocate_raw(BufferType::Storage, mask_bytes);
 
-        let output_buffer = device.create_buffer(&BufferDescriptor {
-            label: Some("selection_dim_output"),
-            size: capacity as u64 * instance_byte_size,
-            usage: BufferUsages::STORAGE | BufferUsages::VERTEX | BufferUsages::COPY_SRC,
-            mapped_at_creation: false,
-        });
+            let output_bytes = capacity as usize * instance_byte_size as usize;
+            let (output_buf, output_sc) = pool.allocate_raw(BufferType::Instance, output_bytes);
 
-        let config_buffer = device.create_buffer(&BufferDescriptor {
-            label: Some("selection_dim_config"),
-            size: std::mem::size_of::<DimConfig>() as u64,
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+            let config_bytes = std::mem::size_of::<DimConfig>();
+            let (config_buf, config_sc) = pool.allocate_raw(BufferType::Uniform, config_bytes);
+
+            (
+                mask_buf,
+                Some((BufferType::Storage, mask_sc)),
+                output_buf,
+                Some((BufferType::Instance, output_sc)),
+                config_buf,
+                Some((BufferType::Uniform, config_sc)),
+            )
+        } else {
+            let mask_buf = device.create_buffer(&BufferDescriptor {
+                label: Some("selection_mask"),
+                size: capacity as u64 * 4,
+                usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+
+            let output_buf = device.create_buffer(&BufferDescriptor {
+                label: Some("selection_dim_output"),
+                size: capacity as u64 * instance_byte_size,
+                usage: BufferUsages::STORAGE | BufferUsages::VERTEX | BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            });
+
+            let config_buf = device.create_buffer(&BufferDescriptor {
+                label: Some("selection_dim_config"),
+                size: std::mem::size_of::<DimConfig>() as u64,
+                usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+
+            (mask_buf, None, output_buf, None, config_buf, None)
+        };
 
         // Initialise CPU-side mask to all zeros (nothing selected).
         let prev_mask = vec![0u32; capacity as usize];
@@ -379,6 +425,9 @@ impl SelectionMaskBuffer {
             alpha_offsets: alpha_offsets.clone(),
             last_generation: 0,
             has_active_selection: false,
+            mask_pool_meta,
+            output_pool_meta,
+            config_pool_meta,
         })
     }
 
@@ -411,13 +460,74 @@ impl SelectionMaskBuffer {
         self.has_active_selection
     }
 
+    /// Returns `true` if any buffers were allocated from a [`BufferPool`].
+    pub fn is_pooled(&self) -> bool {
+        self.mask_pool_meta.is_some()
+            || self.output_pool_meta.is_some()
+            || self.config_pool_meta.is_some()
+    }
+
+    /// Return all pool-allocated buffers to the given [`BufferPool`].
+    ///
+    /// This should be called before dropping the `SelectionMaskBuffer` when
+    /// buffers were allocated from a pool.  After this call the struct is in
+    /// a partially-moved state and must not be used for rendering; it should
+    /// be dropped or replaced immediately.
+    ///
+    /// Buffers that were *not* allocated from a pool are left in place and
+    /// will be freed normally when the struct is dropped.
+    pub fn release_to_pool(&mut self, pool: &mut BufferPool, device: &Device) {
+        if let Some((bt, sc)) = self.mask_pool_meta.take() {
+            let old = std::mem::replace(
+                &mut self.mask_buffer,
+                Self::placeholder_buffer(device, BufferUsages::STORAGE | BufferUsages::COPY_DST),
+            );
+            pool.deallocate_raw(old, bt, sc);
+        }
+        if let Some((bt, sc)) = self.output_pool_meta.take() {
+            let old = std::mem::replace(
+                &mut self.output_buffer,
+                Self::placeholder_buffer(
+                    device,
+                    BufferUsages::STORAGE | BufferUsages::VERTEX | BufferUsages::COPY_SRC,
+                ),
+            );
+            pool.deallocate_raw(old, bt, sc);
+        }
+        if let Some((bt, sc)) = self.config_pool_meta.take() {
+            let old = std::mem::replace(
+                &mut self.config_buffer,
+                Self::placeholder_buffer(device, BufferUsages::UNIFORM | BufferUsages::COPY_DST),
+            );
+            pool.deallocate_raw(old, bt, sc);
+        }
+    }
+
+    /// Create a minimal placeholder buffer for `std::mem::replace`.
+    fn placeholder_buffer(device: &Device, usage: BufferUsages) -> Buffer {
+        device.create_buffer(&BufferDescriptor {
+            label: Some("placeholder"),
+            size: 4,
+            usage,
+            mapped_at_creation: false,
+        })
+    }
+
     /// Grow the internal buffers if `instance_count` exceeds the current
     /// capacity.
     ///
     /// This reallocates the mask buffer, output buffer, and CPU shadow
     /// array. Existing mask data is **not** preserved (callers should
     /// re-upload via [`update_mask`](Self::update_mask) after resizing).
-    pub fn ensure_capacity(&mut self, device: &Device, instance_count: u32) {
+    ///
+    /// When `pool` is `Some`, old buffers are returned to the pool and
+    /// new buffers are acquired from it.
+    pub fn ensure_capacity(
+        &mut self,
+        device: &Device,
+        instance_count: u32,
+        pool: Option<&mut BufferPool>,
+    ) {
         if instance_count <= self.capacity {
             return;
         }
@@ -425,19 +535,62 @@ impl SelectionMaskBuffer {
         // Grow by at least 1.5× to amortise reallocations.
         let new_capacity = instance_count.max((self.capacity * 3) / 2);
 
-        self.mask_buffer = device.create_buffer(&BufferDescriptor {
-            label: Some("selection_mask"),
-            size: new_capacity as u64 * 4,
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        if let Some(pool) = pool {
+            // Return old buffers to the pool.
+            if let Some((bt, sc)) = self.mask_pool_meta.take() {
+                let old = std::mem::replace(
+                    &mut self.mask_buffer,
+                    device.create_buffer(&BufferDescriptor {
+                        label: Some("placeholder"),
+                        size: 4,
+                        usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+                        mapped_at_creation: false,
+                    }),
+                );
+                pool.deallocate_raw(old, bt, sc);
+            }
+            if let Some((bt, sc)) = self.output_pool_meta.take() {
+                let old = std::mem::replace(
+                    &mut self.output_buffer,
+                    device.create_buffer(&BufferDescriptor {
+                        label: Some("placeholder"),
+                        size: 4,
+                        usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+                        mapped_at_creation: false,
+                    }),
+                );
+                pool.deallocate_raw(old, bt, sc);
+            }
 
-        self.output_buffer = device.create_buffer(&BufferDescriptor {
-            label: Some("selection_dim_output"),
-            size: new_capacity as u64 * self.instance_byte_size,
-            usage: BufferUsages::STORAGE | BufferUsages::VERTEX | BufferUsages::COPY_SRC,
-            mapped_at_creation: false,
-        });
+            // Allocate new buffers from the pool.
+            let mask_bytes = new_capacity as usize * 4;
+            let (mask_buf, mask_sc) = pool.allocate_raw(BufferType::Storage, mask_bytes);
+            self.mask_buffer = mask_buf;
+            self.mask_pool_meta = Some((BufferType::Storage, mask_sc));
+
+            let output_bytes = new_capacity as usize * self.instance_byte_size as usize;
+            let (output_buf, output_sc) = pool.allocate_raw(BufferType::Instance, output_bytes);
+            self.output_buffer = output_buf;
+            self.output_pool_meta = Some((BufferType::Instance, output_sc));
+        } else {
+            self.mask_buffer = device.create_buffer(&BufferDescriptor {
+                label: Some("selection_mask"),
+                size: new_capacity as u64 * 4,
+                usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+
+            self.output_buffer = device.create_buffer(&BufferDescriptor {
+                label: Some("selection_dim_output"),
+                size: new_capacity as u64 * self.instance_byte_size,
+                usage: BufferUsages::STORAGE | BufferUsages::VERTEX | BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            });
+
+            // Clear pool metadata since these are direct allocations.
+            self.mask_pool_meta = None;
+            self.output_pool_meta = None;
+        }
 
         self.prev_mask = vec![0u32; new_capacity as usize];
         self.capacity = new_capacity;
@@ -656,6 +809,8 @@ impl SelectionMaskBuffer {
     /// - `source_buffer` — Storage buffer of original instance data.
     /// - `instance_count` — Number of instances.
     /// - `dim_opacity` — Opacity factor for unselected items.
+    /// - `pool` — Optional buffer pool, forwarded to
+    ///   [`ensure_capacity`](Self::ensure_capacity).
     #[allow(clippy::too_many_arguments)]
     pub fn update_and_dispatch<K, T>(
         &mut self,
@@ -667,11 +822,12 @@ impl SelectionMaskBuffer {
         source_buffer: &Buffer,
         instance_count: u32,
         dim_opacity: f32,
+        pool: Option<&mut BufferPool>,
     ) -> bool
     where
         K: Hash + Eq + Send + Sync + 'static,
     {
-        self.ensure_capacity(device, instance_count);
+        self.ensure_capacity(device, instance_count, pool);
 
         if self.update_mask(queue, data, key_fn, state) {
             self.dispatch_dimming(device, queue, source_buffer, instance_count, dim_opacity);
@@ -690,6 +846,7 @@ impl std::fmt::Debug for SelectionMaskBuffer {
             .field("last_generation", &self.last_generation)
             .field("has_active_selection", &self.has_active_selection)
             .field("alpha_offsets", &self.alpha_offsets)
+            .field("is_pooled", &self.is_pooled())
             .finish_non_exhaustive()
     }
 }

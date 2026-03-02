@@ -783,12 +783,17 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
             self.source_buffer = Some(src_buf);
 
             // (Re)create the mask buffer for the new capacity.
-            self.mask_buffer = Some(SelectionMaskBuffer::new(device, count, &alpha_offsets)?);
+            self.mask_buffer = Some(SelectionMaskBuffer::new(
+                device,
+                count,
+                &alpha_offsets,
+                None,
+            )?);
         }
 
         // -- 2. Update mask & dispatch dimming compute shader ---------------
         let mask = self.mask_buffer.as_mut().expect("mask_buffer initialised");
-        mask.ensure_capacity(device, count);
+        mask.ensure_capacity(device, count, None);
 
         let source = self
             .source_buffer

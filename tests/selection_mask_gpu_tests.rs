@@ -105,7 +105,7 @@ async fn test_selection_mask_buffer_creation() {
     };
 
     let offsets = AlphaOffsets::for_circle();
-    let mask_buf = SelectionMaskBuffer::new(&device, 1000, &offsets);
+    let mask_buf = SelectionMaskBuffer::new(&device, 1000, &offsets, None);
     assert!(mask_buf.is_ok());
 
     let mask_buf = mask_buf.unwrap();
@@ -122,7 +122,7 @@ async fn test_selection_mask_buffer_zero_capacity_fails() {
     };
 
     let offsets = AlphaOffsets::for_circle();
-    let result = SelectionMaskBuffer::new(&device, 0, &offsets);
+    let result = SelectionMaskBuffer::new(&device, 0, &offsets, None);
     assert!(result.is_err());
 }
 
@@ -134,7 +134,7 @@ async fn test_mask_update_from_shared_state() {
     };
 
     let offsets = AlphaOffsets::for_circle();
-    let mut mask_buf = SelectionMaskBuffer::new(&device, 10, &offsets).unwrap();
+    let mut mask_buf = SelectionMaskBuffer::new(&device, 10, &offsets, None).unwrap();
 
     let state = SharedSelectionState::<usize>::new();
     let data: Vec<usize> = (0..10).collect();
@@ -163,7 +163,7 @@ async fn test_dimming_compute_shader_selected_items_keep_alpha() {
 
     let instances = make_circle_instances(4);
     let offsets = AlphaOffsets::for_circle();
-    let mut mask_buf = SelectionMaskBuffer::new(&device, 4, &offsets).unwrap();
+    let mut mask_buf = SelectionMaskBuffer::new(&device, 4, &offsets, None).unwrap();
 
     // Upload source instances.
     let source_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -204,15 +204,15 @@ async fn test_dimming_compute_shader_selected_items_keep_alpha() {
 
     // Instance 1 (unselected): fill alpha should be 1.0 * 0.2 = 0.2.
     assert!(
-        (output[1 * floats_per_instance + 7] - 0.2).abs() < 1e-5,
+        (output[floats_per_instance + 7] - 0.2).abs() < 1e-5,
         "Unselected instance 1 fill alpha should be 0.2, got {}",
-        output[1 * floats_per_instance + 7]
+        output[floats_per_instance + 7]
     );
     // Instance 1 (unselected): stroke alpha should be 0.8 * 0.2 = 0.16.
     assert!(
-        (output[1 * floats_per_instance + 15] - 0.16).abs() < 1e-5,
+        (output[floats_per_instance + 15] - 0.16).abs() < 1e-5,
         "Unselected instance 1 stroke alpha should be 0.16, got {}",
-        output[1 * floats_per_instance + 15]
+        output[floats_per_instance + 15]
     );
 
     // Instance 2 (selected): full alpha.
@@ -237,7 +237,7 @@ async fn test_dimming_preserves_non_alpha_data() {
 
     let instances = make_circle_instances(2);
     let offsets = AlphaOffsets::for_circle();
-    let mut mask_buf = SelectionMaskBuffer::new(&device, 2, &offsets).unwrap();
+    let mut mask_buf = SelectionMaskBuffer::new(&device, 2, &offsets, None).unwrap();
 
     let source_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("source_instances"),
@@ -255,10 +255,16 @@ async fn test_dimming_preserves_non_alpha_data() {
     mask_buf.dispatch_dimming(&device, &queue, &source_buffer, 2, 0.2);
 
     let floats_per_instance = offsets.floats_per_instance() as usize;
-    let output = read_buffer_f32(&device, &queue, mask_buf.output_buffer(), 2 * floats_per_instance).await;
+    let output = read_buffer_f32(
+        &device,
+        &queue,
+        mask_buf.output_buffer(),
+        2 * floats_per_instance,
+    )
+    .await;
 
     // Verify non-alpha fields are preserved for instance 1 (dimmed).
-    let base = 1 * floats_per_instance;
+    let base = floats_per_instance;
     let expected_center_x = instances[1].center[0];
     let expected_center_y = instances[1].center[1];
     let expected_radius = instances[1].radius;
@@ -291,7 +297,7 @@ async fn test_no_selection_means_full_opacity() {
 
     let instances = make_circle_instances(3);
     let offsets = AlphaOffsets::for_circle();
-    let mut mask_buf = SelectionMaskBuffer::new(&device, 3, &offsets).unwrap();
+    let mut mask_buf = SelectionMaskBuffer::new(&device, 3, &offsets, None).unwrap();
 
     let source_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("source_instances"),
@@ -310,7 +316,13 @@ async fn test_no_selection_means_full_opacity() {
     mask_buf.dispatch_dimming(&device, &queue, &source_buffer, 3, 0.2);
 
     let floats_per_instance = offsets.floats_per_instance() as usize;
-    let output = read_buffer_f32(&device, &queue, mask_buf.output_buffer(), 3 * floats_per_instance).await;
+    let output = read_buffer_f32(
+        &device,
+        &queue,
+        mask_buf.output_buffer(),
+        3 * floats_per_instance,
+    )
+    .await;
 
     // All instances should have full alpha since selection is empty.
     for i in 0..3 {
@@ -330,20 +342,20 @@ async fn test_ensure_capacity_grows_buffers() {
     };
 
     let offsets = AlphaOffsets::for_circle();
-    let mut mask_buf = SelectionMaskBuffer::new(&device, 10, &offsets).unwrap();
+    let mut mask_buf = SelectionMaskBuffer::new(&device, 10, &offsets, None).unwrap();
     assert_eq!(mask_buf.capacity(), 10);
 
     // Grow to 100.
-    mask_buf.ensure_capacity(&device, 100);
+    mask_buf.ensure_capacity(&device, 100, None);
     assert!(mask_buf.capacity() >= 100);
 
     // Grow to 1000 — should still work.
-    mask_buf.ensure_capacity(&device, 1000);
+    mask_buf.ensure_capacity(&device, 1000, None);
     assert!(mask_buf.capacity() >= 1000);
 
     // Same or smaller does nothing.
     let cap_before = mask_buf.capacity();
-    mask_buf.ensure_capacity(&device, 500);
+    mask_buf.ensure_capacity(&device, 500, None);
     assert_eq!(mask_buf.capacity(), cap_before);
 }
 
@@ -356,7 +368,7 @@ async fn test_update_and_dispatch_convenience() {
 
     let instances = make_circle_instances(5);
     let offsets = AlphaOffsets::for_circle();
-    let mut mask_buf = SelectionMaskBuffer::new(&device, 5, &offsets).unwrap();
+    let mut mask_buf = SelectionMaskBuffer::new(&device, 5, &offsets, None).unwrap();
 
     let source_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("source_instances"),
@@ -379,15 +391,22 @@ async fn test_update_and_dispatch_convenience() {
         &source_buffer,
         5,
         0.3,
+        None,
     );
     assert!(updated);
 
     // Verify: items 1 and 3 should have full alpha, others dimmed by 0.3.
     let floats_per_instance = offsets.floats_per_instance() as usize;
-    let output = read_buffer_f32(&device, &queue, mask_buf.output_buffer(), 5 * floats_per_instance).await;
+    let output = read_buffer_f32(
+        &device,
+        &queue,
+        mask_buf.output_buffer(),
+        5 * floats_per_instance,
+    )
+    .await;
 
     // Selected items: full alpha.
-    assert!((output[1 * floats_per_instance + 7] - 1.0).abs() < 1e-5);
+    assert!((output[floats_per_instance + 7] - 1.0).abs() < 1e-5);
     assert!((output[3 * floats_per_instance + 7] - 1.0).abs() < 1e-5);
 
     // Unselected items: dimmed by 0.3.
@@ -405,7 +424,7 @@ async fn test_selection_clear_restores_full_opacity() {
 
     let instances = make_circle_instances(4);
     let offsets = AlphaOffsets::for_circle();
-    let mut mask_buf = SelectionMaskBuffer::new(&device, 4, &offsets).unwrap();
+    let mut mask_buf = SelectionMaskBuffer::new(&device, 4, &offsets, None).unwrap();
 
     let source_buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("source_instances"),
@@ -421,20 +440,48 @@ async fn test_selection_clear_restores_full_opacity() {
     // First: select items 0,1 → items 2,3 dimmed.
     state.select([0, 1]);
     mask_buf.update_and_dispatch(
-        &device, &queue, &data, |_item, idx| idx, &state, &source_buffer, 4, 0.2,
+        &device,
+        &queue,
+        &data,
+        |_item, idx| idx,
+        &state,
+        &source_buffer,
+        4,
+        0.2,
+        None,
     );
 
     let floats_per_instance = offsets.floats_per_instance() as usize;
-    let output = read_buffer_f32(&device, &queue, mask_buf.output_buffer(), 4 * floats_per_instance).await;
+    let output = read_buffer_f32(
+        &device,
+        &queue,
+        mask_buf.output_buffer(),
+        4 * floats_per_instance,
+    )
+    .await;
     assert!((output[2 * floats_per_instance + 7] - 0.2).abs() < 1e-5);
 
     // Now clear selection → all items should be full opacity.
     state.clear();
     mask_buf.update_and_dispatch(
-        &device, &queue, &data, |_item, idx| idx, &state, &source_buffer, 4, 0.2,
+        &device,
+        &queue,
+        &data,
+        |_item, idx| idx,
+        &state,
+        &source_buffer,
+        4,
+        0.2,
+        None,
     );
 
-    let output = read_buffer_f32(&device, &queue, mask_buf.output_buffer(), 4 * floats_per_instance).await;
+    let output = read_buffer_f32(
+        &device,
+        &queue,
+        mask_buf.output_buffer(),
+        4 * floats_per_instance,
+    )
+    .await;
     for i in 0..4 {
         assert!(
             (output[i * floats_per_instance + 7] - 1.0).abs() < 1e-5,

@@ -79,7 +79,8 @@ fn bench_selection_mask_dimming(c: &mut Criterion) {
             |b, _| {
                 // Pre-create the pipeline (one-time cost).
                 let mut mask_buf =
-                    SelectionMaskBuffer::new(device, instance_count as u32, &offsets).unwrap();
+                    SelectionMaskBuffer::new(device, instance_count as u32, &offsets, None)
+                        .unwrap();
                 let state = SharedSelectionState::<usize>::new();
                 // Two different selections to alternate between.
                 let keys_a: Vec<usize> = (0..selection_count).collect();
@@ -104,6 +105,7 @@ fn bench_selection_mask_dimming(c: &mut Criterion) {
                         &source_buffer,
                         instance_count as u32,
                         0.2,
+                        None,
                     );
 
                     // Ensure GPU work completes.
@@ -121,7 +123,8 @@ fn bench_selection_mask_dimming(c: &mut Criterion) {
             &(instance_count, selection_count),
             |b, _| {
                 let mut mask_buf =
-                    SelectionMaskBuffer::new(device, instance_count as u32, &offsets).unwrap();
+                    SelectionMaskBuffer::new(device, instance_count as u32, &offsets, None)
+                        .unwrap();
 
                 // Pre-build mask on CPU.
                 let state = SharedSelectionState::<usize>::new();
@@ -151,7 +154,8 @@ fn bench_selection_mask_dimming(c: &mut Criterion) {
             &(instance_count, selection_count),
             |b, _| {
                 let mut mask_buf =
-                    SelectionMaskBuffer::new(device, instance_count as u32, &offsets).unwrap();
+                    SelectionMaskBuffer::new(device, instance_count as u32, &offsets, None)
+                        .unwrap();
                 let state = SharedSelectionState::<usize>::new();
                 state.select(selected_keys.clone());
                 mask_buf.update_mask(queue, &data, |_item, idx| idx, &state);
@@ -183,7 +187,8 @@ fn bench_selection_mask_dimming(c: &mut Criterion) {
                 state.select(selected_keys.clone());
 
                 let mut mask_buf =
-                    SelectionMaskBuffer::new(device, instance_count as u32, &offsets).unwrap();
+                    SelectionMaskBuffer::new(device, instance_count as u32, &offsets, None)
+                        .unwrap();
 
                 // Warm up: do initial update.
                 mask_buf.update_and_dispatch(
@@ -195,14 +200,19 @@ fn bench_selection_mask_dimming(c: &mut Criterion) {
                     &source_buffer,
                     instance_count as u32,
                     0.2,
+                    None,
                 );
                 let _ = device.poll(wgpu::PollType::Wait);
 
                 b.iter(|| {
                     // Modify selection slightly (add one, remove one).
-                    state.set(selected_keys.iter().copied().skip(1).chain(std::iter::once(
-                        instance_count - 1,
-                    )));
+                    state.set(
+                        selected_keys
+                            .iter()
+                            .copied()
+                            .skip(1)
+                            .chain(std::iter::once(instance_count - 1)),
+                    );
 
                     mask_buf.update_and_dispatch(
                         device,
@@ -213,6 +223,7 @@ fn bench_selection_mask_dimming(c: &mut Criterion) {
                         &source_buffer,
                         instance_count as u32,
                         0.2,
+                        None,
                     );
 
                     let _ = device.poll(wgpu::PollType::Wait);
@@ -281,7 +292,7 @@ fn bench_cpu_vs_gpu_dimming(c: &mut Criterion) {
 
             let state = SharedSelectionState::<usize>::new();
             let mut mask_buf =
-                SelectionMaskBuffer::new(device, instance_count as u32, &offsets).unwrap();
+                SelectionMaskBuffer::new(device, instance_count as u32, &offsets, None).unwrap();
             let keys_a: Vec<usize> = (0..selection_count).collect();
             let keys_b: Vec<usize> = (1..selection_count + 1).collect();
             let mut use_a = true;
@@ -303,6 +314,7 @@ fn bench_cpu_vs_gpu_dimming(c: &mut Criterion) {
                     &source_buffer,
                     instance_count as u32,
                     0.2,
+                    None,
                 );
                 let _ = device.poll(wgpu::PollType::Wait);
             });
