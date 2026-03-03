@@ -734,6 +734,8 @@ integration, pipeline caching.
 - [GUP-288](GUP-288_Choropleth_Tooltip_Hover_Interaction.md) 📋 — Choropleth
   tooltip and hover highlighting via GPU hit-testing. Deps: GUP-275 ✅, GUP-012
   ✅, GUP-014 ✅.
+- [GUP-295](GUP-295_Line_Chart_Point_Markers.md) 💡 — Optional circle point
+  markers at each data vertex on line charts. Deps: GUP-246 ✅, GUP-251 📋.
 
 ## Performance & Profiling
 
