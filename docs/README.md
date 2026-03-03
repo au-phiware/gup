@@ -91,6 +91,11 @@ Cross-platform performance benchmarking infrastructure: WASM vs native
 comparison tooling, browser compatibility matrix, and platform-specific
 performance characteristics.
 
+### [📈 Performance Guide](./PERFORMANCE_GUIDE.md)
+
+Performance targets, profiling infrastructure, benchmarking workflow,
+optimization tips, and cross-platform considerations.
+
 ## Quick Navigation
 
 **New to Gup?** Start with [Mission and Goals](./MISSION_AND_GOALS.md) to
