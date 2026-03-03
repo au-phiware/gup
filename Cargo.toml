@@ -183,6 +183,10 @@ name = "bar_chart_100k"
 harness = false
 
 [[bench]]
+name = "force_layout_benchmarks"
+harness = false
+
+[[bench]]
 name = "streaming_builder"
 harness = false
 

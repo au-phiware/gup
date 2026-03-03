@@ -37,9 +37,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ctx = RenderContext::new().await?;
     println!("GPU adapter initialised.");
 
-    // Generate a random graph with 1K nodes and ~3K edges
-    let node_count: u32 = 1_000;
+    // Parse optional node count from args (default 1000)
+    let args: Vec<String> = std::env::args().collect();
+    let node_count: u32 = if args.len() > 1 {
+        args[1].parse().unwrap_or(1_000)
+    } else {
+        1_000
+    };
     let edges_per_node = 3;
+    let max_iterations: u32 = if node_count >= 100_000 { 30 } else { 200 };
+    let check_interval: u32 = if node_count >= 100_000 { 15 } else { 10 };
 
     let nodes: Vec<LayoutNode> = (0..node_count)
         .map(|i| LayoutNode {
@@ -70,9 +77,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let result = GraphChartBuilder::new(&ctx)?
         .graph_layout(
             ForceDirected::new()
-                .iterations(200)
+                .iterations(max_iterations)
                 .convergence_threshold(0.5)
-                .convergence_check_interval(10),
+                .convergence_check_interval(check_interval),
         )
         .nodes(nodes)
         .edges(edges)

@@ -52,6 +52,8 @@ pub struct LayoutEngine {
     spring_pipeline: ComputePipeline,
     integrate_pipeline: ComputePipeline,
     convergence_pipeline: ComputePipeline,
+    clear_forces_pipeline: ComputePipeline,
+    clear_convergence_pipeline: ComputePipeline,
     bind_group_layout: BindGroupLayout,
 }
 
@@ -160,6 +162,9 @@ impl LayoutEngine {
         let spring_pipeline = make_pipeline("spring_pass", "spring_pipeline");
         let integrate_pipeline = make_pipeline("integrate_pass", "integrate_pipeline");
         let convergence_pipeline = make_pipeline("convergence_pass", "convergence_pipeline");
+        let clear_forces_pipeline = make_pipeline("clear_forces_pass", "clear_forces_pipeline");
+        let clear_convergence_pipeline =
+            make_pipeline("clear_convergence_pass", "clear_convergence_pipeline");
 
         // We clone device/queue handles so the engine is self-contained.
         Ok(Self {
@@ -169,6 +174,8 @@ impl LayoutEngine {
             spring_pipeline,
             integrate_pipeline,
             convergence_pipeline,
+            clear_forces_pipeline,
+            clear_convergence_pipeline,
             bind_group_layout,
         })
     }
@@ -252,10 +259,7 @@ impl LayoutEngine {
         // If there are no edges, provide a dummy single-edge buffer so bind
         // group creation succeeds.
         let edge_data = if gpu_edges.is_empty() {
-            vec![GpuEdge {
-                src: 0,
-                tgt: 0,
-            }]
+            vec![GpuEdge { src: 0, tgt: 0 }]
         } else {
             gpu_edges
         };
@@ -331,87 +335,114 @@ impl LayoutEngine {
         });
 
         // Iteration loop -----------------------------------------------------
+        //
+        // Batches of iterations are recorded into a single command encoder
+        // and submitted together.  A convergence readback is only performed
+        // at the end of each batch (every `convergence_check_interval`
+        // iterations), avoiding per-iteration CPU↔GPU round-trips.
 
         let node_workgroups = (node_count as u32).div_ceil(WORKGROUP_SIZE);
         let edge_workgroups = (edge_count as u32).div_ceil(WORKGROUP_SIZE);
+        let has_edges = !edges.is_empty();
 
         let mut iterations_performed: u32 = 0;
         let mut converged = false;
+        let interval = config.convergence_check_interval.max(1);
+        // Limit batch size to avoid exceeding command buffer limits on some
+        // drivers.  5 iterations × 5 passes = 25 compute passes is safe.
+        let max_batch = interval.min(5);
 
-        for iter in 0..config.iterations {
-            iterations_performed = iter + 1;
-
-            let check_convergence = config.convergence_check_interval > 0
-                && (iter + 1) % config.convergence_check_interval == 0;
-
-            // Zero force buffer each iteration
-            self.queue.write_buffer(
-                &force_buffer,
-                0,
-                &vec![0u8; node_count * 2 * std::mem::size_of::<f32>()],
-            );
-
-            // Zero convergence buffer before convergence pass
-            if check_convergence {
-                self.queue.write_buffer(&convergence_buffer, 0, &[0u8; 4]);
-            }
+        let mut iter = 0u32;
+        while iter < config.iterations {
+            // How many iterations to batch before the next submission
+            let batch_end = (iter + max_batch).min(config.iterations);
+            let check_convergence = batch_end >= iter + interval
+                || batch_end == config.iterations
+                || batch_end.is_multiple_of(interval);
 
             let mut encoder = self
                 .device
                 .create_command_encoder(&CommandEncoderDescriptor {
-                    label: Some("force_layout_encoder"),
+                    label: Some("force_layout_batch_encoder"),
                 });
 
-            // Pass 1: repulsion
-            {
-                let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                    label: Some("repulsion_pass"),
-                    timestamp_writes: None,
-                });
-                pass.set_pipeline(&self.repulsion_pipeline);
-                pass.set_bind_group(0, &bind_group, &[]);
-                pass.dispatch_workgroups(node_workgroups, 1, 1);
-            }
-
-            // Pass 2: spring forces (only if there are real edges)
-            if !edges.is_empty() {
-                let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                    label: Some("spring_pass"),
-                    timestamp_writes: None,
-                });
-                pass.set_pipeline(&self.spring_pipeline);
-                pass.set_bind_group(0, &bind_group, &[]);
-                pass.dispatch_workgroups(edge_workgroups, 1, 1);
-            }
-
-            // Pass 3: integration (also computes displacement for convergence)
-            {
-                let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                    label: Some("integrate_pass"),
-                    timestamp_writes: None,
-                });
-                pass.set_pipeline(&self.integrate_pipeline);
-                pass.set_bind_group(0, &bind_group, &[]);
-                pass.dispatch_workgroups(node_workgroups, 1, 1);
-            }
-
-            // Pass 4: convergence check
-            if check_convergence {
+            for _ in iter..batch_end {
+                // Clear forces (GPU-side)
                 {
                     let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                        label: Some("convergence_pass"),
+                        label: Some("clear_forces"),
+                        timestamp_writes: None,
+                    });
+                    pass.set_pipeline(&self.clear_forces_pipeline);
+                    pass.set_bind_group(0, &bind_group, &[]);
+                    pass.dispatch_workgroups(node_workgroups, 1, 1);
+                }
+
+                // Repulsion
+                {
+                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                        label: Some("repulsion"),
+                        timestamp_writes: None,
+                    });
+                    pass.set_pipeline(&self.repulsion_pipeline);
+                    pass.set_bind_group(0, &bind_group, &[]);
+                    pass.dispatch_workgroups(node_workgroups, 1, 1);
+                }
+
+                // Spring forces
+                if has_edges {
+                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                        label: Some("spring"),
+                        timestamp_writes: None,
+                    });
+                    pass.set_pipeline(&self.spring_pipeline);
+                    pass.set_bind_group(0, &bind_group, &[]);
+                    pass.dispatch_workgroups(edge_workgroups, 1, 1);
+                }
+
+                // Integration
+                {
+                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                        label: Some("integrate"),
+                        timestamp_writes: None,
+                    });
+                    pass.set_pipeline(&self.integrate_pipeline);
+                    pass.set_bind_group(0, &bind_group, &[]);
+                    pass.dispatch_workgroups(node_workgroups, 1, 1);
+                }
+            }
+
+            iterations_performed = batch_end;
+
+            // Convergence check (only at convergence intervals, not every batch)
+            if check_convergence {
+                // Clear convergence atomic
+                {
+                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                        label: Some("clear_convergence"),
+                        timestamp_writes: None,
+                    });
+                    pass.set_pipeline(&self.clear_convergence_pipeline);
+                    pass.set_bind_group(0, &bind_group, &[]);
+                    pass.dispatch_workgroups(1, 1, 1);
+                }
+
+                // Compute max displacement
+                {
+                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                        label: Some("convergence"),
                         timestamp_writes: None,
                     });
                     pass.set_pipeline(&self.convergence_pipeline);
                     pass.set_bind_group(0, &bind_group, &[]);
                     pass.dispatch_workgroups(node_workgroups, 1, 1);
                 }
+
                 encoder.copy_buffer_to_buffer(&convergence_buffer, 0, &staging_buffer, 0, 4);
             }
 
             self.queue.submit(std::iter::once(encoder.finish()));
 
-            // Readback convergence if needed
             if check_convergence {
                 let max_disp = self.read_convergence(&staging_buffer).await?;
                 if max_disp < config.convergence_threshold {
@@ -419,6 +450,8 @@ impl LayoutEngine {
                     break;
                 }
             }
+
+            iter = batch_end;
         }
 
         // Read final positions -----------------------------------------------

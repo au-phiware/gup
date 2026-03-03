@@ -177,3 +177,31 @@ fn convergence_pass(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     atomicMax(&convergence[0], bits);
 }
+
+// ---------------------------------------------------------------------------
+// 5. Clear forces pass — zero the force accumulation buffer
+//
+// Dispatched at the start of each iteration so we don't need a CPU-side
+// write_buffer round-trip.
+// ---------------------------------------------------------------------------
+
+@compute @workgroup_size(256)
+fn clear_forces_pass(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let i = gid.x;
+    if i >= params.node_count {
+        return;
+    }
+    forces[i * 2u]     = 0.0;
+    forces[i * 2u + 1u] = 0.0;
+}
+
+// ---------------------------------------------------------------------------
+// 6. Clear convergence pass — zero the atomic max for next check
+// ---------------------------------------------------------------------------
+
+@compute @workgroup_size(256)
+fn clear_convergence_pass(@builtin(global_invocation_id) gid: vec3<u32>) {
+    if gid.x == 0u {
+        atomicStore(&convergence[0], 0u);
+    }
+}
