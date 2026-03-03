@@ -267,3 +267,117 @@ stories can progress until the pyramid structure and its build pipeline exist.
   layout/ctor)
 - 7 integration tests (1K, 100K, 1M, budget, metadata)
 - Total: 28 new tests, all passing
+
+## Retrospective
+
+**Completed**: 2025-07-24
+
+### Key Technical Learnings
+
+#### GPU Buffer Allocation Pressure in Benchmarks
+
+- **Challenge**: Criterion benchmark loops create thousands of GPU buffer
+  allocations per second. Even with explicit `drop()` and `device.poll(Wait)`,
+  the GPU driver cannot reclaim memory fast enough, leading to OOM panics at
+  100K+ point benchmarks.
+- **Solution**: Used `iter_custom` with per-iteration timing and single-shot
+  measurements for large datasets. This matches the pattern noted in the
+  existing `buffer_benchmarks.rs` (which disabled upload benchmarks entirely).
+- **Pattern**: GPU-involving benchmarks should always use single-shot or very
+  low iteration counts. Never use `b.iter()` with GPU allocations.
+
+#### LOD Selection Algorithm Direction
+
+- **Challenge**: The initial implementation walked from the coarsest level
+  towards the finest, which incorrectly chose the coarsest level even for tiny
+  datasets (100 points on a 1920×1080 screen would choose the 1-point level).
+- **Solution**: Reversed the walk direction: start from level 0 (finest) and
+  walk towards coarser levels. Return the first level whose density exceeds the
+  threshold. This ensures small datasets always render at full resolution.
+- **Pattern**: For density-based LOD selection, "start fine and coarsen" is more
+  intuitive and correct than "start coarse and refine."
+
+#### wgpu v26 API Changes
+
+- **Challenge**: wgpu v26 renamed `Maintain::Wait` to `PollType::Wait` and
+  `map_async` returns `BufferAsyncError` instead of a generic error.
+- **Solution**: Used `wgpu::PollType::Wait` and explicit `.map_err()` for the
+  `BufferAsyncError` type, since `GupError` doesn't implement
+  `From<BufferAsyncError>`.
+- **Pattern**: Always check existing code for the current wgpu API patterns
+  before writing new GPU code.
+
+#### Grid Aggregation First-Point-Wins via atomicMin
+
+- **Challenge**: The story's risk assessment flagged `atomicCompareExchangeWeak`
+  as unreliable across backends for representative-point selection.
+- **Solution**: Used `atomicMin` on point indices instead — deterministically
+  selects the lowest-indexed point per grid cell. This is universally supported,
+  deterministic, and matches the CPU reference implementation exactly.
+- **Pattern**: Prefer `atomicMin`/`atomicMax` over CAS loops for selection
+  problems in WGSL compute shaders.
+
+### Architectural Decisions
+
+#### New VertexData Type Instead of Reusing Existing Types
+
+- **Decision**: Defined a new `VertexData` struct in `src/lod/mod.rs` with
+  `{x, y, weight, _padding}` rather than reusing existing mark vertex types
+  (CircleVertex, RectangleVertex, etc.).
+- **Reasoning**: Mark vertex types carry mark-specific attributes (radius,
+  color, etc.) that are irrelevant for LOD aggregation. A minimal 16-byte point
+  type is more efficient for large datasets and cleaner for the pyramid API.
+- **Trade-off**: Downstream consumers (GUP-257, GUP-258) must convert between
+  VertexData and their mark-specific types. This is a conscious decoupling.
+- **Future**: If VertexData needs additional channels (e.g., color average), the
+  padding field can be replaced and the struct extended to 32 bytes.
+
+#### CPU and GPU Build Paths as Separate Methods
+
+- **Decision**: Provided `build_cpu()` and `build_gpu()` as separate methods
+  rather than a single `build()` that auto-selects.
+- **Reasoning**: The GPU path requires `BufferPool` (needs `Arc<Device>`) and is
+  async, while the CPU path works with `&Device` and is synchronous. The
+  different signatures make auto-selection awkward.
+- **Trade-off**: Callers must choose the path explicitly. Integration tests use
+  the CPU path since `RenderContext` doesn't expose `Arc<Device>`.
+- **Future**: A convenience `build()` method could be added once the context API
+  provides `Arc<Device>` access.
+
+#### log::warn! Instead of tracing::warn!
+
+- **Decision**: Used the `log` crate for budget warnings instead of `tracing` as
+  specified in the story.
+- **Reasoning**: The Gup project uses `log` (with `env_logger`) throughout; it
+  does not depend on `tracing`. Using `log::warn!` follows the existing
+  conventions.
+- **Trade-off**: None — functionally equivalent.
+
+### Development Workflow Insights
+
+- The pre-commit hooks run `prettier` on all markdown files, which reformats
+  story documents. Running `prettier --write` before committing avoids hook
+  failures.
+- Criterion's `warm_up_time` still iterates the closure before the main sampling
+  phase. Setting it to 10ms helps but doesn't fully prevent OOM for large GPU
+  benchmarks. The `iter_custom` approach with `|_iters|` that always runs
+  exactly once is the most reliable pattern.
+- The 100K→1M CPU build times (~17–28ms) suggest the 100M target (<10s) is
+  easily achievable. Linear extrapolation gives ~1.7s for 100M points.
+
+### Benchmark Results
+
+| Size      | Levels | Time (median) | Method      |
+| --------- | ------ | ------------- | ----------- |
+| 1,000     | 5      | 40 µs         | Criterion   |
+| 10,000    | 5      | 225 µs        | Criterion   |
+| 100,000   | 5      | 28 ms         | Single-shot |
+| 1,000,000 | 5      | 17 ms         | Single-shot |
+
+**Hardware**: Linux, wgpu v26 (Vulkan backend), headless GPU adapter.
+
+### Follow-up Stories
+
+No new follow-up stories identified. GUP-257 (Adaptive Viewport Renderer) and
+GUP-258 (Streaming Data Manager for LOD) are already planned and can now proceed
+with the pyramid structure and build pipeline in place.
