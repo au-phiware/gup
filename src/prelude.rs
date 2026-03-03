@@ -21,6 +21,8 @@ pub use crate::chart_builder::{
         area::{AreaSegment, StackMode},
         bar,
         bar::{Category, Orientation},
+        composite,
+        composite::{CompositeChart, CompositeChartBuilder, IntoChartLayer, YAxisAssignment},
         heatmap,
         heatmap::{AggregateFunc, HeatmapCell},
         line, scatter,
