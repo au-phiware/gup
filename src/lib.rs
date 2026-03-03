@@ -90,6 +90,7 @@ pub mod mark;
 pub mod mark_selection;
 pub mod mixable;
 pub mod performance;
+pub mod performance_targets;
 pub mod pipeline_cache;
 pub mod plugins;
 pub mod prelude;
