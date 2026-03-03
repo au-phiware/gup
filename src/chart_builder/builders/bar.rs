@@ -161,8 +161,8 @@ const DEFAULT_PALETTE: [[f32; 4]; 8] = [
 /// ```
 #[derive(Debug)]
 pub struct BarChartBuilder<T> {
-    x_accessor: Option<AccessorFunction<T>>,
-    y_accessor: Option<AccessorFunction<T>>,
+    pub(crate) x_accessor: Option<AccessorFunction<T>>,
+    pub(crate) y_accessor: Option<AccessorFunction<T>>,
     color_accessor: Option<AccessorFunction<T>>,
     group_accessor: Option<AccessorFunction<T>>,
     stack_accessor: Option<AccessorFunction<T>>,
