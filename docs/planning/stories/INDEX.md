@@ -721,7 +721,7 @@ integration, pipeline caching.
   KDE compute shader and marching-squares contour extraction, rendered as filled
   contours or line isolevels. Deps: GUP-018 ✅, GUP-144 ✅, GUP-132 ✅, GUP-248
   📋.
-- [GUP-251](GUP-251_Custom_Composite_Chart_Support.md) 📋 —
+- [GUP-251](GUP-251_Custom_Composite_Chart_Support.md) 🚧 —
   CompositeChartBuilder composing multiple chart layers with shared axes,
   unified scale domains, and optional dual-y-axis support. Deps: GUP-001 ✅,
   GUP-018 ✅, GUP-093 ✅, GUP-245 ✅, GUP-246 ✅.
