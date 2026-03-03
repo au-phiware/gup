@@ -243,6 +243,10 @@ name = "business_dashboard"
 path = "examples/showcase/business_dashboard.rs"
 
 [[example]]
+name = "geo_world_map"
+path = "examples/geo_world_map.rs"
+
+[[example]]
 name = "z_sort_demo"
 path = "examples/z_sort_demo.rs"
 
