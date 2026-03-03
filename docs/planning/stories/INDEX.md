@@ -338,6 +338,12 @@ derive macros, and custom mark kit.
 - [GUP-274](GUP-274_Map_Mark_Rendering.md) ✅ — GeoPathMark that loads GeoJSON
   boundaries, tessellates polygons via GUP-132, and renders them with a
   geographic projection shader. Deps: GUP-009 ✅, GUP-132 ✅, GUP-273 ✅.
+- [GUP-285](GUP-285_High_Resolution_GeoJSON_Streaming.md) 📋 — Background/async
+  GeoJSON streaming for large (10–100 MB) boundary datasets without blocking
+  the render thread. Deps: GUP-274 ✅.
+- [GUP-286](GUP-286_Spherical_Polygon_Simplification.md) 📋 — Spherical-aware
+  polygon simplification using great-circle distance for polar-region accuracy.
+  Deps: GUP-274 ✅.
 
 ## Interaction & Spatial Index
 
