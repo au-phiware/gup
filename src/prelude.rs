@@ -19,7 +19,9 @@ pub use crate::chart_builder::{
         GridCapableBuilder, HeatmapBuilder, LineChartBuilder, LineInterpolation, LineSegment,
         ScatterPlotBuilder, area, bar,
         bar::{Category, Orientation},
-        heatmap, line, scatter,
+        heatmap,
+        heatmap::{AggregateFunc, HeatmapCell},
+        line, scatter,
     },
     plot_api::{BoundPlotBuilder, PlotBuilder, plot},
 };
