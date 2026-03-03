@@ -43,8 +43,10 @@
 //! ```
 
 mod selection;
+pub mod streaming;
 
 pub use selection::select_lod_level;
+pub use streaming::MemoryBudget;
 
 use crate::buffer::{BufferPool, BufferType, GpuBuffer};
 use crate::error::{GupError, GupResult};
@@ -155,6 +157,43 @@ impl LodPyramid {
     /// Actual GPU bytes allocated across all levels.
     pub fn allocated_bytes(&self) -> u64 {
         self.allocated_bytes
+    }
+
+    // -----------------------------------------------------------------------
+    // Crate-internal mutation API (used by StreamingLodManager)
+    // -----------------------------------------------------------------------
+
+    /// Construct an `LodPyramid` from pre-built components.
+    ///
+    /// This is used by [`StreamingLodManager`](streaming::StreamingLodManager)
+    /// to create and maintain its internal pyramid representation.
+    pub(crate) fn from_parts(
+        levels: Vec<GpuBuffer<VertexData>>,
+        metadata: Vec<LodLevelMetadata>,
+        budget_bytes: u64,
+        allocated_bytes: u64,
+    ) -> Self {
+        Self {
+            levels,
+            metadata,
+            budget_bytes,
+            allocated_bytes,
+        }
+    }
+
+    /// Mutable reference to the GPU buffer at the given level.
+    pub(crate) fn buffer_mut(&mut self, level: usize) -> &mut GpuBuffer<VertexData> {
+        &mut self.levels[level]
+    }
+
+    /// Mutable reference to the metadata at the given level.
+    pub(crate) fn metadata_mut(&mut self, level: usize) -> &mut LodLevelMetadata {
+        &mut self.metadata[level]
+    }
+
+    /// Update the tracked allocated byte count.
+    pub(crate) fn set_allocated_bytes(&mut self, bytes: u64) {
+        self.allocated_bytes = bytes;
     }
 }
 
