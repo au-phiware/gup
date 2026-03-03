@@ -228,3 +228,118 @@ page without orchestrating multiple single-page PDFs externally.
 - 28 unit tests in `src/export/pdf/` (11 options + 17 renderer)
 - 14 integration tests in `tests/pdf_export_integration.rs`
 - **42 total PDF-specific tests**
+
+## Retrospective
+
+**Completed**: 2026-03-04
+
+### Key Technical Learnings
+
+#### printpdf API Design
+
+- **Challenge**: `printpdf` v0.9 has a completely different API from older
+  versions documented in most online tutorials.  The new API uses `Op` enums
+  pushed to a `Vec<Op>` rather than layer-based method calls.
+- **Solution**: Read the library source code directly
+  (`/home/corin/.cargo/registry/src/`) rather than relying on outdated docs.
+  The `PdfPage::new(width, height, ops)` constructor and `Op::DrawRectangle`,
+  `Op::DrawPolygon`, `Op::DrawLine`, `Op::ShowText` etc. are the key building
+  blocks.
+- **Pattern**: When a crate's published docs are sparse or outdated, reading the
+  source of its types and examples in the registry is faster than searching
+  online.
+
+#### Coordinate System Mapping
+
+- **Challenge**: Three coordinate systems are in play — GPU clip-space (Y-up,
+  [-1,1]), SVG viewport (Y-down, origin top-left), and PDF page (Y-up, origin
+  bottom-left, in points).  Getting the Y-flip right required care.
+- **Solution**: The SVG intermediate already handles clip→SVG transforms.  For
+  SVG→PDF, the transform is: `pdf_y = page_height - svg_y` (after scaling and
+  offset).  Rectangles need special attention because SVG specifies top-left
+  corner but PDF Rect specifies bottom-left.
+- **Pattern**: Always write a coordinate-transform helper function and unit-test
+  corner cases rather than inlining the math in multiple places.
+
+#### Font Embedding via fontdb
+
+- **Challenge**: `printpdf`'s `ParsedFont::from_bytes` requires raw TTF/OTF
+  bytes and a face index.  The font must first be located on the system.
+- **Solution**: Used `fontdb::Database::load_system_fonts()` followed by
+  `db.query()` to find a matching sans-serif font, then
+  `db.with_face_data(id, |data, index| ...)` to get the bytes for
+  `ParsedFont::from_bytes()`.  The `with_face_data` callback approach avoids
+  needing to know the `Source` variant.
+- **Pattern**: `fontdb`'s `with_face_data` is the most portable way to access
+  font bytes — it works for file-backed, memory-mapped, and binary sources
+  without pattern-matching on the `Source` enum.
+
+#### Circle Approximation with Bézier Curves
+
+- **Challenge**: PDF has no native circle primitive.  Circles must be
+  approximated as cubic Bézier polygons.
+- **Solution**: Used the standard four-arc approximation with magic constant
+  `k ≈ 0.552285` (= 4/3 × (√2 − 1)).  Each arc uses one on-curve point and
+  two control points, totaling 13 points for a closed circle.
+- **Pattern**: This is a well-known PDF/PostScript pattern.  The constant is
+  precise enough that the visual difference from a true circle is imperceptible
+  at any reasonable zoom level.
+
+### Architectural Decisions
+
+#### printpdf over pdf-writer
+
+- **Decision**: Chose `printpdf` v0.9 over `pdf-writer` v0.14
+- **Reasoning**: `printpdf` provides higher-level types (`PdfPage`, `Op`,
+  `PdfDocument`, `ParsedFont`) that map well to our SVG element abstraction.
+  `pdf-writer` would require manually constructing PDF objects and content
+  streams, which is more work for the same result.
+- **Trade-off**: `printpdf` brings `lopdf` and potentially `azul-layout` as
+  transitive dependencies, adding to compile time and binary size.  `pdf-writer`
+  is a much lighter dependency.
+- **Future**: If binary size becomes an issue, the renderer's `Op`-based output
+  could be adapted to `pdf-writer` without changing the public API.
+
+#### Orientation Alias in Prelude
+
+- **Decision**: Re-export `pdf::Orientation` as `PdfOrientation` in the prelude
+  to avoid a name collision with `bar::Orientation`.
+- **Reasoning**: Both types have the same name but different semantics (page
+  orientation vs bar chart orientation).  Aliasing is cleaner than removing one
+  from the prelude.
+- **Trade-off**: Users who import both must use the alias or qualified paths.
+- **Future**: If more orientation-like types appear, a unified
+  `gup::Orientation` enum with more variants might be warranted.
+
+#### Font Embedding at Document Level
+
+- **Decision**: Font embedding happens once in `PdfDocument::new()`, not per
+  page.
+- **Reasoning**: Font resources are shared across all pages in a PDF.  Loading
+  fonts once avoids duplicate work and ensures consistent font IDs.
+- **Trade-off**: The `PdfRenderer` used standalone (without `PdfDocument`) uses
+  built-in fonts only.  Users needing embedded fonts should use `PdfDocument`.
+- **Future**: Could add a `PdfRenderer::embed_font()` method for standalone use.
+
+### Development Workflow Insights
+
+- **Disk space**: The `/tmp` partition filled up during the initial build because
+  the cargo target directory was on tmpfs.  Cleaning `/tmp/gup-target` and
+  rebuilding freed ~60 GB.  Setting `CARGO_TARGET_DIR=/tmp/gup-target` and using
+  a symlink kept builds working.
+
+- **Feature-flag testing**: Testing both `cargo check` and
+  `cargo check --features pdf` is essential for every commit to prevent
+  feature-flag leakage.  The `required-features` field in `Cargo.toml` for
+  examples prevents them from failing in the default build.
+
+- **printpdf type mismatch**: The `ParsedFont::from_bytes` signature differs
+  between printpdf's default and `text_layout` feature configurations — it takes
+  `u32` without `text_layout` but `usize` with it.  `fontdb::with_face_data`
+  gives `u32`, so a cast is needed when text_layout is enabled.
+
+### Follow-up Stories
+
+No new follow-up stories identified during implementation.  The PDF export is
+self-contained and the existing SVG intermediate from GUP-266 proved to be a
+clean integration point.
