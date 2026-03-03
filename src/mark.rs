@@ -44,6 +44,9 @@
 //! | [`Path`] | [`path`] | SVG-like path with GPU tessellation |
 //! | [`GeoPathMark`] | [`geo_path`] | GeoJSON polygon with geographic projection |
 //! | [`CompositeMark`] | [`composite`] | Grouped sub-marks |
+//! | [`Sphere3D`] | [`sphere3d`] | 3D billboard sphere with Phong lighting |
+//! | [`Box3D`] | [`box3d`] | 3D axis-aligned box with Phong lighting |
+//! | [`Line3D`] | [`line3d`] | 3D line segment (camera-facing quad) |
 //!
 //! # Quick Start
 //!

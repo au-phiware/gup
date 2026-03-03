@@ -35,7 +35,13 @@ pub use crate::pipeline_cache::PipelineCache;
 pub use crate::selection::{Mark, Selection};
 
 // Mark types
+pub use crate::mark::{Box3D, Line3D, Sphere3D};
 pub use crate::{BoxPlot, Circle, Line, Rectangle};
+
+// 3D rendering support
+pub use crate::camera::{Camera, CameraUniform};
+pub use crate::depth::{DEPTH_FORMAT, DepthBuffer};
+pub use crate::lighting::{LightUniform, Material};
 
 // Mark validation and profiling
 pub use crate::mark::validation::{MarkProfiler, MarkValidator, assert_mark_valid};
