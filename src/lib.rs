@@ -83,6 +83,7 @@ pub mod depth;
 pub mod error;
 pub mod event;
 pub mod examples;
+pub mod export;
 pub mod grid;
 pub mod integration;
 pub mod interaction;
