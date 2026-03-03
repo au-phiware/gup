@@ -16,7 +16,8 @@ pub use crate::chart_builder::{
     accessor::{AccessorValue, ConstantAccessor, FieldAccessor, color, size, x, y},
     builders::{
         AccessorFunction, AreaChartBuilder, BarChartBuilder, ConfigurableBuilder,
-        GridCapableBuilder, HeatmapBuilder, LineChartBuilder, ScatterPlotBuilder, area, bar,
+        GridCapableBuilder, HeatmapBuilder, LineChartBuilder, LineInterpolation, LineSegment,
+        ScatterPlotBuilder, area, bar,
         bar::{Category, Orientation},
         heatmap, line, scatter,
     },

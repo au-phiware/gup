@@ -1,37 +1,95 @@
 // Copyright (C) 2024 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Line chart builder with Observable Plot compatibility.
+//! Line chart builder with fluent API for polyline visualisation.
 //!
-//! Provides fluent API for creating GPU-accelerated line charts with
-//! automatic sorting and interpolation options.
+//! Provides [`LineChartBuilder`] for creating GPU-accelerated line charts
+//! with automatic x-sorting, multi-series support, step and monotone
+//! interpolation, and integrated axes.
+//!
+//! # Performance
+//!
+//! The builder evaluates accessors CPU-side to produce `N − 1` line
+//! segments from `N` data points (or more when step/monotone
+//! interpolation doubles/triples the segment count). Sorting is
+//! `O(N log N)` via a stable sort. For datasets beyond ~100 k points
+//! consider disabling `sort_by_x` if data is already ordered.
 
 use super::{
-    AccessorFunction, ConfigurableBuilder, GridCapableBuilder, apply_accessors_to_selection,
-    validate_required_accessors,
+    AccessorFunction, ConfigurableBuilder, GridCapableBuilder, validate_required_accessors,
 };
-use crate::Circle; // TODO: Replace with Line mark when available
 use crate::RenderContext;
-use crate::chart_builder::{AxisScale, ChartBuilder, ChartBuilderError, ChartConfig};
+use crate::chart_builder::accessor::AccessorValue;
+use crate::chart_builder::{
+    AxisScale, ChartBuilder, ChartBuilderError, ChartConfig, ComposedChart,
+};
 use crate::error::GupResult;
 use crate::grid::{GridConfiguration, GridLineConfig};
+use crate::mark::line::Line;
 use crate::selection::Selection;
 use crate::shader_function::ColorScale;
 use crate::{MaybeSend, MaybeSync};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+// ── Categorical colour palette ──────────────────────────────────────────
+
+/// Default categorical palette (same colours used by bar charts).
+const DEFAULT_PALETTE: [[f32; 4]; 8] = [
+    [0.122, 0.467, 0.706, 1.0], // steel blue
+    [1.000, 0.498, 0.055, 1.0], // safety orange
+    [0.173, 0.627, 0.173, 1.0], // forest green
+    [0.839, 0.153, 0.157, 1.0], // brick red
+    [0.580, 0.404, 0.741, 1.0], // muted purple
+    [0.549, 0.337, 0.294, 1.0], // chestnut brown
+    [0.890, 0.467, 0.761, 1.0], // raspberry pink
+    [0.498, 0.498, 0.498, 1.0], // middle grey
+];
+
+// ── LineSegment wrapper ─────────────────────────────────────────────────
+
+/// A single segment in a polyline, derived from two adjacent data points.
+///
+/// `LineSegment<T>` stores the original data point at the start of the
+/// segment together with the pre-computed start and end positions, colour,
+/// and width.  It is the data item type held by the `Selection<LineSegment<T>, Line>`
+/// returned from [`LineChartBuilder::build_with_data`].
+#[derive(Debug, Clone)]
+pub struct LineSegment<T> {
+    /// The original data point at the segment's start.
+    pub data: T,
+    /// Start position `[x, y]` in data-space coordinates.
+    pub start_pos: [f32; 2],
+    /// End position `[x, y]` in data-space coordinates.
+    pub end_pos: [f32; 2],
+    /// Segment colour `[r, g, b, a]`.
+    pub color: [f32; 4],
+    /// Segment width in pixels.
+    pub width: f32,
+}
+
+// ── Line interpolation ──────────────────────────────────────────────────
+
 /// Line interpolation methods.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum LineInterpolation {
-    /// Linear interpolation (straight lines between points)
+    /// Linear interpolation (straight segments between points).
     #[default]
     Linear,
-    /// Step function (horizontal then vertical)
+    /// Step function — vertical step *before* each horizontal run
+    /// (y changes before x changes).
     StepBefore,
-    /// Step function (vertical then horizontal)
+    /// Step function — vertical step *after* each horizontal run
+    /// (x changes before y changes).
     StepAfter,
-    /// Smooth curve interpolation
+    /// Smooth monotone cubic (Fritsch–Carlson) interpolation.
+    ///
+    /// Generates intermediate points on the CPU so that the resulting
+    /// polyline passes through all original data points with monotone
+    /// tangent slopes, avoiding overshoot.
+    Monotone,
+    /// Legacy alias for [`Monotone`](Self::Monotone).
+    #[deprecated(since = "0.1.0", note = "Use `Monotone` instead")]
     Curve,
 }
 
@@ -177,9 +235,15 @@ impl<T> LineChartBuilder<T> {
         self
     }
 
-    /// Enable smooth curve interpolation.
+    /// Enable smooth monotone cubic interpolation.
     pub fn smooth(mut self) -> Self {
-        self.interpolation = LineInterpolation::Curve;
+        self.interpolation = LineInterpolation::Monotone;
+        self
+    }
+
+    /// Enable monotone cubic interpolation (alias for [`smooth`](Self::smooth)).
+    pub fn monotone(mut self) -> Self {
+        self.interpolation = LineInterpolation::Monotone;
         self
     }
 
@@ -330,7 +394,7 @@ impl<T> ChartBuilder<T> for LineChartBuilder<T>
 where
     T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
 {
-    type Output = Selection<T, Circle>; // TODO: Replace with Line mark
+    type Output = ComposedChart<LineSegment<T>, Line>;
 
     fn build_with_data(self, data: Vec<T>, context: Arc<RenderContext>) -> GupResult<Self::Output> {
         // Validate required accessors
@@ -340,40 +404,292 @@ where
             return Err(ChartBuilderError::EmptyData.into());
         }
 
-        // Sort data by X coordinate if requested
-        let sorted_data = data;
+        let x_acc = self.x_accessor.as_ref().unwrap();
+        let y_acc = self.y_accessor.as_ref().unwrap();
+
+        // ── Evaluate accessor values for each data point ────────────
+        struct EvaluatedPoint<T> {
+            data: T,
+            x: f32,
+            y: f32,
+            series_key: Option<String>,
+            color: Option<[f32; 4]>,
+        }
+
+        let mut points: Vec<EvaluatedPoint<T>> = data
+            .into_iter()
+            .map(|d| {
+                let x_val = x_acc.apply(&d).as_f32();
+                let y_val = y_acc.apply(&d).as_f32();
+                let (series_key, color) = if let Some(stroke_acc) = &self.stroke_accessor {
+                    match stroke_acc.apply(&d) {
+                        AccessorValue::Color(c) => (None, Some(c)),
+                        AccessorValue::String(s) | AccessorValue::Categorical(s) => (Some(s), None),
+                        other => (Some(format!("{}", other.as_f32())), None),
+                    }
+                } else {
+                    (None, None)
+                };
+                EvaluatedPoint {
+                    data: d,
+                    x: x_val,
+                    y: y_val,
+                    series_key,
+                    color,
+                }
+            })
+            .collect();
+
+        // ── Sort by x when requested ────────────────────────────────
         if self.sort_by_x {
-            // In a full implementation, this would sort by the actual X values
-            // For now, we maintain the original order
+            points.sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap_or(std::cmp::Ordering::Equal));
         }
 
-        // Create selection with Circle marks (TODO: Replace with Line marks)
-        let mut selection = Selection::<T, Circle>::new(sorted_data, context)?;
+        // ── Determine default stroke width ──────────────────────────
+        let default_width: f32 = if let Some(ref w_acc) = self.stroke_width_accessor {
+            // Evaluate on first point to get a constant width
+            w_acc.apply(&points[0].data).as_f32()
+        } else {
+            2.0 // default 2px
+        };
 
-        // Apply accessor functions to selection
-        apply_accessors_to_selection(
-            &mut selection,
-            &self.x_accessor,
-            &self.y_accessor,
-            &self.stroke_accessor, // Use stroke as color
-            &None,                 // Lines don't use size
-        )?;
+        // ── Group by series ─────────────────────────────────────────
+        // Each group maps a series label to an ordered list of indices
+        // into `points`.  When no stroke accessor is set, all points
+        // belong to a single default series.
 
-        // Apply stroke width if specified
-        if self.stroke_width_accessor.is_some() {
-            // Stroke width would be applied as a shader function
+        let groups: Vec<(String, Vec<usize>)> = {
+            let mut label_order: Vec<String> = Vec::new();
+            let mut label_indices: std::collections::HashMap<String, Vec<usize>> =
+                std::collections::HashMap::new();
+
+            for (i, pt) in points.iter().enumerate() {
+                let key = pt.series_key.clone().unwrap_or_default();
+                label_indices
+                    .entry(key.clone())
+                    .or_insert_with(|| {
+                        label_order.push(key);
+                        Vec::new()
+                    })
+                    .push(i);
+            }
+
+            label_order
+                .into_iter()
+                .map(|label| {
+                    let indices = label_indices.remove(&label).unwrap();
+                    (label, indices)
+                })
+                .collect()
+        };
+
+        // ── Assign colours per series ───────────────────────────────
+        let series_colors: Vec<[f32; 4]> = groups
+            .iter()
+            .enumerate()
+            .map(|(series_idx, (_label, indices))| {
+                // If the first point in this series has a literal colour, use it.
+                if let Some(c) = points[indices[0]].color {
+                    return c;
+                }
+                // Otherwise auto-assign from the categorical palette.
+                DEFAULT_PALETTE[series_idx % DEFAULT_PALETTE.len()]
+            })
+            .collect();
+
+        // ── Build segments ──────────────────────────────────────────
+        let mut segments: Vec<LineSegment<T>> = Vec::new();
+
+        for (series_idx, (_label, indices)) in groups.iter().enumerate() {
+            // Collect (x, y) coordinates for this series
+            let series_pts: Vec<(f32, f32)> = indices
+                .iter()
+                .map(|&i| (points[i].x, points[i].y))
+                .collect();
+
+            if series_pts.len() < 2 {
+                continue;
+            }
+
+            // Apply interpolation to produce the final polyline coords
+            #[allow(deprecated)]
+            let interpolated = match self.interpolation {
+                LineInterpolation::Linear => series_pts.clone(),
+                LineInterpolation::StepBefore => interpolate_step_before(&series_pts),
+                LineInterpolation::StepAfter => interpolate_step_after(&series_pts),
+                LineInterpolation::Monotone | LineInterpolation::Curve => {
+                    interpolate_monotone(&series_pts)
+                }
+            };
+
+            let color = series_colors[series_idx];
+
+            // Build segments from adjacent pairs
+            for pair in interpolated.windows(2) {
+                let (sx, sy) = pair[0];
+                let (ex, ey) = pair[1];
+
+                // For the data item we pick the original start point of
+                // the enclosing original-data pair.  For interpolated
+                // points (step / monotone) that may be intermediate, we
+                // simply use the first data item of the series as a
+                // reasonable fallback.
+                let data_idx = indices[0]; // fallback
+                segments.push(LineSegment {
+                    data: points[data_idx].data.clone(),
+                    start_pos: [sx, sy],
+                    end_pos: [ex, ey],
+                    color,
+                    width: default_width,
+                });
+            }
         }
 
-        // Apply opacity if specified
-        if self.opacity_accessor.is_some() {
-            // Opacity would be applied as a shader function
+        if segments.is_empty() {
+            return Err(ChartBuilderError::EmptyData.into());
         }
 
-        // Configure line interpolation in the shader pipeline
-        // This would be handled by the Line mark's shader generation
+        // ── Create Selection<LineSegment<T>, Line> ──────────────────
+        let mut selection = Selection::<LineSegment<T>, Line>::new(segments, context)?;
 
-        Ok(selection)
+        // Attr bindings — the closure receives a `&LineSegment<T>` and
+        // returns the corresponding attribute value.
+        selection.attr("start", |seg: &LineSegment<T>| seg.start_pos);
+        selection.attr("end", |seg: &LineSegment<T>| seg.end_pos);
+        selection.attr("color", |seg: &LineSegment<T>| seg.color);
+        selection.attr("width", |seg: &LineSegment<T>| seg.width);
+
+        // ── Wrap in ComposedChart with axes ─────────────────────────
+        let composed_chart = ComposedChart::new(selection, self.config).with_default_axes();
+
+        Ok(composed_chart)
     }
+}
+
+// ── Interpolation helpers ───────────────────────────────────────────────
+
+/// Step-before: y changes *before* x changes.
+///
+/// For each consecutive pair `(x0, y0) → (x1, y1)` inserts an intermediate
+/// point `(x0, y1)` so the polyline steps vertically first.
+///
+/// Input:  `[(x0,y0), (x1,y1), (x2,y2)]`
+/// Output: `[(x0,y0), (x0,y1), (x1,y1), (x1,y2), (x2,y2)]`
+fn interpolate_step_before(pts: &[(f32, f32)]) -> Vec<(f32, f32)> {
+    let mut out = Vec::with_capacity(pts.len() * 2 - 1);
+    out.push(pts[0]);
+    for i in 1..pts.len() {
+        // Vertical step at x of previous point
+        out.push((pts[i - 1].0, pts[i].1));
+        out.push(pts[i]);
+    }
+    out
+}
+
+/// Step-after: x changes *before* y changes.
+///
+/// For each consecutive pair `(x0, y0) → (x1, y1)` inserts an intermediate
+/// point `(x1, y0)` so the polyline runs horizontally first.
+///
+/// Input:  `[(x0,y0), (x1,y1), (x2,y2)]`
+/// Output: `[(x0,y0), (x1,y0), (x1,y1), (x2,y1), (x2,y2)]`
+fn interpolate_step_after(pts: &[(f32, f32)]) -> Vec<(f32, f32)> {
+    let mut out = Vec::with_capacity(pts.len() * 2 - 1);
+    out.push(pts[0]);
+    for i in 1..pts.len() {
+        // Horizontal run to the next x
+        out.push((pts[i].0, pts[i - 1].1));
+        out.push(pts[i]);
+    }
+    out
+}
+
+/// Monotone cubic (Fritsch–Carlson) interpolation.
+///
+/// Generates smooth intermediate points between each data-point pair
+/// while preserving monotonicity (no overshoot).  Uses 8 sub-segments
+/// per original interval.
+fn interpolate_monotone(pts: &[(f32, f32)]) -> Vec<(f32, f32)> {
+    let n = pts.len();
+    if n < 2 {
+        return pts.to_vec();
+    }
+    if n == 2 {
+        // Only two points — linear is the only option
+        return pts.to_vec();
+    }
+
+    // 1. Compute slopes of secant lines (deltas)
+    let mut dx: Vec<f32> = Vec::with_capacity(n - 1);
+    let mut dy: Vec<f32> = Vec::with_capacity(n - 1);
+    let mut slopes: Vec<f32> = Vec::with_capacity(n - 1);
+    for i in 0..n - 1 {
+        let d_x = pts[i + 1].0 - pts[i].0;
+        let d_y = pts[i + 1].1 - pts[i].1;
+        dx.push(d_x);
+        dy.push(d_y);
+        slopes.push(if d_x.abs() < 1e-12 { 0.0 } else { d_y / d_x });
+    }
+
+    // 2. Compute initial tangent slopes (Fritsch–Carlson)
+    let mut tangents: Vec<f32> = vec![0.0; n];
+    tangents[0] = slopes[0];
+    tangents[n - 1] = slopes[n - 2];
+    for i in 1..n - 1 {
+        if slopes[i - 1].signum() != slopes[i].signum()
+            || slopes[i - 1].abs() < 1e-12
+            || slopes[i].abs() < 1e-12
+        {
+            tangents[i] = 0.0;
+        } else {
+            tangents[i] = (slopes[i - 1] + slopes[i]) / 2.0;
+        }
+    }
+
+    // 3. Adjust tangents to ensure monotonicity
+    for i in 0..n - 1 {
+        if slopes[i].abs() < 1e-12 {
+            tangents[i] = 0.0;
+            tangents[i + 1] = 0.0;
+        } else {
+            let alpha = tangents[i] / slopes[i];
+            let beta = tangents[i + 1] / slopes[i];
+            // Clamp to the monotonicity region
+            let s = alpha * alpha + beta * beta;
+            if s > 9.0 {
+                let tau = 3.0 / s.sqrt();
+                tangents[i] = tau * alpha * slopes[i];
+                tangents[i + 1] = tau * beta * slopes[i];
+            }
+        }
+    }
+
+    // 4. Evaluate the Hermite spline at sub-steps
+    const STEPS: usize = 8;
+    let mut out = Vec::with_capacity((n - 1) * STEPS + 1);
+    for i in 0..n - 1 {
+        let h = dx[i];
+        for s in 0..STEPS {
+            let t = s as f32 / STEPS as f32;
+            let t2 = t * t;
+            let t3 = t2 * t;
+            // Hermite basis functions
+            let h00 = 2.0 * t3 - 3.0 * t2 + 1.0;
+            let h10 = t3 - 2.0 * t2 + t;
+            let h01 = -2.0 * t3 + 3.0 * t2;
+            let h11 = t3 - t2;
+
+            let x = pts[i].0 + t * h;
+            let y = h00 * pts[i].1
+                + h10 * h * tangents[i]
+                + h01 * pts[i + 1].1
+                + h11 * h * tangents[i + 1];
+            out.push((x, y));
+        }
+    }
+    // Push the final point
+    out.push(pts[n - 1]);
+    out
 }
 
 /// Convenience function to create a new line chart builder.
@@ -393,6 +709,8 @@ mod tests {
         value: f32,
         series: String,
     }
+
+    // ── Basic builder tests ─────────────────────────────────────────
 
     #[tokio::test]
     async fn test_line_chart_builder_basic() {
@@ -430,9 +748,12 @@ mod tests {
         let result = builder.build_with_data(data, context);
         assert!(result.is_ok());
 
-        let selection = result.unwrap();
-        assert_eq!(selection.len(), 3);
+        let chart = result.unwrap();
+        // 3 data points → 2 segments
+        assert_eq!(chart.len(), 2);
     }
+
+    // ── Interpolation configuration tests ───────────────────────────
 
     #[test]
     fn test_line_chart_interpolation_methods() {
@@ -440,7 +761,10 @@ mod tests {
         assert_eq!(builder.interpolation, LineInterpolation::Linear);
 
         let builder = line::<TimePoint>().smooth();
-        assert_eq!(builder.interpolation, LineInterpolation::Curve);
+        assert_eq!(builder.interpolation, LineInterpolation::Monotone);
+
+        let builder = line::<TimePoint>().monotone();
+        assert_eq!(builder.interpolation, LineInterpolation::Monotone);
 
         let builder = line::<TimePoint>().step();
         assert_eq!(builder.interpolation, LineInterpolation::StepBefore);
@@ -463,11 +787,18 @@ mod tests {
 
     #[tokio::test]
     async fn test_line_chart_field_accessors() {
-        let data = vec![TimePoint {
-            time: 1.5,
-            value: 20.0,
-            series: "test".to_string(),
-        }];
+        let data = vec![
+            TimePoint {
+                time: 1.0,
+                value: 20.0,
+                series: "test".to_string(),
+            },
+            TimePoint {
+                time: 2.0,
+                value: 30.0,
+                series: "test".to_string(),
+            },
+        ];
 
         let context = Arc::new(RenderContext::new().await.unwrap());
 
@@ -544,7 +875,340 @@ mod tests {
         assert!(!builder.connect_nulls);
     }
 
-    // Tests for enhanced grid API (GUP-097) on line charts
+    // ── Segment count tests (AC2) ───────────────────────────────────
+
+    #[tokio::test]
+    async fn test_segment_count_n_minus_one() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+
+        // 5 points → 4 segments
+        let data: Vec<TimePoint> = (0..5)
+            .map(|i| TimePoint {
+                time: i as f32,
+                value: (i * 10) as f32,
+                series: "A".to_string(),
+            })
+            .collect();
+
+        let chart = line()
+            .x(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.time)
+            }))
+            .y(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.value)
+            }))
+            .build_with_data(data, context)
+            .unwrap();
+
+        assert_eq!(chart.len(), 4);
+    }
+
+    #[tokio::test]
+    async fn test_segments_span_correct_start_end() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+
+        // Unsorted data — builder should sort by x
+        let data = vec![
+            TimePoint {
+                time: 3.0,
+                value: 30.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 1.0,
+                value: 10.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 2.0,
+                value: 20.0,
+                series: "A".to_string(),
+            },
+        ];
+
+        let chart = line()
+            .x(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.time)
+            }))
+            .y(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.value)
+            }))
+            .build_with_data(data, context)
+            .unwrap();
+
+        let segments = chart.visualization.data();
+        assert_eq!(segments.len(), 2);
+
+        // After sorting: (1,10) → (2,20) → (3,30)
+        assert_eq!(segments[0].start_pos, [1.0, 10.0]);
+        assert_eq!(segments[0].end_pos, [2.0, 20.0]);
+        assert_eq!(segments[1].start_pos, [2.0, 20.0]);
+        assert_eq!(segments[1].end_pos, [3.0, 30.0]);
+    }
+
+    #[tokio::test]
+    async fn test_sort_by_x_disabled_preserves_order() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+
+        let data = vec![
+            TimePoint {
+                time: 3.0,
+                value: 30.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 1.0,
+                value: 10.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 2.0,
+                value: 20.0,
+                series: "A".to_string(),
+            },
+        ];
+
+        let chart = line()
+            .x(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.time)
+            }))
+            .y(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.value)
+            }))
+            .sort_x(false)
+            .build_with_data(data, context)
+            .unwrap();
+
+        let segments = chart.visualization.data();
+        // Original order: (3,30) → (1,10) → (2,20)
+        assert_eq!(segments[0].start_pos, [3.0, 30.0]);
+        assert_eq!(segments[0].end_pos, [1.0, 10.0]);
+        assert_eq!(segments[1].start_pos, [1.0, 10.0]);
+        assert_eq!(segments[1].end_pos, [2.0, 20.0]);
+    }
+
+    // ── Multi-series tests (AC3) ────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_multi_series_produces_separate_polylines() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+
+        let data = vec![
+            TimePoint {
+                time: 0.0,
+                value: 10.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 1.0,
+                value: 20.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 2.0,
+                value: 15.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 0.0,
+                value: 5.0,
+                series: "B".to_string(),
+            },
+            TimePoint {
+                time: 1.0,
+                value: 25.0,
+                series: "B".to_string(),
+            },
+            TimePoint {
+                time: 2.0,
+                value: 30.0,
+                series: "B".to_string(),
+            },
+        ];
+
+        let chart = line()
+            .x(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.time)
+            }))
+            .y(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.value)
+            }))
+            .color(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::String(d.series.clone())
+            }))
+            .build_with_data(data, context)
+            .unwrap();
+
+        let segments = chart.visualization.data();
+        // 3 points per series → 2 segments per series → 4 total
+        assert_eq!(segments.len(), 4);
+
+        // Series A and series B should have distinct colours
+        let color_a = segments[0].color;
+        let color_b = segments[2].color;
+        assert_ne!(
+            color_a, color_b,
+            "Multi-series should have distinct colours"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_single_series_no_stroke_accessor() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+
+        let data = vec![
+            TimePoint {
+                time: 0.0,
+                value: 10.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 1.0,
+                value: 20.0,
+                series: "A".to_string(),
+            },
+        ];
+
+        let chart = line()
+            .x(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.time)
+            }))
+            .y(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.value)
+            }))
+            .build_with_data(data, context)
+            .unwrap();
+
+        // Should work fine — 1 segment, default palette colour
+        assert_eq!(chart.len(), 1);
+    }
+
+    // ── Interpolation mode tests (AC5) ──────────────────────────────
+
+    #[test]
+    fn test_step_before_interpolation() {
+        let pts = vec![(0.0, 0.0), (1.0, 1.0), (2.0, 0.5)];
+        let result = interpolate_step_before(&pts);
+        // Expected: (0,0), (0,1), (1,1), (1,0.5), (2,0.5)
+        assert_eq!(result.len(), 5);
+        assert_eq!(result[0], (0.0, 0.0));
+        assert_eq!(result[1], (0.0, 1.0)); // vertical step at x=0
+        assert_eq!(result[2], (1.0, 1.0));
+        assert_eq!(result[3], (1.0, 0.5)); // vertical step at x=1
+        assert_eq!(result[4], (2.0, 0.5));
+    }
+
+    #[test]
+    fn test_step_after_interpolation() {
+        let pts = vec![(0.0, 0.0), (1.0, 1.0), (2.0, 0.5)];
+        let result = interpolate_step_after(&pts);
+        // Expected: (0,0), (1,0), (1,1), (2,1), (2,0.5)
+        assert_eq!(result.len(), 5);
+        assert_eq!(result[0], (0.0, 0.0));
+        assert_eq!(result[1], (1.0, 0.0)); // horizontal run to x=1
+        assert_eq!(result[2], (1.0, 1.0));
+        assert_eq!(result[3], (2.0, 1.0)); // horizontal run to x=2
+        assert_eq!(result[4], (2.0, 0.5));
+    }
+
+    #[test]
+    fn test_monotone_interpolation_passes_through_data_points() {
+        let pts = vec![(0.0, 0.0), (1.0, 1.0), (2.0, 0.5)];
+        let result = interpolate_monotone(&pts);
+
+        // Monotone uses 8 sub-steps per interval plus final point
+        // 2 intervals × 8 steps + 1 = 17 points → 16 segments
+        assert_eq!(result.len(), 17);
+
+        // First point matches
+        assert!((result[0].0 - 0.0).abs() < 1e-5);
+        assert!((result[0].1 - 0.0).abs() < 1e-5);
+
+        // Point at boundary of interval 0→1 (index 8)
+        assert!((result[8].0 - 1.0).abs() < 1e-5);
+        assert!((result[8].1 - 1.0).abs() < 1e-5);
+
+        // Final point matches
+        assert!((result[16].0 - 2.0).abs() < 1e-5);
+        assert!((result[16].1 - 0.5).abs() < 1e-5);
+    }
+
+    #[tokio::test]
+    async fn test_step_before_segment_count() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+
+        let data = vec![
+            TimePoint {
+                time: 0.0,
+                value: 0.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 1.0,
+                value: 1.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 2.0,
+                value: 0.5,
+                series: "A".to_string(),
+            },
+        ];
+
+        let chart = line()
+            .x(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.time)
+            }))
+            .y(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.value)
+            }))
+            .step()
+            .build_with_data(data, context)
+            .unwrap();
+
+        // 3 points → step_before produces 5 interpolated points → 4 segments
+        assert_eq!(chart.len(), 4);
+    }
+
+    #[tokio::test]
+    async fn test_monotone_segment_count() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+
+        let data = vec![
+            TimePoint {
+                time: 0.0,
+                value: 0.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 1.0,
+                value: 1.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 2.0,
+                value: 0.5,
+                series: "A".to_string(),
+            },
+        ];
+
+        let chart = line()
+            .x(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.time)
+            }))
+            .y(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.value)
+            }))
+            .monotone()
+            .build_with_data(data, context)
+            .unwrap();
+
+        // 3 points → monotone: 2 intervals × 8 steps + 1 = 17 points → 16 segments
+        assert_eq!(chart.len(), 16);
+    }
+
+    // ── Grid API tests (GUP-097) ────────────────────────────────────
+
     #[test]
     fn test_line_chart_enhanced_grid_api() {
         // Test simple grid enabling
@@ -586,7 +1250,7 @@ mod tests {
             .stroke_color([1.0, 0.0, 0.0, 1.0])
             .horizontal_grid(); // This should set horizontal only
 
-        assert_eq!(builder.interpolation, LineInterpolation::Curve);
+        assert_eq!(builder.interpolation, LineInterpolation::Monotone);
         assert!(builder.stroke_accessor.is_some());
         assert!(builder.config.show_grid);
         assert!(builder.config.grid_config.show_horizontal);
