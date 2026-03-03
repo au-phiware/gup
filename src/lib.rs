@@ -74,6 +74,7 @@ pub mod axis_performance;
 pub mod axis_system;
 pub mod brush;
 pub mod buffer;
+pub mod camera;
 pub mod chart_builder;
 pub mod color_descriptor;
 pub mod context;
