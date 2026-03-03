@@ -7,7 +7,7 @@
 //! Phong lighting, and an orbiting camera animation.
 
 use gup::GupContext;
-use gup::camera::{Camera, CameraUniform};
+use gup::camera::Camera;
 use gup::depth::{DEPTH_FORMAT, DepthBuffer};
 use gup::lighting::{LightUniform, Material};
 use gup::mark::Mark;
@@ -82,8 +82,10 @@ struct GpuResources {
     pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
+    #[allow(dead_code)]
     instance_buffer: wgpu::Buffer,
     camera_buffer: wgpu::Buffer,
+    #[allow(dead_code)]
     light_buffer: wgpu::Buffer,
     instance_bind_group: wgpu::BindGroup,
     uniform_bind_group: wgpu::BindGroup,
