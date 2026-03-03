@@ -706,7 +706,7 @@ integration, pipeline caching.
 - [GUP-246](GUP-246_Line_Chart_Builder.md) ✅ — LineChartBuilder with
   multi-series support, automatic x-sorting, point markers, and four curve
   interpolation modes. Deps: GUP-018 ✅, GUP-067 ✅, GUP-093 ✅, GUP-168 ✅.
-- [GUP-247](GUP-247_Area_Chart_Builder.md) 🚧 — AreaChartBuilder with stacked,
+- [GUP-247](GUP-247_Area_Chart_Builder.md) ✅ — AreaChartBuilder with stacked,
   normalized-stacked, gradient-fill, and band/ribbon area variants via
   tessellated path polygons. Deps: GUP-018 ✅, GUP-246 ✅, GUP-132 ✅.
 - [GUP-248](GUP-248_Heatmap_Chart_Builder.md) ✅ — HeatmapChartBuilder with
@@ -736,9 +736,9 @@ integration, pipeline caching.
   ✅, GUP-014 ✅.
 - [GUP-295](GUP-295_Line_Chart_Point_Markers.md) 💡 — Optional circle point
   markers at each data vertex on line charts. Deps: GUP-246 ✅, GUP-251 📋.
-- [GUP-296](GUP-296_Colorbar_Axis_Renderer.md) 📋 — Colorbar axis renderer:
-  thin gradient-filled rectangle with tick marks and labels for colour-scale
-  legends. Deps: GUP-248 ✅, GUP-093 ✅, GUP-255 ✅.
+- [GUP-296](GUP-296_Colorbar_Axis_Renderer.md) 📋 — Colorbar axis renderer: thin
+  gradient-filled rectangle with tick marks and labels for colour-scale legends.
+  Deps: GUP-248 ✅, GUP-093 ✅, GUP-255 ✅.
 
 ## Performance & Profiling
 
@@ -767,8 +767,8 @@ profiling, trend visualisation.
   render_marks_tracked(&mut self, ...) variant to MarkRenderer that
   automatically….
 - [GUP-297](GUP-297_GPU_Compute_Shader_2D_Binning.md) 📋 — GPU compute shader
-  for 2D heatmap binning of 10M+ row datasets, with CPU fallback. Deps:
-  GUP-248 ✅.
+  for 2D heatmap binning of 10M+ row datasets, with CPU fallback. Deps: GUP-248
+  ✅.
 
 ## Debug & Development Tools
 
