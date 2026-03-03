@@ -86,6 +86,7 @@ pub mod integration;
 pub mod interaction;
 pub mod label;
 pub mod linked_selection;
+pub mod lod;
 pub mod mark;
 pub mod mark_selection;
 pub mod math;
