@@ -216,7 +216,6 @@ fn heatmap_builder_api_compiles() {
 
 #[test]
 fn from_grid_api_compiles() {
-    use gup::chart_builder::builders::ConfigurableBuilder;
     use gup::chart_builder::builders::heatmap::{HeatmapBuilder, HeatmapCell};
 
     let cells = vec![

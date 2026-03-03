@@ -7,10 +7,10 @@
 ## Context
 
 GUP-261 delivered Sphere3D, Box3D, and Line3D marks with unit tests for geometry
-and bytemuck layout. However, it lacks a GPU-level integration test that actually
-renders instances through the full wgpu pipeline and verifies the output. Such a
-test would catch shader compilation errors, bind-group mismatches, and depth
-buffer issues in CI.
+and bytemuck layout. However, it lacks a GPU-level integration test that
+actually renders instances through the full wgpu pipeline and verifies the
+output. Such a test would catch shader compilation errors, bind-group
+mismatches, and depth buffer issues in CI.
 
 ## User Story
 

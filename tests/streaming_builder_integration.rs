@@ -8,8 +8,8 @@ use gup::mark::circle::Circle;
 use gup::render::RenderContext;
 use gup::selection::Selection;
 use gup::streaming::{BackpressureStrategy, DataStream, StreamMode};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Helper to obtain a wgpu device and queue for GPU tests.
 async fn test_device() -> (wgpu::Device, wgpu::Queue) {

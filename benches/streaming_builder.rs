@@ -11,8 +11,8 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use gup::render::RenderContext;
 use gup::streaming::{BackpressureStrategy, DataStream, StreamMode};
 use std::hint::black_box;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::runtime::Runtime;
 
 /// Benchmark: full builder chain → DataStream construction.

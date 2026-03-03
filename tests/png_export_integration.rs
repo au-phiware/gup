@@ -84,8 +84,7 @@ async fn test_render_to_png_produces_valid_png() {
     );
 
     // Decode with the image crate and verify dimensions.
-    let decoded =
-        image::load_from_memory_with_format(&png_bytes, image::ImageFormat::Png).unwrap();
+    let decoded = image::load_from_memory_with_format(&png_bytes, image::ImageFormat::Png).unwrap();
     assert_eq!(decoded.width(), 800);
     assert_eq!(decoded.height(), 600);
 }
@@ -98,8 +97,7 @@ async fn test_render_to_png_scaled_2x() {
 
     let png_bytes = chart.render_to_png_scaled(400, 300, 2.0).unwrap();
 
-    let decoded =
-        image::load_from_memory_with_format(&png_bytes, image::ImageFormat::Png).unwrap();
+    let decoded = image::load_from_memory_with_format(&png_bytes, image::ImageFormat::Png).unwrap();
     assert_eq!(decoded.width(), 800);
     assert_eq!(decoded.height(), 600);
 }
@@ -115,8 +113,7 @@ async fn test_render_to_png_scaled_1x_matches_base() {
 
     // Both should produce the same dimensions.
     let dec_base = image::load_from_memory_with_format(&base, image::ImageFormat::Png).unwrap();
-    let dec_scaled =
-        image::load_from_memory_with_format(&scaled, image::ImageFormat::Png).unwrap();
+    let dec_scaled = image::load_from_memory_with_format(&scaled, image::ImageFormat::Png).unwrap();
     assert_eq!(dec_base.width(), dec_scaled.width());
     assert_eq!(dec_base.height(), dec_scaled.height());
 }
@@ -154,14 +151,9 @@ async fn test_png_has_rgba_channels() {
 
     let png_bytes = chart.render_to_png(200, 150).unwrap();
 
-    let decoded =
-        image::load_from_memory_with_format(&png_bytes, image::ImageFormat::Png).unwrap();
+    let decoded = image::load_from_memory_with_format(&png_bytes, image::ImageFormat::Png).unwrap();
     let rgba = decoded.to_rgba8();
-    assert_eq!(
-        rgba.len(),
-        200 * 150 * 4,
-        "RGBA buffer has wrong size"
-    );
+    assert_eq!(rgba.len(), 200 * 150 * 4, "RGBA buffer has wrong size");
 }
 
 /// Test rendering at a non-aligned width (triggers row-padding logic).
@@ -173,8 +165,7 @@ async fn test_render_to_png_non_aligned_width() {
     // 100 pixels wide → 400 bytes/row, padded to 512; exercises stripping.
     let png_bytes = chart.render_to_png(100, 75).unwrap();
 
-    let decoded =
-        image::load_from_memory_with_format(&png_bytes, image::ImageFormat::Png).unwrap();
+    let decoded = image::load_from_memory_with_format(&png_bytes, image::ImageFormat::Png).unwrap();
     assert_eq!(decoded.width(), 100);
     assert_eq!(decoded.height(), 75);
 }
@@ -234,8 +225,7 @@ async fn test_offscreen_readback_cleared_texture() {
 
     // Read back as PNG and verify.
     let png_bytes = target.readback_as_png(device, queue).unwrap();
-    let decoded =
-        image::load_from_memory_with_format(&png_bytes, image::ImageFormat::Png).unwrap();
+    let decoded = image::load_from_memory_with_format(&png_bytes, image::ImageFormat::Png).unwrap();
     assert_eq!(decoded.width(), 64);
     assert_eq!(decoded.height(), 64);
 

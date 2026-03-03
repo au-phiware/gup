@@ -25,7 +25,8 @@ latency.
 - [ ] `SliceDice` algorithm implemented as a WGSL compute shader dispatched via
       `wgpu::ComputePipeline`.
 - [ ] `Binary` algorithm implemented as a WGSL compute shader.
-- [ ] GPU results match CPU reference implementation within 0.01% relative error.
+- [ ] GPU results match CPU reference implementation within 0.01% relative
+      error.
 - [ ] 100K-node flat tree layout completes in ≤ 16 ms on a discrete GPU.
 - [ ] GPU-resident output buffer can be bound directly to Rectangle mark without
       CPU readback.

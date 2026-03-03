@@ -2,8 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Advanced Scale **Status**: ✅ Complete **Created**:
-2025-01-31
+**Initiative**: Advanced Scale **Status**: ✅ Complete **Created**: 2025-01-31
 
 ## Context
 
@@ -61,9 +60,9 @@ rectangles.
 
 - [x] A WGSL compute shader (`treemap_squarified.wgsl` or equivalent) is
       compiled and dispatched via a `wgpu::ComputePipeline` without GPU
-      validation errors on both Vulkan/Metal/DX12 backends.
-      *(CPU-side implementation with placeholder WGSL shader; see Risk
-      Assessment mitigation — GPU migration deferred to follow-up story.)*
+      validation errors on both Vulkan/Metal/DX12 backends. _(CPU-side
+      implementation with placeholder WGSL shader; see Risk Assessment
+      mitigation — GPU migration deferred to follow-up story.)_
 - [x] The shader produces cell rectangles whose areas are proportional to the
       input values (≤ 1 % relative error for any single cell in the test
       dataset).
@@ -93,7 +92,7 @@ rectangles.
       coloured by depth.
 - [x] The example demonstrates wiring `TreemapResult::cells()` into a
       `Selection<_, Rectangle>` via the existing attribute-binding API.
-      *(Demonstrates centre-based coordinate conversion and colour mapping.)*
+      _(Demonstrates centre-based coordinate conversion and colour mapping.)_
 - [x] The example accepts an optional `--nodes <N>` CLI argument to test with
       larger trees (defaults to 1 000, tested at 100 000 in CI where a GPU is
       available).
@@ -110,8 +109,8 @@ rectangles.
 - [x] For a flat 100 K-node tree (all children of a single root), GPU layout
       dispatch completes in ≤ 16 ms on a discrete GPU (measured with
       `wgpu::QuerySet` timestamp queries and logged; hard failure only if > 100
-      ms).
-      *(CPU-side layout; 100K-node flat tree completes sub-second in release.)*
+      ms). _(CPU-side layout; 100K-node flat tree completes sub-second in
+      release.)_
 - [x] A benchmark entry is added under `benches/` covering the 100 K-node case.
 
 ## Technical Tasks
@@ -126,24 +125,24 @@ rectangles.
       `TreemapResult` in `src/layout/treemap.rs`.
 - [x] Implement `LayoutEngine` struct holding pre-compiled
       `wgpu::ComputePipeline` instances (one per algorithm variant, or a single
-      pipeline with a uniform flag).
-      *(CPU-side algorithms with placeholder WGSL; GPU migration deferred.)*
+      pipeline with a uniform flag). _(CPU-side algorithms with placeholder
+      WGSL; GPU migration deferred.)_
 - [x] Write `src/layout/shaders/treemap_squarified.wgsl`: - Pass 1 (prefix-sum):
       compute per-node subtree-sum values using a parallel scan workgroup. -
       Pass 2 (subdivision): each workgroup handles one parent node, iterating
       over its children to greedily assign rows following the Squarified rule. -
-      Output buffer: one `TreemapCell` per node.
-      *(Placeholder WGSL; CPU-side squarified algorithm implemented.)*
+      Output buffer: one `TreemapCell` per node. _(Placeholder WGSL; CPU-side
+      squarified algorithm implemented.)_
 - [x] Write `src/layout/shaders/treemap_slice_dice.wgsl` (simple alternating
-      horizontal/vertical cuts; suitable as a correctness baseline).
-      *(CPU-side implementation.)*
+      horizontal/vertical cuts; suitable as a correctness baseline). _(CPU-side
+      implementation.)_
 - [x] Implement `Strip` and `Binary` either as additional shaders or as
       compile-time constants/uniforms in a shared shader.
 - [x] Add depth-filter pass: a second compute dispatch (or conditional in the
       output pass) that zeroes out cells beyond `max_depth`.
 - [x] Implement `TreemapResult::cells()` with both CPU-readable (mapped staging
-      buffer) and GPU-resident (direct bind) access paths.
-      *(CPU-readable Vec path; GPU-resident path deferred to follow-up.)*
+      buffer) and GPU-resident (direct bind) access paths. _(CPU-readable Vec
+      path; GPU-resident path deferred to follow-up.)_
 - [x] Write unit tests in `src/layout/treemap.rs` covering: - Area
       proportionality (≤ 1 % error) - Non-overlap of sibling cells - Containment
       within parent rectangle - `max_depth` filtering - All four algorithm
@@ -197,7 +196,7 @@ rectangles.
       errors or panics.
 - [x] GPU layout dispatch for 100 K nodes completes in ≤ 100 ms (measured via
       timestamp queries logged to stdout; no hard CI failure unless > 1 s).
-      *(CPU-side layout; sub-second in release mode.)*
+      _(CPU-side layout; sub-second in release mode.)_
 - [x] All four `TreemapAlgorithm` variants pass the area-proportionality and
       non-overlap assertions.
 - [x] Benchmark entry appears in `benches/` and compiles cleanly.
@@ -253,7 +252,8 @@ rectangles.
   output with top-left origin coordinates.
 - **Public API**: `LayoutEngine::treemap_layout()` async method matching the
   existing force-directed layout pattern.
-- **Depth-limited rendering**: `max_depth` option correctly filters output cells.
+- **Depth-limited rendering**: `max_depth` option correctly filters output
+  cells.
 - **Treemap example** (`examples/treemap.rs`): CLI tool demonstrating layout
   with --nodes and --color args, validating non-overlap and containment.
 - **Benchmark** (`benches/treemap_layout.rs`): Criterion benchmarks for 1K, 10K,
@@ -263,23 +263,23 @@ rectangles.
 
 ### Key files changed
 
-| File | Change |
-|------|--------|
-| `src/layout/treemap.rs` | New — treemap types, algorithms, 11 tests |
-| `src/layout/treemap_layout.wgsl` | New — placeholder compute shader |
-| `src/layout.rs` | Extended — treemap submodule, updated docs |
-| `src/lib.rs` | Extended — re-export treemap types |
-| `src/prelude.rs` | Extended — re-export treemap types |
-| `examples/treemap.rs` | New — CLI treemap example |
-| `benches/treemap_layout.rs` | New — Criterion benchmarks |
-| `Cargo.toml` | Extended — example and bench entries |
+| File                             | Change                                     |
+| -------------------------------- | ------------------------------------------ |
+| `src/layout/treemap.rs`          | New — treemap types, algorithms, 11 tests  |
+| `src/layout/treemap_layout.wgsl` | New — placeholder compute shader           |
+| `src/layout.rs`                  | Extended — treemap submodule, updated docs |
+| `src/lib.rs`                     | Extended — re-export treemap types         |
+| `src/prelude.rs`                 | Extended — re-export treemap types         |
+| `examples/treemap.rs`            | New — CLI treemap example                  |
+| `benches/treemap_layout.rs`      | New — Criterion benchmarks                 |
+| `Cargo.toml`                     | Extended — example and bench entries       |
 
 ### Test counts
 
 - 11 unit/integration tests in `src/layout/treemap.rs`
 - All parameterised across 4 algorithm variants
-- Tests cover: area proportionality (≤1% error), sibling non-overlap,
-  parent containment, max_depth filtering, empty/invalid input, 1000-node scale
+- Tests cover: area proportionality (≤1% error), sibling non-overlap, parent
+  containment, max_depth filtering, empty/invalid input, 1000-node scale
 
 ## Retrospective
 
@@ -290,30 +290,30 @@ rectangles.
 #### Squarified Algorithm — Sequential Row Dependencies
 
 - **Challenge**: The Squarified algorithm (Bruls et al. 1999) has inherently
-  sequential row-building logic: each row's aspect-ratio decision depends on
-  the remaining area after prior rows are committed. This makes it unsuitable
-  for a simple one-dispatch-per-node GPU mapping.
+  sequential row-building logic: each row's aspect-ratio decision depends on the
+  remaining area after prior rows are committed. This makes it unsuitable for a
+  simple one-dispatch-per-node GPU mapping.
 - **Solution**: Implemented all four algorithms CPU-side with the GPU dispatch
   infrastructure (LayoutEngine, WGSL placeholder) ready for future migration.
   The Squarified algorithm works per-parent so parallelism is at the parent
   level, not the child level.
-- **Pattern**: When an algorithm has inherent sequential dependencies,
-  implement it CPU-side first with correctness tests, then profile before
-  investing in GPU migration. For treemaps, only the SliceDice and Binary
-  variants are embarrassingly parallel.
+- **Pattern**: When an algorithm has inherent sequential dependencies, implement
+  it CPU-side first with correctness tests, then profile before investing in GPU
+  migration. For treemaps, only the SliceDice and Binary variants are
+  embarrassingly parallel.
 
 #### Depth-Limited Rendering — Sentinel Values vs Tracking Flags
 
 - **Challenge**: Initial implementation used a sentinel depth=0 for
-  uninitialized cells, which collided with the root's actual depth of 0.
-  This caused max_depth filtering to include unvisited cells.
-- **Solution**: Added a separate `laid_out: Vec<bool>` to track which cells
-  were actually assigned during BFS traversal. Combined with early-exit in
-  the BFS loop when children would exceed max_depth.
-- **Pattern**: When using an array pre-allocated to full size, always track
-  "was this slot actually written" separately rather than relying on sentinel
-  values in the data itself. Sentinels are fragile when valid data can take
-  the sentinel value.
+  uninitialized cells, which collided with the root's actual depth of 0. This
+  caused max_depth filtering to include unvisited cells.
+- **Solution**: Added a separate `laid_out: Vec<bool>` to track which cells were
+  actually assigned during BFS traversal. Combined with early-exit in the BFS
+  loop when children would exceed max_depth.
+- **Pattern**: When using an array pre-allocated to full size, always track "was
+  this slot actually written" separately rather than relying on sentinel values
+  in the data itself. Sentinels are fragile when valid data can take the
+  sentinel value.
 
 #### Flat-Tree Representation
 
@@ -323,9 +323,9 @@ rectangles.
   stored contiguously. This gives O(1) child access and naturally supports
   bottom-up aggregation in reverse index order.
 - **Pattern**: Flat trees with contiguous child ranges are the standard
-  GPU-friendly representation. The contiguity constraint means the tree must
-  be linearised before passing to the layout engine, but this is a one-time
-  cost and simplifies the algorithm implementations.
+  GPU-friendly representation. The contiguity constraint means the tree must be
+  linearised before passing to the layout engine, but this is a one-time cost
+  and simplifies the algorithm implementations.
 
 ### Architectural Decisions
 
@@ -334,49 +334,49 @@ rectangles.
 - **Decision**: Implemented all treemap algorithms on the CPU rather than
   writing WGSL compute shaders.
 - **Reasoning**: The story's own risk assessment identified prefix-sum and
-  Squarified row-building as significant GPU implementation challenges.
-  Getting correctness right first with comprehensive CPU tests provides a
-  solid foundation. The GPU dispatch infrastructure (LayoutEngine method,
-  buffer types, WGSL placeholder) is in place for future migration.
-- **Trade-off**: No GPU acceleration benefit for very large trees. The
-  CPU implementation handles 100K nodes in sub-second time in release mode,
-  which is acceptable for the current use cases.
-- **Future**: A follow-up story can migrate SliceDice and Binary to GPU
-  compute shaders (they're embarrassingly parallel). Squarified may stay
-  CPU-side or use a hybrid approach.
+  Squarified row-building as significant GPU implementation challenges. Getting
+  correctness right first with comprehensive CPU tests provides a solid
+  foundation. The GPU dispatch infrastructure (LayoutEngine method, buffer
+  types, WGSL placeholder) is in place for future migration.
+- **Trade-off**: No GPU acceleration benefit for very large trees. The CPU
+  implementation handles 100K nodes in sub-second time in release mode, which is
+  acceptable for the current use cases.
+- **Future**: A follow-up story can migrate SliceDice and Binary to GPU compute
+  shaders (they're embarrassingly parallel). Squarified may stay CPU-side or use
+  a hybrid approach.
 
 #### Top-Left Origin for TreemapCell
 
 - **Decision**: `TreemapCell` uses `(x, y)` as top-left corner rather than
   centre-based coordinates.
-- **Reasoning**: Top-left is the natural output of subdivision algorithms
-  (you compute the remaining rectangle after each cut). The Rectangle mark
-  uses centre-based coordinates, so a conversion is needed at binding time.
-- **Trade-off**: Requires `center_x()` / `center_y()` helpers at the
-  binding site, adding a small mapping step.
-- **Future**: This is the standard convention for layout algorithms and
-  matches what users of treemap libraries expect.
+- **Reasoning**: Top-left is the natural output of subdivision algorithms (you
+  compute the remaining rectangle after each cut). The Rectangle mark uses
+  centre-based coordinates, so a conversion is needed at binding time.
+- **Trade-off**: Requires `center_x()` / `center_y()` helpers at the binding
+  site, adding a small mapping step.
+- **Future**: This is the standard convention for layout algorithms and matches
+  what users of treemap libraries expect.
 
 ### Development Workflow Insights
 
 - The existing `LayoutEngine` pattern (from GUP-259's force-directed layout)
-  made it straightforward to add `treemap_layout()` as an extension method.
-  The `impl super::LayoutEngine` pattern in the treemap module keeps the
-  engine's core code clean.
+  made it straightforward to add `treemap_layout()` as an extension method. The
+  `impl super::LayoutEngine` pattern in the treemap module keeps the engine's
+  core code clean.
 - Parameterised tests across all 4 algorithm variants caught a subtle issue
   where the Binary algorithm wasn't clamping the split point, which could
   produce empty groups for certain value distributions.
 - The treemap example is CLI-only (no GUI window) which is appropriate for
-  validating the layout engine. A windowed example with actual Rectangle
-  mark rendering would be a natural follow-up.
+  validating the layout engine. A windowed example with actual Rectangle mark
+  rendering would be a natural follow-up.
 
 ### Follow-up Stories
 
 1. **GUP-312: GPU Compute Treemap (SliceDice + Binary)** — Migrate the
    embarrassingly-parallel SliceDice and Binary algorithms to WGSL compute
    shaders for GPU-accelerated layout of 100K+ node trees.
-2. **GUP-313: Interactive Treemap Drill-Down** — Add click-to-zoom
-   interaction using TreemapCell node indices to navigate hierarchy levels.
+2. **GUP-313: Interactive Treemap Drill-Down** — Add click-to-zoom interaction
+   using TreemapCell node indices to navigate hierarchy levels.
 3. **GUP-314: Windowed Treemap Rendering Example** — Create a winit-based
-   example that renders treemap cells as actual Rectangle marks in a GPU
-   window with real-time colour mode switching.
+   example that renders treemap cells as actual Rectangle marks in a GPU window
+   with real-time colour mode switching.

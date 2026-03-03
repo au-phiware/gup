@@ -227,47 +227,59 @@ well-formed SVG document to a file or in-memory string.
 
 ### What Was Implemented
 
-1. **`src/export/` module** — New export subsystem with `svg/` submodule containing:
-   - `element.rs` — `SvgElement` enum (Circle, Rect, Line, Path, Text, Group) with `to_svg_string()` serialisation and `rgba_to_css()` helper
-   - `renderer.rs` — `SvgRenderer`, `SvgExportOptions`, `ClipToSvg` coordinate transform, and `write_svg_to_file()` utility
+1. **`src/export/` module** — New export subsystem with `svg/` submodule
+   containing:
+   - `element.rs` — `SvgElement` enum (Circle, Rect, Line, Path, Text, Group)
+     with `to_svg_string()` serialisation and `rgba_to_css()` helper
+   - `renderer.rs` — `SvgRenderer`, `SvgExportOptions`, `ClipToSvg` coordinate
+     transform, and `write_svg_to_file()` utility
    - `mod.rs` — Public re-exports
 
-2. **Mark trait extension** — Added `svg_element(&self) -> Option<SvgElement>` to the `Mark` trait with default `None`. Implemented for: `Circle`, `Rectangle`, `Line`, `Text`, `Path`, `BoxPlot`.
+2. **Mark trait extension** — Added `svg_element(&self) -> Option<SvgElement>`
+   to the `Mark` trait with default `None`. Implemented for: `Circle`,
+   `Rectangle`, `Line`, `Text`, `Path`, `BoxPlot`.
 
 3. **ComposedChart API** — Added three convenience methods:
    - `render_to_svg(&options)` — generates SVG string from chart config + axes
-   - `export_svg_with_marks(&options, &marks)` — full export with caller-supplied data elements
+   - `export_svg_with_marks(&options, &marks)` — full export with
+     caller-supplied data elements
    - `export_svg(path, &options)` — writes SVG to file
 
-4. **Coordinate transform** — `ClipToSvg` maps GPU clip-space (Y-up, [-1,1]) to SVG viewport (Y-down, [0,w]×[0,h]). Verified for 800×600, 1920×1080, and 400×400 viewports.
+4. **Coordinate transform** — `ClipToSvg` maps GPU clip-space (Y-up, [-1,1]) to
+   SVG viewport (Y-down, [0,w]×[0,h]). Verified for 800×600, 1920×1080, and
+   400×400 viewports.
 
-5. **Example** — `examples/svg_export.rs` demonstrates full end-to-end: creates scatter plot data, maps to SVG circles, generates axes/grid/title, writes `output.svg`.
+5. **Example** — `examples/svg_export.rs` demonstrates full end-to-end: creates
+   scatter plot data, maps to SVG circles, generates axes/grid/title, writes
+   `output.svg`.
 
 ### Key Files Changed
 
-| File | Change |
-|------|--------|
-| `src/export/mod.rs` | New module — export subsystem entry point |
-| `src/export/svg/mod.rs` | New — SVG export module |
-| `src/export/svg/element.rs` | New — SvgElement enum and serialisation |
-| `src/export/svg/renderer.rs` | New — SvgRenderer, ClipToSvg, SvgExportOptions |
-| `src/mark.rs` | Added `svg_element()` to Mark trait |
-| `src/mark/circle.rs` | Implemented `svg_element()` |
-| `src/mark/rectangle.rs` | Implemented `svg_element()` |
-| `src/mark/line.rs` | Implemented `svg_element()` |
-| `src/mark/text.rs` | Implemented `svg_element()` |
-| `src/mark/path.rs` | Implemented `svg_element()` |
-| `src/mark/boxplot.rs` | Implemented `svg_element()` |
-| `src/chart_builder.rs` | Added `render_to_svg`, `export_svg_with_marks`, `export_svg` |
-| `src/lib.rs` | Registered `export` module |
-| `src/prelude.rs` | Exported SVG types |
-| `examples/svg_export.rs` | New — end-to-end SVG export example |
-| `tests/svg_export_integration.rs` | New — 19 integration tests |
+| File                              | Change                                                       |
+| --------------------------------- | ------------------------------------------------------------ |
+| `src/export/mod.rs`               | New module — export subsystem entry point                    |
+| `src/export/svg/mod.rs`           | New — SVG export module                                      |
+| `src/export/svg/element.rs`       | New — SvgElement enum and serialisation                      |
+| `src/export/svg/renderer.rs`      | New — SvgRenderer, ClipToSvg, SvgExportOptions               |
+| `src/mark.rs`                     | Added `svg_element()` to Mark trait                          |
+| `src/mark/circle.rs`              | Implemented `svg_element()`                                  |
+| `src/mark/rectangle.rs`           | Implemented `svg_element()`                                  |
+| `src/mark/line.rs`                | Implemented `svg_element()`                                  |
+| `src/mark/text.rs`                | Implemented `svg_element()`                                  |
+| `src/mark/path.rs`                | Implemented `svg_element()`                                  |
+| `src/mark/boxplot.rs`             | Implemented `svg_element()`                                  |
+| `src/chart_builder.rs`            | Added `render_to_svg`, `export_svg_with_marks`, `export_svg` |
+| `src/lib.rs`                      | Registered `export` module                                   |
+| `src/prelude.rs`                  | Exported SVG types                                           |
+| `examples/svg_export.rs`          | New — end-to-end SVG export example                          |
+| `tests/svg_export_integration.rs` | New — 19 integration tests                                   |
 
 ### Test Counts
 
-- **Unit tests**: 23 (SvgElement serialisation, coordinate transform, document assembly, file I/O)
-- **Integration tests**: 19 (well-formedness, axes, labels, title, grid, data marks, file export, CSS, mark trait)
+- **Unit tests**: 23 (SvgElement serialisation, coordinate transform, document
+  assembly, file I/O)
+- **Integration tests**: 19 (well-formedness, axes, labels, title, grid, data
+  marks, file export, CSS, mark trait)
 - **Total new tests**: 42
 - **All existing tests continue to pass**: 219 total (0 failures)
 
@@ -279,45 +291,90 @@ well-formed SVG document to a file or in-memory string.
 
 #### GPU-first Architecture and SVG Export
 
-- **Challenge**: The Mark trait and Selection system are fundamentally GPU-oriented — marks are unit structs, instance data lives in GPU buffers via closures mapping `T → AttrValue`, and all rendering happens through WGSL shaders. SVG export needs CPU-side evaluation of mark positions and attributes.
-- **Solution**: Rather than trying to evaluate GPU shader functions on the CPU, the SVG export works at the `ComposedChart` level. Axis geometry (already computed in NDC by `AxisRenderer`) is transformed to SVG coordinates via `ClipToSvg`. Data mark elements are provided by the caller as pre-built `SvgElement` values, keeping the GPU/CPU boundary clean.
-- **Pattern**: For GPU-accelerated libraries adding static export, work at the highest abstraction level that has structured data (ComposedChart, not Selection) and let the caller bridge the data gap for mark instances.
+- **Challenge**: The Mark trait and Selection system are fundamentally
+  GPU-oriented — marks are unit structs, instance data lives in GPU buffers via
+  closures mapping `T → AttrValue`, and all rendering happens through WGSL
+  shaders. SVG export needs CPU-side evaluation of mark positions and
+  attributes.
+- **Solution**: Rather than trying to evaluate GPU shader functions on the CPU,
+  the SVG export works at the `ComposedChart` level. Axis geometry (already
+  computed in NDC by `AxisRenderer`) is transformed to SVG coordinates via
+  `ClipToSvg`. Data mark elements are provided by the caller as pre-built
+  `SvgElement` values, keeping the GPU/CPU boundary clean.
+- **Pattern**: For GPU-accelerated libraries adding static export, work at the
+  highest abstraction level that has structured data (ComposedChart, not
+  Selection) and let the caller bridge the data gap for mark instances.
 
 #### Coordinate System Duality
 
-- **Challenge**: GPU clip-space is Y-up `[-1, 1]`, while SVG viewport is Y-down `[0, width] × [0, height]`. Axis labels already have screen-space positions computed by the axis renderer, but axis lines and ticks are in NDC.
-- **Solution**: `ClipToSvg` transform (`svg_x = (clip_x + 1) / 2 * width`, `svg_y = (1 - clip_y) / 2 * height`) applied uniformly in the SvgRenderer for NDC data, while labels use their pre-computed screen positions directly.
-- **Pattern**: When bridging coordinate systems, apply the transform at a single point (the renderer) rather than distributing it across mark types. Verify with corner tests at multiple viewport sizes.
+- **Challenge**: GPU clip-space is Y-up `[-1, 1]`, while SVG viewport is Y-down
+  `[0, width] × [0, height]`. Axis labels already have screen-space positions
+  computed by the axis renderer, but axis lines and ticks are in NDC.
+- **Solution**: `ClipToSvg` transform (`svg_x = (clip_x + 1) / 2 * width`,
+  `svg_y = (1 - clip_y) / 2 * height`) applied uniformly in the SvgRenderer for
+  NDC data, while labels use their pre-computed screen positions directly.
+- **Pattern**: When bridging coordinate systems, apply the transform at a single
+  point (the renderer) rather than distributing it across mark types. Verify
+  with corner tests at multiple viewport sizes.
 
 #### Mark Trait Extension Strategy
 
-- **Challenge**: The story specified `svg_element(&self)` on the Mark trait, but built-in marks are unit structs with no instance data. The method can't produce real per-instance SVG without data.
-- **Solution**: The Mark trait method returns a *representative template* element for each mark type (documenting what SVG primitive it maps to). The actual per-instance SVG generation happens through `SvgRenderer` which receives pre-built elements or works with axis geometry data.
-- **Pattern**: When adding optional capabilities to traits used by unit-like types, the method serves as metadata/documentation rather than a data transformer. Keep the real work in the renderer.
+- **Challenge**: The story specified `svg_element(&self)` on the Mark trait, but
+  built-in marks are unit structs with no instance data. The method can't
+  produce real per-instance SVG without data.
+- **Solution**: The Mark trait method returns a _representative template_
+  element for each mark type (documenting what SVG primitive it maps to). The
+  actual per-instance SVG generation happens through `SvgRenderer` which
+  receives pre-built elements or works with axis geometry data.
+- **Pattern**: When adding optional capabilities to traits used by unit-like
+  types, the method serves as metadata/documentation rather than a data
+  transformer. Keep the real work in the renderer.
 
 ### Architectural Decisions
 
 #### Separation of Rendering and Data Extraction
 
-- **Decision**: `ComposedChart::render_to_svg()` exports axes, grid, title, and labels but NOT data marks automatically. Data marks must be provided via `export_svg_with_marks()`.
-- **Reasoning**: The Selection stores mark attributes as closures (`T → AttrValue`) evaluated on the GPU. Extracting position/color/size data CPU-side would require duplicating shader function evaluation, which is complex and fragile.
-- **Trade-off**: Callers must construct `SvgElement` values manually for data marks. This is more work but keeps the export path simple, correct, and GPU-independent.
-- **Future**: A follow-up story could add a `Selection::evaluate_attributes()` method that evaluates attribute bindings CPU-side, enabling automatic data mark SVG generation.
+- **Decision**: `ComposedChart::render_to_svg()` exports axes, grid, title, and
+  labels but NOT data marks automatically. Data marks must be provided via
+  `export_svg_with_marks()`.
+- **Reasoning**: The Selection stores mark attributes as closures
+  (`T → AttrValue`) evaluated on the GPU. Extracting position/color/size data
+  CPU-side would require duplicating shader function evaluation, which is
+  complex and fragile.
+- **Trade-off**: Callers must construct `SvgElement` values manually for data
+  marks. This is more work but keeps the export path simple, correct, and
+  GPU-independent.
+- **Future**: A follow-up story could add a `Selection::evaluate_attributes()`
+  method that evaluates attribute bindings CPU-side, enabling automatic data
+  mark SVG generation.
 
 #### SvgElement as Lightweight Enum
 
-- **Decision**: `SvgElement` is a simple enum with `to_svg_string()` rather than a full DOM tree or using an external SVG library.
-- **Reasoning**: Keeps dependencies minimal (no new crate needed), the six SVG element types cover all built-in marks, and string serialisation is simple and fast.
-- **Trade-off**: No SVG parsing, DOM manipulation, or round-trip capability. The output is write-only.
-- **Future**: If SVG manipulation becomes needed (e.g., for GUP-269 HTML Export), consider wrapping or switching to an SVG DOM crate.
+- **Decision**: `SvgElement` is a simple enum with `to_svg_string()` rather than
+  a full DOM tree or using an external SVG library.
+- **Reasoning**: Keeps dependencies minimal (no new crate needed), the six SVG
+  element types cover all built-in marks, and string serialisation is simple and
+  fast.
+- **Trade-off**: No SVG parsing, DOM manipulation, or round-trip capability. The
+  output is write-only.
+- **Future**: If SVG manipulation becomes needed (e.g., for GUP-269 HTML
+  Export), consider wrapping or switching to an SVG DOM crate.
 
 ### Development Workflow Insights
 
-- The pre-commit hooks (`mask all-fix`) include markdown linting for story files, which has many pre-existing issues. Using `--no-verify` for commits during development and running format/clippy checks separately kept momentum.
-- Writing integration tests that construct `ComposedChart` asynchronously (for GPU context) but exercise the SVG path (no GPU needed) worked well with `#[tokio::test]`.
-- The axis geometry pipeline (`generate_axis_geometry_instanced`) is the key data source for SVG export — it produces NDC coordinates, tick instances, and labels in a structured format that translates directly to SVG elements.
+- The pre-commit hooks (`mask all-fix`) include markdown linting for story
+  files, which has many pre-existing issues. Using `--no-verify` for commits
+  during development and running format/clippy checks separately kept momentum.
+- Writing integration tests that construct `ComposedChart` asynchronously (for
+  GPU context) but exercise the SVG path (no GPU needed) worked well with
+  `#[tokio::test]`.
+- The axis geometry pipeline (`generate_axis_geometry_instanced`) is the key
+  data source for SVG export — it produces NDC coordinates, tick instances, and
+  labels in a structured format that translates directly to SVG elements.
 
 ### Follow-up Stories
 
-1. **GUP-267: PDF Export** — Now unblocked by GUP-266 completion. Can convert the SVG intermediate to PDF.
-2. **GUP-269: HTML Export** — Now partially unblocked (depends on GUP-266 ✅ and GUP-268).
+1. **GUP-267: PDF Export** — Now unblocked by GUP-266 completion. Can convert
+   the SVG intermediate to PDF.
+2. **GUP-269: HTML Export** — Now partially unblocked (depends on GUP-266 ✅ and
+   GUP-268).

@@ -13,9 +13,9 @@ layout at that node, providing hierarchical drill-down exploration.
 
 ## User Story
 
-> "As an end user exploring a large hierarchy, I want to click on a treemap
-> cell to zoom into that subtree and click a breadcrumb or back button to
-> return to the parent view."
+> "As an end user exploring a large hierarchy, I want to click on a treemap cell
+> to zoom into that subtree and click a breadcrumb or back button to return to
+> the parent view."
 
 ## Acceptance Criteria
 

@@ -2196,13 +2196,13 @@ where
     /// std::fs::write("chart.png", &png_bytes)?;
     /// ```
     pub fn render_to_png(&mut self, width: u32, height: u32) -> GupResult<Vec<u8>> {
-        let context = self
-            .visualization
-            .context()
-            .cloned()
-            .ok_or_else(|| GupError::RenderError {
-                message: "Cannot export PNG: chart has no GPU RenderContext".to_string(),
-            })?;
+        let context =
+            self.visualization
+                .context()
+                .cloned()
+                .ok_or_else(|| GupError::RenderError {
+                    message: "Cannot export PNG: chart has no GPU RenderContext".to_string(),
+                })?;
 
         let device = context.device();
         let queue = context.queue();

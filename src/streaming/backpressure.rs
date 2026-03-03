@@ -23,7 +23,7 @@
 /// let strategy = BackpressureStrategy::DropNewest;
 /// assert_eq!(format!("{strategy:?}"), "DropNewest");
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum BackpressureStrategy {
     /// Block the caller until space becomes available. Useful when data
     /// integrity is paramount and the consumer can keep up on average.
@@ -35,13 +35,8 @@ pub enum BackpressureStrategy {
 
     /// Evict the oldest data point to make room for the incoming one. This
     /// is semantically equivalent to a ring-buffer overwrite.
+    #[default]
     EvictOldest,
-}
-
-impl Default for BackpressureStrategy {
-    fn default() -> Self {
-        Self::EvictOldest
-    }
 }
 
 impl std::fmt::Display for BackpressureStrategy {
@@ -70,9 +65,6 @@ mod tests {
     fn display_variants() {
         assert_eq!(BackpressureStrategy::Block.to_string(), "Block");
         assert_eq!(BackpressureStrategy::DropNewest.to_string(), "DropNewest");
-        assert_eq!(
-            BackpressureStrategy::EvictOldest.to_string(),
-            "EvictOldest"
-        );
+        assert_eq!(BackpressureStrategy::EvictOldest.to_string(), "EvictOldest");
     }
 }

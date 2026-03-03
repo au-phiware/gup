@@ -123,10 +123,7 @@ async fn main() -> gup::error::GupResult<()> {
         "  ✅ Composite chart built with {} layers",
         chart.additional_layer_count()
     );
-    println!(
-        "  Has secondary y-axis: {}",
-        chart.has_secondary_y_axis()
-    );
+    println!("  Has secondary y-axis: {}", chart.has_secondary_y_axis());
     println!("  Data points: {}", data.len());
 
     // Print a summary table.

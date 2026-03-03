@@ -30,14 +30,14 @@ let pyramid = LodPyramidBuilder::new()
 
 The `AdaptiveRenderer` orchestrates per-frame tier selection:
 
-1. **Tier selection** — a density heuristic picks the finest tier whose on-screen
-   point density is ≤ 1 point per pixel. Finer tiers are preferred when zoomed
-   in; coarser tiers are used when zoomed out.
+1. **Tier selection** — a density heuristic picks the finest tier whose
+   on-screen point density is ≤ 1 point per pixel. Finer tiers are preferred
+   when zoomed in; coarser tiers are used when zoomed out.
 2. **Blend transitions** — `LodBlendState` cross-fades between tiers over a
    configurable number of frames (default: 8) to avoid visual popping.
 3. **Viewport culling** — `ViewportCuller` runs a GPU compute shader pipeline
-   that discards off-screen points and produces a compacted output buffer with an
-   indirect draw argument buffer. No CPU readback occurs.
+   that discards off-screen points and produces a compacted output buffer with
+   an indirect draw argument buffer. No CPU readback occurs.
 
 ### Viewport Culler (`gup::renderer::ViewportCuller`)
 

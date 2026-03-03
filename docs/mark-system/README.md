@@ -44,18 +44,18 @@ For creating custom marks, see the
 
 ## Built-in Mark Types
 
-| Mark        | Shape             | Vertices  | Indexed  | Key Features                           |
-| ----------- | ----------------- | --------- | -------- | -------------------------------------- |
-| `Circle`    | Filled circle     | 4 (quad)  | Yes (6)  | SDF rendering, radius, fill/stroke     |
-| `Rectangle` | Rounded rectangle | 4 (quad)  | Yes (6)  | Corner radius, fill/stroke             |
-| `Line`      | Styled line       | 4 (quad)  | Yes (6)  | Width, dash/dot styles                 |
-| `BoxPlot`   | Statistical box   | 4 (quad)  | Yes (6)  | Min/Q1/median/Q3/max, outliers         |
-| `Text`      | SDF text glyph    | 4 (quad)  | Yes (6)  | Font atlas, anchor, SDF anti-aliasing  |
-| `Path`      | SVG-like path     | 4 (quad)  | Yes (6)  | GPU tessellation, stroke, SVG commands |
-| `Composite` | Grouped sub-marks | 4 (quad)  | Yes (6)  | Nested marks with transforms           |
-| `Sphere3D`  | 3D billboard sphere | 4 (quad) | Yes (6) | SDF + frag_depth, Phong lighting       |
-| `Box3D`     | 3D axis-aligned box | 24 (cube) | Yes (36) | 6 faces, Phong lighting              |
-| `Line3D`    | 3D line segment   | 4 (quad)  | Yes (6)  | Camera-facing quad, unlit              |
+| Mark        | Shape               | Vertices  | Indexed  | Key Features                           |
+| ----------- | ------------------- | --------- | -------- | -------------------------------------- |
+| `Circle`    | Filled circle       | 4 (quad)  | Yes (6)  | SDF rendering, radius, fill/stroke     |
+| `Rectangle` | Rounded rectangle   | 4 (quad)  | Yes (6)  | Corner radius, fill/stroke             |
+| `Line`      | Styled line         | 4 (quad)  | Yes (6)  | Width, dash/dot styles                 |
+| `BoxPlot`   | Statistical box     | 4 (quad)  | Yes (6)  | Min/Q1/median/Q3/max, outliers         |
+| `Text`      | SDF text glyph      | 4 (quad)  | Yes (6)  | Font atlas, anchor, SDF anti-aliasing  |
+| `Path`      | SVG-like path       | 4 (quad)  | Yes (6)  | GPU tessellation, stroke, SVG commands |
+| `Composite` | Grouped sub-marks   | 4 (quad)  | Yes (6)  | Nested marks with transforms           |
+| `Sphere3D`  | 3D billboard sphere | 4 (quad)  | Yes (6)  | SDF + frag_depth, Phong lighting       |
+| `Box3D`     | 3D axis-aligned box | 24 (cube) | Yes (36) | 6 faces, Phong lighting                |
+| `Line3D`    | 3D line segment     | 4 (quad)  | Yes (6)  | Camera-facing quad, unlit              |
 
 ## System Overview
 

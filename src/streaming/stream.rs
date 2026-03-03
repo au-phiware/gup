@@ -467,8 +467,8 @@ impl From<DataStreamError> for crate::error::GupError {
 mod tests {
     use super::*;
     use crate::render::RenderContext;
-    use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
     async fn test_device() -> wgpu::Device {
         let ctx = RenderContext::new().await.unwrap();
@@ -848,9 +848,10 @@ mod tests {
             message: "test".into(),
         };
         let gup_err: crate::error::GupError = err.into();
-        assert!(
-            matches!(gup_err, crate::error::GupError::ConfigurationError { .. })
-        );
+        assert!(matches!(
+            gup_err,
+            crate::error::GupError::ConfigurationError { .. }
+        ));
     }
 
     #[test]

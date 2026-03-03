@@ -174,9 +174,11 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> DataStreamBuilder<T> {
     /// ```
     pub fn build(self, device: &wgpu::Device) -> Result<DataStream<T>, DataStreamError> {
         // Validate capacity
-        let capacity = self.capacity.ok_or_else(|| DataStreamError::InvalidCapacity {
-            message: "capacity must be set before calling build()".into(),
-        })?;
+        let capacity = self
+            .capacity
+            .ok_or_else(|| DataStreamError::InvalidCapacity {
+                message: "capacity must be set before calling build()".into(),
+            })?;
 
         if capacity == 0 {
             return Err(DataStreamError::InvalidCapacity {
@@ -186,7 +188,10 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> DataStreamBuilder<T> {
 
         // Validate mode/backpressure combination
         if self.backpressure == BackpressureStrategy::Block
-            && matches!(self.mode, StreamMode::SlidingWindow | StreamMode::RingBuffer)
+            && matches!(
+                self.mode,
+                StreamMode::SlidingWindow | StreamMode::RingBuffer
+            )
         {
             return Err(DataStreamError::UnsupportedCombination {
                 message: format!(

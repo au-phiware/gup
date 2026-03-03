@@ -156,7 +156,9 @@ async fn layout_two_connected_nodes() {
         source: 0,
         target: 1,
     }];
-    let config = ForceDirected::new().iterations(100).convergence_check_interval(10);
+    let config = ForceDirected::new()
+        .iterations(100)
+        .convergence_check_interval(10);
     let result = engine
         .force_directed_layout(&nodes, &edges, &config)
         .await

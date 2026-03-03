@@ -6,14 +6,14 @@
 //! Verifies that multi-layer composite charts can be built against a
 //! real GPU context without validation errors.
 
+use gup::RenderContext;
+use gup::chart_builder::ChartBuilder;
 use gup::chart_builder::accessor::AccessorValue;
 use gup::chart_builder::builders::composite::{composite, union_domain};
 use gup::chart_builder::builders::{
     AccessorFunction, BarChartBuilder, ConfigurableBuilder, GridCapableBuilder, LineChartBuilder,
     ScatterPlotBuilder,
 };
-use gup::chart_builder::ChartBuilder;
-use gup::RenderContext;
 use std::sync::Arc;
 
 // ── Shared data type ────────────────────────────────────────────────────

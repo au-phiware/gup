@@ -162,7 +162,10 @@ async fn debug_overlay_collects_frame_info() {
 
     // Test display string.
     let display = renderer.debug_overlay().display_string().unwrap();
-    assert!(display.contains("LOD"), "Display should contain 'LOD': {display}");
+    assert!(
+        display.contains("LOD"),
+        "Display should contain 'LOD': {display}"
+    );
 }
 
 #[tokio::test]
@@ -218,7 +221,10 @@ async fn viewport_cull_all_visible() {
         .await
         .unwrap();
 
-    let indirect = culler.read_draw_indirect(ctx.device(), ctx.queue(), &result).await.unwrap();
+    let indirect = culler
+        .read_draw_indirect(ctx.device(), ctx.queue(), &result)
+        .await
+        .unwrap();
     // indirect[1] = instance_count (visible points)
     assert_eq!(
         indirect[1],
@@ -255,14 +261,14 @@ async fn viewport_cull_partial() {
         .await
         .unwrap();
 
-    let indirect = culler.read_draw_indirect(ctx.device(), ctx.queue(), &result).await.unwrap();
+    let indirect = culler
+        .read_draw_indirect(ctx.device(), ctx.queue(), &result)
+        .await
+        .unwrap();
     let visible = indirect[1];
 
     // Should have some but not all points visible.
-    assert!(
-        visible > 0,
-        "Some points should be in the first quadrant"
-    );
+    assert!(visible > 0, "Some points should be in the first quadrant");
     assert!(
         visible < data.len() as u32,
         "Not all points should be in the first quadrant; visible={visible}"
@@ -295,7 +301,10 @@ async fn viewport_cull_none_visible() {
         .await
         .unwrap();
 
-    let indirect = culler.read_draw_indirect(ctx.device(), ctx.queue(), &result).await.unwrap();
+    let indirect = culler
+        .read_draw_indirect(ctx.device(), ctx.queue(), &result)
+        .await
+        .unwrap();
     assert_eq!(
         indirect[1], 0,
         "No points should be visible; got {}",

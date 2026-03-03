@@ -17,7 +17,7 @@
 /// let mode = StreamMode::SlidingWindow;
 /// assert_eq!(format!("{mode:?}"), "SlidingWindow");
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum StreamMode {
     /// New data is appended. When the buffer is full, pushes are governed by
     /// the [`BackpressureStrategy`](super::BackpressureStrategy).
@@ -31,13 +31,8 @@ pub enum StreamMode {
     /// The buffer wraps around, overwriting the oldest slot. This is the
     /// lowest-overhead mode and mirrors the underlying
     /// [`RingBuffer`](super::RingBuffer) directly.
+    #[default]
     RingBuffer,
-}
-
-impl Default for StreamMode {
-    fn default() -> Self {
-        Self::RingBuffer
-    }
 }
 
 impl std::fmt::Display for StreamMode {

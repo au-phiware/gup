@@ -396,7 +396,7 @@ impl Scatter3DApp {
                 frame.finish()?;
                 self.frame_count += 1;
 
-                if self.frame_count % 120 == 0 {
+                if self.frame_count.is_multiple_of(120) {
                     let stats = ctx.frame_stats();
                     println!(
                         "Frame {}: {:.1} FPS, {:.2}ms avg",
@@ -456,18 +456,18 @@ impl ApplicationHandler for Scatter3DApp {
                 ..
             } => event_loop.exit(),
             WindowEvent::Resized(size) => {
-                if let Some(context) = self.context.take() {
-                    if let Ok(mut ctx) = Arc::try_unwrap(context) {
-                        let _ = ctx.resize_surface(
-                            ctx.primary_surface_id().unwrap(),
-                            gup::PhysicalSize::new(size.width, size.height),
-                        );
-                        if let Some(gpu) = self.gpu.as_mut() {
-                            gpu.depth_buffer
-                                .resize(&ctx.device, size.width, size.height);
-                        }
-                        self.context = Some(Arc::new(ctx));
+                if let Some(context) = self.context.take()
+                    && let Ok(mut ctx) = Arc::try_unwrap(context)
+                {
+                    let _ = ctx.resize_surface(
+                        ctx.primary_surface_id().unwrap(),
+                        gup::PhysicalSize::new(size.width, size.height),
+                    );
+                    if let Some(gpu) = self.gpu.as_mut() {
+                        gpu.depth_buffer
+                            .resize(&ctx.device, size.width, size.height);
                     }
+                    self.context = Some(Arc::new(ctx));
                 }
             }
             WindowEvent::RedrawRequested => {

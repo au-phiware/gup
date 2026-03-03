@@ -559,7 +559,7 @@ fn float_to_key(f: f32) -> i64 {
     // IEEE 754 floats: positive floats have bit patterns that sort
     // like unsigned integers, but negative floats are reversed.
     // Flip all bits for negative values; flip only sign bit for positive.
-    
+
     if (bits >> 31) == 1 {
         !(bits as i64)
     } else {

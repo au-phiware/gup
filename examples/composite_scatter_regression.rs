@@ -15,8 +15,7 @@ use gup::chart_builder::ChartBuilder;
 use gup::chart_builder::accessor::AccessorValue;
 use gup::chart_builder::builders::composite::composite;
 use gup::chart_builder::builders::{
-    AccessorFunction, ConfigurableBuilder, GridCapableBuilder, LineChartBuilder,
-    ScatterPlotBuilder,
+    AccessorFunction, ConfigurableBuilder, GridCapableBuilder, LineChartBuilder, ScatterPlotBuilder,
 };
 use std::sync::Arc;
 
@@ -94,10 +93,7 @@ fn linear_regression(data: &[DataPoint]) -> (f32, f32) {
 /// Generate regression line endpoints from the data range.
 fn generate_regression_line(data: &[DataPoint], slope: f32, intercept: f32) -> Vec<DataPoint> {
     let x_min = data.iter().map(|d| d.x).fold(f32::INFINITY, f32::min);
-    let x_max = data
-        .iter()
-        .map(|d| d.x)
-        .fold(f32::NEG_INFINITY, f32::max);
+    let x_max = data.iter().map(|d| d.x).fold(f32::NEG_INFINITY, f32::max);
 
     // Two-point line from x_min to x_max.
     vec![
@@ -170,10 +166,7 @@ async fn main() -> gup::error::GupResult<()> {
         chart.additional_layer_count()
     );
     println!("  Primary chart data points: {}", chart.primary().len());
-    println!(
-        "  Has secondary y-axis: {}",
-        chart.has_secondary_y_axis()
-    );
+    println!("  Has secondary y-axis: {}", chart.has_secondary_y_axis());
     println!(
         "  Scatter data points: {scatter_count}, regression endpoints: {}",
         regression_data.len()

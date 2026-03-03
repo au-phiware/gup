@@ -52,20 +52,15 @@ use std::sync::Arc;
 /// Orientation for violin plots.
 ///
 /// Controls whether violins extend vertically (default) or horizontally.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum ViolinOrientation {
     /// Violins extend vertically — the value axis is vertical
     /// and the categorical axis is horizontal.
+    #[default]
     Vertical,
     /// Violins extend horizontally — the value axis is horizontal
     /// and the categorical axis is vertical.
     Horizontal,
-}
-
-impl Default for ViolinOrientation {
-    fn default() -> Self {
-        Self::Vertical
-    }
 }
 
 /// Which side(s) of the violin to render.
@@ -73,20 +68,15 @@ impl Default for ViolinOrientation {
 /// A full violin (`Both`) shows mirrored flanks on both sides of the spine.
 /// `Left` or `Right` renders only one flank, useful for split-comparison
 /// layouts where two categories share a spine.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum HalfSide {
     /// Render both flanks (standard full violin).
+    #[default]
     Both,
     /// Render only the left (or bottom, for horizontal) flank.
     Left,
     /// Render only the right (or top, for horizontal) flank.
     Right,
-}
-
-impl Default for HalfSide {
-    fn default() -> Self {
-        Self::Both
-    }
 }
 
 /// Internal data computed per violin category.

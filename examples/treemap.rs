@@ -255,7 +255,7 @@ fn main() {
         m
     };
 
-    for (_parent_idx, children) in &parent_children {
+    for children in parent_children.values() {
         let child_cells: Vec<_> = children
             .iter()
             .filter_map(|&ci| cells.iter().find(|c| c.node_index == ci as u32))

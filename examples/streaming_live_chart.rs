@@ -15,8 +15,8 @@ use gup::mark::circle::Circle;
 use gup::render::RenderContext;
 use gup::selection::Selection;
 use gup::streaming::{BackpressureStrategy, DataStream, StreamMode};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[tokio::main]
 async fn main() {

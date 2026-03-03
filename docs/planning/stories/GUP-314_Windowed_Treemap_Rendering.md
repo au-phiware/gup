@@ -6,10 +6,10 @@
 
 ## Context
 
-GUP-260 provides a CLI-only treemap example that validates the layout engine
-but does not render cells visually in a GPU window. A windowed example using
-winit + wgpu + Rectangle marks would demonstrate the full end-to-end pipeline:
-data → layout → GPU rendering, and serve as a visual regression baseline.
+GUP-260 provides a CLI-only treemap example that validates the layout engine but
+does not render cells visually in a GPU window. A windowed example using winit +
+wgpu + Rectangle marks would demonstrate the full end-to-end pipeline: data →
+layout → GPU rendering, and serve as a visual regression baseline.
 
 ## User Story
 
@@ -25,7 +25,8 @@ data → layout → GPU rendering, and serve as a visual regression baseline.
 - [ ] The window supports resize and re-layouts the treemap to fit the new
       viewport.
 - [ ] Screenshot comparison test added for visual regression.
-- [ ] Works with all four treemap algorithm variants (switchable via CLI or key).
+- [ ] Works with all four treemap algorithm variants (switchable via CLI or
+      key).
 
 ## Dependencies
 
@@ -42,9 +43,8 @@ data → layout → GPU rendering, and serve as a visual regression baseline.
 
 ## Risk Assessment
 
-- **Low**: The Rectangle mark and render context are well established. The
-  main work is wiring layout cells to GPU-rendered instances in a window
-  event loop.
+- **Low**: The Rectangle mark and render context are well established. The main
+  work is wiring layout cells to GPU-rendered instances in a window event loop.
 
 ## Definition of Done
 

@@ -48,7 +48,7 @@ pub fn padded_bytes_per_row(width: u32) -> u32 {
     let unpadded = width * BYTES_PER_PIXEL;
     let align = COPY_BYTES_PER_ROW_ALIGNMENT;
     // Round up: (unpadded + align - 1) / align * align
-    (unpadded + align - 1) / align * align
+    unpadded.div_ceil(align) * align
 }
 
 /// Strip wgpu row padding from a pixel buffer.
@@ -59,12 +59,7 @@ pub fn padded_bytes_per_row(width: u32) -> u32 {
 ///
 /// If the padded and unpadded row sizes are identical no copy is performed
 /// and the input data is returned as-is.
-pub fn strip_row_padding(
-    data: &[u8],
-    width: u32,
-    height: u32,
-    padded_row_bytes: u32,
-) -> Vec<u8> {
+pub fn strip_row_padding(data: &[u8], width: u32, height: u32, padded_row_bytes: u32) -> Vec<u8> {
     let unpadded = (width * BYTES_PER_PIXEL) as usize;
     let padded = padded_row_bytes as usize;
 
@@ -113,16 +108,9 @@ pub fn encode_png(pixels: &[u8], width: u32, height: u32) -> GupResult<Vec<u8>> 
 
     let mut png_bytes: Vec<u8> = Vec::new();
     {
-        let encoder =
-            image::codecs::png::PngEncoder::new(std::io::Cursor::new(&mut png_bytes));
-        image::ImageEncoder::write_image(
-            encoder,
-            pixels,
-            width,
-            height,
-            image::ColorType::Rgba8,
-        )
-        .map_err(|e| GupError::RenderError {
+        let encoder = image::codecs::png::PngEncoder::new(std::io::Cursor::new(&mut png_bytes));
+        image::ImageEncoder::write_image(encoder, pixels, width, height, image::ColorType::Rgba8)
+            .map_err(|e| GupError::RenderError {
             message: format!("PNG encoding failed: {e}"),
         })?;
     }
@@ -413,10 +401,13 @@ mod tests {
             10, 20, 30, 40, // B=10, G=20, R=30, A=40
         ];
         bgra_to_rgba(&mut data);
-        assert_eq!(data, vec![
-            255, 128, 0, 200, // R=255, G=128, B=0, A=200
-            30, 20, 10, 40, // R=30, G=20, B=10, A=40
-        ]);
+        assert_eq!(
+            data,
+            vec![
+                255, 128, 0, 200, // R=255, G=128, B=0, A=200
+                30, 20, 10, 40, // R=30, G=20, B=10, A=40
+            ]
+        );
     }
 
     #[test]
@@ -465,8 +456,8 @@ mod tests {
         let png = encode_png(&pixels, width, height).unwrap();
 
         // Decode with the image crate and verify dimensions.
-        let decoded = image::load_from_memory_with_format(&png, image::ImageFormat::Png)
-            .expect("decode PNG");
+        let decoded =
+            image::load_from_memory_with_format(&png, image::ImageFormat::Png).expect("decode PNG");
         assert_eq!(decoded.width(), width);
         assert_eq!(decoded.height(), height);
 
@@ -483,8 +474,8 @@ mod tests {
         let pixels = vec![0, 0, 0, 0];
         let png = encode_png(&pixels, width, height).unwrap();
 
-        let decoded = image::load_from_memory_with_format(&png, image::ImageFormat::Png)
-            .expect("decode PNG");
+        let decoded =
+            image::load_from_memory_with_format(&png, image::ImageFormat::Png).expect("decode PNG");
         let rgba = decoded.to_rgba8();
         assert_eq!(rgba.as_raw(), &pixels);
     }
