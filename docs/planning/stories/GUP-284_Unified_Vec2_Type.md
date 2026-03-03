@@ -99,3 +99,71 @@ to/from `[f32; 2]`.
 - 2438 existing lib tests pass unchanged
 - All integration tests pass
 - All examples compile
+
+## Retrospective
+
+**Completed**: 2025-07-27
+
+### Key Technical Learnings
+
+#### Re-export-Based Unification
+
+- **Challenge**: Two identical `Vec2` structs in different modules with
+  subtly different trait sets. Merging them risks breaking every downstream
+  import path.
+- **Solution**: Define the canonical type in `src/math.rs` and replace each
+  module's `struct Vec2` with `pub use crate::math::Vec2`. All existing import
+  paths (`interaction::Vec2`, `shader_function::Vec2`, `gup::Vec2`) continue
+  to resolve to the same concrete type with zero source-level changes needed
+  in consuming code.
+- **Pattern**: When unifying duplicated types, `pub use` re-exports are
+  strictly superior to type aliases — they preserve the original type identity
+  and all trait impls, whereas `type Alias = T` can cause orphan-rule issues
+  for downstream `impl` blocks.
+
+#### Orphan Rule and `ShaderType`
+
+- **Challenge**: `ShaderType` is defined in `shader_function.rs`. Moving
+  `Vec2` to `math.rs` means the impl `ShaderType for Vec2` is now in a
+  different module from both the trait and the type — but because the re-export
+  makes `Vec2` effectively "owned" by the crate, the orphan rule is not
+  violated.
+- **Solution**: Keep the `impl ShaderType for Vec2` in `shader_function.rs`
+  alongside the `pub use`. This places the impl next to related `Vec3`/`Vec4`
+  impls and keeps `math.rs` dependency-free.
+- **Pattern**: For crate-internal types, the orphan rule only constrains
+  cross-crate boundaries. Re-exported types can be impl'd anywhere within the
+  owning crate.
+
+### Architectural Decisions
+
+#### Single `math` Module vs Spreading Across Modules
+
+- **Decision**: Create a dedicated `src/math.rs` module for the canonical
+  `Vec2` type.
+- **Reasoning**: A `math` module provides a natural home for future
+  mathematical primitives (e.g., `Rect`, matrix types, affine transforms)
+  without coupling them to domain-specific modules like `interaction` or
+  `shader_function`.
+- **Trade-off**: Adds one more module to navigate, but it's small and
+  focused.
+- **Future**: This module can host `Rect` (currently in `interaction.rs`),
+  and arithmetic impls for `Vec3`/`Vec4` if those are also unified.
+
+### Development Workflow Insights
+
+- The refactor was surprisingly low-risk: `pub use` re-exports meant zero
+  changes were needed at call sites. The main work was defining the unified
+  type, writing tests, and simplifying existing manual arithmetic.
+- `mask all-fix` and `cargo check --examples` provided high confidence that
+  no breakage was introduced.
+- An intermittent GPU test failure (`pattern_pipeline_integration_tests`) was
+  observed during full test suite runs but is unrelated — it did not reproduce
+  on re-run and is a known GPU resource contention issue.
+
+### Follow-up Stories
+
+1. **GUP-306: Vec3/Vec4 Arithmetic Operators** — Vec3 and Vec4 currently lack
+   arithmetic traits (Add, Sub, Mul, Div) and array conversions (From/Into)
+   that Vec2 now has. This inconsistency will surprise developers. Should add
+   the same operator set and optionally migrate Vec3/Vec4 into `math.rs`.
