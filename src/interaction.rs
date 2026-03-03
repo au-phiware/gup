@@ -72,10 +72,10 @@ impl Rect {
     }
 
     pub fn from_center_size(center: Vec2, size: Vec2) -> Self {
-        let half_size = Vec2::new(size.x * 0.5, size.y * 0.5);
+        let half_size = size * 0.5;
         Self {
-            min: Vec2::new(center.x - half_size.x, center.y - half_size.y),
-            max: Vec2::new(center.x + half_size.x, center.y + half_size.y),
+            min: center - half_size,
+            max: center + half_size,
         }
     }
 
@@ -88,10 +88,7 @@ impl Rect {
     }
 
     pub fn center(&self) -> Vec2 {
-        Vec2::new(
-            (self.min.x + self.max.x) * 0.5,
-            (self.min.y + self.max.y) * 0.5,
-        )
+        (self.min + self.max) * 0.5
     }
 }
 
@@ -3562,7 +3559,7 @@ impl GestureRecognizer {
         // Calculate average position and delta
         let (current_pos, prev_pos) = self.calculate_average_positions();
 
-        let delta = Vec2::new(current_pos.x - prev_pos.x, current_pos.y - prev_pos.y);
+        let delta = current_pos - prev_pos;
 
         // Only return pan if there's meaningful movement
         let delta_magnitude = (delta.x * delta.x + delta.y * delta.y).sqrt();
@@ -3594,10 +3591,7 @@ impl GestureRecognizer {
         let current_angle = self.angle_between(touches[0].position, touches[1].position);
         let previous_angle = self.angle_between(prev_touches[0].position, prev_touches[1].position);
 
-        let center = Vec2::new(
-            (touches[0].position.x + touches[1].position.x) * 0.5,
-            (touches[0].position.y + touches[1].position.y) * 0.5,
-        );
+        let center = (touches[0].position + touches[1].position) * 0.5;
 
         // Calculate deltas
         let scale = if previous_distance > 0.0 {
@@ -3631,14 +3625,14 @@ impl GestureRecognizer {
 
     /// Calculate distance between two points.
     fn distance_between(&self, p1: Vec2, p2: Vec2) -> f32 {
-        let dx = p2.x - p1.x;
-        let dy = p2.y - p1.y;
-        (dx * dx + dy * dy).sqrt()
+        let d = p2 - p1;
+        (d.x * d.x + d.y * d.y).sqrt()
     }
 
     /// Calculate angle between two points (in radians).
     fn angle_between(&self, p1: Vec2, p2: Vec2) -> f32 {
-        (p2.y - p1.y).atan2(p2.x - p1.x)
+        let d = p2 - p1;
+        d.y.atan2(d.x)
     }
 
     /// Calculate average position of current and previous touches.
@@ -3647,30 +3641,20 @@ impl GestureRecognizer {
             let sum = self
                 .active_touches
                 .values()
-                .fold(Vec2::new(0.0, 0.0), |acc, t| {
-                    Vec2::new(acc.x + t.position.x, acc.y + t.position.y)
-                });
-            Vec2::new(
-                sum.x / self.active_touches.len() as f32,
-                sum.y / self.active_touches.len() as f32,
-            )
+                .fold(Vec2::zero(), |acc, t| acc + t.position);
+            sum / self.active_touches.len() as f32
         } else {
-            Vec2::new(0.0, 0.0)
+            Vec2::zero()
         };
 
         let prev_avg = if !self.previous_touches.is_empty() {
             let sum = self
                 .previous_touches
                 .values()
-                .fold(Vec2::new(0.0, 0.0), |acc, t| {
-                    Vec2::new(acc.x + t.position.x, acc.y + t.position.y)
-                });
-            Vec2::new(
-                sum.x / self.previous_touches.len() as f32,
-                sum.y / self.previous_touches.len() as f32,
-            )
+                .fold(Vec2::zero(), |acc, t| acc + t.position);
+            sum / self.previous_touches.len() as f32
         } else {
-            Vec2::new(0.0, 0.0)
+            Vec2::zero()
         };
 
         (current_avg, prev_avg)

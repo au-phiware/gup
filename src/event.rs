@@ -672,8 +672,8 @@ pub struct ViewportTransform {
 impl Default for ViewportTransform {
     fn default() -> Self {
         Self {
-            offset: Vec2::new(0.0, 0.0),
-            scale: Vec2::new(1.0, 1.0),
+            offset: Vec2::zero(),
+            scale: Vec2::one(),
         }
     }
 }
@@ -681,18 +681,12 @@ impl Default for ViewportTransform {
 impl ViewportTransform {
     /// Convert screen coordinates to world (visualization-space) coordinates.
     pub fn screen_to_world(&self, screen: Vec2) -> Vec2 {
-        Vec2::new(
-            (screen.x - self.offset.x) / self.scale.x,
-            (screen.y - self.offset.y) / self.scale.y,
-        )
+        (screen - self.offset) / self.scale
     }
 
     /// Convert world coordinates to screen coordinates.
     pub fn world_to_screen(&self, world: Vec2) -> Vec2 {
-        Vec2::new(
-            world.x * self.scale.x + self.offset.x,
-            world.y * self.scale.y + self.offset.y,
-        )
+        world * self.scale + self.offset
     }
 }
 
