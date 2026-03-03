@@ -713,7 +713,7 @@ integration, pipeline caching.
   automatic 2D binning, ColorScale value→color mapping, and GPU-instanced
   Rectangle rendering for 1M+ cells at 60 FPS. Deps: GUP-018 ✅, GUP-067 ✅,
   GUP-093 ✅, GUP-255 ✅.
-- [GUP-249](GUP-249_Violin_Plot_Builder.md) 📋 — ViolinPlotBuilder using KDE
+- [GUP-249](GUP-249_Violin_Plot_Builder.md) 🚧 — ViolinPlotBuilder using KDE
   (GUP-144) for smooth mirrored density curves with optional embedded box plots
   and half-violin split mode. Deps: GUP-018 ✅, GUP-132 ✅, GUP-144 ✅, GUP-166
   ✅.
@@ -740,8 +740,8 @@ integration, pipeline caching.
   gradient-filled rectangle with tick marks and labels for colour-scale legends.
   Deps: GUP-248 ✅, GUP-093 ✅, GUP-255 ✅.
 - [GUP-298](GUP-298_Filled_Polygon_Mark.md) 📋 — FilledPolygon mark type for
-  true filled rendering of area charts and polygon-based visualisations via
-  GPU tessellation. Deps: GUP-132 ✅, GUP-247 ✅.
+  true filled rendering of area charts and polygon-based visualisations via GPU
+  tessellation. Deps: GUP-132 ✅, GUP-247 ✅.
 - [GUP-299](GUP-299_Axis_Percentage_Formatter.md) 📋 — Pluggable axis tick
   formatters with automatic percentage formatting for normalised stacked charts.
   Deps: GUP-247 ✅.
