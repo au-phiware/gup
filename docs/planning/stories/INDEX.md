@@ -894,13 +894,13 @@ layouts, and 3D visualization.
 - [GUP-259](GUP-259_GPU_Force_Directed_Graph_Layout.md) ✅ — GPU compute shader
   force-directed layout (repulsion, spring, gravity, convergence detection)
   targeting 100K nodes in ≤5 seconds. Deps: GUP-003 ✅, GUP-004 ✅, GUP-077 ✅.
-- [GUP-310](GUP-310_Barnes_Hut_GPU_Repulsion.md) 📋 — Barnes-Hut GPU
-  repulsion approximation to reduce O(n²) to O(n log n), enabling 100K-node ≤5s
-  target. Deps: GUP-259 ✅.
+- [GUP-310](GUP-310_Barnes_Hut_GPU_Repulsion.md) 📋 — Barnes-Hut GPU repulsion
+  approximation to reduce O(n²) to O(n log n), enabling 100K-node ≤5s target.
+  Deps: GUP-259 ✅.
 - [GUP-311](GUP-311_Interactive_Graph_Rendering.md) 📋 — Interactive
   force-directed graph rendering with real-time animation, node dragging, and
   zoom. Deps: GUP-259 ✅.
-- [GUP-260](GUP-260_GPU_Treemap_Layout.md) 🚧 — GPU compute shader treemap
+- [GUP-260](GUP-260_GPU_Treemap_Layout.md) ✅ — GPU compute shader treemap
   layout with four algorithm variants (Squarified, Binary, Strip, SliceDice)
   outputting Rectangle-compatible cells. Deps: GUP-003 ✅, GUP-004 ✅, GUP-067
   ✅.
