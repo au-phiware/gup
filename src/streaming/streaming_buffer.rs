@@ -711,4 +711,158 @@ mod tests {
         // Adjacent regions should have been merged into 1 (or at most a few).
         assert!(buf.dirty_region_count() <= 1);
     }
+
+    #[tokio::test]
+    async fn high_throughput_inserts() {
+        let (device, _queue) = test_device().await;
+        let mut buf = StreamingBuffer::<TestItem>::new(
+            &device,
+            StreamingBufferConfig {
+                capacity: 100_000,
+                ..Default::default()
+            },
+        );
+
+        let start = Instant::now();
+        let count = 100_000u64;
+        for i in 0..count {
+            buf.insert(i, TestItem::new(i as f32));
+        }
+        let elapsed = start.elapsed();
+
+        assert_eq!(buf.len(), count as usize);
+        // 100K inserts should complete well within 1 second on any modern CPU.
+        assert!(
+            elapsed.as_secs_f64() < 1.0,
+            "100K inserts took {elapsed:?}, expected < 1s"
+        );
+    }
+
+    #[tokio::test]
+    async fn sub_millisecond_single_insert_latency() {
+        let (device, _queue) = test_device().await;
+        let mut buf = StreamingBuffer::<TestItem>::new(
+            &device,
+            StreamingBufferConfig {
+                capacity: 10_000,
+                latency_window: 1024,
+            },
+        );
+
+        for i in 0..1000u64 {
+            buf.insert(i, TestItem::new(i as f32));
+        }
+
+        let snap = buf.latency().snapshot();
+        assert!(snap.p99.is_some());
+        // CPU-side inserts should be well under 1ms at P99.
+        assert!(
+            snap.p99.unwrap() < Duration::from_millis(1),
+            "P99 latency {:?} exceeds 1ms target",
+            snap.p99.unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn gpu_readback_validates_data() {
+        let (device, queue) = test_device().await;
+        let mut buf = StreamingBuffer::<TestItem>::new(
+            &device,
+            StreamingBufferConfig {
+                capacity: 16,
+                ..Default::default()
+            },
+        );
+
+        buf.insert(0, TestItem::new(42.0));
+        buf.insert(1, TestItem::new(99.0));
+        buf.flush(&device, &queue);
+
+        // Read back from the active GPU buffer to verify data landed correctly.
+        let active = buf.active_buffer();
+        let element_size = std::mem::size_of::<TestItem>() as u64;
+        let read_size = element_size * 2;
+
+        let staging = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("readback_staging"),
+            size: read_size,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        let mut encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        encoder.copy_buffer_to_buffer(active, 0, &staging, 0, read_size);
+        queue.submit(Some(encoder.finish()));
+
+        let slice = staging.slice(..);
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = tx.send(result);
+        });
+        let _ = device.poll(wgpu::PollType::Wait);
+        rx.await.unwrap().unwrap();
+
+        let data = slice.get_mapped_range();
+        let items: &[TestItem] = bytemuck::cast_slice(&data);
+        assert_eq!(items[0].value, 42.0);
+        assert_eq!(items[1].value, 99.0);
+    }
+
+    #[tokio::test]
+    async fn flush_only_writes_dirty_bytes() {
+        let (device, queue) = test_device().await;
+        let mut buf = StreamingBuffer::<TestItem>::new(
+            &device,
+            StreamingBufferConfig {
+                capacity: 1000,
+                ..Default::default()
+            },
+        );
+
+        // Insert 1000 items and flush.
+        for i in 0..1000u64 {
+            buf.insert(i, TestItem::new(i as f32));
+        }
+        let full_bytes = buf.flush(&device, &queue);
+        assert!(full_bytes > 0);
+
+        // Now update just one item.
+        buf.update(500, TestItem::new(999.0)).unwrap();
+        let element_size = std::mem::size_of::<TestItem>();
+        assert_eq!(buf.dirty_bytes(), element_size);
+
+        let partial_bytes = buf.flush(&device, &queue);
+        // Only one element's worth of bytes should have been written.
+        assert_eq!(partial_bytes, element_size);
+    }
+
+    #[tokio::test]
+    async fn batch_throughput() {
+        let (device, _queue) = test_device().await;
+        let mut buf = StreamingBuffer::<TestItem>::new(
+            &device,
+            StreamingBufferConfig {
+                capacity: 100_000,
+                ..Default::default()
+            },
+        );
+
+        let updates: Vec<StreamUpdate<TestItem>> = (0..10_000u64)
+            .map(|i| StreamUpdate::Insert {
+                key: i,
+                data: TestItem::new(i as f32),
+            })
+            .collect();
+
+        let start = Instant::now();
+        buf.apply_batch(updates).unwrap();
+        let elapsed = start.elapsed();
+
+        assert_eq!(buf.len(), 10_000);
+        assert!(
+            elapsed < Duration::from_millis(100),
+            "10K batch took {elapsed:?}, expected < 100ms"
+        );
+    }
 }
