@@ -205,6 +205,10 @@ name = "treemap_layout"
 harness = false
 
 [[example]]
+name = "export_png"
+path = "examples/export_png.rs"
+
+[[example]]
 name = "treemap"
 path = "examples/treemap.rs"
 
