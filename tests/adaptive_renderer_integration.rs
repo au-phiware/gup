@@ -189,3 +189,154 @@ async fn viewport_2d_conversion_matches_adaptive_viewport() {
     assert!((v2d.min_x - bounds[0]).abs() < 1e-5);
     assert!((v2d.max_x - bounds[2]).abs() < 1e-5);
 }
+
+// --- Viewport culling GPU tests ---
+
+#[tokio::test]
+async fn viewport_cull_all_visible() {
+    let guard = create_test_context().await.unwrap();
+    let ctx = guard.context();
+
+    let data = synthetic_data(500);
+    let pyramid = LodPyramidBuilder::new()
+        .levels(3)
+        .build_cpu(ctx.device(), ctx.queue(), &data)
+        .unwrap();
+
+    let culler = gup::renderer::ViewportCuller::new(ctx.device()).unwrap();
+
+    // Use bounds that contain all data points (0..100, 0..100).
+    let result = culler
+        .dispatch(
+            ctx.device(),
+            ctx.queue(),
+            pyramid.buffer(0).buffer(),
+            pyramid.level_point_count(0) as u32,
+            1, // vertex_count for point rendering
+            [-10.0, 110.0, -10.0, 110.0],
+        )
+        .await
+        .unwrap();
+
+    let indirect = culler.read_draw_indirect(ctx.device(), ctx.queue(), &result).await.unwrap();
+    // indirect[1] = instance_count (visible points)
+    assert_eq!(
+        indirect[1],
+        data.len() as u32,
+        "All points should be visible; got {} out of {}",
+        indirect[1],
+        data.len()
+    );
+}
+
+#[tokio::test]
+async fn viewport_cull_partial() {
+    let guard = create_test_context().await.unwrap();
+    let ctx = guard.context();
+
+    let data = synthetic_data(1_000);
+    let pyramid = LodPyramidBuilder::new()
+        .levels(3)
+        .build_cpu(ctx.device(), ctx.queue(), &data)
+        .unwrap();
+
+    let culler = gup::renderer::ViewportCuller::new(ctx.device()).unwrap();
+
+    // Use bounds that cover only the first quadrant (0..50, 0..50).
+    let result = culler
+        .dispatch(
+            ctx.device(),
+            ctx.queue(),
+            pyramid.buffer(0).buffer(),
+            pyramid.level_point_count(0) as u32,
+            1,
+            [0.0, 50.0, 0.0, 50.0],
+        )
+        .await
+        .unwrap();
+
+    let indirect = culler.read_draw_indirect(ctx.device(), ctx.queue(), &result).await.unwrap();
+    let visible = indirect[1];
+
+    // Should have some but not all points visible.
+    assert!(
+        visible > 0,
+        "Some points should be in the first quadrant"
+    );
+    assert!(
+        visible < data.len() as u32,
+        "Not all points should be in the first quadrant; visible={visible}"
+    );
+}
+
+#[tokio::test]
+async fn viewport_cull_none_visible() {
+    let guard = create_test_context().await.unwrap();
+    let ctx = guard.context();
+
+    let data = synthetic_data(100);
+    let pyramid = LodPyramidBuilder::new()
+        .levels(2)
+        .build_cpu(ctx.device(), ctx.queue(), &data)
+        .unwrap();
+
+    let culler = gup::renderer::ViewportCuller::new(ctx.device()).unwrap();
+
+    // Use bounds completely outside the data range.
+    let result = culler
+        .dispatch(
+            ctx.device(),
+            ctx.queue(),
+            pyramid.buffer(0).buffer(),
+            pyramid.level_point_count(0) as u32,
+            1,
+            [200.0, 300.0, 200.0, 300.0],
+        )
+        .await
+        .unwrap();
+
+    let indirect = culler.read_draw_indirect(ctx.device(), ctx.queue(), &result).await.unwrap();
+    assert_eq!(
+        indirect[1], 0,
+        "No points should be visible; got {}",
+        indirect[1]
+    );
+}
+
+#[tokio::test]
+async fn viewport_cull_no_gpu_errors() {
+    // Verify no GPU validation errors occur during the culling pass.
+    let guard = create_test_context().await.unwrap();
+    let ctx = guard.context();
+
+    let data = synthetic_data(2_000);
+    let pyramid = LodPyramidBuilder::new()
+        .levels(4)
+        .build_cpu(ctx.device(), ctx.queue(), &data)
+        .unwrap();
+
+    let culler = gup::renderer::ViewportCuller::new(ctx.device()).unwrap();
+
+    // Run culling on each tier.
+    for tier in 0..pyramid.level_count() {
+        let count = pyramid.level_point_count(tier) as u32;
+        if count == 0 {
+            continue;
+        }
+        let result = culler
+            .dispatch(
+                ctx.device(),
+                ctx.queue(),
+                pyramid.buffer(tier).buffer(),
+                count,
+                1,
+                [0.0, 100.0, 0.0, 100.0],
+            )
+            .await;
+        assert!(
+            result.is_ok(),
+            "Culling tier {tier} should not produce errors: {:?}",
+            result.err()
+        );
+    }
+}
