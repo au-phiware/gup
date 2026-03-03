@@ -97,6 +97,7 @@ pub mod pipeline_cache;
 pub mod plugins;
 pub mod prelude;
 pub mod render;
+pub mod renderer;
 pub mod scale;
 pub mod selection;
 pub mod selection_mask;

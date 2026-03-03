@@ -2,7 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Advanced Scale **Status**: 🚧 In Progress **Created**: 2025-07-14
+**Initiative**: Advanced Scale **Status**: 🚧 In Progress **Created**:
+2025-07-14
 
 ## Context
 
@@ -35,7 +36,7 @@ resolution to another during a continuous zoom gesture.
 > "As a visualization developer, I want the renderer to automatically select the
 > right level of detail and cull off-screen data based on the current viewport
 > so that billion-point datasets render at 30+ FPS without manual tuning."
-
+>
 > "As a developer debugging LOD behaviour, I want an optional overlay showing
 > the active LOD tier and visible point count per frame so that I can verify the
 > selection heuristic is working correctly."
