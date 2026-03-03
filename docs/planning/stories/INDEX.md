@@ -941,7 +941,7 @@ PNG, HTML), and platform targets.
   wrapping the full winit event loop (surface, resize, device-loss recovery)
   into a 5-line builder entry point. Deps: GUP-039 ✅, GUP-047 ✅, GUP-049 ✅,
   GUP-013 📋.
-- [GUP-266](GUP-266_SVG_Export.md) 📋 — SvgRenderer extracting vector paths from
+- [GUP-266](GUP-266_SVG_Export.md) 🚧 — SvgRenderer extracting vector paths from
   marks and generating a valid SVG document with correct clip-space→viewport
   coordinate mapping. Deps: GUP-009 ✅, GUP-018 ✅, GUP-099 ✅.
 - [GUP-267](GUP-267_PDF_Export.md) 📋 — PdfRenderer converting the GUP-266 SVG
