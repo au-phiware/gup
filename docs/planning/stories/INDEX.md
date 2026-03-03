@@ -706,7 +706,7 @@ integration, pipeline caching.
 - [GUP-246](GUP-246_Line_Chart_Builder.md) ✅ — LineChartBuilder with
   multi-series support, automatic x-sorting, point markers, and four curve
   interpolation modes. Deps: GUP-018 ✅, GUP-067 ✅, GUP-093 ✅, GUP-168 ✅.
-- [GUP-247](GUP-247_Area_Chart_Builder.md) 📋 — AreaChartBuilder with stacked,
+- [GUP-247](GUP-247_Area_Chart_Builder.md) 🚧 — AreaChartBuilder with stacked,
   normalized-stacked, gradient-fill, and band/ribbon area variants via
   tessellated path polygons. Deps: GUP-018 ✅, GUP-246 ✅, GUP-132 ✅.
 - [GUP-248](GUP-248_Heatmap_Chart_Builder.md) ✅ — HeatmapChartBuilder with
