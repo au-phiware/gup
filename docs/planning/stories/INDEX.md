@@ -944,7 +944,7 @@ PNG, HTML), and platform targets.
 - [GUP-266](GUP-266_SVG_Export.md) ✅ — SvgRenderer extracting vector paths from
   marks and generating a valid SVG document with correct clip-space→viewport
   coordinate mapping. Deps: GUP-009 ✅, GUP-018 ✅, GUP-099 ✅.
-- [GUP-267](GUP-267_PDF_Export.md) 📋 — PdfRenderer converting the GUP-266 SVG
+- [GUP-267](GUP-267_PDF_Export.md) 🚧 — PdfRenderer converting the GUP-266 SVG
   intermediate to a PDF with embedded font subsets, configurable page sizes, and
   multi-page support. Deps: GUP-018 ✅, GUP-266 ✅.
 - [GUP-268](GUP-268_PNG_Export.md) ✅ — Off-screen GPU render-to-texture with
