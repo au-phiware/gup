@@ -2309,6 +2309,165 @@ where
             error: e.to_string(),
         })
     }
+
+    // -----------------------------------------------------------------
+    // PDF export
+    // -----------------------------------------------------------------
+
+    /// Export this chart as a single-page PDF file.
+    ///
+    /// Convenience method for the common single-chart case.  Uses the
+    /// SVG intermediate representation — no GPU commands are issued.
+    ///
+    /// Data marks must be provided separately as [`SvgElement`] values,
+    /// exactly as with [`export_svg_with_marks`](Self::export_svg_with_marks).
+    ///
+    /// # Feature Gate
+    ///
+    /// Requires the **`pdf`** Cargo feature.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use gup::export::pdf::PdfOptions;
+    ///
+    /// chart.export_pdf("report.pdf", PdfOptions::a4())?;
+    /// ```
+    #[cfg(feature = "pdf")]
+    pub fn export_pdf(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        options: crate::export::pdf::PdfOptions,
+    ) -> GupResult<()> {
+        self.export_pdf_with_marks(path, options, &[])
+    }
+
+    /// Export this chart as a single-page PDF file, including the given
+    /// data-mark elements.
+    ///
+    /// # Feature Gate
+    ///
+    /// Requires the **`pdf`** Cargo feature.
+    #[cfg(feature = "pdf")]
+    pub fn export_pdf_with_marks(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        options: crate::export::pdf::PdfOptions,
+        data_elements: &[crate::export::svg::SvgElement],
+    ) -> GupResult<()> {
+        let svg_opts = crate::export::svg::SvgExportOptions::new(800, 600);
+        let geom = self.generate_axis_geometry_instanced();
+
+        // Build SVG elements for chart structure.
+        let svg_renderer = crate::export::svg::SvgRenderer::new(svg_opts.clone());
+        let svg_string = svg_renderer.render(
+            &self.config,
+            &geom.line_vertices,
+            &geom.tick_instances,
+            &geom.labels,
+            data_elements,
+        )?;
+        // We use the SVG approach to build elements, then convert to PDF.
+        // Since we can't easily parse the SVG string back, we reconstruct
+        // elements for the PDF renderer.
+        let transform =
+            crate::export::svg::ClipToSvg::new(svg_opts.width as f32, svg_opts.height as f32);
+
+        let mut all_elements: Vec<crate::export::svg::SvgElement> = Vec::new();
+
+        // Background
+        let bg = self.config.background_color.unwrap_or([1.0, 1.0, 1.0, 1.0]);
+        all_elements.push(crate::export::svg::SvgElement::Rect {
+            x: 0.0,
+            y: 0.0,
+            width: svg_opts.width as f32,
+            height: svg_opts.height as f32,
+            fill: crate::export::svg::element::rgba_to_css(bg[0], bg[1], bg[2], bg[3]),
+            stroke: None,
+            stroke_width: None,
+            rx: None,
+        });
+
+        // Axis lines
+        for pair in geom.line_vertices.chunks_exact(2) {
+            let (x1, y1) = transform.point(pair[0].position[0], pair[0].position[1]);
+            let (x2, y2) = transform.point(pair[1].position[0], pair[1].position[1]);
+            let color = crate::export::svg::element::rgba_to_css(
+                pair[0].color[0],
+                pair[0].color[1],
+                pair[0].color[2],
+                pair[0].color[3],
+            );
+            all_elements.push(crate::export::svg::SvgElement::Line {
+                x1,
+                y1,
+                x2,
+                y2,
+                stroke: color,
+                stroke_width: 1.0,
+                stroke_dasharray: None,
+            });
+        }
+
+        // Tick marks
+        for inst in &geom.tick_instances {
+            let (x1, y1) = transform.point(inst.position[0], inst.position[1]);
+            let (x2, y2) = transform.point(
+                inst.position[0] + inst.tick_vector[0],
+                inst.position[1] + inst.tick_vector[1],
+            );
+            let color = crate::export::svg::element::rgba_to_css(
+                inst.color[0],
+                inst.color[1],
+                inst.color[2],
+                inst.color[3],
+            );
+            all_elements.push(crate::export::svg::SvgElement::Line {
+                x1,
+                y1,
+                x2,
+                y2,
+                stroke: color,
+                stroke_width: 1.0,
+                stroke_dasharray: None,
+            });
+        }
+
+        // Labels
+        for label in &geom.labels {
+            all_elements.push(crate::export::svg::SvgElement::Text {
+                x: label.screen_position.x,
+                y: label.screen_position.y,
+                content: label.text.clone(),
+                font_family: "sans-serif".to_string(),
+                font_size: self.config.label_style.font_size,
+                text_anchor: "start".to_string(),
+                dominant_baseline: "central".to_string(),
+                fill: crate::export::svg::element::rgba_to_css(
+                    self.config.label_style.color.x,
+                    self.config.label_style.color.y,
+                    self.config.label_style.color.z,
+                    self.config.label_style.color.w,
+                ),
+                font_weight: None,
+            });
+        }
+
+        // Data marks
+        all_elements.extend_from_slice(data_elements);
+
+        // Ignore the SVG string — it was only generated to validate.
+        let _ = svg_string;
+
+        let mut doc = crate::export::pdf::PdfDocument::new(options);
+        doc.add_page_from_elements(
+            "Chart",
+            &all_elements,
+            svg_opts.width as f32,
+            svg_opts.height as f32,
+        )?;
+        doc.write(path)
+    }
 }
 
 #[derive(Debug, Clone)]

@@ -19,6 +19,7 @@ use printpdf::{
 
 use crate::error::{GupError, GupResult};
 use crate::export::svg::SvgElement;
+use crate::export::svg::element::rgba_to_css;
 
 use super::options::PdfOptions;
 use crate::export::svg::ClipToSvg;
@@ -572,12 +573,7 @@ impl PdfDocument {
                 inst.position[0] + inst.tick_vector[0],
                 inst.position[1] + inst.tick_vector[1],
             );
-            let color = rgba_to_css(
-                inst.color[0],
-                inst.color[1],
-                inst.color[2],
-                inst.color[3],
-            );
+            let color = rgba_to_css(inst.color[0], inst.color[1], inst.color[2], inst.color[3]);
             all_elements.push(SvgElement::Line {
                 x1,
                 y1,
