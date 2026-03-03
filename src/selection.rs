@@ -28,6 +28,7 @@ use crate::shader_function::{
     ComposableShaderFunction, ShaderType, ShaderUniform, deduplicate_wgsl_functions,
     replace_wgsl_identifier,
 };
+use crate::streaming::DataStream;
 use crate::transition::builder::{CommittedTransition, TransitionBuilder};
 use crate::transition::diff::{DiffResult, diff_by_key};
 use crate::{GupResult, MaybeSend, MaybeSync, RenderContext};
@@ -421,6 +422,10 @@ pub struct Selection<T, M: Mark> {
     /// Callback to invoke when the transition ends.
     #[cfg(target_arch = "wasm32")]
     transition_end_callback: Option<Box<dyn Fn()>>,
+    /// Active data stream source (type-erased). Set via [`stream`](Self::stream).
+    /// When present, the selection delegates GPU buffer management to the
+    /// [`DataStream`](crate::streaming::DataStream).
+    stream_source: Option<Box<dyn std::any::Any + Send + Sync>>,
 }
 
 impl<T, M: Mark> std::fmt::Debug for Selection<T, M> {
@@ -457,6 +462,7 @@ impl<T, M: Mark> Selection<T, M> {
             pending_diff: None,
             committed_transition: None,
             transition_end_callback: None,
+            stream_source: None,
         })
     }
 
@@ -484,6 +490,7 @@ impl<T, M: Mark> Selection<T, M> {
             pending_diff: None,
             committed_transition: None,
             transition_end_callback: None,
+            stream_source: None,
         }
     }
 
@@ -918,6 +925,90 @@ impl<T, M: Mark> Selection<T, M> {
         self.data = data;
         // Mark ARIA tree as needing a refresh.
         self.aria_dirty = true;
+    }
+
+    // -----------------------------------------------------------------------
+    // Live data streaming
+    // -----------------------------------------------------------------------
+
+    /// Connect a [`DataStream`] as the live data source for this selection.
+    ///
+    /// Once connected, the stream's GPU buffer is used directly for
+    /// rendering — subsequent [`push`](DataStream::push) and
+    /// [`push_batch`](DataStream::push_batch) calls on the stream perform
+    /// incremental GPU buffer updates without requiring a full
+    /// [`set_data`](Self::set_data) / re-join cycle.
+    ///
+    /// Calling this on a selection that already has static data via
+    /// [`set_data`](Self::set_data) replaces the static binding: the old
+    /// data is dropped and the render state is invalidated.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let mut stream = DataStream::<f32>::builder()
+    ///     .capacity(1_000)
+    ///     .build(&device)
+    ///     .unwrap();
+    ///
+    /// selection.stream(stream);
+    /// ```
+    pub fn stream(&mut self, data_stream: DataStream<T>)
+    where
+        T: bytemuck::Pod + bytemuck::Zeroable + Send + Sync + 'static,
+    {
+        // Drop static data and invalidate render state.
+        self.data = Vec::new();
+        self.render_state = None;
+        self.aria_dirty = true;
+        self.stream_source = Some(Box::new(data_stream));
+    }
+
+    /// Returns `true` if this selection has an active data stream.
+    pub fn has_stream(&self) -> bool {
+        self.stream_source.is_some()
+    }
+
+    /// Return a reference to the active [`DataStream`], if one has been
+    /// set via [`stream`](Self::stream).
+    ///
+    /// Returns `None` if no stream is attached or if the type parameter
+    /// does not match.
+    pub fn stream_ref<U: bytemuck::Pod + bytemuck::Zeroable + Send + Sync + 'static>(
+        &self,
+    ) -> Option<&DataStream<U>> {
+        self.stream_source
+            .as_ref()
+            .and_then(|s| s.downcast_ref::<DataStream<U>>())
+    }
+
+    /// Return a mutable reference to the active [`DataStream`], if one
+    /// has been set via [`stream`](Self::stream).
+    ///
+    /// Use this to push data, subscribe to updates, or flush to the GPU.
+    ///
+    /// Returns `None` if no stream is attached or if the type parameter
+    /// does not match.
+    pub fn stream_mut<U: bytemuck::Pod + bytemuck::Zeroable + Send + Sync + 'static>(
+        &mut self,
+    ) -> Option<&mut DataStream<U>> {
+        self.stream_source
+            .as_mut()
+            .and_then(|s| s.downcast_mut::<DataStream<U>>())
+    }
+
+    /// Detach the current data stream, returning it if one was attached.
+    ///
+    /// After this call, [`has_stream`](Self::has_stream) returns `false`
+    /// and the selection reverts to static-data mode (call
+    /// [`set_data`](Self::set_data) to provide new data).
+    pub fn detach_stream<U: bytemuck::Pod + bytemuck::Zeroable + Send + Sync + 'static>(
+        &mut self,
+    ) -> Option<DataStream<U>> {
+        self.stream_source
+            .take()
+            .and_then(|s| s.downcast::<DataStream<U>>().ok())
+            .map(|b| *b)
     }
 
     // -----------------------------------------------------------------------

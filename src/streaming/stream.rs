@@ -50,7 +50,7 @@ pub struct SubscriberHandle(u64);
 /// Internal subscriber entry pairing a handle with its callback.
 struct Subscriber<T: bytemuck::Pod + bytemuck::Zeroable> {
     handle: SubscriberHandle,
-    callback: Box<dyn Fn(&StreamUpdate<T>) + Send + 'static>,
+    callback: Box<dyn Fn(&StreamUpdate<T>) + Send + Sync + 'static>,
 }
 
 // ---------------------------------------------------------------------------
@@ -285,7 +285,7 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> DataStream<T> {
     /// ```
     pub fn subscribe(
         &mut self,
-        callback: impl Fn(&StreamUpdate<T>) + Send + 'static,
+        callback: impl Fn(&StreamUpdate<T>) + Send + Sync + 'static,
     ) -> SubscriberHandle {
         let handle = SubscriberHandle(NEXT_SUBSCRIBER_ID.fetch_add(1, Ordering::Relaxed));
         self.subscribers.push(Subscriber {
