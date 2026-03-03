@@ -881,10 +881,10 @@ layouts, and 3D visualization.
   selects the coarsest LOD tier by pixels-per-data-point heuristic and issues a
   frustum-culled indirect draw with no CPU readback. Deps: GUP-256 ✅, GUP-076
   ✅, GUP-077 ✅.
-- [GUP-258](GUP-258_Streaming_Data_Manager_LOD.md) 📋 — StreamingLodManager
+- [GUP-258](GUP-258_Streaming_Data_Manager_LOD.md) 🚧 — StreamingLodManager
   combining DataStream<T> (GUP-015) with LodPyramid for incremental cell-level
-  LOD updates and memory-budget eviction. Deps: GUP-015 ✅, GUP-244 📋, GUP-256
-  📋.
+  LOD updates and memory-budget eviction. Deps: GUP-015 ✅, GUP-244 ✅, GUP-256
+  ✅.
 - [GUP-259](GUP-259_GPU_Force_Directed_Graph_Layout.md) 📋 — GPU compute shader
   force-directed layout (repulsion, spring, gravity, convergence detection)
   targeting 100K nodes in ≤5 seconds. Deps: GUP-003 ✅, GUP-004 ✅, GUP-077 ✅.
