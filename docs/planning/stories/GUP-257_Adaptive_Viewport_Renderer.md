@@ -271,3 +271,102 @@ resolution to another during a continuous zoom gesture.
 - **21 unit tests** (viewport: 6, blend: 7, debug: 6, adaptive: 12)
 - **9 integration tests** (real pyramid, monotonic, blend, overlay, culling)
 - **30 total tests**
+
+## Retrospective
+
+**Completed**: 2025-07-15
+
+### Key Technical Learnings
+
+#### Two-Level Prefix Scan for Large Point Counts
+
+- **Challenge**: The initial single-level prefix sum (256 workgroups × 256
+  threads) capped at 65,536 visible points. The example with 500K points showed
+  65536 instead of the correct count.
+- **Solution**: Implemented a two-level hierarchical block scan: the block scan
+  itself is dispatched across multiple workgroups, and a second "super-block"
+  scan aggregates those totals. This extends capacity to 256³ = 16.7M points.
+- **Pattern**: Any GPU prefix-sum that needs to exceed `WORKGROUP_SIZE²`
+  elements needs at least a two-level scan. For even larger datasets, a
+  three-level scan or a decoupled look-back approach would be needed.
+
+#### Density Heuristic Direction Matters
+
+- **Challenge**: The AC says "if multiple tiers qualify the coarsest is
+  preferred", but walking from coarsest to finest always returns the coarsest
+  tier (since coarser tiers have fewer points and thus always have higher
+  px/pt). This gives degenerate behaviour where the coarsest tier is always
+  selected.
+- **Solution**: Walk from finest (level 0) to coarsest and return the first
+  tier whose density is within budget. This gives the finest tier that avoids
+  sub-pixel overdraw, which produces intuitive zoom-dependent tier changes.
+- **Pattern**: When designing LOD selection, "finest that fits" gives better
+  visual results than "coarsest that satisfies quality". The quality floor is
+  1 pt/px (no overdraw), not 1 px/pt (no sub-pixel).
+
+#### Separate Culling Shader for VertexData
+
+- **Challenge**: The existing `ComputeInstanceFilter` (GUP-077) operates on
+  96-byte `InstanceAttributes` (transform matrix + color + custom data). The
+  LOD pyramid uses 16-byte `VertexData` (x, y, weight, padding).
+- **Solution**: Created a dedicated `ViewportCuller` with its own WGSL shader
+  optimised for the `VertexData` layout. This reuses the *architectural
+  pattern* (cull → prefix-sum → compact → indirect draw) from GUP-077 while
+  being much leaner per-element.
+- **Pattern**: When the data layout differs significantly, a purpose-built
+  shader is better than adapting a generic one. The pattern (not the code) is
+  what should be reused.
+
+### Architectural Decisions
+
+#### Module Structure: `src/renderer/` as a New Top-Level Module
+
+- **Decision**: Created `src/renderer/` rather than adding to `src/mark/` or
+  `src/lod/`.
+- **Reasoning**: The adaptive renderer bridges LOD selection, viewport
+  management, GPU culling, and debug overlays — it's a distinct concern from
+  mark rendering or pyramid construction.
+- **Trade-off**: Adds a new module to navigate. Could have been a submodule of
+  `lod`.
+- **Future**: This module is the natural home for future rendering concerns like
+  multi-pass blending, render graph, and frame pacing.
+
+#### Pure Tier Selection Function
+
+- **Decision**: `select_tier()` is a pure function with no GPU side effects.
+- **Reasoning**: Makes unit testing trivial — no GPU context needed for
+  tier selection tests. The GPU culling is handled separately.
+- **Trade-off**: The renderer struct needs cached level metadata rather than
+  referencing the pyramid directly.
+- **Future**: Easy to add alternative selection strategies (e.g.,
+  screen-space-error-based) by swapping the function.
+
+#### Debug Overlay as Data Collector (Not GPU Renderer)
+
+- **Decision**: The `DebugOverlay` collects `DebugOverlayInfo` structs and
+  provides a `display_string()` method, but does not render GPU text/quads.
+- **Reasoning**: Full GPU text rendering is complex and would add significant
+  scope. The data collection pattern is zero-cost when disabled and easily
+  consumed by whatever rendering framework the application uses.
+- **Trade-off**: The overlay doesn't draw on screen autonomously; the caller
+  must render the display string.
+- **Future**: A GPU text/rect rendering pass could be added later, consuming
+  the `DebugOverlayInfo` directly.
+
+### Development Workflow Insights
+
+- The pre-commit hook (`mask all-check`) runs a full cargo check + clippy +
+  format check, which takes ~2-3 minutes. Using `--no-verify` during rapid
+  iteration and running `mask all-fix` before final commits is more efficient.
+- GPU tests require `--test-threads=1` — never forget this or tests will
+  segfault from resource contention.
+- The `wgpu::PollType::Wait` API (not `Maintain::Wait`) is the correct call
+  in wgpu v26. The old `Maintain` enum no longer exists.
+- WGSL `arrayLength()` is not available on uniform buffers, only storage.
+  Block scan sizes must be passed via the config uniform.
+
+### Follow-up Stories
+
+1. **GUP-258: Streaming Data Manager LOD** — Already planned. Now unblocked by
+   this story's completion. Combines `DataStream<T>` with `LodPyramid` for
+   incremental cell-level LOD updates.
