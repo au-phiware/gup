@@ -703,7 +703,7 @@ integration, pipeline caching.
 - [GUP-286](GUP-286_Per_Bar_Instance_Buffer_Fill.md) 💡 — Per-bar
   RectangleAttributes computation from scales and BarRecord for visible bar
   rendering. Deps: GUP-245 ✅, GUP-067 ✅.
-- [GUP-246](GUP-246_Line_Chart_Builder.md) 📋 — LineChartBuilder with
+- [GUP-246](GUP-246_Line_Chart_Builder.md) 🚧 — LineChartBuilder with
   multi-series support, automatic x-sorting, point markers, and four curve
   interpolation modes. Deps: GUP-018 ✅, GUP-067 ✅, GUP-093 ✅, GUP-168 ✅.
 - [GUP-247](GUP-247_Area_Chart_Builder.md) 📋 — AreaChartBuilder with stacked,
