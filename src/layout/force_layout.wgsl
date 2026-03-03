@@ -18,8 +18,8 @@ struct GpuNode {
 }
 
 struct GpuEdge {
-    source: u32,
-    target: u32,
+    src: u32,
+    tgt: u32,
 }
 
 struct SimParams {
@@ -91,8 +91,8 @@ fn spring_pass(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
 
-    let src = edges[e].source;
-    let tgt = edges[e].target;
+    let src = edges[e].src;
+    let tgt = edges[e].tgt;
 
     let ps = vec2<f32>(nodes[src].pos_x, nodes[src].pos_y);
     let pt = vec2<f32>(nodes[tgt].pos_x, nodes[tgt].pos_y);

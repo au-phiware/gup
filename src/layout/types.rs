@@ -70,8 +70,8 @@ pub(crate) struct GpuNode {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub(crate) struct GpuEdge {
-    pub source: u32,
-    pub target: u32,
+    pub src: u32,
+    pub tgt: u32,
 }
 
 /// GPU-side force simulation parameters.
@@ -118,21 +118,21 @@ const _: () = assert!(std::mem::size_of::<GpuSimParams>() == 32);
 #[derive(Debug, Clone)]
 pub struct ForceDirected {
     /// Repulsion force strength between all node pairs (default 50.0).
-    pub(crate) repulsion_strength: f32,
+    pub repulsion_strength: f32,
     /// Spring attraction strength along edges (default 0.01).
-    pub(crate) spring_strength: f32,
+    pub spring_strength: f32,
     /// Natural rest length of edge springs in pixels (default 30.0).
-    pub(crate) spring_rest_length: f32,
+    pub spring_rest_length: f32,
     /// Gravity pulling nodes toward the centre (default 0.1).
-    pub(crate) gravity: f32,
+    pub gravity: f32,
     /// Velocity damping coefficient applied each iteration (default 0.9).
-    pub(crate) damping: f32,
+    pub damping: f32,
     /// Maximum number of iterations (default 300).
-    pub(crate) iterations: u32,
+    pub iterations: u32,
     /// Maximum displacement threshold for convergence (default 0.5 pixels).
-    pub(crate) convergence_threshold: f32,
+    pub convergence_threshold: f32,
     /// Check convergence every N iterations (default 10).
-    pub(crate) convergence_check_interval: u32,
+    pub convergence_check_interval: u32,
 }
 
 impl Default for ForceDirected {

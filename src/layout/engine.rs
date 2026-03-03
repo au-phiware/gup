@@ -55,6 +55,14 @@ pub struct LayoutEngine {
     bind_group_layout: BindGroupLayout,
 }
 
+impl std::fmt::Debug for LayoutEngine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LayoutEngine")
+            .field("device", &"<wgpu::Device>")
+            .finish()
+    }
+}
+
 impl LayoutEngine {
     /// Create a new layout engine, compiling compute shaders.
     ///
@@ -213,8 +221,8 @@ impl LayoutEngine {
         let gpu_edges: Vec<GpuEdge> = edges
             .iter()
             .map(|e| GpuEdge {
-                source: e.source,
-                target: e.target,
+                src: e.source,
+                tgt: e.target,
             })
             .collect();
 
@@ -245,8 +253,8 @@ impl LayoutEngine {
         // group creation succeeds.
         let edge_data = if gpu_edges.is_empty() {
             vec![GpuEdge {
-                source: 0,
-                target: 0,
+                src: 0,
+                tgt: 0,
             }]
         } else {
             gpu_edges
