@@ -9,8 +9,8 @@
 use super::ChartBuilder;
 use super::accessor::FieldAccessor;
 use super::builders::{
-    AreaChartBuilder, BarChartBuilder, BoxPlotBuilder, HeatmapBuilder, LineChartBuilder,
-    ScatterPlotBuilder, ViolinPlotBuilder,
+    AreaChartBuilder, BarChartBuilder, BoxPlotBuilder, DensityPlotBuilder, HeatmapBuilder,
+    LineChartBuilder, ScatterPlotBuilder, ViolinPlotBuilder,
 };
 use crate::RenderContext;
 use crate::error::{GupError, GupResult};
@@ -235,6 +235,29 @@ where
         ConfiguredViolinPlot::new(self.data, self.context, builder)
     }
 
+    /// Create a density plot with the specified X and Y accessors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    ///
+    /// # #[derive(Debug, Clone)] struct Point { x: f32, y: f32 }
+    /// # let points = vec![Point { x: 1.0, y: 2.0 }];
+    /// let chart = plot()
+    ///     .data(points)
+    ///     .density(x("x"), y("y"));
+    /// ```
+    pub fn density(
+        self,
+        x_accessor: FieldAccessor,
+        y_accessor: FieldAccessor,
+    ) -> ConfiguredDensityPlot<T> {
+        let builder = DensityPlotBuilder::new().x(x_accessor).y(y_accessor);
+
+        ConfiguredDensityPlot::new(self.data, self.context, builder)
+    }
+
     /// Get the underlying data.
     pub fn data(&self) -> &[T] {
         &self.data
@@ -394,6 +417,7 @@ impl_configured_chart!(ConfiguredAreaChart, AreaChartBuilder<T>);
 impl_configured_chart!(ConfiguredHeatmap, HeatmapBuilder<T>);
 impl_configured_chart!(ConfiguredBoxPlot, BoxPlotBuilder<T>);
 impl_configured_chart!(ConfiguredViolinPlot, ViolinPlotBuilder<T>);
+impl_configured_chart!(ConfiguredDensityPlot, DensityPlotBuilder<T>);
 
 /// Main entry point for Observable Plot-style API.
 ///
@@ -544,6 +568,14 @@ mod tests {
         }];
 
         let _violin = plot().data(data7).violin(y("y")).title("Violin Plot");
+
+        let data8 = vec![TestData {
+            x: 1.0,
+            y: 2.0,
+            category: "test".to_string(),
+        }];
+
+        let _density = plot().data(data8).density(x("x"), y("y")).title("Density");
     }
 
     #[test]

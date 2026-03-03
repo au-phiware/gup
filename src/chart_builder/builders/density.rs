@@ -479,6 +479,21 @@ impl<T> DensityPlotBuilder<T> {
         self
     }
 
+    /// No-op colour accessor for API consistency with other chart
+    /// builders.
+    ///
+    /// Density plots derive colour from the [`ColorScale`] set via
+    /// [`color_scheme`](Self::color_scheme); this method exists solely
+    /// so that the generic `plot().data(d).density(x, y).color(c)`
+    /// convenience chain compiles.
+    pub fn color<A>(self, _accessor: A) -> Self
+    where
+        A: Into<AccessorFunction<T>>,
+    {
+        // Colour is determined by the colour scale, not per-datum.
+        self
+    }
+
     /// Set a fixed KDE bandwidth.
     ///
     /// When omitted, Silverman's rule is used to estimate an
