@@ -87,6 +87,7 @@ pub mod integration;
 pub mod interaction;
 pub mod label;
 pub mod layout;
+pub mod lighting;
 pub mod linked_selection;
 pub mod lod;
 pub mod mark;
