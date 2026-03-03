@@ -42,6 +42,7 @@
 //! | [`BoxPlot`] | [`boxplot`] | Statistical box-and-whisker |
 //! | [`Text`] | [`text`] | SDF text glyph rendering |
 //! | [`Path`] | [`path`] | SVG-like path with GPU tessellation |
+//! | [`GeoPathMark`] | [`geo_path`] | GeoJSON polygon with geographic projection |
 //! | [`CompositeMark`] | [`composite`] | Grouped sub-marks |
 //!
 //! # Quick Start
@@ -95,6 +96,7 @@ pub mod boxplot;
 pub mod circle;
 pub mod composite;
 pub mod compute_instance_filter;
+pub mod geo_path;
 pub mod gpu_path_tessellator;
 pub mod line;
 pub mod occlusion_culler;
@@ -122,6 +124,10 @@ pub use composite::{
     CompositeMark, CompositeMarkAttributes, CompositeMarkVertex, SubMark, Transform,
 };
 pub use compute_instance_filter::{ComputeInstanceFilter, FilterConfig, FilterResult};
+pub use geo_path::{
+    GeoFeature, GeoJsonSource, GeoPathAttributes, GeoPathMark, GeoPathVertex, GeoPolygon,
+    Projection,
+};
 pub use gpu_path_tessellator::GpuPathTessellator;
 pub use line::{Line, LineAttributes, LineStyle, LineVertex};
 pub use occlusion_culler::{
