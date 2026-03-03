@@ -917,6 +917,11 @@ layouts, and 3D visualization.
   Camera/projection uniforms, Phong lighting, and Sphere3D/Box3D/Line3D marks
   enabling 3D scatter plots with materials. Deps: GUP-004 ✅, GUP-009 ✅,
   GUP-010 ✅, GUP-131 ✅.
+- [GUP-315](GUP-315_3D_Axis_and_Grid.md) 📋 — 3D axis lines, tick marks, and
+  ground-plane grid using Line3D marks and the Camera uniform. Deps: GUP-261 ✅.
+- [GUP-316](GUP-316_GPU_Integration_Test_3D.md) 📋 — GPU integration tests for
+  3D marks: headless rendering of Sphere3D/Box3D/Line3D with pixel readback
+  verification. Deps: GUP-261 ✅.
 
 ## Ecosystem Integration
 
