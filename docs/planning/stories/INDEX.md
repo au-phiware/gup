@@ -941,18 +941,18 @@ PNG, HTML), and platform targets.
   wrapping the full winit event loop (surface, resize, device-loss recovery)
   into a 5-line builder entry point. Deps: GUP-039 ✅, GUP-047 ✅, GUP-049 ✅,
   GUP-013 📋.
-- [GUP-266](GUP-266_SVG_Export.md) 🚧 — SvgRenderer extracting vector paths from
+- [GUP-266](GUP-266_SVG_Export.md) ✅ — SvgRenderer extracting vector paths from
   marks and generating a valid SVG document with correct clip-space→viewport
   coordinate mapping. Deps: GUP-009 ✅, GUP-018 ✅, GUP-099 ✅.
 - [GUP-267](GUP-267_PDF_Export.md) 📋 — PdfRenderer converting the GUP-266 SVG
   intermediate to a PDF with embedded font subsets, configurable page sizes, and
-  multi-page support. Deps: GUP-018 ✅, GUP-266 📋.
+  multi-page support. Deps: GUP-018 ✅, GUP-266 ✅.
 - [GUP-268](GUP-268_PNG_Export.md) 📋 — Off-screen GPU render-to-texture with
   staging-buffer readback and PNG encoding via the image crate, supporting HiDPI
   scale factors. Deps: GUP-004 ✅, GUP-035 ✅, GUP-018 ✅.
 - [GUP-269](GUP-269_HTML_Export.md) 📋 — HtmlExporter generating a single-file
   interactive HTML page with embedded WASM, data JSON, SVG fallback, and OG
-  thumbnail meta tags. Deps: GUP-266 📋, GUP-268 📋, GUP-172 ✅.
+  thumbnail meta tags. Deps: GUP-266 ✅, GUP-268 📋, GUP-172 ✅.
 
 ## Mobile
 
