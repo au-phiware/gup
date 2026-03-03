@@ -2,7 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Chart Builders **Status**: 🚧 In Progress **Created**: 2025-01-31
+**Initiative**: Chart Builders **Status**: 🚧 In Progress **Created**:
+2025-01-31
 
 ## Context
 
@@ -42,7 +43,7 @@ data upload.
 > automatically, and renders using GPU-instanced rectangles, so that I can
 > produce professional bar charts for large datasets with a single method
 > chain."
-
+>
 > "As a data analyst embedding Gup charts in a dashboard, I want to switch
 > between vertical and horizontal bar orientations and between grouped and
 > stacked layouts without restructuring my data pipeline, so that I can explore
