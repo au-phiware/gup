@@ -719,7 +719,7 @@ integration, pipeline caching.
   CompositeChartBuilder composing multiple chart layers with shared axes,
   unified scale domains, and optional dual-y-axis support. Deps: GUP-001 ✅,
   GUP-018 ✅, GUP-093 ✅, GUP-245 📋, GUP-246 📋.
-- [GUP-275](GUP-275_Choropleth_Chart_Builder.md) 📋 — ChoroplethChartBuilder
+- [GUP-275](GUP-275_Choropleth_Chart_Builder.md) 🚧 — ChoroplethChartBuilder
   mapping GeoJSON region values to colors with projection selection, colorbar
   legend, and zoom/pan. Deps: GUP-018 ✅, GUP-273 ✅, GUP-274 ✅, GUP-255 ✅.
 
