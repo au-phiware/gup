@@ -206,7 +206,8 @@ pub use interaction::{
 };
 // Export event handling system
 pub use event::{
-    EventManager, EventResult, EventType, ModifierFlags, RawInputEvent, ViewportTransform,
+    CoalescingConfig, EventManager, EventResult, EventType, ModifierFlags, RawInputEvent,
+    ViewportTransform,
 };
 // Export zoom/pan behaviour
 pub use mixable::*;
