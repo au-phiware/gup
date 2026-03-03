@@ -536,6 +536,14 @@ mod tests {
         }];
 
         let _boxplot = plot().data(data6).boxplot(y("y")).title("Box Plot");
+
+        let data7 = vec![TestData {
+            x: 1.0,
+            y: 2.0,
+            category: "test".to_string(),
+        }];
+
+        let _violin = plot().data(data7).violin(y("y")).title("Violin Plot");
     }
 
     #[test]
