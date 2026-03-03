@@ -913,7 +913,7 @@ layouts, and 3D visualization.
 - [GUP-314](GUP-314_Windowed_Treemap_Rendering.md) 📋 — Windowed treemap
   rendering example with Rectangle marks and real-time colour switching. Deps:
   GUP-260 ✅, GUP-067 ✅.
-- [GUP-261](GUP-261_3D_Visualization_Support.md) 📋 — Depth buffer,
+- [GUP-261](GUP-261_3D_Visualization_Support.md) 🚧 — Depth buffer,
   Camera/projection uniforms, Phong lighting, and Sphere3D/Box3D/Line3D marks
   enabling 3D scatter plots with materials. Deps: GUP-004 ✅, GUP-009 ✅,
   GUP-010 ✅, GUP-131 ✅.
