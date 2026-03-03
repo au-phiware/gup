@@ -200,6 +200,10 @@ name = "adaptive_renderer"
 harness = false
 required-features = ["gpu-bench"]
 
+[[bench]]
+name = "treemap_layout"
+harness = false
+
 [[example]]
 name = "treemap"
 path = "examples/treemap.rs"
