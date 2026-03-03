@@ -79,6 +79,7 @@ pub mod chart_builder;
 pub mod color_descriptor;
 pub mod context;
 pub mod debug;
+pub mod depth;
 pub mod error;
 pub mod event;
 pub mod examples;
