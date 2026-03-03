@@ -182,6 +182,10 @@ harness = false
 name = "bar_chart_100k"
 harness = false
 
+[[bench]]
+name = "streaming_builder"
+harness = false
+
 [[example]]
 name = "custom_mark_demo"
 path = "examples/custom_mark_demo.rs"
