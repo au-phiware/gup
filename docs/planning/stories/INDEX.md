@@ -745,6 +745,9 @@ integration, pipeline caching.
 - [GUP-299](GUP-299_Axis_Percentage_Formatter.md) 📋 — Pluggable axis tick
   formatters with automatic percentage formatting for normalised stacked charts.
   Deps: GUP-247 ✅.
+- [GUP-300](GUP-300_Violin_Mark_Renderer.md) 💡 — Dedicated ViolinMark with GPU
+  shaders for filled density polygon rendering with gradient fill, stroke
+  outline, and anti-aliasing. Deps: GUP-249 ✅, GUP-132 ✅.
 
 ## Performance & Profiling
 
