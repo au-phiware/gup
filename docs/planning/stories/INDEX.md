@@ -809,7 +809,7 @@ validation.
   StreamingBuffer<T> with keyed insert/update/remove, dirty-region tracking,
   double-buffering swap, and GPU-flush of only mutated byte ranges. Deps:
   GUP-002 ✅, GUP-003 ✅, GUP-004 ✅.
-- [GUP-244](GUP-244_Streaming_Data_Builder_API.md) 📋 — Ergonomic DataStream<T>
+- [GUP-244](GUP-244_Streaming_Data_Builder_API.md) 🚧 — Ergonomic DataStream<T>
   builder API (capacity, mode, backpressure) with Selection::stream()
   integration on top of GUP-015's low-level primitives. Deps: GUP-002 ✅,
   GUP-015 ✅.
