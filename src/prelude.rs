@@ -230,3 +230,6 @@ pub use crate::integration::{
 pub use crate::plugins::{
     MixablePlugin, MixablePluginRegistry, PluginMetadata, global_registry, try_make_mixable,
 };
+
+// SVG export
+pub use crate::export::svg::{SvgElement, SvgExportOptions, SvgRenderer};
