@@ -2,16 +2,15 @@
 
 ## Story Overview
 
-**Initiative**: Interaction & Spatial Index
-**Status**: 📋 Planned
-**Created**: 2025-07-26
+**Initiative**: Interaction & Spatial Index **Status**: 🚧 In Progress **Created**:
+2025-07-26
 
 ## Context
 
 GUP-013 delivered the event handling system with `EventManager` dispatch, but
 noted in its risk assessment that event coalescing for high-frequency
-`mousemove` events is not in scope. Without coalescing, rapid mouse movement
-can generate 60+ events per frame, each triggering full handler dispatch chains.
+`mousemove` events is not in scope. Without coalescing, rapid mouse movement can
+generate 60+ events per frame, each triggering full handler dispatch chains.
 This can cause the event queue to grow unbounded and violate the 16 ms latency
 target under sustained rapid input.
 
