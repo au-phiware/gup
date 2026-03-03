@@ -709,7 +709,7 @@ integration, pipeline caching.
 - [GUP-247](GUP-247_Area_Chart_Builder.md) 📋 — AreaChartBuilder with stacked,
   normalized-stacked, gradient-fill, and band/ribbon area variants via
   tessellated path polygons. Deps: GUP-018 ✅, GUP-246 ✅, GUP-132 ✅.
-- [GUP-248](GUP-248_Heatmap_Chart_Builder.md) 📋 — HeatmapChartBuilder with
+- [GUP-248](GUP-248_Heatmap_Chart_Builder.md) 🚧 — HeatmapChartBuilder with
   automatic 2D binning, ColorScale value→color mapping, and GPU-instanced
   Rectangle rendering for 1M+ cells at 60 FPS. Deps: GUP-018 ✅, GUP-067 ✅,
   GUP-093 ✅, GUP-255 ✅.
