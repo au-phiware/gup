@@ -475,11 +475,6 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable + SpatiallyKeyed> StreamingLodManager
 
             // Track cell writes — one per dirty cell.
             self.cell_write_count += dirty_cells.len() as u64;
-
-            // Update allocated bytes.
-            let level_bytes = total_count * vertex_size;
-            // We track total across all levels; recompute after all levels flushed.
-            let _ = level_bytes;
         }
 
         // Recompute total allocated bytes.

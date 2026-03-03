@@ -881,7 +881,7 @@ layouts, and 3D visualization.
   selects the coarsest LOD tier by pixels-per-data-point heuristic and issues a
   frustum-culled indirect draw with no CPU readback. Deps: GUP-256 ✅, GUP-076
   ✅, GUP-077 ✅.
-- [GUP-258](GUP-258_Streaming_Data_Manager_LOD.md) 🚧 — StreamingLodManager
+- [GUP-258](GUP-258_Streaming_Data_Manager_LOD.md) ✅ — StreamingLodManager
   combining DataStream<T> (GUP-015) with LodPyramid for incremental cell-level
   LOD updates and memory-budget eviction. Deps: GUP-015 ✅, GUP-244 ✅, GUP-256
   ✅.
