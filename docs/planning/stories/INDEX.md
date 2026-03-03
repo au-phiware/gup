@@ -736,6 +736,9 @@ integration, pipeline caching.
   ✅, GUP-014 ✅.
 - [GUP-295](GUP-295_Line_Chart_Point_Markers.md) 💡 — Optional circle point
   markers at each data vertex on line charts. Deps: GUP-246 ✅, GUP-251 📋.
+- [GUP-296](GUP-296_Colorbar_Axis_Renderer.md) 📋 — Colorbar axis renderer:
+  thin gradient-filled rectangle with tick marks and labels for colour-scale
+  legends. Deps: GUP-248 ✅, GUP-093 ✅, GUP-255 ✅.
 
 ## Performance & Profiling
 
@@ -763,6 +766,9 @@ profiling, trend visualisation.
 - [GUP-188](GUP-188_Automatic_Draw_Call_Metrics.md) ✅ — Add a
   render_marks_tracked(&mut self, ...) variant to MarkRenderer that
   automatically….
+- [GUP-297](GUP-297_GPU_Compute_Shader_2D_Binning.md) 📋 — GPU compute shader
+  for 2D heatmap binning of 10M+ row datasets, with CPU fallback. Deps:
+  GUP-248 ✅.
 
 ## Debug & Development Tools
 
