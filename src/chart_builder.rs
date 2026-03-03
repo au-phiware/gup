@@ -2168,6 +2168,147 @@ where
         let svg = self.render_to_svg(options)?;
         crate::export::svg::write_svg_to_file(&svg, path)
     }
+
+    // -----------------------------------------------------------------
+    // PNG export
+    // -----------------------------------------------------------------
+
+    /// Render this chart to an off-screen GPU texture at the given pixel
+    /// dimensions and return the result as PNG-encoded bytes.
+    ///
+    /// The method creates a temporary off-screen render target, prepares
+    /// and issues all draw commands (axes, ticks, grid lines), reads the
+    /// pixel data back through a staging buffer, and encodes it as a
+    /// lossless PNG with RGBA colour.
+    ///
+    /// The chart's [`Selection`] must have been created with a
+    /// [`RenderContext`] (i.e. `context()` returns `Some`).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no GPU context is available, or if the GPU
+    /// readback or PNG encoding fails.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let png_bytes = chart.render_to_png(800, 600)?;
+    /// std::fs::write("chart.png", &png_bytes)?;
+    /// ```
+    pub fn render_to_png(&mut self, width: u32, height: u32) -> GupResult<Vec<u8>> {
+        let context = self
+            .visualization
+            .context()
+            .cloned()
+            .ok_or_else(|| GupError::RenderError {
+                message: "Cannot export PNG: chart has no GPU RenderContext".to_string(),
+            })?;
+
+        let device = context.device();
+        let queue = context.queue();
+        let surface_format = context.surface_format();
+
+        // 1. Prepare GPU buffers for drawing.
+        self.prepare_draw_commands(device, queue, surface_format);
+
+        // 2. Create off-screen render target.
+        let target = crate::export::png::OffscreenTarget::new(device, width, height);
+
+        // 3. Create command encoder and render pass.
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("png_export_render_encoder"),
+        });
+
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("png_export_render_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target.view(),
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 1.0,
+                            g: 1.0,
+                            b: 1.0,
+                            a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            // 4. Issue all draw commands.
+            self.draw_grid_lines(&mut render_pass);
+            self.draw_axis_lines(&mut render_pass);
+            self.draw_ticks(&mut render_pass);
+        }
+
+        // 5. Submit rendering commands.
+        queue.submit(std::iter::once(encoder.finish()));
+
+        // 6. Read back the rendered pixels and encode as PNG.
+        target.readback_as_png(device, queue)
+    }
+
+    /// Render this chart to PNG at a logical size scaled by the given
+    /// factor.
+    ///
+    /// The physical pixel dimensions of the output are
+    /// `(logical_width × scale, logical_height × scale)`, producing a
+    /// HiDPI/Retina-ready image when `scale > 1.0`.
+    ///
+    /// A scale of `1.0` is equivalent to
+    /// [`render_to_png(logical_width, logical_height)`](Self::render_to_png).
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// // 2× Retina export at logical 400×300
+    /// let png = chart.render_to_png_scaled(400, 300, 2.0)?;
+    /// // Output image will be 800×600 pixels.
+    /// ```
+    pub fn render_to_png_scaled(
+        &mut self,
+        logical_width: u32,
+        logical_height: u32,
+        scale: f32,
+    ) -> GupResult<Vec<u8>> {
+        let phys_w = (logical_width as f32 * scale).round() as u32;
+        let phys_h = (logical_height as f32 * scale).round() as u32;
+        self.render_to_png(phys_w, phys_h)
+    }
+
+    /// Render this chart to PNG and write the result to a file.
+    ///
+    /// Convenience wrapper around [`render_to_png`](Self::render_to_png)
+    /// that writes the PNG bytes directly to disk.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`GupError::FileError`] if the file cannot be written.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// chart.export_png("chart.png", 2400, 1600)?;
+    /// ```
+    pub fn export_png(
+        &mut self,
+        path: impl AsRef<std::path::Path>,
+        width: u32,
+        height: u32,
+    ) -> GupResult<()> {
+        let png_bytes = self.render_to_png(width, height)?;
+        let path = path.as_ref();
+        std::fs::write(path, &png_bytes).map_err(|e| GupError::FileError {
+            path: path.display().to_string(),
+            error: e.to_string(),
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
