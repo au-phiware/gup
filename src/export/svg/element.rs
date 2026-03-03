@@ -262,7 +262,7 @@ fn xml_escape(s: &str) -> String {
 }
 
 /// Format an RGBA colour (each component 0.0–1.0) as a CSS `rgba(…)` string.
-pub(crate) fn rgba_to_css(r: f32, g: f32, b: f32, a: f32) -> String {
+pub fn rgba_to_css(r: f32, g: f32, b: f32, a: f32) -> String {
     let ri = (r * 255.0).round() as u8;
     let gi = (g * 255.0).round() as u8;
     let bi = (b * 255.0).round() as u8;

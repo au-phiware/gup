@@ -19,7 +19,7 @@
 //! // renderer.render(&chart) produces a String containing a valid SVG document.
 //! ```
 
-mod element;
+pub mod element;
 mod renderer;
 
 pub use element::SvgElement;
