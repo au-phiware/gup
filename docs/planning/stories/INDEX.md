@@ -944,7 +944,7 @@ PNG, HTML), and platform targets.
 - [GUP-266](GUP-266_SVG_Export.md) ✅ — SvgRenderer extracting vector paths from
   marks and generating a valid SVG document with correct clip-space→viewport
   coordinate mapping. Deps: GUP-009 ✅, GUP-018 ✅, GUP-099 ✅.
-- [GUP-267](GUP-267_PDF_Export.md) 🚧 — PdfRenderer converting the GUP-266 SVG
+- [GUP-267](GUP-267_PDF_Export.md) ✅ — PdfRenderer converting the GUP-266 SVG
   intermediate to a PDF with embedded font subsets, configurable page sizes, and
   multi-page support. Deps: GUP-018 ✅, GUP-266 ✅.
 - [GUP-268](GUP-268_PNG_Export.md) ✅ — Off-screen GPU render-to-texture with
@@ -952,7 +952,8 @@ PNG, HTML), and platform targets.
   scale factors. Deps: GUP-004 ✅, GUP-035 ✅, GUP-018 ✅.
 - [GUP-268A](GUP-268A_Data_Mark_PNG_Export.md) 📋 — Wire Selection data mark
   rendering (circles, rectangles, lines) through the PNG export path so exported
-  images include the full visualization, not just axes and grid. Deps: GUP-268 ✅.
+  images include the full visualization, not just axes and grid. Deps: GUP-268
+  ✅.
 - [GUP-269](GUP-269_HTML_Export.md) 📋 — HtmlExporter generating a single-file
   interactive HTML page with embedded WASM, data JSON, SVG fallback, and OG
   thumbnail meta tags. Deps: GUP-266 ✅, GUP-268 ✅, GUP-172 ✅.
