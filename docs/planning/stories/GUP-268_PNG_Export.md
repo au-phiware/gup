@@ -235,3 +235,113 @@ intended physical size.
 - [x] All examples compile: `cargo check --examples`
 - [x] Story status updated to ✅ Complete in story file and INDEX.md
 - [x] Retrospective added to story document
+
+## Retrospective
+
+**Completed**: 2025-07-18
+
+### Key Technical Learnings
+
+#### BGRA vs RGBA Channel Order
+
+- **Challenge**: wgpu's default surface format is `Bgra8UnormSrgb`, meaning GPU
+  textures store pixels as BGRA. PNG requires RGBA channel order. Naively
+  encoding the raw readback data would produce colour-swapped images.
+- **Solution**: Added a dedicated `bgra_to_rgba()` function that swaps the R and
+  B channels in-place before encoding. This is a simple byte-swap loop over
+  4-byte pixel chunks.
+- **Pattern**: When reading back GPU textures for CPU-side image encoding, always
+  check the texture format and convert channel order before passing to the
+  encoder. The format `Bgra8UnormSrgb` is the most common default on desktop
+  (especially Windows/Linux via Vulkan).
+
+#### wgpu Row-Padding Alignment
+
+- **Challenge**: wgpu requires `bytes_per_row` in `copy_texture_to_buffer` to be
+  a multiple of `COPY_BYTES_PER_ROW_ALIGNMENT` (256 bytes). For a 100-pixel-wide
+  RGBA texture, the unpadded row is 400 bytes but the aligned row is 512 bytes.
+  Without stripping this padding, decoded images have diagonal corruption
+  artefacts.
+- **Solution**: Isolated the stripping logic in a pure function
+  `strip_row_padding()` and covered it with unit tests using synthetic data
+  before wiring to the GPU path. The pure function makes debugging trivial.
+- **Pattern**: Always isolate GPU alignment concerns into pure, testable helper
+  functions. The row-padding constant (256) is a wgpu/WebGPU spec constant, not
+  a driver-specific value, so it is safe to hard-code.
+
+#### Staging Buffer Synchronisation
+
+- **Challenge**: GPU readback is inherently asynchronous. The staging buffer must
+  be mapped after the GPU finishes the copy, which requires polling.
+- **Solution**: Used `device.poll(PollType::Wait)` for blocking readback, with
+  `std::sync::mpsc::sync_channel` for the map callback. This avoids pulling in
+  `tokio` for what is fundamentally a one-shot synchronisation point.
+- **Pattern**: For blocking GPU readback in native-only code, prefer
+  `mpsc::sync_channel` over `tokio::sync::oneshot` — it is simpler and avoids
+  an async runtime dependency in the export path.
+
+### Architectural Decisions
+
+#### Unconditional `image` Dependency (No Feature Flag)
+
+- **Decision**: Kept the `image` dependency unconditional rather than gating
+  behind a `png-export` feature flag.
+- **Reasoning**: The `image` crate was already in `Cargo.toml` (version 0.24)
+  before this story, so adding a feature gate would add complexity without
+  reducing the dependency footprint. The crate is well-maintained and widely
+  used.
+- **Trade-off**: Downstream crates cannot opt out of the PNG encoding
+  dependency. This is acceptable given that it was already a dependency.
+- **Future**: If the dependency becomes problematic (e.g. for WASM binary size),
+  a feature gate can be added later without API changes.
+
+#### `&mut self` Signature for `render_to_png`
+
+- **Decision**: Used `&mut self` instead of the story's suggested `&self` for
+  `render_to_png`.
+- **Reasoning**: The method calls `prepare_draw_commands()` which lazily creates
+  and caches GPU pipelines (tick pipeline, axis-line pipeline), requiring
+  mutable access. Using interior mutability (`RefCell`) would add runtime
+  overhead and panic risk for no benefit.
+- **Trade-off**: Callers need a mutable reference to the chart, which is the
+  normal pattern for rendering.
+- **Future**: If an immutable variant is needed (e.g. for concurrent export),
+  a snapshot-based approach could be added.
+
+#### `OffscreenTarget` as a Public Utility
+
+- **Decision**: Made `OffscreenTarget` a public struct in `export::png` rather
+  than an internal helper.
+- **Reasoning**: The same off-screen render-to-texture pattern is needed by
+  GUP-263 (egui integration) and potentially by testing utilities. Exposing it
+  allows reuse without duplication.
+- **Trade-off**: Public API surface is slightly larger.
+- **Future**: Enables the egui integration story to embed Gup charts as texture
+  widgets by rendering to an `OffscreenTarget` and converting to an egui
+  `TextureId`.
+
+### Development Workflow Insights
+
+- **Pure function testing first**: Writing unit tests for `strip_row_padding`,
+  `bgra_to_rgba`, and `encode_png` before touching the GPU path was very
+  effective. All 12 pure-function tests passed on the first run, and the GPU
+  integration tests worked on the first attempt because the building blocks were
+  already verified.
+- **Build times**: The initial `cargo test` compilation takes ~15 minutes due to
+  the large number of examples. Using `--lib --test <name>` for targeted test
+  runs kept iteration cycles under 30 seconds.
+- **Visual verification**: The exported PNG shows axis lines, tick marks, and
+  grid lines rendered correctly. Data mark rendering is not yet visible because
+  the `ComposedChart::render_to_png` path only issues axis/tick/grid draw
+  commands — the data mark rendering pipeline (Selection GPU buffers) is not
+  wired through `prepare_draw_commands`. This is expected; data mark rendering
+  through the export path requires the full Selection render pipeline, which
+  is a separate concern.
+
+### Follow-up Stories
+
+1. **GUP-268A: Data Mark Rendering in PNG Export** — Wire the
+   `Selection::prepare_render` and draw pipeline through `ComposedChart`'s PNG
+   export path so that data marks (circles, rectangles, lines) appear in
+   exported PNGs alongside axes and grid lines. Currently the export renders
+   the chart frame (axes, ticks, grid) but not the data visualization itself.
