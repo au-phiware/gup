@@ -191,6 +191,11 @@ name = "lod_pyramid"
 harness = false
 required-features = ["gpu-bench"]
 
+[[bench]]
+name = "adaptive_renderer"
+harness = false
+required-features = ["gpu-bench"]
+
 [[example]]
 name = "custom_mark_demo"
 path = "examples/custom_mark_demo.rs"

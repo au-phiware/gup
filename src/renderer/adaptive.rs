@@ -299,6 +299,18 @@ impl AdaptiveRenderer {
         data_bounds: [f32; 4],
         config: AdaptiveRendererConfig,
     ) -> Self {
+        Self::from_metadata_for_bench(level_point_counts, data_bounds, config)
+    }
+
+    /// Construct from raw metadata for benchmarking.
+    ///
+    /// Creates an `AdaptiveRenderer` without requiring a real `LodPyramid`.
+    /// The caller supplies the point counts and data bounds directly.
+    pub fn from_metadata_for_bench(
+        level_point_counts: Vec<usize>,
+        data_bounds: [f32; 4],
+        config: AdaptiveRendererConfig,
+    ) -> Self {
         let level_count = level_point_counts.len();
         Self {
             viewport: AdaptiveViewport::default(),
