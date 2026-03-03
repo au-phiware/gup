@@ -697,6 +697,12 @@ integration, pipeline caching.
 - [GUP-245](GUP-245_Bar_Chart_Builder.md) ✅ — BarChartBuilder with
   vertical/horizontal, grouped, and stacked variants using instanced Rectangle
   marks and OrdinalScale. Deps: GUP-018 ✅, GUP-067 ✅, GUP-093 ✅, GUP-254 ✅.
+- [GUP-285](GUP-285_Legend_Rendering_System.md) 💡 — LegendRenderer reading
+  series labels/colours from ComposedChart for multi-series charts. Deps:
+  GUP-245 ✅, GUP-018 ✅.
+- [GUP-286](GUP-286_Per_Bar_Instance_Buffer_Fill.md) 💡 — Per-bar
+  RectangleAttributes computation from scales and BarRecord for visible bar
+  rendering. Deps: GUP-245 ✅, GUP-067 ✅.
 - [GUP-246](GUP-246_Line_Chart_Builder.md) 📋 — LineChartBuilder with
   multi-series support, automatic x-sorting, point markers, and four curve
   interpolation modes. Deps: GUP-018 ✅, GUP-067 ✅, GUP-093 ✅, GUP-168 ✅.

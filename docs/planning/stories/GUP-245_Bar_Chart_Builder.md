@@ -264,3 +264,106 @@ integration.
 - All **2 277 existing lib tests** pass with no regressions
 - All examples compile (`cargo check --examples`)
 - Lint clean (`mask all-fix`)
+
+## Retrospective
+
+**Completed**: 2025-07-27
+
+### Key Technical Learnings
+
+#### Reusing OrdinalScale → BandScale for categorical axes
+
+- **Challenge**: The story required the builder to automatically configure a
+  categorical axis. The existing `OrdinalScale` (GUP-254) was designed for
+  GPU-side WGSL functions, not directly for builder-level configuration.
+- **Solution**: Used `OrdinalScale::from_categories()` for CPU-side label-to-
+  index mapping, then `ordinal.band_scale(range, padding)` to produce a
+  `BandScale` which gets stored in `ChartConfig::x_scale` (or `y_scale` for
+  horizontal). The `AxisScale::Band` variant plugs straight into the existing
+  axis tick system.
+- **Pattern**: When the categorical data needs to drive both CPU layout and GPU
+  rendering, build the `OrdinalScale` once, derive the `BandScale` from it, and
+  let the builder pipeline carry the `AxisScale::Band` downstream.
+
+#### Builder output type change from Selection to ComposedChart
+
+- **Challenge**: The original stub returned `Selection<T, Circle>`. Changing to
+  `ComposedChart<T, Rectangle>` ripples into `ChartBuilder::Output` and the
+  `ConfiguredBarChart` macro in `plot_api.rs`.
+- **Solution**: Because `impl_configured_chart!` uses
+  `<$builder_type as ChartBuilder<T>>::Output`, the change was fully backward
+  compatible — only the associated type declaration in `bar.rs` needed updating.
+- **Pattern**: Associated types in `ChartBuilder` act as the single source of
+  truth for output type; downstream code should always refer to the associated
+  type, never to a concrete type.
+
+#### Mutual-exclusivity of grouped and stacked
+
+- **Challenge**: Enforcing at compile time that `.group_by()` and `.stack_by()`
+  are not both called would require typestate or phantom-type tricks that bloat
+  the API surface.
+- **Solution**: Chose a runtime `panic!` at build time, consistent with existing
+  builder patterns in the codebase (e.g. `validate_required_accessors`). The
+  panic message is descriptive.
+- **Pattern**: Prefer runtime checks over typestate when the constraint is
+  uncommon and the API ergonomics cost of typestate is high. Document the panic
+  clearly in doc comments.
+
+### Architectural Decisions
+
+#### Rectangle mark instead of Circle
+
+- **Decision**: Changed the builder output from `Circle` to `Rectangle`.
+- **Reasoning**: Bars are rectangular; using `Circle` was a placeholder that
+  would have required post-hoc shape overrides. `Rectangle` mark has
+  GPU-instanced rendering with SDF-based corners and anti-aliasing already
+  implemented by GUP-067.
+- **Trade-off**: The existing `observable_plot_showcase.rs` bar example
+  continued to compile because it uses the `AccessorFunction` →
+  `build_with_data` path which is stable.
+- **Future**: Per-bar instance buffer upload (computing `RectangleAttributes`
+  for every bar from scale output) is the next step for full visual rendering;
+  currently the builder produces the `ComposedChart` container with correct
+  scales and axes but the instance buffer fill is deferred to the render
+  pipeline.
+
+#### Auto-domain with 10% headroom
+
+- **Decision**: The numeric axis auto-domain is set to `0..max_value * 1.1`.
+- **Reasoning**: A small headroom prevents bars from touching the top of the
+  chart area, improving legibility. Zero is always included as the domain
+  minimum because bar charts measure magnitude from a baseline.
+- **Trade-off**: For datasets with all-zero values, the domain defaults to
+  `0..1` as a degenerate fallback.
+- **Future**: A `.y_domain(min, max)` override method could be added if users
+  need explicit control.
+
+### Development Workflow Insights
+
+- **Incremental commits**: Working in small, focused increments (core types →
+  build logic → example → benchmark → exports) kept each commit reviewable and
+  bisectable.
+- **mask all-fix**: Running the combined lint/format/check command after every
+  change caught markdown lint issues early (blockquote blank line in the story
+  file).
+- **Existing test harness**: The single `cargo test --lib -- --test-threads=1`
+  command verifying all 2 277 tests gave high confidence that the refactored bar
+  builder did not regress any other chart builder.
+- **Backward compatibility**: Keeping `BarOrientation` as a type alias for
+  `Orientation` and retaining `.stroke()` / `.bar_width()` no-op shims ensured
+  zero breakage in existing consumer code.
+
+### Follow-up Stories
+
+1. **GUP-285: Legend Rendering System** — The bar chart builder stores series
+   labels needed for legend generation, but no visual legend is rendered. A
+   dedicated story should implement a `LegendRenderer` that reads series labels
+   and palette colours from `ComposedChart` and positions legend entries
+   automatically.
+
+2. **GUP-286: Per-bar Instance Buffer Fill** — Currently the builder produces a
+   `ComposedChart<T, Rectangle>` with correct scale configuration but the
+   `Selection` does not yet compute `RectangleAttributes` for each bar. A
+   follow-up should wire the CPU-side `BarRecord` data into the
+   `RectangleInstance` buffer so that bars are visually rendered at the correct
+   positions and sizes.
