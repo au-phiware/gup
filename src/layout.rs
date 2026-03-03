@@ -37,7 +37,9 @@
 //! ```
 
 mod engine;
+mod graph_builder;
 mod types;
 
 pub use engine::LayoutEngine;
+pub use graph_builder::GraphChartBuilder;
 pub use types::*;

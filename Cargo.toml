@@ -269,6 +269,10 @@ name = "z_sort_demo"
 path = "examples/z_sort_demo.rs"
 
 [[example]]
+name = "force_directed_graph"
+path = "examples/force_directed_graph.rs"
+
+[[example]]
 name = "lod_pyramid_debug"
 path = "examples/lod_pyramid_debug.rs"
 
