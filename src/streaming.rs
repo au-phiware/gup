@@ -42,12 +42,16 @@
 //! # }
 //! ```
 
+pub mod backpressure;
 pub mod dirty_region;
 pub mod latency;
+pub mod mode;
 pub mod ring_buffer;
 pub mod streaming_buffer;
 
+pub use backpressure::BackpressureStrategy;
 pub use dirty_region::{BufferRegion, DirtyRegionTracker};
 pub use latency::LatencyTracker;
+pub use mode::StreamMode;
 pub use ring_buffer::RingBuffer;
 pub use streaming_buffer::{StreamUpdate, StreamingBuffer, StreamingBufferConfig};
