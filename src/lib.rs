@@ -299,7 +299,8 @@ pub use linked_selection::{
 // Export layout engine
 pub use layout::{
     ForceDirected, GraphChartBuilder, GraphLayout, LayoutEdge, LayoutEngine, LayoutNode,
-    LayoutResult, NodePosition,
+    LayoutRect, LayoutResult, NodePosition, TreeNode, TreemapAlgorithm, TreemapCell,
+    TreemapOptions, TreemapResult,
 };
 
 // Export chart builder system (Observable Plot-style API)
