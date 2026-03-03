@@ -93,7 +93,17 @@ pub enum LineInterpolation {
     Curve,
 }
 
-/// Line chart builder providing Observable Plot-style API.
+/// Line chart builder providing fluent API for polyline visualisation.
+///
+/// # Performance
+///
+/// Segment construction is `O(N log N)` when `sort_by_x` is enabled (the
+/// default), dominated by the stable sort. When sorting is disabled the
+/// cost is `O(N)`. For datasets beyond ~100 k points consider:
+///
+/// - Disabling `sort_by_x` if data is already in x-order.
+/// - Using `LineInterpolation::Linear` (step and monotone modes multiply
+///   the segment count by 2× and 8× respectively).
 ///
 /// # Examples
 ///

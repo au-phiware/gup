@@ -703,12 +703,12 @@ integration, pipeline caching.
 - [GUP-286](GUP-286_Per_Bar_Instance_Buffer_Fill.md) 💡 — Per-bar
   RectangleAttributes computation from scales and BarRecord for visible bar
   rendering. Deps: GUP-245 ✅, GUP-067 ✅.
-- [GUP-246](GUP-246_Line_Chart_Builder.md) 🚧 — LineChartBuilder with
+- [GUP-246](GUP-246_Line_Chart_Builder.md) ✅ — LineChartBuilder with
   multi-series support, automatic x-sorting, point markers, and four curve
   interpolation modes. Deps: GUP-018 ✅, GUP-067 ✅, GUP-093 ✅, GUP-168 ✅.
 - [GUP-247](GUP-247_Area_Chart_Builder.md) 📋 — AreaChartBuilder with stacked,
   normalized-stacked, gradient-fill, and band/ribbon area variants via
-  tessellated path polygons. Deps: GUP-018 ✅, GUP-246 📋, GUP-132 ✅.
+  tessellated path polygons. Deps: GUP-018 ✅, GUP-246 ✅, GUP-132 ✅.
 - [GUP-248](GUP-248_Heatmap_Chart_Builder.md) 📋 — HeatmapChartBuilder with
   automatic 2D binning, ColorScale value→color mapping, and GPU-instanced
   Rectangle rendering for 1M+ cells at 60 FPS. Deps: GUP-018 ✅, GUP-067 ✅,
@@ -724,7 +724,7 @@ integration, pipeline caching.
 - [GUP-251](GUP-251_Custom_Composite_Chart_Support.md) 📋 —
   CompositeChartBuilder composing multiple chart layers with shared axes,
   unified scale domains, and optional dual-y-axis support. Deps: GUP-001 ✅,
-  GUP-018 ✅, GUP-093 ✅, GUP-245 ✅, GUP-246 📋.
+  GUP-018 ✅, GUP-093 ✅, GUP-245 ✅, GUP-246 ✅.
 - [GUP-275](GUP-275_Choropleth_Chart_Builder.md) ✅ — ChoroplethChartBuilder
   mapping GeoJSON region values to colors with projection selection, colorbar
   legend, and zoom/pan. Deps: GUP-018 ✅, GUP-273 ✅, GUP-274 ✅, GUP-255 ✅.
