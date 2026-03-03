@@ -209,6 +209,12 @@ pub use crate::linked_selection::{
 // Zoom and pan behaviour
 pub use crate::zoom::{GpuViewportTransform, ZoomBehavior};
 
+// Layout engine
+pub use crate::layout::{
+    ForceDirected, GraphChartBuilder, GraphLayout, LayoutEdge, LayoutEngine, LayoutNode,
+    LayoutResult, NodePosition,
+};
+
 // Integration and plugin system
 pub use crate::integration::{
     ExternalRenderer, ExternalVisualizationBuilder, ExternalVisualizationWrapper, wrap_point_data,

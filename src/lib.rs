@@ -296,6 +296,12 @@ pub use linked_selection::{
     has_changed_since,
 };
 
+// Export layout engine
+pub use layout::{
+    ForceDirected, GraphChartBuilder, GraphLayout, LayoutEdge, LayoutEngine, LayoutNode,
+    LayoutResult, NodePosition,
+};
+
 // Export chart builder system (Observable Plot-style API)
 // Re-export selectively to avoid conflicts with label::Margins
 pub use chart_builder::builders::area::{AreaSegment, StackMode};
