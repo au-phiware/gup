@@ -791,6 +791,9 @@ profiling, trend visualisation.
 - [GUP-297](GUP-297_GPU_Compute_Shader_2D_Binning.md) 📋 — GPU compute shader
   for 2D heatmap binning of 10M+ row datasets, with CPU fallback. Deps: GUP-248
   ✅.
+- [GUP-305](GUP-305_Release_Mode_Performance_Validation.md) 💡 — CI job
+  running performance validation tests in release mode to validate actual Phase 1
+  targets. Deps: GUP-014 ✅.
 
 ## Debug & Development Tools
 
