@@ -355,7 +355,7 @@ selection, and radix sort.
   acceleration. Deps: GUP-002 ✅, GUP-003 ✅, GUP-009 ✅, GUP-010 ✅.
 - [GUP-014](GUP-014_Interaction_Performance_Optimization.md) ✅ — Interaction
   Performance Optimization.
-- [GUP-014](GUP-014_Performance_Validation.md) 📋 — This story validates that
+- [GUP-014](GUP-014_Performance_Validation.md) 🚧 — This story validates that
   Phase 1 achieves all performance targets and optimizes any…. Deps: GUP-001 ✅,
   GUP-013 ✅.
 - [GUP-031](GUP-031_GPU_Interaction_Event_System.md) ✅ — GUP-002 implemented
