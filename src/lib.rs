@@ -291,6 +291,7 @@ pub use linked_selection::{
 
 // Export chart builder system (Observable Plot-style API)
 // Re-export selectively to avoid conflicts with label::Margins
+pub use chart_builder::builders::area::{AreaSegment, StackMode};
 pub use chart_builder::builders::bar::{BarOrientation, Category, Orientation};
 pub use chart_builder::builders::heatmap::{AggregateFunc, BinGrid, BinSpec, HeatmapCell};
 pub use chart_builder::{
