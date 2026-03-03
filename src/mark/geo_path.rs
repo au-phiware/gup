@@ -1189,4 +1189,64 @@ mod tests {
         );
         assert!(GeoPathMark::get_attribute_type("invalid").is_err());
     }
+
+    // -- Integration: bundled world GeoJSON --------------------------------
+
+    #[test]
+    fn test_bundled_world_geojson_parses() {
+        let geojson_str = include_str!("../../assets/ne_110m_countries.geojson");
+        let source = GeoJsonSource::from_str(geojson_str).unwrap();
+        assert!(
+            source.features.len() >= 20,
+            "Expected at least 20 features, got {}",
+            source.features.len()
+        );
+    }
+
+    #[test]
+    fn test_bundled_world_geojson_tessellates() {
+        let geojson_str = include_str!("../../assets/ne_110m_countries.geojson");
+        let source = GeoJsonSource::from_str(geojson_str).unwrap();
+        let mark = GeoPathMark::new(source, Projection::Mercator);
+        let (fill_verts, fill_indices, stroke_verts) = mark.tessellate().unwrap();
+        assert!(
+            !fill_verts.is_empty(),
+            "world map should produce fill vertices"
+        );
+        assert!(
+            !fill_indices.is_empty(),
+            "world map should produce fill indices"
+        );
+        assert!(
+            !stroke_verts.is_empty(),
+            "world map should produce stroke vertices"
+        );
+        // Verify non-trivial triangle count.
+        let tri_count = fill_indices.len() / 3;
+        assert!(
+            tri_count > 100,
+            "world map should produce >100 triangles, got {tri_count}"
+        );
+    }
+
+    #[test]
+    fn test_bundled_world_geojson_simplification_reduces_triangles() {
+        let geojson_str = include_str!("../../assets/ne_110m_countries.geojson");
+        let source = GeoJsonSource::from_str(geojson_str).unwrap();
+        let mark = GeoPathMark::new(source, Projection::Mercator);
+
+        let full = mark.triangle_count(0.0);
+        let simplified = mark.triangle_count(0.5);
+        let reduction_pct = ((full - simplified) as f64 / full as f64) * 100.0;
+
+        assert!(
+            simplified < full,
+            "simplification should reduce triangle count: \
+             full={full}, simplified={simplified}"
+        );
+        assert!(
+            reduction_pct >= 30.0,
+            "simplification should reduce by ≥30%, got {reduction_pct:.1}%"
+        );
+    }
 }
