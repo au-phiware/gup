@@ -88,6 +88,7 @@ pub mod label;
 pub mod linked_selection;
 pub mod mark;
 pub mod mark_selection;
+pub mod math;
 pub mod mixable;
 pub mod performance;
 pub mod performance_targets;
