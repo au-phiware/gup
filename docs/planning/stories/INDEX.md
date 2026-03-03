@@ -694,7 +694,7 @@ integration, pipeline caching.
 - [GUP-239](GUP-239_Pipeline_Caching_Chart_Builder.md) ✅ — The
   multi_font_chart_demo (and likely other chart rendering code) recreates the
   axis-line….
-- [GUP-245](GUP-245_Bar_Chart_Builder.md) 🚧 — BarChartBuilder with
+- [GUP-245](GUP-245_Bar_Chart_Builder.md) ✅ — BarChartBuilder with
   vertical/horizontal, grouped, and stacked variants using instanced Rectangle
   marks and OrdinalScale. Deps: GUP-018 ✅, GUP-067 ✅, GUP-093 ✅, GUP-254 ✅.
 - [GUP-246](GUP-246_Line_Chart_Builder.md) 📋 — LineChartBuilder with
@@ -718,7 +718,7 @@ integration, pipeline caching.
 - [GUP-251](GUP-251_Custom_Composite_Chart_Support.md) 📋 —
   CompositeChartBuilder composing multiple chart layers with shared axes,
   unified scale domains, and optional dual-y-axis support. Deps: GUP-001 ✅,
-  GUP-018 ✅, GUP-093 ✅, GUP-245 📋, GUP-246 📋.
+  GUP-018 ✅, GUP-093 ✅, GUP-245 ✅, GUP-246 📋.
 - [GUP-275](GUP-275_Choropleth_Chart_Builder.md) ✅ — ChoroplethChartBuilder
   mapping GeoJSON region values to colors with projection selection, colorbar
   legend, and zoom/pan. Deps: GUP-018 ✅, GUP-273 ✅, GUP-274 ✅, GUP-255 ✅.
