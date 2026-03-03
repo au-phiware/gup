@@ -425,6 +425,18 @@ impl Mark for Circle {
             Err(_) => false,
         }
     }
+
+    /// Return a representative SVG `<circle>` element for this mark type.
+    fn svg_element(&self) -> Option<crate::export::svg::SvgElement> {
+        Some(crate::export::svg::SvgElement::Circle {
+            cx: 0.0,
+            cy: 0.0,
+            r: 5.0,
+            fill: "rgb(0,0,0)".to_string(),
+            stroke: None,
+            stroke_width: None,
+        })
+    }
 }
 
 impl Default for CircleAttributes {

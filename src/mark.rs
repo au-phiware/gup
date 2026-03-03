@@ -339,6 +339,22 @@ pub trait Mark: Clone + MaybeSend + MaybeSync + 'static {
             format: VertexFormat::Float32x2,
         }]
     }
+
+    /// Return an SVG element representation of this mark type.
+    ///
+    /// Built-in marks return a representative [`SvgElement`] describing
+    /// the SVG primitive they produce (e.g., `<circle>` for [`Circle`],
+    /// `<rect>` for [`Rectangle`]).  The default implementation returns
+    /// `None`, which is safe for custom marks that have not yet
+    /// implemented SVG export — the [`SvgRenderer`](crate::export::svg::SvgRenderer)
+    /// will simply skip them.
+    ///
+    /// For actual per-instance SVG generation with real data coordinates,
+    /// use [`SvgRenderer`](crate::export::svg::SvgRenderer) which calls
+    /// the mark-specific export helpers in the `export::svg` module.
+    fn svg_element(&self) -> Option<crate::export::svg::SvgElement> {
+        None
+    }
 }
 
 /// Trait for providing stable mark type IDs for GPU interaction.

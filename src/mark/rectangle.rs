@@ -459,6 +459,20 @@ impl Mark for Rectangle {
             Err(_) => false,
         }
     }
+
+    /// Return a representative SVG `<rect>` element for this mark type.
+    fn svg_element(&self) -> Option<crate::export::svg::SvgElement> {
+        Some(crate::export::svg::SvgElement::Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 10.0,
+            height: 10.0,
+            fill: "rgb(0,0,0)".to_string(),
+            stroke: None,
+            stroke_width: None,
+            rx: None,
+        })
+    }
 }
 
 impl Default for RectangleAttributes {

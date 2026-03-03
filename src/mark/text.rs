@@ -223,6 +223,21 @@ fn fs_main(input: FragmentInput) -> @location(0) vec4<f32> {{
             ))),
         }
     }
+
+    /// Return a representative SVG `<text>` element for this mark type.
+    fn svg_element(&self) -> Option<crate::export::svg::SvgElement> {
+        Some(crate::export::svg::SvgElement::Text {
+            x: 0.0,
+            y: 0.0,
+            content: String::new(),
+            font_family: "sans-serif".to_string(),
+            font_size: 14.0,
+            text_anchor: "start".to_string(),
+            dominant_baseline: "alphabetic".to_string(),
+            fill: "rgb(0,0,0)".to_string(),
+            font_weight: None,
+        })
+    }
 }
 
 #[cfg(test)]

@@ -448,6 +448,27 @@ impl Mark for BoxPlot {
             Err(_) => false,
         }
     }
+
+    /// Return a representative SVG `<g>` element for this mark type.
+    ///
+    /// Box plots are composite shapes; the SVG representation is a group
+    /// containing rectangles and lines.
+    fn svg_element(&self) -> Option<crate::export::svg::SvgElement> {
+        Some(crate::export::svg::SvgElement::Group {
+            class: Some("boxplot".to_string()),
+            transform: None,
+            children: vec![crate::export::svg::SvgElement::Rect {
+                x: 0.0,
+                y: 0.0,
+                width: 10.0,
+                height: 20.0,
+                fill: "rgb(179,179,255)".to_string(),
+                stroke: Some("rgb(0,0,0)".to_string()),
+                stroke_width: Some(1.0),
+                rx: None,
+            }],
+        })
+    }
 }
 
 impl Default for BoxPlotAttributes {

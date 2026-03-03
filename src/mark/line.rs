@@ -484,6 +484,19 @@ impl Mark for Line {
             },
         ]
     }
+
+    /// Return a representative SVG `<line>` element for this mark type.
+    fn svg_element(&self) -> Option<crate::export::svg::SvgElement> {
+        Some(crate::export::svg::SvgElement::Line {
+            x1: 0.0,
+            y1: 0.0,
+            x2: 10.0,
+            y2: 10.0,
+            stroke: "rgb(0,0,0)".to_string(),
+            stroke_width: 1.0,
+            stroke_dasharray: None,
+        })
+    }
 }
 
 impl Default for LineAttributes {

@@ -277,6 +277,16 @@ fn fs_main(input: FragmentInput) -> @location(0) vec4<f32> {{
             ))),
         }
     }
+
+    /// Return a representative SVG `<path>` element for this mark type.
+    fn svg_element(&self) -> Option<crate::export::svg::SvgElement> {
+        Some(crate::export::svg::SvgElement::Path {
+            d: String::new(),
+            fill: "none".to_string(),
+            stroke: Some("rgb(0,0,0)".to_string()),
+            stroke_width: Some(1.0),
+        })
+    }
 }
 
 #[cfg(test)]
