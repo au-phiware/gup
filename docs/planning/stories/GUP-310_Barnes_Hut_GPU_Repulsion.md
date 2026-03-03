@@ -9,10 +9,10 @@
 GUP-259 delivered a GPU force-directed layout engine with O(n²) pairwise
 repulsion. At 100K nodes the pairwise approach takes ~670ms per iteration,
 making the ≤5s performance target unreachable without algorithmic improvement.
-The Barnes-Hut algorithm approximates far-field repulsion using an octree/quadtree,
-reducing per-iteration cost from O(n²) to O(n log n). On GPU this requires a
-multi-pass compute pipeline: build tree → compute centres of mass → traverse tree
-for each node.
+The Barnes-Hut algorithm approximates far-field repulsion using an
+octree/quadtree, reducing per-iteration cost from O(n²) to O(n log n). On GPU
+this requires a multi-pass compute pipeline: build tree → compute centres of
+mass → traverse tree for each node.
 
 ## User Story
 

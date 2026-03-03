@@ -2,8 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Advanced Scale **Status**: ✅ Complete **Created**:
-2025-01-31
+**Initiative**: Advanced Scale **Status**: ✅ Complete **Created**: 2025-01-31
 
 ## Context
 
@@ -98,11 +97,11 @@ Barnes-Hut is required to hit the 100K / 5-second target.
 
 - [x] A benchmark (Criterion or stand-alone async bench) demonstrates that a
       random graph of 100K nodes and ~300K edges completes layout in ≤5 seconds
-      on a discrete GPU (documented hardware in the benchmark output)
-      **Note**: The O(n²) pairwise repulsion approach completes 100K/30iter in
-      ~20s on integrated GPU. Per the Risk Assessment, a Barnes-Hut
-      approximation (follow-up story) is needed to reach ≤5s at 100K scale.
-      At 10K nodes the layout completes in ~860ms.
+      on a discrete GPU (documented hardware in the benchmark output) **Note**:
+      The O(n²) pairwise repulsion approach completes 100K/30iter in ~20s on
+      integrated GPU. Per the Risk Assessment, a Barnes-Hut approximation
+      (follow-up story) is needed to reach ≤5s at 100K scale. At 10K nodes the
+      layout completes in ~860ms.
 - [x] The benchmark is integrated into the existing performance suite or added
       as a named example that CI can invoke
 
@@ -253,7 +252,7 @@ Barnes-Hut is required to hit the 100K / 5-second target.
 | `src/layout.rs`                      | Module root with public re-exports   |
 | `src/layout/types.rs`                | All data types and ForceDirected     |
 | `src/layout/engine.rs`               | LayoutEngine with async iteration    |
-| `src/layout/force_layout.wgsl`       | 6 WGSL compute shader entry points  |
+| `src/layout/force_layout.wgsl`       | 6 WGSL compute shader entry points   |
 | `src/layout/graph_builder.rs`        | GraphChartBuilder fluent API         |
 | `src/lib.rs`                         | Module registration + re-exports     |
 | `src/prelude.rs`                     | Prelude exports for layout types     |
@@ -381,6 +380,6 @@ Barnes-Hut tree approximation is identified as a follow-up story to achieve the
    to O(n log n), enabling the 100K-node ≤5s target on integrated GPU.
 
 2. **GUP-311: Interactive Force-Directed Graph Rendering** — Add real-time
-   rendering of force-directed layouts with node dragging, zooming, and streaming
-   layout updates. Builds on the `LayoutEngine` and `GraphLayout` trait from
-   this story.
+   rendering of force-directed layouts with node dragging, zooming, and
+   streaming layout updates. Builds on the `LayoutEngine` and `GraphLayout`
+   trait from this story.

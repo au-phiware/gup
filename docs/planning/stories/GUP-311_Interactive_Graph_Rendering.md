@@ -9,7 +9,8 @@
 GUP-259 provides an async layout engine that computes final positions but does
 not render the graph interactively. This story adds real-time rendering of
 force-directed layouts where nodes and edges are drawn each frame as the layout
-converges, with support for node dragging, zooming, and streaming layout updates.
+converges, with support for node dragging, zooming, and streaming layout
+updates.
 
 ## User Story
 
@@ -18,8 +19,8 @@ converges, with support for node dragging, zooming, and streaming layout updates
 
 ## Acceptance Criteria
 
-- [ ] A windowed example renders nodes (circles) and edges (lines) updating
-      each frame as the layout converges
+- [ ] A windowed example renders nodes (circles) and edges (lines) updating each
+      frame as the layout converges
 - [ ] Node dragging with mouse allows pinning a node to a fixed position
 - [ ] Pan and zoom with mouse wheel / drag
 - [ ] The layout runs incrementally (a few iterations per frame) so the UI

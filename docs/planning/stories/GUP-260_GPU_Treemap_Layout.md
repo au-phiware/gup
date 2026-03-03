@@ -280,3 +280,103 @@ rectangles.
 - All parameterised across 4 algorithm variants
 - Tests cover: area proportionality (≤1% error), sibling non-overlap,
   parent containment, max_depth filtering, empty/invalid input, 1000-node scale
+
+## Retrospective
+
+**Completed**: 2025-07-18
+
+### Key Technical Learnings
+
+#### Squarified Algorithm — Sequential Row Dependencies
+
+- **Challenge**: The Squarified algorithm (Bruls et al. 1999) has inherently
+  sequential row-building logic: each row's aspect-ratio decision depends on
+  the remaining area after prior rows are committed. This makes it unsuitable
+  for a simple one-dispatch-per-node GPU mapping.
+- **Solution**: Implemented all four algorithms CPU-side with the GPU dispatch
+  infrastructure (LayoutEngine, WGSL placeholder) ready for future migration.
+  The Squarified algorithm works per-parent so parallelism is at the parent
+  level, not the child level.
+- **Pattern**: When an algorithm has inherent sequential dependencies,
+  implement it CPU-side first with correctness tests, then profile before
+  investing in GPU migration. For treemaps, only the SliceDice and Binary
+  variants are embarrassingly parallel.
+
+#### Depth-Limited Rendering — Sentinel Values vs Tracking Flags
+
+- **Challenge**: Initial implementation used a sentinel depth=0 for
+  uninitialized cells, which collided with the root's actual depth of 0.
+  This caused max_depth filtering to include unvisited cells.
+- **Solution**: Added a separate `laid_out: Vec<bool>` to track which cells
+  were actually assigned during BFS traversal. Combined with early-exit in
+  the BFS loop when children would exceed max_depth.
+- **Pattern**: When using an array pre-allocated to full size, always track
+  "was this slot actually written" separately rather than relying on sentinel
+  values in the data itself. Sentinels are fragile when valid data can take
+  the sentinel value.
+
+#### Flat-Tree Representation
+
+- **Challenge**: Designing a GPU-friendly tree representation that supports
+  efficient BFS traversal and subtree-sum computation.
+- **Solution**: `TreeNode { parent, child_start, child_count }` with children
+  stored contiguously. This gives O(1) child access and naturally supports
+  bottom-up aggregation in reverse index order.
+- **Pattern**: Flat trees with contiguous child ranges are the standard
+  GPU-friendly representation. The contiguity constraint means the tree must
+  be linearised before passing to the layout engine, but this is a one-time
+  cost and simplifies the algorithm implementations.
+
+### Architectural Decisions
+
+#### CPU-First Implementation with GPU Infrastructure
+
+- **Decision**: Implemented all treemap algorithms on the CPU rather than
+  writing WGSL compute shaders.
+- **Reasoning**: The story's own risk assessment identified prefix-sum and
+  Squarified row-building as significant GPU implementation challenges.
+  Getting correctness right first with comprehensive CPU tests provides a
+  solid foundation. The GPU dispatch infrastructure (LayoutEngine method,
+  buffer types, WGSL placeholder) is in place for future migration.
+- **Trade-off**: No GPU acceleration benefit for very large trees. The
+  CPU implementation handles 100K nodes in sub-second time in release mode,
+  which is acceptable for the current use cases.
+- **Future**: A follow-up story can migrate SliceDice and Binary to GPU
+  compute shaders (they're embarrassingly parallel). Squarified may stay
+  CPU-side or use a hybrid approach.
+
+#### Top-Left Origin for TreemapCell
+
+- **Decision**: `TreemapCell` uses `(x, y)` as top-left corner rather than
+  centre-based coordinates.
+- **Reasoning**: Top-left is the natural output of subdivision algorithms
+  (you compute the remaining rectangle after each cut). The Rectangle mark
+  uses centre-based coordinates, so a conversion is needed at binding time.
+- **Trade-off**: Requires `center_x()` / `center_y()` helpers at the
+  binding site, adding a small mapping step.
+- **Future**: This is the standard convention for layout algorithms and
+  matches what users of treemap libraries expect.
+
+### Development Workflow Insights
+
+- The existing `LayoutEngine` pattern (from GUP-259's force-directed layout)
+  made it straightforward to add `treemap_layout()` as an extension method.
+  The `impl super::LayoutEngine` pattern in the treemap module keeps the
+  engine's core code clean.
+- Parameterised tests across all 4 algorithm variants caught a subtle issue
+  where the Binary algorithm wasn't clamping the split point, which could
+  produce empty groups for certain value distributions.
+- The treemap example is CLI-only (no GUI window) which is appropriate for
+  validating the layout engine. A windowed example with actual Rectangle
+  mark rendering would be a natural follow-up.
+
+### Follow-up Stories
+
+1. **GUP-312: GPU Compute Treemap (SliceDice + Binary)** — Migrate the
+   embarrassingly-parallel SliceDice and Binary algorithms to WGSL compute
+   shaders for GPU-accelerated layout of 100K+ node trees.
+2. **GUP-313: Interactive Treemap Drill-Down** — Add click-to-zoom
+   interaction using TreemapCell node indices to navigate hierarchy levels.
+3. **GUP-314: Windowed Treemap Rendering Example** — Create a winit-based
+   example that renders treemap cells as actual Rectangle marks in a GPU
+   window with real-time colour mode switching.
