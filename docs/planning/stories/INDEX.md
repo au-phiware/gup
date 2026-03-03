@@ -339,8 +339,8 @@ derive macros, and custom mark kit.
   boundaries, tessellates polygons via GUP-132, and renders them with a
   geographic projection shader. Deps: GUP-009 ✅, GUP-132 ✅, GUP-273 ✅.
 - [GUP-285](GUP-285_High_Resolution_GeoJSON_Streaming.md) 📋 — Background/async
-  GeoJSON streaming for large (10–100 MB) boundary datasets without blocking
-  the render thread. Deps: GUP-274 ✅.
+  GeoJSON streaming for large (10–100 MB) boundary datasets without blocking the
+  render thread. Deps: GUP-274 ✅.
 - [GUP-286](GUP-286_Spherical_Polygon_Simplification.md) 📋 — Spherical-aware
   polygon simplification using great-circle distance for polar-region accuracy.
   Deps: GUP-274 ✅.
@@ -719,7 +719,7 @@ integration, pipeline caching.
   CompositeChartBuilder composing multiple chart layers with shared axes,
   unified scale domains, and optional dual-y-axis support. Deps: GUP-001 ✅,
   GUP-018 ✅, GUP-093 ✅, GUP-245 📋, GUP-246 📋.
-- [GUP-275](GUP-275_Choropleth_Chart_Builder.md) 🚧 — ChoroplethChartBuilder
+- [GUP-275](GUP-275_Choropleth_Chart_Builder.md) ✅ — ChoroplethChartBuilder
   mapping GeoJSON region values to colors with projection selection, colorbar
   legend, and zoom/pan. Deps: GUP-018 ✅, GUP-273 ✅, GUP-274 ✅, GUP-255 ✅.
 
