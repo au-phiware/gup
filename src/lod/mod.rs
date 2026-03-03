@@ -255,7 +255,7 @@ impl LodPyramidBuilder {
         let mut allocated_bytes: u64 = 0;
 
         let mut buf0 = GpuBuffer::<VertexData>::new(device, BufferType::Storage, data.len());
-        buf0.upload(device, queue, data);
+        buf0.upload(device, queue, data)?;
         allocated_bytes += data.len() as u64 * vertex_size;
 
         metadata.push(LodLevelMetadata {
@@ -301,7 +301,7 @@ impl LodPyramidBuilder {
 
             let mut buf =
                 GpuBuffer::<VertexData>::new(device, BufferType::Storage, aggregated.len());
-            buf.upload(device, queue, &aggregated);
+            buf.upload(device, queue, &aggregated)?;
             allocated_bytes += new_bytes;
 
             metadata.push(LodLevelMetadata {
@@ -364,7 +364,7 @@ impl LodPyramidBuilder {
 
         // Upload level-0 data.
         let mut buf0: GpuBuffer<VertexData> = pool.allocate(BufferType::Storage, data.len());
-        buf0.upload(device, queue, data);
+        buf0.upload(device, queue, data)?;
 
         let mut levels = vec![buf0];
         let mut metadata = vec![LodLevelMetadata {
@@ -398,12 +398,12 @@ impl LodPyramidBuilder {
             // Grid buffer: one u32 per cell, initialized to 0xFFFFFFFF.
             let grid_init: Vec<u32> = vec![0xFFFF_FFFFu32; total_cells];
             let mut grid_buf = GpuBuffer::<u32>::new(device, BufferType::Storage, total_cells);
-            grid_buf.upload(device, queue, &grid_init);
+            grid_buf.upload(device, queue, &grid_init)?;
 
             // Counter buffer: single atomic u32.
             let counter_init = [0u32];
             let mut counter_buf = GpuBuffer::<u32>::new(device, BufferType::Storage, 1);
-            counter_buf.upload(device, queue, &counter_init);
+            counter_buf.upload(device, queue, &counter_init)?;
 
             // Uniform buffer with grid params.
             let params = AggregateParams {

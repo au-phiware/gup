@@ -263,6 +263,10 @@ path = "examples/geo_world_map.rs"
 name = "z_sort_demo"
 path = "examples/z_sort_demo.rs"
 
+[[example]]
+name = "lod_pyramid_debug"
+path = "examples/lod_pyramid_debug.rs"
+
 [[bin]]
 name = "validate_marks"
 path = "src/bin/validate_marks.rs"
