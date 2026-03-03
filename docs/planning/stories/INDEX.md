@@ -813,6 +813,9 @@ validation.
   builder API (capacity, mode, backpressure) with Selection::stream()
   integration on top of GUP-015's low-level primitives. Deps: GUP-002 ✅,
   GUP-015 ✅.
+- [GUP-307](GUP-307_Streaming_Render_Pipeline_Integration.md) 💡 — Auto-flush
+  and render pipeline integration for DataStream-attached Selections. Deps:
+  GUP-244 ✅.
 - [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md) ✅ — During GUP-002
   development, debugging GPU resource issues was challenging.
 - [GUP-037](GUP-037_Buffer_Validation_and_Debugging_Tools.md) ✅ — During
