@@ -292,10 +292,15 @@ pub use linked_selection::{
 // Export chart builder system (Observable Plot-style API)
 // Re-export selectively to avoid conflicts with label::Margins
 pub use chart_builder::{
-    AreaChartBuilder, AxisLabelConfig, BarChartBuilder, ChartBuilder, ChartConfig, ComposedChart,
-    HeatmapBuilder, LabelCapableBuilder, LabeledChart, LineChartBuilder, ScatterPlotBuilder,
-    TitleAlignment, TitleConfig, plot,
+    AreaChartBuilder, AxisLabelConfig, BarChartBuilder, ChartBuilder, ChartConfig, ChoroplethChart,
+    ChoroplethChartBuilder, ComposedChart, HeatmapBuilder, LabelCapableBuilder, LabeledChart,
+    LineChartBuilder, ScatterPlotBuilder, TitleAlignment, TitleConfig, plot,
 };
+
+/// Create a new [`ChoroplethChartBuilder`] (convenience shorthand).
+pub fn choropleth() -> ChoroplethChartBuilder {
+    ChoroplethChartBuilder::new()
+}
 
 // Note: Procedural macros from gup_macros must be imported directly due to Rust limitations
 // Available macros:

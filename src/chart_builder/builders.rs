@@ -22,6 +22,7 @@
 pub mod area;
 pub mod bar;
 pub mod boxplot;
+pub mod choropleth;
 pub mod heatmap;
 pub mod line;
 pub mod scatter;
@@ -29,6 +30,7 @@ pub mod scatter;
 pub use area::*;
 pub use bar::*;
 pub use boxplot::*;
+pub use choropleth::*;
 pub use heatmap::*;
 pub use line::*;
 pub use scatter::*;
