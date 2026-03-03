@@ -13,4 +13,5 @@
 
 pub mod svg;
 
+pub use svg::write_svg_to_file;
 pub use svg::{SvgElement, SvgExportOptions, SvgRenderer};

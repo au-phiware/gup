@@ -23,4 +23,4 @@ mod element;
 mod renderer;
 
 pub use element::SvgElement;
-pub use renderer::{SvgExportOptions, SvgRenderer};
+pub use renderer::{SvgExportOptions, SvgRenderer, write_svg_to_file};

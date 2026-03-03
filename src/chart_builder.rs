@@ -2091,6 +2091,83 @@ where
 
         Ok(true)
     }
+
+    // -----------------------------------------------------------------------
+    // SVG Export
+    // -----------------------------------------------------------------------
+
+    /// Export this chart as an SVG document string.
+    ///
+    /// Generates axis geometry, grid lines, axis labels, and the chart
+    /// title, then passes everything through [`SvgRenderer`] to produce
+    /// a well-formed SVG string.
+    ///
+    /// Data marks are *not* automatically exported by this method because
+    /// the generic `Selection<T, M>` stores mark attributes as closures
+    /// that map `T → AttrValue` and cannot be evaluated without a GPU
+    /// context.  To include data marks in the SVG, pass pre-built
+    /// [`SvgElement`] instances via [`export_svg_with_marks`](Self::export_svg_with_marks).
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::export::svg::SvgExportOptions;
+    /// # use gup::prelude::*;
+    /// # use gup::chart_builder::ComposedChart;
+    /// # use std::sync::Arc;
+    /// # async fn example() -> GupResult<()> {
+    /// # let ctx = Arc::new(gup::RenderContext::new().await?);
+    /// # #[derive(Debug, Clone)] struct D { x: f32, y: f32 }
+    /// # let sel = gup::selection::Selection::<D, gup::Circle>::new(vec![], ctx)?;
+    /// # let config = gup::chart_builder::ChartConfig::default();
+    /// let chart = ComposedChart::new(sel, config).with_default_axes();
+    /// let options = SvgExportOptions::new(800, 600);
+    /// let svg = chart.render_to_svg(&options)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn render_to_svg(
+        &self,
+        options: &crate::export::svg::SvgExportOptions,
+    ) -> GupResult<String> {
+        self.export_svg_with_marks(options, &[])
+    }
+
+    /// Export this chart as an SVG document string, including the given
+    /// data-mark elements.
+    ///
+    /// This is the full-featured export entry point.  Caller-supplied
+    /// [`SvgElement`] values (typically circles, rects, lines, etc.
+    /// constructed from the chart's data) are included in the output
+    /// under a `<g class="marks">` group.
+    pub fn export_svg_with_marks(
+        &self,
+        options: &crate::export::svg::SvgExportOptions,
+        data_elements: &[crate::export::svg::SvgElement],
+    ) -> GupResult<String> {
+        let renderer = crate::export::svg::SvgRenderer::new(options.clone());
+        let geom = self.generate_axis_geometry_instanced();
+        renderer.render(
+            &self.config,
+            &geom.line_vertices,
+            &geom.tick_instances,
+            &geom.labels,
+            data_elements,
+        )
+    }
+
+    /// Export this chart as an SVG file.
+    ///
+    /// Convenience wrapper around [`render_to_svg`](Self::render_to_svg)
+    /// that writes the result to the given file path.
+    pub fn export_svg(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        options: &crate::export::svg::SvgExportOptions,
+    ) -> GupResult<()> {
+        let svg = self.render_to_svg(options)?;
+        crate::export::svg::write_svg_to_file(&svg, path)
+    }
 }
 
 #[derive(Debug, Clone)]
