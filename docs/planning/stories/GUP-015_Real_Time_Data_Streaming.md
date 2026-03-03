@@ -581,3 +581,89 @@ primitives for real-time GPU data visualization:
 - [x] Performance benchmarks meet all targets
 - [x] Documentation complete with streaming examples
 - [x] Code review completed and approved
+
+## Retrospective
+
+**Completed**: 2025-07-17
+
+### Key Technical Learnings
+
+#### Key-Based vs Index-Based Addressing
+
+- **Challenge**: The original story sketch used index-based `StreamUpdate<T>`
+  variants (`Insert { index, data }`). In practice, downstream consumers rarely
+  know or care about physical buffer indices — they work with logical
+  identifiers (sensor IDs, trade IDs, etc.).
+- **Solution**: Changed to `u64` key-based addressing with an internal
+  `HashMap<u64, usize>` mapping keys to physical ring-buffer slots.
+- **Pattern**: For any keyed data structure that also needs contiguous GPU
+  storage, maintain a key→index map on the CPU side and let the ring buffer own
+  the physical layout.
+
+#### Dirty Region Merging
+
+- **Challenge**: Naïve dirty tracking (one region per mutation) would produce
+  thousands of tiny `queue.write_buffer` calls for large batches.
+- **Solution**: `DirtyRegionTracker` merges adjacent and overlapping regions on
+  insert, keeping the region list sorted and minimal. A single 100K-item batch
+  typically collapses into 1 dirty region.
+- **Pattern**: Merge-on-insert with sorted retain is simple and effective for
+  range coalescing.
+
+#### Double-Buffer Swap Semantics
+
+- **Challenge**: The active buffer must always be renderable while the staging
+  buffer is being written to. Needed a clean swap that doesn't leave the active
+  buffer in a half-written state.
+- **Solution**: All writes go to the staging buffer (index `1 - active_idx`),
+  then `active_idx` is swapped atomically at the end of `flush()`. This means
+  the render path always reads from a fully consistent buffer.
+- **Pattern**: Write-to-staging + swap is the standard double-buffer pattern for
+  GPU streaming. The key insight is that the swap is a simple integer flip, not
+  a buffer copy.
+
+### Architectural Decisions
+
+#### Separate Low-Level Primitives from High-Level API
+
+- **Decision**: Implemented `StreamingBuffer<T>` as a standalone primitive
+  without Selection integration or async queues.
+- **Reasoning**: The INDEX.md already scoped GUP-244 for the builder API and
+  Selection integration. Keeping the primitive layer clean makes it reusable for
+  non-Selection use cases (e.g., custom compute pipelines, LOD systems).
+- **Trade-off**: Users must manually manage flush timing and key assignment.
+  GUP-244 will provide the ergonomic wrapper.
+- **Future**: GUP-244 can build `DataStream<T>` with async channels and
+  `Selection::stream()` on top of `StreamingBuffer<T>` without changing the
+  primitive layer.
+
+#### Ring Buffer with Option Slots
+
+- **Decision**: Used `Vec<Option<T>>` rather than a compact `Vec<T>` for the
+  ring buffer.
+- **Reasoning**: Supports remove-by-key without shifting elements. An
+  `Option::None` slot is effectively a "tombstone" that gets zeroed on the GPU
+  side during the next flush.
+- **Trade-off**: ~8 bytes overhead per slot for the Option discriminant and
+  alignment. Acceptable for the typical capacity range (1K–1M items).
+- **Future**: If memory pressure becomes critical for very large buffers,
+  a slot-map or generation-based approach could eliminate the Option overhead.
+
+### Development Workflow Insights
+
+- **GPU test helper**: Reusing `RenderContext::new()` for GPU device acquisition
+  in tests works well, but the initial call encountered a type inference issue
+  (`E0282`). The fix was straightforward (use explicit `RenderContext` import
+  from the correct module).
+- **Test thread serialization**: `--test-threads=1` is still essential for GPU
+  tests; parallel GPU tests segfault as expected from prior story learnings.
+- **Incremental development**: Building the module bottom-up (dirty regions →
+  ring buffer → latency → streaming buffer) kept each increment small and
+  testable.
+
+### Follow-up Stories
+
+1. **GUP-244: Streaming Data Builder API** — Already planned. Ergonomic
+   `DataStream<T>` builder with capacity, mode, backpressure, and
+   `Selection::stream()` integration on top of GUP-015's primitives.
+
