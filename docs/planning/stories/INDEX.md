@@ -412,7 +412,7 @@ selection, and radix sort.
 - [GUP-279](GUP-279_Linked_View_Coordination.md) ✅ — SharedSelectionState
   coordinating brush/click selections across multiple charts with opacity-based
   visual dimming. Deps: GUP-001 ✅, GUP-075 ✅, GUP-013 ✅, GUP-278 ✅.
-- [GUP-283](GUP-283_Event_Coalescing.md) 🚧 — Frame-rate-aware coalescing for
+- [GUP-283](GUP-283_Event_Coalescing.md) ✅ — Frame-rate-aware coalescing for
   high-frequency mousemove/touchmove events in EventManager. Deps: GUP-013 ✅.
 - [GUP-284](GUP-284_Unified_Vec2_Type.md) 📋 — Unify interaction::Vec2,
   shader_function::Vec2, and [f32; 2] into a single ergonomic type with
@@ -791,8 +791,8 @@ profiling, trend visualisation.
 - [GUP-297](GUP-297_GPU_Compute_Shader_2D_Binning.md) 📋 — GPU compute shader
   for 2D heatmap binning of 10M+ row datasets, with CPU fallback. Deps: GUP-248
   ✅.
-- [GUP-305](GUP-305_Release_Mode_Performance_Validation.md) 💡 — CI job
-  running performance validation tests in release mode to validate actual Phase 1
+- [GUP-305](GUP-305_Release_Mode_Performance_Validation.md) 💡 — CI job running
+  performance validation tests in release mode to validate actual Phase 1
   targets. Deps: GUP-014 ✅.
 
 ## Debug & Development Tools

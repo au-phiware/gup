@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Interaction & Spatial Index **Status**: 🚧 In Progress **Created**:
-2025-07-26
+**Initiative**: Interaction & Spatial Index **Status**: ✅ Complete **Created**:
+2025-07-26 **Completed**: 2025-07-27
 
 ## Context
 
@@ -22,24 +22,24 @@ target under sustained rapid input.
 
 ## Acceptance Criteria
 
-- [ ] `EventManager` supports configurable coalescing that merges rapid
+- [x] `EventManager` supports configurable coalescing that merges rapid
       `mousemove` and `touchmove` events into at most one dispatch per frame
-- [ ] Coalesced events carry the latest position but retain the original
+- [x] Coalesced events carry the latest position but retain the original
       timestamp of the first event in the coalescing window
-- [ ] Non-coalesced events (`mousedown`, `mouseup`, `click`, `touchstart`,
+- [x] Non-coalesced events (`mousedown`, `mouseup`, `click`, `touchstart`,
       `touchend`) are always dispatched immediately
-- [ ] A benchmark with 1000 simulated mouse-move events per frame shows dispatch
+- [x] A benchmark with 1000 simulated mouse-move events per frame shows dispatch
       count reduced to 1 per frame while maintaining < 16 ms total latency
-- [ ] Coalescing can be disabled per event type for use cases requiring every
+- [x] Coalescing can be disabled per event type for use cases requiring every
       event (e.g., drawing tools)
 
 ## Technical Tasks
 
-- [ ] Add a `CoalescingConfig` struct to `EventManager` with per-event-type
+- [x] Add a `CoalescingConfig` struct to `EventManager` with per-event-type
       enable/disable
-- [ ] Implement a frame-boundary coalescing buffer that accumulates events and
+- [x] Implement a frame-boundary coalescing buffer that accumulates events and
       flushes on `flush_frame()` or equivalent
-- [ ] Add unit tests for coalescing behaviour
+- [x] Add unit tests for coalescing behaviour
 - [ ] Update the interactive example to demonstrate coalescing (optional)
 
 ## Dependencies
@@ -61,6 +61,45 @@ target under sustained rapid input.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria met
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint clean: `mask all-fix`
+- [x] All Acceptance Criteria met
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint clean: `mask all-fix`
+
+## Implementation Summary
+
+### Modified Files
+
+- **`src/event.rs`** — Added `CoalescingConfig`, `PendingCoalescedEvent`
+  (internal), and extended `EventManager` with coalescing infrastructure:
+  `with_coalescing()`, `coalescing_config()`, `set_coalescing_config()`,
+  `submit()`, `flush_frame()`, `pending_count()`, `discard_pending()`. Also
+  added `EventType::is_coalescable_default()`.
+- **`src/lib.rs`** — Added `CoalescingConfig` to public re-exports.
+
+### Key APIs
+
+- **`CoalescingConfig`** — Per-event-type enable/disable. Default: `mousemove`
+  and `touchmove` coalesced. Builder methods: `enable()`, `disable()`, `none()`.
+- **`EventManager::submit(event, hits)`** — Queues coalescable events for
+  frame-boundary dispatch; dispatches non-coalescable events immediately.
+- **`EventManager::flush_frame()`** — Dispatches all pending coalesced events
+  (one per type). Returns `Vec<(event_name, merge_count, EventResult)>`.
+- **`EventManager::with_coalescing(config)`** — Constructor with custom config.
+
+### Test Counts
+
+- 15 new unit tests in `src/event.rs` (coalescing-specific)
+- 1 benchmark test (1000 events → 1 dispatch, < 16ms)
+- **Total new tests: 15** (all in `event::tests`)
+
+### Design Decisions
+
+- **Explicit `flush_frame()` over timer-based**: The caller controls when
+  coalesced events flush, matching the typical game/visualization loop pattern
+  where frame boundaries are explicit. No hidden timers or threads.
+- **`submit()` + `flush_frame()` over modifying `dispatch()`**: Kept the
+  existing `dispatch()` API unchanged for backward compatibility. New coalescing
+  is opt-in through the `submit()` entry point.
+- **Latest position, first timestamp**: Coalesced events preserve the first
+  timestamp (for latency measurement) but use the latest position (for accurate
+  cursor tracking). This matches browser `getCoalescedEvents()` semantics.
