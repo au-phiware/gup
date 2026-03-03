@@ -58,32 +58,7 @@ use wgpu::{
 };
 
 /// Geometric shapes for spatial queries
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Vec2 {
-    pub x: f32,
-    pub y: f32,
-}
-
-impl Vec2 {
-    pub fn new(x: f32, y: f32) -> Self {
-        Self { x, y }
-    }
-}
-
-impl From<[f32; 2]> for Vec2 {
-    fn from(array: [f32; 2]) -> Self {
-        Self {
-            x: array[0],
-            y: array[1],
-        }
-    }
-}
-
-impl From<Vec2> for [f32; 2] {
-    fn from(vec: Vec2) -> Self {
-        [vec.x, vec.y]
-    }
-}
+pub use crate::math::Vec2;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Rect {

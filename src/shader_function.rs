@@ -508,56 +508,7 @@ impl ShaderType for bool {
     }
 }
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Vec2 {
-    pub x: f32,
-    pub y: f32,
-}
-
-impl Vec2 {
-    /// Creates a new 2D vector.
-    ///
-    /// # Example
-    /// ```
-    /// use gup::shader_function::Vec2;
-    /// let v = Vec2::new(1.0, 2.0);
-    /// assert_eq!(v.x, 1.0);
-    /// assert_eq!(v.y, 2.0);
-    /// ```
-    #[inline]
-    pub const fn new(x: f32, y: f32) -> Self {
-        Self { x, y }
-    }
-
-    /// Creates a vector with both components set to zero.
-    ///
-    /// # Example
-    /// ```
-    /// use gup::shader_function::Vec2;
-    /// let v = Vec2::zero();
-    /// assert_eq!(v.x, 0.0);
-    /// assert_eq!(v.y, 0.0);
-    /// ```
-    #[inline]
-    pub const fn zero() -> Self {
-        Self { x: 0.0, y: 0.0 }
-    }
-
-    /// Creates a vector with both components set to one.
-    ///
-    /// # Example
-    /// ```
-    /// use gup::shader_function::Vec2;
-    /// let v = Vec2::one();
-    /// assert_eq!(v.x, 1.0);
-    /// assert_eq!(v.y, 1.0);
-    /// ```
-    #[inline]
-    pub const fn one() -> Self {
-        Self { x: 1.0, y: 1.0 }
-    }
-}
+pub use crate::math::Vec2;
 
 impl ShaderType for Vec2 {
     fn wgsl_type_name() -> &'static str {
