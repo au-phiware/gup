@@ -201,6 +201,10 @@ harness = false
 required-features = ["gpu-bench"]
 
 [[example]]
+name = "treemap"
+path = "examples/treemap.rs"
+
+[[example]]
 name = "custom_mark_demo"
 path = "examples/custom_mark_demo.rs"
 
