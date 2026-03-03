@@ -53,6 +53,7 @@ pub struct ViewportCuller {
     cull_pipeline: ComputePipeline,
     prefix_sum_pipeline: ComputePipeline,
     prefix_sum_blocks_pipeline: ComputePipeline,
+    prefix_sum_super_blocks_pipeline: ComputePipeline,
     prefix_sum_add_offsets_pipeline: ComputePipeline,
     compact_pipeline: ComputePipeline,
     bind_group_layout: BindGroupLayout,
@@ -147,6 +148,17 @@ impl ViewportCuller {
                     },
                     count: None,
                 },
+                // binding 7: super-block sums
+                BindGroupLayoutEntry {
+                    binding: 7,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
             ],
         });
 
@@ -176,6 +188,10 @@ impl ViewportCuller {
             prefix_sum_blocks_pipeline: make_pipeline(
                 "prefix_sum_blocks",
                 "viewport_prefix_sum_blocks_pipeline",
+            ),
+            prefix_sum_super_blocks_pipeline: make_pipeline(
+                "prefix_sum_super_blocks",
+                "viewport_prefix_sum_super_blocks_pipeline",
             ),
             prefix_sum_add_offsets_pipeline: make_pipeline(
                 "prefix_sum_add_offsets",
@@ -278,6 +294,14 @@ impl ViewportCuller {
             mapped_at_creation: false,
         });
 
+        let num_block_chunks = num_workgroups.div_ceil(WORKGROUP_SIZE);
+        let super_block_sums_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("viewport_cull_super_block_sums"),
+            size: (num_block_chunks.max(1) as u64) * 4,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
         // Create bind group.
         let bind_group = device.create_bind_group(&BindGroupDescriptor {
             label: Some("viewport_cull_bind_group"),
@@ -311,10 +335,14 @@ impl ViewportCuller {
                     binding: 6,
                     resource: block_sums_buffer.as_entire_binding(),
                 },
+                BindGroupEntry {
+                    binding: 7,
+                    resource: super_block_sums_buffer.as_entire_binding(),
+                },
             ],
         });
 
-        // Encode the five compute passes.
+        // Encode compute passes.
         let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
             label: Some("viewport_cull_encoder"),
         });
@@ -341,7 +369,7 @@ impl ViewportCuller {
             cpass.dispatch_workgroups(num_workgroups, 1, 1);
         }
 
-        // Pass 3: Scan block sums.
+        // Pass 3: Scan block sums (one workgroup per chunk of 256 blocks).
         {
             let mut cpass = encoder.begin_compute_pass(&ComputePassDescriptor {
                 label: Some("viewport_prefix_sum_blocks_pass"),
@@ -349,10 +377,21 @@ impl ViewportCuller {
             });
             cpass.set_pipeline(&self.prefix_sum_blocks_pipeline);
             cpass.set_bind_group(0, &bind_group, &[]);
+            cpass.dispatch_workgroups(num_block_chunks, 1, 1);
+        }
+
+        // Pass 3b: Scan super-block sums (single workgroup) + write draw_indirect.
+        {
+            let mut cpass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("viewport_prefix_sum_super_blocks_pass"),
+                timestamp_writes: None,
+            });
+            cpass.set_pipeline(&self.prefix_sum_super_blocks_pipeline);
+            cpass.set_bind_group(0, &bind_group, &[]);
             cpass.dispatch_workgroups(1, 1, 1);
         }
 
-        // Pass 4: Add block offsets.
+        // Pass 4: Add block + super-block offsets.
         if num_workgroups > 1 {
             let mut cpass = encoder.begin_compute_pass(&ComputePassDescriptor {
                 label: Some("viewport_add_offsets_pass"),
