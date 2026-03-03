@@ -293,6 +293,9 @@ pub use linked_selection::{
 // Re-export selectively to avoid conflicts with label::Margins
 pub use chart_builder::builders::area::{AreaSegment, StackMode};
 pub use chart_builder::builders::bar::{BarOrientation, Category, Orientation};
+pub use chart_builder::builders::density::{
+    ContourBand, ContourLevel, DensityConfig, DensityLayer, DensityPlotBuilder, DensityRenderMode,
+};
 pub use chart_builder::builders::heatmap::{AggregateFunc, BinGrid, BinSpec, HeatmapCell};
 pub use chart_builder::builders::violin::{HalfSide, ViolinOrientation, ViolinPlotBuilder};
 pub use chart_builder::{
@@ -300,6 +303,26 @@ pub use chart_builder::{
     ChoroplethChartBuilder, ComposedChart, HeatmapBuilder, LabelCapableBuilder, LabeledChart,
     LineChartBuilder, ScatterPlotBuilder, TitleAlignment, TitleConfig, plot,
 };
+
+/// Create a new [`DensityPlotBuilder`] (convenience shorthand).
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use gup::prelude::*;
+/// use gup::chart_builder::builders::AccessorFunction;
+/// use gup::chart_builder::accessor::AccessorValue;
+///
+/// #[derive(Debug, Clone)]
+/// struct Point { x: f32, y: f32 }
+///
+/// let builder = gup::density_plot()
+///     .x(AccessorFunction::new(|d: &Point| AccessorValue::Float(d.x)))
+///     .y(AccessorFunction::new(|d: &Point| AccessorValue::Float(d.y)));
+/// ```
+pub fn density_plot<T>() -> DensityPlotBuilder<T> {
+    DensityPlotBuilder::new()
+}
 
 /// Create a new [`ChoroplethChartBuilder`] (convenience shorthand).
 pub fn choropleth() -> ChoroplethChartBuilder {
