@@ -295,6 +295,11 @@ path = "examples/force_directed_graph.rs"
 name = "lod_pyramid_debug"
 path = "examples/lod_pyramid_debug.rs"
 
+[[example]]
+name = "pdf_export"
+path = "examples/pdf_export.rs"
+required-features = ["pdf"]
+
 [[bin]]
 name = "validate_marks"
 path = "src/bin/validate_marks.rs"
