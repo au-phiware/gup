@@ -233,3 +233,7 @@ pub use crate::plugins::{
 
 // SVG export
 pub use crate::export::svg::{SvgElement, SvgExportOptions, SvgRenderer};
+
+// PDF export (requires `pdf` feature)
+#[cfg(feature = "pdf")]
+pub use crate::export::pdf::{Orientation as PdfOrientation, PdfDocument, PdfOptions, PdfRenderer};

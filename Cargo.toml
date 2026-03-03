@@ -47,6 +47,9 @@ lru = "0.12"
 tiny_http = { version = "0.12", optional = true }
 fontdb = "0.23"
 
+# PDF export dependencies (optional, feature-gated)
+printpdf = { version = "0.9", optional = true }
+
 # Tokio: use rt-multi-thread on native, limited features on WASM
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "macros", "time"] }
@@ -309,3 +312,6 @@ gpu-bench = []
 ## Disable when running `wasm-pack test` (the test harness provides its own
 ## entry point and the duplicate `main` symbol causes a wasm-ld conflict).
 wasm-start = []
+## PDF export via `printpdf`.  Enables `PdfRenderer`, `PdfDocument`,
+## `PdfOptions`, and the `export_pdf` convenience method on `ComposedChart`.
+pdf = ["printpdf"]
