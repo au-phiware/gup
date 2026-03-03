@@ -335,7 +335,7 @@ derive macros, and custom mark kit.
   use multi-pass rendering to validate the multi-pass API with visual output.
 - [GUP-208](GUP-208_Mark_Derive_Instance_Buffer_Generation.md) ✅ — Mark Derive
   Macro GPU Instance Buffer Generation.
-- [GUP-274](GUP-274_Map_Mark_Rendering.md) 🚧 — GeoPathMark that loads GeoJSON
+- [GUP-274](GUP-274_Map_Mark_Rendering.md) ✅ — GeoPathMark that loads GeoJSON
   boundaries, tessellates polygons via GUP-132, and renders them with a
   geographic projection shader. Deps: GUP-009 ✅, GUP-132 ✅, GUP-273 ✅.
 
@@ -715,7 +715,7 @@ integration, pipeline caching.
   GUP-018 ✅, GUP-093 ✅, GUP-245 📋, GUP-246 📋.
 - [GUP-275](GUP-275_Choropleth_Chart_Builder.md) 📋 — ChoroplethChartBuilder
   mapping GeoJSON region values to colors with projection selection, colorbar
-  legend, and zoom/pan. Deps: GUP-018 ✅, GUP-273 ✅, GUP-274 📋, GUP-255 ✅.
+  legend, and zoom/pan. Deps: GUP-018 ✅, GUP-273 ✅, GUP-274 ✅, GUP-255 ✅.
 
 ## Performance & Profiling
 
