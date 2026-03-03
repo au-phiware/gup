@@ -109,12 +109,38 @@ fn mm_to_pt(mm: f32) -> Pt {
 #[derive(Debug, Clone)]
 pub struct PdfRenderer {
     options: PdfOptions,
+    /// Embedded regular font handle, if available.
+    regular_font: Option<printpdf::FontId>,
+    /// Embedded bold font handle, if available.
+    bold_font: Option<printpdf::FontId>,
 }
 
 impl PdfRenderer {
     /// Create a new PDF renderer with the given options.
+    ///
+    /// Text will be rendered using built-in Helvetica.  To use embedded
+    /// fonts, call [`with_fonts`](Self::with_fonts).
     pub fn new(options: PdfOptions) -> Self {
-        Self { options }
+        Self {
+            options,
+            regular_font: None,
+            bold_font: None,
+        }
+    }
+
+    /// Set embedded font handles for text rendering.
+    ///
+    /// When set, text elements will reference the embedded font ID rather
+    /// than the built-in Helvetica.  This produces proper PDF text
+    /// objects with embedded font subsets.
+    pub fn with_fonts(
+        mut self,
+        regular: Option<printpdf::FontId>,
+        bold: Option<printpdf::FontId>,
+    ) -> Self {
+        self.regular_font = regular;
+        self.bold_font = bold;
+        self
     }
 
     /// Render a set of SVG elements into a single PDF page.
@@ -336,11 +362,18 @@ impl PdfRenderer {
                 let pdf_y = page_h - (offset_y + y * scale);
                 let pdf_font_size = font_size * scale;
 
-                // Use built-in Helvetica (closest to sans-serif default).
-                let font = if font_weight.as_deref() == Some("bold") {
-                    BuiltinFont::HelveticaBold
+                // Choose font: prefer embedded font, fall back to built-in.
+                let is_bold = font_weight.as_deref() == Some("bold");
+                let font_handle = if is_bold {
+                    self.bold_font
+                        .as_ref()
+                        .map(|fid| PdfFontHandle::External(fid.clone()))
+                        .unwrap_or(PdfFontHandle::Builtin(BuiltinFont::HelveticaBold))
                 } else {
-                    BuiltinFont::Helvetica
+                    self.regular_font
+                        .as_ref()
+                        .map(|fid| PdfFontHandle::External(fid.clone()))
+                        .unwrap_or(PdfFontHandle::Builtin(BuiltinFont::Helvetica))
                 };
 
                 ops.push(Op::SetFillColor {
@@ -348,7 +381,7 @@ impl PdfRenderer {
                 });
                 ops.push(Op::StartTextSection);
                 ops.push(Op::SetFont {
-                    font: PdfFontHandle::Builtin(font),
+                    font: font_handle,
                     size: mm_to_pt(pdf_font_size),
                 });
                 ops.push(Op::SetTextCursor {
@@ -450,6 +483,11 @@ impl PdfRenderer {
 
 /// Builder for multi-page PDF documents.
 ///
+/// On creation, `PdfDocument` attempts to locate and embed a sans-serif
+/// system font (using `fontdb`).  If the font cannot be found or loaded,
+/// the document falls back to the built-in PDF Helvetica font and emits a
+/// `log::warn!` message — this is a non-fatal condition.
+///
 /// # Examples
 ///
 /// ```rust,ignore
@@ -464,16 +502,95 @@ pub struct PdfDocument {
     options: PdfOptions,
     inner: printpdf::PdfDocument,
     page_count: usize,
+    /// Embedded regular font, if a system font was successfully loaded.
+    embedded_font: Option<printpdf::FontId>,
+    /// Embedded bold font, if available.
+    embedded_bold_font: Option<printpdf::FontId>,
 }
 
 impl PdfDocument {
     /// Create a new empty PDF document.
+    ///
+    /// Tries to embed a sans-serif system font.  Falls back to PDF
+    /// built-in Helvetica with a warning if no suitable font is found.
     pub fn new(options: PdfOptions) -> Self {
+        let mut inner = printpdf::PdfDocument::new("Gup Chart");
+
+        let (embedded_font, embedded_bold_font) = Self::try_embed_fonts(&mut inner);
+
         Self {
             options,
-            inner: printpdf::PdfDocument::new("Gup Chart"),
+            inner,
             page_count: 0,
+            embedded_font,
+            embedded_bold_font,
         }
+    }
+
+    /// Attempt to load and embed a sans-serif font from the system.
+    fn try_embed_fonts(
+        doc: &mut printpdf::PdfDocument,
+    ) -> (Option<printpdf::FontId>, Option<printpdf::FontId>) {
+        let mut db = fontdb::Database::new();
+        db.load_system_fonts();
+
+        if db.is_empty() {
+            log::warn!("fontdb found no system fonts; falling back to built-in Helvetica");
+            return (None, None);
+        }
+
+        // Try common sans-serif font families.
+        let families: &[fontdb::Family<'_>] = &[
+            fontdb::Family::SansSerif,
+            fontdb::Family::Name("DejaVu Sans"),
+            fontdb::Family::Name("Liberation Sans"),
+            fontdb::Family::Name("Noto Sans"),
+            fontdb::Family::Name("Arial"),
+            fontdb::Family::Name("Helvetica"),
+        ];
+
+        let regular_id =
+            Self::try_embed_font(doc, &db, families, fontdb::Weight::NORMAL, "regular");
+        let bold_id = Self::try_embed_font(doc, &db, families, fontdb::Weight::BOLD, "bold");
+
+        if regular_id.is_none() {
+            log::warn!(
+                "Could not locate a sans-serif system font for PDF embedding; \
+                 falling back to built-in Helvetica"
+            );
+        }
+
+        (regular_id, bold_id)
+    }
+
+    /// Try to embed a specific font weight from the system.
+    fn try_embed_font(
+        doc: &mut printpdf::PdfDocument,
+        db: &fontdb::Database,
+        families: &[fontdb::Family<'_>],
+        weight: fontdb::Weight,
+        label: &str,
+    ) -> Option<printpdf::FontId> {
+        for family in families {
+            let query = fontdb::Query {
+                families: &[family.clone()],
+                weight,
+                stretch: fontdb::Stretch::Normal,
+                style: fontdb::Style::Normal,
+            };
+            if let Some(face_id) = db.query(&query) {
+                let result = db.with_face_data(face_id, |font_data, face_index| {
+                    let mut warnings = Vec::new();
+                    printpdf::ParsedFont::from_bytes(font_data, face_index as usize, &mut warnings)
+                });
+                if let Some(Some(parsed)) = result {
+                    let fid = doc.add_font(&parsed);
+                    log::info!("Embedded PDF font ({label}): family={:?}", family);
+                    return Some(fid);
+                }
+            }
+        }
+        None
     }
 
     /// Add a chart page from pre-built [`SvgElement`] data.
@@ -487,7 +604,8 @@ impl PdfDocument {
         chart_width: f32,
         chart_height: f32,
     ) -> GupResult<()> {
-        let renderer = PdfRenderer::new(self.options.clone());
+        let renderer = PdfRenderer::new(self.options.clone())
+            .with_fonts(self.embedded_font.clone(), self.embedded_bold_font.clone());
         let page = renderer.render_page(elements, chart_width, chart_height);
         self.inner.pages.push(page);
         self.page_count += 1;
