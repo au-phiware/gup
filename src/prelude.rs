@@ -212,7 +212,8 @@ pub use crate::zoom::{GpuViewportTransform, ZoomBehavior};
 // Layout engine
 pub use crate::layout::{
     ForceDirected, GraphChartBuilder, GraphLayout, LayoutEdge, LayoutEngine, LayoutNode,
-    LayoutResult, NodePosition,
+    LayoutRect, LayoutResult, NodePosition, TreeNode, TreemapAlgorithm, TreemapCell,
+    TreemapOptions, TreemapResult,
 };
 
 // Integration and plugin system
