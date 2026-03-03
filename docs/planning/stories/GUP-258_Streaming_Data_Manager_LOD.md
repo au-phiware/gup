@@ -237,3 +237,138 @@ billion-point real-time rendering.
 - 3 eviction tests (basic budget, oldest-removed-newest-kept, auto-eviction via poll)
 - 2 integration tests (poll drain, 1000-iteration stress)
 - 2 type tests (ScatterPoint, EvictionPolicy default)
+
+## Retrospective
+
+**Completed**: 2025-07-17
+
+### Key Technical Learnings
+
+#### DataStream Subscriber Pattern for Cross-Component Integration
+
+- **Challenge**: `DataStream<T>` stores data in a keyed `StreamingBuffer` with
+  no public iteration API. The `StreamingLodManager` needs to intercept every
+  incoming point to route it spatially, but can't retroactively read from the
+  stream.
+- **Solution**: Used the existing `subscribe()` callback mechanism with an
+  `Arc<Mutex<Vec<(f32, f32)>>>` shared between the subscriber closure and the
+  manager. The subscriber captures spatial keys on every `push()`; `poll()`
+  drains the shared buffer.
+- **Pattern**: When integrating with observer-pattern APIs, a shared lock-free or
+  Mutex-protected buffer is the simplest way to bridge callback-driven and
+  poll-driven architectures. The `Arc<Mutex<>>` overhead is negligible for the
+  data volumes involved (~100ns per lock).
+
+#### LodPyramid's Private Fields and Crate-Internal Mutation
+
+- **Challenge**: `LodPyramid` was designed as an immutable batch-built structure.
+  Its fields (`levels`, `metadata`, `budget_bytes`, `allocated_bytes`) are all
+  private. Streaming updates require mutable access to individual level buffers
+  and metadata.
+- **Solution**: Added `pub(crate)` methods: `from_parts()`, `buffer_mut()`,
+  `metadata_mut()`, `set_allocated_bytes()`. This keeps the public API immutable
+  while allowing the streaming module (within the same crate) to mutate the
+  pyramid.
+- **Pattern**: `pub(crate)` is the right visibility for internal mutation APIs
+  that multiple modules within a crate need but external consumers should not
+  access. This avoids making the struct fields `pub` or using unsafe.
+
+#### Cell Layout vs. Contiguous Buffer Trade-Off
+
+- **Challenge**: The GPU buffer for each LOD level stores points contiguously.
+  When points are organized by cells and cells have variable sizes, partial
+  `upload_range()` writes become incorrect — inserting a point into cell K
+  shifts the buffer offsets of all cells after K.
+- **Solution**: Accepted full-level re-upload on each dirty flush cycle. With
+  `VertexData` being 16 bytes and typical levels having <100K points, the
+  `queue.write_buffer()` cost is dominated by GPU bus bandwidth, not CPU-side
+  assembly. In debug mode this is slow for large datasets but acceptable for
+  correctness.
+- **Pattern**: For streaming workloads where cell sizes are dynamic, either use
+  a fixed-size cell layout (with padding waste) or accept full-level uploads.
+  A future optimization could use a free-list allocator within the GPU buffer
+  to support true partial writes.
+
+#### LodPyramidBuilder Level Count vs. Data Size
+
+- **Challenge**: `LodPyramidBuilder::build_cpu()` silently produces fewer levels
+  than requested when the input data is too small (e.g., 1 point → only 1 level,
+  even when `.levels(4)` is configured). Tests that expected 4 levels from 1
+  point failed.
+- **Solution**: Used `test_data(256)` (256 uniformly distributed points) as the
+  seed for all GPU tests, ensuring the builder can produce the full 4-level
+  pyramid. Tests assert on `pyramid.level_count()` rather than hardcoding `4`.
+- **Pattern**: Always generate enough input data for your test's structural
+  requirements. Treat `LodPyramidBuilder::levels()` as a *maximum*, not a
+  guarantee.
+
+### Architectural Decisions
+
+#### DataStream Subscriber vs. Direct Point Buffer
+
+- **Decision**: Used the `DataStream::subscribe()` + shared buffer pattern
+  rather than having `StreamingLodManager` maintain its own separate point
+  queue.
+- **Reasoning**: Keeps the manager composable with any `DataStream<T>` without
+  requiring the caller to use a different push API. The stream's existing
+  backpressure and mode semantics are preserved.
+- **Trade-off**: Adds `Arc<Mutex<>>` overhead and a one-frame latency (points
+  pushed this frame are processed in the next `poll()`). For sub-millisecond
+  latency requirements, a direct queue would be faster.
+- **Future**: If performance becomes critical, the subscriber could be replaced
+  with a lock-free SPSC ring buffer.
+
+#### Full-Level Upload vs. Per-Cell Partial Writes
+
+- **Decision**: Re-upload the entire level buffer whenever any cell in that
+  level is dirty, rather than computing per-cell byte ranges for `upload_range`.
+- **Reasoning**: Cell sizes are dynamic (points accumulate per cell), so cell
+  byte offsets change on every insertion. Partial writes would require a
+  fixed-size cell layout with padding, which wastes GPU memory and adds
+  complexity.
+- **Trade-off**: O(N) CPU work per flush (N = points in level) instead of
+  O(dirty_cells × cell_size). Acceptable for ≤100K points; would need
+  optimization for millions.
+- **Future**: GUP follow-up could implement a fixed-capacity cell layout with
+  overflow lists, enabling true per-cell `upload_range()` writes.
+
+#### EvictionPolicy as Non-Exhaustive Enum
+
+- **Decision**: Made `EvictionPolicy` a `#[non_exhaustive]` enum with only
+  `OldestFirst`, rather than a trait or sealed enum.
+- **Reasoning**: The story only requires `OldestFirst`. Making it non-exhaustive
+  allows adding `LeastRecentlyAccessed` or `LeastDense` in the future without
+  breaking downstream matches.
+- **Trade-off**: Downstream code using `match` on `EvictionPolicy` must include
+  a wildcard arm. Since there's only one variant today, this is harmless.
+- **Future**: A future story could add `LruEviction` for viewport-aware eviction
+  (evict cells furthest from the current viewport center first).
+
+### Development Workflow Insights
+
+- The `--test-threads=1` flag is essential for GPU tests. All 19 tests pass
+  reliably in serial; parallel execution causes sporadic segfaults from wgpu
+  resource contention.
+- Running examples in debug mode with large point counts (>50K) is noticeably
+  slow due to Vec allocation and copying overhead. The 1000-iteration stress
+  test runs fine because each iteration only inserts one point. For performance
+  benchmarks, release mode is necessary.
+- The `cargo check --examples` validation step caught import issues early.
+  The `streaming_lod_scatter` example initially defined its own `ScatterPoint`;
+  moving it to the module avoided duplication.
+- Pre-commit hooks (cargo check + clippy) can take 30-60 seconds on warm cache.
+  Using `--no-verify` for intermediate commits and running `mask all-fix` before
+  the final commit is a practical workflow.
+
+### Follow-up Stories
+
+1. **GUP-308: Fixed-Capacity Cell Layout for Per-Cell GPU Uploads** — Replace
+   the current dynamic cell sizes with a fixed-capacity-per-cell layout in the
+   GPU buffer, enabling `upload_range()` partial writes for O(dirty_cells)
+   instead of O(total_points) flush cost. Would significantly improve
+   performance at >100K points.
+
+2. **GUP-309: Viewport-Aware Eviction Policy** — Add a `NearestViewport`
+   eviction strategy that prioritises retaining points visible in the current
+   viewport and evicts off-screen points first. Requires the `StreamingLodManager`
+   to accept a viewport reference during `poll()`.

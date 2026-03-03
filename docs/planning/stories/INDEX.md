@@ -885,6 +885,12 @@ layouts, and 3D visualization.
   combining DataStream<T> (GUP-015) with LodPyramid for incremental cell-level
   LOD updates and memory-budget eviction. Deps: GUP-015 ✅, GUP-244 ✅, GUP-256
   ✅.
+- [GUP-308](GUP-308_Fixed_Capacity_Cell_Layout.md) 💡 — Fixed-capacity cell
+  layout in GPU buffers for per-cell `upload_range()` writes, enabling O(dirty)
+  instead of O(total) flush cost. Deps: GUP-258 ✅.
+- [GUP-309](GUP-309_Viewport_Aware_Eviction.md) 💡 — Viewport-aware eviction
+  policy for StreamingLodManager that evicts off-screen points before on-screen
+  points. Deps: GUP-258 ✅.
 - [GUP-259](GUP-259_GPU_Force_Directed_Graph_Layout.md) 📋 — GPU compute shader
   force-directed layout (repulsion, spring, gravity, convergence detection)
   targeting 100K nodes in ≤5 seconds. Deps: GUP-003 ✅, GUP-004 ✅, GUP-077 ✅.
