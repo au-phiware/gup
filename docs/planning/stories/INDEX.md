@@ -717,7 +717,7 @@ integration, pipeline caching.
   (GUP-144) for smooth mirrored density curves with optional embedded box plots
   and half-violin split mode. Deps: GUP-018 ✅, GUP-132 ✅, GUP-144 ✅, GUP-166
   ✅.
-- [GUP-250](GUP-250_Density_Plot_Builder.md) 📋 — DensityPlotBuilder with 2D GPU
+- [GUP-250](GUP-250_Density_Plot_Builder.md) 🚧 — DensityPlotBuilder with 2D GPU
   KDE compute shader and marching-squares contour extraction, rendered as filled
   contours or line isolevels. Deps: GUP-018 ✅, GUP-144 ✅, GUP-132 ✅, GUP-248
   📋.
