@@ -694,7 +694,7 @@ integration, pipeline caching.
 - [GUP-239](GUP-239_Pipeline_Caching_Chart_Builder.md) ✅ — The
   multi_font_chart_demo (and likely other chart rendering code) recreates the
   axis-line….
-- [GUP-245](GUP-245_Bar_Chart_Builder.md) 📋 — BarChartBuilder with
+- [GUP-245](GUP-245_Bar_Chart_Builder.md) 🚧 — BarChartBuilder with
   vertical/horizontal, grouped, and stacked variants using instanced Rectangle
   marks and OrdinalScale. Deps: GUP-018 ✅, GUP-067 ✅, GUP-093 ✅, GUP-254 ✅.
 - [GUP-246](GUP-246_Line_Chart_Builder.md) 📋 — LineChartBuilder with
