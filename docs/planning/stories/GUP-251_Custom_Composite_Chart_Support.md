@@ -242,3 +242,105 @@ independent y-scales are intentional.
 - **6 integration tests** in `composite_chart_integration.rs` (GPU builds,
   error cases, domain union cases)
 - **2,394+ total tests** pass with 0 failures
+
+## Retrospective
+
+**Completed**: 2026-03-03
+
+### Key Technical Learnings
+
+#### Enum-over-Trait-Objects for Layer Composition
+
+- **Challenge**: Different chart builders produce different concrete types
+  (`ComposedChart<T, Circle>` vs `ComposedChart<LineSegment<T>, Line>` vs
+  `ComposedChart<T, Rectangle>`). A trait-object approach (`Box<dyn ChartLayer>`)
+  would require either object-unsafe generic methods or heavy type erasure.
+- **Solution**: Used `LayerKind<T>` enum with one variant per supported builder
+  type (Scatter, Line, Bar, Area). Each variant carries the builder directly. An
+  `IntoChartLayer<T>` trait provides ergonomic conversion from concrete builders.
+- **Pattern**: When the set of variants is known and finite, enums are strictly
+  superior to trait objects: compile-time exhaustiveness checks, no boxing
+  overhead, easy serialisation, and no object-safety worries.
+
+#### Shared Data Type Constraint
+
+- **Challenge**: The story envisions `composite().layer(scatter).layer(line)`
+  where layers may visualise different aspects of the same dataset. A fully
+  type-erased approach would require each layer to carry its own data, doubling
+  memory and complicating domain computation.
+- **Solution**: `CompositeChartBuilder<T>` is generic over a single data type T.
+  All layers share the same `Vec<T>` passed to `build_with_data`. For the
+  regression-line example, we merged scatter data and regression endpoints into
+  one `Vec<DataPoint>`.
+- **Pattern**: Sharing one data type per composite is a reasonable constraint
+  for most real-world dashboards. For genuinely heterogeneous data, a future
+  type-erased `AnyLayer` variant could be added.
+
+#### Domain Unification as Pure Logic
+
+- **Challenge**: Computing the unified x/y domain across layers must work
+  correctly for edge cases: empty data, single-point ranges, negative values,
+  disjoint ranges.
+- **Solution**: Extracted `compute_domain()`, `union_domain()`, and
+  `pad_domain()` as pure functions with comprehensive unit tests. The padding
+  function handles the zero-range (single-point) case by expanding ±1.0.
+- **Pattern**: Separating pure domain logic from GPU-dependent code enabled
+  thorough testing without GPU resources — 12 of the 18 tests run without any
+  GPU context.
+
+### Architectural Decisions
+
+#### Anchor Selection for Primary Chart
+
+- **Decision**: The `CompositeChart<T>` wraps a `ComposedChart<T, Circle>` as
+  the "primary" that owns axis/grid pipelines, even when the first user layer
+  might be a line or bar. A separate anchor `Selection<T, Circle>` is created
+  for this purpose.
+- **Reasoning**: `ComposedChart` manages axis rendering, grid pipelines, and
+  draw commands. Reusing one of the user's layers as the primary would require
+  knowing its concrete mark type at the composite level, violating the
+  enum-based abstraction.
+- **Trade-off**: The anchor selection is essentially empty — it allocates a
+  GPU buffer but contains no meaningful data marks. This is a small overhead.
+- **Future**: A dedicated `CompositeChartFrame` type that handles axis/grid
+  rendering independently of any mark type could eliminate this overhead.
+
+#### Layers Receive Unified Scales at Build Time
+
+- **Decision**: Each layer's builder receives the unified scale via its
+  `config.x_scale` / `config.y_scale` fields before calling `build_with_data`.
+  Layers are built with `show_axes = false`.
+- **Reasoning**: This reuses 100% of the existing builder infrastructure — no
+  new `render_layer` method or `ChartLayer` trait is needed. Each builder
+  already knows how to build a `ComposedChart`; we just suppress its axes and
+  inject the composite's scales.
+- **Trade-off**: Builders must have `pub(crate)` fields for `config`,
+  `x_accessor`, and `y_accessor`. The `BarChartBuilder` required a visibility
+  change for this.
+- **Future**: A formal `ChartLayer` trait with `render_layer(ctx, scales)` would
+  be cleaner but would require larger refactoring of all existing builders.
+
+### Development Workflow Insights
+
+- **Fast iteration**: The enum-based approach compiled on the first attempt with
+  zero errors, validating the project's established pattern.
+- **Test-driven domain logic**: Writing the 12 domain-unification unit tests
+  first caught the single-point edge case before it could manifest in examples.
+- **Example-driven validation**: Running the two examples end-to-end was the
+  fastest way to verify the full pipeline (data → domain → scale → build →
+  selection) without needing a visual window.
+- **Pre-existing warnings**: The `gup-macros` crate generates 42 warnings from
+  transpilation-related dead code — these are unrelated to this story and should
+  be addressed in a separate cleanup.
+
+### Follow-up Stories
+
+1. **GUP-303: Composite Chart GPU Render Pipeline** — Wire the `CompositeChart`
+   through an actual wgpu render pass so that all layer selections are drawn to
+   the same surface in declaration order. Currently the selections are built but
+   not visually rendered to a window.
+
+2. **GUP-304: Per-Layer Data Support** — Allow each layer in a composite to carry
+   its own data set (different T per layer). This would require a type-erased
+   `AnyLayer` variant or a `Box<dyn ErasedLayer>` approach for the case where
+   scatter data and line data have fundamentally different schemas.
