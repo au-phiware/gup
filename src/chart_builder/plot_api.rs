@@ -10,7 +10,7 @@ use super::ChartBuilder;
 use super::accessor::FieldAccessor;
 use super::builders::{
     AreaChartBuilder, BarChartBuilder, BoxPlotBuilder, HeatmapBuilder, LineChartBuilder,
-    ScatterPlotBuilder,
+    ScatterPlotBuilder, ViolinPlotBuilder,
 };
 use crate::RenderContext;
 use crate::error::{GupError, GupResult};
@@ -216,6 +216,25 @@ where
         ConfiguredBoxPlot::new(self.data, self.context, builder)
     }
 
+    /// Create a violin plot with the specified Y accessor.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    ///
+    /// # #[derive(Debug, Clone)] struct DataSet { values: f32 }
+    /// # let data_sets = vec![DataSet { values: 1.0 }];
+    /// let chart = plot()
+    ///     .data(data_sets)
+    ///     .violin(y("values"));
+    /// ```
+    pub fn violin(self, y_accessor: FieldAccessor) -> ConfiguredViolinPlot<T> {
+        let builder = ViolinPlotBuilder::new().y(y_accessor);
+
+        ConfiguredViolinPlot::new(self.data, self.context, builder)
+    }
+
     /// Get the underlying data.
     pub fn data(&self) -> &[T] {
         &self.data
@@ -374,6 +393,7 @@ impl_configured_chart!(ConfiguredBarChart, BarChartBuilder<T>);
 impl_configured_chart!(ConfiguredAreaChart, AreaChartBuilder<T>);
 impl_configured_chart!(ConfiguredHeatmap, HeatmapBuilder<T>);
 impl_configured_chart!(ConfiguredBoxPlot, BoxPlotBuilder<T>);
+impl_configured_chart!(ConfiguredViolinPlot, ViolinPlotBuilder<T>);
 
 /// Main entry point for Observable Plot-style API.
 ///

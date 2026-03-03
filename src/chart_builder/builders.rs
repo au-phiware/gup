@@ -26,6 +26,7 @@ pub mod choropleth;
 pub mod heatmap;
 pub mod line;
 pub mod scatter;
+pub mod violin;
 
 pub use area::*;
 pub use bar::*;
@@ -34,6 +35,7 @@ pub use choropleth::*;
 pub use heatmap::*;
 pub use line::*;
 pub use scatter::*;
+pub use violin::*;
 
 use super::ChartBuilderError;
 use super::accessor::{AccessorValue, FieldAccessor};

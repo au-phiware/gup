@@ -294,6 +294,7 @@ pub use linked_selection::{
 pub use chart_builder::builders::area::{AreaSegment, StackMode};
 pub use chart_builder::builders::bar::{BarOrientation, Category, Orientation};
 pub use chart_builder::builders::heatmap::{AggregateFunc, BinGrid, BinSpec, HeatmapCell};
+pub use chart_builder::builders::violin::{HalfSide, ViolinOrientation, ViolinPlotBuilder};
 pub use chart_builder::{
     AreaChartBuilder, AxisLabelConfig, BarChartBuilder, ChartBuilder, ChartConfig, ChoroplethChart,
     ChoroplethChartBuilder, ComposedChart, HeatmapBuilder, LabelCapableBuilder, LabeledChart,
