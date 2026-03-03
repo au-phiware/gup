@@ -805,14 +805,14 @@ validation.
 
 - [GUP-015](GUP-015_GPU_Debugging_Tools.md) ✅ — GPU Debugging and Profiling
   Tools.
-- [GUP-015](GUP-015_Real_Time_Data_Streaming.md) 🚧 — Implements
+- [GUP-015](GUP-015_Real_Time_Data_Streaming.md) ✅ — Implements
   StreamingBuffer<T> with keyed insert/update/remove, dirty-region tracking,
   double-buffering swap, and GPU-flush of only mutated byte ranges. Deps:
   GUP-002 ✅, GUP-003 ✅, GUP-004 ✅.
 - [GUP-244](GUP-244_Streaming_Data_Builder_API.md) 📋 — Ergonomic DataStream<T>
   builder API (capacity, mode, backpressure) with Selection::stream()
   integration on top of GUP-015's low-level primitives. Deps: GUP-002 ✅,
-  GUP-015 📋.
+  GUP-015 ✅.
 - [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md) ✅ — During GUP-002
   development, debugging GPU resource issues was challenging.
 - [GUP-037](GUP-037_Buffer_Validation_and_Debugging_Tools.md) ✅ — During
@@ -880,7 +880,7 @@ layouts, and 3D visualization.
   ✅, GUP-077 ✅.
 - [GUP-258](GUP-258_Streaming_Data_Manager_LOD.md) 📋 — StreamingLodManager
   combining DataStream<T> (GUP-015) with LodPyramid for incremental cell-level
-  LOD updates and memory-budget eviction. Deps: GUP-015 📋, GUP-244 📋, GUP-256
+  LOD updates and memory-budget eviction. Deps: GUP-015 ✅, GUP-244 📋, GUP-256
   📋.
 - [GUP-259](GUP-259_GPU_Force_Directed_Graph_Layout.md) 📋 — GPU compute shader
   force-directed layout (repulsion, spring, gravity, convergence detection)
