@@ -178,6 +178,10 @@ harness = false
 name = "linear_scale_composition"
 harness = false
 
+[[bench]]
+name = "bar_chart_100k"
+harness = false
+
 [[example]]
 name = "custom_mark_demo"
 path = "examples/custom_mark_demo.rs"
