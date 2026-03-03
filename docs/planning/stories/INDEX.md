@@ -721,7 +721,7 @@ integration, pipeline caching.
   KDE compute shader and marching-squares contour extraction, rendered as filled
   contours or line isolevels. Deps: GUP-018 ✅, GUP-144 ✅, GUP-132 ✅, GUP-248
   📋.
-- [GUP-251](GUP-251_Custom_Composite_Chart_Support.md) 🚧 —
+- [GUP-251](GUP-251_Custom_Composite_Chart_Support.md) ✅ —
   CompositeChartBuilder composing multiple chart layers with shared axes,
   unified scale domains, and optional dual-y-axis support. Deps: GUP-001 ✅,
   GUP-018 ✅, GUP-093 ✅, GUP-245 ✅, GUP-246 ✅.
@@ -735,7 +735,7 @@ integration, pipeline caching.
   tooltip and hover highlighting via GPU hit-testing. Deps: GUP-275 ✅, GUP-012
   ✅, GUP-014 ✅.
 - [GUP-295](GUP-295_Line_Chart_Point_Markers.md) 💡 — Optional circle point
-  markers at each data vertex on line charts. Deps: GUP-246 ✅, GUP-251 📋.
+  markers at each data vertex on line charts. Deps: GUP-246 ✅, GUP-251 ✅.
 - [GUP-296](GUP-296_Colorbar_Axis_Renderer.md) 📋 — Colorbar axis renderer: thin
   gradient-filled rectangle with tick marks and labels for colour-scale legends.
   Deps: GUP-248 ✅, GUP-093 ✅, GUP-255 ✅.
