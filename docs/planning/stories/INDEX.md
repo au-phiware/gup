@@ -891,7 +891,7 @@ layouts, and 3D visualization.
 - [GUP-309](GUP-309_Viewport_Aware_Eviction.md) 💡 — Viewport-aware eviction
   policy for StreamingLodManager that evicts off-screen points before on-screen
   points. Deps: GUP-258 ✅.
-- [GUP-259](GUP-259_GPU_Force_Directed_Graph_Layout.md) 📋 — GPU compute shader
+- [GUP-259](GUP-259_GPU_Force_Directed_Graph_Layout.md) 🚧 — GPU compute shader
   force-directed layout (repulsion, spring, gravity, convergence detection)
   targeting 100K nodes in ≤5 seconds. Deps: GUP-003 ✅, GUP-004 ✅, GUP-077 ✅.
 - [GUP-260](GUP-260_GPU_Treemap_Layout.md) 📋 — GPU compute shader treemap
