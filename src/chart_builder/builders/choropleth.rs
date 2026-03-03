@@ -213,6 +213,34 @@ impl ChoroplethChartBuilder {
         self
     }
 
+    /// Load data from a collection of struct records, extracting region
+    /// identifiers and values with the provided closures.
+    ///
+    /// This is an alternative to [`data`](Self::data) for when you have a
+    /// collection of typed structs rather than pre-keyed `(key, value)` pairs.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// struct CountryStats { iso: String, population: f64, gdp: f64 }
+    ///
+    /// ChoroplethChartBuilder::new()
+    ///     .data_from_records(
+    ///         stats_vec,
+    ///         |s| s.iso.clone(),
+    ///         |s| s.population,
+    ///     )
+    /// ```
+    pub fn data_from_records<T, I, K, V>(mut self, records: I, key: K, value: V) -> Self
+    where
+        I: IntoIterator<Item = T>,
+        K: Fn(&T) -> String,
+        V: Fn(&T) -> f64,
+    {
+        self.data = records.into_iter().map(|r| (key(&r), value(&r))).collect();
+        self
+    }
+
     /// Configure how a region identifier is extracted from each GeoJSON
     /// feature.
     ///
@@ -880,5 +908,187 @@ mod tests {
         let color = sample_color_scale(&scale, 50.0, 50.0, 50.0);
         // Should not panic and should return a valid colour.
         assert!(color.iter().all(|c| (0.0..=1.0).contains(c)));
+    }
+
+    #[test]
+    fn test_data_from_records() {
+        struct CountryData {
+            code: String,
+            population: f64,
+        }
+        let records = vec![
+            CountryData {
+                code: "AAA".into(),
+                population: 100.0,
+            },
+            CountryData {
+                code: "BBB".into(),
+                population: 200.0,
+            },
+            CountryData {
+                code: "CCC".into(),
+                population: 300.0,
+            },
+        ];
+
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data_from_records(records, |r| r.code.clone(), |r| r.population)
+            .color_scale(ColorScale::viridis(100.0, 300.0))
+            .build()
+            .unwrap();
+
+        // All three regions should have values.
+        assert!(chart.regions.iter().all(|r| r.value.is_some()));
+        assert_eq!(chart.regions[0].value, Some(100.0));
+        assert_eq!(chart.regions[1].value, Some(200.0));
+        assert_eq!(chart.regions[2].value, Some(300.0));
+    }
+
+    #[test]
+    fn test_data_from_records_partial_coverage() {
+        struct Record {
+            iso: String,
+            val: f64,
+        }
+        let records = vec![Record {
+            iso: "AAA".into(),
+            val: 42.0,
+        }];
+
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data_from_records(records, |r| r.iso.clone(), |r| r.val)
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .build()
+            .unwrap();
+
+        // Only AAA has data; BBB and CCC should get no-data colour.
+        assert!(chart.regions[0].value.is_some());
+        assert!(chart.regions[1].value.is_none());
+        assert!(chart.regions[2].value.is_none());
+        assert_eq!(chart.regions[1].color, [0.75, 0.75, 0.75, 1.0]);
+    }
+
+    #[test]
+    fn test_legend_position_variants() {
+        let source = synthetic_geojson();
+        for pos in [
+            LegendPosition::Bottom,
+            LegendPosition::Top,
+            LegendPosition::Left,
+            LegendPosition::Right,
+        ] {
+            let chart = ChoroplethChartBuilder::new()
+                .boundaries(source.clone())
+                .data(vec![("AAA", 10.0)])
+                .color_scale(ColorScale::viridis(0.0, 100.0))
+                .legend_position(pos)
+                .build()
+                .unwrap();
+            assert_eq!(chart.legend_position, pos);
+        }
+    }
+
+    #[test]
+    fn test_projection_variants() {
+        let source = synthetic_geojson();
+        for proj in [Projection::Mercator, Projection::Equirectangular] {
+            let chart = ChoroplethChartBuilder::new()
+                .boundaries(source.clone())
+                .data(vec![("AAA", 10.0)])
+                .color_scale(ColorScale::viridis(0.0, 100.0))
+                .projection(proj)
+                .build()
+                .unwrap();
+            assert_eq!(chart.projection, proj);
+        }
+    }
+
+    #[test]
+    fn test_simplification_reduces_vertices() {
+        let source = synthetic_geojson();
+        let full = ChoroplethChartBuilder::new()
+            .boundaries(source.clone())
+            .data(vec![("AAA", 10.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .build()
+            .unwrap();
+
+        let simplified = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 10.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .simplification_tolerance(5.0)
+            .build()
+            .unwrap();
+
+        // With a large tolerance, simplified should have <= full vertices.
+        assert!(simplified.stroke_vertices.len() <= full.stroke_vertices.len());
+    }
+
+    #[test]
+    fn test_stroke_opacity_propagates() {
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 10.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .stroke_opacity(0.8)
+            .build()
+            .unwrap();
+        assert!((chart.stroke_opacity - 0.8).abs() < f32::EPSILON);
+        assert!((chart.stroke_color[3] - 0.8).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_domain_auto_computed_from_data() {
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 5.0), ("BBB", 50.0), ("CCC", 500.0)])
+            .color_scale(ColorScale::viridis(0.0, 1.0))
+            .build()
+            .unwrap();
+
+        assert!((chart.domain_min - 5.0).abs() < f64::EPSILON);
+        assert!((chart.domain_max - 500.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_empty_data_uses_default_domain() {
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(Vec::<(&str, f64)>::new())
+            .color_scale(ColorScale::viridis(0.0, 1.0))
+            .build()
+            .unwrap();
+
+        // Empty data → default domain [0, 1].
+        assert!((chart.domain_min - 0.0).abs() < f64::EPSILON);
+        assert!((chart.domain_max - 1.0).abs() < f64::EPSILON);
+        // All regions should get no-data colour.
+        assert!(chart.regions.iter().all(|r| r.value.is_none()));
+    }
+
+    #[test]
+    fn test_default_builder_values() {
+        let builder = ChoroplethChartBuilder::new();
+        assert!(builder.zoom_enabled);
+        assert!(builder.show_legend);
+        assert_eq!(builder.legend_position, LegendPosition::Bottom);
+        assert_eq!(builder.no_data_color, [0.75, 0.75, 0.75, 1.0]);
+        assert!((builder.stroke_opacity - 0.4).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_choropleth_convenience_constructor() {
+        // Verify the module-level `choropleth()` function.
+        let builder = choropleth();
+        assert!(builder.zoom_enabled);
+        assert!(builder.show_legend);
     }
 }

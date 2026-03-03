@@ -2,10 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Interaction & Spatial Index
-**Status**: ✅ Complete
-**Created**: 2025-01-30
-**Completed**: 2025-07-26
+**Initiative**: Interaction & Spatial Index **Status**: ✅ Complete **Created**:
+2025-01-30 **Completed**: 2025-07-26
 
 ## Context
 
@@ -96,7 +94,8 @@ overlapping elements and layered selections behave predictably.
 - [x] Wire `EventManager::dispatch` to the window/surface event loop so that
       `winit` (or equivalent) input events reach the manager
 - [x] Convert raw cursor coordinates to visualization-space coordinates using
-      the viewport transform (`ViewportTransform` + `RawInputEvent::into_interaction_event`)
+      the viewport transform (`ViewportTransform` +
+      `RawInputEvent::into_interaction_event`)
 - [x] Add convenience methods `.on_click()`, `.on_hover()`, and `.on_drag()` to
       `Selection` as thin wrappers over `.on()`
 - [x] Write unit tests for: handler registration, propagation with
@@ -179,15 +178,18 @@ overlapping elements and layered selections behave predictably.
 ## Implementation Summary
 
 ### New Files
-- **`src/event.rs`** — Core event handling module with `EventType`, `EventResult`,
-  `ModifierFlags`, `EventManager`, `RawInputEvent`, and `ViewportTransform`
+
+- **`src/event.rs`** — Core event handling module with `EventType`,
+  `EventResult`, `ModifierFlags`, `EventManager`, `RawInputEvent`, and
+  `ViewportTransform`
 - **`tests/event_handling_tests.rs`** — 7 integration tests covering full
-  round-trip dispatch, cross-selection isolation, coordinate transforms,
-  global handlers, modifier propagation, and performance
+  round-trip dispatch, cross-selection isolation, coordinate transforms, global
+  handlers, modifier propagation, and performance
 - **`examples/interactive_circles.rs`** — Visual demo showing hover highlighting
   and click logging with 30 circles
 
 ### Modified Files
+
 - **`src/interaction.rs`** — Added `timestamp` and `modifiers` fields to
   `InteractionEvent`; imported `ModifierFlags` from new event module
 - **`src/selection.rs`** — Added `on_click()`, `on_hover()`, `on_drag()`
@@ -195,20 +197,22 @@ overlapping elements and layered selections behave predictably.
 - **`src/lib.rs`** — Added `event` module declaration and public exports
 
 ### Test Counts
+
 - 20 unit tests in `src/event.rs`
 - 8 unit tests in `src/selection.rs` (event handler related)
 - 7 integration tests in `tests/event_handling_tests.rs`
 - **Total new tests: 35**
 
 ### Key Design Decisions
-- **EventManager is decoupled from InteractionSystem**: dispatch takes pre-resolved
-  `&[ElementHit]` rather than owning the GPU hit-test pipeline, keeping the event
-  layer GPU-agnostic and easily testable without a device
+
+- **EventManager is decoupled from InteractionSystem**: dispatch takes
+  pre-resolved `&[ElementHit]` rather than owning the GPU hit-test pipeline,
+  keeping the event layer GPU-agnostic and easily testable without a device
 - **Handler signature uses `&mut InteractionEvent`**: allows handlers to control
   propagation by calling `stop_propagation()` / `stop_immediate_propagation()`
   directly on the event, matching familiar DOM semantics
-- **Reused `interaction::Vec2`**: rather than adding a `glam` dependency, the event
-  module uses the existing `interaction::Vec2` type for consistency
+- **Reused `interaction::Vec2`**: rather than adding a `glam` dependency, the
+  event module uses the existing `interaction::Vec2` type for consistency
 
 ## Retrospective
 
@@ -218,24 +222,25 @@ overlapping elements and layered selections behave predictably.
 
 #### interaction::Vec2 vs glam::Vec2
 
-- **Challenge**: The codebase uses a custom `interaction::Vec2` (simple struct with
-  `x, y` and no arithmetic ops), not the standard `glam::Vec2`. The event module
-  initially assumed `glam` was available.
+- **Challenge**: The codebase uses a custom `interaction::Vec2` (simple struct
+  with `x, y` and no arithmetic ops), not the standard `glam::Vec2`. The event
+  module initially assumed `glam` was available.
 - **Solution**: Used `interaction::Vec2` throughout and implemented
-  `ViewportTransform` with manual field arithmetic instead of operator overloads.
-- **Pattern**: When a crate has its own math types, prefer consistency with those
-  types over importing a third-party library — especially for API-surface types
-  that callers will interact with.
+  `ViewportTransform` with manual field arithmetic instead of operator
+  overloads.
+- **Pattern**: When a crate has its own math types, prefer consistency with
+  those types over importing a third-party library — especially for API-surface
+  types that callers will interact with.
 
 #### Decoupling EventManager from GPU
 
 - **Challenge**: The story spec described `EventManager::dispatch` as calling
   GUP-012's hit test directly, but that would require the event module to depend
   on `wgpu::Device` and async GPU readback.
-- **Solution**: Made `EventManager::dispatch` accept pre-resolved `&[ElementHit]`
-  instead. The caller (winit event loop or test harness) is responsible for
-  performing the hit test and passing results. This keeps the event module
-  GPU-free and testable with zero GPU setup.
+- **Solution**: Made `EventManager::dispatch` accept pre-resolved
+  `&[ElementHit]` instead. The caller (winit event loop or test harness) is
+  responsible for performing the hit test and passing results. This keeps the
+  event module GPU-free and testable with zero GPU setup.
 - **Pattern**: Separate "what happened" (hit results) from "who handles it"
   (event dispatch). This inversion makes the event layer a pure CPU routing
   system, enabling sub-millisecond dispatch benchmarks.
@@ -243,23 +248,24 @@ overlapping elements and layered selections behave predictably.
 #### Existing `.on()` API
 
 - **Challenge**: The story assumed `.on()` didn't exist on `Selection` yet, but
-  GUP-002 had already implemented it with `Fn(&mut InteractionEvent, &T)` signature.
+  GUP-002 had already implemented it with `Fn(&mut InteractionEvent, &T)`
+  signature.
 - **Solution**: Built on the existing implementation rather than replacing it.
   Added convenience wrappers and the `EventManager` routing layer on top.
 - **Pattern**: Always audit what prerequisite stories actually delivered before
-  assuming work is needed. The existing `trigger_event()` method was also already
-  present and handled per-selection handler dispatch.
+  assuming work is needed. The existing `trigger_event()` method was also
+  already present and handled per-selection handler dispatch.
 
 ### Architectural Decisions
 
 #### EventManager as Separate Module
 
-- **Decision**: Created `src/event.rs` as a standalone module rather than extending
-  `src/interaction.rs`.
-- **Reasoning**: The interaction module is already 3000+ lines with GPU-heavy code.
-  Keeping the CPU-only event routing in a separate file maintains clear separation
-  of concerns: `interaction.rs` owns GPU hit testing, `event.rs` owns handler
-  routing.
+- **Decision**: Created `src/event.rs` as a standalone module rather than
+  extending `src/interaction.rs`.
+- **Reasoning**: The interaction module is already 3000+ lines with GPU-heavy
+  code. Keeping the CPU-only event routing in a separate file maintains clear
+  separation of concerns: `interaction.rs` owns GPU hit testing, `event.rs` owns
+  handler routing.
 - **Trade-off**: Two modules to understand instead of one, but each is focused.
 - **Future**: If the event system grows (gesture recognition, event coalescing),
   it can expand in its own module without bloating the GPU code.
@@ -269,8 +275,8 @@ overlapping elements and layered selections behave predictably.
 - **Decision**: Handlers receive `&mut InteractionEvent` (mutable reference)
   rather than the story's suggested `InteractionEvent` (by value).
 - **Reasoning**: Mutable access lets handlers call `stop_propagation()` and
-  `stop_immediate_propagation()` directly, matching DOM semantics that the target
-  audience knows. Passing by value would prevent propagation control.
+  `stop_immediate_propagation()` directly, matching DOM semantics that the
+  target audience knows. Passing by value would prevent propagation control.
 - **Trade-off**: Handlers could mutate event metadata unexpectedly. Mitigated by
   keeping propagation fields private and only exposing the control methods.
 
@@ -284,17 +290,17 @@ overlapping elements and layered selections behave predictably.
   event module tests (no GPU resources), but was used for the full suite to
   maintain consistency. Event-only tests run in < 1ms.
 - **Visual validation**: The interactive_circles example successfully rendered
-  30 circles with hover highlighting visible in the screenshot. The yellow stroke
-  on the hovered circle confirmed event dispatch was working end-to-end.
+  30 circles with hover highlighting visible in the screenshot. The yellow
+  stroke on the hovered circle confirmed event dispatch was working end-to-end.
 
 ### Follow-up Stories
 
-1. **GUP-283: Event Coalescing for High-Frequency Input** — mousemove events
-   can fire at 60+ Hz; without coalescing the event queue may grow unbounded.
+1. **GUP-283: Event Coalescing for High-Frequency Input** — mousemove events can
+   fire at 60+ Hz; without coalescing the event queue may grow unbounded.
    Implement frame-rate-aware event coalescing in EventManager to merge rapid
    mouse movements into a single dispatch per frame.
 
 2. **GUP-284: Unified Vec2 Type** — The codebase has `interaction::Vec2`,
    `shader_function::Vec2`, and various `[f32; 2]` usages. A unified math type
-   (either promoting `interaction::Vec2` to a top-level type with arithmetic ops,
-   or adopting `glam`) would reduce friction and conversion boilerplate.
+   (either promoting `interaction::Vec2` to a top-level type with arithmetic
+   ops, or adopting `glam`) would reduce friction and conversion boilerplate.

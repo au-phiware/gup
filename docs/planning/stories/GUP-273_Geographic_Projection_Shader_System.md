@@ -47,7 +47,7 @@ on.
 > common geographic projections so that I can map `(longitude, latitude)`
 > coordinates to screen pixels by composing a projection with a screen
 > transform, without writing raw WGSL."
-
+>
 > "As a visualization developer building map-based charts, I want
 > out-of-boundary coordinates to be automatically culled by the projection
 > shader so that points outside the visible projection region are discarded on
@@ -153,7 +153,7 @@ on.
 - [x] All projection types are defined in `src/shader_functions/geo.rs` and
       re-exported from `src/shader_functions/mod.rs`
 - [x] The public API surface is
-      `pub use shader_functions::geo::{GeoPoint, EquirectangularProjection, MercatorProjection, StereographicProjection, OrthographicProjection, CLIP_SENTINEL}`
+      `pub use shader_functions::geo::{GeoPoint, ...Projection, CLIP_SENTINEL}`
 - [x] A `geographic_projection` example (or extended existing map example)
       demonstrates composing a projection with a screen transform and rendering
       a set of world-city coordinates as `Circle` marks

@@ -129,7 +129,9 @@ D3's own `.transition()` API to lower the migration barrier for D3 users.
   - An initial dataset of 20 points rendered as `Circle` marks.
   - A function that rebinds a new dataset of 20 points (with 10 shared keys, 5
     new, 5 removed).
-  - `selection.data_keyed(new_data, |p| p.id).transition().duration(800).ease(EasingFn::EaseInOut).attr("cx", |p| p.x).attr("cy", |p| p.y)`.
+  - `selection.data_keyed(new_data, |p| p.id).transition()`
+    `.duration(800).ease(EasingFn::EaseInOut)`
+    `.attr("cx", |p| p.x).attr("cy", |p| p.y)`.
   - The example compiles and renders without GPU validation errors.
 - [x] The example includes inline comments explaining the enter/update/exit
       groups.
@@ -287,7 +289,8 @@ D3's own `.transition()` API to lower the migration barrier for D3 users.
    - `commit()` to finalize and schedule the transition
 
 3. **EasingFn Enum**: Unified easing specification bridging `EasingFunction`
-   (timing curves) and `InterpolationMode` (spatial splines, CatmullRom/BSpline).
+   (timing curves) and `InterpolationMode` (spatial splines,
+   CatmullRom/BSpline).
 
 4. **Selection Integration** (`src/selection.rs`):
    - `data_keyed()` for key-based data rebinding
@@ -300,16 +303,16 @@ D3's own `.transition()` API to lower the migration barrier for D3 users.
 
 ### Key Files Changed
 
-| File | Change |
-|------|--------|
-| `src/transition/mod.rs` | New module root |
-| `src/transition/diff.rs` | Diff engine (11 unit tests) |
-| `src/transition/builder.rs` | TransitionBuilder + types (7 unit tests) |
-| `src/selection.rs` | data_keyed, transition, complete_transition |
-| `src/lib.rs` | Module registration + re-exports |
-| `src/prelude.rs` | Transition types in prelude |
-| `examples/data_transition_scatter.rs` | Scatter plot example |
-| `tests/transition_integration.rs` | 19 integration tests |
+| File                                  | Change                                      |
+| ------------------------------------- | ------------------------------------------- |
+| `src/transition/mod.rs`               | New module root                             |
+| `src/transition/diff.rs`              | Diff engine (11 unit tests)                 |
+| `src/transition/builder.rs`           | TransitionBuilder + types (7 unit tests)    |
+| `src/selection.rs`                    | data_keyed, transition, complete_transition |
+| `src/lib.rs`                          | Module registration + re-exports            |
+| `src/prelude.rs`                      | Transition types in prelude                 |
+| `examples/data_transition_scatter.rs` | Scatter plot example                        |
+| `tests/transition_integration.rs`     | 19 integration tests                        |
 
 ### Test Counts
 
@@ -332,20 +335,21 @@ D3's own `.transition()` API to lower the migration barrier for D3 users.
 - **Solution**: Wrapped closures in `AttrTargetFn<T>` which uses
   `Box<dyn Fn(&T) -> AttrValue>` internally, mirroring the existing
   `AttributeBinding<T>` pattern in `selection.rs`.
-- **Pattern**: When you need to store heterogeneous closures, box them behind
-  a trait object that produces a common type (here `AttrValue`). The
+- **Pattern**: When you need to store heterogeneous closures, box them behind a
+  trait object that produces a common type (here `AttrValue`). The
   `IntoAttrValue` trait provides the bridge from concrete types to the enum.
 
 #### Conditional Send+Sync Bounds
 
-- **Challenge**: The `Selection` struct does not require `T: Clone + Send + Sync`
-  on all methods, but `TransitionBuilder` needs `T: Clone` for the diff and
-  `T: MaybeSend + MaybeSync + 'static` for boxed closures.
+- **Challenge**: The `Selection` struct does not require
+  `T: Clone + Send + Sync` on all methods, but `TransitionBuilder` needs
+  `T: Clone` for the diff and `T: MaybeSend + MaybeSync + 'static` for boxed
+  closures.
 - **Solution**: Added where-clause bounds only on the `transition()` method
   rather than on the Selection struct itself. This preserves backward
   compatibility: existing code that doesn't use transitions is unaffected.
-- **Pattern**: Apply trait bounds at the method level, not the struct level,
-  to maintain maximum flexibility.
+- **Pattern**: Apply trait bounds at the method level, not the struct level, to
+  maintain maximum flexibility.
 
 #### HashMap-Based Diff with Stable Ordering
 
@@ -379,8 +383,8 @@ D3's own `.transition()` API to lower the migration barrier for D3 users.
 - **Decision**: The `on_end` callback is stored on the `Selection` rather than
   on the `CommittedTransition`.
 - **Reasoning**: `CommittedTransition` is `Clone` and `Debug` — storing boxed
-  closures would break both. The Selection is the long-lived owner that
-  manages the lifecycle, so it's the natural home for callbacks.
+  closures would break both. The Selection is the long-lived owner that manages
+  the lifecycle, so it's the natural home for callbacks.
 - **Trade-off**: Only one `on_end` callback can be active at a time (per
   selection). This matches the semantics: a new transition replaces the old.
 - **Future**: If multiple concurrent transitions per selection are needed,
@@ -397,14 +401,14 @@ D3's own `.transition()` API to lower the migration barrier for D3 users.
 - **Trade-off**: Users need to learn the `EasingFn` type rather than reusing
   existing enums directly. Conversion methods `to_easing_function()` and
   `to_interpolation_mode()` provide the bridge.
-- **Future**: If the easing system is reworked, `EasingFn` can be deprecated
-  in favor of a unified approach.
+- **Future**: If the easing system is reworked, `EasingFn` can be deprecated in
+  favor of a unified approach.
 
 ### Development Workflow Insights
 
-- **Test-first approach worked well**: Writing the diff engine with comprehensive
-  unit tests first gave confidence that the foundation was solid before building
-  the more complex TransitionBuilder on top.
+- **Test-first approach worked well**: Writing the diff engine with
+  comprehensive unit tests first gave confidence that the foundation was solid
+  before building the more complex TransitionBuilder on top.
 - **Integration tests caught real issues**: The 19-test integration suite
   exercises the full workflow (data_keyed → transition → commit → complete) and
   verified callback behavior that unit tests alone couldn't cover.
