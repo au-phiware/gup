@@ -933,7 +933,7 @@ PNG, HTML), and platform targets.
   Deps: GUP-004 ✅, GUP-018 ✅, GUP-039 ✅.
 - [GUP-263](GUP-263_egui_Integration.md) 📋 — GupWidget implementing
   egui::Widget via render-to-texture, with dirty-tracking and interaction bridge
-  forwarding egui pointer events. Deps: GUP-004 ✅, GUP-018 ✅, GUP-268 📋.
+  forwarding egui pointer events. Deps: GUP-004 ✅, GUP-018 ✅, GUP-268 ✅.
 - [GUP-264](GUP-264_Tauri_Integration.md) 📋 — gup-tauri example running Gup
   WASM in a Tauri WebView with a Rust IPC bridge feeding data to the chart.
   Deps: GUP-004 ✅, GUP-018 ✅, GUP-172 ✅, GUP-237 ✅.
@@ -947,12 +947,12 @@ PNG, HTML), and platform targets.
 - [GUP-267](GUP-267_PDF_Export.md) 📋 — PdfRenderer converting the GUP-266 SVG
   intermediate to a PDF with embedded font subsets, configurable page sizes, and
   multi-page support. Deps: GUP-018 ✅, GUP-266 ✅.
-- [GUP-268](GUP-268_PNG_Export.md) 🚧 — Off-screen GPU render-to-texture with
+- [GUP-268](GUP-268_PNG_Export.md) ✅ — Off-screen GPU render-to-texture with
   staging-buffer readback and PNG encoding via the image crate, supporting HiDPI
   scale factors. Deps: GUP-004 ✅, GUP-035 ✅, GUP-018 ✅.
 - [GUP-269](GUP-269_HTML_Export.md) 📋 — HtmlExporter generating a single-file
   interactive HTML page with embedded WASM, data JSON, SVG fallback, and OG
-  thumbnail meta tags. Deps: GUP-266 ✅, GUP-268 📋, GUP-172 ✅.
+  thumbnail meta tags. Deps: GUP-266 ✅, GUP-268 ✅, GUP-172 ✅.
 
 ## Mobile
 
@@ -981,4 +981,4 @@ API reference generation, tutorials, and example gallery.
   GUP-103 ✅, GUP-280 📋.
 - [GUP-282](GUP-282_Example_Gallery.md) 📋 — Automated thumbnail generation (via
   GUP-268 PNG Export) and GitHub Pages gallery grouped by category with CI
-  deployment. Deps: GUP-103 ✅, GUP-268 📋.
+  deployment. Deps: GUP-103 ✅, GUP-268 ✅.

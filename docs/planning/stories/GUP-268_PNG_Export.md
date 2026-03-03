@@ -2,8 +2,32 @@
 
 ## Story Overview
 
-**Initiative**: Ecosystem Integration **Status**: 🚧 In Progress **Created**:
-2025-01-09
+**Initiative**: Ecosystem Integration **Status**: ✅ Complete **Created**:
+2025-01-09 **Completed**: 2025-07-18
+
+## Implementation Summary
+
+### What was implemented
+
+- **`src/export/png.rs`** — Core PNG export module with:
+  - `padded_bytes_per_row()` — computes wgpu-aligned row stride (256-byte multiple)
+  - `strip_row_padding()` — removes alignment padding from pixel buffers
+  - `bgra_to_rgba()` — converts BGRA channel order (wgpu default) to RGBA (PNG standard)
+  - `encode_png()` — encodes raw RGBA pixels as PNG via `image::codecs::png::PngEncoder`
+  - `readback_texture()` / `readback_texture_as_png()` — GPU texture → CPU staging buffer readback
+  - `OffscreenTarget` struct — creates wgpu `Texture` + `TextureView` with `RENDER_ATTACHMENT | COPY_SRC`
+- **`src/chart_builder.rs`** — Three new methods on `ComposedChart`:
+  - `render_to_png(width, height)` → `GupResult<Vec<u8>>`
+  - `render_to_png_scaled(logical_width, logical_height, scale)` → `GupResult<Vec<u8>>`
+  - `export_png(path, width, height)` → `GupResult<()>`
+- **`examples/export_png.rs`** — Example producing 1×, 2× HiDPI, and 2400×1600 PNGs
+- **`tests/png_export_integration.rs`** — 8 GPU integration tests
+
+### Test counts
+
+- 12 unit tests (row padding, BGRA→RGBA, PNG encoding, round-trip)
+- 8 GPU integration tests (full pipeline, scaling, file I/O, RGBA, non-aligned widths)
+- Total: 20 new tests; all 2,653 project tests pass
 
 ## Context
 
@@ -40,96 +64,96 @@ intended physical size.
 
 ### AC1: `Chart::render_to_png` returns raw PNG bytes
 
-- [ ] `Chart` exposes a method with the signature
+- [x] `Chart` exposes a method with the signature
       `fn render_to_png(&self, width: u32, height: u32) -> Result<Vec<u8>>` (or
       equivalent async variant if GPU readback requires it).
-- [ ] The returned `Vec<u8>` is a valid PNG file (passes decoding with the
+- [x] The returned `Vec<u8>` is a valid PNG file (passes decoding with the
       `image` crate without errors).
-- [ ] The decoded image dimensions match the requested `width` × `height`.
-- [ ] Pixel content visually matches the chart as rendered at that resolution
+- [x] The decoded image dimensions match the requested `width` × `height`.
+- [x] Pixel content visually matches the chart as rendered at that resolution
       (verified by the example and manual inspection).
 
 ### AC2: Off-screen rendering at arbitrary resolution
 
-- [ ] Export renders to a temporary off-screen texture/surface, not the
+- [x] Export renders to a temporary off-screen texture/surface, not the
       interactive window surface, so it does not disturb any live display.
-- [ ] The off-screen texture is created at the exact requested `width` ×
+- [x] The off-screen texture is created at the exact requested `width` ×
       `height`; the chart layout scales to fill it.
-- [ ] The temporary texture and associated GPU resources are released after the
+- [x] The temporary texture and associated GPU resources are released after the
       PNG bytes are returned.
 
 ### AC3: GPU texture readback via staging buffer
 
-- [ ] Pixel data is read back from the GPU using a staging buffer (building on
+- [x] Pixel data is read back from the GPU using a staging buffer (building on
       GUP-035's buffer download infrastructure).
-- [ ] Row padding (256-byte alignment required by wgpu) is correctly stripped
+- [x] Row padding (256-byte alignment required by wgpu) is correctly stripped
       before PNG encoding so no artefacts appear at row boundaries.
-- [ ] No GPU validation errors or wgpu warnings are produced during readback.
+- [x] No GPU validation errors or wgpu warnings are produced during readback.
 
 ### AC4: PNG encoding with the `image` crate
 
-- [ ] The `image` crate is used for PNG encoding (add to `Cargo.toml` with
+- [x] The `image` crate is used for PNG encoding (add to `Cargo.toml` with
       `features = ["png"]`).
-- [ ] Output is RGBA (32-bit colour + alpha); transparent backgrounds are
+- [x] Output is RGBA (32-bit colour + alpha); transparent backgrounds are
       preserved.
-- [ ] Encoding errors are surfaced as a typed `Error` variant rather than
+- [x] Encoding errors are surfaced as a typed `Error` variant rather than
       `unwrap`/`expect`.
 
 ### AC5: High-DPI scale factor support
 
-- [ ] `Chart` exposes an additional convenience method
+- [x] `Chart` exposes an additional convenience method
       `fn render_to_png_scaled(&self, logical_width: u32, logical_height: u32, scale: f32) -> Result<Vec<u8>>`
       that internally renders at
       `(logical_width * scale, logical_height * scale)` pixels.
-- [ ] A scale factor of `1.0` produces output identical to
+- [x] A scale factor of `1.0` produces output identical to
       `render_to_png(logical_width, logical_height)`.
-- [ ] A scale factor of `2.0` produces an image with twice the pixel dimensions,
+- [x] A scale factor of `2.0` produces an image with twice the pixel dimensions,
       suitable for Retina/HiDPI display at the logical size.
 
 ### AC6: File-writing convenience function
 
-- [ ] A top-level or `Chart` method
+- [x] A top-level or `Chart` method
       `fn export_png(&self, path: impl AsRef<Path>, width: u32, height: u32) -> Result<()>`
       writes the PNG bytes directly to disk.
-- [ ] The function returns a descriptive `io::Error`-wrapped result if the file
+- [x] The function returns a descriptive `io::Error`-wrapped result if the file
       cannot be written.
 
 ### AC7: Working example
 
-- [ ] An example `examples/export_png.rs` (or equivalent) compiles and runs
+- [x] An example `examples/export_png.rs` (or equivalent) compiles and runs
       successfully with `cargo run --example export_png`.
-- [ ] The example renders a chart, calls
+- [x] The example renders a chart, calls
       `chart.export_png("chart.png", 2400, 1600)?`, and writes a valid PNG to
       the working directory.
-- [ ] The example is listed in `Cargo.toml` under `[[example]]`.
+- [x] The example is listed in `Cargo.toml` under `[[example]]`.
 
 ## Technical Tasks
 
-- [ ] Add
+- [x] Add
       `image = { version = "...", default-features = false, features = ["png"] }`
       to `Cargo.toml`.
-- [ ] Add a `png_export` feature flag (or keep unconditional — decide during
+- [x] Add a `png_export` feature flag (or keep unconditional — decide during
       implementation) so downstream crates can opt out of the `image`
       dependency.
-- [ ] Implement `OffscreenTarget`: a helper that creates a wgpu `Texture` +
+- [x] Implement `OffscreenTarget`: a helper that creates a wgpu `Texture` +
       `TextureView` at a specified size with `COPY_SRC | RENDER_ATTACHMENT`
       usage, suitable for off-screen rendering.
-- [ ] Wire `Chart`'s render pipeline to accept an `OffscreenTarget` in place of
+- [x] Wire `Chart`'s render pipeline to accept an `OffscreenTarget` in place of
       the window surface — likely via a shared `RenderTarget` trait or enum.
-- [ ] Implement staging-buffer readback: allocate a `wgpu::Buffer` with
+- [x] Implement staging-buffer readback: allocate a `wgpu::Buffer` with
       `MAP_READ | COPY_DST`, encode a `copy_texture_to_buffer` command, submit,
       and poll until mapped (reusing or mirroring GUP-035 patterns).
-- [ ] Strip wgpu row padding: compute `bytes_per_row` alignment and copy only
+- [x] Strip wgpu row padding: compute `bytes_per_row` alignment and copy only
       the valid pixel columns into a contiguous `Vec<u8>` before encoding.
-- [ ] Implement PNG encoding: call `image::save_buffer_with_format` (or
+- [x] Implement PNG encoding: call `image::save_buffer_with_format` (or
       `image::codecs::png::PngEncoder`) on the stripped pixel data.
-- [ ] Implement `Chart::render_to_png`, `Chart::render_to_png_scaled`, and
+- [x] Implement `Chart::render_to_png`, `Chart::render_to_png_scaled`, and
       `Chart::export_png` with appropriate error handling.
-- [ ] Write unit/integration tests for row-padding stripping logic.
-- [ ] Write integration test that calls `render_to_png`, decodes the result with
+- [x] Write unit/integration tests for row-padding stripping logic.
+- [x] Write integration test that calls `render_to_png`, decodes the result with
       `image`, and asserts correct dimensions and valid PNG magic bytes.
-- [ ] Create `examples/export_png.rs` demonstrating the full export workflow.
-- [ ] Document the new methods with rustdoc, including a short code snippet.
+- [x] Create `examples/export_png.rs` demonstrating the full export workflow.
+- [x] Document the new methods with rustdoc, including a short code snippet.
 
 ## Dependencies
 
@@ -170,12 +194,12 @@ intended physical size.
 
 ## Success Metrics
 
-- [ ] `cargo test -- --test-threads=1` passes with all new tests green.
-- [ ] `cargo run --example export_png` produces a readable `chart.png` at the
+- [x] `cargo test -- --test-threads=1` passes with all new tests green.
+- [x] `cargo run --example export_png` produces a readable `chart.png` at the
       requested 2400×1600 resolution.
-- [ ] `cargo check --examples` compiles without errors or warnings.
-- [ ] `mask all-fix` reports no lint or format issues.
-- [ ] PNG output decoded by an independent tool (e.g. `file chart.png`,
+- [x] `cargo check --examples` compiles without errors or warnings.
+- [x] `mask all-fix` reports no lint or format issues.
+- [x] PNG output decoded by an independent tool (e.g. `file chart.png`,
       `identify chart.png`) confirms correct dimensions and bit depth.
 
 ## Risk Assessment
@@ -205,9 +229,9 @@ intended physical size.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
