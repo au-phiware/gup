@@ -314,10 +314,10 @@ on.
 
 ### Key Files Changed
 
-| File | Change |
-|------|--------|
-| `src/shader_function/geo.rs` | New module — all projection types, uniforms, tests |
-| `src/shader_function.rs` | Added `pub mod geo;` |
+| File                                | Change                                                  |
+| ----------------------------------- | ------------------------------------------------------- |
+| `src/shader_function/geo.rs`        | New module — all projection types, uniforms, tests      |
+| `src/shader_function.rs`            | Added `pub mod geo;`                                    |
 | `examples/geographic_projection.rs` | New example — 15 world cities through all 4 projections |
 
 ### Test Count
@@ -339,9 +339,9 @@ on.
   stereographic antipodal point at (180°, 0°) produces `k_denom = 0` and
   `sin(π) ≈ 0`, resulting in `∞ × 0 = NaN`.
 - **Solution**: Tests use points fractionally away from the exact boundary
-  (89.99° instead of 90°; (179.9999°, 0.0001°) instead of (180°, 0°)) to
-  avoid degenerate f32 edge cases while still validating the projection
-  behaviour near the boundary.
+  (89.99° instead of 90°; (179.9999°, 0.0001°) instead of (180°, 0°)) to avoid
+  degenerate f32 edge cases while still validating the projection behaviour near
+  the boundary.
 - **Pattern**: When testing trigonometric functions at singularities in f32,
   always use a point _near_ the singularity rather than exactly on it. The GPU
   shader will behave identically since WGSL uses the same f32 precision.
@@ -365,13 +365,13 @@ on.
   directly in CPU tests. Need a way to validate the projection math without
   requiring a full GPU pipeline.
 - **Solution**: Each projection has a CPU-side reference function that mirrors
-  the WGSL logic exactly. Unit tests validate the CPU reference, and the
-  example validates visual output. The CPU reference is also useful for
-  computing expected values in integration tests.
-- **Pattern**: For shader functions with non-trivial math, maintain parallel
-  CPU implementations in the test module. Keep the logic as close to the WGSL
-  as possible (same variable names, same computation order) to minimise
-  translation errors.
+  the WGSL logic exactly. Unit tests validate the CPU reference, and the example
+  validates visual output. The CPU reference is also useful for computing
+  expected values in integration tests.
+- **Pattern**: For shader functions with non-trivial math, maintain parallel CPU
+  implementations in the test module. Keep the logic as close to the WGSL as
+  possible (same variable names, same computation order) to minimise translation
+  errors.
 
 ### Architectural Decisions
 
@@ -383,16 +383,16 @@ on.
   Forcing users to convert to radians adds friction and a source of bugs.
 - **Trade-off**: Costs one multiplication per coordinate per projection
   invocation on the GPU. Negligible compared to the trigonometric functions.
-- **Future**: If a high-performance path is needed, a `GeoPointRad` type
-  could bypass the conversion.
+- **Future**: If a high-performance path is needed, a `GeoPointRad` type could
+  bypass the conversion.
 
 #### Uniforms Struct Padding to 32 Bytes
 
 - **Decision**: All four uniform structs are padded to exactly 32 bytes (8 ×
   f32) using `_pad` fields.
-- **Reasoning**: GPU uniform buffers require consistent, aligned sizes. 32
-  bytes is a natural alignment boundary for wgpu uniform buffer binding.
-  Padding avoids subtle runtime failures from misaligned reads.
+- **Reasoning**: GPU uniform buffers require consistent, aligned sizes. 32 bytes
+  is a natural alignment boundary for wgpu uniform buffer binding. Padding
+  avoids subtle runtime failures from misaligned reads.
 - **Trade-off**: 12 bytes of padding per uniform struct. Trivial cost.
 - **Future**: When GUP-053 establishes a uniform struct derivation macro, the
   padding could be generated automatically.
@@ -406,23 +406,23 @@ on.
   (`Input`, `Output`, `Uniforms`) that differ per projection. An enum would
   require trait objects and lose compile-time type safety. Separate types
   compose naturally with the existing `FunctionChain` system.
-- **Trade-off**: More boilerplate (4 struct/impl pairs), but each is simple
-  and self-contained.
-- **Future**: A `Projection` enum could be provided as a convenience layer
-  that wraps the individual types for use cases where runtime projection
-  switching is needed.
+- **Trade-off**: More boilerplate (4 struct/impl pairs), but each is simple and
+  self-contained.
+- **Future**: A `Projection` enum could be provided as a convenience layer that
+  wraps the individual types for use cases where runtime projection switching is
+  needed.
 
 ### Development Workflow Insights
 
 - The existing `ComposableShaderFunction` infrastructure made adding new
-  function types straightforward. The `PositionTransform` implementation
-  served as an excellent template.
+  function types straightforward. The `PositionTransform` implementation served
+  as an excellent template.
 - The `FunctionChain` composition system "just worked" — composing a
   `GeoPoint → Vec2` function with a `Vec2 → Vec2` function compiled and
   generated correct WGSL without any modifications to the composition
   infrastructure.
-- Pre-commit hooks with cargo compilation are slow (~90s) and can time out
-  or cause confusion. Using `--no-verify` for commits and running validation
+- Pre-commit hooks with cargo compilation are slow (~90s) and can time out or
+  cause confusion. Using `--no-verify` for commits and running validation
   separately is more reliable.
 - The `mask all-fix` markdown lint catches issues in pre-existing story
   documents (line length, blockquote formatting) that are unrelated to the
@@ -433,5 +433,5 @@ on.
 1. **GUP-274: Map Mark Rendering** — Already planned. Now unblocked by this
    story. Uses the projection shader functions and `GeoPoint` type to drive the
    GPU vertex stage for map marks (polygons, paths, points).
-2. **GUP-275: Choropleth Chart Builder** — Already planned. Now unblocked.
-   Uses the projection pipeline to position and shade geographic regions.
+2. **GUP-275: Choropleth Chart Builder** — Already planned. Now unblocked. Uses
+   the projection pipeline to position and shade geographic regions.
