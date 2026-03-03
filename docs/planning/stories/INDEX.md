@@ -947,7 +947,7 @@ PNG, HTML), and platform targets.
 - [GUP-267](GUP-267_PDF_Export.md) 📋 — PdfRenderer converting the GUP-266 SVG
   intermediate to a PDF with embedded font subsets, configurable page sizes, and
   multi-page support. Deps: GUP-018 ✅, GUP-266 ✅.
-- [GUP-268](GUP-268_PNG_Export.md) 📋 — Off-screen GPU render-to-texture with
+- [GUP-268](GUP-268_PNG_Export.md) 🚧 — Off-screen GPU render-to-texture with
   staging-buffer readback and PNG encoding via the image crate, supporting HiDPI
   scale factors. Deps: GUP-004 ✅, GUP-035 ✅, GUP-018 ✅.
 - [GUP-269](GUP-269_HTML_Export.md) 📋 — HtmlExporter generating a single-file
