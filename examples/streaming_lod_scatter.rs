@@ -20,7 +20,7 @@
 //! - Steady-state frame time: ~0.2 ms per poll cycle (1K points/batch)
 //! - Peak GPU memory: ~4 MiB at 100K total points (64 MiB budget)
 
-use gup::lod::streaming::{SpatiallyKeyed, StreamingLodManager};
+use gup::lod::streaming::{ScatterPoint, StreamingLodManager};
 use gup::lod::{LodPyramidBuilder, MemoryBudget, VertexData, select_lod_level};
 use gup::mark::batch_renderer::Viewport2D;
 use gup::render::RenderContext;
@@ -28,20 +28,6 @@ use gup::streaming::{BackpressureStrategy, DataStream, StreamMode};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
-
-/// A scatter-plot point with two spatial coordinates.
-#[repr(C)]
-#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct ScatterPoint {
-    x: f32,
-    y: f32,
-}
-
-impl SpatiallyKeyed for ScatterPoint {
-    fn spatial_key(&self) -> (f32, f32) {
-        (self.x, self.y)
-    }
-}
 
 fn main() {
     env_logger::init();

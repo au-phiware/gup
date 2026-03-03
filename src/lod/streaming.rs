@@ -146,6 +146,55 @@ impl MemoryBudget {
 }
 
 // ---------------------------------------------------------------------------
+// EvictionPolicy
+// ---------------------------------------------------------------------------
+
+/// Strategy used to decide which points to evict when the memory budget is
+/// exceeded.
+///
+/// Currently only `OldestFirst` is supported; the enum is non-exhaustive to
+/// allow future strategies (e.g. `LeastRecentlyAccessed`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
+pub enum EvictionPolicy {
+    /// Evict the oldest points (by insertion order) first.
+    #[default]
+    OldestFirst,
+}
+
+// ---------------------------------------------------------------------------
+// ScatterPoint
+// ---------------------------------------------------------------------------
+
+/// A simple 2D scatter-plot point.
+///
+/// This is the canonical [`SpatiallyKeyed`] type used in the
+/// `streaming_lod_scatter` example and in tests.
+///
+/// # Examples
+///
+/// ```
+/// use gup::lod::streaming::{ScatterPoint, SpatiallyKeyed};
+///
+/// let pt = ScatterPoint { x: 1.5, y: 3.7 };
+/// assert_eq!(pt.spatial_key(), (1.5, 3.7));
+/// ```
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ScatterPoint {
+    /// X coordinate.
+    pub x: f32,
+    /// Y coordinate.
+    pub y: f32,
+}
+
+impl SpatiallyKeyed for ScatterPoint {
+    fn spatial_key(&self) -> (f32, f32) {
+        (self.x, self.y)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Internal bookkeeping
 // ---------------------------------------------------------------------------
 
@@ -196,6 +245,9 @@ pub struct StreamingLodManager<T: bytemuck::Pod + bytemuck::Zeroable + Spatially
     budget: MemoryBudget,
     /// Current estimated GPU byte usage.
     current_bytes: usize,
+    /// Eviction strategy.
+    #[allow(dead_code)]
+    eviction_policy: EvictionPolicy,
     /// Incoming data stream.
     stream: DataStream<T>,
     /// Running count of cell writes (for testing / metrics).
@@ -273,6 +325,7 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable + SpatiallyKeyed> StreamingLodManager
             insertion_log: VecDeque::new(),
             budget,
             current_bytes: 0,
+            eviction_policy: EvictionPolicy::OldestFirst,
             stream,
             cell_write_count: 0,
             pending,
@@ -887,5 +940,182 @@ mod tests {
             mgr.cell_write_count() > 0,
             "poll should have triggered cell writes"
         );
+    }
+
+    #[tokio::test]
+    async fn eviction_removes_oldest_keeps_newest() {
+        let guard = crate::test_utils::create_test_context().await.unwrap();
+        let ctx = guard.context();
+        let device = ctx.device();
+        let queue = ctx.queue();
+
+        let data = test_data(256);
+        let pyramid = crate::lod::LodPyramidBuilder::new()
+            .levels(4)
+            .build_cpu(device, queue, &data)
+            .unwrap();
+        let depth = pyramid.level_count();
+
+        let stream = DataStream::<VertexData>::builder()
+            .capacity(1000)
+            .build(device)
+            .unwrap();
+
+        // Budget for exactly 3 points across all levels.
+        let vertex_size = std::mem::size_of::<VertexData>();
+        let budget = MemoryBudget::bytes(vertex_size * depth * 3);
+
+        let mut mgr = StreamingLodManager::new(pyramid, stream, budget, device);
+
+        // Insert 5 points with distinct coordinates.
+        let coords: Vec<(f32, f32)> =
+            vec![(1.0, 1.0), (2.0, 2.0), (3.0, 3.0), (4.0, 4.0), (5.0, 5.0)];
+        for &(x, y) in &coords {
+            mgr.insert_point(x, y);
+        }
+
+        // Flush and evict.
+        mgr.flush_dirty_cells(device, queue);
+        mgr.evict_until_within_budget(device, queue);
+
+        // Budget allows 3 points; 2 oldest should be gone.
+        assert!(
+            mgr.current_bytes <= budget.as_bytes(),
+            "Should be within budget"
+        );
+        let remaining = mgr.total_points();
+        assert!(
+            remaining <= 3,
+            "At most 3 points should remain, got {remaining}"
+        );
+        assert!(remaining > 0, "At least 1 point should remain");
+
+        // Verify that the oldest points (1,1) and (2,2) are absent from level 0.
+        let level0_points: Vec<(f32, f32)> = mgr.levels[0]
+            .cells
+            .iter()
+            .flat_map(|c| c.points.iter().map(|v| (v.x, v.y)))
+            .collect();
+
+        // The newest points should still be present.
+        assert!(
+            level0_points
+                .iter()
+                .any(|&(x, y)| (x - 5.0).abs() < 0.01 && (y - 5.0).abs() < 0.01),
+            "Newest point (5,5) should remain after eviction"
+        );
+
+        // Check that evicted points are absent from ALL levels.
+        for level_idx in 0..depth {
+            let all_pts: Vec<(f32, f32)> = mgr.levels[level_idx]
+                .cells
+                .iter()
+                .flat_map(|c| c.points.iter().map(|v| (v.x, v.y)))
+                .collect();
+
+            // Points (1,1) and (2,2) should have been evicted first.
+            let has_oldest = all_pts
+                .iter()
+                .any(|&(x, y)| (x - 1.0).abs() < 0.01 && (y - 1.0).abs() < 0.01);
+            assert!(
+                !has_oldest,
+                "Oldest point (1,1) should be absent from level {level_idx}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn poll_with_budget_evicts_automatically() {
+        let guard = crate::test_utils::create_test_context().await.unwrap();
+        let ctx = guard.context();
+        let device = ctx.device();
+        let queue = ctx.queue();
+
+        let data = test_data(256);
+        let pyramid = crate::lod::LodPyramidBuilder::new()
+            .levels(4)
+            .build_cpu(device, queue, &data)
+            .unwrap();
+        let depth = pyramid.level_count();
+
+        let stream = DataStream::<VertexData>::builder()
+            .capacity(1000)
+            .build(device)
+            .unwrap();
+
+        let vertex_size = std::mem::size_of::<VertexData>();
+        let budget = MemoryBudget::bytes(vertex_size * depth * 10);
+
+        let mut mgr = StreamingLodManager::new(pyramid, stream, budget, device);
+
+        // Push 50 points through the stream and poll.
+        for i in 0..50 {
+            mgr.stream_mut()
+                .push(VertexData::new(i as f32 % 10.0, i as f32 % 10.0));
+        }
+        mgr.poll(device, queue);
+
+        // After poll, budget should be enforced.
+        assert!(
+            mgr.current_bytes <= budget.as_bytes(),
+            "After poll, {} bytes should be <= {} budget",
+            mgr.current_bytes,
+            budget.as_bytes(),
+        );
+    }
+
+    #[tokio::test]
+    async fn integration_1000_iterations() {
+        let guard = crate::test_utils::create_test_context().await.unwrap();
+        let ctx = guard.context();
+        let device = ctx.device();
+        let queue = ctx.queue();
+
+        let data = test_data(256);
+        let pyramid = crate::lod::LodPyramidBuilder::new()
+            .levels(4)
+            .build_cpu(device, queue, &data)
+            .unwrap();
+        let depth = pyramid.level_count();
+
+        let stream = DataStream::<VertexData>::builder()
+            .capacity(10_000)
+            .build(device)
+            .unwrap();
+
+        let vertex_size = std::mem::size_of::<VertexData>();
+        let budget = MemoryBudget::bytes(vertex_size * depth * 500);
+
+        let mut mgr = StreamingLodManager::new(pyramid, stream, budget, device);
+
+        // Drive 1000 poll iterations with synthetic data.
+        for iter in 0..1000 {
+            let pt = VertexData::new((iter as f32 * 0.618) % 10.0, (iter as f32 * 0.414) % 10.0);
+            mgr.stream_mut().push(pt);
+            mgr.poll(device, queue);
+
+            // Budget must always be honoured.
+            assert!(
+                mgr.current_bytes <= budget.as_bytes(),
+                "Budget violated at iteration {iter}: {} > {}",
+                mgr.current_bytes,
+                budget.as_bytes(),
+            );
+        }
+
+        // Final state should be consistent.
+        assert!(mgr.total_points() > 0);
+        assert!(mgr.cell_write_count() > 0);
+    }
+
+    #[test]
+    fn scatter_point_spatially_keyed() {
+        let pt = ScatterPoint { x: 1.5, y: 3.7 };
+        assert_eq!(pt.spatial_key(), (1.5, 3.7));
+    }
+
+    #[test]
+    fn eviction_policy_default() {
+        assert_eq!(EvictionPolicy::default(), EvictionPolicy::OldestFirst);
     }
 }
