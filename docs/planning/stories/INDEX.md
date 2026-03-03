@@ -877,7 +877,7 @@ layouts, and 3D visualization.
   compute shader pyramid builder for up to 1B points using grid-based point
   aggregation across 5+ LOD levels. Deps: GUP-003 ✅, GUP-004 ✅, GUP-030 ✅,
   GUP-077 ✅.
-- [GUP-257](GUP-257_Adaptive_Viewport_Renderer.md) 📋 — AdaptiveRenderer that
+- [GUP-257](GUP-257_Adaptive_Viewport_Renderer.md) 🚧 — AdaptiveRenderer that
   selects the coarsest LOD tier by pixels-per-data-point heuristic and issues a
   frustum-culled indirect draw with no CPU readback. Deps: GUP-256 ✅, GUP-076
   ✅, GUP-077 ✅.
