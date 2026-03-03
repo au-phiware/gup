@@ -447,25 +447,27 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable + SpatiallyKeyed> StreamingLodManager
 
             // Rebuild the flat buffer data for this level from all cells.
             let level = &self.levels[level_idx];
+            let total_count: usize = level.cells.iter().map(|c| c.points.len()).sum();
+
+            // Ensure the GPU buffer is large enough.
+            let buf = self.pyramid.buffer_mut(level_idx);
+            if total_count > buf.capacity() {
+                let new_capacity = (total_count * 2).max(64);
+                *buf = GpuBuffer::<VertexData>::new(device, BufferType::Storage, new_capacity);
+            }
+
+            // Collect all points and upload.
+            let level = &self.levels[level_idx];
             let all_points: Vec<VertexData> = level
                 .cells
                 .iter()
                 .flat_map(|c| c.points.iter().copied())
                 .collect();
-
-            let total_count = all_points.len();
-
-            // Ensure the GPU buffer is large enough.
-            let buf = self.pyramid.buffer_mut(level_idx);
-            if total_count > buf.capacity() {
-                // Reallocate with headroom.
-                let new_capacity = (total_count * 2).max(64);
-                *buf = GpuBuffer::<VertexData>::new(device, BufferType::Storage, new_capacity);
-            }
-
-            // Upload the entire level's data.
             if !all_points.is_empty() {
-                let _ = buf.upload(device, queue, &all_points);
+                let _ = self
+                    .pyramid
+                    .buffer_mut(level_idx)
+                    .upload(device, queue, &all_points);
             }
 
             // Update metadata.

@@ -79,26 +79,36 @@ fn main() {
 
         // We'll push data on the main thread in batches (simulating a
         // background feed) because DataStream isn't Send.
-        let target_points_per_frame = 1000;
-        let num_frames = 100;
+        let target_points_per_frame = 1_000;
+        let num_frames = 50;
 
         // -- Simulate viewport zoom transitions --
+        // Use tiny viewports and large point counts to trigger LOD changes.
         let viewports = [
-            Viewport2D {
-                pixel_width: 1920.0,
-                pixel_height: 1080.0,
-                ..Default::default()
-            },
-            Viewport2D {
-                pixel_width: 320.0,
-                pixel_height: 240.0,
-                ..Default::default()
-            },
-            Viewport2D {
-                pixel_width: 3840.0,
-                pixel_height: 2160.0,
-                ..Default::default()
-            },
+            (
+                "desktop 1080p",
+                Viewport2D {
+                    pixel_width: 1920.0,
+                    pixel_height: 1080.0,
+                    ..Default::default()
+                },
+            ),
+            (
+                "tiny thumbnail",
+                Viewport2D {
+                    pixel_width: 50.0,
+                    pixel_height: 50.0,
+                    ..Default::default()
+                },
+            ),
+            (
+                "4K display",
+                Viewport2D {
+                    pixel_width: 3840.0,
+                    pixel_height: 2160.0,
+                    ..Default::default()
+                },
+            ),
         ];
 
         let start = Instant::now();
@@ -129,20 +139,16 @@ fn main() {
 
             // Print every 10 frames.
             if frame % 10 == 0 || frame == num_frames - 1 {
-                let vp = &viewports[frame / 34 % viewports.len()];
-                let level = select_lod_level(
-                    vp,
-                    mgr.total_points() as u64,
-                    mgr.pyramid().level_count(),
-                );
+                let (vp_name, vp) = &viewports[frame / 17 % viewports.len()];
+                let level =
+                    select_lod_level(vp, mgr.total_points() as u64, mgr.pyramid().level_count());
                 println!(
-                    "  Frame {:>3}: {:>6} live points | {:>7} bytes | LOD level {} | viewport {}×{}",
+                    "  Frame {:>3}: {:>7} pts | {:>8} bytes | LOD {} | {}",
                     frame,
                     mgr.total_points(),
                     mgr.current_bytes(),
                     level,
-                    vp.pixel_width as u32,
-                    vp.pixel_height as u32,
+                    vp_name,
                 );
             }
         }
@@ -164,7 +170,11 @@ fn main() {
             "  Avg frame time: {:.3} ms",
             elapsed.as_secs_f64() / num_frames as f64 * 1000.0
         );
-        println!("  Peak GPU bytes: {} ({:.2} MiB)", peak_bytes, peak_bytes as f64 / (1024.0 * 1024.0));
+        println!(
+            "  Peak GPU bytes: {} ({:.2} MiB)",
+            peak_bytes,
+            peak_bytes as f64 / (1024.0 * 1024.0)
+        );
         println!("  Cell writes:    {}", mgr.cell_write_count());
         println!("  Pyramid levels: {}", mgr.pyramid().level_count());
         for l in 0..mgr.pyramid().level_count() {
