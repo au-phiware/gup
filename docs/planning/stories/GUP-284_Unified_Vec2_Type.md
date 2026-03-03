@@ -2,7 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Core GPU Primitives **Status**: 🚧 In Progress **Created**:
+**Initiative**: Core GPU Primitives **Status**: ✅ Complete **Created**:
 2025-07-26
 
 ## Context
@@ -27,24 +27,24 @@ error-prone and verbose.
 
 ## Acceptance Criteria
 
-- [ ] A single `Vec2` type is used across interaction, event, and public API
+- [x] A single `Vec2` type is used across interaction, event, and public API
       surfaces
-- [ ] The type implements `Add`, `Sub`, `Mul`, `Div` for component-wise
+- [x] The type implements `Add`, `Sub`, `Mul`, `Div` for component-wise
       operations and scalar multiply/divide
-- [ ] The type implements `Debug`, `Clone`, `Copy`, `PartialEq`
-- [ ] Conversion `From<[f32; 2]>` and `Into<[f32; 2]>` are provided
-- [ ] All existing `interaction::Vec2` and `shader_function::Vec2` usages are
+- [x] The type implements `Debug`, `Clone`, `Copy`, `PartialEq`
+- [x] Conversion `From<[f32; 2]>` and `Into<[f32; 2]>` are provided
+- [x] All existing `interaction::Vec2` and `shader_function::Vec2` usages are
       migrated or aliased
-- [ ] No new external dependency required (implement in-crate)
+- [x] No new external dependency required (implement in-crate)
 
 ## Technical Tasks
 
-- [ ] Promote `interaction::Vec2` to a top-level `src/math.rs` module (or
+- [x] Promote `interaction::Vec2` to a top-level `src/math.rs` module (or
       similar) and implement arithmetic traits
-- [ ] Update `interaction.rs` to use the new type
-- [ ] Update `event.rs` to use the new type
-- [ ] Verify `shader_function::Vec2` can coexist or be replaced
-- [ ] Update all call sites
+- [x] Update `interaction.rs` to use the new type
+- [x] Update `event.rs` to use the new type
+- [x] Verify `shader_function::Vec2` can coexist or be replaced
+- [x] Update all call sites
 
 ## Dependencies
 
@@ -64,6 +64,38 @@ error-prone and verbose.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria met
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint clean: `mask all-fix`
+- [x] All Acceptance Criteria met
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint clean: `mask all-fix`
+
+## Implementation Summary
+
+### What was implemented
+
+A single canonical `Vec2` type in `src/math.rs` that unifies the two
+previously separate definitions (`interaction::Vec2` and
+`shader_function::Vec2`). The type is GPU-compatible (`#[repr(C)]`,
+`bytemuck::Pod`), implements full arithmetic operators (`Add`, `Sub`, `Mul`,
+`Div` for both component-wise and scalar operations), and provides conversions
+to/from `[f32; 2]`.
+
+### Key files changed
+
+- **`src/math.rs`** — New module: canonical `Vec2` definition with 13 unit
+  tests
+- **`src/interaction.rs`** — Removed local `Vec2` struct, replaced with
+  `pub use crate::math::Vec2`; simplified `Rect` and `GestureRecognizer` code
+  using arithmetic operators
+- **`src/shader_function.rs`** — Removed local `Vec2` struct, replaced with
+  `pub use crate::math::Vec2`; kept `ShaderType` impl
+- **`src/event.rs`** — Simplified `ViewportTransform` using arithmetic
+  operators (`screen_to_world`, `world_to_screen`)
+- **`src/lib.rs`** — Added `pub mod math`
+
+### Test counts
+
+- 13 new unit tests in `math::tests` (constructors, all arithmetic ops,
+  conversions, bytemuck Pod, repr(C) layout, zero/negative edge cases)
+- 2438 existing lib tests pass unchanged
+- All integration tests pass
+- All examples compile
