@@ -805,7 +805,7 @@ validation.
 
 - [GUP-015](GUP-015_GPU_Debugging_Tools.md) ✅ — GPU Debugging and Profiling
   Tools.
-- [GUP-015](GUP-015_Real_Time_Data_Streaming.md) 📋 — Implements
+- [GUP-015](GUP-015_Real_Time_Data_Streaming.md) 🚧 — Implements
   StreamingBuffer<T> with keyed insert/update/remove, dirty-region tracking,
   double-buffering swap, and GPU-flush of only mutated byte ranges. Deps:
   GUP-002 ✅, GUP-003 ✅, GUP-004 ✅.
