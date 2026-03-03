@@ -414,7 +414,7 @@ selection, and radix sort.
   visual dimming. Deps: GUP-001 ✅, GUP-075 ✅, GUP-013 ✅, GUP-278 ✅.
 - [GUP-283](GUP-283_Event_Coalescing.md) ✅ — Frame-rate-aware coalescing for
   high-frequency mousemove/touchmove events in EventManager. Deps: GUP-013 ✅.
-- [GUP-284](GUP-284_Unified_Vec2_Type.md) 📋 — Unify interaction::Vec2,
+- [GUP-284](GUP-284_Unified_Vec2_Type.md) 🚧 — Unify interaction::Vec2,
   shader_function::Vec2, and [f32; 2] into a single ergonomic type with
   arithmetic ops.
 - [GUP-285](GUP-285_BrushMark_GPU_Overlay_Rendering.md) 📋 — Wire BrushMark

@@ -2,13 +2,13 @@
 
 ## Story Overview
 
-**Initiative**: Core GPU Primitives
-**Status**: 📋 Planned
-**Created**: 2025-07-26
+**Initiative**: Core GPU Primitives **Status**: 🚧 In Progress **Created**:
+2025-07-26
 
 ## Context
 
 The codebase has multiple 2D vector representations:
+
 - `interaction::Vec2` — simple struct, no arithmetic ops, used by
   `InteractionEvent`, `ElementHit`, `event::RawInputEvent`, etc.
 - `shader_function::Vec2` — WGSL-compatible type with `bytemuck::Pod`
