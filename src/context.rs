@@ -2576,6 +2576,46 @@ impl<'a> RenderFrame<'a> {
             })
     }
 
+    /// Create a render pass with a depth-stencil attachment for 3D rendering.
+    ///
+    /// The depth buffer is cleared to `1.0` each frame.
+    pub fn render_pass_with_depth<'b>(
+        &'b mut self,
+        clear_color: Option<Color>,
+        depth_view: &'b TextureView,
+    ) -> RenderPass<'b> {
+        let clear_value = clear_color.unwrap_or(Color {
+            r: 0.0,
+            g: 0.0,
+            b: 0.0,
+            a: 1.0,
+        });
+
+        self.command_encoder
+            .begin_render_pass(&RenderPassDescriptor {
+                label: Some("gup_render_pass_3d"),
+                color_attachments: &[Some(RenderPassColorAttachment {
+                    view: &self.render_target,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: LoadOp::Clear(clear_value),
+                        store: StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: depth_view,
+                    depth_ops: Some(Operations {
+                        load: LoadOp::Clear(1.0),
+                        store: StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            })
+    }
+
     /// Get reference to the render target.
     pub fn render_target(&self) -> &TextureView {
         &self.render_target
