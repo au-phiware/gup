@@ -466,8 +466,8 @@ async fn test_streaming_with_interactions() {
 
 - [ ] **Selection Integration**: Seamless integration with Selection<T, M>
       system (deferred to GUP-244)
-- [ ] **Event System**: Streaming updates trigger appropriate events (deferred to
-      GUP-244)
+- [ ] **Event System**: Streaming updates trigger appropriate events (deferred
+      to GUP-244)
 - [ ] **Shader Functions**: Streaming data works with all shader function
       compositions (deferred to GUP-244)
 - [x] **Performance Monitoring**: Built-in metrics and profiling for streaming
@@ -520,10 +520,10 @@ async fn test_streaming_with_interactions() {
 The core `StreamingBuffer<T>` infrastructure providing the low-level streaming
 primitives for real-time GPU data visualization:
 
-1. **`StreamingBuffer<T>`** (`src/streaming/streaming_buffer.rs`): Double-buffered
-   GPU data store with keyed insert/update/remove. Only dirty byte ranges are
-   flushed to the GPU, and the active/staging buffers are swapped atomically on
-   each flush.
+1. **`StreamingBuffer<T>`** (`src/streaming/streaming_buffer.rs`):
+   Double-buffered GPU data store with keyed insert/update/remove. Only dirty
+   byte ranges are flushed to the GPU, and the active/staging buffers are
+   swapped atomically on each flush.
 
 2. **`RingBuffer<T>`** (`src/streaming/ring_buffer.rs`): Fixed-capacity circular
    buffer with FIFO eviction. Ensures bounded memory usage regardless of stream
@@ -541,14 +541,14 @@ primitives for real-time GPU data visualization:
 
 ### Key Files Changed
 
-| File                                  | Change                                |
-| ------------------------------------- | ------------------------------------- |
-| `src/streaming.rs`                    | New module root                       |
-| `src/streaming/streaming_buffer.rs`   | Core StreamingBuffer + 19 tests       |
-| `src/streaming/ring_buffer.rs`        | RingBuffer + 10 tests                 |
-| `src/streaming/dirty_region.rs`       | DirtyRegionTracker + 11 tests         |
-| `src/streaming/latency.rs`            | LatencyTracker + 8 tests              |
-| `src/lib.rs`                          | Module registration                   |
+| File                                | Change                          |
+| ----------------------------------- | ------------------------------- |
+| `src/streaming.rs`                  | New module root                 |
+| `src/streaming/streaming_buffer.rs` | Core StreamingBuffer + 19 tests |
+| `src/streaming/ring_buffer.rs`      | RingBuffer + 10 tests           |
+| `src/streaming/dirty_region.rs`     | DirtyRegionTracker + 11 tests   |
+| `src/streaming/latency.rs`          | LatencyTracker + 8 tests        |
+| `src/lib.rs`                        | Module registration             |
 
 ### Test Counts
 
@@ -646,8 +646,8 @@ primitives for real-time GPU data visualization:
   side during the next flush.
 - **Trade-off**: ~8 bytes overhead per slot for the Option discriminant and
   alignment. Acceptable for the typical capacity range (1K–1M items).
-- **Future**: If memory pressure becomes critical for very large buffers,
-  a slot-map or generation-based approach could eliminate the Option overhead.
+- **Future**: If memory pressure becomes critical for very large buffers, a
+  slot-map or generation-based approach could eliminate the Option overhead.
 
 ### Development Workflow Insights
 
@@ -666,4 +666,3 @@ primitives for real-time GPU data visualization:
 1. **GUP-244: Streaming Data Builder API** — Already planned. Ergonomic
    `DataStream<T>` builder with capacity, mode, backpressure, and
    `Selection::stream()` integration on top of GUP-015's primitives.
-

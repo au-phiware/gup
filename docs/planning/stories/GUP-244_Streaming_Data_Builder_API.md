@@ -242,10 +242,10 @@ auto-scroll a time axis or update a legend.
 
 ### Key Files Changed
 
-| File                                      | Change           |
-| ----------------------------------------- | ---------------- |
-| `src/streaming/mode.rs`                   | New              |
-| `src/streaming/backpressure.rs`           | New              |
+| File                                     | Change           |
+| ---------------------------------------- | ---------------- |
+| `src/streaming/mode.rs`                  | New              |
+| `src/streaming/backpressure.rs`          | New              |
 | `src/streaming/builder.rs`               | New              |
 | `src/streaming/stream.rs`                | New              |
 | `src/streaming.rs`                       | Updated exports  |
@@ -253,7 +253,7 @@ auto-scroll a time axis or update a legend.
 | `tests/streaming_builder_integration.rs` | New              |
 | `benches/streaming_builder.rs`           | New              |
 | `examples/streaming_live_chart.rs`       | New              |
-| `Cargo.toml`                            | Bench entry      |
+| `Cargo.toml`                             | Bench entry      |
 
 ### Test Counts
 
@@ -272,7 +272,8 @@ auto-scroll a time axis or update a legend.
 
 - **Challenge**: `Selection<T, M>` has no `bytemuck::Pod + Zeroable` bound on
   `T`, but `DataStream<T>` requires them. Storing a `DataStream<T>` directly in
-  the Selection struct would require adding those bounds to every Selection user.
+  the Selection struct would require adding those bounds to every Selection
+  user.
 - **Solution**: Store the DataStream as `Box<dyn Any + Send + Sync>` and provide
   typed accessor methods (`stream_ref<U>()`, `stream_mut<U>()`) that downcast.
   This keeps the Selection's type signature unchanged.
@@ -342,7 +343,8 @@ auto-scroll a time axis or update a legend.
   creates wgpu buffers in every iteration, so it measures GPU allocation cost
   too. The ~1.9µs result includes buffer creation, confirming the builder layer
   adds negligible overhead.
-- The existing `mixable_performance_validation::test_composition_overhead_under_one_percent`
+- The existing
+  `mixable_performance_validation::test_composition_overhead_under_one_percent`
   test is flaky and unrelated to this story's changes.
 
 ### Follow-up Stories

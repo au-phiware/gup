@@ -22,8 +22,8 @@ infrastructure.
 ## User Story
 
 > "As a visualization developer, I want to specify per-element delays in
-> transitions (e.g., `delay_fn(|i, _d| i as u64 * 50)`) so that elements
-> animate in a staggered sequence rather than all at once."
+> transitions (e.g., `delay_fn(|i, _d| i as u64 * 50)`) so that elements animate
+> in a staggered sequence rather than all at once."
 
 ## Acceptance Criteria
 
@@ -32,8 +32,8 @@ infrastructure.
       per-element delay in milliseconds.
 - [ ] Per-element delays are stored in `ElementTransition` alongside from/to
       values.
-- [ ] When both `.delay()` and `.delay_fn()` are specified, the global delay
-      is added to each per-element delay.
+- [ ] When both `.delay()` and `.delay_fn()` are specified, the global delay is
+      added to each per-element delay.
 - [ ] The scatter plot example is extended to show staggered entry.
 - [ ] Unit test verifies per-element delays are correctly computed.
 
@@ -43,8 +43,8 @@ infrastructure.
 
 - GUP-276: D3-Style Data Transitions ✅ — provides `TransitionBuilder`,
   `ElementTransition`, and the commit pipeline.
-- GUP-277: GPU Render Loop Transition Integration 📋 — needed for visual
-  stagger effect (optional, API can be designed without it).
+- GUP-277: GPU Render Loop Transition Integration 📋 — needed for visual stagger
+  effect (optional, API can be designed without it).
 
 ## Testing Strategy
 

@@ -7,9 +7,9 @@
 ## Context
 
 The `StreamingLodManager` (GUP-258) currently re-uploads the entire level buffer
-whenever any cell in that level is dirty. This is O(total_points) per flush cycle,
-which becomes a bottleneck at >100K points. By laying out cells in the GPU buffer
-with a fixed capacity per cell, each dirty cell can be updated via
+whenever any cell in that level is dirty. This is O(total_points) per flush
+cycle, which becomes a bottleneck at >100K points. By laying out cells in the
+GPU buffer with a fixed capacity per cell, each dirty cell can be updated via
 `upload_range()` independently — O(dirty_cells × cell_capacity) instead.
 
 ## User Story

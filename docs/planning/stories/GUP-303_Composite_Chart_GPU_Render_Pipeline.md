@@ -38,7 +38,8 @@ rendering side.
       issued once.
 - [ ] Update examples to open a winit event loop and present the rendered
       surface.
-- [ ] Write integration tests that verify all layers produce non-zero draw calls.
+- [ ] Write integration tests that verify all layers produce non-zero draw
+      calls.
 
 ## Dependencies
 

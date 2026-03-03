@@ -2,8 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Chart Builders **Status**: ✅ Complete **Created**:
-2026-03-01
+**Initiative**: Chart Builders **Status**: ✅ Complete **Created**: 2026-03-01
 
 ## Context
 
@@ -213,8 +212,8 @@ independent y-scales are intentional.
   data domains.
 - **`LayerKind<T>` enum** — Follows the project's enum-over-trait-objects
   pattern with variants for Scatter, Line, Bar, and Area builders.
-- **`IntoChartLayer<T>` trait** — Enables ergonomic `.layer(builder)` calls
-  that accept any supported builder type.
+- **`IntoChartLayer<T>` trait** — Enables ergonomic `.layer(builder)` calls that
+  accept any supported builder type.
 - **`YAxisAssignment` enum** — Primary vs Secondary y-axis assignment.
 - **Domain unification** — `union_domain()` and `compute_domain()` functions
   with 5% padding and single-point-safe handling.
@@ -225,22 +224,22 @@ independent y-scales are intentional.
 
 ### Key Files Changed
 
-| File | Change |
-|------|--------|
-| `src/chart_builder/builders/composite.rs` | New — core composite builder |
-| `src/chart_builder/builders.rs` | Added `pub mod composite` and re-export |
-| `src/chart_builder/builders/bar.rs` | Made `x_accessor`/`y_accessor` `pub(crate)` |
-| `src/prelude.rs` | Added composite types to prelude |
-| `examples/composite_scatter_regression.rs` | New — scatter + regression line |
-| `examples/composite_bar_trend.rs` | New — bar chart + trend line (dual y) |
-| `tests/composite_chart_integration.rs` | New — 6 integration tests |
+| File                                       | Change                                      |
+| ------------------------------------------ | ------------------------------------------- |
+| `src/chart_builder/builders/composite.rs`  | New — core composite builder                |
+| `src/chart_builder/builders.rs`            | Added `pub mod composite` and re-export     |
+| `src/chart_builder/builders/bar.rs`        | Made `x_accessor`/`y_accessor` `pub(crate)` |
+| `src/prelude.rs`                           | Added composite types to prelude            |
+| `examples/composite_scatter_regression.rs` | New — scatter + regression line             |
+| `examples/composite_bar_trend.rs`          | New — bar chart + trend line (dual y)       |
+| `tests/composite_chart_integration.rs`     | New — 6 integration tests                   |
 
 ### Test Counts
 
 - **12 unit tests** in `composite.rs` (domain union, padding, accessor domain
   computation, builder construction)
-- **6 integration tests** in `composite_chart_integration.rs` (GPU builds,
-  error cases, domain union cases)
+- **6 integration tests** in `composite_chart_integration.rs` (GPU builds, error
+  cases, domain union cases)
 - **2,394+ total tests** pass with 0 failures
 
 ## Retrospective
@@ -253,11 +252,13 @@ independent y-scales are intentional.
 
 - **Challenge**: Different chart builders produce different concrete types
   (`ComposedChart<T, Circle>` vs `ComposedChart<LineSegment<T>, Line>` vs
-  `ComposedChart<T, Rectangle>`). A trait-object approach (`Box<dyn ChartLayer>`)
-  would require either object-unsafe generic methods or heavy type erasure.
+  `ComposedChart<T, Rectangle>`). A trait-object approach
+  (`Box<dyn ChartLayer>`) would require either object-unsafe generic methods or
+  heavy type erasure.
 - **Solution**: Used `LayerKind<T>` enum with one variant per supported builder
   type (Scatter, Line, Bar, Area). Each variant carries the builder directly. An
-  `IntoChartLayer<T>` trait provides ergonomic conversion from concrete builders.
+  `IntoChartLayer<T>` trait provides ergonomic conversion from concrete
+  builders.
 - **Pattern**: When the set of variants is known and finite, enums are strictly
   superior to trait objects: compile-time exhaustiveness checks, no boxing
   overhead, easy serialisation, and no object-safety worries.
@@ -300,8 +301,8 @@ independent y-scales are intentional.
   draw commands. Reusing one of the user's layers as the primary would require
   knowing its concrete mark type at the composite level, violating the
   enum-based abstraction.
-- **Trade-off**: The anchor selection is essentially empty — it allocates a
-  GPU buffer but contains no meaningful data marks. This is a small overhead.
+- **Trade-off**: The anchor selection is essentially empty — it allocates a GPU
+  buffer but contains no meaningful data marks. This is a small overhead.
 - **Future**: A dedicated `CompositeChartFrame` type that handles axis/grid
   rendering independently of any mark type could eliminate this overhead.
 
@@ -340,7 +341,7 @@ independent y-scales are intentional.
    the same surface in declaration order. Currently the selections are built but
    not visually rendered to a window.
 
-2. **GUP-304: Per-Layer Data Support** — Allow each layer in a composite to carry
-   its own data set (different T per layer). This would require a type-erased
-   `AnyLayer` variant or a `Box<dyn ErasedLayer>` approach for the case where
-   scatter data and line data have fundamentally different schemas.
+2. **GUP-304: Per-Layer Data Support** — Allow each layer in a composite to
+   carry its own data set (different T per layer). This would require a
+   type-erased `AnyLayer` variant or a `Box<dyn ErasedLayer>` approach for the
+   case where scatter data and line data have fundamentally different schemas.

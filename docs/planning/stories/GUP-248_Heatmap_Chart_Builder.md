@@ -262,18 +262,19 @@ main chart — is required so that viewers can read off the encoded values.
 
 ### Key Files Changed
 
-| File | Change |
-|------|--------|
-| `src/chart_builder/builders/heatmap/mod.rs` | New: full builder (was `heatmap.rs` with Circle placeholder) |
-| `src/chart_builder/builders/heatmap/binning.rs` | New: 2D binning engine with 5 aggregation modes |
-| `src/lib.rs` | Added re-exports for `AggregateFunc`, `BinGrid`, `BinSpec`, `HeatmapCell` |
-| `src/prelude.rs` | Added `AggregateFunc`, `HeatmapCell` to prelude |
-| `examples/heatmap_chart.rs` | New: 3-scenario example (raw, pre-binned, 1M cells) |
-| `tests/heatmap_integration.rs` | New: 8 integration tests |
+| File                                            | Change                                                                    |
+| ----------------------------------------------- | ------------------------------------------------------------------------- |
+| `src/chart_builder/builders/heatmap/mod.rs`     | New: full builder (was `heatmap.rs` with Circle placeholder)              |
+| `src/chart_builder/builders/heatmap/binning.rs` | New: 2D binning engine with 5 aggregation modes                           |
+| `src/lib.rs`                                    | Added re-exports for `AggregateFunc`, `BinGrid`, `BinSpec`, `HeatmapCell` |
+| `src/prelude.rs`                                | Added `AggregateFunc`, `HeatmapCell` to prelude                           |
+| `examples/heatmap_chart.rs`                     | New: 3-scenario example (raw, pre-binned, 1M cells)                       |
+| `tests/heatmap_integration.rs`                  | New: 8 integration tests                                                  |
 
 ### Test Counts
 
-- **20 unit tests** in `chart_builder::builders::heatmap` (14 binning + 6 builder)
+- **20 unit tests** in `chart_builder::builders::heatmap` (14 binning + 6
+  builder)
 - **8 integration tests** in `tests/heatmap_integration.rs`
 - **28 total new tests**
 
@@ -300,18 +301,17 @@ main chart — is required so that viewers can read off the encoded values.
 - **Solution**: A `CellAccum` struct tracks `count`, `sum`, `min`, `max` in one
   pass. The `finalize()` method selects which value to emit based on the chosen
   `AggregateFunc`. Mean is `sum / count`.
-- **Pattern**: Accumulate all statistics in a single pass; choose which to
-  emit at finalization time. This avoids multiple passes and keeps the API
-  extensible (adding Median or Variance later only requires changing
-  `finalize()`).
+- **Pattern**: Accumulate all statistics in a single pass; choose which to emit
+  at finalization time. This avoids multiple passes and keeps the API extensible
+  (adding Median or Variance later only requires changing `finalize()`).
 
 #### Pre-Binned Data as First-Class Path
 
 - **Challenge**: The story required both raw-data binning and pre-binned
   `from_grid()` paths to produce identical visual output.
-- **Solution**: `from_grid()` simply stores `Vec<HeatmapCell>` and bypasses
-  the binning step. The integration test validates that raw-binned and
-  pre-binned produce identical cells for the same input distribution.
+- **Solution**: `from_grid()` simply stores `Vec<HeatmapCell>` and bypasses the
+  binning step. The integration test validates that raw-binned and pre-binned
+  produce identical cells for the same input distribution.
 - **Pattern**: Support both computed and pre-computed data by making the
   intermediate representation (`HeatmapCell`) a public first-class type.
 
@@ -325,16 +325,16 @@ main chart — is required so that viewers can read off the encoded values.
   implementation was a TODO placeholder. Rectangle marks provide GPU-instanced
   rendering with per-cell position, size, and color attributes.
 - **Trade-off**: None — this was a straightforward improvement.
-- **Future**: Enables all heatmap-specific shader composition (ColorScale,
-  NaN discard) through the Rectangle mark pipeline.
+- **Future**: Enables all heatmap-specific shader composition (ColorScale, NaN
+  discard) through the Rectangle mark pipeline.
 
 #### ComposedChart as Output Type
 
 - **Decision**: Used `ComposedChart<T, Rectangle>` instead of bare
   `Selection<T, Rectangle>` as the builder output.
 - **Reasoning**: `ComposedChart` integrates axes, grid lines, and hover reveal
-  automatically. This matches the bar chart pattern and gives heatmaps
-  full chart chrome out of the box.
+  automatically. This matches the bar chart pattern and gives heatmaps full
+  chart chrome out of the box.
 - **Trade-off**: Slightly more complex output type, but users get axes for free.
 - **Future**: The colorbar axis can be added as an additional axis on the
   `ComposedChart` in a follow-up story.
@@ -368,7 +368,7 @@ main chart — is required so that viewers can read off the encoded values.
    chart. This should integrate with the existing axis system from GUP-093.
 
 2. **GUP-297: GPU Compute Shader 2D Binning** — For datasets with 10M+ rows,
-   CPU-side binning may become a bottleneck. A compute shader implementation
-   of the 2D binning loop would push aggregation to the GPU, keeping the main
-   thread free. The `BinGrid` interface can remain the same, with the GPU
-   path as an alternative backend.
+   CPU-side binning may become a bottleneck. A compute shader implementation of
+   the 2D binning loop would push aggregation to the GPU, keeping the main
+   thread free. The `BinGrid` interface can remain the same, with the GPU path
+   as an alternative backend.

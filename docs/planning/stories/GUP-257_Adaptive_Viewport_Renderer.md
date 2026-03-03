@@ -2,8 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Advanced Scale **Status**: ✅ Complete **Created**:
-2025-07-14
+**Initiative**: Advanced Scale **Status**: ✅ Complete **Created**: 2025-07-14
 
 ## Context
 
@@ -232,11 +231,11 @@ resolution to another during a continuous zoom gesture.
 - **`LodBlendState`** (`src/renderer/blend.rs`): Configurable cross-fade
   transition state machine with linear alpha progression.
 - **`AdaptiveRenderer`** (`src/renderer/adaptive.rs`): Core renderer that
-  selects LOD tiers using a density heuristic (finest tier with ≤ 1 pt/px), manages
-  blend transitions, and exposes viewport conversion for GPU culling.
+  selects LOD tiers using a density heuristic (finest tier with ≤ 1 pt/px),
+  manages blend transitions, and exposes viewport conversion for GPU culling.
 - **`ViewportCuller`** (`src/renderer/viewport_cull.rs`): GPU compute shader
-  pipeline for frustum culling of `VertexData` points, producing compacted output
-  and indirect draw buffers with no CPU readback.
+  pipeline for frustum culling of `VertexData` points, producing compacted
+  output and indirect draw buffers with no CPU readback.
 - **`DebugOverlay`** (`src/renderer/debug_overlay.rs`): Zero-overhead debug info
   collector showing LOD tier, visible count, blend state.
 - **WGSL compute shader** (`src/shaders/viewport_cull.compute.wgsl`): 6-pass
@@ -250,21 +249,21 @@ resolution to another during a continuous zoom gesture.
 
 ### Key Files Changed
 
-| File | Description |
-|------|-------------|
-| `src/renderer/mod.rs` | New module: adaptive viewport renderer |
-| `src/renderer/adaptive.rs` | AdaptiveRenderer with tier selection |
-| `src/renderer/blend.rs` | LodBlendState cross-fade transitions |
-| `src/renderer/viewport.rs` | AdaptiveViewport type |
-| `src/renderer/viewport_cull.rs` | GPU viewport frustum culler |
-| `src/renderer/debug_overlay.rs` | Debug overlay controller |
-| `src/shaders/viewport_cull.compute.wgsl` | Compute shader for culling |
-| `src/lib.rs` | Registered `renderer` module |
-| `tests/adaptive_renderer_integration.rs` | 9 integration tests |
-| `benches/adaptive_renderer.rs` | Criterion benchmark |
-| `examples/adaptive_lod_debug.rs` | Debug example |
-| `docs/LOD_SYSTEM.md` | LOD system documentation |
-| `perf-thresholds.toml` | Benchmark regression threshold |
+| File                                     | Description                            |
+| ---------------------------------------- | -------------------------------------- |
+| `src/renderer/mod.rs`                    | New module: adaptive viewport renderer |
+| `src/renderer/adaptive.rs`               | AdaptiveRenderer with tier selection   |
+| `src/renderer/blend.rs`                  | LodBlendState cross-fade transitions   |
+| `src/renderer/viewport.rs`               | AdaptiveViewport type                  |
+| `src/renderer/viewport_cull.rs`          | GPU viewport frustum culler            |
+| `src/renderer/debug_overlay.rs`          | Debug overlay controller               |
+| `src/shaders/viewport_cull.compute.wgsl` | Compute shader for culling             |
+| `src/lib.rs`                             | Registered `renderer` module           |
+| `tests/adaptive_renderer_integration.rs` | 9 integration tests                    |
+| `benches/adaptive_renderer.rs`           | Criterion benchmark                    |
+| `examples/adaptive_lod_debug.rs`         | Debug example                          |
+| `docs/LOD_SYSTEM.md`                     | LOD system documentation               |
+| `perf-thresholds.toml`                   | Benchmark regression threshold         |
 
 ### Test Counts
 
@@ -297,22 +296,22 @@ resolution to another during a continuous zoom gesture.
   tier (since coarser tiers have fewer points and thus always have higher
   px/pt). This gives degenerate behaviour where the coarsest tier is always
   selected.
-- **Solution**: Walk from finest (level 0) to coarsest and return the first
-  tier whose density is within budget. This gives the finest tier that avoids
+- **Solution**: Walk from finest (level 0) to coarsest and return the first tier
+  whose density is within budget. This gives the finest tier that avoids
   sub-pixel overdraw, which produces intuitive zoom-dependent tier changes.
 - **Pattern**: When designing LOD selection, "finest that fits" gives better
-  visual results than "coarsest that satisfies quality". The quality floor is
-  1 pt/px (no overdraw), not 1 px/pt (no sub-pixel).
+  visual results than "coarsest that satisfies quality". The quality floor is 1
+  pt/px (no overdraw), not 1 px/pt (no sub-pixel).
 
 #### Separate Culling Shader for VertexData
 
 - **Challenge**: The existing `ComputeInstanceFilter` (GUP-077) operates on
-  96-byte `InstanceAttributes` (transform matrix + color + custom data). The
-  LOD pyramid uses 16-byte `VertexData` (x, y, weight, padding).
+  96-byte `InstanceAttributes` (transform matrix + color + custom data). The LOD
+  pyramid uses 16-byte `VertexData` (x, y, weight, padding).
 - **Solution**: Created a dedicated `ViewportCuller` with its own WGSL shader
-  optimised for the `VertexData` layout. This reuses the *architectural
-  pattern* (cull → prefix-sum → compact → indirect draw) from GUP-077 while
-  being much leaner per-element.
+  optimised for the `VertexData` layout. This reuses the _architectural pattern_
+  (cull → prefix-sum → compact → indirect draw) from GUP-077 while being much
+  leaner per-element.
 - **Pattern**: When the data layout differs significantly, a purpose-built
   shader is better than adapting a generic one. The pattern (not the code) is
   what should be reused.
@@ -334,8 +333,8 @@ resolution to another during a continuous zoom gesture.
 #### Pure Tier Selection Function
 
 - **Decision**: `select_tier()` is a pure function with no GPU side effects.
-- **Reasoning**: Makes unit testing trivial — no GPU context needed for
-  tier selection tests. The GPU culling is handled separately.
+- **Reasoning**: Makes unit testing trivial — no GPU context needed for tier
+  selection tests. The GPU culling is handled separately.
 - **Trade-off**: The renderer struct needs cached level metadata rather than
   referencing the pyramid directly.
 - **Future**: Easy to add alternative selection strategies (e.g.,
@@ -350,8 +349,8 @@ resolution to another during a continuous zoom gesture.
   consumed by whatever rendering framework the application uses.
 - **Trade-off**: The overlay doesn't draw on screen autonomously; the caller
   must render the display string.
-- **Future**: A GPU text/rect rendering pass could be added later, consuming
-  the `DebugOverlayInfo` directly.
+- **Future**: A GPU text/rect rendering pass could be added later, consuming the
+  `DebugOverlayInfo` directly.
 
 ### Development Workflow Insights
 
@@ -360,10 +359,10 @@ resolution to another during a continuous zoom gesture.
   iteration and running `mask all-fix` before final commits is more efficient.
 - GPU tests require `--test-threads=1` — never forget this or tests will
   segfault from resource contention.
-- The `wgpu::PollType::Wait` API (not `Maintain::Wait`) is the correct call
-  in wgpu v26. The old `Maintain` enum no longer exists.
-- WGSL `arrayLength()` is not available on uniform buffers, only storage.
-  Block scan sizes must be passed via the config uniform.
+- The `wgpu::PollType::Wait` API (not `Maintain::Wait`) is the correct call in
+  wgpu v26. The old `Maintain` enum no longer exists.
+- WGSL `arrayLength()` is not available on uniform buffers, only storage. Block
+  scan sizes must be passed via the config uniform.
 
 ### Follow-up Stories
 

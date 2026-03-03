@@ -2,8 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Chart Builders **Status**: ✅ Complete **Created**:
-2025-07-14
+**Initiative**: Chart Builders **Status**: ✅ Complete **Created**: 2025-07-14
 
 ## Context
 
@@ -236,9 +235,9 @@ mark within a single chart.
 - **`DensityPlotBuilder<T>`** — full fluent API with `x()`, `y()`,
   `bandwidth()`, `levels()`, `fill()`, `color_scheme()`, `grid_size()`, and
   `margin()` methods, all following the owned-`self` pattern.
-- **2D KDE (CPU)** — `compute_density_2d()` wraps the existing
-  `KernelDensity2D` from GUP-144 with density-plot-specific defaults (256×256
-  grid, 5% margin, Silverman's rule).
+- **2D KDE (CPU)** — `compute_density_2d()` wraps the existing `KernelDensity2D`
+  from GUP-144 with density-plot-specific defaults (256×256 grid, 5% margin,
+  Silverman's rule).
 - **Marching-squares contour extraction** — `marching_squares()` with
   interpolation-based saddle-point disambiguation and a 16-entry edge lookup
   table.
@@ -248,21 +247,21 @@ mark within a single chart.
   one thread per grid cell) and `density_marching_squares.compute.wgsl` (atomic
   vertex emit, saddle disambiguation).
 - **DensityLayer** — composable type for heatmap overlay integration.
-- **Plot API integration** — `gup::density_plot()`, `plot().data(d).density(x,
-  y)`, and full re-exports from `lib.rs`.
+- **Plot API integration** — `gup::density_plot()`,
+  `plot().data(d).density(x, y)`, and full re-exports from `lib.rs`.
 - **Example** — `density_scatter_overlay.rs` demonstrating six configurations.
 
 ### Key files changed
 
-| File | Change |
-| --- | --- |
-| `src/chart_builder/builders/density.rs` | New — builder, KDE helpers, marching squares, contour bands, tests (738 lines) |
-| `src/chart_builder/builders.rs` | Added `density` module and re-export |
-| `src/chart_builder/plot_api.rs` | Added `density()` method and `ConfiguredDensityPlot` |
-| `src/lib.rs` | Added `gup::density_plot()` and type re-exports |
-| `src/shaders/density_kde_2d.compute.wgsl` | New — 2D KDE compute shader (67 lines) |
-| `src/shaders/density_marching_squares.compute.wgsl` | New — marching-squares compute shader (195 lines) |
-| `examples/density_scatter_overlay.rs` | New — comprehensive demo (246 lines) |
+| File                                                | Change                                                                         |
+| --------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `src/chart_builder/builders/density.rs`             | New — builder, KDE helpers, marching squares, contour bands, tests (738 lines) |
+| `src/chart_builder/builders.rs`                     | Added `density` module and re-export                                           |
+| `src/chart_builder/plot_api.rs`                     | Added `density()` method and `ConfiguredDensityPlot`                           |
+| `src/lib.rs`                                        | Added `gup::density_plot()` and type re-exports                                |
+| `src/shaders/density_kde_2d.compute.wgsl`           | New — 2D KDE compute shader (67 lines)                                         |
+| `src/shaders/density_marching_squares.compute.wgsl` | New — marching-squares compute shader (195 lines)                              |
+| `examples/density_scatter_overlay.rs`               | New — comprehensive demo (246 lines)                                           |
 
 ### Test counts
 
@@ -296,9 +295,9 @@ mark within a single chart.
   pipeline caching, dispatch). Meanwhile, the CPU path provides immediate
   testability and a correctness reference.
 - **Solution**: Implemented full CPU path first (`compute_density_2d`,
-  `marching_squares`, `filled_contour_bands`), wrote comprehensive tests
-  against the CPU reference, then authored the WGSL shaders with identical
-  logic. The CPU tests validate the algorithm; the GPU shaders mirror it.
+  `marching_squares`, `filled_contour_bands`), wrote comprehensive tests against
+  the CPU reference, then authored the WGSL shaders with identical logic. The
+  CPU tests validate the algorithm; the GPU shaders mirror it.
 - **Pattern**: For compute-shader-backed features, always build and test the CPU
   reference implementation first. The GPU shader can then be validated against
   it, and the CPU path serves as a fallback for environments without compute
@@ -306,8 +305,8 @@ mark within a single chart.
 
 #### Macro-Generated Chart Type Constraints
 
-- **Challenge**: The `impl_configured_chart!` macro in `plot_api.rs` generates
-  a `.color()` method on every configured chart type. The `DensityPlotBuilder`
+- **Challenge**: The `impl_configured_chart!` macro in `plot_api.rs` generates a
+  `.color()` method on every configured chart type. The `DensityPlotBuilder`
   does not naturally have a `.color()` method (colour comes from the colour
   scale, not per-datum accessors). This caused a compilation error when the
   macro expanded.
@@ -315,8 +314,8 @@ mark within a single chart.
   accepts an accessor but discards it. Documented that density plots derive
   colour from `color_scheme()`, not per-point colour accessors.
 - **Pattern**: When adding new chart types to a macro-driven API, check what
-  methods the macro assumes exist on the builder. Either implement them (even
-  as no-ops) or refactor the macro to be conditional.
+  methods the macro assumes exist on the builder. Either implement them (even as
+  no-ops) or refactor the macro to be conditional.
 
 ### Architectural Decisions
 
@@ -369,14 +368,13 @@ mark within a single chart.
 1. **GUP-301: GPU Density Compute Pipeline Integration** — Wire the WGSL compute
    shaders (`density_kde_2d.compute.wgsl` and
    `density_marching_squares.compute.wgsl`) into the Gup rendering pipeline with
-   bind group creation, pipeline caching, and GPU dispatch. Currently the shaders
-   exist as standalone WGSL files; this story would make them executable on the
-   GPU and connect them to the `DensityPlotBuilder`'s `.build()` path for
+   bind group creation, pipeline caching, and GPU dispatch. Currently the
+   shaders exist as standalone WGSL files; this story would make them executable
+   on the GPU and connect them to the `DensityPlotBuilder`'s `.build()` path for
    100K+ point datasets where the CPU path is too slow.
 
 2. **GUP-302: Exact Marching-Squares Polygon Fill** — Replace the cell-average
    filled contour approach with exact marching-squares polygon decomposition.
    Each cell would emit precisely the polygon region where density falls within
-   the band, producing smooth band boundaries even at low grid resolutions.
-   This is primarily needed for publication-quality rendering at small grid
-   sizes.
+   the band, producing smooth band boundaries even at low grid resolutions. This
+   is primarily needed for publication-quality rendering at small grid sizes.

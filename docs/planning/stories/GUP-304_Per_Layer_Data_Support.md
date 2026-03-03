@@ -58,9 +58,9 @@ type, enabling truly independent layer composition.
 
 - **High**: Full type erasure is fundamentally at odds with the project's
   preference for enums over trait objects. Careful design is needed.
-  _Mitigation_: Consider a limited approach using `Box<dyn ErasedDomain +
-  ErasedRender>` only for the "foreign" layers, keeping the enum path for
-  same-type layers.
+  _Mitigation_: Consider a limited approach using
+  `Box<dyn ErasedDomain + ErasedRender>` only for the "foreign" layers, keeping
+  the enum path for same-type layers.
 
 ## Definition of Done
 

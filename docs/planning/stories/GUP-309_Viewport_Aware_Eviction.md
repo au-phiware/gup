@@ -26,8 +26,8 @@ data density.
       evicted before closer points.
 - [ ] A unit test verifies that two points equidistant from the viewport centre
       are evicted in insertion order (tie-breaking).
-- [ ] A unit test verifies that an off-screen point is evicted before an on-screen
-      point even if the on-screen point is older.
+- [ ] A unit test verifies that an off-screen point is evicted before an
+      on-screen point even if the on-screen point is older.
 
 ## Dependencies
 

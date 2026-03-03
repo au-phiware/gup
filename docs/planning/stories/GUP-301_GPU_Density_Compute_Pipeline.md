@@ -11,8 +11,8 @@ marching-squares contour extraction, along with WGSL compute shaders
 (`density_kde_2d.compute.wgsl` and `density_marching_squares.compute.wgsl`).
 However, the compute shaders are standalone files — they are not yet wired into
 the Gup GPU pipeline. The CPU path is adequate for small datasets (< 10K
-points), but for 100K+ points the O(n × m²) KDE cost becomes prohibitive and
-GPU dispatch is essential.
+points), but for 100K+ points the O(n × m²) KDE cost becomes prohibitive and GPU
+dispatch is essential.
 
 This story completes the GPU integration: creating bind groups, compute
 pipelines, staging buffers, and connecting the dispatch to
@@ -47,8 +47,8 @@ threshold.
 
 ## Testing Strategy
 
-- GPU integration test: dispatch KDE shader, read back texture, compare with
-  CPU reference
+- GPU integration test: dispatch KDE shader, read back texture, compare with CPU
+  reference
 - GPU marching-squares test: dispatch shader, read back vertex buffer, compare
   segment count and topology with CPU
 - Performance benchmark: 100K points, 256×256 grid, measure GPU timestamp

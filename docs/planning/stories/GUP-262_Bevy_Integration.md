@@ -1,0 +1,214 @@
+# GUP-262: Bevy Integration
+
+## Story Overview
+
+**Initiative**: Ecosystem Integration **Status**: 📋 Planned **Created**:
+2025-01-31
+
+## Context
+
+Bevy is a rapidly growing open-source Rust game engine built on an
+Entity-Component-System (ECS) architecture. Its Rust-native design and active
+community make it one of the most natural targets for a Gup integration: game
+developers and simulation authors who already use Bevy want to embed live data
+visualizations — scatter plots of entity positions, time-series of simulation
+metrics, spatial histograms — directly inside their 3D scenes without spinning
+up a second GPU context or writing adapter glue by hand.
+
+The core challenge is resource sharing. Bevy owns the `wgpu` `Device` and
+`Queue` for a running application; Gup independently creates its own
+`GupContext` (GUP-004) that also wraps an `Arc<wgpu::Device>` and
+`Arc<wgpu::Queue>`. Running both in the same process without coordination would
+create two independent GPU contexts, wasting VRAM and defeating the purpose of a
+tight integration. This story solves that problem by providing a `GupPlugin`
+that extracts Bevy's wgpu resources and injects them into a shared `GupContext`
+that is registered as a Bevy `Resource`.
+
+GUP-004 gave us a `GupContext` backed by `Arc`-wrapped wgpu handles, making it
+straightforward to construct one from externally-supplied device/queue arcs.
+GUP-018 produced the chart builder API (`Chart` and friends) that Bevy
+components will wrap. GUP-039 extended `GupContext` with multi-surface
+management, which is the natural abstraction for rendering a chart into a
+Bevy-managed texture target.
+
+The implementation lives in a new `gup-bevy` crate (or behind a `bevy` feature
+flag), keeping Bevy's dependency tree completely optional for users who do not
+need it. The Bevy integration strategy shown in
+`docs/IMPLEMENTATION_STRATEGY.md` — a `GupChart` component and a
+`gup_chart_render_system` — serves as the direct specification for what is
+delivered here.
+
+## User Story
+
+> "As a Bevy game developer, I want to add Gup data-visualization charts as ECS
+> components so that I can render GPU-accelerated scatter plots and other charts
+> inside my Bevy application without managing a second GPU context."
+
+## Acceptance Criteria
+
+### AC1: Shared wgpu Context
+
+- [ ] `GupPlugin` extracts Bevy's `wgpu::Device` and `wgpu::Queue` via
+      `bevy::render::renderer::RenderDevice` / `RenderQueue` resources.
+- [ ] A `GupContext` is constructed from those extracted handles (no second GPU
+      adapter is created).
+- [ ] The constructed `GupContext` is inserted as a Bevy `Resource` named
+      `GupRenderContext`.
+- [ ] Running an example with Bevy's GPU validation layer active produces no
+      validation errors related to cross-context resource usage.
+
+### AC2: GupChart ECS Component
+
+- [ ] `GupChart` implements `bevy::ecs::component::Component`.
+- [ ] `GupChart` holds a `Chart` (from GUP-018) and an `auto_update: bool` flag.
+- [ ] `GupChart::new(chart)` and `GupChart::with_auto_update(chart, bool)`
+      constructors are provided.
+- [ ] `GupChart` can be inserted on any Bevy `Entity` alongside standard Bevy
+      components (e.g. `Transform`, `Visibility`).
+
+### AC3: Render System Integration
+
+- [ ] A `gup_render_system` Bevy system is provided that queries all `GupChart`
+      components and calls `Chart::render` for each one using the shared
+      `GupRenderContext`.
+- [ ] The system is added to Bevy's `RenderApp` (or `PostUpdate` schedule as
+      appropriate) by `GupPlugin::build`.
+- [ ] Charts with `auto_update: false` skip re-rendering unless explicitly
+      marked dirty.
+- [ ] No `panic` or GPU error occurs when zero `GupChart` entities exist in the
+      world.
+
+### AC4: Bevy Scatter-Plot Example
+
+- [ ] A runnable example at `examples/bevy_scatter.rs` (or
+      `gup-bevy/examples/scatter.rs`) exists and compiles with
+      `cargo run --example bevy_scatter --features bevy`.
+- [ ] The example creates a Bevy `App`, adds `GupPlugin`, spawns a `GupChart`
+      entity containing a scatter plot built with the GUP-018 chart-builder API,
+      and renders it in a Bevy window.
+- [ ] The scatter plot data updates each frame (e.g. animated sine wave) to
+      demonstrate `auto_update: true` behaviour.
+- [ ] The example runs without GPU validation errors on at least one platform
+      (Linux/macOS or Windows).
+
+### AC5: Integration Guide Documentation
+
+- [ ] `docs/BEVY_INTEGRATION.md` (or equivalent) exists and covers: - Adding the
+      `gup-bevy` crate / `bevy` feature to `Cargo.toml`. - Adding `GupPlugin` to
+      a Bevy `App`. - Creating and spawning a `GupChart` component. - Updating
+      chart data at runtime. - Known limitations and caveats (e.g. Bevy version
+      compatibility).
+- [ ] All public items in `gup-bevy` have rustdoc comments.
+
+### AC6: Feature-Gated Build
+
+- [ ] When the `bevy` feature (or `gup-bevy` crate) is not enabled, the main
+      `gup` crate compiles without any Bevy dependency pulled in.
+- [ ] `cargo check` on the workspace root (without `--features bevy`) succeeds.
+- [ ] `cargo check --features bevy` (or `cargo check -p gup-bevy`) succeeds.
+
+## Technical Tasks
+
+- [ ] Decide on delivery mechanism: a workspace sub-crate `gup-bevy` vs. a
+      `bevy` feature flag on the root `gup` crate. A sub-crate is preferred to
+      keep the dependency graph clean.
+- [ ] Add `gup-bevy/Cargo.toml` with
+      `bevy = { version = "...", default-features = false,     features = ["..."] }`
+      and `gup` as a path dependency.
+- [ ] Implement `GupRenderContext` newtype resource wrapping `GupContext`.
+- [ ] Implement `GupPlugin` using `bevy::app::Plugin`:
+  - In `build()`, add `gup_render_system` to the appropriate Bevy schedule.
+  - In a startup system or `finish()`, extract `RenderDevice`/`RenderQueue` from
+    Bevy and construct the shared `GupContext`.
+- [ ] Implement `GupChart` component struct with `Chart` and `auto_update`
+      fields.
+- [ ] Implement
+      `gup_render_system(mut charts: Query<&mut GupChart>, context: ResMut<GupRenderContext>)`.
+- [ ] Handle the `auto_update: false` path by introducing a `dirty` flag or
+      relying on an explicit `GupChartDirty` marker component.
+- [ ] Write the `bevy_scatter` example demonstrating per-frame data updates.
+- [ ] Write `docs/BEVY_INTEGRATION.md`.
+- [ ] Add rustdoc to all public items in `gup-bevy`.
+- [ ] Extend CI to run `cargo check -p gup-bevy` (or `--features bevy`) on at
+      least one platform.
+
+## Dependencies
+
+### Prerequisite Stories
+
+- GUP-004: Basic Render Context ✅ — provides `GupContext` with
+  `Arc<wgpu::Device>` and `Arc<wgpu::Queue>`, enabling construction from
+  externally supplied handles.
+- GUP-018: Observable Plot Chart Builders ✅ — provides the `Chart` type that
+  `GupChart` wraps and the chart-builder API used in the example.
+- GUP-039: Context Window Integration ✅ — multi-surface `GupContext` management
+  needed to render into Bevy-owned texture targets.
+
+### Enables Stories
+
+- A future `gup-egui` integration story would follow the same pattern (shared
+  context, widget wrapper, plugin/system registration) established here.
+
+## Testing Strategy
+
+- **Unit tests**: Test that `GupChart::new` and `with_auto_update` set fields
+  correctly. Test that a `GupContext` constructed from given `Arc<Device>` /
+  `Arc<Queue>` references the same underlying objects (pointer equality).
+- **Integration tests**: In a headless Bevy world (no window), instantiate
+  `GupPlugin`, spawn a `GupChart`, run one app tick, and assert no panic occurs.
+  Use Bevy's `App::update()` for headless operation.
+- **Visual validation**: Run `bevy_scatter` example and observe animated scatter
+  plot embedded in a Bevy window; capture a screenshot to confirm the chart is
+  visible.
+- **Compile-time gating**: CI step that verifies `cargo check` without `bevy`
+  feature succeeds (no accidental Bevy dependency bleed).
+
+## Success Metrics
+
+- [ ] `cargo run --example bevy_scatter` (with the Bevy feature/crate enabled)
+      renders an animated scatter plot in a Bevy window with no GPU validation
+      errors.
+- [ ] `cargo check` on the workspace without the `bevy` feature produces zero
+      errors and zero warnings related to `gup-bevy` symbols.
+- [ ] All integration tests pass: `cargo test -p gup-bevy -- --test-threads=1`.
+- [ ] The integration guide covers the full add-to-project workflow in fewer
+      than 30 lines of user-written code.
+
+## Risk Assessment
+
+- **Medium**: Bevy's render graph and wgpu resource extraction API changes
+  frequently between minor versions. The integration must pin a specific Bevy
+  version and document that constraint clearly. _Mitigation_: Pin to the latest
+  stable Bevy release at story start; add a `BEVY_VERSION` note to
+  `docs/BEVY_INTEGRATION.md` and the crate README. Schedule a follow-up story
+  for version bumps.
+
+- **Medium**: Bevy's `RenderDevice` abstraction may not expose the raw
+  `Arc<wgpu::Device>` directly in all versions — it may require
+  `bevy::render::renderer::RenderDevice::wgpu_device()`. Verify the extraction
+  API before committing to an approach. _Mitigation_: Prototype the resource
+  extraction in a throwaway binary before writing full implementation; fall back
+  to constructing a second `GupContext` with a texture-copy path if sharing
+  proves infeasible, and document the trade-off.
+
+- **Low**: Bevy's `RenderApp` runs in a separate thread from the main world.
+  Cross-thread `Resource` access requires `Send + Sync`, which `GupContext`
+  already satisfies (GUP-238 audited `Send + Sync` bounds), but chart data
+  mutations must go through proper Bevy change-detection channels. _Mitigation_:
+  Use Bevy's standard `Commands` / `EventWriter` patterns for data updates;
+  document this in the integration guide.
+
+- **Low**: Build times. Bevy has a large dependency tree. The sub-crate approach
+  isolates this cost to users who opt in. _Mitigation_: Use
+  `default-features = false` on the Bevy dependency and enable only the features
+  strictly required (windowing, rendering, ecs).
+
+## Definition of Done
+
+- [ ] All Acceptance Criteria are satisfied and checked
+- [ ] All tests pass: `cargo test -p gup-bevy -- --test-threads=1`
+- [ ] Lint and format clean: `mask all-fix`
+- [ ] All examples compile: `cargo check --examples` (with appropriate feature
+      flags)
+- [ ] Story status updated to ✅ Complete in story file and INDEX.md
+- [ ] Retrospective added to story document

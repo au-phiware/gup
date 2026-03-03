@@ -6,8 +6,8 @@
 
 ## Context
 
-GUP-250's filled-contour mode uses a cell-average approximation: each cell
-whose average density falls within a contour band is filled with two triangles
+GUP-250's filled-contour mode uses a cell-average approximation: each cell whose
+average density falls within a contour band is filled with two triangles
 covering the entire cell. This produces visually correct results at grid
 resolutions ≥ 64 but at lower resolutions the band boundaries appear blocky
 rather than smooth.

@@ -33,8 +33,8 @@ flush management from the render loop.
       stream's dirty regions to the GPU before uploading instances.
 - [ ] The render pipeline uses the DataStream's active buffer directly for
       instance data when a stream is attached.
-- [ ] The Selection correctly handles the transition between static data mode and
-      streaming mode without GPU validation errors.
+- [ ] The Selection correctly handles the transition between static data mode
+      and streaming mode without GPU validation errors.
 - [ ] An integration test demonstrates a full render loop: push → auto-flush →
       render, with GPU readback validating the rendered data.
 

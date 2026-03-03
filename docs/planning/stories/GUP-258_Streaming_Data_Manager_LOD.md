@@ -2,8 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Advanced Scale **Status**: ✅ Complete **Created**:
-2026-03-02
+**Initiative**: Advanced Scale **Status**: ✅ Complete **Created**: 2026-03-02
 
 ## Context
 
@@ -215,26 +214,32 @@ billion-point real-time rendering.
 
 ### Files Changed
 
-| File | Change |
-| --- | --- |
-| `src/lod/mod.rs` | Added `pub mod streaming`, `pub use streaming::MemoryBudget`; added `from_parts()`, `buffer_mut()`, `metadata_mut()`, `set_allocated_bytes()` crate-internal mutation methods to `LodPyramid` |
-| `src/lod/streaming.rs` | **New** — `StreamingLodManager<T>`, `SpatiallyKeyed` trait, `MemoryBudget` newtype, `EvictionPolicy` enum, `ScatterPoint` type, 19 tests |
-| `examples/streaming_lod_scatter.rs` | **New** — End-to-end demo: 50K synthetic points, viewport LOD transitions, performance metrics |
+| File                                | Change                                                                                                                                                                                        |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/lod/mod.rs`                    | Added `pub mod streaming`, `pub use streaming::MemoryBudget`; added `from_parts()`, `buffer_mut()`, `metadata_mut()`, `set_allocated_bytes()` crate-internal mutation methods to `LodPyramid` |
+| `src/lod/streaming.rs`              | **New** — `StreamingLodManager<T>`, `SpatiallyKeyed` trait, `MemoryBudget` newtype, `EvictionPolicy` enum, `ScatterPoint` type, 19 tests                                                      |
+| `examples/streaming_lod_scatter.rs` | **New** — End-to-end demo: 50K synthetic points, viewport LOD transitions, performance metrics                                                                                                |
 
 ### Key Types
 
-- **`SpatiallyKeyed`** — trait with `spatial_key(&self) -> (f32, f32)` for spatial routing
+- **`SpatiallyKeyed`** — trait with `spatial_key(&self) -> (f32, f32)` for
+  spatial routing
 - **`MemoryBudget`** — newtype over `usize` for GPU memory budget configuration
-- **`EvictionPolicy`** — `OldestFirst` (default), non-exhaustive for future strategies
+- **`EvictionPolicy`** — `OldestFirst` (default), non-exhaustive for future
+  strategies
 - **`ScatterPoint`** — canonical `SpatiallyKeyed + Pod` type for examples/tests
-- **`StreamingLodManager<T>`** — main struct combining `LodPyramid`, `DataStream<T>`, and `MemoryBudget`
+- **`StreamingLodManager<T>`** — main struct combining `LodPyramid`,
+  `DataStream<T>`, and `MemoryBudget`
 
 ### Test Count
 
 19 unit/integration tests in `src/lod/streaming.rs`:
-- 5 pure unit tests (MemoryBudget, grid geometry, SpatiallyKeyed impls, EvictionPolicy)
+
+- 5 pure unit tests (MemoryBudget, grid geometry, SpatiallyKeyed impls,
+  EvictionPolicy)
 - 7 GPU integration tests (construction, insert, coalesce, routing, root cell)
-- 3 eviction tests (basic budget, oldest-removed-newest-kept, auto-eviction via poll)
+- 3 eviction tests (basic budget, oldest-removed-newest-kept, auto-eviction via
+  poll)
 - 2 integration tests (poll drain, 1000-iteration stress)
 - 2 type tests (ScatterPoint, EvictionPolicy default)
 
@@ -254,17 +259,17 @@ billion-point real-time rendering.
   `Arc<Mutex<Vec<(f32, f32)>>>` shared between the subscriber closure and the
   manager. The subscriber captures spatial keys on every `push()`; `poll()`
   drains the shared buffer.
-- **Pattern**: When integrating with observer-pattern APIs, a shared lock-free or
-  Mutex-protected buffer is the simplest way to bridge callback-driven and
+- **Pattern**: When integrating with observer-pattern APIs, a shared lock-free
+  or Mutex-protected buffer is the simplest way to bridge callback-driven and
   poll-driven architectures. The `Arc<Mutex<>>` overhead is negligible for the
   data volumes involved (~100ns per lock).
 
 #### LodPyramid's Private Fields and Crate-Internal Mutation
 
-- **Challenge**: `LodPyramid` was designed as an immutable batch-built structure.
-  Its fields (`levels`, `metadata`, `budget_bytes`, `allocated_bytes`) are all
-  private. Streaming updates require mutable access to individual level buffers
-  and metadata.
+- **Challenge**: `LodPyramid` was designed as an immutable batch-built
+  structure. Its fields (`levels`, `metadata`, `budget_bytes`,
+  `allocated_bytes`) are all private. Streaming updates require mutable access
+  to individual level buffers and metadata.
 - **Solution**: Added `pub(crate)` methods: `from_parts()`, `buffer_mut()`,
   `metadata_mut()`, `set_allocated_bytes()`. This keeps the public API immutable
   while allowing the streaming module (within the same crate) to mutate the
@@ -285,9 +290,9 @@ billion-point real-time rendering.
   assembly. In debug mode this is slow for large datasets but acceptable for
   correctness.
 - **Pattern**: For streaming workloads where cell sizes are dynamic, either use
-  a fixed-size cell layout (with padding waste) or accept full-level uploads.
-  A future optimization could use a free-list allocator within the GPU buffer
-  to support true partial writes.
+  a fixed-size cell layout (with padding waste) or accept full-level uploads. A
+  future optimization could use a free-list allocator within the GPU buffer to
+  support true partial writes.
 
 #### LodPyramidBuilder Level Count vs. Data Size
 
@@ -299,7 +304,7 @@ billion-point real-time rendering.
   seed for all GPU tests, ensuring the builder can produce the full 4-level
   pyramid. Tests assert on `pyramid.level_count()` rather than hardcoding `4`.
 - **Pattern**: Always generate enough input data for your test's structural
-  requirements. Treat `LodPyramidBuilder::levels()` as a *maximum*, not a
+  requirements. Treat `LodPyramidBuilder::levels()` as a _maximum_, not a
   guarantee.
 
 ### Architectural Decisions
@@ -353,8 +358,8 @@ billion-point real-time rendering.
   slow due to Vec allocation and copying overhead. The 1000-iteration stress
   test runs fine because each iteration only inserts one point. For performance
   benchmarks, release mode is necessary.
-- The `cargo check --examples` validation step caught import issues early.
-  The `streaming_lod_scatter` example initially defined its own `ScatterPoint`;
+- The `cargo check --examples` validation step caught import issues early. The
+  `streaming_lod_scatter` example initially defined its own `ScatterPoint`;
   moving it to the module avoided duplication.
 - Pre-commit hooks (cargo check + clippy) can take 30-60 seconds on warm cache.
   Using `--no-verify` for intermediate commits and running `mask all-fix` before
@@ -370,5 +375,5 @@ billion-point real-time rendering.
 
 2. **GUP-309: Viewport-Aware Eviction Policy** — Add a `NearestViewport`
    eviction strategy that prioritises retaining points visible in the current
-   viewport and evicts off-screen points first. Requires the `StreamingLodManager`
-   to accept a viewport reference during `poll()`.
+   viewport and evicts off-screen points first. Requires the
+   `StreamingLodManager` to accept a viewport reference during `poll()`.

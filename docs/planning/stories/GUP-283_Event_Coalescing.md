@@ -139,8 +139,8 @@ target under sustained rapid input.
 
 #### Explicit flush_frame() vs Timer-Based Coalescing
 
-- **Decision**: Used an explicit `flush_frame()` call at frame boundaries
-  rather than an internal timer or fixed-interval flush.
+- **Decision**: Used an explicit `flush_frame()` call at frame boundaries rather
+  than an internal timer or fixed-interval flush.
 - **Reasoning**: Visualization render loops have well-defined frame boundaries
   (e.g., `winit`'s `AboutToWait` or `RedrawRequested`). An explicit flush
   matches this model naturally. Timer-based coalescing would require spawning
@@ -154,8 +154,8 @@ target under sustained rapid input.
 
 - **Decision**: `submit()` returns the `EventResult` from immediately-dispatched
   (non-coalescable) events, and `EventResult::Continue` for buffered ones.
-- **Reasoning**: This lets callers react to immediate dispatch results (e.g.,
-  if a `mousedown` handler stops propagation) while treating buffered events as
+- **Reasoning**: This lets callers react to immediate dispatch results (e.g., if
+  a `mousedown` handler stops propagation) while treating buffered events as
   fire-and-forget until `flush_frame()`.
 - **Trade-off**: Slightly asymmetric return semantics. Documented clearly.
 

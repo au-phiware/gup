@@ -7,13 +7,13 @@
 
 ## Context
 
-GUP-284 unified `Vec2` into `src/math.rs` with full arithmetic operators
-(`Add`, `Sub`, `Mul`, `Div` for both component-wise and scalar operations) and
-array conversions (`From<[f32; 2]>`, `Into<[f32; 2]>`). However, `Vec3` and
-`Vec4` remain in `shader_function.rs` with only constructors (`new`, `zero`,
-`one`) and `ShaderType` impls — no arithmetic operators and no array
-conversions. This inconsistency will surprise developers who expect uniform
-ergonomics across all vector types.
+GUP-284 unified `Vec2` into `src/math.rs` with full arithmetic operators (`Add`,
+`Sub`, `Mul`, `Div` for both component-wise and scalar operations) and array
+conversions (`From<[f32; 2]>`, `Into<[f32; 2]>`). However, `Vec3` and `Vec4`
+remain in `shader_function.rs` with only constructors (`new`, `zero`, `one`) and
+`ShaderType` impls — no arithmetic operators and no array conversions. This
+inconsistency will surprise developers who expect uniform ergonomics across all
+vector types.
 
 ## User Story
 
@@ -23,24 +23,24 @@ ergonomics across all vector types.
 
 ## Acceptance Criteria
 
-- [ ] `Vec3` implements `Add`, `Sub`, `Mul`, `Div` for component-wise
-      operations and scalar multiply/divide
-- [ ] `Vec4` implements `Add`, `Sub`, `Mul`, `Div` for component-wise
-      operations and scalar multiply/divide
+- [ ] `Vec3` implements `Add`, `Sub`, `Mul`, `Div` for component-wise operations
+      and scalar multiply/divide
+- [ ] `Vec4` implements `Add`, `Sub`, `Mul`, `Div` for component-wise operations
+      and scalar multiply/divide
 - [ ] `Vec3` provides `From<[f32; 3]>` and `Into<[f32; 3]>` conversions
 - [ ] `Vec4` provides `From<[f32; 4]>` and `Into<[f32; 4]>` conversions
 - [ ] Both types are optionally migrated into `src/math.rs` alongside `Vec2`
 - [ ] Unit tests cover arithmetic, conversions, and edge cases for both types
-- [ ] `Vec3` arithmetic correctly handles the `_padding` field (preserves
-      zero padding)
+- [ ] `Vec3` arithmetic correctly handles the `_padding` field (preserves zero
+      padding)
 
 ## Technical Tasks
 
 - [ ] Add arithmetic trait impls to `Vec3` (handling `_padding` field)
 - [ ] Add arithmetic trait impls to `Vec4`
 - [ ] Add `From`/`Into` array conversions for `Vec3` and `Vec4`
-- [ ] Optionally move `Vec3`/`Vec4` definitions to `src/math.rs` and
-      re-export from `shader_function`
+- [ ] Optionally move `Vec3`/`Vec4` definitions to `src/math.rs` and re-export
+      from `shader_function`
 - [ ] Write unit tests for all new trait implementations
 - [ ] Simplify any existing manual field arithmetic on Vec3/Vec4
 
@@ -60,8 +60,8 @@ ergonomics across all vector types.
 
 ## Risk Assessment
 
-- **Low**: Straightforward trait implementations following the Vec2 pattern.
-  The `Vec3` `_padding` field needs care but is well understood.
+- **Low**: Straightforward trait implementations following the Vec2 pattern. The
+  `Vec3` `_padding` field needs care but is well understood.
 
 ## Definition of Done
 

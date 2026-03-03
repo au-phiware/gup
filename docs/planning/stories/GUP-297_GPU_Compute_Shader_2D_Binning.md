@@ -9,13 +9,13 @@
 ## Context
 
 GUP-248 (Heatmap Chart Builder) implements CPU-side 2D binning in
-`BinGrid::from_data()`. For modest datasets (up to ~1M rows) this is
-performant, but for very large flat datasets (10M+ rows) the CPU binning loop
-may become a bottleneck, especially in real-time streaming scenarios.
+`BinGrid::from_data()`. For modest datasets (up to ~1M rows) this is performant,
+but for very large flat datasets (10M+ rows) the CPU binning loop may become a
+bottleneck, especially in real-time streaming scenarios.
 
 This story moves the 2D binning aggregation to a wgpu compute shader, keeping
-the main thread free. The `BinGrid` interface remains the same — the GPU path
-is an alternative backend selected via a feature flag or runtime heuristic.
+the main thread free. The `BinGrid` interface remains the same — the GPU path is
+an alternative backend selected via a feature flag or runtime heuristic.
 
 ## User Story
 
@@ -49,8 +49,8 @@ is an alternative backend selected via a feature flag or runtime heuristic.
 
 ### Prerequisite Stories
 
-- GUP-248: Heatmap Chart Builder ✅ — provides `BinGrid`, `BinSpec`, and the
-  CPU binning baseline.
+- GUP-248: Heatmap Chart Builder ✅ — provides `BinGrid`, `BinSpec`, and the CPU
+  binning baseline.
 
 ## Testing Strategy
 
