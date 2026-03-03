@@ -270,3 +270,113 @@ mark within a single chart.
   marching squares topology (5), threshold computation (2), filled bands (2),
   density layer (1), ChartBuilder integration (3).
 - **7 plot API tests** continue to pass (including new density type creation).
+
+## Retrospective
+
+**Completed**: 2025-07-15
+
+### Key Technical Learnings
+
+#### Marching-Squares Saddle-Point Disambiguation
+
+- **Challenge**: The 16-case marching-squares lookup table has two ambiguous
+  cases (5 and 10) where the diagonal corners are above/below the threshold and
+  the contour could connect either pair. Choosing wrong produces topologically
+  inconsistent contours (crossing lines at the same iso-level).
+- **Solution**: Compare the cell's centre value (average of four corners) with
+  the threshold. If the centre is above, connect the "inside" corners; otherwise
+  keep the default separation. This is the standard interpolation-based rule.
+- **Pattern**: For any grid-based contour algorithm, always explicitly handle
+  saddle points. The simplest correct approach is centre-value comparison.
+
+#### CPU-First Strategy with GPU Shader Parity
+
+- **Challenge**: The story calls for GPU compute shaders, but GPU pipeline
+  integration requires wiring through the entire rendering system (bind groups,
+  pipeline caching, dispatch). Meanwhile, the CPU path provides immediate
+  testability and a correctness reference.
+- **Solution**: Implemented full CPU path first (`compute_density_2d`,
+  `marching_squares`, `filled_contour_bands`), wrote comprehensive tests
+  against the CPU reference, then authored the WGSL shaders with identical
+  logic. The CPU tests validate the algorithm; the GPU shaders mirror it.
+- **Pattern**: For compute-shader-backed features, always build and test the CPU
+  reference implementation first. The GPU shader can then be validated against
+  it, and the CPU path serves as a fallback for environments without compute
+  shader support (e.g., WebGL).
+
+#### Macro-Generated Chart Type Constraints
+
+- **Challenge**: The `impl_configured_chart!` macro in `plot_api.rs` generates
+  a `.color()` method on every configured chart type. The `DensityPlotBuilder`
+  does not naturally have a `.color()` method (colour comes from the colour
+  scale, not per-datum accessors). This caused a compilation error when the
+  macro expanded.
+- **Solution**: Added a no-op `.color()` method on `DensityPlotBuilder` that
+  accepts an accessor but discards it. Documented that density plots derive
+  colour from `color_scheme()`, not per-point colour accessors.
+- **Pattern**: When adding new chart types to a macro-driven API, check what
+  methods the macro assumes exist on the builder. Either implement them (even
+  as no-ops) or refactor the macro to be conditional.
+
+### Architectural Decisions
+
+#### Cell-Average Filled Contour Approach
+
+- **Decision**: Used a simplified cell-average method for filled contour bands
+  rather than true marching-squares polygon filling.
+- **Reasoning**: True marching-squares polygon filling requires computing exact
+  polygon boundaries per cell per band, which is significantly more complex
+  (each cell can produce up to 6 different polygon shapes). The cell-average
+  approach — emitting two triangles per cell if its average density falls within
+  the band — produces visually correct results at grid resolutions ≥64.
+- **Trade-off**: At very low grid resolutions (<16), band boundaries may appear
+  blocky rather than smoothly interpolated. At typical resolutions (128–256),
+  the difference is imperceptible.
+- **Future**: A follow-up story could implement exact cell polygon decomposition
+  for publication-quality contour fills at low grid resolutions.
+
+#### DensityLayer as Composable Value
+
+- **Decision**: Introduced `DensityLayer` as a standalone struct holding the KDE
+  result, config, and colour scale, rather than tightly coupling the density
+  computation into the heatmap builder.
+- **Reasoning**: This enables the density computation to be used independently
+  (e.g., for analysis, export, or custom rendering) and keeps the density and
+  heatmap builders loosely coupled.
+- **Trade-off**: The `DensityLayer` currently lacks a direct rendering method;
+  it's a data container rather than a renderable component. Full rendering
+  integration requires wiring it through the heatmap pipeline.
+- **Future**: When GUP-248 (Heatmap Chart Builder) gets its full GPU rendering
+  pipeline, `DensityLayer` can be accepted as input with minimal changes.
+
+### Development Workflow Insights
+
+- The existing `KernelDensity2D` from GUP-144 was a solid foundation — the CPU
+  reference implementation worked perfectly and the 2D KDE helper was
+  essentially a thin wrapper.
+- Building the marching-squares algorithm from scratch was straightforward using
+  the 16-case lookup table. The key insight is that the lookup table can be
+  represented as a static array of edge pairs, making the per-cell logic very
+  compact.
+- The `mask all-fix` pre-existing markdown lint failures (GUP-248, GUP-249) are
+  annoying but don't block development — they should be cleaned up in a
+  housekeeping pass.
+- Writing tests for contour topology (connectivity, no dangling segments, no
+  duplicates) was valuable for catching subtle bugs in saddle disambiguation.
+
+### Follow-up Stories
+
+1. **GUP-301: GPU Density Compute Pipeline Integration** — Wire the WGSL compute
+   shaders (`density_kde_2d.compute.wgsl` and
+   `density_marching_squares.compute.wgsl`) into the Gup rendering pipeline with
+   bind group creation, pipeline caching, and GPU dispatch. Currently the shaders
+   exist as standalone WGSL files; this story would make them executable on the
+   GPU and connect them to the `DensityPlotBuilder`'s `.build()` path for
+   100K+ point datasets where the CPU path is too slow.
+
+2. **GUP-302: Exact Marching-Squares Polygon Fill** — Replace the cell-average
+   filled contour approach with exact marching-squares polygon decomposition.
+   Each cell would emit precisely the polygon region where density falls within
+   the band, producing smooth band boundaries even at low grid resolutions.
+   This is primarily needed for publication-quality rendering at small grid
+   sizes.
