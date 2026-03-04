@@ -135,7 +135,7 @@ mod tests {
     #[test]
     fn single_tap_translates_correctly() {
         let touches = [
-            touch(1, 100.0, 200.0, 0, 2.0, 0.0), // Began
+            touch(1, 100.0, 200.0, 0, 2.0, 0.0),  // Began
             touch(1, 100.0, 200.0, 2, 2.0, 0.05), // Ended
         ];
         let events = translate_uitouch(&touches, None);
@@ -239,8 +239,8 @@ mod tests {
     fn view_bounds_clamp_position() {
         // View is 200×400 points, scale 2.0 → pixel range [0..400] × [0..800]
         let touches = [
-            touch(1, 250.0, 500.0, 0, 2.0, 0.0),  // outside right+bottom
-            touch(2, -10.0, -5.0, 0, 2.0, 0.0),    // outside left+top
+            touch(1, 250.0, 500.0, 0, 2.0, 0.0), // outside right+bottom
+            touch(2, -10.0, -5.0, 0, 2.0, 0.0),  // outside left+top
         ];
         let events = translate_uitouch(&touches, Some((200.0, 400.0)));
 

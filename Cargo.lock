@@ -3265,6 +3265,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "gup-ios"
+version = "0.1.0"
+dependencies = [
+ "gup",
+ "pollster 0.3.0",
+]
+
+[[package]]
 name = "gup-macros"
 version = "0.1.0"
 dependencies = [

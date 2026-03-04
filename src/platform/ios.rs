@@ -29,8 +29,8 @@ pub use super::ios_touch::{RawIosTouch, translate_uitouch};
 use crate::context::{GupContext, PhysicalSize, SurfaceId};
 use crate::error::{GupError, GupResult};
 use raw_window_handle::{
-    HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle,
-    UiKitDisplayHandle, UiKitWindowHandle,
+    HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle, UiKitDisplayHandle,
+    UiKitWindowHandle,
 };
 use std::ffi::c_void;
 use std::ptr::NonNull;
@@ -114,9 +114,8 @@ pub unsafe fn attach_metal_layer(
     width: u32,
     height: u32,
 ) -> GupResult<SurfaceId> {
-    let view_nn = NonNull::new(ui_view).ok_or_else(|| {
-        GupError::resource_error("ui_view pointer is null")
-    })?;
+    let view_nn =
+        NonNull::new(ui_view).ok_or_else(|| GupError::resource_error("ui_view pointer is null"))?;
     let vc_nn = NonNull::new(ui_view_controller);
 
     let handle = Arc::new(IosSurfaceHandle {
@@ -159,4 +158,3 @@ pub fn handle_orientation_change(
     let h = new_height.max(1);
     ctx.resize_surface(surface_id, PhysicalSize::new(w, h))
 }
-
