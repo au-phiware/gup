@@ -263,6 +263,76 @@ impl LabelFormatter for NumericFormatter {
     }
 }
 
+/// Percentage formatter that converts 0.0–1.0 proportions to "0%"–"100%".
+///
+/// Unlike [`NumericFormatter::percentage`], which is a general-purpose
+/// formatter, `PercentFormatter` is purpose-built for axis labels on
+/// normalised data (e.g., normalised stacked area charts) and always
+/// multiplies by 100 before formatting.
+///
+/// # Examples
+///
+/// ```rust
+/// use gup::label::PercentFormatter;
+/// use gup::label::LabelFormatter;
+///
+/// let fmt = PercentFormatter::new();
+/// assert_eq!(fmt.format_value(0.0), "0%");
+/// assert_eq!(fmt.format_value(0.5), "50%");
+/// assert_eq!(fmt.format_value(1.0), "100%");
+/// ```
+#[derive(Debug, Clone)]
+pub struct PercentFormatter {
+    /// Number of decimal places to show after multiplying by 100.
+    pub precision: usize,
+}
+
+impl Default for PercentFormatter {
+    fn default() -> Self {
+        Self { precision: 0 }
+    }
+}
+
+impl PercentFormatter {
+    /// Create a new percent formatter with zero decimal places.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Create a percent formatter with the given decimal precision.
+    ///
+    /// ```rust
+    /// use gup::label::PercentFormatter;
+    /// use gup::label::LabelFormatter;
+    ///
+    /// let fmt = PercentFormatter::with_precision(1);
+    /// assert_eq!(fmt.format_value(0.123), "12.3%");
+    /// ```
+    pub fn with_precision(precision: usize) -> Self {
+        Self { precision }
+    }
+}
+
+impl LabelFormatter for PercentFormatter {
+    fn format_value(&self, value: f64) -> String {
+        let pct = value * 100.0;
+        format!("{:.prec$}%", pct, prec = self.precision)
+    }
+
+    fn preferred_spacing(&self) -> f32 {
+        40.0
+    }
+
+    fn estimate_width(&self, value: f64) -> f32 {
+        let formatted = self.format_value(value);
+        formatted.len() as f32 * 8.0
+    }
+
+    fn max_width(&self) -> f32 {
+        60.0
+    }
+}
+
 /// Date/time formatter for temporal data.
 #[derive(Debug, Clone)]
 pub struct DateTimeFormatter {
@@ -648,5 +718,43 @@ mod tests {
 
         let percentage = NumericFormatter::percentage(1, true);
         assert!(percentage.max_width() < currency.max_width());
+    }
+
+    #[test]
+    fn test_percent_formatter_basic() {
+        let fmt = PercentFormatter::new();
+        assert_eq!(fmt.format_value(0.0), "0%");
+        assert_eq!(fmt.format_value(0.5), "50%");
+        assert_eq!(fmt.format_value(1.0), "100%");
+    }
+
+    #[test]
+    fn test_percent_formatter_precision() {
+        let fmt = PercentFormatter::with_precision(1);
+        assert_eq!(fmt.format_value(0.0), "0.0%");
+        assert_eq!(fmt.format_value(0.5), "50.0%");
+        assert_eq!(fmt.format_value(0.123), "12.3%");
+        assert_eq!(fmt.format_value(1.0), "100.0%");
+    }
+
+    #[test]
+    fn test_percent_formatter_edge_cases() {
+        let fmt = PercentFormatter::new();
+        // Values beyond 0..1 still format correctly
+        assert_eq!(fmt.format_value(1.5), "150%");
+        assert_eq!(fmt.format_value(-0.1), "-10%");
+        // Very small values
+        assert_eq!(fmt.format_value(0.001), "0%");
+        // With precision these show up
+        let fmt_prec = PercentFormatter::with_precision(2);
+        assert_eq!(fmt_prec.format_value(0.001), "0.10%");
+    }
+
+    #[test]
+    fn test_percent_formatter_spacing() {
+        let fmt = PercentFormatter::new();
+        assert_eq!(fmt.preferred_spacing(), 40.0);
+        assert_eq!(fmt.max_width(), 60.0);
+        assert!(fmt.estimate_width(0.5) > 0.0);
     }
 }
