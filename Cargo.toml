@@ -208,6 +208,11 @@ required-features = ["gpu-bench"]
 name = "treemap_layout"
 harness = false
 
+[[bench]]
+name = "brush_region_query_benchmarks"
+harness = false
+required-features = ["gpu-bench"]
+
 [[example]]
 name = "hello_world"
 path = "examples/hello_world.rs"
