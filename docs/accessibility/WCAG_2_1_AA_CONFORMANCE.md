@@ -93,8 +93,8 @@ accessibility responsibilities fall on the host application that integrates Gup:
    attributes, and heading hierarchy are the host application's responsibility.
 2. **Form inputs** — Any input controls, labels, and error messages surrounding
    the visualization are provided by the host.
-3. **Layout and reflow** — Responsive layout and CSS reflow of the
-   visualization container are managed by the host.
+3. **Layout and reflow** — Responsive layout and CSS reflow of the visualization
+   container are managed by the host.
 4. **Platform audio** — While Gup provides a `SonificationEngine` API for data
    sonification, the host application must implement the actual audio synthesis.
 
@@ -109,17 +109,17 @@ developer.
 
 Gup provides the following built-in accessibility features:
 
-| Feature | Description |
-| --- | --- |
+| Feature                   | Description                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------------ |
 | **Screen reader support** | Automatic ARIA tree generation with roles, labels, and descriptions for all chart elements |
-| **Keyboard navigation** | Three modes: Sequential (Tab), Spatial (arrows), Data Dimension (value-ordered) |
-| **Focus indicators** | GPU-accelerated focus rings with high-contrast presets; DOM-based indicators on web |
-| **Contrast modes** | Standard, High Contrast, Low Vision, Colorblind (Tol palette), Pattern-based |
-| **Colour descriptions** | Human-readable colour names for screen readers (e.g., "dark grayish-blue") |
-| **Platform integration** | Native AT-SPI2 (Linux), macOS, Windows, and web DOM accessibility APIs |
-| **Live regions** | ARIA live region updates for dynamic data changes with urgency control |
-| **Data sonification** | API for mapping data dimensions to audio parameters |
-| **Pattern rendering** | Dots, Lines, Crosshatch patterns as alternatives to colour encoding |
+| **Keyboard navigation**   | Three modes: Sequential (Tab), Spatial (arrows), Data Dimension (value-ordered)            |
+| **Focus indicators**      | GPU-accelerated focus rings with high-contrast presets; DOM-based indicators on web        |
+| **Contrast modes**        | Standard, High Contrast, Low Vision, Colorblind (Tol palette), Pattern-based               |
+| **Colour descriptions**   | Human-readable colour names for screen readers (e.g., "dark grayish-blue")                 |
+| **Platform integration**  | Native AT-SPI2 (Linux), macOS, Windows, and web DOM accessibility APIs                     |
+| **Live regions**          | ARIA live region updates for dynamic data changes with urgency control                     |
+| **Data sonification**     | API for mapping data dimensions to audio parameters                                        |
+| **Pattern rendering**     | Dots, Lines, Crosshatch patterns as alternatives to colour encoding                        |
 
 ## Evaluation Methods
 

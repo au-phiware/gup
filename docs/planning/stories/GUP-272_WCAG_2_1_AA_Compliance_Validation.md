@@ -271,3 +271,101 @@ Statement and a consumer-facing accessibility testing guide.
 - 107 accessibility-specific tests pass
 - 2741 total lib tests pass
 - 13 new WCAG regression tests added
+
+## Retrospective
+
+**Completed**: 2025-07-26
+
+### Key Technical Learnings
+
+#### sRGB Linearization Is Critical for Accurate Contrast
+
+- **Challenge**: The existing `relative_luminance()` function used raw sRGB
+  channel values without gamma correction. This produced correct results for the
+  extremes (black = 0.0, white = 1.0) but was inaccurate for mid-range colours
+  where the sRGB gamma curve diverges most from linear.
+- **Solution**: Applied the standard sRGB linearization formula from the WCAG
+  specification: `c <= 0.04045 ? c/12.92 : ((c+0.055)/1.055)^2.4`.
+- **Pattern**: When implementing standards-based calculations, always use the
+  exact formula from the specification, not a "simplified" approximation. The
+  simplification saved negligible compute but introduced incorrect contrast
+  ratios for the most common colours.
+
+#### Many WCAG Criteria Are N/A for GPU Visualization Libraries
+
+- **Challenge**: 22 of 50 criteria don't apply to Gup because it doesn't produce
+  time-based media, form inputs, hyperlinks, or multi-page content. Determining
+  N/A requires careful justification to avoid incorrectly dismissing applicable
+  criteria.
+- **Solution**: Referenced W3C's WCAG2ICT guidance for applying WCAG to non-web
+  software. Each N/A verdict includes a specific justification explaining why the
+  criterion doesn't apply.
+- **Pattern**: For GPU rendering libraries, the applicable WCAG criteria cluster
+  around Perceivable (contrast, colour independence, text alternatives) and
+  Operable (keyboard access, focus management). Robust (ARIA, status messages) is
+  fully applicable. Understandable criteria mostly concern forms and navigation
+  patterns that don't apply.
+
+### Architectural Decisions
+
+#### Three-Tier CI Accessibility Strategy
+
+- **Decision**: Structured CI checks into three tiers: Rust unit tests (active),
+  AT-SPI2 validation (Linux, documented), and axe-core web scans (future,
+  documented).
+- **Reasoning**: The Rust unit test tier provides immediate value with zero
+  infrastructure cost — 107 tests run as part of `cargo test`. The AT-SPI2 and
+  axe-core tiers require platform-specific infrastructure (D-Bus, headless
+  browser) that would add CI complexity without proportional benefit at this
+  stage.
+- **Trade-off**: Web/WASM accessibility is validated only through code-level
+  checks, not end-to-end browser scans. This may miss DOM-level issues in the
+  web overlay.
+- **Future**: When a CI environment with headless Chromium is available, the
+  axe-core tier can be activated following the documentation in
+  `CI_ACCESSIBILITY.md`.
+
+#### "Supports" Rather Than "Supports with Exceptions"
+
+- **Decision**: Declared full "Supports" conformance rather than "Supports with
+  Exceptions".
+- **Reasoning**: The audit found zero Fail verdicts. All applicable criteria are
+  satisfied by the existing accessibility infrastructure. The sRGB linearization
+  fix was the only remediation needed, and it was applied within this story.
+- **Trade-off**: The "Supports" declaration carries more weight but also more
+  risk if edge cases are discovered later. The conformance statement documents
+  known limitations and host application responsibilities.
+- **Future**: The conformance statement should be re-audited when significant
+  new features are added (e.g., 3D visualizations, video export).
+
+### Development Workflow Insights
+
+- **Documentation-first approach worked well**: Creating the audit document
+  before writing code helped identify the exact gap (sRGB linearization)
+  efficiently. The systematic criterion-by-criterion review ensured nothing was
+  missed.
+- **Existing accessibility infrastructure was comprehensive**: The prior
+  Accessibility initiative stories (GUP-016, GUP-111, GUP-112, GUP-122,
+  GUP-124, GUP-127) had built a thorough accessibility system. The audit
+  confirmed this rather than uncovering major gaps.
+- **Disk space**: The full `cargo test` suite generates significant build
+  artifacts. Running `cargo clean` was necessary during final validation. For
+  large projects, incremental test runs (`cargo test --lib`) are more practical.
+- **Pre-existing lint issues**: The `gup-macros` crate has clippy warnings that
+  predate this story and are unrelated to accessibility. These should be
+  addressed in a dedicated code quality story.
+
+### Follow-up Stories
+
+No follow-up stories were required — the audit found zero Fail verdicts. However,
+the following areas could benefit from future attention:
+
+1. **Axe-core CI integration** — When a CI environment with headless Chromium is
+   available, activate the web/WASM accessibility scanning tier documented in
+   `CI_ACCESSIBILITY.md`. This would provide end-to-end validation of the DOM
+   overlay generated by GUP-117.
+
+2. **Sonification audio synthesis** — The `SonificationEngine` provides data
+   mapping APIs but no actual audio output. Implementing Web Audio API synthesis
+   for WASM and platform audio for native would complete the non-visual data
+   channel.
