@@ -305,3 +305,120 @@ conventions to keep the mobile platform layer coherent and maintainable.
 ### Test counts
 
 - 12 unit tests in `platform::android_touch::tests`
+
+## Retrospective
+
+**Completed**: 2025-07-25
+
+### Key Technical Learnings
+
+#### Mirroring the iOS Two-Crate Pattern for Android
+
+- **Challenge**: Designing the Android integration to be consistent with
+  the iOS pattern (GUP-270) while accounting for Android-specific
+  differences (JNI vs C ABI, SurfaceView vs CAMetalLayer, MotionEvent vs
+  UITouch).
+- **Solution**: Followed the exact same architecture: separate shim crate
+  (`gup-android` ↔ `gup-ios`), feature-gated platform modules in the main
+  crate (`android-shim` ↔ `ios-shim`), split pure-logic touch translation
+  (testable everywhere) from target-gated surface code.
+- **Pattern**: The two-crate + feature-flag pattern scales well to
+  additional platforms. Any new mobile platform (e.g. HarmonyOS) would
+  follow the same template: `platform/<os>_touch.rs` for testable logic,
+  `platform/<os>.rs` for surface code, `gup-<os>/` for FFI shim.
+
+#### Android Touch Coordinate Space vs iOS
+
+- **Challenge**: Android `MotionEvent` coordinates are in display pixels,
+  while iOS UITouch coordinates are in points (logical pixels).  The two
+  platforms use opposite conventions: Android reports raw pixels (multiply
+  by nothing), iOS reports points (multiply by scale to get pixels).
+- **Solution**: In the Android bridge, divide by `density` to convert from
+  display pixels to logical coordinates, mirroring the iOS pattern of
+  multiplying by `scale_factor`.  Both bridges produce coordinates in Gup's
+  density-independent logical space.
+- **Pattern**: Always document the coordinate space convention clearly in
+  the translation function's doc comments, and test with explicit density
+  values (1.0, 2.0, 3.0) to verify the scaling direction.
+
+#### Panic Safety at the JNI Boundary
+
+- **Challenge**: Rust panics unwinding across the JNI boundary would
+  corrupt the JVM and crash the process.  The iOS bridge (GUP-270) did
+  not implement catch_unwind.
+- **Solution**: Wrapped every JNI entry point in a `catch` helper that
+  uses `std::panic::catch_unwind`, logs the panic message to stderr, and
+  returns a safe default value (null pointer, false, or unit).
+- **Pattern**: For any FFI boundary (JNI, C ABI, WASM), always catch
+  panics at the outermost layer.  A small generic `catch(default, || {})`
+  wrapper makes this ergonomic.
+
+### Architectural Decisions
+
+#### Separate `gup-android` Crate vs Feature Flag in Root
+
+- **Decision**: Created a separate `gup-android` workspace member (like
+  `gup-ios`) rather than adding JNI functions behind a feature flag in the
+  root crate.
+- **Reasoning**: The root crate's `crate-type = ["cdylib", "rlib"]` would
+  conflict with the Android-specific `cdylib` output.  A separate crate
+  keeps the build clean and allows independent versioning.
+- **Trade-off**: Slightly more workspace members to maintain, but each
+  platform crate is tiny (~250 lines) and self-contained.
+- **Future**: The `cbindgen` story (GUP-273) can generate C headers from
+  both `gup-ios` and `gup-android` independently.
+
+#### Choreographer for Render Loop (Not Thread Spinning)
+
+- **Decision**: Used `Choreographer.FrameCallback` in `GupSurfaceView.kt`
+  for vsync-driven rendering instead of a dedicated render thread with
+  `Thread.sleep()`.
+- **Reasoning**: Choreographer provides frame pacing aligned with the
+  display refresh rate, avoids busy-waiting, and is the standard Android
+  pattern for SurfaceView rendering.  Mirrors the `CADisplayLink` approach
+  used in the iOS `GupChartView`.
+- **Trade-off**: Rendering happens on the UI thread via Choreographer
+  callbacks.  For heavy rendering, a dedicated GL thread with
+  `GLSurfaceView.Renderer` would be better, but that adds complexity.
+- **Future**: If performance becomes an issue, a follow-up story could
+  migrate to a dedicated render thread with a channel-based command queue.
+
+#### Timestamps: Milliseconds to Seconds Conversion
+
+- **Decision**: Convert Android `MotionEvent.getEventTime()` (milliseconds)
+  to seconds in the Rust bridge, matching the iOS convention where
+  `UITouch.timestamp` is already in seconds.
+- **Reasoning**: Gup's `TouchEvent.timestamp` should have a consistent
+  unit across all platforms.  Seconds with f64 precision provides ~292
+  million years of range with sub-microsecond precision.
+- **Trade-off**: Division by 1000.0 introduces a tiny floating-point
+  rounding error, but this is negligible for gesture recognition timing.
+- **Future**: If sub-millisecond precision matters, consider using integer
+  nanoseconds internally.
+
+### Development Workflow Insights
+
+- The iOS pattern (GUP-270) was an excellent template.  Having a clear
+  reference implementation reduced design decisions to "follow the
+  pattern" for most of the work.
+- Testing with `--features android-shim` on Linux confirmed the pure-logic
+  touch translation works without cross-compilation, exactly matching the
+  iOS approach.
+- Disk space was a recurring constraint during development.  Using
+  `CARGO_TARGET_DIR=/tmp/gup-target` was essential to avoid filling the
+  main partition.  This should be documented as a development tip.
+- The `pkg/.gitignore` pattern of whitelisting platform directories
+  (`!android/`, `!ios/`) keeps the `pkg/` directory clean while allowing
+  multiple platform wrappers to coexist.
+
+### Follow-up Stories
+
+1. **GUP-353: Android Chart Rendering Integration** — Wire chart builder
+   output into `gup_render_frame()` for actual data visualisation on
+   Android. Currently the render stub returns `true` without producing
+   visible output. Mirrors GUP-272 (iOS Chart Rendering Integration).
+
+2. **GUP-354: Android Real Device Testing** — Document real-device testing
+   workflow, performance baselines, and emulator-vs-device caveats.
+   Includes GPU vendor compatibility matrix (Adreno, Mali, PowerVR).
+   Mirrors GUP-274 (iOS Real Device Testing).

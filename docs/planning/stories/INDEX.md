@@ -999,6 +999,12 @@ iOS and Android platform support for GPU-accelerated Gup charts.
 - [GUP-274](GUP-274_iOS_Real_Device_Testing.md) 📋 — Document real-device
   testing workflow, performance baselines, and Simulator-vs-device caveats.
   Deps: GUP-270 ✅, GUP-272 📋.
+- [GUP-353](GUP-353_Android_Chart_Rendering_Integration.md) 📋 — Wire chart
+  builder output into `gup_render_frame()` for actual data visualisation on
+  Android. Deps: GUP-271 ✅, GUP-018 ✅, GUP-013 📋.
+- [GUP-354](GUP-354_Android_Real_Device_Testing.md) 📋 — Document Android
+  real-device testing workflow, performance baselines, and GPU vendor
+  compatibility matrix. Deps: GUP-271 ✅, GUP-353 📋.
 
 ## Documentation
 
