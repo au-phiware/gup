@@ -116,6 +116,21 @@ performance characteristics.
 Performance targets, profiling infrastructure, benchmarking workflow,
 optimization tips, and cross-platform considerations.
 
+## Mobile Platforms
+
+### [📱 Android Integration](../pkg/android/GupKotlin/)
+
+Kotlin/Java library for embedding Gup charts in Android applications.
+`GupSurfaceView` handles the `SurfaceHolder.Callback` lifecycle and
+`MotionEvent` touch forwarding via JNI to the `gup-android` Rust crate.
+See the [Android example](../examples/android/README.md) for build steps.
+
+### [🍎 iOS Integration](../pkg/ios/GupSwift/)
+
+Swift package for embedding Gup charts in UIKit/SwiftUI applications.
+`GupChartView` handles `CAMetalLayer` lifecycle and UITouch forwarding via
+C ABI to the `gup-ios` Rust crate.
+
 ## Accessibility
 
 ### [♿ WCAG 2.1 AA Conformance Statement](./accessibility/WCAG_2_1_AA_CONFORMANCE.md)
