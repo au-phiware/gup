@@ -96,6 +96,29 @@ performance characteristics.
 Performance targets, profiling infrastructure, benchmarking workflow,
 optimization tips, and cross-platform considerations.
 
+## Accessibility
+
+### [♿ WCAG 2.1 AA Conformance Statement](./accessibility/WCAG_2_1_AA_CONFORMANCE.md)
+
+Gup's WCAG 2.1 AA conformance declaration, including technologies relied upon,
+non-applicable criteria, and known limitations.
+
+### [📋 WCAG 2.1 AA Audit](./accessibility/WCAG_2_1_AA_AUDIT.md)
+
+Criterion-by-criterion evaluation of all 50 WCAG 2.1 Level A and AA success
+criteria with Pass/Fail/N-A verdicts and evidence.
+
+### [🔧 CI Accessibility Checks](./accessibility/CI_ACCESSIBILITY.md)
+
+How automated accessibility validation works in CI: test commands, failure
+interpretation, and severity levels.
+
+### [🧪 Accessibility Testing Guide](./accessibility/TESTING_GUIDE.md)
+
+Consumer-facing guide for validating WCAG compliance in applications built on
+Gup: axe-core scanning, screen reader testing, keyboard navigation, and colour
+contrast checking.
+
 ## Quick Navigation
 
 **New to Gup?** Start with [Mission and Goals](./MISSION_AND_GOALS.md) to
