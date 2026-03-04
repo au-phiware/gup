@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2024 Corin Lawson -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- No permissions required — GPU access is implicit via SurfaceView. -->
+</manifest>
