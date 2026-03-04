@@ -4,7 +4,7 @@
 
 **Title**: LAB/OKLab Perceptual Color Space Shader Functions **Epic**: Phase 1
 Initiative 2 - Unified Shader Function System **Priority**: Low **Story
-Points**: 5 **Status**: 📋 Planned
+Points**: 5 **Status**: 🚧 In Progress
 
 ## Context
 
