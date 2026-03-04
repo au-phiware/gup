@@ -13,6 +13,7 @@ use crate::buffer::{BufferType, GpuBuffer};
 use crate::error::GupResult;
 use crate::{MaybeSend, MaybeSync};
 use std::marker::PhantomData;
+use std::ops::{Add, Div, Mul, Sub};
 use wgpu::{Device, Queue};
 
 // Re-export macros for easier access
@@ -261,6 +262,128 @@ impl Vec3 {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Conversions: [f32; 3] <-> Vec3
+// ---------------------------------------------------------------------------
+
+impl From<[f32; 3]> for Vec3 {
+    #[inline]
+    fn from(array: [f32; 3]) -> Self {
+        Self {
+            x: array[0],
+            y: array[1],
+            z: array[2],
+            _padding: 0.0,
+        }
+    }
+}
+
+impl From<Vec3> for [f32; 3] {
+    #[inline]
+    fn from(vec: Vec3) -> Self {
+        [vec.x, vec.y, vec.z]
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Component-wise arithmetic: Vec3 op Vec3
+// ---------------------------------------------------------------------------
+
+impl Add for Vec3 {
+    type Output = Self;
+    #[inline]
+    fn add(self, rhs: Self) -> Self {
+        Self {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+            z: self.z + rhs.z,
+            _padding: 0.0,
+        }
+    }
+}
+
+impl Sub for Vec3 {
+    type Output = Self;
+    #[inline]
+    fn sub(self, rhs: Self) -> Self {
+        Self {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+            z: self.z - rhs.z,
+            _padding: 0.0,
+        }
+    }
+}
+
+impl Mul for Vec3 {
+    type Output = Self;
+    #[inline]
+    fn mul(self, rhs: Self) -> Self {
+        Self {
+            x: self.x * rhs.x,
+            y: self.y * rhs.y,
+            z: self.z * rhs.z,
+            _padding: 0.0,
+        }
+    }
+}
+
+impl Div for Vec3 {
+    type Output = Self;
+    #[inline]
+    fn div(self, rhs: Self) -> Self {
+        Self {
+            x: self.x / rhs.x,
+            y: self.y / rhs.y,
+            z: self.z / rhs.z,
+            _padding: 0.0,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Scalar arithmetic: Vec3 op f32  and  f32 op Vec3
+// ---------------------------------------------------------------------------
+
+impl Mul<f32> for Vec3 {
+    type Output = Self;
+    #[inline]
+    fn mul(self, rhs: f32) -> Self {
+        Self {
+            x: self.x * rhs,
+            y: self.y * rhs,
+            z: self.z * rhs,
+            _padding: 0.0,
+        }
+    }
+}
+
+impl Mul<Vec3> for f32 {
+    type Output = Vec3;
+    #[inline]
+    fn mul(self, rhs: Vec3) -> Vec3 {
+        Vec3 {
+            x: self * rhs.x,
+            y: self * rhs.y,
+            z: self * rhs.z,
+            _padding: 0.0,
+        }
+    }
+}
+
+impl Div<f32> for Vec3 {
+    type Output = Self;
+    #[inline]
+    fn div(self, rhs: f32) -> Self {
+        Self {
+            x: self.x / rhs,
+            y: self.y / rhs,
+            z: self.z / rhs,
+            _padding: 0.0,
+        }
+    }
+}
+
 impl ShaderType for Vec3 {
     fn wgsl_type_name() -> &'static str {
         "vec3<f32>"
@@ -343,6 +466,128 @@ impl Vec4 {
             y: 1.0,
             z: 1.0,
             w: 1.0,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Conversions: [f32; 4] <-> Vec4
+// ---------------------------------------------------------------------------
+
+impl From<[f32; 4]> for Vec4 {
+    #[inline]
+    fn from(array: [f32; 4]) -> Self {
+        Self {
+            x: array[0],
+            y: array[1],
+            z: array[2],
+            w: array[3],
+        }
+    }
+}
+
+impl From<Vec4> for [f32; 4] {
+    #[inline]
+    fn from(vec: Vec4) -> Self {
+        [vec.x, vec.y, vec.z, vec.w]
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Component-wise arithmetic: Vec4 op Vec4
+// ---------------------------------------------------------------------------
+
+impl Add for Vec4 {
+    type Output = Self;
+    #[inline]
+    fn add(self, rhs: Self) -> Self {
+        Self {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+            z: self.z + rhs.z,
+            w: self.w + rhs.w,
+        }
+    }
+}
+
+impl Sub for Vec4 {
+    type Output = Self;
+    #[inline]
+    fn sub(self, rhs: Self) -> Self {
+        Self {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+            z: self.z - rhs.z,
+            w: self.w - rhs.w,
+        }
+    }
+}
+
+impl Mul for Vec4 {
+    type Output = Self;
+    #[inline]
+    fn mul(self, rhs: Self) -> Self {
+        Self {
+            x: self.x * rhs.x,
+            y: self.y * rhs.y,
+            z: self.z * rhs.z,
+            w: self.w * rhs.w,
+        }
+    }
+}
+
+impl Div for Vec4 {
+    type Output = Self;
+    #[inline]
+    fn div(self, rhs: Self) -> Self {
+        Self {
+            x: self.x / rhs.x,
+            y: self.y / rhs.y,
+            z: self.z / rhs.z,
+            w: self.w / rhs.w,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Scalar arithmetic: Vec4 op f32  and  f32 op Vec4
+// ---------------------------------------------------------------------------
+
+impl Mul<f32> for Vec4 {
+    type Output = Self;
+    #[inline]
+    fn mul(self, rhs: f32) -> Self {
+        Self {
+            x: self.x * rhs,
+            y: self.y * rhs,
+            z: self.z * rhs,
+            w: self.w * rhs,
+        }
+    }
+}
+
+impl Mul<Vec4> for f32 {
+    type Output = Vec4;
+    #[inline]
+    fn mul(self, rhs: Vec4) -> Vec4 {
+        Vec4 {
+            x: self * rhs.x,
+            y: self * rhs.y,
+            z: self * rhs.z,
+            w: self * rhs.w,
+        }
+    }
+}
+
+impl Div<f32> for Vec4 {
+    type Output = Self;
+    #[inline]
+    fn div(self, rhs: f32) -> Self {
+        Self {
+            x: self.x / rhs,
+            y: self.y / rhs,
+            z: self.z / rhs,
+            w: self.w / rhs,
         }
     }
 }

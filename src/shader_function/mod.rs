@@ -640,6 +640,247 @@ mod tests {
         assert_eq!(v4.w, 4.0);
     }
 
+    // -----------------------------------------------------------------------
+    // Vec3 arithmetic and conversion tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn vec3_from_array() {
+        let v: Vec3 = [3.0, 4.0, 5.0].into();
+        assert_eq!(v, Vec3::new(3.0, 4.0, 5.0));
+        assert_eq!(v._padding, 0.0);
+    }
+
+    #[test]
+    fn vec3_into_array() {
+        let arr: [f32; 3] = Vec3::new(5.0, 6.0, 7.0).into();
+        assert_eq!(arr, [5.0, 6.0, 7.0]);
+    }
+
+    #[test]
+    fn vec3_array_roundtrip() {
+        let original = [1.5, 2.5, 3.5];
+        let v: Vec3 = original.into();
+        let back: [f32; 3] = v.into();
+        assert_eq!(back, original);
+    }
+
+    #[test]
+    fn vec3_add() {
+        let a = Vec3::new(1.0, 2.0, 3.0);
+        let b = Vec3::new(4.0, 5.0, 6.0);
+        assert_eq!(a + b, Vec3::new(5.0, 7.0, 9.0));
+    }
+
+    #[test]
+    fn vec3_sub() {
+        let a = Vec3::new(5.0, 8.0, 10.0);
+        let b = Vec3::new(2.0, 3.0, 4.0);
+        assert_eq!(a - b, Vec3::new(3.0, 5.0, 6.0));
+    }
+
+    #[test]
+    fn vec3_mul() {
+        let a = Vec3::new(2.0, 3.0, 4.0);
+        let b = Vec3::new(5.0, 6.0, 7.0);
+        assert_eq!(a * b, Vec3::new(10.0, 18.0, 28.0));
+    }
+
+    #[test]
+    fn vec3_div() {
+        let a = Vec3::new(10.0, 20.0, 30.0);
+        let b = Vec3::new(2.0, 5.0, 6.0);
+        assert_eq!(a / b, Vec3::new(5.0, 4.0, 5.0));
+    }
+
+    #[test]
+    fn vec3_mul_scalar() {
+        let v = Vec3::new(3.0, 4.0, 5.0);
+        assert_eq!(v * 2.0, Vec3::new(6.0, 8.0, 10.0));
+        assert_eq!(2.0 * v, Vec3::new(6.0, 8.0, 10.0));
+    }
+
+    #[test]
+    fn vec3_div_scalar() {
+        let v = Vec3::new(10.0, 20.0, 30.0);
+        assert_eq!(v / 2.0, Vec3::new(5.0, 10.0, 15.0));
+    }
+
+    #[test]
+    fn vec3_zero_arithmetic() {
+        let v = Vec3::new(5.0, 10.0, 15.0);
+        let z = Vec3::zero();
+        assert_eq!(v + z, v);
+        assert_eq!(v - z, v);
+        assert_eq!(v * z, z);
+    }
+
+    #[test]
+    fn vec3_negative_values() {
+        let a = Vec3::new(-1.0, -2.0, -3.0);
+        let b = Vec3::new(4.0, 5.0, 6.0);
+        assert_eq!(a + b, Vec3::new(3.0, 3.0, 3.0));
+        assert_eq!(a * b, Vec3::new(-4.0, -10.0, -18.0));
+    }
+
+    #[test]
+    fn vec3_padding_preserved() {
+        // Ensure _padding is always zero after all operations
+        let a = Vec3 {
+            x: 1.0,
+            y: 2.0,
+            z: 3.0,
+            _padding: 999.0, // Deliberately set non-zero padding
+        };
+        let b = Vec3::new(4.0, 5.0, 6.0);
+
+        assert_eq!((a + b)._padding, 0.0);
+        assert_eq!((a - b)._padding, 0.0);
+        assert_eq!((a * b)._padding, 0.0);
+        assert_eq!((a / b)._padding, 0.0);
+        assert_eq!((a * 2.0)._padding, 0.0);
+        assert_eq!((2.0 * a)._padding, 0.0);
+        assert_eq!((a / 2.0)._padding, 0.0);
+
+        // From array also preserves zero padding
+        let from_arr: Vec3 = [1.0, 2.0, 3.0].into();
+        assert_eq!(from_arr._padding, 0.0);
+    }
+
+    #[test]
+    fn vec3_large_values() {
+        let a = Vec3::new(1e10, 1e10, 1e10);
+        let b = Vec3::new(2e10, 2e10, 2e10);
+        assert_eq!(a + b, Vec3::new(3e10, 3e10, 3e10));
+    }
+
+    #[test]
+    fn vec3_bytemuck_pod() {
+        let v = Vec3::new(1.0, 2.0, 3.0);
+        let bytes: &[u8] = bytemuck::bytes_of(&v);
+        assert_eq!(bytes.len(), 16); // 4 fields × 4 bytes
+        let roundtrip: &Vec3 = bytemuck::from_bytes(bytes);
+        assert_eq!(*roundtrip, v);
+    }
+
+    #[test]
+    fn vec3_repr_c_layout() {
+        assert_eq!(std::mem::size_of::<Vec3>(), 16);
+        assert_eq!(std::mem::align_of::<Vec3>(), 4);
+        assert_eq!(std::mem::offset_of!(Vec3, x), 0);
+        assert_eq!(std::mem::offset_of!(Vec3, y), 4);
+        assert_eq!(std::mem::offset_of!(Vec3, z), 8);
+        assert_eq!(std::mem::offset_of!(Vec3, _padding), 12);
+    }
+
+    // -----------------------------------------------------------------------
+    // Vec4 arithmetic and conversion tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn vec4_from_array() {
+        let v: Vec4 = [3.0, 4.0, 5.0, 6.0].into();
+        assert_eq!(v, Vec4::new(3.0, 4.0, 5.0, 6.0));
+    }
+
+    #[test]
+    fn vec4_into_array() {
+        let arr: [f32; 4] = Vec4::new(5.0, 6.0, 7.0, 8.0).into();
+        assert_eq!(arr, [5.0, 6.0, 7.0, 8.0]);
+    }
+
+    #[test]
+    fn vec4_array_roundtrip() {
+        let original = [1.5, 2.5, 3.5, 4.5];
+        let v: Vec4 = original.into();
+        let back: [f32; 4] = v.into();
+        assert_eq!(back, original);
+    }
+
+    #[test]
+    fn vec4_add() {
+        let a = Vec4::new(1.0, 2.0, 3.0, 4.0);
+        let b = Vec4::new(5.0, 6.0, 7.0, 8.0);
+        assert_eq!(a + b, Vec4::new(6.0, 8.0, 10.0, 12.0));
+    }
+
+    #[test]
+    fn vec4_sub() {
+        let a = Vec4::new(5.0, 8.0, 10.0, 12.0);
+        let b = Vec4::new(2.0, 3.0, 4.0, 5.0);
+        assert_eq!(a - b, Vec4::new(3.0, 5.0, 6.0, 7.0));
+    }
+
+    #[test]
+    fn vec4_mul() {
+        let a = Vec4::new(2.0, 3.0, 4.0, 5.0);
+        let b = Vec4::new(6.0, 7.0, 8.0, 9.0);
+        assert_eq!(a * b, Vec4::new(12.0, 21.0, 32.0, 45.0));
+    }
+
+    #[test]
+    fn vec4_div() {
+        let a = Vec4::new(10.0, 20.0, 30.0, 40.0);
+        let b = Vec4::new(2.0, 5.0, 6.0, 8.0);
+        assert_eq!(a / b, Vec4::new(5.0, 4.0, 5.0, 5.0));
+    }
+
+    #[test]
+    fn vec4_mul_scalar() {
+        let v = Vec4::new(3.0, 4.0, 5.0, 6.0);
+        assert_eq!(v * 2.0, Vec4::new(6.0, 8.0, 10.0, 12.0));
+        assert_eq!(2.0 * v, Vec4::new(6.0, 8.0, 10.0, 12.0));
+    }
+
+    #[test]
+    fn vec4_div_scalar() {
+        let v = Vec4::new(10.0, 20.0, 30.0, 40.0);
+        assert_eq!(v / 2.0, Vec4::new(5.0, 10.0, 15.0, 20.0));
+    }
+
+    #[test]
+    fn vec4_zero_arithmetic() {
+        let v = Vec4::new(5.0, 10.0, 15.0, 20.0);
+        let z = Vec4::zero();
+        assert_eq!(v + z, v);
+        assert_eq!(v - z, v);
+        assert_eq!(v * z, z);
+    }
+
+    #[test]
+    fn vec4_negative_values() {
+        let a = Vec4::new(-1.0, -2.0, -3.0, -4.0);
+        let b = Vec4::new(5.0, 6.0, 7.0, 8.0);
+        assert_eq!(a + b, Vec4::new(4.0, 4.0, 4.0, 4.0));
+        assert_eq!(a * b, Vec4::new(-5.0, -12.0, -21.0, -32.0));
+    }
+
+    #[test]
+    fn vec4_large_values() {
+        let a = Vec4::new(1e10, 1e10, 1e10, 1e10);
+        let b = Vec4::new(2e10, 2e10, 2e10, 2e10);
+        assert_eq!(a + b, Vec4::new(3e10, 3e10, 3e10, 3e10));
+    }
+
+    #[test]
+    fn vec4_bytemuck_pod() {
+        let v = Vec4::new(1.0, 2.0, 3.0, 4.0);
+        let bytes: &[u8] = bytemuck::bytes_of(&v);
+        assert_eq!(bytes.len(), 16);
+        let roundtrip: &Vec4 = bytemuck::from_bytes(bytes);
+        assert_eq!(*roundtrip, v);
+    }
+
+    #[test]
+    fn vec4_repr_c_layout() {
+        assert_eq!(std::mem::size_of::<Vec4>(), 16);
+        assert_eq!(std::mem::align_of::<Vec4>(), 4);
+        assert_eq!(std::mem::offset_of!(Vec4, x), 0);
+        assert_eq!(std::mem::offset_of!(Vec4, y), 4);
+        assert_eq!(std::mem::offset_of!(Vec4, z), 8);
+        assert_eq!(std::mem::offset_of!(Vec4, w), 12);
+    }
+
     #[test]
     fn test_linear_scale_shader_function() {
         let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
