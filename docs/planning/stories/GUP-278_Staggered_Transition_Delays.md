@@ -3,7 +3,8 @@
 ## Story Overview
 
 **Initiative**: Selection API  
-**Status**: 🚧 In Progress  
+**Status**: ✅ Complete  
+**Completed**: 2025-07-26
 **Created**: 2025-07-25
 
 ## Context
@@ -27,15 +28,15 @@ infrastructure.
 
 ## Acceptance Criteria
 
-- [ ] `TransitionBuilder::delay_fn(f: impl Fn(usize, &T) -> u64)` accepts a
+- [x] `TransitionBuilder::delay_fn(f: impl Fn(usize, &T) -> u64)` accepts a
       closure that receives the element index and data item, returning a
       per-element delay in milliseconds.
-- [ ] Per-element delays are stored in `ElementTransition` alongside from/to
+- [x] Per-element delays are stored in `ElementTransition` alongside from/to
       values.
-- [ ] When both `.delay()` and `.delay_fn()` are specified, the global delay is
+- [x] When both `.delay()` and `.delay_fn()` are specified, the global delay is
       added to each per-element delay.
-- [ ] The scatter plot example is extended to show staggered entry.
-- [ ] Unit test verifies per-element delays are correctly computed.
+- [x] The scatter plot example is extended to show staggered entry.
+- [x] Unit test verifies per-element delays are correctly computed.
 
 ## Dependencies
 
@@ -54,8 +55,41 @@ infrastructure.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+
+## Implementation Summary
+
+### What Was Implemented
+
+- **`DelayFn<T>` type** — Type-erased closure `(usize, &T) -> u64` for
+  computing per-element delays, with `Send + Sync` on native targets.
+- **`ElementTransition.delay_ms`** — Optional `u64` field storing the
+  per-element delay computed by the delay function.
+- **`TransitionBuilder::delay_fn()`** — Fluent API method accepting a closure
+  that receives `(index, &data_item)` and returns a per-element delay in
+  milliseconds.
+- **`CommittedTransition` helper methods**:
+  - `effective_delay(el)` — global delay + per-element delay
+  - `max_effective_delay()` — maximum effective delay across all elements
+  - `total_ms()` — max effective delay + duration (the true transition end time)
+- **Per-element interpolation** — `build_transition_instances` now computes
+  `eased_t` per element using its effective delay, enabling stagger effects.
+- **Staggered completion** — `tick_transition` uses `total_ms()` so the
+  transition doesn't complete until the last-delayed element finishes.
+
+### Key Files Changed
+
+| File | Change |
+|------|--------|
+| `src/transition/builder.rs` | `DelayFn`, `delay_fn()`, `delay_ms` field, `CommittedTransition` helpers, 8 new tests |
+| `src/selection.rs` | Per-element `eased_t` in `build_transition_instances`, staggered `tick_transition`, 3 new tests |
+| `examples/data_transition_scatter.rs` | Staggered entry demo section |
+
+### Test Counts
+
+- **11 new tests** (8 in builder, 3 in selection)
+- **2777 total lib tests** all passing

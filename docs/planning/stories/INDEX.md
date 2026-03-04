@@ -170,7 +170,7 @@ data, and parallel output.
 - [GUP-277](GUP-277_GPU_Render_Loop_Transition_Integration.md) ✅ — Wire
   CommittedTransition into the GPU render loop with KeyframeAnimation instances
   for automatic per-frame interpolation. Deps: GUP-276 ✅.
-- [GUP-278](GUP-278_Staggered_Transition_Delays.md) 🚧 — Per-element delay
+- [GUP-278](GUP-278_Staggered_Transition_Delays.md) ✅ — Per-element delay
   offsets via `.delay_fn()` for cascading/staggered animation effects. Deps:
   GUP-276 ✅.
 - [GUP-355](GUP-355_GPU_Compute_Shader_Transition_Interpolation.md) 💡 — GPU
