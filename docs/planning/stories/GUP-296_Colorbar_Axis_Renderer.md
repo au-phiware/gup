@@ -3,8 +3,9 @@
 ## Story Overview
 
 **Initiative**: Chart Builders  
-**Status**: 🚧 In Progress  
-**Created**: 2026-03-03
+**Status**: ✅ Complete  
+**Created**: 2026-03-03  
+**Completed**: 2025-07-18
 
 ## Context
 
@@ -28,26 +29,26 @@ colours.
 
 ## Acceptance Criteria
 
-- [ ] A `ColorbarRenderer` struct renders a thin vertical or horizontal gradient
+- [x] A `ColorbarRenderer` struct renders a thin vertical or horizontal gradient
       strip adjacent to the plot area.
-- [ ] The gradient is filled using the same `ColorScale` as the chart cells,
+- [x] The gradient is filled using the same `ColorScale` as the chart cells,
       ensuring visual consistency.
-- [ ] Tick marks and numeric labels are placed along the colorbar using the
+- [x] Tick marks and numeric labels are placed along the colorbar using the
       `TickGenerator` from GUP-093.
-- [ ] The colorbar inherits the fill domain from the heatmap (or from
+- [x] The colorbar inherits the fill domain from the heatmap (or from
       `.fill_domain()` overrides).
-- [ ] Rendering is suppressed when `.colorbar(false)` is set on the builder.
-- [ ] The colorbar is composable: it can be added to any `ComposedChart` that
+- [x] Rendering is suppressed when `.colorbar(false)` is set on the builder.
+- [x] The colorbar is composable: it can be added to any `ComposedChart` that
       has a `ColorScale`.
 
 ## Technical Tasks
 
-- [ ] Create `src/chart_builder/colorbar.rs` with `ColorbarRenderer`.
-- [ ] Implement GPU-instanced gradient strip rendering using Rectangle marks.
-- [ ] Integrate with `TickGenerator` for tick marks and labels.
-- [ ] Wire into `ComposedChart` rendering pipeline when `config.color_scale` and
+- [x] Create `src/chart_builder/colorbar.rs` with `ColorbarRenderer`.
+- [x] Implement GPU-instanced gradient strip rendering using Rectangle marks.
+- [x] Integrate with `TickGenerator` for tick marks and labels.
+- [x] Wire into `ComposedChart` rendering pipeline when `config.color_scale` and
       `show_colorbar` are both set.
-- [ ] Add unit tests and visual validation.
+- [x] Add unit tests and visual validation.
 
 ## Dependencies
 
@@ -70,7 +71,47 @@ colours.
 
 ## Definition of Done
 
-- [ ] All acceptance criteria met
-- [ ] Tests pass
-- [ ] Visual validation with heatmap example
-- [ ] Documentation updated
+- [x] All acceptance criteria met
+- [x] Tests pass
+- [x] Visual validation with heatmap example
+- [x] Documentation updated
+
+## Implementation Summary
+
+### What Was Implemented
+
+A reusable `ColorbarRenderer` component that generates a gradient-filled strip
+with tick marks and numeric labels, integrated into the `ComposedChart`
+rendering pipeline.
+
+### Key Files Changed
+
+| File | Change |
+| --- | --- |
+| `src/chart_builder/colorbar.rs` | **New** — `ColorbarRenderer`, `ColorbarConfig`, `ColorbarGeometry`, `ColorbarOrientation` |
+| `src/chart_builder.rs` | Added `show_colorbar` to `ChartConfig`, `GradientStripPipeline` (TriangleList), colorbar integration in `ComposedChart` (`prepare_draw_commands`, `prepare_tick_pipeline`, `queue_chart_text`, `draw_colorbar_gradient`) |
+| `src/chart_builder/builders/heatmap/mod.rs` | Propagate `show_colorbar` from `HeatmapBuilder` to `ChartConfig` during `build_with_data` |
+| `examples/heatmap_chart.rs` | Added `.colorbar(true)` and colorbar status output |
+
+### Architecture
+
+- `ColorbarRenderer` is a standalone component that takes a `ColorScale` and
+  produces `ColorbarGeometry` (gradient triangles, tick instances, outline
+  lines, labels).
+- CPU-side gradient sampling via linear interpolation over `ColorGradientStorage`
+  stops, matching the GPU shader's behaviour.
+- `GradientStripPipeline` uses TriangleList topology with the same `basic.wgsl`
+  shader as axis lines, but draws filled quads instead of line segments.
+- Colorbar outline and ticks are merged into existing axis-line and tick buffers
+  for efficient single-pass rendering.
+- Colorbar labels are queued via the standard `TextRenderer` path in
+  `queue_chart_text()`.
+
+### Test Counts
+
+- 11 unit tests in `colorbar::tests` (colour sampling, geometry generation,
+  configuration, multiple palettes)
+- 10 integration tests in `tests_colorbar` (ComposedChart integration, domain
+  inheritance, composability, suppression)
+- 2 heatmap propagation tests (show_colorbar true/false through build pipeline)
+- **Total: 23 new tests, all passing**

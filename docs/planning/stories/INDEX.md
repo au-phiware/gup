@@ -177,9 +177,9 @@ data, and parallel output.
   compute shader path for transition interpolation at scale (10K+ elements).
   Deps: GUP-277 ✅.
 - [GUP-356](GUP-356_InteractionSystem_Dynamic_Result_Buffer.md) 💡 — Dynamically
-  grow the InteractionSystem result buffer when query results exceed max_results,
-  enabling accurate GPU region queries on 1M+ mark datasets. Deps: GUP-286 ✅,
-  GUP-012 ✅.
+  grow the InteractionSystem result buffer when query results exceed
+  max_results, enabling accurate GPU region queries on 1M+ mark datasets. Deps:
+  GUP-286 ✅, GUP-012 ✅.
 
 ## Shader Function System
 
@@ -749,7 +749,7 @@ integration, pipeline caching.
   ✅, GUP-014 ✅.
 - [GUP-295](GUP-295_Line_Chart_Point_Markers.md) 💡 — Optional circle point
   markers at each data vertex on line charts. Deps: GUP-246 ✅, GUP-251 ✅.
-- [GUP-296](GUP-296_Colorbar_Axis_Renderer.md) 🚧 — Colorbar axis renderer: thin
+- [GUP-296](GUP-296_Colorbar_Axis_Renderer.md) ✅ — Colorbar axis renderer: thin
   gradient-filled rectangle with tick marks and labels for colour-scale legends.
   Deps: GUP-248 ✅, GUP-093 ✅, GUP-255 ✅.
 - [GUP-298](GUP-298_Filled_Polygon_Mark.md) 📋 — FilledPolygon mark type for
