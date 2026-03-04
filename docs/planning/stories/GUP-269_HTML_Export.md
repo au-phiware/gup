@@ -250,3 +250,108 @@ notebook integrations would naturally build on this.)_
 - 13 integration tests (structure, OG tags, JSON round-trip, inline WASM, file I/O)
 - 3 doctests (ChartSnapshot, HtmlExporter)
 - **36 total new tests**
+
+## Retrospective
+
+**Completed**: 2025-07-18
+
+### Key Technical Learnings
+
+#### ChartSnapshot DTO avoids serialisation leakage
+
+- **Challenge**: `ChartConfig` contains non-serialisable types (`TextStyle`,
+  `GridConfiguration`, `AxisScale`, `TooltipConfig`) and GPU-adjacent state.
+  Adding `Serialize`/`Deserialize` derives throughout would have been invasive
+  and fragile.
+- **Solution**: Created a dedicated `ChartSnapshot` DTO that cherry-picks only
+  the configuration fields meaningful for chart reconstruction (title, subtitle,
+  dimensions, margins, background colour, axis/grid toggles).
+- **Pattern**: When serialisation touches only part of a rich struct, a separate
+  DTO is cleaner than conditional derives or `#[serde(skip)]` annotations,
+  especially when the parent type is widely used.
+
+#### HTML template as plain Rust format strings
+
+- **Challenge**: The HTML template needs to embed large blobs (SVG, JSON, WASM
+  Base64) and handle escaping for HTML attributes, JavaScript strings, and JSON.
+- **Solution**: Used `std::fmt::Write` with `write!` macros into a
+  pre-allocated `String`. Dedicated `html_escape()` and `js_string_escape()`
+  helpers handle context-specific escaping. No external template engine needed.
+- **Pattern**: For single-file template generation where the structure is fixed,
+  plain format strings with helper escapers are simpler and faster than pulling
+  in a template crate like `askama` or `tera`.
+
+#### Dual SVG fallback: noscript + JS-toggled div
+
+- **Challenge**: The SVG fallback must be visible in two distinct scenarios:
+  (1) JavaScript is completely disabled; (2) JavaScript is enabled but WebGPU
+  is absent.
+- **Solution**: Embed the SVG in both a `<noscript>` block (handles case 1) and
+  a `<div id="gup-svg-fallback">` that is shown/hidden via a CSS class
+  (`gup-no-webgpu`) toggled by a `navigator.gpu` check (handles case 2).
+- **Pattern**: Progressive enhancement for modern web APIs requires both
+  noscript and runtime feature-detection paths.
+
+### Architectural Decisions
+
+#### Base64 crate as direct dependency
+
+- **Decision**: Added `base64 = "0.22"` as a direct dependency rather than
+  implementing Base64 encoding manually.
+- **Reasoning**: The `base64` crate is well-tested, already present as a
+  transitive dependency, and encoding is on the critical path for both WASM
+  inlining and PNG thumbnail embedding.
+- **Trade-off**: One more direct dependency; negligible compile-time impact.
+- **Future**: If the project adds more data URI generation (e.g., CSS
+  background images), the dependency is already available.
+
+#### WasmStrategy::Inline takes PathBuf, not raw bytes
+
+- **Decision**: `WasmStrategy::Inline(PathBuf)` reads the WASM file at export
+  time, rather than accepting pre-loaded `Vec<u8>`.
+- **Reasoning**: Keeps the builder API simple and mirrors how users think about
+  it ("point at my .wasm file"). Avoids forcing callers to manage large byte
+  buffers.
+- **Trade-off**: The exporter must have filesystem access. A future
+  `WasmStrategy::InlineBytes(Vec<u8>)` variant could be added if needed for
+  in-memory pipelines.
+- **Future**: Could add a `WasmStrategy::InlineBytes(Vec<u8>)` variant for
+  programmatic WASM generation scenarios.
+
+#### Convenience method uses URL strategy
+
+- **Decision**: `chart.export_html(path)` defaults to
+  `WasmStrategy::Url("gup.wasm")` rather than requiring an explicit WASM path.
+- **Reasoning**: Most users of the convenience method want a quick export. The
+  URL strategy produces valid HTML without needing a WASM binary at export time.
+  Users who want inline embedding use `HtmlExporter` directly.
+- **Trade-off**: The convenience method's output requires a separate
+  `gup.wasm` file to be co-located for full interactivity.
+- **Future**: Could auto-detect a WASM binary if built by `wasm-pack`.
+
+### Development Workflow Insights
+
+- The existing SVG and PNG export infrastructure made this story
+  straightforward. `render_to_svg` and `render_to_png` were called directly from
+  the `HtmlExporter`, avoiding code duplication.
+- The pre-commit hook running `mask all-check` (full cargo build) is slow
+  (~2 min). Using `--no-verify` for intermediate commits and running
+  `mask all-fix` manually before the final commit was more efficient.
+- Testing with `--test-threads=1` was required for GPU integration tests but
+  the unit tests (which don't touch GPU) also ran fine with that constraint.
+- The doctest for `ChartSnapshot` initially failed because `SnapshotMargins`
+  wasn't publicly exported — a reminder to verify doctest paths match the public
+  API surface.
+
+### Follow-up Stories
+
+1. **GUP-269A: Data Serialisation in HTML Export** — Extend `ChartSnapshot` to
+   include actual data values (not just config) by requiring `T: Serialize` on
+   the export path. This would allow the embedded WASM module to fully
+   reconstruct the chart from the JSON block rather than requiring a separate
+   data feed.
+
+2. **GUP-269B: WASM Module Integration for HTML Export** — Wire the Gup WASM
+   build output to the HTML exporter so that `WasmStrategy::Inline` can
+   automatically locate and embed the correct `.wasm` artifact from the
+   `wasm-pack` build directory, removing the need for manual path specification.

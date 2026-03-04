@@ -957,6 +957,13 @@ PNG, HTML), and platform targets.
 - [GUP-269](GUP-269_HTML_Export.md) ✅ — HtmlExporter generating a single-file
   interactive HTML page with embedded WASM, data JSON, SVG fallback, and OG
   thumbnail meta tags. Deps: GUP-266 ✅, GUP-268 ✅, GUP-172 ✅.
+- [GUP-269A](GUP-269A_Data_Serialisation_HTML_Export.md) 📋 — Extend
+  ChartSnapshot to include actual data values when T: Serialize, making the HTML
+  export fully self-contained. Deps: GUP-269 ✅.
+- [GUP-269B](GUP-269B_WASM_Module_Integration_HTML_Export.md) 📋 — Wire WASM
+  build auto-discovery and JavaScript↔WASM data passing so the exported HTML
+  renders interactively without manual setup. Deps: GUP-269 ✅, GUP-172 ✅,
+  GUP-269A 📋.
 
 ## Mobile
 
