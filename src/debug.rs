@@ -52,6 +52,7 @@ pub mod ci_performance;
 pub mod debug_buffer_wrapper;
 pub mod interaction_visualizer;
 pub mod layout_validator;
+pub mod memory_bandwidth;
 pub mod memory_profiler;
 pub mod resource_graph;
 pub mod shader_profiler;
@@ -71,6 +72,7 @@ pub use ci_performance::{
     RegressionSeverity as CiRegressionSeverity, TestResult,
 };
 pub use layout_validator::*;
+pub use memory_bandwidth::*;
 pub use memory_profiler::*;
 // Export resource graph types with explicit names to avoid conflicts with error::ResourceId
 pub use resource_graph::{
