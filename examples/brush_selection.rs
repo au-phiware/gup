@@ -1,11 +1,16 @@
 // Copyright (C) 2024 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Brush selection demo — rectangular drag-to-select (GUP-278).
+//! Brush selection demo — rectangular drag-to-select (GUP-278, GUP-286).
 //!
 //! Renders 1 000 coloured circles and attaches a [`BrushBehavior`] so
-//! the user can drag a rectangle to select data points. Selected IDs
-//! are printed to stdout on release.
+//! the user can drag a rectangle to select data points.  On release the
+//! brush performs a GPU-accelerated region query via
+//! [`MarkSelectionSystem::rect_hit_test_gpu`] when an
+//! [`InteractionSystem`] is available, falling back to the CPU
+//! [`filter_by_rect`] path otherwise.
+//!
+//! Selected IDs are printed to stdout on release.
 //!
 //! # Controls
 //!
@@ -14,11 +19,11 @@
 
 use gup::brush::{BrushBehavior, BrushEvent, BrushOverlayRenderer, BrushStyle};
 use gup::event::ViewportTransform;
-use gup::interaction::Vec2;
+use gup::interaction::{InteractionSystem, Vec2};
 use gup::mark::circle::{Circle, CircleInstance};
 use gup::mark_selection::MarkSelectionSystem;
 use gup::selection::Selection;
-use gup::{GupContext, PipelineCache};
+use gup::{GupContext, PipelineCache, RenderContext};
 use std::sync::Arc;
 use std::time::Instant;
 use wgpu::Color;
@@ -92,6 +97,7 @@ struct App {
     brush: BrushBehavior,
     overlay_renderer: Option<BrushOverlayRenderer>,
     mark_system: MarkSelectionSystem,
+    interaction: Option<InteractionSystem>,
     viewport: ViewportTransform,
 
     win_size: [f32; 2],
@@ -147,6 +153,7 @@ impl App {
             brush,
             overlay_renderer: None,
             mark_system,
+            interaction: None,
             viewport: ViewportTransform::default(),
             win_size: [800.0, 600.0],
             mouse_pos: [0.0; 2],
@@ -247,7 +254,7 @@ impl App {
                     ""
                 };
                 w.set_title(&format!(
-                    "GUP-285 Brush Selection — {NUM_POINTS} pts | {fps:.0} FPS{brush_status}"
+                    "GUP-286 Brush Selection — {NUM_POINTS} pts | {fps:.0} FPS{brush_status}"
                 ));
             }
             self.frame_count = 0;
@@ -264,7 +271,7 @@ impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         pollster::block_on(async {
             let attrs = WindowAttributes::default()
-                .with_title(format!("GUP-285 Brush Selection — {NUM_POINTS} points"))
+                .with_title(format!("GUP-286 Brush Selection — {NUM_POINTS} points"))
                 .with_inner_size(winit::dpi::LogicalSize::new(800, 600));
             let window = match event_loop.create_window(attrs) {
                 Ok(w) => Arc::new(w),
@@ -276,6 +283,18 @@ impl ApplicationHandler for App {
             };
             match GupContext::with_surface(Arc::clone(&window)).await {
                 Ok(ctx) => {
+                    // Create an InteractionSystem for GPU-accelerated brush queries.
+                    let render_ctx = RenderContext::new().await.unwrap();
+                    match InteractionSystem::new(&render_ctx).await {
+                        Ok(is) => {
+                            self.interaction = Some(is);
+                            println!("  ✓ GPU interaction system ready (GUP-286)");
+                        }
+                        Err(e) => {
+                            eprintln!("  ⚠ GPU interaction init failed, using CPU: {e}");
+                        }
+                    }
+
                     self.context = Some(ctx);
                     self.window = Some(window);
                     self.selection = Some(Selection::<Point, Circle>::from_data(self.data.clone()));
@@ -369,11 +388,13 @@ impl ApplicationHandler for App {
                 ..
             } => {
                 let data_pos = self.screen_to_data(self.mouse_pos[0], self.mouse_pos[1]);
-                self.brush.on_pointer_up(
+                // Use the GPU-accelerated async path (GUP-286).
+                pollster::block_on(self.brush.on_pointer_up_async(
                     Vec2::new(data_pos[0], data_pos[1]),
                     &self.viewport,
                     Some(&self.mark_system),
-                );
+                    self.interaction.as_mut(),
+                ));
                 self.needs_redraw = true;
                 if let Some(w) = &self.window {
                     w.request_redraw();
@@ -395,7 +416,7 @@ impl ApplicationHandler for App {
 // ---------------------------------------------------------------------------
 
 fn main() {
-    println!("GUP-285 Brush Selection Demo");
+    println!("GUP-286 Brush Selection Demo (GPU-accelerated)");
     println!("  Left-click drag to select data points");
     println!("  Q or Escape to quit");
     println!("  Rendering {NUM_POINTS} points");
