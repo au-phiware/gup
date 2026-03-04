@@ -2,7 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Chart Builders **Status**: 🚧 In Progress **Created**: 2025-07-15
+**Initiative**: Chart Builders **Status**: ✅ Complete **Created**: 2025-07-15
+**Completed**: 2025-07-27
 
 ## Context
 
@@ -25,13 +26,13 @@ grid resolutions as low as 8 × 8.
 
 ## Acceptance Criteria
 
-- [ ] Each filled-contour band's polygon boundary matches the interpolated
+- [x] Each filled-contour band's polygon boundary matches the interpolated
       iso-contour line to sub-pixel accuracy
-- [ ] Bands tile seamlessly with no visible gaps or overlaps at any grid
+- [x] Bands tile seamlessly with no visible gaps or overlaps at any grid
       resolution ≥ 4
-- [ ] The exact decomposition handles all 16 marching-squares cases plus both
+- [x] The exact decomposition handles all 16 marching-squares cases plus both
       saddle-point configurations
-- [ ] Visual comparison of cell-average vs exact fill at 16×16 shows clearly
+- [x] Visual comparison of cell-average vs exact fill at 16×16 shows clearly
       smoother boundaries in the exact version
 
 ## Dependencies
@@ -50,6 +51,44 @@ grid resolutions as low as 8 × 8.
 
 ## Definition of Done
 
-- [ ] All acceptance criteria satisfied
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
+- [x] All acceptance criteria satisfied
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+
+## Implementation Summary
+
+### What Was Implemented
+
+Replaced the cell-average filled contour approach in `filled_contour_bands()`
+with exact marching-squares polygon decomposition. Each cell now emits precisely
+the polygon region where the scalar field lies within band boundaries, producing
+smooth contour fills even at grid resolutions as low as 4×4.
+
+### Key Components
+
+- **`BandState` enum**: Classifies each cell corner as Below, Inside, or Above
+  relative to a band `[low, high)`.
+- **`cell_band_polygons()`**: Per-cell entry point that returns zero or more band
+  polygons, handling both normal and saddle configurations.
+- **`boundary_walk_quad()`**: Walks the 4 cell edges collecting band polygon
+  vertices in winding order for non-saddle cells.
+- **`triangle_band_polygon()`**: Handles triangle sub-cells produced by saddle
+  subdivision; triangles have no saddle ambiguity.
+- **`emit_edge_vertices()`**: Core edge-processing logic: emits the starting
+  corner (if Inside) plus any threshold crossing points in traversal order.
+  Covers all 9 state-transition combinations (B↔B, B↔I, B↔A, etc.).
+- **`fan_triangulate()`**: Converts convex polygons to triangle strips via fan
+  from the first vertex.
+- **Saddle handling**: Cells with alternating diagonal corner states are
+  subdivided into 4 triangles through the cell centre, eliminating topological
+  ambiguity.
+
+### Files Changed
+
+- `src/chart_builder/builders/density.rs` — Replaced `filled_contour_bands`
+  implementation (+733 lines, −27 lines); added 23 new tests.
+
+### Test Counts
+
+- 46 density module tests (23 existing + 23 new), all passing.
+- Full test suite: 233+ tests pass, 0 failures.
