@@ -17,6 +17,7 @@ use super::density::DensityConfig;
 use crate::error::{GupError, GupResult};
 use crate::render::RenderContext;
 use crate::shader_function::{KDEResult2D, KernelFunction, MinMax, Percentile, StandardDeviation};
+use std::sync::{Arc, Mutex};
 use wgpu::util::DeviceExt;
 use wgpu::*;
 
@@ -192,7 +193,7 @@ impl GpuDensityCompute {
     ///
     /// The returned [`KDEResult2D`] is directly comparable to the CPU
     /// reference produced by [`super::density::compute_density_2d`].
-    pub async fn compute_kde(
+    pub fn compute_kde(
         &self,
         samples: &[(f32, f32)],
         config: &DensityConfig,
@@ -333,9 +334,8 @@ impl GpuDensityCompute {
         let _ = self.device.poll(PollType::WaitForSubmissionIndex(sub));
 
         // Map the staging buffer.
-        let densities = self
-            .read_texture_staging(&staging, cols as usize, rows as usize, padded_row as usize)
-            .await?;
+        let densities =
+            self.read_texture_staging(&staging, cols as usize, rows as usize, padded_row as usize)?;
 
         Ok(KDEResult2D {
             densities,
@@ -351,7 +351,7 @@ impl GpuDensityCompute {
 
     /// Dispatch the marching-squares shader for a single iso-level and
     /// return the resulting line segments.
-    pub async fn compute_contours(
+    pub fn compute_contours(
         &self,
         kde_result: &KDEResult2D,
         threshold: f32,
@@ -498,7 +498,7 @@ impl GpuDensityCompute {
         let _ = self.device.poll(PollType::WaitForSubmissionIndex(sub));
 
         // Read the vertex count first.
-        let count = map_read_u32_single(&self.device, &count_staging).await?;
+        let count = map_read_u32_single(&self.device, &count_staging)?;
 
         if count == 0 {
             return Ok(Vec::new());
@@ -506,7 +506,7 @@ impl GpuDensityCompute {
 
         // Read vertex data (count Vertex2D structs, each 2 floats).
         let float_count = count as usize * 2;
-        let floats = map_read_f32(&self.device, &vert_staging, float_count).await?;
+        let floats = map_read_f32(&self.device, &vert_staging, float_count)?;
 
         // Convert to segment pairs (each segment = 2 consecutive vertices).
         let segments: Vec<[(f32, f32); 2]> = floats
@@ -519,7 +519,7 @@ impl GpuDensityCompute {
 
     // ── Texture readback helper ──────────────────────────────────────
 
-    async fn read_texture_staging(
+    fn read_texture_staging(
         &self,
         staging: &Buffer,
         cols: usize,
@@ -527,13 +527,18 @@ impl GpuDensityCompute {
         padded_bytes_per_row: usize,
     ) -> GupResult<Vec<f32>> {
         let slice = staging.slice(..);
-        let (tx, rx) = futures_channel::oneshot::channel();
+        let result: Arc<Mutex<Option<Result<(), BufferAsyncError>>>> = Arc::new(Mutex::new(None));
+        let cb_result = result.clone();
         slice.map_async(MapMode::Read, move |r| {
-            let _ = tx.send(r);
+            *cb_result.lock().unwrap() = Some(r);
         });
         let _ = self.device.poll(PollType::Wait);
-        rx.await
-            .map_err(|_| GupError::resource_error("GPU readback channel cancelled"))?
+
+        result
+            .lock()
+            .unwrap()
+            .take()
+            .ok_or_else(|| GupError::resource_error("Buffer mapping not completed"))?
             .map_err(|e| GupError::resource_error(format!("GPU buffer map failed: {e:?}")))?;
 
         let data = slice.get_mapped_range();
@@ -643,7 +648,7 @@ pub const DEFAULT_GPU_THRESHOLD: usize = 5_000;
 
 /// Compute the 2D KDE, using the GPU when available and the dataset
 /// exceeds `threshold`, else falling back to the CPU path.
-pub async fn gpu_density_2d(
+pub fn gpu_density_2d(
     samples: &[(f32, f32)],
     config: &DensityConfig,
     threshold: usize,
@@ -652,7 +657,7 @@ pub async fn gpu_density_2d(
     if samples.len() >= threshold {
         if let Some(ctx) = context {
             match GpuDensityCompute::new(ctx) {
-                Ok(gpu) => match gpu.compute_kde(samples, config).await {
+                Ok(gpu) => match gpu.compute_kde(samples, config) {
                     Ok(result) => return result,
                     Err(_) => { /* fall through to CPU */ }
                 },
@@ -709,15 +714,19 @@ fn staging_readback(
     staging
 }
 
-async fn map_read_u32_single(device: &Device, staging: &Buffer) -> GupResult<u32> {
+fn map_read_u32_single(device: &Device, staging: &Buffer) -> GupResult<u32> {
     let slice = staging.slice(..);
-    let (tx, rx) = futures_channel::oneshot::channel();
+    let result: Arc<Mutex<Option<Result<(), BufferAsyncError>>>> = Arc::new(Mutex::new(None));
+    let cb = result.clone();
     slice.map_async(MapMode::Read, move |r| {
-        let _ = tx.send(r);
+        *cb.lock().unwrap() = Some(r);
     });
     let _ = device.poll(PollType::Wait);
-    rx.await
-        .map_err(|_| GupError::resource_error("GPU readback channel cancelled"))?
+    result
+        .lock()
+        .unwrap()
+        .take()
+        .ok_or_else(|| GupError::resource_error("Buffer mapping not completed"))?
         .map_err(|e| GupError::resource_error(format!("GPU buffer map failed: {e:?}")))?;
 
     let data = slice.get_mapped_range();
@@ -727,16 +736,20 @@ async fn map_read_u32_single(device: &Device, staging: &Buffer) -> GupResult<u32
     Ok(val)
 }
 
-async fn map_read_f32(device: &Device, staging: &Buffer, count: usize) -> GupResult<Vec<f32>> {
+fn map_read_f32(device: &Device, staging: &Buffer, count: usize) -> GupResult<Vec<f32>> {
     let byte_len = count * std::mem::size_of::<f32>();
     let slice = staging.slice(..byte_len as u64);
-    let (tx, rx) = futures_channel::oneshot::channel();
+    let result: Arc<Mutex<Option<Result<(), BufferAsyncError>>>> = Arc::new(Mutex::new(None));
+    let cb = result.clone();
     slice.map_async(MapMode::Read, move |r| {
-        let _ = tx.send(r);
+        *cb.lock().unwrap() = Some(r);
     });
     let _ = device.poll(PollType::Wait);
-    rx.await
-        .map_err(|_| GupError::resource_error("GPU readback channel cancelled"))?
+    result
+        .lock()
+        .unwrap()
+        .take()
+        .ok_or_else(|| GupError::resource_error("Buffer mapping not completed"))?
         .map_err(|e| GupError::resource_error(format!("GPU buffer map failed: {e:?}")))?;
 
     let data = slice.get_mapped_range();
@@ -752,45 +765,39 @@ async fn map_read_f32(device: &Device, staging: &Buffer, count: usize) -> GupRes
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
 
-    async fn test_context() -> RenderContext {
-        RenderContext::new()
-            .await
-            .expect("GPU context required for tests")
+    fn test_context() -> RenderContext {
+        pollster::block_on(RenderContext::new()).expect("GPU context required for tests")
     }
 
     // ── Pipeline creation / caching ──────────────────────────────────
 
-    #[tokio::test]
-    async fn pipeline_creation_succeeds() {
-        let ctx = test_context().await;
+    #[test]
+    fn pipeline_creation_succeeds() {
+        let ctx = test_context();
         let gpu = GpuDensityCompute::new(&ctx);
         assert!(gpu.is_ok(), "pipeline creation failed: {:?}", gpu.err());
     }
 
-    #[tokio::test]
-    async fn pipeline_reuse_avoids_redundant_creation() {
-        let ctx = test_context().await;
-        // Creating a single GpuDensityCompute caches both pipelines.
+    #[test]
+    fn pipeline_reuse_avoids_redundant_creation() {
+        let ctx = test_context();
         let gpu = GpuDensityCompute::new(&ctx).unwrap();
-        // The pipelines are stored as fields — reuse is implicit.
-        // Run two KDE dispatches to verify reuse doesn't error.
         let samples: Vec<(f32, f32)> = (0..50).map(|i| (i as f32 * 0.1, i as f32 * 0.1)).collect();
         let config = DensityConfig {
             grid_size: 8,
             bandwidth: Some(0.3),
             ..Default::default()
         };
-        let _r1 = gpu.compute_kde(&samples, &config).await.unwrap();
-        let _r2 = gpu.compute_kde(&samples, &config).await.unwrap();
+        let _r1 = gpu.compute_kde(&samples, &config).unwrap();
+        let _r2 = gpu.compute_kde(&samples, &config).unwrap();
     }
 
     // ── KDE GPU vs CPU reference ─────────────────────────────────────
 
-    #[tokio::test]
-    async fn gpu_kde_matches_cpu_standard_normal() {
-        let ctx = test_context().await;
+    #[test]
+    fn gpu_kde_matches_cpu_standard_normal() {
+        let ctx = test_context();
         let gpu = GpuDensityCompute::new(&ctx).unwrap();
 
         let mut rng: u64 = 42;
@@ -801,15 +808,15 @@ mod tests {
             ..Default::default()
         };
 
-        let gpu_result = gpu.compute_kde(&samples, &config).await.unwrap();
+        let gpu_result = gpu.compute_kde(&samples, &config).unwrap();
         let cpu_result = super::super::density::compute_density_2d(&samples, &config);
 
         assert_results_match(&gpu_result, &cpu_result, 0.01);
     }
 
-    #[tokio::test]
-    async fn gpu_kde_matches_cpu_uniform_rectangle() {
-        let ctx = test_context().await;
+    #[test]
+    fn gpu_kde_matches_cpu_uniform_rectangle() {
+        let ctx = test_context();
         let gpu = GpuDensityCompute::new(&ctx).unwrap();
 
         let samples: Vec<(f32, f32)> = (0..400)
@@ -821,15 +828,15 @@ mod tests {
             ..Default::default()
         };
 
-        let gpu_result = gpu.compute_kde(&samples, &config).await.unwrap();
+        let gpu_result = gpu.compute_kde(&samples, &config).unwrap();
         let cpu_result = super::super::density::compute_density_2d(&samples, &config);
 
         assert_results_match(&gpu_result, &cpu_result, 0.01);
     }
 
-    #[tokio::test]
-    async fn gpu_kde_matches_cpu_mixture_of_gaussians() {
-        let ctx = test_context().await;
+    #[test]
+    fn gpu_kde_matches_cpu_mixture_of_gaussians() {
+        let ctx = test_context();
         let gpu = GpuDensityCompute::new(&ctx).unwrap();
 
         let mut rng: u64 = 123;
@@ -848,7 +855,7 @@ mod tests {
             ..Default::default()
         };
 
-        let gpu_result = gpu.compute_kde(&samples, &config).await.unwrap();
+        let gpu_result = gpu.compute_kde(&samples, &config).unwrap();
         let cpu_result = super::super::density::compute_density_2d(&samples, &config);
 
         assert_results_match(&gpu_result, &cpu_result, 0.01);
@@ -856,12 +863,11 @@ mod tests {
 
     // ── Marching squares GPU vs CPU ──────────────────────────────────
 
-    #[tokio::test]
-    async fn gpu_marching_squares_simple_peak() {
-        let ctx = test_context().await;
+    #[test]
+    fn gpu_marching_squares_simple_peak() {
+        let ctx = test_context();
         let gpu = GpuDensityCompute::new(&ctx).unwrap();
 
-        // Build a small KDE result with a known density grid.
         let kde = KDEResult2D {
             densities: vec![
                 0.0, 0.0, 0.0, 0.0, //
@@ -876,7 +882,7 @@ mod tests {
             kernel: KernelFunction::Gaussian,
         };
 
-        let gpu_segs = gpu.compute_contours(&kde, 0.5).await.unwrap();
+        let gpu_segs = gpu.compute_contours(&kde, 0.5).unwrap();
         let cpu_segs = super::super::density::marching_squares(
             &kde.densities,
             4,
@@ -886,7 +892,6 @@ mod tests {
             &kde.y_points,
         );
 
-        // Both should produce a non-empty contour around the peak.
         assert!(!gpu_segs.is_empty(), "GPU produced no contour segments");
         assert_eq!(
             gpu_segs.len(),
@@ -897,9 +902,9 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn gpu_marching_squares_no_contour() {
-        let ctx = test_context().await;
+    #[test]
+    fn gpu_marching_squares_no_contour() {
+        let ctx = test_context();
         let gpu = GpuDensityCompute::new(&ctx).unwrap();
 
         let kde = KDEResult2D {
@@ -911,7 +916,7 @@ mod tests {
             kernel: KernelFunction::Gaussian,
         };
 
-        let segs = gpu.compute_contours(&kde, 0.5).await.unwrap();
+        let segs = gpu.compute_contours(&kde, 0.5).unwrap();
         assert!(
             segs.is_empty(),
             "expected no segments for uniform grid above threshold"
@@ -920,8 +925,8 @@ mod tests {
 
     // ── CPU fallback ─────────────────────────────────────────────────
 
-    #[tokio::test]
-    async fn gpu_density_2d_uses_cpu_below_threshold() {
+    #[test]
+    fn gpu_density_2d_uses_cpu_below_threshold() {
         let samples: Vec<(f32, f32)> = (0..100)
             .map(|i| (i as f32 * 0.1, (i as f32 * 0.1).sin()))
             .collect();
@@ -931,14 +936,12 @@ mod tests {
             ..Default::default()
         };
 
-        // Threshold 200 — should use CPU path (100 samples < 200).
-        let result = gpu_density_2d(&samples, &config, 200, None).await;
-        assert!(!result.densities.is_empty());
+        let result = gpu_density_2d(&samples, &config, 200, None);
     }
 
-    #[tokio::test]
-    async fn gpu_density_2d_uses_gpu_above_threshold() {
-        let ctx = Arc::new(test_context().await);
+    #[test]
+    fn gpu_density_2d_uses_gpu_above_threshold() {
+        let ctx = test_context();
         let samples: Vec<(f32, f32)> = (0..200)
             .map(|i| (i as f32 * 0.05, (i as f32 * 0.05).sin()))
             .collect();
@@ -948,31 +951,16 @@ mod tests {
             ..Default::default()
         };
 
-        // Threshold 100 — should use GPU path (200 samples >= 100).
-        let result = gpu_density_2d(&samples, &config, 100, Some(&ctx)).await;
-        assert!(!result.densities.is_empty());
+        let result = gpu_density_2d(&samples, &config, 100, Some(&ctx));
     }
 
     // ── Helpers ──────────────────────────────────────────────────────
 
     fn assert_results_match(gpu: &KDEResult2D, cpu: &KDEResult2D, max_rel_err: f32) {
-        assert_eq!(
-            gpu.x_points.len(),
-            cpu.x_points.len(),
-            "x_points length mismatch"
-        );
-        assert_eq!(
-            gpu.y_points.len(),
-            cpu.y_points.len(),
-            "y_points length mismatch"
-        );
-        assert_eq!(
-            gpu.densities.len(),
-            cpu.densities.len(),
-            "density length mismatch"
-        );
+        assert_eq!(gpu.x_points.len(), cpu.x_points.len());
+        assert_eq!(gpu.y_points.len(), cpu.y_points.len());
+        assert_eq!(gpu.densities.len(), cpu.densities.len());
 
-        // Grid coordinates should match exactly.
         for (i, (&gx, &cx)) in gpu.x_points.iter().zip(cpu.x_points.iter()).enumerate() {
             assert!(
                 (gx - cx).abs() < 1e-5,
@@ -980,7 +968,6 @@ mod tests {
             );
         }
 
-        // Density values within relative tolerance.
         for (i, (&gv, &cv)) in gpu.densities.iter().zip(cpu.densities.iter()).enumerate() {
             let max_ab = gv.abs().max(cv.abs());
             if max_ab > 1e-10 {

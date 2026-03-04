@@ -750,8 +750,13 @@ where
             return Err(ChartBuilderError::EmptyData.into());
         }
 
-        // Build the 2D KDE.
-        let _kde_result = compute_density_2d(&samples, &self.density_config);
+        // Build the 2D KDE — use GPU path when sample count exceeds threshold.
+        let _kde_result = super::gpu_density::gpu_density_2d(
+            &samples,
+            &self.density_config,
+            self.density_config.gpu_threshold,
+            Some(&context),
+        );
 
         // Set up colour scale (default: Viridis).
         let mut chart_config = self.config;
