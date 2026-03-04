@@ -855,4 +855,163 @@ mod tests {
         };
         assert!((ct.elapsed_ms - 0.0).abs() < f64::EPSILON);
     }
+
+    #[test]
+    fn test_element_transition_delay_ms_none_by_default() {
+        let et = ElementTransition {
+            attrs: HashMap::new(),
+            group: TransitionGroup::Update,
+            delay_ms: None,
+        };
+        assert_eq!(et.delay_ms, None);
+    }
+
+    #[test]
+    fn test_element_transition_delay_ms_some() {
+        let et = ElementTransition {
+            attrs: HashMap::new(),
+            group: TransitionGroup::Enter,
+            delay_ms: Some(150),
+        };
+        assert_eq!(et.delay_ms, Some(150));
+    }
+
+    #[test]
+    fn test_effective_delay_no_per_element() {
+        let ct = CommittedTransition {
+            config: TransitionConfig {
+                duration_ms: 500,
+                delay_ms: 100,
+                easing: EasingFn::Linear,
+            },
+            elements: vec![ElementTransition {
+                attrs: HashMap::new(),
+                group: TransitionGroup::Update,
+                delay_ms: None,
+            }],
+            new_data_len: 1,
+            enter_count: 0,
+            update_count: 1,
+            exit_count: 0,
+            state: TransitionState::Running,
+            elapsed_ms: 0.0,
+        };
+        assert_eq!(ct.effective_delay(&ct.elements[0]), 100);
+    }
+
+    #[test]
+    fn test_effective_delay_with_per_element() {
+        let ct = CommittedTransition {
+            config: TransitionConfig {
+                duration_ms: 500,
+                delay_ms: 100,
+                easing: EasingFn::Linear,
+            },
+            elements: vec![ElementTransition {
+                attrs: HashMap::new(),
+                group: TransitionGroup::Update,
+                delay_ms: Some(200),
+            }],
+            new_data_len: 1,
+            enter_count: 0,
+            update_count: 1,
+            exit_count: 0,
+            state: TransitionState::Running,
+            elapsed_ms: 0.0,
+        };
+        // global 100 + per-element 200 = 300
+        assert_eq!(ct.effective_delay(&ct.elements[0]), 300);
+    }
+
+    #[test]
+    fn test_max_effective_delay_staggered() {
+        let elements: Vec<ElementTransition> = (0..5)
+            .map(|i| ElementTransition {
+                attrs: HashMap::new(),
+                group: TransitionGroup::Enter,
+                delay_ms: Some(i as u64 * 100),
+            })
+            .collect();
+        let ct = CommittedTransition {
+            config: TransitionConfig {
+                duration_ms: 500,
+                delay_ms: 50,
+                easing: EasingFn::Linear,
+            },
+            elements,
+            new_data_len: 5,
+            enter_count: 5,
+            update_count: 0,
+            exit_count: 0,
+            state: TransitionState::Running,
+            elapsed_ms: 0.0,
+        };
+        // max per-element delay = 400, global = 50, so max effective = 450
+        assert_eq!(ct.max_effective_delay(), 450);
+    }
+
+    #[test]
+    fn test_total_ms_staggered() {
+        let elements: Vec<ElementTransition> = (0..5)
+            .map(|i| ElementTransition {
+                attrs: HashMap::new(),
+                group: TransitionGroup::Enter,
+                delay_ms: Some(i as u64 * 100),
+            })
+            .collect();
+        let ct = CommittedTransition {
+            config: TransitionConfig {
+                duration_ms: 500,
+                delay_ms: 0,
+                easing: EasingFn::Linear,
+            },
+            elements,
+            new_data_len: 5,
+            enter_count: 5,
+            update_count: 0,
+            exit_count: 0,
+            state: TransitionState::Running,
+            elapsed_ms: 0.0,
+        };
+        // max per-element delay = 400, duration = 500 → total = 900
+        assert!((ct.total_ms() - 900.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_total_ms_no_stagger() {
+        let ct = CommittedTransition {
+            config: TransitionConfig {
+                duration_ms: 250,
+                delay_ms: 100,
+                easing: EasingFn::Linear,
+            },
+            elements: vec![ElementTransition {
+                attrs: HashMap::new(),
+                group: TransitionGroup::Update,
+                delay_ms: None,
+            }],
+            new_data_len: 1,
+            enter_count: 0,
+            update_count: 1,
+            exit_count: 0,
+            state: TransitionState::Running,
+            elapsed_ms: 0.0,
+        };
+        // No per-element delay → total = global delay 100 + duration 250 = 350
+        assert!((ct.total_ms() - 350.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_delay_fn_produces_correct_per_element_delays() {
+        // Simulate what delay_fn(|i, _| i as u64 * 100) would produce
+        // on 5 elements (unit test without Selection).
+        let delay_func = |i: usize, _: &u32| i as u64 * 100;
+        let data: Vec<u32> = vec![10, 20, 30, 40, 50];
+        let delays: Vec<u64> = data
+            .iter()
+            .enumerate()
+            .map(|(i, d)| delay_func(i, d))
+            .collect();
+        assert_eq!(delays, vec![0, 100, 200, 300, 400]);
+    }
 }

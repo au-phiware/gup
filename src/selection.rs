@@ -7711,4 +7711,187 @@ fn vs_main() -> VertexOutput {
             instances[0].radius
         );
     }
+
+    #[test]
+    fn build_transition_instances_staggered_delays() {
+        use crate::mark::circle::Circle;
+        use crate::transition::builder::{
+            CommittedTransition, ElementTransition, TransitionConfig, TransitionGroup,
+            TransitionState,
+        };
+
+        // Two elements with different per-element delays.
+        // Element 0: delay 0ms, Element 1: delay 200ms
+        // At elapsed 100ms with duration 200ms:
+        //   Element 0: active = 100ms, t = 0.5 → radius = 5.0
+        //   Element 1: active = max(0, 100-200) = 0 → t = 0.0 → radius = 0.0
+        let el0 = ElementTransition {
+            attrs: {
+                let mut m = std::collections::HashMap::new();
+                m.insert(
+                    "radius".to_string(),
+                    (AttrValue::Float(0.0), AttrValue::Float(10.0)),
+                );
+                m
+            },
+            group: TransitionGroup::Enter,
+            delay_ms: Some(0),
+        };
+        let el1 = ElementTransition {
+            attrs: {
+                let mut m = std::collections::HashMap::new();
+                m.insert(
+                    "radius".to_string(),
+                    (AttrValue::Float(0.0), AttrValue::Float(10.0)),
+                );
+                m
+            },
+            group: TransitionGroup::Enter,
+            delay_ms: Some(200),
+        };
+        let ct = CommittedTransition {
+            config: TransitionConfig {
+                duration_ms: 200,
+                delay_ms: 0,
+                easing: crate::transition::builder::EasingFn::Linear,
+            },
+            elements: vec![el0, el1],
+            new_data_len: 2,
+            enter_count: 2,
+            update_count: 0,
+            exit_count: 0,
+            state: TransitionState::Running,
+            elapsed_ms: 100.0,
+        };
+        let instances = Selection::<f32, Circle>::build_transition_instances::<Circle>(&ct);
+        assert_eq!(instances.len(), 2);
+        // Element 0: t = 100/200 = 0.5 → radius = 5.0
+        assert!(
+            (instances[0].radius - 5.0).abs() < 1e-4,
+            "el0 radius at 100ms should be 5.0, got {}",
+            instances[0].radius
+        );
+        // Element 1: still in delay (elapsed 100 < delay 200) → t = 0.0 → radius = 0.0
+        assert!(
+            (instances[1].radius - 0.0).abs() < 1e-4,
+            "el1 radius at 100ms should be 0.0, got {}",
+            instances[1].radius
+        );
+    }
+
+    #[test]
+    fn build_transition_instances_staggered_with_global_delay() {
+        use crate::mark::circle::Circle;
+        use crate::transition::builder::{
+            CommittedTransition, ElementTransition, TransitionConfig, TransitionGroup,
+            TransitionState,
+        };
+
+        // Global delay 50ms + per-element delays [0, 100].
+        // Effective delays: [50, 150].
+        // At elapsed 150ms with duration 100ms:
+        //   Element 0: active = 150 - 50 = 100ms, t = 1.0 → radius = 10.0
+        //   Element 1: active = 150 - 150 = 0ms, t = 0.0 → radius = 0.0
+        let el0 = ElementTransition {
+            attrs: {
+                let mut m = std::collections::HashMap::new();
+                m.insert(
+                    "radius".to_string(),
+                    (AttrValue::Float(0.0), AttrValue::Float(10.0)),
+                );
+                m
+            },
+            group: TransitionGroup::Update,
+            delay_ms: Some(0),
+        };
+        let el1 = ElementTransition {
+            attrs: {
+                let mut m = std::collections::HashMap::new();
+                m.insert(
+                    "radius".to_string(),
+                    (AttrValue::Float(0.0), AttrValue::Float(10.0)),
+                );
+                m
+            },
+            group: TransitionGroup::Update,
+            delay_ms: Some(100),
+        };
+        let ct = CommittedTransition {
+            config: TransitionConfig {
+                duration_ms: 100,
+                delay_ms: 50,
+                easing: crate::transition::builder::EasingFn::Linear,
+            },
+            elements: vec![el0, el1],
+            new_data_len: 2,
+            enter_count: 0,
+            update_count: 2,
+            exit_count: 0,
+            state: TransitionState::Running,
+            elapsed_ms: 150.0,
+        };
+        let instances = Selection::<f32, Circle>::build_transition_instances::<Circle>(&ct);
+        assert_eq!(instances.len(), 2);
+        // Element 0: effective delay = 50, active = 150 - 50 = 100, t = 1.0
+        assert!(
+            (instances[0].radius - 10.0).abs() < 1e-4,
+            "el0 radius should be 10.0, got {}",
+            instances[0].radius
+        );
+        // Element 1: effective delay = 150, active = 150 - 150 = 0, t = 0.0
+        assert!(
+            (instances[1].radius - 0.0).abs() < 1e-4,
+            "el1 radius should be 0.0, got {}",
+            instances[1].radius
+        );
+    }
+
+    #[test]
+    fn tick_transition_staggered_total_time() {
+        use crate::transition::builder::{
+            CommittedTransition, ElementTransition, TransitionConfig, TransitionGroup,
+            TransitionState,
+        };
+
+        // Verify total transition time = max(delays) + duration.
+        let mut sel = Selection::<f32, Circle>::from_data(vec![1.0, 2.0, 3.0]);
+        let ct = CommittedTransition {
+            config: TransitionConfig {
+                duration_ms: 200,
+                delay_ms: 0,
+                easing: crate::transition::builder::EasingFn::Linear,
+            },
+            elements: vec![
+                ElementTransition {
+                    attrs: std::collections::HashMap::new(),
+                    group: TransitionGroup::Enter,
+                    delay_ms: Some(0),
+                },
+                ElementTransition {
+                    attrs: std::collections::HashMap::new(),
+                    group: TransitionGroup::Enter,
+                    delay_ms: Some(100),
+                },
+                ElementTransition {
+                    attrs: std::collections::HashMap::new(),
+                    group: TransitionGroup::Enter,
+                    delay_ms: Some(200),
+                },
+            ],
+            new_data_len: 3,
+            enter_count: 3,
+            update_count: 0,
+            exit_count: 0,
+            state: TransitionState::Running,
+            elapsed_ms: 0.0,
+        };
+        sel.set_committed_transition(Some(ct));
+
+        // Total should be max(0, 100, 200) + 200 = 400ms
+        // At 399ms, still active
+        assert!(sel.tick_transition(399.0));
+        // At 1ms more (total 400ms), should complete
+        assert!(!sel.tick_transition(1.0));
+        assert!(!sel.has_active_transition());
+    }
 }
