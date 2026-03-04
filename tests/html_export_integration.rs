@@ -281,3 +281,44 @@ fn chart_snapshot_round_trip_from_html() {
 
     assert_eq!(snapshot, snapshot2, "round-trip should be lossless");
 }
+
+// -----------------------------------------------------------------------
+// Inline WASM strategy test
+// -----------------------------------------------------------------------
+
+#[test]
+fn html_export_inline_wasm_strategy() {
+    // Create a temporary fake WASM file.
+    let dir = std::env::temp_dir().join("gup_html_inline_test");
+    std::fs::create_dir_all(&dir).unwrap();
+    let wasm_path = dir.join("fake.wasm");
+    // A minimal valid WASM magic header + version.
+    let fake_wasm = b"\x00asm\x01\x00\x00\x00";
+    std::fs::write(&wasm_path, fake_wasm).unwrap();
+
+    let exporter = HtmlExporter::new(WasmStrategy::Inline(wasm_path.clone()));
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let html = rt.block_on(async {
+        let ctx = Arc::new(gup::RenderContext::new().await.unwrap());
+        let sel = gup::selection::Selection::<Pt, gup::Circle>::new(vec![], ctx).unwrap();
+        let config = ChartConfig::default();
+        let mut chart = ComposedChart::new(sel, config).with_default_axes();
+        exporter.render(&mut chart).unwrap()
+    });
+
+    // The inline strategy should use atob() for Base64 decoding.
+    assert!(html.contains("atob("), "inline strategy should use atob()");
+    assert!(
+        html.contains("WebAssembly.instantiate"),
+        "should instantiate WebAssembly"
+    );
+    // Should NOT contain fetch().
+    assert!(
+        !html.contains("fetch("),
+        "inline strategy should not use fetch()"
+    );
+
+    // Clean up.
+    let _ = std::fs::remove_dir_all(&dir);
+}
