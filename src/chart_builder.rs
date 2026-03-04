@@ -2311,6 +2311,34 @@ where
     }
 
     // -----------------------------------------------------------------
+    // HTML export
+    // -----------------------------------------------------------------
+
+    /// Export this chart as a self-contained HTML file.
+    ///
+    /// Uses the [`WasmStrategy::Url`] strategy with a default path of
+    /// `"gup.wasm"`.  For full control over the WASM embedding strategy,
+    /// page title, description, and author metadata, create an
+    /// [`HtmlExporter`](crate::export::html::HtmlExporter) directly.
+    ///
+    /// The exported HTML contains:
+    /// * An embedded SVG fallback for browsers without WebGPU.
+    /// * A PNG thumbnail in Open Graph `<meta>` tags.
+    /// * The chart definition as a JSON block.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// chart.export_html("chart.html")?;
+    /// ```
+    pub fn export_html(&mut self, path: impl AsRef<std::path::Path>) -> GupResult<()> {
+        let exporter = crate::export::html::HtmlExporter::new(
+            crate::export::html::WasmStrategy::Url("gup.wasm".to_string()),
+        );
+        exporter.export(self, path)
+    }
+
+    // -----------------------------------------------------------------
     // PDF export
     // -----------------------------------------------------------------
 
