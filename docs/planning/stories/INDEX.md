@@ -983,14 +983,14 @@ PNG, HTML), and platform targets.
 
 iOS and Android platform support for GPU-accelerated Gup charts.
 
-- [GUP-270](GUP-270_iOS_Platform_Support.md) 🚧 — CAMetalLayer Metal surface,
+- [GUP-270](GUP-270_iOS_Platform_Support.md) ✅ — CAMetalLayer Metal surface,
   Swift/Obj-C UIKit/SwiftUI integration shim, and UITouch→InteractionEvent
   translation for iOS/iPadOS. Deps: GUP-004 ✅, GUP-039 ✅, GUP-182 ✅, GUP-013
   📋.
 - [GUP-271](GUP-271_Android_Platform_Support.md) 📋 — Android SurfaceView
   lifecycle, JNI NDK wrapper, MotionEvent→InteractionEvent bridge, and APK
   example for Kotlin/Java embedding. Deps: GUP-004 ✅, GUP-039 ✅, GUP-182 ✅,
-  GUP-013 📋, GUP-270 📋.
+  GUP-013 📋, GUP-270 ✅.
 
 ## Documentation
 
@@ -1010,9 +1010,9 @@ API reference generation, tutorials, and example gallery.
 - [GUP-282A](GUP-282A_Wire_Headless_Screenshots.md) 📋 — Wire
   `GUP_SCREENSHOT_PATH` support into all 62 renderable examples so the gallery
   produces real thumbnails. Deps: GUP-282 ✅.
-- [GUP-282B](GUP-282B_Gallery_Config_Sync.md) 📋 — Validation script that
-  checks gallery_config.toml against INDEX.md and Cargo.toml for drift. Deps:
-  GUP-282 ✅.
+- [GUP-282B](GUP-282B_Gallery_Config_Sync.md) 📋 — Validation script that checks
+  gallery_config.toml against INDEX.md and Cargo.toml for drift. Deps: GUP-282
+  ✅.
 - [GUP-351](GUP-351_Tutorial_Snippet_Compilation_Tests.md) 📋 — Automated test
   harness that extracts Rust code blocks from tutorial Markdown and verifies
   they compile, preventing snippet drift. Deps: GUP-281 ✅.
