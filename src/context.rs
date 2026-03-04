@@ -1116,6 +1116,24 @@ impl TexturePool {
 }
 
 /// Unified render context that manages GPU resources and provides rendering capabilities.
+///
+/// `GupContext` is the central hub for all GPU operations in Gup. It owns
+/// the wgpu [`Device`](wgpu::Device) and [`Queue`](wgpu::Queue), manages
+/// surface configuration, and provides resource pools (buffers, textures,
+/// pipelines) for efficient rendering.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// # async fn example() {
+/// use gup::context::GupContext;
+///
+/// // Create a context (requires a GPU adapter)
+/// let ctx = GupContext::new().await.expect("GPU init");
+/// let device = &ctx.device;
+/// let queue = &ctx.queue;
+/// # }
+/// ```
 pub struct GupContext {
     /// Core wgpu device handle.
     pub device: Arc<Device>,
