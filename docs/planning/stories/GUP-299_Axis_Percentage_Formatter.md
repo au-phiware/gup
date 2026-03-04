@@ -89,3 +89,76 @@ the builder is not consumed during rendering.
 - 1 new scatter builder test
 - 1 new line builder test
 - **12 new tests total**, all passing
+
+## Retrospective
+
+**Completed**: 2025-07-28
+
+### Key Technical Learnings
+
+#### Arc vs Box for Clonable Trait Objects
+
+- **Challenge**: `ChartConfig` derives `Clone`, but `Box<dyn LabelFormatter>`
+  does not implement `Clone`. Adding formatter fields required a compatible
+  smart pointer.
+- **Solution**: Used `Option<Arc<dyn LabelFormatter>>` instead of
+  `Option<Box<dyn LabelFormatter>>`. `Arc` implements `Clone` via reference
+  counting, which works naturally with derive macros.
+- **Pattern**: When a struct derives `Clone` and needs to hold trait objects, use
+  `Arc<dyn Trait>` instead of `Box<dyn Trait>`. This also enables zero-cost
+  sharing of formatters across cloned configs.
+
+#### Centralising Formatter Lookup
+
+- **Challenge**: There were 4 separate `generate_label_data` call sites in
+  `ComposedChart` that all needed the formatter plumbed through.
+- **Solution**: Added a `ChartConfig::label_formatter_for(position)` helper that
+  maps `AxisPosition` → `Option<&dyn LabelFormatter>`, keeping each call site
+  to a single-line change.
+- **Pattern**: When a configuration value needs to be routed to multiple
+  consumers based on context (e.g. axis position), add a lookup helper on the
+  config struct rather than duplicating the match logic.
+
+### Architectural Decisions
+
+#### Trait Extension over New Trait
+
+- **Decision**: Extended `ConfigurableBuilder` with `x_tick_format` /
+  `y_tick_format` rather than creating a separate `FormatterCapableBuilder`
+  trait.
+- **Reasoning**: All 9 builders already implement `ConfigurableBuilder` and have
+  a `config: ChartConfig`. Tick formatting is a universal chart concern, not a
+  specialised capability.
+- **Trade-off**: The `ConfigurableBuilder` trait grows by 2 methods. If the
+  number of axis-specific methods continues to grow, a separate trait may become
+  worthwhile.
+- **Future**: This pattern is straightforward to extend for additional per-axis
+  configuration (e.g., axis title formatters, tick mark styles).
+
+#### Auto-Apply with Override
+
+- **Decision**: `AreaChartBuilder` automatically sets `PercentFormatter` for
+  normalised mode, but only when no custom formatter was explicitly set.
+- **Reasoning**: Sensible defaults without removing user control. The check
+  `config.y_label_formatter.is_none()` preserves explicit overrides.
+- **Trade-off**: The auto-apply happens at build time, not at
+  `stack_normalized()` call time. This means calling `.y_tick_format(...)` after
+  `.stack_normalized()` correctly overrides the auto-formatter.
+- **Future**: Other builders could adopt similar auto-apply patterns (e.g., log
+  scale auto-selecting scientific notation).
+
+### Development Workflow Insights
+
+- The story was very well-scoped — all 5 acceptance criteria mapped cleanly to
+  discrete implementation steps.
+- The existing `LabelFormatter` trait and `NumericFormatter::percentage()` method
+  provided good prior art. `PercentFormatter` was purpose-built for axis labels
+  with simpler semantics (always multiply by 100, integer precision by default).
+- Running `mask all-fix` revealed no new warnings in the gup lib — only
+  pre-existing markdown lint issues in other story files and pre-existing dead
+  code warnings in `gup-macros`.
+
+### Follow-up Stories
+
+No follow-up stories are needed. The implementation is self-contained and all
+acceptance criteria are fully met.
