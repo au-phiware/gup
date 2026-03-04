@@ -7494,7 +7494,7 @@ impl StatisticsCompute {
     async fn create_basic_stats_pipeline(
         device: &wgpu::Device,
     ) -> GupResult<wgpu::ComputePipeline> {
-        let shader_source = include_str!("shaders/statistics.compute.wgsl");
+        let shader_source = include_str!("../shaders/statistics.compute.wgsl");
 
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("statistics_compute"),
@@ -7515,7 +7515,7 @@ impl StatisticsCompute {
 
     /// Create compute pipeline for variance calculation
     async fn create_variance_pipeline(device: &wgpu::Device) -> GupResult<wgpu::ComputePipeline> {
-        let shader_source = include_str!("shaders/statistics.compute.wgsl");
+        let shader_source = include_str!("../shaders/statistics.compute.wgsl");
 
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("statistics_compute"),
@@ -7536,7 +7536,7 @@ impl StatisticsCompute {
 
     /// Create compute pipeline for percentile calculation
     async fn create_percentile_pipeline(device: &wgpu::Device) -> GupResult<wgpu::ComputePipeline> {
-        let shader_source = include_str!("shaders/percentile.compute.wgsl");
+        let shader_source = include_str!("../shaders/percentile.compute.wgsl");
 
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("percentile_compute"),
@@ -7831,7 +7831,7 @@ impl HistogramCompute {
 
     /// Create compute pipeline for histogram generation
     async fn create_histogram_pipeline(device: &wgpu::Device) -> GupResult<wgpu::ComputePipeline> {
-        let shader_source = include_str!("shaders/histogram.compute.wgsl");
+        let shader_source = include_str!("../shaders/histogram.compute.wgsl");
 
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("histogram_compute"),
