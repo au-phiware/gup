@@ -176,6 +176,10 @@ data, and parallel output.
 - [GUP-355](GUP-355_GPU_Compute_Shader_Transition_Interpolation.md) 💡 — GPU
   compute shader path for transition interpolation at scale (10K+ elements).
   Deps: GUP-277 ✅.
+- [GUP-356](GUP-356_InteractionSystem_Dynamic_Result_Buffer.md) 💡 — Dynamically
+  grow the InteractionSystem result buffer when query results exceed max_results,
+  enabling accurate GPU region queries on 1M+ mark datasets. Deps: GUP-286 ✅,
+  GUP-012 ✅.
 
 ## Shader Function System
 

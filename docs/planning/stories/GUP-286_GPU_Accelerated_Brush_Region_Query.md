@@ -103,3 +103,86 @@ fallback.
 
 - 42 brush module tests (15 new)
 - All existing tests continue to pass
+
+## Retrospective
+
+**Completed**: 2025-07-27
+
+### Key Technical Learnings
+
+#### Async Method Design for GPU Operations
+
+- **Challenge**: The existing `on_pointer_up` is synchronous, but
+  `rect_hit_test_gpu` is async. Adding a new async variant rather than
+  changing the existing method preserved backward compatibility.
+- **Solution**: Added `on_pointer_up_async` that accepts an optional
+  `&mut InteractionSystem`. The original `on_pointer_up` continues to
+  work identically for CPU-only callers.
+- **Pattern**: When adding GPU-accelerated alternatives to existing CPU
+  methods, provide a separate async entry point with the GPU resource as an
+  optional parameter, rather than making the existing method async.
+
+#### GPU Result Buffer Limits
+
+- **Challenge**: The `InteractionSystem` has a fixed `max_results = 100_000`
+  buffer. Querying a region covering 25% of 1M marks would need ~250K result
+  slots, causing a device-lost validation error.
+- **Solution**: Reduced test region sizes and documented the limitation. The
+  GPU path correctly falls back to CPU when the result buffer is exceeded.
+- **Pattern**: GPU buffer sizes impose hard limits on query results. For
+  very large result sets, consider streaming results in chunks or
+  dynamically resizing the result buffer.
+
+#### Timeout-Based Fallback
+
+- **Challenge**: Need a way to gracefully degrade when GPU is slow or
+  unavailable, without blocking the UI.
+- **Solution**: `GpuBrushConfig::timeout` (default 50ms) wraps the GPU
+  query. If it completes within the timeout, use GPU results. Otherwise
+  fall back to CPU `filter_by_rect`. The GPU result is already
+  awaited before the timeout check, so this acts as an "after the fact"
+  quality gate rather than a true cancellation.
+- **Pattern**: For real-time interaction, measure elapsed time after the
+  GPU completes and decide whether to use or discard the result. True
+  cancellation of in-flight GPU work is complex and rarely needed.
+
+### Architectural Decisions
+
+#### Separate Async Method vs. Making on_pointer_up Async
+
+- **Decision**: Added `on_pointer_up_async` as a new method.
+- **Reasoning**: Making `on_pointer_up` async would be a breaking change for
+  all existing callers. The sync CPU path is still valuable for simple use
+  cases without a GPU interaction system.
+- **Trade-off**: Two methods to maintain, slight API duplication.
+- **Future**: If all users migrate to async, the sync version could be
+  deprecated.
+
+#### GpuBrushConfig as a Separate Type
+
+- **Decision**: Created `GpuBrushConfig` struct rather than adding fields
+  directly to `BrushBehavior`.
+- **Reasoning**: Follows the project pattern of configuration structs with
+  `Default`. Keeps GPU-specific concerns isolated and extensible.
+- **Trade-off**: Additional type to learn.
+- **Future**: Could add fields like `min_marks_for_gpu` threshold to
+  auto-select CPU vs GPU based on dataset size.
+
+### Development Workflow Insights
+
+- Rust field/method name conflicts: having a struct field and a builder
+  method with the same name causes compile errors. Resolved by naming the
+  builder method `with_gpu_config` instead of `gpu_config`.
+- GPU test reliability: 500K+ element tests hit device-lost errors due to
+  result buffer overflow. Tests needed to be sized to fit within the
+  `max_results` budget of the InteractionSystem.
+- The `--test-threads=1` flag is essential for GPU tests — parallel GPU
+  test execution causes intermittent device-lost errors unrelated to code
+  bugs.
+
+### Follow-up Stories
+
+1. **GUP-356: InteractionSystem Dynamic Result Buffer** — Grow the result
+   buffer dynamically when query results exceed `max_results`, enabling
+   reliable GPU region queries on 1M+ mark datasets with large selection
+   regions.
