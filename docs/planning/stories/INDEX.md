@@ -803,7 +803,7 @@ profiling, trend visualisation.
 - [GUP-188](GUP-188_Automatic_Draw_Call_Metrics.md) ✅ — Add a
   render_marks_tracked(&mut self, ...) variant to MarkRenderer that
   automatically….
-- [GUP-297](GUP-297_GPU_Compute_Shader_2D_Binning.md) 📋 — GPU compute shader
+- [GUP-297](GUP-297_GPU_Compute_Shader_2D_Binning.md) 🚧 — GPU compute shader
   for 2D heatmap binning of 10M+ row datasets, with CPU fallback. Deps: GUP-248
   ✅.
 - [GUP-305](GUP-305_Release_Mode_Performance_Validation.md) 💡 — CI job running
