@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Interaction & Spatial Index **Status**: 🚧 In Progress **Created**:
-2025-07-25
+**Initiative**: Interaction & Spatial Index **Status**: ✅ Complete
+**Created**: 2025-07-25 **Completed**: 2026-03-05
 
 ## Context
 
@@ -25,25 +25,59 @@ ensure correct z-order.
 
 ## Acceptance Criteria
 
-- [ ] When `BrushMark.visible` is `true`, a filled+stroked rectangle is rendered
+- [x] When `BrushMark.visible` is `true`, a filled+stroked rectangle is rendered
       at `screen_rect` coordinates using the `BrushStyle` colours.
-- [ ] The overlay rectangle disappears immediately when `BrushMark.visible`
+- [x] The overlay rectangle disappears immediately when `BrushMark.visible`
       becomes `false` (drag ended or cancelled).
-- [ ] The overlay is drawn after all data marks in the render pass (highest
+- [x] The overlay is drawn after all data marks in the render pass (highest
       z-order).
-- [ ] No GPU validation errors on Vulkan or Metal backends.
-- [ ] The `brush_selection` example visually shows the brush rectangle during
+- [x] No GPU validation errors on Vulkan or Metal backends.
+- [x] The `brush_selection` example visually shows the brush rectangle during
       drag.
 
 ## Technical Tasks
 
-- [ ] Create a `BrushOverlayRenderer` (or extend `Selection`/render loop) that
+- [x] Create a `BrushOverlayRenderer` (or extend `Selection`/render loop) that
       allocates a single `RectangleInstance` GPU buffer for the overlay.
-- [ ] Each frame, if `BrushMark.visible`, update the vertex buffer with the
+- [x] Each frame, if `BrushMark.visible`, update the vertex buffer with the
       current `screen_rect` and `BrushStyle`.
-- [ ] Render the overlay as the last draw call in the chart's render pass.
-- [ ] Update `examples/brush_selection.rs` to use the overlay renderer.
-- [ ] Write a visual test confirming overlay appears and disappears.
+- [x] Render the overlay as the last draw call in the chart's render pass.
+- [x] Update `examples/brush_selection.rs` to use the overlay renderer.
+- [x] Write a visual test confirming overlay appears and disappears.
+
+## Implementation Summary
+
+### What Was Implemented
+
+- **`BrushOverlayRenderer`** — a dedicated GPU renderer in `src/brush.rs` that
+  allocates a single `RectangleInstance` storage buffer, reuses the cached
+  Rectangle render pipeline via `PipelineCache`, and draws one instanced quad
+  each frame the brush is visible.
+- **`update()` method** — converts `BrushMark.screen_rect` (clip-space min/max)
+  to `RectangleInstance` centre + size, uploads `BrushStyle` fill/stroke colours
+  each frame.
+- **`render()` method** — issues a single indexed draw call as the last step in
+  the render pass, ensuring highest z-order.
+- **`set_viewport_size()`** — keeps the viewport dimensions uniform in sync with
+  the window size for correct SDF rendering.
+- **Example update** — `examples/brush_selection.rs` now lazily creates a
+  `BrushOverlayRenderer`, calls `update` before the render pass, and `render`
+  after data marks inside the pass.
+
+### Key Files Changed
+
+| File                           | Change                                 |
+| ------------------------------ | -------------------------------------- |
+| `src/brush.rs`                 | Added `BrushOverlayRenderer` + 5 tests |
+| `src/lib.rs`                   | Re-exported `BrushOverlayRenderer`     |
+| `examples/brush_selection.rs`  | Integrated overlay renderer            |
+
+### Test Counts
+
+- 5 new GPU tests (`overlay_renderer_creation`, `overlay_visible_when_brush_shown`,
+  `overlay_hidden_when_brush_hidden`, `overlay_hidden_for_default_brush_mark`,
+  `overlay_reuses_cached_pipeline`)
+- 31 total brush module tests — all passing
 
 ## Dependencies
 
@@ -66,9 +100,9 @@ ensure correct z-order.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
