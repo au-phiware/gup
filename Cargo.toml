@@ -209,6 +209,10 @@ name = "treemap_layout"
 harness = false
 
 [[example]]
+name = "hello_world"
+path = "examples/hello_world.rs"
+
+[[example]]
 name = "export_png"
 path = "examples/export_png.rs"
 
