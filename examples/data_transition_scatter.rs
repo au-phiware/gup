@@ -15,6 +15,8 @@
 //!    target values.
 //! 4. After committing, the example prints the transition details and
 //!    completes the animation.
+//! 5. A second transition demonstrates **staggered entry** using `delay_fn()`
+//!    so each element animates in with an increasing offset.
 
 use gup::mark::circle::Circle;
 use gup::selection::Selection;
@@ -207,4 +209,82 @@ fn main() {
     }
 
     println!("\n=== Example Complete ===");
+
+    // -----------------------------------------------------------------------
+    // Step 5: Demonstrate staggered entry with delay_fn().
+    // -----------------------------------------------------------------------
+    println!("\n=== Staggered Entry Transition ===\n");
+
+    // Create a fresh selection with a new dataset where all elements enter.
+    let stagger_data: Vec<ScatterPoint> = (0..10)
+        .map(|i| {
+            let angle = (i as f32) * std::f32::consts::TAU / 10.0;
+            ScatterPoint {
+                id: 100 + i,
+                x: angle.cos() * 0.5,
+                y: angle.sin() * 0.5,
+                radius: 0.04,
+            }
+        })
+        .collect();
+
+    let mut stagger_sel = Selection::<ScatterPoint, Circle>::from_data(Vec::new());
+    stagger_sel
+        .attr("center", |p: &ScatterPoint| [p.x, p.y])
+        .attr("radius", |p: &ScatterPoint| p.radius)
+        .attr("opacity", |_p: &ScatterPoint| 1.0_f32);
+
+    // All elements will be in the enter group.
+    stagger_sel.data_keyed(stagger_data, |p| p.id);
+
+    let staggered = stagger_sel
+        .transition()
+        .duration(400)
+        // Each element starts 50ms after the previous one.
+        .delay_fn(|i, _d| i as u64 * 50)
+        .ease(EasingFn::EaseOut)
+        .attr("center", |p: &ScatterPoint| [p.x, p.y])
+        .attr("radius", |p: &ScatterPoint| p.radius)
+        .attr("opacity", |_p: &ScatterPoint| 1.0_f32)
+        .enter_attr("center", |_p: &ScatterPoint| [0.0_f32, 0.0])
+        .commit();
+
+    if let Some(ct) = staggered {
+        println!("Staggered transition committed:");
+        println!("  Duration: {} ms", ct.config.duration_ms);
+        println!(
+            "  Max effective delay: {} ms",
+            ct.max_effective_delay()
+        );
+        println!(
+            "  Total time: {} ms",
+            ct.total_ms()
+        );
+        println!("  Enter elements: {}", ct.enter_count);
+
+        for (i, el) in ct.elements.iter().enumerate() {
+            println!(
+                "  Element {}: per-element delay = {:?} ms, effective = {} ms",
+                i,
+                el.delay_ms,
+                ct.effective_delay(el)
+            );
+        }
+
+        // Simulate stepping through the staggered animation.
+        println!("\nSimulating staggered animation:");
+        let total = ct.total_ms();
+        let step = 100.0;
+        let mut t = 0.0;
+        while t <= total {
+            let still_active = stagger_sel.tick_transition(if t == 0.0 { 0.0 } else { step });
+            println!(
+                "  t={:.0}ms — active: {}",
+                t, still_active
+            );
+            t += step;
+        }
+    }
+
+    println!("\n=== Staggered Example Complete ===");
 }
