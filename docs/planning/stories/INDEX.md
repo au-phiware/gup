@@ -936,7 +936,7 @@ PNG, HTML), and platform targets.
   Deps: GUP-262 ✅.
 - [GUP-262B](GUP-262B_Bevy_018_Upgrade.md) 📋 — Upgrade gup-bevy to Bevy 0.18
   when the main gup crate upgrades to wgpu 27. Deps: GUP-262 ✅.
-- [GUP-263](GUP-263_egui_Integration.md) 🚧 — GupWidget implementing
+- [GUP-263](GUP-263_egui_Integration.md) ✅ — GupWidget implementing
   egui::Widget via render-to-texture, with dirty-tracking and interaction bridge
   forwarding egui pointer events. Deps: GUP-004 ✅, GUP-018 ✅, GUP-268 ✅.
 - [GUP-264](GUP-264_Tauri_Integration.md) 📋 — gup-tauri example running Gup
