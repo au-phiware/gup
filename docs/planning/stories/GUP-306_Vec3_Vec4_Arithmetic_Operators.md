@@ -102,3 +102,51 @@ vector types.
 - [x] All Acceptance Criteria met
 - [x] All tests pass: `cargo test -- --test-threads=1`
 - [x] Lint clean: `mask all-fix`
+
+## Retrospective
+
+**Completed**: 2025-07-27
+
+### Key Technical Learnings
+
+#### Vec3 Padding Field Discipline
+
+- **Challenge**: Vec3 has a `_padding` field for GPU 16-byte alignment that must
+  always remain zero after operations, but Rust's type system doesn't enforce
+  this automatically.
+- **Solution**: Every arithmetic operator impl and the `From<[f32; 3]>`
+  conversion explicitly sets `_padding: 0.0` in the result. A dedicated test
+  (`vec3_padding_preserved`) deliberately constructs a Vec3 with non-zero
+  padding and verifies all operations zero it out.
+- **Pattern**: When GPU types have padding fields, treat every constructor path
+  (including operator results) as a place that must zero the padding. A
+  property-based test with intentionally corrupt padding catches regressions.
+
+### Architectural Decisions
+
+#### Keep Vec3/Vec4 in shader_function/core.rs
+
+- **Decision**: Did not move Vec3/Vec4 to `src/math.rs` alongside Vec2.
+- **Reasoning**: Vec3/Vec4 have `ShaderType` impls that depend on the
+  `ShaderType` trait defined in the shader_function module. Moving the struct
+  definitions would require either moving the trait (large churn) or splitting
+  impls across modules (orphan rule complications). The story explicitly made
+  this optional.
+- **Trade-off**: Vec2 lives in `math.rs` while Vec3/Vec4 live in
+  `shader_function/core.rs`, creating a slight inconsistency in module
+  organisation. However, all three types are uniformly accessible through
+  `shader_function::*` and `prelude::*`.
+- **Future**: If a future story consolidates all math types, Vec3/Vec4 could be
+  moved to `math.rs` with the `ShaderType` impls kept in shader_function via
+  `impl ShaderType for crate::math::Vec3`.
+
+### Development Workflow Insights
+
+- The story was straightforward — following the existing Vec2 pattern made
+  implementation mechanical and confident.
+- ZFS snapshot accumulation on /home caused disk space exhaustion during builds.
+  Using `CARGO_TARGET_DIR=/tmp/gup-target` as a workaround kept the workflow
+  moving. This is an environment issue, not a code issue.
+- The `mask all-fix` pre-commit hook includes markdown linting that flags
+  pre-existing issues in other story files; these are unrelated to the current
+  changes.
