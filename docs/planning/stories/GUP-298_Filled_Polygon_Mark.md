@@ -2,7 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Mark System **Status**: 📋 Planned **Created**: 2025-07-28
+**Initiative**: Mark System **Status**: 🚧 In Progress **Created**: 2025-07-28
 
 ## Context
 
