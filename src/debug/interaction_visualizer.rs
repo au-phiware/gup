@@ -40,13 +40,18 @@ use std::sync::Arc;
 /// Color coding for visualization
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct DebugColor {
+    /// Red channel value.
     pub r: f32,
+    /// Green channel value.
     pub g: f32,
+    /// Blue channel value.
     pub b: f32,
+    /// Alpha channel value.
     pub a: f32,
 }
 
 impl DebugColor {
+    /// Create a new debug color from RGBA components.
     pub const fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
         Self { r, g, b, a }
     }
@@ -72,13 +77,21 @@ impl DebugColor {
 /// Visualization representation of an element
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VisualElement {
+    /// Screen position of the element.
     pub position: [f32; 2],
+    /// Size of the element bounding box.
     pub size: [f32; 2],
+    /// Numeric mark type identifier.
     pub mark_type: u32,
+    /// Human-readable mark type name.
     pub mark_type_name: String,
+    /// Selection group identifier.
     pub selection_id: u32,
+    /// Unique element identifier.
     pub element_id: u32,
+    /// Display color for this element.
     pub color: DebugColor,
+    /// Whether this element is highlighted as a hit.
     pub is_highlighted: bool,
 }
 
@@ -107,11 +120,17 @@ impl VisualElement {
 /// Visualization representation of a query
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VisualQuery {
+    /// Screen position of the query.
     pub position: [f32; 2],
+    /// Region size for area queries.
     pub region_size: [f32; 2],
+    /// Numeric query type identifier.
     pub query_type_id: u32,
+    /// Human-readable query type name.
     pub query_type_name: String,
+    /// Maximum number of results for this query.
     pub max_results: u32,
+    /// Display color for this query.
     pub color: DebugColor,
 }
 
@@ -137,11 +156,17 @@ impl VisualQuery {
 /// Visualization representation of a hit result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VisualResult {
+    /// Element that was tested.
     pub element_id: u32,
+    /// Selection group of the element.
     pub selection_id: u32,
+    /// Distance from query point to element.
     pub distance: f32,
+    /// Whether the element was hit.
     pub is_hit: bool,
+    /// Point of intersection between query and element.
     pub intersection_point: [f32; 2],
+    /// Display color for this result.
     pub color: DebugColor,
 }
 
@@ -168,12 +193,19 @@ impl VisualResult {
 /// Summary statistics for the debug view
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DebugSummary {
+    /// Total number of elements in the scene.
     pub total_elements: usize,
+    /// Total number of queries executed.
     pub total_queries: usize,
+    /// Total number of results returned.
     pub total_results: usize,
+    /// Number of successful hits.
     pub total_hits: usize,
+    /// Number of misses.
     pub total_misses: usize,
+    /// Element counts grouped by mark type.
     pub elements_by_mark_type: Vec<(String, usize)>,
+    /// Hit rate as a percentage.
     pub hit_rate_percent: f32,
 }
 
@@ -215,10 +247,15 @@ impl DebugSummary {
 /// Complete debug visualization state
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DebugVisualizationState {
+    /// Timestamp when the state was captured.
     pub timestamp: chrono::DateTime<chrono::Utc>,
+    /// Visual representations of scene elements.
     pub elements: Vec<VisualElement>,
+    /// Visual representations of interaction queries.
     pub queries: Vec<VisualQuery>,
+    /// Visual representations of hit test results.
     pub results: Vec<VisualResult>,
+    /// Summary statistics for the debug view.
     pub summary: DebugSummary,
 }
 
@@ -458,11 +495,17 @@ impl InteractionDebugVisualizer {
 /// Buffer inspection data
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BufferInspectionData {
+    /// Visual elements from the element buffer.
     pub element_buffer: Vec<VisualElement>,
+    /// Visual queries from the query buffer.
     pub query_buffer: Vec<VisualQuery>,
+    /// Visual results from the result buffer.
     pub result_buffer: Vec<VisualResult>,
+    /// Size of the element buffer in bytes.
     pub element_buffer_size_bytes: usize,
+    /// Size of the query buffer in bytes.
     pub query_buffer_size_bytes: usize,
+    /// Size of the result buffer in bytes.
     pub result_buffer_size_bytes: usize,
 }
 

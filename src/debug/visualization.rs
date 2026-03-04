@@ -685,23 +685,36 @@ impl PerformanceDashboard {
 /// Performance statistics summary
 #[derive(Debug, Clone, Default)]
 pub struct PerformanceStatistics {
+    /// Average frame time in milliseconds.
     pub avg_frame_time_ms: f32,
+    /// Minimum frame time in milliseconds.
     pub min_frame_time_ms: f32,
+    /// Maximum frame time in milliseconds.
     pub max_frame_time_ms: f32,
+    /// Average memory usage in bytes.
     pub avg_memory_bytes: u64,
+    /// Minimum memory usage in bytes.
     pub min_memory_bytes: u64,
+    /// Maximum memory usage in bytes.
     pub max_memory_bytes: u64,
+    /// Average frames per second.
     pub fps: f32,
 }
 
 /// Memory statistics summary
 #[derive(Debug, Clone, Default)]
 pub struct MemoryStatistics {
+    /// Average memory usage in bytes.
     pub avg_memory_bytes: u64,
+    /// Minimum memory usage in bytes.
     pub min_memory_bytes: u64,
+    /// Maximum memory usage in bytes.
     pub max_memory_bytes: u64,
+    /// Average number of active allocations.
     pub avg_allocations: usize,
+    /// Minimum number of active allocations.
     pub min_allocations: usize,
+    /// Maximum number of active allocations.
     pub max_allocations: usize,
 }
 

@@ -372,15 +372,22 @@ impl GpuDebugContext {
 /// Performance snapshot for a single measurement
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceSnapshot {
+    /// Timestamp when the snapshot was taken.
     pub timestamp: chrono::DateTime<chrono::Utc>,
+    /// Frame time in milliseconds.
     pub frame_time_ms: f32,
+    /// GPU memory usage in bytes.
     pub memory_usage_bytes: u64,
+    /// Estimated GPU utilization as a percentage.
     pub gpu_utilization_percent: f32,
+    /// Interaction query time in microseconds.
     pub query_time_us: f32,
+    /// Arbitrary key-value metadata for this snapshot.
     pub metadata: HashMap<String, String>,
 }
 
 impl PerformanceSnapshot {
+    /// Create a new performance snapshot with the given frame time and memory usage.
     pub fn new(frame_time_ms: f32, memory_usage_bytes: u64) -> Self {
         Self {
             timestamp: chrono::Utc::now(),
@@ -392,16 +399,19 @@ impl PerformanceSnapshot {
         }
     }
 
+    /// Set the GPU utilization percentage on this snapshot.
     pub fn with_gpu_utilization(mut self, utilization_percent: f32) -> Self {
         self.gpu_utilization_percent = utilization_percent;
         self
     }
 
+    /// Set the query time in microseconds on this snapshot.
     pub fn with_query_time(mut self, query_time_us: f32) -> Self {
         self.query_time_us = query_time_us;
         self
     }
 
+    /// Attach a metadata key-value pair to this snapshot.
     pub fn with_metadata(mut self, key: &str, value: &str) -> Self {
         self.metadata.insert(key.to_string(), value.to_string());
         self
@@ -411,27 +421,44 @@ impl PerformanceSnapshot {
 /// Summary of performance statistics
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PerformanceSummary {
+    /// Number of samples in the summary.
     pub sample_count: usize,
+    /// Average frame time in milliseconds.
     pub avg_frame_time_ms: f32,
+    /// Minimum frame time in milliseconds.
     pub min_frame_time_ms: f32,
+    /// Maximum frame time in milliseconds.
     pub max_frame_time_ms: f32,
+    /// Average memory usage in bytes.
     pub avg_memory_usage_bytes: u64,
+    /// Minimum memory usage in bytes.
     pub min_memory_usage_bytes: u64,
+    /// Maximum memory usage in bytes.
     pub max_memory_usage_bytes: u64,
+    /// Average frames per second.
     pub fps: f32,
 }
 
 /// Complete debug report with all collected data
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DebugReport {
+    /// Timestamp when the report was generated.
     pub timestamp: chrono::DateTime<chrono::Utc>,
+    /// Debug configuration used during the session.
     pub config: DebugConfig,
+    /// Aggregated performance statistics.
     pub performance_summary: PerformanceSummary,
+    /// Raw performance snapshots collected during the session.
     pub performance_history: Vec<PerformanceSnapshot>,
+    /// Results from memory layout validation checks.
     pub layout_validation_results: Vec<LayoutValidationResult>,
+    /// GPU memory allocation report, if available.
     pub memory_report: Option<MemoryReport>,
+    /// Resource dependency graph analysis, if available.
     pub resource_graph_report: Option<ResourceGraphReport>,
+    /// Memory bandwidth statistics, if available.
     pub bandwidth_stats: Option<memory_bandwidth::MemoryBandwidthStats>,
+    /// Memory pressure status, if available.
     pub bandwidth_pressure: Option<memory_bandwidth::MemoryPressureStatus>,
 }
 

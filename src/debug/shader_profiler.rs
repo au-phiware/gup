@@ -473,24 +473,34 @@ impl ShaderProfiler {
 /// Statistics for a single shader execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShaderExecutionStats {
+    /// Total execution duration.
     pub duration: Duration,
+    /// Estimated GPU utilization as a percentage.
     pub gpu_utilization_percent: f32,
+    /// Workgroup dispatch dimensions (x, y, z).
     pub dispatch_size: (u32, u32, u32),
+    /// Total number of dispatched workgroups.
     pub workgroup_count: u32,
+    /// Estimated memory bandwidth in GB/s.
     pub memory_bandwidth_gbps: f32,
+    /// Estimated instructions executed per second.
     pub instructions_per_second: f32,
+    /// Timestamp when the measurement was taken.
     pub timestamp: chrono::DateTime<chrono::Utc>,
+    /// Arbitrary key-value metadata for this measurement.
     pub metadata: HashMap<String, String>,
     /// Whether this measurement used hardware timestamp queries
     pub used_hardware_timestamps: bool,
 }
 
 impl ShaderExecutionStats {
+    /// Attach a metadata key-value pair to these stats.
     pub fn with_metadata(mut self, key: &str, value: &str) -> Self {
         self.metadata.insert(key.to_string(), value.to_string());
         self
     }
 
+    /// Set whether hardware timestamp queries were used for this measurement.
     pub fn with_hardware_timestamps(mut self, used: bool) -> Self {
         self.used_hardware_timestamps = used;
         self
@@ -500,56 +510,84 @@ impl ShaderExecutionStats {
 /// Compute execution configuration for batch profiling
 #[derive(Debug)]
 pub struct ComputeExecution {
+    /// Compute pipeline to execute.
     pub pipeline: ComputePipeline,
+    /// Bind group for the pipeline.
     pub bind_group: BindGroup,
+    /// Workgroup dispatch dimensions (x, y, z).
     pub dispatch_size: (u32, u32, u32),
 }
 
 /// Statistics for batch execution profiling
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BatchExecutionStats {
+    /// Total wall-clock duration of the batch.
     pub total_duration: Duration,
+    /// Number of executions in the batch.
     pub execution_count: usize,
+    /// Statistics for each individual execution.
     pub individual_stats: Vec<ShaderExecutionStats>,
+    /// Average execution duration across the batch.
     pub average_duration: Duration,
+    /// Maximum execution duration in the batch.
     pub max_duration: Duration,
+    /// Minimum execution duration in the batch.
     pub min_duration: Duration,
 }
 
 /// Active profiling session for continuous monitoring
 #[derive(Debug, Clone)]
 pub struct ProfilingSession {
+    /// Name of the profiling session.
     pub name: String,
+    /// Instant when the session started.
     pub start_time: Instant,
+    /// Execution statistics recorded during the session.
     pub executions: Vec<ShaderExecutionStats>,
+    /// Cumulative GPU time across all executions.
     pub total_gpu_time: Duration,
+    /// Peak memory usage observed during the session.
     pub peak_memory_usage: u64,
 }
 
 /// Results from a completed profiling session
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProfilingSessionResults {
+    /// Name of the completed session.
     pub session_name: String,
+    /// Total wall-clock duration of the session.
     pub total_duration: Duration,
+    /// Number of shader executions recorded.
     pub execution_count: usize,
+    /// Cumulative GPU execution time.
     pub total_gpu_time: Duration,
+    /// Peak GPU memory usage observed.
     pub peak_memory_usage: u64,
+    /// Average GPU utilization across all executions.
     pub average_gpu_utilization: f32,
+    /// Individual execution statistics.
     pub executions: Vec<ShaderExecutionStats>,
 }
 
 /// Performance baseline for regression detection
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceBaseline {
+    /// Name identifying this baseline.
     pub name: String,
+    /// Expected execution duration.
     pub expected_duration: Duration,
+    /// Expected GPU utilization percentage.
     pub expected_gpu_utilization: f32,
+    /// Expected memory usage in bytes.
     pub expected_memory_usage: u64,
+    /// Factor above baseline that triggers a regression.
     pub regression_threshold: f32, // Factor above baseline that triggers regression (e.g., 1.2 = 20% increase)
+    /// Timestamp when the baseline was created.
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl PerformanceBaseline {
+    /// Create a new performance baseline with the given parameters.
     pub fn new(name: &str, expected_duration: Duration, expected_gpu_utilization: f32) -> Self {
         Self {
             name: name.to_string(),
@@ -561,11 +599,13 @@ impl PerformanceBaseline {
         }
     }
 
+    /// Set the expected memory usage for this baseline.
     pub fn with_memory_usage(mut self, memory_usage: u64) -> Self {
         self.expected_memory_usage = memory_usage;
         self
     }
 
+    /// Set the regression threshold factor for this baseline.
     pub fn with_threshold(mut self, threshold: f32) -> Self {
         self.regression_threshold = threshold;
         self
@@ -591,29 +631,43 @@ impl From<PerformanceBaseline> for ShaderExecutionStats {
 /// Performance regression detection result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceRegression {
+    /// Name of the baseline that was exceeded.
     pub baseline_name: String,
+    /// Severity level of the regression.
     pub severity: RegressionSeverity,
+    /// Descriptions of the regression issues detected.
     pub issues: Vec<String>,
+    /// Statistics from the current execution.
     pub current_stats: ShaderExecutionStats,
+    /// Baseline statistics for comparison.
     pub baseline_stats: ShaderExecutionStats,
 }
 
 /// Severity level for performance regressions
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum RegressionSeverity {
+    /// Minor performance degradation.
     Minor,
+    /// Moderate performance degradation.
     Moderate,
+    /// Severe performance degradation.
     Severe,
 }
 
 /// Summary of all profiling activities
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProfilingSummary {
+    /// Total number of profiling sessions completed.
     pub total_sessions: usize,
+    /// Total number of shader executions across all sessions.
     pub total_executions: usize,
+    /// Cumulative GPU time across all sessions.
     pub total_gpu_time: Duration,
+    /// Average execution duration.
     pub average_duration: Duration,
+    /// Average GPU utilization percentage.
     pub average_gpu_utilization: f32,
+    /// Number of registered performance baselines.
     pub baseline_count: usize,
 }
 

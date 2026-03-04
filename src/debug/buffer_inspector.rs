@@ -383,9 +383,13 @@ impl GpuBufferInspector {
 /// Result of buffer comparison analysis
 #[derive(Debug, Clone)]
 pub struct BufferComparisonResult<T> {
+    /// Whether the two buffers are identical.
     pub is_identical: bool,
+    /// Length mismatch as (buffer_a_len, buffer_b_len), if applicable.
     pub length_mismatch: Option<(usize, usize)>,
+    /// Individual element differences found.
     pub differences: Vec<BufferElementDifference>,
+    /// Percentage of identical elements.
     pub similarity_percentage: f32,
     phantom: PhantomData<T>,
 }
@@ -393,27 +397,39 @@ pub struct BufferComparisonResult<T> {
 /// Individual element difference in buffer comparison
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BufferElementDifference {
+    /// Index of the differing element.
     pub index: usize,
+    /// Debug representation of the value in buffer A.
     pub value_a: String,
+    /// Debug representation of the value in buffer B.
     pub value_b: String,
 }
 
 /// Analysis results for buffer content patterns
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BufferAnalysis {
+    /// Number of elements in the buffer.
     pub element_count: usize,
+    /// Approximate number of unique values.
     pub unique_values: usize,
+    /// Whether the buffer contains zero values.
     pub has_zero_values: bool,
+    /// Whether the buffer contains NaN float values.
     pub has_nan_values: bool,
+    /// Whether the buffer contains infinite float values.
     pub has_infinite_values: bool,
+    /// Total buffer size in bytes.
     pub memory_usage_bytes: u64,
+    /// Descriptions of detected anomalies.
     pub anomalies: Vec<String>,
 }
 
 /// Statistics about staging buffer cache usage
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StagingBufferStats {
+    /// Number of cached staging buffers.
     pub buffer_count: usize,
+    /// Total GPU memory used by staging buffers.
     pub total_memory_bytes: u64,
 }
 

@@ -36,10 +36,15 @@ impl fmt::Display for ResourceId {
 /// Type of GPU resource
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ResourceType {
+    /// GPU buffer resource.
     Buffer,
+    /// Compute or render pipeline.
     Pipeline,
+    /// Bind group linking resources to a pipeline.
     BindGroup,
+    /// GPU texture resource.
     Texture,
+    /// Texture sampler.
     Sampler,
 }
 
@@ -82,8 +87,11 @@ impl fmt::Display for ResourceType {
 /// State of a GPU resource
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResourceState {
+    /// Resource is actively in use.
     Active,
+    /// Resource exists but has not been recently used.
     Inactive,
+    /// Resource has been destroyed.
     Destroyed,
 }
 
@@ -101,11 +109,17 @@ impl ResourceState {
 /// GPU resource node in the dependency graph
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceNode {
+    /// Unique identifier for this resource.
     pub id: ResourceId,
+    /// Type of GPU resource.
     pub resource_type: ResourceType,
+    /// Optional human-readable label.
     pub label: Option<String>,
+    /// Size of the resource in bytes.
     pub size: u64,
+    /// Current state of the resource.
     pub state: ResourceState,
+    /// Optional usage flags description.
     pub usage_flags: Option<String>,
     /// Resources that this resource depends on
     pub dependencies: Vec<ResourceId>,
@@ -508,17 +522,29 @@ struct GraphEdge {
 /// Resource graph analysis report
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceGraphReport {
+    /// Total number of resources in the graph.
     pub total_resources: usize,
+    /// Number of active resources.
     pub active_resources: usize,
+    /// Number of inactive or destroyed resources.
     pub inactive_resources: usize,
+    /// Total memory consumed by all resources.
     pub total_memory: u64,
+    /// Number of circular dependency cycles detected.
     pub circular_dependencies: usize,
+    /// Number of unused resources detected.
     pub unused_resources: usize,
+    /// Number of resource sharing opportunities found.
     pub sharing_opportunities: usize,
+    /// Resource counts grouped by type.
     pub resources_by_type: HashMap<ResourceType, usize>,
+    /// Memory usage grouped by resource type.
     pub memory_by_type: HashMap<ResourceType, u64>,
+    /// Details of circular dependency cycles.
     pub circular_dependency_details: Vec<Vec<ResourceId>>,
+    /// Identifiers of unused resources.
     pub unused_resource_ids: Vec<ResourceId>,
+    /// Shared resources with their dependent count.
     pub sharing_opportunity_details: Vec<(ResourceId, usize)>,
 }
 

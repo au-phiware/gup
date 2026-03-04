@@ -332,28 +332,41 @@ impl Default for MemoryProfilerConfig {
 /// Information about a tracked buffer allocation
 #[derive(Debug, Clone)]
 pub struct BufferAllocation {
+    /// Unique allocation identifier.
     pub id: u64,
+    /// Optional human-readable label.
     pub label: Option<String>,
+    /// Size of the allocation in bytes.
     pub size: u64,
+    /// Buffer usage flags.
     pub usage: BufferUsages,
+    /// Time when the buffer was allocated.
     pub allocated_at: Instant,
+    /// Time when the buffer was deallocated, if applicable.
     pub deallocated_at: Option<Instant>,
+    /// Stack trace captured at allocation time, if enabled.
     pub stack_trace: Option<String>,
 }
 
 /// Memory snapshot at a point in time
 #[derive(Debug, Clone)]
 pub struct MemorySnapshot {
+    /// Time when the snapshot was taken.
     pub timestamp: Instant,
+    /// Total tracked memory usage in bytes.
     pub total_memory: u64,
+    /// Number of active allocations.
     pub active_allocations: usize,
 }
 
 /// Serializable version of MemorySnapshot for export
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemorySnapshotSerialized {
+    /// Elapsed seconds since snapshot capture.
     pub timestamp_secs: f64,
+    /// Total tracked memory usage in bytes.
     pub total_memory: u64,
+    /// Number of active allocations.
     pub active_allocations: usize,
 }
 
@@ -370,45 +383,68 @@ impl From<&MemorySnapshot> for MemorySnapshotSerialized {
 /// Memory trend direction
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MemoryTrend {
+    /// Memory usage is trending upward.
     Increasing,
+    /// Memory usage is stable.
     Stable,
+    /// Memory usage is trending downward.
     Decreasing,
 }
 
 /// Detected memory leak
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryLeak {
+    /// Allocation identifier of the suspected leak.
     pub allocation_id: u64,
+    /// Optional label of the leaked buffer.
     pub label: Option<String>,
+    /// Size of the leaked allocation in bytes.
     pub size: u64,
+    /// Duration since the allocation was created.
     #[serde(with = "duration_serde")]
     pub age: Duration,
+    /// Stack trace at allocation time, if captured.
     pub stack_trace: Option<String>,
 }
 
 /// Detailed memory usage report
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryReport {
+    /// Timestamp when the report was generated.
     pub timestamp: chrono::DateTime<chrono::Utc>,
+    /// Duration of the profiling session.
     #[serde(with = "duration_serde")]
     pub session_duration: Duration,
+    /// Total number of allocations tracked (active and freed).
     pub total_allocations: usize,
+    /// Number of currently active allocations.
     pub active_allocations: usize,
+    /// Cumulative bytes allocated across all tracked buffers.
     pub total_memory_allocated: u64,
+    /// Bytes currently in use by active allocations.
     pub total_memory_active: u64,
+    /// Bytes freed by deallocated buffers.
     pub total_memory_deallocated: u64,
+    /// Rate of allocations per second.
     pub allocation_rate: f32,
+    /// Memory usage grouped by buffer usage flags.
     pub usage_breakdown: HashMap<String, u64>,
+    /// Largest active allocations, sorted by size.
     pub largest_allocations: Vec<AllocationInfo>,
+    /// Detected memory leaks.
     pub detected_leaks: Vec<MemoryLeak>,
 }
 
 /// Information about a single allocation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AllocationInfo {
+    /// Unique allocation identifier.
     pub id: u64,
+    /// Optional human-readable label.
     pub label: Option<String>,
+    /// Size of the allocation in bytes.
     pub size: u64,
+    /// Duration since the allocation was created.
     #[serde(with = "duration_serde")]
     pub age: Duration,
 }

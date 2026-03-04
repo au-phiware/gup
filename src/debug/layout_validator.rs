@@ -207,34 +207,53 @@ impl Default for MemoryLayoutValidator {
 /// Result of memory layout validation for a single struct
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LayoutValidationResult {
+    /// Name of the validated struct.
     pub struct_name: String,
+    /// Whether the layout is valid for GPU use.
     pub is_valid: bool,
+    /// Non-fatal warning messages.
     pub warnings: Vec<String>,
+    /// Fatal error messages.
     pub errors: Vec<String>,
+    /// Size of the Rust struct in bytes.
     pub rust_size: usize,
+    /// Alignment of the Rust struct in bytes.
     pub rust_alignment: usize,
+    /// Expected WGSL struct size, if known.
     pub expected_wgsl_size: Option<usize>,
+    /// Expected WGSL struct alignment, if known.
     pub expected_wgsl_alignment: Option<usize>,
+    /// Field offset information for each struct field.
     pub field_offsets: Vec<FieldOffset>,
+    /// Recommendations for improving layout compatibility.
     pub recommendations: Vec<String>,
 }
 
 /// Information about a struct field's memory offset
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FieldOffset {
+    /// Name of the struct field.
     pub field_name: String,
+    /// Byte offset of the field within the struct.
     pub offset: usize,
+    /// Size of the field in bytes.
     pub size: usize,
+    /// Alignment requirement of the field in bytes.
     pub alignment: usize,
 }
 
 /// Summary of validation results for multiple structs
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationSummary {
+    /// Total number of structs validated.
     pub total_structs: usize,
+    /// Number of structs that passed validation.
     pub valid_structs: usize,
+    /// Total number of errors across all structs.
     pub total_errors: usize,
+    /// Total number of warnings across all structs.
     pub total_warnings: usize,
+    /// Individual validation results.
     pub results: Vec<LayoutValidationResult>,
 }
 

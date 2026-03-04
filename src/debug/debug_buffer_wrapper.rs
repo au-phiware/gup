@@ -210,17 +210,28 @@ where
 /// Record of a buffer operation
 #[derive(Debug, Clone)]
 pub enum BufferOperation {
+    /// Full buffer upload operation.
     Upload {
+        /// When the operation occurred.
         timestamp: Instant,
+        /// Number of elements uploaded.
         data_size: usize,
+        /// Capacity of the destination buffer.
         buffer_capacity: usize,
+        /// Total operation duration including validation.
         duration: std::time::Duration,
+        /// Duration of the GPU upload alone.
         upload_duration: std::time::Duration,
     },
+    /// Partial buffer upload to a specific range.
     UploadRange {
+        /// When the operation occurred.
         timestamp: Instant,
+        /// Number of elements uploaded.
         data_size: usize,
+        /// Byte offset into the buffer.
         offset: usize,
+        /// Total operation duration.
         duration: std::time::Duration,
     },
 }
@@ -228,9 +239,13 @@ pub enum BufferOperation {
 /// Statistics about buffer operations
 #[derive(Debug, Clone)]
 pub struct OperationStats {
+    /// Number of full upload operations.
     pub upload_count: usize,
+    /// Number of range upload operations.
     pub upload_range_count: usize,
+    /// Cumulative time spent on full uploads.
     pub total_upload_time: std::time::Duration,
+    /// Average time per full upload.
     pub avg_upload_time: std::time::Duration,
 }
 

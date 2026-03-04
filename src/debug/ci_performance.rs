@@ -550,24 +550,38 @@ impl BaselineStorage {
 /// Performance baseline for regression detection
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceBaseline {
+    /// Name of the test this baseline measures.
     pub test_name: String,
+    /// Category grouping for the test.
     pub category: String,
+    /// Average frame time in milliseconds.
     pub avg_frame_time_ms: f32,
+    /// Average memory usage in bytes.
     pub avg_memory_usage_bytes: u64,
+    /// Number of samples used to compute this baseline.
     pub sample_count: usize,
+    /// Timestamp when the baseline was last updated.
     pub last_updated: chrono::DateTime<chrono::Utc>,
+    /// Arbitrary key-value metadata.
     pub metadata: HashMap<String, String>,
+    /// Platform identifier for this baseline.
     pub platform_id: String,
 }
 
 /// Complete performance report from a CI run
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceReport {
+    /// Timestamp when the report was generated.
     pub timestamp: chrono::DateTime<chrono::Utc>,
+    /// Total duration of the test suite in milliseconds.
     pub duration_ms: u64,
+    /// Results for each individual test.
     pub test_results: Vec<TestResult>,
+    /// Aggregated performance summary.
     pub summary: PerformanceSummary,
+    /// CI configuration used for this run.
     pub config: CiConfig,
+    /// Platform information, if available.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub platform_info: Option<PlatformInfo>,
 }
@@ -575,48 +589,72 @@ pub struct PerformanceReport {
 /// Result of a single performance test
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestResult {
+    /// Name of the test.
     pub test_name: String,
+    /// Category of the test.
     pub category: String,
+    /// Performance snapshot captured during the test.
     pub snapshot: PerformanceSnapshot,
+    /// Comparison against stored baseline, if available.
     pub baseline_comparison: Option<BaselineComparison>,
+    /// Wall-clock time for the test in milliseconds.
     pub elapsed_ms: u64,
+    /// Whether the test passed regression checks.
     pub passed: bool,
 }
 
 /// Comparison between current performance and baseline
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BaselineComparison {
+    /// Baseline frame time in milliseconds.
     pub baseline_frame_time_ms: f32,
+    /// Current frame time in milliseconds.
     pub current_frame_time_ms: f32,
+    /// Percentage change in frame time from the baseline.
     pub frame_time_delta_percent: f64,
+    /// Baseline memory usage in bytes.
     pub baseline_memory_bytes: u64,
+    /// Current memory usage in bytes.
     pub current_memory_bytes: u64,
+    /// Percentage change in memory usage from the baseline.
     pub memory_delta_percent: f64,
+    /// Whether the comparison indicates a regression.
     pub is_regression: bool,
 }
 
 /// Performance regression detected in testing
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceRegression {
+    /// Name of the regressed test.
     pub test_name: String,
+    /// Category of the regressed test.
     pub category: String,
+    /// Percentage change in frame time.
     pub frame_time_delta_percent: f64,
+    /// Percentage change in memory usage.
     pub memory_delta_percent: f64,
+    /// Severity of the regression.
     pub severity: RegressionSeverity,
 }
 
 /// Severity level of a performance regression
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RegressionSeverity {
+    /// Low-impact regression.
     Low,
+    /// Medium-impact regression.
     Medium,
+    /// High-impact regression.
     High,
+    /// Critical regression requiring immediate attention.
     Critical,
 }
 
 /// Test suite containing multiple performance tests
 pub struct PerformanceTestSuite {
+    /// Name of the test suite.
     pub name: String,
+    /// Individual performance tests in the suite.
     pub tests: Vec<PerformanceTest>,
 }
 
@@ -632,8 +670,11 @@ type AsyncTestFn = Box<
 
 /// Individual performance test
 pub struct PerformanceTest {
+    /// Name of the test.
     pub name: String,
+    /// Category grouping for the test.
     pub category: String,
+    /// Async function that executes the test and returns a performance snapshot.
     pub test_fn: AsyncTestFn,
 }
 
