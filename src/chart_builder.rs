@@ -3227,6 +3227,27 @@ mod tests {
     }
 
     #[test]
+    fn test_axis_scale_scale_value_linear() {
+        let scale = AxisScale::Linear(crate::shader_function::LinearScale::new(
+            0.0, 100.0, -1.0, 1.0,
+        ));
+        assert!((scale.scale_value(0.0) - (-1.0)).abs() < 1e-6);
+        assert!((scale.scale_value(50.0) - 0.0).abs() < 1e-6);
+        assert!((scale.scale_value(100.0) - 1.0).abs() < 1e-6);
+        // Extrapolation
+        assert!((scale.scale_value(200.0) - 3.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_axis_scale_scale_value_degenerate() {
+        // When domain_min == domain_max, return range_min.
+        let scale = AxisScale::Linear(crate::shader_function::LinearScale::new(
+            5.0, 5.0, -1.0, 1.0,
+        ));
+        assert!((scale.scale_value(5.0) - (-1.0)).abs() < 1e-6);
+    }
+
+    #[test]
     fn test_chart_builder_error_display() {
         let error = ChartBuilderError::EmptyData;
         assert_eq!(format!("{error}"), "Cannot create chart: no data provided");
