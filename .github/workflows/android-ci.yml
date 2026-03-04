@@ -1,0 +1,192 @@
+# Android CI — build the gup-android crate and example APK.
+#
+# This workflow triggers on:
+#   1. Pushes that touch Android-related paths.
+#   2. Manual dispatch via the Actions UI.
+#
+# The emulator smoke test boots an API-30 x86_64 image, installs the
+# example APK, runs it for 5 seconds, and checks logcat for fatal errors.
+
+name: Android CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "gup-android/**"
+      - "src/platform/android*"
+      - "pkg/android/**"
+      - "examples/android/**"
+      - ".github/workflows/android-ci.yml"
+  pull_request:
+    paths:
+      - "gup-android/**"
+      - "src/platform/android*"
+      - "pkg/android/**"
+      - "examples/android/**"
+      - ".github/workflows/android-ci.yml"
+  workflow_dispatch:
+
+# Cancel in-progress runs for the same branch.
+concurrency:
+  group: android-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  NDK_VERSION: "27.2.12479018"
+
+jobs:
+  # ------------------------------------------------------------------ #
+  # Job 1: Build the Rust shared library for Android targets            #
+  # ------------------------------------------------------------------ #
+  build-rust:
+    name: Build gup-android (.so)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk
+
+      - name: Setup Android SDK & NDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "ndk;${{ env.NDK_VERSION }}"
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: android-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: android-cargo-
+
+      - name: Cargo check (host, with android-shim)
+        run: cargo check --features android-shim
+
+      - name: Build gup-android for arm64-v8a
+        run: cargo ndk -t arm64-v8a build -p gup-android --release
+
+      - name: Build gup-android for armeabi-v7a
+        run: cargo ndk -t armeabi-v7a build -p gup-android --release
+
+      - name: Upload shared libraries
+        uses: actions/upload-artifact@v4
+        with:
+          name: libgup_android
+          path: |
+            target/aarch64-linux-android/release/libgup_android.so
+            target/armv7-linux-androideabi/release/libgup_android.so
+          if-no-files-found: error
+
+  # ------------------------------------------------------------------ #
+  # Job 2: Build the example APK and run emulator smoke test            #
+  # ------------------------------------------------------------------ #
+  example-apk:
+    name: Example APK & Emulator Smoke Test
+    runs-on: ubuntu-latest
+    needs: build-rust
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download shared libraries
+        uses: actions/download-artifact@v4
+        with:
+          name: libgup_android
+          path: libs/
+
+      - name: Place .so files in jniLibs
+        run: |
+          mkdir -p examples/android/app/src/main/jniLibs/arm64-v8a
+          mkdir -p examples/android/app/src/main/jniLibs/armeabi-v7a
+          cp libs/aarch64-linux-android/release/libgup_android.so \
+             examples/android/app/src/main/jniLibs/arm64-v8a/
+          cp libs/armv7-linux-androideabi/release/libgup_android.so \
+             examples/android/app/src/main/jniLibs/armeabi-v7a/
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: >-
+            platforms;android-34
+            build-tools;34.0.0
+            system-images;android-30;google_apis;x86_64
+            emulator
+
+      - name: Build example APK
+        working-directory: examples/android
+        run: ./gradlew assembleDebug
+
+      - name: Create AVD
+        run: |
+          echo "no" | avdmanager create avd \
+            --name "gup_test" \
+            --package "system-images;android-30;google_apis;x86_64" \
+            --device "pixel_4" \
+            --force
+
+      - name: Boot emulator
+        run: |
+          $ANDROID_HOME/emulator/emulator -avd gup_test \
+            -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect &
+          adb wait-for-device
+          # Wait for boot to complete
+          adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done'
+          echo "Emulator booted."
+
+      - name: Install and launch example
+        run: |
+          adb install examples/android/app/build/outputs/apk/debug/app-debug.apk
+          adb shell am start -n au.com.phiware.gup.example/.ChartActivity
+          echo "Launched ChartActivity — waiting 5 seconds..."
+          sleep 5
+
+      - name: Check logcat for fatal errors
+        run: |
+          adb logcat -d > /tmp/logcat.txt
+          if grep -qiE "FATAL|A/libc|A/DEBUG" /tmp/logcat.txt; then
+            echo "❌ Fatal errors found in logcat:"
+            grep -iE "FATAL|A/libc|A/DEBUG" /tmp/logcat.txt
+            exit 1
+          fi
+          echo "✅ No fatal errors in logcat."
+
+      - name: Upload logcat on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-logcat
+          path: /tmp/logcat.txt
+
+  # ------------------------------------------------------------------ #
+  # Job 3: Verify platform isolation — Linux tests still pass           #
+  # ------------------------------------------------------------------ #
+  platform-isolation:
+    name: Platform isolation (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cargo test (default features)
+        run: cargo test -- --test-threads=1
+
+      - name: Cargo test (android-shim feature, host target)
+        run: cargo test --features android-shim -- --test-threads=1
