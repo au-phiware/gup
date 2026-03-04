@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Interaction & Spatial Index **Status**: ✅ Complete
-**Created**: 2026-03-03 **Completed**: 2025-07-24
+**Initiative**: Interaction & Spatial Index **Status**: ✅ Complete **Created**:
+2026-03-03 **Completed**: 2025-07-24
 
 ## Context
 
@@ -82,12 +82,12 @@ latency skews wall-clock measurements.
   optional `ComputePassTimestampWrites` to instrument the dimming compute pass.
   The existing `encode_dimming()` delegates to this with `None`.
 
-- **Lazy GpuTimer integration in `LinkedSelection`** — A `gpu_timer:
-  Option<GpuTimer>` field is lazily created during the first GPU-path
-  calibration frame when auto-tune is enabled. During the ProbeGpu phase, GPU
-  timestamps are recorded around the compute dispatch and preferred over
-  `Instant` wall-clock timing. Falls back to `Instant` for the ProbeCpu phase
-  and when timestamp queries are unavailable.
+- **Lazy GpuTimer integration in `LinkedSelection`** — A
+  `gpu_timer: Option<GpuTimer>` field is lazily created during the first
+  GPU-path calibration frame when auto-tune is enabled. During the ProbeGpu
+  phase, GPU timestamps are recorded around the compute dispatch and preferred
+  over `Instant` wall-clock timing. Falls back to `Instant` for the ProbeCpu
+  phase and when timestamp queries are unavailable.
 
 - **Opportunistic `TIMESTAMP_QUERY` in `GupContext::with_options`** — When the
   adapter supports `Features::TIMESTAMP_QUERY`, the feature is automatically
@@ -168,8 +168,8 @@ latency skews wall-clock measurements.
 - **Decision**: Created a new focused `GpuTimer` module rather than reusing the
   existing `TimestampQueryManager` from `performance.rs`.
 - **Reasoning**: `TimestampQueryManager` is designed for general profiling (64
-  queries, async readback via `futures::channel`), while `GpuTimer` needs only
-  2 queries and synchronous readback for the auto-tune path. The simpler
+  queries, async readback via `futures::channel`), while `GpuTimer` needs only 2
+  queries and synchronous readback for the auto-tune path. The simpler
   abstraction avoids a `futures` dependency in `linked_selection.rs` and keeps
   the synchronous `prepare_render` API clean.
 - **Trade-off**: Two similar abstractions exist for timestamp queries. The
@@ -180,8 +180,8 @@ latency skews wall-clock measurements.
 
 #### Opportunistic Feature Enablement in GupContext
 
-- **Decision**: Automatically request `TIMESTAMP_QUERY` from the device when
-  the adapter reports support, even if the user didn't explicitly request it.
+- **Decision**: Automatically request `TIMESTAMP_QUERY` from the device when the
+  adapter reports support, even if the user didn't explicitly request it.
 - **Reasoning**: The story requires "no additional device features required by
   default". Making the feature opportunistic means callers get better auto-tune
   accuracy on capable hardware without changing their code.
@@ -209,8 +209,8 @@ latency skews wall-clock measurements.
 
 - **GUP-291's clean state machine design made integration straightforward**: The
   `AutoTunePhase` enum and `record_sample(elapsed_ns)` interface made it easy to
-  swap in GPU timestamps — the state machine doesn't care where the timing
-  comes from, only that it receives nanoseconds.
+  swap in GPU timestamps — the state machine doesn't care where the timing comes
+  from, only that it receives nanoseconds.
 - **Existing `encode_dimming` signature change was minimal**: Adding an
   `encode_dimming_timed()` method with an optional timestamp writes parameter
   while keeping the original `encode_dimming()` as a delegating wrapper meant
@@ -222,7 +222,6 @@ latency skews wall-clock measurements.
 ### Follow-up Stories
 
 1. **Fix TimestampQueryManager timestamp_period** — The existing
-   `TimestampQueryManager` in `performance.rs` hard-codes `timestamp_period =
-   1.0`. It should use `Queue::get_timestamp_period()` for accurate
-   tick-to-nanosecond conversion, matching what `GpuTimer` does.
-
+   `TimestampQueryManager` in `performance.rs` hard-codes
+   `timestamp_period = 1.0`. It should use `Queue::get_timestamp_period()` for
+   accurate tick-to-nanosecond conversion, matching what `GpuTimer` does.

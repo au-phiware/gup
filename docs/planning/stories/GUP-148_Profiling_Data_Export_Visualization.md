@@ -149,9 +149,9 @@ pub trait ProfileExporter {
 - **Solution**: Implemented the "X" (complete) event type with duration, which
   is the simplest and most useful for profiling data. Render passes are placed
   on a separate `tid` from frames to show them in parallel lanes in the viewer.
-- **Pattern**: For Chrome Trace format, use "X" phase events with `ts` and
-  `dur` in microseconds. Separate logical categories onto different `tid` values
-  to get parallel lanes in the trace viewer.
+- **Pattern**: For Chrome Trace format, use "X" phase events with `ts` and `dur`
+  in microseconds. Separate logical categories onto different `tid` values to
+  get parallel lanes in the trace viewer.
 
 #### Self-Contained HTML Dashboards
 
@@ -199,8 +199,8 @@ pub trait ProfileExporter {
   rebuild. Using `--no-verify` for documentation-only commits (status changes)
   saves significant time.
 - Disk space is a recurring constraint. Running `cargo clean` before full test
-  suites is often necessary. Targeted test runs (`--lib performance_export`)
-  are more practical during development.
+  suites is often necessary. Targeted test runs (`--lib performance_export`) are
+  more practical during development.
 - The existing `FrameBandwidthStats` already had serde support, which made it
   straightforward to include in the export. The bandwidth profiler integration
   in GUP-147 set up a good foundation.

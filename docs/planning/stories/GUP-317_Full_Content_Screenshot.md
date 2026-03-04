@@ -2,9 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Ecosystem Integration
-**Status**: 📋 Planned
-**Created**: 2025-03-04
+**Initiative**: Ecosystem Integration **Status**: 📋 Planned **Created**:
+2025-03-04
 
 ## Context
 
@@ -54,7 +53,8 @@ actual rendered chart content.
 ## Technical Tasks
 
 - [ ] Add `usage: Option<TextureUsages>` to `SurfaceConfigBuilder`.
-- [ ] In `add_surface_with_config`, merge builder usage with `RENDER_ATTACHMENT`.
+- [ ] In `add_surface_with_config`, merge builder usage with
+      `RENDER_ATTACHMENT`.
 - [ ] Add `RenderFrame::capture_texture_copy(&mut self, device, width, height)`
       that creates a staging buffer and encodes a copy command.
 - [ ] In `GupAppRunner::render_frame`, when `screenshot_requested`, call

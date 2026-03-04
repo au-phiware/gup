@@ -73,7 +73,8 @@ pub struct MemoryBandwidthStats {
 **New module: `src/debug/memory_bandwidth.rs`** — A comprehensive GPU memory
 bandwidth profiling module with the following components:
 
-1. **MemoryBandwidthProfiler** — Core profiler with per-frame begin/end lifecycle
+1. **MemoryBandwidthProfiler** — Core profiler with per-frame begin/end
+   lifecycle
    - Buffer upload/download recording with per-label byte tracking
    - Texture binding event recording with slot-level tracking
    - Bounded frame history with configurable window size
@@ -95,34 +96,34 @@ bandwidth profiling module with the following components:
    critical saturation)
 
 6. **MemoryEfficiencyMetrics** — Aggregate efficiency analysis including
-   upload/download ratio, average transfer sizes, texture memory inventory,
-   and redundant upload detection
+   upload/download ratio, average transfer sizes, texture memory inventory, and
+   redundant upload detection
 
 7. **TextureSlotTracker** — Internal tracker for per-slot texture binding
    history and thrashing detection via alternation analysis
 
 ### Integration Points
 
-- **PerformanceProfiler** (`src/performance.rs`) — Added `MemoryBandwidthProfiler`
-  as a field, wired into begin_frame/end_frame, added bandwidth recording
-  methods and HighMemoryBandwidth alerts
+- **PerformanceProfiler** (`src/performance.rs`) — Added
+  `MemoryBandwidthProfiler` as a field, wired into begin_frame/end_frame, added
+  bandwidth recording methods and HighMemoryBandwidth alerts
 - **DetailedFrameStats** — New `bandwidth_stats` field carries per-frame
   bandwidth data through the existing profiling pipeline
 - **ShaderProfiler** (`src/debug/shader_profiler.rs`) — Filled in the
   `memory_bandwidth_gbps` placeholder with a heuristic estimate
-- **GpuDebugContext** (`src/debug.rs`) — Added `bandwidth_profiler` field
-  and included bandwidth data in DebugReport export
-- **DebugReport** — New `bandwidth_stats` and `bandwidth_pressure` fields
-  for serialized export
+- **GpuDebugContext** (`src/debug.rs`) — Added `bandwidth_profiler` field and
+  included bandwidth data in DebugReport export
+- **DebugReport** — New `bandwidth_stats` and `bandwidth_pressure` fields for
+  serialized export
 
 ### Key Files Changed
 
-| File | Change |
-|------|--------|
-| `src/debug/memory_bandwidth.rs` | New — 1300+ lines, complete bandwidth profiling module |
-| `src/debug.rs` | Added module registration, re-exports, GpuDebugContext integration |
-| `src/performance.rs` | Added bandwidth profiler field and recording methods |
-| `src/debug/shader_profiler.rs` | Filled memory_bandwidth_gbps placeholder |
+| File                            | Change                                                             |
+| ------------------------------- | ------------------------------------------------------------------ |
+| `src/debug/memory_bandwidth.rs` | New — 1300+ lines, complete bandwidth profiling module             |
+| `src/debug.rs`                  | Added module registration, re-exports, GpuDebugContext integration |
+| `src/performance.rs`            | Added bandwidth profiler field and recording methods               |
+| `src/debug/shader_profiler.rs`  | Filled memory_bandwidth_gbps placeholder                           |
 
 ### Test Counts
 
@@ -176,7 +177,8 @@ bandwidth profiling module with the following components:
 #### Separate Module vs. Extending Existing Profilers
 
 - **Decision**: Created a standalone `memory_bandwidth` module rather than
-  embedding the logic directly into `PerformanceProfiler` or `GpuMemoryProfiler`.
+  embedding the logic directly into `PerformanceProfiler` or
+  `GpuMemoryProfiler`.
 - **Reasoning**: The bandwidth profiler has its own lifecycle (begin/end frame),
   configuration, and output types. Keeping it separate follows the single
   responsibility principle and avoids bloating the existing profilers.
@@ -206,8 +208,8 @@ bandwidth profiling module with the following components:
   unused — filling it in was a natural integration point.
 - The `memory_bandwidth_gbps` field in `ShaderExecutionStats` was an explicit
   TODO placeholder, making it easy to locate and fill.
-- Building the module as pure Rust (no GPU resources needed) allowed running
-  all 29 tests without GPU access, keeping the development loop fast.
+- Building the module as pure Rust (no GPU resources needed) allowed running all
+  29 tests without GPU access, keeping the development loop fast.
 
 ### Follow-up Stories
 

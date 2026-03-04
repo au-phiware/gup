@@ -2,16 +2,15 @@
 
 ## Story Overview
 
-**Initiative**: Ecosystem Integration
-**Status**: 📋 Planned
-**Created**: 2025-03-04
+**Initiative**: Ecosystem Integration **Status**: 📋 Planned **Created**:
+2025-03-04
 
 ## Context
 
-GUP-265 introduced `GupApp`, a builder that eliminates the 50–100 lines of
-winit boilerplate present in every windowed example. However, all existing
-windowed examples still implement `ApplicationHandler` manually. Migrating
-suitable examples to `GupApp` will:
+GUP-265 introduced `GupApp`, a builder that eliminates the 50–100 lines of winit
+boilerplate present in every windowed example. However, all existing windowed
+examples still implement `ApplicationHandler` manually. Migrating suitable
+examples to `GupApp` will:
 
 1. Demonstrate `GupApp`'s versatility across different chart types.
 2. Reduce total code in the repository by removing duplicated lifecycle code.
@@ -28,8 +27,8 @@ of the manual approach.
 
 ## Acceptance Criteria
 
-- [ ] `examples/basic/02_scatter_window.rs` is migrated to use `GupApp` and
-      its `main()` body is ≤ 5 lines.
+- [ ] `examples/basic/02_scatter_window.rs` is migrated to use `GupApp` and its
+      `main()` body is ≤ 5 lines.
 - [ ] At least two other windowed examples are migrated where appropriate.
 - [ ] Multi-window and advanced-event examples remain unchanged and are
       documented as intentionally manual.
@@ -46,8 +45,8 @@ of the manual approach.
 ## Technical Tasks
 
 - [ ] Identify which examples are suitable for `GupApp` migration.
-- [ ] Refactor each suitable example: extract the renderer into an
-      `AppRenderer` impl, replace the `ApplicationHandler` boilerplate with
+- [ ] Refactor each suitable example: extract the renderer into an `AppRenderer`
+      impl, replace the `ApplicationHandler` boilerplate with
       `GupApp::new(renderer).run()`.
 - [ ] Add doc comments explaining the migration and when manual handling is
       preferred.

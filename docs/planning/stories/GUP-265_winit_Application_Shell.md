@@ -4,8 +4,7 @@
 
 **Initiative**: Ecosystem Integration  
 **Status**: ✅ Complete  
-**Completed**: 2025-03-04
-**Created**: 2025-07-14
+**Completed**: 2025-03-04 **Created**: 2025-07-14
 
 ## Context
 
@@ -209,31 +208,33 @@ for multi-window or embedded scenarios.
 ### What Was Implemented
 
 - **`src/app.rs`** — New module containing:
-  - `AppRenderer` trait with blanket implementation for `FnMut(&mut RenderFrame)`
-    closures
+  - `AppRenderer` trait with blanket implementation for
+    `FnMut(&mut RenderFrame)` closures
   - `GupApp` fluent builder with `new()`, `title()`, `size()`, `resizable()`,
     `shortcuts()`, and `run()` methods
   - Internal `GupAppRunner` struct implementing winit's `ApplicationHandler`
     with full lifecycle management (resumed, resize, redraw, close, keyboard)
   - Fullscreen toggle via `F`/`F11` using winit's `Fullscreen::Borderless`
   - Screenshot capture via offscreen render target and PNG encoding
-- **`src/lib.rs`** — Added `pub mod app` and `pub use app::{AppRenderer, GupApp}`
+- **`src/lib.rs`** — Added `pub mod app` and
+  `pub use app::{AppRenderer, GupApp}`
 - **`examples/hello_world.rs`** — Complete runnable example with instanced
   circle rendering and a 4-line `main()` function
 - **`Cargo.toml`** — Added `hello_world` example entry
 
 ### Key Files Changed
 
-| File | Change |
-|------|--------|
-| `src/app.rs` | New: GupApp builder, AppRenderer trait, GupAppRunner |
-| `src/lib.rs` | Added module declaration and public re-exports |
-| `examples/hello_world.rs` | New: minimal scatter-plot demo |
-| `Cargo.toml` | Added hello_world example entry |
+| File                      | Change                                               |
+| ------------------------- | ---------------------------------------------------- |
+| `src/app.rs`              | New: GupApp builder, AppRenderer trait, GupAppRunner |
+| `src/lib.rs`              | Added module declaration and public re-exports       |
+| `examples/hello_world.rs` | New: minimal scatter-plot demo                       |
+| `Cargo.toml`              | Added hello_world example entry                      |
 
 ### Test Count
 
-- 8 unit tests for the builder API (defaults, setters, chaining, struct renderer)
+- 8 unit tests for the builder API (defaults, setters, chaining, struct
+  renderer)
 
 ## Retrospective
 
@@ -256,7 +257,8 @@ for multi-window or embedded scenarios.
 #### Arc-unwrap Pattern for Mutable GupContext
 
 - **Challenge**: `GupContext` is wrapped in `Arc` after creation via
-  `with_surface()`, but `begin_frame()` and `resize_surface()` require `&mut self`.
+  `with_surface()`, but `begin_frame()` and `resize_surface()` require
+  `&mut self`.
 - **Solution**: Used the established `Arc::try_unwrap → mutate → Arc::new`
   pattern from existing examples. If unwrap fails (another reference exists),
   the render is silently skipped for that frame.
@@ -268,7 +270,8 @@ for multi-window or embedded scenarios.
 
 - **Challenge**: Surface textures are configured with only `RENDER_ATTACHMENT`
   usage — no `COPY_SRC` — making direct readback impossible. The `RenderFrame`
-  API has private fields, preventing injection of copy commands before presentation.
+  API has private fields, preventing injection of copy commands before
+  presentation.
 - **Solution**: Used the existing `OffscreenTarget` from `export::png` to create
   a separate render target. For v1, screenshots capture a blank frame (clear
   colour only) rather than re-rendering user content, because `AppRenderer`
@@ -283,9 +286,9 @@ for multi-window or embedded scenarios.
 
 - **Decision**: `GupApp` stores `Box<dyn AppRenderer>` rather than being generic
   over the renderer type.
-- **Reasoning**: A generic `GupApp<R: AppRenderer>` would infect all
-  downstream types with the type parameter. Boxing enables a simpler API and
-  allows closures without explicit type annotation.
+- **Reasoning**: A generic `GupApp<R: AppRenderer>` would infect all downstream
+  types with the type parameter. Boxing enables a simpler API and allows
+  closures without explicit type annotation.
 - **Trade-off**: One vtable indirection per frame (negligible compared to GPU
   work).
 - **Future**: If profiling ever shows the vtable call matters, a generic variant
@@ -295,9 +298,9 @@ for multi-window or embedded scenarios.
 
 - **Decision**: Used `GupContext::with_surface()` as-is rather than customising
   the surface configuration.
-- **Reasoning**: Adding `COPY_SRC` to the surface usage requires either modifying
-  `SurfaceConfigBuilder` or bypassing `GupContext`'s surface setup — both are
-  invasive changes out of scope for this story.
+- **Reasoning**: Adding `COPY_SRC` to the surface usage requires either
+  modifying `SurfaceConfigBuilder` or bypassing `GupContext`'s surface setup —
+  both are invasive changes out of scope for this story.
 - **Trade-off**: Screenshots currently render a blank frame instead of the
   actual chart content.
 - **Future**: A dedicated story should add `COPY_SRC` support to surface
@@ -326,6 +329,6 @@ for multi-window or embedded scenarios.
 
 2. **GUP-318: Migrate Existing Examples to GupApp** — Refactor windowed examples
    (`02_scatter_window`, `windowed_demo`, `multi_font_demo`, etc.) to use
-   `GupApp` where appropriate, reducing boilerplate and demonstrating the shell's
-   versatility. Some multi-window examples should remain as reference
+   `GupApp` where appropriate, reducing boilerplate and demonstrating the
+   shell's versatility. Some multi-window examples should remain as reference
    implementations of the manual `ApplicationHandler` approach.

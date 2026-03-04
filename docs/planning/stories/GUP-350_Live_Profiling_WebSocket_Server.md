@@ -4,10 +4,8 @@
 
 ## Story Overview
 
-**Title**: Live Profiling WebSocket Server
-**Epic**: Phase 1 Initiative 1 - Core GPU Primitives and Selection API
-**Priority**: Low
-**Story Points**: 5
+**Title**: Live Profiling WebSocket Server **Epic**: Phase 1 Initiative 1 - Core
+GPU Primitives and Selection API **Priority**: Low **Story Points**: 5
 
 ## Context
 
@@ -18,10 +16,9 @@ time as frames are rendered.
 
 ## User Story
 
-**As a** Gup application developer
-**I want** a live profiling dashboard that updates in real time
-**So that** I can observe performance characteristics as I interact with my
-visualization
+**As a** Gup application developer **I want** a live profiling dashboard that
+updates in real time **So that** I can observe performance characteristics as I
+interact with my visualization
 
 ## Acceptance Criteria
 

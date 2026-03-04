@@ -1196,19 +1196,15 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
             encoder.copy_buffer_to_buffer(mask.output_buffer(), 0, dst, 0, instance_byte_size);
 
             // Resolve timestamp queries before submit.
-            if use_gpu_timer {
-                if let Some(timer) = &self.gpu_timer {
-                    timer.resolve(&mut encoder);
-                }
+            if use_gpu_timer && let Some(timer) = &self.gpu_timer {
+                timer.resolve(&mut encoder);
             }
 
             queue.submit([encoder.finish()]);
 
             // Read back GPU timestamps synchronously (blocking).
-            if use_gpu_timer {
-                if let Some(timer) = &self.gpu_timer {
-                    return Ok(timer.read_elapsed_ns(device));
-                }
+            if use_gpu_timer && let Some(timer) = &self.gpu_timer {
+                return Ok(timer.read_elapsed_ns(device));
             }
         }
 
