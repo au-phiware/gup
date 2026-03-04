@@ -128,6 +128,10 @@ pub struct HeatmapBuilder<T> {
     show_colorbar: bool,
     /// Pre-binned cells (set via [`from_grid`](Self::from_grid)).
     pre_binned: Option<Vec<HeatmapCell>>,
+    /// When `true`, the 2D binning step is offloaded to a GPU compute
+    /// shader via [`GpuBinner`](gpu_binning::GpuBinner).  Falls back to
+    /// CPU binning when compute shaders are unavailable.
+    gpu_binning: bool,
     pub(crate) _phantom: PhantomData<T>,
 }
 
@@ -148,6 +152,7 @@ impl<T> HeatmapBuilder<T> {
             no_data_value: f32::NAN,
             show_colorbar: true,
             pre_binned: None,
+            gpu_binning: false,
             _phantom: PhantomData,
         }
     }
@@ -245,6 +250,17 @@ impl<T> HeatmapBuilder<T> {
         self
     }
 
+    /// Enable or disable GPU-accelerated 2D binning (default: `false`).
+    ///
+    /// When enabled, the binning step is offloaded to a wgpu compute
+    /// shader, which can be significantly faster for large datasets
+    /// (10 M+ rows).  If compute shaders are unavailable at runtime the
+    /// builder falls back to the CPU path transparently.
+    pub fn gpu_binning(mut self, enabled: bool) -> Self {
+        self.gpu_binning = enabled;
+        self
+    }
+
     /// Set the colour scale for value-to-colour mapping.
     ///
     /// When set, the [`ColorScale`] shader function is wired into the
@@ -278,6 +294,11 @@ impl<T> HeatmapBuilder<T> {
     /// Return whether the colorbar is enabled.
     pub fn get_show_colorbar(&self) -> bool {
         self.show_colorbar
+    }
+
+    /// Return whether GPU binning is enabled.
+    pub fn get_gpu_binning(&self) -> bool {
+        self.gpu_binning
     }
 }
 
@@ -479,6 +500,7 @@ mod tests {
         assert!(builder.show_colorbar);
         assert!(builder.no_data_value.is_nan());
         assert!(builder.pre_binned.is_none());
+        assert!(!builder.gpu_binning);
     }
 
     #[test]
@@ -501,6 +523,7 @@ mod tests {
             .fill_domain(0.0, 100.0)
             .no_data_value(0.0)
             .colorbar(false)
+            .gpu_binning(true)
             .color_scale(ColorScale::viridis(0.0, 100.0))
             .title("My Heatmap")
             .width(800.0)
@@ -513,6 +536,7 @@ mod tests {
         assert_eq!(builder.y_domain, Some((0.0, 7.0)));
         assert_eq!(builder.fill_domain, Some((0.0, 100.0)));
         assert!(!builder.show_colorbar);
+        assert!(builder.gpu_binning);
         assert_eq!(builder.no_data_value, 0.0);
         assert!(builder.config.color_scale.is_some());
     }
