@@ -89,7 +89,7 @@ pub async fn create_test_context() -> GupResult<GpuContextGuard<'static>> {
 
 /// Create a test GPU context that can be cloned
 ///
-/// Convenience function that returns an Arc<RenderContext> for tests that need
+/// Convenience function that returns an `Arc<RenderContext>` for tests that need
 /// to share the context across multiple selections or systems.
 ///
 /// # Example

@@ -168,7 +168,7 @@ impl<T> ScatterPlotBuilder<T> {
     /// Set the X-axis scale.
     ///
     /// Accepts any scale type that implements `Into<AxisScale>`, including
-    /// [`LinearScale`] and [`LogScale`](crate::shader_function::LogScale).
+    /// [`LinearScale`](crate::shader_function::LinearScale) and [`LogScale`](crate::shader_function::LogScale).
     /// The scale's domain is used to auto-configure axis tick generation.
     pub fn x_scale(mut self, scale: impl Into<AxisScale>) -> Self {
         self.config.x_scale = Some(scale.into());
@@ -178,7 +178,7 @@ impl<T> ScatterPlotBuilder<T> {
     /// Set the Y-axis scale.
     ///
     /// Accepts any scale type that implements `Into<AxisScale>`, including
-    /// [`LinearScale`] and [`LogScale`](crate::shader_function::LogScale).
+    /// [`LinearScale`](crate::shader_function::LinearScale) and [`LogScale`](crate::shader_function::LogScale).
     /// The scale's domain is used to auto-configure axis tick generation.
     pub fn y_scale(mut self, scale: impl Into<AxisScale>) -> Self {
         self.config.y_scale = Some(scale.into());

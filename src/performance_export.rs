@@ -4,7 +4,7 @@
 //! Profiling data export and visualization.
 //!
 //! This module provides export capabilities for performance profiling data
-//! collected by [`PerformanceProfiler`](crate::performance::PerformanceProfiler).
+//! collected by [`PerformanceProfiler`].
 //!
 //! # Export Formats
 //!

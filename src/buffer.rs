@@ -150,7 +150,7 @@ where
     /// Download data from the GPU buffer to CPU memory.
     ///
     /// This method creates a staging buffer, copies the GPU buffer contents to it,
-    /// maps it for reading, and returns the data as a Vec<T>. Primarily used for
+    /// maps it for reading, and returns the data as a `Vec<T>`. Primarily used for
     /// debugging, validation, and CPU-side post-processing.
     ///
     /// # Performance Note

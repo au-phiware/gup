@@ -1264,7 +1264,7 @@ impl AxisRenderer {
     /// Generate label data with viewport culling and LOD-based limiting.
     ///
     /// This is the performance-optimized label generation path that:
-    /// 1. Generates candidate labels the same way as [`generate_label_data`].
+    /// 1. Generates candidate labels the same way as [`generate_label_data`](Self::generate_label_data).
     /// 2. Culls labels whose screen position falls outside the viewport.
     /// 3. Caps the label count based on the current LOD level.
     ///

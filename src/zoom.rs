@@ -126,7 +126,7 @@ impl Default for ZoomState {
 /// Configurable zoom and pan behaviour for chart navigation.
 ///
 /// `ZoomBehavior` processes mouse-wheel and drag events and maintains an
-/// internal [`ZoomState`] that is converted to a [`GpuViewportTransform`]
+/// internal `ZoomState` that is converted to a [`GpuViewportTransform`]
 /// each frame.  The transform is applied by the vertex shader in clip space,
 /// so geometry buffers are never modified during navigation.
 ///

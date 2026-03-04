@@ -330,7 +330,7 @@ impl BrushBehavior {
     ///
     /// Calling `.on()` with the same event name adds an additional handler
     /// (they are invoked in registration order). To replace all handlers
-    /// for an event, call [`clear_handlers`] first.
+    /// for an event, call [`clear_handlers`](Self::clear_handlers) first.
     pub fn on<F>(mut self, event_name: &str, handler: F) -> Self
     where
         F: Fn(&BrushEvent) + Send + Sync + 'static,

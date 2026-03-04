@@ -334,7 +334,7 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable + SpatiallyKeyed> StreamingLodManager
 
     /// Read-only reference to the underlying [`LodPyramid`].
     ///
-    /// The returned pyramid reflects all updates applied by prior [`poll`]
+    /// The returned pyramid reflects all updates applied by prior [`poll`](Self::poll)
     /// calls. Pass this to the renderer to draw the current LOD state.
     pub fn pyramid(&self) -> &LodPyramid {
         &self.pyramid

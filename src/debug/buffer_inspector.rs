@@ -75,7 +75,7 @@ impl GpuBufferInspector {
         Ok(())
     }
 
-    /// Read buffer contents into a Vec<T>
+    /// Read buffer contents into a `Vec<T>`
     pub async fn read_buffer<T>(&mut self, buffer: &Buffer) -> GupResult<Vec<T>>
     where
         T: bytemuck::Pod + bytemuck::Zeroable,

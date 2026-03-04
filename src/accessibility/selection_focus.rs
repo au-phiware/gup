@@ -3,7 +3,7 @@
 
 //! Selection–FocusManager integration for keyboard-accessible data points.
 //!
-//! This module bridges [`Selection`] with the accessibility [`FocusManager`],
+//! This module bridges [`Selection`](crate::selection::Selection) with the accessibility [`FocusManager`],
 //! enabling keyboard navigation of individual data points within a
 //! visualization.  It provides:
 //!
@@ -79,7 +79,7 @@ impl Default for SelectionFocusConfig {
     }
 }
 
-/// Bridges a [`Selection`] with the [`FocusManager`] and optional [`AriaTree`].
+/// Bridges a [`Selection`](crate::selection::Selection) with the [`FocusManager`] and optional [`AriaTree`].
 ///
 /// Maintains a snapshot of the registered focusable elements so it can detect
 /// when the data has changed and re-synchronize.
@@ -159,7 +159,7 @@ impl SelectionFocusBridge {
 
     /// Synchronize and also register ARIA nodes for each data point.
     ///
-    /// This is the full-featured variant: it calls [`sync_focus_elements`] and
+    /// This is the full-featured variant: it calls [`sync_focus_elements`](Self::sync_focus_elements) and
     /// additionally creates an ARIA node per data point under the given
     /// `parent_node_id` in the provided [`AriaTree`].
     pub fn sync_focus_elements_with_aria<T, F>(

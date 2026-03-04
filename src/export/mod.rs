@@ -10,7 +10,7 @@
 //! # Available Exporters
 //!
 //! * [`svg`] — Produces well-formed SVG documents from chart data.
-//! * [`pdf`] — Converts the SVG intermediate to PDF (requires the `pdf` feature).
+//! * `pdf` — Converts the SVG intermediate to PDF (requires the `pdf` feature).
 //! * [`png`] — Renders to an off-screen GPU texture and encodes as PNG.
 //! * [`html`] — Packages a chart as a standalone HTML file with WASM, SVG
 //!   fallback, and Open Graph metadata.

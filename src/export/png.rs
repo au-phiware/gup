@@ -43,7 +43,7 @@ const BYTES_PER_PIXEL: u32 = 4;
 ///
 /// The unpadded row size is `width * 4` (RGBA, one byte per channel). The
 /// result is rounded up to the next multiple of
-/// [`COPY_BYTES_PER_ROW_ALIGNMENT`].
+/// `COPY_BYTES_PER_ROW_ALIGNMENT`.
 pub fn padded_bytes_per_row(width: u32) -> u32 {
     let unpadded = width * BYTES_PER_PIXEL;
     let align = COPY_BYTES_PER_ROW_ALIGNMENT;

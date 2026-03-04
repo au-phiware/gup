@@ -468,8 +468,8 @@ impl Mark for Line {
     /// Get vertex attributes for line rendering.
     ///
     /// Lines require two vertex attributes:
-    /// - @location(0): position (vec2<f32>) - local position within quad
-    /// - @location(1): normal (vec2<f32>) - normal vector for width expansion
+    /// - `@location(0)`: position (`vec2<f32>`) - local position within quad
+    /// - `@location(1)`: normal (`vec2<f32>`) - normal vector for width expansion
     fn vertex_attributes() -> &'static [wgpu::VertexAttribute] {
         &[
             wgpu::VertexAttribute {

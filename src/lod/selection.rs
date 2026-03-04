@@ -20,7 +20,7 @@ pub const DEFAULT_MAX_DENSITY: f32 = 4.0;
 ///
 /// The heuristic estimates on-screen point density for each level and returns
 /// the coarsest level whose density does not exceed `max_density` (default
-/// [`DEFAULT_MAX_DENSITY`]).
+/// `DEFAULT_MAX_DENSITY`).
 ///
 /// Density for a level is computed as:
 ///

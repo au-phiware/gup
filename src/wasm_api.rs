@@ -22,7 +22,7 @@
 //!
 //! # Architecture
 //!
-//! Each call to [`render_scatter`] performs a complete GPU render cycle:
+//! Each call to `render_scatter` performs a complete GPU render cycle:
 //!
 //! 1. Obtain the `<canvas>` element from the DOM.
 //! 2. Create (or reuse) a WebGPU surface, adapter, device, and queue.

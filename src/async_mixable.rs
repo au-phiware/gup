@@ -560,7 +560,7 @@ impl<T: Mixable> AsyncMixable for SyncAdapter<T> {
     }
 }
 
-/// Implement AsyncMixable for Box<dyn AsyncMixable> to enable trait object usage
+/// Implement `AsyncMixable` for `Box<dyn AsyncMixable>` to enable trait object usage
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl<T> AsyncMixable for Box<T>

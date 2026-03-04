@@ -298,7 +298,7 @@ impl MarkBlendConfig {
     }
 }
 
-/// Convert a [`BlendMode`] to a wgpu [`BlendState`].
+/// Convert a [`BlendMode`] to a wgpu `BlendState`.
 pub fn blend_mode_to_wgpu(mode: BlendMode) -> Option<wgpu::BlendState> {
     match mode {
         BlendMode::None => None,
@@ -823,7 +823,7 @@ impl DynamicAttributeBufferManager {
 
     /// Create a bind group referencing the current buffers.
     ///
-    /// The layout must match the one from [`create_bind_group_layout`].
+    /// The layout must match the one from [`create_bind_group_layout`](Self::create_bind_group_layout).
     pub fn create_bind_group(
         &self,
         device: &wgpu::Device,

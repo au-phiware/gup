@@ -35,17 +35,17 @@
 //! - **[`Selection`]** – The primary data-binding type. A selection associates
 //!   data elements with GPU-resident mark instances and drives the
 //!   enter/update/exit lifecycle.
-//! - **[`ShaderFunction`](shader_function::ShaderFunction)** – Composable GPU
+//! - **`ShaderFunction`** – Composable GPU
 //!   shader functions that map data attributes to visual channels (position,
 //!   colour, size, …) and can be combined through the
-//!   [`Composable`](shader_function::Composable) trait.
-//! - **[`Mark`](mark::Mark)** – Visual primitives (circle, rectangle, line, …)
+//!   [`ComposableShaderFunction`] trait.
+//! - **[`Mark`]** – Visual primitives (circle, rectangle, line, …)
 //!   rendered on the GPU. Marks declare their vertex layout and shader code and
-//!   are registered in a [`MarkRegistry`](mark::MarkRegistry).
+//!   are registered in a [`MarkRegistry`].
 //! - **[`GupContext`]** – The central GPU context that owns the wgpu device,
 //!   queue, surface, and auxiliary caches (buffer pool, pipeline cache, texture
 //!   pool).
-//! - **[`ChartBuilder`](chart_builder::ChartBuilder)** – A high-level, fluent
+//! - **[`ChartBuilder`]** – A high-level, fluent
 //!   API for constructing common chart types (scatter, line, bar, area, …)
 //!   without manual shader or mark wiring.
 //!

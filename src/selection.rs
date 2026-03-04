@@ -314,11 +314,11 @@ fn capitalize(s: &str) -> String {
 pub struct AriaUpdateConfig {
     /// The urgency level for live-region announcements.
     ///
-    /// - [`AriaLive::Polite`] — announced when the screen reader is idle
+    /// - [`AriaLive::Polite`](crate::accessibility::aria::AriaLive::Polite) — announced when the screen reader is idle
     ///   (default).
-    /// - [`AriaLive::Assertive`] — announced immediately, interrupting the
+    /// - [`AriaLive::Assertive`](crate::accessibility::aria::AriaLive::Assertive) — announced immediately, interrupting the
     ///   current speech.
-    /// - [`AriaLive::Off`] — no announcements.
+    /// - [`AriaLive::Off`](crate::accessibility::aria::AriaLive::Off) — no announcements.
     pub urgency: crate::accessibility::aria::AriaLive,
 
     /// Whether live-region announcements are enabled.  When `false`, data
@@ -1740,8 +1740,8 @@ impl<T, M: Mark> Selection<T, M> {
     }
 
     /// Returns `true` if the ARIA tree needs to be regenerated due to data or
-    /// attribute changes since the last [`sync_aria_from_context`] or
-    /// [`register_aria`] call.
+    /// attribute changes since the last [`sync_aria_from_context`](Self::sync_aria_from_context) or
+    /// [`register_aria`](Self::register_aria) call.
     pub fn is_aria_dirty(&self) -> bool {
         self.aria_dirty
     }
@@ -1883,7 +1883,7 @@ impl<T, M: Mark> Selection<T, M> {
     ///
     /// This is the recommended way to keep the ARIA tree in sync with data.
     /// If `auto_aria` is enabled (the default), and the selection's
-    /// [`RenderContext`] has an [`AccessibilitySystem`] attached, this method
+    /// [`RenderContext`] has an [`AccessibilitySystem`](crate::accessibility::AccessibilitySystem) attached, this method
     /// generates or refreshes the ARIA tree.
     ///
     /// On the first call, the ARIA tree is always generated.  On subsequent
@@ -1931,7 +1931,7 @@ impl<T, M: Mark> Selection<T, M> {
     ///
     /// This is a convenience wrapper around
     /// [`SelectionFocusBridge::sync_focus_elements`](crate::accessibility::SelectionFocusBridge::sync_focus_elements).
-    /// The `descriptor_fn` maps each data item to a [`FocusPointDescriptor`]
+    /// The `descriptor_fn` maps each data item to a [`FocusPointDescriptor`](crate::accessibility::selection_focus::FocusPointDescriptor)
     /// that specifies the screen position, label, and optional value.
     ///
     /// Returns the number of elements registered (may be capped by max_elements).

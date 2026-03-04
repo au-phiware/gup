@@ -315,7 +315,7 @@ pub mod sdf {
 
     /// Legacy smoothing factor for SDF edges.
     ///
-    /// **Superseded** by [`SdfTuningParams::for_font_size`] which provides
+    /// **Superseded** by [`SdfTuningParams::for_font_size`](crate::text::sdf_tuning::SdfTuningParams::for_font_size) which provides
     /// per-size adaptive smoothing. Kept for reference only.
     pub const SDF_SMOOTHING: f32 = 0.5;
 }

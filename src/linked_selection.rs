@@ -372,7 +372,7 @@ impl<K: Hash + Eq + Send + Sync + 'static> SharedSelectionState<K> {
 ///
 /// Types that also support GPU-side dimming via [`SelectionMaskBuffer`]
 /// should override [`alpha_offsets`](Self::alpha_offsets) to return the
-/// corresponding [`AlphaOffsets`].
+/// corresponding [`AlphaOffsets`](crate::selection_mask::AlphaOffsets).
 pub trait DimInstance {
     /// Multiply the instance's alpha channel(s) by `factor`.
     ///
@@ -380,7 +380,7 @@ pub trait DimInstance {
     /// `stroke_color[3] *= factor`.
     fn dim_alpha(&mut self, factor: f32);
 
-    /// Returns [`AlphaOffsets`] for GPU-side dimming via
+    /// Returns [`AlphaOffsets`](crate::selection_mask::AlphaOffsets) for GPU-side dimming via
     /// [`SelectionMaskBuffer`], or `None` if only CPU dimming is supported.
     ///
     /// The default implementation returns `None`.  Built-in mark instance

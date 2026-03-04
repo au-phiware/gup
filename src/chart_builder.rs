@@ -894,7 +894,7 @@ where
     ///
     /// Axis lines are rendered via each axis's `render()` method. Tick
     /// marks and grid lines are prepared for GPU-instanced rendering
-    /// through [`TickPipeline`](crate::axis::TickPipeline), which is
+    /// through [`TickPipeline`], which is
     /// lazily created on the first call.
     ///
     /// After calling `render()`, use [`draw_grid_lines`](Self::draw_grid_lines)
@@ -1069,7 +1069,7 @@ where
     ///
     /// This is the public entry-point for callers that manage their own
     /// render pass (e.g. examples). The private
-    /// [`prepare_tick_pipeline()`](Self::prepare_tick_pipeline) is used
+    /// `prepare_tick_pipeline()` is used
     /// internally by [`render()`](Self::render).
     ///
     /// # Example
@@ -1430,7 +1430,7 @@ where
     /// from tick instance data.  Axis lines are in
     /// [`AxisGeometry::line_vertices`] (rendered with a `LineList` pipeline)
     /// and tick marks are in [`AxisGeometry::tick_instances`] (rendered via
-    /// [`TickPipeline`](crate::axis::TickPipeline)).
+    /// [`TickPipeline`]).
     ///
     /// This method produces the same visual result as
     /// [`generate_axis_geometry`](Self::generate_axis_geometry), but enables
@@ -2103,14 +2103,14 @@ where
     /// Export this chart as an SVG document string.
     ///
     /// Generates axis geometry, grid lines, axis labels, and the chart
-    /// title, then passes everything through [`SvgRenderer`] to produce
+    /// title, then passes everything through [`SvgRenderer`](crate::export::svg::SvgRenderer) to produce
     /// a well-formed SVG string.
     ///
     /// Data marks are *not* automatically exported by this method because
     /// the generic `Selection<T, M>` stores mark attributes as closures
     /// that map `T → AttrValue` and cannot be evaluated without a GPU
     /// context.  To include data marks in the SVG, pass pre-built
-    /// [`SvgElement`] instances via [`export_svg_with_marks`](Self::export_svg_with_marks).
+    /// [`SvgElement`](crate::export::svg::SvgElement) instances via [`export_svg_with_marks`](Self::export_svg_with_marks).
     ///
     /// # Examples
     ///
@@ -2141,7 +2141,7 @@ where
     /// data-mark elements.
     ///
     /// This is the full-featured export entry point.  Caller-supplied
-    /// [`SvgElement`] values (typically circles, rects, lines, etc.
+    /// [`SvgElement`](crate::export::svg::SvgElement) values (typically circles, rects, lines, etc.
     /// constructed from the chart's data) are included in the output
     /// under a `<g class="marks">` group.
     pub fn export_svg_with_marks(
@@ -2320,7 +2320,7 @@ where
 
     /// Export this chart as a self-contained HTML file.
     ///
-    /// Uses the [`WasmStrategy::Url`] strategy with a default path of
+    /// Uses the [`WasmStrategy::Url`](crate::export::WasmStrategy::Url) strategy with a default path of
     /// `"gup.wasm"`.  For full control over the WASM embedding strategy,
     /// page title, description, and author metadata, create an
     /// [`HtmlExporter`](crate::export::html::HtmlExporter) directly.

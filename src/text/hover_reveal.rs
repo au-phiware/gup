@@ -13,7 +13,7 @@
 //!
 //! 1. **[`ClippedTextRegistry`]** — Tracks clipped text regions and their
 //!    original (un-truncated) content. Text is registered during layout when
-//!    [`ClippingStrategyConfig::enable_hover_reveal`] is `true`.
+//!    [`ClippingStrategyConfig::enable_hover_reveal`](crate::text::layout::ClippingStrategyConfig::enable_hover_reveal) is `true`.
 //!
 //! 2. **[`HoverRevealState`]** — Manages the current tooltip display state
 //!    including smooth opacity transitions (fade-in/fade-out).

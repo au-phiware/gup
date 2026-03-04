@@ -396,7 +396,7 @@ impl MarkRenderer {
         Ok(())
     }
 
-    /// Render marks with state isolation using a [`RenderStateManager`].
+    /// Render marks with state isolation using a [`RenderStateManager`](super::advanced_rendering::RenderStateManager).
     ///
     /// This method saves the current render state, applies the mark-specific
     /// viewport/scissor configuration, renders, then restores the previous state.
@@ -418,9 +418,9 @@ impl MarkRenderer {
 
     /// Render marks with dynamic attribute buffers bound.
     ///
-    /// This method extends [`render_marks`] by also binding the dynamic attribute
+    /// This method extends [`render_marks`](Self::render_marks) by also binding the dynamic attribute
     /// bind group at the specified group index. The dynamic attribute buffers are
-    /// managed by a [`DynamicAttributeBufferManager`].
+    /// managed by a [`DynamicAttributeBufferManager`](super::advanced_rendering::DynamicAttributeBufferManager).
     ///
     /// # Arguments
     ///
@@ -476,14 +476,14 @@ impl MarkRenderer {
     /// Render mark instances, automatically tracking draw-call and instance
     /// metrics.
     ///
-    /// This is the same as [`render_marks`] but takes `&mut self` so it can
-    /// increment the internal [`MarkPerformanceMetrics`] counters:
+    /// This is the same as [`render_marks`](Self::render_marks) but takes `&mut self` so it can
+    /// increment the internal [`MarkPerformanceMetrics`](super::performance_opt::MarkPerformanceMetrics) counters:
     ///
     /// * `draw_calls += 1`
     /// * `total_instances += instance_count`
     ///
-    /// Use [`reset_performance_counters`] at the start of each frame and
-    /// [`get_performance_metrics`] at the end to obtain per-frame statistics.
+    /// Use [`reset_performance_counters`](Self::reset_performance_counters) at the start of each frame and
+    /// [`get_performance_metrics`](Self::get_performance_metrics) at the end to obtain per-frame statistics.
     pub fn render_marks_tracked<M: Mark>(
         &mut self,
         render_pass: &mut RenderPass,
@@ -500,7 +500,7 @@ impl MarkRenderer {
     /// Render mark instances with accessibility patterns, automatically
     /// tracking draw-call and instance metrics.
     ///
-    /// Tracked variant of [`render_marks_with_patterns`].
+    /// Tracked variant of [`render_marks_with_patterns`](Self::render_marks_with_patterns).
     pub fn render_marks_with_patterns_tracked<M: Mark>(
         &mut self,
         render_pass: &mut RenderPass,
@@ -524,7 +524,7 @@ impl MarkRenderer {
     /// Render marks in multiple passes, automatically tracking draw-call,
     /// instance, and pipeline-switch metrics.
     ///
-    /// Tracked variant of [`render_marks_multi_pass`].  Each configured
+    /// Tracked variant of [`render_marks_multi_pass`](Self::render_marks_multi_pass).  Each configured
     /// pass contributes one draw call and one pipeline switch.
     pub fn render_marks_multi_pass_tracked<M: Mark>(
         &mut self,
@@ -550,7 +550,7 @@ impl MarkRenderer {
 
     /// Render marks with state isolation, automatically tracking metrics.
     ///
-    /// Tracked variant of [`render_marks_with_state`].
+    /// Tracked variant of [`render_marks_with_state`](Self::render_marks_with_state).
     pub fn render_marks_with_state_tracked<M: Mark>(
         &mut self,
         render_pass: &mut RenderPass<'_>,
@@ -574,7 +574,7 @@ impl MarkRenderer {
     /// Render marks with dynamic attribute buffers, automatically tracking
     /// metrics.
     ///
-    /// Tracked variant of [`render_marks_with_dynamic_attrs`].
+    /// Tracked variant of [`render_marks_with_dynamic_attrs`](Self::render_marks_with_dynamic_attrs).
     pub fn render_marks_with_dynamic_attrs_tracked<M: Mark>(
         &mut self,
         render_pass: &mut RenderPass,
@@ -604,7 +604,7 @@ impl MarkRenderer {
     /// Get current performance metrics.
     ///
     /// Returns a snapshot of the accumulated performance counters since the
-    /// last call to [`reset_performance_counters`].
+    /// last call to [`reset_performance_counters`](Self::reset_performance_counters).
     pub fn get_performance_metrics(&self) -> &super::performance_opt::MarkPerformanceMetrics {
         &self.metrics
     }

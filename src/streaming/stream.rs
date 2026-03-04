@@ -66,7 +66,7 @@ struct Subscriber<T: bytemuck::Pod + bytemuck::Zeroable> {
 ///   [`SlidingWindow`](StreamMode::SlidingWindow), or
 ///   [`RingBuffer`](StreamMode::RingBuffer) semantics.
 /// * **Backpressure**: configurable via
-///   [`BackpressureStrategy`](super::BackpressureStrategy).
+///   [`BackpressureStrategy`].
 /// * **Observable subscribers**: register callbacks that fire on every
 ///   committed update.
 ///

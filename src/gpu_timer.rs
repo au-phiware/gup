@@ -3,7 +3,7 @@
 
 //! GPU timestamp query timer for precise compute-pass profiling.
 //!
-//! [`GpuTimer`] wraps a wgpu [`QuerySet`](wgpu::QuerySet) with two timestamp
+//! [`GpuTimer`] wraps a wgpu [`QuerySet`] with two timestamp
 //! slots (begin/end) and the buffers required to resolve and read back the
 //! results.  It is designed for lightweight, per-dispatch timing during
 //! auto-tune calibration — not general-purpose profiling (see
@@ -138,7 +138,7 @@ impl GpuTimer {
     /// Returns `None` if the buffer map fails or the timestamps are invalid
     /// (e.g. end < begin).
     ///
-    /// **Note:** this calls [`Device::poll(PollType::Wait)`] which blocks
+    /// **Note:** this calls `Device::poll(PollType::Wait)` which blocks
     /// until the GPU has finished the submitted work.  This is acceptable
     /// during calibration but should not be used in a hot render loop.
     pub fn read_elapsed_ns(&self, device: &Device) -> Option<u128> {

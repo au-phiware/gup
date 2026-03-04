@@ -342,7 +342,7 @@ pub trait Mark: Clone + MaybeSend + MaybeSync + 'static {
 
     /// Return an SVG element representation of this mark type.
     ///
-    /// Built-in marks return a representative [`SvgElement`] describing
+    /// Built-in marks return a representative [`SvgElement`](crate::export::svg::SvgElement) describing
     /// the SVG primitive they produce (e.g., `<circle>` for [`Circle`],
     /// `<rect>` for [`Rectangle`]).  The default implementation returns
     /// `None`, which is safe for custom marks that have not yet

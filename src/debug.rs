@@ -72,7 +72,12 @@ pub use ci_performance::{
     RegressionSeverity as CiRegressionSeverity, TestResult,
 };
 pub use layout_validator::*;
-pub use memory_bandwidth::*;
+pub use memory_bandwidth::{
+    BandwidthConfig, BufferTransferEvent, FrameBandwidthStats, MemoryBandwidthProfiler,
+    MemoryBandwidthStats, MemoryEfficiencyMetrics, MemoryPressureStatus, OptimizationSuggestion,
+    PressureLevel as DebugPressureLevel, SuggestionCategory, TextureBindingEvent,
+    TransferDirection,
+};
 pub use memory_profiler::*;
 // Export resource graph types with explicit names to avoid conflicts with error::ResourceId
 pub use resource_graph::{

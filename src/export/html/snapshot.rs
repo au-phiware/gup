@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 /// A serialisable snapshot of a chart's definition.
 ///
-/// This DTO captures the subset of [`ChartConfig`] fields that are
+/// This DTO captures the subset of [`ChartConfig`](crate::chart_builder::ChartConfig) fields that are
 /// meaningful for reconstructing a chart from embedded data — dimensions,
 /// margins, title, scales, and visual toggles.  GPU-only state (pipeline
 /// caches, text atlases, etc.) is intentionally excluded.
@@ -45,10 +45,10 @@ use serde::{Deserialize, Serialize};
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChartSnapshot {
-    /// Chart title (from [`TitleConfig::text`]).
+    /// Chart title (from [`TitleConfig::text`](crate::chart_builder::TitleConfig::text)).
     pub title: Option<String>,
 
-    /// Chart subtitle (from [`TitleConfig::subtitle`]).
+    /// Chart subtitle (from [`TitleConfig::subtitle`](crate::chart_builder::TitleConfig::subtitle)).
     pub subtitle: Option<String>,
 
     /// Chart width in logical pixels.
@@ -84,7 +84,7 @@ pub struct SnapshotMargins {
 }
 
 impl ChartSnapshot {
-    /// Build a snapshot from the live [`ChartConfig`].
+    /// Build a snapshot from the live [`ChartConfig`](crate::chart_builder::ChartConfig).
     pub fn from_config(config: &crate::chart_builder::ChartConfig) -> Self {
         Self {
             title: config.title_config.as_ref().map(|t| t.text.clone()),

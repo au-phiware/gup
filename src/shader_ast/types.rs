@@ -88,9 +88,9 @@ impl WgslType {
     /// Returns `true` if `self` can be automatically promoted to `target`.
     ///
     /// Promotion rules:
-    /// - f32 → vec2<f32>, vec3<f32>, vec4<f32> (broadcast)
-    /// - vec2<f32> → vec3<f32>, vec4<f32> (zero-padded)
-    /// - vec3<f32> → vec4<f32> (zero-padded)
+    /// - `f32` → `vec2<f32>`, `vec3<f32>`, `vec4<f32>` (broadcast)
+    /// - `vec2<f32>` → `vec3<f32>`, `vec4<f32>` (zero-padded)
+    /// - `vec3<f32>` → `vec4<f32>` (zero-padded)
     pub fn can_promote_to(&self, target: &WgslType) -> bool {
         match (self, target) {
             // Same types are always compatible.

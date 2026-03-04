@@ -4,7 +4,7 @@
 //! Native benchmark runner that outputs JSON results.
 //!
 //! This binary runs the same interaction benchmarks that the WASM runner
-//! executes in-browser, producing a JSON file in the [`BenchSuite`] format.
+//! executes in-browser, producing a JSON file in the [`BenchSuite`](gup::wasm_bench::BenchSuite) format.
 //! The output can then be compared with WASM benchmark results using the
 //! `benchmark_comparison.sh` script.
 //!

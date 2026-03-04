@@ -373,7 +373,7 @@ pub struct BatchFrameStats {
 }
 
 impl BatchFrameStats {
-    /// Convert to the comprehensive [`MarkPerformanceMetrics`] format.
+    /// Convert to the comprehensive [`MarkPerformanceMetrics`](super::performance_opt::MarkPerformanceMetrics) format.
     pub fn to_performance_metrics(&self) -> super::performance_opt::MarkPerformanceMetrics {
         super::performance_opt::MarkPerformanceMetrics {
             vertex_processing_time: std::time::Duration::from_micros(self.buffer_upload_us),
@@ -904,13 +904,14 @@ impl InstancedBatchRenderer {
     ///
     /// Uses [`ComputeInstanceFilter`] to cull and compact instances on
     /// the GPU, producing a [`FilterResult`] that can be used with
-    /// `draw_indirect`. Falls back to the CPU [`submit_with_culling`]
+    /// `draw_indirect`. Falls back to the CPU [`submit_with_culling`](Self::submit_with_culling)
     /// path if `gpu_filter` is `None`.
     ///
     /// Returns the [`FilterResult`] for use in render passes when the
     /// GPU path is used, or `None` when falling back to CPU culling.
     ///
     /// [`ComputeInstanceFilter`]: super::compute_instance_filter::ComputeInstanceFilter
+    /// [`FilterResult`]: super::compute_instance_filter::FilterResult
     pub async fn submit_with_gpu_culling<M, I>(
         &mut self,
         device: &Device,
@@ -988,6 +989,7 @@ impl InstancedBatchRenderer {
     /// flags and the Hi-Z buffer.
     ///
     /// [`OcclusionCuller`]: super::occlusion_culler::OcclusionCuller
+    /// [`OcclusionResult`]: super::occlusion_culler::OcclusionResult
     pub async fn submit_with_occlusion_culling(
         &mut self,
         device: &Device,
@@ -1028,12 +1030,12 @@ impl InstancedBatchRenderer {
 
     /// Compute an optimal rendering order for the queued batches.
     ///
-    /// Returns a vector of indices into [`queued_batches()`] sorted to
+    /// Returns a vector of indices into [`queued_batches()`](Self::queued_batches) sorted to
     /// minimise GPU pipeline state transitions. Batches sharing the same
     /// `mark_type_id` are grouped together, and within each group batches
     /// are ordered by `z_order` (back-to-front for correct alpha blending).
     ///
-    /// Use the returned order with [`render_batches_sorted`] for optimal
+    /// Use the returned order with `render_batches_sorted` for optimal
     /// rendering performance.
     pub fn sorted_batch_order(&self) -> Vec<usize> {
         use super::performance_opt::{SortedBatch, sort_batches_by_state};

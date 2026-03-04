@@ -4,10 +4,10 @@
 //! GPU compute shader pipeline for instance culling, LOD classification,
 //! and Z-order sorting.
 //!
-//! For datasets exceeding ~100K instances the CPU-side [`CullingManager`]
+//! For datasets exceeding ~100K instances the CPU-side [`CullingManager`](super::batch_renderer::CullingManager)
 //! becomes a bottleneck. This module moves the entire filter / compact /
 //! sort pipeline to GPU compute shaders, producing a compact output buffer
-//! of visible [`InstanceAttributes`] along with [`wgpu::DrawIndirectArgs`]
+//! of visible [`InstanceAttributes`] along with `wgpu::DrawIndirectArgs`
 //! so the render pass can issue a single `draw_indirect` call with zero
 //! CPU readback.
 //!
@@ -140,7 +140,7 @@ pub const MAX_INSTANCES: u32 = WORKGROUP_SIZE * WORKGROUP_SIZE * WORKGROUP_SIZE;
 
 /// GPU compute pipeline for instance filtering, culling, and compaction.
 ///
-/// Replaces the CPU-side [`CullingManager`] for large datasets (>100K
+/// Replaces the CPU-side [`CullingManager`](super::batch_renderer::CullingManager) for large datasets (>100K
 /// instances) by running frustum culling, LOD classification, and stream
 /// compaction entirely on the GPU.
 ///

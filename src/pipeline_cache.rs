@@ -3,7 +3,7 @@
 
 //! Shared render pipeline cache for [`Selection`](crate::selection::Selection)s.
 //!
-//! When many Selections of the same [`Mark`](crate::mark::Mark) type coexist
+//! When many Selections of the same [`Mark`] type coexist
 //! (e.g. a dashboard with multiple scatter plots), each would normally create
 //! its own render pipeline.  `PipelineCache` deduplicates them by keying on
 //! [`TypeId`] so that all Selections of the same mark type share a single

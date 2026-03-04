@@ -4,8 +4,8 @@
 //! Adaptive viewport renderer for LOD-driven rendering.
 //!
 //! This module provides [`AdaptiveRenderer`], which selects the appropriate LOD
-//! tier from a [`LodPyramid`] each frame based on the current viewport and
-//! issues a frustum-culled indirect draw via [`ComputeInstanceFilter`].
+//! tier from a [`LodPyramid`](crate::lod::LodPyramid) each frame based on the current viewport and
+//! issues a frustum-culled indirect draw via [`ComputeInstanceFilter`](crate::mark::compute_instance_filter::ComputeInstanceFilter).
 //!
 //! # Architecture
 //!

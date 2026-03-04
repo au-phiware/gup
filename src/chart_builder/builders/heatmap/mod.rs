@@ -4,7 +4,7 @@
 //! Heatmap chart builder with 2D binning and colour-scale integration.
 //!
 //! Provides [`HeatmapBuilder`] for creating GPU-accelerated heatmaps using
-//! instanced [`Rectangle`](crate::mark::Rectangle) marks.  Supports both
+//! instanced [`Rectangle`] marks.  Supports both
 //! raw data (binned automatically via [`AggregateFunc`]) and pre-binned
 //! data (via [`HeatmapBuilder::from_grid`]).
 //!

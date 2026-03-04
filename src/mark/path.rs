@@ -167,8 +167,8 @@ impl Mark for Path {
     /// Get vertex attributes for path rendering.
     ///
     /// Paths require two vertex attributes:
-    /// - @location(0): position (vec2<f32>) - local position within bounding box
-    /// - @location(1): tex_coords (vec2<f32>) - texture coordinates for SDF rendering
+    /// - `@location(0)`: position (`vec2<f32>`) - local position within bounding box
+    /// - `@location(1)`: tex_coords (`vec2<f32>`) - texture coordinates for SDF rendering
     fn vertex_attributes() -> &'static [wgpu::VertexAttribute] {
         &[
             wgpu::VertexAttribute {

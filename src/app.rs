@@ -3,7 +3,7 @@
 
 //! Opinionated application shell for single-window Gup desktop apps.
 //!
-//! [`GupApp`] wraps winit's event loop and [`GupContext`](crate::GupContext)
+//! [`GupApp`] wraps winit's event loop and [`GupContext`]
 //! lifecycle so that a complete GPU-accelerated visualisation can be launched
 //! in a handful of lines:
 //!

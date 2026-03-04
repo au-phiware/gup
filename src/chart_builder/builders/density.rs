@@ -783,7 +783,7 @@ pub fn compute_thresholds(densities: &[f32], n_levels: usize) -> Vec<f32> {
 
 /// A composable density layer that can be overlaid on other chart types.
 ///
-/// Produced by [`DensityPlotBuilder::as_heatmap_layer`] (when the heatmap
+/// Produced by `DensityPlotBuilder::as_heatmap_layer` (when the heatmap
 /// rendering pipeline from GUP-248 is available).
 #[derive(Debug, Clone)]
 pub struct DensityLayer {

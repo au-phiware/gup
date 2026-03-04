@@ -4,7 +4,7 @@
 //! Bar chart builder with fluent API for categorical data visualisation.
 //!
 //! Provides [`BarChartBuilder`] for creating GPU-accelerated bar charts using
-//! instanced [`Rectangle`](crate::mark::Rectangle) marks. Supports vertical
+//! instanced [`Rectangle`] marks. Supports vertical
 //! and horizontal orientations, grouped and stacked layouts, and automatic
 //! ordinal axis integration.
 
