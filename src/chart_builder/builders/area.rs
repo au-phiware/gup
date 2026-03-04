@@ -1489,6 +1489,46 @@ mod tests {
     }
 
     #[test]
+    fn test_area_builder_normalized_auto_percent_formatter() {
+        // Normalised mode should auto-set y_label_formatter to PercentFormatter
+        let builder = area::<TimePoint>().stack_normalized();
+        // Before build, config has no formatter
+        assert!(builder.config.y_label_formatter.is_none());
+        // After building, the ComposedChart's config should have the formatter
+        // (tested via build_with_data in the GPU integration test below)
+    }
+
+    #[test]
+    fn test_area_builder_y_tick_format_fluent() {
+        use crate::label::PercentFormatter;
+        let builder = area::<TimePoint>().y_tick_format(PercentFormatter::new());
+        assert!(builder.config.y_label_formatter.is_some());
+        // Verify the formatter works correctly
+        let fmt = builder.config.y_label_formatter.as_ref().unwrap();
+        assert_eq!(fmt.format_value(0.5), "50%");
+    }
+
+    #[test]
+    fn test_area_builder_x_tick_format_fluent() {
+        use crate::label::NumericFormatter;
+        let builder = area::<TimePoint>().x_tick_format(NumericFormatter::new(1));
+        assert!(builder.config.x_label_formatter.is_some());
+    }
+
+    #[test]
+    fn test_area_builder_custom_y_formatter_overrides_auto_percent() {
+        use crate::label::NumericFormatter;
+        // Explicitly setting a custom y formatter should prevent auto-percent
+        let builder = area::<TimePoint>()
+            .stack_normalized()
+            .y_tick_format(NumericFormatter::new(3));
+        assert!(builder.config.y_label_formatter.is_some());
+        // The custom formatter should produce NumericFormatter output, not percent
+        let fmt = builder.config.y_label_formatter.as_ref().unwrap();
+        assert_eq!(fmt.format_value(0.5), "0.500");
+    }
+
+    #[test]
     fn test_area_builder_opacity_clamping() {
         let builder = area::<TimePoint>().opacity(1.5);
         assert_eq!(builder.fill_opacity, 1.0);
@@ -1748,6 +1788,56 @@ mod tests {
                 seg.color[3]
             );
         }
+    }
+
+    #[tokio::test]
+    async fn test_area_normalized_chart_has_percent_formatter() {
+        use crate::label::LabelFormatter;
+
+        let data = vec![
+            TimePoint { time: 0.0, value: 10.0, series: "A".to_string() },
+            TimePoint { time: 0.0, value: 20.0, series: "B".to_string() },
+            TimePoint { time: 1.0, value: 30.0, series: "A".to_string() },
+            TimePoint { time: 1.0, value: 10.0, series: "B".to_string() },
+        ];
+
+        let context = Arc::new(RenderContext::new().await.unwrap());
+
+        let chart = area()
+            .x(AccessorFunction::new(|d: &TimePoint| AccessorValue::Float(d.time)))
+            .y(AccessorFunction::new(|d: &TimePoint| AccessorValue::Float(d.value)))
+            .color(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Categorical(d.series.clone())
+            }))
+            .stack_normalized()
+            .build_with_data(data, context)
+            .unwrap();
+
+        // The config should have the PercentFormatter auto-applied
+        let fmt = chart.config.y_label_formatter.as_ref()
+            .expect("normalized mode should auto-set y_label_formatter");
+        assert_eq!(fmt.format_value(0.0), "0%");
+        assert_eq!(fmt.format_value(0.5), "50%");
+        assert_eq!(fmt.format_value(1.0), "100%");
+    }
+
+    #[tokio::test]
+    async fn test_area_non_normalized_has_no_auto_formatter() {
+        let data = vec![
+            TimePoint { time: 0.0, value: 10.0, series: "A".to_string() },
+            TimePoint { time: 1.0, value: 15.0, series: "A".to_string() },
+        ];
+
+        let context = Arc::new(RenderContext::new().await.unwrap());
+
+        let chart = area()
+            .x(AccessorFunction::new(|d: &TimePoint| AccessorValue::Float(d.time)))
+            .y(AccessorFunction::new(|d: &TimePoint| AccessorValue::Float(d.value)))
+            .build_with_data(data, context)
+            .unwrap();
+
+        // Non-normalised mode should NOT auto-set y_label_formatter
+        assert!(chart.config.y_label_formatter.is_none());
     }
 
     // ── Grid API tests ──────────────────────────────────────────────
