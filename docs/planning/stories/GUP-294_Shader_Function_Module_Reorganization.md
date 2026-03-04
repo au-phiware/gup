@@ -4,7 +4,7 @@
 
 **Title**: Shader Function Module Reorganization **Epic**: Phase 1 Initiative
 2 - Unified Shader Function System **Priority**: Low **Story Points**: 3
-**Status**: 📋 Planned
+**Status**: 🚧 In Progress
 
 ## Context
 

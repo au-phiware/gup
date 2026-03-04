@@ -223,7 +223,7 @@ integration, and Rust→WGSL transpilation.
 - [GUP-293](GUP-293_LAB_OKLab_Color_Space_Shader_Functions.md) ✅ — LAB/OKLab
   perceptual color space conversions as composable shader functions. Deps:
   GUP-053 ✅.
-- [GUP-294](GUP-294_Shader_Function_Module_Reorganization.md) 📋 — Split
+- [GUP-294](GUP-294_Shader_Function_Module_Reorganization.md) 🚧 — Split
   shader_function.rs (7700+ lines) into category-based submodules. Deps: GUP-053
   ✅.
 - [GUP-053](GUP-053_Shader_Pipeline_Performance_Optimization.md) ✅ — Enhance
