@@ -426,7 +426,7 @@ selection, and radix sort.
 - [GUP-285](GUP-285_BrushMark_GPU_Overlay_Rendering.md) ✅ — Wire BrushMark
   screen_rect into the chart render loop as a visible RectangleInstance overlay.
   Deps: GUP-278 ✅, GUP-067 ✅.
-- [GUP-286](GUP-286_GPU_Accelerated_Brush_Region_Query.md) 🚧 — Replace CPU
+- [GUP-286](GUP-286_GPU_Accelerated_Brush_Region_Query.md) ✅ — Replace CPU
   filter_by_rect with GPU rect_hit_test_gpu for brush selection on 500K+ mark
   datasets. Deps: GUP-278 ✅, GUP-012 ✅, GUP-075 ✅.
 - [GUP-287](GUP-287_LinkedSelection_Wrapper_Type.md) ✅ — Wrap Selection +
