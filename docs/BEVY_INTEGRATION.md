@@ -5,9 +5,9 @@ This guide shows how to embed GPU-accelerated Gup data visualizations inside a
 
 ## Version Compatibility
 
-| gup-bevy | Bevy  | wgpu  |
-| -------- | ----- | ----- |
-| 0.1      | 0.17  | 26.x  |
+| gup-bevy | Bevy | wgpu |
+| -------- | ---- | ---- |
+| 0.1      | 0.17 | 26.x |
 
 > **Note**: Bevy's wgpu version must match the version used by the `gup` crate.
 > Bevy 0.17 ships with wgpu 26.0, which is compatible.
@@ -103,15 +103,15 @@ scatter plot rendering inside a Bevy window.
 
 1. **`build()`** — registers `gup_render_system` in the `PostUpdate` schedule.
 2. **`finish()`** — extracts Bevy's `RenderDevice`, `RenderQueue`,
-   `RenderAdapter`, and `RenderInstance` from the render sub-app and
-   constructs a `GupRenderContext` resource.  No second GPU adapter is
-   created; both Bevy and Gup share the same device.
+   `RenderAdapter`, and `RenderInstance` from the render sub-app and constructs
+   a `GupRenderContext` resource. No second GPU adapter is created; both Bevy
+   and Gup share the same device.
 
 ### GupChart Component
 
 `GupChart` is a Bevy `Component` that wraps any chart built with the Gup
-chart-builder API.  It uses an object-safe `DynChart` trait internally for
-type erasure, so you can store scatter plots, line charts, bar charts, etc.
+chart-builder API. It uses an object-safe `DynChart` trait internally for type
+erasure, so you can store scatter plots, line charts, bar charts, etc.
 
 Key fields:
 
@@ -157,21 +157,21 @@ gup_chart.mark_dirty(); // triggers a single re-render
 
 ## Known Limitations and Caveats
 
-1. **Bevy version lock** — `gup-bevy` targets Bevy 0.17 (wgpu 26).  Upgrading
-   to a different Bevy version requires matching wgpu versions.
+1. **Bevy version lock** — `gup-bevy` targets Bevy 0.17 (wgpu 26). Upgrading to
+   a different Bevy version requires matching wgpu versions.
 
-2. **Render-to-PNG overhead** — The current implementation renders charts to
-   PNG bytes and then loads the PNG as a Bevy `Image`.  This involves a
-   GPU→CPU→GPU round-trip.  A future story will add direct texture sharing
-   to eliminate this overhead.
+2. **Render-to-PNG overhead** — The current implementation renders charts to PNG
+   bytes and then loads the PNG as a Bevy `Image`. This involves a GPU→CPU→GPU
+   round-trip. A future story will add direct texture sharing to eliminate this
+   overhead.
 
-3. **Single-threaded chart rendering** — Charts are rendered sequentially in
-   the render system.  Parallel chart rendering is not yet supported.
+3. **Single-threaded chart rendering** — Charts are rendered sequentially in the
+   render system. Parallel chart rendering is not yet supported.
 
-4. **Platform features** — The `bevy` dependency in `gup-bevy` enables `x11`
-   by default.  On other platforms, adjust the feature flags accordingly
-   (e.g. `wayland` on Wayland Linux, no extra feature on macOS/Windows).
+4. **Platform features** — The `bevy` dependency in `gup-bevy` enables `x11` by
+   default. On other platforms, adjust the feature flags accordingly (e.g.
+   `wayland` on Wayland Linux, no extra feature on macOS/Windows).
 
-5. **No 3-D support** — Charts are rendered to 2-D textures displayed as
-   Bevy sprites.  3-D scene integration (e.g. billboarded charts in a 3-D
-   world) is out of scope for this initial integration.
+5. **No 3-D support** — Charts are rendered to 2-D textures displayed as Bevy
+   sprites. 3-D scene integration (e.g. billboarded charts in a 3-D world) is
+   out of scope for this initial integration.

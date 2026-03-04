@@ -1,13 +1,13 @@
 # gup-bevy
 
-Bevy integration for the [Gup](https://github.com/au-phiware/gup) GPU-accelerated
-data visualization library.
+Bevy integration for the [Gup](https://github.com/au-phiware/gup)
+GPU-accelerated data visualization library.
 
 ## Version Compatibility
 
-| gup-bevy | Bevy  | wgpu  |
-| -------- | ----- | ----- |
-| 0.1      | 0.17  | 26.x  |
+| gup-bevy | Bevy | wgpu |
+| -------- | ---- | ---- |
+| 0.1      | 0.17 | 26.x |
 
 ## Quick Start
 

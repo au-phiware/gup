@@ -3,9 +3,9 @@
 
 //! Unit tests for `gup-bevy` components and plugin wiring.
 
-use gup::chart_builder::accessor::AccessorValue;
-use gup::chart_builder::builders::{scatter, AccessorFunction};
 use gup::chart_builder::ChartBuilder;
+use gup::chart_builder::accessor::AccessorValue;
+use gup::chart_builder::builders::{AccessorFunction, scatter};
 use gup::render::RenderContext;
 use gup_bevy::{GupChart, GupRenderContext};
 use std::sync::Arc;
@@ -26,9 +26,7 @@ fn make_scatter_chart() -> gup::chart_builder::ComposedChart<Pt, gup::mark::Circ
         Pt { x: 2.0, y: 3.0 },
         Pt { x: 3.0, y: 1.0 },
     ];
-    let context = Arc::new(
-        pollster::block_on(RenderContext::new()).expect("RenderContext"),
-    );
+    let context = Arc::new(pollster::block_on(RenderContext::new()).expect("RenderContext"));
     let x = AccessorFunction::new(|p: &Pt| AccessorValue::Float(p.x));
     let y = AccessorFunction::new(|p: &Pt| AccessorValue::Float(p.y));
     scatter()
@@ -116,24 +114,19 @@ fn gup_render_context_from_wgpu_creates_valid_context() {
         force_fallback_adapter: false,
     }))
     .expect("adapter");
-    let (device, queue) = pollster::block_on(adapter.request_device(
-        &wgpu::DeviceDescriptor {
-            label: Some("test_device"),
-            ..Default::default()
-        },
-    ))
+    let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+        label: Some("test_device"),
+        ..Default::default()
+    }))
     .expect("device");
 
-    let gup_ctx = GupRenderContext::from_wgpu(
-        instance,
-        adapter,
-        device,
-        queue,
-    );
+    let gup_ctx = GupRenderContext::from_wgpu(instance, adapter, device, queue);
 
     // The context should be usable.
-    assert!(!gup_ctx.gup_context().device.as_ref().features().is_empty()
-        || gup_ctx.gup_context().device.as_ref().features().is_empty());
+    assert!(
+        !gup_ctx.gup_context().device.as_ref().features().is_empty()
+            || gup_ctx.gup_context().device.as_ref().features().is_empty()
+    );
 }
 
 // ---------------------------------------------------------------------------

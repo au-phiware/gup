@@ -9,10 +9,10 @@
 //! Run with: `cargo run -p gup-bevy --example bevy_scatter`
 
 use bevy::prelude::*;
-use gup::chart_builder::accessor::AccessorValue;
-use gup::chart_builder::builders::scatter;
-use gup::chart_builder::builders::AccessorFunction;
 use gup::chart_builder::ChartBuilder;
+use gup::chart_builder::accessor::AccessorValue;
+use gup::chart_builder::builders::AccessorFunction;
+use gup::chart_builder::builders::scatter;
 use gup::render::RenderContext;
 use gup_bevy::prelude::*;
 use std::sync::Arc;
@@ -83,9 +83,8 @@ fn build_scatter_chart(
         })
         .collect();
 
-    let context = Arc::new(
-        pollster::block_on(RenderContext::new()).expect("Failed to create RenderContext"),
-    );
+    let context =
+        Arc::new(pollster::block_on(RenderContext::new()).expect("Failed to create RenderContext"));
 
     let x_acc = AccessorFunction::new(|d: &DataPoint| AccessorValue::Float(d.x));
     let y_acc = AccessorFunction::new(|d: &DataPoint| AccessorValue::Float(d.y));

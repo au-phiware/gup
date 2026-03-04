@@ -221,12 +221,7 @@ impl RenderContext {
     ///
     /// The caller is responsible for keeping the `Instance` and `Adapter` alive
     /// for as long as the returned context is in use.
-    pub fn from_wgpu(
-        instance: Instance,
-        adapter: Adapter,
-        device: Device,
-        queue: Queue,
-    ) -> Self {
+    pub fn from_wgpu(instance: Instance, adapter: Adapter, device: Device, queue: Queue) -> Self {
         let global_alpha_bind_group_layout =
             device.create_bind_group_layout(&BindGroupLayoutDescriptor {
                 entries: &[BindGroupLayoutEntry {
