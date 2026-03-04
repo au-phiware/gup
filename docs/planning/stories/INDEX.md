@@ -996,7 +996,7 @@ iOS and Android platform support for GPU-accelerated Gup charts.
 
 API reference generation, tutorials, and example gallery.
 
-- [GUP-280](GUP-280_API_Reference_Generation.md) 🚧 — Comprehensive rustdoc
+- [GUP-280](GUP-280_API_Reference_Generation.md) ✅ — Comprehensive rustdoc
   coverage of all public APIs with runnable doc examples, docs.rs configuration,
   and a CI gate enforcing zero doc warnings. Deps: GUP-002 ✅, GUP-005 ✅,
   GUP-009 ✅, GUP-018 ✅.
