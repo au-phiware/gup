@@ -13,11 +13,7 @@ categories = ["graphics", "visualization", "gui"]
 [dependencies]
 gup = { path = ".." }
 egui = "0.33"
-eframe = { version = "0.33", default-features = false, features = [
-    "default_fonts",
-    "glow",
-    "wgpu",
-] }
+eframe = { version = "0.33", features = ["wgpu"] }
 log = "0.4"
 image = "0.24"
 env_logger = "0.10"
