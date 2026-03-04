@@ -1,0 +1,15 @@
+{
+  "name": "gup-tauri",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Gup scatter plot in a Tauri WebView",
+  "scripts": {
+    "tauri": "cargo tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2"
+  }
+}

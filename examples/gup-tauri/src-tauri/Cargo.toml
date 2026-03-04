@@ -1,0 +1,21 @@
+[package]
+name = "gup-tauri"
+version = "0.1.0"
+authors = ["Corin Lawson <corin@phiware.com.au>"]
+edition = "2024"
+description = "Tauri desktop app embedding a Gup WebGPU scatter plot"
+license = "GPL-3.0-or-later"
+publish = false
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rand = "0.9"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

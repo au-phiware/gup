@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gup Scatter Plot — Tauri + WebGPU</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Gup Scatter Plot</h1>
+      <p class="subtitle">GPU-accelerated chart rendered via WebGPU inside a Tauri WebView</p>
+    </header>
+
+    <main>
+      <!-- WebGPU availability banner (hidden when GPU is present) -->
+      <div id="no-webgpu" class="banner hidden">
+        ⚠️ <strong>WebGPU is not available</strong> in this WebView.
+        A recent WebKitGTK (≥ 2.42) or WebView2 build is required.
+      </div>
+
+      <div class="chart-container">
+        <canvas id="chart-canvas" width="800" height="500"></canvas>
+      </div>
+
+      <div class="controls">
+        <button id="btn-refresh">🔄 Refresh Data</button>
+        <span id="status" class="status">Loading…</span>
+      </div>
+    </main>
+
+    <!-- Tauri IPC bridge (injected by Tauri when withGlobalTauri is true) -->
+    <script type="module" src="main.js"></script>
+  </body>
+</html>
