@@ -3,8 +3,9 @@
 ## Story Overview
 
 **Initiative**: Selection API  
-**Status**: 🚧 In Progress  
-**Created**: 2025-07-25
+**Status**: ✅ Complete  
+**Created**: 2025-07-25  
+**Completed**: 2025-07-26
 
 ## Context
 
@@ -28,14 +29,14 @@ time, and interpolate attribute values in the vertex shader.
 
 ## Acceptance Criteria
 
-- [ ] When `CommittedTransition` is active, `prepare_render_bound()` generates
+- [x] When `CommittedTransition` is active, `prepare_render_bound()` generates
       interpolated instance data between from/to values based on elapsed time.
-- [ ] The elapsed time is tracked via a `Selection::tick_transition(dt_ms: f64)`
+- [x] The elapsed time is tracked via a `Selection::tick_transition(dt_ms: f64)`
       method that advances the transition clock.
-- [ ] At `t >= duration + delay`, the transition auto-completes (calls
+- [x] At `t >= duration + delay`, the transition auto-completes (calls
       `complete_transition()`).
-- [ ] `KeyframeAnimation` instances from GUP-138 are used for the interpolation.
-- [ ] No GPU validation errors during animated rendering.
+- [x] `KeyframeAnimation` instances from GUP-138 are used for the interpolation.
+- [x] No GPU validation errors during animated rendering.
 
 ## Dependencies
 
@@ -56,8 +57,51 @@ time, and interpolate attribute values in the vertex shader.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+
+## Implementation Summary
+
+### What Was Implemented
+
+1. **`elapsed_ms` field on `CommittedTransition`** — Tracks accumulated time
+   since transition start. Initialised to 0.0 on commit.
+
+2. **`EasingFn::apply(t: f32) -> f32`** — CPU-side easing curve evaluation
+   matching the GPU-side behaviour. Supports Linear, EaseIn (quadratic),
+   EaseOut, EaseInOut (cubic), CubicBezier, CatmullRom, and BSpline.
+
+3. **`KeyframeAnimation::evaluate(time: f32) -> f32`** — CPU-side keyframe
+   interpolation that mirrors the GPU `keyframe_animation` WGSL function.
+   Supports empty/single/multi-keyframe animations with boundary clamping.
+
+4. **`AttrValue::lerp()` and `AttrValue::as_f32_first()`** — Component-wise
+   linear interpolation for Float, Vec2, Vec4 attribute values, plus a
+   helper to extract the first f32 component.
+
+5. **`Selection::tick_transition(dt_ms: f64) -> bool`** — Advances the
+   transition clock. Auto-completes via `complete_transition()` when
+   elapsed time reaches `delay + duration`. Returns whether the transition
+   is still active.
+
+6. **`prepare_render_bound()` transition integration** — When a
+   `CommittedTransition` is active, the method delegates to
+   `build_transition_instances()` which creates 2-keyframe
+   `KeyframeAnimation` instances per attribute, applies easing, and
+   interpolates between from/to `AttrValue`s.
+
+### Key Files Changed
+
+| File | Changes |
+|------|---------|
+| `src/transition/builder.rs` | Added `elapsed_ms` field, `EasingFn::apply()`, 6 tests |
+| `src/shader_function.rs` | Added `KeyframeAnimation::evaluate()`, 5 tests |
+| `src/selection.rs` | Added `tick_transition()`, `build_transition_instances()`, `AttrValue::lerp()`, `AttrValue::as_f32_first()`, modified `prepare_render_bound()`, 11 tests |
+
+### Test Counts
+
+- **22 new tests**: 6 easing, 5 keyframe evaluation, 5 AttrValue, 4 tick_transition, 2 integration
+- **2766 total library tests passing** (up from 2744)

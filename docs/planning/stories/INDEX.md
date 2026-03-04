@@ -167,7 +167,7 @@ data, and parallel output.
   enter/update/exit transitions via Selection::data_keyed() with
   GPU-interpolated 2-keyframe animations for smooth data rebinding. Deps:
   GUP-002 ✅, GUP-138 ✅, GUP-141 ✅, GUP-142 ✅, GUP-168 ✅.
-- [GUP-277](GUP-277_GPU_Render_Loop_Transition_Integration.md) 🚧 — Wire
+- [GUP-277](GUP-277_GPU_Render_Loop_Transition_Integration.md) ✅ — Wire
   CommittedTransition into the GPU render loop with KeyframeAnimation instances
   for automatic per-frame interpolation. Deps: GUP-276 ✅.
 - [GUP-278](GUP-278_Staggered_Transition_Delays.md) 📋 — Per-element delay
