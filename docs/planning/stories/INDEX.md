@@ -754,7 +754,7 @@ integration, pipeline caching.
 - [GUP-296](GUP-296_Colorbar_Axis_Renderer.md) ✅ — Colorbar axis renderer: thin
   gradient-filled rectangle with tick marks and labels for colour-scale legends.
   Deps: GUP-248 ✅, GUP-093 ✅, GUP-255 ✅.
-- [GUP-298](GUP-298_Filled_Polygon_Mark.md) 🚧 — FilledPolygon mark type for
+- [GUP-298](GUP-298_Filled_Polygon_Mark.md) ✅ — FilledPolygon mark type for
   true filled rendering of area charts and polygon-based visualisations via GPU
   tessellation. Deps: GUP-132 ✅, GUP-247 ✅.
 - [GUP-299](GUP-299_Axis_Percentage_Formatter.md) 📋 — Pluggable axis tick
