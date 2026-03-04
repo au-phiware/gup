@@ -181,14 +181,10 @@ fn html_export_contains_canvas() {
 
 #[test]
 fn html_export_url_strategy_contains_fetch() {
-    let exporter =
-        HtmlExporter::new(WasmStrategy::Url("https://cdn.example.com/gup.wasm".into()));
+    let exporter = HtmlExporter::new(WasmStrategy::Url("https://cdn.example.com/gup.wasm".into()));
     let html = export_chart_html(&exporter);
 
-    assert!(
-        html.contains("fetch("),
-        "URL strategy should use fetch()"
-    );
+    assert!(html.contains("fetch("), "URL strategy should use fetch()");
     assert!(
         html.contains("https://cdn.example.com/gup.wasm"),
         "URL should be embedded"
@@ -197,8 +193,8 @@ fn html_export_url_strategy_contains_fetch() {
 
 #[test]
 fn html_export_write_to_file() {
-    let exporter = HtmlExporter::new(WasmStrategy::Url("gup.wasm".into()))
-        .with_title("File Write Test");
+    let exporter =
+        HtmlExporter::new(WasmStrategy::Url("gup.wasm".into())).with_title("File Write Test");
 
     let dir = std::env::temp_dir().join("gup_html_test");
     std::fs::create_dir_all(&dir).unwrap();
@@ -247,8 +243,7 @@ fn html_export_convenience_method() {
 
 #[test]
 fn html_export_author_metadata() {
-    let exporter = HtmlExporter::new(WasmStrategy::Url("gup.wasm".into()))
-        .with_author("Jane Doe");
+    let exporter = HtmlExporter::new(WasmStrategy::Url("gup.wasm".into())).with_author("Jane Doe");
     let html = export_chart_html(&exporter);
 
     assert!(

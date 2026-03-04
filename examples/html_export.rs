@@ -99,10 +99,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // --- Custom export (URL strategy with full metadata) ---
         let output_custom = "chart_custom.html";
-        let exporter = HtmlExporter::new(WasmStrategy::Url("https://cdn.example.com/gup.wasm".into()))
-            .with_title("Custom Dashboard")
-            .with_description("A scatter plot of study hours vs test scores")
-            .with_author("Gup Example");
+        let exporter =
+            HtmlExporter::new(WasmStrategy::Url("https://cdn.example.com/gup.wasm".into()))
+                .with_title("Custom Dashboard")
+                .with_description("A scatter plot of study hours vs test scores")
+                .with_author("Gup Example");
         exporter.export(&mut chart, output_custom)?;
         let meta_custom = std::fs::metadata(output_custom)?;
         println!("Wrote {output_custom} ({} bytes)", meta_custom.len());
