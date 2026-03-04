@@ -2,7 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Documentation **Status**: 📋 Planned **Created**: 2025-01-31
+**Initiative**: Documentation **Status**: 🚧 In Progress **Created**: 2025-01-31
 
 ## Context
 
