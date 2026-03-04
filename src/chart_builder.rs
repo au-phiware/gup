@@ -4663,3 +4663,198 @@ mod tests_hover_reveal {
         assert!(builder.config.hover_reveal);
     }
 }
+
+#[cfg(test)]
+mod tests_colorbar {
+    use super::*;
+
+    #[derive(Debug, Clone)]
+    #[allow(dead_code)]
+    struct D {
+        x: f32,
+        y: f32,
+    }
+
+    #[test]
+    fn test_chart_config_show_colorbar_default_is_false() {
+        let config = ChartConfig::default();
+        assert!(!config.show_colorbar);
+    }
+
+    #[test]
+    fn test_chart_config_with_colorbar() {
+        let config = ChartConfig::default().with_colorbar(true);
+        assert!(config.show_colorbar);
+    }
+
+    #[tokio::test]
+    async fn test_has_colorbar_requires_both_flag_and_scale() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+
+        // No scale, no flag
+        let config = ChartConfig::default();
+        let sel =
+            Selection::<D, crate::Circle>::new(vec![D { x: 0.0, y: 0.0 }], context.clone())
+                .unwrap();
+        let chart = ComposedChart::new(sel, config);
+        assert!(!chart.has_colorbar());
+
+        // Flag only, no scale
+        let config = ChartConfig::default().with_colorbar(true);
+        let sel =
+            Selection::<D, crate::Circle>::new(vec![D { x: 0.0, y: 0.0 }], context.clone())
+                .unwrap();
+        let chart = ComposedChart::new(sel, config);
+        assert!(!chart.has_colorbar());
+
+        // Scale only, no flag
+        let config = ChartConfig::default().with_color_scale(ColorScale::viridis(0.0, 100.0));
+        let sel =
+            Selection::<D, crate::Circle>::new(vec![D { x: 0.0, y: 0.0 }], context.clone())
+                .unwrap();
+        let chart = ComposedChart::new(sel, config);
+        assert!(!chart.has_colorbar());
+
+        // Both set
+        let config = ChartConfig::default()
+            .with_color_scale(ColorScale::viridis(0.0, 100.0))
+            .with_colorbar(true);
+        let sel =
+            Selection::<D, crate::Circle>::new(vec![D { x: 0.0, y: 0.0 }], context).unwrap();
+        let chart = ComposedChart::new(sel, config);
+        assert!(chart.has_colorbar());
+    }
+
+    #[tokio::test]
+    async fn test_colorbar_geometry_generated_when_enabled() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let config = ChartConfig::default()
+            .with_color_scale(ColorScale::viridis(0.0, 100.0))
+            .with_colorbar(true);
+        let sel =
+            Selection::<D, crate::Circle>::new(vec![D { x: 1.0, y: 2.0 }], context).unwrap();
+        let chart = ComposedChart::new(sel, config).with_default_axes();
+        let geom = chart.generate_colorbar_geometry();
+        assert!(geom.is_some());
+        let geom = geom.unwrap();
+        assert!(!geom.gradient_vertices.is_empty());
+        assert!(!geom.tick_instances.is_empty());
+        assert!(!geom.labels.is_empty());
+        assert_eq!(geom.line_vertices.len(), 8); // outline
+    }
+
+    #[tokio::test]
+    async fn test_colorbar_geometry_none_when_disabled() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let config = ChartConfig::default()
+            .with_color_scale(ColorScale::viridis(0.0, 100.0))
+            .with_colorbar(false);
+        let sel =
+            Selection::<D, crate::Circle>::new(vec![D { x: 1.0, y: 2.0 }], context).unwrap();
+        let chart = ComposedChart::new(sel, config).with_default_axes();
+        let geom = chart.generate_colorbar_geometry();
+        assert!(geom.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_colorbar_geometry_gradient_vertex_count() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let config = ChartConfig::default()
+            .with_color_scale(ColorScale::viridis(0.0, 100.0))
+            .with_colorbar(true);
+        let sel =
+            Selection::<D, crate::Circle>::new(vec![D { x: 1.0, y: 2.0 }], context).unwrap();
+        let chart = ComposedChart::new(sel, config).with_default_axes();
+        let geom = chart.generate_colorbar_geometry().unwrap();
+        // Default 64 segments × 6 verts = 384
+        assert_eq!(geom.gradient_vertices.len(), 64 * 6);
+    }
+
+    #[tokio::test]
+    async fn test_colorbar_labels_contain_domain_values() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let config = ChartConfig::default()
+            .with_color_scale(ColorScale::viridis(0.0, 100.0))
+            .with_colorbar(true);
+        let sel =
+            Selection::<D, crate::Circle>::new(vec![D { x: 1.0, y: 2.0 }], context).unwrap();
+        let chart = ComposedChart::new(sel, config).with_default_axes();
+        let geom = chart.generate_colorbar_geometry().unwrap();
+
+        // Labels should contain values within [0, 100]
+        for label in &geom.labels {
+            assert!(
+                label.value >= 0.0 && label.value <= 100.0,
+                "Label value {} should be in domain [0, 100]",
+                label.value
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_colorbar_composable_with_scatter_chart() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let config = ChartConfig::default()
+            .with_color_scale(ColorScale::plasma(0.0, 50.0))
+            .with_colorbar(true);
+        let sel = Selection::<D, crate::Circle>::new(
+            vec![D { x: 1.0, y: 2.0 }, D { x: 3.0, y: 4.0 }],
+            context,
+        )
+        .unwrap();
+        let chart = ComposedChart::new(sel, config).with_default_axes();
+
+        assert!(chart.has_colorbar());
+        let geom = chart.generate_colorbar_geometry().unwrap();
+        assert!(!geom.gradient_vertices.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_colorbar_inherits_fill_domain() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let config = ChartConfig::default()
+            .with_color_scale(ColorScale::viridis(10.0, 200.0))
+            .with_colorbar(true);
+        let sel =
+            Selection::<D, crate::Circle>::new(vec![D { x: 1.0, y: 2.0 }], context).unwrap();
+        let chart = ComposedChart::new(sel, config);
+
+        let geom = chart.generate_colorbar_geometry().unwrap();
+
+        // Labels should be in the [10, 200] domain
+        let min_val = geom
+            .labels
+            .iter()
+            .map(|l| l.value)
+            .fold(f64::MAX, f64::min);
+        let max_val = geom
+            .labels
+            .iter()
+            .map(|l| l.value)
+            .fold(f64::MIN, f64::max);
+
+        assert!(
+            min_val >= 10.0 - 1.0,
+            "min label {min_val} should be near domain min 10"
+        );
+        assert!(
+            max_val <= 200.0 + 1.0,
+            "max label {max_val} should be near domain max 200"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_colorbar_suppressed_by_colorbar_false() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        // ColorScale set but show_colorbar = false
+        let config = ChartConfig::default()
+            .with_color_scale(ColorScale::viridis(0.0, 100.0))
+            .with_colorbar(false);
+        let sel =
+            Selection::<D, crate::Circle>::new(vec![D { x: 1.0, y: 2.0 }], context).unwrap();
+        let chart = ComposedChart::new(sel, config).with_default_axes();
+
+        assert!(!chart.has_colorbar());
+        assert!(chart.generate_colorbar_geometry().is_none());
+    }
+}

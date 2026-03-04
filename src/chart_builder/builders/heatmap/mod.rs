@@ -562,4 +562,54 @@ mod tests {
         };
         assert_eq!(a, b);
     }
+
+    #[tokio::test]
+    async fn test_heatmap_propagates_show_colorbar_true() {
+        let data = vec![TestData {
+            x: 1.0,
+            y: 2.0,
+            value: 3.0,
+        }];
+        let context = std::sync::Arc::new(crate::RenderContext::new().await.unwrap());
+
+        let chart = heatmap()
+            .x(AccessorFunction::new(|d: &TestData| {
+                AccessorValue::Float(d.x)
+            }))
+            .y(AccessorFunction::new(|d: &TestData| {
+                AccessorValue::Float(d.y)
+            }))
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .colorbar(true)
+            .build_with_data(data, context)
+            .unwrap();
+
+        assert!(chart.config.show_colorbar);
+        assert!(chart.has_colorbar());
+    }
+
+    #[tokio::test]
+    async fn test_heatmap_propagates_show_colorbar_false() {
+        let data = vec![TestData {
+            x: 1.0,
+            y: 2.0,
+            value: 3.0,
+        }];
+        let context = std::sync::Arc::new(crate::RenderContext::new().await.unwrap());
+
+        let chart = heatmap()
+            .x(AccessorFunction::new(|d: &TestData| {
+                AccessorValue::Float(d.x)
+            }))
+            .y(AccessorFunction::new(|d: &TestData| {
+                AccessorValue::Float(d.y)
+            }))
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .colorbar(false)
+            .build_with_data(data, context)
+            .unwrap();
+
+        assert!(!chart.config.show_colorbar);
+        assert!(!chart.has_colorbar());
+    }
 }
