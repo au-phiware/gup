@@ -948,7 +948,7 @@ PNG, HTML), and platform targets.
 - [GUP-264](GUP-264_Tauri_Integration.md) ✅ — gup-tauri example running Gup
   WASM in a Tauri WebView with a Rust IPC bridge feeding data to the chart.
   Deps: GUP-004 ✅, GUP-018 ✅, GUP-172 ✅, GUP-237 ✅.
-- [GUP-265](GUP-265_winit_Application_Shell.md) 📋 — GupApp application shell
+- [GUP-265](GUP-265_winit_Application_Shell.md) 🚧 — GupApp application shell
   wrapping the full winit event loop (surface, resize, device-loss recovery)
   into a 5-line builder entry point. Deps: GUP-039 ✅, GUP-047 ✅, GUP-049 ✅,
   GUP-013 📋.
