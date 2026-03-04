@@ -211,6 +211,36 @@ pub enum SuggestionCategory {
     BufferManagement,
 }
 
+/// Memory access efficiency metrics.
+///
+/// Provides aggregate insight into how efficiently memory bandwidth is being
+/// used over the profiled frame history.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct MemoryEfficiencyMetrics {
+    /// Ratio of upload bytes to download bytes.
+    /// High values indicate mostly write-only workloads (typical for rendering).
+    /// Values near 1.0 indicate balanced read/write (e.g. readback-heavy).
+    pub upload_download_ratio: f64,
+    /// Average size of each individual transfer in bytes.
+    /// Small values (<4 KiB) suggest inefficient batching.
+    pub avg_transfer_size_bytes: u64,
+    /// Average number of transfers per frame.
+    pub avg_transfers_per_frame: f64,
+    /// Average total bytes transferred per frame.
+    pub avg_bytes_per_frame: f64,
+    /// Average texture bindings per frame.
+    pub avg_texture_bindings_per_frame: f64,
+    /// Estimated total texture memory footprint (unique textures × their size).
+    pub estimated_texture_memory_bytes: u64,
+    /// Number of unique textures seen across all profiled frames.
+    pub unique_texture_count: u32,
+    /// Ratio of uploads to the same label in consecutive frames (potential
+    /// redundancy). 0.0 = no redundancy, 1.0 = every upload is redundant.
+    pub redundant_upload_ratio: f64,
+    /// Number of frames included in the analysis.
+    pub total_frames_analysed: u64,
+}
+
 /// Texture access pattern tracker for thrashing detection.
 #[derive(Debug, Clone, Default)]
 struct TextureSlotTracker {
@@ -617,6 +647,98 @@ impl MemoryBandwidthProfiler {
     /// Get the frame history.
     pub fn history(&self) -> &VecDeque<FrameBandwidthStats> {
         &self.history
+    }
+
+    /// Get memory access efficiency metrics.
+    ///
+    /// Provides aggregate insight into how efficiently memory bandwidth is being
+    /// used, including upload/download ratio, average transfer sizes, texture
+    /// memory footprint, and bandwidth-per-draw-call estimates.
+    pub fn get_efficiency_metrics(&self) -> MemoryEfficiencyMetrics {
+        if self.history.is_empty() {
+            return MemoryEfficiencyMetrics::default();
+        }
+
+        let total_upload: u64 = self.history.iter().map(|f| f.upload_bytes).sum();
+        let total_download: u64 = self.history.iter().map(|f| f.download_bytes).sum();
+        let total_transfers: u64 = self.history.iter().map(|f| f.transfer_count as u64).sum();
+        let total_tex_bindings: u64 = self
+            .history
+            .iter()
+            .map(|f| f.texture_binding_count as u64)
+            .sum();
+        let frame_count = self.history.len() as f64;
+
+        let upload_download_ratio = if total_download > 0 {
+            total_upload as f64 / total_download as f64
+        } else if total_upload > 0 {
+            f64::INFINITY
+        } else {
+            0.0
+        };
+
+        let avg_transfer_size = if total_transfers > 0 {
+            (total_upload + total_download) / total_transfers
+        } else {
+            0
+        };
+
+        let avg_transfers_per_frame = total_transfers as f64 / frame_count;
+        let avg_bytes_per_frame = (total_upload + total_download) as f64 / frame_count;
+        let avg_texture_bindings_per_frame = total_tex_bindings as f64 / frame_count;
+
+        // Estimate total texture memory footprint from binding events
+        let mut unique_textures: HashMap<String, u64> = HashMap::new();
+        for frame in &self.history {
+            for tex in &frame.texture_bindings {
+                let tex_bytes = tex.width as u64 * tex.height as u64 * tex.bytes_per_pixel as u64;
+                unique_textures
+                    .entry(tex.label.clone())
+                    .and_modify(|b| *b = (*b).max(tex_bytes))
+                    .or_insert(tex_bytes);
+            }
+        }
+        let estimated_texture_memory: u64 = unique_textures.values().sum();
+
+        // Redundant upload detection: same label appearing in consecutive frames
+        let mut redundant_uploads = 0u64;
+        let mut prev_labels: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for frame in &self.history {
+            let mut current_labels: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            for t in &frame.transfers {
+                if t.direction == TransferDirection::Upload {
+                    current_labels.insert(t.label.clone());
+                    if prev_labels.contains(&t.label) {
+                        redundant_uploads += 1;
+                    }
+                }
+            }
+            prev_labels = current_labels;
+        }
+        let total_uploads: u64 = self
+            .history
+            .iter()
+            .flat_map(|f| f.transfers.iter())
+            .filter(|t| t.direction == TransferDirection::Upload)
+            .count() as u64;
+        let redundant_upload_ratio = if total_uploads > 0 {
+            redundant_uploads as f64 / total_uploads as f64
+        } else {
+            0.0
+        };
+
+        MemoryEfficiencyMetrics {
+            upload_download_ratio,
+            avg_transfer_size_bytes: avg_transfer_size,
+            avg_transfers_per_frame,
+            avg_bytes_per_frame,
+            avg_texture_bindings_per_frame,
+            estimated_texture_memory_bytes: estimated_texture_memory,
+            unique_texture_count: unique_textures.len() as u32,
+            redundant_upload_ratio,
+            total_frames_analysed: self.history.len() as u64,
+        }
     }
 
     /// Get per-label cumulative bytes transferred.
@@ -1065,5 +1187,99 @@ mod tests {
         let frame = profiler.end_frame().unwrap();
 
         assert_eq!(frame.texture_bindings[0].bytes_per_pixel, 4);
+    }
+
+    #[test]
+    fn test_efficiency_metrics_empty() {
+        let profiler = MemoryBandwidthProfiler::new(BandwidthConfig::default());
+        let metrics = profiler.get_efficiency_metrics();
+        assert_eq!(metrics.total_frames_analysed, 0);
+        assert_eq!(metrics.avg_transfer_size_bytes, 0);
+        assert_eq!(metrics.upload_download_ratio, 0.0);
+    }
+
+    #[test]
+    fn test_efficiency_metrics_upload_only() {
+        let mut profiler = MemoryBandwidthProfiler::new(BandwidthConfig::default());
+
+        for _ in 0..5 {
+            profiler.begin_frame();
+            profiler.record_buffer_upload("verts", 4096);
+            profiler.record_buffer_upload("indices", 1024);
+            profiler.end_frame();
+        }
+
+        let metrics = profiler.get_efficiency_metrics();
+        assert_eq!(metrics.total_frames_analysed, 5);
+        assert!(metrics.upload_download_ratio.is_infinite()); // no downloads
+        assert_eq!(metrics.avg_transfer_size_bytes, (4096 + 1024) / 2); // 2 transfers per frame
+        assert!((metrics.avg_transfers_per_frame - 2.0).abs() < 0.01);
+        assert!((metrics.avg_bytes_per_frame - 5120.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_efficiency_metrics_upload_download_ratio() {
+        let mut profiler = MemoryBandwidthProfiler::new(BandwidthConfig::default());
+
+        profiler.begin_frame();
+        profiler.record_buffer_upload("data", 2000);
+        profiler.record_buffer_download("readback", 1000);
+        profiler.end_frame();
+
+        let metrics = profiler.get_efficiency_metrics();
+        assert!((metrics.upload_download_ratio - 2.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_efficiency_metrics_texture_memory() {
+        let mut profiler = MemoryBandwidthProfiler::new(BandwidthConfig::default());
+
+        // Two unique textures
+        profiler.begin_frame();
+        profiler.record_texture_binding("albedo", 1024, 1024, 4, 0);
+        profiler.record_texture_binding("normal", 512, 512, 4, 1);
+        profiler.end_frame();
+
+        let metrics = profiler.get_efficiency_metrics();
+        assert_eq!(metrics.unique_texture_count, 2);
+        let expected = 1024 * 1024 * 4 + 512 * 512 * 4;
+        assert_eq!(metrics.estimated_texture_memory_bytes, expected);
+    }
+
+    #[test]
+    fn test_efficiency_metrics_redundant_uploads() {
+        let mut profiler = MemoryBandwidthProfiler::new(BandwidthConfig::default());
+
+        // Same label uploaded every frame = redundant
+        for _ in 0..5 {
+            profiler.begin_frame();
+            profiler.record_buffer_upload("static_buf", 4096);
+            profiler.end_frame();
+        }
+
+        let metrics = profiler.get_efficiency_metrics();
+        // Frames 2–5 all upload "static_buf" which was also in the previous frame
+        // 4 out of 5 uploads are redundant
+        assert!((metrics.redundant_upload_ratio - 0.8).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_efficiency_metrics_serialization() {
+        let metrics = MemoryEfficiencyMetrics {
+            upload_download_ratio: 3.5,
+            avg_transfer_size_bytes: 8192,
+            avg_transfers_per_frame: 4.2,
+            avg_bytes_per_frame: 32000.0,
+            avg_texture_bindings_per_frame: 2.0,
+            estimated_texture_memory_bytes: 16 * 1024 * 1024,
+            unique_texture_count: 4,
+            redundant_upload_ratio: 0.25,
+            total_frames_analysed: 120,
+        };
+
+        let json = serde_json::to_string(&metrics).unwrap();
+        let deserialized: MemoryEfficiencyMetrics = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.unique_texture_count, 4);
+        assert!((deserialized.upload_download_ratio - 3.5).abs() < f64::EPSILON);
     }
 }
