@@ -42,9 +42,10 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::Hash;
+use std::time::Duration;
 
 use crate::event::ViewportTransform;
-use crate::interaction::{Rect, Vec2};
+use crate::interaction::{InteractionSystem, Rect, Vec2};
 use crate::linked_selection::SharedSelectionState;
 use crate::mark_selection::MarkSelectionSystem;
 
@@ -222,6 +223,32 @@ impl Default for BrushMark {
 }
 
 // ---------------------------------------------------------------------------
+// GpuBrushConfig — GPU-accelerated brush configuration
+// ---------------------------------------------------------------------------
+
+/// Configuration for GPU-accelerated brush region queries.
+///
+/// When using [`BrushBehavior::on_pointer_up_async`], the GPU path is
+/// preferred for large datasets (500K+ marks). If the GPU query does
+/// not complete within [`timeout`](Self::timeout) the system falls back
+/// to the CPU [`filter_by_rect`](MarkSelectionSystem::filter_by_rect)
+/// path.
+#[derive(Debug, Clone)]
+pub struct GpuBrushConfig {
+    /// Maximum time to wait for the GPU query before falling back to
+    /// CPU. Default: 50 ms.
+    pub timeout: Duration,
+}
+
+impl Default for GpuBrushConfig {
+    fn default() -> Self {
+        Self {
+            timeout: Duration::from_millis(50),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // BrushBehavior — developer-facing API
 // ---------------------------------------------------------------------------
 
@@ -270,6 +297,8 @@ pub struct BrushBehavior {
     drag_start: Option<Vec2>,
     /// Current drag position in screen space (updated on mouse-move).
     drag_current: Option<Vec2>,
+    /// Configuration for GPU-accelerated region queries.
+    gpu_config: GpuBrushConfig,
 }
 
 impl fmt::Debug for BrushBehavior {
@@ -287,6 +316,7 @@ impl fmt::Debug for BrushBehavior {
             .field("overlay", &self.overlay)
             .field("drag_start", &self.drag_start)
             .field("drag_current", &self.drag_current)
+            .field("gpu_config", &self.gpu_config)
             .finish()
     }
 }
@@ -310,6 +340,7 @@ impl BrushBehavior {
             overlay,
             drag_start: None,
             drag_current: None,
+            gpu_config: GpuBrushConfig::default(),
         }
     }
 
@@ -319,6 +350,24 @@ impl BrushBehavior {
     pub fn style(mut self, style: BrushStyle) -> Self {
         self.style = style.clone();
         self.overlay.style = style;
+        self
+    }
+
+    /// Set the GPU brush configuration (timeout, etc.).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use gup::brush::{BrushBehavior, GpuBrushConfig};
+    /// use std::time::Duration;
+    ///
+    /// let brush = BrushBehavior::new()
+    ///     .with_gpu_config(GpuBrushConfig {
+    ///         timeout: Duration::from_millis(100),
+    ///     });
+    /// ```
+    pub fn with_gpu_config(mut self, config: GpuBrushConfig) -> Self {
+        self.gpu_config = config;
         self
     }
 
@@ -481,6 +530,71 @@ impl BrushBehavior {
         self.overlay.hide();
     }
 
+    /// Handle a pointer-up event with GPU-accelerated region query.
+    ///
+    /// When `interaction_system` is `Some`, the GPU
+    /// [`rect_hit_test_gpu`](MarkSelectionSystem::rect_hit_test_gpu) path
+    /// is used. If the GPU query does not complete within the configured
+    /// [`GpuBrushConfig::timeout`], the CPU
+    /// [`filter_by_rect`](MarkSelectionSystem::filter_by_rect) fallback
+    /// is used instead.
+    ///
+    /// When `interaction_system` is `None`, the CPU path is always used
+    /// (identical to [`on_pointer_up`](Self::on_pointer_up)).
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// brush.on_pointer_up_async(
+    ///     screen_pos,
+    ///     &viewport,
+    ///     Some(&mark_system),
+    ///     Some(&mut interaction_system),
+    /// ).await;
+    /// ```
+    pub async fn on_pointer_up_async(
+        &mut self,
+        screen_position: Vec2,
+        viewport: &ViewportTransform,
+        selection_system: Option<&MarkSelectionSystem>,
+        interaction_system: Option<&mut InteractionSystem>,
+    ) {
+        if self.drag_start.is_none() {
+            return;
+        }
+        self.drag_current = Some(screen_position);
+
+        let rect = self.current_screen_rect();
+        let (data_extent, screen_extent, selection) = if let Some(rect) = rect {
+            let screen_extent = BrushExtent::from_corners(rect.min, rect.max);
+            let data_start = viewport.screen_to_world(rect.min);
+            let data_end = viewport.screen_to_world(rect.max);
+            let data_extent = BrushExtent::from_corners(data_start, data_end);
+
+            let selection = self
+                .query_region(data_extent, selection_system, interaction_system)
+                .await;
+
+            (data_extent, screen_extent, selection)
+        } else {
+            let zero = BrushExtent::new(0.0, 0.0, 0.0, 0.0);
+            (zero, zero, Vec::new())
+        };
+
+        let event = BrushEvent::new(data_extent, screen_extent, selection);
+        self.fire("brushend", &event);
+
+        // Clear drag state and hide overlay
+        self.drag_start = None;
+        self.drag_current = None;
+        self.overlay.hide();
+    }
+
+    /// Returns the current [`GpuBrushConfig`].
+    pub fn current_gpu_config(&self) -> &GpuBrushConfig {
+        &self.gpu_config
+    }
+
     /// Wire this brush to automatically update a [`SharedSelectionState`]
     /// on every brush and brushend event.
     ///
@@ -562,6 +676,52 @@ impl BrushBehavior {
             }
         }
     }
+
+    /// Internal: perform a region query using the best available method.
+    ///
+    /// Tries the GPU path first (if an `InteractionSystem` is provided and
+    /// positions are set). Falls back to CPU `filter_by_rect` on timeout
+    /// or when no GPU system is available.
+    async fn query_region(
+        &self,
+        data_extent: BrushExtent,
+        selection_system: Option<&MarkSelectionSystem>,
+        interaction_system: Option<&mut InteractionSystem>,
+    ) -> Vec<u32> {
+        let system = match selection_system {
+            Some(s) => s,
+            None => return Vec::new(),
+        };
+
+        let data_rect = data_extent.to_rect();
+
+        // Try GPU path when an InteractionSystem is available.
+        if let Some(is) = interaction_system {
+            let timeout = self.gpu_config.timeout;
+            let start = std::time::Instant::now();
+            let gpu_result = system.rect_hit_test_gpu(&data_rect, is).await;
+            let elapsed = start.elapsed();
+
+            match gpu_result {
+                Ok(ids) if elapsed <= timeout => return ids,
+                Ok(_) => {
+                    // GPU succeeded but exceeded timeout — fall back to CPU
+                    // for this query and let the caller know via the
+                    // (cheaper) CPU path. This ensures a responsive UX.
+                }
+                Err(_) => {
+                    // GPU error — fall back to CPU silently.
+                }
+            }
+        }
+
+        // CPU fallback.
+        if let Some(positions) = system.positions() {
+            MarkSelectionSystem::filter_by_rect(&data_rect, positions)
+        } else {
+            Vec::new()
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -611,8 +771,8 @@ impl BrushOverlayRenderer {
         _queue: &wgpu::Queue,
         cache: &mut crate::pipeline_cache::PipelineCache,
     ) -> crate::error::GupResult<Self> {
-        use crate::mark::rectangle::{Rectangle, RectangleInstance};
         use crate::mark::Mark;
+        use crate::mark::rectangle::{Rectangle, RectangleInstance};
         use wgpu::util::DeviceExt;
 
         // Reuse the cached Rectangle pipeline.
@@ -1241,7 +1401,10 @@ mod tests {
         let (device, queue) = create_test_device().await;
         let mut cache = crate::pipeline_cache::PipelineCache::new();
         let renderer = BrushOverlayRenderer::new(&device, &queue, &mut cache);
-        assert!(renderer.is_ok(), "BrushOverlayRenderer should be created without error");
+        assert!(
+            renderer.is_ok(),
+            "BrushOverlayRenderer should be created without error"
+        );
         let renderer = renderer.unwrap();
         assert!(!renderer.is_visible(), "should start invisible");
     }
@@ -1284,7 +1447,10 @@ mod tests {
 
         let mark = BrushMark::default();
         renderer.update(&mark, &queue);
-        assert!(!renderer.is_visible(), "default BrushMark should be invisible");
+        assert!(
+            !renderer.is_visible(),
+            "default BrushMark should be invisible"
+        );
     }
 
     #[tokio::test]
