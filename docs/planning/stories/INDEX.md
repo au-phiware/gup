@@ -180,6 +180,8 @@ data, and parallel output.
   grow the InteractionSystem result buffer when query results exceed
   max_results, enabling accurate GPU region queries on 1M+ mark datasets. Deps:
   GUP-286 ✅, GUP-012 ✅.
+- [GUP-357](GUP-357_Horizontal_Colorbar_Orientation.md) 💡 — Horizontal colorbar
+  layout for wide charts with limited right margin. Deps: GUP-296 ✅.
 
 ## Shader Function System
 
