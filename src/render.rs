@@ -213,6 +213,57 @@ impl RenderContext {
         Self::with_viewport(Viewport::default()).await
     }
 
+    /// Create a render context from externally-provided wgpu resources.
+    ///
+    /// This constructor allows embedding Gup in a host application (e.g. a game
+    /// engine) that already owns the GPU device and queue.  No second adapter or
+    /// device is created – the supplied handles are used directly.
+    ///
+    /// The caller is responsible for keeping the `Instance` and `Adapter` alive
+    /// for as long as the returned context is in use.
+    pub fn from_wgpu(
+        instance: Instance,
+        adapter: Adapter,
+        device: Device,
+        queue: Queue,
+    ) -> Self {
+        let global_alpha_bind_group_layout =
+            device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                entries: &[BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: Some("global_alpha_bind_group_layout"),
+            });
+
+        Self {
+            instance,
+            adapter,
+            device,
+            queue,
+            surface: None,
+            surface_config: None,
+            viewport: Viewport::default(),
+            encoder_pool: CommandEncoderPool::new(),
+            resource_manager: ResourceManager::new(),
+            current_blend_mode: BlendMode::default(),
+            blend_state_stack: Vec::new(),
+            pipeline_cache: HashMap::new(),
+            pipeline_cache_hits: 0,
+            pipeline_cache_misses: 0,
+            global_alpha_buffer: None,
+            global_alpha_bind_group: None,
+            global_alpha_bind_group_layout,
+            accessibility: None,
+        }
+    }
+
     /// Create a new render context with specific viewport
     pub async fn with_viewport(viewport: Viewport) -> GupResult<Self> {
         let instance = Instance::new(&InstanceDescriptor {

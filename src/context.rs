@@ -1210,6 +1210,45 @@ impl GupContext {
         Self::new().await
     }
 
+    /// Create a context from externally-provided wgpu resources.
+    ///
+    /// This constructor allows sharing an existing GPU device and queue with a
+    /// host application (e.g. a Bevy game engine).  No second adapter or device
+    /// is requested – the supplied handles are used directly, so both Gup and
+    /// the host operate on the same GPU context.
+    pub fn from_wgpu(
+        instance: Instance,
+        adapter: Adapter,
+        device: Arc<Device>,
+        queue: Arc<Queue>,
+    ) -> Arc<Self> {
+        let buffer_pool = BufferPool::new(Arc::clone(&device));
+        let texture_pool = TexturePool::new(Arc::clone(&device));
+
+        Arc::new(Self {
+            device,
+            queue,
+            surfaces: HashMap::new(),
+            primary_surface_id: None,
+            buffer_pool,
+            texture_pool,
+            frame_stats: FrameStats::default(),
+            frame_start_time: None,
+            performance_profiler: None,
+            event_handlers: Vec::new(),
+            background_throttling_enabled: false,
+            _instance: instance,
+            _adapter: adapter,
+            context_state: ContextState::Active,
+            recovery_callback: None,
+            last_recovery_attempt: None,
+            context_options: GupOptions::default(),
+            cached_surface_configs: HashMap::new(),
+            window_handle_renewal_callback: None,
+            recovery_metrics: RecoveryMetrics::default(),
+        })
+    }
+
     /// Custom initialization with advanced options.
     pub async fn with_options(options: GupOptions) -> GupResult<Arc<Self>> {
         let instance = Instance::new(&InstanceDescriptor {
