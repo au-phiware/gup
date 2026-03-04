@@ -36,9 +36,11 @@ use crate::chart_builder::{
 };
 use crate::error::GupResult;
 use crate::grid::{GridConfiguration, GridLineConfig};
+use crate::mark::filled_polygon::{self, FilledPolygon, TriangleInstance};
 use crate::mark::line::Line;
 use crate::selection::Selection;
 use crate::shader_function::ColorScale;
+use crate::shader_function::color::ColorGradientStorage;
 use crate::{MaybeSend, MaybeSync};
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -579,6 +581,56 @@ fn key_to_float(key: i64) -> f32 {
     f32::from_bits(bits)
 }
 
+// ── CPU-side gradient sampling ──────────────────────────────────────────
+
+/// Sample a [`ColorGradientStorage`] on the CPU at parameter `t`.
+///
+/// This mirrors the binary-search interpolation that the WGSL shader
+/// performs on the GPU.  `t` is clamped to the domain of the gradient's
+/// stop positions.
+fn sample_gradient_cpu(gradient: &ColorGradientStorage, t: f32) -> [f32; 4] {
+    let stops = &gradient.stops;
+    let colors = &gradient.colors;
+    if colors.is_empty() {
+        return [0.0; 4];
+    }
+    if colors.len() == 1 {
+        let c = &colors[0];
+        return [c.x, c.y, c.z, c.w];
+    }
+
+    let t_clamped = t.clamp(stops[0], stops[stops.len() - 1]);
+
+    // Find the interval [stops[i], stops[i+1]] that contains t.
+    let mut lo = 0usize;
+    for i in 0..stops.len() - 1 {
+        if t_clamped >= stops[i] {
+            lo = i;
+        }
+    }
+    let hi = (lo + 1).min(stops.len() - 1);
+    if lo == hi {
+        let c = &colors[lo];
+        return [c.x, c.y, c.z, c.w];
+    }
+
+    let range = stops[hi] - stops[lo];
+    let frac = if range.abs() < 1e-12 {
+        0.0
+    } else {
+        (t_clamped - stops[lo]) / range
+    };
+
+    let a = &colors[lo];
+    let b = &colors[hi];
+    [
+        a.x + (b.x - a.x) * frac,
+        a.y + (b.y - a.y) * frac,
+        a.z + (b.z - a.z) * frac,
+        a.w + (b.w - a.w) * frac,
+    ]
+}
+
 // ── Polygon closing helper ──────────────────────────────────────────────
 
 /// Close an area polygon by connecting the upper path to the reversed
@@ -628,7 +680,295 @@ pub fn close_area_polygon(upper: &[[f32; 2]], lower: &[[f32; 2]]) -> Vec<([f32; 
     segments
 }
 
-// ── ChartBuilder implementation ─────────────────────────────────────────
+// ── Polygon vertex collector ────────────────────────────────────────────
+
+/// Collect the closed polygon vertices (upper path → right connector →
+/// reversed lower path → left connector) as a single `Vec<[f32; 2]>`.
+///
+/// This is the same shape that [`close_area_polygon`] produces as line
+/// segments, but returned as a flat vertex list suitable for
+/// [`filled_polygon::tessellate_polygon`].
+pub fn collect_area_polygon_vertices(upper: &[[f32; 2]], lower: &[[f32; 2]]) -> Vec<[f32; 2]> {
+    if upper.is_empty() || lower.is_empty() {
+        return Vec::new();
+    }
+    if upper.len() == 1 && lower.len() == 1 {
+        return Vec::new();
+    }
+
+    let mut verts = Vec::with_capacity(upper.len() + lower.len());
+
+    // Upper path: left to right.
+    verts.extend_from_slice(upper);
+
+    // Lower path: right to left (reversed).
+    for pt in lower.iter().rev() {
+        verts.push(*pt);
+    }
+
+    verts
+}
+
+// ── AreaTriangle data wrapper ───────────────────────────────────────────
+
+/// A single tessellated triangle from an area polygon fill.
+///
+/// `AreaTriangle<T>` stores a representative data point together with
+/// the pre-computed [`TriangleInstance`] (three vertex positions and
+/// three vertex colours) ready for GPU upload.
+#[derive(Debug, Clone)]
+pub struct AreaTriangle<T> {
+    /// A representative data point from the series.
+    pub data: T,
+    /// The triangle instance data.
+    pub instance: TriangleInstance,
+}
+
+// ── build_filled ────────────────────────────────────────────────────────
+
+impl<T> AreaChartBuilder<T>
+where
+    T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
+{
+    /// Build a filled area chart using tessellated polygons.
+    ///
+    /// Instead of rendering the area outline as `Line` segments, this
+    /// method tessellates each series' closed polygon into triangles and
+    /// renders them as [`FilledPolygon`] instances with per-vertex colour.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use gup::prelude::*;
+    /// use gup::chart_builder::accessor::AccessorValue;
+    /// use gup::chart_builder::builders::AccessorFunction;
+    ///
+    /// #[derive(Debug, Clone)]
+    /// struct Pt { x: f32, y: f32 }
+    ///
+    /// # async fn example() -> GupResult<()> {
+    /// # let context = std::sync::Arc::new(RenderContext::new().await?);
+    /// let chart = area()
+    ///     .x(AccessorFunction::new(|d: &Pt| AccessorValue::Float(d.x)))
+    ///     .y(AccessorFunction::new(|d: &Pt| AccessorValue::Float(d.y)))
+    ///     .build_filled(
+    ///         vec![Pt { x: 0.0, y: 0.5 }, Pt { x: 1.0, y: 0.8 }],
+    ///         context,
+    ///     )?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn build_filled(
+        self,
+        data: Vec<T>,
+        context: Arc<RenderContext>,
+    ) -> GupResult<ComposedChart<AreaTriangle<T>, FilledPolygon>> {
+        validate_required_accessors(&self.x_accessor, &self.y_accessor)?;
+
+        if data.is_empty() {
+            return Err(ChartBuilderError::EmptyData.into());
+        }
+
+        let x_acc = self.x_accessor.as_ref().unwrap();
+        let y_acc = self.y_accessor.as_ref().unwrap();
+        let fill_opacity = self.fill_opacity;
+
+        let series_acc = self
+            .series_accessor
+            .as_ref()
+            .or(self.fill_accessor.as_ref());
+
+        // ── Evaluate accessor values ────────────────────────────────
+        struct EvalPt<T> {
+            data: T,
+            x: f32,
+            y: f32,
+            y0: f32,
+            series_key: Option<String>,
+            color: Option<[f32; 4]>,
+        }
+
+        let mut points: Vec<EvalPt<T>> = data
+            .into_iter()
+            .map(|d| {
+                let x_val = x_acc.apply(&d).as_f32();
+                let y_val = y_acc.apply(&d).as_f32();
+                let y0_val = match &self.y0_baseline {
+                    Baseline::Constant(c) => *c,
+                    Baseline::Accessor(acc) => acc.apply(&d).as_f32(),
+                };
+                let (series_key, color) = if let Some(acc) = series_acc {
+                    match acc.apply(&d) {
+                        AccessorValue::Color(c) => (None, Some(c)),
+                        AccessorValue::String(s) | AccessorValue::Categorical(s) => (Some(s), None),
+                        other => (Some(format!("{}", other.as_f32())), None),
+                    }
+                } else {
+                    (None, None)
+                };
+                EvalPt {
+                    data: d,
+                    x: x_val,
+                    y: y_val,
+                    y0: y0_val,
+                    series_key,
+                    color,
+                }
+            })
+            .collect();
+
+        if self.sort_by_x {
+            points.sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap_or(std::cmp::Ordering::Equal));
+        }
+
+        // ── Group by series ─────────────────────────────────────────
+        let groups: Vec<(String, Vec<usize>)> = {
+            let mut label_order: Vec<String> = Vec::new();
+            let mut label_indices: std::collections::HashMap<String, Vec<usize>> =
+                std::collections::HashMap::new();
+
+            for (i, pt) in points.iter().enumerate() {
+                let key = pt.series_key.clone().unwrap_or_default();
+                label_indices
+                    .entry(key.clone())
+                    .or_insert_with(|| {
+                        label_order.push(key);
+                        Vec::new()
+                    })
+                    .push(i);
+            }
+
+            label_order
+                .into_iter()
+                .map(|label| {
+                    let indices = label_indices.remove(&label).unwrap();
+                    (label, indices)
+                })
+                .collect()
+        };
+
+        // ── Assign colours per series ───────────────────────────────
+        let series_colors: Vec<[f32; 4]> = groups
+            .iter()
+            .enumerate()
+            .map(|(series_idx, (_label, indices))| {
+                if let Some(c) = points[indices[0]].color {
+                    return c;
+                }
+                DEFAULT_PALETTE[series_idx % DEFAULT_PALETTE.len()]
+            })
+            .collect();
+
+        // ── Apply stacking if needed ────────────────────────────────
+        let use_stacking = self.stack_mode != StackMode::None && groups.len() > 1;
+
+        let stacked_points: Option<Vec<StackedPoint>> = if use_stacking {
+            let flat_points: Vec<(f32, f32, String, usize)> = points
+                .iter()
+                .enumerate()
+                .map(|(i, pt)| (pt.x, pt.y, pt.series_key.clone().unwrap_or_default(), i))
+                .collect();
+
+            let series_order: Vec<String> = groups.iter().map(|(label, _)| label.clone()).collect();
+            Some(compute_stack_offsets(
+                &flat_points,
+                &series_order,
+                self.stack_mode,
+            ))
+        } else {
+            None
+        };
+
+        // ── Tessellate each series polygon ──────────────────────────
+        let mut triangles: Vec<AreaTriangle<T>> = Vec::new();
+
+        for (series_idx, (series_label, indices)) in groups.iter().enumerate() {
+            if indices.is_empty() {
+                continue;
+            }
+
+            let color = {
+                let mut c = series_colors[series_idx];
+                c[3] = fill_opacity;
+                c
+            };
+
+            let (upper, lower): (Vec<[f32; 2]>, Vec<[f32; 2]>) =
+                if let Some(ref stacked) = stacked_points {
+                    let series_stacked: Vec<&StackedPoint> = stacked
+                        .iter()
+                        .filter(|sp| &sp.series == series_label)
+                        .collect();
+
+                    let u: Vec<[f32; 2]> = series_stacked.iter().map(|sp| [sp.x, sp.y]).collect();
+                    let l: Vec<[f32; 2]> = series_stacked.iter().map(|sp| [sp.x, sp.y0]).collect();
+                    (u, l)
+                } else {
+                    let u: Vec<[f32; 2]> = indices
+                        .iter()
+                        .map(|&i| [points[i].x, points[i].y])
+                        .collect();
+                    let l: Vec<[f32; 2]> = indices
+                        .iter()
+                        .map(|&i| [points[i].x, points[i].y0])
+                        .collect();
+                    (u, l)
+                };
+
+            if upper.len() < 2 {
+                continue;
+            }
+
+            // Build closed polygon vertices.
+            let polygon_verts = collect_area_polygon_vertices(&upper, &lower);
+
+            // Build per-vertex colours for gradient support.
+            let vertex_colors: Option<Vec<[f32; 4]>> =
+                if let Some(ref gradient) = self.gradient_scale {
+                    // Map each polygon vertex's y-value to a gradient colour.
+                    let mut colors = Vec::with_capacity(polygon_verts.len());
+                    for pt in &polygon_verts {
+                        let t = pt[1]; // Use y coordinate as gradient parameter.
+                        let gc = sample_gradient_cpu(&gradient.gradient, t);
+                        colors.push([gc[0], gc[1], gc[2], fill_opacity]);
+                    }
+                    Some(colors)
+                } else {
+                    None
+                };
+
+            // Tessellate.
+            let instances =
+                filled_polygon::tessellate_polygon(&polygon_verts, vertex_colors.as_deref(), color);
+
+            let data_idx = indices[0];
+            for inst in instances {
+                triangles.push(AreaTriangle {
+                    data: points[data_idx].data.clone(),
+                    instance: inst,
+                });
+            }
+        }
+
+        if triangles.is_empty() {
+            return Err(ChartBuilderError::EmptyData.into());
+        }
+
+        // ── Create Selection<AreaTriangle<T>, FilledPolygon> ────────
+        let mut selection = Selection::<AreaTriangle<T>, FilledPolygon>::new(triangles, context)?;
+
+        selection.attr("v0", |tri: &AreaTriangle<T>| tri.instance.v0);
+        selection.attr("v1", |tri: &AreaTriangle<T>| tri.instance.v1);
+        selection.attr("v2", |tri: &AreaTriangle<T>| tri.instance.v2);
+        selection.attr("color0", |tri: &AreaTriangle<T>| tri.instance.color0);
+        selection.attr("color1", |tri: &AreaTriangle<T>| tri.instance.color1);
+        selection.attr("color2", |tri: &AreaTriangle<T>| tri.instance.color2);
+
+        let composed_chart = ComposedChart::new(selection, self.config.clone()).with_default_axes();
+
+        Ok(composed_chart)
+    }
+}
 
 impl<T> ChartBuilder<T> for AreaChartBuilder<T>
 where
@@ -1400,5 +1740,108 @@ mod tests {
         assert!(builder.config.show_grid);
         assert!(builder.config.grid_config.show_horizontal);
         assert!(!builder.config.grid_config.show_vertical);
+    }
+
+    // ── collect_area_polygon_vertices tests ─────────────────────────
+
+    #[test]
+    fn test_collect_polygon_vertices_basic() {
+        let upper = vec![[0.0, 1.0], [1.0, 2.0], [2.0, 1.5]];
+        let lower = vec![[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]];
+        let verts = collect_area_polygon_vertices(&upper, &lower);
+
+        // 3 upper + 3 lower (reversed) = 6 vertices
+        assert_eq!(verts.len(), 6);
+
+        // Upper path, left to right.
+        assert_eq!(verts[0], [0.0, 1.0]);
+        assert_eq!(verts[1], [1.0, 2.0]);
+        assert_eq!(verts[2], [2.0, 1.5]);
+
+        // Lower path, right to left (reversed).
+        assert_eq!(verts[3], [2.0, 0.0]);
+        assert_eq!(verts[4], [1.0, 0.0]);
+        assert_eq!(verts[5], [0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_collect_polygon_vertices_empty() {
+        let empty: Vec<[f32; 2]> = vec![];
+        let lower = vec![[0.0, 0.0]];
+        assert!(collect_area_polygon_vertices(&empty, &lower).is_empty());
+        assert!(collect_area_polygon_vertices(&lower, &empty).is_empty());
+    }
+
+    #[test]
+    fn test_collect_polygon_vertices_single_point() {
+        let upper = vec![[0.0, 1.0]];
+        let lower = vec![[0.0, 0.0]];
+        assert!(collect_area_polygon_vertices(&upper, &lower).is_empty());
+    }
+
+    // ── CPU gradient sampling tests ─────────────────────────────────
+
+    #[test]
+    fn test_sample_gradient_cpu_basic() {
+        use crate::shader_function::Vec4;
+        use crate::shader_function::color::ColorGradientStorage;
+
+        let gradient = ColorGradientStorage::with_colors(vec![
+            Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            }, // black at 0.0
+            Vec4 {
+                x: 1.0,
+                y: 1.0,
+                z: 1.0,
+                w: 1.0,
+            }, // white at 1.0
+        ]);
+
+        // At midpoint → grey
+        let mid = sample_gradient_cpu(&gradient, 0.5);
+        assert!((mid[0] - 0.5).abs() < 1e-5);
+        assert!((mid[1] - 0.5).abs() < 1e-5);
+        assert!((mid[2] - 0.5).abs() < 1e-5);
+
+        // At start → black
+        let start = sample_gradient_cpu(&gradient, 0.0);
+        assert!((start[0]).abs() < 1e-5);
+
+        // At end → white
+        let end = sample_gradient_cpu(&gradient, 1.0);
+        assert!((end[0] - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_sample_gradient_cpu_clamping() {
+        use crate::shader_function::Vec4;
+        use crate::shader_function::color::ColorGradientStorage;
+
+        let gradient = ColorGradientStorage::with_colors(vec![
+            Vec4 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+            Vec4 {
+                x: 1.0,
+                y: 1.0,
+                z: 1.0,
+                w: 1.0,
+            },
+        ]);
+
+        // Below range → clamp to first color
+        let below = sample_gradient_cpu(&gradient, -1.0);
+        assert!((below[0]).abs() < 1e-5);
+
+        // Above range → clamp to last color
+        let above = sample_gradient_cpu(&gradient, 2.0);
+        assert!((above[0] - 1.0).abs() < 1e-5);
     }
 }
