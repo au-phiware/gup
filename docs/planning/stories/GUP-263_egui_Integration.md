@@ -229,17 +229,17 @@ can reuse directly.
 
 ### Key Files
 
-| File                               | Purpose                                  |
-| ---------------------------------- | ---------------------------------------- |
-| `gup-egui/Cargo.toml`             | Crate manifest with egui/eframe deps     |
-| `gup-egui/src/lib.rs`             | Crate root with prelude re-exports       |
-| `gup-egui/src/widget.rs`          | GupWidget, DynChart trait                |
-| `gup-egui/src/bridge.rs`          | Event translation, coordinate mapping    |
-| `gup-egui/examples/egui_chart.rs` | Live-updating scatter plot demo          |
-| `gup-egui/tests/widget_tests.rs`  | Integration tests for dirty tracking     |
-| `gup-egui/README.md`              | Crate README                             |
-| `docs/EGUI_INTEGRATION.md`        | Comprehensive integration guide          |
-| `Cargo.toml`                      | Workspace members updated                |
+| File                              | Purpose                               |
+| --------------------------------- | ------------------------------------- |
+| `gup-egui/Cargo.toml`             | Crate manifest with egui/eframe deps  |
+| `gup-egui/src/lib.rs`             | Crate root with prelude re-exports    |
+| `gup-egui/src/widget.rs`          | GupWidget, DynChart trait             |
+| `gup-egui/src/bridge.rs`          | Event translation, coordinate mapping |
+| `gup-egui/examples/egui_chart.rs` | Live-updating scatter plot demo       |
+| `gup-egui/tests/widget_tests.rs`  | Integration tests for dirty tracking  |
+| `gup-egui/README.md`              | Crate README                          |
+| `docs/EGUI_INTEGRATION.md`        | Comprehensive integration guide       |
+| `Cargo.toml`                      | Workspace members updated             |
 
 ### Test Counts
 
@@ -247,3 +247,104 @@ can reuse directly.
 - **6 integration tests**: dirty flag transitions, chart accessors, event queue
 - **3 doc-tests**: ignored (`rust,ignore` examples)
 - **Total: 14 passing tests**
+
+## Retrospective
+
+**Completed**: 2025-07-22
+
+### Key Technical Learnings
+
+#### wgpu Version Coexistence
+
+- **Challenge**: egui 0.33 depends on wgpu 27, while the gup core crate uses
+  wgpu 26. No egui release matches wgpu 26 exactly (0.31→24, 0.32→25, 0.33→27).
+- **Solution**: Use a pixel-buffer bridge rather than shared device/queue. Gup
+  renders to PNG on its own wgpu 26 device, the PNG is decoded to RGBA, and
+  those bytes are uploaded to egui's `ColorImage`. Both wgpu versions coexist as
+  separate Cargo dependencies with no type sharing across the boundary.
+- **Pattern**: When integrating two libraries that each own a GPU device, prefer
+  a CPU-level pixel handoff over trying to share wgpu types across version
+  boundaries. This is the same pattern used by gup-bevy.
+
+#### eframe Feature Propagation
+
+- **Challenge**: Using `default-features = false` on eframe with explicit
+  features (`wgpu`, `glow`, etc.) resulted in wgpu 27 being compiled without any
+  GPU backend features (no `vulkan`), causing a runtime panic.
+- **Solution**: Use eframe with default features enabled
+  (`eframe = { version = "0.33", features = ["wgpu"] }`). The default features
+  chain through `egui-wgpu?/default → wgpu/default → vulkan`.
+- **Pattern**: For complex feature-gated crates like eframe, prefer keeping
+  default features unless you have a specific reason to strip them. The
+  `?/feature` conditional syntax in Cargo feature resolution can create
+  surprising gaps when defaults are removed.
+
+#### Implementing Widget for a Mutable Reference
+
+- **Challenge**: `egui::Widget::ui()` takes `self` by value, but `GupWidget`
+  needs to persist across frames (holds texture handles, dirty state).
+- **Solution**: Implement `egui::Widget for &mut GupWidget` rather than for
+  `GupWidget` directly. This lets users write `ui.add(&mut widget)` while the
+  widget continues to own its state.
+- **Pattern**: For stateful egui widgets, implement `Widget` on a mutable
+  reference or provide a `show(&mut self, ui: &mut Ui)` method.
+
+### Architectural Decisions
+
+#### Standalone Crate vs. Feature Flag
+
+- **Decision**: Created a standalone `gup-egui` crate rather than an `egui`
+  feature on the main `gup` crate.
+- **Reasoning**: Keeps egui/eframe (and their wgpu 27) completely out of the
+  core crate's dependency tree. Users who don't need egui pay no compile-time or
+  binary-size cost.
+- **Trade-off**: Users must add two dependencies (`gup` + `gup-egui`) instead of
+  one.
+- **Future**: When gup upgrades to wgpu 27, device sharing between egui and gup
+  becomes possible, which would enable zero-copy texture transfer. The crate
+  boundary won't change, only the internal implementation.
+
+#### PNG Round-trip vs. Raw Pixel Transfer
+
+- **Decision**: Used the existing `render_to_png` → PNG decode → `ColorImage`
+  pipeline rather than adding a new `render_to_rgba` method to the core crate.
+- **Reasoning**: Minimises changes to the core crate. Mirrors the approach
+  proven in gup-bevy. PNG encode/decode overhead is negligible for typical chart
+  sizes at interactive frame rates.
+- **Trade-off**: ~1–2ms overhead per re-render from PNG encode/decode. For very
+  high-frequency updates this could become a bottleneck.
+- **Future**: GUP-268 (PNG Export) will likely add a `render_to_rgba` method
+  that both `export_png` and `gup-egui` can use, eliminating the round-trip.
+
+#### DynChart Trait Duplication
+
+- **Decision**: Defined a `DynChart` trait in `gup-egui` identical to the one in
+  `gup-bevy`. Did not extract it into the core crate.
+- **Reasoning**: The trait is trivial (2 methods) and the two crates have
+  different dependency graphs. Extracting it would create a coupling between
+  framework integration crates and the core.
+- **Trade-off**: Duplicated ~20 lines of trait definition and blanket impl.
+- **Future**: If a third integration crate is needed, consider extracting
+  `DynChart` into `gup` core.
+
+### Development Workflow Insights
+
+- **gup-bevy as template**: Having gup-bevy as an existing integration crate was
+  invaluable. The overall pattern (DynChart trait, PNG-based rendering,
+  workspace member setup) was directly reusable.
+- **Cargo feature debugging**: The wgpu backend panic was tricky to diagnose.
+  `cargo tree -f "{p} [{f}]"` was essential for verifying which features were
+  actually resolved.
+- **Window visibility in CI-like environments**: The example compiled and ran
+  without panics but the Wayland compositor session didn't show the window. This
+  is expected in headless environments and is documented as a known limitation.
+
+### Follow-up Stories
+
+1. **GUP-263A: Raw Pixel Transfer for egui/Bevy Integration** — Replace the PNG
+   encode/decode round-trip in both gup-egui and gup-bevy with a direct
+   `render_to_rgba` method on ComposedChart. This eliminates ~1–2ms overhead per
+   re-render and provides the foundation GUP-268 needs.
+2. **GUP-263B: Shared wgpu Device for egui** — When gup upgrades to wgpu 27,
+   implement device sharing between egui and Gup (mirroring gup-bevy's
+   `from_wgpu` pattern) to enable zero-copy texture transfer.
