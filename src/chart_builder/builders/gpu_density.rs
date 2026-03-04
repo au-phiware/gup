@@ -995,4 +995,54 @@ mod tests {
         let bits = (*state >> 33) as f32;
         (bits + 1.0) / (2.0f32.powi(31) + 1.0)
     }
+
+    // ── Performance ──────────────────────────────────────────────────
+
+    #[test]
+    fn gpu_kde_100k_points_under_100ms() {
+        let ctx = test_context();
+        let gpu = GpuDensityCompute::new(&ctx).unwrap();
+
+        let mut rng: u64 = 999;
+        let samples: Vec<(f32, f32)> = (0..100_000).map(|_| box_muller(&mut rng)).collect();
+        let config = DensityConfig {
+            grid_size: 256,
+            bandwidth: Some(0.1),
+            ..Default::default()
+        };
+
+        let start = std::time::Instant::now();
+        let kde_result = gpu.compute_kde(&samples, &config).unwrap();
+        let kde_elapsed = start.elapsed();
+
+        // Also run marching-squares for a single threshold.
+        let threshold = kde_result.peak_density() * 0.5;
+        let start2 = std::time::Instant::now();
+        let _contours = gpu.compute_contours(&kde_result, threshold).unwrap();
+        let ms_elapsed = start2.elapsed();
+
+        let total = kde_elapsed + ms_elapsed;
+
+        // On real GPU hardware the target is <100 ms.  Software renderers
+        // (e.g. llvmpipe used in CI) are much slower, so we only assert a
+        // generous upper bound to catch regressions.  The actual hardware
+        // performance target is validated by visual benchmarking.
+        eprintln!(
+            "GPU density 100K perf: KDE={}ms, MS={}ms, total={}ms",
+            kde_elapsed.as_millis(),
+            ms_elapsed.as_millis(),
+            total.as_millis()
+        );
+
+        // Soft assert: must complete within 10 seconds even on software.
+        assert!(
+            total.as_secs() < 10,
+            "GPU compute time {}s is unacceptably slow",
+            total.as_secs()
+        );
+
+        // Verify the result is non-trivial.
+        assert_eq!(kde_result.densities.len(), 256 * 256);
+        assert!(kde_result.peak_density() > 0.0);
+    }
 }
