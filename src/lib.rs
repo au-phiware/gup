@@ -378,7 +378,9 @@ pub use chart_builder::builders::bar::{BarOrientation, Category, Orientation};
 pub use chart_builder::builders::density::{
     ContourBand, ContourLevel, DensityConfig, DensityLayer, DensityPlotBuilder, DensityRenderMode,
 };
-pub use chart_builder::builders::heatmap::{AggregateFunc, BinGrid, BinSpec, HeatmapCell};
+pub use chart_builder::builders::heatmap::{
+    AggregateFunc, BinGrid, BinSpec, GpuBinner, HeatmapCell, gpu_bin_data,
+};
 pub use chart_builder::builders::violin::{HalfSide, ViolinOrientation, ViolinPlotBuilder};
 pub use chart_builder::{
     AreaChartBuilder, AxisLabelConfig, BarChartBuilder, ChartBuilder, ChartConfig, ChoroplethChart,
