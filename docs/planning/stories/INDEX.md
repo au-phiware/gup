@@ -305,6 +305,9 @@ integration, and Rust→WGSL transpilation.
 - [GUP-220](GUP-220_Mixed_Chain_Attribute_Deduplication.md) ✅ — GUP-218
   introduced name-based WGSL struct deduplication: when multiple attr_shader()
   bindings….
+- [GUP-361](GUP-361_ColorScale_CPU_Sampling_API.md) 💡 — Add
+  `ColorScale::sample(t)` method for CPU-side colour lookups, eliminating ad-hoc
+  gradient sampling in chart builders. Deps: GUP-298 ✅.
 
 ## Mark System
 
@@ -353,6 +356,9 @@ derive macros, and custom mark kit.
 - [GUP-286](GUP-286_Spherical_Polygon_Simplification.md) 📋 — Spherical-aware
   polygon simplification using great-circle distance for polar-region accuracy.
   Deps: GUP-274 ✅.
+- [GUP-360](GUP-360_GPU_Fill_Tessellation.md) 💡 — GPU compute shader for
+  polygon fill tessellation, enabling per-frame dynamic polygon updates for very
+  large polygons (>100K vertices). Deps: GUP-132 ✅, GUP-298 ✅.
 
 ## Interaction & Spatial Index
 
