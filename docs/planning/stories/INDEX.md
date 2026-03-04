@@ -987,7 +987,7 @@ iOS and Android platform support for GPU-accelerated Gup charts.
   Swift/Obj-C UIKit/SwiftUI integration shim, and UITouch→InteractionEvent
   translation for iOS/iPadOS. Deps: GUP-004 ✅, GUP-039 ✅, GUP-182 ✅, GUP-013
   📋.
-- [GUP-271](GUP-271_Android_Platform_Support.md) 🚧 — Android SurfaceView
+- [GUP-271](GUP-271_Android_Platform_Support.md) ✅ — Android SurfaceView
   lifecycle, JNI NDK wrapper, MotionEvent→InteractionEvent bridge, and APK
   example for Kotlin/Java embedding. Deps: GUP-004 ✅, GUP-039 ✅, GUP-182 ✅,
   GUP-013 📋, GUP-270 ✅.
