@@ -117,6 +117,18 @@ pub enum SvgElement {
         /// Child elements within the group.
         children: Vec<SvgElement>,
     },
+
+    /// An SVG `<polygon>` element.
+    Polygon {
+        /// Space-separated list of `"x,y"` coordinate pairs.
+        points: String,
+        /// Fill colour as a CSS colour string.
+        fill: String,
+        /// Optional stroke colour.
+        stroke: Option<String>,
+        /// Optional stroke width.
+        stroke_width: Option<f32>,
+    },
 }
 
 impl SvgElement {
@@ -247,6 +259,22 @@ impl SvgElement {
                 s.push_str(&indent);
                 s.push_str("</g>");
                 s
+            }
+            SvgElement::Polygon {
+                points,
+                fill,
+                stroke,
+                stroke_width,
+            } => {
+                let mut attrs = format!(r#"{indent}<polygon points="{points}" fill="{fill}""#,);
+                if let Some(s) = stroke {
+                    attrs.push_str(&format!(r#" stroke="{s}""#));
+                }
+                if let Some(sw) = stroke_width {
+                    attrs.push_str(&format!(r#" stroke-width="{sw}""#));
+                }
+                attrs.push_str("/>");
+                attrs
             }
         }
     }

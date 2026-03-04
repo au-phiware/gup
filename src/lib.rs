@@ -327,6 +327,9 @@ pub use mark::circle::{Circle, CircleAttributes, CircleInstance, CircleVertex};
 pub use mark::compute_instance_filter::{
     ComputeInstanceFilter, FilterConfig, FilterResult, PooledComputeInstanceFilter,
 };
+pub use mark::filled_polygon::{
+    FilledPolygon, FilledPolygonAttributes, FilledPolygonVertex, TriangleInstance,
+};
 pub use mark::line::{Line, LineAttributes, LineInstance, LineStyle, LineVertex};
 pub use mark::occlusion_culler::{
     OcclusionCuller, OcclusionGpuConfig, OcclusionParams, OcclusionResult, PooledOcclusionCuller,

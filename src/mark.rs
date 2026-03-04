@@ -100,6 +100,7 @@ pub mod boxplot;
 pub mod circle;
 pub mod composite;
 pub mod compute_instance_filter;
+pub mod filled_polygon;
 pub mod geo_path;
 pub mod gpu_path_tessellator;
 pub mod line;
@@ -131,6 +132,9 @@ pub use composite::{
     CompositeMark, CompositeMarkAttributes, CompositeMarkVertex, SubMark, Transform,
 };
 pub use compute_instance_filter::{ComputeInstanceFilter, FilterConfig, FilterResult};
+pub use filled_polygon::{
+    FilledPolygon, FilledPolygonAttributes, FilledPolygonVertex, TriangleInstance,
+};
 pub use geo_path::{
     GeoFeature, GeoJsonSource, GeoPathAttributes, GeoPathMark, GeoPathVertex, GeoPolygon,
     Projection,
