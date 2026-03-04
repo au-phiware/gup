@@ -37,8 +37,7 @@ use crate::tick_generator;
 // ── Configuration ────────────────────────────────────────────────────────
 
 /// Orientation of the colorbar strip.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ColorbarOrientation {
     /// Vertical strip (default) — placed to the right of the chart.
     #[default]
@@ -46,7 +45,6 @@ pub enum ColorbarOrientation {
     /// Horizontal strip — placed below the chart.
     Horizontal,
 }
-
 
 /// Configuration for the colorbar legend.
 #[derive(Debug, Clone)]

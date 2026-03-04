@@ -1269,10 +1269,7 @@ where
     /// (or [`render()`](Self::render)) has prepared the colorbar pipeline.
     ///
     /// Returns the number of vertices drawn (0 if there is no colorbar).
-    pub fn draw_colorbar_gradient<'a>(
-        &'a self,
-        render_pass: &mut wgpu::RenderPass<'a>,
-    ) -> u32 {
+    pub fn draw_colorbar_gradient<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) -> u32 {
         if let (Some(pipeline), Some(bufs)) = (
             &self.colorbar_gradient_pipeline,
             &self.colorbar_gradient_buffers,
@@ -1395,8 +1392,7 @@ where
         // Tick instances (includes colorbar ticks)
         if !all_tick_instances.is_empty() {
             if let Some(tick_pipeline) = &self.tick_pipeline {
-                let (base_buf, inst_buf) =
-                    tick_pipeline.upload(device, queue, &all_tick_instances);
+                let (base_buf, inst_buf) = tick_pipeline.upload(device, queue, &all_tick_instances);
                 self.tick_buffers = Some(TickBuffers {
                     base_buf,
                     inst_buf,
@@ -4693,25 +4689,22 @@ mod tests_colorbar {
 
         // No scale, no flag
         let config = ChartConfig::default();
-        let sel =
-            Selection::<D, crate::Circle>::new(vec![D { x: 0.0, y: 0.0 }], context.clone())
-                .unwrap();
+        let sel = Selection::<D, crate::Circle>::new(vec![D { x: 0.0, y: 0.0 }], context.clone())
+            .unwrap();
         let chart = ComposedChart::new(sel, config);
         assert!(!chart.has_colorbar());
 
         // Flag only, no scale
         let config = ChartConfig::default().with_colorbar(true);
-        let sel =
-            Selection::<D, crate::Circle>::new(vec![D { x: 0.0, y: 0.0 }], context.clone())
-                .unwrap();
+        let sel = Selection::<D, crate::Circle>::new(vec![D { x: 0.0, y: 0.0 }], context.clone())
+            .unwrap();
         let chart = ComposedChart::new(sel, config);
         assert!(!chart.has_colorbar());
 
         // Scale only, no flag
         let config = ChartConfig::default().with_color_scale(ColorScale::viridis(0.0, 100.0));
-        let sel =
-            Selection::<D, crate::Circle>::new(vec![D { x: 0.0, y: 0.0 }], context.clone())
-                .unwrap();
+        let sel = Selection::<D, crate::Circle>::new(vec![D { x: 0.0, y: 0.0 }], context.clone())
+            .unwrap();
         let chart = ComposedChart::new(sel, config);
         assert!(!chart.has_colorbar());
 
@@ -4719,8 +4712,7 @@ mod tests_colorbar {
         let config = ChartConfig::default()
             .with_color_scale(ColorScale::viridis(0.0, 100.0))
             .with_colorbar(true);
-        let sel =
-            Selection::<D, crate::Circle>::new(vec![D { x: 0.0, y: 0.0 }], context).unwrap();
+        let sel = Selection::<D, crate::Circle>::new(vec![D { x: 0.0, y: 0.0 }], context).unwrap();
         let chart = ComposedChart::new(sel, config);
         assert!(chart.has_colorbar());
     }
@@ -4731,8 +4723,7 @@ mod tests_colorbar {
         let config = ChartConfig::default()
             .with_color_scale(ColorScale::viridis(0.0, 100.0))
             .with_colorbar(true);
-        let sel =
-            Selection::<D, crate::Circle>::new(vec![D { x: 1.0, y: 2.0 }], context).unwrap();
+        let sel = Selection::<D, crate::Circle>::new(vec![D { x: 1.0, y: 2.0 }], context).unwrap();
         let chart = ComposedChart::new(sel, config).with_default_axes();
         let geom = chart.generate_colorbar_geometry();
         assert!(geom.is_some());
@@ -4749,8 +4740,7 @@ mod tests_colorbar {
         let config = ChartConfig::default()
             .with_color_scale(ColorScale::viridis(0.0, 100.0))
             .with_colorbar(false);
-        let sel =
-            Selection::<D, crate::Circle>::new(vec![D { x: 1.0, y: 2.0 }], context).unwrap();
+        let sel = Selection::<D, crate::Circle>::new(vec![D { x: 1.0, y: 2.0 }], context).unwrap();
         let chart = ComposedChart::new(sel, config).with_default_axes();
         let geom = chart.generate_colorbar_geometry();
         assert!(geom.is_none());
@@ -4762,8 +4752,7 @@ mod tests_colorbar {
         let config = ChartConfig::default()
             .with_color_scale(ColorScale::viridis(0.0, 100.0))
             .with_colorbar(true);
-        let sel =
-            Selection::<D, crate::Circle>::new(vec![D { x: 1.0, y: 2.0 }], context).unwrap();
+        let sel = Selection::<D, crate::Circle>::new(vec![D { x: 1.0, y: 2.0 }], context).unwrap();
         let chart = ComposedChart::new(sel, config).with_default_axes();
         let geom = chart.generate_colorbar_geometry().unwrap();
         // Default 64 segments × 6 verts = 384
@@ -4776,8 +4765,7 @@ mod tests_colorbar {
         let config = ChartConfig::default()
             .with_color_scale(ColorScale::viridis(0.0, 100.0))
             .with_colorbar(true);
-        let sel =
-            Selection::<D, crate::Circle>::new(vec![D { x: 1.0, y: 2.0 }], context).unwrap();
+        let sel = Selection::<D, crate::Circle>::new(vec![D { x: 1.0, y: 2.0 }], context).unwrap();
         let chart = ComposedChart::new(sel, config).with_default_axes();
         let geom = chart.generate_colorbar_geometry().unwrap();
 
@@ -4815,23 +4803,14 @@ mod tests_colorbar {
         let config = ChartConfig::default()
             .with_color_scale(ColorScale::viridis(10.0, 200.0))
             .with_colorbar(true);
-        let sel =
-            Selection::<D, crate::Circle>::new(vec![D { x: 1.0, y: 2.0 }], context).unwrap();
+        let sel = Selection::<D, crate::Circle>::new(vec![D { x: 1.0, y: 2.0 }], context).unwrap();
         let chart = ComposedChart::new(sel, config);
 
         let geom = chart.generate_colorbar_geometry().unwrap();
 
         // Labels should be in the [10, 200] domain
-        let min_val = geom
-            .labels
-            .iter()
-            .map(|l| l.value)
-            .fold(f64::MAX, f64::min);
-        let max_val = geom
-            .labels
-            .iter()
-            .map(|l| l.value)
-            .fold(f64::MIN, f64::max);
+        let min_val = geom.labels.iter().map(|l| l.value).fold(f64::MAX, f64::min);
+        let max_val = geom.labels.iter().map(|l| l.value).fold(f64::MIN, f64::max);
 
         assert!(
             min_val >= 10.0 - 1.0,
@@ -4850,8 +4829,7 @@ mod tests_colorbar {
         let config = ChartConfig::default()
             .with_color_scale(ColorScale::viridis(0.0, 100.0))
             .with_colorbar(false);
-        let sel =
-            Selection::<D, crate::Circle>::new(vec![D { x: 1.0, y: 2.0 }], context).unwrap();
+        let sel = Selection::<D, crate::Circle>::new(vec![D { x: 1.0, y: 2.0 }], context).unwrap();
         let chart = ComposedChart::new(sel, config).with_default_axes();
 
         assert!(!chart.has_colorbar());
