@@ -23,9 +23,9 @@ bevy = { version = "0.17", default-features = false, features = [
 wgpu = { version = "26.0", features = ["wgsl"] }
 log = "0.4"
 image = "0.24"
+pollster = "0.3"
 
 [dev-dependencies]
-pollster = "0.3"
 
 [[example]]
 name = "bevy_scatter"
