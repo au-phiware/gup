@@ -1,34 +1,32 @@
 # Tauri Integration Guide
 
-Embed GPU-accelerated Gup charts in a
-[Tauri](https://v2.tauri.app/) desktop application. The Rust backend
-produces data, serialises it to JSON over Tauri's IPC bridge, and a
-WASM-compiled Gup chart running in the WebView consumes and renders it
-with WebGPU.
+Embed GPU-accelerated Gup charts in a [Tauri](https://v2.tauri.app/) desktop
+application. The Rust backend produces data, serialises it to JSON over Tauri's
+IPC bridge, and a WASM-compiled Gup chart running in the WebView consumes and
+renders it with WebGPU.
 
 ## Prerequisites
 
-| Tool | Version | Install |
-| --- | --- | --- |
-| Rust | ≥ 1.77 | <https://rustup.rs/> |
-| Node.js | ≥ 18 | <https://nodejs.org/> |
-| Tauri CLI | 2.x | `cargo install tauri-cli` |
-| wasm-pack | ≥ 0.12 | `cargo install wasm-pack` |
+| Tool      | Version | Install                   |
+| --------- | ------- | ------------------------- |
+| Rust      | ≥ 1.77  | <https://rustup.rs/>      |
+| Node.js   | ≥ 18    | <https://nodejs.org/>     |
+| Tauri CLI | 2.x     | `cargo install tauri-cli` |
+| wasm-pack | ≥ 0.12  | `cargo install wasm-pack` |
 
-You also need the platform-specific system libraries required by Tauri.
-See the
-[Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/)
-for details:
+You also need the platform-specific system libraries required by Tauri. See the
+[Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/) for
+details:
 
-- **Linux**: `libwebkit2gtk-4.1-dev`, `libappindicator3-dev`,
-  `librsvg2-dev`, `patchelf`
+- **Linux**: `libwebkit2gtk-4.1-dev`, `libappindicator3-dev`, `librsvg2-dev`,
+  `patchelf`
 - **macOS**: Xcode command-line tools
 - **Windows**: Microsoft Visual Studio C++ Build Tools, WebView2
 
 ## Quick Start (Using the Example)
 
-The repository ships a complete working example at
-`examples/gup-tauri/`. To run it:
+The repository ships a complete working example at `examples/gup-tauri/`. To run
+it:
 
 ```bash
 # 1. Build the Gup WASM package (from repository root)
@@ -44,9 +42,9 @@ npm install
 cargo tauri dev
 ```
 
-A native window should open displaying a GPU-accelerated scatter plot.
-Click **Refresh Data** to request new data from the Rust backend and
-re-render the chart.
+A native window should open displaying a GPU-accelerated scatter plot. Click
+**Refresh Data** to request new data from the Rust backend and re-render the
+chart.
 
 ## Building Your Own Tauri + Gup App
 
@@ -56,8 +54,8 @@ re-render the chart.
 cargo tauri init
 ```
 
-Choose the defaults. This creates a `src-tauri/` directory with
-`Cargo.toml`, `tauri.conf.json`, and a `src/main.rs` skeleton.
+Choose the defaults. This creates a `src-tauri/` directory with `Cargo.toml`,
+`tauri.conf.json`, and a `src/main.rs` skeleton.
 
 ### Step 2: Build the Gup WASM package
 
@@ -67,13 +65,12 @@ From the Gup repository root:
 wasm-pack build --target web --out-dir /path/to/your-app/ui/pkg
 ```
 
-This produces a JavaScript module (`gup.js`) and a WASM binary
-(`gup_bg.wasm`) that expose the `render_scatter` function.
+This produces a JavaScript module (`gup.js`) and a WASM binary (`gup_bg.wasm`)
+that expose the `render_scatter` function.
 
 ### Step 3: Add a Tauri command
 
-In your `src-tauri/src/main.rs`, expose a command that returns chart
-data:
+In your `src-tauri/src/main.rs`, expose a command that returns chart data:
 
 ```rust
 use serde::Serialize;
@@ -142,8 +139,8 @@ main();
 
 ### Step 5: Configure Tauri
 
-In `src-tauri/tauri.conf.json`, ensure the frontend directory points to
-your `ui/` folder:
+In `src-tauri/tauri.conf.json`, ensure the frontend directory points to your
+`ui/` folder:
 
 ```json
 {
@@ -165,8 +162,8 @@ cargo tauri dev
 
 ## Live Data Updates
 
-To update the chart without a page reload, re-invoke the command and
-call `render_scatter` again:
+To update the chart without a page reload, re-invoke the command and call
+`render_scatter` again:
 
 ```js
 async function refresh() {
@@ -177,9 +174,9 @@ async function refresh() {
 document.getElementById("btn-refresh").addEventListener("click", refresh);
 ```
 
-The `render_scatter` function caches the GPU device and render pipeline
-per canvas element, so subsequent calls only rebuild the data buffers —
-no canvas or GPU resource leaks occur.
+The `render_scatter` function caches the GPU device and render pipeline per
+canvas element, so subsequent calls only rebuild the data buffers — no canvas or
+GPU resource leaks occur.
 
 ## WASM API Reference
 
@@ -189,10 +186,10 @@ Renders a scatter plot to an HTML `<canvas>` element.
 
 **Parameters:**
 
-| Name | Type | Description |
-| --- | --- | --- |
+| Name        | Type     | Description                               |
+| ----------- | -------- | ----------------------------------------- |
 | `canvas_id` | `string` | DOM `id` of the target `<canvas>` element |
-| `data_json` | `string` | JSON array of `{x, y}` objects |
+| `data_json` | `string` | JSON array of `{x, y}` objects            |
 
 **Returns:** `Promise<void>`
 
@@ -208,40 +205,40 @@ Renders a scatter plot to an HTML `<canvas>` element.
 
 WebGPU support in OS-native WebViews varies by platform:
 
-| Platform | WebView Engine | WebGPU Status |
-| --- | --- | --- |
-| Linux | WebKitGTK | Requires ≥ 2.42; may need `WEBKIT_DISABLE_COMPOSITING_MODE=1` |
-| macOS | WebKit | Supported on macOS 14+ |
-| Windows | WebView2 (Chromium) | Supported with recent Edge/Chromium updates |
+| Platform | WebView Engine      | WebGPU Status                                                 |
+| -------- | ------------------- | ------------------------------------------------------------- |
+| Linux    | WebKitGTK           | Requires ≥ 2.42; may need `WEBKIT_DISABLE_COMPOSITING_MODE=1` |
+| macOS    | WebKit              | Supported on macOS 14+                                        |
+| Windows  | WebView2 (Chromium) | Supported with recent Edge/Chromium updates                   |
 
-The example application checks `navigator.gpu` at startup and displays
-a fallback banner when WebGPU is unavailable.
+The example application checks `navigator.gpu` at startup and displays a
+fallback banner when WebGPU is unavailable.
 
 ### Tauri Version
 
-This guide targets **Tauri 2.x** exclusively. The IPC and capability
-APIs differ significantly from Tauri 1.x.
+This guide targets **Tauri 2.x** exclusively. The IPC and capability APIs differ
+significantly from Tauri 1.x.
 
 ### Chart Builder Limitation
 
-The current WASM API renders circles using Gup's low-level mark
-rendering system (GPU-instanced circles with WGSL shaders). The
-high-level `ScatterPlotBuilder` chart builder API configures scales and
-axes but does not yet render data marks directly. A future story will
-unify the builder output with the mark rendering pipeline.
+The current WASM API renders circles using Gup's low-level mark rendering system
+(GPU-instanced circles with WGSL shaders). The high-level `ScatterPlotBuilder`
+chart builder API configures scales and axes but does not yet render data marks
+directly. A future story will unify the builder output with the mark rendering
+pipeline.
 
 ## Troubleshooting
 
-**"Canvas element not found"** — Ensure the `<canvas>` element's `id`
-matches the string passed to `render_scatter`.
+**"Canvas element not found"** — Ensure the `<canvas>` element's `id` matches
+the string passed to `render_scatter`.
 
-**"No suitable GPU adapter"** — The WebView does not support WebGPU.
-Check the platform table above and update your system WebView.
+**"No suitable GPU adapter"** — The WebView does not support WebGPU. Check the
+platform table above and update your system WebView.
 
-**"Failed to create surface"** — The WASM module could not create a
-WebGPU surface from the canvas. This may happen on older browsers or
-when hardware acceleration is disabled.
+**"Failed to create surface"** — The WASM module could not create a WebGPU
+surface from the canvas. This may happen on older browsers or when hardware
+acceleration is disabled.
 
-**Blank canvas with no errors** — Verify that `wasm-pack build` was run
-with `--target web` and that the `pkg/` directory is served correctly by
-Tauri's `frontendDist` setting.
+**Blank canvas with no errors** — Verify that `wasm-pack build` was run with
+`--target web` and that the `pkg/` directory is served correctly by Tauri's
+`frontendDist` setting.

@@ -1,14 +1,15 @@
 # gup-tauri
 
 A self-contained Tauri 2.x desktop application that embeds a Gup WebGPU scatter
-plot inside a native WebView. The Rust backend generates data and feeds it to the
-chart over Tauri's typed IPC bridge.
+plot inside a native WebView. The Rust backend generates data and feeds it to
+the chart over Tauri's typed IPC bridge.
 
 ## Prerequisites
 
 - [Rust](https://rustup.rs/) ≥ 1.77
 - [Node.js](https://nodejs.org/) ≥ 18
-- [Tauri CLI](https://v2.tauri.app/start/prerequisites/) (`cargo install tauri-cli`)
+- [Tauri CLI](https://v2.tauri.app/start/prerequisites/)
+  (`cargo install tauri-cli`)
 - [wasm-pack](https://rustwasm.github.io/wasm-pack/) (`cargo install wasm-pack`)
 - Platform-specific dependencies (see
   [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/))
@@ -53,8 +54,8 @@ gup-tauri/
 
 1. The **Rust backend** (`src-tauri/src/main.rs`) exposes a Tauri command
    `get_scatter_data` that returns a JSON array of `{x, y}` objects.
-2. The **frontend** (`ui/main.js`) calls `invoke("get_scatter_data")` via Tauri's
-   IPC bridge and receives the data.
+2. The **frontend** (`ui/main.js`) calls `invoke("get_scatter_data")` via
+   Tauri's IPC bridge and receives the data.
 3. The frontend loads the Gup WASM package (`ui/pkg/gup.js`) and calls
    `render_scatter("chart-canvas", dataJson)` which initialises WebGPU and
    renders the scatter plot to the `<canvas>` element.
