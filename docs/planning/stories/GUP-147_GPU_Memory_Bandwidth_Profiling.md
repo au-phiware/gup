@@ -1,6 +1,6 @@
 # GUP-147: GPU Memory Bandwidth Profiling
 
-**Status**: 💡 New
+**Status**: 🚧 In Progress
 
 ## Story Overview
 

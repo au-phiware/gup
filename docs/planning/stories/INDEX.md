@@ -618,7 +618,7 @@ aggregation.
   statistical functions are limited by GPU memory size.
 - [GUP-147](GUP-147_Box_Plot_Visualization.md) ✅ — GUP-139 provides the
   statistical foundation (min, max, quartiles) needed for box plots.
-- [GUP-147](GUP-147_GPU_Memory_Bandwidth_Profiling.md) 📋 — Adds actual GPU
+- [GUP-147](GUP-147_GPU_Memory_Bandwidth_Profiling.md) 🚧 — Adds actual GPU
   memory bandwidth measurement (upload/download throughput, texture access
   patterns, memory pressure detection) to the profiling system. Deps: GUP-046
   ✅, GUP-080 ✅.
