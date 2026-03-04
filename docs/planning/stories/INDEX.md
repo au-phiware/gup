@@ -423,7 +423,7 @@ selection, and radix sort.
 - [GUP-306](GUP-306_Vec3_Vec4_Arithmetic_Operators.md) ✅ — Add arithmetic
   operators (Add, Sub, Mul, Div) and array conversions to Vec3 and Vec4,
   matching Vec2's ergonomics. Deps: GUP-284 ✅.
-- [GUP-285](GUP-285_BrushMark_GPU_Overlay_Rendering.md) 📋 — Wire BrushMark
+- [GUP-285](GUP-285_BrushMark_GPU_Overlay_Rendering.md) 🚧 — Wire BrushMark
   screen_rect into the chart render loop as a visible RectangleInstance overlay.
   Deps: GUP-278 ✅, GUP-067 ✅.
 - [GUP-286](GUP-286_GPU_Accelerated_Brush_Region_Query.md) 📋 — Replace CPU
