@@ -10,8 +10,8 @@
 
 ## Methodology
 
-This audit evaluates every WCAG 2.1 Level A and Level AA success criterion
-(50 total) against Gup's implementation. Each criterion receives exactly one
+This audit evaluates every WCAG 2.1 Level A and Level AA success criterion (50
+total) against Gup's implementation. Each criterion receives exactly one
 verdict:
 
 - **Pass** — The criterion is satisfied; evidence points to the implementing
@@ -281,8 +281,8 @@ always provides a path to move focus away from any element.
 
 Gup does not define single-character keyboard shortcuts. All keyboard
 interactions use modifier keys or are standard navigation keys (Tab, arrows,
-Enter, Escape). This criterion applies when character key shortcuts are used; Gup
-does not use them.
+Enter, Escape). This criterion applies when character key shortcuts are used;
+Gup does not use them.
 
 ---
 
@@ -300,9 +300,9 @@ purely visual transitions that do not gate user interaction behind a time limit.
 
 **Verdict**: Pass
 
-Animations in Gup (GUP-138, GUP-141) can be paused, stopped, or disabled via
-the animation system's API. The `SonificationEngine` is opt-in and can be
-disabled. No content auto-updates for more than 5 seconds without user control.
+Animations in Gup (GUP-138, GUP-141) can be paused, stopped, or disabled via the
+animation system's API. The `SonificationEngine` is opt-in and can be disabled.
+No content auto-updates for more than 5 seconds without user control.
 
 **Evidence**: GUP-138 animation system, `AccessibilitySettings` controls in
 `src/accessibility.rs`.
@@ -317,7 +317,8 @@ disabled. No content auto-updates for more than 5 seconds without user control.
 
 Gup does not produce flashing content exceeding 3 flashes per second. Animations
 are smooth transitions (easing functions from GUP-138) that do not create rapid
-flashing. The rendering pipeline produces continuous frames, not strobed content.
+flashing. The rendering pipeline produces continuous frames, not strobed
+content.
 
 **Evidence**: GUP-138 animation easing functions.
 
@@ -356,8 +357,7 @@ The `FocusManager` supports three navigation modes:
 
 All modes produce a meaningful, predictable focus order.
 
-**Evidence**: GUP-127, `NavigationMode` enum in
-`src/accessibility/keyboard.rs`.
+**Evidence**: GUP-127, `NavigationMode` enum in `src/accessibility/keyboard.rs`.
 
 #### 2.4.4 Link Purpose (In Context) (Level A)
 
@@ -465,9 +465,9 @@ implementations.
 **Verdict**: N/A
 
 Gup generates chart labels and descriptions in a single language (determined by
-the developer's data and configuration). It does not produce multilingual content
-within a single visualization. Language-of-parts applies when content contains
-passages in different languages.
+the developer's data and configuration). It does not produce multilingual
+content within a single visualization. Language-of-parts applies when content
+contains passages in different languages.
 
 ---
 
@@ -543,8 +543,8 @@ No user input fields. See 3.3.1 justification.
 
 **Verdict**: N/A
 
-Gup does not process legal, financial, or data submissions. It is a
-read-only visualization library. Error prevention for submissions is the host
+Gup does not process legal, financial, or data submissions. It is a read-only
+visualization library. Error prevention for submissions is the host
 application's responsibility.
 
 ---
@@ -557,14 +557,15 @@ application's responsibility.
 
 **Verdict**: N/A
 
-This criterion targets HTML markup validity (complete start/end tags, unique IDs,
-no duplicate attributes). Gup is a Rust library; its ARIA tree uses structured
-data types with compiler-enforced validity. The web overlay generates valid DOM
-elements. WCAG 2.2 has deprecated this criterion as modern browsers handle
-parsing robustly, but for completeness under WCAG 2.1 we note that generated DOM
-content uses well-formed elements.
+This criterion targets HTML markup validity (complete start/end tags, unique
+IDs, no duplicate attributes). Gup is a Rust library; its ARIA tree uses
+structured data types with compiler-enforced validity. The web overlay generates
+valid DOM elements. WCAG 2.2 has deprecated this criterion as modern browsers
+handle parsing robustly, but for completeness under WCAG 2.1 we note that
+generated DOM content uses well-formed elements.
 
-**Evidence**: `AriaNode` struct with typed fields in `src/accessibility/aria.rs`.
+**Evidence**: `AriaNode` struct with typed fields in
+`src/accessibility/aria.rs`.
 
 #### 4.1.2 Name, Role, Value (Level A)
 
@@ -572,11 +573,11 @@ content uses well-formed elements.
 
 Every ARIA node has a programmatic name (`label`), role (`AriaRole` mapped to
 standard ARIA role strings), and optional value. The platform bridges expose
-these to assistive technologies: AT-SPI2 on Linux (`src/accessibility/atspi.rs`),
-native APIs on macOS and Windows, and DOM attributes on the web. Roles are
-mapped to standard equivalents: `Chart→img`, `ChartSeries→list`,
-`DataPoint→listitem`, `Legend→region`, `Axis→separator`, `Tooltip→tooltip`,
-`Control→button`.
+these to assistive technologies: AT-SPI2 on Linux
+(`src/accessibility/atspi.rs`), native APIs on macOS and Windows, and DOM
+attributes on the web. Roles are mapped to standard equivalents: `Chart→img`,
+`ChartSeries→list`, `DataPoint→listitem`, `Legend→region`, `Axis→separator`,
+`Tooltip→tooltip`, `Control→button`.
 
 **Evidence**: GUP-111, GUP-112, `AriaRole::as_str()` in
 `src/accessibility/aria.rs`.
@@ -599,18 +600,37 @@ and assertive urgency levels.
 
 ## Summary
 
-| Category | Pass | Fail | N/A | Total |
-| --- | --- | --- | --- | --- |
-| Principle 1: Perceivable | 10 | 0 | 10 | 20 |
-| Principle 2: Operable | 12 | 0 | 5 | 17 |
-| Principle 3: Understandable | 4 | 0 | 6 | 10 |
-| Principle 4: Robust | 2 | 0 | 1 | 3 |
-| **Total** | **28** | **0** | **22** | **50** |
+| Category                    | Pass   | Fail  | N/A    | Total  |
+| --------------------------- | ------ | ----- | ------ | ------ |
+| Principle 1: Perceivable    | 10     | 0     | 10     | 20     |
+| Principle 2: Operable       | 12     | 0     | 5      | 17     |
+| Principle 3: Understandable | 4      | 0     | 6      | 10     |
+| Principle 4: Robust         | 2      | 0     | 1      | 3      |
+| **Total**                   | **28** | **0** | **22** | **50** |
 
-**Overall Result**: All 50 WCAG 2.1 AA success criteria have been evaluated.
-28 criteria **Pass**, 0 criteria **Fail**, and 22 criteria are **Not
-Applicable** to a GPU-rendered data visualization library.
+**Overall Result**: All 50 WCAG 2.1 AA success criteria have been evaluated. 28
+criteria **Pass**, 0 criteria **Fail**, and 22 criteria are **Not Applicable**
+to a GPU-rendered data visualization library.
 
 No follow-up stories are required for gap remediation at this time. All
 applicable criteria are satisfied by the existing accessibility infrastructure
 built across GUP-016, GUP-111, GUP-112, GUP-122, GUP-124, and GUP-127.
+
+## Remediation Applied During Audit
+
+The following fix was applied during the GUP-272 audit:
+
+### sRGB Linearization in Contrast Ratio Calculation
+
+**Criterion**: 1.4.3 Contrast (Minimum)\
+**File**: `src/accessibility/high_contrast.rs`\
+**Issue**: The `relative_luminance()` function used raw sRGB channel values
+directly instead of applying the gamma linearization step required by the WCAG
+specification. This produced slightly incorrect contrast ratios for mid-range
+colours (black/white were unaffected since they are at the linear endpoints).\
+**Fix**: Applied the standard sRGB linearization formula
+(`c <= 0.04045 ? c/12.92 : ((c+0.055)/1.055)^2.4`) before computing luminance.
+Added `meets_wcag_aa()` and `meets_wcag_aa_large_text()` convenience functions.\
+**Regression Tests**: 13 new tests added covering sRGB linearization, contrast
+ratio symmetry, WCAG AA thresholds, ARIA role validity, keyboard navigation
+no-trap, and live region urgency levels.
