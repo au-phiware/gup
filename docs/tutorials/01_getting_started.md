@@ -38,8 +38,8 @@ tokio = { version = "1", features = ["full"] }
 
 ## Step 2: Define Your Data
 
-Every Gup chart starts with a Rust struct that represents one data point.
-The struct needs `Debug` and `Clone`:
+Every Gup chart starts with a Rust struct that represents one data point. The
+struct needs `Debug` and `Clone`:
 
 ```rust
 #[derive(Debug, Clone)]
@@ -225,8 +225,8 @@ let builder = plot()
 
 ## Next Steps
 
-- **[Tutorial 2: Data Binding](02_data_binding.md)** — learn how `Selection<T,
-  M>` works under the hood and bind complex data structures.
+- **[Tutorial 2: Data Binding](02_data_binding.md)** — learn how
+  `Selection<T, M>` works under the hood and bind complex data structures.
 - **[`02_scatter_window` example](../../examples/basic/02_scatter_window.rs)** —
   display a scatter chart in an interactive window.
 - **[Grid System guide](../GRID_SYSTEM.md)** — add grid lines and axes to your

@@ -23,18 +23,21 @@ experience.
 
 - [ ] A `examples/tutorials/` directory exists with one example per tutorial
       (where visual output is meaningful).
-- [ ] Each tutorial example is a self-contained windowed program that renders the
-      tutorial's "Full Example" chart.
+- [ ] Each tutorial example is a self-contained windowed program that renders
+      the tutorial's "Full Example" chart.
 - [ ] Tutorial documents are updated to reference these dedicated examples.
 - [ ] Each example includes a quit mechanism (ESC or window close).
 
 ## Technical Tasks
 
 - [ ] Create `examples/tutorials/` directory.
-- [ ] Implement `tutorial01_scatter.rs` — windowed scatter chart from Tutorial 1.
-- [ ] Implement `tutorial04_interactions.rs` — interactive chart from Tutorial 4.
+- [ ] Implement `tutorial01_scatter.rs` — windowed scatter chart from
+      Tutorial 1.
+- [ ] Implement `tutorial04_interactions.rs` — interactive chart from
+      Tutorial 4.
 - [ ] Implement `tutorial05_streaming.rs` — streaming chart from Tutorial 5.
-- [ ] Implement `tutorial06_custom_marks.rs` — custom mark chart from Tutorial 6.
+- [ ] Implement `tutorial06_custom_marks.rs` — custom mark chart from
+      Tutorial 6.
 - [ ] Update tutorial documents with links to the new examples.
 - [ ] Update screenshot sources in `docs/tutorials/README.md`.
 

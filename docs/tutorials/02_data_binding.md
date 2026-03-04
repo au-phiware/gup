@@ -116,11 +116,11 @@ selection
 
 Any type that implements `IntoAttrValue` works as a return type:
 
-| Rust type | `AttrValue` variant | Typical attribute |
-|-----------|-------------------|-------------------|
-| `f32` | `Float` | `"radius"`, `"stroke_width"` |
-| `[f32; 2]` | `Vec2` | `"center"`, `"position"` |
-| `[f32; 4]` | `Vec4` | `"fill_color"`, `"stroke_color"` |
+| Rust type  | `AttrValue` variant | Typical attribute                |
+| ---------- | ------------------- | -------------------------------- |
+| `f32`      | `Float`             | `"radius"`, `"stroke_width"`     |
+| `[f32; 2]` | `Vec2`              | `"center"`, `"position"`         |
+| `[f32; 4]` | `Vec4`              | `"fill_color"`, `"stroke_color"` |
 
 ## Step 4: Batch Bindings with `attr_parallel()`
 
@@ -166,8 +166,8 @@ selection.set_data(updated_data);
 ```
 
 Your attribute bindings are preserved — Gup re-evaluates them against the new
-data the next time `prepare_render_bound()` is called. This is the *update*
-half of the join/update pattern: existing bindings are replayed on fresh data.
+data the next time `prepare_render_bound()` is called. This is the _update_ half
+of the join/update pattern: existing bindings are replayed on fresh data.
 
 ## Step 6: Render
 
@@ -232,20 +232,20 @@ async fn main() -> GupResult<()> {
 
 ## Key Concepts
 
-| Concept | What It Does |
-|---------|-------------|
-| `Selection<T, M>` | Connects data of type `T` to a mark of type `M` |
-| `.attr(name, closure)` | Maps a named visual attribute to a data field |
-| `.attr_parallel(closure, names)` | Computes multiple attributes in one pass |
-| `set_data(new_data)` | Replaces the data, preserving bindings |
-| `prepare_render_bound()` | Evaluates bindings and uploads to GPU |
-| `render()` | Issues the GPU draw call |
+| Concept                          | What It Does                                    |
+| -------------------------------- | ----------------------------------------------- |
+| `Selection<T, M>`                | Connects data of type `T` to a mark of type `M` |
+| `.attr(name, closure)`           | Maps a named visual attribute to a data field   |
+| `.attr_parallel(closure, names)` | Computes multiple attributes in one pass        |
+| `set_data(new_data)`             | Replaces the data, preserving bindings          |
+| `prepare_render_bound()`         | Evaluates bindings and uploads to GPU           |
+| `render()`                       | Issues the GPU draw call                        |
 
 ## Next Steps
 
 - **[Tutorial 3: Custom Shader Functions](03_custom_shader_functions.md)** —
   move data transforms to the GPU for maximum performance.
-- **[`attr_binding_demo` example](../../examples/attr_binding_demo.rs)** —
-  a complete windowed example of attribute binding.
+- **[`attr_binding_demo` example](../../examples/attr_binding_demo.rs)** — a
+  complete windowed example of attribute binding.
 - **[Mark System docs](../mark-system/README.md)** — learn about built-in mark
   types and their attributes.

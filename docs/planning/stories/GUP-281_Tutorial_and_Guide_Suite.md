@@ -246,19 +246,19 @@ to custom mark implementation.
 
 ### Key Files Changed
 
-| File | Description |
-|------|-------------|
-| `docs/tutorials/README.md` | Tutorial index with learning path and screenshot sources |
-| `docs/tutorials/01_getting_started.md` | Chart builder API walkthrough with scatter() |
-| `docs/tutorials/02_data_binding.md` | Selection<T, M>, attr(), attr_parallel(), set_data() |
-| `docs/tutorials/03_custom_shader_functions.md` | #[wgsl_function], attr_shader, uniforms |
-| `docs/tutorials/04_interactions.md` | Click, hover, drag, brush, ZoomBehavior |
-| `docs/tutorials/05_streaming_data.md` | StreamingDataSource, DataStream, backpressure |
-| `docs/tutorials/06_custom_marks.md` | Mark trait, #[derive(Mark)], MarkRegistry |
-| `docs/tutorials/assets/` | 4 screenshot PNGs from running examples |
-| `docs/README.md` | Added Tutorials section with links |
-| `docs/CUSTOM_MARK_GUIDE.md` | Added cross-link to Tutorial 6 |
-| `docs/GRID_SYSTEM.md` | Added cross-link to Tutorial 1 |
+| File                                           | Description                                              |
+| ---------------------------------------------- | -------------------------------------------------------- |
+| `docs/tutorials/README.md`                     | Tutorial index with learning path and screenshot sources |
+| `docs/tutorials/01_getting_started.md`         | Chart builder API walkthrough with scatter()             |
+| `docs/tutorials/02_data_binding.md`            | Selection<T, M>, attr(), attr_parallel(), set_data()     |
+| `docs/tutorials/03_custom_shader_functions.md` | #[wgsl_function], attr_shader, uniforms                  |
+| `docs/tutorials/04_interactions.md`            | Click, hover, drag, brush, ZoomBehavior                  |
+| `docs/tutorials/05_streaming_data.md`          | StreamingDataSource, DataStream, backpressure            |
+| `docs/tutorials/06_custom_marks.md`            | Mark trait, #[derive(Mark)], MarkRegistry                |
+| `docs/tutorials/assets/`                       | 4 screenshot PNGs from running examples                  |
+| `docs/README.md`                               | Added Tutorials section with links                       |
+| `docs/CUSTOM_MARK_GUIDE.md`                    | Added cross-link to Tutorial 6                           |
+| `docs/GRID_SYSTEM.md`                          | Added cross-link to Tutorial 1                           |
 
 ### Validation
 
@@ -278,7 +278,7 @@ to custom mark implementation.
 
 - **Challenge**: Gup has a large API surface spread across many modules. Knowing
   which methods and types to feature in tutorials required reading source code,
-  examples, tests, and existing documentation to find the *canonical* patterns.
+  examples, tests, and existing documentation to find the _canonical_ patterns.
 - **Solution**: Cross-referencing the GUP-103 example suite with the actual
   `Selection`, `Mark`, and chart builder source code. The examples are the most
   reliable source of "what works today" since they are compiled and tested.
@@ -303,10 +303,10 @@ to custom mark implementation.
   non-windowed console demos that exit immediately, making screenshot capture
   impossible.
 - **Solution**: Used alternative windowed examples (zoom_pan,
-  observable_plot_visual_showcase) that demonstrate the same concepts with visual
-  output. Documented the screenshot source in `docs/tutorials/README.md`.
-- **Pattern**: For tutorial screenshot needs, maintain a mapping between concepts
-  and their windowed demo equivalents.
+  observable_plot_visual_showcase) that demonstrate the same concepts with
+  visual output. Documented the screenshot source in `docs/tutorials/README.md`.
+- **Pattern**: For tutorial screenshot needs, maintain a mapping between
+  concepts and their windowed demo equivalents.
 
 ### Architectural Decisions
 
@@ -343,15 +343,15 @@ to custom mark implementation.
   windowed example output. The workflow of `nohup cargo run --example X &` →
   wait → screen-grabber → kill is reliable.
 - **Cross-reference verification**: A simple shell script grepping for Markdown
-  links and checking file existence caught all broken references quickly —
-  no need for mdbook-linkcheck in this case.
+  links and checking file existence caught all broken references quickly — no
+  need for mdbook-linkcheck in this case.
 
 ### Follow-up Stories
 
 1. **GUP-351: Tutorial Snippet Compilation Tests** — Add a CI step or test
    harness that extracts code blocks from tutorial Markdown files and verifies
-   they compile. This prevents snippet drift as APIs evolve. Could use
-   `skeptic` or a custom `tests/doc_snippets/` approach.
+   they compile. This prevents snippet drift as APIs evolve. Could use `skeptic`
+   or a custom `tests/doc_snippets/` approach.
 
 2. **GUP-352: Interactive Tutorial Examples** — Create dedicated windowed
    examples for each tutorial that readers can run to see the exact output

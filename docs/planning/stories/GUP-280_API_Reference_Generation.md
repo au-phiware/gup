@@ -306,9 +306,9 @@ narrative prose assumes a navigable, linked API reference.
 
 #### Feature-Gated Documentation
 
-- **Challenge**: Some doc warnings only appear when building with `--all-features`
-  because feature-gated items (PDF, web-dashboard) bring in additional public
-  API surface.
+- **Challenge**: Some doc warnings only appear when building with
+  `--all-features` because feature-gated items (PDF, web-dashboard) bring in
+  additional public API surface.
 - **Solution**: The `mask doc` task and docs.rs config use `--all-features` to
   catch all warnings. The `docsrs` cfg flag enables `doc(cfg(...))` annotations
   so feature-gated items are visually marked in the rendered docs.
@@ -330,8 +330,9 @@ narrative prose assumes a navigable, linked API reference.
 
 #### doc(hidden) for Internal Modules
 
-- **Decision**: Hide 7 modules (`test_utils`, `visual_test_utils`, `wasm_bench*`,
-  `examples`, `integration`) rather than making them `pub(crate)`.
+- **Decision**: Hide 7 modules (`test_utils`, `visual_test_utils`,
+  `wasm_bench*`, `examples`, `integration`) rather than making them
+  `pub(crate)`.
 - **Reasoning**: These modules are `pub` for valid reasons (macro hygiene,
   integration test access, benchmark harness). Changing visibility would break
   existing usage. `doc(hidden)` keeps them accessible in code but invisible in
@@ -350,11 +351,12 @@ narrative prose assumes a navigable, linked API reference.
 - Running `cargo check` after every batch of documentation changes is essential.
   Doc comments are syntactically significant in Rust — a misplaced `///` can
   cause compilation errors.
-- The `mask doc` task (`RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
-  --all-features`) is the canonical way to verify zero doc warnings locally.
-- Disk space can be a concern when building with both `cargo test` and `cargo
-  doc` on resource-constrained CI runners. Consider using `CARGO_TARGET_DIR` on
-  a larger filesystem.
+- The `mask doc` task
+  (`RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features`) is the
+  canonical way to verify zero doc warnings locally.
+- Disk space can be a concern when building with both `cargo test` and
+  `cargo doc` on resource-constrained CI runners. Consider using
+  `CARGO_TARGET_DIR` on a larger filesystem.
 
 ### Follow-up Stories
 

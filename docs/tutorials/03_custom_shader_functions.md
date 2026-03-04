@@ -24,19 +24,19 @@ Rust, serialised, and uploaded to the GPU every frame.
 
 **Shader functions** move the transform to the GPU:
 
-| Approach | Where it runs | Best for |
-|----------|--------------|----------|
-| `.attr(name, closure)` | CPU | Simple mappings, string lookups, complex logic |
-| `.attr_shader(name, extractor, shader_fn)` | GPU | Numeric transforms on large datasets |
+| Approach                                   | Where it runs | Best for                                       |
+| ------------------------------------------ | ------------- | ---------------------------------------------- |
+| `.attr(name, closure)`                     | CPU           | Simple mappings, string lookups, complex logic |
+| `.attr_shader(name, extractor, shader_fn)` | GPU           | Numeric transforms on large datasets           |
 
 With `attr_shader`, Gup uploads the raw extracted value once and applies the
 transform in the vertex shader — thousands of times faster for large datasets.
 
 ## Step 1: Define a Shader Function
 
-Use the `#[wgsl_function]` procedural macro from `gup_macros` to annotate a
-Rust function. The macro transpiles the function body to WGSL and generates a
-struct that implements `ComposableShaderFunction`:
+Use the `#[wgsl_function]` procedural macro from `gup_macros` to annotate a Rust
+function. The macro transpiles the function body to WGSL and generates a struct
+that implements `ComposableShaderFunction`:
 
 ```rust
 use gup_macros::wgsl_function;
@@ -49,10 +49,10 @@ fn my_linear_scale(value: f32, scale: f32, offset: f32) -> f32 {
 
 This generates:
 
-- A struct `MyLinearScale` with fields `scale: f32` and `offset: f32`
-  (all parameters except the first are treated as uniforms).
-- A `MyLinearScaleUniforms` struct that is `#[repr(C)]`, `Pod`, and `Zeroable`
-  — ready for GPU upload.
+- A struct `MyLinearScale` with fields `scale: f32` and `offset: f32` (all
+  parameters except the first are treated as uniforms).
+- A `MyLinearScaleUniforms` struct that is `#[repr(C)]`, `Pod`, and `Zeroable` —
+  ready for GPU upload.
 - An implementation of `ComposableShaderFunction` that produces valid WGSL.
 
 Create an instance by passing the uniform values:
@@ -106,15 +106,15 @@ selection.attr_shader("center", |d: &Measurement| [d.timestamp, d.value], transf
 
 The macro maps Rust types to WGSL types automatically:
 
-| Rust type | WGSL type |
-|-----------|-----------|
-| `f32` | `f32` |
-| `Vec2` | `vec2<f32>` |
-| `Vec3` | `vec3<f32>` |
-| `Vec4` | `vec4<f32>` |
-| `Mat2` | `mat2x2<f32>` |
-| `Mat3` | `mat3x3<f32>` |
-| `Mat4` | `mat4x4<f32>` |
+| Rust type | WGSL type     |
+| --------- | ------------- |
+| `f32`     | `f32`         |
+| `Vec2`    | `vec2<f32>`   |
+| `Vec3`    | `vec3<f32>`   |
+| `Vec4`    | `vec4<f32>`   |
+| `Mat2`    | `mat2x2<f32>` |
+| `Mat3`    | `mat3x3<f32>` |
+| `Mat4`    | `mat4x4<f32>` |
 
 Only these types are supported in `#[wgsl_function]` signatures. For the full
 transpiler reference see [Technical Approach](../TECHNICAL_APPROACH.md).
@@ -242,12 +242,12 @@ async fn main() -> GupResult<()> {
 
 ## Key Concepts
 
-| Concept | What It Does |
-|---------|-------------|
-| `#[wgsl_function]` | Transpiles a Rust function to WGSL and generates a shader struct |
-| `attr_shader(name, extractor, shader_fn)` | Binds an attribute to a GPU shader function |
-| `ComposableShaderFunction` | Trait implemented by all shader functions |
-| `update_shader_uniforms()` | Updates uniform values without pipeline rebuild |
+| Concept                                   | What It Does                                                     |
+| ----------------------------------------- | ---------------------------------------------------------------- |
+| `#[wgsl_function]`                        | Transpiles a Rust function to WGSL and generates a shader struct |
+| `attr_shader(name, extractor, shader_fn)` | Binds an attribute to a GPU shader function                      |
+| `ComposableShaderFunction`                | Trait implemented by all shader functions                        |
+| `update_shader_uniforms()`                | Updates uniform values without pipeline rebuild                  |
 
 ## Next Steps
 

@@ -13,9 +13,9 @@
 
 ## Prerequisites
 
-Complete [Tutorial 2](02_data_binding.md). Familiarity with
-`Selection<T, M>` is assumed. You should also be comfortable with basic GPU
-concepts (vertices, indices, shaders).
+Complete [Tutorial 2](02_data_binding.md). Familiarity with `Selection<T, M>` is
+assumed. You should also be comfortable with basic GPU concepts (vertices,
+indices, shaders).
 
 For the full architectural overview, see the
 [Custom Mark Guide](../CUSTOM_MARK_GUIDE.md) and the
@@ -50,9 +50,9 @@ pub trait Mark: Clone + MaybeSend + MaybeSync + 'static {
 
 ## Quick Path: `#[derive(Mark)]`
 
-The fastest way to create a mark is with the derive macro. Define a struct
-with annotated fields and Gup generates the vertex type, instance buffer
-layout, and boilerplate for you.
+The fastest way to create a mark is with the derive macro. Define a struct with
+annotated fields and Gup generates the vertex type, instance buffer layout, and
+boilerplate for you.
 
 ### Step 1: Define the Mark Struct
 
@@ -78,13 +78,13 @@ pub struct Diamond {
 
 **Annotations**:
 
-| Annotation | Purpose |
-|-----------|---------|
+| Annotation                    | Purpose                                              |
+| ----------------------------- | ---------------------------------------------------- |
 | `#[mark(primitive = "quad")]` | Base geometry: `"quad"`, `"triangle"`, or `"circle"` |
-| `#[mark(position)]` | The field that positions the mark in clip space |
-| `#[mark(size)]` | The field that controls the mark's scale |
-| `#[mark(color)]` | The field that sets the fill colour |
-| `#[mark(rotation)]` | The field that rotates the mark (in radians) |
+| `#[mark(position)]`           | The field that positions the mark in clip space      |
+| `#[mark(size)]`               | The field that controls the mark's scale             |
+| `#[mark(color)]`              | The field that sets the fill colour                  |
+| `#[mark(rotation)]`           | The field that rotates the mark (in radians)         |
 
 The macro generates:
 
@@ -288,17 +288,17 @@ println!("Vertices: {}, Indices: {:?}", perf.vertex_count, perf.index_count);
 
 Gup ships these marks out of the box:
 
-| Mark | Geometry | Typical Use |
-|------|----------|-------------|
-| `Circle` | Triangle fan | Scatter plots, bubble charts |
-| `Rectangle` | Quad | Bar charts, heatmaps |
-| `Line` | Line strip | Line charts, paths |
-| `BoxPlot` | Composite | Statistical box-and-whisker plots |
-| `Text` | SDF quads | Labels, annotations |
-| `Path` | Tessellated | Geographic shapes, custom paths |
-| `Sphere3D` | UV sphere | 3D scatter plots |
-| `Box3D` | Cube | 3D bar charts |
-| `Line3D` | Line strip | 3D paths |
+| Mark        | Geometry     | Typical Use                       |
+| ----------- | ------------ | --------------------------------- |
+| `Circle`    | Triangle fan | Scatter plots, bubble charts      |
+| `Rectangle` | Quad         | Bar charts, heatmaps              |
+| `Line`      | Line strip   | Line charts, paths                |
+| `BoxPlot`   | Composite    | Statistical box-and-whisker plots |
+| `Text`      | SDF quads    | Labels, annotations               |
+| `Path`      | Tessellated  | Geographic shapes, custom paths   |
+| `Sphere3D`  | UV sphere    | 3D scatter plots                  |
+| `Box3D`     | Cube         | 3D bar charts                     |
+| `Line3D`    | Line strip   | 3D paths                          |
 
 ## Full Derive Example
 
@@ -352,14 +352,14 @@ async fn main() -> GupResult<()> {
 
 ## Key Concepts
 
-| Concept | What It Does |
-|---------|-------------|
-| `Mark` trait | Defines geometry, attributes, and shaders for a visual element |
-| `#[derive(Mark)]` | Auto-generates Mark implementation from annotated struct |
-| `#[mark(primitive)]` | Sets the base geometry (quad, triangle, circle) |
-| `MarkRegistry` | Caches render pipelines per mark type |
-| `MarkValidator` | Checks mark correctness at test time |
-| `MarkProfiler` | Measures mark performance characteristics |
+| Concept              | What It Does                                                   |
+| -------------------- | -------------------------------------------------------------- |
+| `Mark` trait         | Defines geometry, attributes, and shaders for a visual element |
+| `#[derive(Mark)]`    | Auto-generates Mark implementation from annotated struct       |
+| `#[mark(primitive)]` | Sets the base geometry (quad, triangle, circle)                |
+| `MarkRegistry`       | Caches render pipelines per mark type                          |
+| `MarkValidator`      | Checks mark correctness at test time                           |
+| `MarkProfiler`       | Measures mark performance characteristics                      |
 
 ## Next Steps
 
@@ -369,5 +369,5 @@ async fn main() -> GupResult<()> {
   `MarkRegistry` and `MarkRenderer`.
 - **[`custom_mark_demo` example](../../examples/custom_mark_demo.rs)** —
   runnable example with Diamond, Arrow, and Hexagon marks.
-- **[Tutorial 1: Getting Started](01_getting_started.md)** — back to basics
-  if you want to review the chart builder API.
+- **[Tutorial 1: Getting Started](01_getting_started.md)** — back to basics if
+  you want to review the chart builder API.

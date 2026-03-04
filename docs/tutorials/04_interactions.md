@@ -13,15 +13,15 @@
 
 ## Prerequisites
 
-Complete [Tutorial 2](02_data_binding.md). Familiarity with
-`Selection<T, M>` and `.attr()` is assumed.
+Complete [Tutorial 2](02_data_binding.md). Familiarity with `Selection<T, M>`
+and `.attr()` is assumed.
 
 ## The Interaction Model
 
 Gup uses a **behaviour-based** interaction model. You attach lightweight
 behaviour objects (like `ZoomBehavior` or `BrushBehavior`) that consume raw
-input events and produce high-level interaction state. The `Selection` type
-also provides convenience methods for the most common patterns.
+input events and produce high-level interaction state. The `Selection` type also
+provides convenience methods for the most common patterns.
 
 The core type is `InteractionEvent`:
 
@@ -151,8 +151,8 @@ Common event type strings: `"click"`, `"mouseenter"`, `"mouseleave"`,
 
 ## Step 5: Brush Selection
 
-Brush selection lets users drag a rectangle to select multiple elements.
-Use `BrushBehavior`:
+Brush selection lets users drag a rectangle to select multiple elements. Use
+`BrushBehavior`:
 
 ```rust
 use gup::prelude::*;
@@ -229,8 +229,8 @@ let transform = zoom.gpu_transform();
 // transform.scale_x, transform.scale_y, transform.translate_x, transform.translate_y
 ```
 
-Upload the transform to your shader as a uniform so the GPU applies zoom/pan
-to all rendered marks:
+Upload the transform to your shader as a uniform so the GPU applies zoom/pan to
+all rendered marks:
 
 ```rust
 queue.write_buffer(&viewport_buffer, 0, bytemuck::bytes_of(&transform));
@@ -320,15 +320,15 @@ async fn main() -> GupResult<()> {
 
 ## Key Concepts
 
-| Concept | What It Does |
-|---------|-------------|
-| `on_click(handler)` | Fires when an element is clicked |
-| `on_hover(handler)` | Fires when the pointer enters an element |
-| `on_drag(handler)` | Fires during a drag interaction |
-| `on(event_type, handler)` | Generic event registration |
-| `ZoomBehavior` | Smooth zoom/pan with inertia and constraints |
-| `BrushBehavior` | Rectangle brush selection for multi-element picking |
-| `HoverRevealState` | Tooltip display with configurable delay and animation |
+| Concept                   | What It Does                                          |
+| ------------------------- | ----------------------------------------------------- |
+| `on_click(handler)`       | Fires when an element is clicked                      |
+| `on_hover(handler)`       | Fires when the pointer enters an element              |
+| `on_drag(handler)`        | Fires during a drag interaction                       |
+| `on(event_type, handler)` | Generic event registration                            |
+| `ZoomBehavior`            | Smooth zoom/pan with inertia and constraints          |
+| `BrushBehavior`           | Rectangle brush selection for multi-element picking   |
+| `HoverRevealState`        | Tooltip display with configurable delay and animation |
 
 ## Next Steps
 

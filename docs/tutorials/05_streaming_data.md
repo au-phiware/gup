@@ -20,10 +20,10 @@ Complete [Tutorial 2](02_data_binding.md). You should be comfortable with
 
 Gup offers two complementary APIs for streaming data:
 
-| API | Level | Best For |
-|-----|-------|----------|
-| `StreamingDataSource<T>` | Trait | Custom data sources (sensors, WebSockets, databases) |
-| `DataStream<T>` | Builder | GPU-backed ring buffers with backpressure |
+| API                      | Level   | Best For                                             |
+| ------------------------ | ------- | ---------------------------------------------------- |
+| `StreamingDataSource<T>` | Trait   | Custom data sources (sensors, WebSockets, databases) |
+| `DataStream<T>`          | Builder | GPU-backed ring buffers with backpressure            |
 
 `StreamingDataSource` is an async trait you implement to produce batches of
 data. `DataStream` is a concrete, GPU-optimised stream that manages a fixed-
@@ -155,19 +155,19 @@ let stream = DataStream::<[f32; 2]>::builder()
 
 ### Stream Modes
 
-| Mode | Behaviour |
-|------|-----------|
-| `RingBuffer` | Wraps around, overwriting the oldest slot (lowest overhead) |
+| Mode            | Behaviour                                                        |
+| --------------- | ---------------------------------------------------------------- |
+| `RingBuffer`    | Wraps around, overwriting the oldest slot (lowest overhead)      |
 | `SlidingWindow` | Retains the most recent `capacity` items; oldest evicted on push |
-| `AppendOnly` | Appends until full; then applies backpressure strategy |
+| `AppendOnly`    | Appends until full; then applies backpressure strategy           |
 
 ### Backpressure Strategies
 
-| Strategy | Behaviour |
-|----------|-----------|
+| Strategy      | Behaviour                                      |
+| ------------- | ---------------------------------------------- |
 | `EvictOldest` | Removes the oldest item to make room (default) |
-| `DropNewest` | Silently drops incoming data when full |
-| `Block` | Blocks the producer until space is available |
+| `DropNewest`  | Silently drops incoming data when full         |
+| `Block`       | Blocks the producer until space is available   |
 
 ### Push Data and Flush to GPU
 
@@ -263,27 +263,28 @@ async fn main() -> GupResult<()> {
 
 ![Streaming scatter chart with live data](assets/tutorial05_streaming.png)
 
-> **Note**: The ergonomic `DataStream` builder API is being further refined in
-> a future story. The `StreamingDataSource` trait and `StreamingScatterPlot`
-> shown here are stable and production-ready.
+> **Note**: The ergonomic `DataStream` builder API is being further refined in a
+> future story. The `StreamingDataSource` trait and `StreamingScatterPlot` shown
+> here are stable and production-ready.
+>
 > <!-- TODO(GUP-280): Link to DataStream API reference when available -->
 
 ## Key Concepts
 
-| Concept | What It Does |
-|---------|-------------|
-| `StreamingDataSource<T>` | Async trait for custom data sources |
-| `StreamingScatterPlot` | Capped scatter plot backed by a streaming source |
-| `DataStream<T>` | GPU-backed ring buffer with builder API |
-| `StreamMode` | Controls how the buffer handles new data |
-| `BackpressureStrategy` | Controls what happens when the buffer is full |
-| `push()` / `push_batch()` | Add data to the stream |
-| `flush()` | Upload pending data to the GPU |
+| Concept                   | What It Does                                     |
+| ------------------------- | ------------------------------------------------ |
+| `StreamingDataSource<T>`  | Async trait for custom data sources              |
+| `StreamingScatterPlot`    | Capped scatter plot backed by a streaming source |
+| `DataStream<T>`           | GPU-backed ring buffer with builder API          |
+| `StreamMode`              | Controls how the buffer handles new data         |
+| `BackpressureStrategy`    | Controls what happens when the buffer is full    |
+| `push()` / `push_batch()` | Add data to the stream                           |
+| `flush()`                 | Upload pending data to the GPU                   |
 
 ## Next Steps
 
-- **[Tutorial 6: Custom Marks](06_custom_marks.md)** — implement a new mark
-  type from scratch.
+- **[Tutorial 6: Custom Marks](06_custom_marks.md)** — implement a new mark type
+  from scratch.
 - **[`streaming_live_chart` example](../../examples/streaming_live_chart.rs)** —
   full windowed streaming chart with GPU rendering.
 - **[`async_streaming_demo` example](../../examples/async_streaming_demo.rs)** —
