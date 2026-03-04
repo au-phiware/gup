@@ -213,6 +213,10 @@ name = "export_png"
 path = "examples/export_png.rs"
 
 [[example]]
+name = "html_export"
+path = "examples/html_export.rs"
+
+[[example]]
 name = "treemap"
 path = "examples/treemap.rs"
 
