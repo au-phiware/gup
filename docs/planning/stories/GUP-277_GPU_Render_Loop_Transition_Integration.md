@@ -3,7 +3,7 @@
 ## Story Overview
 
 **Initiative**: Selection API  
-**Status**: 📋 Planned  
+**Status**: 🚧 In Progress  
 **Created**: 2025-07-25
 
 ## Context
