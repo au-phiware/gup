@@ -288,7 +288,9 @@ pub use shader_pipeline::*;
 pub use text::*;
 pub use zoom::{GpuViewportTransform, ZoomBehavior};
 // Export brush selection system
-pub use brush::{BrushBehavior, BrushEvent, BrushExtent, BrushMark, BrushStyle};
+pub use brush::{
+    BrushBehavior, BrushEvent, BrushExtent, BrushMark, BrushOverlayRenderer, BrushStyle,
+};
 // Export tick generator with explicit types to avoid conflicts
 pub use tick_generator::{
     // Renamed to avoid conflict with shader_function::LinearScale (the GPU

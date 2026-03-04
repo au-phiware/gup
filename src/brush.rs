@@ -565,6 +565,206 @@ impl BrushBehavior {
 }
 
 // ---------------------------------------------------------------------------
+// BrushOverlayRenderer — GPU rectangle overlay for the brush mark
+// ---------------------------------------------------------------------------
+
+/// GPU renderer for the [`BrushMark`] overlay rectangle.
+///
+/// `BrushOverlayRenderer` allocates a single [`RectangleInstance`] on the
+/// GPU and re-uploads its data each frame the brush is visible.  Call
+/// [`update`](Self::update) once per frame (before the render pass) and
+/// then [`render`](Self::render) inside the pass — after all data marks
+/// so the overlay has the highest z-order.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// # fn example(device: &wgpu::Device, queue: &wgpu::Queue,
+/// #            cache: &mut gup::PipelineCache,
+/// #            brush: &gup::brush::BrushBehavior) {
+/// use gup::brush::BrushOverlayRenderer;
+/// let mut renderer = BrushOverlayRenderer::new(device, queue, cache)
+///     .expect("pipeline creation");
+/// renderer.update(brush.overlay(), queue);
+/// # }
+/// ```
+pub struct BrushOverlayRenderer {
+    pipeline: std::sync::Arc<wgpu::RenderPipeline>,
+    vertex_buffer: wgpu::Buffer,
+    index_buffer: wgpu::Buffer,
+    instance_buffer: wgpu::Buffer,
+    bind_group: wgpu::BindGroup,
+    vt_bind_group: wgpu::BindGroup,
+    /// `true` when the overlay should be drawn this frame.
+    visible: bool,
+}
+
+impl BrushOverlayRenderer {
+    /// Create a new overlay renderer, allocating GPU resources.
+    ///
+    /// The rectangle pipeline is obtained (or created) through `cache`
+    /// so it is shared with any other `Selection<_, Rectangle>` that uses
+    /// the same cache.
+    pub fn new(
+        device: &wgpu::Device,
+        _queue: &wgpu::Queue,
+        cache: &mut crate::pipeline_cache::PipelineCache,
+    ) -> crate::error::GupResult<Self> {
+        use crate::mark::rectangle::{Rectangle, RectangleInstance};
+        use crate::mark::Mark;
+        use wgpu::util::DeviceExt;
+
+        // Reuse the cached Rectangle pipeline.
+        let pipeline = cache.get_or_create::<Rectangle>(device)?;
+
+        // Unit-quad vertex buffer (same geometry every Rectangle uses).
+        let vertices = Rectangle::generate_vertices();
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("brush_overlay_vertex"),
+            contents: bytemuck::cast_slice(&vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        // Index buffer (two triangles).
+        let indices = Rectangle::generate_indices().unwrap_or_default();
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("brush_overlay_index"),
+            contents: bytemuck::cast_slice(&indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        // Single-instance storage buffer (zeroed — no overlay yet).
+        let zero_instance = RectangleInstance {
+            center: [0.0; 2],
+            size: [0.0; 2],
+            fill_color: [0.0; 4],
+            stroke_width: 0.0,
+            _pad1: [0.0; 3],
+            stroke_color: [0.0; 4],
+            corner_radius: 0.0,
+            _padding: 0.0,
+            _pad2: [0.0; 2],
+        };
+        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("brush_overlay_instance"),
+            contents: bytemuck::bytes_of(&zero_instance),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
+
+        // Viewport uniform (identity — brush coords are already in clip space).
+        let identity_vt = crate::zoom::GpuViewportTransform::IDENTITY;
+        let vt_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("brush_overlay_viewport_transform"),
+            contents: bytemuck::bytes_of(&identity_vt),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+
+        // Bind group 0: storage buffer (+ optional viewport uniform at binding 1).
+        let bg0_layout = pipeline.get_bind_group_layout(0);
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("brush_overlay_bg0"),
+            layout: &bg0_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: instance_buffer.as_entire_binding(),
+            }],
+        });
+
+        // Bind group 1: viewport transform uniform.
+        let bg1_layout = pipeline.get_bind_group_layout(1);
+        let vt_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("brush_overlay_bg1"),
+            layout: &bg1_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: vt_buffer.as_entire_binding(),
+            }],
+        });
+
+        Ok(Self {
+            pipeline,
+            vertex_buffer,
+            index_buffer,
+            instance_buffer,
+            bind_group,
+            vt_bind_group,
+            visible: false,
+        })
+    }
+
+    /// Update the overlay from the current [`BrushMark`] state.
+    ///
+    /// Call this once per frame before the render pass.  When the brush
+    /// is visible, a single [`RectangleInstance`] is written to the GPU
+    /// storage buffer.  When hidden, the renderer is flagged as invisible
+    /// and [`render`](Self::render) becomes a no-op.
+    pub fn update(&mut self, mark: &BrushMark, queue: &wgpu::Queue) {
+        if !mark.visible {
+            self.visible = false;
+            return;
+        }
+
+        let rect = match &mark.screen_rect {
+            Some(r) => r,
+            None => {
+                self.visible = false;
+                return;
+            }
+        };
+
+        // Convert Rect (min/max in clip space) → centre + size.
+        let cx = (rect.min.x + rect.max.x) * 0.5;
+        let cy = (rect.min.y + rect.max.y) * 0.5;
+        let w = (rect.max.x - rect.min.x).abs();
+        let h = (rect.max.y - rect.min.y).abs();
+
+        // Convert stroke_width from pixels to clip-space units.
+        // We don't have window size here, so we use a small constant
+        // that looks reasonable (the SDF expects clip-space units).
+        let stroke_width_clip = mark.style.stroke_width * 0.002;
+
+        let instance = crate::mark::rectangle::RectangleInstance {
+            center: [cx, cy],
+            size: [w, h],
+            fill_color: mark.style.fill,
+            stroke_width: stroke_width_clip,
+            _pad1: [0.0; 3],
+            stroke_color: mark.style.stroke,
+            corner_radius: 0.0,
+            _padding: 0.0,
+            _pad2: [0.0; 2],
+        };
+
+        queue.write_buffer(&self.instance_buffer, 0, bytemuck::bytes_of(&instance));
+        self.visible = true;
+    }
+
+    /// Render the brush overlay into an active render pass.
+    ///
+    /// This should be the **last** draw call in the pass so the overlay
+    /// appears above all data marks.  If the brush is not visible this
+    /// method is a no-op.
+    pub fn render<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+        if !self.visible {
+            return;
+        }
+
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, &self.bind_group, &[]);
+        render_pass.set_bind_group(1, &self.vt_bind_group, &[]);
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        // Draw 6 indices, 1 instance.
+        render_pass.draw_indexed(0..6, 0, 0..1);
+    }
+
+    /// Returns `true` if the overlay is currently visible (will draw).
+    pub fn is_visible(&self) -> bool {
+        self.visible
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
