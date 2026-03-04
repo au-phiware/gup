@@ -129,3 +129,93 @@ bandwidth profiling module with the following components:
 - 29 new tests in `debug::memory_bandwidth` module
 - All 2708 library tests pass
 - All examples compile
+
+## Retrospective
+
+**Completed**: 2025-07-15
+
+### Key Technical Learnings
+
+#### Bandwidth Estimation Without Hardware Counters
+
+- **Challenge**: wgpu does not expose native GPU memory bandwidth counters or
+  PCIe transfer metrics. We cannot directly measure actual bus-level throughput.
+- **Solution**: Track transfer volumes (bytes) and wall-clock durations at the
+  application level, then compute bandwidth as bytes/time. For shader-level
+  bandwidth, use a heuristic based on workgroup count × estimated bytes per
+  thread.
+- **Pattern**: Application-level instrumentation can provide useful bandwidth
+  data for optimization guidance even without hardware counters. The key is
+  framing the data as "estimated" and providing configurable theoretical
+  bandwidth limits for pressure scoring.
+
+#### Texture Thrashing Detection via Slot History
+
+- **Challenge**: Detecting texture thrashing requires tracking temporal patterns
+  in binding operations, not just counts.
+- **Solution**: Maintain a per-slot history of recently bound texture labels and
+  detect when multiple unique textures appear in a short window. This captures
+  the essence of thrashing (rapid alternation) without needing GPU-side metrics.
+- **Pattern**: Ring-buffer-based history per resource slot is an effective
+  pattern for detecting temporal access anomalies.
+
+#### Redundant Upload Detection
+
+- **Challenge**: Identifying wasted bandwidth from uploading unchanged data
+  every frame.
+- **Solution**: Track per-label upload presence across consecutive frames. If
+  the same label appears in consecutive frames, it's flagged as potentially
+  redundant (the actual data may differ, but the heuristic catches the common
+  case of re-uploading static data).
+- **Pattern**: Cross-frame label matching is a lightweight heuristic for
+  redundancy detection. A more precise approach would involve content hashing,
+  but the label-based approach has near-zero overhead.
+
+### Architectural Decisions
+
+#### Separate Module vs. Extending Existing Profilers
+
+- **Decision**: Created a standalone `memory_bandwidth` module rather than
+  embedding the logic directly into `PerformanceProfiler` or `GpuMemoryProfiler`.
+- **Reasoning**: The bandwidth profiler has its own lifecycle (begin/end frame),
+  configuration, and output types. Keeping it separate follows the single
+  responsibility principle and avoids bloating the existing profilers.
+- **Trade-off**: Users need to know about a third profiler type; mitigated by
+  integrating it into both `PerformanceProfiler` (automatic lifecycle) and
+  `GpuDebugContext` (unified access).
+- **Future**: Could be extended with actual GPU timestamp queries for more
+  accurate per-transfer timing when wgpu exposes finer-grained profiling.
+
+#### Configurable Theoretical Bandwidth
+
+- **Decision**: Made `theoretical_bandwidth_gbps` a configuration parameter
+  rather than auto-detecting it from the GPU adapter.
+- **Reasoning**: wgpu doesn't expose memory bandwidth limits from the adapter.
+  Different GPUs have vastly different bandwidth (30 GB/s integrated to 900+
+  GB/s discrete), so a user-provided value is more accurate than a guess.
+- **Trade-off**: Requires users to configure the value for accurate pressure
+  scoring. Default of 100 GB/s is a reasonable middle ground.
+- **Future**: If wgpu ever exposes adapter memory bandwidth info, auto-detection
+  could be added.
+
+### Development Workflow Insights
+
+- The story was well-scoped; the existing profiling infrastructure (GUP-046,
+  GUP-015) provided clear integration points.
+- The `PerformanceAlert::HighMemoryBandwidth` variant was already defined but
+  unused — filling it in was a natural integration point.
+- The `memory_bandwidth_gbps` field in `ShaderExecutionStats` was an explicit
+  TODO placeholder, making it easy to locate and fill.
+- Building the module as pure Rust (no GPU resources needed) allowed running
+  all 29 tests without GPU access, keeping the development loop fast.
+
+### Follow-up Stories
+
+1. **GUP-148: Profiling Data Export & Visualization** — Already planned, now
+   unblocked. Can consume `MemoryBandwidthStats`, `MemoryPressureStatus`, and
+   `MemoryEfficiencyMetrics` for dashboard display and export.
+
+2. **GUP-XXX: GPU Adapter Bandwidth Auto-Detection** — Investigate whether wgpu
+   adapter limits or vendor-specific queries can provide actual theoretical
+   bandwidth, removing the need for manual configuration. Low priority since the
+   current approach works for optimization guidance.
