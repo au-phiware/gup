@@ -707,4 +707,23 @@ mod tests {
         assert!(!builder.config.grid_config.show_vertical);
         assert!(builder.config.grid_config.minor_grid.enabled);
     }
+
+    #[test]
+    fn test_scatter_plot_tick_format_fluent() {
+        use crate::label::{NumericFormatter, PercentFormatter};
+
+        // X-axis: custom numeric precision
+        let builder = scatter::<TestPoint>()
+            .x_tick_format(NumericFormatter::new(1));
+        assert!(builder.config.x_label_formatter.is_some());
+        let fmt = builder.config.x_label_formatter.as_ref().unwrap();
+        assert_eq!(fmt.format_value(3.14159), "3.1");
+
+        // Y-axis: percent formatter
+        let builder = scatter::<TestPoint>()
+            .y_tick_format(PercentFormatter::new());
+        assert!(builder.config.y_label_formatter.is_some());
+        let fmt = builder.config.y_label_formatter.as_ref().unwrap();
+        assert_eq!(fmt.format_value(0.25), "25%");
+    }
 }

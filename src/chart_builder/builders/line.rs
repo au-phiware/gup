@@ -1281,4 +1281,19 @@ mod tests {
         let opacity_builder = line::<TimePoint>().grid_opacity(0.3);
         assert_eq!(opacity_builder.config.grid_config.major_grid.opacity, 0.3);
     }
+
+    #[test]
+    fn test_line_chart_tick_format_fluent() {
+        use crate::label::{DateTimeFormatter, PercentFormatter};
+
+        let builder = line::<TimePoint>()
+            .x_tick_format(DateTimeFormatter::date_only())
+            .y_tick_format(PercentFormatter::with_precision(1));
+
+        assert!(builder.config.x_label_formatter.is_some());
+        assert!(builder.config.y_label_formatter.is_some());
+
+        let y_fmt = builder.config.y_label_formatter.as_ref().unwrap();
+        assert_eq!(y_fmt.format_value(0.333), "33.3%");
+    }
 }
