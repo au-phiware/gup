@@ -116,6 +116,7 @@ impl std::error::Error for CompositionError {}
 /// Metadata about a shader function for type checking.
 #[derive(Debug, Clone)]
 pub struct FunctionSignature {
+    /// Name of the function.
     pub name: String,
     /// The primary input type (first parameter).
     pub input_type: WgslType,

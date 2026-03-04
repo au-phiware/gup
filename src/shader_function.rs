@@ -3371,9 +3371,13 @@ impl AnimationTimelineWithEvents {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct LinearScaleUniforms {
+    /// Lower bound of the input domain.
     pub domain_min: f32,
+    /// Upper bound of the input domain.
     pub domain_max: f32,
+    /// Lower bound of the output range.
     pub range_min: f32,
+    /// Upper bound of the output range.
     pub range_max: f32,
     /// 0 = unclamped (extrapolates beyond domain), 1 = clamped to range.
     pub clamp: u32,
@@ -3422,9 +3426,13 @@ impl ShaderUniform for LinearScaleUniforms {
 /// ```
 #[derive(Debug, Clone)]
 pub struct LinearScale {
+    /// Lower bound of the input domain.
     pub domain_min: f32,
+    /// Upper bound of the input domain.
     pub domain_max: f32,
+    /// Lower bound of the output range.
     pub range_min: f32,
+    /// Upper bound of the output range.
     pub range_max: f32,
     /// Whether to clamp the output to `[range_min, range_max]`.
     pub clamp: bool,
@@ -3523,10 +3531,15 @@ fn linear_scale_invert(value: f32, scale: LinearScaleUniforms) -> f32 {
 /// alongside `linear_scale` from the same [`LinearScale`] WGSL block.
 #[derive(Debug, Clone)]
 pub struct LinearScaleInvert {
+    /// Lower bound of the input domain.
     pub domain_min: f32,
+    /// Upper bound of the input domain.
     pub domain_max: f32,
+    /// Lower bound of the output range.
     pub range_min: f32,
+    /// Upper bound of the output range.
     pub range_max: f32,
+    /// Whether to clamp the output to the range bounds.
     pub clamp: bool,
 }
 
@@ -3558,9 +3571,11 @@ impl ComposableShaderFunction for LinearScaleInvert {
     }
 }
 
+/// GPU uniform data for [`ColorMap`].
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ColorMapUniforms {
+    /// RGBA color at the low end of the interpolation.
     pub min_color: [f32; 4],
     pub max_color: [f32; 4],
 }
@@ -3581,11 +3596,14 @@ impl ShaderUniform for ColorMapUniforms {
 /// This is a basic example shader function. Advanced color mapping features
 /// (HSV color space, multi-stop gradients, color space conversions) will be added in future updates.
 pub struct ColorMap {
+    /// RGBA color at the low end of the interpolation.
     pub min_color: Vec4,
+    /// RGBA color at the high end of the interpolation.
     pub max_color: Vec4,
 }
 
 impl ColorMap {
+    /// Creates a new color map interpolating between two colors.
     pub fn new(min_color: Vec4, max_color: Vec4) -> Self {
         Self {
             min_color,
@@ -3636,20 +3654,26 @@ impl ComposableShaderFunction for ColorMap {
 /// (polar coordinates, matrix transforms, projections) will be added in future updates.
 #[derive(Clone, Debug)]
 pub struct PositionTransform {
+    /// Multiplicative scale factor applied to each axis.
     pub scale: Vec2,
+    /// Translation offset added after scaling.
     pub offset: Vec2,
 }
 
 impl PositionTransform {
+    /// Creates a new position transform with the given scale and offset.
     pub fn new(scale: Vec2, offset: Vec2) -> Self {
         Self { scale, offset }
     }
 }
 
+/// GPU uniform data for [`PositionTransform`].
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct PositionTransformUniforms {
+    /// Multiplicative scale factor for each axis.
     pub scale: [f32; 2],
+    /// Translation offset for each axis.
     pub offset: [f32; 2],
 }
 
@@ -3722,11 +3746,17 @@ impl ComposableShaderFunction for PositionTransform {
 /// ```
 #[derive(Clone, Debug)]
 pub struct LogScale {
+    /// Lower bound of the input domain.
     pub domain_min: f32,
+    /// Upper bound of the input domain.
     pub domain_max: f32,
+    /// Lower bound of the output range.
     pub range_min: f32,
+    /// Upper bound of the output range.
     pub range_max: f32,
+    /// Logarithm base (e.g. 10.0, `E`).
     pub base: f32,
+    /// Whether to use symmetric log scaling for negative values.
     pub is_symmetric: bool,
 }
 
@@ -3886,10 +3916,15 @@ impl LogScale {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct LogScaleUniforms {
+    /// Lower bound of the input domain.
     pub domain_min: f32,
+    /// Upper bound of the input domain.
     pub domain_max: f32,
+    /// Lower bound of the output range.
     pub range_min: f32,
+    /// Upper bound of the output range.
     pub range_max: f32,
+    /// Logarithm base.
     pub base: f32,
     /// 0 = standard log scale, 1 = symmetric-log (sign-preserving).
     pub symmetric: u32,
@@ -4046,9 +4081,13 @@ impl ShaderUniform for OrdinalScaleUniforms {
 /// ```
 #[derive(Clone, Debug)]
 pub struct BandScale {
+    /// Start of the output pixel range.
     pub range_start: f32,
+    /// End of the output pixel range.
     pub range_end: f32,
+    /// Number of discrete categories.
     pub category_count: u32,
+    /// Fraction of each step reserved as inner padding (0.0–1.0).
     pub padding: f32,
 }
 
@@ -4152,9 +4191,13 @@ fn band_scale_bandwidth(scale: OrdinalScaleUniforms) -> f32 {
 /// ```
 #[derive(Clone, Debug)]
 pub struct PointScale {
+    /// Start of the output pixel range.
     pub range_start: f32,
+    /// End of the output pixel range.
     pub range_end: f32,
+    /// Number of discrete categories.
     pub category_count: u32,
+    /// Outer padding as a multiple of the step size.
     pub padding: f32,
 }
 
@@ -4318,14 +4361,20 @@ impl OrdinalScale {
 /// Exponent < 1 compresses high values, > 1 expands them.
 #[derive(Clone, Debug)]
 pub struct PowerScale {
+    /// Lower bound of the input domain.
     pub domain_min: f32,
+    /// Upper bound of the input domain.
     pub domain_max: f32,
+    /// Lower bound of the output range.
     pub range_min: f32,
+    /// Upper bound of the output range.
     pub range_max: f32,
+    /// Power exponent applied to the normalised input.
     pub exponent: f32,
 }
 
 impl PowerScale {
+    /// Creates a new power scale with the given domain, range, and exponent.
     pub fn new(
         domain_min: f32,
         domain_max: f32,
@@ -4353,14 +4402,21 @@ impl PowerScale {
     }
 }
 
+/// GPU uniform data for [`PowerScale`].
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct PowerScaleUniforms {
+    /// Lower bound of the input domain.
     pub domain_min: f32,
+    /// Upper bound of the input domain.
     pub domain_max: f32,
+    /// Lower bound of the output range.
     pub range_min: f32,
+    /// Upper bound of the output range.
     pub range_max: f32,
+    /// Power exponent.
     pub exponent: f32,
+    /// Padding for GPU alignment.
     pub _padding: [f32; 3],
 }
 
@@ -4412,14 +4468,20 @@ impl ComposableShaderFunction for PowerScale {
 /// in large values while compressing small value differences.
 #[derive(Clone, Debug)]
 pub struct ExponentialScale {
+    /// Lower bound of the input domain.
     pub domain_min: f32,
+    /// Upper bound of the input domain.
     pub domain_max: f32,
+    /// Lower bound of the output range.
     pub range_min: f32,
+    /// Upper bound of the output range.
     pub range_max: f32,
+    /// Exponential base (e.g. 10.0, `E`).
     pub base: f32,
 }
 
 impl ExponentialScale {
+    /// Creates a new exponential scale with the given domain, range, and base.
     pub fn new(
         domain_min: f32,
         domain_max: f32,
@@ -4453,14 +4515,21 @@ impl ExponentialScale {
     }
 }
 
+/// GPU uniform data for [`ExponentialScale`].
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ExponentialScaleUniforms {
+    /// Lower bound of the input domain.
     pub domain_min: f32,
+    /// Upper bound of the input domain.
     pub domain_max: f32,
+    /// Lower bound of the output range.
     pub range_min: f32,
+    /// Upper bound of the output range.
     pub range_max: f32,
+    /// Exponential base.
     pub base: f32,
+    /// Padding for GPU alignment.
     pub _padding: [f32; 3],
 }
 
@@ -4513,21 +4582,28 @@ impl ComposableShaderFunction for ExponentialScale {
 /// Clamps values to a specified range.
 #[derive(Clone, Debug)]
 pub struct Clamp {
+    /// Minimum allowed value.
     pub min: f32,
+    /// Maximum allowed value.
     pub max: f32,
 }
 
 impl Clamp {
+    /// Creates a new clamp with the given minimum and maximum bounds.
     pub fn new(min: f32, max: f32) -> Self {
         Self { min, max }
     }
 }
 
+/// GPU uniform data for [`Clamp`].
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ClampUniforms {
+    /// Minimum allowed value.
     pub min: f32,
+    /// Maximum allowed value.
     pub max: f32,
+    /// Padding for GPU alignment.
     pub _padding: [f32; 2],
 }
 
@@ -4570,19 +4646,24 @@ impl ComposableShaderFunction for Clamp {
 /// Threshold function - outputs 0 or 1 based on threshold.
 #[derive(Clone, Debug)]
 pub struct Threshold {
+    /// Threshold value for the step function.
     pub threshold: f32,
 }
 
 impl Threshold {
+    /// Creates a new threshold function at the given value.
     pub fn new(threshold: f32) -> Self {
         Self { threshold }
     }
 }
 
+/// GPU uniform data for [`Threshold`].
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ThresholdUniforms {
+    /// Threshold value.
     pub threshold: f32,
+    /// Padding for GPU alignment.
     pub _padding: [f32; 3],
 }
 
@@ -4628,21 +4709,28 @@ impl ComposableShaderFunction for Threshold {
 /// Smooth step interpolation (ease-in-ease-out).
 #[derive(Clone, Debug)]
 pub struct SmoothStep {
+    /// Lower edge of the smooth transition.
     pub edge0: f32,
+    /// Upper edge of the smooth transition.
     pub edge1: f32,
 }
 
 impl SmoothStep {
+    /// Creates a new smooth step interpolation between two edges.
     pub fn new(edge0: f32, edge1: f32) -> Self {
         Self { edge0, edge1 }
     }
 }
 
+/// GPU uniform data for [`SmoothStep`].
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct SmoothStepUniforms {
+    /// Lower edge of the smooth transition.
     pub edge0: f32,
+    /// Upper edge of the smooth transition.
     pub edge1: f32,
+    /// Padding for GPU alignment.
     pub _padding: [f32; 2],
 }
 
@@ -4685,11 +4773,14 @@ impl ComposableShaderFunction for SmoothStep {
 /// Multi-point color interpolation (gradient with multiple stops).
 #[derive(Clone, Debug)]
 pub struct ColorGradient {
+    /// RGBA colors at each gradient stop.
     pub colors: Vec<Vec4>,
+    /// Normalised positions of each color stop.
     pub stops: Vec<f32>,
 }
 
 impl ColorGradient {
+    /// Creates a new color gradient from matching color and stop vectors.
     pub fn new(colors: Vec<Vec4>, stops: Vec<f32>) -> Self {
         assert_eq!(
             colors.len(),
@@ -4712,12 +4803,17 @@ impl ColorGradient {
 
 // For now, we'll use a simplified uniform that supports up to 8 color stops
 // A more advanced implementation would use storage buffers for arbitrary length
+/// GPU uniform data for [`ColorGradient`], supporting up to 8 color stops.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ColorGradientUniforms {
+    /// RGBA colors for each stop (up to 8).
     pub colors: [[f32; 4]; 8],
+    /// Normalised stop positions (up to 8).
     pub stops: [f32; 8],
+    /// Number of active color stops.
     pub count: u32,
+    /// Padding for GPU alignment.
     pub _padding: [f32; 3],
 }
 
@@ -4799,7 +4895,9 @@ impl ComposableShaderFunction for ColorGradient {
 /// Uses efficient binary search in WGSL for stop lookup.
 #[derive(Clone, Debug)]
 pub struct ColorGradientStorage {
+    /// RGBA colors at each gradient stop.
     pub colors: Vec<Vec4>,
+    /// Normalised positions of each color stop.
     pub stops: Vec<f32>,
 }
 
@@ -5447,6 +5545,7 @@ pub struct HSVColorMap {
 }
 
 impl HSVColorMap {
+    /// Creates a new HSV color map with the given hue range, saturation, and value.
     pub fn new(hue_start: f32, hue_end: f32, saturation: f32, value: f32) -> Self {
         Self {
             hue_start,
@@ -5467,12 +5566,17 @@ impl HSVColorMap {
     }
 }
 
+/// GPU uniform data for [`HSVColorMap`].
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct HSVColorMapUniforms {
+    /// Starting hue angle in degrees.
     pub hue_start: f32,
+    /// Ending hue angle in degrees.
     pub hue_end: f32,
+    /// Colour saturation (0.0–1.0).
     pub saturation: f32,
+    /// Brightness value (0.0–1.0).
     pub value: f32,
 }
 
@@ -5543,6 +5647,7 @@ pub struct AlphaBlending {
 }
 
 impl AlphaBlending {
+    /// Creates a new alpha blending function with the given alpha value.
     pub fn new(alpha: f32) -> Self {
         Self { alpha }
     }
@@ -5554,10 +5659,13 @@ impl AlphaBlending {
 }
 
 #[repr(C)]
+/// GPU uniform data for the alpha blending shader function.
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct AlphaBlendingUniforms {
     pub alpha: f32,
+    /// Alpha multiplier value.
     pub _padding: [f32; 3],
+    /// Padding for GPU alignment.
 }
 
 impl ShaderUniform for AlphaBlendingUniforms {
@@ -5615,6 +5723,7 @@ pub struct ColorSpaceConverter {
 }
 
 impl ColorSpaceConverter {
+    /// Creates a new colour space converter with the given direction.
     pub fn new(direction: ColorSpaceDirection) -> Self {
         Self { direction }
     }
@@ -5631,11 +5740,13 @@ impl ColorSpaceConverter {
 }
 
 #[repr(C)]
+/// GPU uniform data for the colour space conversion shader function.
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ColorSpaceConverterUniforms {
     /// 0 = RGB→HSV, 1 = HSV→RGB
     pub direction: u32,
     pub _padding: [u32; 3],
+    /// Padding for GPU alignment.
 }
 
 impl ShaderUniform for ColorSpaceConverterUniforms {
@@ -5735,6 +5846,7 @@ pub struct PolarTransform {
 }
 
 impl PolarTransform {
+    /// Creates a new Cartesian-to-polar transform with the given centre and angle offset.
     pub fn new(center: Vec2, angle_offset: f32) -> Self {
         Self {
             center,
@@ -5763,11 +5875,15 @@ impl PolarTransform {
 }
 
 #[repr(C)]
+/// GPU uniform data for the polar coordinate transform shader function.
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct PolarTransformUniforms {
     pub center_x: f32,
+    /// X component of the centre point.
     pub center_y: f32,
+    /// Y component of the centre point.
     pub angle_offset: f32,
+    /// Angle offset in radians.
     /// 0 = Cartesian→Polar, 1 = Polar→Cartesian
     pub direction: u32,
 }
@@ -5836,6 +5952,7 @@ pub struct MatrixTransform {
 }
 
 impl MatrixTransform {
+    /// Creates a new affine matrix transform from six coefficients.
     pub fn new(matrix: [f32; 6]) -> Self {
         Self { matrix }
     }
@@ -5864,6 +5981,7 @@ impl MatrixTransform {
 }
 
 #[repr(C)]
+/// GPU uniform data for the affine matrix transform shader function.
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct MatrixTransformUniforms {
     /// Row-major: a, b, c, d
@@ -5934,6 +6052,7 @@ pub struct ProjectionTransform {
 }
 
 impl ProjectionTransform {
+    /// Creates a new projection transform mapping data coordinates to viewport coordinates.
     pub fn new(data_min: Vec2, data_max: Vec2, viewport_min: Vec2, viewport_max: Vec2) -> Self {
         Self {
             data_min,
@@ -5945,12 +6064,17 @@ impl ProjectionTransform {
 }
 
 #[repr(C)]
+/// GPU uniform data for the viewport projection transform shader function.
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ProjectionTransformUniforms {
     pub data_min: [f32; 2],
+    /// Minimum data coordinate.
     pub data_max: [f32; 2],
+    /// Maximum data coordinate.
     pub viewport_min: [f32; 2],
+    /// Minimum viewport coordinate.
     pub viewport_max: [f32; 2],
+    /// Maximum viewport coordinate.
 }
 
 impl ShaderUniform for ProjectionTransformUniforms {
@@ -6007,6 +6131,7 @@ pub struct DistanceFunction {
 }
 
 impl DistanceFunction {
+    /// Creates a new distance function measuring from the given reference point.
     pub fn new(reference_point: Vec2) -> Self {
         Self { reference_point }
     }
@@ -6018,11 +6143,15 @@ impl DistanceFunction {
 }
 
 #[repr(C)]
+/// GPU uniform data for the distance function shader.
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct DistanceFunctionUniforms {
     pub ref_x: f32,
+    /// X component of the reference point.
     pub ref_y: f32,
+    /// Y component of the reference point.
     pub _padding: [f32; 2],
+    /// Padding for GPU alignment.
 }
 
 impl ShaderUniform for DistanceFunctionUniforms {
