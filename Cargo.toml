@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "gup-macros", "gup-bevy", "gup-egui"]
+members = [".", "gup-macros", "gup-bevy", "gup-egui", "gup-ios"]
 
 [package]
 name = "gup"

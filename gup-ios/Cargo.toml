@@ -1,0 +1,18 @@
+[package]
+name = "gup-ios"
+version = "0.1.0"
+authors = ["Corin Lawson <corin@phiware.com.au>"]
+edition = "2024"
+description = "C-ABI shim for embedding Gup charts in iOS (UIKit / SwiftUI)"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/au-phiware/gup"
+keywords = ["gpu", "visualization", "ios", "metal", "ffi"]
+publish = false
+
+[lib]
+name = "gup_ios"
+crate-type = ["staticlib", "cdylib"]
+
+[dependencies]
+gup = { path = "..", features = ["ios-shim"] }
+pollster = "0.3"
