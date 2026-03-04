@@ -10855,4 +10855,54 @@ mod color_scale_tests {
         let g = ColorScale::rd_bu_gradient();
         assert_eq!(g.count(), 11);
     }
+
+    // -----------------------------------------------------------------------
+    // KeyframeAnimation::evaluate tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn keyframe_animation_evaluate_empty() {
+        let anim = KeyframeAnimation::new();
+        assert!((anim.evaluate(0.5) - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn keyframe_animation_evaluate_single() {
+        let anim = KeyframeAnimation::new().add_keyframe(0.0, 42.0);
+        assert!((anim.evaluate(0.0) - 42.0).abs() < f32::EPSILON);
+        assert!((anim.evaluate(0.5) - 42.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn keyframe_animation_evaluate_two_keyframes() {
+        let anim = KeyframeAnimation::new()
+            .add_keyframe(0.0, 0.0)
+            .add_keyframe(1.0, 100.0);
+        assert!((anim.evaluate(0.0) - 0.0).abs() < f32::EPSILON);
+        assert!((anim.evaluate(0.5) - 50.0).abs() < 1e-4);
+        assert!((anim.evaluate(1.0) - 100.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn keyframe_animation_evaluate_clamps_at_boundaries() {
+        let anim = KeyframeAnimation::new()
+            .add_keyframe(0.0, 10.0)
+            .add_keyframe(1.0, 20.0);
+        // Before first keyframe — clamp to first value.
+        assert!((anim.evaluate(-1.0) - 10.0).abs() < f32::EPSILON);
+        // After last keyframe — clamp to last value.
+        assert!((anim.evaluate(2.0) - 20.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn keyframe_animation_evaluate_three_keyframes() {
+        let anim = KeyframeAnimation::new()
+            .add_keyframe(0.0, 0.0)
+            .add_keyframe(0.5, 100.0)
+            .add_keyframe(1.0, 50.0);
+        // Midpoint of first segment: 0.25 → 50.0.
+        assert!((anim.evaluate(0.25) - 50.0).abs() < 1e-4);
+        // Midpoint of second segment: 0.75 → 75.0.
+        assert!((anim.evaluate(0.75) - 75.0).abs() < 1e-4);
+    }
 }

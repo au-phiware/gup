@@ -7436,4 +7436,271 @@ fn vs_main() -> VertexOutput {
             assert_eq!(stats.total_deallocated, cycles);
         });
     }
+
+    // -----------------------------------------------------------------------
+    // AttrValue::lerp and as_f32_first tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn attr_value_lerp_float() {
+        let a = AttrValue::Float(0.0);
+        let b = AttrValue::Float(10.0);
+        assert_eq!(a.lerp(b, 0.0), AttrValue::Float(0.0));
+        assert_eq!(a.lerp(b, 0.5), AttrValue::Float(5.0));
+        assert_eq!(a.lerp(b, 1.0), AttrValue::Float(10.0));
+    }
+
+    #[test]
+    fn attr_value_lerp_vec2() {
+        let a = AttrValue::Vec2([0.0, 0.0]);
+        let b = AttrValue::Vec2([10.0, 20.0]);
+        let mid = a.lerp(b, 0.5);
+        assert_eq!(mid, AttrValue::Vec2([5.0, 10.0]));
+    }
+
+    #[test]
+    fn attr_value_lerp_vec4() {
+        let a = AttrValue::Vec4([0.0, 0.0, 0.0, 0.0]);
+        let b = AttrValue::Vec4([1.0, 2.0, 3.0, 4.0]);
+        let mid = a.lerp(b, 0.25);
+        assert_eq!(mid, AttrValue::Vec4([0.25, 0.5, 0.75, 1.0]));
+    }
+
+    #[test]
+    fn attr_value_lerp_mismatched_variants_returns_self() {
+        let a = AttrValue::Float(5.0);
+        let b = AttrValue::Vec2([10.0, 20.0]);
+        assert_eq!(a.lerp(b, 0.5), AttrValue::Float(5.0));
+    }
+
+    #[test]
+    fn attr_value_as_f32_first() {
+        assert!((AttrValue::Float(3.0).as_f32_first() - 3.0).abs() < f32::EPSILON);
+        assert!((AttrValue::Vec2([4.0, 5.0]).as_f32_first() - 4.0).abs() < f32::EPSILON);
+        assert!((AttrValue::Vec4([6.0, 7.0, 8.0, 9.0]).as_f32_first() - 6.0).abs() < f32::EPSILON);
+    }
+
+    // -----------------------------------------------------------------------
+    // tick_transition tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn tick_transition_advances_clock() {
+        use crate::transition::builder::{
+            CommittedTransition, TransitionConfig, TransitionState,
+        };
+
+        let mut sel = Selection::<u32, Circle>::from_data(vec![1, 2, 3]);
+        let ct = CommittedTransition {
+            config: TransitionConfig {
+                duration_ms: 500,
+                delay_ms: 0,
+                easing: crate::transition::builder::EasingFn::Linear,
+            },
+            elements: vec![],
+            new_data_len: 3,
+            enter_count: 0,
+            update_count: 3,
+            exit_count: 0,
+            state: TransitionState::Running,
+            elapsed_ms: 0.0,
+        };
+        sel.set_committed_transition(Some(ct));
+
+        // Tick 100ms — transition should still be active.
+        assert!(sel.tick_transition(100.0));
+        assert!(sel.has_active_transition());
+        assert!(
+            (sel.committed_transition().unwrap().elapsed_ms - 100.0).abs() < f64::EPSILON
+        );
+    }
+
+    #[test]
+    fn tick_transition_auto_completes() {
+        use crate::transition::builder::{
+            CommittedTransition, TransitionConfig, TransitionState,
+        };
+
+        let mut sel = Selection::<u32, Circle>::from_data(vec![1, 2, 3]);
+        let ct = CommittedTransition {
+            config: TransitionConfig {
+                duration_ms: 500,
+                delay_ms: 100,
+                easing: crate::transition::builder::EasingFn::Linear,
+            },
+            elements: vec![],
+            new_data_len: 3,
+            enter_count: 0,
+            update_count: 3,
+            exit_count: 0,
+            state: TransitionState::Running,
+            elapsed_ms: 0.0,
+        };
+        sel.set_committed_transition(Some(ct));
+
+        // Tick 599ms — not yet complete (delay=100 + duration=500 = 600).
+        assert!(sel.tick_transition(599.0));
+        assert!(sel.has_active_transition());
+
+        // Tick 1ms more — should auto-complete.
+        assert!(!sel.tick_transition(1.0));
+        assert!(!sel.has_active_transition());
+    }
+
+    #[test]
+    fn tick_transition_no_active_returns_false() {
+        let mut sel = Selection::<u32, Circle>::from_data(vec![1, 2, 3]);
+        assert!(!sel.tick_transition(100.0));
+    }
+
+    #[test]
+    fn tick_transition_fires_end_callback() {
+        use crate::transition::builder::{
+            CommittedTransition, TransitionConfig, TransitionState,
+        };
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let mut sel = Selection::<u32, Circle>::from_data(vec![1, 2, 3]);
+        let ct = CommittedTransition {
+            config: TransitionConfig {
+                duration_ms: 100,
+                delay_ms: 0,
+                easing: crate::transition::builder::EasingFn::Linear,
+            },
+            elements: vec![],
+            new_data_len: 3,
+            enter_count: 0,
+            update_count: 3,
+            exit_count: 0,
+            state: TransitionState::Running,
+            elapsed_ms: 0.0,
+        };
+        sel.set_committed_transition(Some(ct));
+        let called = Arc::new(AtomicBool::new(false));
+        let called_clone = called.clone();
+        sel.set_transition_end_callback(Some(Box::new(move || {
+            called_clone.store(true, Ordering::SeqCst);
+        })));
+
+        // Tick past completion.
+        assert!(!sel.tick_transition(200.0));
+        assert!(called.load(Ordering::SeqCst), "end callback should fire");
+    }
+
+    // -----------------------------------------------------------------------
+    // Integration: 500ms transition interpolation at 0%, 50%, 100%
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn transition_interpolation_at_boundaries() {
+        use crate::transition::builder::{
+            CommittedTransition, ElementTransition, TransitionConfig,
+            TransitionGroup, TransitionState,
+        };
+
+        let mut sel = Selection::<f32, Circle>::from_data(vec![0.0, 0.0]);
+        sel.attr("radius", |d: &f32| *d);
+
+        // Manually create a committed transition with known from/to.
+        let el0 = ElementTransition {
+            attrs: {
+                let mut m = std::collections::HashMap::new();
+                m.insert("radius".to_string(), (AttrValue::Float(0.0), AttrValue::Float(10.0)));
+                m.insert("center".to_string(), (AttrValue::Vec2([0.0, 0.0]), AttrValue::Vec2([1.0, 1.0])));
+                m
+            },
+            group: TransitionGroup::Update,
+        };
+        let ct = CommittedTransition {
+            config: TransitionConfig {
+                duration_ms: 500,
+                delay_ms: 0,
+                easing: crate::transition::builder::EasingFn::Linear,
+            },
+            elements: vec![el0],
+            new_data_len: 1,
+            enter_count: 0,
+            update_count: 1,
+            exit_count: 0,
+            state: TransitionState::Running,
+            elapsed_ms: 0.0,
+        };
+        sel.set_committed_transition(Some(ct));
+
+        // At t=0ms (0%) — build_transition_instances should give from values.
+        {
+            let ct = sel.committed_transition().unwrap();
+            let instances = Selection::<f32, Circle>::build_transition_instances::<Circle>(ct);
+            assert_eq!(instances.len(), 1);
+            // radius should be 0.0 (from value)
+            assert!((instances[0].radius - 0.0).abs() < 1e-6, "radius at 0% should be 0.0");
+            // center should be [0.0, 0.0]
+            assert!((instances[0].center[0] - 0.0).abs() < 1e-6);
+            assert!((instances[0].center[1] - 0.0).abs() < 1e-6);
+        }
+
+        // Tick 250ms (50%).
+        sel.tick_transition(250.0);
+        {
+            let ct = sel.committed_transition().unwrap();
+            let instances = Selection::<f32, Circle>::build_transition_instances::<Circle>(ct);
+            assert_eq!(instances.len(), 1);
+            assert!(
+                (instances[0].radius - 5.0).abs() < 1e-4,
+                "radius at 50% should be ~5.0, got {}",
+                instances[0].radius
+            );
+            assert!(
+                (instances[0].center[0] - 0.5).abs() < 1e-4,
+                "center.x at 50% should be ~0.5, got {}",
+                instances[0].center[0]
+            );
+        }
+
+        // Tick to 500ms (100%).
+        sel.tick_transition(250.0);
+        // At 100% the transition auto-completes, so check the final values
+        // before completion. Let's instead create a new transition for this test.
+        assert!(!sel.has_active_transition(), "should auto-complete at 100%");
+    }
+
+    #[test]
+    fn transition_interpolation_at_100_pct() {
+        use crate::transition::builder::{
+            CommittedTransition, ElementTransition, TransitionConfig,
+            TransitionGroup, TransitionState,
+        };
+
+        // Verify that at exactly duration the interpolated values are the to values.
+        let el0 = ElementTransition {
+            attrs: {
+                let mut m = std::collections::HashMap::new();
+                m.insert("radius".to_string(), (AttrValue::Float(0.0), AttrValue::Float(10.0)));
+                m
+            },
+            group: TransitionGroup::Update,
+        };
+        let ct = CommittedTransition {
+            config: TransitionConfig {
+                duration_ms: 500,
+                delay_ms: 0,
+                easing: crate::transition::builder::EasingFn::Linear,
+            },
+            elements: vec![el0],
+            new_data_len: 1,
+            enter_count: 0,
+            update_count: 1,
+            exit_count: 0,
+            state: TransitionState::Running,
+            elapsed_ms: 500.0, // at 100%
+        };
+        let instances = Selection::<f32, Circle>::build_transition_instances::<Circle>(&ct);
+        assert_eq!(instances.len(), 1);
+        assert!(
+            (instances[0].radius - 10.0).abs() < 1e-4,
+            "radius at 100% should be 10.0, got {}",
+            instances[0].radius
+        );
+    }
 }

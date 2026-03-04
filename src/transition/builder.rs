@@ -683,4 +683,61 @@ mod tests {
         assert_eq!(ct.exit_count, 2);
         assert_eq!(ct.new_data_len, 10);
     }
+
+    #[test]
+    fn test_easing_fn_apply_linear() {
+        let e = EasingFn::Linear;
+        assert!((e.apply(0.0) - 0.0).abs() < f32::EPSILON);
+        assert!((e.apply(0.5) - 0.5).abs() < f32::EPSILON);
+        assert!((e.apply(1.0) - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_easing_fn_apply_ease_in() {
+        let e = EasingFn::EaseIn;
+        assert!((e.apply(0.0) - 0.0).abs() < f32::EPSILON);
+        // Quadratic: t^2 → 0.5^2 = 0.25
+        assert!((e.apply(0.5) - 0.25).abs() < 1e-6);
+        assert!((e.apply(1.0) - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_easing_fn_apply_ease_out() {
+        let e = EasingFn::EaseOut;
+        assert!((e.apply(0.0) - 0.0).abs() < f32::EPSILON);
+        // t*(2 - t) → 0.5*(2 - 0.5) = 0.75
+        assert!((e.apply(0.5) - 0.75).abs() < 1e-6);
+        assert!((e.apply(1.0) - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_easing_fn_apply_ease_in_out() {
+        let e = EasingFn::EaseInOut;
+        assert!((e.apply(0.0) - 0.0).abs() < f32::EPSILON);
+        // Cubic ease-in-out at midpoint = 0.5
+        assert!((e.apply(0.5) - 0.5).abs() < 1e-6);
+        assert!((e.apply(1.0) - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_easing_fn_apply_clamps_input() {
+        let e = EasingFn::Linear;
+        assert!((e.apply(-0.5) - 0.0).abs() < f32::EPSILON);
+        assert!((e.apply(1.5) - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_committed_transition_elapsed_ms_default() {
+        let ct = CommittedTransition {
+            config: TransitionConfig::default(),
+            elements: vec![],
+            new_data_len: 0,
+            enter_count: 0,
+            update_count: 0,
+            exit_count: 0,
+            state: TransitionState::Running,
+            elapsed_ms: 0.0,
+        };
+        assert!((ct.elapsed_ms - 0.0).abs() < f64::EPSILON);
+    }
 }
