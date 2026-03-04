@@ -7486,9 +7486,7 @@ fn vs_main() -> VertexOutput {
 
     #[test]
     fn tick_transition_advances_clock() {
-        use crate::transition::builder::{
-            CommittedTransition, TransitionConfig, TransitionState,
-        };
+        use crate::transition::builder::{CommittedTransition, TransitionConfig, TransitionState};
 
         let mut sel = Selection::<u32, Circle>::from_data(vec![1, 2, 3]);
         let ct = CommittedTransition {
@@ -7510,16 +7508,12 @@ fn vs_main() -> VertexOutput {
         // Tick 100ms — transition should still be active.
         assert!(sel.tick_transition(100.0));
         assert!(sel.has_active_transition());
-        assert!(
-            (sel.committed_transition().unwrap().elapsed_ms - 100.0).abs() < f64::EPSILON
-        );
+        assert!((sel.committed_transition().unwrap().elapsed_ms - 100.0).abs() < f64::EPSILON);
     }
 
     #[test]
     fn tick_transition_auto_completes() {
-        use crate::transition::builder::{
-            CommittedTransition, TransitionConfig, TransitionState,
-        };
+        use crate::transition::builder::{CommittedTransition, TransitionConfig, TransitionState};
 
         let mut sel = Selection::<u32, Circle>::from_data(vec![1, 2, 3]);
         let ct = CommittedTransition {
@@ -7555,9 +7549,7 @@ fn vs_main() -> VertexOutput {
 
     #[test]
     fn tick_transition_fires_end_callback() {
-        use crate::transition::builder::{
-            CommittedTransition, TransitionConfig, TransitionState,
-        };
+        use crate::transition::builder::{CommittedTransition, TransitionConfig, TransitionState};
         use std::sync::Arc;
         use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -7595,8 +7587,8 @@ fn vs_main() -> VertexOutput {
     #[test]
     fn transition_interpolation_at_boundaries() {
         use crate::transition::builder::{
-            CommittedTransition, ElementTransition, TransitionConfig,
-            TransitionGroup, TransitionState,
+            CommittedTransition, ElementTransition, TransitionConfig, TransitionGroup,
+            TransitionState,
         };
 
         let mut sel = Selection::<f32, Circle>::from_data(vec![0.0, 0.0]);
@@ -7606,8 +7598,14 @@ fn vs_main() -> VertexOutput {
         let el0 = ElementTransition {
             attrs: {
                 let mut m = std::collections::HashMap::new();
-                m.insert("radius".to_string(), (AttrValue::Float(0.0), AttrValue::Float(10.0)));
-                m.insert("center".to_string(), (AttrValue::Vec2([0.0, 0.0]), AttrValue::Vec2([1.0, 1.0])));
+                m.insert(
+                    "radius".to_string(),
+                    (AttrValue::Float(0.0), AttrValue::Float(10.0)),
+                );
+                m.insert(
+                    "center".to_string(),
+                    (AttrValue::Vec2([0.0, 0.0]), AttrValue::Vec2([1.0, 1.0])),
+                );
                 m
             },
             group: TransitionGroup::Update,
@@ -7634,7 +7632,10 @@ fn vs_main() -> VertexOutput {
             let instances = Selection::<f32, Circle>::build_transition_instances::<Circle>(ct);
             assert_eq!(instances.len(), 1);
             // radius should be 0.0 (from value)
-            assert!((instances[0].radius - 0.0).abs() < 1e-6, "radius at 0% should be 0.0");
+            assert!(
+                (instances[0].radius - 0.0).abs() < 1e-6,
+                "radius at 0% should be 0.0"
+            );
             // center should be [0.0, 0.0]
             assert!((instances[0].center[0] - 0.0).abs() < 1e-6);
             assert!((instances[0].center[1] - 0.0).abs() < 1e-6);
@@ -7668,15 +7669,18 @@ fn vs_main() -> VertexOutput {
     #[test]
     fn transition_interpolation_at_100_pct() {
         use crate::transition::builder::{
-            CommittedTransition, ElementTransition, TransitionConfig,
-            TransitionGroup, TransitionState,
+            CommittedTransition, ElementTransition, TransitionConfig, TransitionGroup,
+            TransitionState,
         };
 
         // Verify that at exactly duration the interpolated values are the to values.
         let el0 = ElementTransition {
             attrs: {
                 let mut m = std::collections::HashMap::new();
-                m.insert("radius".to_string(), (AttrValue::Float(0.0), AttrValue::Float(10.0)));
+                m.insert(
+                    "radius".to_string(),
+                    (AttrValue::Float(0.0), AttrValue::Float(10.0)),
+                );
                 m
             },
             group: TransitionGroup::Update,
