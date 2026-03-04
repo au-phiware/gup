@@ -928,7 +928,7 @@ layouts, and 3D visualization.
 Framework integrations (Bevy, egui, Tauri, winit), export formats (SVG, PDF,
 PNG, HTML), and platform targets.
 
-- [GUP-262](GUP-262_Bevy_Integration.md) 📋 — gup-bevy crate with GupChart Bevy
+- [GUP-262](GUP-262_Bevy_Integration.md) 🚧 — gup-bevy crate with GupChart Bevy
   Component and GupPlugin sharing the wgpu device/queue with Bevy's renderer.
   Deps: GUP-004 ✅, GUP-018 ✅, GUP-039 ✅.
 - [GUP-263](GUP-263_egui_Integration.md) 📋 — GupWidget implementing
