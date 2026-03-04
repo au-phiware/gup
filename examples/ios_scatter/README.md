@@ -44,8 +44,8 @@ target/aarch64-apple-ios/release/libgup_ios.a         # Device
 
 2. Add `libgup_ios.a` to **Build Phases → Link Binary With Libraries**.
 
-3. Add the GupSwift package as a local dependency:
-   **File → Add Package Dependencies → Add Local…** → select `pkg/ios/GupSwift/`.
+3. Add the GupSwift package as a local dependency: **File → Add Package
+   Dependencies → Add Local…** → select `pkg/ios/GupSwift/`.
 
 4. In the app target's **Build Settings** set:
    - **Other Linker Flags**: `-lresolv` (required by some Rust dependencies)
@@ -95,7 +95,8 @@ struct ContentView: View {
 - **Metal surface creation** via `CAMetalLayer`-backed `UIView`
 - **CADisplayLink-paced rendering** at the display refresh rate
 - **10 000 random scatter-plot points** rendered via GPU
-- **Touch selection**: tap a point to highlight it (touch → hit-test → selection)
+- **Touch selection**: tap a point to highlight it (touch → hit-test →
+  selection)
 - **Orientation handling**: rotate the device/simulator and the chart resizes
   without re-creating the GPU context
 
@@ -107,9 +108,9 @@ For accurate performance measurements, always test on a real device.
 
 ## Troubleshooting
 
-| Symptom | Fix |
-|---------|-----|
-| Linker error: `undefined symbol _gup_context_create` | Ensure `libgup_ios.a` is linked and Library Search Paths are correct. |
-| Black screen | Check Xcode console for wgpu/Metal validation errors. |
-| Crash on launch | Verify the Rust library was built for the correct target (sim vs device, arm64 vs x86_64). |
-| Low FPS on Simulator | Expected — Simulator uses software Metal. Test on device for real perf. |
+| Symptom                                              | Fix                                                                                        |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Linker error: `undefined symbol _gup_context_create` | Ensure `libgup_ios.a` is linked and Library Search Paths are correct.                      |
+| Black screen                                         | Check Xcode console for wgpu/Metal validation errors.                                      |
+| Crash on launch                                      | Verify the Rust library was built for the correct target (sim vs device, arm64 vs x86_64). |
+| Low FPS on Simulator                                 | Expected — Simulator uses software Metal. Test on device for real perf.                    |
