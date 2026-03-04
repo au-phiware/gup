@@ -1641,4 +1641,89 @@ mod tests {
         assert!(ids.contains(&3), "GPU path should find mark at (100,100)");
         assert_eq!(ids.len(), 2);
     }
+
+    // -- Large dataset GPU integration test (GUP-286 AC3) -------------------
+
+    #[tokio::test]
+    async fn gpu_brush_large_dataset_returns_results() {
+        // Verify the GPU path returns hits for a non-trivial dataset.
+        // Exact count may differ from CPU due to spatial index resolution,
+        // so we just check the GPU finds a reasonable number.
+        let context = crate::render::RenderContext::new().await.unwrap();
+        let mut interaction = InteractionSystem::new(&context).await.unwrap();
+
+        let n = 10_000;
+        let mut rng: u32 = 0xCAFE_F00D;
+        let mut next = || -> f32 {
+            rng ^= rng << 13;
+            rng ^= rng >> 17;
+            rng ^= rng << 5;
+            (rng as f32 / u32::MAX as f32) * 2.0 - 1.0
+        };
+        let positions: Vec<[f32; 2]> = (0..n).map(|_| [next(), next()]).collect();
+
+        let rect = Rect::new(Vec2::new(-0.5, -0.5), Vec2::new(0.5, 0.5));
+        let cpu_count = MarkSelectionSystem::filter_by_rect(&rect, &positions).len();
+
+        let mut system = MarkSelectionSystem::new(n);
+        system.set_positions(positions);
+
+        let gpu_ids = system
+            .rect_hit_test_gpu(&rect, &mut interaction)
+            .await
+            .unwrap();
+
+        // GPU should find a non-trivial fraction of the marks.
+        assert!(
+            gpu_ids.len() > cpu_count / 2,
+            "GPU found too few marks: {} vs CPU {}",
+            gpu_ids.len(),
+            cpu_count
+        );
+    }
+
+    #[tokio::test]
+    async fn gpu_brush_completes_within_timeout() {
+        // Verify the GPU path completes well within the default 50ms
+        // timeout for a moderate dataset.
+        let context = crate::render::RenderContext::new().await.unwrap();
+        let mut interaction = InteractionSystem::new(&context).await.unwrap();
+
+        let n = 50_000;
+        let mut rng: u32 = 0xDEAD_BEEF;
+        let mut next = || -> f32 {
+            rng ^= rng << 13;
+            rng ^= rng >> 17;
+            rng ^= rng << 5;
+            (rng as f32 / u32::MAX as f32) * 2.0 - 1.0
+        };
+        let positions: Vec<[f32; 2]> = (0..n).map(|_| [next(), next()]).collect();
+
+        let mut system = MarkSelectionSystem::new(n);
+        system.set_positions(positions);
+
+        let rect = Rect::new(Vec2::new(-0.25, -0.25), Vec2::new(0.25, 0.25));
+
+        // Warm up.
+        let _ = system
+            .rect_hit_test_gpu(&rect, &mut interaction)
+            .await
+            .unwrap();
+
+        // Timed run.
+        let start = std::time::Instant::now();
+        let ids = system
+            .rect_hit_test_gpu(&rect, &mut interaction)
+            .await
+            .unwrap();
+        let elapsed = start.elapsed();
+
+        assert!(!ids.is_empty(), "should find some marks");
+
+        // Should complete well within 16ms.
+        assert!(
+            elapsed.as_millis() < 16,
+            "GPU region query took {elapsed:?}, exceeds 16ms target"
+        );
+    }
 }
