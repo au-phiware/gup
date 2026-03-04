@@ -1015,3 +1015,5 @@ println!("Grid fingerprint: {}", fingerprint);
   chart builder API
 - [Accessibility Guide](ACCESSIBILITY_KNOWN_ISSUES.md) — Grid accessibility
   considerations including high-contrast themes
+- [Tutorial 1: Getting Started](tutorials/01_getting_started.md) — Create your
+  first chart with Gup, including grid and axes configuration

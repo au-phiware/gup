@@ -732,3 +732,5 @@ the GPU complexity.
   Mark, MarkRegistry, and MarkRenderer
 - [Performance Guide](mark-system/performance.md) — Benchmarks, optimization
   strategies, and profiling
+- [Tutorial 6: Custom Marks](tutorials/06_custom_marks.md) — Step-by-step
+  tutorial for creating custom mark types

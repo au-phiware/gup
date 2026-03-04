@@ -50,6 +50,26 @@ The [`archive/`](./archive/) directory contains earlier versions of documents
 that have been superseded by the core documentation above. These provide
 historical context and show the evolution of Gup's design.
 
+## Tutorials
+
+### [📖 Tutorial Series](./tutorials/README.md)
+
+Six step-by-step tutorials that take you from your first chart to advanced
+topics. Start with [Getting Started](./tutorials/01_getting_started.md) if you
+are new to Gup.
+
+1. [Getting Started](./tutorials/01_getting_started.md) — create your first
+   scatter chart
+2. [Data Binding](./tutorials/02_data_binding.md) — bind custom structs with
+   `Selection<T, M>`
+3. [Custom Shader Functions](./tutorials/03_custom_shader_functions.md) — GPU
+   transforms with `#[wgsl_function]`
+4. [Interactions](./tutorials/04_interactions.md) — hover, click, brush,
+   zoom/pan
+5. [Streaming Data](./tutorials/05_streaming_data.md) — live data with
+   `StreamingDataSource`
+6. [Custom Marks](./tutorials/06_custom_marks.md) — implement new mark types
+
 ## Feature Guides
 
 ### [📐 Grid System](./GRID_SYSTEM.md)
