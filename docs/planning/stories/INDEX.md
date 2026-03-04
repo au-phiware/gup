@@ -772,7 +772,7 @@ integration, pipeline caching.
 - [GUP-301](GUP-301_GPU_Density_Compute_Pipeline.md) ✅ — Wire 2D KDE and
   marching-squares WGSL compute shaders into the GPU pipeline with bind groups,
   pipeline caching, and automatic CPU/GPU dispatch selection. Deps: GUP-250 ✅.
-- [GUP-302](GUP-302_Exact_Marching_Squares_Polygon_Fill.md) 📋 — Replace
+- [GUP-302](GUP-302_Exact_Marching_Squares_Polygon_Fill.md) 🚧 — Replace
   cell-average filled contour approach with exact marching-squares polygon
   decomposition for smooth band boundaries at low grid resolutions. Deps:
   GUP-250 ✅.
