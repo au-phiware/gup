@@ -975,7 +975,14 @@ where
         selection.attr("color1", |tri: &AreaTriangle<T>| tri.instance.color1);
         selection.attr("color2", |tri: &AreaTriangle<T>| tri.instance.color2);
 
-        let composed_chart = ComposedChart::new(selection, self.config.clone()).with_default_axes();
+        // Automatically apply percentage formatting for normalised stacking
+        // when no custom y formatter was explicitly set.
+        let mut config = self.config.clone();
+        if self.stack_mode == StackMode::Normalized && config.y_label_formatter.is_none() {
+            config.y_label_formatter =
+                Some(std::sync::Arc::new(crate::label::PercentFormatter::new()));
+        }
+        let composed_chart = ComposedChart::new(selection, config).with_default_axes();
 
         Ok(composed_chart)
     }
@@ -1180,7 +1187,14 @@ where
         selection.attr("width", |seg: &AreaSegment<T>| seg.width);
 
         // ── Wrap in ComposedChart with axes ─────────────────────────
-        let composed_chart = ComposedChart::new(selection, self.config).with_default_axes();
+        // Automatically apply percentage formatting for normalised stacking
+        // when no custom y formatter was explicitly set.
+        let mut config = self.config;
+        if self.stack_mode == StackMode::Normalized && config.y_label_formatter.is_none() {
+            config.y_label_formatter =
+                Some(std::sync::Arc::new(crate::label::PercentFormatter::new()));
+        }
+        let composed_chart = ComposedChart::new(selection, config).with_default_axes();
 
         Ok(composed_chart)
     }
