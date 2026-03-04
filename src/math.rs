@@ -44,7 +44,9 @@ use std::ops::{Add, Div, Mul, Sub};
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vec2 {
+    /// X component.
     pub x: f32,
+    /// Y component.
     pub y: f32,
 }
 

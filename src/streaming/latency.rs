@@ -194,12 +194,19 @@ impl Default for LatencyTracker {
 /// Immutable snapshot of latency statistics.
 #[derive(Debug, Clone)]
 pub struct LatencySnapshot {
+    /// Number of samples in the rolling window at snapshot time.
     pub sample_count: usize,
+    /// Lifetime total of recorded operations.
     pub total_ops: u64,
+    /// Mean latency over the rolling window.
     pub mean: Option<Duration>,
+    /// Median (P50) latency.
     pub p50: Option<Duration>,
+    /// 99th-percentile latency.
     pub p99: Option<Duration>,
+    /// Maximum latency in the rolling window.
     pub max: Option<Duration>,
+    /// Estimated throughput in operations per second.
     pub throughput_ops_per_sec: f64,
 }
 

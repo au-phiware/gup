@@ -532,9 +532,13 @@ pub struct ChartConfig {
 /// Chart margin specification.
 #[derive(Debug, Clone, Copy)]
 pub struct Margins {
+    /// Top margin in pixels.
     pub top: f32,
+    /// Right margin in pixels.
     pub right: f32,
+    /// Bottom margin in pixels.
     pub bottom: f32,
+    /// Left margin in pixels.
     pub left: f32,
 }
 
@@ -2635,21 +2639,33 @@ pub enum ChartBuilderError {
     /// No data provided for chart creation
     EmptyData,
 
-    /// Required accessor function not provided
-    MissingAccessor { attribute: String },
-
-    /// Incompatible accessor function type
-    IncompatibleAccessor {
+    /// Required accessor function not provided.
+    MissingAccessor {
+        /// Name of the missing accessor attribute.
         attribute: String,
+    },
+
+    /// Incompatible accessor function type.
+    IncompatibleAccessor {
+        /// Name of the accessor attribute.
+        attribute: String,
+        /// Expected accessor type.
         expected_type: String,
+        /// Actual accessor type provided.
         actual_type: String,
     },
 
-    /// Chart configuration error
-    ConfigurationError { message: String },
+    /// Chart configuration error.
+    ConfigurationError {
+        /// Description of the configuration error.
+        message: String,
+    },
 
-    /// Render context initialization failed
-    ContextError { source: GupError },
+    /// Render context initialization failed.
+    ContextError {
+        /// Underlying rendering error.
+        source: GupError,
+    },
 }
 
 impl std::fmt::Display for ChartBuilderError {

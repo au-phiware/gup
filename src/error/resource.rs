@@ -29,39 +29,63 @@ pub struct ResourceId(Uuid);
 /// GPU resource with metadata for cleanup decisions.
 #[derive(Debug, Clone)]
 pub struct GpuResource {
+    /// Unique identifier of this resource.
     pub id: ResourceId,
+    /// Type of GPU resource.
     pub resource_type: ResourceType,
+    /// Size of the resource in bytes.
     pub size: usize,
+    /// Instant when the resource was created.
     pub created: Instant,
+    /// Instant when the resource was last used.
     pub last_used: Instant,
+    /// Number of times this resource has been used.
     pub usage_count: usize,
+    /// Eviction priority of this resource.
     pub priority: ResourcePriority,
+    /// Additional metadata key-value pairs.
     pub metadata: HashMap<String, String>,
 }
 
 /// Types of GPU resources.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ResourceType {
+    /// Vertex data buffer.
     VertexBuffer,
+    /// Index data buffer.
     IndexBuffer,
+    /// Uniform data buffer.
     UniformBuffer,
+    /// Storage buffer for compute operations.
     StorageBuffer,
+    /// Staging buffer for CPU-GPU transfers.
     StagingBuffer,
+    /// Two-dimensional texture.
     Texture2D,
+    /// Three-dimensional texture.
     Texture3D,
+    /// Cube map texture.
     TextureCube,
+    /// Render pipeline object.
     RenderPipeline,
+    /// Compute pipeline object.
     ComputePipeline,
+    /// Bind group resource set.
     BindGroup,
+    /// Texture sampler.
     Sampler,
 }
 
 /// Priority levels for resource cleanup decisions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ResourcePriority {
+    /// Never evict this resource.
     Critical, // Never evict
+    /// Evict only under severe memory pressure.
     High,     // Evict only under severe pressure
+    /// Normal cleanup candidate.
     Medium,   // Normal cleanup candidate
+    /// First to be evicted when memory pressure rises.
     Low,      // First to be evicted
 }
 
@@ -92,62 +116,100 @@ pub struct AllocationEvent {
 /// Types of allocation events.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AllocationEventType {
+    /// Memory was allocated.
     Allocated,
+    /// Memory was deallocated.
     Deallocated,
-    Resized { old_size: usize },
+    /// Memory was resized from a previous size.
+    Resized {
+        /// Previous size in bytes before the resize.
+        old_size: usize,
+    },
 }
 
 /// Resource usage limits and thresholds.
 #[derive(Debug, Clone)]
 pub struct ResourceLimits {
+    /// Maximum allowed GPU memory usage in bytes.
     pub max_gpu_memory: usize,
+    /// Maximum number of buffers allowed.
     pub max_buffer_count: usize,
+    /// Maximum number of textures allowed.
     pub max_texture_count: usize,
+    /// Maximum number of pipelines allowed.
     pub max_pipeline_count: usize,
+    /// Usage ratio at which a warning is triggered.
     pub warning_threshold: f32,
+    /// Usage ratio at which an emergency cleanup is triggered.
     pub emergency_threshold: f32,
 }
 
 /// Cleanup strategies for memory pressure handling.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CleanupStrategy {
+    /// Evict buffers that have not been used recently.
     EvictUnusedBuffers,
+    /// Compact fragmented GPU memory.
     CompactFragmentedMemory,
+    /// Shrink oversized buffers.
     ReduceBufferSizes,
+    /// Clear internal caches.
     ClearCaches,
+    /// Reduce texture resolution to save memory.
     DowngradeTextureQuality,
-    RemoveOldResources { max_age: Duration },
+    /// Remove resources older than the specified age.
+    RemoveOldResources {
+        /// Maximum age before a resource is removed.
+        max_age: Duration,
+    },
+    /// Evict resources based on their priority level.
     EvictByPriority,
 }
 
 /// Memory pressure information and recommendations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourcePressure {
+    /// Severity of the current memory pressure.
     pub pressure_type: PressureType,
+    /// Current memory usage in bytes.
     pub current_usage: usize,
+    /// Available memory in bytes.
     pub available: usize,
+    /// Current usage as a percentage of the limit.
     pub usage_percentage: f32,
+    /// Recommended cleanup actions for this pressure level.
     pub recommended_actions: Vec<CleanupAction>,
+    /// Resource identifiers that must not be evicted.
     pub critical_resources: Vec<ResourceId>,
 }
 
 /// Types of memory pressure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum PressureType {
+    /// Memory pressure is low.
     Low,
+    /// Memory pressure is moderate.
     Moderate,
+    /// Memory pressure is high.
     High,
+    /// Memory pressure is critical.
     Critical,
+    /// Memory pressure is at emergency level requiring immediate action.
     Emergency,
 }
 
 /// Recommended cleanup actions.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CleanupAction {
+    /// Compact buffer memory to reduce fragmentation.
     CompactBuffers,
+    /// Evict old or unused resources.
     EvictOldResources,
+    /// Reduce texture quality to save memory.
     ReduceTextureQuality,
+    /// Clear pipelines that are not currently in use.
     ClearUnusedPipelines,
+    /// Perform emergency cleanup of all non-critical resources.
     Emergency,
 }
 
@@ -566,11 +628,17 @@ impl ResourceManager {
 /// Resource usage statistics.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceStats {
+    /// Total number of registered GPU resources.
     pub total_resources: usize,
+    /// Total GPU memory currently in use in bytes.
     pub total_memory_used: usize,
+    /// Configured GPU memory limit in bytes.
     pub memory_limit: usize,
+    /// Memory usage broken down by resource type.
     pub usage_by_type: HashMap<ResourceType, usize>,
+    /// Peak memory usage observed in bytes.
     pub peak_usage: usize,
+    /// Estimated memory fragmentation ratio.
     pub fragmentation_ratio: f32,
 }
 
@@ -581,6 +649,7 @@ impl Default for ResourceId {
 }
 
 impl ResourceId {
+    /// Create a new unique resource identifier.
     pub fn new() -> Self {
         Self(Uuid::new_v4())
     }

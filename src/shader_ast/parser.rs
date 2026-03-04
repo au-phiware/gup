@@ -366,13 +366,18 @@ impl<'a> Lexer<'a> {
 /// Error produced during WGSL parsing.
 #[derive(Debug, Clone)]
 pub struct ParseError {
+    /// Error message.
     pub message: String,
+    /// Line number where the error occurred.
     pub line: usize,
+    /// Column number where the error occurred.
     pub col: usize,
+    /// Optional suggestion for fixing the error.
     pub suggestion: Option<String>,
 }
 
 impl ParseError {
+    /// Create a new parse error at the given position.
     pub fn new(message: impl Into<String>, line: usize, col: usize) -> Self {
         Self {
             message: message.into(),
@@ -382,6 +387,7 @@ impl ParseError {
         }
     }
 
+    /// Attach a suggestion to this parse error.
     pub fn with_suggestion(mut self, suggestion: impl Into<String>) -> Self {
         self.suggestion = Some(suggestion.into());
         self

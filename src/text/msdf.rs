@@ -45,27 +45,34 @@ impl Default for MsdfConfig {
 /// Colors are combinations of RGB channels using the median-of-three model
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EdgeColor {
+    /// Whether the red channel is active.
     pub r: bool,
+    /// Whether the green channel is active.
     pub g: bool,
+    /// Whether the blue channel is active.
     pub b: bool,
 }
 
 impl EdgeColor {
+    /// All channels active (white).
     pub const WHITE: EdgeColor = EdgeColor {
         r: true,
         g: true,
         b: true,
     };
+    /// Red and green channels active (yellow).
     pub const YELLOW: EdgeColor = EdgeColor {
         r: true,
         g: true,
         b: false,
     };
+    /// Red and blue channels active (magenta).
     pub const MAGENTA: EdgeColor = EdgeColor {
         r: true,
         g: false,
         b: true,
     };
+    /// Green and blue channels active (cyan).
     pub const CYAN: EdgeColor = EdgeColor {
         r: false,
         g: true,
@@ -91,35 +98,43 @@ impl EdgeColor {
 /// 2D point representation
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Point {
+    /// The x coordinate.
     pub x: f32,
+    /// The y coordinate.
     pub y: f32,
 }
 
 impl Point {
+    /// Creates a new point from x and y coordinates.
     pub fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
 
+    /// Returns the Euclidean distance to another point.
     pub fn distance_to(&self, other: &Point) -> f32 {
         let dx = self.x - other.x;
         let dy = self.y - other.y;
         (dx * dx + dy * dy).sqrt()
     }
 
+    /// Returns the squared Euclidean distance to another point.
     pub fn distance_squared_to(&self, other: &Point) -> f32 {
         let dx = self.x - other.x;
         let dy = self.y - other.y;
         dx * dx + dy * dy
     }
 
+    /// Returns the length of this point as a vector from the origin.
     pub fn length(&self) -> f32 {
         (self.x * self.x + self.y * self.y).sqrt()
     }
 
+    /// Returns the squared length of this point as a vector from the origin.
     pub fn length_squared(&self) -> f32 {
         self.x * self.x + self.y * self.y
     }
 
+    /// Returns the dot product with another point.
     pub fn dot(&self, other: &Point) -> f32 {
         self.x * other.x + self.y * other.y
     }
@@ -129,6 +144,7 @@ impl Point {
         self.x * other.y - self.y * other.x
     }
 
+    /// Returns a unit-length vector in the same direction.
     pub fn normalize(&self) -> Point {
         let len = self.length();
         if len > 0.0 {
@@ -138,14 +154,17 @@ impl Point {
         }
     }
 
+    /// Returns the component-wise subtraction of another point.
     pub fn sub(&self, other: &Point) -> Point {
         Point::new(self.x - other.x, self.y - other.y)
     }
 
+    /// Returns the component-wise addition of another point.
     pub fn add(&self, other: &Point) -> Point {
         Point::new(self.x + other.x, self.y + other.y)
     }
 
+    /// Returns this point scaled by the given factor.
     pub fn scale(&self, s: f32) -> Point {
         Point::new(self.x * s, self.y * s)
     }
@@ -191,25 +210,40 @@ impl SignedDistance {
 /// Edge segment types in glyph outline
 #[derive(Debug, Clone)]
 pub struct EdgeSegment {
+    /// The geometric type of this edge segment.
     pub edge_type: EdgeType,
+    /// The color channel assignment for MSDF generation.
     pub color: EdgeColor,
 }
 
+/// Type of edge segment in a glyph contour.
 #[derive(Debug, Clone)]
 pub enum EdgeType {
+    /// A straight line segment.
     Line {
+        /// Start point of the line.
         start: Point,
+        /// End point of the line.
         end: Point,
     },
+    /// A quadratic Bézier curve.
     QuadCurve {
+        /// Start point.
         p0: Point,
+        /// Control point.
         p1: Point,
+        /// End point.
         p2: Point,
     },
+    /// A cubic Bézier curve.
     CubicCurve {
+        /// Start point.
         p0: Point,
+        /// First control point.
         p1: Point,
+        /// Second control point.
         p2: Point,
+        /// End point.
         p3: Point,
     },
 }
@@ -635,6 +669,7 @@ fn solve_quadratic(a: f32, b: f32, c: f32) -> Vec<f32> {
 /// Contour (closed shape) in glyph outline
 #[derive(Debug, Clone)]
 pub struct Contour {
+    /// The ordered list of edge segments forming this contour.
     pub edges: Vec<EdgeSegment>,
 }
 
@@ -645,10 +680,12 @@ impl Default for Contour {
 }
 
 impl Contour {
+    /// Creates an empty contour with no edges.
     pub fn new() -> Self {
         Self { edges: Vec::new() }
     }
 
+    /// Appends an edge segment to this contour.
     pub fn add_edge(&mut self, edge: EdgeSegment) {
         self.edges.push(edge);
     }
@@ -748,7 +785,9 @@ impl Contour {
 /// Complete glyph outline with edge coloring applied
 #[derive(Debug, Clone)]
 pub struct GlyphOutline {
+    /// The list of contours that make up this glyph.
     pub contours: Vec<Contour>,
+    /// The axis-aligned bounding box as (min, max) corners.
     pub bounds: (Point, Point),
 }
 
@@ -759,6 +798,7 @@ impl Default for GlyphOutline {
 }
 
 impl GlyphOutline {
+    /// Creates an empty glyph outline with infinite bounds.
     pub fn new() -> Self {
         Self {
             contours: Vec::new(),
@@ -769,6 +809,7 @@ impl GlyphOutline {
         }
     }
 
+    /// Adds a contour and updates the bounding box.
     pub fn add_contour(&mut self, contour: Contour) {
         // Update bounds
         for edge in &contour.edges {
@@ -912,16 +953,20 @@ impl Default for SdfConfig {
 /// is replicated to all three RGB channels).
 #[derive(Debug, Clone)]
 pub struct SdfBitmap {
+    /// Width of the bitmap in texels.
     pub width: usize,
+    /// Height of the bitmap in texels.
     pub height: usize,
+    /// The single-channel distance field data.
     pub channel: DistanceField,
-    /// Scale factor used to generate this SDF (font units to pixels)
+    /// Scale factor used to generate this SDF (font units to pixels).
     pub scale: f32,
     /// Padding in pixels around the glyph
     pub padding: u32,
 }
 
 impl SdfBitmap {
+    /// Creates a new SDF bitmap with the given dimensions.
     pub fn new(width: usize, height: usize, scale: f32, padding: u32) -> Self {
         Self {
             width,
@@ -955,12 +1000,16 @@ impl SdfBitmap {
 /// Distance field for a single channel
 #[derive(Debug, Clone)]
 pub struct DistanceField {
+    /// Width of the field in texels.
     pub width: usize,
+    /// Height of the field in texels.
     pub height: usize,
+    /// Flat array of distance values in row-major order.
     pub data: Vec<f32>,
 }
 
 impl DistanceField {
+    /// Creates a new distance field initialized to zero.
     pub fn new(width: usize, height: usize) -> Self {
         Self {
             width,
@@ -969,12 +1018,14 @@ impl DistanceField {
         }
     }
 
+    /// Sets the distance value at the given coordinates.
     pub fn set(&mut self, x: usize, y: usize, value: f32) {
         if x < self.width && y < self.height {
             self.data[y * self.width + x] = value;
         }
     }
 
+    /// Returns the distance value at the given coordinates.
     pub fn get(&self, x: usize, y: usize) -> f32 {
         if x < self.width && y < self.height {
             self.data[y * self.width + x]
@@ -987,10 +1038,15 @@ impl DistanceField {
 /// MSDF bitmap with 3 channels (RGB)
 #[derive(Debug, Clone)]
 pub struct MsdfBitmap {
+    /// Width of the bitmap in texels.
     pub width: usize,
+    /// Height of the bitmap in texels.
     pub height: usize,
+    /// Red channel distance field.
     pub red_channel: DistanceField,
+    /// Green channel distance field.
     pub green_channel: DistanceField,
+    /// Blue channel distance field.
     pub blue_channel: DistanceField,
     /// Scale factor used to generate this MSDF (font units to pixels)
     pub scale: f32,
@@ -999,6 +1055,7 @@ pub struct MsdfBitmap {
 }
 
 impl MsdfBitmap {
+    /// Creates a new MSDF bitmap with the given dimensions.
     pub fn new(width: usize, height: usize, scale: f32, padding: u32) -> Self {
         Self {
             width,

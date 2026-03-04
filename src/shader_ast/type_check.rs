@@ -12,14 +12,20 @@ use std::fmt;
 /// Error produced during type checking.
 #[derive(Debug, Clone)]
 pub struct TypeError {
+    /// Description of the type error.
     pub message: String,
+    /// The expected type.
     pub expected: WgslType,
+    /// The actual type encountered.
     pub actual: WgslType,
+    /// Optional suggestion for fixing the error.
     pub suggestion: Option<String>,
+    /// Context in which the error occurred.
     pub context: String,
 }
 
 impl TypeError {
+    /// Create a new type error with the given details.
     pub fn new(
         message: impl Into<String>,
         expected: WgslType,
@@ -35,6 +41,7 @@ impl TypeError {
         }
     }
 
+    /// Attach a suggestion to this type error.
     pub fn with_suggestion(mut self, suggestion: impl Into<String>) -> Self {
         self.suggestion = Some(suggestion.into());
         self
@@ -60,12 +67,16 @@ impl std::error::Error for TypeError {}
 /// Error produced during composition validation.
 #[derive(Debug, Clone)]
 pub struct CompositionError {
+    /// Description of the composition error.
     pub message: String,
+    /// Individual type errors that contributed.
     pub errors: Vec<TypeError>,
+    /// Optional suggestion for fixing the error.
     pub suggestion: Option<String>,
 }
 
 impl CompositionError {
+    /// Create a new composition error with the given message.
     pub fn new(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
@@ -74,11 +85,13 @@ impl CompositionError {
         }
     }
 
+    /// Add a type error to this composition error.
     pub fn with_type_error(mut self, error: TypeError) -> Self {
         self.errors.push(error);
         self
     }
 
+    /// Attach a suggestion to this composition error.
     pub fn with_suggestion(mut self, suggestion: impl Into<String>) -> Self {
         self.suggestion = Some(suggestion.into());
         self

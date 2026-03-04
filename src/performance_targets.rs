@@ -122,30 +122,48 @@ pub struct MemoryScalingResult {
 pub enum PerformanceIssue {
     /// Frame time exceeds the target.
     FrameTimeExceeded {
+        /// Maximum allowed frame time.
         target: Duration,
+        /// Measured frame time.
         actual: Duration,
+        /// Number of data points rendered.
         point_count: usize,
     },
     /// Interaction response time exceeds the target.
     InteractionTimeExceeded {
+        /// Maximum allowed interaction time.
         target: Duration,
+        /// Measured interaction time.
         actual: Duration,
+        /// Number of data points rendered.
         point_count: usize,
     },
     /// Shader composition overhead exceeds the target.
     ShaderOverheadExceeded {
+        /// Maximum allowed overhead percentage.
         target_percent: f32,
+        /// Measured overhead percentage.
         actual_percent: f32,
     },
     /// Memory overhead exceeds the target.
     MemoryOverheadExceeded {
+        /// Maximum allowed overhead percentage.
         target_percent: f32,
+        /// Measured overhead percentage.
         actual_percent: f32,
     },
     /// Memory scaling is not linear.
-    NonLinearMemoryScaling { r_squared: f32 },
+    NonLinearMemoryScaling {
+        /// R-squared value of the linear fit.
+        r_squared: f32,
+    },
     /// Throughput below minimum target.
-    ThroughputBelowTarget { target: usize, actual: usize },
+    ThroughputBelowTarget {
+        /// Minimum required throughput.
+        target: usize,
+        /// Measured throughput.
+        actual: usize,
+    },
 }
 
 impl fmt::Display for PerformanceIssue {

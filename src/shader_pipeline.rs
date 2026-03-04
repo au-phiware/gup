@@ -47,6 +47,7 @@ pub struct PipelineFunction {
 }
 
 impl PipelineFunction {
+    /// Create a new pipeline function from a composable shader function.
     pub fn new<F: ComposableShaderFunction + 'static>(function: F) -> Self
     where
         F::Uniforms: Send + Sync + 'static,
@@ -70,26 +71,32 @@ impl PipelineFunction {
         }
     }
 
+    /// Get the function name.
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// Get the raw WGSL code for this function.
     pub fn wgsl_code(&self) -> &str {
         &self.wgsl_code
     }
 
+    /// Returns whether this function has associated uniform data.
     pub fn has_uniforms(&self) -> bool {
         self.uniform_buffer.is_some()
     }
 
+    /// Get the byte size of the uniform data.
     pub fn uniform_size(&self) -> usize {
         self.uniform_size
     }
 
+    /// Get the WGSL type name of the uniform struct.
     pub fn uniform_type_name(&self) -> &str {
         &self.uniform_type_name
     }
 
+    /// Get the WGSL struct definition for the uniform type.
     pub fn uniform_struct_definition(&self) -> &str {
         &self.uniform_struct_definition
     }
@@ -98,18 +105,26 @@ impl PipelineFunction {
 /// Cached shader compilation results to avoid regeneration.
 #[derive(Clone)]
 pub struct CachedShaders {
+    /// Generated vertex shader WGSL source.
     pub vertex_shader: String,
+    /// Generated fragment shader WGSL source.
     pub fragment_shader: String,
+    /// Cached bind group layout.
     pub bind_group_layout: Option<Arc<BindGroupLayout>>,
+    /// Cached compiled vertex shader module.
     pub vertex_module: Option<Arc<ShaderModule>>,
+    /// Cached compiled fragment shader module.
     pub fragment_module: Option<Arc<ShaderModule>>,
 }
 
 /// Attribute mapping configuration for shader pipeline.
 #[derive(Debug, Clone)]
 pub struct AttributeMapping {
+    /// Name of the attribute.
     pub attribute_name: String,
+    /// Name of the associated shader function.
     pub function_name: String,
+    /// Shader location index.
     pub location: u32,
 }
 

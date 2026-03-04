@@ -61,12 +61,19 @@ impl QualityLevel {
 /// Progress information for data loading operations.
 #[derive(Debug, Clone)]
 pub struct LoadProgress {
+    /// Number of chunks loaded so far.
     pub chunks_loaded: usize,
+    /// Total number of chunks to load, if known.
     pub total_chunks: Option<usize>,
+    /// Quality level that has been fully loaded.
     pub current_quality: QualityLevel,
+    /// Quality level the loader is working towards.
     pub target_quality: QualityLevel,
+    /// Bytes loaded so far.
     pub bytes_loaded: u64,
+    /// Total bytes expected, if known.
     pub total_bytes: Option<u64>,
+    /// Human-readable description of the current loading stage.
     pub loading_stage: String,
 }
 

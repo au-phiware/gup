@@ -66,8 +66,11 @@ pub enum AccessorType {
 /// Type of mark being rendered.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum MarkType {
+    /// Circular mark.
     Circle,
+    /// Rectangular mark.
     Rectangle,
+    /// Line mark.
     Line,
 }
 

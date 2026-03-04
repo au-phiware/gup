@@ -12,43 +12,53 @@ use std::collections::HashMap;
 /// Color representation for accessibility rendering.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Color {
+    /// Red channel (0.0–1.0).
     pub r: f32,
+    /// Green channel (0.0–1.0).
     pub g: f32,
+    /// Blue channel (0.0–1.0).
     pub b: f32,
+    /// Alpha channel (0.0–1.0).
     pub a: f32,
 }
 
 impl Color {
+    /// Opaque white.
     pub const WHITE: Self = Self {
         r: 1.0,
         g: 1.0,
         b: 1.0,
         a: 1.0,
     };
+    /// Opaque black.
     pub const BLACK: Self = Self {
         r: 0.0,
         g: 0.0,
         b: 0.0,
         a: 1.0,
     };
+    /// Opaque red.
     pub const RED: Self = Self {
         r: 1.0,
         g: 0.0,
         b: 0.0,
         a: 1.0,
     };
+    /// Opaque green.
     pub const GREEN: Self = Self {
         r: 0.0,
         g: 1.0,
         b: 0.0,
         a: 1.0,
     };
+    /// Opaque blue.
     pub const BLUE: Self = Self {
         r: 0.0,
         g: 0.0,
         b: 1.0,
         a: 1.0,
     };
+    /// Opaque yellow.
     pub const YELLOW: Self = Self {
         r: 1.0,
         g: 1.0,
@@ -407,14 +417,25 @@ pub enum Pattern {
     /// Solid fill
     Solid,
 
-    /// Dot pattern
-    Dots { spacing: f32 },
+    /// Dot pattern.
+    Dots {
+        /// Distance between dots in pixels.
+        spacing: f32,
+    },
 
-    /// Line pattern
-    Lines { spacing: f32, angle: f32 },
+    /// Line pattern.
+    Lines {
+        /// Distance between lines in pixels.
+        spacing: f32,
+        /// Line angle in radians.
+        angle: f32,
+    },
 
-    /// Crosshatch pattern
-    Crosshatch { spacing: f32 },
+    /// Crosshatch pattern.
+    Crosshatch {
+        /// Distance between hatch lines in pixels.
+        spacing: f32,
+    },
 }
 
 impl Pattern {

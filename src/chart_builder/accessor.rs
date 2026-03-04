@@ -181,16 +181,25 @@ pub struct AccessorRegistry<T> {
 /// Union type for different accessor output values.
 #[derive(Debug, Clone, PartialEq)]
 pub enum AccessorValue {
+    /// Single-precision floating-point value.
     Float(f32),
+    /// RGBA colour as four floats.
     Color([f32; 4]),
+    /// UTF-8 string value.
     String(String),
+    /// Two-dimensional position.
     Position([f32; 2]),
+    /// Boolean flag.
     Bool(bool),
     // Additional variants for scale analysis
+    /// Double-precision numeric value.
     Numeric(f64),
+    /// Date-time value in UTC.
     Temporal(chrono::DateTime<chrono::Utc>),
+    /// Categorical string value.
     Categorical(String),
     // Array of floats for statistical computations
+    /// Array of single-precision floats.
     FloatArray(Vec<f32>),
 }
 
@@ -393,6 +402,7 @@ impl<T> Default for AccessorRegistry<T> {
 
 /// Convenience trait for converting closures to accessors with specific output types.
 pub trait IntoAccessor<T, Output> {
+    /// Convert this closure into a named accessor.
     fn into_accessor(self, name: &str) -> ClosureAccessor<T, Output, Self>
     where
         Self: Sized + Fn(&T) -> Output + MaybeSend + MaybeSync;

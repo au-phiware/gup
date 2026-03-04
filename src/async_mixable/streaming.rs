@@ -15,10 +15,15 @@ use tokio_util::sync::CancellationToken;
 /// Statistics for a streaming data source.
 #[derive(Debug, Clone)]
 pub struct StreamStats {
+    /// Total number of items processed so far.
     pub items_processed: u64,
+    /// Current throughput in items per second.
     pub items_per_second: f64,
+    /// Number of items remaining in the source buffer.
     pub buffer_size: usize,
+    /// Whether the stream is actively producing data.
     pub is_live: bool,
+    /// Timestamp of the last statistics update.
     pub last_update: Instant,
 }
 
@@ -76,8 +81,11 @@ pub trait StreamingDataSource<T>: MaybeSend + MaybeSync {
 /// 2D point for visualization.
 #[derive(Debug, Clone, Copy)]
 pub struct Point2D {
+    /// Horizontal coordinate.
     pub x: f32,
+    /// Vertical coordinate.
     pub y: f32,
+    /// RGBA colour in `0.0..=1.0`.
     pub color: [f32; 4],
 }
 

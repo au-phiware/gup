@@ -14,115 +14,179 @@ use super::GupError;
 /// Comprehensive error context with system information and recovery suggestions.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorContext {
+    /// The error that occurred.
     pub error: GupError,
+    /// Unique identifier for this error instance.
     pub error_id: Uuid,
+    /// Timestamp when the error occurred.
     pub timestamp: SystemTime,
+    /// Captured stack trace at the point of error.
     pub stack_trace: Vec<String>,
+    /// System information collected at error time.
     pub system_info: SystemInfo,
+    /// Suggested recovery actions.
     pub recovery_suggestions: Vec<RecoverySuggestion>,
+    /// Additional key-value context pairs.
     pub additional_context: HashMap<String, String>,
 }
 
 /// System information collected at error time.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemInfo {
+    /// GPU adapter and device information.
     pub gpu_info: GpuInfo,
+    /// Platform detection results.
     pub platform: Platform,
+    /// Memory usage statistics.
     pub memory_info: MemoryInfo,
+    /// Performance state at error time.
     pub performance_state: PerformanceState,
 }
 
 /// GPU-specific information for error diagnostics.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GpuInfo {
+    /// Name of the GPU adapter.
     pub adapter_name: String,
+    /// Graphics backend in use.
     pub backend: String,
+    /// Type of GPU device.
     pub device_type: String,
+    /// PCI vendor identifier, if available.
     pub vendor_id: Option<u32>,
+    /// PCI device identifier, if available.
     pub device_id: Option<u32>,
+    /// Total GPU memory in bytes, if available.
     pub memory_size: Option<u64>,
+    /// Enabled GPU features.
     pub features: Vec<String>,
+    /// Device limits as key-value pairs.
     pub limits: HashMap<String, u64>,
 }
 
 /// Platform-specific information.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Platform {
+    /// Operating system name.
     pub os: String,
+    /// CPU architecture.
     pub arch: String,
+    /// Combined target triple string.
     pub target: String,
+    /// Whether WebGPU is available.
     pub webgpu_available: bool,
+    /// Whether WebGL is available.
     pub webgl_available: bool,
 }
 
 /// Memory usage information.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryInfo {
+    /// Total system memory in bytes.
     pub total_system_memory: u64,
+    /// Available system memory in bytes.
     pub available_system_memory: u64,
+    /// GPU memory currently in use in bytes.
     pub gpu_memory_used: u64,
+    /// Total GPU memory in bytes, if known.
     pub gpu_memory_total: Option<u64>,
+    /// Number of active GPU buffers.
     pub buffer_count: usize,
+    /// Number of active GPU textures.
     pub texture_count: usize,
 }
 
 /// Performance state at error time.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceState {
+    /// Current frames per second.
     pub current_fps: f64,
+    /// Target frames per second.
     pub target_fps: f64,
+    /// Current frame time in milliseconds.
     pub frame_time_ms: f64,
+    /// CPU usage as a percentage.
     pub cpu_usage_percent: f32,
+    /// Current memory pressure level.
     pub memory_pressure: MemoryPressure,
+    /// Recent frame times for trend analysis.
     pub recent_frame_times: Vec<f64>,
 }
 
 /// Memory pressure levels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MemoryPressure {
+    /// Memory usage is low and healthy.
     Low,
+    /// Memory usage is moderate.
     Moderate,
+    /// Memory usage is high and may cause issues.
     High,
+    /// Memory usage is critically high.
     Critical,
 }
 
 /// Recovery suggestion with action information.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecoverySuggestion {
+    /// Category of the recovery suggestion.
     pub suggestion_type: SuggestionType,
+    /// Human-readable description of the suggestion.
     pub description: String,
+    /// Concrete recovery action, if applicable.
     pub action: Option<RecoveryAction>,
+    /// Estimated probability of success (0.0 to 1.0).
     pub success_probability: f32,
+    /// Estimated time to execute the recovery.
     pub estimated_time: Duration,
+    /// Whether this suggestion should be shown to the user.
     pub user_visible: bool,
 }
 
 /// Types of recovery suggestions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SuggestionType {
+    /// Recovery can be performed automatically without user intervention.
     AutomaticRecovery,
+    /// Recovery requires a manual action by the user.
     UserAction,
+    /// Recovery requires a configuration change.
     ConfigurationChange,
+    /// Recovery requires a system-level prerequisite.
     SystemRequirement,
+    /// Recovery involves switching to a fallback mode.
     Fallback,
+    /// Recovery requires restarting a component or the application.
     Restart,
 }
 
 /// Specific recovery actions that can be taken.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RecoveryAction {
+    /// Reduce the data batch size by the given factor.
     ReduceBatchSize {
+        /// Multiplicative factor to apply to batch size.
         factor: f32,
     },
+    /// Switch to a simpler fallback shader.
     UseFallbackShader,
+    /// Switch rendering backend to WebGL.
     SwitchToWebGL,
+    /// Enable CPU-based rendering fallback.
     EnableCpuFallback,
+    /// Clear internal caches to free memory.
     ClearCache,
+    /// Reduce rendering quality settings.
     ReduceQuality,
+    /// Restart the GPU device.
     RestartGpu,
+    /// Restart the entire application.
     RestartApplication,
+    /// A user-defined recovery action.
     Custom {
+        /// Name of the custom action.
         action_name: String,
+        /// Parameters for the custom action.
         parameters: HashMap<String, String>,
     },
 }
@@ -130,26 +194,31 @@ pub enum RecoveryAction {
 /// Duration for recovery time estimates.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Duration {
+    /// Duration value in seconds.
     pub seconds: f64,
 }
 
 impl Duration {
+    /// Create a new duration from a value in seconds.
     pub fn new(seconds: f64) -> Self {
         Self { seconds }
     }
 
+    /// Create a new duration from a value in milliseconds.
     pub fn milliseconds(ms: f64) -> Self {
         Self {
             seconds: ms / 1000.0,
         }
     }
 
+    /// Create a duration from a standard library `Duration`.
     pub fn from_std(duration: std::time::Duration) -> Self {
         Self {
             seconds: duration.as_secs_f64(),
         }
     }
 
+    /// Convert this duration to a standard library `Duration`.
     pub fn to_std(&self) -> std::time::Duration {
         std::time::Duration::from_secs_f64(self.seconds)
     }

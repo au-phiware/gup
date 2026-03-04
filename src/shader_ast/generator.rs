@@ -33,6 +33,7 @@ pub struct WgslGenerator {
 }
 
 impl WgslGenerator {
+    /// Create a new generator with the given configuration.
     pub fn new(config: GeneratorConfig) -> Self {
         Self {
             config,

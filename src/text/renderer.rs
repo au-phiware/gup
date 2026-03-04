@@ -62,12 +62,19 @@ struct TextUniforms {
 
 /// Configuration for text rendering
 pub struct TextRenderConfig<'a> {
+    /// The text string to render.
     pub text: &'a str,
+    /// Position of the text in screen coordinates.
     pub position: Vec2,
+    /// Style configuration for the text.
     pub style: &'a TextStyle,
+    /// Font atlas used for glyph lookup and caching.
     pub font_atlas: &'a mut FontAtlas,
+    /// Layout engine for computing glyph positions.
     pub layout_engine: &'a mut TextLayoutEngine,
+    /// Width of the screen in pixels.
     pub screen_width: f32,
+    /// Height of the screen in pixels.
     pub screen_height: f32,
     /// Optional viewport bounds for clipping detection.
     /// When `None`, no clipping is applied (backward compatible).

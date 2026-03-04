@@ -72,21 +72,35 @@ const MAX_HIZ_LEVELS: usize = 12;
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct OcclusionGpuConfig {
+    /// Width of the base mip level in pixels.
     pub base_width: u32,
+    /// Height of the base mip level in pixels.
     pub base_height: u32,
+    /// Number of hierarchical-Z mip levels.
     pub num_levels: u32,
+    /// Total number of instances to test.
     pub instance_count: u32,
+    /// Minimum viewport X coordinate in NDC.
     pub viewport_min_x: f32,
+    /// Maximum viewport X coordinate in NDC.
     pub viewport_max_x: f32,
+    /// Minimum viewport Y coordinate in NDC.
     pub viewport_min_y: f32,
+    /// Maximum viewport Y coordinate in NDC.
     pub viewport_max_y: f32,
+    /// Width of a single pixel in NDC.
     pub pixel_width: f32,
+    /// Height of a single pixel in NDC.
     pub pixel_height: f32,
+    /// Conservative margin added to bounding boxes.
     pub conservative_margin: f32,
+    /// Current hierarchical-Z level being processed.
     pub current_level: u32,
     /// Level offsets packed as 3 × `[u32; 4]` (matching `vec4<u32>` in WGSL).
     pub level_offsets_0: [u32; 4],
+    /// Second group of packed level offsets.
     pub level_offsets_1: [u32; 4],
+    /// Third group of packed level offsets.
     pub level_offsets_2: [u32; 4],
 }
 

@@ -438,6 +438,7 @@ impl<M: Mark> Default for MarkInfoImpl<M> {
 }
 
 impl<M: Mark> MarkInfoImpl<M> {
+    /// Create a new mark info instance for the given mark type.
     pub fn new() -> Self {
         Self {
             _phantom: PhantomData,
@@ -1306,20 +1307,27 @@ impl<T, M: Mark> AttributeBinding<T, M> {
 /// Attribute binding error types.
 #[derive(Debug, Clone)]
 pub enum AttributeError {
-    /// Type mismatch between shader function output and mark attribute
+    /// Type mismatch between shader function output and mark attribute.
     TypeMismatch {
+        /// Name of the attribute that was mismatched.
         attribute: String,
+        /// Expected type name.
         expected: &'static str,
+        /// Actual type name that was provided.
         actual: String,
     },
-    /// Unknown attribute name for the mark type
+    /// Unknown attribute name for the mark type.
     UnknownAttribute {
+        /// Name of the unrecognised attribute.
         attribute: String,
+        /// Mark type that was queried.
         mark_type: &'static str,
     },
-    /// Shader function compilation error
+    /// Shader function compilation error.
     CompilationError {
+        /// Name of the shader function that failed.
         function_name: String,
+        /// Compiler error message.
         error_message: String,
     },
 }

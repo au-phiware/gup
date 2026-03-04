@@ -32,23 +32,38 @@ pub enum LabelPositioningStrategy {
     /// `max_distance` is the furthest (in pixels) a label may be shifted.
     /// `directions` lists the unit offsets to attempt.
     Offset {
+        /// Maximum displacement distance in pixels.
         max_distance: f32,
+        /// Unit-offset directions to attempt.
         directions: Vec<Vec2>,
     },
     /// Rotate all labels by increasing angles until overlaps are resolved.
     ///
     /// Angles are tried in `step`-radian increments up to `max_angle`.
-    Rotate { max_angle: f32, step: f32 },
+    Rotate {
+        /// Maximum rotation angle in radians.
+        max_angle: f32,
+        /// Angle increment per attempt in radians.
+        step: f32,
+    },
     /// Hide lower-priority labels that still overlap.
     ///
     /// Labels with priority below `priority_threshold` may be hidden.
     /// When no explicit priorities are supplied the default is positional
     /// order (first and last labels have highest priority).
-    Hide { priority_threshold: f32 },
+    Hide {
+        /// Minimum priority a label must have to remain visible.
+        priority_threshold: f32,
+    },
     /// Scale label font size down to fit.
     ///
     /// Not yet implemented — reserved for future use.
-    Scale { min_size: f32, max_size: f32 },
+    Scale {
+        /// Minimum font size in pixels.
+        min_size: f32,
+        /// Maximum font size in pixels.
+        max_size: f32,
+    },
 }
 
 impl LabelPositioningStrategy {

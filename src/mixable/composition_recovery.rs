@@ -17,29 +17,44 @@ use std::time::{Duration, Instant};
 pub enum CompositionError {
     /// Component render failure with recovery options
     ComponentFailure {
+        /// Identifier of the failed component.
         component_id: ComponentId,
+        /// Type name of the failed component.
         component_type: String,
+        /// The underlying error.
         error: GupError,
+        /// Available recovery options.
         recovery_options: Vec<RecoveryOption>,
     },
     /// Resource allocation failure
     ResourceFailure {
+        /// Type of resource that failed to allocate.
         resource_type: String,
+        /// Requested allocation size in bytes.
         requested_size: usize,
+        /// Available size in bytes.
         available_size: usize,
+        /// Suggestions for resolving the failure.
         suggestions: Vec<String>,
     },
     /// Performance threshold exceeded
     PerformanceThreshold {
+        /// Name of the operation that exceeded the threshold.
         operation: String,
+        /// Actual duration of the operation.
         duration: Duration,
+        /// Maximum allowed duration.
         threshold: Duration,
+        /// Recommendations for improving performance.
         recommendations: Vec<String>,
     },
     /// Validation failure
     ValidationFailure {
+        /// Type of validation that failed.
         validation_type: String,
+        /// Details about the failure.
         details: String,
+        /// Suggestions for fixing the issue.
         fix_suggestions: Vec<String>,
     },
 }
@@ -53,11 +68,16 @@ pub enum RecoveryOption {
     Fallback(String),
     /// Retry with different parameters
     Retry {
+        /// Maximum number of retry attempts.
         max_attempts: u32,
+        /// Delay between retries.
         backoff: Duration,
     },
     /// Render placeholder
-    Placeholder { message: String },
+    Placeholder {
+        /// Message to display in the placeholder.
+        message: String,
+    },
 }
 
 type ComponentId = u64;
@@ -77,22 +97,34 @@ pub struct ErrorHandlingPolicy {
     pub continue_on_fatal: bool,
 }
 
+/// Recovery strategy for failed composition components.
 #[derive(Debug, Clone)]
 pub enum RecoveryStrategy {
+    /// Fail immediately on error.
     Fail,
+    /// Skip the failed component.
     Skip,
+    /// Use a fallback visualization.
     Fallback(CompositionFallbackType),
+    /// Retry the operation with backoff.
     Retry {
+        /// Maximum number of retry attempts.
         max_attempts: u32,
+        /// Delay between retries.
         backoff: Duration,
     },
 }
 
+/// Types of fallback visualizations for failed components.
 #[derive(Debug, Clone)]
 pub enum CompositionFallbackType {
+    /// Render nothing.
     Empty,
+    /// Render a placeholder message.
     Placeholder(String),
+    /// Render simple geometry as a stand-in.
     SimpleGeometry,
+    /// Use the last successfully rendered output.
     LastKnownGood,
 }
 
@@ -125,6 +157,7 @@ pub struct RobustCompositionExecutor {
 }
 
 impl RobustCompositionExecutor {
+    /// Create a new executor with the given error handling policy.
     pub fn new(policy: ErrorHandlingPolicy) -> Self {
         Self {
             policy,
@@ -359,10 +392,15 @@ impl RobustCompositionExecutor {
 /// Result of composition execution with diagnostics
 #[derive(Debug)]
 pub struct CompositionResult {
+    /// Whether the composition executed successfully.
     pub success: bool,
+    /// Total execution time.
     pub execution_time: Duration,
+    /// Errors recorded during execution.
     pub errors: Vec<ErrorRecord>,
+    /// Performance metrics from the execution.
     pub performance_metrics: CompositionPerformanceMetrics,
+    /// Health status after execution.
     pub health_status: HealthStatus,
 }
 
@@ -372,13 +410,20 @@ pub struct ErrorContextCollector {
     current_context: Vec<String>,
 }
 
+/// Record of an error encountered during composition.
 #[derive(Debug, Clone)]
 pub struct ErrorRecord {
+    /// Identifier of the component that failed.
     pub component_id: ComponentId,
+    /// Type name of the component that failed.
     pub component_type: String,
+    /// The error that occurred.
     pub error: GupError,
+    /// Contextual information at the time of the error.
     pub context: Vec<String>,
+    /// When the error occurred.
     pub timestamp: Instant,
+    /// Recovery action that was taken, if any.
     pub recovery_action: Option<String>,
 }
 
@@ -417,21 +462,33 @@ pub struct CompositionPerformanceMonitor {
     start_times: HashMap<ComponentId, Instant>,
 }
 
+/// Aggregated performance metrics for a composition execution.
 #[derive(Debug, Clone, Default)]
 pub struct CompositionPerformanceMetrics {
+    /// Total wall-clock execution time.
     pub total_execution_time: Duration,
+    /// Per-component execution times.
     pub component_times: HashMap<ComponentId, Duration>,
+    /// Time spent on error recovery.
     pub recovery_overhead: Duration,
+    /// Proportion of cache hits (0.0 to 1.0).
     pub cache_hit_rate: f32,
+    /// Identified performance bottlenecks.
     pub bottlenecks: Vec<PerformanceBottleneck>,
 }
 
+/// A performance bottleneck identified during composition.
 #[derive(Debug, Clone)]
 pub struct PerformanceBottleneck {
+    /// Identifier of the bottleneck component.
     pub component_id: ComponentId,
+    /// Type name of the bottleneck component.
     pub component_type: String,
+    /// Duration spent in this component.
     pub duration: Duration,
+    /// Percentage of total execution time.
     pub percentage_of_total: f32,
+    /// Recommendations for improving performance.
     pub recommendations: Vec<String>,
 }
 
@@ -515,10 +572,14 @@ struct ComponentHealth {
     consecutive_failures: u32,
 }
 
+/// Overall health status of the composition system.
 #[derive(Debug, Clone)]
 pub struct HealthStatus {
+    /// Overall health score (0.0 = unhealthy, 1.0 = healthy).
     pub overall_health: f32, // 0.0 to 1.0
+    /// Components currently in an unhealthy state.
     pub unhealthy_components: Vec<ComponentId>,
+    /// Recommendations for improving health.
     pub recommendations: Vec<String>,
 }
 
@@ -723,12 +784,16 @@ pub mod debug {
 
     /// Interactive debugging session
     pub struct DebugSession {
+        /// Textual representation of the composition tree.
         pub composition_tree: String,
+        /// Component IDs to break on during stepping.
         pub breakpoints: Vec<ComponentId>,
+        /// Whether step-by-step execution is enabled.
         pub step_mode: bool,
     }
 
     impl DebugSession {
+        /// Create a new debug session for the given composition.
         pub fn new<T: Mixable>(composition: &T) -> Self {
             Self {
                 composition_tree: CompositionVisualizer::visualize(composition),
@@ -737,14 +802,17 @@ pub mod debug {
             }
         }
 
+        /// Add a breakpoint for a specific component.
         pub fn add_breakpoint(&mut self, component_id: ComponentId) {
             self.breakpoints.push(component_id);
         }
 
+        /// Enable step-by-step execution mode.
         pub fn enable_step_mode(&mut self) {
             self.step_mode = true;
         }
 
+        /// Print the composition tree to stdout.
         pub fn print_tree(&self) {
             println!("Composition Tree:");
             println!("{}", self.composition_tree);
@@ -758,6 +826,7 @@ pub mod debug {
     }
 
     impl CompositionProfiler {
+        /// Create a new empty profiler.
         pub fn new() -> Self {
             Self {
                 timings: HashMap::new(),
@@ -765,16 +834,19 @@ pub mod debug {
             }
         }
 
+        /// Begin timing an operation by name.
         pub fn start_timing(&mut self, operation: &str) {
             self.current_stack.push(operation.to_string());
         }
 
+        /// End timing the current operation, recording the duration.
         pub fn end_timing(&mut self, duration: Duration) {
             if let Some(operation) = self.current_stack.pop() {
                 self.timings.entry(operation).or_default().push(duration);
             }
         }
 
+        /// Generate a human-readable performance report.
         pub fn generate_report(&self) -> String {
             let mut report = String::from("Performance Report:\n");
 

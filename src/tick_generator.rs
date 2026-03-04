@@ -515,25 +515,37 @@ impl TickGenerator for LogarithmicTickGenerator {
 /// Time unit enumeration for time scale tick generation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TimeUnit {
+    /// Millisecond resolution.
     Millisecond,
+    /// Second resolution.
     Second,
+    /// Minute resolution.
     Minute,
+    /// Hour resolution.
     Hour,
+    /// Day resolution.
     Day,
+    /// Week resolution.
     Week,
+    /// Month resolution.
     Month,
+    /// Year resolution.
     Year,
 }
 
 /// Time interval specification for tick generation.
 #[derive(Debug, Clone, Copy)]
 pub struct TimeInterval {
+    /// Time unit for this interval.
     pub unit: TimeUnit,
+    /// Number of units per interval.
     pub count: u32,
+    /// Interval duration in milliseconds.
     pub milliseconds: u64,
 }
 
 impl TimeInterval {
+    /// Create a new time interval for the given unit and count.
     pub fn new(unit: TimeUnit, count: u32) -> Self {
         let milliseconds = match unit {
             TimeUnit::Millisecond => count as u64,

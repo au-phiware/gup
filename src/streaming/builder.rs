@@ -41,16 +41,25 @@ use super::stream::DataStream;
 pub enum DataStreamError {
     /// The requested capacity is invalid (e.g. zero).
     #[error("Invalid stream capacity: {message}")]
-    InvalidCapacity { message: String },
+    InvalidCapacity {
+        /// Human-readable explanation of the capacity error.
+        message: String,
+    },
 
     /// The chosen [`StreamMode`] and [`BackpressureStrategy`] combination is
     /// not supported.
     #[error("Unsupported mode/backpressure combination: {message}")]
-    UnsupportedCombination { message: String },
+    UnsupportedCombination {
+        /// Human-readable explanation of the incompatibility.
+        message: String,
+    },
 
     /// A required configuration field was not set.
     #[error("Missing required configuration: {message}")]
-    MissingConfiguration { message: String },
+    MissingConfiguration {
+        /// Human-readable description of the missing field.
+        message: String,
+    },
 }
 
 /// Fluent builder for constructing a [`DataStream<T>`].

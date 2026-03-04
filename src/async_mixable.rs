@@ -40,9 +40,13 @@ pub use utils::*;
 /// Progress information for async rendering operations.
 #[derive(Debug, Clone)]
 pub struct RenderProgress {
+    /// Number of units completed so far.
     pub current: u64,
+    /// Total number of units, if known.
     pub total: Option<u64>,
+    /// Human-readable description of the current stage.
     pub stage: String,
+    /// Estimated wall-clock time until completion, if available.
     pub estimated_time_remaining: Option<Duration>,
 }
 
@@ -97,6 +101,7 @@ pub enum AsyncRenderStrategy {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 pub trait AsyncMixable: MaybeSend + MaybeSync + Debug {
+    /// The output produced by rendering this component.
     type Output;
 
     /// Asynchronously render this component.

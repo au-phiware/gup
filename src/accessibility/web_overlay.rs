@@ -1130,10 +1130,12 @@ impl Drop for WebDomOverlay {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+/// Stub DOM overlay used on non-WASM targets.
 pub struct WebDomOverlay;
 
 #[cfg(not(target_arch = "wasm32"))]
 impl WebDomOverlay {
+    /// Create a no-op overlay for non-WASM platforms.
     pub fn new() -> Result<Self, crate::accessibility::platform::AccessibilityError> {
         Ok(WebDomOverlay)
     }

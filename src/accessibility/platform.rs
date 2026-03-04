@@ -186,6 +186,7 @@ impl Default for LinuxAccessibility {
 
 #[cfg(target_os = "linux")]
 impl LinuxAccessibility {
+    /// Create a new Linux accessibility bridge.
     pub fn new() -> Self {
         Self {
             atspi_manager: crate::accessibility::atspi::AtSpiManager::new(
@@ -593,6 +594,7 @@ impl PlatformAccessibility for WebAccessibility {
 pub struct NullAccessibility;
 
 impl NullAccessibility {
+    /// Create a new no-op accessibility implementation.
     pub fn new() -> Self {
         Self
     }

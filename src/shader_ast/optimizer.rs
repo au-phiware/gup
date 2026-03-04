@@ -11,7 +11,9 @@ use std::collections::HashSet;
 
 /// Result of an optimization pass: whether it changed anything.
 pub struct OptimizationResult {
+    /// Whether the pass changed the module.
     pub changed: bool,
+    /// Human-readable description of what changed.
     pub description: String,
 }
 
@@ -883,10 +885,15 @@ fn substitute_ident(expr: &mut Expr, name: &str, replacement: &Expr) {
 /// Configuration for the optimization pipeline.
 #[derive(Debug, Clone)]
 pub struct AstOptimizationConfig {
+    /// Enable dead code elimination pass.
     pub enable_dead_code_elimination: bool,
+    /// Enable constant folding pass.
     pub enable_constant_folding: bool,
+    /// Enable function inlining pass.
     pub enable_function_inlining: bool,
+    /// Maximum number of statements for a function to be inlined.
     pub inline_max_statements: usize,
+    /// Maximum number of call sites for a function to be inlined.
     pub inline_max_call_sites: usize,
 }
 

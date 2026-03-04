@@ -183,10 +183,15 @@ impl Default for ErrorContextCache {
 /// Cache statistics for monitoring.
 #[derive(Debug, Clone, Copy)]
 pub struct CacheStats {
+    /// Number of cache hits.
     pub hits: u64,
+    /// Number of cache misses.
     pub misses: u64,
+    /// Cache hit rate as a ratio.
     pub hit_rate: f64,
+    /// Current number of entries in the cache.
     pub cache_size: usize,
+    /// Maximum number of entries the cache can hold.
     pub max_cache_size: usize,
 }
 

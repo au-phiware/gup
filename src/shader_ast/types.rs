@@ -11,9 +11,13 @@ use std::fmt;
 /// Scalar types in WGSL.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ScalarType {
+    /// 32-bit floating point.
     F32,
+    /// 32-bit signed integer.
     I32,
+    /// 32-bit unsigned integer.
     U32,
+    /// Boolean value.
     Bool,
 }
 
@@ -124,7 +128,9 @@ impl WgslType {
 /// A function parameter.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Parameter {
+    /// Parameter name.
     pub name: String,
+    /// Parameter type.
     pub ty: WgslType,
     /// Attributes on the parameter (e.g., `@builtin(global_invocation_id)`).
     pub attributes: Vec<Attribute>,
@@ -133,30 +139,43 @@ pub struct Parameter {
 /// A struct field definition.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructField {
+    /// Field name.
     pub name: String,
+    /// Field type.
     pub ty: WgslType,
+    /// Attributes on the field.
     pub attributes: Vec<Attribute>,
 }
 
 /// A struct definition.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructDef {
+    /// Struct name.
     pub name: String,
+    /// Fields of the struct.
     pub fields: Vec<StructField>,
 }
 
 /// A function attribute (e.g., `@vertex`, `@group(0)`, `@binding(0)`).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Attribute {
+    /// Vertex shader entry point.
     Vertex,
+    /// Fragment shader entry point.
     Fragment,
+    /// Compute shader entry point.
     Compute,
     /// `@workgroup_size(x)`, `@workgroup_size(x, y)`, or `@workgroup_size(x, y, z)`.
     WorkgroupSize(u32, Option<u32>, Option<u32>),
+    /// Bind group index.
     Group(u32),
+    /// Binding index within a group.
     Binding(u32),
+    /// Location index for input/output.
     Location(u32),
+    /// Built-in variable reference.
     Builtin(String),
+    /// Custom attribute string.
     Custom(String),
 }
 
@@ -186,7 +205,9 @@ impl fmt::Display for Attribute {
 /// A unary operator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryOp {
+    /// Arithmetic negation: `-expr`.
     Negate,
+    /// Logical negation: `!expr`.
     Not,
     /// Address-of: `&expr`.
     AddressOf,
@@ -197,23 +218,41 @@ pub enum UnaryOp {
 /// A binary operator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryOp {
+    /// Addition (`+`).
     Add,
+    /// Subtraction (`-`).
     Sub,
+    /// Multiplication (`*`).
     Mul,
+    /// Division (`/`).
     Div,
+    /// Modulo (`%`).
     Mod,
+    /// Logical AND (`&&`).
     And,
+    /// Logical OR (`||`).
     Or,
+    /// Equality (`==`).
     Equal,
+    /// Inequality (`!=`).
     NotEqual,
+    /// Less than (`<`).
     Less,
+    /// Less than or equal (`<=`).
     LessEqual,
+    /// Greater than (`>`).
     Greater,
+    /// Greater than or equal (`>=`).
     GreaterEqual,
+    /// Bitwise AND (`&`).
     BitwiseAnd,
+    /// Bitwise OR (`|`).
     BitwiseOr,
+    /// Bitwise XOR (`^`).
     BitwiseXor,
+    /// Left shift (`<<`).
     ShiftLeft,
+    /// Right shift (`>>`).
     ShiftRight,
 }
 
@@ -266,9 +305,13 @@ pub enum Expr {
 /// A literal value.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
+    /// Floating-point literal.
     Float(f64),
+    /// Signed integer literal.
     Int(i64),
+    /// Unsigned integer literal.
     UInt(u64),
+    /// Boolean literal.
     Bool(bool),
 }
 
@@ -277,9 +320,13 @@ pub enum Literal {
 pub enum Statement {
     /// Variable declaration: `let name: ty = expr;` or `var name: ty = expr;`.
     Let {
+        /// Variable name.
         name: String,
+        /// Optional explicit type annotation.
         ty: Option<WgslType>,
+        /// Initializer expression.
         value: Expr,
+        /// Whether the binding is mutable (`var` vs `let`).
         mutable: bool,
     },
     /// Assignment: `target = value;`.
@@ -290,26 +337,38 @@ pub enum Statement {
     Return(Option<Expr>),
     /// If statement: `if (condition) { body } else { else_body }`.
     If {
+        /// Condition expression.
         condition: Expr,
+        /// Body executed when the condition is true.
         body: Block,
+        /// Optional else branch.
         else_body: Option<Block>,
     },
     /// For loop: `for (init; condition; update) { body }`.
     For {
+        /// Optional initializer statement.
         init: Option<Box<Statement>>,
+        /// Optional loop condition.
         condition: Option<Expr>,
+        /// Optional update statement.
         update: Option<Box<Statement>>,
+        /// Loop body.
         body: Block,
     },
     /// Loop: `loop { body }`.
-    Loop { body: Block },
+    Loop {
+        /// Loop body.
+        body: Block,
+    },
     /// Break statement.
     Break,
     /// Continue statement.
     Continue,
     /// Switch statement: `switch (expr) { case N: { ... } default: { ... } }`.
     Switch {
+        /// Expression being switched on.
         subject: Expr,
+        /// Switch cases including the optional default.
         cases: Vec<SwitchCase>,
     },
     /// Expression statement (function call as statement).
@@ -323,20 +382,24 @@ pub enum Statement {
 pub struct SwitchCase {
     /// The match expression, or `None` for `default`.
     pub selector: Option<Expr>,
+    /// Statements executed when this case matches.
     pub body: Block,
 }
 
 /// A block of statements.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Block {
+    /// Ordered list of statements in the block.
     pub statements: Vec<Statement>,
 }
 
 impl Block {
+    /// Create a new block from a list of statements.
     pub fn new(statements: Vec<Statement>) -> Self {
         Self { statements }
     }
 
+    /// Create an empty block with no statements.
     pub fn empty() -> Self {
         Self {
             statements: Vec::new(),
@@ -347,28 +410,39 @@ impl Block {
 /// A function definition in the AST.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function {
+    /// Function name.
     pub name: String,
+    /// Formal parameters.
     pub parameters: Vec<Parameter>,
+    /// Return type, or `None` for void functions.
     pub return_type: Option<WgslType>,
     /// Attributes on the return type (e.g., `@location(0)`).
     pub return_attributes: Vec<Attribute>,
+    /// Function body.
     pub body: Block,
+    /// Attributes on the function (e.g., `@vertex`).
     pub attributes: Vec<Attribute>,
 }
 
 /// A global variable/uniform declaration.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GlobalVar {
+    /// Variable name.
     pub name: String,
+    /// Variable type.
     pub ty: WgslType,
+    /// Address space (uniform, storage, etc.).
     pub address_space: AddressSpace,
+    /// Attributes (e.g., `@group`, `@binding`).
     pub attributes: Vec<Attribute>,
 }
 
 /// Access mode for storage address space.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AccessMode {
+    /// Read-only access.
     Read,
+    /// Read-write access.
     ReadWrite,
 }
 
@@ -384,9 +458,13 @@ impl fmt::Display for AccessMode {
 /// WGSL address spaces for global variables.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AddressSpace {
+    /// Uniform address space for read-only data.
     Uniform,
+    /// Storage address space with an access mode.
     Storage(AccessMode),
+    /// Private address space (per-invocation).
     Private,
+    /// Workgroup shared address space.
     Workgroup,
     /// Function-scope address space (used in pointer types).
     Function,
@@ -407,21 +485,29 @@ impl fmt::Display for AddressSpace {
 /// A top-level constant declaration: `const NAME: TYPE = EXPR;`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GlobalConst {
+    /// Constant name.
     pub name: String,
+    /// Optional explicit type annotation.
     pub ty: Option<WgslType>,
+    /// Constant value expression.
     pub value: Expr,
 }
 
 /// Top-level WGSL module containing all definitions.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WgslModule {
+    /// Struct definitions.
     pub structs: Vec<StructDef>,
+    /// Global variable declarations.
     pub globals: Vec<GlobalVar>,
+    /// Top-level constant declarations.
     pub constants: Vec<GlobalConst>,
+    /// Function definitions.
     pub functions: Vec<Function>,
 }
 
 impl WgslModule {
+    /// Create an empty WGSL module.
     pub fn new() -> Self {
         Self {
             structs: Vec::new(),

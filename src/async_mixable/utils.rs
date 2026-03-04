@@ -558,10 +558,15 @@ impl Default for AsyncPerformanceMonitor {
 /// Performance statistics for a specific component.
 #[derive(Debug, Clone)]
 pub struct ComponentStats {
+    /// Index of the component these statistics describe.
     pub component_index: usize,
+    /// Number of timing samples collected.
     pub sample_count: usize,
+    /// Mean render duration across all samples.
     pub average_time: Option<Duration>,
+    /// Shortest recorded render duration.
     pub min_time: Option<Duration>,
+    /// Longest recorded render duration.
     pub max_time: Option<Duration>,
 }
 

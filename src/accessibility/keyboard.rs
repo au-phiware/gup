@@ -373,22 +373,31 @@ pub enum KeyEvent {
 
     /// Arrow keys
     ArrowUp,
+    /// Arrow down key.
     ArrowDown,
+    /// Arrow left key.
     ArrowLeft,
+    /// Arrow right key.
     ArrowRight,
 
     /// Action keys
     Enter,
+    /// Space bar key.
     Space,
+    /// Escape key.
     Escape,
 }
 
 /// Direction for spatial navigation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
+    /// Upward direction.
     Up,
+    /// Downward direction.
     Down,
+    /// Leftward direction.
     Left,
+    /// Rightward direction.
     Right,
 }
 
@@ -408,7 +417,10 @@ pub enum AccessibilityAction {
     ///
     /// `forward: true` means the user pressed Down (advance to next dimension),
     /// `forward: false` means the user pressed Up (return to previous dimension).
-    DimensionCycleRequested { forward: bool },
+    DimensionCycleRequested {
+        /// `true` for next dimension (Down), `false` for previous (Up).
+        forward: bool,
+    },
 }
 
 /// Helper function to check if a point is in a direction from another point.

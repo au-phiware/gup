@@ -69,7 +69,9 @@ pub struct SortConfig {
     pub prefix_block_offset: u32,
     /// For prefix sum: offset in histograms[] where the data to scan starts.
     pub prefix_data_offset: u32,
+    /// Padding for GPU alignment.
     pub _pad0: u32,
+    /// Padding for GPU alignment.
     pub _pad1: u32,
 }
 

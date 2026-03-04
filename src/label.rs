@@ -207,9 +207,13 @@ pub struct LabelPosition {
 /// Margin requirements for labels.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Margins {
+    /// Top margin in pixels.
     pub top: f32,
+    /// Right margin in pixels.
     pub right: f32,
+    /// Bottom margin in pixels.
     pub bottom: f32,
+    /// Left margin in pixels.
     pub left: f32,
 }
 

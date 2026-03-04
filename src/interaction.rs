@@ -60,17 +60,22 @@ use wgpu::{
 /// Geometric shapes for spatial queries
 pub use crate::math::Vec2;
 
+/// Axis-aligned bounding rectangle defined by minimum and maximum corners.
 #[derive(Debug, Clone, Copy)]
 pub struct Rect {
+    /// Minimum corner of the rectangle.
     pub min: Vec2,
+    /// Maximum corner of the rectangle.
     pub max: Vec2,
 }
 
 impl Rect {
+    /// Create a new rectangle from minimum and maximum corners.
     pub fn new(min: Vec2, max: Vec2) -> Self {
         Self { min, max }
     }
 
+    /// Create a new rectangle from a center point and size.
     pub fn from_center_size(center: Vec2, size: Vec2) -> Self {
         let half_size = size * 0.5;
         Self {
@@ -79,14 +84,17 @@ impl Rect {
         }
     }
 
+    /// Return the width of the rectangle.
     pub fn width(&self) -> f32 {
         self.max.x - self.min.x
     }
 
+    /// Return the height of the rectangle.
     pub fn height(&self) -> f32 {
         self.max.y - self.min.y
     }
 
+    /// Return the center point of the rectangle.
     pub fn center(&self) -> Vec2 {
         (self.min + self.max) * 0.5
     }
@@ -132,6 +140,7 @@ pub struct ElementHit {
 }
 
 impl ElementHit {
+    /// Create a new element hit with the given identifiers, distance and intersection point.
     pub fn new(
         element_id: u32,
         selection_id: u32,
@@ -147,6 +156,7 @@ impl ElementHit {
         }
     }
 
+    /// Attach a metadata key-value pair to this hit.
     pub fn with_metadata(mut self, key: &str, value: &str) -> Self {
         self.metadata.insert(key.to_string(), value.to_string());
         self
@@ -165,6 +175,7 @@ pub struct TouchPoint {
 }
 
 impl TouchPoint {
+    /// Create a new touch point with the given id, position and timestamp.
     pub fn new(id: u64, position: Vec2, timestamp: f64) -> Self {
         Self {
             id,
@@ -266,6 +277,7 @@ pub struct InteractionEvent {
 }
 
 impl InteractionEvent {
+    /// Create a new interaction event with the given type and screen position.
     pub fn new(interaction_type: &str, screen_position: Vec2) -> Self {
         Self {
             interaction_type: interaction_type.to_string(),
@@ -284,16 +296,19 @@ impl InteractionEvent {
         }
     }
 
+    /// Set the world position for this event.
     pub fn with_world_position(mut self, world_position: Vec2) -> Self {
         self.world_position = Some(world_position);
         self
     }
 
+    /// Attach an element hit to this event.
     pub fn with_hit(mut self, hit: ElementHit) -> Self {
         self.hit = Some(hit);
         self
     }
 
+    /// Attach a metadata key-value pair to this event.
     pub fn with_metadata(mut self, key: &str, value: &str) -> Self {
         self.metadata.insert(key.to_string(), value.to_string());
         self
@@ -379,6 +394,7 @@ pub struct GpuInteractionQuery {
 }
 
 impl GpuInteractionQuery {
+    /// Create a point query at the given position.
     pub fn point(position: Vec2, max_results: u32) -> Self {
         Self {
             query_type: 0,
@@ -389,6 +405,7 @@ impl GpuInteractionQuery {
         }
     }
 
+    /// Create a region query covering the given rectangle.
     pub fn region(rect: Rect, max_results: u32) -> Self {
         let center = rect.center();
         Self {
@@ -453,6 +470,7 @@ pub struct QueryStats {
 }
 
 impl QueryStats {
+    /// Record the results of a single query.
     pub fn update(&mut self, elements_tested: u32, hits_found: u32, query_time_us: f32) {
         self.total_queries += 1;
         self.total_elements_tested += elements_tested as u64;
@@ -467,6 +485,7 @@ impl QueryStats {
         }
     }
 
+    /// Return the ratio of hits to elements tested.
     pub fn hit_rate(&self) -> f32 {
         if self.total_elements_tested > 0 {
             self.total_hits as f32 / self.total_elements_tested as f32
@@ -504,9 +523,13 @@ pub struct SpatialIndexConfig {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct SpatialCell {
+    /// Number of elements in this cell.
     pub element_count: u32,
+    /// Start index into the element array.
     pub element_start_index: u32,
+    /// Minimum bounds of this cell in world coordinates.
     pub bounds_min: [f32; 2],
+    /// Maximum bounds of this cell in world coordinates.
     pub bounds_max: [f32; 2],
 }
 
@@ -546,6 +569,7 @@ pub struct MortonQueryConfig {
 pub struct HitTestConfig {
     /// Actual number of queries dispatched (not the buffer capacity).
     pub query_count: u32,
+    /// Padding for 16-byte alignment.
     pub _padding: [u32; 3],
 }
 
@@ -2881,8 +2905,11 @@ pub trait Renderable: MaybeSend + MaybeSync {
 /// Element data for interaction processing
 #[derive(Debug, Clone)]
 pub struct InteractionElement {
+    /// Position in world coordinates.
     pub position: [f32; 2],
+    /// Width and height of the element.
     pub size: [f32; 2],
+    /// Mark type identifier for the element.
     pub mark_type: u32,
 }
 

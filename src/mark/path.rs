@@ -49,15 +49,20 @@ pub enum PathCommand {
     MoveTo(crate::Vec2),
     /// Draw a line to a position
     LineTo(crate::Vec2),
-    /// Draw a quadratic Bezier curve
+    /// Draw a quadratic Bezier curve.
     QuadraticCurveTo {
+        /// Control point.
         control: crate::Vec2,
+        /// End point.
         end: crate::Vec2,
     },
-    /// Draw a cubic Bezier curve
+    /// Draw a cubic Bezier curve.
     CubicCurveTo {
+        /// First control point.
         control1: crate::Vec2,
+        /// Second control point.
         control2: crate::Vec2,
+        /// End point.
         end: crate::Vec2,
     },
     /// Close the path by drawing a line to the start

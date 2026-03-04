@@ -125,17 +125,24 @@ impl<T> AccessorFunction<T> {
 /// Identifier for different axes in a chart system.
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
 pub enum AxisId {
+    /// The horizontal axis.
     XAxis,
+    /// The vertical axis.
     YAxis,
+    /// The colour-encoding axis.
     ColorAxis,
+    /// The size-encoding axis.
     SizeAxis,
 }
 
 /// Data value types for scale analysis.
 #[derive(Debug, Clone)]
 pub enum DataValue {
+    /// A numeric value.
     Numeric(f64),
-    Temporal(i64), // Unix timestamp in milliseconds
+    /// A temporal value as a Unix timestamp in milliseconds.
+    Temporal(i64),
+    /// A categorical (string) value.
     Categorical(String),
 }
 
@@ -156,59 +163,89 @@ impl From<AccessorValue> for DataValue {
 /// Characteristics of a data field for scale selection.
 #[derive(Debug, Clone)]
 pub struct DataCharacteristics {
+    /// The type of data (numeric, temporal, or categorical).
     pub data_type: DataType,
+    /// The minimum observed value, if available.
     pub min_value: Option<f64>,
+    /// The maximum observed value, if available.
     pub max_value: Option<f64>,
+    /// Distribution characteristics of the data.
     pub distribution: Distribution,
+    /// Time range information, present for temporal data.
     pub temporal_range: Option<TemporalRange>,
+    /// Distinct category labels, present for categorical data.
     pub categories: Option<Vec<String>>,
+    /// The scale type recommended for this data.
     pub recommended_scale: ScaleType,
+    /// The number of data samples analysed.
     pub sample_count: usize,
+    /// Whether the data contains zero.
     pub has_zero: bool,
+    /// Whether the data contains negative values.
     pub has_negative: bool,
 }
 
 /// Types of data for scale selection.
 #[derive(Debug, Clone, PartialEq)]
 pub enum DataType {
+    /// Continuous numeric data.
     Numeric,
+    /// Time-based data.
     Temporal,
+    /// Discrete categorical data.
     Categorical,
 }
 
 /// Distribution characteristics of numeric data.
 #[derive(Debug, Clone)]
 pub struct Distribution {
+    /// Whether the data appears to follow a logarithmic distribution.
     pub is_logarithmic: bool,
+    /// The number of orders of magnitude the data spans.
     pub span_orders_of_magnitude: f64,
+    /// An estimate of data density.
     pub density_estimate: f64,
 }
 
 /// Time range information for temporal data.
 #[derive(Debug, Clone)]
 pub struct TemporalRange {
+    /// The start of the range as a Unix timestamp.
     pub start_timestamp: i64,
+    /// The end of the range as a Unix timestamp.
     pub end_timestamp: i64,
+    /// The duration of the range in milliseconds.
     pub duration_ms: i64,
 }
 
 /// Recommended scale types with configuration.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScaleType {
+    /// A linear scale.
     Linear {
+        /// Whether to round the domain to nice values.
         nice_domain: bool,
     },
+    /// A logarithmic scale.
     Logarithmic {
+        /// The logarithm base.
         base: f64,
     },
+    /// A temporal scale.
     Temporal {
+        /// The time unit for tick generation.
         unit: TimeUnit,
     },
+    /// An ordinal (categorical) scale.
     Ordinal {
+        /// The ordered category labels.
         categories: Vec<String>,
     },
+    /// A band scale for bar-chart-style positioning.
     Band {
+        /// The ordered category labels.
         categories: Vec<String>,
+        /// Inner padding between bands as a fraction.
         padding: f32,
     },
 }
@@ -216,13 +253,21 @@ pub enum ScaleType {
 /// Time units for temporal scales.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TimeUnit {
+    /// Millisecond resolution.
     Millisecond,
+    /// Second resolution.
     Second,
+    /// Minute resolution.
     Minute,
+    /// Hour resolution.
     Hour,
+    /// Day resolution.
     Day,
+    /// Week resolution.
     Week,
+    /// Month resolution.
     Month,
+    /// Year resolution.
     Year,
 }
 
@@ -680,6 +725,7 @@ pub struct IntegratedLogarithmicScale {
 }
 
 impl IntegratedLogarithmicScale {
+    /// Creates a new logarithmic scale with the given domain and base.
     pub fn new(domain_min: f64, domain_max: f64, base: f64) -> Self {
         Self {
             inner: LogarithmicScale::new(domain_min, domain_max, base),
@@ -787,6 +833,7 @@ pub struct IntegratedTimeScale {
 }
 
 impl IntegratedTimeScale {
+    /// Creates a new time scale with the given domain.
     pub fn new(domain_min: f64, domain_max: f64) -> Self {
         Self {
             inner: TimeScale::new(domain_min, domain_max),
@@ -892,6 +939,7 @@ pub struct IntegratedOrdinalScale {
 }
 
 impl IntegratedOrdinalScale {
+    /// Creates a new ordinal scale with the given categories.
     pub fn new(categories: Vec<String>) -> Self {
         Self {
             categories,
@@ -900,6 +948,7 @@ impl IntegratedOrdinalScale {
         }
     }
 
+    /// Creates a new ordinal scale with the given categories and padding.
     pub fn new_with_padding(categories: Vec<String>, padding: f32) -> Self {
         Self {
             categories,

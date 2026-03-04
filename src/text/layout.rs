@@ -22,20 +22,29 @@ pub struct ViewportBounds {
 /// Text margin requirements around container boundaries.
 #[derive(Debug, Clone)]
 pub struct TextMargins {
+    /// Top margin in pixels.
     pub top: f32,
+    /// Right margin in pixels.
     pub right: f32,
+    /// Bottom margin in pixels.
     pub bottom: f32,
+    /// Left margin in pixels.
     pub left: f32,
 }
 
 /// Result of clipping detection analysis.
 #[derive(Debug, Clone)]
 pub enum ClippingResult {
+    /// Text is fully visible with no clipping.
     NoClipping,
+    /// Text is partially clipped on one or more edges.
     PartialClipping {
+        /// Edges where clipping occurs.
         clipped_edges: Vec<ClippedEdge>,
+        /// Fraction of text still visible, from 0.0 to 1.0.
         visible_percentage: f32, // 0.0-1.0
     },
+    /// Text is entirely outside the visible area.
     CompletelyClipped,
 }
 
@@ -75,18 +84,38 @@ impl ClippingResult {
 /// Specific edge where text is clipped.
 #[derive(Debug, Clone)]
 pub enum ClippedEdge {
-    Top { overflow_pixels: f32 },
-    Right { overflow_pixels: f32 },
-    Bottom { overflow_pixels: f32 },
-    Left { overflow_pixels: f32 },
+    /// Clipped at the top edge.
+    Top {
+        /// Number of pixels overflowing beyond the top edge.
+        overflow_pixels: f32,
+    },
+    /// Clipped at the right edge.
+    Right {
+        /// Number of pixels overflowing beyond the right edge.
+        overflow_pixels: f32,
+    },
+    /// Clipped at the bottom edge.
+    Bottom {
+        /// Number of pixels overflowing beyond the bottom edge.
+        overflow_pixels: f32,
+    },
+    /// Clipped at the left edge.
+    Left {
+        /// Number of pixels overflowing beyond the left edge.
+        overflow_pixels: f32,
+    },
 }
 
 /// Configuration for different text clipping strategies.
 #[derive(Debug, Clone)]
 pub struct ClippingStrategyConfig {
+    /// Primary strategy to apply when text is clipped.
     pub primary_strategy: ClippingStrategy,
+    /// Ordered list of fallback strategies if the primary fails.
     pub fallback_strategies: Vec<ClippingStrategy>,
+    /// Minimum visible fraction below which text is not rendered.
     pub minimum_visible_percentage: f32, // Don't render if less than X% visible
+    /// Whether hovering reveals the full text.
     pub enable_hover_reveal: bool,
 }
 
@@ -95,28 +124,39 @@ pub struct ClippingStrategyConfig {
 pub enum ClippingStrategy {
     /// Truncate text with ellipsis
     TruncateWithEllipsis {
+        /// Text appended at the truncation point (e.g. `"..."`).
         ellipsis_text: String, // Default: "..."
+        /// Whether to break at word boundaries instead of mid-word.
         preserve_words: bool,  // Try to break at word boundaries
     },
     /// Reduce font size to fit
     DynamicFontScaling {
+        /// Smallest allowable font size after scaling.
         min_font_size: f32,
+        /// Reduction factor per scaling step (e.g. 0.1 = 10%).
         scale_factor: f32, // How aggressively to scale (0.1 = 10% reduction per step)
     },
     /// Move text to stay within bounds
     RepositionText {
+        /// Preferred offset directions to try when repositioning.
         prefer_directions: Vec<Vec2>, // Preferred offset directions
+        /// Maximum distance in pixels text may be moved.
         max_offset_distance: f32,
     },
     /// Hide text completely if it doesn't fit
     HideIfClipped {
+        /// Visible fraction below which the text is hidden entirely.
         min_visible_threshold: f32, // Hide if less than X% visible
     },
     /// Wrap text to multiple lines within container width
     TextWrapping {
+        /// Maximum number of lines; zero means unlimited.
         max_lines: usize,              // Maximum number of lines (0 = unlimited)
+        /// Multiplier applied to line height for inter-line spacing.
         line_spacing_factor: f32,      // Multiplier for line height spacing
+        /// Whether to insert hyphens when breaking mid-word.
         hyphenate: bool,               // Whether to break mid-word with hyphens
+        /// Text appended to the last line when truncated.
         ellipsis_text: Option<String>, // Append to last line when truncated (e.g. "...")
     },
 }

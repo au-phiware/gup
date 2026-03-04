@@ -120,24 +120,32 @@ impl Transform {
 /// This enum allows different mark types to be combined in a composite.
 #[derive(Debug, Clone)]
 pub enum SubMark {
-    /// A circle sub-mark
+    /// A circle sub-mark.
     Circle {
+        /// Circle mark attributes.
         attributes: super::CircleAttributes,
+        /// Local transform for this sub-mark.
         transform: Transform,
     },
-    /// A rectangle sub-mark
+    /// A rectangle sub-mark.
     Rectangle {
+        /// Rectangle mark attributes.
         attributes: super::RectangleAttributes,
+        /// Local transform for this sub-mark.
         transform: Transform,
     },
-    /// A line sub-mark
+    /// A line sub-mark.
     Line {
+        /// Line mark attributes.
         attributes: super::LineAttributes,
+        /// Local transform for this sub-mark.
         transform: Transform,
     },
-    /// A path sub-mark
+    /// A path sub-mark.
     Path {
+        /// Path mark attributes.
         attributes: super::PathAttributes,
+        /// Local transform for this sub-mark.
         transform: Transform,
     },
 }

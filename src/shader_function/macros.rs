@@ -196,10 +196,13 @@ macro_rules! wgsl_uniform_struct {
     };
 }
 
-// Helper trait for automatic code generation context
+/// Automatic WGSL code generation for shader functions.
 pub trait WgslCodeGenerator {
+    /// Generate the WGSL function definition source code.
     fn generate_function_definition(&self) -> String;
+    /// Generate the WGSL uniform struct declaration.
     fn generate_uniform_struct(&self) -> String;
+    /// Generate a composed WGSL function that delegates to `other_name`.
     fn generate_composed_function(&self, other_name: &str) -> String;
 }
 

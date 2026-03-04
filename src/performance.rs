@@ -166,18 +166,32 @@ pub struct PerformanceBaseline {
 pub enum PerformanceAlert {
     /// Frame time regression detected
     FrameTimeRegression {
+        /// Current frame time.
         #[serde(with = "duration_serde")]
         current: Duration,
+        /// Baseline frame time.
         #[serde(with = "duration_serde")]
         baseline: Duration,
+        /// Percentage increase over baseline.
         percent_increase: f32,
     },
     /// Draw call count spike
-    DrawCallSpike { current: u32, baseline: f32 },
+    DrawCallSpike {
+        /// Current draw call count.
+        current: u32,
+        /// Baseline average draw call count.
+        baseline: f32,
+    },
     /// Pipeline switch overhead
-    ExcessivePipelineSwitches { count: u32 },
+    ExcessivePipelineSwitches {
+        /// Number of pipeline switches.
+        count: u32,
+    },
     /// Memory bandwidth concern
-    HighMemoryBandwidth { estimated_gbps: f32 },
+    HighMemoryBandwidth {
+        /// Estimated bandwidth in GB/s.
+        estimated_gbps: f32,
+    },
 }
 
 /// GPU timestamp query manager.

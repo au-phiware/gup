@@ -243,14 +243,20 @@ pub enum SelectionOperation {
     SelectAll(BitSet),
     /// Rectangle selection. Stores affected IDs and previous selection state.
     RectangleSelect {
+        /// Mark IDs affected by the rectangle selection.
         ids: Vec<u32>,
+        /// Whether this selection was additive.
         additive: bool,
+        /// Previous selection state for undo.
         previous: BitSet,
     },
     /// Lasso selection. Stores affected IDs and previous selection state.
     LassoSelect {
+        /// Mark IDs affected by the lasso selection.
         ids: Vec<u32>,
+        /// Whether this selection was additive.
         additive: bool,
+        /// Previous selection state for undo.
         previous: BitSet,
     },
 }
@@ -965,9 +971,15 @@ pub fn point_in_polygon(point: Vec2, vertices: &[Vec2]) -> bool {
 #[derive(Debug, Clone)]
 pub enum SelectionEvent {
     /// Selection changed (new selection count).
-    Changed { count: usize },
+    Changed {
+        /// Number of currently selected marks.
+        count: usize,
+    },
     /// Hover changed to a new mark.
-    HoverChanged { id: Option<u32> },
+    HoverChanged {
+        /// Mark ID that is now hovered, or `None` if unhovered.
+        id: Option<u32>,
+    },
     /// Selection was cleared.
     Cleared,
 }

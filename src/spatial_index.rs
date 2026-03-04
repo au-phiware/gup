@@ -45,11 +45,14 @@ pub struct ElementPosition {
 /// Axis-aligned bounding box for spatial queries.
 #[derive(Debug, Clone, Copy)]
 pub struct Aabb {
+    /// Minimum corner of the bounding box.
     pub min: [f32; 2],
+    /// Maximum corner of the bounding box.
     pub max: [f32; 2],
 }
 
 impl Aabb {
+    /// Create an AABB from minimum and maximum corners.
     pub fn new(min: [f32; 2], max: [f32; 2]) -> Self {
         Self { min, max }
     }
@@ -62,6 +65,7 @@ impl Aabb {
         }
     }
 
+    /// Test whether `point` lies inside this bounding box (inclusive).
     pub fn contains_point(&self, point: [f32; 2]) -> bool {
         point[0] >= self.min[0]
             && point[0] <= self.max[0]
@@ -69,6 +73,7 @@ impl Aabb {
             && point[1] <= self.max[1]
     }
 
+    /// Test whether this bounding box overlaps `other`.
     pub fn intersects(&self, other: &Aabb) -> bool {
         self.min[0] <= other.max[0]
             && self.max[0] >= other.min[0]
@@ -76,10 +81,12 @@ impl Aabb {
             && self.max[1] >= other.min[1]
     }
 
+    /// Width of the bounding box along the x-axis.
     pub fn width(&self) -> f32 {
         self.max[0] - self.min[0]
     }
 
+    /// Height of the bounding box along the y-axis.
     pub fn height(&self) -> f32 {
         self.max[1] - self.min[1]
     }
@@ -115,7 +122,9 @@ pub trait SpatialQuery {
 
 /// Unified spatial index that wraps different algorithm implementations.
 pub enum SpatialIndex {
+    /// Z-order curve index variant.
     Morton(MortonIndex),
+    /// Adaptive hierarchical grid variant.
     Hierarchical(HierarchicalGrid),
 }
 

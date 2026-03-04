@@ -47,13 +47,29 @@ impl Default for StreamingBufferConfig {
 #[derive(Debug, Clone)]
 pub enum StreamUpdate<T> {
     /// Insert a new item with the given key.
-    Insert { key: u64, data: T },
+    Insert {
+        /// Unique identifier for the item.
+        key: u64,
+        /// Payload to store.
+        data: T,
+    },
     /// Update an existing item identified by key.
-    Update { key: u64, data: T },
+    Update {
+        /// Unique identifier of the item to update.
+        key: u64,
+        /// New payload to store.
+        data: T,
+    },
     /// Remove the item with the given key.
-    Remove { key: u64 },
+    Remove {
+        /// Unique identifier of the item to remove.
+        key: u64,
+    },
     /// Apply a batch of updates atomically.
-    Batch { updates: Vec<StreamUpdate<T>> },
+    Batch {
+        /// The sequence of updates to apply.
+        updates: Vec<StreamUpdate<T>>,
+    },
 }
 
 // ---------------------------------------------------------------------------

@@ -56,17 +56,29 @@ use super::{InstanceAttributes, Viewport2D};
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct FilterConfig {
+    /// Minimum X of the visible viewport in NDC.
     pub min_x: f32,
+    /// Maximum X of the visible viewport in NDC.
     pub max_x: f32,
+    /// Minimum Y of the visible viewport in NDC.
     pub min_y: f32,
+    /// Maximum Y of the visible viewport in NDC.
     pub max_y: f32,
+    /// Width of a single pixel in NDC.
     pub pixel_width: f32,
+    /// Height of a single pixel in NDC.
     pub pixel_height: f32,
+    /// Screen-space size threshold for full detail LOD.
     pub lod_full: f32,
+    /// Screen-space size threshold for simplified LOD.
     pub lod_simplified: f32,
+    /// Screen-space size threshold for point LOD.
     pub lod_point: f32,
+    /// Total number of instances to filter.
     pub instance_count: u32,
+    /// Number of vertices per instance.
     pub vertex_count: u32,
+    /// Whether to enable depth-based sorting (`1` = enabled).
     pub enable_sort: u32,
 }
 

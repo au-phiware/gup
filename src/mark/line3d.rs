@@ -39,6 +39,7 @@ pub struct Line3DInstance {
     pub width: f32,
     /// End point (world space).
     pub end: [f32; 3],
+    /// Padding for GPU alignment.
     pub _pad: f32,
     /// Colour (RGBA).
     pub color: [f32; 4],
@@ -47,9 +48,13 @@ pub struct Line3DInstance {
 /// High-level attributes for a 3D line.
 #[derive(Debug, Clone)]
 pub struct Line3DAttributes {
+    /// Start point in world space.
     pub start: [f32; 3],
+    /// End point in world space.
     pub end: [f32; 3],
+    /// Line width in clip-space units.
     pub width: f32,
+    /// Colour (RGBA).
     pub color: [f32; 4],
 }
 

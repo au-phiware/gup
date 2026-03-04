@@ -35,9 +35,11 @@ pub struct Box3DVertex {
 pub struct Box3DInstance {
     /// World-space centre.
     pub center: [f32; 3],
+    /// Padding for GPU alignment.
     pub _pad0: f32,
     /// Half-extents (size/2 along each axis).
     pub half_extents: [f32; 3],
+    /// Padding for GPU alignment.
     pub _pad1: f32,
     /// Base colour (RGBA).
     pub color: [f32; 4],
@@ -50,8 +52,11 @@ pub struct Box3DInstance {
 /// High-level attributes for configuring a box.
 #[derive(Debug, Clone)]
 pub struct Box3DAttributes {
+    /// World-space centre position.
     pub center: [f32; 3],
+    /// Half-extents (size/2 along each axis).
     pub half_extents: [f32; 3],
+    /// Base colour (RGBA).
     pub color: [f32; 4],
 }
 

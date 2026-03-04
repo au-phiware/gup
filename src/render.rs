@@ -1186,10 +1186,13 @@ pub struct BasicPipeline {
     uniform_bind_group_layout: BindGroupLayout,
 }
 
+/// A GPU vertex with position and colour.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
+    /// 2D position in normalised device coordinates.
     pub position: [f32; 2],
+    /// RGBA colour components.
     pub color: [f32; 4],
 }
 
@@ -1202,6 +1205,7 @@ struct GlobalAlphaUniform {
 }
 
 impl BasicPipeline {
+    /// Create a new basic render pipeline for the given surface format.
     pub fn new(device: &Device, surface_format: TextureFormat) -> Self {
         let shader = device.create_shader_module(ShaderModuleDescriptor {
             label: Some("basic_shader"),
@@ -1282,6 +1286,7 @@ impl BasicPipeline {
         }
     }
 
+    /// Upload vertices to a GPU buffer using the given render context.
     pub fn render_points_with_context(
         &self,
         vertices: &[Vertex],
@@ -1300,6 +1305,7 @@ impl BasicPipeline {
         Ok(vertex_buffer)
     }
 
+    /// Issue draw calls for the given vertex buffer.
     pub fn render_points(
         &self,
         render_pass: &mut RenderPass,

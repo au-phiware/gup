@@ -18,14 +18,18 @@ use std::collections::HashMap;
 /// Position in screen space (pixels from top-left)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ScreenPosition {
+    /// Horizontal offset in pixels from the left edge.
     pub x: f32,
+    /// Vertical offset in pixels from the top edge.
     pub y: f32,
 }
 
 /// Position in GPU/normalized device coordinates (-1 to 1)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GpuPosition {
+    /// Horizontal coordinate in normalised device space.
     pub x: f32,
+    /// Vertical coordinate in normalised device space.
     pub y: f32,
 }
 

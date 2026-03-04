@@ -344,9 +344,11 @@ pub enum DynamicAttributeValue {
     Static([f32; 4]),
     /// Value that varies per data index (lookup table)
     PerInstance(Vec<[f32; 4]>),
-    /// Flag indicating the attribute uses a shader function (GPU-side)
+    /// Flag indicating the attribute uses a shader function (GPU-side).
     ShaderDriven {
+        /// Name of the WGSL function.
         function_name: String,
+        /// Source code of the WGSL function.
         wgsl_code: String,
     },
 }

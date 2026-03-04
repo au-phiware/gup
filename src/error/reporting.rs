@@ -23,10 +23,15 @@ pub struct ErrorReporter {
 /// Configuration for error reporting behavior.
 #[derive(Debug, Clone)]
 pub struct ReportingConfig {
+    /// Whether telemetry reporting is enabled.
     pub enable_telemetry: bool,
+    /// Maximum number of error reports allowed per minute.
     pub max_reports_per_minute: usize,
+    /// Number of reports to batch before sending.
     pub batch_size: usize,
+    /// Number of retry attempts for failed report delivery.
     pub retry_attempts: usize,
+    /// Time window for aggregating similar errors.
     pub aggregation_window: Duration,
 }
 
@@ -60,20 +65,30 @@ pub struct ErrorAggregator {
 /// Unique signature for grouping similar errors.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ErrorSignature {
+    /// Error category for grouping.
     pub category: ErrorCategory,
+    /// Severity level of the error.
     pub severity: ErrorSeverity,
+    /// Discriminant-based error type identifier.
     pub error_type: String,
+    /// Key context extracted from the error for deduplication.
     pub key_context: String,
 }
 
 /// Aggregated error information.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AggregatedError {
+    /// Unique signature identifying this error group.
     pub signature: ErrorSignature,
+    /// Number of occurrences of this error.
     pub count: usize,
+    /// Timestamp of the first occurrence.
     pub first_seen: SystemTime,
+    /// Timestamp of the most recent occurrence.
     pub last_seen: SystemTime,
+    /// Sample error contexts for analysis.
     pub sample_contexts: Vec<ErrorContext>,
+    /// Names of systems affected by this error.
     pub affected_systems: Vec<String>,
 }
 
@@ -89,106 +104,162 @@ pub struct RateLimiter {
 /// Comprehensive error report with aggregated data.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorReport {
+    /// Unique identifier for this report.
     pub report_id: uuid::Uuid,
+    /// Timestamp when the report was generated.
     pub timestamp: SystemTime,
+    /// Context of the reported error.
     pub error_context: ErrorContext,
+    /// Number of times this error occurred.
     pub frequency: usize,
+    /// Timestamp of the first occurrence.
     pub first_occurrence: SystemTime,
+    /// Timestamp of the last occurrence.
     pub last_occurrence: SystemTime,
+    /// Recovery attempts made for this error.
     pub recovery_attempts: Vec<RecoveryAttempt>,
+    /// Assessment of system impact.
     pub system_impact: SystemImpact,
+    /// Recommended actions to address this error.
     pub recommendations: Vec<String>,
 }
 
 /// System impact assessment for errors.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemImpact {
+    /// Estimated performance degradation as a fraction.
     pub performance_degradation: f32,
+    /// Impact on user experience.
     pub user_experience_impact: ImpactLevel,
+    /// Risk to system stability.
     pub stability_risk: ImpactLevel,
+    /// Risk to data integrity.
     pub data_integrity_risk: ImpactLevel,
+    /// Names of components affected by this error.
     pub affected_components: Vec<String>,
 }
 
 /// Impact severity levels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ImpactLevel {
+    /// No measurable impact.
     None,
+    /// Minor impact unlikely to be noticed.
     Low,
+    /// Moderate impact that may affect some workflows.
     Medium,
+    /// Significant impact affecting core functionality.
     High,
+    /// Severe impact requiring immediate attention.
     Critical,
 }
 
 /// Summary of errors over a time period.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorSummary {
+    /// Duration of the analysis window.
     pub time_window: Duration,
+    /// Total number of errors in the window.
     pub total_errors: usize,
+    /// Error counts grouped by category.
     pub error_categories: HashMap<ErrorCategory, usize>,
+    /// Error counts grouped by severity.
     pub severity_distribution: HashMap<ErrorSeverity, usize>,
+    /// Most frequently occurring error, if any.
     pub most_frequent: Option<AggregatedError>,
+    /// Ratio of successful recoveries to total recoverable errors.
     pub recovery_success_rate: f32,
+    /// System-level recommendations based on error patterns.
     pub recommendations: Vec<SystemRecommendation>,
+    /// Trend analysis for error metrics.
     pub trends: ErrorTrends,
 }
 
 /// System-level recommendations based on error patterns.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemRecommendation {
+    /// Category of the recommendation.
     pub recommendation_type: RecommendationType,
+    /// Priority level for this recommendation.
     pub priority: RecommendationPriority,
+    /// Human-readable description of the recommendation.
     pub description: String,
+    /// Estimated impact as a fraction if the recommendation is applied.
     pub estimated_impact: f32,
+    /// Estimated effort to implement the recommendation.
     pub implementation_effort: EffortLevel,
 }
 
 /// Types of system recommendations.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RecommendationType {
+    /// Adjust configuration settings.
     ConfigurationChange,
+    /// Upgrade hardware or system resources.
     ResourceUpgrade,
+    /// Optimise application code paths.
     CodeOptimization,
+    /// Add or improve monitoring and alerting.
     MonitoringImprovement,
+    /// Provide guidance or documentation to end users.
     UserEducation,
+    /// Perform routine system maintenance.
     SystemMaintenance,
 }
 
 /// Priority levels for recommendations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum RecommendationPriority {
+    /// Low-priority recommendation.
     Low,
+    /// Medium-priority recommendation.
     Medium,
+    /// High-priority recommendation.
     High,
+    /// Critical-priority recommendation requiring immediate action.
     Critical,
 }
 
 /// Effort levels for implementing recommendations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EffortLevel {
+    /// Trivial change requiring almost no effort.
     Minimal,
+    /// Small change with low effort.
     Low,
+    /// Moderate change requiring some planning.
     Medium,
+    /// Large change requiring significant work.
     High,
+    /// Major undertaking requiring substantial resources.
     Significant,
 }
 
 /// Error trend analysis.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorTrends {
+    /// Trend direction for overall error rate.
     pub error_rate_trend: TrendDirection,
+    /// Trend direction for error severity.
     pub severity_trend: TrendDirection,
+    /// Trend direction for recovery success rate.
     pub recovery_rate_trend: TrendDirection,
+    /// Number of newly observed error types.
     pub new_error_types: usize,
+    /// Number of error types no longer occurring.
     pub resolved_error_types: usize,
 }
 
 /// Trend direction indicators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TrendDirection {
+    /// Metric is decreasing over time.
     Decreasing,
+    /// Metric is stable over time.
     Stable,
+    /// Metric is increasing over time.
     Increasing,
+    /// Metric is increasing rapidly over time.
     RapidlyIncreasing,
 }
 
@@ -425,9 +496,13 @@ impl ErrorReporter {
 /// Error reporting statistics.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorStats {
+    /// Number of distinct aggregated error groups.
     pub total_aggregated_errors: usize,
+    /// Number of reports sent in the current rate-limit window.
     pub reports_in_current_window: usize,
+    /// Timestamp of the most recent error report.
     pub last_report_time: Option<SystemTime>,
+    /// Whether the configured error sink is available.
     pub sink_available: bool,
 }
 
@@ -561,10 +636,12 @@ impl Default for ConsoleErrorSink {
 }
 
 impl ConsoleErrorSink {
+    /// Create a new console error sink with default verbosity.
     pub fn new() -> Self {
         Self { verbose: false }
     }
 
+    /// Create a new console error sink with the specified verbosity.
     pub fn with_verbose(verbose: bool) -> Self {
         Self { verbose }
     }
@@ -588,6 +665,7 @@ pub struct FileErrorSink {
 }
 
 impl FileErrorSink {
+    /// Create a new file error sink that writes to the given path.
     pub fn new(file_path: std::path::PathBuf) -> Self {
         Self { file_path }
     }

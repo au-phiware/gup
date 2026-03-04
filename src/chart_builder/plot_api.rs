@@ -276,7 +276,9 @@ where
 
 /// Base trait for all configured chart types.
 pub trait ConfiguredChart<T> {
+    /// The chart builder type used by this configuration.
     type Builder: ChartBuilder<T>;
+    /// The output type produced when building the chart.
     type Output;
 
     /// Build the chart.
@@ -291,6 +293,7 @@ pub trait ConfiguredChart<T> {
 /// Macro to generate configured chart types with common methods.
 macro_rules! impl_configured_chart {
     ($chart_type:ident, $builder_type:ty) => {
+        #[doc = concat!("Configured ", stringify!($chart_type), " ready for building or rendering.")]
         pub struct $chart_type<T> {
             data: Vec<T>,
             context: Option<Arc<RenderContext>>,
@@ -301,6 +304,7 @@ macro_rules! impl_configured_chart {
         where
             T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
         {
+            /// Create a new configured chart from data, context, and builder.
             pub fn new(
                 data: Vec<T>,
                 context: Option<Arc<RenderContext>>,

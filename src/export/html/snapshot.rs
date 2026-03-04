@@ -73,9 +73,13 @@ pub struct ChartSnapshot {
 /// Serialisable copy of [`Margins`](crate::chart_builder::Margins).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct SnapshotMargins {
+    /// Top margin in logical pixels.
     pub top: f32,
+    /// Right margin in logical pixels.
     pub right: f32,
+    /// Bottom margin in logical pixels.
     pub bottom: f32,
+    /// Left margin in logical pixels.
     pub left: f32,
 }
 

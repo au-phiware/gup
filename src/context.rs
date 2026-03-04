@@ -208,23 +208,32 @@ pub struct MultiSurfaceStats {
 pub enum SurfaceEvent {
     /// DPI/scale factor changed
     DpiChanged {
+        /// Identifier of the affected surface.
         surface_id: SurfaceId,
+        /// New scale factor.
         scale_factor: f64,
     },
     /// Window focus changed
     FocusChanged {
+        /// Identifier of the affected surface.
         surface_id: SurfaceId,
+        /// Whether the surface is focused.
         focused: bool,
     },
     /// Window visibility changed
     VisibilityChanged {
+        /// Identifier of the affected surface.
         surface_id: SurfaceId,
+        /// Whether the surface is visible.
         visible: bool,
     },
     /// Surface was resized
     Resized {
+        /// Identifier of the affected surface.
         surface_id: SurfaceId,
+        /// New width in physical pixels.
         width: u32,
+        /// New height in physical pixels.
         height: u32,
     },
 }
@@ -317,7 +326,9 @@ pub struct RecoveryMetrics {
     pub total_recovery_time: Duration,
     /// Number of recoveries per tier
     pub full_features_count: u64,
+    /// Number of recoveries that fell back to reduced features.
     pub reduced_features_count: u64,
+    /// Number of recoveries that fell back to software rendering.
     pub software_rendering_count: u64,
     /// Rolling window of recent recovery attempts (last 100)
     pub recent_attempts: Vec<RecoveryAttemptResult>,
@@ -728,11 +739,14 @@ impl ManagedSurface {
 /// Physical size with width and height.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PhysicalSize<T> {
+    /// Width component.
     pub width: T,
+    /// Height component.
     pub height: T,
 }
 
 impl<T> PhysicalSize<T> {
+    /// Create a new physical size with the given width and height.
     pub fn new(width: T, height: T) -> Self {
         Self { width, height }
     }
@@ -1103,8 +1117,9 @@ impl TexturePool {
 
 /// Unified render context that manages GPU resources and provides rendering capabilities.
 pub struct GupContext {
-    /// Core wgpu resources
+    /// Core wgpu device handle.
     pub device: Arc<Device>,
+    /// Core wgpu queue handle.
     pub queue: Arc<Queue>,
 
     /// Multi-surface management

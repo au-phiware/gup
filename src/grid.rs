@@ -159,8 +159,11 @@ impl Color {
 
     /// Common color presets for grids.
     pub const LIGHT_GRID: Color = Color::new(0.9, 0.9, 0.9, 0.7);
+    /// Dark grid colour preset.
     pub const DARK_GRID: Color = Color::new(0.3, 0.3, 0.3, 0.8);
+    /// Subtle grid colour preset.
     pub const SUBTLE_GRID: Color = Color::new(0.95, 0.95, 0.95, 0.5);
+    /// High contrast grid colour preset.
     pub const HIGH_CONTRAST_GRID: Color = Color::new(0.0, 0.0, 0.0, 0.8);
 }
 

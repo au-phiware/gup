@@ -505,9 +505,13 @@ impl Default for AxisSystem {
 /// Axis mappings that define which data fields map to which axes.
 #[derive(Debug)]
 pub struct AxisMappings<T> {
+    /// Accessor function for the X axis.
     pub x_accessor: Option<AccessorFunction<T>>,
+    /// Accessor function for the Y axis.
     pub y_accessor: Option<AccessorFunction<T>>,
+    /// Accessor function for the color axis.
     pub color_accessor: Option<AccessorFunction<T>>,
+    /// Accessor function for the size axis.
     pub size_accessor: Option<AccessorFunction<T>>,
 }
 
@@ -578,26 +582,37 @@ pub struct AxisLayout {
 /// Margin requirements for all axes.
 #[derive(Debug, Clone)]
 pub struct AxisMargins {
+    /// Top margin in pixels.
     pub top: f32,
+    /// Right margin in pixels.
     pub right: f32,
+    /// Bottom margin in pixels.
     pub bottom: f32,
+    /// Left margin in pixels.
     pub left: f32,
 }
 
 /// Chart area coordinates.
 #[derive(Debug, Clone)]
 pub struct ChartArea {
+    /// X origin of the chart area.
     pub x: f32,
+    /// Y origin of the chart area.
     pub y: f32,
+    /// Width of the chart area.
     pub width: f32,
+    /// Height of the chart area.
     pub height: f32,
 }
 
 /// Scale configuration information.
 #[derive(Debug, Clone)]
 pub struct ScaleConfiguration {
+    /// Type of the scale (e.g. "linear", "log").
     pub scale_type: String,
+    /// Domain range of the scale (min, max).
     pub domain: (f64, f64),
+    /// Pixel range of the scale (start, end).
     pub range: (f32, f32),
 }
 

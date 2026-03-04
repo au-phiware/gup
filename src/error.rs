@@ -31,106 +31,243 @@ pub mod resource;
 #[derive(Debug, Clone, Error, Serialize, Deserialize)]
 pub enum GupError {
     // GPU and rendering errors
+    /// GPU initialization failed.
     #[error("GPU initialization failed: {reason}")]
-    GpuInitializationError { reason: String },
+    GpuInitializationError {
+        /// Description of why GPU initialization failed.
+        reason: String,
+    },
 
+    /// Shader compilation failed.
     #[error("Shader compilation failed: {shader_type} - {error}")]
-    ShaderCompilationError { shader_type: String, error: String },
+    ShaderCompilationError {
+        /// Type of shader that failed to compile.
+        shader_type: String,
+        /// Compilation error message.
+        error: String,
+    },
 
+    /// GPU memory has been exhausted.
     #[error("GPU memory exhausted: requested {requested} bytes, available {available} bytes")]
-    GpuMemoryExhausted { requested: usize, available: usize },
+    GpuMemoryExhausted {
+        /// Number of bytes requested.
+        requested: usize,
+        /// Number of bytes available.
+        available: usize,
+    },
 
+    /// GPU resource creation failed.
     #[error("GPU resource creation failed: {resource_type} - {reason}")]
     GpuResourceCreationError {
+        /// Type of GPU resource that failed to be created.
         resource_type: String,
+        /// Description of why resource creation failed.
         reason: String,
     },
 
     // Data and type errors
+    /// Invalid data format encountered.
     #[error("Invalid data format: {message}")]
-    InvalidDataFormat { message: String },
+    InvalidDataFormat {
+        /// Description of the invalid format.
+        message: String,
+    },
 
+    /// Type mismatch between expected and actual types.
     #[error("Type mismatch: expected {expected}, found {actual}")]
-    TypeMismatch { expected: String, actual: String },
+    TypeMismatch {
+        /// Expected type name.
+        expected: String,
+        /// Actual type name found.
+        actual: String,
+    },
 
+    /// Data validation failed.
     #[error("Data validation failed: {validation_error}")]
-    DataValidationError { validation_error: String },
+    DataValidationError {
+        /// Description of the validation failure.
+        validation_error: String,
+    },
 
+    /// Buffer size does not match the expected size.
     #[error("Buffer size mismatch: expected {expected}, found {actual}")]
-    BufferSizeMismatch { expected: usize, actual: usize },
+    BufferSizeMismatch {
+        /// Expected buffer size in bytes.
+        expected: usize,
+        /// Actual buffer size in bytes.
+        actual: usize,
+    },
 
     // Streaming and performance errors
+    /// Stream buffer has overflowed its capacity.
     #[error("Stream buffer overflow: {buffer_size} exceeded")]
-    StreamBufferOverflow { buffer_size: usize },
+    StreamBufferOverflow {
+        /// Size of the buffer that overflowed.
+        buffer_size: usize,
+    },
 
+    /// Performance target was not met.
     #[error("Performance target missed: {target_ms}ms target, actual {actual_ms}ms")]
-    PerformanceTargetMissed { target_ms: f64, actual_ms: f64 },
+    PerformanceTargetMissed {
+        /// Target frame time in milliseconds.
+        target_ms: f64,
+        /// Actual frame time in milliseconds.
+        actual_ms: f64,
+    },
 
+    /// A resource limit has been exceeded.
     #[error("Resource limit exceeded: {limit_type} - {current} / {maximum}")]
     ResourceLimitExceeded {
+        /// Type of resource limit that was exceeded.
         limit_type: String,
+        /// Current resource usage count.
         current: usize,
+        /// Maximum allowed resource count.
         maximum: usize,
     },
 
     // Platform and compatibility errors
+    /// The current platform is not supported for the requested feature.
     #[error("Platform not supported: {platform} - {feature} not available")]
-    PlatformNotSupported { platform: String, feature: String },
+    PlatformNotSupported {
+        /// Name of the unsupported platform.
+        platform: String,
+        /// Feature that is not available.
+        feature: String,
+    },
 
+    /// WebGPU is not available on this platform.
     #[error("WebGPU not available: {fallback_suggestion}")]
-    WebGpuNotAvailable { fallback_suggestion: String },
+    WebGpuNotAvailable {
+        /// Suggestion for an alternative rendering path.
+        fallback_suggestion: String,
+    },
 
+    /// A required feature is not supported on the current backend.
     #[error("Feature not supported: {feature} on {backend}")]
-    FeatureNotSupported { feature: String, backend: String },
+    FeatureNotSupported {
+        /// Name of the unsupported feature.
+        feature: String,
+        /// Name of the backend lacking support.
+        backend: String,
+    },
 
     // Network and I/O errors
+    /// A network operation failed.
     #[error("Network error: {error}")]
-    NetworkError { error: String },
+    NetworkError {
+        /// Description of the network error.
+        error: String,
+    },
 
+    /// A file I/O operation failed.
     #[error("File I/O error: {path} - {error}")]
-    FileError { path: String, error: String },
+    FileError {
+        /// Path of the file involved.
+        path: String,
+        /// Description of the I/O error.
+        error: String,
+    },
 
     // System and configuration errors
+    /// A configuration parameter is invalid or missing.
     #[error("Configuration error: {parameter} - {message}")]
-    ConfigurationError { parameter: String, message: String },
+    ConfigurationError {
+        /// Name of the configuration parameter.
+        parameter: String,
+        /// Description of the configuration error.
+        message: String,
+    },
 
+    /// A required system resource is unavailable.
     #[error("System resource unavailable: {resource} - {reason}")]
-    SystemResourceUnavailable { resource: String, reason: String },
+    SystemResourceUnavailable {
+        /// Name of the unavailable system resource.
+        resource: String,
+        /// Reason the resource is unavailable.
+        reason: String,
+    },
 
     // Legacy error types for backward compatibility
+    /// Legacy render error.
     #[error("Render error: {message}")]
-    RenderError { message: String },
+    RenderError {
+        /// Error message.
+        message: String,
+    },
 
+    /// Legacy composition error.
     #[error("Composition error: {message}")]
-    CompositionError { message: String },
+    CompositionError {
+        /// Error message.
+        message: String,
+    },
 
+    /// Legacy resource error.
     #[error("Resource error: {message}")]
-    ResourceError { message: String },
+    ResourceError {
+        /// Error message.
+        message: String,
+    },
 
+    /// Legacy invalid operation error.
     #[error("Invalid operation: {message}")]
-    InvalidOperation { message: String },
+    InvalidOperation {
+        /// Error message.
+        message: String,
+    },
 
+    /// Legacy WebGPU error.
     #[error("WebGPU error: {message}")]
-    WebGpuError { message: String },
+    WebGpuError {
+        /// Error message.
+        message: String,
+    },
 
+    /// Legacy buffer error.
     #[error("Buffer error: {message}")]
-    BufferError { message: String },
+    BufferError {
+        /// Error message.
+        message: String,
+    },
 
+    /// Legacy validation error.
     #[error("Validation error: {message}")]
-    ValidationError { message: String },
+    ValidationError {
+        /// Error message.
+        message: String,
+    },
 
+    /// Legacy shader error.
     #[error("Shader error: {message}")]
-    ShaderError { message: String },
+    ShaderError {
+        /// Error message.
+        message: String,
+    },
 
     // Fallback and recovery errors
+    /// A fallback of the same type is already active.
     #[error("Fallback already active: {fallback_type}")]
-    FallbackAlreadyActive { fallback_type: String },
+    FallbackAlreadyActive {
+        /// Type of fallback that is already active.
+        fallback_type: String,
+    },
 
+    /// An attempted recovery operation failed.
     #[error("Recovery failed: {strategy} - {reason}")]
-    RecoveryFailed { strategy: String, reason: String },
+    RecoveryFailed {
+        /// Name of the recovery strategy that failed.
+        strategy: String,
+        /// Reason the recovery failed.
+        reason: String,
+    },
 
+    /// No fallback strategy is available for the error.
     #[error("No fallback available for error: {original_error}")]
-    NoFallbackAvailable { original_error: String },
+    NoFallbackAvailable {
+        /// Description of the original error.
+        original_error: String,
+    },
 }
 
 impl GupError {
@@ -362,17 +499,29 @@ impl GupError {
 /// Error categories for different handling strategies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ErrorCategory {
+    /// GPU device or adapter initialization errors.
     GpuInitialization,
+    /// Shader compilation or linking errors.
     ShaderCompilation,
+    /// Memory or resource exhaustion errors.
     ResourceExhaustion,
+    /// Data format or validation errors.
     DataValidation,
+    /// Performance target or frame-time errors.
     Performance,
+    /// Platform or backend compatibility errors.
     PlatformCompatibility,
+    /// Network or file I/O errors.
     IO,
+    /// Configuration or system setup errors.
     Configuration,
+    /// Rendering pipeline errors.
     Rendering,
+    /// Buffer creation or management errors.
     BufferManagement,
+    /// Invalid operation or usage errors.
     InvalidOperation,
+    /// Recovery and fallback mechanism errors.
     Recovery,
 }
 
@@ -398,9 +547,13 @@ impl std::fmt::Display for ErrorCategory {
 /// Error severity levels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum ErrorSeverity {
+    /// Minor issue with minimal impact.
     Low,
+    /// Moderate issue that may affect functionality.
     Medium,
+    /// Significant issue requiring attention.
     High,
+    /// Critical failure requiring immediate action.
     Critical,
 }
 

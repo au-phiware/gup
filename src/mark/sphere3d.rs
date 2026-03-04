@@ -43,8 +43,11 @@ pub struct Sphere3DInstance {
 /// High-level attributes for configuring a sphere.
 #[derive(Debug, Clone)]
 pub struct Sphere3DAttributes {
+    /// World-space centre position.
     pub position: [f32; 3],
+    /// Sphere radius.
     pub radius: f32,
+    /// Base colour (RGBA).
     pub color: [f32; 4],
 }
 

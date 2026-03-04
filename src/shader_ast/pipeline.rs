@@ -53,6 +53,7 @@ pub struct AstShaderPipeline {
 }
 
 impl AstShaderPipeline {
+    /// Create a new empty AST shader pipeline.
     pub fn new() -> Self {
         Self {
             functions: Vec::new(),

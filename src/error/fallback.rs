@@ -21,56 +21,82 @@ pub struct FallbackManager {
 /// Configuration for fallback behavior.
 #[derive(Debug, Clone)]
 pub struct FallbackConfig {
+    /// Whether automatic fallback activation is enabled.
     pub enable_automatic_fallbacks: bool,
+    /// Maximum number of fallback attempts per error.
     pub max_fallback_attempts: usize,
+    /// Timeout in seconds for a single fallback attempt.
     pub fallback_timeout_seconds: f64,
+    /// Performance ratio threshold below which fallbacks are triggered.
     pub performance_threshold: f64,
 }
 
 /// Different types of fallback strategies.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FallbackStrategy {
+    /// Fall back from GPU to CPU rendering.
     GpuToCpu,
+    /// Fall back from WebGPU to WebGL rendering.
     WebGpuToWebGl,
+    /// Reduce rendering quality from high to low.
     HighQualityToLowQuality,
+    /// Simplify complex visualisation to a simpler form.
     ComplexToSimple,
+    /// A named custom fallback strategy.
     CustomFallback(String),
 }
 
 /// Active fallback types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum FallbackType {
+    /// CPU-based software rendering is active.
     CpuRendering,
+    /// WebGL rendering backend is active.
     WebGlRendering,
+    /// Low-quality rendering mode is active.
     LowQuality,
+    /// Simplified shader pipeline is active.
     SimpleShaders,
+    /// A custom fallback identified by a numeric tag.
     Custom(u32),
 }
 
 /// Result of a fallback operation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecoveryResult {
+    /// Type of recovery that was performed.
     pub recovery_type: RecoveryType,
+    /// Human-readable description of the recovery outcome.
     pub message: String,
+    /// Performance impact of the recovery, if measurable.
     pub performance_impact: Option<PerformanceImpact>,
+    /// Whether the recovery was successful.
     pub success: bool,
+    /// Fallback type that is now active, if any.
     pub fallback_active: Option<FallbackType>,
 }
 
 /// Types of recovery operations.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RecoveryType {
+    /// Recovery through a fallback strategy.
     Fallback,
+    /// Recovery through repairing the existing state.
     Repair,
+    /// Recovery through restarting a component.
     Restart,
+    /// Recovery requiring manual intervention.
     Manual,
 }
 
 /// Performance impact information.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceImpact {
+    /// Expected slowdown factor (values > 1.0 mean slower).
     pub expected_slowdown: f64,
+    /// Memory overhead change as a percentage (negative means savings).
     pub memory_overhead: f64,
+    /// Quality reduction as a fraction (0.0 to 1.0).
     pub quality_reduction: f32,
 }
 
@@ -188,6 +214,7 @@ impl FallbackManager {
         }
     }
 
+    /// Enable CPU rendering as a fallback.
     pub async fn enable_cpu_rendering(&mut self) -> GupResult<RecoveryResult> {
         self.enable_cpu_rendering_internal().await
     }

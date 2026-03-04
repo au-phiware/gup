@@ -61,7 +61,9 @@ pub const CLIP_SENTINEL: f32 = 1e9;
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct GeoPoint {
+    /// Longitude in degrees.
     pub longitude: f32,
+    /// Latitude in degrees.
     pub latitude: f32,
 }
 
@@ -102,17 +104,24 @@ impl ShaderType for GeoPoint {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct EquirectangularUniforms {
+    /// Centre longitude in degrees.
     pub center_lon: f32,
+    /// Centre latitude in degrees.
     pub center_lat: f32,
+    /// Scale factor.
     pub scale: f32,
+    /// Horizontal translation offset.
     pub translate_x: f32,
+    /// Vertical translation offset.
     pub translate_y: f32,
     /// Padding for 4-byte alignment of the overall struct to a multiple of
     /// the largest member alignment (f32 = 4 bytes). This ensures the struct
     /// size is a multiple of 4 bytes, which is already satisfied. Added for
     /// future-proofing uniform buffer requirements.
     pub _pad0: f32,
+    /// Padding for uniform buffer alignment.
     pub _pad1: f32,
+    /// Padding for uniform buffer alignment.
     pub _pad2: f32,
 }
 
@@ -135,10 +144,15 @@ impl ShaderUniform for EquirectangularUniforms {
 /// The result is then scaled and translated by the uniform parameters.
 #[derive(Clone, Debug)]
 pub struct EquirectangularProjection {
+    /// Centre longitude in degrees.
     pub center_lon: f32,
+    /// Centre latitude in degrees.
     pub center_lat: f32,
+    /// Scale factor.
     pub scale: f32,
+    /// Horizontal translation offset.
     pub translate_x: f32,
+    /// Vertical translation offset.
     pub translate_y: f32,
 }
 
@@ -229,15 +243,22 @@ fn equirectangular_projection(point: gup_GeoPoint, u: EquirectangularUniforms) -
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct MercatorUniforms {
+    /// Centre longitude in degrees.
     pub center_lon: f32,
+    /// Scale factor.
     pub scale: f32,
+    /// Horizontal translation offset.
     pub translate_x: f32,
+    /// Vertical translation offset.
     pub translate_y: f32,
     /// Maximum absolute latitude in degrees before clipping.
     /// Default: 85.051129° (Web Mercator standard).
     pub clip_lat: f32,
+    /// Padding for uniform buffer alignment.
     pub _pad0: f32,
+    /// Padding for uniform buffer alignment.
     pub _pad1: f32,
+    /// Padding for uniform buffer alignment.
     pub _pad2: f32,
 }
 
@@ -262,10 +283,15 @@ impl ShaderUniform for MercatorUniforms {
 /// to avoid numerical instability, regardless of the `clip_lat` value.
 #[derive(Clone, Debug)]
 pub struct MercatorProjection {
+    /// Centre longitude in degrees.
     pub center_lon: f32,
+    /// Scale factor.
     pub scale: f32,
+    /// Horizontal translation offset.
     pub translate_x: f32,
+    /// Vertical translation offset.
     pub translate_y: f32,
+    /// Maximum absolute latitude in degrees before clipping.
     pub clip_lat: f32,
 }
 
@@ -372,13 +398,21 @@ fn mercator_projection(point: gup_GeoPoint, u: MercatorUniforms) -> vec2<f32> {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct StereographicUniforms {
+    /// Centre longitude in degrees.
     pub center_lon: f32,
+    /// Centre latitude in degrees.
     pub center_lat: f32,
+    /// Scale factor.
     pub scale: f32,
+    /// Horizontal translation offset.
     pub translate_x: f32,
+    /// Vertical translation offset.
     pub translate_y: f32,
+    /// Padding for uniform buffer alignment.
     pub _pad0: f32,
+    /// Padding for uniform buffer alignment.
     pub _pad1: f32,
+    /// Padding for uniform buffer alignment.
     pub _pad2: f32,
 }
 
@@ -399,10 +433,15 @@ impl ShaderUniform for StereographicUniforms {
 /// area, with infinite distortion at the antipodal point.
 #[derive(Clone, Debug)]
 pub struct StereographicProjection {
+    /// Centre longitude in degrees.
     pub center_lon: f32,
+    /// Centre latitude in degrees.
     pub center_lat: f32,
+    /// Scale factor.
     pub scale: f32,
+    /// Horizontal translation offset.
     pub translate_x: f32,
+    /// Vertical translation offset.
     pub translate_y: f32,
 }
 
@@ -500,13 +539,21 @@ fn stereographic_projection(point: gup_GeoPoint, u: StereographicUniforms) -> ve
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct OrthographicUniforms {
+    /// Centre longitude in degrees.
     pub center_lon: f32,
+    /// Centre latitude in degrees.
     pub center_lat: f32,
+    /// Scale factor.
     pub scale: f32,
+    /// Horizontal translation offset.
     pub translate_x: f32,
+    /// Vertical translation offset.
     pub translate_y: f32,
+    /// Padding for uniform buffer alignment.
     pub _pad0: f32,
+    /// Padding for uniform buffer alignment.
     pub _pad1: f32,
+    /// Padding for uniform buffer alignment.
     pub _pad2: f32,
 }
 
@@ -526,10 +573,15 @@ impl ShaderUniform for OrthographicUniforms {
 /// the far hemisphere (behind the viewer) are clipped to [`CLIP_SENTINEL`].
 #[derive(Clone, Debug)]
 pub struct OrthographicProjection {
+    /// Centre longitude in degrees.
     pub center_lon: f32,
+    /// Centre latitude in degrees.
     pub center_lat: f32,
+    /// Scale factor.
     pub scale: f32,
+    /// Horizontal translation offset.
     pub translate_x: f32,
+    /// Vertical translation offset.
     pub translate_y: f32,
 }
 

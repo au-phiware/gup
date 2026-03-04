@@ -49,15 +49,20 @@ pub enum CompositionMode {
 /// Layout direction for SideBySide composition
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LayoutDirection {
+    /// Left-to-right layout.
     Horizontal,
+    /// Top-to-bottom layout.
     Vertical,
 }
 
 /// Configuration for SideBySide composition mode
 #[derive(Debug, Clone)]
 pub struct SideBySideConfig {
+    /// Direction of the side-by-side layout.
     pub direction: LayoutDirection,
+    /// Proportion allocated to first component (0.0 to 1.0).
     pub split_ratio: f32, // 0.0 to 1.0, proportion allocated to first component
+    /// Padding between components in pixels.
     pub padding: f32,     // Padding between components in pixels
 }
 
@@ -92,17 +97,23 @@ impl Default for SideBySideConfig {
 /// Blend modes for overlay composition
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
 pub enum BlendMode {
+    /// No blending applied.
     #[default]
     None,
+    /// Alpha-based transparency blending.
     AlphaBlending,
+    /// Additive colour blending.
     Additive,
+    /// Multiplicative colour blending.
     Multiply,
 }
 
 /// Custom composition behaviors supported by the system
 #[derive(Debug, Clone)]
 pub enum CustomCompositionBehavior {
+    /// Cross-fade between two components.
     CrossFade(CrossFadeComposition),
+    /// Grid-based layout of two components.
     GridLayout(GridLayoutComposition),
 }
 
@@ -744,10 +755,12 @@ impl<T: Mixable> MixableExt for T {}
 /// Example: Cross-fade composition behavior
 #[derive(Debug, Clone)]
 pub struct CrossFadeComposition {
+    /// Blend factor (0.0 = first only, 1.0 = second only).
     pub fade_factor: f32, // 0.0 = first only, 1.0 = second only
 }
 
 impl CrossFadeComposition {
+    /// Compose two components using cross-fade blending.
     pub fn compose<A: Mixable, B: Mixable>(
         &self,
         first: &mut A,
@@ -768,11 +781,13 @@ impl CrossFadeComposition {
         Ok(())
     }
 
+    /// Returns whether two components can be cross-faded.
     pub fn can_compose<A: Mixable, B: Mixable>(&self, _first: &A, _second: &B) -> bool {
         // Cross-fade can compose any two components
         true
     }
 
+    /// Get a human-readable description of this composition.
     pub fn description(&self) -> String {
         format!("CrossFade(factor: {:.2})", self.fade_factor)
     }
@@ -781,13 +796,18 @@ impl CrossFadeComposition {
 /// Example: Grid layout composition behavior
 #[derive(Debug, Clone)]
 pub struct GridLayoutComposition {
+    /// Number of rows in the grid.
     pub rows: u32,
+    /// Number of columns in the grid.
     pub cols: u32,
+    /// Grid cell position (row, col) for the first component.
     pub cell_index_first: (u32, u32),
+    /// Grid cell position (row, col) for the second component.
     pub cell_index_second: (u32, u32),
 }
 
 impl GridLayoutComposition {
+    /// Compose two components in a grid layout.
     pub fn compose<A: Mixable, B: Mixable>(
         &self,
         first: &mut A,
@@ -823,8 +843,8 @@ impl GridLayoutComposition {
         Ok(())
     }
 
+    /// Returns whether the grid cell indices are within bounds.
     pub fn can_compose<A: Mixable, B: Mixable>(&self, _first: &A, _second: &B) -> bool {
-        // Check that cell indices are within grid bounds
         // Indices are (row, col)
         self.cell_index_first.0 < self.rows
             && self.cell_index_first.1 < self.cols
@@ -832,6 +852,7 @@ impl GridLayoutComposition {
             && self.cell_index_second.1 < self.cols
     }
 
+    /// Get a human-readable description of this grid layout.
     pub fn description(&self) -> String {
         format!(
             "GridLayout({}x{}, cells: {:?}, {:?})",

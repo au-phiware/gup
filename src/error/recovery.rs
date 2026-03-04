@@ -24,10 +24,15 @@ pub struct RecoveryManager {
 /// Configuration for recovery behavior.
 #[derive(Debug, Clone)]
 pub struct RecoveryConfig {
+    /// Maximum number of recovery attempts before giving up.
     pub max_recovery_attempts: usize,
+    /// Timeout duration for a single recovery attempt.
     pub recovery_timeout: Duration,
+    /// Whether automatic checkpoint creation is enabled.
     pub enable_checkpoints: bool,
+    /// Interval between automatic checkpoints.
     pub checkpoint_interval: Duration,
+    /// Whether automatic recovery is enabled.
     pub auto_recovery_enabled: bool,
 }
 
@@ -47,62 +52,94 @@ pub trait RecoveryHandler: std::fmt::Debug + MaybeSend + MaybeSync {
 /// Record of a recovery attempt.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecoveryAttempt {
+    /// Unique identifier for this recovery attempt.
     pub attempt_id: uuid::Uuid,
+    /// Timestamp when the attempt was made.
     pub timestamp: std::time::SystemTime,
+    /// Identifier of the error being recovered from.
     pub error_id: uuid::Uuid,
+    /// Recovery action that was attempted.
     pub action: RecoveryAction,
+    /// Result of the recovery attempt.
     pub result: RecoveryResult,
+    /// Time taken to execute the recovery.
     pub duration: Duration,
 }
 
 /// System state checkpoint for recovery.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemCheckpoint {
+    /// Unique identifier for this checkpoint.
     pub checkpoint_id: uuid::Uuid,
+    /// Timestamp when the checkpoint was created.
     pub timestamp: std::time::SystemTime,
+    /// GPU device state snapshot.
     pub gpu_state: GpuState,
+    /// Buffer state snapshot.
     pub buffer_state: BufferState,
+    /// Pipeline state snapshot.
     pub pipeline_state: PipelineState,
+    /// System configuration snapshot.
     pub configuration: SystemConfiguration,
 }
 
 /// GPU state information for checkpoints.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GpuState {
+    /// Identifier of the GPU device.
     pub device_id: String,
+    /// Graphics backend in use.
     pub backend: String,
+    /// Enabled GPU features.
     pub features_enabled: Vec<String>,
+    /// Current GPU memory usage in bytes.
     pub memory_usage: u64,
+    /// Number of active GPU buffers.
     pub active_buffers: usize,
+    /// Number of active GPU textures.
     pub active_textures: usize,
 }
 
 /// Buffer state information.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BufferState {
+    /// Total number of buffers.
     pub total_buffers: usize,
+    /// Total buffer size in bytes.
     pub total_size: u64,
+    /// Number of staging buffers.
     pub staging_buffers: usize,
+    /// Number of vertex buffers.
     pub vertex_buffers: usize,
+    /// Number of uniform buffers.
     pub uniform_buffers: usize,
 }
 
 /// Pipeline state information.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PipelineState {
+    /// Number of active render or compute pipelines.
     pub active_pipelines: usize,
+    /// Number of cached compiled shaders.
     pub cached_shaders: usize,
+    /// Number of active bind groups.
     pub bind_groups: usize,
+    /// Number of active render passes.
     pub render_passes: usize,
 }
 
 /// System configuration snapshot.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemConfiguration {
+    /// Current render scale factor.
     pub render_scale: f32,
+    /// Current quality level setting.
     pub quality_level: u32,
+    /// Whether vertical sync is enabled.
     pub vsync_enabled: bool,
+    /// Whether debug mode is enabled.
     pub debug_mode: bool,
+    /// Active fallback settings as key-value pairs.
     pub fallback_settings: HashMap<String, String>,
 }
 
@@ -372,10 +409,15 @@ impl RecoveryManager {
 /// Recovery statistics.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecoveryStats {
+    /// Total number of recovery attempts made.
     pub total_attempts: usize,
+    /// Number of successful recovery attempts.
     pub successful_attempts: usize,
+    /// Ratio of successful recoveries to total attempts.
     pub success_rate: f32,
+    /// Average time taken per recovery attempt.
     pub average_duration: Duration,
+    /// Number of recent checkpoints available.
     pub recent_checkpoints: usize,
 }
 
@@ -564,6 +606,7 @@ impl Default for RecoveryManager {
 
 // Extension methods for GupError
 impl GupError {
+    /// Create a new configuration error.
     pub fn configuration_error(parameter: impl Into<String>, message: impl Into<String>) -> Self {
         Self::ConfigurationError {
             parameter: parameter.into(),

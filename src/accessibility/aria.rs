@@ -366,9 +366,13 @@ pub enum AriaLive {
 pub struct AriaRelevant(u8);
 
 impl AriaRelevant {
+    /// Additions to the region are relevant.
     pub const ADDITIONS: Self = Self(0b0001);
+    /// Removals from the region are relevant.
     pub const REMOVALS: Self = Self(0b0010);
+    /// Text changes within the region are relevant.
     pub const TEXT: Self = Self(0b0100);
+    /// All change types are relevant.
     pub const ALL: Self = Self(0b1111);
 }
 
@@ -383,22 +387,37 @@ impl std::ops::BitOr for AriaRelevant {
 /// Updates to be communicated to screen readers.
 #[derive(Debug, Clone)]
 pub enum AriaUpdate {
-    /// A new node was created
-    NodeCreated { node_id: NodeId },
+    /// A new node was created.
+    NodeCreated {
+        /// Identifier of the created node.
+        node_id: NodeId,
+    },
 
-    /// A node was updated
-    NodeUpdated { node_id: NodeId },
+    /// A node was updated.
+    NodeUpdated {
+        /// Identifier of the updated node.
+        node_id: NodeId,
+    },
 
-    /// A node was removed
-    NodeRemoved { node_id: NodeId },
+    /// A node was removed.
+    NodeRemoved {
+        /// Identifier of the removed node.
+        node_id: NodeId,
+    },
 
-    /// Focus changed to a new node
-    FocusChanged { node_id: NodeId },
+    /// Focus changed to a new node.
+    FocusChanged {
+        /// Identifier of the newly focused node.
+        node_id: NodeId,
+    },
 
-    /// Live region was updated
+    /// Live region was updated.
     LiveRegion {
+        /// Identifier of the live region.
         id: String,
+        /// New content of the live region.
         content: String,
+        /// Urgency level for the announcement.
         urgency: AriaLive,
     },
 }
