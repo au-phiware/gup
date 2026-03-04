@@ -186,6 +186,7 @@ impl<T> AttrTargetFn<T> {
 
 /// A type-erased closure for computing per-element delays: given an element
 /// index and data item reference, it produces a delay in milliseconds.
+#[allow(clippy::type_complexity)]
 struct DelayFn<T> {
     #[cfg(not(target_arch = "wasm32"))]
     func: Box<dyn Fn(usize, &T) -> u64 + Send + Sync>,
@@ -198,9 +199,7 @@ impl<T> DelayFn<T> {
     where
         F: Fn(usize, &T) -> u64 + MaybeSend + MaybeSync + 'static,
     {
-        Self {
-            func: Box::new(f),
-        }
+        Self { func: Box::new(f) }
     }
 
     fn eval(&self, index: usize, item: &T) -> u64 {
@@ -551,10 +550,7 @@ where
                         let to = target_fn.eval(item);
                         attrs.insert(name.clone(), (from, to));
                     }
-                    let per_delay = self
-                        .delay_fn
-                        .as_ref()
-                        .map(|df| df.eval(element_idx, item));
+                    let per_delay = self.delay_fn.as_ref().map(|df| df.eval(element_idx, item));
                     element_idx += 1;
                     elements.push(ElementTransition {
                         attrs,
@@ -579,10 +575,7 @@ where
                         };
                         attrs.insert(name.clone(), (from, to));
                     }
-                    let per_delay = self
-                        .delay_fn
-                        .as_ref()
-                        .map(|df| df.eval(element_idx, item));
+                    let per_delay = self.delay_fn.as_ref().map(|df| df.eval(element_idx, item));
                     element_idx += 1;
                     elements.push(ElementTransition {
                         attrs,
@@ -648,10 +641,7 @@ where
                         let to = target_fn.eval(item);
                         attrs.insert(name.clone(), (from, to));
                     }
-                    let per_delay = self
-                        .delay_fn
-                        .as_ref()
-                        .map(|df| df.eval(element_idx, item));
+                    let per_delay = self.delay_fn.as_ref().map(|df| df.eval(element_idx, item));
                     element_idx += 1;
                     elements.push(ElementTransition {
                         attrs,
