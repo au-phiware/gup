@@ -2,6 +2,9 @@
 
 All runnable examples. For a guided learning path, see [README.md](README.md).
 
+**🖼️ [Visual Gallery](https://au-phiware.github.io/gup/)** — Browse rendered
+screenshots of every example.
+
 Run any example with: `cargo run --example <name>`
 
 ---

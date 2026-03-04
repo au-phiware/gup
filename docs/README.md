@@ -144,6 +144,11 @@ contrast checking.
 **New to Gup?** Start with [Mission and Goals](./MISSION_AND_GOALS.md) to
 understand the project vision.
 
+**Want to see examples?** Browse the
+[🖼️ Visual Gallery](https://au-phiware.github.io/gup/) for rendered screenshots
+of every example, or view the [Examples Index](../examples/INDEX.md) for
+runnable code.
+
 **Want technical details?** Read [Technical Approach](./TECHNICAL_APPROACH.md)
 for the unified shader architecture.
 
