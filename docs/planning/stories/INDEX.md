@@ -763,7 +763,7 @@ integration, pipeline caching.
 - [GUP-298](GUP-298_Filled_Polygon_Mark.md) ✅ — FilledPolygon mark type for
   true filled rendering of area charts and polygon-based visualisations via GPU
   tessellation. Deps: GUP-132 ✅, GUP-247 ✅.
-- [GUP-299](GUP-299_Axis_Percentage_Formatter.md) 📋 — Pluggable axis tick
+- [GUP-299](GUP-299_Axis_Percentage_Formatter.md) 🚧 — Pluggable axis tick
   formatters with automatic percentage formatting for normalised stacked charts.
   Deps: GUP-247 ✅.
 - [GUP-300](GUP-300_Violin_Mark_Renderer.md) 💡 — Dedicated ViolinMark with GPU

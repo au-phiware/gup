@@ -2,7 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Chart Builders **Status**: 📋 Planned **Created**: 2025-07-28
+**Initiative**: Chart Builders **Status**: 🚧 In Progress **Created**: 2025-07-28
 
 ## Context
 
