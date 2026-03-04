@@ -937,6 +937,17 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
         self.auto_tune.enabled && self.auto_tune.is_settled()
     }
 
+    /// Returns `true` if a GPU timestamp timer has been created for
+    /// auto-tune profiling.
+    ///
+    /// This indicates that `Features::TIMESTAMP_QUERY` is available on the
+    /// device and the timer has been lazily initialised during calibration.
+    /// When `false`, the auto-tune system uses `Instant`-based wall-clock
+    /// timing instead.
+    pub fn has_gpu_timer(&self) -> bool {
+        self.gpu_timer.is_some()
+    }
+
     /// Prepare GPU resources for rendering, automatically rebuilding the
     /// dimmed instance buffer when the shared selection state has changed.
     ///
@@ -2059,5 +2070,22 @@ mod tests {
             LinkedSelection::new(vec![1.0], shared, |_item, idx| idx).gpu_dimming_auto_tune(true);
 
         assert!(linked.auto_tune_timings().is_none());
+    }
+
+    #[test]
+    fn linked_selection_gpu_timer_none_by_default() {
+        let shared = SharedSelectionState::<usize>::new();
+        let linked: LinkedSelection<f32, crate::Circle, usize> =
+            LinkedSelection::new(vec![1.0], shared, |_item, idx| idx);
+        assert!(!linked.has_gpu_timer());
+    }
+
+    #[test]
+    fn linked_selection_gpu_timer_none_before_prepare_render() {
+        let shared = SharedSelectionState::<usize>::new();
+        let linked: LinkedSelection<f32, crate::Circle, usize> =
+            LinkedSelection::new(vec![1.0], shared, |_item, idx| idx).gpu_dimming_auto_tune(true);
+        // Timer is lazily created during prepare_render, not at construction.
+        assert!(!linked.has_gpu_timer());
     }
 }

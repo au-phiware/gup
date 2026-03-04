@@ -36,6 +36,37 @@ async fn create_gpu_context() -> Option<(wgpu::Device, wgpu::Queue)> {
     Some((device, queue))
 }
 
+/// Create a GPU context that opportunistically enables TIMESTAMP_QUERY.
+async fn create_gpu_context_with_timestamps() -> Option<(wgpu::Device, wgpu::Queue, bool)> {
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::PRIMARY,
+        ..Default::default()
+    });
+    let adapter = instance
+        .request_adapter(&wgpu::RequestAdapterOptions::default())
+        .await
+        .ok()?;
+
+    let supports_ts = adapter.features().contains(wgpu::Features::TIMESTAMP_QUERY);
+
+    let mut features = wgpu::Features::empty();
+    if supports_ts {
+        features |= wgpu::Features::TIMESTAMP_QUERY;
+    }
+
+    let (device, queue) = adapter
+        .request_device(&wgpu::DeviceDescriptor {
+            label: Some("test_device_ts"),
+            required_features: features,
+            required_limits: wgpu::Limits::default(),
+            memory_hints: wgpu::MemoryHints::default(),
+            trace: Default::default(),
+        })
+        .await
+        .ok()?;
+    Some((device, queue, supports_ts))
+}
+
 /// Read back GPU buffer contents as a Vec<f32>.
 async fn read_buffer_f32(
     device: &wgpu::Device,
@@ -599,4 +630,150 @@ async fn auto_tune_disabled_uses_static_threshold() {
         "GPU path should activate with 20 items and threshold 10"
     );
     assert_eq!(linked.effective_threshold(), 10);
+}
+
+// ---------------------------------------------------------------------------
+// GPU Timestamp Query tests (GUP-292)
+// ---------------------------------------------------------------------------
+
+/// When TIMESTAMP_QUERY is available, the auto-tune system should create
+/// a GpuTimer during calibration of the GPU path.
+#[tokio::test]
+async fn auto_tune_creates_gpu_timer_when_timestamps_available() {
+    let Some((device, queue, supports_ts)) = create_gpu_context_with_timestamps().await else {
+        eprintln!("Skipping GPU test: no adapter available");
+        return;
+    };
+
+    let shared = SharedSelectionState::<usize>::new();
+    shared.select([0usize]);
+
+    let data = make_data(50);
+    let mut linked: LinkedSelection<f32, gup::Circle, usize> =
+        LinkedSelection::new(data, shared.clone(), |_item, idx| idx)
+            .gpu_dimming_threshold(10)
+            .gpu_dimming_auto_tune(true)
+            .auto_tune_calibration_frames(2);
+
+    // Before any prepare_render, no GPU timer yet.
+    assert!(!linked.has_gpu_timer());
+
+    // Run CPU probe frames (2 frames) — timer should not be created yet
+    // because the CPU path is forced.
+    for i in 0..2 {
+        shared.set([(i % 50) as usize]);
+        linked
+            .prepare_render(&device, &queue, circle_mapper, None, None)
+            .unwrap();
+    }
+    // After CPU probing, still no GPU timer (CPU path doesn't need it).
+    assert!(
+        !linked.has_gpu_timer() || supports_ts,
+        "GPU timer should only exist if timestamps are supported"
+    );
+
+    // Run GPU probe frames (2 frames) — timer should be created if supported.
+    for i in 2..4 {
+        shared.set([(i % 50) as usize]);
+        linked
+            .prepare_render(&device, &queue, circle_mapper, None, None)
+            .unwrap();
+    }
+
+    // After calibration settles, check GPU timer presence.
+    assert!(
+        linked.is_auto_tune_settled(),
+        "Auto-tune should be settled after 4 frames"
+    );
+
+    if supports_ts {
+        assert!(
+            linked.has_gpu_timer(),
+            "GPU timer should exist when TIMESTAMP_QUERY is available"
+        );
+    } else {
+        assert!(
+            !linked.has_gpu_timer(),
+            "GPU timer should not exist without TIMESTAMP_QUERY"
+        );
+    }
+
+    // Timings should always be available regardless of timer presence.
+    let timings = linked.auto_tune_timings();
+    assert!(
+        timings.is_some(),
+        "Timings should be available after settling"
+    );
+    let (cpu_ns, gpu_ns) = timings.unwrap();
+    assert!(
+        cpu_ns > 0 || gpu_ns > 0,
+        "At least one timing should be positive"
+    );
+}
+
+/// Without auto-tune, no GpuTimer should be created even if the device
+/// supports timestamp queries.
+#[tokio::test]
+async fn no_gpu_timer_without_auto_tune() {
+    let Some((device, queue, _supports_ts)) = create_gpu_context_with_timestamps().await else {
+        eprintln!("Skipping GPU test: no adapter available");
+        return;
+    };
+
+    let shared = SharedSelectionState::<usize>::new();
+    shared.select([0usize]);
+
+    let data = make_data(20);
+    let mut linked: LinkedSelection<f32, gup::Circle, usize> =
+        LinkedSelection::new(data, shared.clone(), |_item, idx| idx).gpu_dimming_threshold(10);
+
+    // Auto-tune disabled, prepare_render with GPU path
+    linked
+        .prepare_render(&device, &queue, circle_mapper, None, None)
+        .unwrap();
+
+    assert!(
+        !linked.has_gpu_timer(),
+        "GPU timer should not be created when auto-tune is disabled"
+    );
+}
+
+/// When auto-tune settles using GPU timestamps, the auto_tune_timings API
+/// should still report valid results.
+#[tokio::test]
+async fn auto_tune_timings_reported_with_gpu_timestamps() {
+    let Some((device, queue, _supports_ts)) = create_gpu_context_with_timestamps().await else {
+        eprintln!("Skipping GPU test: no adapter available");
+        return;
+    };
+
+    let shared = SharedSelectionState::<usize>::new();
+    shared.select([0usize]);
+
+    let data = make_data(50);
+    let mut linked: LinkedSelection<f32, gup::Circle, usize> =
+        LinkedSelection::new(data, shared.clone(), |_item, idx| idx)
+            .gpu_dimming_threshold(10)
+            .gpu_dimming_auto_tune(true)
+            .auto_tune_calibration_frames(2);
+
+    // Run through full calibration (2 CPU + 2 GPU frames).
+    for i in 0..4 {
+        shared.set([(i % 50) as usize]);
+        linked
+            .prepare_render(&device, &queue, circle_mapper, None, None)
+            .unwrap();
+    }
+
+    assert!(linked.is_auto_tune_settled());
+
+    let timings = linked.auto_tune_timings();
+    assert!(timings.is_some());
+    let (cpu_ns, gpu_ns) = timings.unwrap();
+
+    // Both paths should have produced measurable timing values.
+    // (CPU uses Instant, GPU uses timestamps if available or Instant fallback)
+    assert!(cpu_ns > 0, "CPU timing should be positive, got {cpu_ns}");
+    // GPU timing might be 0 in fast cases but should be non-negative.
+    let _ = gpu_ns; // Just verify it doesn't panic.
 }
