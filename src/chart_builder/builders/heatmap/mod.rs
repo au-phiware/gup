@@ -425,7 +425,11 @@ where
             &None,
         )?;
 
-        let composed_chart = ComposedChart::new(selection, self.config).with_default_axes();
+        // Propagate the heatmap-specific colorbar flag into ChartConfig.
+        let mut config = self.config;
+        config.show_colorbar = self.show_colorbar;
+
+        let composed_chart = ComposedChart::new(selection, config).with_default_axes();
 
         Ok(composed_chart)
     }

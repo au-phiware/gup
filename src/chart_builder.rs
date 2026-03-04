@@ -149,6 +149,129 @@ struct AxisLineBuffers {
     vertex_count: u32,
 }
 
+/// GPU pipeline for rendering the colorbar gradient strip using TriangleList
+/// topology with per-vertex colours.
+///
+/// Uses the same `basic.wgsl` shader as axis lines but with triangle
+/// topology instead of line-list.
+struct GradientStripPipeline {
+    pipeline: wgpu::RenderPipeline,
+}
+
+impl std::fmt::Debug for GradientStripPipeline {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GradientStripPipeline")
+            .field("pipeline", &"<wgpu::RenderPipeline>")
+            .finish()
+    }
+}
+
+impl GradientStripPipeline {
+    /// Create a new gradient-strip pipeline for the given surface format.
+    fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("gradient_strip_shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/basic.wgsl").into()),
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("gradient_strip_pipeline_layout"),
+            bind_group_layouts: &[],
+            push_constant_ranges: &[],
+        });
+
+        let vertex_layout = wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Vertex>() as u64,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 2]>() as u64,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+            ],
+        };
+
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("gradient_strip_pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                buffers: &[vertex_layout],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: surface_format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+            cache: None,
+        });
+
+        Self { pipeline }
+    }
+
+    /// Upload gradient vertices to a GPU buffer.
+    fn upload(&self, device: &wgpu::Device, vertices: &[Vertex]) -> wgpu::Buffer {
+        use wgpu::util::{BufferInitDescriptor, DeviceExt};
+
+        device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("gradient_strip_vertex_buffer"),
+            contents: bytemuck::cast_slice(vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        })
+    }
+
+    /// Record gradient draw commands into an active render pass.
+    fn draw<'a>(
+        &'a self,
+        render_pass: &mut wgpu::RenderPass<'a>,
+        vertex_buf: &'a wgpu::Buffer,
+        vertex_count: u32,
+    ) {
+        if vertex_count == 0 {
+            return;
+        }
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_vertex_buffer(0, vertex_buf.slice(..));
+        render_pass.draw(0..vertex_count, 0..1);
+    }
+}
+
+/// Uploaded GPU buffer for colorbar gradient rendering.
+#[derive(Debug)]
+struct GradientStripBuffers {
+    vertex_buf: wgpu::Buffer,
+    vertex_count: u32,
+}
+
 /// Core trait for all chart builders providing fluent API construction.
 ///
 /// This trait enables type-safe chart building with compile-time validation
@@ -529,6 +652,13 @@ pub struct ChartConfig {
     /// pipeline so that a numeric data value is mapped to an RGBA colour
     /// on the GPU.
     pub color_scale: Option<ColorScale>,
+
+    /// Whether to show a colorbar legend for the colour scale.
+    ///
+    /// When `true` and [`color_scale`](Self::color_scale) is set, a
+    /// gradient strip with tick marks and labels is rendered adjacent to
+    /// the plot area.
+    pub show_colorbar: bool,
 }
 
 /// Chart margin specification.
@@ -562,6 +692,7 @@ impl Default for ChartConfig {
             x_scale: None,
             y_scale: None,
             color_scale: None,
+            show_colorbar: false,
         }
     }
 }
@@ -695,6 +826,16 @@ impl ChartConfig {
         self.color_scale = Some(scale.into());
         self
     }
+
+    /// Enable or disable the colorbar legend.
+    ///
+    /// The colorbar is only rendered when both `show_colorbar` is `true`
+    /// **and** a [`ColorScale`] is configured via
+    /// [`with_color_scale`](Self::with_color_scale).
+    pub fn with_colorbar(mut self, show: bool) -> Self {
+        self.show_colorbar = show;
+        self
+    }
 }
 
 impl Default for Margins {
@@ -768,6 +909,12 @@ where
     clipped_text_registry: ClippedTextRegistry,
     /// Hover reveal state machine managing tooltip visibility.
     hover_state: HoverRevealState,
+    /// Cached triangle-list pipeline for colorbar gradient rendering.
+    colorbar_gradient_pipeline: Option<GradientStripPipeline>,
+    /// Uploaded colorbar gradient vertex buffer.
+    colorbar_gradient_buffers: Option<GradientStripBuffers>,
+    /// Cached colorbar geometry (labels are stored here for text rendering).
+    colorbar_geometry: Option<colorbar::ColorbarGeometry>,
 }
 
 impl<T, M> ComposedChart<T, M>
@@ -800,6 +947,9 @@ where
             axis_line_buffers: None,
             clipped_text_registry: ClippedTextRegistry::new(),
             hover_state,
+            colorbar_gradient_pipeline: None,
+            colorbar_gradient_buffers: None,
+            colorbar_geometry: None,
         }
     }
 
@@ -1060,6 +1210,89 @@ where
             .is_some_and(|b| b.vertex_count > 0)
     }
 
+    // ── Colorbar methods ─────────────────────────────────────────────────
+
+    /// Returns `true` when the colorbar should be rendered.
+    ///
+    /// A colorbar is shown only when `show_colorbar` is `true` in the
+    /// chart config **and** a [`ColorScale`] has been configured.
+    pub fn has_colorbar(&self) -> bool {
+        self.config.show_colorbar && self.config.color_scale.is_some()
+    }
+
+    /// Returns `true` if the colorbar gradient pipeline has been
+    /// initialised and there are vertices ready to draw.
+    pub fn has_colorbar_data(&self) -> bool {
+        self.colorbar_gradient_buffers
+            .as_ref()
+            .is_some_and(|b| b.vertex_count > 0)
+    }
+
+    /// Record colorbar gradient draw commands into an active render pass.
+    ///
+    /// Call this after [`prepare_draw_commands()`](Self::prepare_draw_commands)
+    /// (or [`render()`](Self::render)) has prepared the colorbar pipeline.
+    ///
+    /// Returns the number of vertices drawn (0 if there is no colorbar).
+    pub fn draw_colorbar_gradient<'a>(
+        &'a self,
+        render_pass: &mut wgpu::RenderPass<'a>,
+    ) -> u32 {
+        if let (Some(pipeline), Some(bufs)) = (
+            &self.colorbar_gradient_pipeline,
+            &self.colorbar_gradient_buffers,
+        ) {
+            pipeline.draw(render_pass, &bufs.vertex_buf, bufs.vertex_count);
+            bufs.vertex_count
+        } else {
+            0
+        }
+    }
+
+    /// Access the colorbar geometry (labels, outline, ticks) after
+    /// [`prepare_draw_commands()`](Self::prepare_draw_commands).
+    ///
+    /// Use the returned [`ColorbarGeometry`] to:
+    /// - Feed `labels` to a `TextRenderer`
+    /// - Add `line_vertices` to the axis-line draw
+    /// - Add `tick_instances` to the tick draw
+    pub fn colorbar_geometry(&self) -> Option<&colorbar::ColorbarGeometry> {
+        self.colorbar_geometry.as_ref()
+    }
+
+    /// Prepare the colorbar gradient pipeline and upload buffers.
+    ///
+    /// Called by [`prepare_draw_commands()`](Self::prepare_draw_commands)
+    /// when `has_colorbar()` is true.
+    fn generate_colorbar_geometry(&self) -> Option<colorbar::ColorbarGeometry> {
+        if !self.has_colorbar() {
+            return None;
+        }
+
+        let color_scale = self.config.color_scale.clone().unwrap();
+        let chart_area = self.calculate_chart_area();
+        let viewport_size = (self.config.width, self.config.height);
+
+        // Position the colorbar to the right of the chart area.
+        // Convert pixel coordinates to NDC.
+        let w = self.config.width;
+        let h = self.config.height;
+
+        // Place the strip 10 px to the right of the chart area,
+        // spanning the full chart height.
+        let gap_px = 10.0;
+        let x_px = chart_area.x + chart_area.width + gap_px;
+        let x_ndc = (x_px / w) * 2.0 - 1.0;
+
+        let y_top_px = chart_area.y;
+        let y_bot_px = chart_area.y + chart_area.height;
+        let y_top_ndc = 1.0 - (y_top_px / h) * 2.0;
+        let y_bot_ndc = 1.0 - (y_bot_px / h) * 2.0;
+
+        let renderer = colorbar::ColorbarRenderer::with_defaults(color_scale);
+        Some(renderer.generate_geometry(x_ndc, y_bot_ndc, y_top_ndc, viewport_size))
+    }
+
     /// Prepare cached axis-line and tick pipelines from the current chart
     /// geometry.
     ///
@@ -1098,33 +1331,69 @@ where
 
         let geom = self.generate_axis_geometry_instanced();
 
-        // Axis-line vertices
-        if !geom.line_vertices.is_empty() {
+        // Generate colorbar geometry (if enabled) so its outline and ticks
+        // can be merged into the axis buffers.
+        let colorbar_geom = self.generate_colorbar_geometry();
+
+        // Merge axis-line vertices with colorbar outline.
+        let mut all_line_vertices = geom.line_vertices;
+        let mut all_tick_instances = geom.tick_instances;
+
+        if let Some(ref cb_geom) = colorbar_geom {
+            all_line_vertices.extend_from_slice(&cb_geom.line_vertices);
+            all_tick_instances.extend_from_slice(&cb_geom.tick_instances);
+        }
+
+        // Axis-line vertices (includes colorbar outline)
+        if !all_line_vertices.is_empty() {
             if let Some(pipeline) = &self.axis_line_pipeline {
-                let vertex_buf = pipeline.upload(device, &geom.line_vertices);
+                let vertex_buf = pipeline.upload(device, &all_line_vertices);
                 self.axis_line_buffers = Some(AxisLineBuffers {
                     vertex_buf,
-                    vertex_count: geom.line_vertices.len() as u32,
+                    vertex_count: all_line_vertices.len() as u32,
                 });
             }
         } else {
             self.axis_line_buffers = None;
         }
 
-        // Tick instances
-        if !geom.tick_instances.is_empty() {
+        // Tick instances (includes colorbar ticks)
+        if !all_tick_instances.is_empty() {
             if let Some(tick_pipeline) = &self.tick_pipeline {
                 let (base_buf, inst_buf) =
-                    tick_pipeline.upload(device, queue, &geom.tick_instances);
+                    tick_pipeline.upload(device, queue, &all_tick_instances);
                 self.tick_buffers = Some(TickBuffers {
                     base_buf,
                     inst_buf,
-                    instance_count: geom.tick_instances.len() as u32,
+                    instance_count: all_tick_instances.len() as u32,
                 });
             }
         } else {
             self.tick_buffers = None;
         }
+
+        // Colorbar gradient strip (separate triangle-list pipeline)
+        if let Some(ref cb_geom) = colorbar_geom {
+            if self.colorbar_gradient_pipeline.is_none() {
+                self.colorbar_gradient_pipeline =
+                    Some(GradientStripPipeline::new(device, surface_format));
+            }
+            if !cb_geom.gradient_vertices.is_empty() {
+                if let Some(pipeline) = &self.colorbar_gradient_pipeline {
+                    let vertex_buf = pipeline.upload(device, &cb_geom.gradient_vertices);
+                    self.colorbar_gradient_buffers = Some(GradientStripBuffers {
+                        vertex_buf,
+                        vertex_count: cb_geom.gradient_vertices.len() as u32,
+                    });
+                }
+            } else {
+                self.colorbar_gradient_buffers = None;
+            }
+        } else {
+            self.colorbar_gradient_buffers = None;
+        }
+
+        self.colorbar_geometry = colorbar_geom;
     }
 
     /// Prepare grid line instance buffers for GPU-instanced rendering.
