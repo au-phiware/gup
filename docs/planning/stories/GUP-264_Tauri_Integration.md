@@ -252,3 +252,113 @@ documented and tested.
 - 6 new unit tests (JSON parsing, error paths) in `wasm_api::tests`
 - All 2376+ existing tests pass without regressions
 - All examples compile (`cargo check --examples`)
+
+## Retrospective
+
+**Completed**: 2025-07-18
+
+### Key Technical Learnings
+
+#### WASM Surface Rendering vs PNG Readback
+
+- **Challenge**: The existing `render_to_png` pipeline uses blocking
+  `device.poll(PollType::Wait)` for buffer readback, which panics on WASM
+  targets (cannot block the browser event loop).
+- **Solution**: Implemented direct WebGPU surface rendering instead —
+  `instance.create_surface(SurfaceTarget::Canvas(...))` creates a surface from
+  the HTML canvas element, and the render pass writes directly to the surface
+  texture. No readback needed.
+- **Pattern**: For WASM rendering, always prefer surface-based rendering over
+  texture readback. The `render_to_png` path should be reserved for native-only
+  export use cases.
+
+#### Per-Canvas GPU State Caching
+
+- **Challenge**: The story requires repeated `render_scatter()` calls with
+  different data to update the chart in place without GPU resource leaks.
+  Creating a new wgpu instance/adapter/device per call would be wasteful and
+  slow.
+- **Solution**: Used `thread_local!(RefCell<HashMap<String, CanvasState>>)` to
+  cache GPU state (device, queue, pipeline, surface) per canvas ID. Subsequent
+  calls only recreate the instance buffer with new data.
+- **Pattern**: For WASM APIs with repeated calls, cache GPU resources in
+  thread-local storage keyed by the DOM element identifier.
+
+#### Chart Builder Data Rendering Gap
+
+- **Challenge**: `ComposedChart::render()` currently renders only
+  axes/grid/ticks. The actual data marks (circles for scatter) are not wired
+  into the chart builder's render pipeline. The comment in the `render()` method
+  says "For now, we acknowledge that the visualization is prepared for
+  rendering."
+- **Solution**: Implemented circle rendering at the lower level, using
+  GPU-instanced quads with a WGSL circle shader (same approach as
+  `02_scatter_window.rs`). This bypasses the chart builder for data marks.
+- **Pattern**: Until the chart builder's data-layer rendering is complete, the
+  WASM API and integration examples must use Gup's low-level mark rendering
+  infrastructure directly.
+
+### Architectural Decisions
+
+#### Standalone Example vs Workspace Member
+
+- **Decision**: Made `gup-tauri` a standalone directory under `examples/` rather
+  than a workspace member.
+- **Reasoning**: Tauri requires `webkit2gtk-4.1-dev` and other system libraries
+  that are not in the Nix dev environment. Adding it as a workspace member would
+  break `cargo check` for all developers without these system dependencies
+  installed.
+- **Trade-off**: The Tauri backend code cannot be compiled or tested by CI
+  without additional environment setup. The Rust code is verified by review and
+  follows the same patterns as the tested main crate.
+- **Future**: If Tauri dependencies are added to `flake.nix`, the crate could be
+  promoted to a workspace member with full CI coverage.
+
+#### Direct Circle Rendering vs Chart Builder
+
+- **Decision**: Used low-level GPU-instanced circle rendering instead of the
+  `ScatterPlotBuilder` for data marks.
+- **Reasoning**: The chart builder creates the chart structure
+  (axes/grid/scales) but does not yet render data marks. Using the builder would
+  show axes but no data points, which is useless for a demo.
+- **Trade-off**: The WASM API doesn't benefit from the chart builder's automatic
+  axis/scale configuration. It renders raw circles in clip space with manual
+  data-to-screen mapping.
+- **Future**: When the chart builder wires up data-layer rendering, the WASM API
+  should switch to using the builder for a richer chart (axes + grid + data in
+  one call).
+
+### Development Workflow Insights
+
+- **Pre-existing WASM build failure**: `wasm-pack build --target web` fails due
+  to a `Send + Sync` bound issue in `streaming_buffer.rs`. This pre-dates this
+  story and affects all WASM builds. Verified by stashing changes and confirming
+  the same failure on the previous commit.
+- **Tauri CLI unavailability**: The Nix dev environment does not include
+  `cargo-tauri` or `webkit2gtk-4.1`. All Tauri-specific code was written using
+  knowledge of the Tauri 2.x API and validated by review. Manual testing
+  requires installing the Tauri CLI separately.
+- **Test isolation**: The 6 new unit tests cover JSON parsing and error paths on
+  the native target. The WASM-specific rendering code is gated behind
+  `#[cfg(target_arch = "wasm32")]` and can only be tested in a browser
+  environment.
+
+### Follow-up Stories
+
+1. **GUP-283: Fix WASM Build (`StreamingBuffer` Send/Sync)** — The
+   `StreamingBuffer<T>` type requires `Send + Sync` bounds that are not
+   satisfied on WASM targets. This blocks `wasm-pack build` and
+   `wasm-pack test`. The fix likely involves conditional compilation or removing
+   the `Send + Sync` requirement for the WASM build.
+
+2. **GUP-284: Unify Chart Builder Data-Layer Rendering** — The
+   `ComposedChart::render()` method does not render data marks (circles, lines,
+   bars). The `render_to_png` and surface rendering paths only produce axes and
+   grid lines. Wiring the Selection/Mark pipeline into the chart builder's
+   render pass would enable the chart builder to produce complete visualisations
+   end-to-end.
+
+3. **GUP-285: Tauri Event-Driven Streaming Updates** — Replace the explicit
+   `invoke()` pattern with Tauri's event system (`app.emit(...)`) for streaming
+   data updates. This would enable real-time charts that update as the Rust
+   backend produces new data, without requiring the frontend to poll.
