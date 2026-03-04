@@ -108,3 +108,96 @@ directory with six category-based submodules:
 - 2,813 lib tests pass (0 failures, 4 ignored)
 - All examples compile without changes
 - No breaking API changes
+
+## Retrospective
+
+**Completed**: 2025-03-05
+
+### Key Technical Learnings
+
+#### Rust macro_rules! Scoping in Module Hierarchies
+
+- **Challenge**: After moving code from `mod.rs` into submodules, the `vec2!`,
+  `vec3!`, `vec4!`, `mat2!`, `mat3!`, `mat4!` macros (defined via
+  `macro_rules!`) were not visible in sibling submodules. Compilation failed
+  with "cannot find macro `vec4` in this scope" across all submodules.
+- **Solution**: Keep `macro_rules!` macros in `mod.rs` (the parent module),
+  defined before the `pub mod` declarations. In Rust, `macro_rules!` macros are
+  scoped to the module they're defined in and its child modules. They are NOT
+  automatically available through `pub use` re-exports.
+- **Pattern**: When splitting a module that contains `macro_rules!` definitions,
+  always keep the macros in the parent module file. Alternatively, use
+  `#[macro_export]` for crate-wide visibility, but that changes the macro's
+  canonical path.
+
+#### Non-Contiguous Code Extraction
+
+- **Challenge**: The original file had categories interleaved. For example, the
+  "basic functions" section around line 3534 contained LinearScale (math),
+  ColorMap (color), and PositionTransform (geometric) all adjacent to each
+  other.
+- **Solution**: Used a scripted extraction approach (Node.js) to precisely
+  select non-contiguous line ranges for each submodule, rather than trying to
+  do sequential cut-and-paste.
+- **Pattern**: For large file splits where sections interleave, write a script
+  that takes explicit line ranges rather than attempting manual extraction.
+
+#### Test Module Placement Strategy
+
+- **Challenge**: Three test modules (`tests`, `compatibility_tests`,
+  `color_scale_tests`) all used `use super::*` and tested across categories.
+  Moving them to individual submodules would require modifying imports.
+- **Solution**: Kept all tests in `mod.rs`. Since `mod.rs` re-exports
+  everything via `pub use`, `use super::*` in tests continues to bring all
+  symbols into scope. Zero test modifications needed.
+- **Pattern**: For pure refactoring splits, keeping tests in the parent module
+  with glob re-exports is the lowest-risk approach that satisfies "no test
+  modification" requirements.
+
+### Architectural Decisions
+
+#### Glob Re-exports for Backward Compatibility
+
+- **Decision**: Use `pub use self::core::*;` etc. in mod.rs for all submodules.
+- **Reasoning**: The story explicitly requires "all public API types remain
+  accessible from `shader_function::` path" with no breaking changes. Glob
+  re-exports achieve this with minimal maintenance overhead.
+- **Trade-off**: Glob re-exports can cause name conflicts if two submodules
+  export the same name. Currently no conflicts exist.
+- **Future**: If submodule-specific imports are desired (e.g.,
+  `shader_function::math::LinearScale`), the current structure already supports
+  this since submodules are `pub mod`.
+
+#### Keeping `core` as Module Name
+
+- **Decision**: Named the core traits module `core.rs` as specified in the
+  story, despite `core` being a Rust standard library crate name.
+- **Reasoning**: The module is accessed as `self::core` or
+  `super::core` within the shader_function module tree, which doesn't conflict
+  with `::core` (the standard library). No code in this module references
+  `::core` directly.
+- **Trade-off**: Could cause confusion for developers who expect `core` to
+  refer to the standard library. However, the shader_function module is
+  internal and well-documented.
+
+### Development Workflow Insights
+
+- **Disk space**: The ZFS home partition ran out of space during development
+  (0 bytes available due to snapshots). Using `CARGO_TARGET_DIR=/tmp/gup-target`
+  (an existing target dir on a separate filesystem) was essential to continue
+  building and testing.
+- **Scripted extraction**: Using Node.js to read the file and extract precise
+  line ranges into new files was much more reliable than manual editing of a
+  12,000+ line file. The script approach allowed precise control over which
+  lines went where.
+- **Incremental verification**: Running `cargo check` after each submodule
+  creation caught import issues immediately, making them easy to fix one at a
+  time rather than debugging a large batch of errors.
+
+### Follow-up Stories
+
+1. **Move Tests to Submodules** — Move the three test modules from `mod.rs`
+   into their respective submodules (e.g., color tests to `color.rs`,
+   statistical tests to `statistical.rs`). This would further reduce `mod.rs`
+   from 3,359 lines and co-locate tests with the code they verify. Lower
+   priority since current approach works.
