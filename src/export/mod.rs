@@ -19,6 +19,8 @@ pub mod html;
 pub mod png;
 pub mod svg;
 
+pub mod gallery;
+
 #[cfg(feature = "pdf")]
 pub mod pdf;
 
