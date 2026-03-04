@@ -64,8 +64,7 @@ pub fn translate_response(
     if response.hovered() {
         if let Some(pos) = response.hover_pos() {
             let [x, y] = map_to_chart_coords(pos, chart_rect, pixels_per_point);
-            let mut event =
-                InteractionEvent::new("mousemove", gup::interaction::Vec2::new(x, y));
+            let mut event = InteractionEvent::new("mousemove", gup::interaction::Vec2::new(x, y));
             event.modifiers = gup_modifiers;
             events.push(event);
         }
@@ -75,8 +74,7 @@ pub fn translate_response(
     if response.clicked() {
         if let Some(pos) = response.interact_pointer_pos() {
             let [x, y] = map_to_chart_coords(pos, chart_rect, pixels_per_point);
-            let mut event =
-                InteractionEvent::new("click", gup::interaction::Vec2::new(x, y));
+            let mut event = InteractionEvent::new("click", gup::interaction::Vec2::new(x, y));
             event.modifiers = gup_modifiers;
             events.push(event);
         }
@@ -86,8 +84,7 @@ pub fn translate_response(
     if response.secondary_clicked() {
         if let Some(pos) = response.interact_pointer_pos() {
             let [x, y] = map_to_chart_coords(pos, chart_rect, pixels_per_point);
-            let mut event =
-                InteractionEvent::new("contextmenu", gup::interaction::Vec2::new(x, y));
+            let mut event = InteractionEvent::new("contextmenu", gup::interaction::Vec2::new(x, y));
             event.modifiers = gup_modifiers;
             events.push(event);
         }
@@ -97,8 +94,7 @@ pub fn translate_response(
     if response.dragged() {
         if let Some(pos) = response.interact_pointer_pos() {
             let [x, y] = map_to_chart_coords(pos, chart_rect, pixels_per_point);
-            let mut event =
-                InteractionEvent::new("drag", gup::interaction::Vec2::new(x, y));
+            let mut event = InteractionEvent::new("drag", gup::interaction::Vec2::new(x, y));
             event.modifiers = gup_modifiers;
             events.push(event);
         }
@@ -108,8 +104,7 @@ pub fn translate_response(
     if response.drag_started() {
         if let Some(pos) = response.interact_pointer_pos() {
             let [x, y] = map_to_chart_coords(pos, chart_rect, pixels_per_point);
-            let mut event =
-                InteractionEvent::new("mousedown", gup::interaction::Vec2::new(x, y));
+            let mut event = InteractionEvent::new("mousedown", gup::interaction::Vec2::new(x, y));
             event.modifiers = gup_modifiers;
             events.push(event);
         }
@@ -119,8 +114,7 @@ pub fn translate_response(
     if response.drag_stopped() {
         if let Some(pos) = response.interact_pointer_pos() {
             let [x, y] = map_to_chart_coords(pos, chart_rect, pixels_per_point);
-            let mut event =
-                InteractionEvent::new("mouseup", gup::interaction::Vec2::new(x, y));
+            let mut event = InteractionEvent::new("mouseup", gup::interaction::Vec2::new(x, y));
             event.modifiers = gup_modifiers;
             events.push(event);
         }
@@ -143,8 +137,7 @@ pub fn translate_response(
     if scroll_delta != egui::Vec2::ZERO && response.hovered() {
         if let Some(pos) = response.hover_pos() {
             let [x, y] = map_to_chart_coords(pos, chart_rect, pixels_per_point);
-            let mut event =
-                InteractionEvent::new("scroll", gup::interaction::Vec2::new(x, y));
+            let mut event = InteractionEvent::new("scroll", gup::interaction::Vec2::new(x, y));
             event
                 .metadata
                 .insert("scroll_x".to_string(), scroll_delta.x.to_string());

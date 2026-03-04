@@ -61,8 +61,8 @@ use gup_egui::GupWidget;
 let mut widget = GupWidget::new(build_chart(initial_data));
 ```
 
-`GupWidget` takes ownership of the chart and manages the off-screen GPU
-texture, dirty tracking, and egui texture upload internally.
+`GupWidget` takes ownership of the chart and manages the off-screen GPU texture,
+dirty tracking, and egui texture upload internally.
 
 ### Step 3 — Display in a panel
 
@@ -74,8 +74,8 @@ egui::CentralPanel::default().show(ctx, |ui| {
 });
 ```
 
-`GupWidget` implements `egui::Widget` for `&mut GupWidget`, so it can be
-passed directly to `ui.add()`.
+`GupWidget` implements `egui::Widget` for `&mut GupWidget`, so it can be passed
+directly to `ui.add()`.
 
 ## Pushing Live Data Updates
 
@@ -86,22 +86,22 @@ automatically re-render on the next frame:
 widget.set_chart(build_chart(new_data));
 ```
 
-Alternatively, if you have mutable access to the chart and update it
-in-place, call:
+Alternatively, if you have mutable access to the chart and update it in-place,
+call:
 
 ```rust
 widget.mark_dirty();
 ```
 
 The widget only re-renders when dirty or when the panel size has changed.
-Unchanged frames reuse the previously uploaded texture without issuing new
-GPU draw calls.
+Unchanged frames reuse the previously uploaded texture without issuing new GPU
+draw calls.
 
 ## Retrieving Interaction Events
 
-egui pointer events (hover, click, drag, scroll) are automatically
-translated into Gup `InteractionEvent` types with coordinates mapped to the
-chart's physical pixel space:
+egui pointer events (hover, click, drag, scroll) are automatically translated
+into Gup `InteractionEvent` types with coordinates mapped to the chart's
+physical pixel space:
 
 ```rust
 let events = widget.take_events();
@@ -111,8 +111,8 @@ for ev in &events {
 }
 ```
 
-Scroll events that egui does not consume are forwarded as `"scroll"` events
-with `scroll_x` / `scroll_y` metadata.
+Scroll events that egui does not consume are forwarded as `"scroll"` events with
+`scroll_x` / `scroll_y` metadata.
 
 ## Complete Example
 
@@ -158,27 +158,27 @@ cargo run -p gup-egui --example egui_chart
 ```
 
 Gup creates its own headless GPU device (wgpu 26) for off-screen rendering.
-egui/eframe brings its own wgpu 27. The two wgpu versions coexist as
-separate Cargo dependencies and do **not** share device/queue. Pixel data
-crosses the boundary as plain `Vec<u8>`.
+egui/eframe brings its own wgpu 27. The two wgpu versions coexist as separate
+Cargo dependencies and do **not** share device/queue. Pixel data crosses the
+boundary as plain `Vec<u8>`.
 
 ## Known Limitations
 
-- **Two wgpu versions linked**: Because gup uses wgpu 26 and eframe 0.33
-  uses wgpu 27, the final binary links both. This increases compile time and
-  binary size but is functionally correct. When gup upgrades to wgpu 27
-  device sharing will become possible.
+- **Two wgpu versions linked**: Because gup uses wgpu 26 and eframe 0.33 uses
+  wgpu 27, the final binary links both. This increases compile time and binary
+  size but is functionally correct. When gup upgrades to wgpu 27 device sharing
+  will become possible.
 
 - **Headless / software-renderer environments**: The chart rendering path
   requires a GPU device (or software Vulkan via lavapipe). If no GPU is
-  available at all, `RenderContext::new()` will fail. In CI, use lavapipe
-  or skip the chart construction.
+  available at all, `RenderContext::new()` will fail. In CI, use lavapipe or
+  skip the chart construction.
 
-- **PNG round-trip overhead**: The current pipeline encodes the chart to
-  PNG on the GPU side, then decodes it on the egui side. This is the same
-  approach used by `gup-bevy` and is fast enough for interactive use, but a
-  future optimisation could transfer raw pixels directly.
+- **PNG round-trip overhead**: The current pipeline encodes the chart to PNG on
+  the GPU side, then decodes it on the egui side. This is the same approach used
+  by `gup-bevy` and is fast enough for interactive use, but a future
+  optimisation could transfer raw pixels directly.
 
-- **Single chart per widget**: Each `GupWidget` wraps exactly one chart.
-  For multi-chart layouts, create multiple `GupWidget` instances and place
-  them in separate egui panels.
+- **Single chart per widget**: Each `GupWidget` wraps exactly one chart. For
+  multi-chart layouts, create multiple `GupWidget` instances and place them in
+  separate egui panels.

@@ -237,20 +237,20 @@ delivered here.
 
 ### Key Files Changed
 
-| File                                       | Change                                    |
-| ------------------------------------------ | ----------------------------------------- |
-| `Cargo.toml`                               | Added `gup-bevy` to workspace members     |
-| `src/context.rs`                           | Added `GupContext::from_wgpu`              |
-| `src/render.rs`                            | Added `RenderContext::from_wgpu`           |
-| `gup-bevy/Cargo.toml`                      | New crate manifest                        |
-| `gup-bevy/src/lib.rs`                      | Crate root with prelude                   |
-| `gup-bevy/src/plugin.rs`                   | `GupPlugin` implementation                |
-| `gup-bevy/src/context.rs`                  | `GupRenderContext` resource               |
-| `gup-bevy/src/chart.rs`                    | `GupChart` component + `DynChart` trait   |
-| `gup-bevy/src/render_system.rs`            | `gup_render_system` + `blank_chart_image` |
-| `gup-bevy/examples/bevy_scatter.rs`        | Animated scatter plot example             |
-| `gup-bevy/tests/integration.rs`            | 8 integration tests                       |
-| `docs/BEVY_INTEGRATION.md`                 | Full integration guide                    |
+| File                                | Change                                    |
+| ----------------------------------- | ----------------------------------------- |
+| `Cargo.toml`                        | Added `gup-bevy` to workspace members     |
+| `src/context.rs`                    | Added `GupContext::from_wgpu`             |
+| `src/render.rs`                     | Added `RenderContext::from_wgpu`          |
+| `gup-bevy/Cargo.toml`               | New crate manifest                        |
+| `gup-bevy/src/lib.rs`               | Crate root with prelude                   |
+| `gup-bevy/src/plugin.rs`            | `GupPlugin` implementation                |
+| `gup-bevy/src/context.rs`           | `GupRenderContext` resource               |
+| `gup-bevy/src/chart.rs`             | `GupChart` component + `DynChart` trait   |
+| `gup-bevy/src/render_system.rs`     | `gup_render_system` + `blank_chart_image` |
+| `gup-bevy/examples/bevy_scatter.rs` | Animated scatter plot example             |
+| `gup-bevy/tests/integration.rs`     | 8 integration tests                       |
+| `docs/BEVY_INTEGRATION.md`          | Full integration guide                    |
 
 ### Test Counts
 
@@ -268,34 +268,34 @@ delivered here.
 #### Bevy Version × wgpu Version Matrix
 
 - **Challenge**: The story required sharing wgpu `Device`/`Queue` between Bevy
-  and Gup.  This only works if both use the exact same wgpu version, since
+  and Gup. This only works if both use the exact same wgpu version, since
   `wgpu::Device` from version 26 is a different Rust type than from version 27.
-- **Solution**: Tested Bevy 0.15 (wgpu 23), 0.16 (wgpu 24), 0.17 (wgpu 26),
-  and 0.18 (wgpu 27).  Bevy **0.17** was the only release matching Gup's
-  wgpu 26 requirement.
+- **Solution**: Tested Bevy 0.15 (wgpu 23), 0.16 (wgpu 24), 0.17 (wgpu 26), and
+  0.18 (wgpu 27). Bevy **0.17** was the only release matching Gup's wgpu 26
+  requirement.
 - **Pattern**: Always check the entire transitive dependency graph for version
-  alignment before choosing a framework integration target.  A simple
+  alignment before choosing a framework integration target. A simple
   `cargo metadata` query resolves this quickly.
 
 #### Type Erasure for Generic Charts
 
 - **Challenge**: `ComposedChart<T, M>` is generic over data type and mark type,
-  but Bevy `Component`s must be concrete `'static` types.  The `Mixable` trait
-  is not object-safe (has `Sized` constraints and generic methods).
+  but Bevy `Component`s must be concrete `'static` types. The `Mixable` trait is
+  not object-safe (has `Sized` constraints and generic methods).
 - **Solution**: Introduced `DynChart`, a minimal object-safe trait with just
-  `render` and `render_to_png`.  Blanket-implemented for all
+  `render` and `render_to_png`. Blanket-implemented for all
   `ComposedChart<T, M>` where `T: Clone + Send + Sync + Debug + 'static` and
-  `M: Mark`.  `GupChart` stores `Box<dyn DynChart>`.
+  `M: Mark`. `GupChart` stores `Box<dyn DynChart>`.
 - **Pattern**: When a framework's trait isn't object-safe, create a narrow
   object-safe "rendering" trait and implement it generically.
 
 #### Bevy's `finish()` Hook for Render Resource Access
 
 - **Challenge**: Bevy's `RenderDevice` / `RenderQueue` are only available after
-  `RenderPlugin` finishes initialization.  Calling `app.world().resource()`
-  in `Plugin::build()` panics.
+  `RenderPlugin` finishes initialization. Calling `app.world().resource()` in
+  `Plugin::build()` panics.
 - **Solution**: Used `Plugin::finish()` instead of `build()` for context
-  extraction.  In `finish()`, the render sub-app is fully initialized and
+  extraction. In `finish()`, the render sub-app is fully initialized and
   resources are safe to access.
 - **Pattern**: In Bevy plugins, use `build()` for system registration and
   `finish()` for late resource extraction from the render world.
@@ -303,26 +303,26 @@ delivered here.
 #### wgpu 26 Internal Reference Counting
 
 - **Challenge**: Gup's `GupContext` stores `Arc<Device>` while Bevy's
-  `RenderDevice` wraps `WgpuWrapper<Device>`.  Sharing the same underlying GPU
+  `RenderDevice` wraps `WgpuWrapper<Device>`. Sharing the same underlying GPU
   device requires either a single `Arc` or some other reference mechanism.
 - **Solution**: In wgpu 26, `Device`, `Queue`, `Adapter`, and `Instance` are
-  internally reference-counted (they contain an `Arc` inside).  Calling
-  `.clone()` is a cheap Arc bump, not a new GPU allocation.  This means
-  wrapping a cloned `Device` in a separate `Arc<Device>` is safe — both Arcs
-  point to the same inner GPU handle.
-- **Pattern**: wgpu types in v26+ are Clone-cheap.  Don't fight the borrow
+  internally reference-counted (they contain an `Arc` inside). Calling
+  `.clone()` is a cheap Arc bump, not a new GPU allocation. This means wrapping
+  a cloned `Device` in a separate `Arc<Device>` is safe — both Arcs point to the
+  same inner GPU handle.
+- **Pattern**: wgpu types in v26+ are Clone-cheap. Don't fight the borrow
   checker — just clone them.
 
 ### Architectural Decisions
 
 #### Separate `gup-bevy` Crate (Not a Feature Flag)
 
-- **Decision**: Implemented as a standalone workspace member crate rather than
-  a `bevy` feature flag on the main `gup` crate.
+- **Decision**: Implemented as a standalone workspace member crate rather than a
+  `bevy` feature flag on the main `gup` crate.
 - **Reasoning**: Bevy 0.17 pulls in ~120 transitive dependencies including
-  `winit`, ECS, asset loading, etc.  Feature-gating this behind a flag would
+  `winit`, ECS, asset loading, etc. Feature-gating this behind a flag would
   still require all downstream users to see the dependency in `Cargo.toml` and
-  risk accidental activation.  A separate crate keeps the dependency boundary
+  risk accidental activation. A separate crate keeps the dependency boundary
   clean.
 - **Trade-off**: Users add two dependencies (`gup` + `gup-bevy`) instead of one
   with a feature flag.
@@ -333,11 +333,11 @@ delivered here.
 
 - **Decision**: Charts are rendered to PNG bytes, decoded, and loaded as Bevy
   `Image` assets rather than rendering directly to GPU textures.
-- **Reasoning**: The simplest correct implementation.  `ComposedChart` already
-  has `render_to_png`; Bevy's `Image::from_buffer` can load PNGs.  This avoids
+- **Reasoning**: The simplest correct implementation. `ComposedChart` already
+  has `render_to_png`; Bevy's `Image::from_buffer` can load PNGs. This avoids
   the complexity of integrating with Bevy's render graph or manually managing
   texture views between Gup and Bevy.
-- **Trade-off**: GPU → CPU → GPU round-trip per frame per chart.  Not suitable
+- **Trade-off**: GPU → CPU → GPU round-trip per frame per chart. Not suitable
   for large charts or many charts at 60 fps.
 - **Future**: A dedicated story should add direct texture sharing (render to a
   shared `wgpu::Texture`, wrap as Bevy `Image` with zero-copy).
@@ -346,37 +346,37 @@ delivered here.
 
 - **Decision**: `gup_render_system` runs in `PostUpdate`, not inside Bevy's
   render graph.
-- **Reasoning**: Avoids deep coupling to Bevy's render internals.  The system
+- **Reasoning**: Avoids deep coupling to Bevy's render internals. The system
   only needs `Query<(&mut GupChart, &mut Sprite)>` and `ResMut<Assets<Image>>`,
-  which are main-world resources.  Running in `PostUpdate` ensures all user
+  which are main-world resources. Running in `PostUpdate` ensures all user
   `Update` systems have had a chance to modify chart data.
 - **Trade-off**: Chart rendering is synchronous on the main thread.
-- **Future**: Moving rendering to the render world (via `ExtractComponent`) would
-  enable parallel rendering with Bevy's renderer.
+- **Future**: Moving rendering to the render world (via `ExtractComponent`)
+  would enable parallel rendering with Bevy's renderer.
 
 ### Development Workflow Insights
 
 - **Bevy compilation time**: First build of `bevy 0.17` takes ~45 seconds even
-  with minimal features.  Incremental rebuilds of `gup-bevy` alone take <1s.
+  with minimal features. Incremental rebuilds of `gup-bevy` alone take <1s.
 - **Disk space**: Building both `gup` and `bevy` from scratch consumed ~69 GB in
-  the target directory.  Using a shared target dir on a large filesystem is
+  the target directory. Using a shared target dir on a large filesystem is
   essential; `/tmp` ran out of space.
 - **Testing Bevy systems**: `MinimalPlugins` doesn't include `Assets<Image>`, so
   systems that access `ResMut<Assets<Image>>` need the resource to be optional
-  (`Option<ResMut<...>>`).  This also makes the system more robust in production.
+  (`Option<ResMut<...>>`). This also makes the system more robust in production.
 - **WgpuWrapper access**: Bevy wraps all wgpu types in `WgpuWrapper<T>` for WASM
-  Send/Sync safety.  Accessing the inner type requires understanding the
-  deref chain: `RenderQueue` → `Arc<WgpuWrapper<Queue>>` → `WgpuWrapper<Queue>`
-  → `Queue`.  The `.0` field is `pub`, and `WgpuWrapper::into_inner()` provides
+  Send/Sync safety. Accessing the inner type requires understanding the deref
+  chain: `RenderQueue` → `Arc<WgpuWrapper<Queue>>` → `WgpuWrapper<Queue>` →
+  `Queue`. The `.0` field is `pub`, and `WgpuWrapper::into_inner()` provides
   clean access.
 
 ### Follow-up Stories
 
 1. **GUP-262A: Direct Texture Sharing for Bevy** — Eliminate the render-to-PNG
    round-trip by rendering charts directly to a `wgpu::Texture` that is wrapped
-   as a Bevy `Image` handle with zero-copy.  Would dramatically improve
+   as a Bevy `Image` handle with zero-copy. Would dramatically improve
    performance for animated charts.
 
 2. **GUP-262B: Bevy 0.18 Upgrade** — When the main gup crate upgrades to wgpu
-   27, update gup-bevy to target Bevy 0.18.  This requires verifying API
+   27, update gup-bevy to target Bevy 0.18. This requires verifying API
    compatibility and updating any changed Bevy APIs.

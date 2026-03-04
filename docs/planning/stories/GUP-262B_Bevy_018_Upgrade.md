@@ -5,8 +5,8 @@
 
 ## Overview
 
-Upgrade `gup-bevy` from Bevy 0.17 (wgpu 26) to Bevy 0.18 (wgpu 27) when the
-main `gup` crate upgrades its wgpu dependency.
+Upgrade `gup-bevy` from Bevy 0.17 (wgpu 26) to Bevy 0.18 (wgpu 27) when the main
+`gup` crate upgrades its wgpu dependency.
 
 ## Context
 

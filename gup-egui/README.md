@@ -5,13 +5,13 @@ GPU-accelerated data visualization library.
 
 ## Features
 
-- **`GupWidget`** — stateful egui widget that renders any Gup chart inside
-  an egui panel.
+- **`GupWidget`** — stateful egui widget that renders any Gup chart inside an
+  egui panel.
 - **Dirty tracking** — re-renders only when data or panel size has changed.
-- **Interaction bridge** — translates egui pointer events (hover, click,
-  drag, scroll) into Gup `InteractionEvent` types.
-- **Coordinate mapping** — correctly accounts for panel offset and display
-  scale factor.
+- **Interaction bridge** — translates egui pointer events (hover, click, drag,
+  scroll) into Gup `InteractionEvent` types.
+- **Coordinate mapping** — correctly accounts for panel offset and display scale
+  factor.
 
 ## Quick Start
 
@@ -37,8 +37,8 @@ widget.mark_dirty();
 cargo run -p gup-egui --example egui_chart
 ```
 
-See [docs/EGUI_INTEGRATION.md](../docs/EGUI_INTEGRATION.md) for a
-comprehensive integration guide.
+See [docs/EGUI_INTEGRATION.md](../docs/EGUI_INTEGRATION.md) for a comprehensive
+integration guide.
 
 ## License
 

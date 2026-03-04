@@ -573,7 +573,7 @@ impl PdfDocument {
     ) -> Option<printpdf::FontId> {
         for family in families {
             let query = fontdb::Query {
-                families: &[family.clone()],
+                families: &[*family],
                 weight,
                 stretch: fontdb::Stretch::Normal,
                 style: fontdb::Style::Normal,
