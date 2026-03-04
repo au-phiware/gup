@@ -146,3 +146,82 @@ fn domain_union_five_cases() {
         Some((-20.0, 10.0))
     );
 }
+
+// ── GPU render pipeline tests (GUP-303) ─────────────────────────────────
+
+#[tokio::test]
+async fn composite_prepare_render_succeeds() {
+    let ctx = Arc::new(RenderContext::new().await.expect("GPU context"));
+
+    let mut chart = composite::<Pt>()
+        .layer(ScatterPlotBuilder::new().x(x_accessor()).y(y_accessor()))
+        .layer(LineChartBuilder::new().x(x_accessor()).y(y_accessor()))
+        .build_with_data(sample_data(), ctx.clone())
+        .expect("build");
+
+    let result = chart.prepare_render(
+        &ctx.device(),
+        &ctx.queue(),
+        wgpu::TextureFormat::Bgra8UnormSrgb,
+    );
+    assert!(result.is_ok(), "prepare_render failed: {:?}", result.err());
+}
+
+#[tokio::test]
+async fn composite_all_layers_render_ready_after_prepare() {
+    let ctx = Arc::new(RenderContext::new().await.expect("GPU context"));
+
+    let mut chart = composite::<Pt>()
+        .layer(ScatterPlotBuilder::new().x(x_accessor()).y(y_accessor()))
+        .layer(LineChartBuilder::new().x(x_accessor()).y(y_accessor()))
+        .build_with_data(sample_data(), ctx.clone())
+        .expect("build");
+
+    // Before prepare, no layers should be ready.
+    assert_eq!(chart.layer_draw_count(), 0);
+
+    chart
+        .prepare_render(
+            &ctx.device(),
+            &ctx.queue(),
+            wgpu::TextureFormat::Bgra8UnormSrgb,
+        )
+        .expect("prepare");
+
+    // After prepare, all layers should be ready.
+    assert_eq!(
+        chart.layer_draw_count(),
+        chart.additional_layer_count(),
+        "Not all layers are render-ready"
+    );
+}
+
+#[tokio::test]
+async fn composite_dual_axis_prepare_render_succeeds() {
+    let ctx = Arc::new(RenderContext::new().await.expect("GPU context"));
+
+    let mut chart = composite::<Pt>()
+        .layer(BarChartBuilder::new().x(x_accessor()).y(y_accessor()))
+        .layer_with_y2(LineChartBuilder::new().x(x_accessor()).y(y_accessor()))
+        .build_with_data(sample_data(), ctx.clone())
+        .expect("build");
+
+    let result = chart.prepare_render(
+        &ctx.device(),
+        &ctx.queue(),
+        wgpu::TextureFormat::Bgra8UnormSrgb,
+    );
+    assert!(result.is_ok(), "prepare_render failed: {:?}", result.err());
+    assert_eq!(chart.layer_draw_count(), 2);
+}
+
+#[tokio::test]
+async fn composite_scale_value_maps_domain_to_ndc() {
+    use gup::chart_builder::AxisScale;
+    use gup::shader_function::LinearScale;
+
+    let scale = AxisScale::Linear(LinearScale::new(0.0, 10.0, -1.0, 1.0));
+    assert!((scale.scale_value(0.0) - (-1.0)).abs() < 1e-6);
+    assert!((scale.scale_value(5.0) - 0.0).abs() < 1e-6);
+    assert!((scale.scale_value(10.0) - 1.0).abs() < 1e-6);
+}
