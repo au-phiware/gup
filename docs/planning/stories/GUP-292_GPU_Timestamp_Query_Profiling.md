@@ -2,7 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Interaction & Spatial Index **Status**: 📋 Planned **Created**:
+**Initiative**: Interaction & Spatial Index **Status**: 🚧 In Progress **Created**:
 2026-03-03
 
 ## Context

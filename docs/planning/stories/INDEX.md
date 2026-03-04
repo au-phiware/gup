@@ -440,7 +440,7 @@ selection, and radix sort.
   GUP-003 ✅.
 - [GUP-291](GUP-291_Adaptive_GPU_Dimming_Threshold.md) ✅ — Auto-tune the
   CPU/GPU dimming threshold based on runtime profiling. Deps: GUP-289 ✅.
-- [GUP-292](GUP-292_GPU_Timestamp_Query_Profiling.md) 📋 — Use GPU timestamp
+- [GUP-292](GUP-292_GPU_Timestamp_Query_Profiling.md) 🚧 — Use GPU timestamp
   queries for more accurate auto-tune calibration. Deps: GUP-291 ✅.
 
 ## Axis & Grid System
