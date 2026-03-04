@@ -12,7 +12,7 @@
 //! - **Left-click drag**: Draw a brush rectangle
 //! - **Q** / **Escape**: Quit
 
-use gup::brush::{BrushBehavior, BrushEvent, BrushStyle};
+use gup::brush::{BrushBehavior, BrushEvent, BrushOverlayRenderer, BrushStyle};
 use gup::event::ViewportTransform;
 use gup::interaction::Vec2;
 use gup::mark::circle::{Circle, CircleInstance};
@@ -90,6 +90,7 @@ struct App {
     selection: Option<Selection<Point, Circle>>,
     cache: PipelineCache,
     brush: BrushBehavior,
+    overlay_renderer: Option<BrushOverlayRenderer>,
     mark_system: MarkSelectionSystem,
     viewport: ViewportTransform,
 
@@ -144,6 +145,7 @@ impl App {
             selection: None,
             cache: PipelineCache::new(),
             brush,
+            overlay_renderer: None,
             mark_system,
             viewport: ViewportTransform::default(),
             win_size: [800.0, 600.0],
@@ -196,6 +198,19 @@ impl App {
             );
         }
 
+        // Lazily create the overlay renderer on first frame.
+        if self.overlay_renderer.is_none() {
+            match BrushOverlayRenderer::new(&ctx.device, &ctx.queue, &mut self.cache) {
+                Ok(r) => self.overlay_renderer = Some(r),
+                Err(e) => eprintln!("overlay init: {e}"),
+            }
+        }
+
+        // Upload overlay geometry from BrushMark state.
+        if let Some(ref mut overlay) = self.overlay_renderer {
+            overlay.update(self.brush.overlay(), &ctx.queue);
+        }
+
         match ctx.begin_frame() {
             Ok(mut frame) => {
                 let bg = Color {
@@ -209,8 +224,10 @@ impl App {
                     if let Some(s) = &self.selection {
                         let _ = s.render(&mut rp);
                     }
-                    // BrushMark overlay would be rendered here (above data marks)
-                    // For now, the visual overlay is indicated in the terminal
+                    // Draw brush overlay after data marks (highest z-order).
+                    if let Some(ref overlay) = self.overlay_renderer {
+                        overlay.render(&mut rp);
+                    }
                 }
                 let _ = frame.finish();
             }
@@ -230,7 +247,7 @@ impl App {
                     ""
                 };
                 w.set_title(&format!(
-                    "GUP-278 Brush Selection — {NUM_POINTS} pts | {fps:.0} FPS{brush_status}"
+                    "GUP-285 Brush Selection — {NUM_POINTS} pts | {fps:.0} FPS{brush_status}"
                 ));
             }
             self.frame_count = 0;
@@ -247,7 +264,7 @@ impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         pollster::block_on(async {
             let attrs = WindowAttributes::default()
-                .with_title(format!("GUP-278 Brush Selection — {NUM_POINTS} points"))
+                .with_title(format!("GUP-285 Brush Selection — {NUM_POINTS} points"))
                 .with_inner_size(winit::dpi::LogicalSize::new(800, 600));
             let window = match event_loop.create_window(attrs) {
                 Ok(w) => Arc::new(w),
@@ -370,7 +387,7 @@ impl ApplicationHandler for App {
 // ---------------------------------------------------------------------------
 
 fn main() {
-    println!("GUP-278 Brush Selection Demo");
+    println!("GUP-285 Brush Selection Demo");
     println!("  Left-click drag to select data points");
     println!("  Q or Escape to quit");
     println!("  Rendering {NUM_POINTS} points");
