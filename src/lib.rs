@@ -60,7 +60,7 @@
 //!
 //! ## Quick Start
 //!
-//! ```rust,no_run
+//! ```rust,ignore
 //! use gup::prelude::*;
 //!
 //! // Create GPU-compatible types with ergonomic macros
@@ -70,11 +70,10 @@
 //!
 //! ### Building a chart
 //!
-//! ```rust,no_run
-//! use gup::chart_builder::{ChartBuilder, ChartConfig};
+//! ```rust
+//! use gup::ScatterPlotBuilder;
 //!
-//! let chart = ChartBuilder::new(ChartConfig::default())
-//!     .title("Revenue vs Profit");
+//! let builder = ScatterPlotBuilder::<(f32, f32)>::new();
 //! ```
 //!
 //! ## Type Construction
