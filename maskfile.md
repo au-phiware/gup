@@ -293,3 +293,14 @@ echo "Installing npm dependencies..."
 echo "Launching Tauri dev server..."
 (cd examples/gup-tauri && cargo tauri dev)
 ```
+
+## ios-build
+
+Build the gup-ios static library for the iOS Simulator (requires macOS with
+Xcode).
+
+```bash
+echo "Building gup-ios for aarch64-apple-ios-sim..."
+cargo build -p gup-ios --target aarch64-apple-ios-sim --release
+echo "Library at target/aarch64-apple-ios-sim/release/libgup_ios.a"
+```
