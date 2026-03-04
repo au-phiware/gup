@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gup Example Gallery</title>
+  <link rel="stylesheet" href="gallery.css">
+</head>
+<body>
+  <header>
+    <h1>Gup Example Gallery</h1>
+    <p class="subtitle">
+      GPU-accelerated data visualisation examples.
+      Each thumbnail links to the example's source code.
+    </p>
+    <nav aria-label="Category navigation">
+      <ul class="category-nav">
+        <li><a href="#basic">Basic</a></li>
+        <li><a href="#showcase">Showcase</a></li>
+        <li><a href="#charts--marks">Charts & Marks</a></li>
+        <li><a href="#axis--grid">Axis & Grid</a></li>
+        <li><a href="#text-rendering">Text Rendering</a></li>
+        <li><a href="#interaction--selection">Interaction & Selection</a></li>
+        <li><a href="#animation--streaming">Animation & Streaming</a></li>
+        <li><a href="#patterns">Patterns</a></li>
+        <li><a href="#blend-modes">Blend Modes</a></li>
+        <li><a href="#composition">Composition</a></li>
+        <li><a href="#performance--profiling">Performance & Profiling</a></li>
+        <li><a href="#accessibility">Accessibility</a></li>
+        <li><a href="#debug--development">Debug & Development</a></li>
+        <li><a href="#window--surface">Window & Surface</a></li>
+        <li><a href="#shader-development">Shader Development</a></li>
+        <li><a href="#export">Export</a></li>
+        <li><a href="#intermediate">Intermediate</a></li>
+      </ul>
+    </nav>
+  </header>
+  <main>
+    <section id="basic">
+      <h2>Basic</h2>
+      <div class="gallery-grid">
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">01_hello_chart</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/basic/01_hello_chart.rs">01_hello_chart</a></h3>
+            <p>Minimal scatter plot (console output only)</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">02_scatter_window</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/basic/02_scatter_window.rs">02_scatter_window</a></h3>
+            <p>Visual scatter plot in a GPU window</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">03_line_chart</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/basic/03_line_chart.rs">03_line_chart</a></h3>
+            <p>Line chart API demonstration</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">04_bar_chart</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/basic/04_bar_chart.rs">04_bar_chart</a></h3>
+            <p>Bar chart API demonstration</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">hello_world</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/hello_world.rs">hello_world</a></h3>
+            <p>Hello world example</p>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section id="showcase">
+      <h2>Showcase</h2>
+      <div class="gallery-grid">
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">business_dashboard</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/showcase/business_dashboard.rs">business_dashboard</a></h3>
+            <p>Multi-chart business dashboard layout</p>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section id="charts--marks">
+      <h2>Charts & Marks</h2>
+      <div class="gallery-grid">
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">scatter_plot_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/scatter_plot_demo.rs">scatter_plot_demo</a></h3>
+            <p>Scatter plot with selection and interaction</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">boxplot</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/boxplot.rs">boxplot</a></h3>
+            <p>Basic box plot rendering</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">boxplot_rendering_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/boxplot_rendering_demo.rs">boxplot_rendering_demo</a></h3>
+            <p>Box plot rendering pipeline demo</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">boxplot_builder_demo</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/boxplot_builder_demo.rs">boxplot_builder_demo</a></h3>
+            <p>Box plot chart builder API</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">multi_category_boxplot</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/multi_category_boxplot.rs">multi_category_boxplot</a></h3>
+            <p>Multi-category box plots</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">observable_plot_showcase</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/observable_plot_showcase.rs">observable_plot_showcase</a></h3>
+            <p>Chart builder API showcase</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">observable_plot_visual_showcase</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/observable_plot_visual_showcase.rs">observable_plot_visual_showcase</a></h3>
+            <p>Visual showcase of chart builder API</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">integration_showcase</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/integration_showcase.rs">integration_showcase</a></h3>
+            <p>Full integration showcase of multiple chart types</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">custom_mark_demo</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/custom_mark_demo.rs">custom_mark_demo</a></h3>
+            <p>Implementing a custom mark type</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">multi_pass_mark_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/multi_pass_mark_demo.rs">multi_pass_mark_demo</a></h3>
+            <p>Multi-pass mark rendering</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">bar_chart</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/bar_chart.rs">bar_chart</a></h3>
+            <p>Bar chart variations</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">line_chart_demo</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/line_chart_demo.rs">line_chart_demo</a></h3>
+            <p>Line chart rendering demo</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">area_chart_demo</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/area_chart_demo.rs">area_chart_demo</a></h3>
+            <p>Area chart rendering</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">heatmap_chart</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/heatmap_chart.rs">heatmap_chart</a></h3>
+            <p>Heatmap chart rendering</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">violin_plot_demo</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/violin_plot_demo.rs">violin_plot_demo</a></h3>
+            <p>Violin plot rendering</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">treemap</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/treemap.rs">treemap</a></h3>
+            <p>Treemap layout rendering</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">choropleth_world_population</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/choropleth_world_population.rs">choropleth_world_population</a></h3>
+            <p>Choropleth world population map</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">color_scale_heatmap</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/color_scale_heatmap.rs">color_scale_heatmap</a></h3>
+            <p>Colour scale heatmap</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">composite_bar_trend</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/composite_bar_trend.rs">composite_bar_trend</a></h3>
+            <p>Composite bar and trend chart</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">composite_scatter_regression</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/composite_scatter_regression.rs">composite_scatter_regression</a></h3>
+            <p>Scatter plot with regression line</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">density_scatter_overlay</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/density_scatter_overlay.rs">density_scatter_overlay</a></h3>
+            <p>Density scatter plot overlay</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">geo_world_map</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/geo_world_map.rs">geo_world_map</a></h3>
+            <p>World map geographic rendering</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">geographic_projection</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/geographic_projection.rs">geographic_projection</a></h3>
+            <p>Geographic projection demo</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">force_directed_graph</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/force_directed_graph.rs">force_directed_graph</a></h3>
+            <p>Force-directed graph layout</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">scatter_3d</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/scatter_3d.rs">scatter_3d</a></h3>
+            <p>3D scatter plot</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">ordinal_scale</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/ordinal_scale.rs">ordinal_scale</a></h3>
+            <p>Ordinal scale demonstration</p>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section id="axis--grid">
+      <h2>Axis & Grid</h2>
+      <div class="gallery-grid">
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">axis_showcase</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/axis_showcase.rs">axis_showcase</a></h3>
+            <p>Axis rendering and configuration</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">axis_tick_integration_visual_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/axis_tick_integration_visual_demo.rs">axis_tick_integration_visual_demo</a></h3>
+            <p>Axis tick rendering integration</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">tick_generation_visual_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/tick_generation_visual_demo.rs">tick_generation_visual_demo</a></h3>
+            <p>Automatic tick generation algorithm demo</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">scale_axis_integration_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/scale_axis_integration_demo.rs">scale_axis_integration_demo</a></h3>
+            <p>Scale-to-axis integration</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">grid_visual_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/grid_visual_demo.rs">grid_visual_demo</a></h3>
+            <p>Grid line rendering</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">grid_scatter_demo</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/grid_scatter_demo.rs">grid_scatter_demo</a></h3>
+            <p>Grid with scatter plot overlay</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">label_formatting_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/label_formatting_demo.rs">label_formatting_demo</a></h3>
+            <p>Axis label formatting and positioning</p>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section id="text-rendering">
+      <h2>Text Rendering</h2>
+      <div class="gallery-grid">
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">text_rendering_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/text_rendering_demo.rs">text_rendering_demo</a></h3>
+            <p>GPU SDF text rendering pipeline</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">text_clipping_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/text_clipping_demo.rs">text_clipping_demo</a></h3>
+            <p>Text clipping and viewport bounds</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">debug_text_positioning</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/debug_text_positioning.rs">debug_text_positioning</a></h3>
+            <p>Debug tool for text character positioning</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">atlas_viewer</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/atlas_viewer.rs">atlas_viewer</a></h3>
+            <p>Font atlas inspection tool</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">msdf_debug</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/msdf_debug.rs">msdf_debug</a></h3>
+            <p>MSDF glyph generation debug view</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">multi_font_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/multi_font_demo.rs">multi_font_demo</a></h3>
+            <p>Multi-font atlas rendering</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">multi_font_chart_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/multi_font_chart_demo.rs">multi_font_chart_demo</a></h3>
+            <p>Charts using multiple font families</p>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section id="interaction--selection">
+      <h2>Interaction & Selection</h2>
+      <div class="gallery-grid">
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">gpu_selection_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/gpu_selection_demo.rs">gpu_selection_demo</a></h3>
+            <p>GPU-side selection and hit testing</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">interactive_selection_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/interactive_selection_demo.rs">interactive_selection_demo</a></h3>
+            <p>Interactive mark selection with mouse</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">hover_reveal_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/hover_reveal_demo.rs">hover_reveal_demo</a></h3>
+            <p>Hover-reveal tooltip integration</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">chart_hover_reveal_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/chart_hover_reveal_demo.rs">chart_hover_reveal_demo</a></h3>
+            <p>Chart builder hover-reveal API</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">interaction_debug_visualizer</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/interaction_debug_visualizer.rs">interaction_debug_visualizer</a></h3>
+            <p>Debug visualiser for interaction pipeline</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">attr_binding_demo</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/attr_binding_demo.rs">attr_binding_demo</a></h3>
+            <p>Attribute binding pipeline demo</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">brush_selection</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/brush_selection.rs">brush_selection</a></h3>
+            <p>Brush selection interaction</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">interactive_circles</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/interactive_circles.rs">interactive_circles</a></h3>
+            <p>Interactive circles demo</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">linked_views</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/linked_views.rs">linked_views</a></h3>
+            <p>Linked views coordination</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">zoom_pan</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/zoom_pan.rs">zoom_pan</a></h3>
+            <p>Zoom and pan interaction</p>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section id="animation--streaming">
+      <h2>Animation & Streaming</h2>
+      <div class="gallery-grid">
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">advanced_temporal_animation</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/advanced_temporal_animation.rs">advanced_temporal_animation</a></h3>
+            <p>Temporal animation system demo</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">animation_events</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/animation_events.rs">animation_events</a></h3>
+            <p>Animation event system</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">spline_animation_curves</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/spline_animation_curves.rs">spline_animation_curves</a></h3>
+            <p>Spline-interpolated animation curves</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">keyframe_animation_storage</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/keyframe_animation_storage.rs">keyframe_animation_storage</a></h3>
+            <p>Storage buffer keyframe animation</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">async_streaming_demo</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/async_streaming_demo.rs">async_streaming_demo</a></h3>
+            <p>Async data streaming to GPU</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">data_transition_scatter</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/data_transition_scatter.rs">data_transition_scatter</a></h3>
+            <p>Data transition scatter animation</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">streaming_live_chart</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/streaming_live_chart.rs">streaming_live_chart</a></h3>
+            <p>Streaming live data chart</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">streaming_lod_scatter</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/streaming_lod_scatter.rs">streaming_lod_scatter</a></h3>
+            <p>Streaming LOD scatter plot</p>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section id="patterns">
+      <h2>Patterns</h2>
+      <div class="gallery-grid">
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">pattern_rendering_demo</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/pattern_rendering_demo.rs">pattern_rendering_demo</a></h3>
+            <p>Procedural pattern rendering</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">pattern_pipeline_demo</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/pattern_pipeline_demo.rs">pattern_pipeline_demo</a></h3>
+            <p>Pattern pipeline integration</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">multi_mark_pattern_showcase</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/multi_mark_pattern_showcase.rs">multi_mark_pattern_showcase</a></h3>
+            <p>Patterns across multiple mark types</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">texture_vs_procedural_patterns</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/texture_vs_procedural_patterns.rs">texture_vs_procedural_patterns</a></h3>
+            <p>Texture vs procedural pattern comparison</p>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section id="blend-modes">
+      <h2>Blend Modes</h2>
+      <div class="gallery-grid">
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">blend_modes_showcase</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/blend_modes_showcase.rs">blend_modes_showcase</a></h3>
+            <p>GPU blend mode showcase</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">visual_blend_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/visual_blend_demo.rs">visual_blend_demo</a></h3>
+            <p>Visual blend mode demonstration</p>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section id="composition">
+      <h2>Composition</h2>
+      <div class="gallery-grid">
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">parallel_composition_demo</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/parallel_composition_demo.rs">parallel_composition_demo</a></h3>
+            <p>Parallel composition of visualisations</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">composition_error_recovery_showcase</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/composition_error_recovery_showcase.rs">composition_error_recovery_showcase</a></h3>
+            <p>Error recovery in composition chains</p>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section id="performance--profiling">
+      <h2>Performance & Profiling</h2>
+      <div class="gallery-grid">
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">performance_trend_demo</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/performance_trend_demo.rs">performance_trend_demo</a></h3>
+            <p>Performance trend visualisation</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">baseline_recommendation_demo</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/baseline_recommendation_demo.rs">baseline_recommendation_demo</a></h3>
+            <p>Automated baseline recommendation demo</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">surface_performance_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/surface_performance_demo.rs">surface_performance_demo</a></h3>
+            <p>Surface configuration and performance</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">z_sort_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/z_sort_demo.rs">z_sort_demo</a></h3>
+            <p>Z-order radix sort performance demo</p>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section id="accessibility">
+      <h2>Accessibility</h2>
+      <div class="gallery-grid">
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">web_accessibility_demo</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/web_accessibility_demo.rs">web_accessibility_demo</a></h3>
+            <p>Web accessibility DOM overlay demo</p>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section id="debug--development">
+      <h2>Debug & Development</h2>
+      <div class="gallery-grid">
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">gpu_debug_demo</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/gpu_debug_demo.rs">gpu_debug_demo</a></h3>
+            <p>GPU debug tools demo</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">gpu_debug_visualization_demo</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/gpu_debug_visualization_demo.rs">gpu_debug_visualization_demo</a></h3>
+            <p>GPU hit test debug visualiser</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">buffer_demo</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/buffer_demo.rs">buffer_demo</a></h3>
+            <p>GPU buffer pool management demo</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">buffer_validation_demo</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/buffer_validation_demo.rs">buffer_validation_demo</a></h3>
+            <p>Buffer validation and debugging</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">resource_graph_demo</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/resource_graph_demo.rs">resource_graph_demo</a></h3>
+            <p>GPU resource dependency graph</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">context_demo</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/context_demo.rs">context_demo</a></h3>
+            <p>Render context lifecycle demo</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">adaptive_lod_debug</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/adaptive_lod_debug.rs">adaptive_lod_debug</a></h3>
+            <p>Adaptive LOD debug visualisation</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">lod_pyramid_debug</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/lod_pyramid_debug.rs">lod_pyramid_debug</a></h3>
+            <p>LOD pyramid debug visualisation</p>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section id="window--surface">
+      <h2>Window & Surface</h2>
+      <div class="gallery-grid">
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">simple_window</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/simple_window.rs">simple_window</a></h3>
+            <p>Minimal wgpu window setup</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">multi_window_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/multi_window_demo.rs">multi_window_demo</a></h3>
+            <p>Multiple windows with shared GPU context</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">windowed_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/windowed_demo.rs">windowed_demo</a></h3>
+            <p>Windowed application scaffold</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">surface_events_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/surface_events_demo.rs">surface_events_demo</a></h3>
+            <p>Window/surface event integration</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">position_sync_demo</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/position_sync_demo.rs">position_sync_demo</a></h3>
+            <p>Visualisation position synchronisation</p>
+          </div>
+        </article>
+        <article class="gallery-card skipped">
+          <div class="thumb-placeholder" aria-label="No thumbnail available">
+            <span class="placeholder-label">web_dashboard_demo</span>
+            <span class="placeholder-note">Requires window</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/web_dashboard_demo.rs">web_dashboard_demo</a></h3>
+            <p>Web-based dashboard with WASM</p>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section id="shader-development">
+      <h2>Shader Development</h2>
+      <div class="gallery-grid">
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">shader_pipeline_demo</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/shader_pipeline_demo.rs">shader_pipeline_demo</a></h3>
+            <p>ComposableShaderPipeline usage</p>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section id="export">
+      <h2>Export</h2>
+      <div class="gallery-grid">
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">export_png</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/export_png.rs">export_png</a></h3>
+            <p>PNG export via GPU off-screen rendering</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">svg_export</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/svg_export.rs">svg_export</a></h3>
+            <p>SVG export demonstration</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">html_export</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/html_export.rs">html_export</a></h3>
+            <p>HTML export demonstration</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">pdf_export</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/pdf_export.rs">pdf_export</a></h3>
+            <p>PDF export demonstration</p>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section id="intermediate">
+      <h2>Intermediate</h2>
+      <div class="gallery-grid">
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">styled_scatter</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/intermediate/styled_scatter.rs">styled_scatter</a></h3>
+            <p>Data-driven styling with categorical colours</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">multi_series_line</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/intermediate/multi_series_line.rs">multi_series_line</a></h3>
+            <p>Multiple time series visualisation</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">categorical_bar</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/intermediate/categorical_bar.rs">categorical_bar</a></h3>
+            <p>Categorical data with vertical/horizontal bars</p>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+  <footer>
+    <p>
+      Generated on 2026-03-04T11:02:27Z &middot;
+      62 renderable / 99 total examples &middot;
+      <a href="https://github.com/au-phiware/gup">Gup on GitHub</a>
+    </p>
+  </footer>
+</body>
+</html>

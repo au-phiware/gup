@@ -12,7 +12,7 @@
 thumb_width = 640
 thumb_height = 480
 output_dir = "docs/gallery/thumbs"
-github_base = "https://github.com/nickel-org/gup/blob/main"
+github_base = "https://github.com/au-phiware/gup/blob/main"
 
 # ---------------------------------------------------------------------------
 # Basic

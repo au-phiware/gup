@@ -1,0 +1,81 @@
+# Gallery CI — generates thumbnails and deploys the example gallery.
+#
+# Runs on every push to main.  Caches the Rust build and previously
+# generated thumbnails so unchanged examples do not re-render.
+
+name: Gallery
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: gallery-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-gallery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: gallery-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            gallery-${{ runner.os }}-cargo-
+
+      # Cache thumbnails keyed on the hash of all example source files.
+      # If no example source changed, the entire thumbnail set is reused.
+      - name: Cache thumbnails
+        uses: actions/cache@v4
+        with:
+          path: docs/gallery/thumbs
+          key: gallery-thumbs-${{ hashFiles('examples/**/*.rs') }}
+          restore-keys: |
+            gallery-thumbs-
+
+      - name: Build (release)
+        run: cargo build --release --examples
+
+      - name: Generate thumbnails
+        run: bash scripts/generate_gallery.sh
+
+      - name: Generate gallery HTML
+        run: bash scripts/generate_gallery_html.sh
+
+      - name: Validate source links
+        run: bash scripts/check_gallery_links.sh
+
+      - name: Upload gallery artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/gallery
+
+  deploy:
+    needs: build-gallery
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
