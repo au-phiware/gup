@@ -107,8 +107,12 @@ impl GupChart {
         self.dirty || self.auto_update
     }
 
-    /// Clear the dirty flag (called by the render system after rendering).
-    pub(crate) fn clear_dirty(&mut self) {
+    /// Clear the dirty flag after a successful render.
+    ///
+    /// Normally called by [`gup_render_system`](crate::gup_render_system)
+    /// after rendering; you can also call it manually if you implement your
+    /// own rendering loop.
+    pub fn clear_dirty(&mut self) {
         self.dirty = false;
     }
 

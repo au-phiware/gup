@@ -21,8 +21,12 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, T
 pub fn gup_render_system(
     _context: Option<Res<GupRenderContext>>,
     mut charts: Query<(&mut GupChart, &mut Sprite)>,
-    mut images: ResMut<Assets<Image>>,
+    images: Option<ResMut<Assets<Image>>>,
 ) {
+    let Some(mut images) = images else {
+        return;
+    };
+
     for (mut chart, mut sprite) in &mut charts {
         if !chart.is_dirty() {
             continue;
