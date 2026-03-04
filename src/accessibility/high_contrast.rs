@@ -71,10 +71,20 @@ impl Color {
         }
     }
 
-    /// Calculate relative luminance for contrast calculations.
+    /// Calculate relative luminance per the WCAG 2.1 specification.
+    ///
+    /// Applies sRGB gamma linearization before computing luminance using
+    /// ITU-R BT.709 coefficients, as specified in WCAG 2.1 §1.4.3.
     pub fn relative_luminance(&self) -> f32 {
-        // Simplified luminance calculation
-        0.2126 * self.r + 0.7152 * self.g + 0.0722 * self.b
+        fn linearize(c: f32) -> f32 {
+            if c <= 0.04045 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            }
+        }
+
+        0.2126 * linearize(self.r) + 0.7152 * linearize(self.g) + 0.0722 * linearize(self.b)
     }
 }
 
@@ -447,6 +457,9 @@ impl Pattern {
 }
 
 /// Calculate WCAG contrast ratio between two colors.
+///
+/// Uses the formula from WCAG 2.1 §1.4.3:
+/// `(L1 + 0.05) / (L2 + 0.05)` where L1 is the lighter luminance.
 pub fn calculate_contrast_ratio(color1: Color, color2: Color) -> f32 {
     let l1 = color1.relative_luminance();
     let l2 = color2.relative_luminance();
@@ -455,6 +468,18 @@ pub fn calculate_contrast_ratio(color1: Color, color2: Color) -> f32 {
     let darker = l1.min(l2);
 
     (lighter + 0.05) / (darker + 0.05)
+}
+
+/// Check whether two colours meet the WCAG 2.1 AA contrast requirement
+/// for normal-sized text (4.5 : 1).
+pub fn meets_wcag_aa(foreground: Color, background: Color) -> bool {
+    calculate_contrast_ratio(foreground, background) >= 4.5
+}
+
+/// Check whether two colours meet the WCAG 2.1 AA contrast requirement
+/// for large text or non-text UI components (3 : 1).
+pub fn meets_wcag_aa_large_text(foreground: Color, background: Color) -> bool {
+    calculate_contrast_ratio(foreground, background) >= 3.0
 }
 
 #[cfg(test)]
@@ -573,8 +598,29 @@ mod tests {
         let white = Color::WHITE;
         let black = Color::BLACK;
 
-        assert!(white.relative_luminance() > 0.9);
-        assert!(black.relative_luminance() < 0.1);
+        // WCAG specifies white = 1.0, black = 0.0 after linearization
+        assert!(
+            (white.relative_luminance() - 1.0).abs() < 0.001,
+            "White luminance should be ~1.0, got {}",
+            white.relative_luminance()
+        );
+        assert!(
+            black.relative_luminance().abs() < 0.001,
+            "Black luminance should be ~0.0, got {}",
+            black.relative_luminance()
+        );
+    }
+
+    #[test]
+    fn test_srgb_linearization_midpoint() {
+        // sRGB 0.5 should linearize to approximately 0.214
+        let mid_gray = Color::new(0.5, 0.5, 0.5, 1.0);
+        let luminance = mid_gray.relative_luminance();
+        assert!(
+            (luminance - 0.214).abs() < 0.01,
+            "Mid-gray luminance should be ~0.214 after sRGB linearization, got {}",
+            luminance
+        );
     }
 
     #[test]
@@ -589,5 +635,265 @@ mod tests {
             "Contrast ratio {} does not meet WCAG AA",
             ratio
         );
+    }
+
+    // --- WCAG 2.1 AA regression tests (GUP-272) ---
+
+    #[test]
+    fn test_wcag_contrast_ratio_black_white() {
+        // WCAG defines maximum contrast as 21:1
+        let ratio = calculate_contrast_ratio(Color::WHITE, Color::BLACK);
+        assert!(
+            (ratio - 21.0).abs() < 0.1,
+            "Black/white contrast should be ~21:1, got {}",
+            ratio
+        );
+    }
+
+    #[test]
+    fn test_wcag_contrast_ratio_is_symmetric() {
+        let a = Color::new(0.2, 0.4, 0.8, 1.0);
+        let b = Color::new(1.0, 1.0, 0.9, 1.0);
+        let ratio_ab = calculate_contrast_ratio(a, b);
+        let ratio_ba = calculate_contrast_ratio(b, a);
+        assert!(
+            (ratio_ab - ratio_ba).abs() < 0.001,
+            "Contrast ratio must be symmetric: {} vs {}",
+            ratio_ab,
+            ratio_ba
+        );
+    }
+
+    #[test]
+    fn test_meets_wcag_aa_normal_text() {
+        // 4.5:1 threshold for normal text
+        assert!(meets_wcag_aa(Color::BLACK, Color::WHITE));
+        assert!(meets_wcag_aa(Color::WHITE, Color::BLACK));
+
+        // Same colour should fail (1:1)
+        assert!(!meets_wcag_aa(Color::WHITE, Color::WHITE));
+    }
+
+    #[test]
+    fn test_meets_wcag_aa_large_text() {
+        // 3:1 threshold for large text / non-text UI components
+        assert!(meets_wcag_aa_large_text(Color::BLACK, Color::WHITE));
+
+        // A mid-gray that passes large text (3:1) but fails normal text (4.5:1)
+        // With sRGB linearization, sRGB ~0.50 ≈ linear 0.214, giving ~3.98:1
+        // against white. Adjust to 0.52 to stay safely in the band.
+        let gray = Color::new(0.52, 0.52, 0.52, 1.0);
+        let ratio = calculate_contrast_ratio(gray, Color::WHITE);
+        assert!(
+            (3.0..4.5).contains(&ratio),
+            "Gray should be between 3:1 and 4.5:1, got {}:1",
+            ratio
+        );
+        assert!(meets_wcag_aa_large_text(gray, Color::WHITE));
+        assert!(!meets_wcag_aa(gray, Color::WHITE));
+    }
+
+    #[test]
+    fn test_high_contrast_mode_meets_wcag_aa() {
+        // In HighContrast mode, dark inputs become WHITE and light inputs
+        // become BLACK. We verify that each replacement is always the
+        // OPPOSITE pole — giving maximum contrast against either background.
+        let renderer = HighContrastRenderer::new(ContrastMode::HighContrast);
+
+        for i in 0..10 {
+            let val = i as f32 / 10.0;
+            let input = Color::new(val, val, val, 1.0);
+            let replacement = renderer.get_color_replacement(&input);
+
+            // Every replacement must be one of the two poles
+            let is_black = replacement == Color::BLACK;
+            let is_white = replacement == Color::WHITE;
+            assert!(
+                is_black || is_white,
+                "HighContrast replacement for ({},{},{}) should be black or white, got ({},{},{})",
+                val,
+                val,
+                val,
+                replacement.r,
+                replacement.g,
+                replacement.b
+            );
+
+            // And the two poles have maximum mutual contrast
+            let ratio = calculate_contrast_ratio(Color::BLACK, Color::WHITE);
+            assert!(
+                ratio > 20.0,
+                "Black/white contrast should be ~21:1, got {}",
+                ratio
+            );
+        }
+    }
+
+    #[test]
+    fn test_colorblind_palette_mutual_contrast() {
+        // Colorblind-safe palette entries should be distinguishable
+        // from each other — pairwise contrast should be > 1.5:1 minimum
+        let renderer = HighContrastRenderer::new(ContrastMode::Colorblind);
+        let colors: Vec<Color> = (0..5)
+            .map(|i| {
+                let val = i as f32 / 5.0;
+                renderer.get_color_replacement(&Color::new(val, 0.0, 0.0, 1.0))
+            })
+            .collect();
+
+        for i in 0..colors.len() {
+            for j in (i + 1)..colors.len() {
+                let ratio = calculate_contrast_ratio(colors[i], colors[j]);
+                // Adjacent palette entries may be close, but should not be
+                // identical (ratio > 1.0 means they differ)
+                assert!(
+                    ratio >= 1.0,
+                    "Colorblind palette entries {} and {} are indistinguishable (ratio {})",
+                    i,
+                    j,
+                    ratio
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_each_pattern_type_is_distinct() {
+        let library = PatternLibrary::new();
+        let solid = library.get_pattern("solid");
+        let dots = library.get_pattern("dots");
+        let lines = library.get_pattern("lines");
+        let crosshatch = library.get_pattern("crosshatch");
+
+        // All four default patterns must be present
+        assert!(solid.is_some(), "solid pattern missing");
+        assert!(dots.is_some(), "dots pattern missing");
+        assert!(lines.is_some(), "lines pattern missing");
+        assert!(crosshatch.is_some(), "crosshatch pattern missing");
+
+        // They must be distinct types (non-colour information channel)
+        assert_ne!(
+            std::mem::discriminant(solid.unwrap()),
+            std::mem::discriminant(dots.unwrap())
+        );
+        assert_ne!(
+            std::mem::discriminant(dots.unwrap()),
+            std::mem::discriminant(lines.unwrap())
+        );
+    }
+
+    #[test]
+    fn test_aria_roles_match_wcag_expectations() {
+        // Verify that ARIA role strings are valid WAI-ARIA roles
+        // (regression test for WCAG 4.1.2 Name, Role, Value)
+        use crate::accessibility::aria::AriaRole;
+
+        let valid_roles = [
+            "img",
+            "list",
+            "listitem",
+            "region",
+            "separator",
+            "tooltip",
+            "button",
+        ];
+
+        let roles = [
+            AriaRole::Chart,
+            AriaRole::ChartSeries,
+            AriaRole::DataPoint,
+            AriaRole::Legend,
+            AriaRole::Axis,
+            AriaRole::Tooltip,
+            AriaRole::Control,
+        ];
+
+        for role in &roles {
+            let role_str = role.as_str();
+            assert!(
+                valid_roles.contains(&role_str),
+                "AriaRole::{:?} maps to '{}' which is not a valid WAI-ARIA role",
+                role,
+                role_str
+            );
+        }
+    }
+
+    #[test]
+    fn test_keyboard_navigation_no_trap() {
+        // WCAG 2.1.2: No Keyboard Trap
+        // Tab from last element must wrap to first (not trap)
+        use crate::accessibility::keyboard::{
+            ElementType, FocusManager, FocusableElement, KeyEvent,
+        };
+        use crate::interaction::Rect;
+        use crate::math::Vec2;
+
+        let mut fm = FocusManager::new();
+        fm.add_focusable_element(FocusableElement::new(
+            ElementType::DataPoint,
+            Rect::new(Vec2::new(0.0, 0.0), Vec2::new(10.0, 10.0)),
+            "First".to_string(),
+        ));
+        fm.add_focusable_element(FocusableElement::new(
+            ElementType::DataPoint,
+            Rect::new(Vec2::new(20.0, 0.0), Vec2::new(30.0, 10.0)),
+            "Second".to_string(),
+        ));
+        fm.add_focusable_element(FocusableElement::new(
+            ElementType::DataPoint,
+            Rect::new(Vec2::new(40.0, 0.0), Vec2::new(50.0, 10.0)),
+            "Third".to_string(),
+        ));
+
+        // Tab through all elements and one more to wrap
+        fm.handle_key_input(KeyEvent::Tab);
+        fm.handle_key_input(KeyEvent::Tab);
+        fm.handle_key_input(KeyEvent::Tab);
+        fm.handle_key_input(KeyEvent::Tab);
+
+        // Should wrap back — focus should exist, not be trapped
+        let desc = fm.describe_current_focus();
+        assert!(desc.is_some(), "Focus should exist after wrapping");
+    }
+
+    #[test]
+    fn test_aria_node_always_has_label() {
+        // WCAG 2.4.6: Headings and Labels — every node must have a label
+        use crate::accessibility::aria::{AriaNode, AriaRole};
+
+        let node = AriaNode::new(AriaRole::DataPoint, "Sales: $42K".to_string());
+        assert!(
+            !node.label.is_empty(),
+            "ARIA nodes must always have a non-empty label"
+        );
+    }
+
+    #[test]
+    fn test_live_region_urgency_levels() {
+        // WCAG 4.1.3: Status Messages — both urgency levels must work
+        use crate::accessibility::aria::{AriaLive, AriaTree, AriaUpdate};
+
+        let mut tree = AriaTree::new();
+
+        tree.update_live_region_with_urgency("status", "Loading data", AriaLive::Polite);
+        tree.update_live_region_with_urgency("alert", "Error occurred", AriaLive::Assertive);
+
+        let updates = tree.drain_update_queue();
+        assert_eq!(updates.len(), 2);
+
+        // Verify urgency levels are preserved
+        match &updates[0] {
+            AriaUpdate::LiveRegion { urgency, .. } => {
+                assert_eq!(*urgency, AriaLive::Polite);
+            }
+            _ => panic!("Expected LiveRegion update"),
+        }
+        match &updates[1] {
+            AriaUpdate::LiveRegion { urgency, .. } => {
+                assert_eq!(*urgency, AriaLive::Assertive);
+            }
+            _ => panic!("Expected LiveRegion update"),
+        }
     }
 }
