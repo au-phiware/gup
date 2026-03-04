@@ -116,6 +116,7 @@ pub mod text;
 pub mod tick_generator;
 pub mod transition;
 pub mod visual_test_utils;
+pub mod wasm_api;
 pub mod wasm_bench;
 pub mod wasm_bench_axis;
 pub mod wasm_bench_interaction;
