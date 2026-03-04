@@ -948,7 +948,7 @@ PNG, HTML), and platform targets.
 - [GUP-264](GUP-264_Tauri_Integration.md) ✅ — gup-tauri example running Gup
   WASM in a Tauri WebView with a Rust IPC bridge feeding data to the chart.
   Deps: GUP-004 ✅, GUP-018 ✅, GUP-172 ✅, GUP-237 ✅.
-- [GUP-265](GUP-265_winit_Application_Shell.md) 🚧 — GupApp application shell
+- [GUP-265](GUP-265_winit_Application_Shell.md) ✅ — GupApp application shell
   wrapping the full winit event loop (surface, resize, device-loss recovery)
   into a 5-line builder entry point. Deps: GUP-039 ✅, GUP-047 ✅, GUP-049 ✅,
   GUP-013 📋.
@@ -1017,3 +1017,12 @@ API reference generation, tutorials, and example gallery.
 - [GUP-285](GUP-285_Tauri_Streaming_Updates.md) 📋 — Add Tauri event-driven
   streaming to the gup-tauri example for real-time chart updates. Deps: GUP-264
   ✅.
+
+## Follow-ups from GUP-265
+
+- [GUP-317](GUP-317_Full_Content_Screenshot.md) 📋 — Add `COPY_SRC` to surface
+  texture configuration and `RenderFrame::capture()` so the `S` shortcut in
+  GupApp captures actual rendered content. Deps: GUP-265 ✅.
+- [GUP-318](GUP-318_Migrate_Examples_to_GupApp.md) 📋 — Migrate suitable
+  windowed examples to GupApp, reducing boilerplate and demonstrating the shell.
+  Deps: GUP-265 ✅.
