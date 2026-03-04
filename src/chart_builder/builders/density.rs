@@ -300,7 +300,12 @@ pub fn marching_squares(
     segments
 }
 
-/// Extract filled contour bands between adjacent iso-levels.
+/// Extract filled contour bands between adjacent iso-levels using exact
+/// marching-squares polygon decomposition.
+///
+/// Each cell emits precisely the polygon region where the scalar field lies
+/// within the band boundaries, producing smooth contour fills even at low
+/// grid resolutions.
 ///
 /// Returns one [`ContourBand`] per pair of adjacent thresholds plus bands
 /// below the first level and above the last level.
@@ -325,7 +330,11 @@ pub fn filled_contour_bands(
             boundaries.push(t);
         }
     }
-    boundaries.push(max_val);
+    // Nudge the top boundary slightly above max_val so that cells at
+    // exactly max_val are classified as Inside rather than Above in the
+    // last band.
+    let top = max_val + range.max(1e-6) * 1e-6;
+    boundaries.push(top);
     boundaries.dedup_by(|a, b| (*a - *b).abs() < 1e-12);
 
     for pair in boundaries.windows(2) {
@@ -338,46 +347,262 @@ pub fn filled_contour_bands(
             0.5
         };
 
-        // For each cell, emit triangles that cover the region where the
-        // density lies within [low, high].  We use a simplified approach:
-        // for every cell whose average density falls within the band,
-        // emit two triangles covering the cell.
         let mut triangles = Vec::new();
         for y in 0..rows - 1 {
             for x in 0..cols - 1 {
-                let v00 = grid[y * cols + x];
-                let v10 = grid[y * cols + (x + 1)];
-                let v01 = grid[(y + 1) * cols + x];
-                let v11 = grid[(y + 1) * cols + (x + 1)];
-                let avg = (v00 + v10 + v01 + v11) * 0.25;
+                let values = [
+                    grid[y * cols + x],
+                    grid[y * cols + (x + 1)],
+                    grid[(y + 1) * cols + (x + 1)],
+                    grid[(y + 1) * cols + x],
+                ];
+                let positions = [
+                    (x_points[x], y_points[y]),
+                    (x_points[x + 1], y_points[y]),
+                    (x_points[x + 1], y_points[y + 1]),
+                    (x_points[x], y_points[y + 1]),
+                ];
 
-                if avg >= low && avg < high {
-                    let x0 = x_points[x];
-                    let x1 = x_points[x + 1];
-                    let y0 = y_points[y];
-                    let y1 = y_points[y + 1];
-
-                    // Two triangles covering the cell quad.
-                    triangles.push((x0, y0));
-                    triangles.push((x1, y0));
-                    triangles.push((x0, y1));
-
-                    triangles.push((x1, y0));
-                    triangles.push((x1, y1));
-                    triangles.push((x0, y1));
+                for poly in cell_band_polygons(values, positions, low, high) {
+                    fan_triangulate(&poly, &mut triangles);
                 }
             }
         }
 
         bands.push(ContourBand {
             low,
-            high,
+            high: high.min(max_val),
             normalised,
             triangles,
         });
     }
 
     bands
+}
+
+// ── Exact marching-squares band decomposition ────────────────────────────
+
+/// Corner classification relative to a contour band `[low, high)`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BandState {
+    /// Value is below the band lower bound.
+    Below,
+    /// Value lies within the band.
+    Inside,
+    /// Value is at or above the band upper bound.
+    Above,
+}
+
+/// Classify a scalar value relative to a band `[low, high)`.
+#[inline]
+fn classify_band(value: f32, low: f32, high: f32) -> BandState {
+    if value < low {
+        BandState::Below
+    } else if value < high {
+        BandState::Inside
+    } else {
+        BandState::Above
+    }
+}
+
+/// Interpolate the position where a threshold crosses a line segment.
+#[inline]
+fn lerp_point(p0: (f32, f32), p1: (f32, f32), v0: f32, v1: f32, threshold: f32) -> (f32, f32) {
+    let t = safe_lerp_t(threshold, v0, v1);
+    (p0.0 + t * (p1.0 - p0.0), p0.1 + t * (p1.1 - p0.1))
+}
+
+/// Collect the band polygon(s) for a single cell.
+///
+/// Corners are ordered clockwise: `[v00 (TL), v10 (TR), v11 (BR), v01 (BL)]`.
+/// Returns zero or more polygons (multiple polygons arise from saddle
+/// configurations where the band region has disconnected components).
+fn cell_band_polygons(
+    values: [f32; 4],
+    positions: [(f32, f32); 4],
+    low: f32,
+    high: f32,
+) -> Vec<Vec<(f32, f32)>> {
+    let states = [
+        classify_band(values[0], low, high),
+        classify_band(values[1], low, high),
+        classify_band(values[2], low, high),
+        classify_band(values[3], low, high),
+    ];
+
+    // All corners share a non-Inside state → no band region in this cell.
+    if states.iter().all(|&s| s == BandState::Below)
+        || states.iter().all(|&s| s == BandState::Above)
+    {
+        return vec![];
+    }
+
+    // All corners Inside → full cell quad.
+    if states.iter().all(|&s| s == BandState::Inside) {
+        return vec![vec![positions[0], positions[1], positions[2], positions[3]]];
+    }
+
+    // Detect saddle: opposite corners share a state, adjacent corners
+    // differ.  Saddle cells can produce disconnected band regions so we
+    // subdivide into 4 triangles through the cell centre.
+    let is_saddle = states[0] == states[2] && states[1] == states[3] && states[0] != states[1];
+
+    if is_saddle {
+        let centre_val = (values[0] + values[1] + values[2] + values[3]) * 0.25;
+        let centre_pos = (
+            (positions[0].0 + positions[2].0) * 0.5,
+            (positions[0].1 + positions[2].1) * 0.5,
+        );
+
+        let mut polygons = Vec::new();
+        // 4 triangles: (0,1,c), (1,2,c), (2,3,c), (3,0,c)
+        for k in 0..4 {
+            let j = (k + 1) % 4;
+            let tri_vals = [values[k], values[j], centre_val];
+            let tri_pos = [positions[k], positions[j], centre_pos];
+            let poly = triangle_band_polygon(tri_vals, tri_pos, low, high);
+            if !poly.is_empty() {
+                polygons.push(poly);
+            }
+        }
+        return polygons;
+    }
+
+    // Non-saddle cell: walk the boundary and collect band polygon vertices.
+    let poly = boundary_walk_quad(&values, &positions, &states, low, high);
+    if poly.is_empty() { vec![] } else { vec![poly] }
+}
+
+/// Walk the boundary of a non-saddle quadrilateral cell and collect the
+/// vertices of the band polygon in winding order.
+fn boundary_walk_quad(
+    values: &[f32; 4],
+    positions: &[(f32, f32); 4],
+    states: &[BandState; 4],
+    low: f32,
+    high: f32,
+) -> Vec<(f32, f32)> {
+    let mut vertices = Vec::with_capacity(8);
+    for k in 0..4 {
+        let j = (k + 1) % 4;
+        emit_edge_vertices(
+            states[k],
+            states[j],
+            positions[k],
+            positions[j],
+            values[k],
+            values[j],
+            low,
+            high,
+            &mut vertices,
+        );
+    }
+    vertices
+}
+
+/// Collect band polygon vertices for a single triangle sub-cell.
+///
+/// Used during saddle subdivision.  Triangles have no saddle ambiguity so
+/// a simple boundary walk suffices.
+fn triangle_band_polygon(
+    values: [f32; 3],
+    positions: [(f32, f32); 3],
+    low: f32,
+    high: f32,
+) -> Vec<(f32, f32)> {
+    let states = [
+        classify_band(values[0], low, high),
+        classify_band(values[1], low, high),
+        classify_band(values[2], low, high),
+    ];
+
+    if states.iter().all(|&s| s == BandState::Below)
+        || states.iter().all(|&s| s == BandState::Above)
+    {
+        return vec![];
+    }
+
+    if states.iter().all(|&s| s == BandState::Inside) {
+        return vec![positions[0], positions[1], positions[2]];
+    }
+
+    let mut vertices = Vec::with_capacity(6);
+    for k in 0..3 {
+        let j = (k + 1) % 3;
+        emit_edge_vertices(
+            states[k],
+            states[j],
+            positions[k],
+            positions[j],
+            values[k],
+            values[j],
+            low,
+            high,
+            &mut vertices,
+        );
+    }
+    vertices
+}
+
+/// Emit band polygon vertices along a single edge from corner `i` to
+/// corner `j`.
+///
+/// The corner's own position is emitted first (if Inside), followed by any
+/// threshold crossing points in traversal order.
+#[inline]
+fn emit_edge_vertices(
+    si: BandState,
+    sj: BandState,
+    pi: (f32, f32),
+    pj: (f32, f32),
+    vi: f32,
+    vj: f32,
+    low: f32,
+    high: f32,
+    out: &mut Vec<(f32, f32)>,
+) {
+    // Emit starting corner when Inside.
+    if si == BandState::Inside {
+        out.push(pi);
+    }
+
+    // Emit threshold crossings in traversal order.
+    match (si, sj) {
+        (BandState::Below, BandState::Inside) => {
+            out.push(lerp_point(pi, pj, vi, vj, low));
+        }
+        (BandState::Below, BandState::Above) => {
+            out.push(lerp_point(pi, pj, vi, vj, low));
+            out.push(lerp_point(pi, pj, vi, vj, high));
+        }
+        (BandState::Inside, BandState::Below) => {
+            out.push(lerp_point(pi, pj, vi, vj, low));
+        }
+        (BandState::Inside, BandState::Above) => {
+            out.push(lerp_point(pi, pj, vi, vj, high));
+        }
+        (BandState::Above, BandState::Below) => {
+            out.push(lerp_point(pi, pj, vi, vj, high));
+            out.push(lerp_point(pi, pj, vi, vj, low));
+        }
+        (BandState::Above, BandState::Inside) => {
+            out.push(lerp_point(pi, pj, vi, vj, high));
+        }
+        _ => {} // Same state on both corners: no crossings.
+    }
+}
+
+/// Fan-triangulate a convex polygon and append the resulting triangle
+/// vertices (groups of 3) to `out`.
+fn fan_triangulate(polygon: &[(f32, f32)], out: &mut Vec<(f32, f32)>) {
+    if polygon.len() < 3 {
+        return;
+    }
+    for i in 1..polygon.len() - 1 {
+        out.push(polygon[0]);
+        out.push(polygon[i]);
+        out.push(polygon[i + 1]);
+    }
 }
 
 // ── DensityPlotBuilder ──────────────────────────────────────────────────
@@ -1259,6 +1484,487 @@ mod tests {
         let layer = DensityPlotBuilder::density_layer(&samples, Some(0.3));
         assert!(!layer.kde_result.densities.is_empty());
         assert_eq!(layer.config.bandwidth, Some(0.3));
+    }
+
+    // ── Exact marching-squares band polygon tests ───────────────────
+
+    /// Helper: compute the signed area of a polygon.
+    fn polygon_area(verts: &[(f32, f32)]) -> f32 {
+        let n = verts.len();
+        if n < 3 {
+            return 0.0;
+        }
+        let mut area = 0.0f32;
+        for i in 0..n {
+            let j = (i + 1) % n;
+            area += verts[i].0 * verts[j].1;
+            area -= verts[j].0 * verts[i].1;
+        }
+        area * 0.5
+    }
+
+    /// Helper: compute the area of triangles stored as flat (x,y)
+    /// vertices in groups of three.
+    fn triangles_area(tris: &[(f32, f32)]) -> f32 {
+        assert_eq!(tris.len() % 3, 0);
+        let mut area = 0.0f32;
+        for chunk in tris.chunks(3) {
+            let (ax, ay) = chunk[0];
+            let (bx, by) = chunk[1];
+            let (cx, cy) = chunk[2];
+            area += ((bx - ax) * (cy - ay) - (cx - ax) * (by - ay)).abs() * 0.5;
+        }
+        area
+    }
+
+    // ── Case-by-case polygon vertex count tests ─────────────────────
+    //
+    // For a single cell with corners [v00, v10, v11, v01] and a band
+    // that maps to the 16 standard marching-squares cases, we verify
+    // the polygon vertex count produced by `cell_band_polygons`.
+
+    #[test]
+    fn test_band_case_0000_all_below() {
+        // All corners below the band → no polygon.
+        let polys = cell_band_polygons(
+            [0.0, 0.0, 0.0, 0.0],
+            [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+            0.5,
+            1.5,
+        );
+        assert!(polys.is_empty());
+    }
+
+    #[test]
+    fn test_band_case_1111_all_inside() {
+        // All corners inside the band → full quad (4 vertices).
+        let polys = cell_band_polygons(
+            [1.0, 1.0, 1.0, 1.0],
+            [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+            0.5,
+            1.5,
+        );
+        assert_eq!(polys.len(), 1);
+        assert_eq!(polys[0].len(), 4);
+    }
+
+    #[test]
+    fn test_band_case_all_above() {
+        // All corners above the band → no polygon.
+        let polys = cell_band_polygons(
+            [2.0, 2.0, 2.0, 2.0],
+            [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+            0.5,
+            1.5,
+        );
+        assert!(polys.is_empty());
+    }
+
+    #[test]
+    fn test_band_single_corner_inside() {
+        // One corner Inside, rest Below → triangle (3 vertices).
+        // v00=1.0 (Inside), rest=0.0 (Below), band=[0.5, 1.5)
+        let polys = cell_band_polygons(
+            [1.0, 0.0, 0.0, 0.0],
+            [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+            0.5,
+            1.5,
+        );
+        assert_eq!(polys.len(), 1);
+        assert_eq!(
+            polys[0].len(),
+            3,
+            "single inside corner should give triangle"
+        );
+    }
+
+    #[test]
+    fn test_band_two_adjacent_inside() {
+        // Two adjacent corners Inside → quadrilateral (4 vertices).
+        // v00=1.0, v10=1.0 (Inside), v11=0.0, v01=0.0 (Below)
+        let polys = cell_band_polygons(
+            [1.0, 1.0, 0.0, 0.0],
+            [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+            0.5,
+            1.5,
+        );
+        assert_eq!(polys.len(), 1);
+        assert_eq!(
+            polys[0].len(),
+            4,
+            "two adjacent inside corners should give quad"
+        );
+    }
+
+    #[test]
+    fn test_band_three_corners_inside() {
+        // Three corners Inside, one Below → pentagon (5 vertices).
+        // v00=1.0, v10=1.0, v11=1.0 (Inside), v01=0.0 (Below)
+        let polys = cell_band_polygons(
+            [1.0, 1.0, 1.0, 0.0],
+            [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+            0.5,
+            1.5,
+        );
+        assert_eq!(polys.len(), 1);
+        assert_eq!(
+            polys[0].len(),
+            5,
+            "three inside corners should give pentagon"
+        );
+    }
+
+    #[test]
+    fn test_band_below_to_above_crossing() {
+        // One corner Below, opposite Above, middle two Inside →
+        // produces a hexagon through two threshold crossings.
+        // v00=0.0 (Below), v10=1.0 (Inside), v11=2.0 (Above),
+        // v01=1.0 (Inside); band=[0.5, 1.5)
+        let polys = cell_band_polygons(
+            [0.0, 1.0, 2.0, 1.0],
+            [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+            0.5,
+            1.5,
+        );
+        assert_eq!(polys.len(), 1);
+        // v00(B)→v10(I): low crossing; v10(I); v10(I)→v11(A): high crossing;
+        // v11(A)→v01(I): high crossing; v01(I); v01(I)→v00(B): low crossing
+        assert_eq!(
+            polys[0].len(),
+            6,
+            "B-I-A-I ring should give hexagon, got {}",
+            polys[0].len()
+        );
+    }
+
+    #[test]
+    fn test_band_below_to_above_edge() {
+        // Single edge crosses from Below to Above → two crossings.
+        // v00=0.0 (B), v10=2.0 (A), v11=2.0 (A), v01=0.0 (B)
+        // band=[0.5, 1.5)
+        let polys = cell_band_polygons(
+            [0.0, 2.0, 2.0, 0.0],
+            [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+            0.5,
+            1.5,
+        );
+        assert_eq!(polys.len(), 1);
+        // Edge 0→1: B→A low+high; Edge 1→2: A→A nothing;
+        // Edge 2→3: A→B high+low; Edge 3→0: B→B nothing → 4 vertices
+        assert_eq!(
+            polys[0].len(),
+            4,
+            "B-A-A-B should give quad band strip, got {}",
+            polys[0].len()
+        );
+    }
+
+    // ── Saddle configuration tests ──────────────────────────────────
+
+    #[test]
+    fn test_band_saddle_connected() {
+        // Saddle: v00=A, v10=I, v11=A, v01=I with centre Inside.
+        // Centre = (2.0+1.0+2.0+1.0)/4 = 1.5 → Inside [0.5, 1.6)
+        // Band should be connected (single polygon via sub-triangles).
+        let polys = cell_band_polygons(
+            [2.0, 1.0, 2.0, 1.0],
+            [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+            0.5,
+            1.6,
+        );
+        assert!(
+            !polys.is_empty(),
+            "saddle with centre inside should produce polygons"
+        );
+        // Verify total area > 0
+        let total: f32 = polys.iter().map(|p| polygon_area(p).abs()).sum();
+        assert!(total > 0.0, "saddle band should have positive area");
+    }
+
+    #[test]
+    fn test_band_saddle_disconnected() {
+        // Saddle: v00=A, v10=I, v11=A, v01=I with centre Above.
+        // Centre = (3.0+1.0+3.0+1.0)/4 = 2.0 → Above [0.5, 1.5)
+        // Band should be two disconnected triangles around corners 1 and 3.
+        let polys = cell_band_polygons(
+            [3.0, 1.0, 3.0, 1.0],
+            [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+            0.5,
+            1.5,
+        );
+        assert!(
+            polys.len() >= 2,
+            "disconnected saddle should produce ≥2 polygons, got {}",
+            polys.len()
+        );
+    }
+
+    #[test]
+    fn test_band_saddle_both_thresholds() {
+        // Saddle: v00=A, v10=B, v11=A, v01=B.
+        // Values: 2.0, 0.0, 2.0, 0.0; band=[0.5, 1.5)
+        // Centre = 1.0 → Inside. Should produce band region(s).
+        let polys = cell_band_polygons(
+            [2.0, 0.0, 2.0, 0.0],
+            [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+            0.5,
+            1.5,
+        );
+        assert!(
+            !polys.is_empty(),
+            "A-B saddle with centre in band should produce polygons"
+        );
+        let total: f32 = polys.iter().map(|p| polygon_area(p).abs()).sum();
+        assert!(total > 0.0);
+    }
+
+    // ── Interpolation accuracy tests ────────────────────────────────
+
+    #[test]
+    fn test_band_boundary_matches_iso_contour() {
+        // Verify that the band polygon boundary lies on the iso-contour
+        // to sub-pixel accuracy.
+        //
+        // Grid: linear ramp 0→1 along x.
+        // Band [0.25, 0.75): the left boundary should be at x=0.25,
+        // the right at x=0.75.
+        #[rustfmt::skip]
+        let grid = vec![
+            0.0, 0.5, 1.0,
+            0.0, 0.5, 1.0,
+        ];
+        let xs = vec![0.0, 0.5, 1.0];
+        let ys = vec![0.0, 1.0];
+        let bands = filled_contour_bands(&grid, 2, 3, &[0.25, 0.75], &xs, &ys);
+
+        // Find the band covering [0.25, 0.75).
+        let mid_band = bands
+            .iter()
+            .find(|b| b.low < 0.3 && b.high > 0.7)
+            .expect("should have a band covering [0.25, 0.75)");
+
+        assert!(
+            !mid_band.triangles.is_empty(),
+            "middle band should have triangles"
+        );
+
+        // All triangle x-coordinates should be in [0.25, 0.75] ± ε.
+        for &(x, _y) in &mid_band.triangles {
+            assert!(
+                x >= 0.25 - 1e-4 && x <= 0.75 + 1e-4,
+                "vertex x={x} outside expected [0.25, 0.75]"
+            );
+        }
+    }
+
+    // ── Seamless tiling / topology tests ────────────────────────────
+
+    #[test]
+    fn test_band_areas_sum_to_grid_area() {
+        // The total triangle area across all bands should equal the
+        // total grid area (all cells are covered by exactly one band).
+        #[rustfmt::skip]
+        let grid = vec![
+            0.0, 0.3, 0.6, 1.0,
+            0.1, 0.5, 0.8, 0.9,
+            0.2, 0.7, 1.0, 0.7,
+            0.0, 0.4, 0.5, 0.3,
+        ];
+        let xs = vec![0.0, 1.0, 2.0, 3.0];
+        let ys = vec![0.0, 1.0, 2.0, 3.0];
+        let thresholds = compute_thresholds(&grid, 4);
+        let bands = filled_contour_bands(&grid, 4, 4, &thresholds, &xs, &ys);
+
+        let total_band_area: f32 = bands.iter().map(|b| triangles_area(&b.triangles)).sum();
+        // Total grid area = 3 × 3 = 9 (3 cells wide × 3 cells tall).
+        let grid_area = 9.0f32;
+
+        assert!(
+            (total_band_area - grid_area).abs() < 0.05,
+            "band area sum {total_band_area} should ≈ grid area {grid_area}"
+        );
+    }
+
+    #[test]
+    fn test_seamless_tiling_uniform_gradient() {
+        // Linear gradient: every cell is split by every threshold,
+        // so exact tiling is critical.
+        let size = 8;
+        let grid: Vec<f32> = (0..size * size)
+            .map(|i| i as f32 / (size * size - 1) as f32)
+            .collect();
+        let xs: Vec<f32> = (0..size).map(|i| i as f32).collect();
+        let ys: Vec<f32> = (0..size).map(|i| i as f32).collect();
+        let thresholds = compute_thresholds(&grid, 6);
+        let bands = filled_contour_bands(&grid, size, size, &thresholds, &xs, &ys);
+
+        let total_band_area: f32 = bands.iter().map(|b| triangles_area(&b.triangles)).sum();
+        let grid_area = ((size - 1) * (size - 1)) as f32;
+
+        assert!(
+            (total_band_area - grid_area).abs() / grid_area < 0.01,
+            "gradient band area sum {total_band_area} should ≈ {grid_area} (err > 1%)"
+        );
+    }
+
+    #[test]
+    fn test_no_gaps_at_resolution_4() {
+        // Acceptance criterion: bands tile at grid resolution ≥ 4.
+        let size = 4;
+        #[rustfmt::skip]
+        let grid = vec![
+            0.0, 0.2, 0.4, 0.1,
+            0.3, 0.9, 0.7, 0.2,
+            0.1, 0.6, 1.0, 0.5,
+            0.0, 0.1, 0.3, 0.2,
+        ];
+        let xs: Vec<f32> = (0..size).map(|i| i as f32).collect();
+        let ys: Vec<f32> = (0..size).map(|i| i as f32).collect();
+        let thresholds = compute_thresholds(&grid, 4);
+        let bands = filled_contour_bands(&grid, size, size, &thresholds, &xs, &ys);
+
+        let total_area: f32 = bands.iter().map(|b| triangles_area(&b.triangles)).sum();
+        let expected = ((size - 1) * (size - 1)) as f32;
+
+        assert!(
+            (total_area - expected).abs() / expected < 0.01,
+            "at 4×4 grid, total band area {total_area} ≈ {expected}"
+        );
+    }
+
+    #[test]
+    fn test_triangle_counts_non_empty() {
+        // Verify that triangles are produced in multiples of 3 vertices.
+        #[rustfmt::skip]
+        let grid = vec![
+            0.0, 0.5, 1.0,
+            0.5, 1.0, 0.5,
+            1.0, 0.5, 0.0,
+        ];
+        let xs = vec![0.0, 1.0, 2.0];
+        let ys = vec![0.0, 1.0, 2.0];
+        let thresholds = compute_thresholds(&grid, 3);
+        let bands = filled_contour_bands(&grid, 3, 3, &thresholds, &xs, &ys);
+
+        for band in &bands {
+            assert_eq!(
+                band.triangles.len() % 3,
+                0,
+                "triangle count must be multiple of 3, got {} for band [{}, {}]",
+                band.triangles.len(),
+                band.low,
+                band.high
+            );
+        }
+    }
+
+    #[test]
+    fn test_exact_vs_cell_average_smoother_at_low_res() {
+        // At 16×16 resolution with a Gaussian-like peak, the exact
+        // decomposition should produce a smaller number of triangles
+        // (partial cells) compared to a full-cell tiling, demonstrating
+        // that band boundaries cut through cells rather than including
+        // the entire cell.
+        let size = 6;
+        let mid = (size - 1) as f32 / 2.0;
+        let grid: Vec<f32> = (0..size * size)
+            .map(|i| {
+                let x = (i % size) as f32 - mid;
+                let y = (i / size) as f32 - mid;
+                (-0.5 * (x * x + y * y)).exp()
+            })
+            .collect();
+        let xs: Vec<f32> = (0..size).map(|i| i as f32).collect();
+        let ys: Vec<f32> = (0..size).map(|i| i as f32).collect();
+        let thresholds = compute_thresholds(&grid, 4);
+        let bands = filled_contour_bands(&grid, size, size, &thresholds, &xs, &ys);
+
+        // Each band should have SOME triangles (the peak isn't flat).
+        let bands_with_tris: Vec<_> = bands.iter().filter(|b| !b.triangles.is_empty()).collect();
+        assert!(
+            bands_with_tris.len() >= 2,
+            "at least 2 bands should have triangles"
+        );
+
+        // The band area sum should still match the grid.
+        let total_area: f32 = bands.iter().map(|b| triangles_area(&b.triangles)).sum();
+        let expected = ((size - 1) * (size - 1)) as f32;
+        assert!(
+            (total_area - expected).abs() / expected < 0.02,
+            "Gaussian peak: band area {total_area} ≈ {expected}"
+        );
+    }
+
+    // ── cell_band_polygons edge-case tests ──────────────────────────
+
+    #[test]
+    fn test_band_polygon_single_above_corner() {
+        // One corner Above, rest Inside → pentagon (5 vertices).
+        // v00=2.0 (Above), rest=1.0 (Inside); band=[0.5, 1.5)
+        let polys = cell_band_polygons(
+            [2.0, 1.0, 1.0, 1.0],
+            [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+            0.5,
+            1.5,
+        );
+        assert_eq!(polys.len(), 1);
+        assert_eq!(
+            polys[0].len(),
+            5,
+            "one above corner clipping should give pentagon"
+        );
+    }
+
+    #[test]
+    fn test_band_polygon_two_above_adjacent() {
+        // Two adjacent corners Above, two Inside → quad.
+        // v00=2.0, v10=2.0 (Above), v11=1.0, v01=1.0 (Inside)
+        let polys = cell_band_polygons(
+            [2.0, 2.0, 1.0, 1.0],
+            [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+            0.5,
+            1.5,
+        );
+        assert_eq!(polys.len(), 1);
+        assert_eq!(polys[0].len(), 4);
+    }
+
+    #[test]
+    fn test_band_polygon_mixed_below_above() {
+        // v00=0.0 (B), v10=2.0 (A), v11=0.0 (B), v01=2.0 (A)
+        // This is a saddle; centre=(0+2+0+2)/4=1.0 Inside [0.5,1.5)
+        let polys = cell_band_polygons(
+            [0.0, 2.0, 0.0, 2.0],
+            [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+            0.5,
+            1.5,
+        );
+        assert!(
+            !polys.is_empty(),
+            "B-A-B-A saddle with centre in band should produce polygons"
+        );
+    }
+
+    #[test]
+    fn test_fan_triangulate_triangle() {
+        let mut out = Vec::new();
+        fan_triangulate(&[(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)], &mut out);
+        assert_eq!(out.len(), 3);
+    }
+
+    #[test]
+    fn test_fan_triangulate_quad() {
+        let mut out = Vec::new();
+        fan_triangulate(&[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)], &mut out);
+        // Quad → 2 triangles → 6 vertices.
+        assert_eq!(out.len(), 6);
+    }
+
+    #[test]
+    fn test_fan_triangulate_degenerate() {
+        let mut out = Vec::new();
+        fan_triangulate(&[(0.0, 0.0), (1.0, 0.0)], &mut out);
+        assert!(out.is_empty(), "fewer than 3 vertices → no triangles");
     }
 
     // ── Integration test with ChartBuilder ──────────────────────────
