@@ -583,7 +583,7 @@ screen reader testing, focus elements.
 - [GUP-127](GUP-127_Focus_Elements_for_Data_Points.md) ✅ — GUP-111 implemented
   ARIA tree generation, but screen reader users still cannot navigate…. Deps:
   GUP-016 ✅, GUP-111 ✅.
-- [GUP-272](GUP-272_WCAG_2_1_AA_Compliance_Validation.md) 🚧 — Systematic WCAG
+- [GUP-272](GUP-272_WCAG_2_1_AA_Compliance_Validation.md) ✅ — Systematic WCAG
   2.1 AA audit of all 50 success criteria, gap fixes, conformance statement, and
   automated accessibility checks in CI. Deps: GUP-016 ✅, GUP-111 ✅, GUP-112
   ✅, GUP-122 ✅, GUP-124 ✅, GUP-127 ✅.
