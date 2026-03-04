@@ -109,7 +109,7 @@
 //! | [`prelude`] | Convenience re-exports for common imports |
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![warn(missing_docs)]
+#![deny(missing_docs)]
 
 // Allow `gup::` paths in proc macro-generated code from within this crate.
 extern crate self as gup;
