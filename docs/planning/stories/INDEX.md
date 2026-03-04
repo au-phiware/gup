@@ -809,6 +809,10 @@ profiling, trend visualisation.
 - [GUP-305](GUP-305_Release_Mode_Performance_Validation.md) 💡 — CI job running
   performance validation tests in release mode to validate actual Phase 1
   targets. Deps: GUP-014 ✅.
+- [GUP-358](GUP-358_GPU_Binning_Performance_Benchmarks.md) 📋 — Criterion
+  benchmarks for GPU vs CPU binning at 1M/10M/100M scales. Deps: GUP-297 ✅.
+- [GUP-359](GUP-359_Streaming_GPU_Binning.md) 📋 — Incremental GPU binning for
+  streaming data (append-only updates). Deps: GUP-297 ✅.
 
 ## Debug & Development Tools
 
