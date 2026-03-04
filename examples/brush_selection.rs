@@ -323,6 +323,14 @@ impl ApplicationHandler for App {
                         let _ =
                             ctx.resize_surface(id, gup::PhysicalSize::new(size.width, size.height));
                     }
+                    // Keep overlay viewport in sync with window size.
+                    if let Some(ref overlay) = self.overlay_renderer {
+                        overlay.set_viewport_size(
+                            &ctx.queue,
+                            size.width as f32,
+                            size.height as f32,
+                        );
+                    }
                     self.context = Some(Arc::new(ctx));
                 }
             }
