@@ -153,6 +153,8 @@ pub struct GpuDebugContext {
     pub shader_profiler: ShaderProfiler,
     /// Resource dependency graph for relationship analysis
     pub resource_graph: ResourceGraph,
+    /// Memory bandwidth profiler for transfer tracking and pressure detection
+    pub bandwidth_profiler: MemoryBandwidthProfiler,
     /// Debug configuration
     pub config: DebugConfig,
     /// Performance history for regression detection
@@ -173,6 +175,9 @@ impl GpuDebugContext {
             memory_profiler: GpuMemoryProfiler::new(device, queue),
             shader_profiler: ShaderProfiler::new(device, queue),
             resource_graph: ResourceGraph::new(),
+            bandwidth_profiler: MemoryBandwidthProfiler::new(
+                memory_bandwidth::BandwidthConfig::default(),
+            ),
             config,
             performance_history: Vec::new(),
         }
@@ -339,6 +344,8 @@ impl GpuDebugContext {
         let summary = self.get_performance_summary();
         let memory_report = self.memory_profiler.get_memory_report();
         let resource_report = self.resource_graph.generate_report();
+        let bandwidth_stats = self.bandwidth_profiler.get_stats();
+        let bandwidth_pressure = self.bandwidth_profiler.get_memory_pressure();
         let report = DebugReport {
             timestamp: chrono::Utc::now(),
             config: self.config.clone(),
@@ -347,6 +354,8 @@ impl GpuDebugContext {
             layout_validation_results: self.layout_validator.get_validation_history(),
             memory_report: Some(memory_report),
             resource_graph_report: Some(resource_report),
+            bandwidth_stats: Some(bandwidth_stats),
+            bandwidth_pressure: Some(bandwidth_pressure),
         };
 
         let json = serde_json::to_string_pretty(&report).map_err(|e| {
@@ -422,6 +431,8 @@ pub struct DebugReport {
     pub layout_validation_results: Vec<LayoutValidationResult>,
     pub memory_report: Option<MemoryReport>,
     pub resource_graph_report: Option<ResourceGraphReport>,
+    pub bandwidth_stats: Option<memory_bandwidth::MemoryBandwidthStats>,
+    pub bandwidth_pressure: Option<memory_bandwidth::MemoryPressureStatus>,
 }
 
 #[cfg(test)]
@@ -479,6 +490,8 @@ mod tests {
             layout_validation_results: Vec::new(),
             memory_report: None,
             resource_graph_report: None,
+            bandwidth_stats: None,
+            bandwidth_pressure: None,
         };
 
         let json = serde_json::to_string_pretty(&report);
