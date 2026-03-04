@@ -156,6 +156,7 @@ async fn main() -> gup::error::GupResult<()> {
         levels: 8,
         render_mode: DensityRenderMode::ContourLine,
         margin: 0.05,
+        ..Default::default()
     };
 
     let kde_result = compute_density_2d(&samples, &config);

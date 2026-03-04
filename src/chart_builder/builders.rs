@@ -37,6 +37,7 @@ pub use boxplot::*;
 pub use choropleth::*;
 pub use composite::*;
 pub use density::*;
+pub use gpu_density::*;
 pub use heatmap::*;
 pub use line::*;
 pub use scatter::*;
