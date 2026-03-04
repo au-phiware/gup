@@ -261,3 +261,111 @@ integration is handled by those companion stories.
 ### Test Counts
 
 - 3 unit tests in `src/export/gallery.rs` (all pass)
+
+## Retrospective
+
+**Completed**: 2025-07-26
+
+### Key Technical Learnings
+
+#### Shell-Based Gallery Generation Is Sufficient
+
+- **Challenge**: The story suggested a Rust binary or Python script for gallery
+  generation, but the project's Nix shell does not include Python.
+- **Solution**: Pure Bash scripts using `awk` for TOML parsing, `grep`/`sed` for
+  HTML link extraction, and heredocs for HTML generation. No additional
+  dependencies needed.
+- **Pattern**: For documentation tooling that only runs in CI, shell scripts are
+  often simpler and more portable than compiled tools — especially when the
+  parsing requirements are straightforward (flat TOML tables, grep-based link
+  extraction).
+
+#### Environment Variable Approach for Headless Screenshots
+
+- **Challenge**: Many examples use `winit::EventLoop` and block forever. Adding
+  `--headless-screenshot` CLI flags to 60+ examples is impractical.
+- **Solution**: An environment variable convention (`GUP_SCREENSHOT_PATH`) with
+  a library helper function. Examples opt in with a single `if let` check.
+  The generation script sets the env var externally.
+- **Pattern**: Environment variables are superior to CLI flags for cross-cutting
+  concerns that need to be added incrementally across many entry points. The
+  library helper centralises the parsing logic.
+
+#### TOML Config Over INDEX.md Parsing
+
+- **Challenge**: The story suggested reading `examples/INDEX.md` as the source
+  of truth for example classification, but Markdown table parsing in shell is
+  fragile.
+- **Solution**: A standalone `gallery_config.toml` as the canonical list, with
+  `skip`, `skip_reason`, `category`, `description`, and `source` fields per
+  example. The HTML generator reads this config, not INDEX.md.
+- **Pattern**: For CI pipelines, prefer structured config files (TOML/YAML) over
+  parsing Markdown. The config can be validated independently and evolves
+  without breaking the gallery.
+
+### Architectural Decisions
+
+#### Separate Config File Instead of INDEX.md Parsing
+
+- **Decision**: Use `scripts/gallery_config.toml` as the canonical gallery
+  example list rather than parsing `examples/INDEX.md`.
+- **Reasoning**: Shell-based Markdown table parsing is fragile and hard to
+  maintain. TOML is structured, supports skip reasons, and is easy to extend
+  with new fields (e.g. CI-skip, hardware-required).
+- **Trade-off**: Two sources of truth for example metadata (INDEX.md and config).
+  Risk of drift if new examples are added to one but not the other.
+- **Future**: Consider a script that generates gallery_config.toml from
+  INDEX.md, or vice versa, to keep them synchronised.
+
+#### Placeholder Cards for Skipped Examples
+
+- **Decision**: Show all 99 examples in the gallery — renderable ones with
+  thumbnails, skipped ones with placeholder cards.
+- **Reasoning**: A new user scanning the gallery should see the full breadth of
+  examples, even those they can't preview visually. Placeholder cards provide
+  context ("Requires window") and link to source code.
+- **Trade-off**: The gallery is larger than it would be with only renderable
+  examples. Some users may find placeholders noisy.
+- **Future**: As more examples gain headless support (via the screenshot env
+  var), placeholders will gradually be replaced by real thumbnails.
+
+#### GitHub Pages Deployment via actions-deploy-pages
+
+- **Decision**: Use `actions/upload-pages-artifact` + `actions/deploy-pages`
+  instead of `peaceiris/actions-gh-pages`.
+- **Reasoning**: The official GitHub Actions are better maintained and integrate
+  with the newer Pages deployment model (environments, OIDC tokens). No need
+  for a personal access token.
+- **Trade-off**: Requires `pages: write` and `id-token: write` permissions,
+  which are more explicit but less familiar to some contributors.
+- **Future**: The same deployment pipeline can serve GUP-280 (API Reference) and
+  GUP-281 (Tutorials) by combining artifacts.
+
+### Development Workflow Insights
+
+- **Disk space was the dominant constraint**: The ZFS pool had only ~600MB free,
+  and Rust's `cargo test` builds dozens of test binaries (each 20-60MB). Had to
+  use `cargo test --lib` to avoid building integration test binaries. This is a
+  persistent issue for this codebase and should be documented.
+
+- **Shell scripts benefit from early testing**: Running
+  `generate_gallery_html.sh` and `check_gallery_links.sh` locally before
+  committing caught the incorrect GitHub base URL immediately.
+
+- **The `unsafe` env var API**: Rust 2024 edition makes `std::env::set_var` and
+  `remove_var` unsafe. This is correct (they are not thread-safe) but requires
+  boilerplate in tests. The `--test-threads=1` requirement for GPU tests
+  already serialises execution, making the safety concern moot in practice.
+
+### Follow-up Stories
+
+1. **GUP-282A: Wire Headless Screenshots Into Examples** — Add
+   `GUP_SCREENSHOT_PATH` support to the 62 examples classified as renderable in
+   `gallery_config.toml`. Each example needs a one-line check at its render
+   point to call `export_png` and exit. This is mechanical but necessary for the
+   gallery to produce actual thumbnails rather than placeholders.
+
+2. **GUP-282B: Gallery Config Sync Tool** — Write a script that validates
+   `gallery_config.toml` against `examples/INDEX.md` and `Cargo.toml` example
+   entries, reporting any drift (examples in one but not the other). Prevents
+   new examples from being omitted from the gallery.
