@@ -41,7 +41,7 @@ documented and tested.
 > chart in my WebView and feed it live data from my Rust backend, so that I can
 > build GPU-accelerated visualizations in a native desktop app without leaving
 > the Rust ecosystem."
-
+>
 > "As a Gup maintainer, I want an end-to-end Tauri example that exercises the
 > WASM public API from JavaScript so that regressions in the WASM surface are
 > caught before release."
