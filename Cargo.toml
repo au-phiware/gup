@@ -333,6 +333,11 @@ pdf = ["printpdf"]
 ## helpers, UITouch→TouchEvent translation, and the C ABI consumed by the
 ## companion Swift package in `pkg/ios/GupSwift/`.
 ios-shim = []
+## Android embedding shim.  Enables the `platform::android` module with
+## ANativeWindow surface helpers, MotionEvent→TouchEvent translation, and the
+## JNI C ABI consumed by the companion Kotlin library in
+## `pkg/android/GupKotlin/`.
+android-shim = []
 
 [package.metadata.docs.rs]
 all-features = true
