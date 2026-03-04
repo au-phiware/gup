@@ -173,6 +173,9 @@ data, and parallel output.
 - [GUP-278](GUP-278_Staggered_Transition_Delays.md) 📋 — Per-element delay
   offsets via `.delay_fn()` for cascading/staggered animation effects. Deps:
   GUP-276 ✅.
+- [GUP-355](GUP-355_GPU_Compute_Shader_Transition_Interpolation.md) 💡 — GPU
+  compute shader path for transition interpolation at scale (10K+ elements).
+  Deps: GUP-277 ✅.
 
 ## Shader Function System
 
