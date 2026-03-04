@@ -6020,6 +6020,693 @@ impl ComposableShaderFunction for ColorSpaceConverter {
 }
 
 // ============================================================================
+// Perceptual Color Space Conversions (GUP-293)
+// ============================================================================
+
+/// Direction of perceptual color space conversion.
+#[derive(Clone, Debug, Copy, PartialEq, Eq)]
+pub enum PerceptualColorSpaceDirection {
+    /// Convert from linear RGB to CIE XYZ (D65 illuminant)
+    RGBToXYZ,
+    /// Convert from CIE XYZ (D65 illuminant) to linear RGB
+    XYZToRGB,
+    /// Convert from linear RGB to CIE LAB (via XYZ, D65 illuminant)
+    RGBToLAB,
+    /// Convert from CIE LAB to linear RGB (via XYZ, D65 illuminant)
+    LABToRGB,
+    /// Convert from linear RGB to OKLab
+    RGBToOKLab,
+    /// Convert from OKLab to linear RGB
+    OKLabToRGB,
+    /// Convert from linear RGB to LCH (cylindrical LAB, D65 illuminant)
+    RGBToLCH,
+    /// Convert from LCH (cylindrical LAB) to linear RGB (D65 illuminant)
+    LCHToRGB,
+}
+
+/// Perceptual color space converter.
+///
+/// Converts colors between RGB and perceptual color spaces (CIE LAB, OKLab,
+/// LCH) on the GPU. These spaces are designed so that equal numerical
+/// differences correspond to equal perceived colour differences, making them
+/// ideal for data visualisation colour scales.
+///
+/// Input and output are `Vec4` where xyz = colour components, w = alpha (preserved).
+///
+/// ## Colour Spaces
+///
+/// - **CIE XYZ**: Intermediate space derived from sRGB via the D65 illuminant.
+/// - **CIE LAB**: Perceptually uniform space with L* (lightness 0–100),
+///   a* (green–red), b* (blue–yellow).
+/// - **OKLab**: A modern perceptual space by Björn Ottosson with improved
+///   uniformity. L (0–1), a, b.
+/// - **LCH**: Cylindrical form of CIE LAB with L* (lightness), C* (chroma),
+///   h° (hue in degrees).
+///
+/// ## D65 Illuminant
+///
+/// The default illuminant is CIE Standard Illuminant D65, which represents
+/// average daylight. Custom illuminant values may be supplied via
+/// [`PerceptualColorSpaceConverter::with_illuminant`].
+#[derive(Clone, Debug)]
+pub struct PerceptualColorSpaceConverter {
+    /// The conversion direction.
+    pub direction: PerceptualColorSpaceDirection,
+    /// D65 illuminant X reference (default: 0.95047).
+    pub illuminant_x: f32,
+    /// D65 illuminant Y reference (default: 1.0).
+    pub illuminant_y: f32,
+    /// D65 illuminant Z reference (default: 1.08883).
+    pub illuminant_z: f32,
+}
+
+impl PerceptualColorSpaceConverter {
+    /// Creates a new converter with the given direction and default D65 illuminant.
+    pub fn new(direction: PerceptualColorSpaceDirection) -> Self {
+        Self {
+            direction,
+            illuminant_x: 0.950_47,
+            illuminant_y: 1.0,
+            illuminant_z: 1.088_83,
+        }
+    }
+
+    /// Overrides the illuminant reference white point.
+    pub fn with_illuminant(mut self, x: f32, y: f32, z: f32) -> Self {
+        self.illuminant_x = x;
+        self.illuminant_y = y;
+        self.illuminant_z = z;
+        self
+    }
+
+    /// Creates an RGB → CIE XYZ converter.
+    pub fn rgb_to_xyz() -> Self {
+        Self::new(PerceptualColorSpaceDirection::RGBToXYZ)
+    }
+
+    /// Creates a CIE XYZ → RGB converter.
+    pub fn xyz_to_rgb() -> Self {
+        Self::new(PerceptualColorSpaceDirection::XYZToRGB)
+    }
+
+    /// Creates an RGB → CIE LAB converter.
+    pub fn rgb_to_lab() -> Self {
+        Self::new(PerceptualColorSpaceDirection::RGBToLAB)
+    }
+
+    /// Creates a CIE LAB → RGB converter.
+    pub fn lab_to_rgb() -> Self {
+        Self::new(PerceptualColorSpaceDirection::LABToRGB)
+    }
+
+    /// Creates an RGB → OKLab converter.
+    pub fn rgb_to_oklab() -> Self {
+        Self::new(PerceptualColorSpaceDirection::RGBToOKLab)
+    }
+
+    /// Creates an OKLab → RGB converter.
+    pub fn oklab_to_rgb() -> Self {
+        Self::new(PerceptualColorSpaceDirection::OKLabToRGB)
+    }
+
+    /// Creates an RGB → LCH converter.
+    pub fn rgb_to_lch() -> Self {
+        Self::new(PerceptualColorSpaceDirection::RGBToLCH)
+    }
+
+    /// Creates an LCH → RGB converter.
+    pub fn lch_to_rgb() -> Self {
+        Self::new(PerceptualColorSpaceDirection::LCHToRGB)
+    }
+}
+
+/// GPU uniform data for the perceptual colour space conversion shader function.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct PerceptualColorSpaceConverterUniforms {
+    /// Conversion direction (see `PerceptualColorSpaceDirection` ordinals).
+    pub direction: u32,
+    /// D65 illuminant X reference.
+    pub illuminant_x: f32,
+    /// D65 illuminant Y reference.
+    pub illuminant_y: f32,
+    /// D65 illuminant Z reference.
+    pub illuminant_z: f32,
+}
+
+impl ShaderUniform for PerceptualColorSpaceConverterUniforms {
+    fn wgsl_struct_definition() -> String {
+        concat!(
+            "struct PerceptualColorSpaceConverterUniforms {\n",
+            "    direction: u32,\n",
+            "    illuminant_x: f32,\n",
+            "    illuminant_y: f32,\n",
+            "    illuminant_z: f32,\n",
+            "}",
+        )
+        .to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "PerceptualColorSpaceConverterUniforms"
+    }
+}
+
+impl ComposableShaderFunction for PerceptualColorSpaceConverter {
+    type Input = Vec4;
+    type Output = Vec4;
+    type Uniforms = PerceptualColorSpaceConverterUniforms;
+
+    fn wgsl_function() -> &'static str {
+        r#"
+        fn srgb_to_linear(c: f32) -> f32 {
+            if (c <= 0.04045) {
+                return c / 12.92;
+            }
+            return pow((c + 0.055) / 1.055, 2.4);
+        }
+
+        fn linear_to_srgb(c: f32) -> f32 {
+            if (c <= 0.0031308) {
+                return c * 12.92;
+            }
+            return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
+        }
+
+        fn rgb_to_xyz_convert(rgb: vec3<f32>) -> vec3<f32> {
+            let r = srgb_to_linear(rgb.x);
+            let g = srgb_to_linear(rgb.y);
+            let b = srgb_to_linear(rgb.z);
+            let x = r * 0.4124564 + g * 0.3575761 + b * 0.1804375;
+            let y = r * 0.2126729 + g * 0.7151522 + b * 0.0721750;
+            let z = r * 0.0193339 + g * 0.1191920 + b * 0.9503041;
+            return vec3<f32>(x, y, z);
+        }
+
+        fn xyz_to_rgb_convert(xyz: vec3<f32>) -> vec3<f32> {
+            let r = xyz.x *  3.2404542 + xyz.y * -1.5371385 + xyz.z * -0.4985314;
+            let g = xyz.x * -0.9692660 + xyz.y *  1.8760108 + xyz.z *  0.0415560;
+            let b = xyz.x *  0.0556434 + xyz.y * -0.2040259 + xyz.z *  1.0572252;
+            return vec3<f32>(
+                linear_to_srgb(clamp(r, 0.0, 1.0)),
+                linear_to_srgb(clamp(g, 0.0, 1.0)),
+                linear_to_srgb(clamp(b, 0.0, 1.0))
+            );
+        }
+
+        fn lab_f(t: f32) -> f32 {
+            let delta: f32 = 6.0 / 29.0;
+            if (t > delta * delta * delta) {
+                return pow(t, 1.0 / 3.0);
+            }
+            return t / (3.0 * delta * delta) + 4.0 / 29.0;
+        }
+
+        fn lab_f_inv(t: f32) -> f32 {
+            let delta: f32 = 6.0 / 29.0;
+            if (t > delta) {
+                return t * t * t;
+            }
+            return 3.0 * delta * delta * (t - 4.0 / 29.0);
+        }
+
+        fn xyz_to_lab_convert(xyz: vec3<f32>, ref_x: f32, ref_y: f32, ref_z: f32) -> vec3<f32> {
+            let fx = lab_f(xyz.x / ref_x);
+            let fy = lab_f(xyz.y / ref_y);
+            let fz = lab_f(xyz.z / ref_z);
+            let l = 116.0 * fy - 16.0;
+            let a = 500.0 * (fx - fy);
+            let b = 200.0 * (fy - fz);
+            return vec3<f32>(l, a, b);
+        }
+
+        fn lab_to_xyz_convert(lab: vec3<f32>, ref_x: f32, ref_y: f32, ref_z: f32) -> vec3<f32> {
+            let fy = (lab.x + 16.0) / 116.0;
+            let fx = lab.y / 500.0 + fy;
+            let fz = fy - lab.z / 200.0;
+            let x = ref_x * lab_f_inv(fx);
+            let y = ref_y * lab_f_inv(fy);
+            let z = ref_z * lab_f_inv(fz);
+            return vec3<f32>(x, y, z);
+        }
+
+        fn rgb_to_lab_convert(rgb: vec3<f32>, ref_x: f32, ref_y: f32, ref_z: f32) -> vec3<f32> {
+            let xyz = rgb_to_xyz_convert(rgb);
+            return xyz_to_lab_convert(xyz, ref_x, ref_y, ref_z);
+        }
+
+        fn lab_to_rgb_convert(lab: vec3<f32>, ref_x: f32, ref_y: f32, ref_z: f32) -> vec3<f32> {
+            let xyz = lab_to_xyz_convert(lab, ref_x, ref_y, ref_z);
+            return xyz_to_rgb_convert(xyz);
+        }
+
+        fn rgb_to_oklab_convert(rgb: vec3<f32>) -> vec3<f32> {
+            let r = srgb_to_linear(rgb.x);
+            let g = srgb_to_linear(rgb.y);
+            let b = srgb_to_linear(rgb.z);
+            let l_ = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
+            let m_ = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
+            let s_ = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
+            let l_c = pow(max(l_, 0.0), 1.0 / 3.0);
+            let m_c = pow(max(m_, 0.0), 1.0 / 3.0);
+            let s_c = pow(max(s_, 0.0), 1.0 / 3.0);
+            let ol = 0.2104542553 * l_c + 0.7936177850 * m_c - 0.0040720468 * s_c;
+            let oa = 1.9779984951 * l_c - 2.4285922050 * m_c + 0.4505937099 * s_c;
+            let ob = 0.0259040371 * l_c + 0.7827717662 * m_c - 0.8086757660 * s_c;
+            return vec3<f32>(ol, oa, ob);
+        }
+
+        fn oklab_to_rgb_convert(lab: vec3<f32>) -> vec3<f32> {
+            let l_ = lab.x + 0.3963377774 * lab.y + 0.2158037573 * lab.z;
+            let m_ = lab.x - 0.1055613458 * lab.y - 0.0638541728 * lab.z;
+            let s_ = lab.x - 0.0894841775 * lab.y - 1.2914855480 * lab.z;
+            let l_c = l_ * l_ * l_;
+            let m_c = m_ * m_ * m_;
+            let s_c = s_ * s_ * s_;
+            let r =  4.0767416621 * l_c - 3.3077115913 * m_c + 0.2309699292 * s_c;
+            let g = -1.2684380046 * l_c + 2.6097574011 * m_c - 0.3413193965 * s_c;
+            let b = -0.0041960863 * l_c - 0.7034186147 * m_c + 1.7076147010 * s_c;
+            return vec3<f32>(
+                linear_to_srgb(clamp(r, 0.0, 1.0)),
+                linear_to_srgb(clamp(g, 0.0, 1.0)),
+                linear_to_srgb(clamp(b, 0.0, 1.0))
+            );
+        }
+
+        fn lab_to_lch_convert(lab: vec3<f32>) -> vec3<f32> {
+            let c = sqrt(lab.y * lab.y + lab.z * lab.z);
+            var h = atan2(lab.z, lab.y) * 180.0 / 3.14159265358979;
+            if (h < 0.0) {
+                h = h + 360.0;
+            }
+            return vec3<f32>(lab.x, c, h);
+        }
+
+        fn lch_to_lab_convert(lch: vec3<f32>) -> vec3<f32> {
+            let h_rad = lch.z * 3.14159265358979 / 180.0;
+            let a = lch.y * cos(h_rad);
+            let b = lch.y * sin(h_rad);
+            return vec3<f32>(lch.x, a, b);
+        }
+
+        fn rgb_to_lch_convert(rgb: vec3<f32>, ref_x: f32, ref_y: f32, ref_z: f32) -> vec3<f32> {
+            let lab = rgb_to_lab_convert(rgb, ref_x, ref_y, ref_z);
+            return lab_to_lch_convert(lab);
+        }
+
+        fn lch_to_rgb_convert(lch: vec3<f32>, ref_x: f32, ref_y: f32, ref_z: f32) -> vec3<f32> {
+            let lab = lch_to_lab_convert(lch);
+            return lab_to_rgb_convert(lab, ref_x, ref_y, ref_z);
+        }
+
+        fn perceptual_color_space_converter(color: vec4<f32>, params: PerceptualColorSpaceConverterUniforms) -> vec4<f32> {
+            var result: vec3<f32>;
+            if (params.direction == 0u) {
+                result = rgb_to_xyz_convert(color.xyz);
+            } else if (params.direction == 1u) {
+                result = xyz_to_rgb_convert(color.xyz);
+            } else if (params.direction == 2u) {
+                result = rgb_to_lab_convert(color.xyz, params.illuminant_x, params.illuminant_y, params.illuminant_z);
+            } else if (params.direction == 3u) {
+                result = lab_to_rgb_convert(color.xyz, params.illuminant_x, params.illuminant_y, params.illuminant_z);
+            } else if (params.direction == 4u) {
+                result = rgb_to_oklab_convert(color.xyz);
+            } else if (params.direction == 5u) {
+                result = oklab_to_rgb_convert(color.xyz);
+            } else if (params.direction == 6u) {
+                result = rgb_to_lch_convert(color.xyz, params.illuminant_x, params.illuminant_y, params.illuminant_z);
+            } else {
+                result = lch_to_rgb_convert(color.xyz, params.illuminant_x, params.illuminant_y, params.illuminant_z);
+            }
+            return vec4<f32>(result, color.w);
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(PerceptualColorSpaceConverterUniforms {
+            direction: match self.direction {
+                PerceptualColorSpaceDirection::RGBToXYZ => 0,
+                PerceptualColorSpaceDirection::XYZToRGB => 1,
+                PerceptualColorSpaceDirection::RGBToLAB => 2,
+                PerceptualColorSpaceDirection::LABToRGB => 3,
+                PerceptualColorSpaceDirection::RGBToOKLab => 4,
+                PerceptualColorSpaceDirection::OKLabToRGB => 5,
+                PerceptualColorSpaceDirection::RGBToLCH => 6,
+                PerceptualColorSpaceDirection::LCHToRGB => 7,
+            },
+            illuminant_x: self.illuminant_x,
+            illuminant_y: self.illuminant_y,
+            illuminant_z: self.illuminant_z,
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "perceptual_color_space_converter"
+    }
+}
+
+/// Perceptual color interpolation space.
+#[derive(Clone, Debug, Copy, PartialEq, Eq)]
+pub enum PerceptualInterpolationSpace {
+    /// Interpolate in CIE LAB space.
+    LAB,
+    /// Interpolate in OKLab space.
+    OKLab,
+    /// Interpolate in LCH space (with hue interpolation).
+    LCH,
+}
+
+/// Perceptual colour interpolation between two RGB colours.
+///
+/// Converts the two endpoint colours into a perceptual space (LAB, OKLab, or
+/// LCH), performs linear interpolation at the given *t* value, and converts
+/// back to sRGB. This produces perceptually uniform gradients that avoid the
+/// muddy mid-tones common with naïve RGB interpolation.
+///
+/// Input is a scalar `f32` in \[0, 1\] representing the interpolation parameter.
+/// Output is a `Vec4` RGBA colour.
+#[derive(Clone, Debug)]
+pub struct PerceptualInterpolation {
+    /// First endpoint colour (sRGB, 0–1 per channel).
+    pub color_a: Vec4,
+    /// Second endpoint colour (sRGB, 0–1 per channel).
+    pub color_b: Vec4,
+    /// The perceptual space in which interpolation is performed.
+    pub space: PerceptualInterpolationSpace,
+    /// D65 illuminant X reference (used for LAB/LCH only).
+    pub illuminant_x: f32,
+    /// D65 illuminant Y reference.
+    pub illuminant_y: f32,
+    /// D65 illuminant Z reference.
+    pub illuminant_z: f32,
+}
+
+impl PerceptualInterpolation {
+    /// Creates a LAB-space interpolator between two colours.
+    pub fn lab(color_a: Vec4, color_b: Vec4) -> Self {
+        Self {
+            color_a,
+            color_b,
+            space: PerceptualInterpolationSpace::LAB,
+            illuminant_x: 0.950_47,
+            illuminant_y: 1.0,
+            illuminant_z: 1.088_83,
+        }
+    }
+
+    /// Creates an OKLab-space interpolator between two colours.
+    pub fn oklab(color_a: Vec4, color_b: Vec4) -> Self {
+        Self {
+            color_a,
+            color_b,
+            space: PerceptualInterpolationSpace::OKLab,
+            illuminant_x: 0.950_47,
+            illuminant_y: 1.0,
+            illuminant_z: 1.088_83,
+        }
+    }
+
+    /// Creates an LCH-space interpolator between two colours.
+    pub fn lch(color_a: Vec4, color_b: Vec4) -> Self {
+        Self {
+            color_a,
+            color_b,
+            space: PerceptualInterpolationSpace::LCH,
+            illuminant_x: 0.950_47,
+            illuminant_y: 1.0,
+            illuminant_z: 1.088_83,
+        }
+    }
+
+    /// Overrides the illuminant reference white point.
+    pub fn with_illuminant(mut self, x: f32, y: f32, z: f32) -> Self {
+        self.illuminant_x = x;
+        self.illuminant_y = y;
+        self.illuminant_z = z;
+        self
+    }
+}
+
+/// GPU uniform data for the perceptual interpolation shader function.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct PerceptualInterpolationUniforms {
+    /// First endpoint colour red.
+    pub color_a_r: f32,
+    /// First endpoint colour green.
+    pub color_a_g: f32,
+    /// First endpoint colour blue.
+    pub color_a_b: f32,
+    /// First endpoint colour alpha.
+    pub color_a_a: f32,
+    /// Second endpoint colour red.
+    pub color_b_r: f32,
+    /// Second endpoint colour green.
+    pub color_b_g: f32,
+    /// Second endpoint colour blue.
+    pub color_b_b: f32,
+    /// Second endpoint colour alpha.
+    pub color_b_a: f32,
+    /// Interpolation space (0 = LAB, 1 = OKLab, 2 = LCH).
+    pub space: u32,
+    /// D65 illuminant X reference.
+    pub illuminant_x: f32,
+    /// D65 illuminant Y reference.
+    pub illuminant_y: f32,
+    /// D65 illuminant Z reference.
+    pub illuminant_z: f32,
+}
+
+impl ShaderUniform for PerceptualInterpolationUniforms {
+    fn wgsl_struct_definition() -> String {
+        concat!(
+            "struct PerceptualInterpolationUniforms {\n",
+            "    color_a_r: f32,\n",
+            "    color_a_g: f32,\n",
+            "    color_a_b: f32,\n",
+            "    color_a_a: f32,\n",
+            "    color_b_r: f32,\n",
+            "    color_b_g: f32,\n",
+            "    color_b_b: f32,\n",
+            "    color_b_a: f32,\n",
+            "    space: u32,\n",
+            "    illuminant_x: f32,\n",
+            "    illuminant_y: f32,\n",
+            "    illuminant_z: f32,\n",
+            "}",
+        )
+        .to_string()
+    }
+
+    fn wgsl_type_name() -> &'static str {
+        "PerceptualInterpolationUniforms"
+    }
+}
+
+impl ComposableShaderFunction for PerceptualInterpolation {
+    type Input = f32;
+    type Output = Vec4;
+    type Uniforms = PerceptualInterpolationUniforms;
+
+    fn wgsl_function() -> &'static str {
+        // The helper functions have a `_pi` suffix to avoid WGSL name
+        // collisions when both PerceptualColorSpaceConverter and
+        // PerceptualInterpolation are composed in the same pipeline.
+        r#"
+        fn srgb_to_linear_pi(c: f32) -> f32 {
+            if (c <= 0.04045) {
+                return c / 12.92;
+            }
+            return pow((c + 0.055) / 1.055, 2.4);
+        }
+
+        fn linear_to_srgb_pi(c: f32) -> f32 {
+            if (c <= 0.0031308) {
+                return c * 12.92;
+            }
+            return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
+        }
+
+        fn rgb_to_xyz_pi(rgb: vec3<f32>) -> vec3<f32> {
+            let r = srgb_to_linear_pi(rgb.x);
+            let g = srgb_to_linear_pi(rgb.y);
+            let b = srgb_to_linear_pi(rgb.z);
+            let x = r * 0.4124564 + g * 0.3575761 + b * 0.1804375;
+            let y = r * 0.2126729 + g * 0.7151522 + b * 0.0721750;
+            let z = r * 0.0193339 + g * 0.1191920 + b * 0.9503041;
+            return vec3<f32>(x, y, z);
+        }
+
+        fn xyz_to_rgb_pi(xyz: vec3<f32>) -> vec3<f32> {
+            let r = xyz.x *  3.2404542 + xyz.y * -1.5371385 + xyz.z * -0.4985314;
+            let g = xyz.x * -0.9692660 + xyz.y *  1.8760108 + xyz.z *  0.0415560;
+            let b = xyz.x *  0.0556434 + xyz.y * -0.2040259 + xyz.z *  1.0572252;
+            return vec3<f32>(
+                linear_to_srgb_pi(clamp(r, 0.0, 1.0)),
+                linear_to_srgb_pi(clamp(g, 0.0, 1.0)),
+                linear_to_srgb_pi(clamp(b, 0.0, 1.0))
+            );
+        }
+
+        fn lab_f_pi(t: f32) -> f32 {
+            let delta: f32 = 6.0 / 29.0;
+            if (t > delta * delta * delta) {
+                return pow(t, 1.0 / 3.0);
+            }
+            return t / (3.0 * delta * delta) + 4.0 / 29.0;
+        }
+
+        fn lab_f_inv_pi(t: f32) -> f32 {
+            let delta: f32 = 6.0 / 29.0;
+            if (t > delta) {
+                return t * t * t;
+            }
+            return 3.0 * delta * delta * (t - 4.0 / 29.0);
+        }
+
+        fn rgb_to_lab_pi(rgb: vec3<f32>, ref_x: f32, ref_y: f32, ref_z: f32) -> vec3<f32> {
+            let xyz = rgb_to_xyz_pi(rgb);
+            let fx = lab_f_pi(xyz.x / ref_x);
+            let fy = lab_f_pi(xyz.y / ref_y);
+            let fz = lab_f_pi(xyz.z / ref_z);
+            let l = 116.0 * fy - 16.0;
+            let a = 500.0 * (fx - fy);
+            let b = 200.0 * (fy - fz);
+            return vec3<f32>(l, a, b);
+        }
+
+        fn lab_to_rgb_pi(lab: vec3<f32>, ref_x: f32, ref_y: f32, ref_z: f32) -> vec3<f32> {
+            let fy = (lab.x + 16.0) / 116.0;
+            let fx = lab.y / 500.0 + fy;
+            let fz = fy - lab.z / 200.0;
+            let x = ref_x * lab_f_inv_pi(fx);
+            let y = ref_y * lab_f_inv_pi(fy);
+            let z = ref_z * lab_f_inv_pi(fz);
+            return xyz_to_rgb_pi(vec3<f32>(x, y, z));
+        }
+
+        fn rgb_to_oklab_pi(rgb: vec3<f32>) -> vec3<f32> {
+            let r = srgb_to_linear_pi(rgb.x);
+            let g = srgb_to_linear_pi(rgb.y);
+            let b = srgb_to_linear_pi(rgb.z);
+            let l_ = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
+            let m_ = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
+            let s_ = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
+            let l_c = pow(max(l_, 0.0), 1.0 / 3.0);
+            let m_c = pow(max(m_, 0.0), 1.0 / 3.0);
+            let s_c = pow(max(s_, 0.0), 1.0 / 3.0);
+            let ol = 0.2104542553 * l_c + 0.7936177850 * m_c - 0.0040720468 * s_c;
+            let oa = 1.9779984951 * l_c - 2.4285922050 * m_c + 0.4505937099 * s_c;
+            let ob = 0.0259040371 * l_c + 0.7827717662 * m_c - 0.8086757660 * s_c;
+            return vec3<f32>(ol, oa, ob);
+        }
+
+        fn oklab_to_rgb_pi(lab: vec3<f32>) -> vec3<f32> {
+            let l_ = lab.x + 0.3963377774 * lab.y + 0.2158037573 * lab.z;
+            let m_ = lab.x - 0.1055613458 * lab.y - 0.0638541728 * lab.z;
+            let s_ = lab.x - 0.0894841775 * lab.y - 1.2914855480 * lab.z;
+            let l_c = l_ * l_ * l_;
+            let m_c = m_ * m_ * m_;
+            let s_c = s_ * s_ * s_;
+            let r =  4.0767416621 * l_c - 3.3077115913 * m_c + 0.2309699292 * s_c;
+            let g = -1.2684380046 * l_c + 2.6097574011 * m_c - 0.3413193965 * s_c;
+            let b = -0.0041960863 * l_c - 0.7034186147 * m_c + 1.7076147010 * s_c;
+            return vec3<f32>(
+                linear_to_srgb_pi(clamp(r, 0.0, 1.0)),
+                linear_to_srgb_pi(clamp(g, 0.0, 1.0)),
+                linear_to_srgb_pi(clamp(b, 0.0, 1.0))
+            );
+        }
+
+        fn lab_to_lch_pi(lab: vec3<f32>) -> vec3<f32> {
+            let c = sqrt(lab.y * lab.y + lab.z * lab.z);
+            var h = atan2(lab.z, lab.y) * 180.0 / 3.14159265358979;
+            if (h < 0.0) {
+                h = h + 360.0;
+            }
+            return vec3<f32>(lab.x, c, h);
+        }
+
+        fn lch_to_lab_pi(lch: vec3<f32>) -> vec3<f32> {
+            let h_rad = lch.z * 3.14159265358979 / 180.0;
+            let a = lch.y * cos(h_rad);
+            let b = lch.y * sin(h_rad);
+            return vec3<f32>(lch.x, a, b);
+        }
+
+        fn lch_shortest_hue_lerp(h0: f32, h1: f32, t: f32) -> f32 {
+            var diff = h1 - h0;
+            if (diff > 180.0) {
+                diff = diff - 360.0;
+            } else if (diff < -180.0) {
+                diff = diff + 360.0;
+            }
+            var h = h0 + t * diff;
+            if (h < 0.0) { h = h + 360.0; }
+            if (h >= 360.0) { h = h - 360.0; }
+            return h;
+        }
+
+        fn perceptual_interpolation(t: f32, params: PerceptualInterpolationUniforms) -> vec4<f32> {
+            let t_clamped = clamp(t, 0.0, 1.0);
+            let ca = vec3<f32>(params.color_a_r, params.color_a_g, params.color_a_b);
+            let cb = vec3<f32>(params.color_b_r, params.color_b_g, params.color_b_b);
+            var result: vec3<f32>;
+
+            if (params.space == 0u) {
+                let lab_a = rgb_to_lab_pi(ca, params.illuminant_x, params.illuminant_y, params.illuminant_z);
+                let lab_b = rgb_to_lab_pi(cb, params.illuminant_x, params.illuminant_y, params.illuminant_z);
+                let lab_mix = mix(lab_a, lab_b, vec3<f32>(t_clamped));
+                result = lab_to_rgb_pi(lab_mix, params.illuminant_x, params.illuminant_y, params.illuminant_z);
+            } else if (params.space == 1u) {
+                let oklab_a = rgb_to_oklab_pi(ca);
+                let oklab_b = rgb_to_oklab_pi(cb);
+                let oklab_mix = mix(oklab_a, oklab_b, vec3<f32>(t_clamped));
+                result = oklab_to_rgb_pi(oklab_mix);
+            } else {
+                let lch_a = lab_to_lch_pi(rgb_to_lab_pi(ca, params.illuminant_x, params.illuminant_y, params.illuminant_z));
+                let lch_b = lab_to_lch_pi(rgb_to_lab_pi(cb, params.illuminant_x, params.illuminant_y, params.illuminant_z));
+                let l = mix(lch_a.x, lch_b.x, t_clamped);
+                let c = mix(lch_a.y, lch_b.y, t_clamped);
+                let h = lch_shortest_hue_lerp(lch_a.z, lch_b.z, t_clamped);
+                let lab_result = lch_to_lab_pi(vec3<f32>(l, c, h));
+                result = lab_to_rgb_pi(lab_result, params.illuminant_x, params.illuminant_y, params.illuminant_z);
+            }
+
+            let alpha = mix(params.color_a_a, params.color_b_a, t_clamped);
+            return vec4<f32>(result, alpha);
+        }
+        "#
+    }
+
+    fn create_uniforms(&self) -> Option<Self::Uniforms> {
+        Some(PerceptualInterpolationUniforms {
+            color_a_r: self.color_a.x,
+            color_a_g: self.color_a.y,
+            color_a_b: self.color_a.z,
+            color_a_a: self.color_a.w,
+            color_b_r: self.color_b.x,
+            color_b_g: self.color_b.y,
+            color_b_b: self.color_b.z,
+            color_b_a: self.color_b.w,
+            space: match self.space {
+                PerceptualInterpolationSpace::LAB => 0,
+                PerceptualInterpolationSpace::OKLab => 1,
+                PerceptualInterpolationSpace::LCH => 2,
+            },
+            illuminant_x: self.illuminant_x,
+            illuminant_y: self.illuminant_y,
+            illuminant_z: self.illuminant_z,
+        })
+    }
+
+    fn function_name() -> &'static str {
+        "perceptual_interpolation"
+    }
+}
+
+// ============================================================================
 // Geometric and Spatial Functions (GUP-053 AC3)
 // ============================================================================
 
@@ -10904,5 +11591,551 @@ mod color_scale_tests {
         assert!((anim.evaluate(0.25) - 50.0).abs() < 1e-4);
         // Midpoint of second segment: 0.75 → 75.0.
         assert!((anim.evaluate(0.75) - 75.0).abs() < 1e-4);
+    }
+
+    // ------------------------------------------------------------------
+    // Perceptual Color Space Conversions (GUP-293)
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn perceptual_converter_rgb_to_xyz_direction() {
+        let conv = PerceptualColorSpaceConverter::rgb_to_xyz();
+        let uniforms = conv.create_uniforms().unwrap();
+        assert_eq!(uniforms.direction, 0);
+    }
+
+    #[test]
+    fn perceptual_converter_xyz_to_rgb_direction() {
+        let conv = PerceptualColorSpaceConverter::xyz_to_rgb();
+        let uniforms = conv.create_uniforms().unwrap();
+        assert_eq!(uniforms.direction, 1);
+    }
+
+    #[test]
+    fn perceptual_converter_rgb_to_lab_direction() {
+        let conv = PerceptualColorSpaceConverter::rgb_to_lab();
+        let uniforms = conv.create_uniforms().unwrap();
+        assert_eq!(uniforms.direction, 2);
+    }
+
+    #[test]
+    fn perceptual_converter_lab_to_rgb_direction() {
+        let conv = PerceptualColorSpaceConverter::lab_to_rgb();
+        let uniforms = conv.create_uniforms().unwrap();
+        assert_eq!(uniforms.direction, 3);
+    }
+
+    #[test]
+    fn perceptual_converter_rgb_to_oklab_direction() {
+        let conv = PerceptualColorSpaceConverter::rgb_to_oklab();
+        let uniforms = conv.create_uniforms().unwrap();
+        assert_eq!(uniforms.direction, 4);
+    }
+
+    #[test]
+    fn perceptual_converter_oklab_to_rgb_direction() {
+        let conv = PerceptualColorSpaceConverter::oklab_to_rgb();
+        let uniforms = conv.create_uniforms().unwrap();
+        assert_eq!(uniforms.direction, 5);
+    }
+
+    #[test]
+    fn perceptual_converter_rgb_to_lch_direction() {
+        let conv = PerceptualColorSpaceConverter::rgb_to_lch();
+        let uniforms = conv.create_uniforms().unwrap();
+        assert_eq!(uniforms.direction, 6);
+    }
+
+    #[test]
+    fn perceptual_converter_lch_to_rgb_direction() {
+        let conv = PerceptualColorSpaceConverter::lch_to_rgb();
+        let uniforms = conv.create_uniforms().unwrap();
+        assert_eq!(uniforms.direction, 7);
+    }
+
+    #[test]
+    fn perceptual_converter_default_d65_illuminant() {
+        let conv = PerceptualColorSpaceConverter::rgb_to_lab();
+        let uniforms = conv.create_uniforms().unwrap();
+        assert!((uniforms.illuminant_x - 0.95047).abs() < 1e-5);
+        assert!((uniforms.illuminant_y - 1.0).abs() < 1e-5);
+        assert!((uniforms.illuminant_z - 1.08883).abs() < 1e-5);
+    }
+
+    #[test]
+    fn perceptual_converter_custom_illuminant() {
+        let conv =
+            PerceptualColorSpaceConverter::rgb_to_lab().with_illuminant(0.96422, 1.0, 0.82521);
+        let uniforms = conv.create_uniforms().unwrap();
+        assert!((uniforms.illuminant_x - 0.96422).abs() < 1e-5);
+        assert!((uniforms.illuminant_z - 0.82521).abs() < 1e-5);
+    }
+
+    #[test]
+    fn perceptual_converter_wgsl_contains_all_helpers() {
+        let wgsl = PerceptualColorSpaceConverter::wgsl_function();
+        assert!(wgsl.contains("fn srgb_to_linear"));
+        assert!(wgsl.contains("fn linear_to_srgb"));
+        assert!(wgsl.contains("fn rgb_to_xyz_convert"));
+        assert!(wgsl.contains("fn xyz_to_rgb_convert"));
+        assert!(wgsl.contains("fn lab_f("));
+        assert!(wgsl.contains("fn lab_f_inv("));
+        assert!(wgsl.contains("fn xyz_to_lab_convert"));
+        assert!(wgsl.contains("fn lab_to_xyz_convert"));
+        assert!(wgsl.contains("fn rgb_to_lab_convert"));
+        assert!(wgsl.contains("fn lab_to_rgb_convert"));
+        assert!(wgsl.contains("fn rgb_to_oklab_convert"));
+        assert!(wgsl.contains("fn oklab_to_rgb_convert"));
+        assert!(wgsl.contains("fn lab_to_lch_convert"));
+        assert!(wgsl.contains("fn lch_to_lab_convert"));
+        assert!(wgsl.contains("fn rgb_to_lch_convert"));
+        assert!(wgsl.contains("fn lch_to_rgb_convert"));
+        assert!(wgsl.contains("fn perceptual_color_space_converter"));
+    }
+
+    #[test]
+    fn perceptual_converter_wgsl_srgb_linearisation() {
+        let wgsl = PerceptualColorSpaceConverter::wgsl_function();
+        assert!(wgsl.contains("0.04045"));
+        assert!(wgsl.contains("12.92"));
+        assert!(wgsl.contains("0.0031308"));
+    }
+
+    #[test]
+    fn perceptual_converter_wgsl_xyz_matrix_values() {
+        let wgsl = PerceptualColorSpaceConverter::wgsl_function();
+        assert!(wgsl.contains("0.4124564"));
+        assert!(wgsl.contains("3.2404542"));
+    }
+
+    #[test]
+    fn perceptual_converter_uniform_size_aligned() {
+        assert_eq!(
+            std::mem::size_of::<PerceptualColorSpaceConverterUniforms>(),
+            16
+        );
+    }
+
+    // CPU-side reference implementations for validation --------------------
+
+    fn cpu_srgb_to_linear(c: f32) -> f32 {
+        if c <= 0.04045 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
+    }
+
+    fn cpu_linear_to_srgb(c: f32) -> f32 {
+        if c <= 0.0031308 {
+            c * 12.92
+        } else {
+            1.055 * c.powf(1.0 / 2.4) - 0.055
+        }
+    }
+
+    fn cpu_rgb_to_xyz(rgb: [f32; 3]) -> [f32; 3] {
+        let r = cpu_srgb_to_linear(rgb[0]);
+        let g = cpu_srgb_to_linear(rgb[1]);
+        let b = cpu_srgb_to_linear(rgb[2]);
+        [
+            r * 0.4124564 + g * 0.3575761 + b * 0.1804375,
+            r * 0.2126729 + g * 0.7151522 + b * 0.0721750,
+            r * 0.0193339 + g * 0.1191920 + b * 0.9503041,
+        ]
+    }
+
+    fn cpu_xyz_to_rgb(xyz: [f32; 3]) -> [f32; 3] {
+        let r = xyz[0] * 3.2404542 + xyz[1] * -1.5371385 + xyz[2] * -0.4985314;
+        let g = xyz[0] * -0.9692660 + xyz[1] * 1.8760108 + xyz[2] * 0.0415560;
+        let b = xyz[0] * 0.0556434 + xyz[1] * -0.2040259 + xyz[2] * 1.0572252;
+        [
+            cpu_linear_to_srgb(r.clamp(0.0, 1.0)),
+            cpu_linear_to_srgb(g.clamp(0.0, 1.0)),
+            cpu_linear_to_srgb(b.clamp(0.0, 1.0)),
+        ]
+    }
+
+    fn cpu_lab_f(t: f32) -> f32 {
+        let delta: f32 = 6.0 / 29.0;
+        if t > delta * delta * delta {
+            t.powf(1.0 / 3.0)
+        } else {
+            t / (3.0 * delta * delta) + 4.0 / 29.0
+        }
+    }
+
+    fn cpu_lab_f_inv(t: f32) -> f32 {
+        let delta: f32 = 6.0 / 29.0;
+        if t > delta {
+            t * t * t
+        } else {
+            3.0 * delta * delta * (t - 4.0 / 29.0)
+        }
+    }
+
+    fn cpu_rgb_to_lab(rgb: [f32; 3]) -> [f32; 3] {
+        let xyz = cpu_rgb_to_xyz(rgb);
+        let ref_x = 0.95047_f32;
+        let ref_y = 1.0_f32;
+        let ref_z = 1.08883_f32;
+        let fx = cpu_lab_f(xyz[0] / ref_x);
+        let fy = cpu_lab_f(xyz[1] / ref_y);
+        let fz = cpu_lab_f(xyz[2] / ref_z);
+        [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)]
+    }
+
+    fn cpu_lab_to_rgb(lab: [f32; 3]) -> [f32; 3] {
+        let ref_x = 0.95047_f32;
+        let ref_y = 1.0_f32;
+        let ref_z = 1.08883_f32;
+        let fy = (lab[0] + 16.0) / 116.0;
+        let fx = lab[1] / 500.0 + fy;
+        let fz = fy - lab[2] / 200.0;
+        let xyz = [
+            ref_x * cpu_lab_f_inv(fx),
+            ref_y * cpu_lab_f_inv(fy),
+            ref_z * cpu_lab_f_inv(fz),
+        ];
+        cpu_xyz_to_rgb(xyz)
+    }
+
+    fn cpu_rgb_to_oklab(rgb: [f32; 3]) -> [f32; 3] {
+        let r = cpu_srgb_to_linear(rgb[0]);
+        let g = cpu_srgb_to_linear(rgb[1]);
+        let b = cpu_srgb_to_linear(rgb[2]);
+        let l_ = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b).max(0.0);
+        let m_ = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b).max(0.0);
+        let s_ = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b).max(0.0);
+        let l_c = l_.cbrt();
+        let m_c = m_.cbrt();
+        let s_c = s_.cbrt();
+        [
+            0.2104542553 * l_c + 0.7936177850 * m_c - 0.0040720468 * s_c,
+            1.9779984951 * l_c - 2.4285922050 * m_c + 0.4505937099 * s_c,
+            0.0259040371 * l_c + 0.7827717662 * m_c - 0.8086757660 * s_c,
+        ]
+    }
+
+    fn cpu_oklab_to_rgb(lab: [f32; 3]) -> [f32; 3] {
+        let l_ = lab[0] + 0.3963377774 * lab[1] + 0.2158037573 * lab[2];
+        let m_ = lab[0] - 0.1055613458 * lab[1] - 0.0638541728 * lab[2];
+        let s_ = lab[0] - 0.0894841775 * lab[1] - 1.2914855480 * lab[2];
+        let l_c = l_ * l_ * l_;
+        let m_c = m_ * m_ * m_;
+        let s_c = s_ * s_ * s_;
+        let r = 4.0767416621 * l_c - 3.3077115913 * m_c + 0.2309699292 * s_c;
+        let g = -1.2684380046 * l_c + 2.6097574011 * m_c - 0.3413193965 * s_c;
+        let b = -0.0041960863 * l_c - 0.7034186147 * m_c + 1.7076147010 * s_c;
+        [
+            cpu_linear_to_srgb(r.clamp(0.0, 1.0)),
+            cpu_linear_to_srgb(g.clamp(0.0, 1.0)),
+            cpu_linear_to_srgb(b.clamp(0.0, 1.0)),
+        ]
+    }
+
+    fn cpu_lab_to_lch(lab: [f32; 3]) -> [f32; 3] {
+        let c = (lab[1] * lab[1] + lab[2] * lab[2]).sqrt();
+        let mut h = lab[2].atan2(lab[1]).to_degrees();
+        if h < 0.0 {
+            h += 360.0;
+        }
+        [lab[0], c, h]
+    }
+
+    fn cpu_lch_to_lab(lch: [f32; 3]) -> [f32; 3] {
+        let h_rad = lch[2].to_radians();
+        [lch[0], lch[1] * h_rad.cos(), lch[1] * h_rad.sin()]
+    }
+
+    // Known-value tests (CIE reference colours) ---------------------------
+
+    #[test]
+    fn known_value_white_rgb_to_lab() {
+        let lab = cpu_rgb_to_lab([1.0, 1.0, 1.0]);
+        assert!((lab[0] - 100.0).abs() < 0.5, "L* for white: {}", lab[0]);
+        assert!(lab[1].abs() < 0.5, "a* for white: {}", lab[1]);
+        assert!(lab[2].abs() < 0.5, "b* for white: {}", lab[2]);
+    }
+
+    #[test]
+    fn known_value_black_rgb_to_lab() {
+        let lab = cpu_rgb_to_lab([0.0, 0.0, 0.0]);
+        assert!(lab[0].abs() < 0.01, "L* for black: {}", lab[0]);
+        assert!(lab[1].abs() < 0.01, "a* for black: {}", lab[1]);
+        assert!(lab[2].abs() < 0.01, "b* for black: {}", lab[2]);
+    }
+
+    #[test]
+    fn known_value_red_rgb_to_lab() {
+        let lab = cpu_rgb_to_lab([1.0, 0.0, 0.0]);
+        assert!((lab[0] - 53.23).abs() < 1.0, "L* for red: {}", lab[0]);
+        assert!((lab[1] - 80.11).abs() < 1.0, "a* for red: {}", lab[1]);
+        assert!((lab[2] - 67.22).abs() < 1.0, "b* for red: {}", lab[2]);
+    }
+
+    #[test]
+    fn known_value_white_rgb_to_oklab() {
+        let oklab = cpu_rgb_to_oklab([1.0, 1.0, 1.0]);
+        assert!(
+            (oklab[0] - 1.0).abs() < 0.01,
+            "L for white: {}",
+            oklab[0]
+        );
+        assert!(oklab[1].abs() < 0.01, "a for white: {}", oklab[1]);
+        assert!(oklab[2].abs() < 0.01, "b for white: {}", oklab[2]);
+    }
+
+    #[test]
+    fn known_value_black_rgb_to_oklab() {
+        let oklab = cpu_rgb_to_oklab([0.0, 0.0, 0.0]);
+        assert!(oklab[0].abs() < 0.01, "L for black: {}", oklab[0]);
+        assert!(oklab[1].abs() < 0.01, "a for black: {}", oklab[1]);
+        assert!(oklab[2].abs() < 0.01, "b for black: {}", oklab[2]);
+    }
+
+    #[test]
+    fn known_value_red_lch_hue() {
+        let lab = cpu_rgb_to_lab([1.0, 0.0, 0.0]);
+        let lch = cpu_lab_to_lch(lab);
+        assert!(lch[2] > 30.0 && lch[2] < 50.0, "hue for red: {}", lch[2]);
+        assert!(lch[1] > 50.0, "chroma for red: {}", lch[1]);
+    }
+
+    // Round-trip tests ----------------------------------------------------
+
+    #[test]
+    fn round_trip_rgb_xyz_rgb() {
+        for rgb in &[
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.5, 0.5, 0.5],
+            [1.0, 1.0, 1.0],
+            [0.0, 0.0, 0.0],
+            [0.2, 0.6, 0.9],
+        ] {
+            let xyz = cpu_rgb_to_xyz(*rgb);
+            let back = cpu_xyz_to_rgb(xyz);
+            for i in 0..3 {
+                assert!(
+                    (back[i] - rgb[i]).abs() < 0.01,
+                    "RGB→XYZ→RGB round-trip failed for {rgb:?}: got {back:?}",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn round_trip_rgb_lab_rgb() {
+        for rgb in &[
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.5, 0.5, 0.5],
+            [1.0, 1.0, 1.0],
+            [0.2, 0.6, 0.9],
+        ] {
+            let lab = cpu_rgb_to_lab(*rgb);
+            let back = cpu_lab_to_rgb(lab);
+            for i in 0..3 {
+                assert!(
+                    (back[i] - rgb[i]).abs() < 0.01,
+                    "RGB→LAB→RGB round-trip failed for {rgb:?}: got {back:?} (via LAB {lab:?})",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn round_trip_rgb_oklab_rgb() {
+        for rgb in &[
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.5, 0.5, 0.5],
+            [1.0, 1.0, 1.0],
+            [0.2, 0.6, 0.9],
+        ] {
+            let oklab = cpu_rgb_to_oklab(*rgb);
+            let back = cpu_oklab_to_rgb(oklab);
+            for i in 0..3 {
+                assert!(
+                    (back[i] - rgb[i]).abs() < 0.02,
+                    "RGB→OKLab→RGB round-trip failed for {rgb:?}: got {back:?} (via OKLab {oklab:?})",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn round_trip_lab_lch_lab() {
+        for lab in &[
+            [50.0, 30.0, -20.0],
+            [100.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [75.0, -50.0, 40.0],
+        ] {
+            let lch = cpu_lab_to_lch(*lab);
+            let back = cpu_lch_to_lab(lch);
+            for i in 0..3 {
+                assert!(
+                    (back[i] - lab[i]).abs() < 0.01,
+                    "LAB→LCH→LAB round-trip failed for {lab:?}: got {back:?}",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn round_trip_rgb_lch_rgb() {
+        for rgb in &[
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.5, 0.5, 0.5],
+            [0.2, 0.6, 0.9],
+        ] {
+            let lab = cpu_rgb_to_lab(*rgb);
+            let lch = cpu_lab_to_lch(lab);
+            let lab_back = cpu_lch_to_lab(lch);
+            let rgb_back = cpu_lab_to_rgb(lab_back);
+            for i in 0..3 {
+                assert!(
+                    (rgb_back[i] - rgb[i]).abs() < 0.01,
+                    "RGB→LCH→RGB round-trip failed for {rgb:?}: got {rgb_back:?}",
+                );
+            }
+        }
+    }
+
+    // Perceptual interpolation tests --------------------------------------
+
+    #[test]
+    fn perceptual_interpolation_lab_constructor() {
+        let a = vec4![1.0, 0.0, 0.0, 1.0];
+        let b = vec4![0.0, 0.0, 1.0, 1.0];
+        let interp = PerceptualInterpolation::lab(a, b);
+        let uniforms = interp.create_uniforms().unwrap();
+        assert_eq!(uniforms.space, 0);
+        assert!((uniforms.color_a_r - 1.0).abs() < 1e-6);
+        assert!((uniforms.color_b_b - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn perceptual_interpolation_oklab_constructor() {
+        let a = vec4![1.0, 0.0, 0.0, 1.0];
+        let b = vec4![0.0, 0.0, 1.0, 1.0];
+        let interp = PerceptualInterpolation::oklab(a, b);
+        let uniforms = interp.create_uniforms().unwrap();
+        assert_eq!(uniforms.space, 1);
+    }
+
+    #[test]
+    fn perceptual_interpolation_lch_constructor() {
+        let a = vec4![1.0, 0.0, 0.0, 1.0];
+        let b = vec4![0.0, 0.0, 1.0, 1.0];
+        let interp = PerceptualInterpolation::lch(a, b);
+        let uniforms = interp.create_uniforms().unwrap();
+        assert_eq!(uniforms.space, 2);
+    }
+
+    #[test]
+    fn perceptual_interpolation_custom_illuminant() {
+        let a = vec4![1.0, 0.0, 0.0, 1.0];
+        let b = vec4![0.0, 0.0, 1.0, 1.0];
+        let interp = PerceptualInterpolation::lab(a, b).with_illuminant(0.96422, 1.0, 0.82521);
+        let uniforms = interp.create_uniforms().unwrap();
+        assert!((uniforms.illuminant_x - 0.96422).abs() < 1e-5);
+    }
+
+    #[test]
+    fn perceptual_interpolation_wgsl_contains_entry_point() {
+        let wgsl = PerceptualInterpolation::wgsl_function();
+        assert!(wgsl.contains("fn perceptual_interpolation"));
+        assert!(wgsl.contains("rgb_to_lab_pi"));
+        assert!(wgsl.contains("rgb_to_oklab_pi"));
+        assert!(wgsl.contains("lch_shortest_hue_lerp"));
+    }
+
+    #[test]
+    fn perceptual_interpolation_uniform_size() {
+        assert_eq!(
+            std::mem::size_of::<PerceptualInterpolationUniforms>(),
+            48
+        );
+    }
+
+    // Perceptual uniformity spot-check ------------------------------------
+
+    #[test]
+    fn lab_interpolation_midpoint_is_perceptually_between() {
+        let lab_red = cpu_rgb_to_lab([1.0, 0.0, 0.0]);
+        let lab_blue = cpu_rgb_to_lab([0.0, 0.0, 1.0]);
+        let lab_mid = [
+            (lab_red[0] + lab_blue[0]) / 2.0,
+            (lab_red[1] + lab_blue[1]) / 2.0,
+            (lab_red[2] + lab_blue[2]) / 2.0,
+        ];
+        let min_l = lab_red[0].min(lab_blue[0]);
+        let max_l = lab_red[0].max(lab_blue[0]);
+        assert!(
+            lab_mid[0] >= min_l && lab_mid[0] <= max_l,
+            "Midpoint L*={} not between {}..{}",
+            lab_mid[0],
+            min_l,
+            max_l
+        );
+    }
+
+    #[test]
+    fn oklab_interpolation_avoids_muddy_midpoint() {
+        let oklab_red = cpu_rgb_to_oklab([1.0, 0.0, 0.0]);
+        let oklab_cyan = cpu_rgb_to_oklab([0.0, 1.0, 1.0]);
+        let oklab_mid = [
+            (oklab_red[0] + oklab_cyan[0]) / 2.0,
+            (oklab_red[1] + oklab_cyan[1]) / 2.0,
+            (oklab_red[2] + oklab_cyan[2]) / 2.0,
+        ];
+        let mid_rgb = cpu_oklab_to_rgb(oklab_mid);
+        let min_ch = mid_rgb.iter().cloned().fold(f32::INFINITY, f32::min);
+        let max_ch = mid_rgb
+            .iter()
+            .cloned()
+            .fold(f32::NEG_INFINITY, f32::max);
+        let range = max_ch - min_ch;
+        assert!(
+            range > 0.05,
+            "OKLab midpoint is too grey: {mid_rgb:?} (range={range})",
+        );
+    }
+
+    // Composability test --------------------------------------------------
+
+    #[test]
+    fn perceptual_converter_composes_with_linear_scale() {
+        let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
+        let interp = PerceptualInterpolation::oklab(
+            vec4![1.0, 0.0, 0.0, 1.0],
+            vec4![0.0, 0.0, 1.0, 1.0],
+        );
+        let composed = scale.compose(interp);
+        let uniforms = composed.create_uniforms();
+        assert!(uniforms.is_some());
+    }
+
+    #[test]
+    fn perceptual_converter_function_name() {
+        assert_eq!(
+            PerceptualColorSpaceConverter::function_name(),
+            "perceptual_color_space_converter"
+        );
+    }
+
+    #[test]
+    fn perceptual_interpolation_function_name() {
+        assert_eq!(
+            PerceptualInterpolation::function_name(),
+            "perceptual_interpolation"
+        );
     }
 }
