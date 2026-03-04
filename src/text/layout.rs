@@ -127,7 +127,7 @@ pub enum ClippingStrategy {
         /// Text appended at the truncation point (e.g. `"..."`).
         ellipsis_text: String, // Default: "..."
         /// Whether to break at word boundaries instead of mid-word.
-        preserve_words: bool,  // Try to break at word boundaries
+        preserve_words: bool, // Try to break at word boundaries
     },
     /// Reduce font size to fit
     DynamicFontScaling {
@@ -151,11 +151,11 @@ pub enum ClippingStrategy {
     /// Wrap text to multiple lines within container width
     TextWrapping {
         /// Maximum number of lines; zero means unlimited.
-        max_lines: usize,              // Maximum number of lines (0 = unlimited)
+        max_lines: usize, // Maximum number of lines (0 = unlimited)
         /// Multiplier applied to line height for inter-line spacing.
-        line_spacing_factor: f32,      // Multiplier for line height spacing
+        line_spacing_factor: f32, // Multiplier for line height spacing
         /// Whether to insert hyphens when breaking mid-word.
-        hyphenate: bool,               // Whether to break mid-word with hyphens
+        hyphenate: bool, // Whether to break mid-word with hyphens
         /// Text appended to the last line when truncated.
         ellipsis_text: Option<String>, // Append to last line when truncated (e.g. "...")
     },

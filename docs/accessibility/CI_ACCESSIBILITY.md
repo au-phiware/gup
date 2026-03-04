@@ -9,17 +9,17 @@ Gup's CI pipeline includes accessibility validation that runs on every pull
 request. A failing accessibility check blocks merge. The checks are organised
 into two tiers:
 
-| Tier | Target | Tool | Runs On |
-| --- | --- | --- | --- |
-| **Rust unit tests** | All platforms | `cargo test` | Every PR |
-| **AT-SPI2 validation** | Linux native | `at-spi2-core` introspection | Linux CI runners |
+| Tier                   | Target        | Tool                         | Runs On          |
+| ---------------------- | ------------- | ---------------------------- | ---------------- |
+| **Rust unit tests**    | All platforms | `cargo test`                 | Every PR         |
+| **AT-SPI2 validation** | Linux native  | `at-spi2-core` introspection | Linux CI runners |
 
 ## Tier 1: Rust Accessibility Unit Tests
 
 The primary accessibility gate is the Rust test suite. These tests validate:
 
-- **Contrast ratio correctness** — sRGB linearization, WCAG AA thresholds
-  (4.5:1 normal text, 3:1 large text / non-text UI)
+- **Contrast ratio correctness** — sRGB linearization, WCAG AA thresholds (4.5:1
+  normal text, 3:1 large text / non-text UI)
 - **ARIA tree integrity** — Node creation, role mapping, label presence, live
   region urgency levels
 - **Keyboard navigation** — No keyboard traps, wrap-around behaviour, all
@@ -49,16 +49,16 @@ cargo test accessibility::keyboard -- --test-threads=1
 A test failure indicates a WCAG regression. The test name and assertion message
 identify which criterion is affected:
 
-| Test prefix | WCAG Criterion |
-| --- | --- |
-| `test_wcag_contrast_ratio_*` | 1.4.3 Contrast (Minimum) |
-| `test_meets_wcag_aa*` | 1.4.3, 1.4.11 Non-text Contrast |
-| `test_srgb_linearization*` | 1.4.3 (formula correctness) |
-| `test_high_contrast_mode*` | 1.4.1 Use of Color |
-| `test_aria_*` | 4.1.2 Name, Role, Value |
-| `test_keyboard_navigation*` | 2.1.1 Keyboard, 2.1.2 No Trap |
-| `test_live_region*` | 4.1.3 Status Messages |
-| `test_each_pattern*` | 1.4.1 Use of Color |
+| Test prefix                  | WCAG Criterion                  |
+| ---------------------------- | ------------------------------- |
+| `test_wcag_contrast_ratio_*` | 1.4.3 Contrast (Minimum)        |
+| `test_meets_wcag_aa*`        | 1.4.3, 1.4.11 Non-text Contrast |
+| `test_srgb_linearization*`   | 1.4.3 (formula correctness)     |
+| `test_high_contrast_mode*`   | 1.4.1 Use of Color              |
+| `test_aria_*`                | 4.1.2 Name, Role, Value         |
+| `test_keyboard_navigation*`  | 2.1.1 Keyboard, 2.1.2 No Trap   |
+| `test_live_region*`          | 4.1.3 Status Messages           |
+| `test_each_pattern*`         | 1.4.1 Use of Color              |
 
 ### CI Configuration
 
@@ -70,8 +70,8 @@ test job:
   run: cargo test -- --test-threads=1
 ```
 
-No additional configuration is needed — the accessibility tests are compiled into
-the main test binary.
+No additional configuration is needed — the accessibility tests are compiled
+into the main test binary.
 
 ## Tier 2: AT-SPI2 Validation (Linux)
 
@@ -137,12 +137,12 @@ When adding a new accessibility feature:
 
 ## Severity Levels
 
-| Severity | Action | Example |
-| --- | --- | --- |
-| **Critical** | Blocks merge | ARIA role returns empty string |
-| **Serious** | Blocks merge | Contrast ratio below AA threshold |
-| **Moderate** | Warning | Missing optional description |
-| **Minor** | Informational | Suboptimal focus order |
+| Severity     | Action        | Example                           |
+| ------------ | ------------- | --------------------------------- |
+| **Critical** | Blocks merge  | ARIA role returns empty string    |
+| **Serious**  | Blocks merge  | Contrast ratio below AA threshold |
+| **Moderate** | Warning       | Missing optional description      |
+| **Minor**    | Informational | Suboptimal focus order            |
 
 All critical and serious violations block merge. Moderate and minor issues are
 logged but do not block.

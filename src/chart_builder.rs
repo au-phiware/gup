@@ -2351,7 +2351,7 @@ where
     /// Convenience method for the common single-chart case.  Uses the
     /// SVG intermediate representation — no GPU commands are issued.
     ///
-    /// Data marks must be provided separately as [`SvgElement`] values,
+    /// Data marks must be provided separately as `SvgElement` values,
     /// exactly as with [`export_svg_with_marks`](Self::export_svg_with_marks).
     ///
     /// # Feature Gate

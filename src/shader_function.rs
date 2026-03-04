@@ -2453,11 +2453,11 @@ pub struct KeyframeAnimationUniforms {
     /// Interpolation mode (0=Linear, 1=CatmullRom, 2=BSpline).
     pub interpolation_mode: u32, // 0=Linear, 1=CatmullRom, 2=BSpline
     /// Tension parameter for Catmull-Rom interpolation.
-    pub tension: f32,            // For Catmull-Rom interpolation
+    pub tension: f32, // For Catmull-Rom interpolation
     /// Padding for 16-byte alignment.
-    pub _padding: [f32; 3],      // Ensure 16-byte alignment
+    pub _padding: [f32; 3], // Ensure 16-byte alignment
     /// Extra padding to match WGSL struct size.
-    pub _padding2: [f32; 4],     // Extra padding to match WGSL struct size (304 bytes)
+    pub _padding2: [f32; 4], // Extra padding to match WGSL struct size (304 bytes)
 }
 
 impl ShaderUniform for KeyframeAnimationUniforms {

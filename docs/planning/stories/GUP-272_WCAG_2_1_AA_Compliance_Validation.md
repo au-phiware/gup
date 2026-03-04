@@ -234,8 +234,8 @@ Statement and a consumer-facing accessibility testing guide.
 ### What Was Implemented
 
 1. **WCAG 2.1 AA Audit** (`docs/accessibility/WCAG_2_1_AA_AUDIT.md`) — All 50
-   success criteria evaluated with Pass/N-A verdicts and evidence. 28 Pass,
-   22 N/A, 0 Fail.
+   success criteria evaluated with Pass/N-A verdicts and evidence. 28 Pass, 22
+   N/A, 0 Fail.
 
 2. **Gap Remediation** — Fixed sRGB linearization in `relative_luminance()` to
    use the WCAG-specified gamma correction formula. Added `meets_wcag_aa()` and
@@ -298,13 +298,13 @@ Statement and a consumer-facing accessibility testing guide.
   N/A requires careful justification to avoid incorrectly dismissing applicable
   criteria.
 - **Solution**: Referenced W3C's WCAG2ICT guidance for applying WCAG to non-web
-  software. Each N/A verdict includes a specific justification explaining why the
-  criterion doesn't apply.
+  software. Each N/A verdict includes a specific justification explaining why
+  the criterion doesn't apply.
 - **Pattern**: For GPU rendering libraries, the applicable WCAG criteria cluster
   around Perceivable (contrast, colour independence, text alternatives) and
-  Operable (keyboard access, focus management). Robust (ARIA, status messages) is
-  fully applicable. Understandable criteria mostly concern forms and navigation
-  patterns that don't apply.
+  Operable (keyboard access, focus management). Robust (ARIA, status messages)
+  is fully applicable. Understandable criteria mostly concern forms and
+  navigation patterns that don't apply.
 
 ### Architectural Decisions
 
@@ -345,9 +345,9 @@ Statement and a consumer-facing accessibility testing guide.
   efficiently. The systematic criterion-by-criterion review ensured nothing was
   missed.
 - **Existing accessibility infrastructure was comprehensive**: The prior
-  Accessibility initiative stories (GUP-016, GUP-111, GUP-112, GUP-122,
-  GUP-124, GUP-127) had built a thorough accessibility system. The audit
-  confirmed this rather than uncovering major gaps.
+  Accessibility initiative stories (GUP-016, GUP-111, GUP-112, GUP-122, GUP-124,
+  GUP-127) had built a thorough accessibility system. The audit confirmed this
+  rather than uncovering major gaps.
 - **Disk space**: The full `cargo test` suite generates significant build
   artifacts. Running `cargo clean` was necessary during final validation. For
   large projects, incremental test runs (`cargo test --lib`) are more practical.
@@ -357,8 +357,8 @@ Statement and a consumer-facing accessibility testing guide.
 
 ### Follow-up Stories
 
-No follow-up stories were required — the audit found zero Fail verdicts. However,
-the following areas could benefit from future attention:
+No follow-up stories were required — the audit found zero Fail verdicts.
+However, the following areas could benefit from future attention:
 
 1. **Axe-core CI integration** — When a CI environment with headless Chromium is
    available, activate the web/WASM accessibility scanning tier documented in

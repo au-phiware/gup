@@ -20,8 +20,8 @@ user experience.
 ## 1. Automated Scanning (Web/WASM Builds)
 
 If your application uses Gup's WASM target with a DOM overlay, use
-[axe-core](https://github.com/dequelabs/axe-core) to scan the generated HTML
-for accessibility violations.
+[axe-core](https://github.com/dequelabs/axe-core) to scan the generated HTML for
+accessibility violations.
 
 ### Setup
 
@@ -65,13 +65,13 @@ content meaningfully. Gup generates an ARIA tree that screen readers traverse.
 
 ### Recommended Screen Readers
 
-| Platform | Screen Reader | Notes |
-| --- | --- | --- |
-| Windows | NVDA (free) | Download from <https://www.nvaccess.org/> |
-| Windows | JAWS | Commercial; industry standard |
-| macOS | VoiceOver | Built-in; Cmd+F5 to toggle |
-| Linux | Orca | Included in GNOME; uses AT-SPI2 |
-| Web | NVDA + Firefox | Best combination for web testing |
+| Platform | Screen Reader  | Notes                                     |
+| -------- | -------------- | ----------------------------------------- |
+| Windows  | NVDA (free)    | Download from <https://www.nvaccess.org/> |
+| Windows  | JAWS           | Commercial; industry standard             |
+| macOS    | VoiceOver      | Built-in; Cmd+F5 to toggle                |
+| Linux    | Orca           | Included in GNOME; uses AT-SPI2           |
+| Web      | NVDA + Firefox | Best combination for web testing          |
 
 ### Testing Protocol
 
@@ -92,8 +92,8 @@ Ensure your screen reader is running before launching the application.
    and description (e.g., "Scatter plot: Sales data over time, image")
 2. **Tab** through data series — each series should be announced as a list
    (e.g., "Series 1, list, 50 items")
-3. **Tab** through data points — each point should announce its value
-   (e.g., "Data point: Revenue $42K, list item")
+3. **Tab** through data points — each point should announce its value (e.g.,
+   "Data point: Revenue $42K, list item")
 4. **Arrow keys** for spatial navigation — moving right/left/up/down should
    announce adjacent data points
 5. **Escape** to exit the chart context

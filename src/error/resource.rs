@@ -82,11 +82,11 @@ pub enum ResourcePriority {
     /// Never evict this resource.
     Critical, // Never evict
     /// Evict only under severe memory pressure.
-    High,     // Evict only under severe pressure
+    High, // Evict only under severe pressure
     /// Normal cleanup candidate.
-    Medium,   // Normal cleanup candidate
+    Medium, // Normal cleanup candidate
     /// First to be evicted when memory pressure rises.
-    Low,      // First to be evicted
+    Low, // First to be evicted
 }
 
 /// Memory usage tracking.
@@ -655,6 +655,7 @@ impl ResourceId {
     }
 
     #[cfg(test)]
+    /// Creates a new instance for testing purposes.
     pub fn new_for_test() -> Self {
         Self::new()
     }

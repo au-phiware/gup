@@ -63,7 +63,7 @@ pub struct SideBySideConfig {
     /// Proportion allocated to first component (0.0 to 1.0).
     pub split_ratio: f32, // 0.0 to 1.0, proportion allocated to first component
     /// Padding between components in pixels.
-    pub padding: f32,     // Padding between components in pixels
+    pub padding: f32, // Padding between components in pixels
 }
 
 impl PartialEq for SideBySideConfig {

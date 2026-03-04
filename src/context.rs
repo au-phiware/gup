@@ -1118,7 +1118,7 @@ impl TexturePool {
 /// Unified render context that manages GPU resources and provides rendering capabilities.
 ///
 /// `GupContext` is the central hub for all GPU operations in Gup. It owns
-/// the wgpu [`Device`](wgpu::Device) and [`Queue`](wgpu::Queue), manages
+/// the wgpu `Device` and `Queue`, manages
 /// surface configuration, and provides resource pools (buffers, textures,
 /// pipelines) for efficient rendering.
 ///
