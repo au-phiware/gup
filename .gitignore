@@ -11,3 +11,4 @@ performance_report.*
 .benchmark-history/
 # Node.js dependencies for benchmark scripts
 scripts/node_modules/
+docs/gallery/thumbs/*.png
