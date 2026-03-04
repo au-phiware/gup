@@ -98,6 +98,7 @@ pub mod mark_selection;
 pub mod math;
 pub mod mixable;
 pub mod performance;
+pub mod performance_export;
 pub mod performance_targets;
 pub mod pipeline_cache;
 pub mod plugins;

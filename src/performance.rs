@@ -10,12 +10,13 @@ use crate::debug::memory_bandwidth::{
     BandwidthConfig, FrameBandwidthStats, MemoryBandwidthProfiler,
 };
 use crate::error::{GupError, GupResult};
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 use wgpu::*;
 
 /// Configuration for performance profiling.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProfilingConfig {
     /// Enable GPU timestamp queries (if supported)
     pub enable_gpu_timing: bool,
@@ -42,15 +43,18 @@ impl Default for ProfilingConfig {
 }
 
 /// Detailed frame performance statistics.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DetailedFrameStats {
     /// Total CPU time for frame
+    #[serde(with = "duration_serde")]
     pub cpu_time: Duration,
     /// Total GPU time for frame (if timestamp queries available)
+    #[serde(with = "option_duration_serde")]
     pub gpu_time: Option<Duration>,
     /// Individual render pass timings
     pub render_pass_times: Vec<RenderPassTiming>,
     /// Buffer upload/download timing
+    #[serde(with = "duration_serde")]
     pub buffer_upload_time: Duration,
     /// Pipeline switch count
     pub pipeline_switches: u32,
@@ -59,6 +63,7 @@ pub struct DetailedFrameStats {
     /// Compute dispatch count
     pub compute_dispatches: u32,
     /// Timestamp when this frame was recorded
+    #[serde(skip, default = "Instant::now")]
     pub timestamp: Instant,
     /// Memory bandwidth statistics for this frame (if bandwidth profiling enabled)
     pub bandwidth_stats: Option<FrameBandwidthStats>,
@@ -81,36 +86,45 @@ impl Default for DetailedFrameStats {
 }
 
 /// Timing information for a single render pass.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenderPassTiming {
     /// Optional label for the render pass
     pub label: Option<String>,
     /// CPU time to record the pass
+    #[serde(with = "duration_serde")]
     pub cpu_time: Duration,
     /// GPU execution time (if available)
+    #[serde(with = "option_duration_serde")]
     pub gpu_time: Option<Duration>,
     /// Number of draw calls in this pass
     pub draw_calls: u32,
 }
 
 /// Performance statistics aggregated over multiple frames.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AggregateStats {
     /// Number of frames in this aggregate
     pub frame_count: u64,
     /// Average CPU time
+    #[serde(with = "duration_serde")]
     pub avg_cpu_time: Duration,
     /// Average GPU time (if available)
+    #[serde(with = "option_duration_serde")]
     pub avg_gpu_time: Option<Duration>,
     /// Minimum frame time
+    #[serde(with = "duration_serde")]
     pub min_frame_time: Duration,
     /// Maximum frame time
+    #[serde(with = "duration_serde")]
     pub max_frame_time: Duration,
     /// 95th percentile frame time
+    #[serde(with = "duration_serde")]
     pub p95_frame_time: Duration,
     /// 99th percentile frame time
+    #[serde(with = "duration_serde")]
     pub p99_frame_time: Duration,
     /// Frame time standard deviation
+    #[serde(with = "duration_serde")]
     pub std_dev: Duration,
     /// Average draw calls per frame
     pub avg_draw_calls: f32,
@@ -136,22 +150,25 @@ impl Default for AggregateStats {
 }
 
 /// Performance baseline for regression detection.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceBaseline {
     /// Label for this baseline
     pub label: String,
     /// Baseline aggregate statistics
     pub stats: AggregateStats,
     /// When this baseline was recorded
+    #[serde(skip, default = "Instant::now")]
     pub recorded_at: Instant,
 }
 
 /// Performance alert types.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PerformanceAlert {
     /// Frame time regression detected
     FrameTimeRegression {
+        #[serde(with = "duration_serde")]
         current: Duration,
+        #[serde(with = "duration_serde")]
         baseline: Duration,
         percent_increase: f32,
     },
@@ -598,6 +615,51 @@ impl PerformanceProfiler {
     /// Clear frame history.
     pub fn clear_history(&mut self) {
         self.history.clear();
+    }
+}
+
+/// Helper module for serializing [`Duration`] as seconds (f64).
+pub(crate) mod duration_serde {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::time::Duration;
+
+    pub fn serialize<S>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        duration.as_secs_f64().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Duration, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let secs = f64::deserialize(deserializer)?;
+        Ok(Duration::from_secs_f64(secs))
+    }
+}
+
+/// Helper module for serializing [`Option<Duration>`] as optional seconds (f64).
+pub(crate) mod option_duration_serde {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::time::Duration;
+
+    pub fn serialize<S>(duration: &Option<Duration>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match duration {
+            Some(d) => d.as_secs_f64().serialize(serializer),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Duration>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let secs: Option<f64> = Option::deserialize(deserializer)?;
+        Ok(secs.map(Duration::from_secs_f64))
     }
 }
 
