@@ -1,0 +1,18 @@
+[package]
+name = "gup-android"
+version = "0.1.0"
+authors = ["Corin Lawson <corin@phiware.com.au>"]
+edition = "2024"
+description = "JNI/NDK shim for embedding Gup charts in Android (Kotlin/Java)"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/au-phiware/gup"
+keywords = ["gpu", "visualization", "android", "jni", "ffi"]
+publish = false
+
+[lib]
+name = "gup_android"
+crate-type = ["cdylib"]
+
+[dependencies]
+gup = { path = "..", features = ["android-shim"] }
+pollster = "0.3"

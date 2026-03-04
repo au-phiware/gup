@@ -3240,6 +3240,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "gup-android"
+version = "0.1.0"
+dependencies = [
+ "gup",
+ "pollster 0.3.0",
+]
+
+[[package]]
 name = "gup-bevy"
 version = "0.1.0"
 dependencies = [
