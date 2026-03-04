@@ -92,3 +92,99 @@ smooth contour fills even at grid resolutions as low as 4×4.
 
 - 46 density module tests (23 existing + 23 new), all passing.
 - Full test suite: 233+ tests pass, 0 failures.
+
+## Retrospective
+
+**Completed**: 2025-07-27
+
+### Key Technical Learnings
+
+#### Boundary-Walking Algorithm for Band Polygons
+
+- **Challenge**: Standard marching squares extracts iso-contour *lines* at a
+  single threshold. Filled contour bands require the polygon *area* between two
+  thresholds, which is a fundamentally different geometric operation.
+- **Solution**: Classify each cell corner as Below/Inside/Above relative to the
+  band, then walk the cell boundary collecting vertices: cell corners that are
+  Inside, plus interpolated crossing points where thresholds intersect cell
+  edges. The resulting vertex list traces the band polygon in winding order
+  because straight-line connections between consecutive vertices automatically
+  follow either cell edges or interior iso-contour segments.
+- **Pattern**: For any two-threshold polygon extraction on a grid cell, the
+  boundary-walk approach produces correct results for non-saddle cells with
+  minimal per-edge logic (9 state-transition cases).
+
+#### Saddle Disambiguation via Triangle Subdivision
+
+- **Challenge**: Saddle cells (where diagonally opposite corners share a state)
+  can produce disconnected band regions that the simple boundary walk merges
+  into a single incorrect polygon.
+- **Solution**: Subdivide saddle cells into 4 triangles through the cell centre
+  (whose value is the bilinear average of the 4 corners). Triangles have no
+  saddle ambiguity, so the same boundary-walk logic applies to each sub-triangle
+  independently.
+- **Pattern**: When a grid algorithm encounters topological ambiguity, splitting
+  cells into triangles is a robust escape hatch that works with the same
+  per-edge processing logic.
+
+#### Top-Boundary Nudge for Inclusive Last Band
+
+- **Challenge**: The original `filled_contour_bands` used `[low, high)` half-open
+  intervals with `high = max_val` for the last band, causing cells at exactly
+  `max_val` to be classified as Above and excluded from all bands.
+- **Solution**: Nudge the top boundary to `max_val + epsilon` so the last band
+  includes peak-density cells. Store the original `max_val` in the `ContourBand`
+  struct so downstream consumers see the correct threshold.
+- **Pattern**: When partitioning a continuous range into half-open intervals,
+  always nudge the final boundary slightly beyond the data maximum.
+
+### Architectural Decisions
+
+#### Reuse `safe_lerp_t` for Band Threshold Interpolation
+
+- **Decision**: The new `lerp_point` function delegates to the existing
+  `safe_lerp_t` for interpolation, ensuring band polygon boundaries use
+  identical crossing-point calculations as the contour-line extraction.
+- **Reasoning**: Using the same interpolation guarantees that band boundaries
+  align perfectly with iso-contour lines, satisfying the sub-pixel accuracy
+  acceptance criterion.
+- **Trade-off**: None — this is strictly better than reimplementing
+  interpolation.
+- **Future**: If the interpolation changes (e.g. to account for bilinear
+  curvature), both line contours and filled bands update consistently.
+
+#### In-Place Replacement of `filled_contour_bands`
+
+- **Decision**: Replaced the function's implementation in-place rather than
+  creating a new function and deprecating the old one.
+- **Reasoning**: The function is public API but the output format
+  (`Vec<ContourBand>`) is unchanged. The only behavioural difference is that
+  band polygon boundaries now follow iso-contours rather than cell edges, which
+  is strictly more accurate. The `density_scatter_overlay` example and all
+  existing tests pass without modification.
+- **Trade-off**: No option to toggle between the old cell-average and new exact
+  mode. If a user relied on the blocky cell-level behaviour, they would need to
+  adapt.
+- **Future**: If performance profiling shows the exact mode is too slow for
+  very large grids, a fallback to the simpler approach could be added via a
+  `DensityConfig` flag.
+
+### Development Workflow Insights
+
+- The algorithm design required careful reasoning about 9 edge-transition cases
+  and saddle topology before writing code. Spending time on paper analysis
+  prevented iteration-heavy debugging later.
+- The topology test (band areas summing to grid area) was the most powerful
+  correctness check — it caught boundary accounting bugs that per-case vertex
+  count tests missed.
+- The existing `density_scatter_overlay` example served as an integration
+  validation, confirming the new implementation works end-to-end with the
+  KDE pipeline.
+
+### Follow-up Stories
+
+No new stories identified. The GPU compute shader path
+(`density_marching_squares.compute.wgsl`) only extracts contour *lines*, not
+filled bands, so it does not need a parallel update for this change. If GPU-side
+filled band extraction is needed in the future, GUP-301's infrastructure would
+support it.
