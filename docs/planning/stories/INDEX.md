@@ -776,12 +776,12 @@ integration, pipeline caching.
   cell-average filled contour approach with exact marching-squares polygon
   decomposition for smooth band boundaries at low grid resolutions. Deps:
   GUP-250 ✅.
-- [GUP-303](GUP-303_Composite_Chart_GPU_Render_Pipeline.md) 🚧 — Wire
+- [GUP-303](GUP-303_Composite_Chart_GPU_Render_Pipeline.md) ✅ — Wire
   CompositeChart through a single wgpu render pass so all layer selections draw
   to the same surface in declaration order. Deps: GUP-251 ✅.
 - [GUP-304](GUP-304_Per_Layer_Data_Support.md) 📋 — Allow each layer in a
   composite chart to carry its own data set (different T per layer) via
-  type-erased layer support. Deps: GUP-251 ✅, GUP-303 📋.
+  type-erased layer support. Deps: GUP-251 ✅, GUP-303 ✅.
 
 ## Performance & Profiling
 
