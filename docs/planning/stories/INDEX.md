@@ -991,6 +991,14 @@ iOS and Android platform support for GPU-accelerated Gup charts.
   lifecycle, JNI NDK wrapper, MotionEvent→InteractionEvent bridge, and APK
   example for Kotlin/Java embedding. Deps: GUP-004 ✅, GUP-039 ✅, GUP-182 ✅,
   GUP-013 📋, GUP-270 ✅.
+- [GUP-272](GUP-272_iOS_Chart_Rendering_Integration.md) 📋 — Wire chart builder
+  output into `gup_render_frame()` for actual data visualisation on iOS. Deps:
+  GUP-270 ✅, GUP-013 📋, GUP-018 ✅.
+- [GUP-273](GUP-273_cbindgen_FFI_Integration.md) 📋 — Auto-generate C headers
+  from gup-ios (and gup-android) using cbindgen. Deps: GUP-270 ✅.
+- [GUP-274](GUP-274_iOS_Real_Device_Testing.md) 📋 — Document real-device
+  testing workflow, performance baselines, and Simulator-vs-device caveats.
+  Deps: GUP-270 ✅, GUP-272 📋.
 
 ## Documentation
 
