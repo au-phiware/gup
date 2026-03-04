@@ -1270,10 +1270,19 @@ impl GupContext {
         // Clone the options to store them for recovery
         let stored_options = options.clone();
 
+        // Opportunistically enable TIMESTAMP_QUERY when the adapter
+        // supports it.  This allows the auto-tune system to use precise
+        // GPU-side timing without requiring the caller to explicitly
+        // request the feature.
+        let mut features = options.required_features;
+        if adapter.features().contains(Features::TIMESTAMP_QUERY) {
+            features |= Features::TIMESTAMP_QUERY;
+        }
+
         let (device, queue) = adapter
             .request_device(&DeviceDescriptor {
                 label: Some("gup_device"),
-                required_features: options.required_features,
+                required_features: features,
                 required_limits: options.required_limits,
                 memory_hints: MemoryHints::Performance,
                 trace: Default::default(),
