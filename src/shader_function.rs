@@ -2430,6 +2430,47 @@ impl KeyframeAnimation {
         self.interpolation_mode = InterpolationMode::BSpline;
         self
     }
+
+    /// Evaluate the animation on the CPU at the given normalised time.
+    ///
+    /// `time` is expected in `[0.0, 1.0]` for a simple two-keyframe
+    /// animation. If there are no keyframes, returns 0.0. For a single
+    /// keyframe, returns its value. For multiple keyframes, linearly
+    /// interpolates between the two surrounding keyframes.
+    ///
+    /// This mirrors the GPU-side `keyframe_animation` WGSL function so
+    /// that CPU-side transition interpolation matches GPU behaviour.
+    pub fn evaluate(&self, time: f32) -> f32 {
+        if self.keyframes.is_empty() {
+            return 0.0;
+        }
+        if self.keyframes.len() == 1 {
+            return self.keyframes[0].value;
+        }
+        // Clamp to keyframe time range.
+        let first = self.keyframes.first().unwrap();
+        let last = self.keyframes.last().unwrap();
+        if time <= first.time {
+            return first.value;
+        }
+        if time >= last.time {
+            return last.value;
+        }
+        // Find surrounding keyframes.
+        for window in self.keyframes.windows(2) {
+            let kf0 = &window[0];
+            let kf1 = &window[1];
+            if time >= kf0.time && time <= kf1.time {
+                let span = kf1.time - kf0.time;
+                if span <= f32::EPSILON {
+                    return kf0.value;
+                }
+                let local_t = (time - kf0.time) / span;
+                return kf0.value + (kf1.value - kf0.value) * local_t;
+            }
+        }
+        last.value
+    }
 }
 
 impl Default for KeyframeAnimation {

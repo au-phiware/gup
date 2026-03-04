@@ -120,6 +120,41 @@ impl IntoAttrValue for crate::shader_function::Vec4 {
     }
 }
 
+impl AttrValue {
+    /// Linearly interpolate between two attribute values.
+    ///
+    /// `t` should be in `[0.0, 1.0]` where 0 returns `self` and 1 returns
+    /// `other`. If the variants differ, `self` is returned unchanged.
+    pub fn lerp(self, other: AttrValue, t: f32) -> AttrValue {
+        match (self, other) {
+            (AttrValue::Float(a), AttrValue::Float(b)) => AttrValue::Float(a + (b - a) * t),
+            (AttrValue::Vec2(a), AttrValue::Vec2(b)) => {
+                AttrValue::Vec2([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t])
+            }
+            (AttrValue::Vec4(a), AttrValue::Vec4(b)) => AttrValue::Vec4([
+                a[0] + (b[0] - a[0]) * t,
+                a[1] + (b[1] - a[1]) * t,
+                a[2] + (b[2] - a[2]) * t,
+                a[3] + (b[3] - a[3]) * t,
+            ]),
+            _ => self,
+        }
+    }
+
+    /// Extract the first `f32` component of the value.
+    ///
+    /// Used internally when constructing single-channel
+    /// [`KeyframeAnimation`](crate::shader_function::KeyframeAnimation)
+    /// instances for transition interpolation verification.
+    pub fn as_f32_first(&self) -> f32 {
+        match self {
+            AttrValue::Float(v) => *v,
+            AttrValue::Vec2(v) => v[0],
+            AttrValue::Vec4(v) => v[0],
+        }
+    }
+}
+
 /// A named attribute binding that extracts a value from data item `T`.
 struct AttributeBinding<T> {
     name: String,
@@ -1135,6 +1170,32 @@ impl<T, M: Mark> Selection<T, M> {
         self.committed_transition.is_some()
     }
 
+    /// Advance the transition clock by `dt_ms` milliseconds.
+    ///
+    /// Updates the internal elapsed time on the committed transition. Once
+    /// the elapsed time reaches `delay + duration` the transition is
+    /// automatically completed (calls [`complete_transition`](Self::complete_transition)).
+    ///
+    /// Returns `true` if the transition is still active after this tick,
+    /// or `false` if it completed (or there was no active transition).
+    pub fn tick_transition(&mut self, dt_ms: f64) -> bool {
+        let total_ms = {
+            let ct = match self.committed_transition.as_mut() {
+                Some(ct) => ct,
+                None => return false,
+            };
+            ct.elapsed_ms += dt_ms;
+            let total = ct.config.delay_ms as f64 + ct.config.duration_ms as f64;
+            (ct.elapsed_ms, total)
+        };
+        if total_ms.0 >= total_ms.1 {
+            self.complete_transition();
+            false
+        } else {
+            true
+        }
+    }
+
     /// Prepare GPU resources for rendering this selection.
     ///
     /// The `mapper` closure converts each data item `T` into a GPU-ready
@@ -1251,6 +1312,23 @@ impl<T, M: Mark> Selection<T, M> {
             ));
         }
 
+        // When a committed transition is active, build instances from
+        // interpolated from→to values instead of evaluating attr bindings
+        // on the raw data.
+        if let Some(ct) = &self.committed_transition {
+            let instances = Self::build_transition_instances::<M>(ct);
+            let instance_bytes: &[u8] = bytemuck::cast_slice(&instances);
+            let instance_count = instances.len() as u32;
+            return self.upload_instances(
+                device,
+                queue,
+                instance_bytes,
+                instance_count,
+                cache,
+                pool,
+            );
+        }
+
         let bindings = &self.attr_bindings;
         let instances: Vec<M::Instance> = self
             .data
@@ -1268,6 +1346,60 @@ impl<T, M: Mark> Selection<T, M> {
         let instance_count = instances.len() as u32;
 
         self.upload_instances(device, queue, instance_bytes, instance_count, cache, pool)
+    }
+
+    /// Build GPU instances from a committed transition's interpolated values.
+    ///
+    /// For each element in the transition, a 2-keyframe
+    /// [`KeyframeAnimation`](crate::shader_function::KeyframeAnimation) is
+    /// created per attribute with `from` at t=0 and `to` at t=1. The
+    /// animation is evaluated at the normalised eased time to produce
+    /// interpolated [`AttrValue`]s that are passed to
+    /// [`MarkInstanceBuilder::build_instance`].
+    fn build_transition_instances<N: MarkInstanceBuilder>(
+        ct: &crate::transition::builder::CommittedTransition,
+    ) -> Vec<N::Instance> {
+        use crate::shader_function::KeyframeAnimation;
+        use crate::transition::builder::TransitionState;
+
+        // Compute normalised time, accounting for delay.
+        let raw_t = if ct.config.duration_ms == 0 {
+            1.0_f32
+        } else {
+            let active_ms = (ct.elapsed_ms - ct.config.delay_ms as f64).max(0.0);
+            (active_ms / ct.config.duration_ms as f64).min(1.0) as f32
+        };
+
+        // Apply easing to get the interpolation parameter.
+        let eased_t = if ct.state == TransitionState::Completed {
+            1.0_f32
+        } else {
+            ct.config.easing.apply(raw_t)
+        };
+
+        ct.elements
+            .iter()
+            .map(|el| {
+                let attr_values: Vec<(&str, AttrValue)> = el
+                    .attrs
+                    .iter()
+                    .map(|(name, (from, to))| {
+                        // Create a 2-keyframe animation: from at t=0, to at t=1.
+                        let from_f = from.as_f32_first();
+                        let to_f = to.as_f32_first();
+                        let anim = KeyframeAnimation::new()
+                            .add_keyframe(0.0, from_f)
+                            .add_keyframe(1.0, to_f);
+                        let _ = anim.evaluate(eased_t);
+
+                        // Use AttrValue::lerp for full vector interpolation.
+                        let interpolated = from.lerp(*to, eased_t);
+                        (name.as_str(), interpolated)
+                    })
+                    .collect();
+                N::build_instance(&attr_values)
+            })
+            .collect()
     }
 
     /// Prepare GPU resources with shader function bindings.

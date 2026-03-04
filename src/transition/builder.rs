@@ -73,6 +73,38 @@ impl EasingFn {
             _ => None,
         }
     }
+
+    /// Apply the easing function to a normalised time value on the CPU.
+    ///
+    /// `t` is expected in `[0.0, 1.0]` and the result is clamped to the
+    /// same range. This mirrors the GPU easing curves so that
+    /// CPU-side interpolation matches GPU-side behaviour.
+    pub fn apply(&self, t: f32) -> f32 {
+        let t = t.clamp(0.0, 1.0);
+        match self {
+            EasingFn::Linear => t,
+            EasingFn::EaseIn => t * t,
+            EasingFn::EaseOut => t * (2.0 - t),
+            EasingFn::EaseInOut => {
+                if t < 0.5 {
+                    4.0 * t * t * t
+                } else {
+                    1.0 - (-2.0 * t + 2.0).powi(3) / 2.0
+                }
+            }
+            EasingFn::CubicBezier => {
+                // Same as EaseInOutCubic
+                if t < 0.5 {
+                    4.0 * t * t * t
+                } else {
+                    1.0 - (-2.0 * t + 2.0).powi(3) / 2.0
+                }
+            }
+            // Spline modes use linear easing; the curve shape comes from
+            // InterpolationMode instead.
+            EasingFn::CatmullRom { .. } | EasingFn::BSpline => t,
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -198,6 +230,8 @@ pub struct CommittedTransition {
     pub exit_count: usize,
     /// Current state of the transition.
     pub state: TransitionState,
+    /// Elapsed time in milliseconds since the transition was started.
+    pub elapsed_ms: f64,
 }
 
 // ---------------------------------------------------------------------------
@@ -483,6 +517,7 @@ where
                     update_count,
                     exit_count,
                     state: TransitionState::Running,
+                    elapsed_ms: 0.0,
                 };
 
                 // Store on_end callback in selection for later invocation.
@@ -527,6 +562,7 @@ where
                     update_count,
                     exit_count: 0,
                     state: TransitionState::Running,
+                    elapsed_ms: 0.0,
                 };
 
                 self.selection.set_transition_end_callback(self.on_end);
@@ -640,6 +676,7 @@ mod tests {
             update_count: 5,
             exit_count: 2,
             state: TransitionState::Running,
+            elapsed_ms: 0.0,
         };
         assert_eq!(ct.enter_count, 3);
         assert_eq!(ct.update_count, 5);
