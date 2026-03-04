@@ -134,6 +134,7 @@ async fn main() -> GupResult<()> {
         .x_domain(0.0, 24.0)
         .y_domain(0.0, 7.0)
         .color_scale(ColorScale::viridis(0.0, 100.0))
+        .colorbar(true)
         .title("Weekly Activity Pattern")
         .width(800.0)
         .height(400.0)
@@ -143,6 +144,21 @@ async fn main() -> GupResult<()> {
         "   ✅ Built raw-data heatmap ({} data points in chart)",
         chart.len()
     );
+
+    // Verify colorbar is active
+    if chart.has_colorbar() {
+        if let Some(geom) = chart.colorbar_geometry() {
+            println!(
+                "   🎨 Colorbar: {} gradient verts, {} ticks, {} labels",
+                geom.gradient_vertices.len(),
+                geom.tick_instances.len(),
+                geom.labels.len()
+            );
+        } else {
+            // Colorbar geometry is generated during prepare_draw_commands
+            println!("   🎨 Colorbar enabled (geometry produced at render time)");
+        }
+    }
 
     // ── 2. Pre-binned 100×100 matrix ─────────────────────────────────
     println!("\n2️⃣  Pre-binned heatmap — 100×100 radial pattern");
