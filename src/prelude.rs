@@ -140,13 +140,13 @@ pub use crate::shader_function::{
     ParallelComposable,
     ParallelComposition,
     ParallelOutput,
+    // Statistical functions (GUP-139)
+    Percentile,
     // Perceptual color space conversions (GUP-293)
     PerceptualColorSpaceConverter,
     PerceptualColorSpaceDirection,
     PerceptualInterpolation,
     PerceptualInterpolationSpace,
-    // Statistical functions (GUP-139)
-    Percentile,
     // Polar transform (GUP-053)
     PolarTransform,
 
