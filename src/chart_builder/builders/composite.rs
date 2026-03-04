@@ -67,13 +67,136 @@ use crate::label::LabelFormatter;
 use crate::mark::line::Line;
 use crate::selection::Selection;
 use crate::shader_function::LinearScale;
-use crate::{Circle, MaybeSend, MaybeSync, Rectangle};
+use crate::{Circle, MaybeSend, MaybeSync, Rectangle, RenderContext};
 use std::marker::PhantomData;
 use std::sync::Arc;
 use wgpu::{Device, Queue, RenderPass};
 
 use super::area::AreaSegment;
 use super::line::LineSegment;
+
+// ── Type-erased layer interfaces ────────────────────────────────────────
+
+/// A built layer whose concrete data type has been erased.
+///
+/// Used by [`CompositeChart`] to render layers with foreign data types
+/// alongside the composite's primary `T`.
+trait ErasedBuiltLayer: std::fmt::Debug {
+    /// Prepare GPU resources for rendering.
+    fn erased_prepare(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        format: wgpu::TextureFormat,
+    ) -> GupResult<()>;
+
+    /// Record draw commands into the render pass.
+    fn erased_draw<'a>(&'a self, render_pass: &mut RenderPass<'a>) -> GupResult<()>;
+
+    /// Returns `true` when GPU resources have been prepared.
+    fn erased_is_render_ready(&self) -> bool;
+}
+
+impl<T> ErasedBuiltLayer for BuiltLayer<T>
+where
+    T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
+{
+    fn erased_prepare(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        format: wgpu::TextureFormat,
+    ) -> GupResult<()> {
+        self.prepare(device, queue, format)
+    }
+
+    fn erased_draw<'a>(&'a self, render_pass: &mut RenderPass<'a>) -> GupResult<()> {
+        self.draw(render_pass)
+    }
+
+    fn erased_is_render_ready(&self) -> bool {
+        self.is_render_ready()
+    }
+}
+
+/// A deferred layer specification that captures a builder, its data, and
+/// pre-computed domain information.  The concrete data type is hidden
+/// behind this trait so that layers with different `T` can coexist in a
+/// single composite builder.
+trait ErasedLayerSpec: std::fmt::Debug {
+    /// Pre-computed x-domain `(min, max)` of this layer's data.
+    fn erased_x_domain(&self) -> Option<(f32, f32)>;
+
+    /// Pre-computed y-domain `(min, max)` of this layer's data.
+    fn erased_y_domain(&self) -> Option<(f32, f32)>;
+
+    /// Which y-axis this layer is assigned to.
+    fn erased_y_axis(&self) -> YAxisAssignment;
+
+    /// Consume this specification and produce a type-erased built layer,
+    /// injecting the unified scales determined by the composite.
+    fn build_erased(
+        self: Box<Self>,
+        context: Arc<RenderContext>,
+        x_scale: &AxisScale,
+        y_scale: &AxisScale,
+    ) -> GupResult<Box<dyn ErasedBuiltLayer>>;
+}
+
+/// Concrete implementation of [`ErasedLayerSpec`] for a given data type
+/// `T2` which may differ from the composite's primary `T`.
+struct TypedLayerSpec<T2>
+where
+    T2: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
+{
+    kind: LayerKind<T2>,
+    data: Vec<T2>,
+    y_axis: YAxisAssignment,
+    cached_x_domain: Option<(f32, f32)>,
+    cached_y_domain: Option<(f32, f32)>,
+}
+
+impl<T2> std::fmt::Debug for TypedLayerSpec<T2>
+where
+    T2: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TypedLayerSpec")
+            .field("kind", &self.kind)
+            .field("data_len", &self.data.len())
+            .field("y_axis", &self.y_axis)
+            .field("cached_x_domain", &self.cached_x_domain)
+            .field("cached_y_domain", &self.cached_y_domain)
+            .finish()
+    }
+}
+
+impl<T2> ErasedLayerSpec for TypedLayerSpec<T2>
+where
+    T2: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
+{
+    fn erased_x_domain(&self) -> Option<(f32, f32)> {
+        self.cached_x_domain
+    }
+
+    fn erased_y_domain(&self) -> Option<(f32, f32)> {
+        self.cached_y_domain
+    }
+
+    fn erased_y_axis(&self) -> YAxisAssignment {
+        self.y_axis
+    }
+
+    fn build_erased(
+        self: Box<Self>,
+        context: Arc<RenderContext>,
+        x_scale: &AxisScale,
+        y_scale: &AxisScale,
+    ) -> GupResult<Box<dyn ErasedBuiltLayer>> {
+        let built = build_layer(self.kind, self.data, context, x_scale, y_scale)?;
+        Ok(Box::new(built))
+    }
+}
 
 // ── Y-axis assignment ───────────────────────────────────────────────────
 
@@ -148,6 +271,82 @@ struct CompositeLayer<T> {
     y_axis: YAxisAssignment,
 }
 
+/// A layer entry in the composite builder — either sharing the
+/// composite's primary data type `T` or carrying its own (type-erased).
+enum AnyCompositeLayer<T> {
+    /// Layer that shares the composite's data type `T`.
+    Typed(CompositeLayer<T>),
+    /// Layer with a foreign data type, captured behind a trait object.
+    Erased(Box<dyn ErasedLayerSpec>),
+}
+
+impl<T> std::fmt::Debug for AnyCompositeLayer<T>
+where
+    T: std::fmt::Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AnyCompositeLayer::Typed(cl) => f.debug_tuple("Typed").field(cl).finish(),
+            AnyCompositeLayer::Erased(spec) => f.debug_tuple("Erased").field(spec).finish(),
+        }
+    }
+}
+
+/// A built layer in the output [`CompositeChart`] — either typed
+/// (matching the composite's `T`) or type-erased (foreign `T2`).
+enum AnyBuiltLayer<T>
+where
+    T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
+{
+    /// Built layer with the same data type as the composite.
+    Typed(BuiltLayer<T>),
+    /// Built layer with a foreign data type, type-erased.
+    Erased(Box<dyn ErasedBuiltLayer>),
+}
+
+impl<T> std::fmt::Debug for AnyBuiltLayer<T>
+where
+    T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AnyBuiltLayer::Typed(bl) => f.debug_tuple("Typed").field(bl).finish(),
+            AnyBuiltLayer::Erased(bl) => f.debug_tuple("Erased").field(bl).finish(),
+        }
+    }
+}
+
+impl<T> AnyBuiltLayer<T>
+where
+    T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
+{
+    fn prepare(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        format: wgpu::TextureFormat,
+    ) -> GupResult<()> {
+        match self {
+            AnyBuiltLayer::Typed(bl) => bl.prepare(device, queue, format),
+            AnyBuiltLayer::Erased(bl) => bl.erased_prepare(device, queue, format),
+        }
+    }
+
+    fn draw<'a>(&'a self, render_pass: &mut RenderPass<'a>) -> GupResult<()> {
+        match self {
+            AnyBuiltLayer::Typed(bl) => bl.draw(render_pass),
+            AnyBuiltLayer::Erased(bl) => bl.erased_draw(render_pass),
+        }
+    }
+
+    fn is_render_ready(&self) -> bool {
+        match self {
+            AnyBuiltLayer::Typed(bl) => bl.is_render_ready(),
+            AnyBuiltLayer::Erased(bl) => bl.erased_is_render_ready(),
+        }
+    }
+}
+
 // ── Domain helpers (pure, no GPU) ───────────────────────────────────────
 
 /// Compute the (min, max) data range for an accessor applied to `data`.
@@ -213,9 +412,13 @@ fn pad_domain(domain: (f32, f32)) -> (f32, f32) {
 ///
 /// Use [`layer_with_y2`](Self::layer_with_y2) to assign a layer to an
 /// independent right-hand y-axis.
-#[derive(Debug, Clone)]
+///
+/// Use [`layer_with_data`](Self::layer_with_data) to add a layer that
+/// carries its own data set with a different type from the composite's
+/// primary `T`.
+#[derive(Debug)]
 pub struct CompositeChartBuilder<T> {
-    layers: Vec<CompositeLayer<T>>,
+    layers: Vec<AnyCompositeLayer<T>>,
     config: ChartConfig,
     _phantom: PhantomData<T>,
 }
@@ -232,19 +435,97 @@ impl<T> CompositeChartBuilder<T> {
 
     /// Append a layer on the primary (left) y-axis.
     pub fn layer(mut self, builder: impl IntoChartLayer<T>) -> Self {
-        self.layers.push(CompositeLayer {
+        self.layers.push(AnyCompositeLayer::Typed(CompositeLayer {
             kind: builder.into_layer(),
             y_axis: YAxisAssignment::Primary,
-        });
+        }));
         self
     }
 
     /// Append a layer on the secondary (right) y-axis.
     pub fn layer_with_y2(mut self, builder: impl IntoChartLayer<T>) -> Self {
-        self.layers.push(CompositeLayer {
+        self.layers.push(AnyCompositeLayer::Typed(CompositeLayer {
             kind: builder.into_layer(),
             y_axis: YAxisAssignment::Secondary,
-        });
+        }));
+        self
+    }
+
+    /// Append a layer with its own data set on the primary (left) y-axis.
+    ///
+    /// The layer's data type `T2` may differ from the composite's
+    /// primary type `T`.  The layer's x and y domains are computed
+    /// immediately and will participate in domain unification at build
+    /// time.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::chart_builder::builders::composite::composite;
+    /// use gup::chart_builder::builders::{scatter, line, AccessorFunction};
+    /// use gup::chart_builder::accessor::AccessorValue;
+    ///
+    /// #[derive(Debug, Clone)]
+    /// struct Observation { x: f32, y: f32 }
+    ///
+    /// #[derive(Debug, Clone)]
+    /// struct FitPoint { x: f32, y_hat: f32 }
+    ///
+    /// let observations = vec![Observation { x: 1.0, y: 2.0 }];
+    /// let fit = vec![FitPoint { x: 1.0, y_hat: 2.1 }];
+    ///
+    /// let builder = composite::<Observation>()
+    ///     .layer(
+    ///         scatter::<Observation>()
+    ///             .x(AccessorFunction::new(|d: &Observation| AccessorValue::Float(d.x)))
+    ///             .y(AccessorFunction::new(|d: &Observation| AccessorValue::Float(d.y)))
+    ///     )
+    ///     .layer_with_data(
+    ///         line::<FitPoint>()
+    ///             .x(AccessorFunction::new(|d: &FitPoint| AccessorValue::Float(d.x)))
+    ///             .y(AccessorFunction::new(|d: &FitPoint| AccessorValue::Float(d.y_hat))),
+    ///         fit,
+    ///     );
+    /// ```
+    pub fn layer_with_data<T2, B>(mut self, builder: B, data: Vec<T2>) -> Self
+    where
+        T2: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
+        B: IntoChartLayer<T2>,
+    {
+        let kind = builder.into_layer();
+        let cached_x_domain = kind.x_domain(&data);
+        let cached_y_domain = kind.y_domain(&data);
+        self.layers
+            .push(AnyCompositeLayer::Erased(Box::new(TypedLayerSpec {
+                kind,
+                data,
+                y_axis: YAxisAssignment::Primary,
+                cached_x_domain,
+                cached_y_domain,
+            })));
+        self
+    }
+
+    /// Append a layer with its own data set on the secondary (right)
+    /// y-axis.
+    ///
+    /// See [`layer_with_data`](Self::layer_with_data) for details.
+    pub fn layer_with_data_y2<T2, B>(mut self, builder: B, data: Vec<T2>) -> Self
+    where
+        T2: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
+        B: IntoChartLayer<T2>,
+    {
+        let kind = builder.into_layer();
+        let cached_x_domain = kind.x_domain(&data);
+        let cached_y_domain = kind.y_domain(&data);
+        self.layers
+            .push(AnyCompositeLayer::Erased(Box::new(TypedLayerSpec {
+                kind,
+                data,
+                y_axis: YAxisAssignment::Secondary,
+                cached_x_domain,
+                cached_y_domain,
+            })));
         self
     }
 
@@ -450,8 +731,9 @@ where
 {
     /// Primary chart (first layer) — owns axis and grid rendering.
     primary: ComposedChart<T, Circle>,
-    /// Additional built layers rendered after the primary.
-    additional_layers: Vec<BuiltLayer<T>>,
+    /// All built layers rendered after the primary, in declaration order.
+    /// Includes both same-type and type-erased foreign-data layers.
+    additional_layers: Vec<AnyBuiltLayer<T>>,
     /// Whether a secondary (right) y-axis is in use.
     has_secondary_y: bool,
 }
@@ -559,7 +841,13 @@ where
             .into());
         }
 
-        if data.is_empty() {
+        // At least the typed layers need data; erased layers carry their
+        // own.  We allow empty `data` only when all layers are erased.
+        let has_typed_layers = self
+            .layers
+            .iter()
+            .any(|l| matches!(l, AnyCompositeLayer::Typed(_)));
+        if data.is_empty() && has_typed_layers {
             return Err(ChartBuilderError::EmptyData.into());
         }
 
@@ -569,16 +857,34 @@ where
         let mut secondary_y: Option<(f32, f32)> = None;
 
         for layer in &self.layers {
-            let lx = layer.kind.x_domain(&data);
-            primary_x = union_domain(primary_x, lx);
+            match layer {
+                AnyCompositeLayer::Typed(cl) => {
+                    let lx = cl.kind.x_domain(&data);
+                    primary_x = union_domain(primary_x, lx);
 
-            let ly = layer.kind.y_domain(&data);
-            match layer.y_axis {
-                YAxisAssignment::Primary => {
-                    primary_y = union_domain(primary_y, ly);
+                    let ly = cl.kind.y_domain(&data);
+                    match cl.y_axis {
+                        YAxisAssignment::Primary => {
+                            primary_y = union_domain(primary_y, ly);
+                        }
+                        YAxisAssignment::Secondary => {
+                            secondary_y = union_domain(secondary_y, ly);
+                        }
+                    }
                 }
-                YAxisAssignment::Secondary => {
-                    secondary_y = union_domain(secondary_y, ly);
+                AnyCompositeLayer::Erased(spec) => {
+                    let lx = spec.erased_x_domain();
+                    primary_x = union_domain(primary_x, lx);
+
+                    let ly = spec.erased_y_domain();
+                    match spec.erased_y_axis() {
+                        YAxisAssignment::Primary => {
+                            primary_y = union_domain(primary_y, ly);
+                        }
+                        YAxisAssignment::Secondary => {
+                            secondary_y = union_domain(secondary_y, ly);
+                        }
+                    }
                 }
             }
         }
@@ -598,30 +904,41 @@ where
         });
 
         // ── 3. Build each layer's selection ─────────────────────────
-        let mut built_layers: Vec<(BuiltLayer<T>, YAxisAssignment)> = Vec::new();
+        let mut built_layers: Vec<AnyBuiltLayer<T>> = Vec::new();
 
         for layer in self.layers {
-            let effective_y_scale = match layer.y_axis {
-                YAxisAssignment::Primary => &y_scale,
-                YAxisAssignment::Secondary => y2_scale.as_ref().unwrap_or(&y_scale),
-            };
+            match layer {
+                AnyCompositeLayer::Typed(cl) => {
+                    let effective_y_scale = match cl.y_axis {
+                        YAxisAssignment::Primary => &y_scale,
+                        YAxisAssignment::Secondary => y2_scale.as_ref().unwrap_or(&y_scale),
+                    };
 
-            let built = build_layer(
-                layer.kind,
-                data.clone(),
-                Arc::clone(&context),
-                &x_scale,
-                effective_y_scale,
-            )?;
+                    let built = build_layer(
+                        cl.kind,
+                        data.clone(),
+                        Arc::clone(&context),
+                        &x_scale,
+                        effective_y_scale,
+                    )?;
 
-            built_layers.push((built, layer.y_axis));
+                    built_layers.push(AnyBuiltLayer::Typed(built));
+                }
+                AnyCompositeLayer::Erased(spec) => {
+                    let effective_y_scale = match spec.erased_y_axis() {
+                        YAxisAssignment::Primary => &y_scale,
+                        YAxisAssignment::Secondary => y2_scale.as_ref().unwrap_or(&y_scale),
+                    };
+
+                    let built =
+                        spec.build_erased(Arc::clone(&context), &x_scale, effective_y_scale)?;
+
+                    built_layers.push(AnyBuiltLayer::Erased(built));
+                }
+            }
         }
 
         // ── 4. Assemble CompositeChart ──────────────────────────────
-        // The first layer becomes the primary ComposedChart that owns
-        // axis rendering.  We pop it off and use a scatter fallback
-        // selection for the primary wrapper.
-
         // Build a config for the shared chart frame.
         let mut config = self.config;
         config.x_scale = Some(x_scale.clone());
@@ -629,7 +946,13 @@ where
 
         // Create a minimal scatter selection to anchor the primary
         // ComposedChart (axis + grid owner).
-        let anchor_selection = Selection::<T, Circle>::new(data.clone(), Arc::clone(&context))?;
+        let anchor_data = if data.is_empty() {
+            // All layers are erased — create an empty anchor selection.
+            Vec::new()
+        } else {
+            data.clone()
+        };
+        let anchor_selection = Selection::<T, Circle>::new(anchor_data, Arc::clone(&context))?;
         let mut primary_chart = ComposedChart::new(anchor_selection, config);
 
         // Set up shared axes.
@@ -651,12 +974,9 @@ where
             }
         }
 
-        // Collect additional layers (all of them — including the first).
-        let additional: Vec<BuiltLayer<T>> = built_layers.into_iter().map(|(bl, _)| bl).collect();
-
         Ok(CompositeChart {
             primary: primary_chart,
-            additional_layers: additional,
+            additional_layers: built_layers,
             has_secondary_y: has_secondary,
         })
     }
