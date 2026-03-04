@@ -954,7 +954,7 @@ PNG, HTML), and platform targets.
   rendering (circles, rectangles, lines) through the PNG export path so exported
   images include the full visualization, not just axes and grid. Deps: GUP-268
   ✅.
-- [GUP-269](GUP-269_HTML_Export.md) 🚧 — HtmlExporter generating a single-file
+- [GUP-269](GUP-269_HTML_Export.md) ✅ — HtmlExporter generating a single-file
   interactive HTML page with embedded WASM, data JSON, SVG fallback, and OG
   thumbnail meta tags. Deps: GUP-266 ✅, GUP-268 ✅, GUP-172 ✅.
 
