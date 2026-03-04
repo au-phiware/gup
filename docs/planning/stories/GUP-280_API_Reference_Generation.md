@@ -258,4 +258,108 @@ narrative prose assumes a navigable, linked API reference.
 - [x] `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features` exits 0
 - [x] `cargo test --doc -- --test-threads=1` exits 0
 - [x] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Retrospective added to story document
+
+## Retrospective
+
+**Completed**: 2026-03-04
+
+### Key Technical Learnings
+
+#### Bulk Documentation at Scale (1,710+ Items)
+
+- **Challenge**: Documenting 1,710+ public items across 75+ files is impractical
+  to do manually in a single session. The `shader_function.rs` file alone had
+  10,500+ lines with 303 undocumented items.
+- **Solution**: A module-by-module approach with parallel work on independent
+  files. The error, debug, text, scale, shader_ast, mixable, mark, interaction,
+  accessibility, and chart_builder modules were tackled as independent units.
+  The massive `shader_function.rs` was split into line-range sections.
+- **Pattern**: For large documentation efforts, organise by dependency order
+  (foundational modules first) and batch by file to avoid merge conflicts.
+  Verify compilation after every batch.
+
+#### Doc Comment Placement Rules in Rust
+
+- **Challenge**: Automated doc-comment passes placed `///` comments inside
+  function bodies, on closing braces, and on `impl` block headers, causing
+  E0584/E0585 compilation errors. One pass even replaced an `impl Foo {` line
+  with a doc comment, removing the block entirely.
+- **Solution**: Strict placement rules: doc comments may only appear directly
+  before the item they document. Comments inside function bodies, on `}`, or on
+  `#[attribute]` lines are always wrong. Each batch required a compilation check
+  to catch these issues.
+- **Pattern**: When automating doc additions, always verify with `cargo check`
+  after each batch, never after the whole file.
+
+#### Intra-Doc Link Resolution
+
+- **Challenge**: 95 broken intra-doc links fell into several categories: types
+  not in scope, references to non-existent types (e.g., `SvgRenderer`), links to
+  private items, and ambiguous glob re-exports.
+- **Solution**: Use fully qualified paths (`crate::module::Type`) for resolvable
+  types, backtick code spans for external or non-existent types, and rename
+  ambiguous re-exports. The `PressureLevel` ambiguity between `buffer` and
+  `debug` modules was resolved by renaming the debug re-export.
+- **Pattern**: Prefer backtick code spans over intra-doc links for types from
+  external crates (e.g., `wgpu::Device`) to avoid resolution failures.
+
+#### Feature-Gated Documentation
+
+- **Challenge**: Some doc warnings only appear when building with `--all-features`
+  because feature-gated items (PDF, web-dashboard) bring in additional public
+  API surface.
+- **Solution**: The `mask doc` task and docs.rs config use `--all-features` to
+  catch all warnings. The `docsrs` cfg flag enables `doc(cfg(...))` annotations
+  so feature-gated items are visually marked in the rendered docs.
+- **Pattern**: Always test doc builds with `--all-features` to match docs.rs
+  behaviour.
+
+### Architectural Decisions
+
+#### deny(missing_docs) Over warn(missing_docs)
+
+- **Decision**: Promote from `warn` to `deny` once all items are documented.
+- **Reasoning**: `deny` prevents regression — any future PR adding an
+  undocumented public item will fail to compile, enforcing documentation as a
+  first-class concern.
+- **Trade-off**: Contributors must write docs for every new public item, adding
+  friction. However, this is a net positive for API quality.
+- **Future**: The `deny` lint ensures GUP-281 (Tutorial Suite) and GUP-282
+  (Example Gallery) have a solid API reference foundation to build on.
+
+#### doc(hidden) for Internal Modules
+
+- **Decision**: Hide 7 modules (`test_utils`, `visual_test_utils`, `wasm_bench*`,
+  `examples`, `integration`) rather than making them `pub(crate)`.
+- **Reasoning**: These modules are `pub` for valid reasons (macro hygiene,
+  integration test access, benchmark harness). Changing visibility would break
+  existing usage. `doc(hidden)` keeps them accessible in code but invisible in
+  the generated API reference.
+- **Trade-off**: Modules are still technically importable by downstream users,
+  but the `#[doc(hidden)]` annotation signals they are not part of the stable
+  API.
+- **Future**: If Rust stabilises a `pub(doc)` or `pub(visible_in_docs)` concept,
+  migrate to that.
+
+### Development Workflow Insights
+
+- Parallel automated passes on independent files is an effective strategy for
+  bulk documentation, but requires careful coordination to avoid merge conflicts
+  or structural damage.
+- Running `cargo check` after every batch of documentation changes is essential.
+  Doc comments are syntactically significant in Rust — a misplaced `///` can
+  cause compilation errors.
+- The `mask doc` task (`RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
+  --all-features`) is the canonical way to verify zero doc warnings locally.
+- Disk space can be a concern when building with both `cargo test` and `cargo
+  doc` on resource-constrained CI runners. Consider using `CARGO_TARGET_DIR` on
+  a larger filesystem.
+
+### Follow-up Stories
+
+1. **GUP-281: Tutorial and Guide Suite** — Now unblocked by this story. The
+   complete API reference provides the foundation for step-by-step tutorials
+   that link to specific types and methods.
+2. **GUP-282: Example Gallery** — Partially unblocked. The doc examples added
+   here can seed the gallery's code samples.

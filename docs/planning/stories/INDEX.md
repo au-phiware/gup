@@ -1003,7 +1003,7 @@ API reference generation, tutorials, and example gallery.
 - [GUP-281](GUP-281_Tutorial_and_Guide_Suite.md) 📋 — Six step-by-step tutorials
   in docs/tutorials/ covering Getting Started, Data Binding, Custom Shaders,
   Interactions, Streaming, and Custom Marks. Deps: GUP-002 ✅, GUP-018 ✅,
-  GUP-103 ✅, GUP-280 📋.
+  GUP-103 ✅, GUP-280 ✅.
 - [GUP-282](GUP-282_Example_Gallery.md) 📋 — Automated thumbnail generation (via
   GUP-268 PNG Export) and GitHub Pages gallery grouped by category with CI
   deployment. Deps: GUP-103 ✅, GUP-268 ✅.
