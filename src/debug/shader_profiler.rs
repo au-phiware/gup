@@ -134,7 +134,7 @@ impl ShaderProfiler {
             gpu_utilization_percent: approximate_gpu_utilization,
             dispatch_size,
             workgroup_count,
-            memory_bandwidth_gbps: 0.0, // TODO: Implement memory bandwidth calculation
+            memory_bandwidth_gbps: self.estimate_memory_bandwidth(workgroup_count, total_duration),
             instructions_per_second: 0.0, // TODO: Implement instruction counting
             timestamp: chrono::Utc::now(),
             metadata: HashMap::new(),
@@ -447,6 +447,26 @@ impl ShaderProfiler {
         let ideal_workgroups_per_ms = 10000.0;
 
         (workgroups_per_ms / ideal_workgroups_per_ms * 100.0).min(100.0)
+    }
+
+    /// Estimate memory bandwidth in GB/s for a compute dispatch.
+    ///
+    /// Uses a heuristic: each workgroup of 256 threads typically reads/writes
+    /// at least one `vec4<f32>` (16 bytes) per thread. The actual bandwidth
+    /// depends on the shader, but this gives a lower-bound estimate.
+    fn estimate_memory_bandwidth(&self, workgroup_count: u32, duration: Duration) -> f32 {
+        if duration.is_zero() || workgroup_count == 0 {
+            return 0.0;
+        }
+
+        // Conservative estimate: 256 threads/workgroup × 16 bytes (vec4<f32>) read + write
+        const THREADS_PER_WORKGROUP: u64 = 256;
+        const BYTES_PER_THREAD: u64 = 16 * 2; // read + write
+
+        let estimated_bytes = workgroup_count as u64 * THREADS_PER_WORKGROUP * BYTES_PER_THREAD;
+        let bandwidth_bytes_per_sec = estimated_bytes as f64 / duration.as_secs_f64();
+
+        (bandwidth_bytes_per_sec / 1e9) as f32
     }
 }
 

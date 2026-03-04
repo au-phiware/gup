@@ -6,6 +6,9 @@
 //! This module provides detailed performance profiling capabilities including GPU
 //! timestamp queries, rendering phase breakdown, and performance regression detection.
 
+use crate::debug::memory_bandwidth::{
+    BandwidthConfig, FrameBandwidthStats, MemoryBandwidthProfiler,
+};
 use crate::error::{GupError, GupResult};
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
@@ -57,6 +60,8 @@ pub struct DetailedFrameStats {
     pub compute_dispatches: u32,
     /// Timestamp when this frame was recorded
     pub timestamp: Instant,
+    /// Memory bandwidth statistics for this frame (if bandwidth profiling enabled)
+    pub bandwidth_stats: Option<FrameBandwidthStats>,
 }
 
 impl Default for DetailedFrameStats {
@@ -70,6 +75,7 @@ impl Default for DetailedFrameStats {
             draw_calls: 0,
             compute_dispatches: 0,
             timestamp: Instant::now(),
+            bandwidth_stats: None,
         }
     }
 }
@@ -332,6 +338,8 @@ pub struct PerformanceProfiler {
     timestamp_manager: Option<TimestampQueryManager>,
     /// Active alerts
     alerts: Vec<PerformanceAlert>,
+    /// Memory bandwidth profiler
+    bandwidth_profiler: MemoryBandwidthProfiler,
 }
 
 impl PerformanceProfiler {
@@ -352,6 +360,10 @@ impl PerformanceProfiler {
             baselines: Vec::new(),
             timestamp_manager,
             alerts: Vec::new(),
+            bandwidth_profiler: MemoryBandwidthProfiler::new(BandwidthConfig {
+                history_size,
+                ..Default::default()
+            }),
         })
     }
 
@@ -359,6 +371,7 @@ impl PerformanceProfiler {
     pub fn begin_frame(&mut self) {
         self.current_frame = DetailedFrameStats::default();
         self.current_frame.timestamp = Instant::now();
+        self.bandwidth_profiler.begin_frame();
     }
 
     /// Record a render pass timing.
@@ -370,6 +383,33 @@ impl PerformanceProfiler {
     /// Record buffer upload timing.
     pub fn record_buffer_upload(&mut self, duration: Duration) {
         self.current_frame.buffer_upload_time += duration;
+    }
+
+    /// Record a buffer upload with bandwidth tracking.
+    ///
+    /// Tracks both the timing (for the existing profiler) and the byte count
+    /// (for bandwidth analysis).
+    pub fn record_buffer_upload_bandwidth(&mut self, label: &str, bytes: u64, duration: Duration) {
+        self.current_frame.buffer_upload_time += duration;
+        self.bandwidth_profiler.record_buffer_upload(label, bytes);
+    }
+
+    /// Record a buffer download (GPU → CPU readback) for bandwidth tracking.
+    pub fn record_buffer_download_bandwidth(&mut self, label: &str, bytes: u64) {
+        self.bandwidth_profiler.record_buffer_download(label, bytes);
+    }
+
+    /// Record a texture binding for bandwidth analysis.
+    pub fn record_texture_binding(
+        &mut self,
+        label: &str,
+        width: u32,
+        height: u32,
+        bytes_per_pixel: u32,
+        slot: u32,
+    ) {
+        self.bandwidth_profiler
+            .record_texture_binding(label, width, height, bytes_per_pixel, slot);
     }
 
     /// Record a pipeline switch.
@@ -386,11 +426,22 @@ impl PerformanceProfiler {
     pub fn end_frame(&mut self, cpu_time: Duration) {
         self.current_frame.cpu_time = cpu_time;
 
+        // Finalize bandwidth stats for this frame
+        self.current_frame.bandwidth_stats = self.bandwidth_profiler.end_frame();
+
         // Add to history
         if self.history.len() >= self.config.history_size {
             self.history.pop_front();
         }
         self.history.push_back(self.current_frame.clone());
+
+        // Check for bandwidth alerts
+        let pressure = self.bandwidth_profiler.get_memory_pressure();
+        if pressure.bandwidth_utilization > 0.6 {
+            self.alerts.push(PerformanceAlert::HighMemoryBandwidth {
+                estimated_gbps: pressure.avg_upload_gbps + pressure.avg_download_gbps,
+            });
+        }
 
         // Check for regressions if enabled
         if self.config.enable_regression_detection {
@@ -532,6 +583,16 @@ impl PerformanceProfiler {
     /// Get frame history.
     pub fn history(&self) -> &VecDeque<DetailedFrameStats> {
         &self.history
+    }
+
+    /// Get the memory bandwidth profiler.
+    pub fn bandwidth_profiler(&self) -> &MemoryBandwidthProfiler {
+        &self.bandwidth_profiler
+    }
+
+    /// Get a mutable reference to the memory bandwidth profiler.
+    pub fn bandwidth_profiler_mut(&mut self) -> &mut MemoryBandwidthProfiler {
+        &mut self.bandwidth_profiler
     }
 
     /// Clear frame history.
