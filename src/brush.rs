@@ -593,6 +593,7 @@ pub struct BrushOverlayRenderer {
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     instance_buffer: wgpu::Buffer,
+    viewport_buffer: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     vt_bind_group: wgpu::BindGroup,
     /// `true` when the overlay should be drawn this frame.
@@ -651,7 +652,20 @@ impl BrushOverlayRenderer {
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
 
-        // Viewport uniform (identity — brush coords are already in clip space).
+        // Viewport dimensions uniform at group(0) binding(1).
+        // The rectangle SDF fragment shader uses this for pixel-to-clip
+        // conversion.  We default to 800×600 and update via set_viewport_size.
+        let viewport_uniform = crate::selection::ViewportUniforms {
+            width: 800.0,
+            height: 600.0,
+        };
+        let viewport_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("brush_overlay_viewport"),
+            contents: bytemuck::bytes_of(&viewport_uniform),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        // Viewport transform uniform (identity — brush coords are already in clip space).
         let identity_vt = crate::zoom::GpuViewportTransform::IDENTITY;
         let vt_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("brush_overlay_viewport_transform"),
@@ -659,15 +673,21 @@ impl BrushOverlayRenderer {
             usage: wgpu::BufferUsages::UNIFORM,
         });
 
-        // Bind group 0: storage buffer (+ optional viewport uniform at binding 1).
+        // Bind group 0: storage buffer + viewport dimensions uniform.
         let bg0_layout = pipeline.get_bind_group_layout(0);
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("brush_overlay_bg0"),
             layout: &bg0_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: instance_buffer.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: instance_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: viewport_buffer.as_entire_binding(),
+                },
+            ],
         });
 
         // Bind group 1: viewport transform uniform.
@@ -686,6 +706,7 @@ impl BrushOverlayRenderer {
             vertex_buffer,
             index_buffer,
             instance_buffer,
+            viewport_buffer,
             bind_group,
             vt_bind_group,
             visible: false,
@@ -761,6 +782,15 @@ impl BrushOverlayRenderer {
     /// Returns `true` if the overlay is currently visible (will draw).
     pub fn is_visible(&self) -> bool {
         self.visible
+    }
+
+    /// Update the viewport dimensions used for SDF pixel-to-clip
+    /// conversion.
+    ///
+    /// Call this whenever the window size changes.
+    pub fn set_viewport_size(&self, queue: &wgpu::Queue, width: f32, height: f32) {
+        let viewport = crate::selection::ViewportUniforms { width, height };
+        queue.write_buffer(&self.viewport_buffer, 0, bytemuck::bytes_of(&viewport));
     }
 }
 
@@ -1189,5 +1219,90 @@ mod tests {
         assert!(shared.is_selected(&"carol".to_string()));
         assert!(shared.is_selected(&"dave".to_string()));
         assert_eq!(shared.selected_count(), 2);
+    }
+
+    // -- BrushOverlayRenderer (GPU) ----------------------------------------
+
+    /// Create a headless device+queue for GPU tests.
+    async fn create_test_device() -> (wgpu::Device, wgpu::Queue) {
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions::default())
+            .await
+            .expect("no GPU adapter");
+        adapter
+            .request_device(&wgpu::DeviceDescriptor::default())
+            .await
+            .expect("failed to create device")
+    }
+
+    #[tokio::test]
+    async fn overlay_renderer_creation() {
+        let (device, queue) = create_test_device().await;
+        let mut cache = crate::pipeline_cache::PipelineCache::new();
+        let renderer = BrushOverlayRenderer::new(&device, &queue, &mut cache);
+        assert!(renderer.is_ok(), "BrushOverlayRenderer should be created without error");
+        let renderer = renderer.unwrap();
+        assert!(!renderer.is_visible(), "should start invisible");
+    }
+
+    #[tokio::test]
+    async fn overlay_visible_when_brush_shown() {
+        let (device, queue) = create_test_device().await;
+        let mut cache = crate::pipeline_cache::PipelineCache::new();
+        let mut renderer = BrushOverlayRenderer::new(&device, &queue, &mut cache).unwrap();
+
+        let mut mark = BrushMark::default();
+        mark.show(Rect::new(Vec2::new(-0.5, -0.5), Vec2::new(0.5, 0.5)));
+
+        renderer.update(&mark, &queue);
+        assert!(renderer.is_visible(), "should be visible after show()");
+    }
+
+    #[tokio::test]
+    async fn overlay_hidden_when_brush_hidden() {
+        let (device, queue) = create_test_device().await;
+        let mut cache = crate::pipeline_cache::PipelineCache::new();
+        let mut renderer = BrushOverlayRenderer::new(&device, &queue, &mut cache).unwrap();
+
+        let mut mark = BrushMark::default();
+        // Show then hide
+        mark.show(Rect::new(Vec2::new(-0.5, -0.5), Vec2::new(0.5, 0.5)));
+        renderer.update(&mark, &queue);
+        assert!(renderer.is_visible());
+
+        mark.hide();
+        renderer.update(&mark, &queue);
+        assert!(!renderer.is_visible(), "should be hidden after hide()");
+    }
+
+    #[tokio::test]
+    async fn overlay_hidden_for_default_brush_mark() {
+        let (device, queue) = create_test_device().await;
+        let mut cache = crate::pipeline_cache::PipelineCache::new();
+        let mut renderer = BrushOverlayRenderer::new(&device, &queue, &mut cache).unwrap();
+
+        let mark = BrushMark::default();
+        renderer.update(&mark, &queue);
+        assert!(!renderer.is_visible(), "default BrushMark should be invisible");
+    }
+
+    #[tokio::test]
+    async fn overlay_reuses_cached_pipeline() {
+        let (device, queue) = create_test_device().await;
+        let mut cache = crate::pipeline_cache::PipelineCache::new();
+
+        // First creation populates the cache.
+        let _r1 = BrushOverlayRenderer::new(&device, &queue, &mut cache).unwrap();
+        let hits_after_first = cache.stats().hits;
+
+        // Second creation should hit the cache.
+        let _r2 = BrushOverlayRenderer::new(&device, &queue, &mut cache).unwrap();
+        let hits_after_second = cache.stats().hits;
+
+        assert!(
+            hits_after_second > hits_after_first,
+            "second renderer should reuse the cached pipeline"
+        );
     }
 }
