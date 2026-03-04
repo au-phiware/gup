@@ -68,6 +68,7 @@
 extern crate self as gup;
 
 pub mod accessibility;
+pub mod app;
 pub mod async_mixable;
 pub mod axis;
 pub mod axis_performance;
@@ -164,6 +165,9 @@ impl<T: Sync> MaybeSync for T {}
 pub trait MaybeSync {}
 #[cfg(target_arch = "wasm32")]
 impl<T> MaybeSync for T {}
+
+// Export application shell
+pub use app::{AppRenderer, GupApp};
 
 pub use color_descriptor::{
     ColorNamer, Hsl, describe_color, describe_color_detailed, describe_color_with, rgba_to_hsl,
