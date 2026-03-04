@@ -2,7 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Mobile **Status**: 📋 Planned **Created**: 2025-07-23
+**Initiative**: Mobile **Status**: 🚧 In Progress **Created**: 2025-07-23
 
 ## Context
 

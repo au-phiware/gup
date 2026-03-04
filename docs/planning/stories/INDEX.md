@@ -983,7 +983,7 @@ PNG, HTML), and platform targets.
 
 iOS and Android platform support for GPU-accelerated Gup charts.
 
-- [GUP-270](GUP-270_iOS_Platform_Support.md) 📋 — CAMetalLayer Metal surface,
+- [GUP-270](GUP-270_iOS_Platform_Support.md) 🚧 — CAMetalLayer Metal surface,
   Swift/Obj-C UIKit/SwiftUI integration shim, and UITouch→InteractionEvent
   translation for iOS/iPadOS. Deps: GUP-004 ✅, GUP-039 ✅, GUP-182 ✅, GUP-013
   📋.
