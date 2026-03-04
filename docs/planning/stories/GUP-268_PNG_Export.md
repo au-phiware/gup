@@ -10,23 +10,31 @@
 ### What was implemented
 
 - **`src/export/png.rs`** — Core PNG export module with:
-  - `padded_bytes_per_row()` — computes wgpu-aligned row stride (256-byte multiple)
+  - `padded_bytes_per_row()` — computes wgpu-aligned row stride (256-byte
+    multiple)
   - `strip_row_padding()` — removes alignment padding from pixel buffers
-  - `bgra_to_rgba()` — converts BGRA channel order (wgpu default) to RGBA (PNG standard)
-  - `encode_png()` — encodes raw RGBA pixels as PNG via `image::codecs::png::PngEncoder`
-  - `readback_texture()` / `readback_texture_as_png()` — GPU texture → CPU staging buffer readback
-  - `OffscreenTarget` struct — creates wgpu `Texture` + `TextureView` with `RENDER_ATTACHMENT | COPY_SRC`
+  - `bgra_to_rgba()` — converts BGRA channel order (wgpu default) to RGBA (PNG
+    standard)
+  - `encode_png()` — encodes raw RGBA pixels as PNG via
+    `image::codecs::png::PngEncoder`
+  - `readback_texture()` / `readback_texture_as_png()` — GPU texture → CPU
+    staging buffer readback
+  - `OffscreenTarget` struct — creates wgpu `Texture` + `TextureView` with
+    `RENDER_ATTACHMENT | COPY_SRC`
 - **`src/chart_builder.rs`** — Three new methods on `ComposedChart`:
   - `render_to_png(width, height)` → `GupResult<Vec<u8>>`
-  - `render_to_png_scaled(logical_width, logical_height, scale)` → `GupResult<Vec<u8>>`
+  - `render_to_png_scaled(logical_width, logical_height, scale)` →
+    `GupResult<Vec<u8>>`
   - `export_png(path, width, height)` → `GupResult<()>`
-- **`examples/export_png.rs`** — Example producing 1×, 2× HiDPI, and 2400×1600 PNGs
+- **`examples/export_png.rs`** — Example producing 1×, 2× HiDPI, and 2400×1600
+  PNGs
 - **`tests/png_export_integration.rs`** — 8 GPU integration tests
 
 ### Test counts
 
 - 12 unit tests (row padding, BGRA→RGBA, PNG encoding, round-trip)
-- 8 GPU integration tests (full pipeline, scaling, file I/O, RGBA, non-aligned widths)
+- 8 GPU integration tests (full pipeline, scaling, file I/O, RGBA, non-aligned
+  widths)
 - Total: 20 new tests; all 2,653 project tests pass
 
 ## Context
@@ -250,9 +258,9 @@ intended physical size.
 - **Solution**: Added a dedicated `bgra_to_rgba()` function that swaps the R and
   B channels in-place before encoding. This is a simple byte-swap loop over
   4-byte pixel chunks.
-- **Pattern**: When reading back GPU textures for CPU-side image encoding, always
-  check the texture format and convert channel order before passing to the
-  encoder. The format `Bgra8UnormSrgb` is the most common default on desktop
+- **Pattern**: When reading back GPU textures for CPU-side image encoding,
+  always check the texture format and convert channel order before passing to
+  the encoder. The format `Bgra8UnormSrgb` is the most common default on desktop
   (especially Windows/Linux via Vulkan).
 
 #### wgpu Row-Padding Alignment
@@ -271,14 +279,14 @@ intended physical size.
 
 #### Staging Buffer Synchronisation
 
-- **Challenge**: GPU readback is inherently asynchronous. The staging buffer must
-  be mapped after the GPU finishes the copy, which requires polling.
+- **Challenge**: GPU readback is inherently asynchronous. The staging buffer
+  must be mapped after the GPU finishes the copy, which requires polling.
 - **Solution**: Used `device.poll(PollType::Wait)` for blocking readback, with
   `std::sync::mpsc::sync_channel` for the map callback. This avoids pulling in
   `tokio` for what is fundamentally a one-shot synchronisation point.
 - **Pattern**: For blocking GPU readback in native-only code, prefer
-  `mpsc::sync_channel` over `tokio::sync::oneshot` — it is simpler and avoids
-  an async runtime dependency in the export path.
+  `mpsc::sync_channel` over `tokio::sync::oneshot` — it is simpler and avoids an
+  async runtime dependency in the export path.
 
 ### Architectural Decisions
 
@@ -305,8 +313,8 @@ intended physical size.
   overhead and panic risk for no benefit.
 - **Trade-off**: Callers need a mutable reference to the chart, which is the
   normal pattern for rendering.
-- **Future**: If an immutable variant is needed (e.g. for concurrent export),
-  a snapshot-based approach could be added.
+- **Future**: If an immutable variant is needed (e.g. for concurrent export), a
+  snapshot-based approach could be added.
 
 #### `OffscreenTarget` as a Public Utility
 
@@ -335,13 +343,13 @@ intended physical size.
   the `ComposedChart::render_to_png` path only issues axis/tick/grid draw
   commands — the data mark rendering pipeline (Selection GPU buffers) is not
   wired through `prepare_draw_commands`. This is expected; data mark rendering
-  through the export path requires the full Selection render pipeline, which
-  is a separate concern.
+  through the export path requires the full Selection render pipeline, which is
+  a separate concern.
 
 ### Follow-up Stories
 
 1. **GUP-268A: Data Mark Rendering in PNG Export** — Wire the
    `Selection::prepare_render` and draw pipeline through `ComposedChart`'s PNG
    export path so that data marks (circles, rectangles, lines) appear in
-   exported PNGs alongside axes and grid lines. Currently the export renders
-   the chart frame (axes, ticks, grid) but not the data visualization itself.
+   exported PNGs alongside axes and grid lines. Currently the export renders the
+   chart frame (axes, ticks, grid) but not the data visualization itself.

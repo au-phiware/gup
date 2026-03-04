@@ -8,16 +8,16 @@
 ## Context
 
 GUP-268 delivered PNG export with off-screen GPU rendering, staging-buffer
-readback, and PNG encoding. The current implementation renders the chart
-frame — axes, tick marks, and grid lines — but does not yet render data marks
-(circles, rectangles, lines) produced by the `Selection` GPU pipeline. This
-is because `ComposedChart::render_to_png` uses `prepare_draw_commands` which
-only uploads axis/tick/grid geometry, while the data visualization lives in
-the `Selection`'s separate GPU buffer pipeline.
+readback, and PNG encoding. The current implementation renders the chart frame —
+axes, tick marks, and grid lines — but does not yet render data marks (circles,
+rectangles, lines) produced by the `Selection` GPU pipeline. This is because
+`ComposedChart::render_to_png` uses `prepare_draw_commands` which only uploads
+axis/tick/grid geometry, while the data visualization lives in the `Selection`'s
+separate GPU buffer pipeline.
 
-This story wires the `Selection::prepare_render` and mark draw pipeline
-through the PNG export path so that exported images show the full chart
-including data points.
+This story wires the `Selection::prepare_render` and mark draw pipeline through
+the PNG export path so that exported images show the full chart including data
+points.
 
 ## User Story
 
@@ -35,8 +35,8 @@ including data points.
 
 ## Technical Tasks
 
-- [ ] Wire `Selection::prepare_render` into `ComposedChart::render_to_png`
-      so that mark GPU buffers are uploaded before the export render pass.
+- [ ] Wire `Selection::prepare_render` into `ComposedChart::render_to_png` so
+      that mark GPU buffers are uploaded before the export render pass.
 - [ ] Issue the Selection's draw commands into the off-screen render pass
       alongside the existing axis/tick/grid draw calls.
 - [ ] Handle pipeline format compatibility between the Selection's render

@@ -217,8 +217,8 @@ notebook integrations would naturally build on this.)_
 - **`HtmlExporter`** builder struct with `WasmStrategy`, `page_title`,
   `description`, and `author` configuration.
 - **`WasmStrategy`** enum with `Inline(PathBuf)` and `Url(String)` variants.
-- **`ChartSnapshot`** DTO for JSON-serialisable chart configuration
-  (title, subtitle, dimensions, margins, background colour, axis/grid toggles).
+- **`ChartSnapshot`** DTO for JSON-serialisable chart configuration (title,
+  subtitle, dimensions, margins, background colour, axis/grid toggles).
 - **`SnapshotMargins`** serialisable copy of chart margins.
 - **HTML template** generating a well-formed HTML5 document with:
   - Viewport meta, Open Graph, and Twitter Card meta tags.
@@ -232,22 +232,23 @@ notebook integrations would naturally build on this.)_
 
 ### Key files changed
 
-| File                                   | Purpose                               |
-| -------------------------------------- | ------------------------------------- |
-| `src/export/html/mod.rs`              | Core HtmlExporter, WasmStrategy       |
-| `src/export/html/snapshot.rs`         | ChartSnapshot DTO                     |
-| `src/export/html/template.rs`         | HTML template generation              |
-| `src/export/mod.rs`                   | Module registration and re-exports    |
-| `src/chart_builder.rs`                | `export_html` convenience method      |
-| `src/prelude.rs`                      | Prelude re-exports                    |
-| `Cargo.toml`                          | `base64` dep, `[[example]]` entry     |
-| `examples/html_export.rs`            | Example usage                         |
-| `tests/html_export_integration.rs`   | 13 integration tests                  |
+| File                               | Purpose                            |
+| ---------------------------------- | ---------------------------------- |
+| `src/export/html/mod.rs`           | Core HtmlExporter, WasmStrategy    |
+| `src/export/html/snapshot.rs`      | ChartSnapshot DTO                  |
+| `src/export/html/template.rs`      | HTML template generation           |
+| `src/export/mod.rs`                | Module registration and re-exports |
+| `src/chart_builder.rs`             | `export_html` convenience method   |
+| `src/prelude.rs`                   | Prelude re-exports                 |
+| `Cargo.toml`                       | `base64` dep, `[[example]]` entry  |
+| `examples/html_export.rs`          | Example usage                      |
+| `tests/html_export_integration.rs` | 13 integration tests               |
 
 ### Test counts
 
 - 20 unit tests (snapshot, template, base64, builder)
-- 13 integration tests (structure, OG tags, JSON round-trip, inline WASM, file I/O)
+- 13 integration tests (structure, OG tags, JSON round-trip, inline WASM, file
+  I/O)
 - 3 doctests (ChartSnapshot, HtmlExporter)
 - **36 total new tests**
 
@@ -274,18 +275,18 @@ notebook integrations would naturally build on this.)_
 
 - **Challenge**: The HTML template needs to embed large blobs (SVG, JSON, WASM
   Base64) and handle escaping for HTML attributes, JavaScript strings, and JSON.
-- **Solution**: Used `std::fmt::Write` with `write!` macros into a
-  pre-allocated `String`. Dedicated `html_escape()` and `js_string_escape()`
-  helpers handle context-specific escaping. No external template engine needed.
+- **Solution**: Used `std::fmt::Write` with `write!` macros into a pre-allocated
+  `String`. Dedicated `html_escape()` and `js_string_escape()` helpers handle
+  context-specific escaping. No external template engine needed.
 - **Pattern**: For single-file template generation where the structure is fixed,
   plain format strings with helper escapers are simpler and faster than pulling
   in a template crate like `askama` or `tera`.
 
 #### Dual SVG fallback: noscript + JS-toggled div
 
-- **Challenge**: The SVG fallback must be visible in two distinct scenarios:
-  (1) JavaScript is completely disabled; (2) JavaScript is enabled but WebGPU
-  is absent.
+- **Challenge**: The SVG fallback must be visible in two distinct scenarios: (1)
+  JavaScript is completely disabled; (2) JavaScript is enabled but WebGPU is
+  absent.
 - **Solution**: Embed the SVG in both a `<noscript>` block (handles case 1) and
   a `<div id="gup-svg-fallback">` that is shown/hidden via a CSS class
   (`gup-no-webgpu`) toggled by a `navigator.gpu` check (handles case 2).
@@ -302,8 +303,8 @@ notebook integrations would naturally build on this.)_
   transitive dependency, and encoding is on the critical path for both WASM
   inlining and PNG thumbnail embedding.
 - **Trade-off**: One more direct dependency; negligible compile-time impact.
-- **Future**: If the project adds more data URI generation (e.g., CSS
-  background images), the dependency is already available.
+- **Future**: If the project adds more data URI generation (e.g., CSS background
+  images), the dependency is already available.
 
 #### WasmStrategy::Inline takes PathBuf, not raw bytes
 
@@ -325,8 +326,8 @@ notebook integrations would naturally build on this.)_
 - **Reasoning**: Most users of the convenience method want a quick export. The
   URL strategy produces valid HTML without needing a WASM binary at export time.
   Users who want inline embedding use `HtmlExporter` directly.
-- **Trade-off**: The convenience method's output requires a separate
-  `gup.wasm` file to be co-located for full interactivity.
+- **Trade-off**: The convenience method's output requires a separate `gup.wasm`
+  file to be co-located for full interactivity.
 - **Future**: Could auto-detect a WASM binary if built by `wasm-pack`.
 
 ### Development Workflow Insights
@@ -334,11 +335,11 @@ notebook integrations would naturally build on this.)_
 - The existing SVG and PNG export infrastructure made this story
   straightforward. `render_to_svg` and `render_to_png` were called directly from
   the `HtmlExporter`, avoiding code duplication.
-- The pre-commit hook running `mask all-check` (full cargo build) is slow
-  (~2 min). Using `--no-verify` for intermediate commits and running
-  `mask all-fix` manually before the final commit was more efficient.
-- Testing with `--test-threads=1` was required for GPU integration tests but
-  the unit tests (which don't touch GPU) also ran fine with that constraint.
+- The pre-commit hook running `mask all-check` (full cargo build) is slow (~2
+  min). Using `--no-verify` for intermediate commits and running `mask all-fix`
+  manually before the final commit was more efficient.
+- Testing with `--test-threads=1` was required for GPU integration tests but the
+  unit tests (which don't touch GPU) also ran fine with that constraint.
 - The doctest for `ChartSnapshot` initially failed because `SnapshotMargins`
   wasn't publicly exported — a reminder to verify doctest paths match the public
   API surface.

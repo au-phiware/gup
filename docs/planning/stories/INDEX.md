@@ -931,6 +931,11 @@ PNG, HTML), and platform targets.
 - [GUP-262](GUP-262_Bevy_Integration.md) ✅ — gup-bevy crate with GupChart Bevy
   Component and GupPlugin sharing the wgpu device/queue with Bevy's renderer.
   Deps: GUP-004 ✅, GUP-018 ✅, GUP-039 ✅.
+- [GUP-262A](GUP-262A_Direct_Texture_Sharing_Bevy.md) 📋 — Eliminate
+  render-to-PNG round-trip by rendering charts directly to shared GPU textures.
+  Deps: GUP-262 ✅.
+- [GUP-262B](GUP-262B_Bevy_018_Upgrade.md) 📋 — Upgrade gup-bevy to Bevy 0.18
+  when the main gup crate upgrades to wgpu 27. Deps: GUP-262 ✅.
 - [GUP-263](GUP-263_egui_Integration.md) 📋 — GupWidget implementing
   egui::Widget via render-to-texture, with dirty-tracking and interaction bridge
   forwarding egui pointer events. Deps: GUP-004 ✅, GUP-018 ✅, GUP-268 ✅.
