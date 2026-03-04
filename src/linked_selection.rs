@@ -88,6 +88,8 @@ use std::hash::Hash;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+use crate::gpu_timer::GpuTimer;
+
 // ---------------------------------------------------------------------------
 // KeyedSelectionState — inner state
 // ---------------------------------------------------------------------------
@@ -778,6 +780,9 @@ pub struct LinkedSelection<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> {
     source_buffer: Option<wgpu::Buffer>,
     /// Auto-tune state machine for adaptive threshold selection.
     auto_tune: AutoTuneState,
+    /// GPU timestamp timer (lazily created when auto-tune needs precise
+    /// GPU-side timing and `Features::TIMESTAMP_QUERY` is available).
+    gpu_timer: Option<GpuTimer>,
 }
 
 impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> {
@@ -811,6 +816,7 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
             mask_buffer: None,
             source_buffer: None,
             auto_tune: AutoTuneState::new(gpu_threshold),
+            gpu_timer: None,
         }
     }
 
@@ -835,6 +841,7 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
             mask_buffer: None,
             source_buffer: None,
             auto_tune: AutoTuneState::new(gpu_threshold),
+            gpu_timer: None,
         }
     }
 
@@ -1000,6 +1007,14 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
 
         // -- Time the execution when auto-tune is active and calibrating --
         let timing = self.auto_tune.enabled && !self.auto_tune.is_settled();
+
+        // Lazily create the GPU timer when auto-tune is calibrating and the
+        // device supports timestamp queries.  The timer is kept for the
+        // lifetime of the LinkedSelection so it can be reused across frames.
+        if timing && use_gpu && self.gpu_timer.is_none() {
+            self.gpu_timer = GpuTimer::new(device, queue);
+        }
+
         let start = if timing { Some(Instant::now()) } else { None };
 
         let result = if use_gpu {
@@ -1009,6 +1024,7 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
                 &mapper,
                 instance_count,
                 data_changed,
+                timing,
                 cache,
                 pool,
             )
@@ -1026,19 +1042,29 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
             );
             self.selection
                 .prepare_render_raw(device, queue, &instances, cache, pool)
+                .map(|()| None)
         };
 
         // -- Record timing sample --
+        // Prefer GPU timestamps when available; fall back to wall-clock.
         if let Some(start) = start {
-            let elapsed_ns = start.elapsed().as_nanos();
+            let gpu_ns = match &result {
+                Ok(Some(ns)) => Some(*ns),
+                _ => None,
+            };
+            let elapsed_ns = gpu_ns.unwrap_or_else(|| start.elapsed().as_nanos());
             self.auto_tune.record_sample(elapsed_ns, count_u32);
         }
 
-        result
+        result.map(|_| ())
     }
 
     /// GPU dimming path: upload undimmed instances, run the compute shader,
     /// then copy the dimmed output into the Selection's instance buffer.
+    ///
+    /// When `timing` is `true` and a [`GpuTimer`] is available, the compute
+    /// pass records GPU-side timestamps and the elapsed nanoseconds are
+    /// returned as `Ok(Some(ns))`.  Otherwise returns `Ok(None)`.
     fn prepare_render_gpu<I>(
         &mut self,
         device: &Device,
@@ -1046,9 +1072,10 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
         mapper: &dyn Fn(&T) -> I,
         instance_count: usize,
         data_changed: bool,
+        timing: bool,
         cache: Option<&mut PipelineCache>,
         pool: Option<&mut BufferPool>,
-    ) -> GupResult<()>
+    ) -> GupResult<Option<u128>>
     where
         I: DimInstance + bytemuck::Pod + bytemuck::Zeroable,
     {
@@ -1129,8 +1156,26 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
                 label: Some("linked_selection_dim_encoder"),
             });
 
-            // Encode the dimming compute pass.
-            mask.encode_dimming(device, queue, &mut encoder, source, count, self.dim_opacity);
+            // Build optional timestamp writes for the compute pass.
+            let use_gpu_timer = timing && self.gpu_timer.is_some();
+            let ts_writes = if use_gpu_timer {
+                self.gpu_timer
+                    .as_ref()
+                    .map(|t| t.compute_pass_timestamp_writes())
+            } else {
+                None
+            };
+
+            // Encode the dimming compute pass (with optional timestamps).
+            mask.encode_dimming_timed(
+                device,
+                queue,
+                &mut encoder,
+                source,
+                count,
+                self.dim_opacity,
+                ts_writes,
+            );
 
             // Copy the dimmed output into the Selection's instance buffer.
             let dst = self
@@ -1139,10 +1184,24 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
                 .expect("render state initialised");
             encoder.copy_buffer_to_buffer(mask.output_buffer(), 0, dst, 0, instance_byte_size);
 
+            // Resolve timestamp queries before submit.
+            if use_gpu_timer {
+                if let Some(timer) = &self.gpu_timer {
+                    timer.resolve(&mut encoder);
+                }
+            }
+
             queue.submit([encoder.finish()]);
+
+            // Read back GPU timestamps synchronously (blocking).
+            if use_gpu_timer {
+                if let Some(timer) = &self.gpu_timer {
+                    return Ok(timer.read_elapsed_ns(device));
+                }
+            }
         }
 
-        Ok(())
+        Ok(None)
     }
 
     /// Render to an active render pass.

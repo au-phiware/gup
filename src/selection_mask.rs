@@ -47,8 +47,9 @@ use std::hash::Hash;
 use wgpu::{
     BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, BindingType, Buffer, BufferBindingType, BufferDescriptor, BufferUsages,
-    CommandEncoderDescriptor, ComputePassDescriptor, ComputePipeline, ComputePipelineDescriptor,
-    Device, PipelineLayoutDescriptor, Queue, ShaderModuleDescriptor, ShaderSource, ShaderStages,
+    CommandEncoderDescriptor, ComputePassDescriptor, ComputePassTimestampWrites, ComputePipeline,
+    ComputePipelineDescriptor, Device, PipelineLayoutDescriptor, Queue, ShaderModuleDescriptor,
+    ShaderSource, ShaderStages,
 };
 
 // ---------------------------------------------------------------------------
@@ -739,6 +740,31 @@ impl SelectionMaskBuffer {
         instance_count: u32,
         dim_opacity: f32,
     ) {
+        self.encode_dimming_timed(
+            device,
+            queue,
+            encoder,
+            source_buffer,
+            instance_count,
+            dim_opacity,
+            None,
+        );
+    }
+
+    /// Encode a dimming compute pass with optional GPU timestamp writes.
+    ///
+    /// When `timestamp_writes` is `Some`, the compute pass records begin/end
+    /// timestamps that can be resolved and read back for profiling.
+    pub fn encode_dimming_timed(
+        &self,
+        device: &Device,
+        queue: &Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        source_buffer: &Buffer,
+        instance_count: u32,
+        dim_opacity: f32,
+        timestamp_writes: Option<ComputePassTimestampWrites<'_>>,
+    ) {
         assert!(
             instance_count <= self.capacity,
             "instance_count ({instance_count}) exceeds capacity ({})",
@@ -780,7 +806,7 @@ impl SelectionMaskBuffer {
         {
             let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
                 label: Some("selection_dim_pass"),
-                timestamp_writes: None,
+                timestamp_writes,
             });
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, &bind_group, &[]);
