@@ -70,6 +70,7 @@ use crate::shader_function::LinearScale;
 use crate::{Circle, MaybeSend, MaybeSync, Rectangle};
 use std::marker::PhantomData;
 use std::sync::Arc;
+use wgpu::{Device, Queue, RenderPass};
 
 use super::area::AreaSegment;
 use super::line::LineSegment;
@@ -385,7 +386,6 @@ impl<T> LayerKind<T> {
 /// Uses an enum to hold the different `Selection<T, M>` variants produced
 /// by the individual chart builders.
 #[derive(Debug)]
-#[allow(dead_code)]
 enum BuiltLayer<T>
 where
     T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
@@ -394,6 +394,48 @@ where
     Line(Selection<LineSegment<T>, Line>),
     Bar(Selection<T, Rectangle>),
     Area(Selection<AreaSegment<T>, Line>),
+}
+
+impl<T> BuiltLayer<T>
+where
+    T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
+{
+    /// Prepare this layer's selection for GPU rendering.
+    ///
+    /// Must be called before [`draw`](Self::draw).
+    fn prepare(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        _format: wgpu::TextureFormat,
+    ) -> GupResult<()> {
+        match self {
+            BuiltLayer::Scatter(sel) => sel.prepare_render_bound(device, queue, None, None),
+            BuiltLayer::Line(sel) => sel.prepare_render_bound(device, queue, None, None),
+            BuiltLayer::Bar(sel) => sel.prepare_render_bound(device, queue, None, None),
+            BuiltLayer::Area(sel) => sel.prepare_render_bound(device, queue, None, None),
+        }
+    }
+
+    /// Issue draw commands for this layer into the given render pass.
+    fn draw<'a>(&'a self, render_pass: &mut RenderPass<'a>) -> GupResult<()> {
+        match self {
+            BuiltLayer::Scatter(sel) => sel.render(render_pass),
+            BuiltLayer::Line(sel) => sel.render(render_pass),
+            BuiltLayer::Bar(sel) => sel.render(render_pass),
+            BuiltLayer::Area(sel) => sel.render(render_pass),
+        }
+    }
+
+    /// Returns `true` when the layer has been prepared for rendering.
+    fn is_render_ready(&self) -> bool {
+        match self {
+            BuiltLayer::Scatter(sel) => sel.is_render_ready(),
+            BuiltLayer::Line(sel) => sel.is_render_ready(),
+            BuiltLayer::Bar(sel) => sel.is_render_ready(),
+            BuiltLayer::Area(sel) => sel.is_render_ready(),
+        }
+    }
 }
 
 /// The output of [`CompositeChartBuilder::build_with_data`].
@@ -436,6 +478,64 @@ where
     /// Whether the secondary y-axis is in use.
     pub fn has_secondary_y_axis(&self) -> bool {
         self.has_secondary_y
+    }
+
+    /// Prepare all GPU resources required for rendering.
+    ///
+    /// This uploads instance buffers for every layer and prepares the
+    /// axis/grid pipelines on the primary chart.  Call once before the
+    /// first frame, or whenever data changes.
+    pub fn prepare_render(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        format: wgpu::TextureFormat,
+    ) -> GupResult<()> {
+        // Prepare axis/grid pipelines on the primary chart.
+        self.primary.prepare_draw_commands(device, queue, format);
+
+        // Prepare each data layer for rendering.
+        for layer in &mut self.additional_layers {
+            if !layer.is_render_ready() {
+                layer.prepare(device, queue, format)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Record all draw commands into a single render pass.
+    ///
+    /// Draw order:
+    /// 1. Grid lines (behind everything)
+    /// 2. Data layers in declaration order (first added = bottom)
+    /// 3. Axis lines and tick marks (on top)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a layer has not been prepared.
+    pub fn draw<'a>(&'a self, render_pass: &mut RenderPass<'a>) -> GupResult<()> {
+        // 1. Grid lines (behind data).
+        self.primary.draw_grid_lines(render_pass);
+
+        // 2. Data layers in declaration order.
+        for layer in &self.additional_layers {
+            layer.draw(render_pass)?;
+        }
+
+        // 3. Axis infrastructure on top.
+        self.primary.draw_axis_lines(render_pass);
+        self.primary.draw_ticks(render_pass);
+
+        Ok(())
+    }
+
+    /// Returns the total number of draw-producing layers (useful for tests).
+    pub fn layer_draw_count(&self) -> usize {
+        self.additional_layers
+            .iter()
+            .filter(|l| l.is_render_ready())
+            .count()
     }
 }
 
@@ -565,6 +665,12 @@ where
 // ── Per-layer build helper ──────────────────────────────────────────────
 
 /// Build a single layer variant, injecting unified scales.
+///
+/// After the inner builder produces a selection, additional `attr`
+/// bindings are appended to map data-space coordinates to NDC using
+/// the composite's unified scales.  Because `build_instance` processes
+/// bindings in order and last-write-wins, these override any earlier
+/// placeholder bindings.
 fn build_layer<T>(
     kind: LayerKind<T>,
     data: Vec<T>,
@@ -577,32 +683,117 @@ where
 {
     match kind {
         LayerKind::Scatter(mut builder) => {
+            // Capture accessors for the NDC position binding.
+            let x_acc = builder.x_accessor.clone();
+            let y_acc = builder.y_accessor.clone();
+            let color_acc = builder.color_accessor.clone();
+            let xs = x_scale.clone();
+            let ys = y_scale.clone();
+
             builder.config.show_axes = false;
             builder.config.x_scale = Some(x_scale.clone());
             builder.config.y_scale = Some(y_scale.clone());
             let composed = builder.build_with_data(data, context)?;
-            Ok(BuiltLayer::Scatter(composed.visualization))
+            let mut sel = composed.visualization;
+
+            // Override the placeholder position binding with a
+            // properly scaled one.
+            if let (Some(xa), Some(ya)) = (x_acc, y_acc) {
+                sel.attr("center", move |d: &T| {
+                    let x_ndc = xs.scale_value(xa.apply(d).as_f32());
+                    let y_ndc = ys.scale_value(ya.apply(d).as_f32());
+                    [x_ndc, y_ndc]
+                });
+                sel.attr("radius", |_d: &T| 0.03f32);
+            }
+            if let Some(ca) = color_acc {
+                sel.attr("fill_color", move |d: &T| match ca.apply(d) {
+                    crate::chart_builder::accessor::AccessorValue::Color(c) => c,
+                    _ => [0.122, 0.467, 0.706, 0.7],
+                });
+            }
+
+            Ok(BuiltLayer::Scatter(sel))
         }
         LayerKind::Line(mut builder) => {
             builder.config.show_axes = false;
             builder.config.x_scale = Some(x_scale.clone());
             builder.config.y_scale = Some(y_scale.clone());
+
             let composed = builder.build_with_data(data, context)?;
-            Ok(BuiltLayer::Line(composed.visualization))
+            let mut sel = composed.visualization;
+
+            // The line builder stores positions in data coords.
+            // Override the start/end bindings to map through the
+            // unified scales so lines render in NDC.
+            let xs = x_scale.clone();
+            let ys = y_scale.clone();
+            sel.attr("start", move |seg: &LineSegment<T>| {
+                [
+                    xs.scale_value(seg.start_pos[0]),
+                    ys.scale_value(seg.start_pos[1]),
+                ]
+            });
+            let xs2 = x_scale.clone();
+            let ys2 = y_scale.clone();
+            sel.attr("end", move |seg: &LineSegment<T>| {
+                [
+                    xs2.scale_value(seg.end_pos[0]),
+                    ys2.scale_value(seg.end_pos[1]),
+                ]
+            });
+
+            Ok(BuiltLayer::Line(sel))
         }
         LayerKind::Bar(mut builder) => {
+            let x_acc = builder.x_accessor.clone();
+            let y_acc = builder.y_accessor.clone();
+            let xs = x_scale.clone();
+            let ys = y_scale.clone();
+
             builder.config.show_axes = false;
             builder.config.x_scale = Some(x_scale.clone());
             builder.config.y_scale = Some(y_scale.clone());
             let composed = builder.build_with_data(data, context)?;
-            Ok(BuiltLayer::Bar(composed.visualization))
+            let mut sel = composed.visualization;
+
+            // Override placeholder position binding for bars.
+            if let (Some(xa), Some(ya)) = (x_acc, y_acc) {
+                sel.attr("position", move |d: &T| {
+                    let x_ndc = xs.scale_value(xa.apply(d).as_f32());
+                    let y_ndc = ys.scale_value(ya.apply(d).as_f32());
+                    [x_ndc, y_ndc]
+                });
+            }
+
+            Ok(BuiltLayer::Bar(sel))
         }
         LayerKind::Area(mut builder) => {
             builder.config.show_axes = false;
             builder.config.x_scale = Some(x_scale.clone());
             builder.config.y_scale = Some(y_scale.clone());
             let composed = builder.build_with_data(data, context)?;
-            Ok(BuiltLayer::Area(composed.visualization))
+            let mut sel = composed.visualization;
+
+            // Area segments share the same structure as line segments.
+            let xs = x_scale.clone();
+            let ys = y_scale.clone();
+            sel.attr("start", move |seg: &AreaSegment<T>| {
+                [
+                    xs.scale_value(seg.start_pos[0]),
+                    ys.scale_value(seg.start_pos[1]),
+                ]
+            });
+            let xs2 = x_scale.clone();
+            let ys2 = y_scale.clone();
+            sel.attr("end", move |seg: &AreaSegment<T>| {
+                [
+                    xs2.scale_value(seg.end_pos[0]),
+                    ys2.scale_value(seg.end_pos[1]),
+                ]
+            });
+
+            Ok(BuiltLayer::Area(sel))
         }
     }
 }

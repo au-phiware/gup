@@ -524,6 +524,27 @@ impl AxisScale {
         }
     }
 
+    /// Map a data-domain value to the output range.
+    ///
+    /// For linear scales this is a simple affine interpolation.
+    /// For log scales the input is log-transformed first.
+    /// Band/point scales map an integer index to the band/point position.
+    pub fn scale_value(&self, value: f32) -> f32 {
+        match self {
+            AxisScale::Linear(s) => {
+                let span = s.domain_max - s.domain_min;
+                if span.abs() < f32::EPSILON {
+                    return s.range_min;
+                }
+                let t = (value - s.domain_min) / span;
+                s.range_min + t * (s.range_max - s.range_min)
+            }
+            AxisScale::Log(s) => s.apply(value),
+            AxisScale::Band(s) => s.apply(value as u32),
+            AxisScale::Point(s) => s.apply(value as u32),
+        }
+    }
+
     /// Create a tick-generator [`Scale`](crate::tick_generator::Scale) trait
     /// object matching this axis scale's type and domain.
     pub fn to_tick_scale(&self) -> Box<dyn crate::tick_generator::Scale> {
