@@ -1099,15 +1099,25 @@ where
         }
 
         let geom = self.generate_axis_geometry_instanced();
+        let colorbar_geom = self.generate_colorbar_geometry();
 
-        if !geom.tick_instances.is_empty() {
+        // Merge axis ticks with colorbar ticks.
+        let mut all_tick_instances = geom.tick_instances;
+        let mut all_line_vertices = geom.line_vertices;
+
+        if let Some(ref cb_geom) = colorbar_geom {
+            all_tick_instances.extend_from_slice(&cb_geom.tick_instances);
+            all_line_vertices.extend_from_slice(&cb_geom.line_vertices);
+        }
+
+        if !all_tick_instances.is_empty() {
             if let Some(tick_pipeline) = &self.tick_pipeline {
                 let (base_buf, inst_buf) =
-                    tick_pipeline.upload(context.device(), context.queue(), &geom.tick_instances);
+                    tick_pipeline.upload(context.device(), context.queue(), &all_tick_instances);
                 self.tick_buffers = Some(TickBuffers {
                     base_buf,
                     inst_buf,
-                    instance_count: geom.tick_instances.len() as u32,
+                    instance_count: all_tick_instances.len() as u32,
                 });
             }
         } else {
@@ -1115,7 +1125,32 @@ where
         }
 
         // Prepare axis-line pipeline and buffers alongside tick data
-        self.prepare_axis_line_pipeline(context, &geom.line_vertices);
+        self.prepare_axis_line_pipeline(context, &all_line_vertices);
+
+        // Prepare colorbar gradient pipeline
+        if let Some(ref cb_geom) = colorbar_geom {
+            if self.colorbar_gradient_pipeline.is_none() {
+                self.colorbar_gradient_pipeline = Some(GradientStripPipeline::new(
+                    context.device(),
+                    context.surface_format(),
+                ));
+            }
+            if !cb_geom.gradient_vertices.is_empty() {
+                if let Some(pipeline) = &self.colorbar_gradient_pipeline {
+                    let vertex_buf = pipeline.upload(context.device(), &cb_geom.gradient_vertices);
+                    self.colorbar_gradient_buffers = Some(GradientStripBuffers {
+                        vertex_buf,
+                        vertex_count: cb_geom.gradient_vertices.len() as u32,
+                    });
+                }
+            } else {
+                self.colorbar_gradient_buffers = None;
+            }
+        } else {
+            self.colorbar_gradient_buffers = None;
+        }
+
+        self.colorbar_geometry = colorbar_geom;
     }
 
     /// Lazily create the [`AxisLinePipeline`] and upload axis-line vertices.
@@ -2097,6 +2132,23 @@ where
         // Queue chart title
         self.queue_title_text(frame, text_renderer, font_manager, layout_engine)?;
 
+        // Queue colorbar labels (if the colorbar has been prepared)
+        if let Some(ref cb_geom) = self.colorbar_geometry {
+            for label in &cb_geom.labels {
+                let style = self.config.label_style.clone().with_anchor(label.anchor);
+                text_renderer.queue_text_with_fonts(
+                    frame,
+                    &label.text,
+                    label.screen_position,
+                    &style,
+                    font_manager,
+                    layout_engine,
+                    None,
+                    None,
+                )?;
+            }
+        }
+
         Ok(())
     }
 
@@ -2204,6 +2256,23 @@ where
 
         // Queue chart title
         self.queue_title_text(frame, text_renderer, font_manager, layout_engine)?;
+
+        // Queue colorbar labels (if the colorbar has been prepared)
+        if let Some(ref cb_geom) = self.colorbar_geometry {
+            for label in &cb_geom.labels {
+                let style = self.config.label_style.clone().with_anchor(label.anchor);
+                text_renderer.queue_text_with_fonts(
+                    frame,
+                    &label.text,
+                    label.screen_position,
+                    &style,
+                    font_manager,
+                    layout_engine,
+                    None,
+                    None,
+                )?;
+            }
+        }
 
         Ok(())
     }
