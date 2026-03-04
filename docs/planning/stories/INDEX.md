@@ -769,7 +769,7 @@ integration, pipeline caching.
 - [GUP-300](GUP-300_Violin_Mark_Renderer.md) 💡 — Dedicated ViolinMark with GPU
   shaders for filled density polygon rendering with gradient fill, stroke
   outline, and anti-aliasing. Deps: GUP-249 ✅, GUP-132 ✅.
-- [GUP-301](GUP-301_GPU_Density_Compute_Pipeline.md) 🚧 — Wire 2D KDE and
+- [GUP-301](GUP-301_GPU_Density_Compute_Pipeline.md) ✅ — Wire 2D KDE and
   marching-squares WGSL compute shaders into the GPU pipeline with bind groups,
   pipeline caching, and automatic CPU/GPU dispatch selection. Deps: GUP-250 ✅.
 - [GUP-302](GUP-302_Exact_Marching_Squares_Polygon_Fill.md) 📋 — Replace
