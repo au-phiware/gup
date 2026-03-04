@@ -624,7 +624,7 @@ aggregation.
   ✅, GUP-080 ✅.
 - [GUP-148](GUP-148_Fix_Statistics_Shader_Bug.md) ✅ — GUP-145 discovered a
   critical bug in the statistics compute shader from GUP-139.
-- [GUP-148](GUP-148_Profiling_Data_Export_Visualization.md) 🚧 — Exports
+- [GUP-148](GUP-148_Profiling_Data_Export_Visualization.md) ✅ — Exports
   profiling data to JSON/CSV/Chrome trace, generates SVG flame graphs, and
   provides a live web dashboard. Deps: GUP-046 ✅, GUP-080 ✅, GUP-147 📋.
 - [GUP-150](GUP-150_Recovery_Metrics_and_Analytics.md) ✅ — The error recovery
