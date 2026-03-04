@@ -1,6 +1,6 @@
 # GUP-148: Profiling Data Export and Visualization
 
-**Status**: 💡 New
+**Status**: 🚧 In Progress
 
 ## Story Overview
 
