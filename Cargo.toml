@@ -329,6 +329,10 @@ wasm-start = []
 ## PDF export via `printpdf`.  Enables `PdfRenderer`, `PdfDocument`,
 ## `PdfOptions`, and the `export_pdf` convenience method on `ComposedChart`.
 pdf = ["printpdf"]
+## iOS embedding shim.  Enables the `platform::ios` module with Metal surface
+## helpers, UITouch→TouchEvent translation, and the C ABI consumed by the
+## companion Swift package in `pkg/ios/GupSwift/`.
+ios-shim = []
 
 [package.metadata.docs.rs]
 all-features = true

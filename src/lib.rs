@@ -150,6 +150,7 @@ pub mod performance;
 pub mod performance_export;
 pub mod performance_targets;
 pub mod pipeline_cache;
+pub mod platform;
 pub mod plugins;
 pub mod prelude;
 pub mod render;
