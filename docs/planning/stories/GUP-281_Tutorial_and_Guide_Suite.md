@@ -267,3 +267,93 @@ to custom mark implementation.
 - `cargo check` and `cargo check --examples` pass cleanly
 - Screenshots captured from running examples: 02_scatter_window,
   interactive_circles, zoom_pan, observable_plot_visual_showcase
+
+## Retrospective
+
+**Completed**: 2025-07-15
+
+### Key Technical Learnings
+
+#### API Surface Discovery for Tutorial Writing
+
+- **Challenge**: Gup has a large API surface spread across many modules. Knowing
+  which methods and types to feature in tutorials required reading source code,
+  examples, tests, and existing documentation to find the *canonical* patterns.
+- **Solution**: Cross-referencing the GUP-103 example suite with the actual
+  `Selection`, `Mark`, and chart builder source code. The examples are the most
+  reliable source of "what works today" since they are compiled and tested.
+- **Pattern**: When writing tutorials for a library, always derive code snippets
+  from tested examples rather than writing new standalone code. This prevents
+  snippet drift and ensures accuracy.
+
+#### Macro Naming: `#[wgsl_function]` vs `#[shader_fn]`
+
+- **Challenge**: The story's acceptance criteria referenced `#[shader_fn]` as
+  the attribute macro name, but the actual codebase uses `#[wgsl_function]` from
+  `gup_macros`. The story was written before the macro was finalised.
+- **Solution**: Tutorials use the correct `#[wgsl_function]` name and explain
+  the `ComposableShaderFunction` trait that it generates. AC4 was satisfied by
+  documenting the actual API rather than the speculative name.
+- **Pattern**: When story ACs reference APIs by name, verify the actual name in
+  the codebase before writing — specs and implementations often diverge.
+
+#### Windowed vs Non-Windowed Examples
+
+- **Challenge**: Many examples (streaming_live_chart, custom_mark_demo) are
+  non-windowed console demos that exit immediately, making screenshot capture
+  impossible.
+- **Solution**: Used alternative windowed examples (zoom_pan,
+  observable_plot_visual_showcase) that demonstrate the same concepts with visual
+  output. Documented the screenshot source in `docs/tutorials/README.md`.
+- **Pattern**: For tutorial screenshot needs, maintain a mapping between concepts
+  and their windowed demo equivalents.
+
+### Architectural Decisions
+
+#### Tutorial Code Snippets: Conceptual Accuracy over Compilability
+
+- **Decision**: Tutorial snippets show the API patterns conceptually rather than
+  being literal copy-paste-compile programs. Each tutorial includes a "Full
+  Example" section with a complete, compilable program.
+- **Reasoning**: Showing only the relevant lines helps readers focus on the API
+  being taught. The full program at the end serves as the compilable reference.
+- **Trade-off**: Individual snippets may not compile in isolation (missing
+  imports, context), but the full example always does.
+- **Future**: When GUP-280 (API Reference) ships, individual snippets should
+  link to the generated docs for complete type signatures.
+
+#### Screenshot Asset Strategy: Static Commits
+
+- **Decision**: Screenshots are captured once and committed as static PNG files
+  rather than generated in CI.
+- **Reasoning**: GPU rendering requires a display server and GPU access, which
+  CI environments typically lack. Committing static assets is simpler and more
+  reliable.
+- **Trade-off**: Screenshots may become stale as the visual output changes.
+- **Future**: The `docs/tutorials/README.md` documents which example binary
+  produces each screenshot so they can be regenerated when needed.
+
+### Development Workflow Insights
+
+- **Disk space constraint**: The development environment had only 27 GB for the
+  workspace. `cargo test` builds all examples and tests, consuming ~16 GB.
+  `cargo clean` was needed between builds. For documentation-only stories,
+  `cargo check --examples` is sufficient validation.
+- **Screenshot capture**: The screen-grabber agent worked well for capturing
+  windowed example output. The workflow of `nohup cargo run --example X &` →
+  wait → screen-grabber → kill is reliable.
+- **Cross-reference verification**: A simple shell script grepping for Markdown
+  links and checking file existence caught all broken references quickly —
+  no need for mdbook-linkcheck in this case.
+
+### Follow-up Stories
+
+1. **GUP-351: Tutorial Snippet Compilation Tests** — Add a CI step or test
+   harness that extracts code blocks from tutorial Markdown files and verifies
+   they compile. This prevents snippet drift as APIs evolve. Could use
+   `skeptic` or a custom `tests/doc_snippets/` approach.
+
+2. **GUP-352: Interactive Tutorial Examples** — Create dedicated windowed
+   examples for each tutorial that readers can run to see the exact output
+   described. Currently tutorials reference existing examples which may show
+   more than the tutorial covers.

@@ -1007,6 +1007,12 @@ API reference generation, tutorials, and example gallery.
 - [GUP-282](GUP-282_Example_Gallery.md) 📋 — Automated thumbnail generation (via
   GUP-268 PNG Export) and GitHub Pages gallery grouped by category with CI
   deployment. Deps: GUP-103 ✅, GUP-268 ✅.
+- [GUP-351](GUP-351_Tutorial_Snippet_Compilation_Tests.md) 📋 — Automated test
+  harness that extracts Rust code blocks from tutorial Markdown and verifies
+  they compile, preventing snippet drift. Deps: GUP-281 ✅.
+- [GUP-352](GUP-352_Interactive_Tutorial_Examples.md) 📋 — Dedicated windowed
+  examples for each tutorial that render exactly the chart described, providing
+  a smoother learning experience. Deps: GUP-281 ✅, GUP-103 ✅.
 
 ## Follow-ups from GUP-264
 
