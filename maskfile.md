@@ -110,6 +110,14 @@ Clean build artifacts
 cargo clean
 ```
 
+## doc
+
+Build API reference and fail on any doc warnings
+
+```bash
+RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
+```
+
 ## watch
 
 Watch for changes and rebuild

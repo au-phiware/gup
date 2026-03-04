@@ -329,3 +329,7 @@ wasm-start = []
 ## PDF export via `printpdf`.  Enables `PdfRenderer`, `PdfDocument`,
 ## `PdfOptions`, and the `export_pdf` convenience method on `ComposedChart`.
 pdf = ["printpdf"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

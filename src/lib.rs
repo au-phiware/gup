@@ -27,20 +27,54 @@
 //! - **Interactive Visualizations**: Built-in support for user interactions and animations
 //! - **Extensible Architecture**: Modular design allowing custom marks and interactions
 //!
+//! ## Architecture Overview
+//!
+//! Gup is organised around several core abstractions that compose into a full
+//! visualisation pipeline:
+//!
+//! - **[`Selection`]** – The primary data-binding type. A selection associates
+//!   data elements with GPU-resident mark instances and drives the
+//!   enter/update/exit lifecycle.
+//! - **[`ShaderFunction`](shader_function::ShaderFunction)** – Composable GPU
+//!   shader functions that map data attributes to visual channels (position,
+//!   colour, size, …) and can be combined through the
+//!   [`Composable`](shader_function::Composable) trait.
+//! - **[`Mark`](mark::Mark)** – Visual primitives (circle, rectangle, line, …)
+//!   rendered on the GPU. Marks declare their vertex layout and shader code and
+//!   are registered in a [`MarkRegistry`](mark::MarkRegistry).
+//! - **[`GupContext`]** – The central GPU context that owns the wgpu device,
+//!   queue, surface, and auxiliary caches (buffer pool, pipeline cache, texture
+//!   pool).
+//! - **[`ChartBuilder`](chart_builder::ChartBuilder)** – A high-level, fluent
+//!   API for constructing common chart types (scatter, line, bar, area, …)
+//!   without manual shader or mark wiring.
+//!
+//! Data flows through the library as follows:
+//!
+//! ```text
+//! Data  ──▶  Selection  ──▶  ShaderFunction (scale/encode)  ──▶  Mark (GPU draw)
+//!                                     │
+//!                                     ▼
+//!                            Axis / Grid / Label (annotation layer)
+//! ```
+//!
 //! ## Quick Start
 //!
-//! ```rust,ignore
+//! ```rust,no_run
 //! use gup::prelude::*;
 //!
 //! // Create GPU-compatible types with ergonomic macros
 //! let position = vec3![1.0, 2.0, 3.0];
 //! let color = vec4![1.0, 0.5, 0.0, 1.0];
+//! ```
 //!
-//! // Create visualizations
-//! gup::plot()
-//!     .data(sales_data)
-//!     .scatter(x("revenue"), y("profit"))
-//!     .render()?;
+//! ### Building a chart
+//!
+//! ```rust,no_run
+//! use gup::chart_builder::{ChartBuilder, ChartConfig};
+//!
+//! let chart = ChartBuilder::new(ChartConfig::default())
+//!     .title("Revenue vs Profit");
 //! ```
 //!
 //! ## Type Construction
@@ -49,20 +83,33 @@
 //!
 //! - `vec2![x, y]` - 2D vectors
 //! - `vec3![x, y, z]` - 3D vectors with automatic GPU padding
-//! - `vec4![x, y, z, w]` - 4D vectors (colors, homogeneous coordinates)
+//! - `vec4![x, y, z, w]` - 4D vectors (colours, homogeneous coordinates)
 //! - `mat2![...]`, `mat3![...]`, `mat4![...]` - Matrix construction
 //!
 //! These macros ensure proper GPU memory alignment and provide zero-cost abstractions.
-//! See the [Type Construction Guide](../docs/TYPE_CONSTRUCTION_GUIDE.md) for details.
 //!
-//! ## Module Organization
+//! ## Module Organisation
 //!
-//! - [`shader_function`] - Composable GPU shader functions
-//! - [`mark`] - Visualization mark types (Circle, Rectangle, Line)
-//! - [`scale`] - Data scaling and transformation
-//! - [`axis`] - Axis rendering and tick generation
-//! - [`accessibility`] - Screen reader and keyboard navigation support
-//! - [`prelude`] - Commonly used imports
+//! | Module | Purpose |
+//! |--------|---------|
+//! | [`accessibility`] | Screen reader support, ARIA tree, focus management |
+//! | [`axis`] / [`axis_system`] | Axis rendering, tick generation, axis layout |
+//! | [`buffer`] | GPU buffer pool, upload/download helpers |
+//! | [`chart_builder`] | High-level chart construction API |
+//! | [`context`] | [`GupContext`] — device, queue, surface management |
+//! | [`error`] | [`GupError`] variants and the [`GupResult`] type alias |
+//! | [`grid`] | GPU-accelerated grid line rendering |
+//! | [`interaction`] | GPU hit-testing, event handling, gesture recognition |
+//! | [`mark`] | Mark trait, registry, built-in marks (circle, rect, line, …) |
+//! | [`mixable`] | Composable visualisation trait and helpers |
+//! | [`scale`] | Scale types (linear, log, ordinal, …) |
+//! | [`selection`] | [`Selection<T, M>`](Selection) — data-binding core |
+//! | [`shader_function`] | Composable GPU shader functions |
+//! | [`text`] | SDF-based GPU text rendering pipeline |
+//! | [`prelude`] | Convenience re-exports for common imports |
+
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![warn(missing_docs)]
 
 // Allow `gup::` paths in proc macro-generated code from within this crate.
 extern crate self as gup;
@@ -83,10 +130,12 @@ pub mod debug;
 pub mod depth;
 pub mod error;
 pub mod event;
+#[doc(hidden)]
 pub mod examples;
 pub mod export;
 pub mod gpu_timer;
 pub mod grid;
+#[doc(hidden)]
 pub mod integration;
 pub mod interaction;
 pub mod label;
@@ -114,14 +163,19 @@ pub mod shader_function;
 pub mod shader_pipeline;
 pub mod spatial_index;
 pub mod streaming;
+#[doc(hidden)]
 pub mod test_utils;
 pub mod text;
 pub mod tick_generator;
 pub mod transition;
+#[doc(hidden)]
 pub mod visual_test_utils;
 pub mod wasm_api;
+#[doc(hidden)]
 pub mod wasm_bench;
+#[doc(hidden)]
 pub mod wasm_bench_axis;
+#[doc(hidden)]
 pub mod wasm_bench_interaction;
 pub mod zoom;
 
