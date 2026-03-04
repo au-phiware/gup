@@ -235,7 +235,7 @@ pub use crate::plugins::{
 pub use crate::export::svg::{SvgElement, SvgExportOptions, SvgRenderer};
 
 // HTML export
-pub use crate::export::html::{ChartSnapshot, HtmlExporter, WasmStrategy};
+pub use crate::export::html::{ChartSnapshot, HtmlExporter, SnapshotMargins, WasmStrategy};
 
 // PDF export (requires `pdf` feature)
 #[cfg(feature = "pdf")]

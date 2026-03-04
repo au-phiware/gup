@@ -39,7 +39,7 @@
 mod snapshot;
 mod template;
 
-pub use snapshot::ChartSnapshot;
+pub use snapshot::{ChartSnapshot, SnapshotMargins};
 
 use crate::error::{GupError, GupResult};
 use std::path::{Path, PathBuf};
