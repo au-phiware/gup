@@ -329,6 +329,7 @@ pub use mark::compute_instance_filter::{
 };
 pub use mark::filled_polygon::{
     FilledPolygon, FilledPolygonAttributes, FilledPolygonVertex, TriangleInstance,
+    tessellate_polygon,
 };
 pub use mark::line::{Line, LineAttributes, LineInstance, LineStyle, LineVertex};
 pub use mark::occlusion_culler::{

@@ -42,6 +42,7 @@
 //! | [`BoxPlot`] | [`boxplot`] | Statistical box-and-whisker |
 //! | [`Text`] | [`text`] | SDF text glyph rendering |
 //! | [`Path`] | [`path`] | SVG-like path with GPU tessellation |
+//! | [`FilledPolygon`] | [`filled_polygon`] | Tessellated filled polygon with per-vertex colour |
 //! | [`GeoPathMark`] | [`geo_path`] | GeoJSON polygon with geographic projection |
 //! | [`CompositeMark`] | [`composite`] | Grouped sub-marks |
 //! | [`Sphere3D`] | [`sphere3d`] | 3D billboard sphere with Phong lighting |
@@ -134,6 +135,7 @@ pub use composite::{
 pub use compute_instance_filter::{ComputeInstanceFilter, FilterConfig, FilterResult};
 pub use filled_polygon::{
     FilledPolygon, FilledPolygonAttributes, FilledPolygonVertex, TriangleInstance,
+    tessellate_polygon,
 };
 pub use geo_path::{
     GeoFeature, GeoJsonSource, GeoPathAttributes, GeoPathMark, GeoPathVertex, GeoPolygon,
