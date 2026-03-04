@@ -627,6 +627,9 @@ aggregation.
 - [GUP-148](GUP-148_Profiling_Data_Export_Visualization.md) ✅ — Exports
   profiling data to JSON/CSV/Chrome trace, generates SVG flame graphs, and
   provides a live web dashboard. Deps: GUP-046 ✅, GUP-080 ✅, GUP-147 📋.
+- [GUP-350](GUP-350_Live_Profiling_WebSocket_Server.md) 💡 — Feature-gated
+  embedded HTTP+WebSocket server for real-time browser profiling dashboards.
+  Deps: GUP-148 ✅.
 - [GUP-150](GUP-150_Recovery_Metrics_and_Analytics.md) ✅ — The error recovery
   system currently tracks individual recovery attempts but doesn't aggregate
   metrics over time.

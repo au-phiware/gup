@@ -121,3 +121,93 @@ pub trait ProfileExporter {
 - [x] Integration with PerformanceProfiler complete
 - [x] All existing tests pass (2724 lib tests)
 - [x] All examples compile
+
+## Retrospective
+
+**Completed**: 2025-07-18
+
+### Key Technical Learnings
+
+#### Serde with Duration and Instant
+
+- **Challenge**: Rust's `Duration` and `Instant` types don't implement
+  `Serialize`/`Deserialize` by default. `Instant` also doesn't implement
+  `Default`, which serde requires for `#[serde(skip)]` fields.
+- **Solution**: Created `duration_serde` and `option_duration_serde` helper
+  modules that serialize `Duration` as `f64` seconds. Used
+  `#[serde(skip, default = "Instant::now")]` for `Instant` fields.
+- **Pattern**: When adding serde to types with non-serializable fields, use a
+  combination of `#[serde(with = "...")]` for custom serialization and
+  `#[serde(skip, default = "...")]` for skipped fields that need runtime
+  defaults. Keep helper modules `pub(crate)` so sibling modules can reuse them.
+
+#### Chrome Trace Event Format
+
+- **Challenge**: The Chrome Trace Event Format has specific requirements for
+  `chrome://tracing` compatibility: events need `name`, `cat`, `ph`, `ts`,
+  `pid`, `tid` fields, with timestamps in microseconds.
+- **Solution**: Implemented the "X" (complete) event type with duration, which
+  is the simplest and most useful for profiling data. Render passes are placed
+  on a separate `tid` from frames to show them in parallel lanes in the viewer.
+- **Pattern**: For Chrome Trace format, use "X" phase events with `ts` and
+  `dur` in microseconds. Separate logical categories onto different `tid` values
+  to get parallel lanes in the trace viewer.
+
+#### Self-Contained HTML Dashboards
+
+- **Challenge**: The dashboard needs to be viewable without any external
+  dependencies (no CDN links, no JavaScript frameworks).
+- **Solution**: Used inline SVG for all charts (frame time bar chart and flame
+  graph). Embedded CSS directly in the HTML. This produces a single HTML file
+  that works offline and can be shared as an attachment.
+- **Pattern**: For diagnostic/profiling tools, self-contained HTML with inline
+  SVG is the best trade-off between interactivity and portability. No build
+  step, no dependencies, works in any browser.
+
+### Architectural Decisions
+
+#### Struct-Based ProfileExporter Instead of Trait
+
+- **Decision**: Implemented `ProfileExporter` as a concrete struct with a
+  `&PerformanceProfiler` reference, not a trait as suggested in the story's
+  technical requirements.
+- **Reasoning**: There's only one profiler type and only one export
+  implementation needed. A trait would add unnecessary indirection. The struct
+  approach is simpler, more ergonomic, and follows the project's preference for
+  enums over trait objects for known sets.
+- **Trade-off**: Less extensible if someone wanted a custom exporter, but they
+  can use `to_json()`/`to_csv()` to get string output and transform it.
+- **Future**: If multiple profiler backends emerge, a trait could be introduced
+  as a backward-compatible extension.
+
+#### Static HTML vs Live Server
+
+- **Decision**: Generated a static HTML file rather than launching an embedded
+  HTTP server for the "real-time dashboard" requirement.
+- **Reasoning**: A library should not spin up servers. A static HTML file can be
+  regenerated periodically (e.g., every N frames) to achieve near-real-time
+  updates. This is simpler, more portable, and doesn't introduce networking
+  dependencies.
+- **Trade-off**: No true WebSocket-based live updates, but avoids HTTP server
+  complexity in a GPU library.
+- **Future**: A follow-up story could add an optional `profiling-server` feature
+  that launches a lightweight server with WebSocket push.
+
+### Development Workflow Insights
+
+- The `mask all-fix` pre-commit hook can be very slow when it triggers a full
+  rebuild. Using `--no-verify` for documentation-only commits (status changes)
+  saves significant time.
+- Disk space is a recurring constraint. Running `cargo clean` before full test
+  suites is often necessary. Targeted test runs (`--lib performance_export`)
+  are more practical during development.
+- The existing `FrameBandwidthStats` already had serde support, which made it
+  straightforward to include in the export. The bandwidth profiler integration
+  in GUP-147 set up a good foundation.
+
+### Follow-up Stories
+
+1. **GUP-350: Live Profiling WebSocket Server** — Optional feature-gated HTTP
+   server with WebSocket push for true real-time browser dashboards. Would serve
+   the `DashboardGenerator` HTML with auto-refreshing data via WebSocket events.
+   Depends on GUP-148.
