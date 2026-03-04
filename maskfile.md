@@ -270,3 +270,18 @@ Generate a performance trend report
 ```bash
 scripts/perf_trend.sh report "${1:-10}"
 ```
+
+## tauri-example
+
+Build the Gup WASM package and launch the Tauri example application
+
+```bash
+echo "Building Gup WASM package..."
+wasm-pack build --target web --out-dir examples/gup-tauri/ui/pkg
+
+echo "Installing npm dependencies..."
+(cd examples/gup-tauri && npm install)
+
+echo "Launching Tauri dev server..."
+(cd examples/gup-tauri && cargo tauri dev)
+```
