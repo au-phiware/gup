@@ -1,0 +1,817 @@
+# Gallery configuration for GUP example thumbnails.
+#
+# Each [[examples]] entry maps to an example binary in examples/.
+# Set `skip = true` for examples that cannot render a headless thumbnail
+# (console-only, interactive-only, multi-window, web-only, or tool).
+#
+# The `category` field groups examples in the gallery HTML.
+# The `source` field is the path to the example source file relative to the
+# repository root.
+
+[gallery]
+thumb_width = 640
+thumb_height = 480
+output_dir = "docs/gallery/thumbs"
+github_base = "https://github.com/nickel-org/gup/blob/main"
+
+# ---------------------------------------------------------------------------
+# Basic
+# ---------------------------------------------------------------------------
+
+[[examples]]
+name = "01_hello_chart"
+source = "examples/basic/01_hello_chart.rs"
+description = "Minimal scatter plot (console output only)"
+category = "Basic"
+skip = true
+skip_reason = "Console-only output, no GPU rendering"
+
+[[examples]]
+name = "02_scatter_window"
+source = "examples/basic/02_scatter_window.rs"
+description = "Visual scatter plot in a GPU window"
+category = "Basic"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "03_line_chart"
+source = "examples/basic/03_line_chart.rs"
+description = "Line chart API demonstration"
+category = "Basic"
+skip = false
+
+[[examples]]
+name = "04_bar_chart"
+source = "examples/basic/04_bar_chart.rs"
+description = "Bar chart API demonstration"
+category = "Basic"
+skip = false
+
+# ---------------------------------------------------------------------------
+# Showcase
+# ---------------------------------------------------------------------------
+
+[[examples]]
+name = "business_dashboard"
+source = "examples/showcase/business_dashboard.rs"
+description = "Multi-chart business dashboard layout"
+category = "Showcase"
+skip = false
+
+# ---------------------------------------------------------------------------
+# Charts & Marks
+# ---------------------------------------------------------------------------
+
+[[examples]]
+name = "scatter_plot_demo"
+source = "examples/scatter_plot_demo.rs"
+description = "Scatter plot with selection and interaction"
+category = "Charts & Marks"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "boxplot"
+source = "examples/boxplot.rs"
+description = "Basic box plot rendering"
+category = "Charts & Marks"
+skip = false
+
+[[examples]]
+name = "boxplot_rendering_demo"
+source = "examples/boxplot_rendering_demo.rs"
+description = "Box plot rendering pipeline demo"
+category = "Charts & Marks"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "boxplot_builder_demo"
+source = "examples/boxplot_builder_demo.rs"
+description = "Box plot chart builder API"
+category = "Charts & Marks"
+skip = false
+
+[[examples]]
+name = "multi_category_boxplot"
+source = "examples/multi_category_boxplot.rs"
+description = "Multi-category box plots"
+category = "Charts & Marks"
+skip = false
+
+[[examples]]
+name = "observable_plot_showcase"
+source = "examples/observable_plot_showcase.rs"
+description = "Chart builder API showcase"
+category = "Charts & Marks"
+skip = false
+
+[[examples]]
+name = "observable_plot_visual_showcase"
+source = "examples/observable_plot_visual_showcase.rs"
+description = "Visual showcase of chart builder API"
+category = "Charts & Marks"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "integration_showcase"
+source = "examples/integration_showcase.rs"
+description = "Full integration showcase of multiple chart types"
+category = "Charts & Marks"
+skip = false
+
+[[examples]]
+name = "custom_mark_demo"
+source = "examples/custom_mark_demo.rs"
+description = "Implementing a custom mark type"
+category = "Charts & Marks"
+skip = false
+
+[[examples]]
+name = "multi_pass_mark_demo"
+source = "examples/multi_pass_mark_demo.rs"
+description = "Multi-pass mark rendering"
+category = "Charts & Marks"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "bar_chart"
+source = "examples/bar_chart.rs"
+description = "Bar chart variations"
+category = "Charts & Marks"
+skip = false
+
+[[examples]]
+name = "line_chart_demo"
+source = "examples/line_chart_demo.rs"
+description = "Line chart rendering demo"
+category = "Charts & Marks"
+skip = false
+
+[[examples]]
+name = "area_chart_demo"
+source = "examples/area_chart_demo.rs"
+description = "Area chart rendering"
+category = "Charts & Marks"
+skip = false
+
+[[examples]]
+name = "heatmap_chart"
+source = "examples/heatmap_chart.rs"
+description = "Heatmap chart rendering"
+category = "Charts & Marks"
+skip = false
+
+[[examples]]
+name = "violin_plot_demo"
+source = "examples/violin_plot_demo.rs"
+description = "Violin plot rendering"
+category = "Charts & Marks"
+skip = false
+
+[[examples]]
+name = "treemap"
+source = "examples/treemap.rs"
+description = "Treemap layout rendering"
+category = "Charts & Marks"
+skip = false
+
+[[examples]]
+name = "choropleth_world_population"
+source = "examples/choropleth_world_population.rs"
+description = "Choropleth world population map"
+category = "Charts & Marks"
+skip = false
+
+[[examples]]
+name = "color_scale_heatmap"
+source = "examples/color_scale_heatmap.rs"
+description = "Colour scale heatmap"
+category = "Charts & Marks"
+skip = false
+
+[[examples]]
+name = "composite_bar_trend"
+source = "examples/composite_bar_trend.rs"
+description = "Composite bar and trend chart"
+category = "Charts & Marks"
+skip = false
+
+[[examples]]
+name = "composite_scatter_regression"
+source = "examples/composite_scatter_regression.rs"
+description = "Scatter plot with regression line"
+category = "Charts & Marks"
+skip = false
+
+[[examples]]
+name = "density_scatter_overlay"
+source = "examples/density_scatter_overlay.rs"
+description = "Density scatter plot overlay"
+category = "Charts & Marks"
+skip = false
+
+[[examples]]
+name = "geo_world_map"
+source = "examples/geo_world_map.rs"
+description = "World map geographic rendering"
+category = "Charts & Marks"
+skip = false
+
+[[examples]]
+name = "geographic_projection"
+source = "examples/geographic_projection.rs"
+description = "Geographic projection demo"
+category = "Charts & Marks"
+skip = false
+
+[[examples]]
+name = "force_directed_graph"
+source = "examples/force_directed_graph.rs"
+description = "Force-directed graph layout"
+category = "Charts & Marks"
+skip = false
+
+[[examples]]
+name = "scatter_3d"
+source = "examples/scatter_3d.rs"
+description = "3D scatter plot"
+category = "Charts & Marks"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+# ---------------------------------------------------------------------------
+# Axis & Grid
+# ---------------------------------------------------------------------------
+
+[[examples]]
+name = "axis_showcase"
+source = "examples/axis_showcase.rs"
+description = "Axis rendering and configuration"
+category = "Axis & Grid"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "axis_tick_integration_visual_demo"
+source = "examples/axis_tick_integration_visual_demo.rs"
+description = "Axis tick rendering integration"
+category = "Axis & Grid"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "tick_generation_visual_demo"
+source = "examples/tick_generation_visual_demo.rs"
+description = "Automatic tick generation algorithm demo"
+category = "Axis & Grid"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "scale_axis_integration_demo"
+source = "examples/scale_axis_integration_demo.rs"
+description = "Scale-to-axis integration"
+category = "Axis & Grid"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "grid_visual_demo"
+source = "examples/grid_visual_demo.rs"
+description = "Grid line rendering"
+category = "Axis & Grid"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "grid_scatter_demo"
+source = "examples/grid_scatter_demo.rs"
+description = "Grid with scatter plot overlay"
+category = "Axis & Grid"
+skip = false
+
+[[examples]]
+name = "label_formatting_demo"
+source = "examples/label_formatting_demo.rs"
+description = "Axis label formatting and positioning"
+category = "Axis & Grid"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+# ---------------------------------------------------------------------------
+# Text Rendering
+# ---------------------------------------------------------------------------
+
+[[examples]]
+name = "text_rendering_demo"
+source = "examples/text_rendering_demo.rs"
+description = "GPU SDF text rendering pipeline"
+category = "Text Rendering"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "text_clipping_demo"
+source = "examples/text_clipping_demo.rs"
+description = "Text clipping and viewport bounds"
+category = "Text Rendering"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "debug_text_positioning"
+source = "examples/debug_text_positioning.rs"
+description = "Debug tool for text character positioning"
+category = "Text Rendering"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "atlas_viewer"
+source = "examples/atlas_viewer.rs"
+description = "Font atlas inspection tool"
+category = "Text Rendering"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "msdf_debug"
+source = "examples/msdf_debug.rs"
+description = "MSDF glyph generation debug view"
+category = "Text Rendering"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "multi_font_demo"
+source = "examples/multi_font_demo.rs"
+description = "Multi-font atlas rendering"
+category = "Text Rendering"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "multi_font_chart_demo"
+source = "examples/multi_font_chart_demo.rs"
+description = "Charts using multiple font families"
+category = "Text Rendering"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+# ---------------------------------------------------------------------------
+# Interaction & Selection
+# ---------------------------------------------------------------------------
+
+[[examples]]
+name = "gpu_selection_demo"
+source = "examples/gpu_selection_demo.rs"
+description = "GPU-side selection and hit testing"
+category = "Interaction & Selection"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "interactive_selection_demo"
+source = "examples/interactive_selection_demo.rs"
+description = "Interactive mark selection with mouse"
+category = "Interaction & Selection"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "hover_reveal_demo"
+source = "examples/hover_reveal_demo.rs"
+description = "Hover-reveal tooltip integration"
+category = "Interaction & Selection"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "chart_hover_reveal_demo"
+source = "examples/chart_hover_reveal_demo.rs"
+description = "Chart builder hover-reveal API"
+category = "Interaction & Selection"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "interaction_debug_visualizer"
+source = "examples/interaction_debug_visualizer.rs"
+description = "Debug visualiser for interaction pipeline"
+category = "Interaction & Selection"
+skip = false
+
+[[examples]]
+name = "attr_binding_demo"
+source = "examples/attr_binding_demo.rs"
+description = "Attribute binding pipeline demo"
+category = "Interaction & Selection"
+skip = false
+
+[[examples]]
+name = "brush_selection"
+source = "examples/brush_selection.rs"
+description = "Brush selection interaction"
+category = "Interaction & Selection"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "interactive_circles"
+source = "examples/interactive_circles.rs"
+description = "Interactive circles demo"
+category = "Interaction & Selection"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "linked_views"
+source = "examples/linked_views.rs"
+description = "Linked views coordination"
+category = "Interaction & Selection"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "zoom_pan"
+source = "examples/zoom_pan.rs"
+description = "Zoom and pan interaction"
+category = "Interaction & Selection"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+# ---------------------------------------------------------------------------
+# Animation & Streaming
+# ---------------------------------------------------------------------------
+
+[[examples]]
+name = "advanced_temporal_animation"
+source = "examples/advanced_temporal_animation.rs"
+description = "Temporal animation system demo"
+category = "Animation & Streaming"
+skip = false
+
+[[examples]]
+name = "animation_events"
+source = "examples/animation_events.rs"
+description = "Animation event system"
+category = "Animation & Streaming"
+skip = false
+
+[[examples]]
+name = "spline_animation_curves"
+source = "examples/spline_animation_curves.rs"
+description = "Spline-interpolated animation curves"
+category = "Animation & Streaming"
+skip = false
+
+[[examples]]
+name = "keyframe_animation_storage"
+source = "examples/keyframe_animation_storage.rs"
+description = "Storage buffer keyframe animation"
+category = "Animation & Streaming"
+skip = false
+
+[[examples]]
+name = "async_streaming_demo"
+source = "examples/async_streaming_demo.rs"
+description = "Async data streaming to GPU"
+category = "Animation & Streaming"
+skip = false
+
+[[examples]]
+name = "data_transition_scatter"
+source = "examples/data_transition_scatter.rs"
+description = "Data transition scatter animation"
+category = "Animation & Streaming"
+skip = false
+
+[[examples]]
+name = "streaming_live_chart"
+source = "examples/streaming_live_chart.rs"
+description = "Streaming live data chart"
+category = "Animation & Streaming"
+skip = false
+
+[[examples]]
+name = "streaming_lod_scatter"
+source = "examples/streaming_lod_scatter.rs"
+description = "Streaming LOD scatter plot"
+category = "Animation & Streaming"
+skip = false
+
+# ---------------------------------------------------------------------------
+# Patterns
+# ---------------------------------------------------------------------------
+
+[[examples]]
+name = "pattern_rendering_demo"
+source = "examples/pattern_rendering_demo.rs"
+description = "Procedural pattern rendering"
+category = "Patterns"
+skip = false
+
+[[examples]]
+name = "pattern_pipeline_demo"
+source = "examples/pattern_pipeline_demo.rs"
+description = "Pattern pipeline integration"
+category = "Patterns"
+skip = false
+
+[[examples]]
+name = "multi_mark_pattern_showcase"
+source = "examples/multi_mark_pattern_showcase.rs"
+description = "Patterns across multiple mark types"
+category = "Patterns"
+skip = false
+
+[[examples]]
+name = "texture_vs_procedural_patterns"
+source = "examples/texture_vs_procedural_patterns.rs"
+description = "Texture vs procedural pattern comparison"
+category = "Patterns"
+skip = false
+
+# ---------------------------------------------------------------------------
+# Blend Modes
+# ---------------------------------------------------------------------------
+
+[[examples]]
+name = "blend_modes_showcase"
+source = "examples/blend_modes_showcase.rs"
+description = "GPU blend mode showcase"
+category = "Blend Modes"
+skip = false
+
+[[examples]]
+name = "visual_blend_demo"
+source = "examples/visual_blend_demo.rs"
+description = "Visual blend mode demonstration"
+category = "Blend Modes"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+# ---------------------------------------------------------------------------
+# Composition
+# ---------------------------------------------------------------------------
+
+[[examples]]
+name = "parallel_composition_demo"
+source = "examples/parallel_composition_demo.rs"
+description = "Parallel composition of visualisations"
+category = "Composition"
+skip = false
+
+[[examples]]
+name = "composition_error_recovery_showcase"
+source = "examples/composition_error_recovery_showcase.rs"
+description = "Error recovery in composition chains"
+category = "Composition"
+skip = false
+
+# ---------------------------------------------------------------------------
+# Performance & Profiling
+# ---------------------------------------------------------------------------
+
+[[examples]]
+name = "performance_trend_demo"
+source = "examples/performance_trend_demo.rs"
+description = "Performance trend visualisation"
+category = "Performance & Profiling"
+skip = false
+
+[[examples]]
+name = "baseline_recommendation_demo"
+source = "examples/baseline_recommendation_demo.rs"
+description = "Automated baseline recommendation demo"
+category = "Performance & Profiling"
+skip = false
+
+[[examples]]
+name = "surface_performance_demo"
+source = "examples/surface_performance_demo.rs"
+description = "Surface configuration and performance"
+category = "Performance & Profiling"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "z_sort_demo"
+source = "examples/z_sort_demo.rs"
+description = "Z-order radix sort performance demo"
+category = "Performance & Profiling"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+# ---------------------------------------------------------------------------
+# Accessibility
+# ---------------------------------------------------------------------------
+
+[[examples]]
+name = "web_accessibility_demo"
+source = "examples/web_accessibility_demo.rs"
+description = "Web accessibility DOM overlay demo"
+category = "Accessibility"
+skip = false
+
+# ---------------------------------------------------------------------------
+# Debug & Development
+# ---------------------------------------------------------------------------
+
+[[examples]]
+name = "gpu_debug_demo"
+source = "examples/gpu_debug_demo.rs"
+description = "GPU debug tools demo"
+category = "Debug & Development"
+skip = false
+
+[[examples]]
+name = "gpu_debug_visualization_demo"
+source = "examples/gpu_debug_visualization_demo.rs"
+description = "GPU hit test debug visualiser"
+category = "Debug & Development"
+skip = false
+
+[[examples]]
+name = "buffer_demo"
+source = "examples/buffer_demo.rs"
+description = "GPU buffer pool management demo"
+category = "Debug & Development"
+skip = false
+
+[[examples]]
+name = "buffer_validation_demo"
+source = "examples/buffer_validation_demo.rs"
+description = "Buffer validation and debugging"
+category = "Debug & Development"
+skip = false
+
+[[examples]]
+name = "resource_graph_demo"
+source = "examples/resource_graph_demo.rs"
+description = "GPU resource dependency graph"
+category = "Debug & Development"
+skip = false
+
+[[examples]]
+name = "context_demo"
+source = "examples/context_demo.rs"
+description = "Render context lifecycle demo"
+category = "Debug & Development"
+skip = false
+
+[[examples]]
+name = "adaptive_lod_debug"
+source = "examples/adaptive_lod_debug.rs"
+description = "Adaptive LOD debug visualisation"
+category = "Debug & Development"
+skip = false
+
+[[examples]]
+name = "lod_pyramid_debug"
+source = "examples/lod_pyramid_debug.rs"
+description = "LOD pyramid debug visualisation"
+category = "Debug & Development"
+skip = false
+
+# ---------------------------------------------------------------------------
+# Window & Surface
+# ---------------------------------------------------------------------------
+
+[[examples]]
+name = "simple_window"
+source = "examples/simple_window.rs"
+description = "Minimal wgpu window setup"
+category = "Window & Surface"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "multi_window_demo"
+source = "examples/multi_window_demo.rs"
+description = "Multiple windows with shared GPU context"
+category = "Window & Surface"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "windowed_demo"
+source = "examples/windowed_demo.rs"
+description = "Windowed application scaffold"
+category = "Window & Surface"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "surface_events_demo"
+source = "examples/surface_events_demo.rs"
+description = "Window/surface event integration"
+category = "Window & Surface"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "position_sync_demo"
+source = "examples/position_sync_demo.rs"
+description = "Visualisation position synchronisation"
+category = "Window & Surface"
+skip = false
+
+[[examples]]
+name = "web_dashboard_demo"
+source = "examples/web_dashboard_demo.rs"
+description = "Web-based dashboard with WASM"
+category = "Window & Surface"
+skip = true
+skip_reason = "Web-only (requires WASM/browser)"
+
+# ---------------------------------------------------------------------------
+# Shader Development
+# ---------------------------------------------------------------------------
+
+[[examples]]
+name = "shader_pipeline_demo"
+source = "examples/shader_pipeline_demo.rs"
+description = "ComposableShaderPipeline usage"
+category = "Shader Development"
+skip = false
+
+# ---------------------------------------------------------------------------
+# Export
+# ---------------------------------------------------------------------------
+
+[[examples]]
+name = "export_png"
+source = "examples/export_png.rs"
+description = "PNG export via GPU off-screen rendering"
+category = "Export"
+skip = false
+
+[[examples]]
+name = "svg_export"
+source = "examples/svg_export.rs"
+description = "SVG export demonstration"
+category = "Export"
+skip = false
+
+[[examples]]
+name = "html_export"
+source = "examples/html_export.rs"
+description = "HTML export demonstration"
+category = "Export"
+skip = false
+
+[[examples]]
+name = "pdf_export"
+source = "examples/pdf_export.rs"
+description = "PDF export demonstration"
+category = "Export"
+skip = false
+
+# ---------------------------------------------------------------------------
+# Intermediate
+# ---------------------------------------------------------------------------
+
+[[examples]]
+name = "styled_scatter"
+source = "examples/intermediate/styled_scatter.rs"
+description = "Data-driven styling with categorical colours"
+category = "Intermediate"
+skip = false
+
+[[examples]]
+name = "multi_series_line"
+source = "examples/intermediate/multi_series_line.rs"
+description = "Multiple time series visualisation"
+category = "Intermediate"
+skip = false
+
+[[examples]]
+name = "categorical_bar"
+source = "examples/intermediate/categorical_bar.rs"
+description = "Categorical data with vertical/horizontal bars"
+category = "Intermediate"
+skip = false
+
+# ---------------------------------------------------------------------------
+# Miscellaneous (not in INDEX.md categories)
+# ---------------------------------------------------------------------------
+
+[[examples]]
+name = "hello_world"
+source = "examples/hello_world.rs"
+description = "Hello world example"
+category = "Basic"
+skip = true
+skip_reason = "Minimal example, no visual output"
+
+[[examples]]
+name = "ordinal_scale"
+source = "examples/ordinal_scale.rs"
+description = "Ordinal scale demonstration"
+category = "Charts & Marks"
+skip = false

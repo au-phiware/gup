@@ -1,0 +1,254 @@
+/* Gallery stylesheet for the GUP example gallery.
+ * Copyright (C) 2024 Corin Lawson
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+:root {
+  --bg: #f8f9fa;
+  --card-bg: #ffffff;
+  --text: #212529;
+  --text-muted: #6c757d;
+  --link: #0d6efd;
+  --link-hover: #0a58ca;
+  --border: #dee2e6;
+  --placeholder-bg: #e9ecef;
+  --placeholder-text: #adb5bd;
+  --section-spacing: 2.5rem;
+  --card-radius: 0.5rem;
+  --thumb-aspect: 4 / 3;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e;
+    --card-bg: #16213e;
+    --text: #e0e0e0;
+    --text-muted: #8d99ae;
+    --link: #64b5f6;
+    --link-hover: #90caf9;
+    --border: #2d3748;
+    --placeholder-bg: #1e293b;
+    --placeholder-text: #4a5568;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+
+/* Header */
+
+header {
+  max-width: 80rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 1rem;
+}
+
+header h1 {
+  margin: 0 0 0.25rem;
+  font-size: 2rem;
+}
+
+.subtitle {
+  color: var(--text-muted);
+  margin: 0 0 1.5rem;
+}
+
+/* Category navigation */
+
+.category-nav {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.category-nav a {
+  display: inline-block;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  color: var(--link);
+  text-decoration: none;
+  font-size: 0.875rem;
+  transition: background 0.15s, color 0.15s;
+}
+
+.category-nav a:hover,
+.category-nav a:focus {
+  background: var(--link);
+  color: #fff;
+  outline: none;
+}
+
+/* Main content */
+
+main {
+  max-width: 80rem;
+  margin: 0 auto;
+  padding: 0 1.5rem 3rem;
+}
+
+section {
+  margin-top: var(--section-spacing);
+}
+
+section h2 {
+  font-size: 1.5rem;
+  margin: 0 0 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--border);
+}
+
+/* Gallery grid */
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+/* Card */
+
+.gallery-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  overflow: hidden;
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+
+.gallery-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+/* Thumbnail image */
+
+.thumb-link {
+  display: block;
+}
+
+.thumb-link img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: var(--thumb-aspect);
+  object-fit: cover;
+  background: var(--placeholder-bg);
+}
+
+/* Placeholder for skipped / pending examples */
+
+.thumb-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: var(--thumb-aspect);
+  background: var(--placeholder-bg);
+  color: var(--placeholder-text);
+  font-size: 0.875rem;
+  gap: 0.25rem;
+}
+
+.placeholder-label {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-weight: 600;
+}
+
+.placeholder-note {
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
+/* Card info */
+
+.card-info {
+  padding: 0.75rem 1rem;
+}
+
+.card-info h3 {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+}
+
+.card-info h3 a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+.card-info h3 a:hover {
+  color: var(--link-hover);
+  text-decoration: underline;
+}
+
+.card-info p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* Skipped card styling */
+
+.gallery-card.skipped {
+  opacity: 0.6;
+}
+
+.gallery-card.pending .thumb-placeholder {
+  border: 2px dashed var(--border);
+  border-bottom: none;
+}
+
+/* Footer */
+
+footer {
+  max-width: 80rem;
+  margin: 0 auto;
+  padding: 1.5rem;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+footer a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+footer a:hover {
+  text-decoration: underline;
+}
+
+/* Responsive adjustments */
+
+@media (max-width: 600px) {
+  header {
+    padding: 1.5rem 1rem 0.75rem;
+  }
+
+  main {
+    padding: 0 1rem 2rem;
+  }
+
+  .gallery-grid {
+    grid-template-columns: 1fr;
+  }
+
+  header h1 {
+    font-size: 1.5rem;
+  }
+}
