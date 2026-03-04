@@ -354,6 +354,7 @@ pub use macros::*;
 // Bring macro into scope for this module
 pub use conversions::AutoConvert;
 
+/// Trait for types that can be used in GPU shader functions.
 pub trait ShaderType: Clone + MaybeSend + MaybeSync + 'static {
     /// Returns the WGSL type name for this type
     fn wgsl_type_name() -> &'static str;
@@ -522,12 +523,17 @@ impl ShaderType for Vec2 {
     }
 }
 
+/// A 3-component vector with GPU-compatible 16-byte alignment.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vec3 {
+    /// X component.
     pub x: f32,
+    /// Y component.
     pub y: f32,
+    /// Z component.
     pub z: f32,
+    /// Padding for 16-byte GPU alignment.
     pub _padding: f32, // Ensure 16-byte alignment
 }
 
@@ -605,12 +611,17 @@ impl ShaderType for Vec3 {
     }
 }
 
+/// A 4-component vector for RGBA colours or homogeneous coordinates.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vec4 {
+    /// X component.
     pub x: f32,
+    /// Y component.
     pub y: f32,
+    /// Z component.
     pub z: f32,
+    /// W component.
     pub w: f32,
 }
 
@@ -690,9 +701,13 @@ impl ShaderType for Vec4 {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Mat2 {
+    /// Element at row 0, column 0.
     pub m00: f32,
+    /// Element at row 0, column 1.
     pub m01: f32,
+    /// Element at row 1, column 0.
     pub m10: f32,
+    /// Element at row 1, column 1.
     pub m11: f32,
 }
 
@@ -751,17 +766,29 @@ impl ShaderType for Mat2 {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Mat3 {
+    /// Element at row 0, column 0.
     pub m00: f32,
+    /// Element at row 0, column 1.
     pub m01: f32,
+    /// Element at row 0, column 2.
     pub m02: f32,
+    /// Padding for row 0 GPU alignment.
     pub _padding0: f32,
+    /// Element at row 1, column 0.
     pub m10: f32,
+    /// Element at row 1, column 1.
     pub m11: f32,
+    /// Element at row 1, column 2.
     pub m12: f32,
+    /// Padding for row 1 GPU alignment.
     pub _padding1: f32,
+    /// Element at row 2, column 0.
     pub m20: f32,
+    /// Element at row 2, column 1.
     pub m21: f32,
+    /// Element at row 2, column 2.
     pub m22: f32,
+    /// Padding for row 2 GPU alignment.
     pub _padding2: f32,
 }
 
@@ -846,21 +873,37 @@ impl ShaderType for Mat3 {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Mat4 {
+    /// Element at row 0, column 0.
     pub m00: f32,
+    /// Element at row 0, column 1.
     pub m01: f32,
+    /// Element at row 0, column 2.
     pub m02: f32,
+    /// Element at row 0, column 3.
     pub m03: f32,
+    /// Element at row 1, column 0.
     pub m10: f32,
+    /// Element at row 1, column 1.
     pub m11: f32,
+    /// Element at row 1, column 2.
     pub m12: f32,
+    /// Element at row 1, column 3.
     pub m13: f32,
+    /// Element at row 2, column 0.
     pub m20: f32,
+    /// Element at row 2, column 1.
     pub m21: f32,
+    /// Element at row 2, column 2.
     pub m22: f32,
+    /// Element at row 2, column 3.
     pub m23: f32,
+    /// Element at row 3, column 0.
     pub m30: f32,
+    /// Element at row 3, column 1.
     pub m31: f32,
+    /// Element at row 3, column 2.
     pub m32: f32,
+    /// Element at row 3, column 3.
     pub m33: f32,
 }
 
@@ -1064,9 +1107,13 @@ impl ShaderUniform for [f32; 4] {
     }
 }
 
+/// Trait for composable GPU shader functions with typed inputs and outputs.
 pub trait ComposableShaderFunction {
+    /// The input type of this shader function.
     type Input: ShaderType;
+    /// The output type of this shader function.
     type Output: ShaderType;
+    /// The uniform buffer type for this shader function.
     type Uniforms: bytemuck::Pod + bytemuck::Zeroable + ShaderUniform;
 
     /// Returns the WGSL code for this shader function.
@@ -1080,7 +1127,9 @@ pub trait ComposableShaderFunction {
         Self::wgsl_function().to_string()
     }
 
+    /// Creates the uniform buffer data for this shader function instance.
     fn create_uniforms(&self) -> Option<Self::Uniforms>;
+    /// Returns the WGSL function name used in shader code.
     fn function_name() -> &'static str;
 }
 
@@ -1138,7 +1187,9 @@ impl ShaderCompatible<Vec4> for Vec3 {
 }
 
 // For backward compatibility with existing TypeCompatible usage
+/// Backward-compatible trait for checking type compatibility.
 pub trait TypeCompatible<T> {
+    /// Returns whether the types are compatible.
     fn is_compatible() -> bool {
         true
     }
@@ -1186,6 +1237,7 @@ impl<A: ComposableShaderFunction, B: ComposableShaderFunction> FunctionChain<A, 
 where
     A::Output: ShaderCompatible<B::Input>,
 {
+    /// Creates a new function chain from two composable shader functions.
     pub fn new(first: A, second: B) -> Self {
         Self {
             first,
@@ -1321,6 +1373,7 @@ pub(crate) fn deduplicate_wgsl_functions(wgsl: &str) -> String {
     result.trim().to_string()
 }
 
+/// Combined uniform data for a chain of two shader functions.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct ChainUniforms<A, B>
@@ -1328,7 +1381,9 @@ where
     A: Copy,
     B: Copy,
 {
+    /// Uniforms for the first shader function.
     pub first: A,
+    /// Uniforms for the second shader function.
     pub second: B,
 }
 
@@ -1565,10 +1620,12 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> Default for UniformBuffer<T> {
 }
 
 impl<T: bytemuck::Pod + bytemuck::Zeroable> UniformBuffer<T> {
+    /// Creates a new empty uniform buffer.
     pub fn new() -> Self {
         Self { buffer: None }
     }
 
+    /// Uploads data to the GPU uniform buffer, creating it if needed.
     pub fn upload(&mut self, device: &Device, queue: &Queue, data: &T) -> GupResult<()> {
         if self.buffer.is_none() {
             self.buffer = Some(GpuBuffer::new(device, BufferType::Uniform, 1));
@@ -1581,6 +1638,7 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> UniformBuffer<T> {
         Ok(())
     }
 
+    /// Returns a reference to the underlying GPU buffer, if allocated.
     pub fn buffer(&self) -> Option<&GpuBuffer<T>> {
         self.buffer.as_ref()
     }
@@ -1608,6 +1666,7 @@ impl<A: ComposableShaderFunction, B: ComposableShaderFunction> ParallelCompositi
 where
     A::Input: ShaderCompatible<B::Input>,
 {
+    /// Creates a new parallel composition from two shader functions.
     pub fn new(first: A, second: B) -> Self {
         Self {
             first,
@@ -1624,7 +1683,9 @@ pub struct ParallelOutput<
     A: bytemuck::Pod + bytemuck::Zeroable,
     B: bytemuck::Pod + bytemuck::Zeroable,
 > {
+    /// Output from the first shader function.
     pub first: A,
+    /// Output from the second shader function.
     pub second: B,
 }
 
@@ -1645,7 +1706,9 @@ where
     A: Copy,
     B: Copy,
 {
+    /// Uniforms for the first shader function.
     pub first: A,
+    /// Uniforms for the second shader function.
     pub second: B,
 }
 
@@ -1881,6 +1944,7 @@ where
     T::Input: ShaderCompatible<F::Input>,
     T::Output: ShaderCompatible<F::Output>,
 {
+    /// Creates a new conditional function with the given threshold and branches.
     pub fn new(condition_threshold: f32, true_branch: T, false_branch: F) -> Self {
         Self {
             condition_threshold,
@@ -1891,6 +1955,7 @@ where
     }
 }
 
+/// Combined uniform data for a conditional shader function.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct ConditionalUniforms<T, F>
@@ -1898,9 +1963,13 @@ where
     T: Copy,
     F: Copy,
 {
+    /// Threshold value for the condition.
     pub condition_threshold: f32,
+    /// Padding for GPU alignment.
     pub _padding: [f32; 3],
+    /// Uniforms for the true branch.
     pub true_uniforms: T,
+    /// Uniforms for the false branch.
     pub false_uniforms: F,
 }
 
@@ -1984,12 +2053,16 @@ where
 /// Enables smooth transitions and animations in visualizations.
 #[derive(Clone, Debug)]
 pub struct TemporalInterpolation {
+    /// Starting value of the interpolation.
     pub start_value: f32,
+    /// Ending value of the interpolation.
     pub end_value: f32,
+    /// Duration of the interpolation in seconds.
     pub duration: f32,
 }
 
 impl TemporalInterpolation {
+    /// Creates a new temporal interpolation with the given parameters.
     pub fn new(start_value: f32, end_value: f32, duration: f32) -> Self {
         Self {
             start_value,
@@ -1999,12 +2072,17 @@ impl TemporalInterpolation {
     }
 }
 
+/// GPU uniform data for the temporal interpolation shader function.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct TemporalInterpolationUniforms {
+    /// Starting value of the interpolation.
     pub start_value: f32,
+    /// Ending value of the interpolation.
     pub end_value: f32,
+    /// Duration of the interpolation in seconds.
     pub duration: f32,
+    /// Padding for GPU alignment.
     pub _padding: f32,
 }
 
@@ -2051,31 +2129,43 @@ impl ComposableShaderFunction for TemporalInterpolation {
 /// Applies common easing curves to temporal values.
 #[derive(Clone, Debug)]
 pub enum EasingFunction {
+    /// Linear easing (no acceleration).
     Linear,
+    /// Quadratic ease-in (accelerating).
     EaseInQuad,
+    /// Quadratic ease-out (decelerating).
     EaseOutQuad,
+    /// Quadratic ease-in-out (accelerate then decelerate).
     EaseInOutQuad,
+    /// Cubic ease-in (accelerating).
     EaseInCubic,
+    /// Cubic ease-out (decelerating).
     EaseOutCubic,
+    /// Cubic ease-in-out (accelerate then decelerate).
     EaseInOutCubic,
 }
 
+/// Easing shader function that applies an easing curve to a value.
 #[derive(Clone, Debug)]
 pub struct Easing {
+    /// The easing function to apply.
     pub function: EasingFunction,
 }
 
 impl Easing {
+    /// Creates a new easing function with the given curve.
     pub fn new(function: EasingFunction) -> Self {
         Self { function }
     }
 
+    /// Creates a linear easing function (no acceleration).
     pub fn linear() -> Self {
         Self {
             function: EasingFunction::Linear,
         }
     }
 
+    /// Creates a cubic ease-in-out easing function.
     pub fn ease_in_out() -> Self {
         Self {
             function: EasingFunction::EaseInOutCubic,
@@ -2083,10 +2173,13 @@ impl Easing {
     }
 }
 
+/// GPU uniform data for the easing shader function.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct EasingUniforms {
+    /// Easing type index (0=linear, 1=ease_in_quad, etc.).
     pub easing_type: u32, // 0=linear, 1=ease_in_quad, etc.
+    /// Padding for GPU alignment.
     pub _padding: [f32; 3],
 }
 
@@ -2174,12 +2267,16 @@ impl ComposableShaderFunction for Easing {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Keyframe {
+    /// Time position of this keyframe.
     pub time: f32,
+    /// Value at this keyframe.
     pub value: f32,
+    /// Padding for uniform buffer alignment.
     pub _padding: [f32; 2], // Align to 16 bytes
 }
 
 impl Keyframe {
+    /// Creates a new keyframe at the given time with the given value.
     pub fn new(time: f32, value: f32) -> Self {
         Self {
             time,
@@ -2203,8 +2300,11 @@ pub enum InterpolationMode {
     Linear,
     /// Catmull-Rom spline interpolation with configurable tension.
     /// Tension of 0.0 gives a standard Catmull-Rom spline (C1 continuous).
-    /// Tension of 1.0 gives straight lines. Range: [0.0, 1.0]
-    CatmullRom { tension: f32 },
+    /// Tension of 1.0 gives straight lines. Range: \[0.0, 1.0\]
+    CatmullRom {
+        /// Catmull-Rom tension parameter.
+        tension: f32,
+    },
     /// Cubic B-spline interpolation (C2 continuous, very smooth).
     BSpline,
 }
@@ -2234,13 +2334,18 @@ impl InterpolationMode {
 /// For animations requiring more keyframes, use KeyframeAnimationStorageBuffer.
 #[derive(Clone, Debug)]
 pub struct KeyframeAnimation {
+    /// The list of keyframes.
     pub keyframes: Vec<Keyframe>,
+    /// Whether the animation loops.
     pub loop_animation: bool,
+    /// Whether playback reverses on each loop.
     pub reverse_on_loop: bool,
+    /// Interpolation mode between keyframes.
     pub interpolation_mode: InterpolationMode,
 }
 
 impl KeyframeAnimation {
+    /// Creates a new empty keyframe animation.
     pub fn new() -> Self {
         Self {
             keyframes: Vec::new(),
@@ -2250,6 +2355,7 @@ impl KeyframeAnimation {
         }
     }
 
+    /// Adds a keyframe at the given time with the given value.
     pub fn add_keyframe(mut self, time: f32, value: f32) -> Self {
         if self.keyframes.len() < MAX_KEYFRAMES {
             self.keyframes.push(Keyframe::new(time, value));
@@ -2260,11 +2366,13 @@ impl KeyframeAnimation {
         self
     }
 
+    /// Enables or disables animation looping.
     pub fn with_loop(mut self, enable: bool) -> Self {
         self.loop_animation = enable;
         self
     }
 
+    /// Enables or disables reverse playback on loop.
     pub fn with_reverse(mut self, enable: bool) -> Self {
         self.reverse_on_loop = enable;
         self
@@ -2330,16 +2438,25 @@ impl Default for KeyframeAnimation {
     }
 }
 
+/// GPU uniform data for the keyframe animation shader function.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct KeyframeAnimationUniforms {
+    /// Array of keyframes (up to MAX_KEYFRAMES).
     pub keyframes: [Keyframe; MAX_KEYFRAMES],
+    /// Number of active keyframes.
     pub keyframe_count: u32,
+    /// Whether the animation loops (0 or 1).
     pub loop_animation: u32,
+    /// Whether playback reverses on loop (0 or 1).
     pub reverse_on_loop: u32,
+    /// Interpolation mode (0=Linear, 1=CatmullRom, 2=BSpline).
     pub interpolation_mode: u32, // 0=Linear, 1=CatmullRom, 2=BSpline
+    /// Tension parameter for Catmull-Rom interpolation.
     pub tension: f32,            // For Catmull-Rom interpolation
+    /// Padding for 16-byte alignment.
     pub _padding: [f32; 3],      // Ensure 16-byte alignment
+    /// Extra padding to match WGSL struct size.
     pub _padding2: [f32; 4],     // Extra padding to match WGSL struct size (304 bytes)
 }
 
@@ -2557,8 +2674,11 @@ impl ComposableShaderFunction for KeyframeAnimation {
 /// for simplicity and performance.
 #[derive(Clone, Debug)]
 pub struct KeyframeAnimationStorage {
+    /// The list of keyframes.
     pub keyframes: Vec<Keyframe>,
+    /// Whether the animation loops.
     pub loop_animation: bool,
+    /// Whether playback reverses on each loop.
     pub reverse_on_loop: bool,
 }
 
@@ -2776,40 +2896,54 @@ impl Default for KeyframeAnimationStorageBuilder {
 /// - ease-in-out: (0.42, 0.0, 0.58, 1.0)
 #[derive(Clone, Debug)]
 pub struct CubicBezierTiming {
+    /// X coordinate of the first control point.
     pub x1: f32,
+    /// Y coordinate of the first control point.
     pub y1: f32,
+    /// X coordinate of the second control point.
     pub x2: f32,
+    /// Y coordinate of the second control point.
     pub y2: f32,
 }
 
 impl CubicBezierTiming {
+    /// Creates a new cubic bezier timing function with the given control points.
     pub fn new(x1: f32, y1: f32, x2: f32, y2: f32) -> Self {
         Self { x1, y1, x2, y2 }
     }
 
+    /// Creates the CSS `ease` timing function.
     pub fn ease() -> Self {
         Self::new(0.25, 0.1, 0.25, 1.0)
     }
 
+    /// Creates the CSS `ease-in` timing function.
     pub fn ease_in() -> Self {
         Self::new(0.42, 0.0, 1.0, 1.0)
     }
 
+    /// Creates the CSS `ease-out` timing function.
     pub fn ease_out() -> Self {
         Self::new(0.0, 0.0, 0.58, 1.0)
     }
 
+    /// Creates the CSS `ease-in-out` timing function.
     pub fn ease_in_out() -> Self {
         Self::new(0.42, 0.0, 0.58, 1.0)
     }
 }
 
+/// GPU uniform data for the cubic bezier timing shader function.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CubicBezierTimingUniforms {
+    /// X coordinate of the first control point.
     pub x1: f32,
+    /// Y coordinate of the first control point.
     pub y1: f32,
+    /// X coordinate of the second control point.
     pub x2: f32,
+    /// Y coordinate of the second control point.
     pub y2: f32,
 }
 
@@ -2892,8 +3026,11 @@ impl ComposableShaderFunction for CubicBezierTiming {
 /// Manages play, pause, seek, and time direction for animations.
 #[derive(Clone, Debug)]
 pub enum AnimationPlaybackState {
+    /// Animation is currently playing.
     Playing,
+    /// Animation is paused.
     Paused,
+    /// Animation is stopped.
     Stopped,
 }
 
@@ -2902,14 +3039,20 @@ pub enum AnimationPlaybackState {
 /// Provides playback control and time management for animations.
 #[derive(Clone, Debug)]
 pub struct AnimationTimeline {
+    /// Current playback time in seconds.
     pub current_time: f32,
+    /// Playback speed multiplier.
     pub playback_rate: f32,
+    /// Current playback state.
     pub state: AnimationPlaybackState,
+    /// Whether the timeline loops.
     pub loop_timeline: bool,
+    /// Total duration in seconds.
     pub duration: f32,
 }
 
 impl AnimationTimeline {
+    /// Creates a new animation timeline with the given duration.
     pub fn new(duration: f32) -> Self {
         Self {
             current_time: 0.0,
@@ -2920,27 +3063,33 @@ impl AnimationTimeline {
         }
     }
 
+    /// Starts or resumes playback.
     pub fn play(&mut self) {
         self.state = AnimationPlaybackState::Playing;
     }
 
+    /// Pauses playback at the current time.
     pub fn pause(&mut self) {
         self.state = AnimationPlaybackState::Paused;
     }
 
+    /// Stops playback and resets to the beginning.
     pub fn stop(&mut self) {
         self.state = AnimationPlaybackState::Stopped;
         self.current_time = 0.0;
     }
 
+    /// Seeks to a specific time position.
     pub fn seek(&mut self, time: f32) {
         self.current_time = time.clamp(0.0, self.duration);
     }
 
+    /// Sets the playback speed multiplier.
     pub fn set_playback_rate(&mut self, rate: f32) {
         self.playback_rate = rate;
     }
 
+    /// Enables or disables timeline looping.
     pub fn enable_loop(&mut self, enable: bool) {
         self.loop_timeline = enable;
     }
@@ -2970,6 +3119,7 @@ impl AnimationTimeline {
         self.current_time
     }
 
+    /// Returns the current time as a normalized value between 0.0 and 1.0.
     pub fn normalized_time(&self) -> f32 {
         if self.duration <= 0.0 {
             0.0
@@ -3371,13 +3521,13 @@ impl AnimationTimelineWithEvents {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct LinearScaleUniforms {
-    /// Lower bound of the input domain.
+    /// Minimum domain value.
     pub domain_min: f32,
-    /// Upper bound of the input domain.
+    /// Maximum domain value.
     pub domain_max: f32,
-    /// Lower bound of the output range.
+    /// Minimum range value.
     pub range_min: f32,
-    /// Upper bound of the output range.
+    /// Maximum range value.
     pub range_max: f32,
     /// 0 = unclamped (extrapolates beyond domain), 1 = clamped to range.
     pub clamp: u32,
@@ -3426,13 +3576,13 @@ impl ShaderUniform for LinearScaleUniforms {
 /// ```
 #[derive(Debug, Clone)]
 pub struct LinearScale {
-    /// Lower bound of the input domain.
+    /// Minimum domain value.
     pub domain_min: f32,
-    /// Upper bound of the input domain.
+    /// Maximum domain value.
     pub domain_max: f32,
-    /// Lower bound of the output range.
+    /// Minimum range value.
     pub range_min: f32,
-    /// Upper bound of the output range.
+    /// Maximum range value.
     pub range_max: f32,
     /// Whether to clamp the output to `[range_min, range_max]`.
     pub clamp: bool,
@@ -3531,15 +3681,15 @@ fn linear_scale_invert(value: f32, scale: LinearScaleUniforms) -> f32 {
 /// alongside `linear_scale` from the same [`LinearScale`] WGSL block.
 #[derive(Debug, Clone)]
 pub struct LinearScaleInvert {
-    /// Lower bound of the input domain.
+    /// Minimum domain value.
     pub domain_min: f32,
-    /// Upper bound of the input domain.
+    /// Maximum domain value.
     pub domain_max: f32,
-    /// Lower bound of the output range.
+    /// Minimum range value.
     pub range_min: f32,
-    /// Upper bound of the output range.
+    /// Maximum range value.
     pub range_max: f32,
-    /// Whether to clamp the output to the range bounds.
+    /// Whether to clamp the output.
     pub clamp: bool,
 }
 
@@ -3571,12 +3721,13 @@ impl ComposableShaderFunction for LinearScaleInvert {
     }
 }
 
-/// GPU uniform data for [`ColorMap`].
+/// GPU uniform data for the colour map shader function.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ColorMapUniforms {
-    /// RGBA color at the low end of the interpolation.
+    /// Minimum colour (RGBA).
     pub min_color: [f32; 4],
+    /// Maximum colour (RGBA).
     pub max_color: [f32; 4],
 }
 
@@ -3596,14 +3747,14 @@ impl ShaderUniform for ColorMapUniforms {
 /// This is a basic example shader function. Advanced color mapping features
 /// (HSV color space, multi-stop gradients, color space conversions) will be added in future updates.
 pub struct ColorMap {
-    /// RGBA color at the low end of the interpolation.
+    /// Minimum colour value.
     pub min_color: Vec4,
-    /// RGBA color at the high end of the interpolation.
+    /// Maximum colour value.
     pub max_color: Vec4,
 }
 
 impl ColorMap {
-    /// Creates a new color map interpolating between two colors.
+    /// Creates a new colour map with the given colour range.
     pub fn new(min_color: Vec4, max_color: Vec4) -> Self {
         Self {
             min_color,
@@ -3654,9 +3805,9 @@ impl ComposableShaderFunction for ColorMap {
 /// (polar coordinates, matrix transforms, projections) will be added in future updates.
 #[derive(Clone, Debug)]
 pub struct PositionTransform {
-    /// Multiplicative scale factor applied to each axis.
+    /// Scale factor for position.
     pub scale: Vec2,
-    /// Translation offset added after scaling.
+    /// Offset for position.
     pub offset: Vec2,
 }
 
@@ -3667,13 +3818,13 @@ impl PositionTransform {
     }
 }
 
-/// GPU uniform data for [`PositionTransform`].
+/// GPU uniform data for the position transform shader function.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct PositionTransformUniforms {
-    /// Multiplicative scale factor for each axis.
+    /// Scale factor (x, y).
     pub scale: [f32; 2],
-    /// Translation offset for each axis.
+    /// Offset (x, y).
     pub offset: [f32; 2],
 }
 
@@ -3746,17 +3897,17 @@ impl ComposableShaderFunction for PositionTransform {
 /// ```
 #[derive(Clone, Debug)]
 pub struct LogScale {
-    /// Lower bound of the input domain.
+    /// Minimum domain value.
     pub domain_min: f32,
-    /// Upper bound of the input domain.
+    /// Maximum domain value.
     pub domain_max: f32,
-    /// Lower bound of the output range.
+    /// Minimum range value.
     pub range_min: f32,
-    /// Upper bound of the output range.
+    /// Maximum range value.
     pub range_max: f32,
-    /// Logarithm base (e.g. 10.0, `E`).
+    /// Logarithm base.
     pub base: f32,
-    /// Whether to use symmetric log scaling for negative values.
+    /// Whether to use symmetric log for negative values.
     pub is_symmetric: bool,
 }
 
@@ -3916,13 +4067,13 @@ impl LogScale {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct LogScaleUniforms {
-    /// Lower bound of the input domain.
+    /// Minimum domain value.
     pub domain_min: f32,
-    /// Upper bound of the input domain.
+    /// Maximum domain value.
     pub domain_max: f32,
-    /// Lower bound of the output range.
+    /// Minimum range value.
     pub range_min: f32,
-    /// Upper bound of the output range.
+    /// Maximum range value.
     pub range_max: f32,
     /// Logarithm base.
     pub base: f32,
@@ -4081,13 +4232,13 @@ impl ShaderUniform for OrdinalScaleUniforms {
 /// ```
 #[derive(Clone, Debug)]
 pub struct BandScale {
-    /// Start of the output pixel range.
+    /// Start of the output range.
     pub range_start: f32,
-    /// End of the output pixel range.
+    /// End of the output range.
     pub range_end: f32,
-    /// Number of discrete categories.
+    /// Number of categories.
     pub category_count: u32,
-    /// Fraction of each step reserved as inner padding (0.0–1.0).
+    /// Padding between bands (0.0 to 1.0).
     pub padding: f32,
 }
 
@@ -4191,13 +4342,13 @@ fn band_scale_bandwidth(scale: OrdinalScaleUniforms) -> f32 {
 /// ```
 #[derive(Clone, Debug)]
 pub struct PointScale {
-    /// Start of the output pixel range.
+    /// Start of the output range.
     pub range_start: f32,
-    /// End of the output pixel range.
+    /// End of the output range.
     pub range_end: f32,
-    /// Number of discrete categories.
+    /// Number of categories.
     pub category_count: u32,
-    /// Outer padding as a multiple of the step size.
+    /// Padding between points (0.0 to 1.0).
     pub padding: f32,
 }
 
@@ -4361,20 +4512,20 @@ impl OrdinalScale {
 /// Exponent < 1 compresses high values, > 1 expands them.
 #[derive(Clone, Debug)]
 pub struct PowerScale {
-    /// Lower bound of the input domain.
+    /// Minimum domain value.
     pub domain_min: f32,
-    /// Upper bound of the input domain.
+    /// Maximum domain value.
     pub domain_max: f32,
-    /// Lower bound of the output range.
+    /// Minimum range value.
     pub range_min: f32,
-    /// Upper bound of the output range.
+    /// Maximum range value.
     pub range_max: f32,
-    /// Power exponent applied to the normalised input.
+    /// Exponent for the power curve.
     pub exponent: f32,
 }
 
 impl PowerScale {
-    /// Creates a new power scale with the given domain, range, and exponent.
+    /// Creates a new power scale with the given parameters.
     pub fn new(
         domain_min: f32,
         domain_max: f32,
@@ -4402,19 +4553,19 @@ impl PowerScale {
     }
 }
 
-/// GPU uniform data for [`PowerScale`].
+/// GPU uniform data for the power scale shader function.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct PowerScaleUniforms {
-    /// Lower bound of the input domain.
+    /// Minimum domain value.
     pub domain_min: f32,
-    /// Upper bound of the input domain.
+    /// Maximum domain value.
     pub domain_max: f32,
-    /// Lower bound of the output range.
+    /// Minimum range value.
     pub range_min: f32,
-    /// Upper bound of the output range.
+    /// Maximum range value.
     pub range_max: f32,
-    /// Power exponent.
+    /// Exponent for the power curve.
     pub exponent: f32,
     /// Padding for GPU alignment.
     pub _padding: [f32; 3],
@@ -4468,20 +4619,20 @@ impl ComposableShaderFunction for PowerScale {
 /// in large values while compressing small value differences.
 #[derive(Clone, Debug)]
 pub struct ExponentialScale {
-    /// Lower bound of the input domain.
+    /// Minimum domain value.
     pub domain_min: f32,
-    /// Upper bound of the input domain.
+    /// Maximum domain value.
     pub domain_max: f32,
-    /// Lower bound of the output range.
+    /// Minimum range value.
     pub range_min: f32,
-    /// Upper bound of the output range.
+    /// Maximum range value.
     pub range_max: f32,
-    /// Exponential base (e.g. 10.0, `E`).
+    /// Base for the exponential curve.
     pub base: f32,
 }
 
 impl ExponentialScale {
-    /// Creates a new exponential scale with the given domain, range, and base.
+    /// Creates a new exponential scale with the given parameters.
     pub fn new(
         domain_min: f32,
         domain_max: f32,
@@ -4515,19 +4666,19 @@ impl ExponentialScale {
     }
 }
 
-/// GPU uniform data for [`ExponentialScale`].
+/// GPU uniform data for the exponential scale shader function.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ExponentialScaleUniforms {
-    /// Lower bound of the input domain.
+    /// Minimum domain value.
     pub domain_min: f32,
-    /// Upper bound of the input domain.
+    /// Maximum domain value.
     pub domain_max: f32,
-    /// Lower bound of the output range.
+    /// Minimum range value.
     pub range_min: f32,
-    /// Upper bound of the output range.
+    /// Maximum range value.
     pub range_max: f32,
-    /// Exponential base.
+    /// Base for the exponential curve.
     pub base: f32,
     /// Padding for GPU alignment.
     pub _padding: [f32; 3],
@@ -4582,26 +4733,26 @@ impl ComposableShaderFunction for ExponentialScale {
 /// Clamps values to a specified range.
 #[derive(Clone, Debug)]
 pub struct Clamp {
-    /// Minimum allowed value.
+    /// Minimum clamp value.
     pub min: f32,
-    /// Maximum allowed value.
+    /// Maximum clamp value.
     pub max: f32,
 }
 
 impl Clamp {
-    /// Creates a new clamp with the given minimum and maximum bounds.
+    /// Creates a new clamp function with the given bounds.
     pub fn new(min: f32, max: f32) -> Self {
         Self { min, max }
     }
 }
 
-/// GPU uniform data for [`Clamp`].
+/// GPU uniform data for the clamp shader function.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ClampUniforms {
-    /// Minimum allowed value.
+    /// Minimum clamp value.
     pub min: f32,
-    /// Maximum allowed value.
+    /// Maximum clamp value.
     pub max: f32,
     /// Padding for GPU alignment.
     pub _padding: [f32; 2],
@@ -4646,18 +4797,18 @@ impl ComposableShaderFunction for Clamp {
 /// Threshold function - outputs 0 or 1 based on threshold.
 #[derive(Clone, Debug)]
 pub struct Threshold {
-    /// Threshold value for the step function.
+    /// Threshold value.
     pub threshold: f32,
 }
 
 impl Threshold {
-    /// Creates a new threshold function at the given value.
+    /// Creates a new threshold function with the given value.
     pub fn new(threshold: f32) -> Self {
         Self { threshold }
     }
 }
 
-/// GPU uniform data for [`Threshold`].
+/// GPU uniform data for the threshold shader function.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ThresholdUniforms {
@@ -4709,26 +4860,26 @@ impl ComposableShaderFunction for Threshold {
 /// Smooth step interpolation (ease-in-ease-out).
 #[derive(Clone, Debug)]
 pub struct SmoothStep {
-    /// Lower edge of the smooth transition.
+    /// Lower edge of the transition.
     pub edge0: f32,
-    /// Upper edge of the smooth transition.
+    /// Upper edge of the transition.
     pub edge1: f32,
 }
 
 impl SmoothStep {
-    /// Creates a new smooth step interpolation between two edges.
+    /// Creates a new smooth step function with the given edges.
     pub fn new(edge0: f32, edge1: f32) -> Self {
         Self { edge0, edge1 }
     }
 }
 
-/// GPU uniform data for [`SmoothStep`].
+/// GPU uniform data for the smooth step shader function.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct SmoothStepUniforms {
-    /// Lower edge of the smooth transition.
+    /// Lower edge of the transition.
     pub edge0: f32,
-    /// Upper edge of the smooth transition.
+    /// Upper edge of the transition.
     pub edge1: f32,
     /// Padding for GPU alignment.
     pub _padding: [f32; 2],
@@ -4773,14 +4924,14 @@ impl ComposableShaderFunction for SmoothStep {
 /// Multi-point color interpolation (gradient with multiple stops).
 #[derive(Clone, Debug)]
 pub struct ColorGradient {
-    /// RGBA colors at each gradient stop.
+    /// Colour stops as RGBA values.
     pub colors: Vec<Vec4>,
-    /// Normalised positions of each color stop.
+    /// Positions of each colour stop (0.0 to 1.0).
     pub stops: Vec<f32>,
 }
 
 impl ColorGradient {
-    /// Creates a new color gradient from matching color and stop vectors.
+    /// Creates a new colour gradient with the given colours and stops.
     pub fn new(colors: Vec<Vec4>, stops: Vec<f32>) -> Self {
         assert_eq!(
             colors.len(),
@@ -4803,15 +4954,15 @@ impl ColorGradient {
 
 // For now, we'll use a simplified uniform that supports up to 8 color stops
 // A more advanced implementation would use storage buffers for arbitrary length
-/// GPU uniform data for [`ColorGradient`], supporting up to 8 color stops.
+/// GPU uniform data for the colour gradient shader function (up to 8 stops).
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ColorGradientUniforms {
-    /// RGBA colors for each stop (up to 8).
+    /// Colour stop values (RGBA, up to 8).
     pub colors: [[f32; 4]; 8],
-    /// Normalised stop positions (up to 8).
+    /// Position of each colour stop.
     pub stops: [f32; 8],
-    /// Number of active color stops.
+    /// Number of active colour stops.
     pub count: u32,
     /// Padding for GPU alignment.
     pub _padding: [f32; 3],
@@ -4895,9 +5046,9 @@ impl ComposableShaderFunction for ColorGradient {
 /// Uses efficient binary search in WGSL for stop lookup.
 #[derive(Clone, Debug)]
 pub struct ColorGradientStorage {
-    /// RGBA colors at each gradient stop.
+    /// Colour stops as RGBA values.
     pub colors: Vec<Vec4>,
-    /// Normalised positions of each color stop.
+    /// Positions of each colour stop (0.0 to 1.0).
     pub stops: Vec<f32>,
 }
 
@@ -5545,7 +5696,7 @@ pub struct HSVColorMap {
 }
 
 impl HSVColorMap {
-    /// Creates a new HSV color map with the given hue range, saturation, and value.
+    /// Creates a new HSV colour map with the given parameters.
     pub fn new(hue_start: f32, hue_end: f32, saturation: f32, value: f32) -> Self {
         Self {
             hue_start,
@@ -5566,7 +5717,7 @@ impl HSVColorMap {
     }
 }
 
-/// GPU uniform data for [`HSVColorMap`].
+/// GPU uniform data for the HSV colour map shader function.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct HSVColorMapUniforms {
@@ -5574,9 +5725,9 @@ pub struct HSVColorMapUniforms {
     pub hue_start: f32,
     /// Ending hue angle in degrees.
     pub hue_end: f32,
-    /// Colour saturation (0.0–1.0).
+    /// Saturation (0.0 to 1.0).
     pub saturation: f32,
-    /// Brightness value (0.0–1.0).
+    /// Value/brightness (0.0 to 1.0).
     pub value: f32,
 }
 
@@ -5658,14 +5809,14 @@ impl AlphaBlending {
     }
 }
 
-#[repr(C)]
 /// GPU uniform data for the alpha blending shader function.
+#[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct AlphaBlendingUniforms {
-    pub alpha: f32,
     /// Alpha multiplier value.
-    pub _padding: [f32; 3],
+    pub alpha: f32,
     /// Padding for GPU alignment.
+    pub _padding: [f32; 3],
 }
 
 impl ShaderUniform for AlphaBlendingUniforms {
@@ -5739,14 +5890,14 @@ impl ColorSpaceConverter {
     }
 }
 
-#[repr(C)]
 /// GPU uniform data for the colour space conversion shader function.
+#[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ColorSpaceConverterUniforms {
     /// 0 = RGB→HSV, 1 = HSV→RGB
     pub direction: u32,
-    pub _padding: [u32; 3],
     /// Padding for GPU alignment.
+    pub _padding: [u32; 3],
 }
 
 impl ShaderUniform for ColorSpaceConverterUniforms {
@@ -5846,7 +5997,7 @@ pub struct PolarTransform {
 }
 
 impl PolarTransform {
-    /// Creates a new Cartesian-to-polar transform with the given centre and angle offset.
+    /// Creates a new polar transform with the given centre and angle offset.
     pub fn new(center: Vec2, angle_offset: f32) -> Self {
         Self {
             center,
@@ -5874,16 +6025,16 @@ impl PolarTransform {
     }
 }
 
-#[repr(C)]
 /// GPU uniform data for the polar coordinate transform shader function.
+#[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct PolarTransformUniforms {
-    pub center_x: f32,
     /// X component of the centre point.
-    pub center_y: f32,
+    pub center_x: f32,
     /// Y component of the centre point.
-    pub angle_offset: f32,
+    pub center_y: f32,
     /// Angle offset in radians.
+    pub angle_offset: f32,
     /// 0 = Cartesian→Polar, 1 = Polar→Cartesian
     pub direction: u32,
 }
@@ -5952,7 +6103,7 @@ pub struct MatrixTransform {
 }
 
 impl MatrixTransform {
-    /// Creates a new affine matrix transform from six coefficients.
+    /// Creates a new matrix transform from a 6-element affine matrix.
     pub fn new(matrix: [f32; 6]) -> Self {
         Self { matrix }
     }
@@ -5980,14 +6131,15 @@ impl MatrixTransform {
     }
 }
 
-#[repr(C)]
 /// GPU uniform data for the affine matrix transform shader function.
+#[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct MatrixTransformUniforms {
     /// Row-major: a, b, c, d
     pub matrix: [f32; 4],
     /// Translation: tx, ty
     pub translation: [f32; 2],
+    /// Padding for GPU alignment.
     pub _padding: [f32; 2],
 }
 
@@ -6052,7 +6204,7 @@ pub struct ProjectionTransform {
 }
 
 impl ProjectionTransform {
-    /// Creates a new projection transform mapping data coordinates to viewport coordinates.
+    /// Creates a new projection transform with the given coordinate ranges.
     pub fn new(data_min: Vec2, data_max: Vec2, viewport_min: Vec2, viewport_max: Vec2) -> Self {
         Self {
             data_min,
@@ -6063,18 +6215,18 @@ impl ProjectionTransform {
     }
 }
 
-#[repr(C)]
 /// GPU uniform data for the viewport projection transform shader function.
+#[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ProjectionTransformUniforms {
+    /// Minimum data range coordinates.
     pub data_min: [f32; 2],
-    /// Minimum data coordinate.
+    /// Maximum data range coordinates.
     pub data_max: [f32; 2],
-    /// Maximum data coordinate.
+    /// Minimum viewport coordinates.
     pub viewport_min: [f32; 2],
-    /// Minimum viewport coordinate.
+    /// Maximum viewport coordinates.
     pub viewport_max: [f32; 2],
-    /// Maximum viewport coordinate.
 }
 
 impl ShaderUniform for ProjectionTransformUniforms {
@@ -6131,7 +6283,7 @@ pub struct DistanceFunction {
 }
 
 impl DistanceFunction {
-    /// Creates a new distance function measuring from the given reference point.
+    /// Creates a new distance function from the given reference point.
     pub fn new(reference_point: Vec2) -> Self {
         Self { reference_point }
     }
@@ -6142,16 +6294,16 @@ impl DistanceFunction {
     }
 }
 
-#[repr(C)]
 /// GPU uniform data for the distance function shader.
+#[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct DistanceFunctionUniforms {
+    /// X coordinate of the reference point.
     pub ref_x: f32,
-    /// X component of the reference point.
+    /// Y coordinate of the reference point.
     pub ref_y: f32,
-    /// Y component of the reference point.
-    pub _padding: [f32; 2],
     /// Padding for GPU alignment.
+    pub _padding: [f32; 2],
 }
 
 impl ShaderUniform for DistanceFunctionUniforms {
@@ -6209,16 +6361,21 @@ pub struct NormalizeFunction {
 }
 
 impl NormalizeFunction {
+    /// Creates a new normalize function with the given range.
     pub fn new(min: f32, max: f32) -> Self {
         Self { min, max }
     }
 }
 
+/// GPU uniform data for the normalize shader function.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct NormalizeFunctionUniforms {
+    /// Minimum value of the input range.
     pub min: f32,
+    /// Maximum value of the input range.
     pub max: f32,
+    /// Padding for GPU alignment.
     pub _padding: [f32; 2],
 }
 
@@ -6275,16 +6432,21 @@ pub struct StandardizeFunction {
 }
 
 impl StandardizeFunction {
+    /// Creates a new standardize function with the given mean and standard deviation.
     pub fn new(mean: f32, std_dev: f32) -> Self {
         Self { mean, std_dev }
     }
 }
 
+/// GPU uniform data for the standardize (z-score) shader function.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct StandardizeFunctionUniforms {
+    /// Mean of the dataset.
     pub mean: f32,
+    /// Standard deviation of the dataset.
     pub std_dev: f32,
+    /// Padding for GPU alignment.
     pub _padding: [f32; 2],
 }
 
@@ -6339,6 +6501,7 @@ pub struct QuantileFunction {
 }
 
 impl QuantileFunction {
+    /// Creates a new quantile function with the given boundaries.
     pub fn new(boundaries: Vec<f32>) -> Self {
         Self { boundaries }
     }
@@ -6353,8 +6516,11 @@ impl QuantileFunction {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct QuantileFunctionUniforms {
+    /// Quantile boundary values (up to 16).
     pub boundaries: [f32; 16],
+    /// Number of active boundaries.
     pub count: u32,
+    /// Padding for GPU alignment.
     pub _padding: [u32; 3],
 }
 
@@ -6426,6 +6592,7 @@ pub struct BinningFunction {
 }
 
 impl BinningFunction {
+    /// Creates a new binning function with the given range and bin count.
     pub fn new(min: f32, max: f32, bin_count: u32) -> Self {
         Self {
             min,
@@ -6435,12 +6602,17 @@ impl BinningFunction {
     }
 }
 
+/// GPU uniform data for the binning shader function.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct BinningFunctionUniforms {
+    /// Lower bound of the data range.
     pub min: f32,
+    /// Upper bound of the data range.
     pub max: f32,
+    /// Number of bins.
     pub bin_count: u32,
+    /// Padding for GPU alignment.
     pub _padding: u32,
 }
 
@@ -7125,6 +7297,7 @@ pub struct Mean {
 }
 
 impl Mean {
+    /// Creates a new mean computation from the given values.
     pub fn new(values: Vec<f32>) -> Self {
         Self { values }
     }
@@ -7147,6 +7320,7 @@ pub struct StandardDeviation {
 }
 
 impl StandardDeviation {
+    /// Creates a new standard deviation computation from the given values.
     pub fn new(values: Vec<f32>) -> Self {
         Self { values }
     }
@@ -7178,6 +7352,7 @@ pub struct MinMax {
 }
 
 impl MinMax {
+    /// Creates a new min/max computation from the given values.
     pub fn new(values: Vec<f32>) -> Self {
         Self { values }
     }
@@ -7203,6 +7378,7 @@ pub struct Percentile {
 }
 
 impl Percentile {
+    /// Creates a new percentile computation from the given values and percentile.
     pub fn new(values: Vec<f32>, percentile: f32) -> Self {
         Self { values, percentile }
     }
