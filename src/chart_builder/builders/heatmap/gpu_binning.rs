@@ -237,7 +237,6 @@ impl GpuBinner {
         // We only need to read back the buffers required by `func`.
         // For Mean we need both count and sum.
         // We always read count to distinguish empty cells for no_data.
-        
 
         let need_sum = matches!(func, AggregateFunc::Sum | AggregateFunc::Mean);
         let need_min = matches!(func, AggregateFunc::Min);
@@ -668,6 +667,42 @@ mod tests {
 
         assert_eq!(grid.cells.len(), 1);
         assert!((grid.cells[0].value - 1.0).abs() < f32::EPSILON);
+    }
+
+    /// AC4-style test: 100×100 grid with 100k records.
+    #[tokio::test]
+    async fn gpu_cpu_equivalence_large_grid() {
+        let ctx = test_context().await;
+        let binner = GpuBinner::new(&ctx).unwrap();
+
+        let n = 100_000usize;
+        let (xs, ys, fs) = deterministic_data(n);
+
+        let x_spec = make_spec(100, 0.0, 10.0);
+        let y_spec = make_spec(100, 0.0, 10.0);
+
+        for func in [
+            AggregateFunc::Count,
+            AggregateFunc::Sum,
+            AggregateFunc::Mean,
+            AggregateFunc::Min,
+            AggregateFunc::Max,
+        ] {
+            let cpu = BinGrid::from_data(&xs, &ys, &fs, x_spec, y_spec, func, f32::NAN);
+            let gpu = binner
+                .bin(&xs, &ys, &fs, x_spec, y_spec, func, f32::NAN)
+                .await
+                .unwrap();
+
+            // Float reductions are non-associative; allow a small tolerance
+            // for Sum and Mean.
+            let tol = match func {
+                AggregateFunc::Sum => 1.0,
+                AggregateFunc::Mean => 0.1,
+                _ => 0.0,
+            };
+            assert_grids_match(&cpu, &gpu, tol);
+        }
     }
 
     // ── Test helpers ─────────────────────────────────────────────────
