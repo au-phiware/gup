@@ -945,7 +945,7 @@ PNG, HTML), and platform targets.
 - [GUP-263B](GUP-263B_Shared_wgpu_Device_egui.md) 📋 — Shared wgpu device
   between egui and Gup for zero-copy texture transfer when gup upgrades to
   wgpu 27. Deps: GUP-263 ✅.
-- [GUP-264](GUP-264_Tauri_Integration.md) 📋 — gup-tauri example running Gup
+- [GUP-264](GUP-264_Tauri_Integration.md) 🚧 — gup-tauri example running Gup
   WASM in a Tauri WebView with a Rust IPC bridge feeding data to the chart.
   Deps: GUP-004 ✅, GUP-018 ✅, GUP-172 ✅, GUP-237 ✅.
 - [GUP-265](GUP-265_winit_Application_Shell.md) 📋 — GupApp application shell
