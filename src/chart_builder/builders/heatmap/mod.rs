@@ -48,6 +48,7 @@
 //! ```
 
 pub mod binning;
+pub mod gpu_binning;
 
 use super::{
     AccessorFunction, ConfigurableBuilder, GridCapableBuilder, apply_accessors_to_selection,
@@ -65,6 +66,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 pub use binning::{AggregateFunc, BinGrid, BinSpec};
+pub use gpu_binning::{GpuBinner, gpu_bin_data};
 
 // ── HeatmapCell ──────────────────────────────────────────────────────────
 
