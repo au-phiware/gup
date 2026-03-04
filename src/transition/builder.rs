@@ -181,6 +181,34 @@ impl<T> AttrTargetFn<T> {
 }
 
 // ---------------------------------------------------------------------------
+// Per-element delay closure (type-erased)
+// ---------------------------------------------------------------------------
+
+/// A type-erased closure for computing per-element delays: given an element
+/// index and data item reference, it produces a delay in milliseconds.
+struct DelayFn<T> {
+    #[cfg(not(target_arch = "wasm32"))]
+    func: Box<dyn Fn(usize, &T) -> u64 + Send + Sync>,
+    #[cfg(target_arch = "wasm32")]
+    func: Box<dyn Fn(usize, &T) -> u64>,
+}
+
+impl<T> DelayFn<T> {
+    fn new<F>(f: F) -> Self
+    where
+        F: Fn(usize, &T) -> u64 + MaybeSend + MaybeSync + 'static,
+    {
+        Self {
+            func: Box::new(f),
+        }
+    }
+
+    fn eval(&self, index: usize, item: &T) -> u64 {
+        (self.func)(index, item)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Per-element animation snapshot
 // ---------------------------------------------------------------------------
 
@@ -194,6 +222,12 @@ pub struct ElementTransition {
     pub attrs: HashMap<String, (AttrValue, AttrValue)>,
     /// The element group this transition belongs to.
     pub group: TransitionGroup,
+    /// Per-element delay in milliseconds (from [`TransitionBuilder::delay_fn`]).
+    ///
+    /// When set, this delay is *added* to [`TransitionConfig::delay_ms`] to
+    /// produce the effective delay for this element. When `None`, the global
+    /// delay is used as-is.
+    pub delay_ms: Option<u64>,
 }
 
 /// Which group an element belongs to in the transition.
@@ -232,6 +266,35 @@ pub struct CommittedTransition {
     pub state: TransitionState,
     /// Elapsed time in milliseconds since the transition was started.
     pub elapsed_ms: f64,
+}
+
+impl CommittedTransition {
+    /// Compute the effective delay for a single element.
+    ///
+    /// The effective delay is the global [`TransitionConfig::delay_ms`] plus
+    /// any per-element delay stored in [`ElementTransition::delay_ms`].
+    pub fn effective_delay(&self, el: &ElementTransition) -> u64 {
+        self.config.delay_ms + el.delay_ms.unwrap_or(0)
+    }
+
+    /// Compute the maximum effective delay across all elements.
+    ///
+    /// When there are no per-element delays, this equals the global delay.
+    pub fn max_effective_delay(&self) -> u64 {
+        self.elements
+            .iter()
+            .map(|el| self.effective_delay(el))
+            .max()
+            .unwrap_or(self.config.delay_ms)
+    }
+
+    /// Total duration of the transition in milliseconds, accounting for
+    /// per-element staggered delays.
+    ///
+    /// This is `max(effective_delay across all elements) + duration`.
+    pub fn total_ms(&self) -> f64 {
+        self.max_effective_delay() as f64 + self.config.duration_ms as f64
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -280,6 +343,8 @@ pub struct TransitionBuilder<'a, T, M: Mark> {
     duration_ms: u64,
     /// Delay in milliseconds.
     delay_ms: u64,
+    /// Per-element delay function (optional).
+    delay_fn: Option<DelayFn<T>>,
     /// Easing function.
     easing: EasingFn,
     /// Named attribute target closures for update/enter elements.
@@ -304,6 +369,7 @@ where
             selection,
             duration_ms: 250,
             delay_ms: 0,
+            delay_fn: None,
             easing: EasingFn::default(),
             attr_targets: HashMap::new(),
             enter_attr_overrides: HashMap::new(),
@@ -322,6 +388,26 @@ where
     /// Set a delay before the transition begins, in milliseconds.
     pub fn delay(mut self, ms: u64) -> Self {
         self.delay_ms = ms;
+        self
+    }
+
+    /// Set a per-element delay function for staggered animations.
+    ///
+    /// The closure receives `(index, &data_item)` and returns a delay in
+    /// milliseconds for that element. When both `.delay()` and `.delay_fn()`
+    /// are specified, the global delay is *added* to each per-element delay.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// // Stagger each element by 50ms
+    /// .delay_fn(|i, _d| i as u64 * 50)
+    /// ```
+    pub fn delay_fn<F>(mut self, f: F) -> Self
+    where
+        F: Fn(usize, &T) -> u64 + MaybeSend + MaybeSync + 'static,
+    {
+        self.delay_fn = Some(DelayFn::new(f));
         self
     }
 
@@ -420,6 +506,9 @@ where
         };
 
         let mut elements = Vec::new();
+        // Running index used for delay_fn evaluation. The index counts
+        // across all groups in commit order (update, enter, exit).
+        let mut element_idx: usize = 0;
 
         match diff {
             Some(diff) => {
@@ -434,9 +523,15 @@ where
                         let to = target_fn.eval(new_item);
                         attrs.insert(name.clone(), (from, to));
                     }
+                    let per_delay = self
+                        .delay_fn
+                        .as_ref()
+                        .map(|df| df.eval(element_idx, new_item));
+                    element_idx += 1;
                     elements.push(ElementTransition {
                         attrs,
                         group: TransitionGroup::Update,
+                        delay_ms: per_delay,
                     });
                 }
 
@@ -456,9 +551,15 @@ where
                         let to = target_fn.eval(item);
                         attrs.insert(name.clone(), (from, to));
                     }
+                    let per_delay = self
+                        .delay_fn
+                        .as_ref()
+                        .map(|df| df.eval(element_idx, item));
+                    element_idx += 1;
                     elements.push(ElementTransition {
                         attrs,
                         group: TransitionGroup::Enter,
+                        delay_ms: per_delay,
                     });
                 }
 
@@ -478,9 +579,15 @@ where
                         };
                         attrs.insert(name.clone(), (from, to));
                     }
+                    let per_delay = self
+                        .delay_fn
+                        .as_ref()
+                        .map(|df| df.eval(element_idx, item));
+                    element_idx += 1;
                     elements.push(ElementTransition {
                         attrs,
                         group: TransitionGroup::Exit,
+                        delay_ms: per_delay,
                     });
                 }
 
@@ -541,9 +648,15 @@ where
                         let to = target_fn.eval(item);
                         attrs.insert(name.clone(), (from, to));
                     }
+                    let per_delay = self
+                        .delay_fn
+                        .as_ref()
+                        .map(|df| df.eval(element_idx, item));
+                    element_idx += 1;
                     elements.push(ElementTransition {
                         attrs,
                         group: TransitionGroup::Update,
+                        delay_ms: per_delay,
                     });
                 }
 
@@ -656,12 +769,14 @@ mod tests {
         let et = ElementTransition {
             attrs: HashMap::new(),
             group: TransitionGroup::Enter,
+            delay_ms: None,
         };
         assert_eq!(et.group, TransitionGroup::Enter);
 
         let et2 = ElementTransition {
             attrs: HashMap::new(),
             group: TransitionGroup::Exit,
+            delay_ms: None,
         };
         assert_eq!(et2.group, TransitionGroup::Exit);
     }

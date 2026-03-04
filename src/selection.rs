@@ -1179,16 +1179,16 @@ impl<T, M: Mark> Selection<T, M> {
     /// Returns `true` if the transition is still active after this tick,
     /// or `false` if it completed (or there was no active transition).
     pub fn tick_transition(&mut self, dt_ms: f64) -> bool {
-        let total_ms = {
+        let (elapsed, total) = {
             let ct = match self.committed_transition.as_mut() {
                 Some(ct) => ct,
                 None => return false,
             };
             ct.elapsed_ms += dt_ms;
-            let total = ct.config.delay_ms as f64 + ct.config.duration_ms as f64;
-            (ct.elapsed_ms, total)
+            // Use total_ms() which accounts for per-element staggered delays.
+            (ct.elapsed_ms, ct.total_ms())
         };
-        if total_ms.0 >= total_ms.1 {
+        if elapsed >= total {
             self.complete_transition();
             false
         } else {
@@ -1362,24 +1362,26 @@ impl<T, M: Mark> Selection<T, M> {
         use crate::shader_function::KeyframeAnimation;
         use crate::transition::builder::TransitionState;
 
-        // Compute normalised time, accounting for delay.
-        let raw_t = if ct.config.duration_ms == 0 {
-            1.0_f32
-        } else {
-            let active_ms = (ct.elapsed_ms - ct.config.delay_ms as f64).max(0.0);
-            (active_ms / ct.config.duration_ms as f64).min(1.0) as f32
-        };
-
-        // Apply easing to get the interpolation parameter.
-        let eased_t = if ct.state == TransitionState::Completed {
-            1.0_f32
-        } else {
-            ct.config.easing.apply(raw_t)
-        };
+        let is_completed = ct.state == TransitionState::Completed;
 
         ct.elements
             .iter()
             .map(|el| {
+                // Compute normalised time for this element, accounting for
+                // its effective delay (global + per-element).
+                let eased_t = if is_completed {
+                    1.0_f32
+                } else {
+                    let effective_delay = ct.effective_delay(el) as f64;
+                    let raw_t = if ct.config.duration_ms == 0 {
+                        1.0_f32
+                    } else {
+                        let active_ms = (ct.elapsed_ms - effective_delay).max(0.0);
+                        (active_ms / ct.config.duration_ms as f64).min(1.0) as f32
+                    };
+                    ct.config.easing.apply(raw_t)
+                };
+
                 let attr_values: Vec<(&str, AttrValue)> = el
                     .attrs
                     .iter()
@@ -7609,6 +7611,7 @@ fn vs_main() -> VertexOutput {
                 m
             },
             group: TransitionGroup::Update,
+            delay_ms: None,
         };
         let ct = CommittedTransition {
             config: TransitionConfig {
@@ -7684,6 +7687,7 @@ fn vs_main() -> VertexOutput {
                 m
             },
             group: TransitionGroup::Update,
+            delay_ms: None,
         };
         let ct = CommittedTransition {
             config: TransitionConfig {
