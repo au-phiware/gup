@@ -1000,7 +1000,7 @@ API reference generation, tutorials, and example gallery.
   coverage of all public APIs with runnable doc examples, docs.rs configuration,
   and a CI gate enforcing zero doc warnings. Deps: GUP-002 ✅, GUP-005 ✅,
   GUP-009 ✅, GUP-018 ✅.
-- [GUP-281](GUP-281_Tutorial_and_Guide_Suite.md) 🚧 — Six step-by-step tutorials
+- [GUP-281](GUP-281_Tutorial_and_Guide_Suite.md) ✅ — Six step-by-step tutorials
   in docs/tutorials/ covering Getting Started, Data Binding, Custom Shaders,
   Interactions, Streaming, and Custom Marks. Deps: GUP-002 ✅, GUP-018 ✅,
   GUP-103 ✅, GUP-280 ✅.
