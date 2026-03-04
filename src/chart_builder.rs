@@ -66,7 +66,9 @@ use crate::axis::{
 };
 use crate::error::{GupError, GupResult};
 use crate::grid::GridConfiguration;
-use crate::label::{AxisInfo, LabelConstraints, LabelLayout, LabelPosition, LabelPositioner};
+use crate::label::{
+    AxisInfo, LabelConstraints, LabelFormatter, LabelLayout, LabelPosition, LabelPositioner,
+};
 use crate::render::Vertex;
 use crate::selection::Selection;
 use crate::shader_function::{BandScale, ColorScale, LinearScale, LogScale, PointScale, Vec2};
@@ -659,6 +661,22 @@ pub struct ChartConfig {
     /// gradient strip with tick marks and labels is rendered adjacent to
     /// the plot area.
     pub show_colorbar: bool,
+
+    /// Optional custom X-axis tick label formatter.
+    ///
+    /// When set, axis tick labels for the bottom/top axis are formatted
+    /// using this formatter instead of the default [`NumericFormatter`].
+    ///
+    /// [`NumericFormatter`]: crate::label::NumericFormatter
+    pub x_label_formatter: Option<Arc<dyn LabelFormatter>>,
+
+    /// Optional custom Y-axis tick label formatter.
+    ///
+    /// When set, axis tick labels for the left/right axis are formatted
+    /// using this formatter instead of the default [`NumericFormatter`].
+    ///
+    /// [`NumericFormatter`]: crate::label::NumericFormatter
+    pub y_label_formatter: Option<Arc<dyn LabelFormatter>>,
 }
 
 /// Chart margin specification.
@@ -693,6 +711,8 @@ impl Default for ChartConfig {
             y_scale: None,
             color_scale: None,
             show_colorbar: false,
+            x_label_formatter: None,
+            y_label_formatter: None,
         }
     }
 }
@@ -835,6 +855,51 @@ impl ChartConfig {
     pub fn with_colorbar(mut self, show: bool) -> Self {
         self.show_colorbar = show;
         self
+    }
+
+    /// Set a custom X-axis tick label formatter.
+    ///
+    /// The formatter is used for bottom and top axes. Pass any type
+    /// that implements [`LabelFormatter`] (e.g. [`PercentFormatter`],
+    /// [`NumericFormatter`], [`DateTimeFormatter`]).
+    ///
+    /// [`PercentFormatter`]: crate::label::PercentFormatter
+    /// [`NumericFormatter`]: crate::label::NumericFormatter
+    /// [`DateTimeFormatter`]: crate::label::DateTimeFormatter
+    pub fn with_x_label_formatter(mut self, formatter: impl LabelFormatter) -> Self {
+        self.x_label_formatter = Some(Arc::new(formatter));
+        self
+    }
+
+    /// Set a custom Y-axis tick label formatter.
+    ///
+    /// The formatter is used for left and right axes. Pass any type
+    /// that implements [`LabelFormatter`] (e.g. [`PercentFormatter`],
+    /// [`NumericFormatter`], [`DateTimeFormatter`]).
+    ///
+    /// [`PercentFormatter`]: crate::label::PercentFormatter
+    /// [`NumericFormatter`]: crate::label::NumericFormatter
+    /// [`DateTimeFormatter`]: crate::label::DateTimeFormatter
+    pub fn with_y_label_formatter(mut self, formatter: impl LabelFormatter) -> Self {
+        self.y_label_formatter = Some(Arc::new(formatter));
+        self
+    }
+
+    /// Return the label formatter for a given axis position, if any.
+    pub(crate) fn label_formatter_for(
+        &self,
+        position: AxisPosition,
+    ) -> Option<&dyn LabelFormatter> {
+        match position {
+            AxisPosition::Bottom | AxisPosition::Top => self
+                .x_label_formatter
+                .as_ref()
+                .map(|f| &**f as &dyn LabelFormatter),
+            AxisPosition::Left | AxisPosition::Right => self
+                .y_label_formatter
+                .as_ref()
+                .map(|f| &**f as &dyn LabelFormatter),
+        }
     }
 }
 
@@ -1814,13 +1879,16 @@ where
                 );
                 all_tick_instances.extend(tick_insts);
 
+                // Select the custom label formatter for this axis, if any.
+                let label_formatter = self.config.label_formatter_for(*position);
+
                 let labels = renderer.generate_label_data(
                     &ndc_bounds,
                     config,
                     *position,
                     tick_scale,
                     viewport_size,
-                    None, // default NumericFormatter
+                    label_formatter,
                 );
                 all_labels.extend(labels);
             }
@@ -1958,7 +2026,7 @@ where
                     *position,
                     tick_scale,
                     viewport_size,
-                    None,
+                    self.config.label_formatter_for(*position),
                 );
 
                 // Build AxisInfo from pixel-space bounds for this axis
@@ -2078,7 +2146,7 @@ where
                     *position,
                     None,
                     viewport_size,
-                    None,
+                    self.config.label_formatter_for(*position),
                 );
 
                 // Per-axis style overrides chart-level style
@@ -2201,7 +2269,7 @@ where
                     *position,
                     None,
                     viewport_size,
-                    None,
+                    self.config.label_formatter_for(*position),
                 );
 
                 let axis_info = AxisInfo::from_bounds(&pixel_bounds, *position);

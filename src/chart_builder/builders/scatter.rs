@@ -17,6 +17,7 @@ use crate::chart_builder::{
 };
 use crate::error::GupResult;
 use crate::grid::{GridConfiguration, GridLineConfig};
+use crate::label::LabelFormatter;
 use crate::selection::Selection;
 use crate::shader_function::ColorScale;
 use crate::{MaybeSend, MaybeSync};
@@ -250,6 +251,16 @@ impl<T> ConfigurableBuilder for ScatterPlotBuilder<T> {
 
     fn tooltip_config(mut self, config: crate::text::hover_reveal::TooltipConfig) -> Self {
         self.config = self.config.with_tooltip_config(config);
+        self
+    }
+
+    fn x_tick_format(mut self, formatter: impl LabelFormatter) -> Self {
+        self.config.x_label_formatter = Some(std::sync::Arc::new(formatter));
+        self
+    }
+
+    fn y_tick_format(mut self, formatter: impl LabelFormatter) -> Self {
+        self.config.y_label_formatter = Some(std::sync::Arc::new(formatter));
         self
     }
 }

@@ -45,6 +45,7 @@ use super::ChartBuilderError;
 use super::accessor::{AccessorValue, FieldAccessor};
 use crate::error::GupResult;
 use crate::grid::{Color, GridConfiguration, GridLineConfig};
+use crate::label::LabelFormatter;
 use crate::selection::Selection;
 use crate::{MaybeSend, MaybeSync};
 use std::marker::PhantomData;
@@ -79,6 +80,22 @@ pub trait ConfigurableBuilder: Sized {
     ///
     /// Implicitly enables hover reveal.
     fn tooltip_config(self, config: crate::text::hover_reveal::TooltipConfig) -> Self;
+
+    /// Set a custom tick label formatter for the X-axis (bottom / top).
+    ///
+    /// Accepts any type implementing [`LabelFormatter`], e.g.
+    /// [`PercentFormatter`](crate::label::PercentFormatter),
+    /// [`NumericFormatter`](crate::label::NumericFormatter), or
+    /// [`DateTimeFormatter`](crate::label::DateTimeFormatter).
+    fn x_tick_format(self, formatter: impl LabelFormatter) -> Self;
+
+    /// Set a custom tick label formatter for the Y-axis (left / right).
+    ///
+    /// Accepts any type implementing [`LabelFormatter`], e.g.
+    /// [`PercentFormatter`](crate::label::PercentFormatter),
+    /// [`NumericFormatter`](crate::label::NumericFormatter), or
+    /// [`DateTimeFormatter`](crate::label::DateTimeFormatter).
+    fn y_tick_format(self, formatter: impl LabelFormatter) -> Self;
 }
 
 /// Extended trait for chart builders that support advanced grid configuration.
