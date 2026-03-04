@@ -1471,4 +1471,174 @@ mod tests {
             "second renderer should reuse the cached pipeline"
         );
     }
+
+    // -- GpuBrushConfig ----------------------------------------------------
+
+    #[test]
+    fn gpu_brush_config_default_timeout() {
+        let config = GpuBrushConfig::default();
+        assert_eq!(config.timeout, Duration::from_millis(50));
+    }
+
+    #[test]
+    fn gpu_brush_config_custom_timeout() {
+        let config = GpuBrushConfig {
+            timeout: Duration::from_millis(100),
+        };
+        assert_eq!(config.timeout, Duration::from_millis(100));
+    }
+
+    #[test]
+    fn brush_behavior_with_gpu_config() {
+        let brush = BrushBehavior::new().with_gpu_config(GpuBrushConfig {
+            timeout: Duration::from_millis(200),
+        });
+        assert_eq!(
+            brush.current_gpu_config().timeout,
+            Duration::from_millis(200)
+        );
+    }
+
+    #[test]
+    fn brush_behavior_default_gpu_config() {
+        let brush = BrushBehavior::new();
+        assert_eq!(
+            brush.current_gpu_config().timeout,
+            Duration::from_millis(50)
+        );
+    }
+
+    // -- on_pointer_up_async CPU fallback ----------------------------------
+
+    #[tokio::test]
+    async fn async_pointer_up_cpu_fallback_no_interaction_system() {
+        let mut system = MarkSelectionSystem::new(5);
+        system.set_positions(vec![
+            [50.0, 50.0],
+            [150.0, 150.0],
+            [250.0, 250.0],
+            [100.0, 100.0],
+            [300.0, 300.0],
+        ]);
+
+        let selected_ids = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let ids_clone = selected_ids.clone();
+
+        let mut brush = BrushBehavior::new().on("brushend", move |e: &BrushEvent| {
+            *ids_clone.lock().unwrap() = e.selection.clone();
+        });
+
+        let vt = ViewportTransform::default();
+        brush.on_pointer_down(Vec2::new(75.0, 75.0));
+        brush.on_pointer_move(Vec2::new(175.0, 175.0), &vt, Some(&system));
+
+        // Use async path without an InteractionSystem → CPU fallback
+        brush
+            .on_pointer_up_async(Vec2::new(175.0, 175.0), &vt, Some(&system), None)
+            .await;
+
+        let ids = selected_ids.lock().unwrap();
+        assert!(ids.contains(&1), "should find mark at (150,150)");
+        assert!(ids.contains(&3), "should find mark at (100,100)");
+        assert_eq!(ids.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn async_pointer_up_no_selection_system() {
+        let selected_ids = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let ids_clone = selected_ids.clone();
+
+        let mut brush = BrushBehavior::new().on("brushend", move |e: &BrushEvent| {
+            *ids_clone.lock().unwrap() = e.selection.clone();
+        });
+
+        let vt = ViewportTransform::default();
+        brush.on_pointer_down(Vec2::new(75.0, 75.0));
+        brush.on_pointer_move(Vec2::new(175.0, 175.0), &vt, None);
+
+        // No selection system at all → empty selection
+        brush
+            .on_pointer_up_async(Vec2::new(175.0, 175.0), &vt, None, None)
+            .await;
+
+        let ids = selected_ids.lock().unwrap();
+        assert!(ids.is_empty());
+    }
+
+    #[tokio::test]
+    async fn async_pointer_up_clears_drag_state() {
+        let mut brush = BrushBehavior::new();
+        let vt = ViewportTransform::default();
+
+        brush.on_pointer_down(Vec2::new(50.0, 50.0));
+        assert!(brush.is_dragging());
+
+        brush
+            .on_pointer_up_async(Vec2::new(150.0, 150.0), &vt, None, None)
+            .await;
+        assert!(!brush.is_dragging());
+        assert!(!brush.overlay().visible);
+    }
+
+    #[tokio::test]
+    async fn async_pointer_up_noop_when_not_dragging() {
+        let counter = Arc::new(AtomicU32::new(0));
+        let c = counter.clone();
+
+        let mut brush = BrushBehavior::new().on("brushend", move |_| {
+            c.fetch_add(1, Ordering::Relaxed);
+        });
+
+        let vt = ViewportTransform::default();
+        // Not dragging — on_pointer_up_async should be a no-op
+        brush
+            .on_pointer_up_async(Vec2::new(100.0, 100.0), &vt, None, None)
+            .await;
+
+        assert_eq!(counter.load(Ordering::Relaxed), 0, "no event should fire");
+    }
+
+    // -- on_pointer_up_async with GPU path ---------------------------------
+
+    #[tokio::test]
+    async fn async_pointer_up_with_gpu_interaction_system() {
+        // Create a real GPU context and InteractionSystem
+        let context = crate::render::RenderContext::new().await.unwrap();
+        let mut interaction = InteractionSystem::new(&context).await.unwrap();
+
+        let mut system = MarkSelectionSystem::new(5);
+        system.set_positions(vec![
+            [50.0, 50.0],
+            [150.0, 150.0],
+            [250.0, 250.0],
+            [100.0, 100.0],
+            [300.0, 300.0],
+        ]);
+
+        let selected_ids = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let ids_clone = selected_ids.clone();
+
+        let mut brush = BrushBehavior::new().on("brushend", move |e: &BrushEvent| {
+            *ids_clone.lock().unwrap() = e.selection.clone();
+        });
+
+        let vt = ViewportTransform::default();
+        brush.on_pointer_down(Vec2::new(75.0, 75.0));
+        brush.on_pointer_move(Vec2::new(175.0, 175.0), &vt, Some(&system));
+
+        // Use async path with InteractionSystem → GPU path
+        brush
+            .on_pointer_up_async(
+                Vec2::new(175.0, 175.0),
+                &vt,
+                Some(&system),
+                Some(&mut interaction),
+            )
+            .await;
+
+        let ids = selected_ids.lock().unwrap();
+        assert!(ids.contains(&1), "GPU path should find mark at (150,150)");
+        assert!(ids.contains(&3), "GPU path should find mark at (100,100)");
+        assert_eq!(ids.len(), 2);
+    }
 }
