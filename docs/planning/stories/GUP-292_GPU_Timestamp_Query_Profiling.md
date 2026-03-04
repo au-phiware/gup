@@ -117,3 +117,112 @@ latency skews wall-clock measurements.
 - All 2729 lib tests pass
 - All 14 linked_selection GPU integration tests pass
 
+## Retrospective
+
+**Completed**: 2025-07-24
+
+### Key Technical Learnings
+
+#### ComputePassTimestampWrites for Targeted GPU Profiling
+
+- **Challenge**: wgpu provides two mechanisms for GPU timestamps —
+  `ComputePassTimestampWrites` (requires `TIMESTAMP_QUERY`) and
+  `CommandEncoder::write_timestamp` (requires
+  `TIMESTAMP_QUERY_INSIDE_ENCODERS`). Choosing the right one affects which
+  feature flag is needed and how precisely the timing is scoped.
+- **Solution**: Used `ComputePassTimestampWrites` with `beginning_of_pass` and
+  `end_of_pass` indices since it requires only `TIMESTAMP_QUERY` (more widely
+  supported) and scopes the measurement precisely to the compute pass.
+- **Pattern**: When timing a specific GPU pass, prefer the pass-level timestamp
+  writes over encoder-level `write_timestamp()`. The pass-level approach needs
+  fewer features and gives exactly the timing you want.
+
+#### Synchronous GPU Readback During Calibration
+
+- **Challenge**: `prepare_render` is synchronous, but reading GPU timestamp
+  results requires buffer mapping which is inherently async in wgpu.
+- **Solution**: Used `Device::poll(PollType::Wait)` to block until the GPU
+  finishes and the buffer map completes. This is acceptable during calibration
+  (5 frames per path by default) but would be a performance problem in a hot
+  render loop.
+- **Pattern**: Synchronous GPU readback via `poll(PollType::Wait)` is fine for
+  low-frequency operations like calibration. For per-frame profiling, use the
+  async `TimestampQueryManager` from `performance.rs` instead.
+
+#### Queue::get_timestamp_period() for Tick-to-Nanosecond Conversion
+
+- **Challenge**: The existing `TimestampQueryManager` in `performance.rs`
+  hard-codes `timestamp_period = 1.0` with a TODO comment about wgpu 26 not
+  exposing the period.
+- **Solution**: `Queue::get_timestamp_period()` is available in wgpu 26 and
+  returns nanoseconds per tick as `f32`. Used this in `GpuTimer` for accurate
+  tick-to-nanosecond conversion.
+- **Pattern**: Always use `Queue::get_timestamp_period()` to convert timestamp
+  ticks; do not assume 1 ns per tick. Different GPU vendors have different tick
+  rates.
+
+### Architectural Decisions
+
+#### Separate GpuTimer vs Reusing TimestampQueryManager
+
+- **Decision**: Created a new focused `GpuTimer` module rather than reusing the
+  existing `TimestampQueryManager` from `performance.rs`.
+- **Reasoning**: `TimestampQueryManager` is designed for general profiling (64
+  queries, async readback via `futures::channel`), while `GpuTimer` needs only
+  2 queries and synchronous readback for the auto-tune path. The simpler
+  abstraction avoids a `futures` dependency in `linked_selection.rs` and keeps
+  the synchronous `prepare_render` API clean.
+- **Trade-off**: Two similar abstractions exist for timestamp queries. The
+  `performance.rs` `TimestampQueryManager` could be updated to use
+  `Queue::get_timestamp_period()` and the correct period conversion.
+- **Future**: If more subsystems need GPU timing, consider unifying the two
+  abstractions with a trait or shared core.
+
+#### Opportunistic Feature Enablement in GupContext
+
+- **Decision**: Automatically request `TIMESTAMP_QUERY` from the device when
+  the adapter reports support, even if the user didn't explicitly request it.
+- **Reasoning**: The story requires "no additional device features required by
+  default". Making the feature opportunistic means callers get better auto-tune
+  accuracy on capable hardware without changing their code.
+- **Trade-off**: The device may have slightly higher overhead from having an
+  extra feature enabled, though `TIMESTAMP_QUERY` is lightweight. If a user
+  explicitly needs minimal features, they can set `required_features` to exactly
+  what they want (the opportunistic code only adds, never removes).
+- **Future**: Other optional features (e.g. `PIPELINE_STATISTICS_QUERY`) could
+  follow the same opportunistic pattern.
+
+#### Lazy GpuTimer Creation
+
+- **Decision**: The `GpuTimer` is created lazily on the first GPU-path
+  calibration frame, not at `LinkedSelection` construction time.
+- **Reasoning**: Creating GPU resources (QuerySet, buffers) at construction time
+  would waste resources when auto-tune is disabled or when the CPU path is being
+  probed. Lazy creation ensures zero overhead when not needed.
+- **Trade-off**: The first GPU calibration frame includes the timer creation
+  cost. This is negligible compared to the compute dispatch and buffer mapping
+  costs.
+- **Future**: If `GpuTimer` is needed for non-calibration purposes, the lazy
+  creation pattern still works well.
+
+### Development Workflow Insights
+
+- **GUP-291's clean state machine design made integration straightforward**: The
+  `AutoTunePhase` enum and `record_sample(elapsed_ns)` interface made it easy to
+  swap in GPU timestamps — the state machine doesn't care where the timing
+  comes from, only that it receives nanoseconds.
+- **Existing `encode_dimming` signature change was minimal**: Adding an
+  `encode_dimming_timed()` method with an optional timestamp writes parameter
+  while keeping the original `encode_dimming()` as a delegating wrapper meant
+  zero impact on existing callers.
+- **Disk space was the main friction**: The build artifacts consumed all
+  available disk space during full test suite compilation. The `cargo clean` /
+  rebuild cycle was the main time cost.
+
+### Follow-up Stories
+
+1. **Fix TimestampQueryManager timestamp_period** — The existing
+   `TimestampQueryManager` in `performance.rs` hard-codes `timestamp_period =
+   1.0`. It should use `Queue::get_timestamp_period()` for accurate
+   tick-to-nanosecond conversion, matching what `GpuTimer` does.
+
