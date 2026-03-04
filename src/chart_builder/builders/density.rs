@@ -91,6 +91,9 @@ pub struct DensityConfig {
     pub grid_size: usize,
     /// Fractional padding added around data extents (default: 0.05 = 5%).
     pub margin: f32,
+    /// Sample count above which KDE is dispatched on the GPU (default: 5 000).
+    /// Set to `usize::MAX` to force the CPU path.
+    pub gpu_threshold: usize,
 }
 
 impl Default for DensityConfig {
@@ -101,6 +104,7 @@ impl Default for DensityConfig {
             render_mode: DensityRenderMode::FilledContour,
             grid_size: 256,
             margin: 0.05,
+            gpu_threshold: super::gpu_density::DEFAULT_GPU_THRESHOLD,
         }
     }
 }
@@ -584,6 +588,16 @@ impl<T> DensityPlotBuilder<T> {
     /// Set the data-extent margin as a fraction (default: 0.05 = 5%).
     pub fn margin(mut self, margin: f32) -> Self {
         self.density_config.margin = margin.max(0.0);
+        self
+    }
+
+    /// Set the sample-count threshold above which KDE is dispatched on the
+    /// GPU (default: 5 000).
+    ///
+    /// Set to `0` to always use the GPU, or [`usize::MAX`] to force the
+    /// CPU path.
+    pub fn gpu_threshold(mut self, threshold: usize) -> Self {
+        self.density_config.gpu_threshold = threshold;
         self
     }
 

@@ -25,6 +25,7 @@ pub mod boxplot;
 pub mod choropleth;
 pub mod composite;
 pub mod density;
+pub mod gpu_density;
 pub mod heatmap;
 pub mod line;
 pub mod scatter;
