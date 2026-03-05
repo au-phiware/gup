@@ -17,6 +17,7 @@ Run any example with: `cargo run --example <name>`
 | `02_scatter_window` | Visual scatter plot in a GPU window        |
 | `03_line_chart`     | Line chart API demonstration               |
 | `04_bar_chart`      | Bar chart API demonstration                |
+| `hello_world`       | Hello world example                        |
 
 ---
 
@@ -32,16 +33,36 @@ Run any example with: `cargo run --example <name>`
 
 | Example                           | Description                                       |
 | --------------------------------- | ------------------------------------------------- |
-| `scatter_plot_demo`               | Scatter plot with selection and interaction       |
-| `boxplot`                         | Basic box plot rendering                          |
-| `boxplot_rendering_demo`          | Box plot rendering pipeline demo                  |
-| `boxplot_builder_demo`            | Box plot chart builder API                        |
-| `multi_category_boxplot`          | Multi-category box plots                          |
-| `observable_plot_showcase`        | Observable Plot-style chart builder API           |
-| `observable_plot_visual_showcase` | Visual showcase of Observable Plot API            |
-| `integration_showcase`            | Full integration showcase of multiple chart types |
-| `custom_mark_demo`                | Implementing a custom mark type                   |
-| `multi_pass_mark_demo`            | Multi-pass mark rendering                         |
+| `scatter_plot_demo`               | Scatter plot with selection and interaction        |
+| `boxplot`                         | Basic box plot rendering                           |
+| `boxplot_rendering_demo`          | Box plot rendering pipeline demo                   |
+| `boxplot_builder_demo`            | Box plot chart builder API                         |
+| `multi_category_boxplot`          | Multi-category box plots                           |
+| `observable_plot_showcase`        | Chart builder API showcase                         |
+| `observable_plot_visual_showcase` | Visual showcase of chart builder API               |
+| `integration_showcase`            | Full integration showcase of multiple chart types  |
+| `custom_mark_demo`                | Implementing a custom mark type                    |
+| `multi_pass_mark_demo`            | Multi-pass mark rendering                          |
+| `bar_chart`                       | Bar chart variations                               |
+| `line_chart_demo`                 | Line chart rendering demo                          |
+| `area_chart_demo`                 | Area chart rendering                               |
+| `heatmap_chart`                   | Heatmap chart rendering                            |
+| `violin_plot_demo`                | Violin plot rendering                              |
+| `density_scatter_overlay`         | Density scatter plot overlay                       |
+| `treemap`                         | Treemap layout rendering                           |
+| `treemap_window`                  | Windowed treemap rendering with keyboard controls  |
+| `ordinal_scale`                   | Ordinal scale demonstration                        |
+| `choropleth_world_population`     | Choropleth world population map                    |
+| `choropleth_gpu_recolor`          | GPU-side choropleth recolouring demo               |
+| `color_scale_heatmap`             | Colour scale heatmap                               |
+| `composite_bar_trend`             | Composite bar and trend chart                      |
+| `composite_scatter_regression`    | Scatter plot with regression line                  |
+| `composite_mixed_data`            | Composite chart with per-layer data types          |
+| `geo_world_map`                   | World map geographic rendering                     |
+| `geographic_projection`           | Geographic projection demo                         |
+| `force_directed_graph`            | Force-directed graph layout                        |
+| `scatter_3d`                      | 3D scatter plot                                    |
+| `scatter_3d_with_axes`            | 3D scatter plot with axes and grid                 |
 
 ---
 
@@ -77,12 +98,17 @@ Run any example with: `cargo run --example <name>`
 
 | Example                        | Description                               |
 | ------------------------------ | ----------------------------------------- |
-| `gpu_selection_demo`           | GPU-side selection and hit testing        |
-| `interactive_selection_demo`   | Interactive mark selection with mouse     |
-| `hover_reveal_demo`            | Hover-reveal tooltip integration          |
-| `chart_hover_reveal_demo`      | Chart builder hover-reveal API            |
-| `interaction_debug_visualizer` | Debug visualizer for interaction pipeline |
-| `attr_binding_demo`            | Attribute binding pipeline demo           |
+| `gpu_selection_demo`           | GPU-side selection and hit testing         |
+| `interactive_selection_demo`   | Interactive mark selection with mouse      |
+| `hover_reveal_demo`            | Hover-reveal tooltip integration           |
+| `chart_hover_reveal_demo`      | Chart builder hover-reveal API             |
+| `interaction_debug_visualizer` | Debug visualiser for interaction pipeline  |
+| `attr_binding_demo`            | Attribute binding pipeline demo            |
+| `brush_selection`              | Brush selection interaction                |
+| `interactive_circles`          | Interactive circles demo                   |
+| `interactive_graph`            | Interactive force-directed graph rendering |
+| `linked_views`                 | Linked views coordination                  |
+| `zoom_pan`                     | Zoom and pan interaction                   |
 
 ---
 
@@ -95,6 +121,9 @@ Run any example with: `cargo run --example <name>`
 | `spline_animation_curves`     | Spline-interpolated animation curves |
 | `keyframe_animation_storage`  | Storage buffer keyframe animation    |
 | `async_streaming_demo`        | Async data streaming to GPU          |
+| `data_transition_scatter`     | Data transition scatter animation    |
+| `streaming_live_chart`        | Streaming live data chart            |
+| `streaming_lod_scatter`       | Streaming LOD scatter plot           |
 
 ---
 
@@ -148,14 +177,16 @@ Run any example with: `cargo run --example <name>`
 
 ## Debug & Development
 
-| Example                        | Description                     |
-| ------------------------------ | ------------------------------- |
-| `gpu_debug_demo`               | GPU debug tools demo            |
-| `gpu_debug_visualization_demo` | GPU hit test debug visualizer   |
-| `buffer_demo`                  | GPU buffer pool management demo |
-| `buffer_validation_demo`       | Buffer validation and debugging |
-| `resource_graph_demo`          | GPU resource dependency graph   |
-| `context_demo`                 | Render context lifecycle demo   |
+| Example                        | Description                          |
+| ------------------------------ | ------------------------------------ |
+| `gpu_debug_demo`               | GPU debug tools demo                 |
+| `gpu_debug_visualization_demo` | GPU hit test debug visualiser        |
+| `buffer_demo`                  | GPU buffer pool management demo      |
+| `buffer_validation_demo`       | Buffer validation and debugging      |
+| `resource_graph_demo`          | GPU resource dependency graph        |
+| `context_demo`                 | Render context lifecycle demo        |
+| `adaptive_lod_debug`           | Adaptive LOD debug visualisation     |
+| `lod_pyramid_debug`            | LOD pyramid debug visualisation      |
 
 ---
 
@@ -177,3 +208,35 @@ Run any example with: `cargo run --example <name>`
 | Example                | Description                    |
 | ---------------------- | ------------------------------ |
 | `shader_pipeline_demo` | ComposableShaderPipeline usage |
+
+---
+
+## Export
+
+| Example      | Description                         |
+| ------------ | ----------------------------------- |
+| `export_png` | PNG export via GPU off-screen rendering |
+| `svg_export` | SVG export demonstration            |
+| `html_export` | HTML export demonstration           |
+| `pdf_export` | PDF export demonstration            |
+
+---
+
+## Intermediate (`intermediate/`)
+
+| Example             | Description                                    |
+| ------------------- | ---------------------------------------------- |
+| `styled_scatter`    | Data-driven styling with categorical colours   |
+| `multi_series_line` | Multiple time series visualisation             |
+| `categorical_bar`   | Categorical data with vertical/horizontal bars |
+
+---
+
+## Tutorials (`tutorials/`)
+
+| Example                    | Description                             |
+| -------------------------- | --------------------------------------- |
+| `tutorial01_scatter`       | Tutorial 1: Getting started scatter chart |
+| `tutorial04_interactions`  | Tutorial 4: Interactions demo           |
+| `tutorial05_streaming`     | Tutorial 5: Streaming data demo         |
+| `tutorial06_custom_marks`  | Tutorial 6: Custom marks demo           |
