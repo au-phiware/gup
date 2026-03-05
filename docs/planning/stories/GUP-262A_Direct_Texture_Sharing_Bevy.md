@@ -1,7 +1,7 @@
 # GUP-262A: Direct Texture Sharing for Bevy
 
-**Initiative**: Ecosystem Integration **Status**: 🚧 In Progress **Created**:
-2025-03-04
+**Initiative**: Ecosystem Integration **Status**: ✅ Complete **Created**:
+2025-03-04 **Completed**: 2025-07-25
 
 ## Overview
 
@@ -23,12 +23,12 @@ are performant (< 2 ms per chart per frame).
 
 ## Acceptance Criteria
 
-- [ ] `GupChart` renders to a `wgpu::Texture` owned by Bevy's `Assets<Image>`
+- [x] `GupChart` renders to a `wgpu::Texture` owned by Bevy's `Assets<Image>`
       without any CPU readback.
-- [ ] No PNG encoding/decoding occurs in the render path.
-- [ ] The `bevy_scatter` example runs at ≥ 30 fps on a mid-range GPU with
+- [x] No PNG encoding/decoding occurs in the render path.
+- [x] The `bevy_scatter` example runs at ≥ 30 fps on a mid-range GPU with
       animated data.
-- [ ] Existing `GupChart` API remains backward-compatible.
+- [x] Existing `GupChart` API remains backward-compatible.
 
 ## Dependencies
 
@@ -47,7 +47,46 @@ are performant (< 2 ms per chart per frame).
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria satisfied
-- [ ] Tests pass
-- [ ] Benchmark shows ≥ 5× improvement over PNG round-trip
-- [ ] Documentation updated
+- [x] All Acceptance Criteria satisfied
+- [x] Tests pass
+- [x] Benchmark shows ≥ 5× improvement over PNG round-trip
+- [x] Documentation updated
+
+## Implementation Summary
+
+### What Was Implemented
+
+Replaced the GPU → CPU readback → PNG encode → PNG decode → GPU upload pipeline
+with a zero-copy GPU → GPU direct texture sharing path.
+
+### Architecture
+
+```text
+Main World (PostUpdate):
+  GupChart → render_to_texture_view → ChartTextureTarget (wgpu::Texture)
+
+Render World (ExtractSchedule + Queue):
+  Extract ChartTextureTarget + Sprite image handle
+  → copy_texture_to_texture → GpuImage (sprite texture)
+```
+
+### Key Files Changed
+
+| File | Change |
+| ---- | ------ |
+| `src/chart_builder.rs` | Added `render_to_texture_view` method to `ComposedChart` |
+| `gup-bevy/src/chart.rs` | Extended `DynChart` trait with `render_to_texture_view` |
+| `gup-bevy/src/texture_target.rs` | New — `ChartTextureTarget` offscreen texture manager |
+| `gup-bevy/src/render_node.rs` | New — render-world extract + GPU copy systems |
+| `gup-bevy/src/render_system.rs` | Replaced PNG render with texture render |
+| `gup-bevy/src/plugin.rs` | Added render-world system registration |
+| `gup-bevy/src/lib.rs` | Updated exports |
+| `gup-bevy/Cargo.toml` | Removed `image` and `png` dependencies |
+| `gup-bevy/examples/bevy_scatter.rs` | Uses shared `GupRenderContext` device |
+| `gup-bevy/README.md` | Architecture documentation |
+| `gup-bevy/tests/integration.rs` | 5 new tests (13 total) |
+
+### Test Counts
+
+- 13 gup-bevy integration tests (5 new)
+- All workspace tests pass (241+ passing)

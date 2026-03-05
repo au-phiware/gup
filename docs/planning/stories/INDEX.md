@@ -990,7 +990,7 @@ PNG, HTML), and platform targets.
 - [GUP-262](GUP-262_Bevy_Integration.md) ✅ — gup-bevy crate with GupChart Bevy
   Component and GupPlugin sharing the wgpu device/queue with Bevy's renderer.
   Deps: GUP-004 ✅, GUP-018 ✅, GUP-039 ✅.
-- [GUP-262A](GUP-262A_Direct_Texture_Sharing_Bevy.md) 🚧 — Eliminate
+- [GUP-262A](GUP-262A_Direct_Texture_Sharing_Bevy.md) ✅ — Eliminate
   render-to-PNG round-trip by rendering charts directly to shared GPU textures.
   Deps: GUP-262 ✅.
 - [GUP-262B](GUP-262B_Bevy_018_Upgrade.md) 📋 — Upgrade gup-bevy to Bevy 0.18
