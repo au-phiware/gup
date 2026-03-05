@@ -35,8 +35,7 @@ compositing.
 
 ## Technical Tasks
 
-- [x] Upgrade gup core crate to wgpu 27 (prerequisite — completed in
-      GUP-262B).
+- [x] Upgrade gup core crate to wgpu 27 (prerequisite — completed in GUP-262B).
 - [x] Add `GupWidget::with_render_state(render_state: &egui_wgpu::RenderState)`
       constructor that extracts device/queue.
 - [x] Create `GupEguiContext` (like gup-bevy's `GupRenderContext`) that wraps
@@ -145,8 +144,8 @@ compositing.
 - **Challenge**: When the chart's mark pipeline was compiled for
   `Bgra8UnormSrgb` but the render target was `Rgba8UnormSrgb`, wgpu silently
   skipped the draw commands rather than producing a validation error. Axis
-  infrastructure (compiled per-frame) rendered correctly, making the issue appear
-  to be mark-specific.
+  infrastructure (compiled per-frame) rendered correctly, making the issue
+  appear to be mark-specific.
 - **Solution**: Added `RenderContext::set_headless_format()` so that all
   pipeline creation (marks, axes, ticks, colorbars) uses the same format from
   the start. Charts built with `GupEguiContext` compile everything for
@@ -161,7 +160,8 @@ compositing.
   creating a second GPU adapter.
 - **Solution**: In wgpu 27, `Device`, `Queue`, `Adapter` are internally
   reference-counted (`Arc`). Cloning them is a cheap reference count bump, not a
-  GPU resource allocation. This made `GupEguiContext::from_render_state` trivial.
+  GPU resource allocation. This made `GupEguiContext::from_render_state`
+  trivial.
 - **Pattern**: Same approach used by `gup-bevy`. Any host application with wgpu
   27+ can share resources by cloning handles.
 

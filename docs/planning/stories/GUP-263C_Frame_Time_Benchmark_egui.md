@@ -7,9 +7,9 @@
 ## Context
 
 GUP-263B introduced a zero-copy shared-device rendering path for gup-egui that
-eliminates CPU-side pixel readback by registering the chart texture directly with
-egui's renderer. While this should reduce frame-time overhead, the improvement
-has not been quantified.
+eliminates CPU-side pixel readback by registering the chart texture directly
+with egui's renderer. While this should reduce frame-time overhead, the
+improvement has not been quantified.
 
 ## User Story
 
