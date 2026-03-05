@@ -786,6 +786,9 @@ integration, pipeline caching.
   builder accessor functions to GPU-side scale transformations so scatter/bar
   charts render data-driven positions without manual overrides. Deps: GUP-303
   ✅.
+- [GUP-365](GUP-365_Composite_Layer_Ordering_Control.md) 📋 — Allow explicit
+  control of composite layer rendering order via z-index or reordering API.
+  Deps: GUP-304 ✅.
 
 ## Performance & Profiling
 
