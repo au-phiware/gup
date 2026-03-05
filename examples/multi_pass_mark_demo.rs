@@ -6,6 +6,8 @@
 //! Demonstrates multi-pass rendering using the `MultiPassConfig` and
 //! `MultiPassRenderer` APIs from `gup::mark::advanced_rendering`.
 //!
+//! This example uses [`GupApp`] to eliminate event-loop boilerplate.
+//!
 //! # What is multi-pass rendering?
 //!
 //! Multi-pass rendering issues **multiple draw calls** with different pipeline
@@ -28,7 +30,7 @@
 //! cargo run --example multi_pass_mark_demo
 //! ```
 //!
-//! Press **Escape** to close the window.
+//! Press **Escape** or **Q** to close the window.
 //!
 //! # Multi-pass pattern
 //!
@@ -64,22 +66,14 @@
 //! ```
 
 use gup::{
-    GupContext, PhysicalSize, SurfaceId,
+    app::{AppRenderer, GupApp},
     mark::{
         Circle, Mark,
         advanced_rendering::{MultiPassConfig, MultiPassRenderer, RenderPassConfig},
         circle::{CircleInstance, CircleVertex},
     },
 };
-use std::sync::Arc;
 use wgpu::Color;
-use winit::{
-    application::ApplicationHandler,
-    event::{ElementState, KeyEvent, WindowEvent},
-    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
-    keyboard::{KeyCode, PhysicalKey},
-    window::{Window, WindowAttributes, WindowId},
-};
 
 // ── Data ───────────────────────────────────────────────────────────────────
 
@@ -488,165 +482,34 @@ impl MultiPassDemoRenderer {
     }
 }
 
-// ── Application ────────────────────────────────────────────────────────────
+// ── AppRenderer wrapper ────────────────────────────────────────────────────
 
-struct MultiPassApp {
-    context: Option<Arc<GupContext>>,
-    window: Option<Arc<Window>>,
-    surface_id: Option<SurfaceId>,
-    renderer: Option<MultiPassDemoRenderer>,
+/// Wraps `MultiPassDemoRenderer` with lazy initialisation so that GPU
+/// resources are created on the first frame when the `wgpu::Device` is
+/// available via [`RenderFrame`].
+struct LazyMultiPassDemo {
+    inner: Option<MultiPassDemoRenderer>,
 }
 
-impl MultiPassApp {
+impl LazyMultiPassDemo {
     fn new() -> Self {
-        Self {
-            context: None,
-            window: None,
-            surface_id: None,
-            renderer: None,
-        }
-    }
-
-    async fn create_context(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        if self.context.is_none() {
-            let context = GupContext::headless().await?;
-            self.context = Some(context);
-        }
-        Ok(())
-    }
-
-    fn create_window(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let attrs = WindowAttributes::default()
-            .with_title("Gup Multi-Pass Mark Rendering Demo")
-            .with_inner_size(winit::dpi::LogicalSize::new(900, 500));
-
-        let window = Arc::new(event_loop.create_window(attrs)?);
-        let surface_id = SurfaceId::new();
-
-        if let Some(context) = self.context.take() {
-            let mut ctx = Arc::try_unwrap(context).map_err(|_| "Context is shared")?;
-            ctx.add_surface(surface_id, Arc::clone(&window))?;
-            self.context = Some(Arc::new(ctx));
-        }
-
-        self.window = Some(window);
-        self.surface_id = Some(surface_id);
-        Ok(())
-    }
-
-    fn render_frame(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let surface_id = self.surface_id.ok_or("No surface")?;
-
-        if let Some(context) = self.context.take() {
-            let mut ctx = Arc::try_unwrap(context).map_err(|_| "Context is shared")?;
-
-            // Lazily create renderer on first frame (needs device access)
-            if self.renderer.is_none() {
-                let renderer = MultiPassDemoRenderer::new(&ctx.device);
-                self.renderer = Some(renderer);
-            }
-
-            match ctx.begin_frame_for_surface(surface_id) {
-                Ok(mut frame) => {
-                    if let Some(renderer) = &self.renderer {
-                        renderer.render(&mut frame);
-                    }
-                    frame.finish()?;
-                }
-                Err(e) => {
-                    eprintln!("Failed to begin frame: {e}");
-                }
-            }
-
-            self.context = Some(Arc::new(ctx));
-        }
-        Ok(())
+        Self { inner: None }
     }
 }
 
-impl ApplicationHandler for MultiPassApp {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        pollster::block_on(async {
-            if let Err(e) = self.create_context().await {
-                eprintln!("Failed to create GPU context: {e}");
-                event_loop.exit();
-                return;
-            }
-            if let Err(e) = self.create_window(event_loop) {
-                eprintln!("Failed to create window: {e}");
-                event_loop.exit();
-                return;
-            }
-
-            println!("🎨 Multi-Pass Mark Rendering Demo");
-            println!("==================================");
-            println!();
-            println!("This demo renders circles using two multi-pass techniques:");
-            println!();
-            println!("  • Drop shadow:   shadow pass (offset, blurred) + main pass");
-            println!("  • Fill + outline: fill pass (solid) + outline pass (stroke ring)");
-            println!();
-            println!("Both techniques issue multiple draw calls within a single");
-            println!("GPU render pass, following the project's single-pass convention.");
-            println!();
-            println!("Press [ESC] to exit.");
-        });
-    }
-
-    fn window_event(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        _window_id: WindowId,
-        event: WindowEvent,
-    ) {
-        match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
-            WindowEvent::Resized(size) => {
-                if let Some(surface_id) = self.surface_id
-                    && let Some(context) = self.context.take()
-                    && let Ok(mut ctx) = Arc::try_unwrap(context)
-                {
-                    let _ =
-                        ctx.resize_surface(surface_id, PhysicalSize::new(size.width, size.height));
-                    self.context = Some(Arc::new(ctx));
-                }
-            }
-            WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        state: ElementState::Pressed,
-                        physical_key: PhysicalKey::Code(KeyCode::Escape),
-                        ..
-                    },
-                ..
-            } => event_loop.exit(),
-            WindowEvent::RedrawRequested => {
-                if let Err(e) = self.render_frame() {
-                    eprintln!("Render error: {e}");
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        if let Some(window) = &self.window {
-            window.request_redraw();
-        }
+impl AppRenderer for LazyMultiPassDemo {
+    fn render(&mut self, frame: &mut gup::RenderFrame) {
+        let renderer = self
+            .inner
+            .get_or_insert_with(|| MultiPassDemoRenderer::new(frame.device()));
+        renderer.render(frame);
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), gup::GupError> {
     env_logger::init();
-
-    let event_loop = EventLoop::new()?;
-    event_loop.set_control_flow(ControlFlow::Poll);
-
-    let mut app = MultiPassApp::new();
-    event_loop.run_app(&mut app)?;
-
-    Ok(())
+    GupApp::new(LazyMultiPassDemo::new())
+        .title("Gup Multi-Pass Mark Rendering Demo")
+        .size(900, 500)
+        .run()
 }
