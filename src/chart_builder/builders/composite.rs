@@ -1306,4 +1306,113 @@ mod tests {
             Some((-20.0, 10.0))
         );
     }
+
+    // ── Per-layer data tests (GUP-304, no GPU) ─────────────────────
+
+    /// A second data type to test heterogeneous layer composition.
+    #[derive(Debug, Clone)]
+    struct FitPt {
+        x: f32,
+        y_hat: f32,
+    }
+
+    #[test]
+    fn layer_with_data_adds_erased_layer() {
+        let builder = composite::<Pt>()
+            .layer(ScatterPlotBuilder::<Pt>::new().x(
+                AccessorFunction::new(|d: &Pt| AccessorValue::Float(d.x)),
+            ).y(
+                AccessorFunction::new(|d: &Pt| AccessorValue::Float(d.y)),
+            ))
+            .layer_with_data(
+                LineChartBuilder::<FitPt>::new()
+                    .x(AccessorFunction::new(|d: &FitPt| AccessorValue::Float(d.x)))
+                    .y(AccessorFunction::new(|d: &FitPt| AccessorValue::Float(d.y_hat))),
+                vec![FitPt { x: 1.0, y_hat: 2.0 }, FitPt { x: 5.0, y_hat: 10.0 }],
+            );
+        assert_eq!(builder.layer_count(), 2);
+    }
+
+    #[test]
+    fn layer_with_data_y2_adds_erased_secondary_layer() {
+        let builder = composite::<Pt>()
+            .layer(ScatterPlotBuilder::<Pt>::new())
+            .layer_with_data_y2(
+                LineChartBuilder::<FitPt>::new()
+                    .x(AccessorFunction::new(|d: &FitPt| AccessorValue::Float(d.x)))
+                    .y(AccessorFunction::new(|d: &FitPt| AccessorValue::Float(d.y_hat))),
+                vec![FitPt { x: 1.0, y_hat: 2.0 }],
+            );
+        assert_eq!(builder.layer_count(), 2);
+    }
+
+    #[test]
+    fn erased_layer_spec_domain_computation() {
+        let fit_data = vec![
+            FitPt { x: 0.0, y_hat: 5.0 },
+            FitPt { x: 10.0, y_hat: 25.0 },
+        ];
+
+        let kind = LineChartBuilder::<FitPt>::new()
+            .x(AccessorFunction::new(|d: &FitPt| AccessorValue::Float(d.x)))
+            .y(AccessorFunction::new(|d: &FitPt| AccessorValue::Float(d.y_hat)))
+            .into_layer();
+
+        let x_dom = kind.x_domain(&fit_data);
+        let y_dom = kind.y_domain(&fit_data);
+
+        assert_eq!(x_dom, Some((0.0, 10.0)));
+        assert_eq!(y_dom, Some((5.0, 25.0)));
+    }
+
+    #[test]
+    fn typed_layer_spec_caches_domain() {
+        let data = vec![
+            FitPt { x: 2.0, y_hat: 8.0 },
+            FitPt { x: 6.0, y_hat: 12.0 },
+        ];
+        let kind = ScatterPlotBuilder::<FitPt>::new()
+            .x(AccessorFunction::new(|d: &FitPt| AccessorValue::Float(d.x)))
+            .y(AccessorFunction::new(|d: &FitPt| AccessorValue::Float(d.y_hat)))
+            .into_layer();
+
+        let spec = TypedLayerSpec {
+            cached_x_domain: kind.x_domain(&data),
+            cached_y_domain: kind.y_domain(&data),
+            kind,
+            data,
+            y_axis: YAxisAssignment::Primary,
+        };
+
+        assert_eq!(spec.erased_x_domain(), Some((2.0, 6.0)));
+        assert_eq!(spec.erased_y_domain(), Some((8.0, 12.0)));
+        assert_eq!(spec.erased_y_axis(), YAxisAssignment::Primary);
+    }
+
+    #[test]
+    fn mixed_domain_unification_typed_and_erased() {
+        // Simulate the domain unification that build_with_data performs.
+        // Typed layer: Pt with x=[1,5], y=[2,7]
+        // Erased layer: FitPt with x=[0,10], y=[5,25]
+        let typed_x = Some((1.0, 5.0));
+        let typed_y = Some((2.0, 7.0));
+        let erased_x = Some((0.0, 10.0));
+        let erased_y = Some((5.0, 25.0));
+
+        let unified_x = union_domain(typed_x, erased_x);
+        let unified_y = union_domain(typed_y, erased_y);
+
+        assert_eq!(unified_x, Some((0.0, 10.0)));
+        assert_eq!(unified_y, Some((2.0, 25.0)));
+    }
+
+    #[test]
+    fn existing_layer_api_unchanged() {
+        // Verify the original .layer() and .layer_with_y2() still work.
+        let builder = composite::<Pt>()
+            .layer(ScatterPlotBuilder::<Pt>::new())
+            .layer(LineChartBuilder::<Pt>::new())
+            .layer_with_y2(BarChartBuilder::<Pt>::new());
+        assert_eq!(builder.layer_count(), 3);
+    }
 }
