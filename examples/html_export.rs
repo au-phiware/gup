@@ -131,6 +131,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let meta_data = std::fs::metadata(output_data)?;
         println!("Wrote {output_data} ({} bytes)", meta_data.len());
 
+        // --- Auto-discovery example (requires wasm-pack output in pkg/) ---
+        // WasmStrategy::Auto searches for *_bg.wasm in pkg/ and inlines it.
+        // Uncomment the following to try it (requires `wasm-pack build` first):
+        //
+        // let auto_exporter = HtmlExporter::new(WasmStrategy::Auto(None))
+        //     .with_title("Auto-discovered WASM");
+        // auto_exporter.export(&mut chart, "chart_auto.html")?;
+        // println!("Wrote chart_auto.html");
+
         // Verify the data-embedded output contains a ChartBundle.
         let data_html = std::fs::read_to_string(output_data)?;
         let has_data = data_html.contains(r#""data""#) && data_html.contains(r#""config""#);

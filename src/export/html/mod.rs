@@ -14,6 +14,40 @@
 //! * **Open Graph `<meta>` tags** with a PNG thumbnail so the page previews
 //!   correctly when shared on social media.
 //!
+//! # WASM strategies
+//!
+//! The [`WasmStrategy`] enum controls how the WASM module is embedded:
+//!
+//! | Strategy                              | Description                         |
+//! |---------------------------------------|-------------------------------------|
+//! | [`Inline(path)`](WasmStrategy::Inline) | Base64-encode a `.wasm` file.      |
+//! | [`Url(url)`](WasmStrategy::Url)        | Fetch from a URL at runtime.       |
+//! | [`Auto(root)`](WasmStrategy::Auto)     | Auto-discover from `pkg/` output.  |
+//!
+//! ## Auto-discovery
+//!
+//! [`WasmStrategy::Auto`] searches for the `wasm-pack` output artifact
+//! (`*_bg.wasm`) inside the `pkg/` subdirectory of the workspace root
+//! (or the current directory when `None` is passed).  This is the
+//! recommended strategy for projects that use `wasm-pack build` as part
+//! of their workflow.
+//!
+//! If the `pkg/` directory is missing, empty, or contains multiple
+//! `*_bg.wasm` files (ambiguous), a clear error message is returned
+//! with guidance on falling back to [`WasmStrategy::Inline`].
+//!
+//! You can also call [`discover_wasm_artifact`] directly to locate the
+//! WASM file without building the full exporter.
+//!
+//! # JavaScript↔WASM data passing
+//!
+//! The generated JavaScript bootstrap reads the embedded chart data from
+//! the `<script id="gup-chart-data">` element and stores it as
+//! `window.__GUP_CHART_DATA__` before instantiating the WASM module.
+//! The Gup WASM entry point (see [`wasm_api::render_from_bundle`](crate::wasm_api::render_from_bundle))
+//! can then parse this JSON as a [`ChartBundle`] or [`ChartSnapshot`]
+//! and render the chart onto the `<canvas>`.
+//!
 //! # Data embedding
 //!
 //! When the chart's data type `T` implements [`serde::Serialize`], the
@@ -58,9 +92,14 @@
 //! # let sel = gup::selection::Selection::<D, gup::Circle>::new(vec![], ctx)?;
 //! # let config = gup::chart_builder::ChartConfig::default();
 //! # let mut chart = ComposedChart::new(sel, config).with_default_axes();
-//! let exporter = HtmlExporter::new(WasmStrategy::Url("gup.wasm".into()))
+//! // Auto-discover WASM from wasm-pack output:
+//! let exporter = HtmlExporter::new(WasmStrategy::Auto(None))
 //!     .with_title("My Chart")
 //!     .with_description("A scatter plot of study hours vs test scores");
+//! exporter.export(&mut chart, "chart.html")?;
+//!
+//! // Or use an explicit URL:
+//! let exporter = HtmlExporter::new(WasmStrategy::Url("gup.wasm".into()));
 //! exporter.export(&mut chart, "chart.html")?;
 //! # Ok(())
 //! # }
