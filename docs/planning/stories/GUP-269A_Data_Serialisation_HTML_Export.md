@@ -115,3 +115,79 @@ external data source.
 - **3 new unit tests**: `bundle_round_trip_with_data`, `bundle_config_only_omits_data`, `bundle_backward_compat_from_snapshot_json`
 - **5 new integration tests**: `html_export_with_data_contains_bundle`, `html_export_with_data_round_trip`, `html_export_without_data_has_no_data_field`, `html_export_with_data_file_write`, `html_export_convenience_with_data`
 - **Total**: 8 new tests; all 3,218+ project tests pass
+
+## Retrospective
+
+**Completed**: 2025-07-19
+
+### Key Technical Learnings
+
+#### Conditional Serialisation with Separate Methods
+
+- **Challenge**: The story asked for data to be included "when `T: Serialize`"
+  and omitted otherwise, ideally from the same export path. Rust doesn't
+  support runtime trait detection or stable specialisation.
+- **Solution**: Added parallel methods (`render_with_data` / `export_with_data`)
+  that carry the extra `T: Serialize` bound. The existing `render` / `export`
+  methods remain unchanged with their original bounds.
+- **Pattern**: When a feature requires an additional trait bound, prefer adding
+  a new method (or method set) rather than trying to make a single method
+  conditionally behave differently. This is cleaner and more discoverable.
+
+#### Type-Erased Data with `serde_json::Value`
+
+- **Challenge**: The `ChartBundle` needs to store data from any `T: Serialize`
+  without being generic itself (since it's deserialised on the WASM side
+  without knowing `T` at compile time).
+- **Solution**: Serialise each `T` to `serde_json::Value` via
+  `serde_json::to_value()` and store as `Vec<serde_json::Value>`. The WASM
+  consumer can deserialise into whatever type it expects.
+- **Pattern**: Use `serde_json::Value` as a type-erased interchange format
+  when the producer and consumer don't share compile-time type information.
+
+### Architectural Decisions
+
+#### Separate `ChartBundle` vs Extending `ChartSnapshot`
+
+- **Decision**: Created a new `ChartBundle` struct that wraps `ChartSnapshot`
+  rather than adding an `Option<Vec<Value>>` field to `ChartSnapshot`.
+- **Reasoning**: `ChartSnapshot` is a clean DTO that mirrors `ChartConfig`
+  fields. Adding a data field would conflate configuration with data. The
+  wrapper approach keeps concerns separated and makes the JSON structure
+  self-documenting (`{"config": {...}, "data": [...]}`).
+- **Trade-off**: Consumers now need to handle two possible JSON formats
+  (plain `ChartSnapshot` from old exports, or `ChartBundle` from new ones).
+- **Future**: The `ChartBundle` structure is extensible — additional metadata
+  (e.g., schema version, mark type hints) can be added as sibling fields
+  to `config` and `data`.
+
+#### Non-Generic `ChartBundle`
+
+- **Decision**: `ChartBundle` uses `Vec<serde_json::Value>` rather than
+  being generic as `ChartBundle<T>`.
+- **Reasoning**: The bundle is meant to be round-tripped through JSON.
+  Making it generic over `T` would require the deserialising side to know
+  `T` at compile time, defeating the purpose of a self-contained HTML file.
+  The type-erased approach lets the WASM module parse data dynamically.
+- **Trade-off**: No compile-time type safety on the data array. Consumers
+  must handle potential deserialisation errors gracefully.
+- **Future**: A typed `ChartBundle<T>` could be offered as a convenience
+  for Rust-to-Rust scenarios, but the primary use case (HTML export) benefits
+  from type erasure.
+
+### Development Workflow Insights
+
+- The story was cleanly scoped with a well-defined prerequisite (GUP-269).
+  The existing `HtmlExporter` and `ChartSnapshot` infrastructure made
+  extension straightforward.
+- Adding the `Serialize` bound only on the new methods preserved full
+  backward compatibility — no existing code needed to change.
+- The integration test infrastructure (helper functions, JSON extraction)
+  from GUP-269 was easily extended for the new tests.
+- Implementation was compact: ~120 lines of new library code, ~200 lines
+  of new tests, across 4 incremental commits.
+
+### Follow-up Stories
+
+No new stories identified. GUP-269B (WASM Module Integration) is now
+unblocked and is the natural next step in the HTML export initiative.
