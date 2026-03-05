@@ -184,12 +184,28 @@ skip = true
 skip_reason = "Console-only (layout computation, no GPU rendering)"
 
 [[examples]]
+name = "treemap_window"
+source = "examples/treemap_window.rs"
+description = "Windowed treemap rendering with keyboard controls"
+category = "Charts & Marks"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
 name = "choropleth_world_population"
 source = "examples/choropleth_world_population.rs"
 description = "Choropleth world population map"
 category = "Charts & Marks"
 skip = true
 skip_reason = "Console-only (chart data structure, no GPU rendering)"
+
+[[examples]]
+name = "choropleth_gpu_recolor"
+source = "examples/choropleth_gpu_recolor.rs"
+description = "GPU-side choropleth recolouring demo"
+category = "Charts & Marks"
+skip = true
+skip_reason = "Console-only (recolouring demo, no GPU rendering)"
 
 [[examples]]
 name = "color_scale_heatmap"
@@ -214,6 +230,14 @@ description = "Scatter plot with regression line"
 category = "Charts & Marks"
 skip = true
 skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "composite_mixed_data"
+source = "examples/composite_mixed_data.rs"
+description = "Composite chart with per-layer data types"
+category = "Charts & Marks"
+skip = true
+skip_reason = "Console-only (composite data demo, no GPU rendering)"
 
 [[examples]]
 name = "density_scatter_overlay"
@@ -250,6 +274,14 @@ skip_reason = "Console-only (layout computation, no GPU rendering)"
 name = "scatter_3d"
 source = "examples/scatter_3d.rs"
 description = "3D scatter plot"
+category = "Charts & Marks"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "scatter_3d_with_axes"
+source = "examples/scatter_3d_with_axes.rs"
+description = "3D scatter plot with axes and grid"
 category = "Charts & Marks"
 skip = true
 skip_reason = "Windowed-only (requires EventLoop)"
@@ -438,6 +470,14 @@ skip_reason = "Windowed-only (requires EventLoop)"
 name = "interactive_circles"
 source = "examples/interactive_circles.rs"
 description = "Interactive circles demo"
+category = "Interaction & Selection"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "interactive_graph"
+source = "examples/interactive_graph.rs"
+description = "Interactive force-directed graph rendering"
 category = "Interaction & Selection"
 skip = true
 skip_reason = "Windowed-only (requires EventLoop)"
@@ -859,3 +899,39 @@ description = "Ordinal scale demonstration"
 category = "Charts & Marks"
 skip = true
 skip_reason = "Console-only (scale computation, no GPU rendering)"
+
+# ---------------------------------------------------------------------------
+# Tutorials
+# ---------------------------------------------------------------------------
+
+[[examples]]
+name = "tutorial01_scatter"
+source = "examples/tutorials/tutorial01_scatter.rs"
+description = "Tutorial 1: Getting started scatter chart"
+category = "Tutorials"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "tutorial04_interactions"
+source = "examples/tutorials/tutorial04_interactions.rs"
+description = "Tutorial 4: Interactions demo"
+category = "Tutorials"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "tutorial05_streaming"
+source = "examples/tutorials/tutorial05_streaming.rs"
+description = "Tutorial 5: Streaming data demo"
+category = "Tutorials"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
+
+[[examples]]
+name = "tutorial06_custom_marks"
+source = "examples/tutorials/tutorial06_custom_marks.rs"
+description = "Tutorial 6: Custom marks demo"
+category = "Tutorials"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
