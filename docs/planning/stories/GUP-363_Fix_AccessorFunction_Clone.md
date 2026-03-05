@@ -100,3 +100,60 @@ changes.
 
 - 3079 lib tests passed, 0 failed
 - All examples compile
+
+## Retrospective
+
+**Completed**: 2025-07-27
+
+### Key Technical Learnings
+
+#### Box vs Arc for Cloneable Closures
+
+- **Challenge**: `Box<dyn Fn>` cannot be cloned because closures don't implement
+  `Clone`. The original workaround was to re-create a field-based accessor on
+  clone, silently losing the closure.
+- **Solution**: Replace `Box<dyn Fn>` with `Arc<dyn Fn>`. Arc is reference-
+  counted and cloneable, so `Arc::clone` gives a new handle to the same
+  closure at negligible cost.
+- **Pattern**: Whenever a type needs to be Clone but contains a trait object
+  closure (`dyn Fn`), `Arc` is the standard Rust solution. This is a common
+  pattern in async runtimes, callbacks, and event handlers.
+
+#### Cascading Clone Fixes
+
+- **Challenge**: `AreaChartBuilder::clone()` was already working around the
+  broken `AccessorFunction::clone()` by resetting `y0_baseline` to
+  `Baseline::default()` instead of cloning it (since `Baseline::Accessor`
+  contains an `AccessorFunction`).
+- **Solution**: With `AccessorFunction` now properly cloneable, added a `Clone`
+  impl for `Baseline<T>` and fixed `AreaChartBuilder::clone()` to clone the
+  baseline faithfully.
+- **Pattern**: When fixing a fundamental type's Clone impl, audit all containing
+  types for workarounds that can be cleaned up.
+
+### Architectural Decisions
+
+#### Arc Over Removing Clone
+
+- **Decision**: Used `Arc<dyn Fn>` rather than removing `Clone` from
+  `AccessorFunction`.
+- **Reasoning**: Removing `Clone` would have broken `BarChartBuilder::clone()`,
+  `AreaChartBuilder::clone()`, and multiple examples. The `Arc` approach is
+  fully backward-compatible with zero API changes required.
+- **Trade-off**: Slight overhead from atomic reference counting on clone/drop,
+  but closures are cloned infrequently and the cost is negligible compared to
+  GPU operations.
+- **Future**: This enables any future code to freely clone accessors without
+  concern. It also aligns with how `AccessorFunction` is used (shared
+  read-only reference to a function).
+
+### Development Workflow Insights
+
+- The fix was minimal and surgical: changing 4 lines in the struct definition
+  and constructor (Box → Arc), plus rewriting the Clone impl (3 lines). Total
+  code change was small but high-impact.
+- The `cargo clean` was needed due to disk space constraints before running
+  `mask all-fix`, which compiles with all features and all targets. This added
+  significant wall-clock time to what was otherwise a 15-minute story.
+- Having good test infrastructure made validation straightforward — the 3079
+  existing tests all passing confirms no regressions.
