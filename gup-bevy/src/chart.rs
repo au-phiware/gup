@@ -19,6 +19,18 @@ pub trait DynChart: Send + Sync + 'static {
 
     /// Render the chart to PNG bytes at the given pixel dimensions.
     fn render_to_png(&mut self, width: u32, height: u32) -> GupResult<Vec<u8>>;
+
+    /// Render the chart directly to a [`wgpu::TextureView`].
+    ///
+    /// This is the zero-copy path used by the direct texture sharing
+    /// render system.  No CPU readback or encoding takes place.
+    fn render_to_texture_view(
+        &mut self,
+        view: &wgpu::TextureView,
+        surface_format: wgpu::TextureFormat,
+        width: u32,
+        height: u32,
+    ) -> GupResult<()>;
 }
 
 impl<T, M> DynChart for ComposedChart<T, M>
@@ -32,6 +44,16 @@ where
 
     fn render_to_png(&mut self, width: u32, height: u32) -> GupResult<Vec<u8>> {
         ComposedChart::render_to_png(self, width, height)
+    }
+
+    fn render_to_texture_view(
+        &mut self,
+        view: &wgpu::TextureView,
+        surface_format: wgpu::TextureFormat,
+        width: u32,
+        height: u32,
+    ) -> GupResult<()> {
+        ComposedChart::render_to_texture_view(self, view, surface_format, width, height)
     }
 }
 

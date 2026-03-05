@@ -17,12 +17,10 @@ bevy = { version = "0.17", default-features = false, features = [
     "bevy_asset",
     "bevy_winit",
     "bevy_sprite",
-    "png",
     "x11",
 ] }
 wgpu = { version = "26.0", features = ["wgsl"] }
 log = "0.4"
-image = "0.24"
 pollster = "0.3"
 
 [dev-dependencies]

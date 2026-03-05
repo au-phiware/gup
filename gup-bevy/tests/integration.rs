@@ -7,7 +7,8 @@ use gup::chart_builder::ChartBuilder;
 use gup::chart_builder::accessor::AccessorValue;
 use gup::chart_builder::builders::{AccessorFunction, scatter};
 use gup::render::RenderContext;
-use gup_bevy::{GupChart, GupRenderContext};
+use gup_bevy::texture_target::{CHART_TEXTURE_FORMAT, ChartTextureTarget};
+use gup_bevy::{GupChart, GupRenderContext, blank_chart_image};
 use std::sync::Arc;
 
 // ---------------------------------------------------------------------------
@@ -20,13 +21,19 @@ struct Pt {
     y: f32,
 }
 
-fn make_scatter_chart() -> gup::chart_builder::ComposedChart<Pt, gup::mark::Circle> {
+/// Shared render context for tests that need device access.
+fn make_render_context() -> Arc<RenderContext> {
+    Arc::new(pollster::block_on(RenderContext::new()).expect("RenderContext"))
+}
+
+fn make_scatter_chart_with_context(
+    context: Arc<RenderContext>,
+) -> gup::chart_builder::ComposedChart<Pt, gup::mark::Circle> {
     let data = vec![
         Pt { x: 1.0, y: 2.0 },
         Pt { x: 2.0, y: 3.0 },
         Pt { x: 3.0, y: 1.0 },
     ];
-    let context = Arc::new(pollster::block_on(RenderContext::new()).expect("RenderContext"));
     let x = AccessorFunction::new(|p: &Pt| AccessorValue::Float(p.x));
     let y = AccessorFunction::new(|p: &Pt| AccessorValue::Float(p.y));
     scatter()
@@ -35,6 +42,10 @@ fn make_scatter_chart() -> gup::chart_builder::ComposedChart<Pt, gup::mark::Circ
         .point_size(5.0)
         .build_with_data(data, context)
         .expect("build chart")
+}
+
+fn make_scatter_chart() -> gup::chart_builder::ComposedChart<Pt, gup::mark::Circle> {
+    make_scatter_chart_with_context(make_render_context())
 }
 
 // ---------------------------------------------------------------------------
@@ -88,6 +99,89 @@ fn gup_chart_render_to_png_produces_bytes() {
     // PNG files start with the magic bytes 0x89 'P' 'N' 'G'.
     assert!(bytes.len() > 8);
     assert_eq!(&bytes[1..4], b"PNG");
+}
+
+// ---------------------------------------------------------------------------
+// Direct texture rendering tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn render_to_texture_view_succeeds() {
+    // Use the SAME render context for both the chart and the texture target.
+    let context = make_render_context();
+    let chart = make_scatter_chart_with_context(context.clone());
+    let mut gup_chart = GupChart::new(chart).with_size(400, 300);
+
+    let device = context.device();
+    let target = ChartTextureTarget::new(device, 400, 300);
+
+    // Render the chart to the texture view — should succeed without error.
+    gup_chart
+        .chart_mut()
+        .render_to_texture_view(&target.view, CHART_TEXTURE_FORMAT, 400, 300)
+        .expect("render_to_texture_view");
+}
+
+#[test]
+fn chart_texture_target_ensure_size_reuses_when_same() {
+    let ctx = pollster::block_on(gup::context::GupContext::new()).expect("GupContext");
+    let device = ctx.device.as_ref();
+    let mut target = ChartTextureTarget::new(device, 400, 300);
+
+    // Same size → no recreation.
+    assert!(!target.ensure_size(device, 400, 300));
+    assert_eq!(target.width, 400);
+    assert_eq!(target.height, 300);
+}
+
+#[test]
+fn chart_texture_target_ensure_size_recreates_when_different() {
+    let ctx = pollster::block_on(gup::context::GupContext::new()).expect("GupContext");
+    let device = ctx.device.as_ref();
+    let mut target = ChartTextureTarget::new(device, 400, 300);
+
+    // Different size → recreation.
+    assert!(target.ensure_size(device, 800, 600));
+    assert_eq!(target.width, 800);
+    assert_eq!(target.height, 600);
+}
+
+#[test]
+fn blank_chart_image_has_no_cpu_data() {
+    let image = blank_chart_image(800, 600);
+
+    // The image should have no CPU-side pixel data (GPU-only).
+    assert!(image.data.is_none());
+
+    // Verify format matches the chart rendering format.
+    assert_eq!(image.texture_descriptor.format, CHART_TEXTURE_FORMAT);
+
+    // Verify COPY_DST usage (required for copy_texture_to_texture target).
+    assert!(
+        image
+            .texture_descriptor
+            .usage
+            .contains(wgpu::TextureUsages::COPY_DST)
+    );
+}
+
+#[test]
+fn no_png_in_texture_render_path() {
+    // Verify that render_to_texture_view does NOT produce PNG bytes.
+    // The method returns () not Vec<u8>.
+    let context = make_render_context();
+    let chart = make_scatter_chart_with_context(context.clone());
+    let mut gup_chart = GupChart::new(chart).with_size(200, 150);
+
+    let device = context.device();
+    let target = ChartTextureTarget::new(device, 200, 150);
+
+    // The return type is GupResult<()> — no bytes involved.
+    let result: Result<(), _> =
+        gup_chart
+            .chart_mut()
+            .render_to_texture_view(&target.view, CHART_TEXTURE_FORMAT, 200, 150);
+    assert!(result.is_ok());
 }
 
 // ---------------------------------------------------------------------------

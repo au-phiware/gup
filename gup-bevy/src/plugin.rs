@@ -4,9 +4,11 @@
 //! The [`GupPlugin`] that wires everything together.
 
 use crate::context::GupRenderContext;
-use crate::render_system::gup_render_system;
+use crate::render_node::{copy_gup_textures_to_bevy, extract_gup_charts};
+use crate::render_system::{ensure_chart_texture_targets, gup_render_system};
 use bevy::prelude::*;
 use bevy::render::renderer::{RenderAdapter, RenderDevice, RenderInstance, RenderQueue};
+use bevy::render::{ExtractSchedule, Render, RenderApp, RenderSystems};
 
 /// Bevy [`Plugin`] that integrates Gup's chart rendering into a Bevy app.
 ///
@@ -16,8 +18,10 @@ use bevy::render::renderer::{RenderAdapter, RenderDevice, RenderInstance, Render
 ///    already owns).
 /// 2. Construct a [`GupRenderContext`] that shares those same GPU resources —
 ///    no second adapter or device is created.
-/// 3. Register the [`gup_render_system`] in the `PostUpdate` schedule so that
-///    all [`GupChart`](crate::GupChart) entities are rendered each frame.
+/// 3. Register the main-world systems that render charts into offscreen
+///    textures.
+/// 4. Register render-world systems that copy those textures directly into
+///    the Bevy sprite's `GpuImage` — zero CPU readback.
 ///
 /// # Examples
 ///
@@ -34,8 +38,13 @@ pub struct GupPlugin;
 
 impl Plugin for GupPlugin {
     fn build(&self, app: &mut App) {
-        // Register the per-frame chart render system.
-        app.add_systems(PostUpdate, gup_render_system);
+        // Main-world systems:
+        // 1. Ensure every GupChart has a ChartTextureTarget.
+        // 2. Render dirty charts into their offscreen textures.
+        app.add_systems(
+            PostUpdate,
+            (ensure_chart_texture_targets, gup_render_system).chain(),
+        );
     }
 
     fn finish(&self, app: &mut App) {
@@ -67,5 +76,17 @@ impl Plugin for GupPlugin {
         // Insert the shared context as a Resource in the **main** world so
         // that normal Bevy systems can access it.
         app.insert_resource(gup_render_context);
+
+        // Render-world systems:
+        // 1. Extract chart textures + image handles from the main world.
+        // 2. Copy chart textures into GpuImage textures (GPU → GPU).
+        if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
+            render_app
+                .add_systems(ExtractSchedule, extract_gup_charts)
+                .add_systems(
+                    Render,
+                    copy_gup_textures_to_bevy.in_set(RenderSystems::Queue),
+                );
+        }
     }
 }
