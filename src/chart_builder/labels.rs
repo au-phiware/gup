@@ -223,7 +223,10 @@ where
     }
 
     /// Render the labeled chart (placeholder implementation).
-    pub fn render(&mut self, context: &mut crate::RenderContext) -> GupResult<()> {
+    pub fn render(&mut self, context: &mut crate::RenderContext) -> GupResult<()>
+    where
+        M: crate::selection::MarkInstanceBuilder,
+    {
         // In a complete implementation, this would:
         // 1. Calculate axis scales from the data
         // 2. Generate tick positions using the tick generator

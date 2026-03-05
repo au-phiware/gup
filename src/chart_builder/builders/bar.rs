@@ -9,8 +9,8 @@
 //! ordinal axis integration.
 
 use super::{
-    AccessorFunction, ConfigurableBuilder, GridCapableBuilder, apply_accessors_to_selection,
-    validate_required_accessors,
+    AccessorFunction, ConfigurableBuilder, GridCapableBuilder, NdcBounds,
+    apply_accessors_to_selection, validate_required_accessors,
 };
 use crate::RenderContext;
 use crate::chart_builder::{
@@ -608,17 +608,30 @@ where
         }
 
         // --- create selection with Rectangle mark ---
-        let mut selection = Selection::<T, Rectangle>::new(data, context)?;
+        let selection = Selection::<T, Rectangle>::new(data, context)?;
+
+        let mut composed_chart =
+            ComposedChart::new(selection, self.config.clone()).with_default_axes();
+
+        let chart_area = composed_chart.calculate_chart_area();
+        let w = composed_chart.config.width;
+        let h = composed_chart.config.height;
+        let ndc = NdcBounds {
+            left: (chart_area.x / w) * 2.0 - 1.0,
+            right: ((chart_area.x + chart_area.width) / w) * 2.0 - 1.0,
+            top: 1.0 - (chart_area.y / h) * 2.0,
+            bottom: 1.0 - ((chart_area.y + chart_area.height) / h) * 2.0,
+        };
 
         apply_accessors_to_selection(
-            &mut selection,
-            &self.x_accessor,
-            &self.y_accessor,
-            &self.color_accessor,
-            &None,
+            &mut composed_chart.visualization,
+            self.x_accessor,
+            self.y_accessor,
+            self.color_accessor,
+            None,
+            &self.config,
+            ndc,
         )?;
-
-        let composed_chart = ComposedChart::new(selection, self.config).with_default_axes();
 
         Ok(composed_chart)
     }

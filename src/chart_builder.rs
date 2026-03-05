@@ -1138,7 +1138,10 @@ where
     /// After calling `render()`, use [`draw_grid_lines`](Self::draw_grid_lines)
     /// followed by [`draw_ticks`](Self::draw_ticks) to record the
     /// instanced draw commands into your render pass.
-    pub fn render(&mut self, context: &mut RenderContext) -> GupResult<()> {
+    pub fn render(&mut self, context: &mut RenderContext) -> GupResult<()>
+    where
+        M: crate::selection::MarkInstanceBuilder,
+    {
         // Calculate chart area based on margins and axis requirements
         let chart_area = self.calculate_chart_area();
 
@@ -1147,9 +1150,8 @@ where
             self.prepare_grid_pipeline(context, &chart_area);
         }
 
-        // Phase 2: Render main visualization (data points, on top of grid)
-        // Note: In a complete implementation, this would use the Mixable render system
-        // For now, we acknowledge that the visualization is prepared for rendering
+        // Phase 2: Prepare data-mark rendering pipeline
+        self.prepare_data_pipeline(context.device(), context.queue());
 
         // Phase 3: Render axes (on top of everything)
         for (position, axis_opt) in [
@@ -1671,8 +1673,69 @@ where
         ticks
     }
 
+    // ── Data-mark rendering ─────────────────────────────────────────────
+
+    /// Prepare the Selection's GPU render pipeline for data marks.
+    ///
+    /// Evaluates the attribute bindings stored on the visualisation
+    /// (position, colour, size) and uploads the resulting instance data to
+    /// the GPU.  After this call,
+    /// [`draw_data_marks()`](Self::draw_data_marks) can record the
+    /// instanced draw command into a render pass.
+    ///
+    /// This is called automatically by
+    /// [`prepare_draw_commands()`](Self::prepare_draw_commands) and
+    /// [`render()`](Self::render).  Calling it again is a cheap no-op
+    /// when the render state is already initialised.
+    pub fn prepare_data_pipeline(&mut self, device: &wgpu::Device, queue: &wgpu::Queue)
+    where
+        M: crate::selection::MarkInstanceBuilder,
+    {
+        // Skip if already prepared or if there are no attribute bindings.
+        if self.visualization.is_render_ready() {
+            return;
+        }
+        let _ = self
+            .visualization
+            .prepare_render_bound(device, queue, None, None);
+    }
+
+    /// Record data-mark draw commands into an active render pass.
+    ///
+    /// Call this after [`prepare_data_pipeline()`](Self::prepare_data_pipeline)
+    /// (or any method that invokes it, such as
+    /// [`prepare_draw_commands()`](Self::prepare_draw_commands)).
+    ///
+    /// Returns the number of mark instances drawn (0 if the Selection has
+    /// not been prepared or contains no data).
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// chart.prepare_draw_commands(&device, &queue, format);
+    /// // … create render pass …
+    /// chart.draw_grid_lines(&mut render_pass);
+    /// chart.draw_data_marks(&mut render_pass);
+    /// chart.draw_axis_lines(&mut render_pass);
+    /// chart.draw_ticks(&mut render_pass);
+    /// ```
+    pub fn draw_data_marks<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) -> u32 {
+        if self.visualization.is_render_ready()
+            && let Ok(()) = self.visualization.render(render_pass)
+        {
+            return self.visualization.data().len() as u32;
+        }
+        0
+    }
+
+    /// Returns `true` if the data-mark pipeline has been initialised and
+    /// there are instances ready to draw.
+    pub fn has_data_mark_data(&self) -> bool {
+        self.visualization.is_render_ready() && !self.visualization.data().is_empty()
+    }
+
     /// Calculate the available chart area after accounting for margins and axes.
-    fn calculate_chart_area(&self) -> ChartArea {
+    pub(crate) fn calculate_chart_area(&self) -> ChartArea {
         let total_width = self.config.width;
         let total_height = self.config.height;
 
@@ -2642,7 +2705,7 @@ where
         let queue = context.queue();
         let surface_format = context.surface_format();
 
-        // 1. Prepare GPU buffers for drawing.
+        // 1. Prepare GPU buffers for drawing (axes, ticks, grid).
         self.prepare_draw_commands(device, queue, surface_format);
 
         // 2. Create off-screen render target.
@@ -2758,7 +2821,7 @@ where
         let device = context.device();
         let queue = context.queue();
 
-        // 1. Prepare GPU buffers for drawing.
+        // 1. Prepare GPU buffers for drawing (axes, ticks, grid).
         self.prepare_draw_commands(device, queue, surface_format);
 
         // 2. Create command encoder and render pass targeting the caller's view.
@@ -3074,7 +3137,7 @@ where
 }
 
 #[derive(Debug, Clone)]
-struct ChartArea {
+pub(crate) struct ChartArea {
     /// X position of chart area
     pub x: f32,
     /// Y position of chart area

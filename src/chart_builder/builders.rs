@@ -604,53 +604,132 @@ pub fn validate_required_accessors<T>(
     Ok(())
 }
 
+/// NDC bounds for the chart plotting area.
+///
+/// All four values are in normalised device coordinates (−1 … +1).
+#[derive(Debug, Clone, Copy)]
+pub struct NdcBounds {
+    /// Left edge of the chart area in NDC.
+    pub left: f32,
+    /// Right edge of the chart area in NDC.
+    pub right: f32,
+    /// Top edge of the chart area in NDC (positive Y is up).
+    pub top: f32,
+    /// Bottom edge of the chart area in NDC (positive Y is up).
+    pub bottom: f32,
+}
+
 /// Utility function to apply accessor functions to a selection.
+///
+/// Pre-computes the data domain by evaluating the x/y accessor functions
+/// across all data items.  If `x_scale` / `y_scale` are set in `config`
+/// those domains are used instead.  The data values are then linearly
+/// mapped into the chart's NDC plotting area described by `ndc`.
+///
+/// Colour and size accessors are wired through directly; when absent,
+/// sensible defaults (steel-blue fill, radius 0.012 NDC) are used.
 pub fn apply_accessors_to_selection<T, M>(
     selection: &mut Selection<T, M>,
-    x_accessor: &Option<AccessorFunction<T>>,
-    y_accessor: &Option<AccessorFunction<T>>,
-    color_accessor: &Option<AccessorFunction<T>>,
-    size_accessor: &Option<AccessorFunction<T>>,
+    x_accessor: Option<AccessorFunction<T>>,
+    y_accessor: Option<AccessorFunction<T>>,
+    color_accessor: Option<AccessorFunction<T>>,
+    size_accessor: Option<AccessorFunction<T>>,
+    config: &crate::chart_builder::ChartConfig,
+    ndc: NdcBounds,
 ) -> GupResult<()>
 where
     T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
     M: crate::selection::Mark,
     M::AttributeValue: Default + Clone,
 {
-    // Apply position mapping if both X and Y are provided
+    // ── Position mapping ────────────────────────────────────────────────
     if let (Some(x_acc), Some(y_acc)) = (x_accessor, y_accessor) {
-        let _x_field = x_acc.field_name().unwrap_or("x").to_string();
-        let _y_field = y_acc.field_name().unwrap_or("y").to_string();
-
-        let position_shader = move |_data: &T| {
-            // In a real implementation, this would use the actual accessor functions
-            // For now, provide a placeholder that compiles
-            [0.0f32, 0.0]
+        // Determine data domain — prefer explicit scales, fall back to
+        // auto-computing from the data.
+        let (x_min, x_max) = if let Some(scale) = &config.x_scale {
+            (scale.domain_min(), scale.domain_max())
+        } else {
+            auto_domain(selection.data(), &x_acc)
+        };
+        let (y_min, y_max) = if let Some(scale) = &config.y_scale {
+            (scale.domain_min(), scale.domain_max())
+        } else {
+            auto_domain(selection.data(), &y_acc)
         };
 
-        selection.attr("position", position_shader);
+        let x_acc = std::sync::Arc::new(x_acc);
+        let y_acc = std::sync::Arc::new(y_acc);
+
+        selection.attr("center", move |data: &T| {
+            let x_val = x_acc.apply(data).as_f32();
+            let y_val = y_acc.apply(data).as_f32();
+
+            let x_span = x_max - x_min;
+            let y_span = y_max - y_min;
+
+            let tx = if x_span.abs() < f32::EPSILON {
+                0.5
+            } else {
+                (x_val - x_min) / x_span
+            };
+            let ty = if y_span.abs() < f32::EPSILON {
+                0.5
+            } else {
+                (y_val - y_min) / y_span
+            };
+
+            let ndc_x = ndc.left + tx * (ndc.right - ndc.left);
+            let ndc_y = ndc.bottom + ty * (ndc.top - ndc.bottom);
+
+            [ndc_x, ndc_y]
+        });
     }
 
-    // Apply color mapping if provided
+    // ── Colour mapping ──────────────────────────────────────────────────
     if let Some(color_acc) = color_accessor {
-        let _color_field = color_acc.field_name().unwrap_or("color").to_string();
-
-        let color_shader = move |_data: &T| {
-            // In a real implementation, this would use the actual accessor function
-            // For now, provide a default color
-            [1.0f32, 0.0, 0.0, 1.0]
-        };
-
-        selection.attr("color", color_shader);
+        let color_acc = std::sync::Arc::new(color_acc);
+        selection.attr("color", move |data: &T| color_acc.apply(data).as_color());
+    } else {
+        // Default: steel-blue
+        selection.attr("color", |_: &T| [0.27f32, 0.51, 0.71, 1.0]);
     }
 
-    // Size mapping would be similar but depends on the mark type
-    if let Some(_size_acc) = size_accessor {
-        // Size mapping implementation would go here
-        // This depends on the specific mark type's attribute system
+    // ── Size / radius mapping ───────────────────────────────────────────
+    if let Some(size_acc) = size_accessor {
+        let size_acc = std::sync::Arc::new(size_acc);
+        // Scale the accessor value into NDC units.
+        let ndc_width = ndc.right - ndc.left;
+        selection.attr("radius", move |data: &T| {
+            size_acc.apply(data).as_f32() * ndc_width * 0.01
+        });
+    } else {
+        // Default radius: ~1.2 % of the chart width in NDC.
+        let default_radius = (ndc.right - ndc.left) * 0.012;
+        selection.attr("radius", move |_: &T| default_radius);
     }
 
     Ok(())
+}
+
+/// Compute the (min, max) of accessor values across `data`, with a small
+/// padding so points do not sit exactly on the axes.
+fn auto_domain<T>(data: &[T], accessor: &AccessorFunction<T>) -> (f32, f32) {
+    let mut lo = f32::INFINITY;
+    let mut hi = f32::NEG_INFINITY;
+    for item in data {
+        let v = accessor.apply(item).as_f32();
+        lo = lo.min(v);
+        hi = hi.max(v);
+    }
+    // Add 5 % padding so marks are not clipped by the axes.
+    let span = hi - lo;
+    if span.abs() < f32::EPSILON {
+        // All values identical — give a ±1 range.
+        (lo - 1.0, hi + 1.0)
+    } else {
+        let pad = span * 0.05;
+        (lo - pad, hi + pad)
+    }
 }
 
 #[cfg(test)]

@@ -51,8 +51,8 @@ pub mod binning;
 pub mod gpu_binning;
 
 use super::{
-    AccessorFunction, ConfigurableBuilder, GridCapableBuilder, apply_accessors_to_selection,
-    validate_required_accessors,
+    AccessorFunction, ConfigurableBuilder, GridCapableBuilder, NdcBounds,
+    apply_accessors_to_selection, validate_required_accessors,
 };
 use crate::RenderContext;
 use crate::chart_builder::{ChartBuilder, ChartBuilderError, ChartConfig, ComposedChart};
@@ -449,21 +449,33 @@ where
             return Err(ChartBuilderError::EmptyData.into());
         }
 
-        let mut selection = Selection::<T, Rectangle>::new(data, context)?;
-
-        apply_accessors_to_selection(
-            &mut selection,
-            &self.x_accessor,
-            &self.y_accessor,
-            &self.fill_accessor,
-            &None,
-        )?;
+        let selection = Selection::<T, Rectangle>::new(data, context)?;
 
         // Propagate the heatmap-specific colorbar flag into ChartConfig.
-        let mut config = self.config;
+        let mut config = self.config.clone();
         config.show_colorbar = self.show_colorbar;
 
-        let composed_chart = ComposedChart::new(selection, config).with_default_axes();
+        let mut composed_chart = ComposedChart::new(selection, config.clone()).with_default_axes();
+
+        let chart_area = composed_chart.calculate_chart_area();
+        let w = composed_chart.config.width;
+        let h = composed_chart.config.height;
+        let ndc = NdcBounds {
+            left: (chart_area.x / w) * 2.0 - 1.0,
+            right: ((chart_area.x + chart_area.width) / w) * 2.0 - 1.0,
+            top: 1.0 - (chart_area.y / h) * 2.0,
+            bottom: 1.0 - ((chart_area.y + chart_area.height) / h) * 2.0,
+        };
+
+        apply_accessors_to_selection(
+            &mut composed_chart.visualization,
+            self.x_accessor,
+            self.y_accessor,
+            self.fill_accessor,
+            None,
+            &config,
+            ndc,
+        )?;
 
         Ok(composed_chart)
     }

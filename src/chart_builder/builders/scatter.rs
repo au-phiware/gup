@@ -7,8 +7,8 @@
 //! automatic scale inference and shader function integration.
 
 use super::{
-    AccessorFunction, ConfigurableBuilder, GridCapableBuilder, apply_accessors_to_selection,
-    validate_required_accessors,
+    AccessorFunction, ConfigurableBuilder, GridCapableBuilder, NdcBounds,
+    apply_accessors_to_selection, validate_required_accessors,
 };
 use crate::Circle;
 use crate::RenderContext;
@@ -322,25 +322,45 @@ where
         }
 
         // Create selection with Circle marks
-        let mut selection = Selection::<T, Circle>::new(data, context)?;
+        let selection = Selection::<T, Circle>::new(data, context.clone())?;
 
-        // Apply accessor functions to selection
+        // Create composed chart with axes based on configuration.
+        // Axes must be added *before* computing NDC bounds so that
+        // axis margins are accounted for in the chart area.
+        let mut composed_chart =
+            ComposedChart::new(selection, self.config.clone()).with_default_axes();
+
+        // Compute exact chart area (now includes axis margins).
+        let chart_area = composed_chart.calculate_chart_area();
+        let w = composed_chart.config.width;
+        let h = composed_chart.config.height;
+        let ndc = NdcBounds {
+            left: (chart_area.x / w) * 2.0 - 1.0,
+            right: ((chart_area.x + chart_area.width) / w) * 2.0 - 1.0,
+            top: 1.0 - (chart_area.y / h) * 2.0,
+            bottom: 1.0 - ((chart_area.y + chart_area.height) / h) * 2.0,
+        };
+
+        // Apply accessor-driven attribute bindings to the visualisation.
         apply_accessors_to_selection(
-            &mut selection,
-            &self.x_accessor,
-            &self.y_accessor,
-            &self.color_accessor,
-            &self.size_accessor,
+            &mut composed_chart.visualization,
+            self.x_accessor,
+            self.y_accessor,
+            self.color_accessor,
+            self.size_accessor,
+            &self.config,
+            ndc,
         )?;
 
-        // Apply opacity if specified
-        if self.opacity_accessor.is_some() {
-            // Opacity would be applied as a shader function
-            // For now, this is noted as a future feature
-        }
-
-        // Create composed chart with axes based on configuration
-        let composed_chart = ComposedChart::new(selection, self.config).with_default_axes();
+        // Prepare the GPU render pipeline at build time so that
+        // `render_to_png()` / `render_to_texture_view()` work without
+        // requiring a `MarkInstanceBuilder` bound at call-site.
+        composed_chart.visualization.prepare_render_bound(
+            context.device(),
+            context.queue(),
+            None,
+            None,
+        )?;
 
         Ok(composed_chart)
     }
