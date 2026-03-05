@@ -7,10 +7,11 @@ This guide shows how to embed GPU-accelerated Gup data visualizations inside a
 
 | gup-bevy | Bevy | wgpu |
 | -------- | ---- | ---- |
+| 0.1      | 0.18 | 27.x |
 | 0.1      | 0.17 | 26.x |
 
 > **Note**: Bevy's wgpu version must match the version used by the `gup` crate.
-> Bevy 0.17 ships with wgpu 26.0, which is compatible.
+> Bevy 0.18 ships with wgpu 27.0, which is compatible.
 
 ## Adding the Dependency
 
@@ -21,7 +22,7 @@ Add `gup-bevy` to your project:
 [dependencies]
 gup = { git = "https://github.com/au-phiware/gup" }
 gup-bevy = { git = "https://github.com/au-phiware/gup" }
-bevy = { version = "0.17", default-features = false, features = [
+bevy = { version = "0.18", default-features = false, features = [
     "bevy_render",
     "bevy_asset",
     "bevy_winit",
@@ -157,7 +158,7 @@ gup_chart.mark_dirty(); // triggers a single re-render
 
 ## Known Limitations and Caveats
 
-1. **Bevy version lock** — `gup-bevy` targets Bevy 0.17 (wgpu 26). Upgrading to
+1. **Bevy version lock** — `gup-bevy` targets Bevy 0.18 (wgpu 27). Upgrading to
    a different Bevy version requires matching wgpu versions.
 
 2. **Render-to-PNG overhead** — The current implementation renders charts to PNG

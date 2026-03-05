@@ -7,7 +7,7 @@ GPU-accelerated data visualization library.
 
 | gup-bevy | Bevy | wgpu |
 | -------- | ---- | ---- |
-| 0.1      | 0.17 | 26.x |
+| 0.1      | 0.18 | 27.x |
 
 ## Architecture
 
