@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Core GPU Primitives **Status**: 🚧 In Progress **Created**:
-2025-07-22
+**Initiative**: Core GPU Primitives **Status**: ✅ Complete **Created**:
+2025-07-22 **Completed**: 2025-07-22
 
 ## Context
 
@@ -21,19 +21,19 @@ should be extracted into a shared helper.
 
 ## Acceptance Criteria
 
-- [ ] A shared helper function exists that transforms `BoxPlotAttributes` into
+- [x] A shared helper function exists that transforms `BoxPlotAttributes` into
       NDC-space `BoxPlotInstance` values given NDC bounds.
-- [ ] `BoxPlotBuilder::build_with_data()` uses the shared helper.
-- [ ] `ViolinPlotBuilder::build_with_data()` uses the shared helper.
-- [ ] All existing tests continue to pass.
+- [x] `BoxPlotBuilder::build_with_data()` uses the shared helper.
+- [x] `ViolinPlotBuilder::build_with_data()` uses the shared helper.
+- [x] All existing tests continue to pass.
 
 ## Technical Tasks
 
-- [ ] Extract the NDC domain computation (x/y min/max from BoxPlotAttributes
+- [x] Extract the NDC domain computation (x/y min/max from BoxPlotAttributes
       slice) into a shared function.
-- [ ] Extract the BoxPlotAttributes → BoxPlotInstance NDC mapper into a shared
+- [x] Extract the BoxPlotAttributes → BoxPlotInstance NDC mapper into a shared
       function or closure factory.
-- [ ] Update both builders to use the shared functions.
+- [x] Update both builders to use the shared functions.
 
 ## Dependencies
 
@@ -57,7 +57,39 @@ should be extracted into a shared helper.
 
 ## Definition of Done
 
-- [ ] Shared helper function extracts common logic.
-- [ ] Both builders use the helper.
-- [ ] All tests pass: `cargo test -- --test-threads=1`.
-- [ ] `mask all-fix` exits cleanly.
+- [x] Shared helper function extracts common logic.
+- [x] Both builders use the helper.
+- [x] All tests pass: `cargo test -- --test-threads=1`.
+- [x] `mask all-fix` exits cleanly.
+
+## Implementation Summary
+
+### What Was Implemented
+
+A single `boxplot_ndc_mapper()` function was added to
+`src/chart_builder/builders.rs` that encapsulates the full NDC transformation
+pipeline for BoxPlot-based marks:
+
+1. Computes data domain (x/y min/max) from a `&[BoxPlotAttributes]` slice,
+   including outlier values and 5% padding.
+2. Returns a closure (`impl Fn(&BoxPlotAttributes) -> BoxPlotInstance`) that maps
+   positions, statistical values (whisker_min…whisker_max), width, and up to 32
+   outliers from data space to NDC coordinates.
+
+Both `BoxPlotBuilder::build_with_data()` and
+`ViolinPlotBuilder::build_with_data()` now construct an `NdcBounds` and delegate
+to `boxplot_ndc_mapper()`, replacing ~60 duplicated lines each.
+
+### Key Files Changed
+
+| File                                    | Change                                                          |
+| --------------------------------------- | --------------------------------------------------------------- |
+| `src/chart_builder/builders.rs`         | Added `boxplot_ndc_mapper()` function and BoxPlot type imports   |
+| `src/chart_builder/builders/boxplot.rs` | Replaced inline NDC mapping with call to shared helper           |
+| `src/chart_builder/builders/violin.rs`  | Replaced inline NDC mapping with call to shared helper           |
+
+### Test Results
+
+- 3,067 lib tests passed, 0 failed
+- All integration tests passed
+- All examples compile
