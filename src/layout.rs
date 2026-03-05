@@ -73,6 +73,7 @@ pub mod treemap;
 mod types;
 
 pub use engine::LayoutEngine;
+pub use engine::LayoutSession;
 pub use graph_builder::GraphChartBuilder;
 pub use treemap::{
     LayoutRect, TreeNode, TreemapAlgorithm, TreemapCell, TreemapOptions, TreemapResult,

@@ -596,3 +596,154 @@ async fn barnes_hut_1k_graph_positions_finite() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Incremental (session-based) API tests
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn session_create_and_step() {
+    let Some(ctx) = gpu_context().await else {
+        return;
+    };
+    let engine = LayoutEngine::new(&ctx).unwrap();
+
+    let nodes = vec![
+        LayoutNode {
+            id: 0,
+            x: -50.0,
+            y: 0.0,
+        },
+        LayoutNode {
+            id: 1,
+            x: 50.0,
+            y: 0.0,
+        },
+    ];
+    let edges = vec![LayoutEdge {
+        source: 0,
+        target: 1,
+    }];
+    let config = ForceDirected::new().approximation_theta(0.0);
+
+    let mut session = engine.create_session(&nodes, &edges, &config).unwrap();
+    assert_eq!(session.node_count(), 2);
+    assert_eq!(session.iterations_performed, 0);
+
+    // Step 5 iterations
+    engine.step(&mut session, 5);
+    assert_eq!(session.iterations_performed, 5);
+
+    // Read back positions — should be finite and different from initial
+    let positions = engine.read_positions(&session).await.unwrap();
+    assert_eq!(positions.len(), 2);
+    for pos in &positions {
+        assert!(pos.x.is_finite());
+        assert!(pos.y.is_finite());
+    }
+}
+
+#[tokio::test]
+async fn session_incremental_stepping() {
+    let Some(ctx) = gpu_context().await else {
+        return;
+    };
+    let engine = LayoutEngine::new(&ctx).unwrap();
+
+    let nodes: Vec<LayoutNode> = (0..20)
+        .map(|i| LayoutNode {
+            id: i,
+            x: 0.0,
+            y: 0.0,
+        })
+        .collect();
+    let mut edges = Vec::new();
+    for i in 0..20u32 {
+        edges.push(LayoutEdge {
+            source: i,
+            target: (i + 1) % 20,
+        });
+    }
+    let config = ForceDirected::new().approximation_theta(0.0);
+    let mut session = engine.create_session(&nodes, &edges, &config).unwrap();
+
+    // Step multiple times and confirm positions change between steps
+    engine.step(&mut session, 10);
+    let pos1 = engine.read_positions(&session).await.unwrap();
+
+    engine.step(&mut session, 10);
+    let pos2 = engine.read_positions(&session).await.unwrap();
+
+    assert_eq!(session.iterations_performed, 20);
+
+    // After additional iterations positions should differ
+    let mut changed = false;
+    for (a, b) in pos1.iter().zip(pos2.iter()) {
+        if (a.x - b.x).abs() > f32::EPSILON || (a.y - b.y).abs() > f32::EPSILON {
+            changed = true;
+            break;
+        }
+    }
+    assert!(changed, "positions should change between steps");
+}
+
+#[tokio::test]
+async fn session_pin_node() {
+    let Some(ctx) = gpu_context().await else {
+        return;
+    };
+    let engine = LayoutEngine::new(&ctx).unwrap();
+
+    let nodes = vec![
+        LayoutNode {
+            id: 0,
+            x: -50.0,
+            y: 0.0,
+        },
+        LayoutNode {
+            id: 1,
+            x: 50.0,
+            y: 0.0,
+        },
+        LayoutNode {
+            id: 2,
+            x: 0.0,
+            y: 50.0,
+        },
+    ];
+    let edges = vec![
+        LayoutEdge {
+            source: 0,
+            target: 1,
+        },
+        LayoutEdge {
+            source: 1,
+            target: 2,
+        },
+    ];
+    let config = ForceDirected::new().approximation_theta(0.0);
+    let mut session = engine.create_session(&nodes, &edges, &config).unwrap();
+
+    // Pin node 0 at (100, 200)
+    engine.pin_node(&session, 0, 100.0, 200.0);
+
+    // Step the simulation
+    engine.step(&mut session, 5);
+
+    // Pin it again to enforce position
+    engine.pin_node(&session, 0, 100.0, 200.0);
+
+    let positions = engine.read_positions(&session).await.unwrap();
+    assert_eq!(positions[0].id, 0);
+    // After pinning + step + pinning, position should be exactly at pin location
+    assert!(
+        (positions[0].x - 100.0).abs() < f32::EPSILON,
+        "pinned x should be 100, got {}",
+        positions[0].x
+    );
+    assert!(
+        (positions[0].y - 200.0).abs() < f32::EPSILON,
+        "pinned y should be 200, got {}",
+        positions[0].y
+    );
+}

@@ -813,4 +813,306 @@ impl LayoutEngine {
             Ok(value)
         }
     }
+
+    // ----- Incremental (session-based) API ---------------------------------
+
+    /// Create a [`LayoutSession`] for incremental layout stepping.
+    ///
+    /// The session holds all GPU buffers for a single graph.  Call
+    /// [`step`](Self::step) to advance the simulation by a given number
+    /// of iterations and [`read_positions`](Self::read_positions) to
+    /// read back the current node positions.
+    pub fn create_session(
+        &self,
+        nodes: &[LayoutNode],
+        edges: &[LayoutEdge],
+        config: &ForceDirected,
+    ) -> GupResult<LayoutSession> {
+        let node_count = nodes.len();
+
+        // Assign initial positions (same logic as force_directed_layout).
+        let gpu_nodes: Vec<GpuNode> = nodes
+            .iter()
+            .enumerate()
+            .map(|(i, n)| {
+                let (px, py) = if n.x == 0.0 && n.y == 0.0 {
+                    let angle = (i as f32) * 2.399_963_2; // golden angle
+                    let radius = (i as f32 + 1.0).sqrt() * 10.0;
+                    (angle.cos() * radius, angle.sin() * radius)
+                } else {
+                    (n.x, n.y)
+                };
+                GpuNode {
+                    pos_x: px,
+                    pos_y: py,
+                    vel_x: 0.0,
+                    vel_y: 0.0,
+                }
+            })
+            .collect();
+
+        let gpu_edges: Vec<GpuEdge> = edges
+            .iter()
+            .map(|e| GpuEdge {
+                src: e.source,
+                tgt: e.target,
+            })
+            .collect();
+
+        let edge_count = gpu_edges.len().max(1);
+        let has_edges = !edges.is_empty();
+
+        let params = GpuSimParams {
+            repulsion_strength: config.repulsion_strength,
+            spring_strength: config.spring_strength,
+            spring_rest_length: config.spring_rest_length,
+            gravity: config.gravity,
+            damping: config.damping,
+            node_count: node_count as u32,
+            edge_count: edges.len() as u32,
+            theta: config.approximation_theta,
+        };
+
+        let node_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("session_nodes"),
+                contents: bytemuck::cast_slice(&gpu_nodes),
+                usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
+            });
+
+        let edge_data = if gpu_edges.is_empty() {
+            vec![GpuEdge { src: 0, tgt: 0 }]
+        } else {
+            gpu_edges
+        };
+        let edge_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("session_edges"),
+                contents: bytemuck::cast_slice(&edge_data),
+                usage: BufferUsages::STORAGE,
+            });
+
+        let force_buffer = self.device.create_buffer(&BufferDescriptor {
+            label: Some("session_forces"),
+            size: (node_count * 2 * std::mem::size_of::<f32>()) as u64,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let params_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("session_params"),
+                contents: bytemuck::bytes_of(&params),
+                usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+            });
+
+        let convergence_buffer = self.device.create_buffer(&BufferDescriptor {
+            label: Some("session_convergence"),
+            size: 4,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let staging_buffer = self.device.create_buffer(&BufferDescriptor {
+            label: Some("session_convergence_staging"),
+            size: 4,
+            usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        let readback_buffer = self.device.create_buffer(&BufferDescriptor {
+            label: Some("session_readback"),
+            size: (node_count * std::mem::size_of::<GpuNode>()) as u64,
+            usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        let bind_group = self.device.create_bind_group(&BindGroupDescriptor {
+            label: Some("session_bind_group"),
+            layout: &self.bind_group_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: node_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: edge_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: force_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 3,
+                    resource: params_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 4,
+                    resource: convergence_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        let node_workgroups = (node_count as u32).div_ceil(WORKGROUP_SIZE);
+        let edge_workgroups = (edge_count as u32).div_ceil(WORKGROUP_SIZE);
+
+        Ok(LayoutSession {
+            node_buffer,
+            _edge_buffer: edge_buffer,
+            _force_buffer: force_buffer,
+            _params_buffer: params_buffer,
+            _convergence_buffer: convergence_buffer,
+            _staging_buffer: staging_buffer,
+            readback_buffer,
+            bind_group,
+            node_count: node_count as u32,
+            has_edges,
+            node_workgroups,
+            edge_workgroups,
+            iterations_performed: 0,
+            converged: false,
+            node_ids: nodes.iter().map(|n| n.id).collect(),
+        })
+    }
+
+    /// Advance the simulation by `iterations` steps.
+    ///
+    /// This dispatches compute passes on the GPU and returns immediately
+    /// after submission.  Call [`read_positions`](Self::read_positions)
+    /// to read back the updated node coordinates.
+    pub fn step(&self, session: &mut LayoutSession, iterations: u32) {
+        if session.converged || iterations == 0 {
+            return;
+        }
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&CommandEncoderDescriptor {
+                label: Some("session_step_encoder"),
+            });
+
+        for _ in 0..iterations {
+            self.encode_clear_forces(&mut encoder, &session.bind_group, session.node_workgroups);
+            self.encode_exact_repulsion(&mut encoder, &session.bind_group, session.node_workgroups);
+            self.encode_spring_integrate(
+                &mut encoder,
+                &session.bind_group,
+                session.node_workgroups,
+                session.edge_workgroups,
+                session.has_edges,
+            );
+        }
+
+        session.iterations_performed += iterations;
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    /// Read back the current node positions from a session.
+    pub async fn read_positions(&self, session: &LayoutSession) -> GupResult<Vec<NodePosition>> {
+        let buf_size = (session.node_count as usize * std::mem::size_of::<GpuNode>()) as u64;
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&CommandEncoderDescriptor {
+                label: Some("session_readback_encoder"),
+            });
+        encoder.copy_buffer_to_buffer(
+            &session.node_buffer,
+            0,
+            &session.readback_buffer,
+            0,
+            buf_size,
+        );
+        self.queue.submit(std::iter::once(encoder.finish()));
+
+        let slice = session.readback_buffer.slice(..);
+        let (sender, receiver) = futures_channel::oneshot::channel::<()>();
+        slice.map_async(MapMode::Read, move |result| {
+            result.expect("Failed to map session readback buffer");
+            let _ = sender.send(());
+        });
+        let _ = self.device.poll(PollType::Wait);
+        let _ = receiver.await;
+
+        let data = slice.get_mapped_range();
+        let gpu_nodes: &[GpuNode] = bytemuck::cast_slice(&data);
+        let positions: Vec<NodePosition> = (0..session.node_count as usize)
+            .map(|i| NodePosition {
+                id: session.node_ids[i],
+                x: gpu_nodes[i].pos_x,
+                y: gpu_nodes[i].pos_y,
+            })
+            .collect();
+        drop(data);
+        session.readback_buffer.unmap();
+
+        Ok(positions)
+    }
+
+    /// Pin a node to a fixed position and zero its velocity.
+    ///
+    /// This writes directly to the GPU node buffer so that subsequent
+    /// simulation steps keep the node at the given coordinates.
+    pub fn pin_node(&self, session: &LayoutSession, index: u32, x: f32, y: f32) {
+        if index >= session.node_count {
+            return;
+        }
+        let node = GpuNode {
+            pos_x: x,
+            pos_y: y,
+            vel_x: 0.0,
+            vel_y: 0.0,
+        };
+        let offset = (index as u64) * (std::mem::size_of::<GpuNode>() as u64);
+        self.queue
+            .write_buffer(&session.node_buffer, offset, bytemuck::bytes_of(&node));
+    }
+}
+
+/// A live layout simulation session for incremental stepping.
+///
+/// Created by [`LayoutEngine::create_session`].  Holds all GPU buffers
+/// needed to advance the force-directed simulation a few iterations at
+/// a time and read back node positions each frame.
+pub struct LayoutSession {
+    node_buffer: Buffer,
+    _edge_buffer: Buffer,
+    _force_buffer: Buffer,
+    _params_buffer: Buffer,
+    _convergence_buffer: Buffer,
+    _staging_buffer: Buffer,
+    readback_buffer: Buffer,
+    bind_group: BindGroup,
+    node_count: u32,
+    has_edges: bool,
+    node_workgroups: u32,
+    edge_workgroups: u32,
+    /// Total iterations performed so far.
+    pub iterations_performed: u32,
+    /// Whether the layout has converged.
+    pub converged: bool,
+    /// Node IDs in index order (for mapping back to user-facing IDs).
+    node_ids: Vec<u32>,
+}
+
+impl std::fmt::Debug for LayoutSession {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LayoutSession")
+            .field("node_count", &self.node_count)
+            .field("iterations_performed", &self.iterations_performed)
+            .field("converged", &self.converged)
+            .finish()
+    }
+}
+
+impl LayoutSession {
+    /// Number of nodes in this session.
+    pub fn node_count(&self) -> u32 {
+        self.node_count
+    }
 }
