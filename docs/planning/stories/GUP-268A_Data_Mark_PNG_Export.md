@@ -93,3 +93,74 @@ The Selection's render pipeline already targets `Bgra8UnormSrgb` (hardcoded in
 - All examples compile
 - Visual inspection confirms data marks at correct positions in 1x, 2x, and
   large exports
+
+## Retrospective
+
+**Completed**: 2025-07-19
+
+### Key Technical Learnings
+
+#### Pipeline Format Compatibility Was a Non-Issue
+
+- **Challenge**: The story anticipated needing to handle format compatibility
+  between the Selection's render pipeline and the off-screen texture format.
+- **Solution**: Both already use `Bgra8UnormSrgb` — the Selection pipeline
+  hardcodes this format in `MarkInfoImpl::create_render_pipeline_impl` (line
+  522 of `mark.rs`), and `OffscreenTarget::new` creates its texture with the
+  same format.
+- **Pattern**: When the same format constant is used in both the pipeline and
+  render target, no conversion or special handling is needed. This is by design
+  in wgpu — the surface format is standardised.
+
+#### Separation of Prepare and Render
+
+- **Challenge**: The `render_to_rgba` method needs to render data marks, but the
+  Selection may or may not have been prepared (via `prepare_render` or
+  `prepare_render_bound`). Auto-preparing would require additional type bounds
+  (`M: MarkInstanceBuilder`) and knowledge of the data-to-instance mapping.
+- **Solution**: Check `is_render_ready()` and only render if the Selection has
+  been prepared. The caller is responsible for calling `prepare_render` before
+  `render_to_png`. This keeps the API simple and avoids adding type bounds.
+- **Pattern**: "Check-then-act" is the right pattern for optional rendering
+  stages. The selection gracefully degrades to a no-op when not prepared.
+
+### Architectural Decisions
+
+#### Caller Prepares, Exporter Renders
+
+- **Decision**: The PNG export path does not auto-prepare the Selection. The
+  caller must call `prepare_render` (with a mapper closure or attribute
+  bindings) before calling `render_to_png`.
+- **Reasoning**: Auto-preparing would require the export method to know how to
+  map data items to GPU instances, which is the caller's responsibility. Adding
+  `M: MarkInstanceBuilder` bounds would be a breaking API change.
+- **Trade-off**: Users must remember to prepare the selection before exporting.
+  If they forget, the export succeeds but shows no data marks (white
+  background only).
+- **Future**: A convenience method like `export_png_with_mapper` could
+  auto-prepare as a one-shot, or the `ComposedChart` builder could store the
+  mapper for reuse.
+
+### Development Workflow Insights
+
+- The implementation was remarkably small — just 4 lines of code in
+  `render_to_rgba` and 4 lines in `render_to_texture_view` — because the
+  Selection rendering API was already well-designed with a clean
+  prepare/render split.
+- Visual inspection of the exported PNG was the most valuable validation step.
+  The integration test catches regressions, but eyeballing the scatter plot
+  confirmed correct positioning and styling.
+- The pre-commit hook has pre-existing failures in `gup-macros` clippy and
+  markdown lint; these are unrelated to this story.
+
+### Follow-up Stories
+
+1. **GUP-268B: Auto-Prepare Selection in PNG Export** — Add a convenience
+   method on `ComposedChart` that accepts a mapper closure and prepares the
+   Selection as part of the export call, so callers don't need to manage the
+   prepare step separately. This would also support `prepare_render_bound`
+   for charts built with attribute bindings.
+2. **GUP-268C: Text Label Rendering in PNG Export** — The current PNG export
+   renders data marks, axes, ticks, and grid lines, but does not render text
+   labels (axis labels, title, tick labels). Wiring the text rendering pipeline
+   through the export path would make the exported chart fully self-contained.

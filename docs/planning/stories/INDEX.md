@@ -1030,6 +1030,12 @@ PNG, HTML), and platform targets.
   rendering (circles, rectangles, lines) through the PNG export path so exported
   images include the full visualization, not just axes and grid. Deps: GUP-268
   ✅.
+- [GUP-268B](GUP-268B_Auto_Prepare_Selection_PNG_Export.md) 💡 — Add
+  convenience API that auto-prepares the Selection as part of the PNG export
+  call, reducing manual `prepare_render` boilerplate. Deps: GUP-268A ✅.
+- [GUP-268C](GUP-268C_Text_Label_PNG_Export.md) 💡 — Wire the SDF text
+  rendering pipeline through the PNG export path so exported images include
+  titles, axis labels, and tick labels. Deps: GUP-268A ✅.
 - [GUP-269](GUP-269_HTML_Export.md) ✅ — HtmlExporter generating a single-file
   interactive HTML page with embedded WASM, data JSON, SVG fallback, and OG
   thumbnail meta tags. Deps: GUP-266 ✅, GUP-268 ✅, GUP-172 ✅.
