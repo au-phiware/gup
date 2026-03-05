@@ -752,7 +752,7 @@ integration, pipeline caching.
 - [GUP-287](GUP-287_GPU_Side_Choropleth_Recolouring.md) ✅ — GPU-side per-region
   colour storage buffer for dynamic recolouring without re-tessellation. Deps:
   GUP-275 ✅.
-- [GUP-288](GUP-288_Choropleth_Tooltip_Hover_Interaction.md) 📋 — Choropleth
+- [GUP-288](GUP-288_Choropleth_Tooltip_Hover_Interaction.md) 🚧 — Choropleth
   tooltip and hover highlighting via GPU hit-testing. Deps: GUP-275 ✅, GUP-012
   ✅, GUP-014 ✅.
 - [GUP-366](GUP-366_Choropleth_GPU_Render_Pipeline_Integration.md) 📋 —
