@@ -118,3 +118,102 @@ compositing.
 - 8 bridge tests (existing, passing)
 - 9 widget tests (6 existing + 3 new, all passing)
 - 5 doc-tests (ignored, require windowed context)
+
+## Retrospective
+
+**Completed**: 2025-07-22
+
+### Key Technical Learnings
+
+#### Texture Format Compatibility Between Chart Pipelines and egui
+
+- **Challenge**: egui's `register_native_texture` requires `Rgba8Unorm`
+  textures, but Gup's chart render pipelines default to `Bgra8UnormSrgb`. Using
+  a mismatched format caused mark data points to silently not render (axes
+  rendered fine because they use pipelines compiled per-call).
+- **Solution**: Created a dual-view texture approach — the GPU texture is
+  created with format `Rgba8UnormSrgb` and `view_formats: [Rgba8Unorm]`. The
+  chart renders into the `Rgba8UnormSrgb` view (hardware applies linear→sRGB
+  encoding), while egui samples from the `Rgba8Unorm` view (reads sRGB-encoded
+  bytes as-is, matching egui's gamma-space expectations).
+- **Pattern**: When bridging between two rendering systems, ensure the texture
+  format for pipeline compilation matches the render target format, not just the
+  output format. The `set_headless_format` API makes this explicit.
+
+#### Pipeline Format Mismatch is Silent
+
+- **Challenge**: When the chart's mark pipeline was compiled for
+  `Bgra8UnormSrgb` but the render target was `Rgba8UnormSrgb`, wgpu silently
+  skipped the draw commands rather than producing a validation error. Axis
+  infrastructure (compiled per-frame) rendered correctly, making the issue appear
+  to be mark-specific.
+- **Solution**: Added `RenderContext::set_headless_format()` so that all
+  pipeline creation (marks, axes, ticks, colorbars) uses the same format from
+  the start. Charts built with `GupEguiContext` compile everything for
+  `Rgba8UnormSrgb`.
+- **Pattern**: Always verify that the entire pipeline chain uses a consistent
+  texture format. Lazily-compiled pipelines (marks) can use a stale format when
+  the rendering target format changes.
+
+#### wgpu 27 Reference-Counted Types Enable Easy Sharing
+
+- **Challenge**: Both egui and Gup need to use the same device/queue without
+  creating a second GPU adapter.
+- **Solution**: In wgpu 27, `Device`, `Queue`, `Adapter` are internally
+  reference-counted (`Arc`). Cloning them is a cheap reference count bump, not a
+  GPU resource allocation. This made `GupEguiContext::from_render_state` trivial.
+- **Pattern**: Same approach used by `gup-bevy`. Any host application with wgpu
+  27+ can share resources by cloning handles.
+
+### Architectural Decisions
+
+#### GupEguiContext vs Direct Device Injection
+
+- **Decision**: Created a `GupEguiContext` type rather than directly passing
+  `Device`/`Queue` to the widget.
+- **Reasoning**: Matches the `GupRenderContext` pattern in `gup-bevy`, provides
+  a single place to configure the headless format, and gives users a clean API
+  for creating shared chart builders.
+- **Trade-off**: Requires users to create one more object (`GupEguiContext`) but
+  prevents misuse (e.g. passing egui's device but forgetting to set the format).
+- **Future**: Could add convenience methods like `build_chart()` that
+  automatically use the shared context.
+
+#### Rgba8UnormSrgb + Rgba8Unorm View Pair
+
+- **Decision**: Use `Rgba8UnormSrgb` for the chart render target with
+  `view_formats: [Rgba8Unorm]` for egui sampling.
+- **Reasoning**: The chart's fragment shaders output linear color values;
+  `Rgba8UnormSrgb` applies hardware linear→sRGB encoding on write. egui expects
+  gamma-space bytes in user textures, so the `Rgba8Unorm` view provides the raw
+  sRGB-encoded bytes without unwanted sRGB decode on sample.
+- **Trade-off**: Requires `view_formats` in the texture descriptor (trivial
+  cost). Alternative was `Bgra8UnormSrgb` which would have required channel
+  swizzling.
+- **Future**: If egui adds sRGB-aware texture sampling, the approach may need
+  revisiting.
+
+### Development Workflow Insights
+
+- **Texture format debugging is hard**: When draw commands silently fail due to
+  format mismatch, there's no wgpu validation error. The only symptom is missing
+  rendered content. Adding explicit format assertions at pipeline creation time
+  would improve debugging.
+- **Screen lock blocked visual verification**: The development machine's screen
+  locked during the final screenshot capture. The first screenshot confirmed the
+  shared-device path was active and axes rendered correctly; automated tests
+  provided additional confidence.
+- **Build cache disk usage**: The 70GB `target/` directory on `/tmp` filled the
+  disk during final validation. Keeping build caches on separate partitions from
+  `/tmp` would prevent this.
+
+### Follow-up Stories
+
+1. **GUP-263C: Frame-time Benchmark for gup-egui Paths** — Measure and compare
+   frame-time overhead between the pixel-buffer fallback and zero-copy
+   shared-device paths. The zero-copy path eliminates CPU readback and texture
+   upload, but quantifying the improvement requires a benchmark harness.
+2. **GUP-263D: Pipeline Format Validation** — Add debug-mode assertions that
+   verify the chart's render pipeline format matches the render target format at
+   draw time, preventing the silent mismatched-format issue discovered in this
+   story.

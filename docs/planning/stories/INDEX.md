@@ -1013,6 +1013,12 @@ PNG, HTML), and platform targets.
 - [GUP-263B](GUP-263B_Shared_wgpu_Device_egui.md) ✅ — Shared wgpu device
   between egui and Gup for zero-copy texture transfer when gup upgrades to
   wgpu 27. Deps: GUP-263 ✅.
+- [GUP-263C](GUP-263C_Frame_Time_Benchmark_egui.md) 💡 — Frame-time benchmark
+  comparing pixel-buffer fallback vs zero-copy shared-device paths in gup-egui.
+  Deps: GUP-263B ✅.
+- [GUP-263D](GUP-263D_Pipeline_Format_Validation.md) 💡 — Debug-mode assertions
+  that verify pipeline format matches render target format at draw time. Deps:
+  GUP-263B ✅.
 - [GUP-264](GUP-264_Tauri_Integration.md) ✅ — gup-tauri example running Gup
   WASM in a Tauri WebView with a Rust IPC bridge feeding data to the chart.
   Deps: GUP-004 ✅, GUP-018 ✅, GUP-172 ✅, GUP-237 ✅.
