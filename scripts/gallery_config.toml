@@ -812,7 +812,8 @@ name = "pdf_export"
 source = "examples/pdf_export.rs"
 description = "PDF export demonstration"
 category = "Export"
-skip = false
+skip = true
+skip_reason = "Requires 'pdf' feature flag"
 
 # ---------------------------------------------------------------------------
 # Intermediate

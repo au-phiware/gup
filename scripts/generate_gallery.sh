@@ -35,12 +35,14 @@ mkdir -p "$OUTPUT_DIR"
 # Produces lines of: name|skip|source
 parse_config() {
   awk '
-    /^\[\[examples\]\]/ { name=""; skip="false"; source="" }
+    /^\[\[examples\]\]/ {
+      if (name != "") print name "|" skip "|" source
+      name=""; skip="false"; source=""
+    }
     /^name *= */ { gsub(/.*= *"|"/, ""); name=$0 }
     /^skip *= */ { gsub(/.*= */, ""); skip=$0 }
     /^source *= */ { gsub(/.*= *"|"/, ""); source=$0 }
     /^(skip_reason|description|category) *= */ { next }
-    /^\[/ && name != "" { print name "|" skip "|" source; name="" }
     END { if (name != "") print name "|" skip "|" source }
   ' "$CONFIG"
 }
