@@ -83,14 +83,14 @@ that `ComposedChart::render()`, `render_to_png()`, and
 
 ### Key Changes
 
-| File | Change |
-| --- | --- |
-| `src/chart_builder/builders.rs` | Rewrote `apply_accessors_to_selection()` to evaluate accessor functions, auto-compute data domain, and map data values to NDC chart-area coordinates. Added `NdcBounds` struct and `auto_domain()` helper. |
-| `src/chart_builder/builders/scatter.rs` | Updated `build_with_data()` to compute exact chart area (with axis margins) before applying accessor bindings, then call `prepare_render_bound()` at build time. |
-| `src/chart_builder/builders/bar.rs` | Updated for new `apply_accessors_to_selection` signature. |
-| `src/chart_builder/builders/heatmap/mod.rs` | Updated for new `apply_accessors_to_selection` signature. |
-| `src/chart_builder.rs` | Added `prepare_data_pipeline()`, `draw_data_marks()`, `has_data_mark_data()` methods. Updated `render()` to prepare data marks. Made `ChartArea` and `calculate_chart_area()` `pub(crate)`. |
-| `src/chart_builder/labels.rs` | Added `M: MarkInstanceBuilder` bound to `LabeledChart::render()`. |
+| File                                        | Change                                                                                                                                                                                                     |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/chart_builder/builders.rs`             | Rewrote `apply_accessors_to_selection()` to evaluate accessor functions, auto-compute data domain, and map data values to NDC chart-area coordinates. Added `NdcBounds` struct and `auto_domain()` helper. |
+| `src/chart_builder/builders/scatter.rs`     | Updated `build_with_data()` to compute exact chart area (with axis margins) before applying accessor bindings, then call `prepare_render_bound()` at build time.                                           |
+| `src/chart_builder/builders/bar.rs`         | Updated for new `apply_accessors_to_selection` signature.                                                                                                                                                  |
+| `src/chart_builder/builders/heatmap/mod.rs` | Updated for new `apply_accessors_to_selection` signature.                                                                                                                                                  |
+| `src/chart_builder.rs`                      | Added `prepare_data_pipeline()`, `draw_data_marks()`, `has_data_mark_data()` methods. Updated `render()` to prepare data marks. Made `ChartArea` and `calculate_chart_area()` `pub(crate)`.                |
+| `src/chart_builder/labels.rs`               | Added `M: MarkInstanceBuilder` bound to `LabeledChart::render()`.                                                                                                                                          |
 
 ### Test Summary
 
@@ -109,10 +109,10 @@ that `ComposedChart::render()`, `render_to_png()`, and
 - **Challenge**: `AccessorFunction<T>` contains a `Box<dyn Fn>` which is not
   `Clone`. The attr binding closures passed to `Selection::attr()` needed to
   capture the accessor functions, but they were borrowed references.
-- **Solution**: Wrap `AccessorFunction<T>` in `Arc` before capturing in closures.
-  Since the inner `Box<dyn Fn>` already has `Send + Sync` bounds on non-WASM, the
-  `Arc` wrapper is `Send + Sync` and satisfies the `MaybeSend + MaybeSync` bounds
-  required by `Selection::attr()`.
+- **Solution**: Wrap `AccessorFunction<T>` in `Arc` before capturing in
+  closures. Since the inner `Box<dyn Fn>` already has `Send + Sync` bounds on
+  non-WASM, the `Arc` wrapper is `Send + Sync` and satisfies the
+  `MaybeSend + MaybeSync` bounds required by `Selection::attr()`.
 - **Pattern**: When closures need to share non-Clone function objects across
   attribute bindings, `Arc`-wrapping is the idiomatic Rust pattern.
 
@@ -179,10 +179,10 @@ that `ComposedChart::render()`, `render_to_png()`, and
   `prepare_render_bound()` and providing real accessor bindings instead of
   placeholders.
 - Visual verification via the `export_png` example and the PNG regression test
-  was essential — the test initially failed with exactly 10 non-white pixels
-  (at the threshold boundary) because the default circle radius was very small
-  at the test resolution. Increasing the resolution and using `point_size()`
-  fixed this.
+  was essential — the test initially failed with exactly 10 non-white pixels (at
+  the threshold boundary) because the default circle radius was very small at
+  the test resolution. Increasing the resolution and using `point_size()` fixed
+  this.
 
 ### Follow-up Stories
 

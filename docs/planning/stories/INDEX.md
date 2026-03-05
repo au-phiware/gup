@@ -1148,8 +1148,8 @@ API reference generation, tutorials, and example gallery.
   rendering into `LineChartBuilder` so that `render_to_png()` produces visible
   line segments. Deps: GUP-284 ✅.
 - [GUP-287](GUP-287_Dynamic_Data_Refresh.md) 📋 — Add a `refresh_data()` method
-  to `ComposedChart` for updating data and re-rendering without rebuilding. Deps:
-  GUP-284 ✅.
+  to `ComposedChart` for updating data and re-rendering without rebuilding.
+  Deps: GUP-284 ✅.
 
 ## Follow-ups from GUP-265
 

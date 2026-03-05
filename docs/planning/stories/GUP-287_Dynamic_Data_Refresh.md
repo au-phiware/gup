@@ -21,7 +21,8 @@ data scenarios need a lightweight `refresh_data()` path.
 ## Acceptance Criteria
 
 - [ ] `ComposedChart` exposes a `refresh_data()` method that replaces the
-      Selection's data, re-evaluates attr bindings, and re-uploads GPU instances.
+      Selection's data, re-evaluates attr bindings, and re-uploads GPU
+      instances.
 - [ ] Calling `refresh_data()` then `render_to_png()` produces a chart
       reflecting the new data.
 - [ ] Pipeline objects (render pipeline, shaders) are reused — only instance
@@ -31,7 +32,8 @@ data scenarios need a lightweight `refresh_data()` path.
 ## Technical Tasks
 
 - [ ] Add `ComposedChart::refresh_data()` that replaces data on the inner
-      Selection, re-computes the data domain, and calls `prepare_render_bound()`.
+      Selection, re-computes the data domain, and calls
+      `prepare_render_bound()`.
 - [ ] Optionally support domain-locking (keep old axis range) vs auto-rescale.
 - [ ] Add tests for data refresh with both domain modes.
 
@@ -49,9 +51,9 @@ data scenarios need a lightweight `refresh_data()` path.
 
 ## Risk Assessment
 
-- **Low**: The Selection already supports multiple `prepare_render_bound()` calls
-  which re-upload instances. The main work is recalculating the data domain and
-  NDC bounds.
+- **Low**: The Selection already supports multiple `prepare_render_bound()`
+  calls which re-upload instances. The main work is recalculating the data
+  domain and NDC bounds.
 
 ## Definition of Done
 
