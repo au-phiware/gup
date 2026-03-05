@@ -33,12 +33,28 @@ struct DataPoint {
 // ---------------------------------------------------------------------------
 
 /// Startup system: spawn a camera and a GupChart entity.
-fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+///
+/// Uses the shared [`GupRenderContext`] so that chart GPU resources live on
+/// the same wgpu device as Bevy's renderer — required for zero-copy texture
+/// sharing.
+fn setup(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    gup_ctx: Option<Res<GupRenderContext>>,
+) {
     // 2-D camera so the sprite is visible.
     commands.spawn(Camera2d);
 
+    // Prefer the shared Bevy/Gup context when available.
+    let context: Arc<RenderContext> = match gup_ctx {
+        Some(ctx) => Arc::clone(ctx.render_context()),
+        None => {
+            Arc::new(pollster::block_on(RenderContext::new()).expect("Failed to create context"))
+        }
+    };
+
     // Build the initial scatter plot.
-    let chart = build_scatter_chart(0.0);
+    let chart = build_scatter_chart(0.0, &context);
 
     // Create a blank placeholder image for the sprite.
     let placeholder = blank_chart_image(800, 600);
@@ -57,12 +73,20 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
 
 /// Per-frame system: rebuild the scatter data with a time offset so the sine
 /// wave animates.
-fn animate_chart(time: Res<Time>, mut charts: Query<&mut GupChart>) {
+fn animate_chart(
+    time: Res<Time>,
+    gup_ctx: Option<Res<GupRenderContext>>,
+    mut charts: Query<&mut GupChart>,
+) {
+    let Some(gup_ctx) = gup_ctx else {
+        return;
+    };
+    let context = Arc::clone(gup_ctx.render_context());
     let t = time.elapsed_secs();
 
     for mut gup_chart in &mut charts {
         // Replace the inner chart with fresh data.
-        let new_chart = build_scatter_chart(t);
+        let new_chart = build_scatter_chart(t, &context);
         *gup_chart = GupChart::new(new_chart).with_size(800, 600);
     }
 }
@@ -74,6 +98,7 @@ fn animate_chart(time: Res<Time>, mut charts: Query<&mut GupChart>) {
 /// Build a scatter chart whose data is a sine wave offset by `time`.
 fn build_scatter_chart(
     time: f32,
+    context: &Arc<RenderContext>,
 ) -> gup::chart_builder::ComposedChart<DataPoint, gup::mark::Circle> {
     let data: Vec<DataPoint> = (0..60)
         .map(|i| {
@@ -83,9 +108,6 @@ fn build_scatter_chart(
         })
         .collect();
 
-    let context =
-        Arc::new(pollster::block_on(RenderContext::new()).expect("Failed to create RenderContext"));
-
     let x_acc = AccessorFunction::new(|d: &DataPoint| AccessorValue::Float(d.x));
     let y_acc = AccessorFunction::new(|d: &DataPoint| AccessorValue::Float(d.y));
 
@@ -94,7 +116,7 @@ fn build_scatter_chart(
         .y(y_acc)
         .point_size(6.0)
         .fill_color([0.2, 0.5, 0.9, 1.0])
-        .build_with_data(data, context)
+        .build_with_data(data, Arc::clone(context))
         .expect("Failed to build scatter chart")
 }
 
