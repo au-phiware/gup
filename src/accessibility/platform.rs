@@ -326,6 +326,7 @@ impl PlatformAccessibility for LinuxAccessibility {
 // ============================================================================
 
 #[cfg(target_arch = "wasm32")]
+/// Web-based accessibility provider using ARIA live regions and DOM overlays.
 pub struct WebAccessibility {
     initialized: bool,
     aria_tree: Option<AriaTree>,
@@ -334,6 +335,7 @@ pub struct WebAccessibility {
 
 #[cfg(target_arch = "wasm32")]
 impl WebAccessibility {
+    /// Create a new, uninitialised web accessibility provider.
     pub fn new() -> Self {
         Self {
             initialized: false,

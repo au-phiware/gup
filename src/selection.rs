@@ -460,7 +460,13 @@ pub struct Selection<T, M: Mark> {
     /// Active data stream source (type-erased). Set via [`stream`](Self::stream).
     /// When present, the selection delegates GPU buffer management to the
     /// [`DataStream`](crate::streaming::DataStream).
+    #[cfg(not(target_arch = "wasm32"))]
     stream_source: Option<Box<dyn std::any::Any + Send + Sync>>,
+    /// Active data stream source (type-erased). Set via [`stream`](Self::stream).
+    /// When present, the selection delegates GPU buffer management to the
+    /// [`DataStream`](crate::streaming::DataStream).
+    #[cfg(target_arch = "wasm32")]
+    stream_source: Option<Box<dyn std::any::Any>>,
 }
 
 impl<T, M: Mark> std::fmt::Debug for Selection<T, M> {
@@ -988,11 +994,25 @@ impl<T, M: Mark> Selection<T, M> {
     ///
     /// selection.stream(stream);
     /// ```
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn stream(&mut self, data_stream: DataStream<T>)
     where
         T: bytemuck::Pod + bytemuck::Zeroable + Send + Sync + 'static,
     {
         // Drop static data and invalidate render state.
+        self.data = Vec::new();
+        self.render_state = None;
+        self.aria_dirty = true;
+        self.stream_source = Some(Box::new(data_stream));
+    }
+
+    /// Connect a [`DataStream`] as the live data source (WASM variant —
+    /// relaxed `Send + Sync` bounds since wgpu types are `!Send` on WASM).
+    #[cfg(target_arch = "wasm32")]
+    pub fn stream(&mut self, data_stream: DataStream<T>)
+    where
+        T: bytemuck::Pod + bytemuck::Zeroable + 'static,
+    {
         self.data = Vec::new();
         self.render_state = None;
         self.aria_dirty = true;
@@ -1009,7 +1029,18 @@ impl<T, M: Mark> Selection<T, M> {
     ///
     /// Returns `None` if no stream is attached or if the type parameter
     /// does not match.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn stream_ref<U: bytemuck::Pod + bytemuck::Zeroable + Send + Sync + 'static>(
+        &self,
+    ) -> Option<&DataStream<U>> {
+        self.stream_source
+            .as_ref()
+            .and_then(|s| s.downcast_ref::<DataStream<U>>())
+    }
+
+    /// Return a reference to the active [`DataStream`] (WASM variant).
+    #[cfg(target_arch = "wasm32")]
+    pub fn stream_ref<U: bytemuck::Pod + bytemuck::Zeroable + 'static>(
         &self,
     ) -> Option<&DataStream<U>> {
         self.stream_source
@@ -1024,7 +1055,18 @@ impl<T, M: Mark> Selection<T, M> {
     ///
     /// Returns `None` if no stream is attached or if the type parameter
     /// does not match.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn stream_mut<U: bytemuck::Pod + bytemuck::Zeroable + Send + Sync + 'static>(
+        &mut self,
+    ) -> Option<&mut DataStream<U>> {
+        self.stream_source
+            .as_mut()
+            .and_then(|s| s.downcast_mut::<DataStream<U>>())
+    }
+
+    /// Return a mutable reference to the active [`DataStream`] (WASM variant).
+    #[cfg(target_arch = "wasm32")]
+    pub fn stream_mut<U: bytemuck::Pod + bytemuck::Zeroable + 'static>(
         &mut self,
     ) -> Option<&mut DataStream<U>> {
         self.stream_source
@@ -1037,7 +1079,19 @@ impl<T, M: Mark> Selection<T, M> {
     /// After this call, [`has_stream`](Self::has_stream) returns `false`
     /// and the selection reverts to static-data mode (call
     /// [`set_data`](Self::set_data) to provide new data).
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn detach_stream<U: bytemuck::Pod + bytemuck::Zeroable + Send + Sync + 'static>(
+        &mut self,
+    ) -> Option<DataStream<U>> {
+        self.stream_source
+            .take()
+            .and_then(|s| s.downcast::<DataStream<U>>().ok())
+            .map(|b| *b)
+    }
+
+    /// Detach the current data stream (WASM variant).
+    #[cfg(target_arch = "wasm32")]
+    pub fn detach_stream<U: bytemuck::Pod + bytemuck::Zeroable + 'static>(
         &mut self,
     ) -> Option<DataStream<U>> {
         self.stream_source

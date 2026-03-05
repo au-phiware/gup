@@ -280,11 +280,12 @@ impl AtSpiManager {
 }
 
 #[cfg(not(target_os = "linux"))]
-/// Placeholder for non-Linux platforms
+/// Placeholder for non-Linux platforms.
 pub struct AtSpiManager;
 
 #[cfg(not(target_os = "linux"))]
 impl AtSpiManager {
+    /// Create a new no-op AT-SPI manager on non-Linux platforms.
     pub fn new(_app_name: String) -> Self {
         Self
     }

@@ -48,9 +48,18 @@ static NEXT_KEY: AtomicU64 = AtomicU64::new(1);
 pub struct SubscriberHandle(u64);
 
 /// Internal subscriber entry pairing a handle with its callback.
+#[cfg(not(target_arch = "wasm32"))]
 struct Subscriber<T: bytemuck::Pod + bytemuck::Zeroable> {
     handle: SubscriberHandle,
     callback: Box<dyn Fn(&StreamUpdate<T>) + Send + Sync + 'static>,
+}
+
+/// Internal subscriber entry pairing a handle with its callback (WASM
+/// variant — relaxed `Send + Sync` since wgpu types are `!Send` on WASM).
+#[cfg(target_arch = "wasm32")]
+struct Subscriber<T: bytemuck::Pod + bytemuck::Zeroable> {
+    handle: SubscriberHandle,
+    callback: Box<dyn Fn(&StreamUpdate<T>) + 'static>,
 }
 
 // ---------------------------------------------------------------------------
@@ -283,10 +292,23 @@ impl<T: bytemuck::Pod + bytemuck::Zeroable> DataStream<T> {
     /// assert_eq!(count.load(Ordering::Relaxed), 1);
     /// # }
     /// ```
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn subscribe(
         &mut self,
         callback: impl Fn(&StreamUpdate<T>) + Send + Sync + 'static,
     ) -> SubscriberHandle {
+        let handle = SubscriberHandle(NEXT_SUBSCRIBER_ID.fetch_add(1, Ordering::Relaxed));
+        self.subscribers.push(Subscriber {
+            handle,
+            callback: Box::new(callback),
+        });
+        handle
+    }
+
+    /// Register a callback that is invoked for every committed update
+    /// (WASM variant — relaxed `Send + Sync` bounds).
+    #[cfg(target_arch = "wasm32")]
+    pub fn subscribe(&mut self, callback: impl Fn(&StreamUpdate<T>) + 'static) -> SubscriberHandle {
         let handle = SubscriberHandle(NEXT_SUBSCRIBER_ID.fetch_add(1, Ordering::Relaxed));
         self.subscribers.push(Subscriber {
             handle,

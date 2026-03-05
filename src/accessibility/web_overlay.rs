@@ -59,9 +59,11 @@ pub struct DomInteractionEvent {
     pub event_type: String,
     /// Screen coordinates (client X/Y from the DOM event)
     pub screen_x: f32,
+    /// Screen Y coordinate from the DOM event.
     pub screen_y: f32,
     /// Canvas-relative coordinates (accounting for canvas position)
     pub canvas_x: f32,
+    /// Canvas-relative Y coordinate.
     pub canvas_y: f32,
     /// Pointer type: "mouse", "pen", "touch"
     pub pointer_type: String,

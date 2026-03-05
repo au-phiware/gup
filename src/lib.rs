@@ -207,6 +207,7 @@ pub trait MaybeSend: Send {}
 #[cfg(not(target_arch = "wasm32"))]
 impl<T: Send> MaybeSend for T {}
 
+/// Marker trait that equals `Send` on native and is auto-implemented on WASM.
 #[cfg(target_arch = "wasm32")]
 pub trait MaybeSend {}
 #[cfg(target_arch = "wasm32")]
@@ -218,6 +219,7 @@ pub trait MaybeSync: Sync {}
 #[cfg(not(target_arch = "wasm32"))]
 impl<T: Sync> MaybeSync for T {}
 
+/// Marker trait that equals `Sync` on native and is auto-implemented on WASM.
 #[cfg(target_arch = "wasm32")]
 pub trait MaybeSync {}
 #[cfg(target_arch = "wasm32")]
