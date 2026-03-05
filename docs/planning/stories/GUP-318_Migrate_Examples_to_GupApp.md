@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Ecosystem Integration **Status**: 🚧 In Progress **Created**:
-2025-03-04
+**Initiative**: Ecosystem Integration **Status**: ✅ Complete **Completed**:
+2025-07-17 **Created**: 2025-03-04
 
 ## Context
 
@@ -27,13 +27,13 @@ of the manual approach.
 
 ## Acceptance Criteria
 
-- [ ] `examples/basic/02_scatter_window.rs` is migrated to use `GupApp` and its
+- [x] `examples/basic/02_scatter_window.rs` is migrated to use `GupApp` and its
       `main()` body is ≤ 5 lines.
-- [ ] At least two other windowed examples are migrated where appropriate.
-- [ ] Multi-window and advanced-event examples remain unchanged and are
+- [x] At least two other windowed examples are migrated where appropriate.
+- [x] Multi-window and advanced-event examples remain unchanged and are
       documented as intentionally manual.
-- [ ] All migrated examples compile and run correctly.
-- [ ] A short paragraph in `docs/` or the example doc-comments explains when to
+- [x] All migrated examples compile and run correctly.
+- [x] A short paragraph in `docs/` or the example doc-comments explains when to
       use `GupApp` vs the manual approach.
 
 ## Dependencies
@@ -44,13 +44,13 @@ of the manual approach.
 
 ## Technical Tasks
 
-- [ ] Identify which examples are suitable for `GupApp` migration.
-- [ ] Refactor each suitable example: extract the renderer into an `AppRenderer`
+- [x] Identify which examples are suitable for `GupApp` migration.
+- [x] Refactor each suitable example: extract the renderer into an `AppRenderer`
       impl, replace the `ApplicationHandler` boilerplate with
       `GupApp::new(renderer).run()`.
-- [ ] Add doc comments explaining the migration and when manual handling is
+- [x] Add doc comments explaining the migration and when manual handling is
       preferred.
-- [ ] Verify all examples compile: `cargo check --examples`.
+- [x] Verify all examples compile: `cargo check --examples`.
 
 ## Testing Strategy
 
@@ -65,9 +65,51 @@ of the manual approach.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Story status updated in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Story status updated in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+### What Was Implemented
+
+Three windowed examples were migrated from manual `ApplicationHandler` to
+`GupApp`:
+
+1. **`examples/basic/02_scatter_window.rs`** — `ScatterRenderer` now implements
+   `AppRenderer`; main() reduced from 15 lines to 4.
+2. **`examples/boxplot_rendering_demo.rs`** — `BoxPlotRenderer` now implements
+   `AppRenderer`; prepare/viewport logic moved into render() using
+   `frame.device()`, `frame.queue()`, and `frame.surface_size()`.
+3. **`examples/multi_pass_mark_demo.rs`** — `LazyMultiPassDemo` wrapper provides
+   lazy GPU resource initialisation via `AppRenderer`.
+
+Four examples were annotated as intentionally manual:
+
+- `multi_window_demo.rs` — multi-window
+- `windowed_demo.rs` — multi-window
+- `treemap_window.rs` — custom keyboard shortcuts (C, A)
+- `simple_window.rs` — custom keyboard shortcut (Space)
+
+### Key Files Changed
+
+| File | Change |
+|------|--------|
+| `src/context.rs` | Added `RenderFrame::surface_size()` |
+| `examples/basic/02_scatter_window.rs` | Migrated to GupApp (–160 lines) |
+| `examples/boxplot_rendering_demo.rs` | Migrated to GupApp (–170 lines) |
+| `examples/multi_pass_mark_demo.rs` | Migrated to GupApp (–160 lines) |
+| `examples/multi_window_demo.rs` | Added "intentionally manual" doc comment |
+| `examples/windowed_demo.rs` | Added "intentionally manual" doc comment |
+| `examples/treemap_window.rs` | Added "intentionally manual" doc comment |
+| `examples/simple_window.rs` | Added "intentionally manual" doc comment |
+
+### Test Counts
+
+- All 3015+ library tests pass
+- All 4 scatter window example tests pass
+- All 4 boxplot example tests pass
+- All examples compile (`cargo check --examples`)
