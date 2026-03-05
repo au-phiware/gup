@@ -70,9 +70,9 @@ to the latest Bevy features and bug fixes alongside Gup charts.
 
 ### Bevy 0.17 → 0.18 API changes addressed
 
-- Render-world entity model changed: main-world entity IDs no longer
-  auto-exist in the render world. Added `cleanup_extracted_gup_charts` system
-  and switched to `commands.spawn(...)` in the extract schedule.
+- Render-world entity model changed: main-world entity IDs no longer auto-exist
+  in the render world. Added `cleanup_extracted_gup_charts` system and switched
+  to `commands.spawn(...)` in the extract schedule.
 
 ### Key files changed
 
@@ -104,11 +104,12 @@ to the latest Bevy features and bug fixes alongside Gup charts.
   variant with `submission_index` and `timeout` fields, and
   `PollType::WaitForSubmissionIndex` was removed entirely. This affected 60+
   call sites across the codebase.
-- **Solution**: Sed-based mass replacement:
-  `PollType::Wait` → `PollType::Wait { submission_index: None, timeout: None }`,
-  `PollType::WaitForSubmissionIndex(idx)` → `PollType::Wait { submission_index: Some(idx), timeout: None }`.
-- **Pattern**: wgpu major version bumps tend to consolidate enum variants.
-  Check release notes for such collapses before upgrading.
+- **Solution**: Sed-based mass replacement: `PollType::Wait` →
+  `PollType::Wait { submission_index: None, timeout: None }`,
+  `PollType::WaitForSubmissionIndex(idx)` →
+  `PollType::Wait { submission_index: Some(idx), timeout: None }`.
+- **Pattern**: wgpu major version bumps tend to consolidate enum variants. Check
+  release notes for such collapses before upgrading.
 
 #### Bevy 0.18 Render-World Entity Model
 
@@ -138,9 +139,8 @@ to the latest Bevy features and bug fixes alongside Gup charts.
 
 #### Upgrade wgpu in Main Crate as Part of This Story
 
-- **Decision**: Upgraded the main `gup` crate from wgpu 26 to 27 alongside
-  the Bevy upgrade, even though it was listed as a separate unplanned
-  prerequisite.
+- **Decision**: Upgraded the main `gup` crate from wgpu 26 to 27 alongside the
+  Bevy upgrade, even though it was listed as a separate unplanned prerequisite.
 - **Reasoning**: `gup-bevy` shares wgpu `Device`/`Queue` between Bevy and Gup.
   If the two crates use different wgpu major versions, their types are
   incompatible and the integration cannot work.
@@ -168,13 +168,13 @@ to the latest Bevy features and bug fixes alongside Gup charts.
   Future mass replacements should use more precise patterns or `cargo fix`.
 - Running the bevy_scatter example required a detached process since the
   compositor window manager needed time to register the window.
-- Pre-existing clippy errors (`erasing_op`, `approx_constant`) in test files
-  are not related to this change and should be addressed in a separate cleanup.
+- Pre-existing clippy errors (`erasing_op`, `approx_constant`) in test files are
+  not related to this change and should be addressed in a separate cleanup.
 
 ### Follow-up Stories
 
 1. **GUP-262E: Migrate gup-bevy to SyncToRenderWorld** — Replace the
    spawn-per-frame + cleanup extraction pattern with Bevy 0.18's
    `SyncToRenderWorld` component for persistent render-world entity mapping.
-   This would eliminate per-frame entity churn and align with Bevy's
-   recommended extraction pattern for long-lived entities.
+   This would eliminate per-frame entity churn and align with Bevy's recommended
+   extraction pattern for long-lived entities.

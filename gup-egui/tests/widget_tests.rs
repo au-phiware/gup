@@ -150,9 +150,8 @@ fn new_widget_uses_pixel_buffer_path() {
 fn render_to_texture_view_rgba8_srgb() {
     use gup_egui::DynChart;
 
-    let ctx = Arc::new(
-        pollster::block_on(RenderContext::new()).expect("Failed to create RenderContext"),
-    );
+    let ctx =
+        Arc::new(pollster::block_on(RenderContext::new()).expect("Failed to create RenderContext"));
     let device = ctx.device();
 
     let width = 64u32;

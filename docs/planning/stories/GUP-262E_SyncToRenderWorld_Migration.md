@@ -4,9 +4,8 @@
 
 ## Overview
 
-Replace the spawn-per-frame + cleanup extraction pattern in `gup-bevy` with
-Bevy 0.18's `SyncToRenderWorld` component for persistent render-world entity
-mapping.
+Replace the spawn-per-frame + cleanup extraction pattern in `gup-bevy` with Bevy
+0.18's `SyncToRenderWorld` component for persistent render-world entity mapping.
 
 ## Context
 
@@ -19,16 +18,16 @@ entities.
 
 ## User Story
 
-As a Bevy plugin author, I want gup-bevy to follow Bevy's recommended
-extraction pattern so that the integration is more efficient and maintainable as
-Bevy evolves.
+As a Bevy plugin author, I want gup-bevy to follow Bevy's recommended extraction
+pattern so that the integration is more efficient and maintainable as Bevy
+evolves.
 
 ## Acceptance Criteria
 
 - [ ] `ChartTextureTarget` or `GupChart` uses `SyncToRenderWorld` as a required
-  component.
+      component.
 - [ ] The extract system uses `RenderEntity` to look up the render-world entity
-  and inserts `ExtractedGupChart` on it.
+      and inserts `ExtractedGupChart` on it.
 - [ ] The `cleanup_extracted_gup_charts` system is removed.
 - [ ] All existing tests pass.
 - [ ] The `bevy_scatter` example runs without entity accumulation.
@@ -36,8 +35,8 @@ Bevy evolves.
 ## Technical Tasks
 
 1. Add `SyncToRenderWorld` as a required component on `GupChart`.
-2. Rewrite `extract_gup_charts` to query `RenderEntity` and insert on the
-   mapped render-world entity.
+2. Rewrite `extract_gup_charts` to query `RenderEntity` and insert on the mapped
+   render-world entity.
 3. Remove `cleanup_extracted_gup_charts`.
 4. Update plugin system registration.
 5. Verify no entity leaks with a multi-frame test.
