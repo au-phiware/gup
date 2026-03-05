@@ -1379,4 +1379,328 @@ mod tests {
         assert!(builder.zoom_enabled);
         assert!(builder.show_legend);
     }
+
+    // -----------------------------------------------------------------------
+    // GPU-side recolouring tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_region_color_buffer_new() {
+        let buf = RegionColorBuffer::new(5, [0.5, 0.5, 0.5, 1.0]);
+        assert_eq!(buf.len(), 5);
+        assert!(!buf.is_empty());
+        for i in 0..5 {
+            assert_eq!(*buf.color(i).unwrap(), [0.5, 0.5, 0.5, 1.0]);
+        }
+        assert_eq!(buf.no_data_color(), [0.5, 0.5, 0.5, 1.0]);
+    }
+
+    #[test]
+    fn test_region_color_buffer_set_color() {
+        let mut buf = RegionColorBuffer::new(3, [0.0, 0.0, 0.0, 1.0]);
+        buf.set_color(1, [1.0, 0.0, 0.0, 1.0]);
+        assert_eq!(*buf.color(0).unwrap(), [0.0, 0.0, 0.0, 1.0]);
+        assert_eq!(*buf.color(1).unwrap(), [1.0, 0.0, 0.0, 1.0]);
+        assert_eq!(*buf.color(2).unwrap(), [0.0, 0.0, 0.0, 1.0]);
+    }
+
+    #[test]
+    fn test_region_color_buffer_set_out_of_bounds_is_noop() {
+        let mut buf = RegionColorBuffer::new(2, [0.0, 0.0, 0.0, 1.0]);
+        buf.set_color(99, [1.0, 0.0, 0.0, 1.0]); // should not panic
+        assert_eq!(buf.len(), 2);
+    }
+
+    #[test]
+    fn test_region_color_buffer_from_regions() {
+        let regions = vec![
+            RegionRecord {
+                id: Some("A".into()),
+                value: Some(10.0),
+                color: [1.0, 0.0, 0.0, 1.0],
+                feature_index: 0,
+            },
+            RegionRecord {
+                id: Some("B".into()),
+                value: None,
+                color: [0.5, 0.5, 0.5, 1.0],
+                feature_index: 1,
+            },
+        ];
+        let buf = RegionColorBuffer::from_regions(&regions, [0.75, 0.75, 0.75, 1.0]);
+        assert_eq!(buf.len(), 2);
+        assert_eq!(*buf.color(0).unwrap(), [1.0, 0.0, 0.0, 1.0]);
+        assert_eq!(*buf.color(1).unwrap(), [0.5, 0.5, 0.5, 1.0]);
+    }
+
+    #[test]
+    fn test_region_color_buffer_update_from_data() {
+        let regions = vec![
+            RegionRecord {
+                id: Some("A".into()),
+                value: Some(0.0),
+                color: [0.0; 4],
+                feature_index: 0,
+            },
+            RegionRecord {
+                id: Some("B".into()),
+                value: None,
+                color: [0.0; 4],
+                feature_index: 1,
+            },
+            RegionRecord {
+                id: Some("C".into()),
+                value: Some(100.0),
+                color: [0.0; 4],
+                feature_index: 2,
+            },
+        ];
+        let no_data = [0.75, 0.75, 0.75, 1.0];
+        let mut buf = RegionColorBuffer::new(3, no_data);
+        let mut data = HashMap::new();
+        data.insert("A".to_string(), 0.0);
+        data.insert("C".to_string(), 100.0);
+        let scale = ColorScale::viridis(0.0, 100.0);
+
+        buf.update_from_data(&data, &regions, &scale);
+
+        // A (value=0) and C (value=100) should have different colours.
+        let color_a = *buf.color(0).unwrap();
+        let color_c = *buf.color(2).unwrap();
+        assert_ne!(color_a, color_c);
+        // B (no data) should have the no-data colour.
+        assert_eq!(*buf.color(1).unwrap(), no_data);
+    }
+
+    #[test]
+    fn test_region_color_buffer_interpolate() {
+        let buf_a = RegionColorBuffer {
+            colors: vec![[0.0, 0.0, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0]],
+            no_data_color: [0.0; 4],
+        };
+        let buf_b = RegionColorBuffer {
+            colors: vec![[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0]],
+            no_data_color: [0.0; 4],
+        };
+
+        // t=0 → same as buf_a
+        let r0 = buf_a.interpolate(&buf_b, 0.0);
+        assert_eq!(r0.colors()[0], [0.0, 0.0, 0.0, 1.0]);
+
+        // t=1 → same as buf_b
+        let r1 = buf_a.interpolate(&buf_b, 1.0);
+        assert_eq!(r1.colors()[0], [1.0, 0.0, 0.0, 1.0]);
+
+        // t=0.5 → midpoint
+        let r_mid = buf_a.interpolate(&buf_b, 0.5);
+        for c in r_mid.colors()[0].iter() {
+            assert!(*c >= 0.0 && *c <= 1.0);
+        }
+        assert!((r_mid.colors()[0][0] - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_region_color_buffer_interpolate_clamps() {
+        let buf = RegionColorBuffer::new(1, [0.0, 0.0, 0.0, 1.0]);
+        let target = RegionColorBuffer::new(1, [1.0, 1.0, 1.0, 1.0]);
+
+        // Out-of-range t values should clamp.
+        let r_neg = buf.interpolate(&target, -0.5);
+        assert_eq!(r_neg.colors()[0], [0.0, 0.0, 0.0, 1.0]);
+        let r_over = buf.interpolate(&target, 2.0);
+        assert_eq!(r_over.colors()[0], [1.0, 1.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn test_region_color_buffer_as_bytes() {
+        let buf = RegionColorBuffer::new(2, [1.0, 0.5, 0.25, 1.0]);
+        let bytes = buf.as_bytes();
+        // 2 regions × 4 f32 × 4 bytes = 32 bytes.
+        assert_eq!(bytes.len(), 32);
+    }
+
+    #[test]
+    fn test_gpu_recolor_disabled_by_default() {
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 10.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .build()
+            .unwrap();
+
+        assert!(chart.indexed_fill_vertices.is_none());
+        assert!(chart.region_color_buffer.is_none());
+    }
+
+    #[test]
+    fn test_gpu_recolor_produces_indexed_vertices() {
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 10.0), ("BBB", 50.0), ("CCC", 90.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .gpu_recolor(true)
+            .build()
+            .unwrap();
+
+        // Indexed vertices should be present and match fill vertices count.
+        let indexed = chart.indexed_fill_vertices.as_ref().unwrap();
+        assert_eq!(indexed.len(), chart.fill_vertices.len());
+
+        // Region color buffer should have one entry per region.
+        let buf = chart.region_color_buffer.as_ref().unwrap();
+        assert_eq!(buf.len(), 3);
+    }
+
+    #[test]
+    fn test_gpu_recolor_indexed_vertices_have_correct_region_indices() {
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 10.0), ("BBB", 50.0), ("CCC", 90.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .gpu_recolor(true)
+            .build()
+            .unwrap();
+
+        let indexed = chart.indexed_fill_vertices.as_ref().unwrap();
+        // All region indices should be in [0, 2].
+        for v in indexed {
+            assert!(v.region_index <= 2);
+        }
+        // At least some vertices should have different region indices
+        // (we have 3 regions each producing fill triangles).
+        let unique: std::collections::HashSet<u32> =
+            indexed.iter().map(|v| v.region_index).collect();
+        assert!(unique.len() > 1);
+    }
+
+    #[test]
+    fn test_gpu_recolor_color_buffer_matches_regions() {
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 10.0), ("CCC", 90.0)]) // BBB has no data
+            .color_scale(ColorScale::viridis(10.0, 90.0))
+            .gpu_recolor(true)
+            .build()
+            .unwrap();
+
+        let buf = chart.region_color_buffer.as_ref().unwrap();
+        // Each region's colour in the buffer should match its RegionRecord.
+        for region in &chart.regions {
+            assert_eq!(*buf.color(region.feature_index).unwrap(), region.color);
+        }
+    }
+
+    #[test]
+    fn test_update_colors_recolours_without_retessellation() {
+        let source = synthetic_geojson();
+        let mut chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 10.0), ("BBB", 50.0), ("CCC", 90.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .gpu_recolor(true)
+            .build()
+            .unwrap();
+
+        // Record original state.
+        let orig_vertex_count = chart.fill_vertices.len();
+        let orig_index_count = chart.fill_indices.len();
+        let orig_color_a = *chart
+            .region_color_buffer
+            .as_ref()
+            .unwrap()
+            .color(0)
+            .unwrap();
+
+        // Update with new data (different values).
+        chart
+            .update_colors(vec![("AAA", 90.0), ("BBB", 50.0), ("CCC", 10.0)])
+            .unwrap();
+
+        // Geometry should be unchanged.
+        assert_eq!(chart.fill_vertices.len(), orig_vertex_count);
+        assert_eq!(chart.fill_indices.len(), orig_index_count);
+
+        // Colours should have changed.
+        let new_color_a = *chart
+            .region_color_buffer
+            .as_ref()
+            .unwrap()
+            .color(0)
+            .unwrap();
+        assert_ne!(orig_color_a, new_color_a);
+    }
+
+    #[test]
+    fn test_update_colors_fails_without_gpu_recolor() {
+        let source = synthetic_geojson();
+        let mut chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 10.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .build()
+            .unwrap();
+
+        let result = chart.update_colors(vec![("AAA", 50.0)]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_update_colors_updates_domain_and_region_values() {
+        let source = synthetic_geojson();
+        let mut chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 10.0), ("BBB", 50.0), ("CCC", 90.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .gpu_recolor(true)
+            .build()
+            .unwrap();
+
+        chart
+            .update_colors(vec![("AAA", 200.0), ("CCC", 800.0)])
+            .unwrap();
+
+        // Domain should update to new data range.
+        assert!((chart.domain_min - 200.0).abs() < f64::EPSILON);
+        assert!((chart.domain_max - 800.0).abs() < f64::EPSILON);
+
+        // BBB should now have no data.
+        let bbb = &chart.regions[1];
+        assert!(bbb.value.is_none());
+    }
+
+    #[test]
+    fn test_interpolate_colors_returns_none_without_gpu_recolor() {
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 10.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .build()
+            .unwrap();
+
+        let target = RegionColorBuffer::new(3, [1.0, 0.0, 0.0, 1.0]);
+        assert!(chart.interpolate_colors(&target, 0.5).is_none());
+    }
+
+    #[test]
+    fn test_interpolate_colors_returns_interpolated_buffer() {
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 0.0), ("BBB", 50.0), ("CCC", 100.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .gpu_recolor(true)
+            .build()
+            .unwrap();
+
+        let target = RegionColorBuffer::new(3, [1.0, 0.0, 0.0, 1.0]);
+        let result = chart.interpolate_colors(&target, 0.5);
+        assert!(result.is_some());
+        let buf = result.unwrap();
+        assert_eq!(buf.len(), 3);
+    }
 }
