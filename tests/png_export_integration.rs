@@ -275,7 +275,7 @@ async fn test_data_marks_appear_in_export() {
             |d: &TestPoint| gup::mark::circle::CircleInstance {
                 center: [
                     d.x / 6.0 * 2.0 - 1.0,  // map x to clip space
-                    d.y / 60.0 * 2.0 - 1.0,  // map y to clip space
+                    d.y / 60.0 * 2.0 - 1.0, // map y to clip space
                 ],
                 radius: 0.05,
                 _pad0: 0.0,
@@ -353,6 +353,11 @@ async fn test_export_without_prepare_renders_no_marks() {
     assert_eq!(rgba.len(), 100 * 100 * 4);
 
     // All pixels should be white (background clear colour).
-    let all_white = rgba.chunks_exact(4).all(|px| px[0] == 255 && px[1] == 255 && px[2] == 255);
-    assert!(all_white, "Expected all-white output when selection is not prepared");
+    let all_white = rgba
+        .chunks_exact(4)
+        .all(|px| px[0] == 255 && px[1] == 255 && px[2] == 255);
+    assert!(
+        all_white,
+        "Expected all-white output when selection is not prepared"
+    );
 }

@@ -457,7 +457,10 @@ impl LayoutEngine {
             result.expect("Failed to map readback buffer");
             let _ = sender.send(());
         });
-        let _ = self.device.poll(PollType::Wait);
+        let _ = self.device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
         let _ = receiver.await;
 
         let data = slice.get_mapped_range();
@@ -788,7 +791,10 @@ impl LayoutEngine {
             result.expect("Failed to map position staging buffer");
             let _ = sender.send(());
         });
-        let _ = self.device.poll(PollType::Wait);
+        let _ = self.device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
         let _ = receiver.await;
 
         let data = slice.get_mapped_range();
@@ -811,7 +817,10 @@ impl LayoutEngine {
             result.expect("Failed to map convergence staging buffer");
             let _ = sender.send(());
         });
-        let _ = self.device.poll(PollType::Wait);
+        let _ = self.device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
         let _ = receiver.await;
 
         let data = slice.get_mapped_range();
@@ -1050,7 +1059,10 @@ impl LayoutEngine {
             result.expect("Failed to map session readback buffer");
             let _ = sender.send(());
         });
-        let _ = self.device.poll(PollType::Wait);
+        let _ = self.device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
         let _ = receiver.await;
 
         let data = slice.get_mapped_range();

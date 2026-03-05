@@ -780,7 +780,10 @@ async fn read_counter(
     slice.map_async(wgpu::MapMode::Read, move |result| {
         let _ = sender.send(result);
     });
-    let _ = device.poll(wgpu::PollType::Wait);
+    let _ = device.poll(wgpu::PollType::Wait {
+        submission_index: None,
+        timeout: None,
+    });
     receiver
         .await
         .map_err(|_| GupError::BufferError {

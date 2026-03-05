@@ -44,6 +44,7 @@ impl GpuBenchmarkContext {
                 required_limits: wgpu::Limits::default(),
                 memory_hints: wgpu::MemoryHints::Performance,
                 trace: Default::default(),
+                experimental_features: Default::default(),
             })
             .await
             .expect("Failed to create GPU device");
@@ -223,7 +224,10 @@ impl GpuBenchmarkContext {
         );
 
         self.queue.submit(Some(encoder.finish()));
-        let _ = self.device.poll(wgpu::PollType::Wait);
+        let _ = self.device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
     }
 }
 

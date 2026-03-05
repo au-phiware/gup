@@ -138,7 +138,7 @@ impl GpuTimer {
     /// Returns `None` if the buffer map fails or the timestamps are invalid
     /// (e.g. end < begin).
     ///
-    /// **Note:** this calls `Device::poll(PollType::Wait)` which blocks
+    /// **Note:** this calls `Device::poll(PollType::Wait { submission_index: None, timeout: None })` which blocks
     /// until the GPU has finished the submitted work.  This is acceptable
     /// during calibration but should not be used in a hot render loop.
     pub fn read_elapsed_ns(&self, device: &Device) -> Option<u128> {
@@ -151,7 +151,10 @@ impl GpuTimer {
         });
 
         // Block until the GPU finishes and the map completes.
-        match device.poll(PollType::Wait) {
+        match device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        }) {
             Ok(_) => {}
             Err(_) => return None,
         }

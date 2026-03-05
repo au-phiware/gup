@@ -2103,14 +2103,20 @@ impl InteractionSystem {
             byte_size as u64,
         );
         let sub_idx = self.queue.submit([encoder.finish()]);
-        let _ = self.device.poll(PollType::WaitForSubmissionIndex(sub_idx));
+        let _ = self.device.poll(PollType::Wait {
+            submission_index: Some(sub_idx),
+            timeout: None,
+        });
 
         let slice = staging.slice(..byte_size as u64);
         let (sender, receiver) = futures_channel::oneshot::channel();
         slice.map_async(wgpu::MapMode::Read, move |r| {
             let _ = sender.send(r);
         });
-        let _ = self.device.poll(PollType::Wait);
+        let _ = self.device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
         let map_result = receiver
             .await
             .map_err(|_| GupError::render_error("Morton count readback cancelled".to_string()))?
@@ -2153,14 +2159,20 @@ impl InteractionSystem {
             });
         encoder.copy_buffer_to_buffer(&self.morton_candidates_buffer, 0, &staging, 0, byte_size);
         let sub_idx = self.queue.submit([encoder.finish()]);
-        let _ = self.device.poll(PollType::WaitForSubmissionIndex(sub_idx));
+        let _ = self.device.poll(PollType::Wait {
+            submission_index: Some(sub_idx),
+            timeout: None,
+        });
 
         let slice = staging.slice(..byte_size);
         let (sender, receiver) = futures_channel::oneshot::channel();
         slice.map_async(wgpu::MapMode::Read, move |r| {
             let _ = sender.send(r);
         });
-        let _ = self.device.poll(PollType::Wait);
+        let _ = self.device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
         let map_result = receiver
             .await
             .map_err(|_| {
@@ -2367,7 +2379,10 @@ impl InteractionSystem {
         });
 
         // Single poll to wait for both copy and map to complete.
-        let _ = self.device.poll(PollType::Wait);
+        let _ = self.device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
 
         receiver
             .await
@@ -3017,7 +3032,7 @@ impl QueryHandle {
 
     /// Await the query result.
     ///
-    /// Performs a blocking `device.poll(PollType::Wait)` so the map callback
+    /// Performs a blocking `device.poll(PollType::Wait { submission_index: None, timeout: None })` so the map callback
     /// fires, then reads and returns the hit test results. In frame-aligned
     /// usage where the GPU has already finished, this returns almost
     /// immediately.
@@ -3036,7 +3051,10 @@ impl QueryHandle {
         } = inner;
 
         // Block until GPU work completes and the map callback fires.
-        let _ = device.poll(PollType::Wait);
+        let _ = device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
 
         let map_result = map_receiver.await.map_err(|_| {
             slot_in_use.store(false, Ordering::Release);

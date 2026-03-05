@@ -244,7 +244,10 @@ where
         });
 
         // Poll the device to complete the mapping operation
-        let _ = device.poll(PollType::Wait);
+        let _ = device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
 
         // Wait for the mapping to complete
         receiver
@@ -318,7 +321,10 @@ where
         });
 
         // Poll the device to complete the mapping operation
-        let _ = device.poll(PollType::Wait);
+        let _ = device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
 
         // Wait for the mapping to complete
         let map_result = receiver
@@ -423,7 +429,10 @@ where
 
             // Wait for the copy operation to complete before proceeding
             // This prevents race conditions in benchmarks and tight loops
-            let _ = device.poll(PollType::WaitForSubmissionIndex(submission_index));
+            let _ = device.poll(PollType::Wait {
+                submission_index: Some(submission_index),
+                timeout: None,
+            });
         }
 
         self.buffer = new_buffer;

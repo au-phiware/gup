@@ -125,7 +125,10 @@ fn bench_gpu_culling(c: &mut Criterion) {
                         total += start.elapsed();
                         black_box(&result);
                         drop(result);
-                        let _ = context.device().poll(wgpu::PollType::Wait);
+                        let _ = context.device().poll(wgpu::PollType::Wait {
+                            submission_index: None,
+                            timeout: None,
+                        });
                     }
                     total
                 });
@@ -133,7 +136,10 @@ fn bench_gpu_culling(c: &mut Criterion) {
         );
 
         drop(pyramid);
-        let _ = context.device().poll(wgpu::PollType::Wait);
+        let _ = context.device().poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
     }
 
     group.finish();
@@ -193,7 +199,10 @@ fn bench_frame_time_large(c: &mut Criterion) {
                 });
 
                 total += start.elapsed();
-                let _ = context.device().poll(wgpu::PollType::Wait);
+                let _ = context.device().poll(wgpu::PollType::Wait {
+                    submission_index: None,
+                    timeout: None,
+                });
             }
             total
         });
@@ -209,7 +218,10 @@ fn bench_frame_time_large(c: &mut Criterion) {
     );
 
     drop(pyramid);
-    let _ = context.device().poll(wgpu::PollType::Wait);
+    let _ = context.device().poll(wgpu::PollType::Wait {
+        submission_index: None,
+        timeout: None,
+    });
     group.finish();
 }
 

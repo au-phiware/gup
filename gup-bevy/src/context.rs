@@ -43,7 +43,7 @@ impl GupRenderContext {
 
         // GupContext takes Arc<Device> + Arc<Queue>.
         let gup_context = GupContext::from_wgpu(
-            // Instance and Adapter are internally reference-counted in wgpu 26,
+            // Instance and Adapter are internally reference-counted in wgpu 27,
             // so cloning is a cheap Arc bump.
             instance.clone(),
             adapter.clone(),

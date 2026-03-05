@@ -55,6 +55,7 @@ impl PatternBenchmarkContext {
                 required_limits: wgpu::Limits::default(),
                 memory_hints: wgpu::MemoryHints::Performance,
                 trace: Default::default(),
+                experimental_features: Default::default(),
             })
             .await
             .expect("Failed to create GPU device");
@@ -67,7 +68,10 @@ impl Drop for PatternBenchmarkContext {
     fn drop(&mut self) {
         // Poll device to ensure cleanup completes before dropping.
         // This prevents resource contention between sequential benchmark runs.
-        let _ = self.device.poll(wgpu::PollType::Wait);
+        let _ = self.device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
     }
 }
 
@@ -221,7 +225,10 @@ fn bench_pattern_rendering_overhead(c: &mut Criterion) {
                     black_box(&mark_renderer);
 
                     context.queue.submit(Some(encoder.finish()));
-                    let _ = context.device.poll(wgpu::PollType::Wait);
+                    let _ = context.device.poll(wgpu::PollType::Wait {
+                        submission_index: None,
+                        timeout: None,
+                    });
                 });
             },
         );
@@ -274,7 +281,10 @@ fn bench_pattern_rendering_overhead(c: &mut Criterion) {
                         black_box(&pattern_renderer);
 
                         context.queue.submit(Some(encoder.finish()));
-                        let _ = context.device.poll(wgpu::PollType::Wait);
+                        let _ = context.device.poll(wgpu::PollType::Wait {
+                            submission_index: None,
+                            timeout: None,
+                        });
                     });
                 },
             );

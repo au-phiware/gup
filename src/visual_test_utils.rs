@@ -51,6 +51,7 @@ impl VisualTestUtils {
                 required_limits: Limits::default(),
                 memory_hints: MemoryHints::Performance,
                 trace: Default::default(),
+                experimental_features: Default::default(),
             })
             .await
             .map_err(|e| GupError::WebGpuError {
@@ -190,7 +191,10 @@ impl VisualTestUtils {
         });
 
         // Poll the device to complete the mapping operation
-        let _ = self.device.poll(PollType::Wait);
+        let _ = self.device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
 
         // Wait for the mapping to complete
         receiver

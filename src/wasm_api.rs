@@ -330,6 +330,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
                 required_limits: wgpu::Limits::downlevel_webgl2_defaults(),
                 memory_hints: wgpu::MemoryHints::default(),
                 trace: Default::default(),
+                experimental_features: Default::default(),
             })
             .await
             .map_err(|e| JsValue::from_str(&format!("Failed to create device: {e}")))?;
@@ -519,9 +520,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         use crate::export::html::{ChartBundle, ChartSnapshot};
 
         // Try ChartBundle first, then fall back to ChartSnapshot.
-        let data_json = if let Ok(bundle) =
-            serde_json::from_str::<ChartBundle>(bundle_json)
-        {
+        let data_json = if let Ok(bundle) = serde_json::from_str::<ChartBundle>(bundle_json) {
             // Extract scatter data from the bundle's data array.
             if let Some(data) = &bundle.data {
                 serde_json::to_string(data)

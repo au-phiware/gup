@@ -600,6 +600,7 @@ fn test_regression_detection() {
         required_limits: wgpu::Limits::default(),
         memory_hints: wgpu::MemoryHints::Performance,
         trace: Default::default(),
+        experimental_features: Default::default(),
     }))
     .expect("device");
 

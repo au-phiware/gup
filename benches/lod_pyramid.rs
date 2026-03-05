@@ -61,7 +61,10 @@ fn bench_small_pipeline(c: &mut Criterion) {
                     total += start.elapsed();
                     black_box(pyramid.level_count());
                     drop(pyramid);
-                    let _ = context.device().poll(wgpu::PollType::Wait);
+                    let _ = context.device().poll(wgpu::PollType::Wait {
+                        submission_index: None,
+                        timeout: None,
+                    });
                 }
                 total
             });
@@ -95,7 +98,10 @@ fn bench_large_single_shot(c: &mut Criterion) {
         let levels = pyramid.level_count();
         let points: Vec<usize> = (0..levels).map(|i| pyramid.level_point_count(i)).collect();
         drop(pyramid);
-        let _ = context.device().poll(wgpu::PollType::Wait);
+        let _ = context.device().poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
 
         eprintln!(
             "\n  [single-shot] {size} points, 5 levels: {elapsed:?} \
@@ -116,7 +122,10 @@ fn bench_large_single_shot(c: &mut Criterion) {
                     let elapsed = start.elapsed();
                     black_box(pyramid.level_count());
                     drop(pyramid);
-                    let _ = context.device().poll(wgpu::PollType::Wait);
+                    let _ = context.device().poll(wgpu::PollType::Wait {
+                        submission_index: None,
+                        timeout: None,
+                    });
                     elapsed
                 });
             },

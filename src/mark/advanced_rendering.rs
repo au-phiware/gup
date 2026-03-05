@@ -1151,7 +1151,10 @@ impl DynamicAttributeBufferManager {
             let _ = sender.send(result);
         });
 
-        let _ = device.poll(wgpu::PollType::Wait);
+        let _ = device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
 
         receiver
             .await

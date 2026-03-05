@@ -696,7 +696,10 @@ impl super::LayoutEngine {
         staging.slice(..).map_async(wgpu::MapMode::Read, move |r| {
             let _ = tx.send(r);
         });
-        let _ = device.poll(wgpu::PollType::Wait);
+        let _ = device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
         rx.recv()
             .map_err(|e| GupError::GpuResourceCreationError {
                 resource_type: "treemap staging buffer".to_string(),

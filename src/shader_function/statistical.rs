@@ -589,7 +589,10 @@ impl StatisticsCompute {
         }
 
         queue.submit(Some(encoder.finish()));
-        let _ = device.poll(wgpu::PollType::Wait);
+        let _ = device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
 
         // Second pass: compute variance (requires mean from first pass)
         let variance_pipeline = self.variance_pipeline.as_ref().ok_or_else(|| {
@@ -654,7 +657,10 @@ impl StatisticsCompute {
         queue.submit(Some(encoder.finish()));
 
         // Wait for GPU to complete
-        let _ = device.poll(wgpu::PollType::Wait);
+        let _ = device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
 
         // Map and read results
         let buffer_slice = staging_buffer.slice(..);
@@ -662,7 +668,10 @@ impl StatisticsCompute {
         buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
             let _ = tx.send(result);
         });
-        let _ = device.poll(wgpu::PollType::Wait);
+        let _ = device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
         rx.await
             .map_err(|_| {
                 GupError::gpu_initialization_failed(
@@ -929,7 +938,10 @@ impl HistogramCompute {
             sender.send(result).ok();
         });
 
-        let _ = device.poll(wgpu::PollType::Wait);
+        let _ = device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
         receiver
             .await
             .map_err(|_| GupError::webgpu_error("Failed to receive buffer mapping".to_string()))?

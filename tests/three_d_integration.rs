@@ -824,7 +824,12 @@ async fn sphere3d_100k_performance() {
             pass.draw_indexed(0..indices.len() as u32, 0, 0..num_instances);
         }
         queue.submit(std::iter::once(enc.finish()));
-        device.poll(wgpu::PollType::Wait).unwrap();
+        device
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: None,
+            })
+            .unwrap();
     }
 
     // Timed run
@@ -865,7 +870,12 @@ async fn sphere3d_100k_performance() {
             pass.draw_indexed(0..indices.len() as u32, 0, 0..num_instances);
         }
         queue.submit(std::iter::once(enc.finish()));
-        device.poll(wgpu::PollType::Wait).unwrap();
+        device
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: None,
+            })
+            .unwrap();
     }
     let elapsed = start.elapsed();
     let avg_ms = elapsed.as_secs_f64() * 1000.0 / num_frames as f64;

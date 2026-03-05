@@ -250,7 +250,10 @@ impl VisualTestRenderer {
         buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
             tx.send(result).unwrap();
         });
-        let _ = self.context.device.poll(wgpu::PollType::Wait);
+        let _ = self.context.device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
         rx.await
             .map_err(|_| gup::error::GupError::resource_error("Failed to map buffer".to_string()))?
             .map_err(|e| {

@@ -34,6 +34,7 @@ async fn create_gpu_context() -> (wgpu::Device, wgpu::Queue) {
             required_limits: wgpu::Limits::default(),
             memory_hints: wgpu::MemoryHints::default(),
             trace: Default::default(),
+            experimental_features: Default::default(),
         })
         .await
         .expect("Failed to create device")
@@ -350,7 +351,10 @@ async fn test_keyframe_animation_gpu_execution() {
         tx.send(result).unwrap();
     });
 
-    let _ = device.poll(wgpu::PollType::Wait);
+    let _ = device.poll(wgpu::PollType::Wait {
+        submission_index: None,
+        timeout: None,
+    });
     rx.await.unwrap().unwrap();
 
     let data = buffer_slice.get_mapped_range();
@@ -503,7 +507,10 @@ async fn test_animation_performance_1000_simultaneous() {
     }
 
     queue.submit(Some(encoder.finish()));
-    let _ = device.poll(wgpu::PollType::Wait);
+    let _ = device.poll(wgpu::PollType::Wait {
+        submission_index: None,
+        timeout: None,
+    });
 
     println!(
         "✓ Successfully processed {} simultaneous animations on GPU",

@@ -343,7 +343,10 @@ impl GpuPathTessellator {
             sender.send(result).unwrap();
         });
 
-        let _ = self.device.poll(wgpu::PollType::Wait);
+        let _ = self.device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
 
         receiver
             .await
@@ -385,6 +388,7 @@ mod tests {
                     required_limits: wgpu::Limits::default(),
                     memory_hints: wgpu::MemoryHints::default(),
                     trace: Default::default(),
+                    experimental_features: Default::default(),
                 })
                 .await
                 .ok()?;

@@ -31,6 +31,7 @@ async fn create_test_device() -> (wgpu::Device, wgpu::Queue) {
             required_limits: wgpu::Limits::default(),
             memory_hints: wgpu::MemoryHints::default(),
             trace: Default::default(),
+            experimental_features: Default::default(),
         })
         .await
         .expect("Failed to create device")

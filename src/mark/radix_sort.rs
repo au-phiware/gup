@@ -817,14 +817,20 @@ pub async fn read_u32_buffer(
     });
     encoder.copy_buffer_to_buffer(buffer, 0, &staging, 0, buffer_size);
     let sub_idx = queue.submit([encoder.finish()]);
-    let _ = device.poll(PollType::WaitForSubmissionIndex(sub_idx));
+    let _ = device.poll(PollType::Wait {
+        submission_index: Some(sub_idx),
+        timeout: None,
+    });
 
     let slice = staging.slice(..);
     let (sender, receiver) = futures_channel::oneshot::channel();
     slice.map_async(wgpu::MapMode::Read, move |r| {
         let _ = sender.send(r);
     });
-    let _ = device.poll(PollType::Wait);
+    let _ = device.poll(PollType::Wait {
+        submission_index: None,
+        timeout: None,
+    });
 
     receiver
         .await
@@ -1053,7 +1059,10 @@ mod tests {
         }
 
         let sub_idx = ctx.queue.submit([encoder.finish()]);
-        let _ = ctx.device.poll(PollType::WaitForSubmissionIndex(sub_idx));
+        let _ = ctx.device.poll(PollType::Wait {
+            submission_index: Some(sub_idx),
+            timeout: None,
+        });
 
         // Read back keys and vals.
         let keys = read_u32_buffer(&ctx.device, &ctx.queue, &sort_buffers.keys_a, count)
@@ -1124,7 +1133,10 @@ mod tests {
         );
 
         let sub_idx = ctx.queue.submit([encoder.finish()]);
-        let _ = ctx.device.poll(PollType::WaitForSubmissionIndex(sub_idx));
+        let _ = ctx.device.poll(PollType::Wait {
+            submission_index: Some(sub_idx),
+            timeout: None,
+        });
 
         // Read back sorted instances.
         let sorted = read_sorted_instances(&ctx.device, &ctx.queue, &dst_buf, count)
@@ -1220,7 +1232,10 @@ mod tests {
         );
 
         let sub_idx = ctx.queue.submit([encoder.finish()]);
-        let _ = ctx.device.poll(PollType::WaitForSubmissionIndex(sub_idx));
+        let _ = ctx.device.poll(PollType::Wait {
+            submission_index: Some(sub_idx),
+            timeout: None,
+        });
 
         let gpu_sorted = read_sorted_instances(&ctx.device, &ctx.queue, &dst_buf, count)
             .await
@@ -1286,7 +1301,10 @@ mod tests {
         );
 
         let sub_idx = ctx.queue.submit([encoder.finish()]);
-        let _ = ctx.device.poll(PollType::WaitForSubmissionIndex(sub_idx));
+        let _ = ctx.device.poll(PollType::Wait {
+            submission_index: Some(sub_idx),
+            timeout: None,
+        });
 
         let sorted = read_sorted_instances(&ctx.device, &ctx.queue, &dst_buf, count)
             .await
@@ -1359,7 +1377,10 @@ mod tests {
         );
 
         let sub_idx = ctx.queue.submit([encoder.finish()]);
-        let _ = ctx.device.poll(PollType::WaitForSubmissionIndex(sub_idx));
+        let _ = ctx.device.poll(PollType::Wait {
+            submission_index: Some(sub_idx),
+            timeout: None,
+        });
 
         let sorted = read_sorted_instances(&ctx.device, &ctx.queue, &dst_buf, count)
             .await
@@ -1426,7 +1447,10 @@ mod tests {
         );
 
         let sub_idx = ctx.queue.submit([encoder.finish()]);
-        let _ = ctx.device.poll(PollType::WaitForSubmissionIndex(sub_idx));
+        let _ = ctx.device.poll(PollType::Wait {
+            submission_index: Some(sub_idx),
+            timeout: None,
+        });
 
         let gpu_sorted = read_sorted_instances(&ctx.device, &ctx.queue, &dst_buf, count)
             .await
@@ -1485,7 +1509,10 @@ mod tests {
         );
 
         let sub_idx = ctx.queue.submit([encoder.finish()]);
-        let _ = ctx.device.poll(PollType::WaitForSubmissionIndex(sub_idx));
+        let _ = ctx.device.poll(PollType::Wait {
+            submission_index: Some(sub_idx),
+            timeout: None,
+        });
 
         let sorted = read_sorted_instances(&ctx.device, &ctx.queue, &dst_buf, 1)
             .await
@@ -1545,7 +1572,10 @@ mod tests {
         );
 
         let sub_idx = ctx.queue.submit([encoder.finish()]);
-        let _ = ctx.device.poll(PollType::WaitForSubmissionIndex(sub_idx));
+        let _ = ctx.device.poll(PollType::Wait {
+            submission_index: Some(sub_idx),
+            timeout: None,
+        });
 
         let sorted = read_sorted_instances(&ctx.device, &ctx.queue, &dst_buf, count)
             .await
@@ -1620,7 +1650,10 @@ mod tests {
         );
 
         let sub_idx = ctx.queue.submit([encoder.finish()]);
-        let _ = ctx.device.poll(PollType::WaitForSubmissionIndex(sub_idx));
+        let _ = ctx.device.poll(PollType::Wait {
+            submission_index: Some(sub_idx),
+            timeout: None,
+        });
 
         let sorted = read_sorted_instances(&ctx.device, &ctx.queue, &dst_buf, count)
             .await
@@ -1716,7 +1749,10 @@ mod tests {
         );
 
         let sub_idx = ctx.queue.submit([encoder.finish()]);
-        let _ = ctx.device.poll(PollType::WaitForSubmissionIndex(sub_idx));
+        let _ = ctx.device.poll(PollType::Wait {
+            submission_index: Some(sub_idx),
+            timeout: None,
+        });
 
         let gpu_sorted = read_sorted_instances(&ctx.device, &ctx.queue, &dst_buf, count)
             .await

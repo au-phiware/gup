@@ -21,7 +21,7 @@ fn synthetic_rgba(width: u32, height: u32) -> Vec<u8> {
             pixels[idx] = (x % 256) as u8; // R
             pixels[idx + 1] = (y % 256) as u8; // G
             pixels[idx + 2] = ((x + y) % 256) as u8; // B
-                                                       // A stays 255
+            // A stays 255
         }
     }
     pixels

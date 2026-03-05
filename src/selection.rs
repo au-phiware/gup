@@ -4908,7 +4908,10 @@ mod tests {
                 let slice = readback.slice(..);
                 let (tx, rx) = std::sync::mpsc::channel();
                 slice.map_async(wgpu::MapMode::Read, move |r| tx.send(r).unwrap());
-                let _ = context.device.poll(wgpu::PollType::Wait);
+                let _ = context.device.poll(wgpu::PollType::Wait {
+                    submission_index: None,
+                    timeout: None,
+                });
                 rx.recv().unwrap().unwrap();
 
                 let data = slice.get_mapped_range();

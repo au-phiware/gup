@@ -25,6 +25,7 @@ async fn create_test_context() -> Option<(Arc<wgpu::Device>, Arc<wgpu::Queue>)> 
             required_limits: wgpu::Limits::default(),
             memory_hints: wgpu::MemoryHints::default(),
             trace: Default::default(),
+            experimental_features: Default::default(),
         })
         .await
         .ok()?;
@@ -235,7 +236,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {{
     buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
         tx.send(result).unwrap();
     });
-    let _ = device.poll(wgpu::PollType::Wait);
+    let _ = device.poll(wgpu::PollType::Wait {
+        submission_index: None,
+        timeout: None,
+    });
     rx.await.unwrap().unwrap();
 
     let data = buffer_slice.get_mapped_range();
@@ -413,7 +417,10 @@ fn main() {{
     buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
         tx.send(result).unwrap();
     });
-    let _ = device.poll(wgpu::PollType::Wait);
+    let _ = device.poll(wgpu::PollType::Wait {
+        submission_index: None,
+        timeout: None,
+    });
     rx.await.unwrap().unwrap();
 
     let data = buffer_slice.get_mapped_range();

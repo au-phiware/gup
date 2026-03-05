@@ -476,7 +476,10 @@ async fn test_texture_contains_glyph_data() {
     buffer_slice.map_async(MapMode::Read, move |result| {
         let _ = sender.send(result);
     });
-    let _ = context.device().poll(wgpu::PollType::Wait);
+    let _ = context.device().poll(wgpu::PollType::Wait {
+        submission_index: None,
+        timeout: None,
+    });
     receiver.await.unwrap().expect("Buffer mapping failed");
 
     // Read pixel data

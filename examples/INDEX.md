@@ -33,36 +33,36 @@ Run any example with: `cargo run --example <name>`
 
 | Example                           | Description                                       |
 | --------------------------------- | ------------------------------------------------- |
-| `scatter_plot_demo`               | Scatter plot with selection and interaction        |
-| `boxplot`                         | Basic box plot rendering                           |
-| `boxplot_rendering_demo`          | Box plot rendering pipeline demo                   |
-| `boxplot_builder_demo`            | Box plot chart builder API                         |
-| `multi_category_boxplot`          | Multi-category box plots                           |
-| `observable_plot_showcase`        | Chart builder API showcase                         |
-| `observable_plot_visual_showcase` | Visual showcase of chart builder API               |
-| `integration_showcase`            | Full integration showcase of multiple chart types  |
-| `custom_mark_demo`                | Implementing a custom mark type                    |
-| `multi_pass_mark_demo`            | Multi-pass mark rendering                          |
-| `bar_chart`                       | Bar chart variations                               |
-| `line_chart_demo`                 | Line chart rendering demo                          |
-| `area_chart_demo`                 | Area chart rendering                               |
-| `heatmap_chart`                   | Heatmap chart rendering                            |
-| `violin_plot_demo`                | Violin plot rendering                              |
-| `density_scatter_overlay`         | Density scatter plot overlay                       |
-| `treemap`                         | Treemap layout rendering                           |
-| `treemap_window`                  | Windowed treemap rendering with keyboard controls  |
-| `ordinal_scale`                   | Ordinal scale demonstration                        |
-| `choropleth_world_population`     | Choropleth world population map                    |
-| `choropleth_gpu_recolor`          | GPU-side choropleth recolouring demo               |
-| `color_scale_heatmap`             | Colour scale heatmap                               |
-| `composite_bar_trend`             | Composite bar and trend chart                      |
-| `composite_scatter_regression`    | Scatter plot with regression line                  |
-| `composite_mixed_data`            | Composite chart with per-layer data types          |
-| `geo_world_map`                   | World map geographic rendering                     |
-| `geographic_projection`           | Geographic projection demo                         |
-| `force_directed_graph`            | Force-directed graph layout                        |
-| `scatter_3d`                      | 3D scatter plot                                    |
-| `scatter_3d_with_axes`            | 3D scatter plot with axes and grid                 |
+| `scatter_plot_demo`               | Scatter plot with selection and interaction       |
+| `boxplot`                         | Basic box plot rendering                          |
+| `boxplot_rendering_demo`          | Box plot rendering pipeline demo                  |
+| `boxplot_builder_demo`            | Box plot chart builder API                        |
+| `multi_category_boxplot`          | Multi-category box plots                          |
+| `observable_plot_showcase`        | Chart builder API showcase                        |
+| `observable_plot_visual_showcase` | Visual showcase of chart builder API              |
+| `integration_showcase`            | Full integration showcase of multiple chart types |
+| `custom_mark_demo`                | Implementing a custom mark type                   |
+| `multi_pass_mark_demo`            | Multi-pass mark rendering                         |
+| `bar_chart`                       | Bar chart variations                              |
+| `line_chart_demo`                 | Line chart rendering demo                         |
+| `area_chart_demo`                 | Area chart rendering                              |
+| `heatmap_chart`                   | Heatmap chart rendering                           |
+| `violin_plot_demo`                | Violin plot rendering                             |
+| `density_scatter_overlay`         | Density scatter plot overlay                      |
+| `treemap`                         | Treemap layout rendering                          |
+| `treemap_window`                  | Windowed treemap rendering with keyboard controls |
+| `ordinal_scale`                   | Ordinal scale demonstration                       |
+| `choropleth_world_population`     | Choropleth world population map                   |
+| `choropleth_gpu_recolor`          | GPU-side choropleth recolouring demo              |
+| `color_scale_heatmap`             | Colour scale heatmap                              |
+| `composite_bar_trend`             | Composite bar and trend chart                     |
+| `composite_scatter_regression`    | Scatter plot with regression line                 |
+| `composite_mixed_data`            | Composite chart with per-layer data types         |
+| `geo_world_map`                   | World map geographic rendering                    |
+| `geographic_projection`           | Geographic projection demo                        |
+| `force_directed_graph`            | Force-directed graph layout                       |
+| `scatter_3d`                      | 3D scatter plot                                   |
+| `scatter_3d_with_axes`            | 3D scatter plot with axes and grid                |
 
 ---
 
@@ -96,8 +96,8 @@ Run any example with: `cargo run --example <name>`
 
 ## Interaction & Selection
 
-| Example                        | Description                               |
-| ------------------------------ | ----------------------------------------- |
+| Example                        | Description                                |
+| ------------------------------ | ------------------------------------------ |
 | `gpu_selection_demo`           | GPU-side selection and hit testing         |
 | `interactive_selection_demo`   | Interactive mark selection with mouse      |
 | `hover_reveal_demo`            | Hover-reveal tooltip integration           |
@@ -177,16 +177,16 @@ Run any example with: `cargo run --example <name>`
 
 ## Debug & Development
 
-| Example                        | Description                          |
-| ------------------------------ | ------------------------------------ |
-| `gpu_debug_demo`               | GPU debug tools demo                 |
-| `gpu_debug_visualization_demo` | GPU hit test debug visualiser        |
-| `buffer_demo`                  | GPU buffer pool management demo      |
-| `buffer_validation_demo`       | Buffer validation and debugging      |
-| `resource_graph_demo`          | GPU resource dependency graph        |
-| `context_demo`                 | Render context lifecycle demo        |
-| `adaptive_lod_debug`           | Adaptive LOD debug visualisation     |
-| `lod_pyramid_debug`            | LOD pyramid debug visualisation      |
+| Example                        | Description                      |
+| ------------------------------ | -------------------------------- |
+| `gpu_debug_demo`               | GPU debug tools demo             |
+| `gpu_debug_visualization_demo` | GPU hit test debug visualiser    |
+| `buffer_demo`                  | GPU buffer pool management demo  |
+| `buffer_validation_demo`       | Buffer validation and debugging  |
+| `resource_graph_demo`          | GPU resource dependency graph    |
+| `context_demo`                 | Render context lifecycle demo    |
+| `adaptive_lod_debug`           | Adaptive LOD debug visualisation |
+| `lod_pyramid_debug`            | LOD pyramid debug visualisation  |
 
 ---
 
@@ -213,12 +213,12 @@ Run any example with: `cargo run --example <name>`
 
 ## Export
 
-| Example      | Description                         |
-| ------------ | ----------------------------------- |
-| `export_png` | PNG export via GPU off-screen rendering |
-| `svg_export` | SVG export demonstration            |
-| `html_export` | HTML export demonstration           |
-| `pdf_export` | PDF export demonstration            |
+| Example       | Description                             |
+| ------------- | --------------------------------------- |
+| `export_png`  | PNG export via GPU off-screen rendering |
+| `svg_export`  | SVG export demonstration                |
+| `html_export` | HTML export demonstration               |
+| `pdf_export`  | PDF export demonstration                |
 
 ---
 
@@ -234,9 +234,9 @@ Run any example with: `cargo run --example <name>`
 
 ## Tutorials (`tutorials/`)
 
-| Example                    | Description                             |
-| -------------------------- | --------------------------------------- |
-| `tutorial01_scatter`       | Tutorial 1: Getting started scatter chart |
-| `tutorial04_interactions`  | Tutorial 4: Interactions demo           |
-| `tutorial05_streaming`     | Tutorial 5: Streaming data demo         |
-| `tutorial06_custom_marks`  | Tutorial 6: Custom marks demo           |
+| Example                   | Description                               |
+| ------------------------- | ----------------------------------------- |
+| `tutorial01_scatter`      | Tutorial 1: Getting started scatter chart |
+| `tutorial04_interactions` | Tutorial 4: Interactions demo             |
+| `tutorial05_streaming`    | Tutorial 5: Streaming data demo           |
+| `tutorial06_custom_marks` | Tutorial 6: Custom marks demo             |

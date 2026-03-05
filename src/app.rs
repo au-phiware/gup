@@ -320,7 +320,10 @@ impl GupAppRunner {
         });
 
         // Block until the GPU finishes the copy.
-        let _ = ctx.device.poll(wgpu::PollType::Wait);
+        let _ = ctx.device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
 
         match receiver.recv() {
             Ok(Ok(())) => {}

@@ -386,7 +386,10 @@ fn bench_gpu_sort_only(c: &mut Criterion) {
                 size as u32,
             );
             let idx = queue.submit([encoder.finish()]);
-            let _ = device.poll(wgpu::PollType::WaitForSubmissionIndex(idx));
+            let _ = device.poll(wgpu::PollType::Wait {
+                submission_index: Some(idx),
+                timeout: None,
+            });
         }
 
         group.bench_with_input(
@@ -407,7 +410,10 @@ fn bench_gpu_sort_only(c: &mut Criterion) {
                         size as u32,
                     );
                     let idx = queue.submit([encoder.finish()]);
-                    let _ = device.poll(wgpu::PollType::WaitForSubmissionIndex(idx));
+                    let _ = device.poll(wgpu::PollType::Wait {
+                        submission_index: Some(idx),
+                        timeout: None,
+                    });
                 });
             },
         );

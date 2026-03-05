@@ -52,6 +52,7 @@ async fn try_get_device() -> Option<(wgpu::Adapter, wgpu::Device, wgpu::Queue)> 
             required_limits: wgpu::Limits::downlevel_webgl2_defaults(),
             memory_hints: wgpu::MemoryHints::default(),
             trace: Default::default(),
+            experimental_features: Default::default(),
         })
         .await
         .ok()?;

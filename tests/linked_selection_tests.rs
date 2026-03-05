@@ -34,6 +34,7 @@ async fn create_gpu_context() -> (wgpu::Device, wgpu::Queue) {
             required_limits: wgpu::Limits::default(),
             memory_hints: wgpu::MemoryHints::default(),
             trace: Default::default(),
+            experimental_features: Default::default(),
         })
         .await
         .expect("Failed to create device")

@@ -331,7 +331,10 @@ impl GpuDensityCompute {
         );
 
         let sub = self.queue.submit(std::iter::once(encoder.finish()));
-        let _ = self.device.poll(PollType::WaitForSubmissionIndex(sub));
+        let _ = self.device.poll(PollType::Wait {
+            submission_index: Some(sub),
+            timeout: None,
+        });
 
         // Map the staging buffer.
         let densities =
@@ -495,7 +498,10 @@ impl GpuDensityCompute {
             staging_readback(&self.device, &mut encoder, &vertex_buf, vertex_buf_size);
 
         let sub = self.queue.submit(std::iter::once(encoder.finish()));
-        let _ = self.device.poll(PollType::WaitForSubmissionIndex(sub));
+        let _ = self.device.poll(PollType::Wait {
+            submission_index: Some(sub),
+            timeout: None,
+        });
 
         // Read the vertex count first.
         let count = map_read_u32_single(&self.device, &count_staging)?;
@@ -532,7 +538,10 @@ impl GpuDensityCompute {
         slice.map_async(MapMode::Read, move |r| {
             *cb_result.lock().unwrap() = Some(r);
         });
-        let _ = self.device.poll(PollType::Wait);
+        let _ = self.device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
 
         result
             .lock()
@@ -721,7 +730,10 @@ fn map_read_u32_single(device: &Device, staging: &Buffer) -> GupResult<u32> {
     slice.map_async(MapMode::Read, move |r| {
         *cb.lock().unwrap() = Some(r);
     });
-    let _ = device.poll(PollType::Wait);
+    let _ = device.poll(PollType::Wait {
+        submission_index: None,
+        timeout: None,
+    });
     result
         .lock()
         .unwrap()
@@ -744,7 +756,10 @@ fn map_read_f32(device: &Device, staging: &Buffer, count: usize) -> GupResult<Ve
     slice.map_async(MapMode::Read, move |r| {
         *cb.lock().unwrap() = Some(r);
     });
-    let _ = device.poll(PollType::Wait);
+    let _ = device.poll(PollType::Wait {
+        submission_index: None,
+        timeout: None,
+    });
     result
         .lock()
         .unwrap()

@@ -199,7 +199,10 @@ pub fn readback_texture(
     });
 
     // Block until the GPU has finished the copy.
-    let _ = device.poll(wgpu::PollType::Wait);
+    let _ = device.poll(wgpu::PollType::Wait {
+        submission_index: None,
+        timeout: None,
+    });
 
     receiver
         .recv()

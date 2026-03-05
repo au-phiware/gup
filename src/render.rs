@@ -284,6 +284,7 @@ impl RenderContext {
                 required_limits: Limits::default(),
                 memory_hints: MemoryHints::Performance,
                 trace: Default::default(),
+                experimental_features: Default::default(),
             })
             .await
             .map_err(|e| GupError::webgpu_error(format!("Failed to create device: {e}")))?;

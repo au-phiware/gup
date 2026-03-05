@@ -117,9 +117,10 @@ impl ShaderProfiler {
 
             // Submit and wait for completion
             let submission_index = self.queue.submit([encoder.finish()]);
-            let _ = self
-                .device
-                .poll(PollType::WaitForSubmissionIndex(submission_index));
+            let _ = self.device.poll(PollType::Wait {
+                submission_index: Some(submission_index),
+                timeout: None,
+            });
 
             start_time.elapsed()
         };
@@ -183,9 +184,10 @@ impl ShaderProfiler {
 
         // Submit commands
         let submission_index = self.queue.submit([encoder.finish()]);
-        let _ = self
-            .device
-            .poll(PollType::WaitForSubmissionIndex(submission_index));
+        let _ = self.device.poll(PollType::Wait {
+            submission_index: Some(submission_index),
+            timeout: None,
+        });
 
         // Read timestamp results
         let timestamps = timestamp_manager.read_timestamps(2).await?;

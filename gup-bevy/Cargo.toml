@@ -12,14 +12,14 @@ categories = ["graphics", "visualization", "game-engines"]
 
 [dependencies]
 gup = { path = ".." }
-bevy = { version = "0.17", default-features = false, features = [
+bevy = { version = "0.18", default-features = false, features = [
     "bevy_render",
     "bevy_asset",
     "bevy_winit",
     "bevy_sprite",
     "x11",
 ] }
-wgpu = { version = "26.0", features = ["wgsl"] }
+wgpu = { version = "27.0", features = ["wgsl"] }
 log = "0.4"
 pollster = "0.3"
 

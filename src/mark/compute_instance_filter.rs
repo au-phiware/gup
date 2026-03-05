@@ -631,14 +631,20 @@ impl ComputeInstanceFilter {
         });
         encoder.copy_buffer_to_buffer(draw_indirect_buffer, 0, &staging, 0, 16);
         let sub_idx = queue.submit([encoder.finish()]);
-        let _ = device.poll(PollType::WaitForSubmissionIndex(sub_idx));
+        let _ = device.poll(PollType::Wait {
+            submission_index: Some(sub_idx),
+            timeout: None,
+        });
 
         let slice = staging.slice(..);
         let (sender, receiver) = futures_channel::oneshot::channel();
         slice.map_async(wgpu::MapMode::Read, move |r| {
             let _ = sender.send(r);
         });
-        let _ = device.poll(PollType::Wait);
+        let _ = device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
 
         receiver
             .await
@@ -679,14 +685,20 @@ impl ComputeInstanceFilter {
         });
         encoder.copy_buffer_to_buffer(output_buffer, 0, &staging, 0, buffer_size);
         let sub_idx = queue.submit([encoder.finish()]);
-        let _ = device.poll(PollType::WaitForSubmissionIndex(sub_idx));
+        let _ = device.poll(PollType::Wait {
+            submission_index: Some(sub_idx),
+            timeout: None,
+        });
 
         let slice = staging.slice(..);
         let (sender, receiver) = futures_channel::oneshot::channel();
         slice.map_async(wgpu::MapMode::Read, move |r| {
             let _ = sender.send(r);
         });
-        let _ = device.poll(PollType::Wait);
+        let _ = device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
 
         receiver
             .await

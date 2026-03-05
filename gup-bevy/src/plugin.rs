@@ -64,7 +64,7 @@ impl Plugin for GupPlugin {
         let render_adapter: &RenderAdapter = render_app.world().resource();
         let render_instance: &RenderInstance = render_app.world().resource();
 
-        // Clone the underlying wgpu objects.  In wgpu 26 these types are
+        // Clone the underlying wgpu objects.  In wgpu 27 these types are
         // internally reference-counted, so Clone is a cheap Arc bump.
         let device: wgpu::Device = render_device.wgpu_device().clone();
         let queue: wgpu::Queue = render_queue.0.as_ref().clone().into_inner();

@@ -118,9 +118,10 @@ impl GpuBufferInspector {
         let submission_index = self.queue.submit([encoder.finish()]);
 
         // Wait for copy to complete
-        let _ = self
-            .device
-            .poll(PollType::WaitForSubmissionIndex(submission_index));
+        let _ = self.device.poll(PollType::Wait {
+            submission_index: Some(submission_index),
+            timeout: None,
+        });
 
         // Map buffer and read data
         let staging_buffer = self.staging_buffer_cache.get(&buffer_size_key).unwrap();
@@ -131,7 +132,10 @@ impl GpuBufferInspector {
             let _ = sender.send(result);
         });
 
-        let _ = self.device.poll(PollType::Wait);
+        let _ = self.device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
 
         receiver
             .await

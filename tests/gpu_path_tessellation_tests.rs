@@ -26,6 +26,7 @@ async fn create_gpu_context() -> Option<(Arc<wgpu::Device>, Arc<wgpu::Queue>)> {
             required_limits: wgpu::Limits::default(),
             memory_hints: wgpu::MemoryHints::default(),
             trace: Default::default(),
+            experimental_features: Default::default(),
         })
         .await
         .ok()?;

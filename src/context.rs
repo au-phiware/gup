@@ -1361,6 +1361,7 @@ impl GupContext {
                 required_limits: options.required_limits,
                 memory_hints: MemoryHints::Performance,
                 trace: Default::default(),
+                experimental_features: Default::default(),
             })
             .await
             .map_err(|e| GupError::webgpu_error(format!("Failed to create device: {e}")))?;
@@ -2389,6 +2390,7 @@ impl GupContext {
                 required_limits: limits,
                 memory_hints: MemoryHints::Performance,
                 trace: Default::default(),
+                experimental_features: Default::default(),
             })
             .await
             .map_err(|e| GupError::webgpu_error(format!("Failed to create device: {}", e)))?;

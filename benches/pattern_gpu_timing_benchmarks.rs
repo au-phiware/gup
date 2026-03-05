@@ -72,6 +72,7 @@ impl GpuTimingContext {
                 required_limits: wgpu::Limits::default(),
                 memory_hints: wgpu::MemoryHints::Performance,
                 trace: Default::default(),
+                experimental_features: Default::default(),
             })
             .await
             .expect("Failed to create GPU device");
@@ -113,9 +114,10 @@ impl GpuTimingContext {
 
         // Submit and wait
         let submission_index = self.queue.submit([encoder.finish()]);
-        let _ = self
-            .device
-            .poll(wgpu::PollType::WaitForSubmissionIndex(submission_index));
+        let _ = self.device.poll(wgpu::PollType::Wait {
+            submission_index: Some(submission_index),
+            timeout: None,
+        });
 
         // Read timestamps
         let timestamps = timestamp_manager.read_timestamps(2).await.ok()?;

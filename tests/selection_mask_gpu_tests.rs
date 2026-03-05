@@ -30,6 +30,7 @@ async fn create_gpu_context() -> Option<(wgpu::Device, wgpu::Queue)> {
             required_limits: wgpu::Limits::default(),
             memory_hints: wgpu::MemoryHints::default(),
             trace: Default::default(),
+            experimental_features: Default::default(),
         })
         .await
         .ok()?;
@@ -62,7 +63,10 @@ async fn read_buffer_f32(
     slice.map_async(wgpu::MapMode::Read, move |result| {
         tx.send(result).unwrap();
     });
-    let _ = device.poll(wgpu::PollType::Wait);
+    let _ = device.poll(wgpu::PollType::Wait {
+        submission_index: None,
+        timeout: None,
+    });
     rx.recv().unwrap().unwrap();
 
     let data = slice.get_mapped_range();

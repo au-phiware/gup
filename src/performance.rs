@@ -314,7 +314,10 @@ impl TimestampQueryManager {
             sender.send(result).ok();
         });
 
-        let _ = self.device.poll(PollType::Wait);
+        let _ = self.device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
 
         receiver
             .await

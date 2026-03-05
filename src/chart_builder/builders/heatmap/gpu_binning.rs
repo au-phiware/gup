@@ -262,9 +262,10 @@ impl GpuBinner {
         let submission = self.queue.submit(std::iter::once(encoder.finish()));
 
         // Wait for GPU.
-        let _ = self
-            .device
-            .poll(PollType::WaitForSubmissionIndex(submission));
+        let _ = self.device.poll(PollType::Wait {
+            submission_index: Some(submission),
+            timeout: None,
+        });
 
         // ── Map & build BinGrid ──────────────────────────────────────
 
@@ -366,7 +367,10 @@ impl GpuBinner {
         slice.map_async(MapMode::Read, move |r| {
             let _ = tx.send(r);
         });
-        let _ = self.device.poll(PollType::Wait);
+        let _ = self.device.poll(PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
         rx.await
             .map_err(|_| GupError::resource_error("GPU readback channel cancelled"))?
             .map_err(|e| GupError::resource_error(format!("GPU buffer map failed: {e:?}")))?;

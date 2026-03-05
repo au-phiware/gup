@@ -109,7 +109,10 @@ fn bench_selection_mask_dimming(c: &mut Criterion) {
                     );
 
                     // Ensure GPU work completes.
-                    let _ = device.poll(wgpu::PollType::Wait);
+                    let _ = device.poll(wgpu::PollType::Wait {
+                        submission_index: None,
+                        timeout: None,
+                    });
                 });
             },
         );
@@ -140,7 +143,10 @@ fn bench_selection_mask_dimming(c: &mut Criterion) {
                         instance_count as u32,
                         0.2,
                     );
-                    let _ = device.poll(wgpu::PollType::Wait);
+                    let _ = device.poll(wgpu::PollType::Wait {
+                        submission_index: None,
+                        timeout: None,
+                    });
                 });
             },
         );
@@ -171,7 +177,10 @@ fn bench_selection_mask_dimming(c: &mut Criterion) {
                     );
                 });
                 // Flush after benchmark.
-                let _ = device.poll(wgpu::PollType::Wait);
+                let _ = device.poll(wgpu::PollType::Wait {
+                    submission_index: None,
+                    timeout: None,
+                });
             },
         );
 
@@ -202,7 +211,10 @@ fn bench_selection_mask_dimming(c: &mut Criterion) {
                     0.2,
                     None,
                 );
-                let _ = device.poll(wgpu::PollType::Wait);
+                let _ = device.poll(wgpu::PollType::Wait {
+                    submission_index: None,
+                    timeout: None,
+                });
 
                 b.iter(|| {
                     // Modify selection slightly (add one, remove one).
@@ -226,7 +238,10 @@ fn bench_selection_mask_dimming(c: &mut Criterion) {
                         None,
                     );
 
-                    let _ = device.poll(wgpu::PollType::Wait);
+                    let _ = device.poll(wgpu::PollType::Wait {
+                        submission_index: None,
+                        timeout: None,
+                    });
                 });
             },
         );
@@ -316,7 +331,10 @@ fn bench_cpu_vs_gpu_dimming(c: &mut Criterion) {
                     0.2,
                     None,
                 );
-                let _ = device.poll(wgpu::PollType::Wait);
+                let _ = device.poll(wgpu::PollType::Wait {
+                    submission_index: None,
+                    timeout: None,
+                });
             });
         },
     );
