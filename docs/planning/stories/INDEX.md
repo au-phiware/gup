@@ -1077,7 +1077,7 @@ API reference generation, tutorials, and example gallery.
 - [GUP-282](GUP-282_Example_Gallery.md) ✅ — Automated thumbnail generation (via
   GUP-268 PNG Export) and GitHub Pages gallery grouped by category with CI
   deployment. Deps: GUP-103 ✅, GUP-268 ✅.
-- [GUP-282A](GUP-282A_Wire_Headless_Screenshots.md) 📋 — Wire
+- [GUP-282A](GUP-282A_Wire_Headless_Screenshots.md) 🚧 — Wire
   `GUP_SCREENSHOT_PATH` support into all 62 renderable examples so the gallery
   produces real thumbnails. Deps: GUP-282 ✅.
 - [GUP-282B](GUP-282B_Gallery_Config_Sync.md) 📋 — Validation script that checks
