@@ -1,10 +1,11 @@
 // Copyright (C) 2024 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Integration tests for the `CompositeChartBuilder` (GUP-251).
+//! Integration tests for the `CompositeChartBuilder` (GUP-251 / GUP-304).
 //!
 //! Verifies that multi-layer composite charts can be built against a
-//! real GPU context without validation errors.
+//! real GPU context without validation errors, including composites
+//! with heterogeneous per-layer data types (GUP-304).
 
 use gup::RenderContext;
 use gup::chart_builder::ChartBuilder;
@@ -224,4 +225,144 @@ async fn composite_scale_value_maps_domain_to_ndc() {
     assert!((scale.scale_value(0.0) - (-1.0)).abs() < 1e-6);
     assert!((scale.scale_value(5.0) - 0.0).abs() < 1e-6);
     assert!((scale.scale_value(10.0) - 1.0).abs() < 1e-6);
+}
+
+// ── Per-layer data tests (GUP-304) ─────────────────────────────────────
+
+/// A distinct data type for foreign-data layers.
+#[derive(Debug, Clone)]
+struct FitPt {
+    x: f32,
+    y_hat: f32,
+}
+
+fn fit_x_accessor() -> AccessorFunction<FitPt> {
+    AccessorFunction::new(|d: &FitPt| AccessorValue::Float(d.x))
+}
+
+fn fit_y_accessor() -> AccessorFunction<FitPt> {
+    AccessorFunction::new(|d: &FitPt| AccessorValue::Float(d.y_hat))
+}
+
+fn fit_data() -> Vec<FitPt> {
+    vec![
+        FitPt { x: 1.0, y_hat: 2.5 },
+        FitPt { x: 3.0, y_hat: 6.5 },
+        FitPt { x: 5.0, y_hat: 10.5 },
+    ]
+}
+
+#[tokio::test]
+async fn composite_mixed_data_scatter_line_builds_ok() {
+    let ctx = Arc::new(RenderContext::new().await.expect("GPU context"));
+
+    let chart = composite::<Pt>()
+        .layer(ScatterPlotBuilder::new().x(x_accessor()).y(y_accessor()))
+        .layer_with_data(
+            LineChartBuilder::new()
+                .x(fit_x_accessor())
+                .y(fit_y_accessor()),
+            fit_data(),
+        )
+        .title("Integration: scatter(Pt) + line(FitPt)")
+        .build_with_data(sample_data(), ctx);
+
+    assert!(chart.is_ok(), "Build failed: {:?}", chart.err());
+    let chart = chart.unwrap();
+    assert_eq!(chart.additional_layer_count(), 2);
+    assert!(!chart.has_secondary_y_axis());
+}
+
+#[tokio::test]
+async fn composite_mixed_data_domain_unification() {
+    // Scatter Pt: x=[1,5], y=[2,7]
+    // Line FitPt: x=[0,10], y=[0.5, 20.5]
+    // Unified: x=[0,10], y=[0.5,20.5]  (before padding)
+    let ctx = Arc::new(RenderContext::new().await.expect("GPU context"));
+
+    let wide_fit = vec![
+        FitPt { x: 0.0, y_hat: 0.5 },
+        FitPt { x: 10.0, y_hat: 20.5 },
+    ];
+
+    let chart = composite::<Pt>()
+        .layer(ScatterPlotBuilder::new().x(x_accessor()).y(y_accessor()))
+        .layer_with_data(
+            LineChartBuilder::new()
+                .x(fit_x_accessor())
+                .y(fit_y_accessor()),
+            wide_fit,
+        )
+        .build_with_data(sample_data(), ctx);
+
+    assert!(chart.is_ok(), "Build failed: {:?}", chart.err());
+}
+
+#[tokio::test]
+async fn composite_mixed_data_dual_axis_builds_ok() {
+    let ctx = Arc::new(RenderContext::new().await.expect("GPU context"));
+
+    let chart = composite::<Pt>()
+        .layer(ScatterPlotBuilder::new().x(x_accessor()).y(y_accessor()))
+        .layer_with_data_y2(
+            LineChartBuilder::new()
+                .x(fit_x_accessor())
+                .y(fit_y_accessor()),
+            fit_data(),
+        )
+        .build_with_data(sample_data(), ctx);
+
+    assert!(chart.is_ok(), "Build failed: {:?}", chart.err());
+    let chart = chart.unwrap();
+    assert!(chart.has_secondary_y_axis());
+}
+
+#[tokio::test]
+async fn composite_mixed_data_prepare_render_succeeds() {
+    let ctx = Arc::new(RenderContext::new().await.expect("GPU context"));
+
+    let mut chart = composite::<Pt>()
+        .layer(ScatterPlotBuilder::new().x(x_accessor()).y(y_accessor()))
+        .layer_with_data(
+            LineChartBuilder::new()
+                .x(fit_x_accessor())
+                .y(fit_y_accessor()),
+            fit_data(),
+        )
+        .build_with_data(sample_data(), ctx.clone())
+        .expect("build");
+
+    let result = chart.prepare_render(
+        &ctx.device(),
+        &ctx.queue(),
+        wgpu::TextureFormat::Bgra8UnormSrgb,
+    );
+    assert!(result.is_ok(), "prepare_render failed: {:?}", result.err());
+
+    // Both layers should be ready after prepare.
+    assert_eq!(chart.layer_draw_count(), 2);
+}
+
+#[tokio::test]
+async fn composite_all_erased_layers_builds_ok() {
+    // A composite where the primary T has no typed layers — only
+    // erased layers carry data.
+    let ctx = Arc::new(RenderContext::new().await.expect("GPU context"));
+
+    let chart = composite::<()>()
+        .layer_with_data(
+            ScatterPlotBuilder::new().x(x_accessor()).y(y_accessor()),
+            sample_data(),
+        )
+        .layer_with_data(
+            LineChartBuilder::new()
+                .x(fit_x_accessor())
+                .y(fit_y_accessor()),
+            fit_data(),
+        )
+        .build_with_data(vec![], ctx);
+
+    assert!(chart.is_ok(), "Build failed: {:?}", chart.err());
+    let chart = chart.unwrap();
+    assert_eq!(chart.additional_layer_count(), 2);
 }
