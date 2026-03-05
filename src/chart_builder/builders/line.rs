@@ -16,7 +16,8 @@
 //! consider disabling `sort_by_x` if data is already ordered.
 
 use super::{
-    AccessorFunction, ConfigurableBuilder, GridCapableBuilder, validate_required_accessors,
+    AccessorFunction, ConfigurableBuilder, GridCapableBuilder, NdcBounds,
+    validate_required_accessors,
 };
 use crate::RenderContext;
 use crate::chart_builder::accessor::AccessorValue;
@@ -466,6 +467,19 @@ where
             points.sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap_or(std::cmp::Ordering::Equal));
         }
 
+        // ── Compute data domain from raw points ─────────────────────
+        // Must be done before `self.config` is moved into ComposedChart.
+        let (x_min, x_max) = if let Some(scale) = &self.config.x_scale {
+            (scale.domain_min(), scale.domain_max())
+        } else {
+            auto_domain_from_iter(points.iter().map(|p| p.x))
+        };
+        let (y_min, y_max) = if let Some(scale) = &self.config.y_scale {
+            (scale.domain_min(), scale.domain_max())
+        } else {
+            auto_domain_from_iter(points.iter().map(|p| p.y))
+        };
+
         // ── Determine default stroke width ──────────────────────────
         let default_width: f32 = if let Some(ref w_acc) = self.stroke_width_accessor {
             // Evaluate on first point to get a constant width
@@ -571,19 +585,112 @@ where
         }
 
         // ── Create Selection<LineSegment<T>, Line> ──────────────────
-        let mut selection = Selection::<LineSegment<T>, Line>::new(segments, context)?;
-
-        // Attr bindings — the closure receives a `&LineSegment<T>` and
-        // returns the corresponding attribute value.
-        selection.attr("start", |seg: &LineSegment<T>| seg.start_pos);
-        selection.attr("end", |seg: &LineSegment<T>| seg.end_pos);
-        selection.attr("color", |seg: &LineSegment<T>| seg.color);
-        selection.attr("width", |seg: &LineSegment<T>| seg.width);
+        let selection = Selection::<LineSegment<T>, Line>::new(segments, context.clone())?;
 
         // ── Wrap in ComposedChart with axes ─────────────────────────
-        let composed_chart = ComposedChart::new(selection, self.config).with_default_axes();
+        // Axes must be added *before* computing NDC bounds so that
+        // axis margins are accounted for in the chart area.
+        let mut composed_chart = ComposedChart::new(selection, self.config).with_default_axes();
+
+        // ── Compute chart area → NDC bounds ─────────────────────────
+        let chart_area = composed_chart.calculate_chart_area();
+        let w = composed_chart.config.width;
+        let h = composed_chart.config.height;
+        let ndc = NdcBounds {
+            left: (chart_area.x / w) * 2.0 - 1.0,
+            right: ((chart_area.x + chart_area.width) / w) * 2.0 - 1.0,
+            top: 1.0 - (chart_area.y / h) * 2.0,
+            bottom: 1.0 - ((chart_area.y + chart_area.height) / h) * 2.0,
+        };
+
+        // ── NDC mapping helpers ─────────────────────────────────────
+        let x_span = x_max - x_min;
+        let y_span = y_max - y_min;
+
+        // Convert stroke width from logical pixels to NDC units.
+        let ndc_width_per_pixel = 2.0 / w;
+
+        // ── Attr bindings with data→NDC mapping ─────────────────────
+        composed_chart
+            .visualization
+            .attr("start", move |seg: &LineSegment<T>| {
+                let tx = if x_span.abs() < f32::EPSILON {
+                    0.5
+                } else {
+                    (seg.start_pos[0] - x_min) / x_span
+                };
+                let ty = if y_span.abs() < f32::EPSILON {
+                    0.5
+                } else {
+                    (seg.start_pos[1] - y_min) / y_span
+                };
+                [
+                    ndc.left + tx * (ndc.right - ndc.left),
+                    ndc.bottom + ty * (ndc.top - ndc.bottom),
+                ]
+            });
+        composed_chart
+            .visualization
+            .attr("end", move |seg: &LineSegment<T>| {
+                let tx = if x_span.abs() < f32::EPSILON {
+                    0.5
+                } else {
+                    (seg.end_pos[0] - x_min) / x_span
+                };
+                let ty = if y_span.abs() < f32::EPSILON {
+                    0.5
+                } else {
+                    (seg.end_pos[1] - y_min) / y_span
+                };
+                [
+                    ndc.left + tx * (ndc.right - ndc.left),
+                    ndc.bottom + ty * (ndc.top - ndc.bottom),
+                ]
+            });
+        composed_chart
+            .visualization
+            .attr("color", |seg: &LineSegment<T>| seg.color);
+        composed_chart
+            .visualization
+            .attr("width", move |seg: &LineSegment<T>| {
+                seg.width * ndc_width_per_pixel
+            });
+
+        // ── Prepare GPU render pipeline at build time ───────────────
+        // This makes the Selection render-ready so that
+        // `render_to_png()` / `render_to_texture_view()` work without
+        // requiring a `MarkInstanceBuilder` bound at call-site.
+        composed_chart.visualization.prepare_render_bound(
+            context.device(),
+            context.queue(),
+            None,
+            None,
+        )?;
 
         Ok(composed_chart)
+    }
+}
+
+// ── Data-domain helpers ──────────────────────────────────────────────────
+
+/// Compute `(min, max)` with 5 % padding from an iterator of float values.
+///
+/// Mirrors the `auto_domain` logic used by the scatter chart builder so
+/// that line charts get the same axis padding.
+fn auto_domain_from_iter(values: impl Iterator<Item = f32>) -> (f32, f32) {
+    let mut lo = f32::INFINITY;
+    let mut hi = f32::NEG_INFINITY;
+    for v in values {
+        lo = lo.min(v);
+        hi = hi.max(v);
+    }
+    let span = hi - lo;
+    if span.abs() < f32::EPSILON {
+        // All values identical — give a ±1 range.
+        (lo - 1.0, hi + 1.0)
+    } else {
+        let pad = span * 0.05;
+        (lo - pad, hi + pad)
     }
 }
 
@@ -1295,5 +1402,103 @@ mod tests {
 
         let y_fmt = builder.config.y_label_formatter.as_ref().unwrap();
         assert_eq!(y_fmt.format_value(0.333), "33.3%");
+    }
+
+    // ── Data-mark rendering tests (GUP-286) ─────────────────────────
+
+    #[tokio::test]
+    async fn test_line_chart_has_data_mark_data() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let data = vec![
+            TimePoint {
+                time: 0.0,
+                value: 10.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 1.0,
+                value: 20.0,
+                series: "A".to_string(),
+            },
+        ];
+
+        let chart = line()
+            .x(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.time)
+            }))
+            .y(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.value)
+            }))
+            .build_with_data(data, context)
+            .unwrap();
+
+        assert!(
+            chart.has_data_mark_data(),
+            "Line chart should report data-mark data present"
+        );
+        assert!(
+            chart.visualization.is_render_ready(),
+            "Line chart selection should be render-ready after build"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_line_chart_render_to_png_produces_visible_lines() {
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let data = vec![
+            TimePoint {
+                time: 0.0,
+                value: 10.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 1.0,
+                value: 50.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 2.0,
+                value: 30.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 3.0,
+                value: 70.0,
+                series: "A".to_string(),
+            },
+        ];
+
+        let mut chart = line()
+            .x(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.time)
+            }))
+            .y(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.value)
+            }))
+            .stroke_width_px(4.0)
+            .build_with_data(data, context)
+            .unwrap();
+
+        let rgba = chart.render_to_rgba(400, 300).unwrap();
+        assert_eq!(rgba.len(), 400 * 300 * 4);
+
+        // Count non-white pixels in the data region (centre of image,
+        // away from axes/labels).
+        let mut non_white = 0u32;
+        for y in 60..240 {
+            for x in 80..320 {
+                let idx = (y * 400 + x) as usize * 4;
+                let r = rgba[idx];
+                let g = rgba[idx + 1];
+                let b = rgba[idx + 2];
+                if r != 255 || g != 255 || b != 255 {
+                    non_white += 1;
+                }
+            }
+        }
+        assert!(
+            non_white > 50,
+            "Expected visible line segments in the data region, but found only {non_white} non-white pixels"
+        );
     }
 }
