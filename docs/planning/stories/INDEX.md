@@ -1125,7 +1125,7 @@ API reference generation, tutorials, and example gallery.
 
 ## Follow-ups from GUP-264
 
-- [GUP-283](GUP-283_Fix_WASM_Build_StreamingBuffer.md) 🚧 — Fix
+- [GUP-283](GUP-283_Fix_WASM_Build_StreamingBuffer.md) ✅ — Fix
   `wasm-pack build` failure caused by `StreamingBuffer<T>` requiring
   `Send + Sync` bounds not satisfied on WASM. No deps.
 - [GUP-284](GUP-284_Unify_Chart_Builder_Data_Layer.md) 📋 — Wire data-mark
