@@ -1108,7 +1108,7 @@ API reference generation, tutorials, and example gallery.
 - [GUP-317](GUP-317_Full_Content_Screenshot.md) ✅ — Add `COPY_SRC` to surface
   texture configuration and `RenderFrame::capture()` so the `S` shortcut in
   GupApp captures actual rendered content. Deps: GUP-265 ✅.
-- [GUP-318](GUP-318_Migrate_Examples_to_GupApp.md) 📋 — Migrate suitable
+- [GUP-318](GUP-318_Migrate_Examples_to_GupApp.md) 🚧 — Migrate suitable
   windowed examples to GupApp, reducing boilerplate and demonstrating the shell.
   Deps: GUP-265 ✅.
 
