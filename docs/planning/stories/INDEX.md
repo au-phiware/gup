@@ -1159,6 +1159,9 @@ API reference generation, tutorials, and example gallery.
 - [GUP-289](GUP-289_Bar_Chart_Builder_Prepare_Render_Bound.md) ✅ — Call
   `prepare_render_bound()` in `BarChartBuilder` so that `render_to_png()`
   produces visible bar rectangles. Deps: GUP-284 ✅.
+- [GUP-379](GUP-379_Area_Chart_Builder_Prepare_Render_Bound.md) 📋 — Call
+  `prepare_render_bound()` in `AreaChartBuilder` so that `render_to_png()`
+  produces visible filled-area segments. Deps: GUP-287 ✅, GUP-289 ✅.
 
 ## Follow-ups from GUP-265
 

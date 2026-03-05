@@ -70,3 +70,63 @@ chart produces axes and grid but no visible data bars.
   `has_data_mark_data()` after build
 - `test_bar_chart_render_to_png_produces_visible_bars`: renders to RGBA and
   checks for non-white pixels in the data region
+
+## Retrospective
+
+**Completed**: 2025-07-20
+
+### Key Technical Learnings
+
+#### Builder Render-Readiness Pattern
+
+- **Challenge**: The bar chart builder was missing the final
+  `prepare_render_bound()` call that marks the Selection as render-ready,
+  causing `render_to_png()` to produce images with axes and grid but no data
+  bars.
+- **Solution**: Added `prepare_render_bound()` after
+  `apply_accessors_to_selection()`, matching the established pattern in
+  `ScatterPlotBuilder` and `LineChartBuilder`.
+- **Pattern**: Every chart builder's `build_with_data()` must call
+  `prepare_render_bound()` as its final GPU setup step. New builders should
+  follow the scatter/line/bar template: validate → create selection → add axes →
+  compute NDC bounds → apply accessors → prepare render bound.
+
+#### Context Ownership in Builder Pipelines
+
+- **Challenge**: `Selection::new(data, context)` consumed the `Arc<RenderContext>`
+  by move, but `prepare_render_bound()` needs `context.device()` and
+  `context.queue()` afterward.
+- **Solution**: Clone `context` before passing to `Selection::new`, matching the
+  pattern already used by scatter and line builders.
+- **Pattern**: Always `context.clone()` when the context is needed after
+  `Selection::new`.
+
+### Architectural Decisions
+
+#### Consistent Builder Post-Processing
+
+- **Decision**: All chart builders follow the same post-processing sequence:
+  `apply_accessors_to_selection` then `prepare_render_bound`.
+- **Reasoning**: Consistency across builders prevents the exact class of bug this
+  story fixes (missing render readiness).
+- **Trade-off**: Slightly more code duplication across builders, but each is
+  explicit and self-contained.
+- **Future**: A shared `finalize_chart()` helper could extract this common
+  pattern if more builder types are added.
+
+### Development Workflow Insights
+
+- The change itself was trivial (7 lines of new code), validating the story's
+  "Very Low" risk assessment.
+- Disk space constraints from ZFS snapshot accumulation during parallel builds
+  were the main workflow challenge. A `cargo clean` by a sub-agent triggered
+  snapshot growth that exhausted the ZFS pool.
+- The visual regression test pattern (render to RGBA, count non-white pixels in
+  the data region) is well-established and was straightforward to replicate from
+  the line chart test.
+
+### Follow-up Stories
+
+1. **GUP-379: Area Chart Builder prepare_render_bound** — The area chart builder
+   (added in GUP-287) is missing the `prepare_render_bound()` call.
+   Should be fixed using the same pattern applied in GUP-289.
