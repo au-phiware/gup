@@ -960,6 +960,13 @@ layouts, and 3D visualization.
 - [GUP-313](GUP-313_Interactive_Treemap_Drill_Down.md) 📋 — Click-to-zoom
   treemap drill-down using TreemapCell node indices. Deps: GUP-260 ✅, GUP-012
   ✅.
+- [GUP-370](GUP-370_GPU_Timestamp_Query_Profiling.md) 📋 — GPU timestamp query
+  instrumentation for treemap compute passes. Deps: GUP-312 ✅, GUP-015 ✅.
+- [GUP-371](GUP-371_Squarified_GPU_Treemap_Hybrid.md) 💡 — Hybrid GPU/CPU
+  Squarified treemap layout for large trees. Deps: GUP-312 ✅, GUP-260 ✅.
+- [GUP-372](GUP-372_TreemapResult_Direct_Bind.md) 📋 — Wire GPU-resident
+  TreemapResult buffer directly to Rectangle mark instance binding. Deps:
+  GUP-312 ✅, GUP-011 ✅.
 - [GUP-314](GUP-314_Windowed_Treemap_Rendering.md) 📋 — Windowed treemap
   rendering example with Rectangle marks and real-time colour switching. Deps:
   GUP-260 ✅, GUP-067 ✅.

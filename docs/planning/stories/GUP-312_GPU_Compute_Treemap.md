@@ -109,3 +109,124 @@ The GPU treemap layout uses a level-by-level dispatch pattern:
 4. **GPU readback**: map staging buffer, copy cells
 5. **GPU-resident path**: `TreemapResult::gpu_buffer()` returns the cells buffer
    for zero-copy binding to Rectangle marks
+
+## Retrospective
+
+**Completed**: 2025-07-27
+
+### Key Technical Learnings
+
+#### Blelloch Prefix Sum on GPU
+
+- **Challenge**: The Blelloch scan requires workgroup-shared memory and careful
+  index arithmetic. For inputs larger than one workgroup (256 elements), a
+  multi-pass approach is needed: (1) per-workgroup scan, (2) scan block totals,
+  (3) add block totals back. Also, WGSL reserves `shared` as a keyword, so
+  workgroup memory variables need non-obvious names.
+- **Solution**: Three-entry-point shader design (`workgroup_scan`,
+  `scan_block_sums`, `add_block_sums`) with separate bind group layouts. Pad
+  input with one extra zero to produce n+1 prefix sums, enabling safe
+  `range_sum(lo, hi)` boundary access.
+- **Pattern**: When a GPU algorithm needs prefix sums of a subrange of a global
+  array, compute a single global exclusive prefix sum and derive subrange sums as
+  `prefix[hi] - prefix[lo]`. This avoids per-parent workgroup coordination.
+
+#### Binary Split Algorithm Matching CPU Semantics
+
+- **Challenge**: The CPU binary layout's `find_split` skips evaluation of the
+  1-child-in-left split (k=0 is skipped), using it only as a default fallback.
+  The GPU version initially evaluated this split, producing correct but different
+  results.
+- **Solution**: Start the GPU's `find_split` loop at `lo + 2` (matching the
+  CPU's skip of k=0) and use `1e38` as the initial best_diff rather than
+  evaluating the first split. Added `clamp()` to ensure neither group is empty.
+- **Pattern**: When GPU code must match CPU reference output exactly, trace both
+  algorithms step-by-step with small inputs to find semantic differences.
+  Seemingly minor loop initialization differences can cascade through recursive
+  algorithms.
+
+#### Sentinel-Based Cell Filtering
+
+- **Challenge**: GPU buffer initialisation is zeroed by default. Zero-valued
+  `TreemapCell` has `depth=0` which is a valid depth, making max_depth filtering
+  impossible without distinguishing computed vs uninitialised cells.
+- **Solution**: Pre-fill the cells buffer with sentinel `depth = u32::MAX` on
+  the CPU before uploading. After readback, filter out any cell with the
+  sentinel depth.
+- **Pattern**: When GPU buffers need a "not yet written" state, use
+  domain-specific sentinel values rather than relying on zero-initialisation.
+
+### Architectural Decisions
+
+#### Level-by-Level Dispatch vs Single Dispatch
+
+- **Decision**: Dispatch one compute pass per tree depth level (top-down), not a
+  single monolithic dispatch.
+- **Reasoning**: WGSL has no global barrier between workgroups within a single
+  dispatch. Parent cells must be written before children can read them. Level-by-
+  level dispatch with queue.submit() between levels ensures ordering.
+- **Trade-off**: D+1 command encoder submissions (D = max tree depth) instead of
+  1. For typical trees (depth 5-10), this is negligible. For very deep trees
+  (depth > 100), this could become a bottleneck due to CPU-GPU synchronisation
+  overhead.
+- **Future**: Could be optimised with indirect dispatch or persistent threads
+  pattern if deep trees become a use case.
+
+#### CPU Preprocessing for Depths and Subtree Sums
+
+- **Decision**: Compute node depths and subtree sums on CPU, upload to GPU.
+- **Reasoning**: Both operations are O(n) with simple data dependencies
+  (BFS/reverse iteration). The actual layout computation benefits far more from
+  GPU parallelism (each node does O(log n) work for binary, O(1) for
+  slice-dice). Moving these to GPU would require additional shader passes and
+  complexity for minimal benefit.
+- **Trade-off**: CPU-to-GPU data transfer for depths and sums arrays. For 100K
+  nodes this is ~800KB, well within the overhead budget.
+- **Future**: If the tree structure changes frequently (e.g., streaming), moving
+  depth/sum computation to GPU would avoid round-trips.
+
+#### Squarified and Strip Remain CPU-Only
+
+- **Decision**: Only SliceDice and Binary were migrated to GPU. Squarified and
+  Strip remain CPU-only.
+- **Reasoning**: Squarified and Strip have sequential row-building dependencies
+  where each row's composition depends on the aspect ratio achieved by the
+  previous row. This cross-sibling dependency fundamentally limits parallelism.
+  GPU migration would require complex scan-and-compact patterns with minimal
+  speedup.
+- **Trade-off**: Users who need maximum performance on 100K+ nodes should prefer
+  SliceDice or Binary algorithms.
+- **Future**: A hybrid approach where Squarified runs on GPU at the top levels
+  (few nodes) and CPU at leaf levels could be explored.
+
+### Development Workflow Insights
+
+- **WGSL reserved keywords**: `shared` is reserved in WGSL (unlike GLSL where
+  it's common). Caught by wgpu validation at runtime, not at Rust compile time.
+  The `include_str!` pattern means WGSL errors only surface when the shader is
+  first compiled on a real device.
+- **wgpu v26 API**: `PollType::Wait` (not `Maintain::Wait`) for synchronous GPU
+  polling. The API has changed from earlier versions.
+- **Cross-module field access**: Rust's privacy rules mean that `impl
+  super::LayoutEngine` in a sibling module cannot access private fields.
+  Solution: `pub(crate)` on `device` and `queue` fields.
+- **GPU test flakiness**: One test run showed 1 failure out of 3015; a
+  subsequent run showed 0 failures. GPU resource contention with
+  `--test-threads=1` is mostly mitigated but not eliminated.
+
+### Follow-up Stories
+
+1. **GUP-370: GPU Timestamp Query Profiling** — Add wgpu timestamp query
+   instrumentation to treemap compute passes for precise GPU-side timing
+   measurement. The current story verified performance through wall-clock timing
+   but didn't add the timestamp query infrastructure specified in the technical
+   tasks.
+
+2. **GUP-371: Squarified GPU Treemap (Hybrid Approach)** — Explore a hybrid
+   GPU/CPU approach for the Squarified algorithm where the top N levels of the
+   tree are laid out on CPU (sequential row-building) and leaf-level layout is
+   dispatched to GPU.
+
+3. **GUP-372: TreemapResult Direct Bind Integration** — Wire
+   `TreemapResult::gpu_buffer()` into the Rectangle mark's instance buffer
+   binding path for true zero-copy GPU-to-render pipeline.
