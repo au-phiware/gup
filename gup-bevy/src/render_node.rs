@@ -30,6 +30,20 @@ pub struct ExtractedGupChart {
     pub height: u32,
 }
 
+/// Cleanup system: despawns all previously extracted chart entities in the
+/// render world before fresh ones are spawned.
+///
+/// In Bevy 0.18 the render world is persistent across frames, so we must
+/// remove stale entities ourselves.
+pub fn cleanup_extracted_gup_charts(
+    mut commands: Commands,
+    extracted: Query<Entity, With<ExtractedGupChart>>,
+) {
+    for entity in extracted.iter() {
+        commands.entity(entity).despawn();
+    }
+}
+
 /// Extraction system: runs in the [`ExtractSchedule`] and reads from the
 /// main world.
 ///
@@ -38,10 +52,10 @@ pub struct ExtractedGupChart {
 /// copy system can run later.
 pub fn extract_gup_charts(
     mut commands: Commands,
-    charts: Extract<Query<(Entity, &ChartTextureTarget, &Sprite)>>,
+    charts: Extract<Query<(&ChartTextureTarget, &Sprite)>>,
 ) {
-    for (entity, target, sprite) in charts.iter() {
-        commands.entity(entity).insert(ExtractedGupChart {
+    for (target, sprite) in charts.iter() {
+        commands.spawn(ExtractedGupChart {
             source_texture: target.texture.clone(),
             target_image_id: sprite.image.id(),
             width: target.width,

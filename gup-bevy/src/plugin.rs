@@ -4,7 +4,9 @@
 //! The [`GupPlugin`] that wires everything together.
 
 use crate::context::GupRenderContext;
-use crate::render_node::{copy_gup_textures_to_bevy, extract_gup_charts};
+use crate::render_node::{
+    cleanup_extracted_gup_charts, copy_gup_textures_to_bevy, extract_gup_charts,
+};
 use crate::render_system::{ensure_chart_texture_targets, gup_render_system};
 use bevy::prelude::*;
 use bevy::render::renderer::{RenderAdapter, RenderDevice, RenderInstance, RenderQueue};
@@ -82,7 +84,10 @@ impl Plugin for GupPlugin {
         // 2. Copy chart textures into GpuImage textures (GPU → GPU).
         if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
             render_app
-                .add_systems(ExtractSchedule, extract_gup_charts)
+                .add_systems(
+                    ExtractSchedule,
+                    (cleanup_extracted_gup_charts, extract_gup_charts).chain(),
+                )
                 .add_systems(
                     Render,
                     copy_gup_textures_to_bevy.in_set(RenderSystems::Queue),
