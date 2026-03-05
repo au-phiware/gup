@@ -2,7 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Chart Builders **Status**: 🚧 In Progress **Created**: 2025-07-15
+**Initiative**: Chart Builders **Status**: ✅ Complete **Created**: 2025-07-15
+**Completed**: 2025-07-18
 
 ## Context
 
@@ -25,16 +26,16 @@ update the storage buffer (a small flat array) when colours change.
 
 ## Acceptance Criteria
 
-- [ ] A `RegionColorBuffer` (or equivalent) stores per-region RGBA colours in a
+- [x] A `RegionColorBuffer` (or equivalent) stores per-region RGBA colours in a
       GPU storage buffer, indexed by feature index.
-- [ ] The choropleth fragment shader reads the region colour from the storage
+- [x] The choropleth fragment shader reads the region colour from the storage
       buffer instead of the vertex attribute when GPU-side recolouring is
       enabled.
-- [ ] `ChoroplethChart::update_colors(new_data)` updates the storage buffer
+- [x] `ChoroplethChart::update_colors(new_data)` updates the storage buffer
       without re-tessellating geometry.
-- [ ] Colour transitions between two datasets can be animated by interpolating
+- [x] Colour transitions between two datasets can be animated by interpolating
       the storage buffer values over time.
-- [ ] The existing CPU-side per-vertex colouring remains the default; GPU-side
+- [x] The existing CPU-side per-vertex colouring remains the default; GPU-side
       recolouring is opt-in.
 
 ## Dependencies
@@ -56,9 +57,50 @@ update the storage buffer (a small flat array) when colours change.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+### What Was Implemented
+
+- **`RegionColorBuffer`** — CPU-side per-region RGBA colour array with methods
+  for creation (`new`, `from_regions`), mutation (`set_color`,
+  `update_from_data`), animation (`interpolate`), and GPU upload
+  (`as_bytes`).
+- **`IndexedChoroplethVertex`** — Lightweight vertex type (position +
+  `region_index: u32`) for GPU-side colour lookup, replacing the per-vertex
+  `color: [f32; 4]` when GPU recolouring is active.
+- **`ChoroplethChart::update_colors()`** — Recolours all regions from new data
+  without re-tessellating geometry, updating the `RegionColorBuffer`, domain
+  bounds, and per-region value records.
+- **`ChoroplethChart::interpolate_colors()`** — Produces an interpolated
+  `RegionColorBuffer` for smooth animated transitions between colour states.
+- **`ChoroplethChartBuilder::gpu_recolor(bool)`** — Opt-in toggle (default
+  `false`). When enabled, the build step produces both standard per-vertex
+  coloured geometry and indexed vertices + colour buffer.
+- **WGSL shaders** — `choropleth_recolor.vert.wgsl` reads `region_index` from
+  each vertex and looks up colour from a `storage` buffer at
+  `@group(0) @binding(1)`. Fragment shader mirrors `geo_path.frag.wgsl`.
+- **Shader constants** — `RECOLOR_VERTEX_SHADER` and `RECOLOR_FRAGMENT_SHADER`
+  exposed for pipeline construction.
+- **Example** — `examples/choropleth_gpu_recolor.rs` demonstrating dynamic
+  recolouring, interpolation, and per-region highlighting.
+
+### Key Files Changed
+
+| File | Change |
+| --- | --- |
+| `src/chart_builder/builders/choropleth.rs` | +600 lines: RegionColorBuffer, IndexedChoroplethVertex, update_colors, interpolate_colors, gpu_recolor builder method, shader constants, 19 new tests |
+| `src/mark/shaders/choropleth_recolor.vert.wgsl` | New vertex shader for storage-buffer colour lookup |
+| `src/mark/shaders/choropleth_recolor.frag.wgsl` | New fragment shader (fill/stroke selection) |
+| `examples/choropleth_gpu_recolor.rs` | New example demonstrating GPU recolouring |
+
+### Test Counts
+
+- **40 unit tests** in `chart_builder::builders::choropleth::tests` (21 original + 19 new)
+- **2 982 total lib tests** pass under `cargo test -- --test-threads=1`

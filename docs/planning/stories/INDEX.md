@@ -749,7 +749,7 @@ integration, pipeline caching.
 - [GUP-275](GUP-275_Choropleth_Chart_Builder.md) ✅ — ChoroplethChartBuilder
   mapping GeoJSON region values to colors with projection selection, colorbar
   legend, and zoom/pan. Deps: GUP-018 ✅, GUP-273 ✅, GUP-274 ✅, GUP-255 ✅.
-- [GUP-287](GUP-287_GPU_Side_Choropleth_Recolouring.md) 🚧 — GPU-side per-region
+- [GUP-287](GUP-287_GPU_Side_Choropleth_Recolouring.md) ✅ — GPU-side per-region
   colour storage buffer for dynamic recolouring without re-tessellation. Deps:
   GUP-275 ✅.
 - [GUP-288](GUP-288_Choropleth_Tooltip_Hover_Interaction.md) 📋 — Choropleth
