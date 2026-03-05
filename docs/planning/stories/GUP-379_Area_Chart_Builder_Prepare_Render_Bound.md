@@ -2,7 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Core GPU Primitives **Status**: 📋 Planned **Created**:
+**Initiative**: Core GPU Primitives **Status**: 🚧 In Progress **Created**:
 2025-07-20
 
 ## Context
@@ -18,8 +18,8 @@ This is the same class of bug fixed in GUP-289 for the bar chart builder.
 
 ## User Story
 
-> "As a Gup developer, I want `AreaChartBuilder` charts to render visible
-> filled areas via `render_to_png()` without manually calling
+> "As a Gup developer, I want `AreaChartBuilder` charts to render visible filled
+> areas via `render_to_png()` without manually calling
 > `prepare_render_bound()`."
 
 ## Acceptance Criteria

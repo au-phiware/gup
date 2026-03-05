@@ -966,7 +966,8 @@ where
         }
 
         // ── Create Selection<AreaTriangle<T>, FilledPolygon> ────────
-        let mut selection = Selection::<AreaTriangle<T>, FilledPolygon>::new(triangles, context)?;
+        let mut selection =
+            Selection::<AreaTriangle<T>, FilledPolygon>::new(triangles, context.clone())?;
 
         selection.attr("v0", |tri: &AreaTriangle<T>| tri.instance.v0);
         selection.attr("v1", |tri: &AreaTriangle<T>| tri.instance.v1);
@@ -982,7 +983,17 @@ where
             config.y_label_formatter =
                 Some(std::sync::Arc::new(crate::label::PercentFormatter::new()));
         }
-        let composed_chart = ComposedChart::new(selection, config).with_default_axes();
+        let mut composed_chart = ComposedChart::new(selection, config).with_default_axes();
+
+        // Prepare the GPU render pipeline at build time so that
+        // `render_to_png()` / `render_to_texture_view()` work without
+        // requiring a `MarkInstanceBuilder` bound at call-site.
+        composed_chart.visualization.prepare_render_bound(
+            context.device(),
+            context.queue(),
+            None,
+            None,
+        )?;
 
         Ok(composed_chart)
     }
@@ -1179,7 +1190,7 @@ where
         }
 
         // ── Create Selection<AreaSegment<T>, Line> ──────────────────
-        let mut selection = Selection::<AreaSegment<T>, Line>::new(segments, context)?;
+        let mut selection = Selection::<AreaSegment<T>, Line>::new(segments, context.clone())?;
 
         selection.attr("start", |seg: &AreaSegment<T>| seg.start_pos);
         selection.attr("end", |seg: &AreaSegment<T>| seg.end_pos);
@@ -1194,7 +1205,17 @@ where
             config.y_label_formatter =
                 Some(std::sync::Arc::new(crate::label::PercentFormatter::new()));
         }
-        let composed_chart = ComposedChart::new(selection, config).with_default_axes();
+        let mut composed_chart = ComposedChart::new(selection, config).with_default_axes();
+
+        // Prepare the GPU render pipeline at build time so that
+        // `render_to_png()` / `render_to_texture_view()` work without
+        // requiring a `MarkInstanceBuilder` bound at call-site.
+        composed_chart.visualization.prepare_render_bound(
+            context.device(),
+            context.queue(),
+            None,
+            None,
+        )?;
 
         Ok(composed_chart)
     }
@@ -1993,5 +2014,59 @@ mod tests {
         // Above range → clamp to last color
         let above = sample_gradient_cpu(&gradient, 2.0);
         assert!((above[0] - 1.0).abs() < 1e-5);
+    }
+
+    #[tokio::test]
+    async fn test_area_chart_render_to_png_produces_visible_area() {
+        let data = vec![
+            TimePoint {
+                time: 0.0,
+                value: 10.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 1.0,
+                value: 30.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 2.0,
+                value: 20.0,
+                series: "A".to_string(),
+            },
+        ];
+
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let mut chart = area()
+            .x(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.time)
+            }))
+            .y(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.value)
+            }))
+            .build_with_data(data, context)
+            .unwrap();
+
+        let rgba = chart.render_to_rgba(400, 300).unwrap();
+        assert_eq!(rgba.len(), 400 * 300 * 4);
+
+        // Count non-white pixels in the data region (centre of image,
+        // away from axes/labels).
+        let mut non_white = 0u32;
+        for y_px in 60..240 {
+            for x_px in 80..320 {
+                let idx = (y_px * 400 + x_px) as usize * 4;
+                let r = rgba[idx];
+                let g = rgba[idx + 1];
+                let b = rgba[idx + 2];
+                if r != 255 || g != 255 || b != 255 {
+                    non_white += 1;
+                }
+            }
+        }
+        assert!(
+            non_white > 50,
+            "Expected visible area segments in the data region, but found only {non_white} non-white pixels"
+        );
     }
 }
