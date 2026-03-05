@@ -1579,4 +1579,73 @@ mod tests {
             "Expected visible line segments in the data region, but found only {non_white} non-white pixels"
         );
     }
+
+    // ── Scale integration tests (GUP-364) ───────────────────────────
+
+    #[tokio::test]
+    async fn test_line_chart_with_explicit_scales_renders() {
+        use crate::chart_builder::AxisScale;
+        use crate::shader_function::LinearScale;
+
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let data = vec![
+            TimePoint {
+                time: 0.0,
+                value: 10.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 1.0,
+                value: 50.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 2.0,
+                value: 30.0,
+                series: "A".to_string(),
+            },
+        ];
+
+        let x_scale = AxisScale::Linear(LinearScale::new(0.0, 2.0, -1.0, 1.0));
+        let y_scale = AxisScale::Linear(LinearScale::new(0.0, 60.0, -1.0, 1.0));
+
+        let mut chart = line()
+            .x(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.time)
+            }))
+            .y(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.value)
+            }))
+            .x_scale(x_scale)
+            .y_scale(y_scale)
+            .stroke_width_px(4.0)
+            .build_with_data(data, context)
+            .unwrap();
+
+        assert!(
+            chart.visualization.is_render_ready(),
+            "Line chart with explicit scales should be render-ready"
+        );
+
+        let rgba = chart.render_to_rgba(400, 300).unwrap();
+        assert_eq!(rgba.len(), 400 * 300 * 4);
+
+        // Count non-white pixels in the data region.
+        let mut non_white = 0u32;
+        for y_px in 60..240 {
+            for x_px in 80..320 {
+                let idx = (y_px * 400 + x_px) as usize * 4;
+                let r = rgba[idx];
+                let g = rgba[idx + 1];
+                let b = rgba[idx + 2];
+                if r != 255 || g != 255 || b != 255 {
+                    non_white += 1;
+                }
+            }
+        }
+        assert!(
+            non_white > 50,
+            "Expected visible line segments with explicit scales, got {non_white} non-white pixels"
+        );
+    }
 }
