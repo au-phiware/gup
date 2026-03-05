@@ -134,14 +134,23 @@ if (!navigator.gpu) {{
 
 /// Produce the JavaScript snippet that decodes a Base64-inlined WASM
 /// module and instantiates it.
+///
+/// The generated script reads the embedded chart data from
+/// `#gup-chart-data` and stores it in `window.__GUP_CHART_DATA__` so that
+/// the WASM module's init function can access it.
 pub(crate) fn inline_wasm_script(wasm_b64: &str) -> String {
     format!(
-        r#"  // Decode the Base64-inlined WASM module.
+        r#"  // Read embedded chart data for the WASM module.
+  const chartDataEl = document.getElementById('gup-chart-data');
+  if (chartDataEl) {{
+    window.__GUP_CHART_DATA__ = chartDataEl.textContent;
+  }}
+
+  // Decode the Base64-inlined WASM module.
   const wasmB64 = "{wasm_b64}";
   const wasmBin = Uint8Array.from(atob(wasmB64), c => c.charCodeAt(0));
   WebAssembly.instantiate(wasmBin).then(result => {{
     const {{ instance }} = result;
-    // Chart data is available in #gup-chart-data.
     if (instance.exports._start) instance.exports._start();
   }}).catch(err => {{
     console.error('Gup WASM initialisation failed:', err);
@@ -152,15 +161,24 @@ pub(crate) fn inline_wasm_script(wasm_b64: &str) -> String {
 
 /// Produce the JavaScript snippet that fetches a WASM module from a URL
 /// and instantiates it.
+///
+/// Like [`inline_wasm_script`], the generated script reads the chart data
+/// from `#gup-chart-data` and stores it in `window.__GUP_CHART_DATA__`
+/// before fetching the WASM module.
 pub(crate) fn url_wasm_script(url: &str) -> String {
     let url_escaped = js_string_escape(url);
     format!(
-        r#"  fetch("{url_escaped}")
+        r#"  // Read embedded chart data for the WASM module.
+  const chartDataEl = document.getElementById('gup-chart-data');
+  if (chartDataEl) {{
+    window.__GUP_CHART_DATA__ = chartDataEl.textContent;
+  }}
+
+  fetch("{url_escaped}")
     .then(r => r.arrayBuffer())
     .then(buf => WebAssembly.instantiate(buf))
     .then(result => {{
       const {{ instance }} = result;
-      // Chart data is available in #gup-chart-data.
       if (instance.exports._start) instance.exports._start();
     }}).catch(err => {{
       console.error('Gup WASM initialisation failed:', err);
@@ -271,11 +289,37 @@ mod tests {
     }
 
     #[test]
+    fn inline_wasm_script_reads_chart_data() {
+        let script = inline_wasm_script("AQIDBA==");
+        assert!(
+            script.contains("gup-chart-data"),
+            "should read the chart data element"
+        );
+        assert!(
+            script.contains("__GUP_CHART_DATA__"),
+            "should store chart data in global"
+        );
+    }
+
+    #[test]
     fn url_wasm_script_contains_fetch() {
         let script = url_wasm_script("https://cdn.example.com/gup.wasm");
         assert!(script.contains("fetch("));
         assert!(script.contains("https://cdn.example.com/gup.wasm"));
         assert!(script.contains("WebAssembly.instantiate"));
+    }
+
+    #[test]
+    fn url_wasm_script_reads_chart_data() {
+        let script = url_wasm_script("https://cdn.example.com/gup.wasm");
+        assert!(
+            script.contains("gup-chart-data"),
+            "should read the chart data element"
+        );
+        assert!(
+            script.contains("__GUP_CHART_DATA__"),
+            "should store chart data in global"
+        );
     }
 
     #[test]
