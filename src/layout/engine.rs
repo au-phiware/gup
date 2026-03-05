@@ -13,7 +13,7 @@
 //!
 //! Both share the same spring, integration, and convergence passes.
 
-use super::quadtree::build_quadtree;
+use super::quadtree::{apply_adaptive_theta, build_quadtree};
 use super::types::*;
 use crate::error::GupResult;
 use crate::render::RenderContext;
@@ -596,7 +596,10 @@ impl LayoutEngine {
 
         for iter in 0..config.iterations {
             // 1. Build quadtree from current CPU positions.
-            let tree_cells = build_quadtree(&cpu_positions);
+            let mut tree_cells = build_quadtree(&cpu_positions, config.approximation_theta);
+            if config.adaptive_theta {
+                apply_adaptive_theta(&mut tree_cells, config.approximation_theta);
+            }
             let tree_buffer = self
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {

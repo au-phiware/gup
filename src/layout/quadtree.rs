@@ -15,8 +15,9 @@ const MAX_DEPTH: u32 = 20;
 /// Build a Barnes-Hut quadtree from 2-D node positions.
 ///
 /// Returns a flat `Vec<BHCell>` suitable for upload to a GPU storage buffer.
-/// The root cell is at index 0.
-pub(crate) fn build_quadtree(positions: &[(f32, f32)]) -> Vec<BHCell> {
+/// The root cell is at index 0.  Every cell's `effective_theta` is set to
+/// `base_theta`.
+pub(crate) fn build_quadtree(positions: &[(f32, f32)], base_theta: f32) -> Vec<BHCell> {
     if positions.is_empty() {
         // Return a single empty root so the GPU buffer is never zero-sized.
         return vec![BHCell {
@@ -28,6 +29,7 @@ pub(crate) fn build_quadtree(positions: &[(f32, f32)]) -> Vec<BHCell> {
             child1: -1,
             child2: -1,
             child3: -1,
+            effective_theta: base_theta,
         }];
     }
 
@@ -63,6 +65,7 @@ pub(crate) fn build_quadtree(positions: &[(f32, f32)]) -> Vec<BHCell> {
         child1: -1,
         child2: -1,
         child3: -1,
+        effective_theta: base_theta,
     });
     leaf_body.push(None);
 
@@ -237,6 +240,7 @@ fn get_or_create_child(
         child1: -1,
         child2: -1,
         child3: -1,
+        effective_theta: cells[cell_idx].effective_theta,
     });
     leaf_body.push(None);
 
@@ -251,20 +255,77 @@ fn get_or_create_child(
     new_idx
 }
 
+/// Apply adaptive theta tuning to a quadtree.
+///
+/// Adjusts each cell's `effective_theta` based on its local density relative
+/// to the global average.  Dense cells (high mass / small area) receive a
+/// smaller theta for more accurate force calculation; sparse cells receive a
+/// larger theta for faster computation.
+///
+/// # Formula
+///
+/// ```text
+/// cell_density   = mass / (2 * half_width)²
+/// avg_density    = root.mass / (2 * root.half_width)²
+/// relative       = cell_density / avg_density
+/// effective_theta = base_theta * clamp(1 / √relative, MIN_FACTOR, MAX_FACTOR)
+/// ```
+///
+/// `MIN_FACTOR` (0.3) prevents excessively small theta in very dense regions
+/// (which would make the approximation slower than exact).  `MAX_FACTOR` (1.5)
+/// prevents excessively large theta in sparse regions (which would degrade
+/// accuracy beyond the already-loose approximation).
+pub(crate) fn apply_adaptive_theta(cells: &mut [BHCell], base_theta: f32) {
+    if cells.is_empty() {
+        return;
+    }
+
+    let root = &cells[0];
+    if root.mass <= 0.0 {
+        return;
+    }
+
+    let root_area = (2.0 * root.half_width) * (2.0 * root.half_width);
+    let avg_density = root.mass / root_area;
+
+    /// Minimum scaling factor for effective theta (prevents theta from
+    /// becoming too small in very dense regions).
+    const MIN_FACTOR: f32 = 0.3;
+    /// Maximum scaling factor for effective theta (prevents theta from
+    /// becoming too large in sparse regions).
+    const MAX_FACTOR: f32 = 1.5;
+
+    for cell in cells.iter_mut() {
+        if cell.mass <= 0.0 {
+            cell.effective_theta = base_theta;
+            continue;
+        }
+
+        let cell_area = (2.0 * cell.half_width) * (2.0 * cell.half_width);
+        let cell_density = cell.mass / cell_area;
+        let relative_density = cell_density / avg_density;
+
+        // Dense cells → smaller theta (more accurate).
+        // Sparse cells → larger theta (faster).
+        let factor = (1.0 / relative_density.sqrt()).clamp(MIN_FACTOR, MAX_FACTOR);
+        cell.effective_theta = base_theta * factor;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn empty_positions() {
-        let tree = build_quadtree(&[]);
+        let tree = build_quadtree(&[], 0.5);
         assert_eq!(tree.len(), 1);
         assert_eq!(tree[0].mass, 0.0);
     }
 
     #[test]
     fn single_body() {
-        let tree = build_quadtree(&[(5.0, 10.0)]);
+        let tree = build_quadtree(&[(5.0, 10.0)], 0.5);
         assert_eq!(tree.len(), 1);
         assert!((tree[0].com_x - 5.0).abs() < 1e-6);
         assert!((tree[0].com_y - 10.0).abs() < 1e-6);
@@ -279,7 +340,7 @@ mod tests {
     #[test]
     fn two_bodies_different_quadrants() {
         // Place two bodies on opposite sides of the expected centre.
-        let tree = build_quadtree(&[(-10.0, -10.0), (10.0, 10.0)]);
+        let tree = build_quadtree(&[(-10.0, -10.0), (10.0, 10.0)], 0.5);
 
         // Root should have mass 2 and COM at the midpoint.
         assert!((tree[0].mass - 2.0).abs() < 1e-5);
@@ -297,7 +358,7 @@ mod tests {
     #[test]
     fn four_bodies_square() {
         let positions = vec![(-10.0, -10.0), (10.0, -10.0), (-10.0, 10.0), (10.0, 10.0)];
-        let tree = build_quadtree(&positions);
+        let tree = build_quadtree(&positions, 0.5);
 
         assert!((tree[0].mass - 4.0).abs() < 1e-5);
         // COM should be near the centre.
@@ -323,7 +384,7 @@ mod tests {
             })
             .collect();
 
-        let tree = build_quadtree(&positions);
+        let tree = build_quadtree(&positions, 0.5);
         assert!((tree[0].mass - 10_000.0).abs() < 1e-1);
         assert!(tree.len() > 1);
     }
@@ -332,7 +393,58 @@ mod tests {
     fn coincident_bodies_depth_limited() {
         // All bodies at the same position should not cause infinite recursion.
         let positions: Vec<(f32, f32)> = vec![(5.0, 5.0); 100];
-        let tree = build_quadtree(&positions);
+        let tree = build_quadtree(&positions, 0.5);
         assert!((tree[0].mass - 100.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn effective_theta_set_to_base() {
+        let tree = build_quadtree(&[(0.0, 0.0), (100.0, 100.0)], 0.7);
+        for cell in &tree {
+            assert!(
+                (cell.effective_theta - 0.7).abs() < 1e-6,
+                "expected base theta 0.7, got {}",
+                cell.effective_theta
+            );
+        }
+    }
+
+    #[test]
+    fn adaptive_theta_varies_by_density() {
+        // Create a graph with a dense cluster and a sparse outlier.
+        let mut positions = Vec::new();
+        // Dense cluster: 50 bodies near origin.
+        for i in 0..50 {
+            let angle = (i as f32) * 2.399_963_2;
+            let r = (i as f32 + 1.0).sqrt() * 0.5;
+            positions.push((angle.cos() * r, angle.sin() * r));
+        }
+        // Sparse outlier far away.
+        positions.push((500.0, 500.0));
+
+        let base_theta = 0.5;
+        let mut tree = build_quadtree(&positions, base_theta);
+        apply_adaptive_theta(&mut tree, base_theta);
+
+        // Collect effective thetas for non-empty cells.
+        let thetas: Vec<f32> = tree
+            .iter()
+            .filter(|c| c.mass > 0.0)
+            .map(|c| c.effective_theta)
+            .collect();
+
+        // Should have variation — not all the same.
+        let min_theta = thetas.iter().cloned().fold(f32::MAX, f32::min);
+        let max_theta = thetas.iter().cloned().fold(f32::MIN, f32::max);
+        assert!(
+            max_theta > min_theta,
+            "adaptive theta should vary: min={min_theta}, max={max_theta}"
+        );
+
+        // Dense cells should have theta < base_theta.
+        assert!(
+            min_theta < base_theta,
+            "densest cell theta ({min_theta}) should be below base ({base_theta})"
+        );
     }
 }

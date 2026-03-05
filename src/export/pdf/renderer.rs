@@ -503,13 +503,11 @@ impl PdfRenderer {
                     })
                     .collect();
 
-                let line = printpdf::Line {
-                    points: line_points,
-                    is_closed: true,
-                };
                 ops.push(Op::DrawPolygon {
                     polygon: printpdf::Polygon {
-                        rings: vec![line],
+                        rings: vec![printpdf::PolygonRing {
+                            points: line_points,
+                        }],
                         mode: paint_mode,
                         winding_order: WindingOrder::NonZero,
                     },

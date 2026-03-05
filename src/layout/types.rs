@@ -97,7 +97,7 @@ const _: () = assert!(std::mem::size_of::<GpuSimParams>() == 32);
 
 /// A cell in the Barnes-Hut quadtree, laid out for GPU consumption.
 ///
-/// Layout: 32 bytes, matches WGSL `BHCell`.
+/// Layout: 36 bytes, matches WGSL `BHCell`.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub(crate) struct BHCell {
@@ -117,9 +117,15 @@ pub(crate) struct BHCell {
     pub child2: i32,
     /// Index of child cell in SE quadrant (`-1` = empty).
     pub child3: i32,
+    /// Per-cell effective theta for adaptive approximation.
+    ///
+    /// When adaptive theta is disabled, this equals the global theta.
+    /// When enabled, dense cells get a smaller value (more accurate)
+    /// and sparse cells get a larger value (faster).
+    pub effective_theta: f32,
 }
 
-const _: () = assert!(std::mem::size_of::<BHCell>() == 32);
+const _: () = assert!(std::mem::size_of::<BHCell>() == 36);
 
 /// Configuration builder for force-directed graph layout.
 ///
@@ -166,6 +172,15 @@ pub struct ForceDirected {
     /// O(n log n).  A typical value is `0.5`.  Setting `theta = 0` disables
     /// the approximation and falls back to exact pairwise computation.
     pub approximation_theta: f32,
+    /// Enable per-cell adaptive theta tuning.
+    ///
+    /// When `true` (and `approximation_theta > 0`), the Barnes-Hut opening
+    /// angle is adjusted per quadtree cell based on local body density.
+    /// Dense cells use a smaller effective theta (more accurate forces) and
+    /// sparse cells use a larger theta (faster computation).  This improves
+    /// layout quality for clustered graphs without significantly increasing
+    /// overall computation time.
+    pub adaptive_theta: bool,
 }
 
 impl Default for ForceDirected {
@@ -180,6 +195,7 @@ impl Default for ForceDirected {
             convergence_threshold: 0.5,
             convergence_check_interval: 10,
             approximation_theta: 0.5,
+            adaptive_theta: false,
         }
     }
 }
@@ -254,6 +270,18 @@ impl ForceDirected {
     /// pairwise computation.
     pub fn approximation_theta(mut self, theta: f32) -> Self {
         self.approximation_theta = theta.max(0.0);
+        self
+    }
+
+    /// Enable or disable per-cell adaptive theta tuning.
+    ///
+    /// When enabled, dense regions of the quadtree automatically use a
+    /// smaller theta (more accurate) while sparse regions use a larger
+    /// theta (faster), improving layout quality for clustered graphs.
+    ///
+    /// This only takes effect when `approximation_theta > 0`.
+    pub fn adaptive_theta(mut self, enabled: bool) -> Self {
+        self.adaptive_theta = enabled;
         self
     }
 }

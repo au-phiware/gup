@@ -27,14 +27,15 @@ struct SimParams {
 }
 
 struct BHCell {
-    com_x:      f32,
-    com_y:      f32,
-    mass:       f32,
-    half_width: f32,
-    child0:     i32,
-    child1:     i32,
-    child2:     i32,
-    child3:     i32,
+    com_x:           f32,
+    com_y:           f32,
+    mass:            f32,
+    half_width:      f32,
+    child0:          i32,
+    child1:          i32,
+    child2:          i32,
+    child3:          i32,
+    effective_theta: f32,
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +97,7 @@ fn bh_repulsion_pass(@builtin(global_invocation_id) gid: vec3<u32>) {
         let cell_width = cell.half_width * 2.0;
         let ratio = cell_width / sqrt(dist_sq);
 
-        if is_leaf || ratio < params.theta {
+        if is_leaf || ratio < cell.effective_theta {
             // Use centre-of-mass approximation.
             // Coulomb-like: F = strength * mass / dist²  (away from COM)
             if dist_sq > 0.01 {
