@@ -200,10 +200,7 @@ impl App {
         let sy = t.scale_y as f64;
         let tx = t.translate_x as f64;
         let ty = t.translate_y as f64;
-        [
-            (clip[0] - tx) / sx.max(1e-9),
-            (clip[1] - ty) / sy.max(1e-9),
-        ]
+        [(clip[0] - tx) / sx.max(1e-9), (clip[1] - ty) / sy.max(1e-9)]
     }
 
     /// Normalise layout coordinates into clip space [-1, 1].
@@ -231,10 +228,8 @@ impl App {
             let dx = px - nx;
             let dy = py - ny;
             let d2 = dx * dx + dy * dy;
-            if d2 <= radius_sq {
-                if best.is_none() || d2 < best.unwrap().1 {
-                    best = Some((pos.id, d2));
-                }
+            if d2 <= radius_sq && (best.is_none() || d2 < best.unwrap().1) {
+                best = Some((pos.id, d2));
             }
         }
         best.map(|(id, _)| id)
@@ -284,20 +279,20 @@ impl App {
 
     fn render(&mut self) {
         // Step the layout
-        if self.simulation_running {
-            if let (Some(engine), Some(session)) = (&self.engine, &mut self.session) {
-                engine.step(session, ITERATIONS_PER_FRAME);
+        if self.simulation_running
+            && let (Some(engine), Some(session)) = (&self.engine, &mut self.session)
+        {
+            engine.step(session, ITERATIONS_PER_FRAME);
 
-                // Read back positions (blocking)
-                match pollster::block_on(engine.read_positions(session)) {
-                    Ok(pos) => self.positions = pos,
-                    Err(e) => eprintln!("read_positions: {e}"),
-                }
+            // Read back positions (blocking)
+            match pollster::block_on(engine.read_positions(session)) {
+                Ok(pos) => self.positions = pos,
+                Err(e) => eprintln!("read_positions: {e}"),
+            }
 
-                // Stop if enough iterations
-                if session.iterations_performed >= 500 {
-                    self.simulation_running = false;
-                }
+            // Stop if enough iterations
+            if session.iterations_performed >= 500 {
+                self.simulation_running = false;
             }
         }
 
@@ -600,10 +595,10 @@ impl ApplicationHandler for App {
                     let bounds = self.compute_bounds();
                     let layout_x = (world[0] as f32 + 0.9) / 1.8 * bounds.width + bounds.min_x;
                     let layout_y = (world[1] as f32 + 0.9) / 1.8 * bounds.height + bounds.min_y;
-                    if let Some(engine) = &self.engine {
-                        if let Some(session) = &self.session {
-                            engine.pin_node(session, dragged_id, layout_x, layout_y);
-                        }
+                    if let Some(engine) = &self.engine
+                        && let Some(session) = &self.session
+                    {
+                        engine.pin_node(session, dragged_id, layout_x, layout_y);
                     }
                     if let Some(w) = &self.window {
                         w.request_redraw();
@@ -675,10 +670,10 @@ impl ApplicationHandler for App {
                 if self.is_panning {
                     self.is_panning = false;
                     self.zoom.on_drag_end();
-                    if self.zoom.is_animating() {
-                        if let Some(w) = &self.window {
-                            w.request_redraw();
-                        }
+                    if self.zoom.is_animating()
+                        && let Some(w) = &self.window
+                    {
+                        w.request_redraw();
                     }
                 }
             }
@@ -697,10 +692,8 @@ impl ApplicationHandler for App {
                     || inertia_moved
                     || self.zoom.is_dragging()
                     || self.dragged_node.is_some();
-                if needs_redraw {
-                    if let Some(w) = &self.window {
-                        w.request_redraw();
-                    }
+                if needs_redraw && let Some(w) = &self.window {
+                    w.request_redraw();
                 }
             }
 
@@ -708,10 +701,10 @@ impl ApplicationHandler for App {
         }
 
         // Continuous redraws while panning
-        if self.zoom.is_dragging() {
-            if let Some(w) = &self.window {
-                w.request_redraw();
-            }
+        if self.zoom.is_dragging()
+            && let Some(w) = &self.window
+        {
+            w.request_redraw();
         }
     }
 }
@@ -722,7 +715,10 @@ impl ApplicationHandler for App {
 
 fn main() {
     println!("GUP-311 Interactive Force-Directed Graph");
-    println!("  {NODE_COUNT} nodes, ~{} edges", NODE_COUNT * EDGES_PER_NODE);
+    println!(
+        "  {NODE_COUNT} nodes, ~{} edges",
+        NODE_COUNT * EDGES_PER_NODE
+    );
     println!("  {ITERATIONS_PER_FRAME} layout iterations per frame");
     println!();
     println!("Controls:");
