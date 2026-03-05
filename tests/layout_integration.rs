@@ -747,3 +747,172 @@ async fn session_pin_node() {
         positions[0].y
     );
 }
+
+// ---------------------------------------------------------------------------
+// Adaptive Barnes-Hut theta tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn adaptive_theta_builder_defaults() {
+    let fd = ForceDirected::new();
+    assert!(!fd.adaptive_theta, "adaptive_theta should default to false");
+}
+
+#[test]
+fn adaptive_theta_builder_set() {
+    let fd = ForceDirected::new().adaptive_theta(true);
+    assert!(fd.adaptive_theta);
+
+    let fd2 = fd.adaptive_theta(false);
+    assert!(!fd2.adaptive_theta);
+}
+
+#[tokio::test]
+async fn adaptive_theta_layout_produces_finite_positions() {
+    // Basic smoke test: adaptive theta should produce valid results.
+    let Some(ctx) = gpu_context().await else {
+        return;
+    };
+    let engine = LayoutEngine::new(&ctx).unwrap();
+
+    let nodes: Vec<LayoutNode> = (0..20)
+        .map(|i| LayoutNode {
+            id: i,
+            x: 0.0,
+            y: 0.0,
+        })
+        .collect();
+    let edges: Vec<LayoutEdge> = (0..19)
+        .map(|i| LayoutEdge {
+            source: i,
+            target: i + 1,
+        })
+        .collect();
+
+    let config = ForceDirected::new()
+        .approximation_theta(0.5)
+        .adaptive_theta(true)
+        .iterations(50)
+        .convergence_check_interval(25);
+
+    let result = engine
+        .force_directed_layout(&nodes, &edges, &config)
+        .await
+        .unwrap();
+
+    assert_eq!(result.positions.len(), 20);
+    for pos in &result.positions {
+        assert!(pos.x.is_finite(), "Node {} x not finite", pos.id);
+        assert!(pos.y.is_finite(), "Node {} y not finite", pos.id);
+        assert!(
+            pos.x.abs() < 4096.0 && pos.y.abs() < 4096.0,
+            "Node {} out of bounds: ({}, {})",
+            pos.id,
+            pos.x,
+            pos.y
+        );
+    }
+}
+
+#[tokio::test]
+async fn adaptive_theta_clustered_graph() {
+    // Test with a graph having dense clusters and sparse connections,
+    // the scenario where adaptive theta should shine.
+    let Some(ctx) = gpu_context().await else {
+        return;
+    };
+    let engine = LayoutEngine::new(&ctx).unwrap();
+
+    // Build two dense clusters connected by a single bridge edge.
+    let cluster_size = 50;
+    let mut nodes: Vec<LayoutNode> = Vec::new();
+    let mut edges: Vec<LayoutEdge> = Vec::new();
+
+    // Cluster A: nodes 0..50
+    for i in 0..cluster_size {
+        nodes.push(LayoutNode {
+            id: i as u32,
+            x: 0.0,
+            y: 0.0,
+        });
+    }
+    // Dense intra-cluster edges for cluster A.
+    for i in 0..cluster_size {
+        for j in (i + 1)..cluster_size.min(i + 4) {
+            edges.push(LayoutEdge {
+                source: i as u32,
+                target: j as u32,
+            });
+        }
+    }
+
+    // Cluster B: nodes 50..100
+    for i in cluster_size..(cluster_size * 2) {
+        nodes.push(LayoutNode {
+            id: i as u32,
+            x: 0.0,
+            y: 0.0,
+        });
+    }
+    // Dense intra-cluster edges for cluster B.
+    for i in cluster_size..(cluster_size * 2) {
+        for j in (i + 1)..(cluster_size * 2).min(i + 4) {
+            edges.push(LayoutEdge {
+                source: i as u32,
+                target: j as u32,
+            });
+        }
+    }
+
+    // Single bridge edge between clusters.
+    edges.push(LayoutEdge {
+        source: 0,
+        target: cluster_size as u32,
+    });
+
+    let config = ForceDirected::new()
+        .approximation_theta(0.5)
+        .adaptive_theta(true)
+        .iterations(100)
+        .convergence_check_interval(50);
+
+    let result = engine
+        .force_directed_layout(&nodes, &edges, &config)
+        .await
+        .unwrap();
+
+    assert_eq!(result.positions.len(), cluster_size * 2);
+    for pos in &result.positions {
+        assert!(pos.x.is_finite(), "Node {} x not finite", pos.id);
+        assert!(pos.y.is_finite(), "Node {} y not finite", pos.id);
+    }
+
+    // Verify clusters are separated: compute centre of each cluster.
+    let cluster_a_cx: f32 = result.positions[..cluster_size]
+        .iter()
+        .map(|p| p.x)
+        .sum::<f32>()
+        / cluster_size as f32;
+    let cluster_a_cy: f32 = result.positions[..cluster_size]
+        .iter()
+        .map(|p| p.y)
+        .sum::<f32>()
+        / cluster_size as f32;
+    let cluster_b_cx: f32 = result.positions[cluster_size..]
+        .iter()
+        .map(|p| p.x)
+        .sum::<f32>()
+        / cluster_size as f32;
+    let cluster_b_cy: f32 = result.positions[cluster_size..]
+        .iter()
+        .map(|p| p.y)
+        .sum::<f32>()
+        / cluster_size as f32;
+
+    let inter_cluster_dist =
+        ((cluster_a_cx - cluster_b_cx).powi(2) + (cluster_a_cy - cluster_b_cy).powi(2)).sqrt();
+    assert!(
+        inter_cluster_dist > 1.0,
+        "Clusters should be separated, distance={inter_cluster_dist}"
+    );
+}
