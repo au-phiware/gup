@@ -1001,6 +1001,9 @@ PNG, HTML), and platform targets.
 - [GUP-262D](GUP-262D_Multi_Chart_Batched_Rendering.md) 💡 — Batch multiple
   chart renders into a single GPU submission for dashboard use cases. Deps:
   GUP-262A ✅.
+- [GUP-262E](GUP-262E_SyncToRenderWorld_Migration.md) 💡 — Migrate gup-bevy
+  extract system from spawn+cleanup to Bevy 0.18's SyncToRenderWorld for
+  persistent render-world entity mapping. Deps: GUP-262B ✅.
 - [GUP-263](GUP-263_egui_Integration.md) ✅ — GupWidget implementing
   egui::Widget via render-to-texture, with dirty-tracking and interaction bridge
   forwarding egui pointer events. Deps: GUP-004 ✅, GUP-018 ✅, GUP-268 ✅.
