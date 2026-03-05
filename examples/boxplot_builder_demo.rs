@@ -57,6 +57,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create render context
     let context = Arc::new(RenderContext::new().await?);
 
+    // Gallery screenshot support
+    if let Some(req) = gup::export::gallery::screenshot_request() {
+        let mut chart = boxplot()
+            .y(AccessorFunction::new(|d: &MeasurementSet| {
+                AccessorValue::FloatArray(d.values.clone())
+            }))
+            .title("Box Plot Demo")
+            .build_with_data(data, context)?;
+        chart.export_png(&req.path, req.width, req.height)?;
+        return Ok(());
+    }
+
     // Example 1: Basic box plot with minimal configuration
     println!("Example 1: Basic box plot");
     let basic_chart = boxplot()

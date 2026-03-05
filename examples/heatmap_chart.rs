@@ -112,6 +112,33 @@ async fn main() -> GupResult<()> {
 
     let context = Arc::new(RenderContext::new().await?);
 
+    // Gallery screenshot support
+    if let Some(req) = gup::export::gallery::screenshot_request() {
+        let activity_data = generate_activity_data();
+        let mut chart = heatmap()
+            .x(AccessorFunction::new(|d: &ActivityEvent| {
+                AccessorValue::Float(d.hour)
+            }))
+            .y(AccessorFunction::new(|d: &ActivityEvent| {
+                AccessorValue::Float(d.weekday)
+            }))
+            .fill(AccessorFunction::new(|d: &ActivityEvent| {
+                AccessorValue::Float(d.count)
+            }))
+            .x_bins(24)
+            .y_bins(7)
+            .aggregate(AggregateFunc::Sum)
+            .x_domain(0.0, 24.0)
+            .y_domain(0.0, 7.0)
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .title("Weekly Activity Pattern")
+            .width(800.0)
+            .height(400.0)
+            .build_with_data(activity_data, context)?;
+        chart.export_png(&req.path, req.width, req.height)?;
+        return Ok(());
+    }
+
     // ── 1. Raw-data heatmap with automatic 2D binning ────────────────
     println!("1️⃣  Raw-data heatmap — time-of-week activity pattern");
 

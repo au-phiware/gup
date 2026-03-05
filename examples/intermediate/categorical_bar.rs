@@ -88,6 +88,25 @@ async fn main() -> GupResult<()> {
     let context = Arc::new(RenderContext::new().await?);
     println!("GPU context initialized");
 
+    // Gallery screenshot support
+    if let Some(req) = gup::export::gallery::screenshot_request() {
+        let data = generate_product_categories();
+        let mut chart = bar()
+            .x(AccessorFunction::new(|d: &CategoryData| {
+                AccessorValue::Float(d.index)
+            }))
+            .y(AccessorFunction::new(|d: &CategoryData| {
+                AccessorValue::Float(d.value)
+            }))
+            .fill(AccessorFunction::new(|_: &CategoryData| {
+                AccessorValue::Color([0.3, 0.7, 0.9, 1.0])
+            }))
+            .vertical()
+            .build_with_data(data, context)?;
+        chart.export_png(&req.path, req.width, req.height)?;
+        return Ok(());
+    }
+
     // ========================================
     // Example 1: Product Categories (Vertical)
     // ========================================

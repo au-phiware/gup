@@ -64,6 +64,21 @@ async fn main() -> GupResult<()> {
     // Create sample datasets
     let sales_data = create_sales_dataset();
     let stock_data = create_stock_dataset();
+
+    // Gallery screenshot support
+    if let Some(req) = gup::export::gallery::screenshot_request() {
+        let mut chart = scatter()
+            .x(x("revenue"))
+            .y(y("profit"))
+            .color(color("region"))
+            .title("Sales Performance Analysis")
+            .width(800.0)
+            .height(600.0)
+            .build_with_data(sales_data, context)?;
+        chart.export_png(&req.path, req.width, req.height)?;
+        return Ok(());
+    }
+
     let geo_data = create_geographic_dataset();
 
     println!("\n📊 Dataset Summary:");

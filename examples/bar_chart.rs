@@ -97,6 +97,28 @@ async fn main() -> GupResult<()> {
     let context = Arc::new(RenderContext::new().await?);
     let data = sample_data();
 
+    // Gallery screenshot support
+    if let Some(req) = gup::export::gallery::screenshot_request() {
+        let simple_data: Vec<_> = data
+            .iter()
+            .filter(|d| d.region == "North")
+            .cloned()
+            .collect();
+        let mut chart = bar()
+            .x(quarter_accessor())
+            .y(revenue_accessor())
+            .orient(Orientation::Vertical)
+            .gap(0.15)
+            .title("Quarterly Revenue (North)")
+            .width(800.0)
+            .height(500.0)
+            .show_axes(true)
+            .horizontal_grid()
+            .build_with_data(simple_data, context)?;
+        chart.export_png(&req.path, req.width, req.height)?;
+        return Ok(());
+    }
+
     // ── 1. Simple vertical bar chart ─────────────────────────────────
     println!("1️⃣  Simple vertical bar chart — one bar per quarter");
 

@@ -93,6 +93,24 @@ async fn main() -> GupResult<()> {
     let context = Arc::new(RenderContext::new().await?);
     println!("GPU context initialized");
 
+    // Gallery screenshot support
+    if let Some(req) = gup::export::gallery::screenshot_request() {
+        let mut chart = line()
+            .x(AccessorFunction::new(|p: &TimePoint| {
+                AccessorValue::Float(p.time)
+            }))
+            .y(AccessorFunction::new(|p: &TimePoint| {
+                AccessorValue::Float(p.value)
+            }))
+            .stroke_color([0.2, 0.6, 1.0, 1.0])
+            .show_grid(true)
+            .show_axes(true)
+            .title("Monthly Temperature")
+            .build_with_data(data, context)?;
+        chart.export_png(&req.path, req.width, req.height)?;
+        return Ok(());
+    }
+
     // Step 5: Create accessor functions
     let x_accessor = AccessorFunction::new(|p: &TimePoint| AccessorValue::Float(p.time));
     let y_accessor = AccessorFunction::new(|p: &TimePoint| AccessorValue::Float(p.value));

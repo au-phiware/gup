@@ -176,6 +176,26 @@ async fn main() -> GupResult<()> {
 
     // Generate dashboard data
     let data = generate_dashboard_data();
+
+    // Gallery screenshot support
+    if let Some(req) = gup::export::gallery::screenshot_request() {
+        let mut chart = line()
+            .x(AccessorFunction::new(|m: &MonthlyMetrics| {
+                AccessorValue::Float(m.month_index)
+            }))
+            .y(AccessorFunction::new(|m: &MonthlyMetrics| {
+                AccessorValue::Float(m.revenue)
+            }))
+            .stroke_color([0.2, 0.7, 0.3, 1.0])
+            .stroke_width_px(2.5)
+            .show_grid(true)
+            .show_axes(true)
+            .title("Revenue Trend")
+            .build_with_data(data, context)?;
+        chart.export_png(&req.path, req.width, req.height)?;
+        return Ok(());
+    }
+
     println!("Generated 12 months of business metrics");
     println!();
 

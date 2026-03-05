@@ -92,6 +92,23 @@ async fn main() -> GupResult<()> {
 
     // Generate sales data
     let data = generate_sales_data();
+
+    // Gallery screenshot support
+    if let Some(req) = gup::export::gallery::screenshot_request() {
+        let mut chart = scatter()
+            .x(AccessorFunction::new(|point: &SalesPoint| {
+                AccessorValue::Float(point.revenue)
+            }))
+            .y(AccessorFunction::new(|point: &SalesPoint| {
+                AccessorValue::Float(point.profit)
+            }))
+            .title("Regional Sales Performance")
+            .point_size(12.0)
+            .build_with_data(data, context)?;
+        chart.export_png(&req.path, req.width, req.height)?;
+        return Ok(());
+    }
+
     println!("Generated {} sales points across {} regions", data.len(), 4);
 
     // Create accessor functions

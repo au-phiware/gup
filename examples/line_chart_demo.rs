@@ -85,6 +85,23 @@ async fn main() -> GupResult<()> {
 
     let context = Arc::new(RenderContext::new().await?);
 
+    // Gallery screenshot support
+    if let Some(req) = gup::export::gallery::screenshot_request() {
+        let mut chart = line()
+            .x(time_accessor())
+            .y(value_accessor())
+            .stroke_color([0.122, 0.467, 0.706, 1.0])
+            .stroke_width_px(2.5)
+            .title("Temperature Over Time")
+            .width(800.0)
+            .height(400.0)
+            .show_axes(true)
+            .horizontal_grid()
+            .build_with_data(single_series_data(), context)?;
+        chart.export_png(&req.path, req.width, req.height)?;
+        return Ok(());
+    }
+
     // ── 1. Single-series line chart ─────────────────────────────────
     println!("1️⃣  Single-series line chart — sine wave");
 

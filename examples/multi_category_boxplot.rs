@@ -162,6 +162,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     ];
 
+    // Gallery screenshot support
+    if let Some(req) = gup::export::gallery::screenshot_request() {
+        let mut chart = boxplot()
+            .y(AccessorFunction::new(|m: &Measurement| {
+                AccessorValue::Float(m.value)
+            }))
+            .category(AccessorFunction::new(|m: &Measurement| {
+                AccessorValue::String(m.category.clone())
+            }))
+            .title("Test Scores by Grade")
+            .build_with_data(test_scores, context)?;
+        chart.export_png(&req.path, req.width, req.height)?;
+        return Ok(());
+    }
+
     println!("Dataset: Test scores by grade level");
     println!("  Grades: 9, 10, 11, 12");
     println!("  Total measurements: {}", test_scores.len());

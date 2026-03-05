@@ -119,6 +119,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let context = Arc::new(RenderContext::new().await?);
 
+    // Gallery screenshot support
+    if let Some(req) = gup::export::gallery::screenshot_request() {
+        let data = generate_samples();
+        let mut chart = ViolinPlotBuilder::new()
+            .x(AccessorFunction::new(|s: &Sample| {
+                AccessorValue::String(s.category.clone())
+            }))
+            .y(AccessorFunction::new(|s: &Sample| {
+                AccessorValue::Float(s.value)
+            }))
+            .show_box(true)
+            .trim(true)
+            .title("Distribution Comparison")
+            .width(800.0)
+            .height(500.0)
+            .build_with_data(data, context)?;
+        chart.export_png(&req.path, req.width, req.height)?;
+        return Ok(());
+    }
+
     // ── Example 1: Three-category violin with embedded box plots ─────────
     println!("Example 1: Multi-category violin plot with embedded box plots");
     let data = generate_samples();

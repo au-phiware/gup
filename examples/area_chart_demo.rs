@@ -128,6 +128,22 @@ async fn main() -> GupResult<()> {
 
     let context = Arc::new(RenderContext::new().await?);
 
+    // Gallery screenshot support
+    if let Some(req) = gup::export::gallery::screenshot_request() {
+        let mut chart = area()
+            .x(time_accessor())
+            .y(value_accessor())
+            .opacity(0.7)
+            .title("Revenue Over Time")
+            .width(800.0)
+            .height(400.0)
+            .show_axes(true)
+            .horizontal_grid()
+            .build_with_data(single_series_data(), context)?;
+        chart.export_png(&req.path, req.width, req.height)?;
+        return Ok(());
+    }
+
     // ── 1. Single-series area chart ─────────────────────────────────
     println!("1️⃣  Single-series area chart — filled sine wave");
 

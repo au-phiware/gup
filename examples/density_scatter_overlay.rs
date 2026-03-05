@@ -103,6 +103,28 @@ async fn main() -> gup::error::GupResult<()> {
 
     let context = Arc::new(RenderContext::new().await?);
 
+    // Gallery screenshot support
+    if let Some(req) = gup::export::gallery::screenshot_request() {
+        let data = generate_bivariate_normal(1_000, 42);
+        let mut chart = density_plot()
+            .x(AccessorFunction::new(|d: &Point| {
+                AccessorValue::Float(d.x)
+            }))
+            .y(AccessorFunction::new(|d: &Point| {
+                AccessorValue::Float(d.y)
+            }))
+            .bandwidth(0.4)
+            .levels(10)
+            .fill(true)
+            .color_scheme(ColorScale::viridis(0.0, 1.0))
+            .title("Bivariate Normal — Filled Contours")
+            .width(800.0)
+            .height(600.0)
+            .build_with_data(data, context)?;
+        chart.export_png(&req.path, req.width, req.height)?;
+        return Ok(());
+    }
+
     // ── 1. Basic density plot with filled contours ──────────────────
     println!("Example 1: Filled-contour density plot (bivariate normal)");
     let data1 = generate_bivariate_normal(1_000, 42);

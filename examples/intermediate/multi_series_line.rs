@@ -106,6 +106,25 @@ async fn main() -> GupResult<()> {
 
     // Generate financial data
     let all_series = generate_financial_data();
+
+    // Gallery screenshot support
+    if let Some(req) = gup::export::gallery::screenshot_request() {
+        let series_data = &all_series[0];
+        let mut chart = line()
+            .x(AccessorFunction::new(|p: &TimeSeriesPoint| {
+                AccessorValue::Float(p.month)
+            }))
+            .y(AccessorFunction::new(|p: &TimeSeriesPoint| {
+                AccessorValue::Float(p.value)
+            }))
+            .stroke_color(series_color(0))
+            .stroke_width_px(2.0)
+            .title("Stock Price Trend")
+            .build_with_data(series_data.clone(), context)?;
+        chart.export_png(&req.path, req.width, req.height)?;
+        return Ok(());
+    }
+
     println!(
         "Generated {} time series with 12 months each",
         all_series.len()

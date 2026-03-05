@@ -84,9 +84,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     rt.block_on(async {
         let context = Arc::new(gup::RenderContext::new().await?);
 
-        let selection = gup::selection::Selection::<DataPoint, gup::Circle>::new(data, context)?;
+        let selection =
+            gup::selection::Selection::<DataPoint, gup::Circle>::new(data.clone(), context)?;
 
-        let mut chart = ComposedChart::new(selection, config).with_default_axes();
+        let mut chart = ComposedChart::new(selection, config.clone()).with_default_axes();
+
+        // Gallery screenshot support
+        if let Some(req) = gup::export::gallery::screenshot_request() {
+            chart.export_png(&req.path, req.width, req.height)?;
+            return Ok(());
+        }
 
         // --- 1× export (800×600) ---
         let output_1x = "chart.png";
