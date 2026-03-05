@@ -9,6 +9,18 @@ GPU-accelerated data visualization library.
 | -------- | ---- | ---- |
 | 0.1      | 0.17 | 26.x |
 
+## Architecture
+
+`GupPlugin` shares Bevy's wgpu `Device`/`Queue` with Gup — no second GPU
+adapter is created.  Charts render into offscreen textures which are
+GPU-copied directly into Bevy's `GpuImage` for sprites.  The render path
+involves **zero CPU readback** and no PNG encoding.
+
+```text
+GupChart  ──render──▶  ChartTextureTarget  ──GPU copy──▶  GpuImage (Sprite)
+              (main world)                        (render world)
+```
+
 ## Quick Start
 
 ```rust
