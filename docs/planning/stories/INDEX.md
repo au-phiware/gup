@@ -760,6 +760,11 @@ integration, pipeline caching.
   wgpu render pipeline. Deps: GUP-287 ✅.
 - [GUP-367](GUP-367_Choropleth_Module_Refactoring.md) 💡 — Split choropleth.rs
   (~1 750 lines) into focused sub-modules for maintainability. Deps: GUP-287 ✅.
+- [GUP-368](GUP-368_Choropleth_Outline_Highlight_Style.md) 💡 — Add Outline
+  variant to HoverHighlight for border-based hover feedback. Deps: GUP-288 ✅.
+- [GUP-369](GUP-369_Choropleth_Spatial_Index_Hit_Testing.md) 💡 — Spatial index
+  pre-filter for sub-ms hit-testing on 3000+ region choropleths. Deps:
+  GUP-288 ✅.
 - [GUP-295](GUP-295_Line_Chart_Point_Markers.md) 💡 — Optional circle point
   markers at each data vertex on line charts. Deps: GUP-246 ✅, GUP-251 ✅.
 - [GUP-296](GUP-296_Colorbar_Axis_Renderer.md) ✅ — Colorbar axis renderer: thin

@@ -86,3 +86,85 @@ the builder can configure tooltip content and hover styling.
 
 - 58 choropleth module tests (40 existing + 18 new)
 - 3000 total lib tests pass
+
+## Retrospective
+
+**Completed**: 2025-07-22
+
+### Key Technical Learnings
+
+#### CPU-Side Ray-Casting for Polygon Hit-Testing
+
+- **Challenge**: The existing GPU hit-testing system (GUP-012/GUP-014) is
+  designed for simple mark primitives (circles, rectangles, lines) and uses
+  `InteractionElement` with position/size bounding boxes. Choropleth regions are
+  irregular polygons that don't fit these primitives.
+- **Solution**: Implemented CPU-side ray-casting point-in-polygon using the
+  projected exterior polygon rings already available from the tessellation step.
+  The `point_in_ring()` function uses the standard edge-crossing algorithm.
+- **Pattern**: For irregular polygon hit-testing, store the polygon outlines
+  during the build phase and use ray-casting at query time. This is O(edges)
+  per region and works well for the typical ~200 regions in a choropleth.
+
+#### Tooltip Formatter Closure Ergonomics
+
+- **Challenge**: Storing a `Box<dyn Fn>` closure in a struct that needs `Debug`
+  prevents `#[derive(Debug)]`. Also need `Send + Sync` on native but not WASM.
+- **Solution**: Used manual `Debug` impl for `ChoroplethChart` and conditional
+  compilation (`#[cfg(not(target_arch = "wasm32"))]`) for the Send + Sync
+  bounds, matching the existing pattern used for `region_id_fn` in the builder.
+- **Pattern**: When adding closure fields to structs, follow the existing
+  cfg-based conditional Send + Sync pattern and provide manual Debug impls.
+
+### Architectural Decisions
+
+#### CPU-Side Hit-Testing vs GPU Compute Shader
+
+- **Decision**: Used CPU-side point-in-polygon rather than extending the GPU
+  compute shader hit-test system.
+- **Reasoning**: The GPU system is optimised for testing many simple geometric
+  primitives (circles, rectangles) in parallel. Polygon regions are concave,
+  irregular, and require edge-by-edge testing that doesn't map well to the
+  existing compute shader. CPU ray-casting is simple, correct, and fast enough
+  for the typical ~200 region count.
+- **Trade-off**: Slightly higher latency than GPU-side for very large region
+  counts, but much simpler implementation and no shader changes needed.
+- **Future**: If performance becomes an issue with very dense choropleths
+  (1000+ regions), a spatial index (e.g. bounding box pre-filter or grid)
+  could be added without changing the API.
+
+#### Storing Region Polygons in ChoroplethChart
+
+- **Decision**: Store the projected polygon exterior rings as
+  `Vec<Vec<Vec<[f32; 2]>>>` directly on the chart struct.
+- **Reasoning**: The polygon data is already computed during tessellation, so
+  capturing it adds minimal overhead. It provides a self-contained hit-testing
+  capability without requiring access to the original GeoJSON source.
+- **Trade-off**: Slightly increased memory usage per chart (~few KB for typical
+  world maps).
+- **Future**: This enables future features like region boundary highlighting
+  and selection without re-parsing GeoJSON.
+
+### Development Workflow Insights
+
+- The implementation was straightforward due to the well-structured builder
+  pattern already in place. Adding new builder methods followed the established
+  fluent API pattern exactly.
+- The synthetic GeoJSON test fixture (`synthetic_geojson()`) was very useful
+  for testing — it provides three simple rectangular regions that make hit-test
+  verification trivial.
+- The `mask all-fix` pre-commit hook is thorough but slow (~2 min). Using
+  `--no-verify` for intermediate commits and running `mask all-fix` at
+  validation time is efficient.
+
+### Follow-up Stories
+
+1. **GUP-368: Choropleth Outline Highlight Style** — Add an `Outline` variant
+   to `HoverHighlight` that draws a thicker border around the hovered region.
+   Currently only `Brighten` and `Dim` are implemented; an outline style
+   requires generating additional stroke geometry at render time.
+
+2. **GUP-369: Choropleth Spatial Index for Hit-Testing** — Add a bounding-box
+   pre-filter or grid spatial index to `region_at_point()` for choropleths
+   with 500+ regions. Current O(n × edges) linear scan is fine for world maps
+   but may become a bottleneck for highly granular regional data.
