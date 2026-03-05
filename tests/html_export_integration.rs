@@ -8,7 +8,7 @@
 //! all the expected structural elements.
 
 use gup::chart_builder::{ChartConfig, ComposedChart, Margins, TitleAlignment, TitleConfig};
-use gup::export::html::{ChartSnapshot, HtmlExporter, WasmStrategy};
+use gup::export::html::{ChartBundle, ChartSnapshot, HtmlExporter, WasmStrategy};
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -313,6 +313,204 @@ fn html_export_inline_wasm_strategy() {
         !html.contains("fetch("),
         "inline strategy should not use fetch()"
     );
+
+    // Clean up.
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// -----------------------------------------------------------------------
+// Data serialisation tests (GUP-269A)
+// -----------------------------------------------------------------------
+
+/// A serialisable data point for data-embedding tests.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+struct SerPt {
+    x: f32,
+    y: f32,
+    label: String,
+}
+
+/// Helper: build a chart with `SerPt` data and export with data.
+fn export_chart_html_with_data(exporter: &HtmlExporter) -> String {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let ctx = Arc::new(gup::RenderContext::new().await.unwrap());
+        let data = vec![
+            SerPt {
+                x: 1.0,
+                y: 10.0,
+                label: "A".into(),
+            },
+            SerPt {
+                x: 2.0,
+                y: 20.0,
+                label: "B".into(),
+            },
+            SerPt {
+                x: 3.0,
+                y: 30.0,
+                label: "C".into(),
+            },
+        ];
+        let sel = gup::selection::Selection::<SerPt, gup::Circle>::new(data, ctx).unwrap();
+
+        let config = ChartConfig {
+            title_config: Some(
+                TitleConfig::new("Data Test")
+                    .with_alignment(TitleAlignment::Center)
+                    .with_subtitle("subtitle"),
+            ),
+            width: 800.0,
+            height: 600.0,
+            margins: Margins {
+                top: 60.0,
+                right: 40.0,
+                bottom: 60.0,
+                left: 60.0,
+            },
+            background_color: Some([1.0, 1.0, 1.0, 1.0]),
+            show_axes: true,
+            show_grid: true,
+            ..ChartConfig::default()
+        };
+
+        let mut chart = ComposedChart::new(sel, config).with_default_axes();
+        exporter.render_with_data(&mut chart).unwrap()
+    })
+}
+
+/// Extract the JSON payload from the HTML `<script id="gup-chart-data">` block.
+fn extract_json_from_html(html: &str) -> &str {
+    let start_marker = r#"id="gup-chart-data">"#;
+    let start = html.find(start_marker).unwrap() + start_marker.len();
+    let end = html[start..].find("</script>").unwrap() + start;
+    html[start..end].trim()
+}
+
+#[test]
+fn html_export_with_data_contains_bundle() {
+    let exporter = HtmlExporter::new(WasmStrategy::Url("gup.wasm".into()));
+    let html = export_chart_html_with_data(&exporter);
+    let json_str = extract_json_from_html(&html);
+
+    // Should parse as a ChartBundle with data.
+    let bundle: ChartBundle =
+        serde_json::from_str(json_str).expect("embedded JSON should parse as ChartBundle");
+
+    assert_eq!(bundle.config.title.as_deref(), Some("Data Test"));
+    assert!(bundle.data.is_some(), "data field should be present");
+    let data = bundle.data.unwrap();
+    assert_eq!(data.len(), 3, "should have 3 data points");
+}
+
+#[test]
+fn html_export_with_data_round_trip() {
+    let exporter = HtmlExporter::new(WasmStrategy::Url("gup.wasm".into()));
+    let html = export_chart_html_with_data(&exporter);
+    let json_str = extract_json_from_html(&html);
+
+    // Parse the bundle.
+    let bundle: ChartBundle = serde_json::from_str(json_str).unwrap();
+    let data = bundle.data.as_ref().unwrap();
+
+    // Deserialise each Value back into SerPt to verify round-trip.
+    let points: Vec<SerPt> = data
+        .iter()
+        .map(|v| serde_json::from_value(v.clone()).unwrap())
+        .collect();
+
+    assert_eq!(points.len(), 3);
+    assert_eq!(points[0].x, 1.0);
+    assert_eq!(points[0].label, "A");
+    assert_eq!(points[1].y, 20.0);
+    assert_eq!(points[2].label, "C");
+
+    // Re-serialise and re-parse to confirm full round-trip.
+    let json2 = serde_json::to_string_pretty(&bundle).unwrap();
+    let bundle2: ChartBundle = serde_json::from_str(&json2).unwrap();
+    assert_eq!(bundle, bundle2, "ChartBundle round-trip should be lossless");
+}
+
+#[test]
+fn html_export_without_data_has_no_data_field() {
+    // Use the existing (non-data) export path with a non-Serialize type.
+    let exporter = HtmlExporter::new(WasmStrategy::Url("gup.wasm".into()));
+    let html = export_chart_html(&exporter);
+    let json_str = extract_json_from_html(&html);
+
+    // The old path serialises a ChartSnapshot directly, which has no
+    // "data" key.
+    assert!(
+        !json_str.contains("\"data\""),
+        "config-only export should not contain a data field"
+    );
+
+    // It should still parse as a ChartSnapshot.
+    let snapshot: ChartSnapshot = serde_json::from_str(json_str).unwrap();
+    assert_eq!(snapshot.title.as_deref(), Some("Integration Test"));
+}
+
+#[test]
+fn html_export_with_data_file_write() {
+    let dir = std::env::temp_dir().join("gup_html_data_test");
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("chart_with_data.html");
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let ctx = Arc::new(gup::RenderContext::new().await.unwrap());
+        let data = vec![SerPt {
+            x: 5.0,
+            y: 50.0,
+            label: "X".into(),
+        }];
+        let sel = gup::selection::Selection::<SerPt, gup::Circle>::new(data, ctx).unwrap();
+        let config = ChartConfig::default();
+        let mut chart = ComposedChart::new(sel, config).with_default_axes();
+
+        let exporter = HtmlExporter::new(WasmStrategy::Url("gup.wasm".into()));
+        exporter.export_with_data(&mut chart, &path).unwrap();
+    });
+
+    let contents = std::fs::read_to_string(&path).unwrap();
+    assert!(contents.starts_with("<!DOCTYPE html>"));
+
+    let json_str = extract_json_from_html(&contents);
+    let bundle: ChartBundle = serde_json::from_str(json_str).unwrap();
+    assert_eq!(bundle.data.unwrap().len(), 1);
+
+    // Clean up.
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn html_export_convenience_with_data() {
+    let dir = std::env::temp_dir().join("gup_html_conv_data");
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("convenience_data.html");
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let ctx = Arc::new(gup::RenderContext::new().await.unwrap());
+        let data = vec![SerPt {
+            x: 7.0,
+            y: 70.0,
+            label: "Z".into(),
+        }];
+        let sel = gup::selection::Selection::<SerPt, gup::Circle>::new(data, ctx).unwrap();
+        let config = ChartConfig::default();
+        let mut chart = ComposedChart::new(sel, config).with_default_axes();
+        chart.export_html_with_data(&path).unwrap();
+    });
+
+    let contents = std::fs::read_to_string(&path).unwrap();
+    let json_str = extract_json_from_html(&contents);
+    let bundle: ChartBundle = serde_json::from_str(json_str).unwrap();
+    let data = bundle.data.unwrap();
+    assert_eq!(data.len(), 1);
+
+    let pt: SerPt = serde_json::from_value(data[0].clone()).unwrap();
+    assert_eq!(pt.label, "Z");
 
     // Clean up.
     let _ = std::fs::remove_dir_all(&dir);
