@@ -90,3 +90,99 @@ Render World (ExtractSchedule + Queue):
 
 - 13 gup-bevy integration tests (5 new)
 - All workspace tests pass (241+ passing)
+
+## Retrospective
+
+**Completed**: 2025-07-25
+
+### Key Technical Learnings
+
+#### Bevy Render World Architecture
+
+- **Challenge**: Bevy 0.17 splits the ECS into a main world and a render world.
+  GPU resources like `GpuImage` textures live exclusively in the render world
+  and cannot be accessed from main-world systems.
+- **Solution**: Two-phase approach: main world renders charts to an offscreen
+  `wgpu::Texture`, then a render-world system uses `copy_texture_to_texture` to
+  copy the result into the `GpuImage` backing the sprite.
+- **Pattern**: When integrating GPU rendering libraries with Bevy, always use
+  the Extract schedule to bridge between worlds. Store wgpu handles (which are
+  internally Arc-referenced) in components for cheap cross-world transfer.
+
+#### wgpu Device Identity and Texture Sharing
+
+- **Challenge**: Charts built with `RenderContext::new()` allocate a fresh wgpu
+  device. Textures created on one device cannot be used in render passes or
+  copies targeting textures on a different device — wgpu panics with "does not
+  exist" errors.
+- **Solution**: The `bevy_scatter` example (and any user code) must build
+  charts using `GupRenderContext::render_context()` so every GPU resource lives
+  on Bevy's shared device.
+- **Pattern**: In Bevy integrations, always propagate the shared
+  `Device`/`Queue` through the chart-builder API. Never create a second adapter
+  for chart rendering.
+
+#### Bevy Image Without CPU Data
+
+- **Challenge**: `Image::new_fill()` creates CPU pixel data that gets uploaded
+  to the GPU. For texture-sharing we never need CPU data — the chart writes
+  directly to the GPU texture.
+- **Solution**: `Image::new_uninit()` (Bevy 0.17) creates an `Image` with
+  `data: None`. Bevy's `GpuImage::prepare_asset` creates the GPU texture
+  without uploading anything. The texture is then ready for
+  `copy_texture_to_texture`.
+- **Pattern**: Use `new_uninit` + `COPY_DST` usage for render targets that are
+  only ever written to by the GPU.
+
+### Architectural Decisions
+
+#### Offscreen Texture + GPU Copy vs. Direct GpuImage Rendering
+
+- **Decision**: Render to a `ChartTextureTarget` then `copy_texture_to_texture`
+  into the `GpuImage`, rather than rendering directly into the GpuImage texture.
+- **Reasoning**: Direct rendering into the GpuImage requires either (a) access
+  to the GpuImage from the main world (impossible) or (b) extracting the
+  entire chart's GPU resources (buffers, pipelines) to the render world (very
+  complex). The copy approach requires only a single GPU blit per chart per
+  frame.
+- **Trade-off**: One extra GPU copy per chart per frame (sub-millisecond for
+  800×600). The simplicity gain is substantial.
+- **Future**: If profiling shows the extra copy is a bottleneck, a render-graph
+  node could render directly into the GpuImage by extracting pre-prepared
+  buffer/pipeline handles.
+
+#### Removing image/png Dependencies
+
+- **Decision**: Removed the `image` crate and Bevy's `png` feature from
+  gup-bevy dependencies.
+- **Reasoning**: The PNG path is no longer used in the render system. The
+  `render_to_png` method still exists on `DynChart`/`GupChart` for screenshot
+  exports, but it uses the main `gup` crate's PNG infrastructure directly.
+- **Trade-off**: If users relied on Bevy's PNG feature transitively through
+  gup-bevy, they would need to enable it themselves. Unlikely since gup-bevy
+  is a niche integration crate.
+- **Future**: Could re-add as an optional feature if users request it.
+
+### Development Workflow Insights
+
+- **Bevy 0.17 API discovery**: Without local docs, examining the crate source
+  directly in `~/.cargo/registry/src/` was the fastest way to understand
+  `GpuImage`, `RenderAssets`, and `Extract<Query<>>`.
+- **wgpu device identity**: The cross-device "TextureView does not exist" panic
+  appeared early in testing and was resolved by ensuring the test helper shared
+  the same `RenderContext` between chart and texture creation.
+- **Pre-existing lint**: The `mask all-fix` check surface pre-existing markdown
+  lint in other story files. These were correctly ignored since they are not
+  related to this story's changes.
+
+### Follow-up Stories
+
+1. **GUP-262C: Bevy Render-Graph Node for Direct GpuImage Rendering** — Replace
+   the current offscreen texture + copy approach with a Bevy render-graph node
+   that renders Gup charts directly into GpuImage textures, eliminating the per-
+   frame GPU copy. Requires extracting chart GPU resources (buffers, pipelines)
+   to the render world.
+2. **GUP-262D: Multi-Chart Batched Rendering** — When multiple `GupChart`
+   entities exist, batch their render commands into a single command encoder
+   submission rather than submitting separately per chart. Reduces GPU
+   synchronisation overhead for dashboards with many charts.

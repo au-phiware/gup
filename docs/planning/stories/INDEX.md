@@ -995,6 +995,12 @@ PNG, HTML), and platform targets.
   Deps: GUP-262 ✅.
 - [GUP-262B](GUP-262B_Bevy_018_Upgrade.md) 📋 — Upgrade gup-bevy to Bevy 0.18
   when the main gup crate upgrades to wgpu 27. Deps: GUP-262 ✅.
+- [GUP-262C](GUP-262C_Bevy_Direct_GpuImage_Rendering.md) 💡 — Render-graph
+  node for direct GpuImage rendering, eliminating the intermediate GPU copy.
+  Deps: GUP-262A ✅.
+- [GUP-262D](GUP-262D_Multi_Chart_Batched_Rendering.md) 💡 — Batch multiple
+  chart renders into a single GPU submission for dashboard use cases.
+  Deps: GUP-262A ✅.
 - [GUP-263](GUP-263_egui_Integration.md) ✅ — GupWidget implementing
   egui::Widget via render-to-texture, with dirty-tracking and interaction bridge
   forwarding egui pointer events. Deps: GUP-004 ✅, GUP-018 ✅, GUP-268 ✅.
