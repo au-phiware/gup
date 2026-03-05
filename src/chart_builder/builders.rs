@@ -52,6 +52,7 @@ use crate::mark::boxplot::{BoxPlotAttributes, BoxPlotInstance, BoxPlotOrientatio
 use crate::selection::Selection;
 use crate::{MaybeSend, MaybeSync};
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 /// Base trait for all chart builders providing common configuration methods.
 pub trait ConfigurableBuilder: Sized {
@@ -505,9 +506,9 @@ pub trait AccessorToShaderFunction<T> {
 /// Type-erased accessor function for dynamic dispatch.
 pub struct AccessorFunction<T> {
     #[cfg(not(target_arch = "wasm32"))]
-    function: Box<dyn Fn(&T) -> AccessorValue + Send + Sync>,
+    function: Arc<dyn Fn(&T) -> AccessorValue + Send + Sync>,
     #[cfg(target_arch = "wasm32")]
-    function: Box<dyn Fn(&T) -> AccessorValue>,
+    function: Arc<dyn Fn(&T) -> AccessorValue>,
     field_name: Option<String>,
     _phantom: PhantomData<T>,
 }
@@ -519,7 +520,7 @@ impl<T> AccessorFunction<T> {
         F: Fn(&T) -> AccessorValue + MaybeSend + MaybeSync + 'static,
     {
         Self {
-            function: Box::new(function),
+            function: Arc::new(function),
             field_name: None,
             _phantom: PhantomData,
         }
@@ -529,7 +530,7 @@ impl<T> AccessorFunction<T> {
     pub fn from_field(field_name: &str) -> Self {
         let field_name_owned = field_name.to_string();
         Self {
-            function: Box::new(move |_data| {
+            function: Arc::new(move |_data| {
                 // In a real implementation, this would use reflection or a registry
                 // For now, return a placeholder value
                 AccessorValue::Float(0.0)
@@ -561,9 +562,11 @@ impl<T> std::fmt::Debug for AccessorFunction<T> {
 
 impl<T> Clone for AccessorFunction<T> {
     fn clone(&self) -> Self {
-        // Note: This is a simplified clone that loses the actual function
-        // In a real implementation, we'd need to handle this differently
-        AccessorFunction::from_field(self.field_name.as_deref().unwrap_or("unknown"))
+        Self {
+            function: Arc::clone(&self.function),
+            field_name: self.field_name.clone(),
+            _phantom: PhantomData,
+        }
     }
 }
 
@@ -964,12 +967,89 @@ mod tests {
     }
 
     #[test]
-    fn test_accessor_function_clone() {
+    fn test_accessor_function_clone_preserves_field_name() {
         let accessor = AccessorFunction::<TestData>::from_field("test_field");
         let cloned_accessor = accessor.clone();
 
         assert_eq!(accessor.field_name(), cloned_accessor.field_name());
         assert_eq!(cloned_accessor.field_name(), Some("test_field"));
+    }
+
+    #[test]
+    fn test_accessor_function_clone_preserves_closure() {
+        let data = TestData {
+            x: 42.0,
+            y: 99.0,
+            value: 7.0,
+            category: "test".to_string(),
+        };
+
+        // Create closure-based accessor and clone it
+        let accessor =
+            AccessorFunction::<TestData>::new(|d: &TestData| AccessorValue::Float(d.x * 2.0));
+        let cloned = accessor.clone();
+
+        // Both original and clone should produce the same result
+        assert_eq!(accessor.apply(&data), AccessorValue::Float(84.0));
+        assert_eq!(cloned.apply(&data), AccessorValue::Float(84.0));
+    }
+
+    #[test]
+    fn test_accessor_function_clone_preserves_string_closure() {
+        let data = TestData {
+            x: 1.0,
+            y: 2.0,
+            value: 3.0,
+            category: "hello".to_string(),
+        };
+
+        let accessor = AccessorFunction::<TestData>::new(|d: &TestData| {
+            AccessorValue::String(d.category.clone())
+        });
+        let cloned = accessor.clone();
+
+        assert_eq!(
+            cloned.apply(&data),
+            AccessorValue::String("hello".to_string())
+        );
+    }
+
+    #[test]
+    fn test_accessor_function_clone_none_field_name() {
+        // Closure-based accessor has no field_name
+        let accessor =
+            AccessorFunction::<TestData>::new(|d: &TestData| AccessorValue::Float(d.value));
+        let cloned = accessor.clone();
+
+        assert_eq!(accessor.field_name(), None);
+        assert_eq!(cloned.field_name(), None);
+    }
+
+    #[test]
+    fn test_option_accessor_function_clone() {
+        let data = TestData {
+            x: 5.0,
+            y: 10.0,
+            value: 15.0,
+            category: "opt".to_string(),
+        };
+
+        // Clone Some(accessor) via Option::clone
+        let opt: Option<AccessorFunction<TestData>> =
+            Some(AccessorFunction::new(|d: &TestData| {
+                AccessorValue::Float(d.y + d.value)
+            }));
+        let cloned_opt = opt.clone();
+
+        assert_eq!(
+            cloned_opt.as_ref().unwrap().apply(&data),
+            AccessorValue::Float(25.0)
+        );
+
+        // Clone None
+        let none_opt: Option<AccessorFunction<TestData>> = None;
+        let cloned_none = none_opt.clone();
+        assert!(cloned_none.is_none());
     }
 
     #[test]

@@ -123,6 +123,15 @@ impl<T> Default for Baseline<T> {
     }
 }
 
+impl<T> Clone for Baseline<T> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Constant(v) => Self::Constant(*v),
+            Self::Accessor(a) => Self::Accessor(a.clone()),
+        }
+    }
+}
+
 // ── AreaChartBuilder ────────────────────────────────────────────────────
 
 /// Area chart builder providing fluent API for filled area visualisation.
@@ -176,7 +185,7 @@ impl<T> Clone for AreaChartBuilder<T> {
         Self {
             x_accessor: self.x_accessor.clone(),
             y_accessor: self.y_accessor.clone(),
-            y0_baseline: Baseline::default(),
+            y0_baseline: self.y0_baseline.clone(),
             fill_accessor: self.fill_accessor.clone(),
             series_accessor: self.series_accessor.clone(),
             fill_opacity: self.fill_opacity,
