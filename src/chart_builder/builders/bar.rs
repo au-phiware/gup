@@ -10,7 +10,7 @@
 
 use super::{
     AccessorFunction, ConfigurableBuilder, GridCapableBuilder, NdcBounds,
-    apply_accessors_to_selection, validate_required_accessors,
+    apply_accessors_to_selection, range_to_ndc, validate_required_accessors,
 };
 use crate::RenderContext;
 use crate::chart_builder::{
@@ -573,6 +573,7 @@ where
         };
 
         let _series_count = series_count; // used only in grouped layout width calc
+        let is_vertical = matches!(self.orientation, Orientation::Vertical);
 
         match self.orientation {
             Orientation::Vertical => {
@@ -623,15 +624,104 @@ where
             bottom: 1.0 - ((chart_area.y + chart_area.height) / h) * 2.0,
         };
 
+        // --- apply colour binding via the generic helper ---
         apply_accessors_to_selection(
             &mut composed_chart.visualization,
-            self.x_accessor,
-            self.y_accessor,
+            None, // position handled below with bar-specific logic
+            None,
             self.color_accessor,
             None,
             &self.config,
             ndc,
         )?;
+
+        // --- bar-specific position and size bindings ---
+        let x_acc = Arc::new(self.x_accessor.unwrap());
+        let y_acc = Arc::new(self.y_accessor.unwrap());
+        let ordinal_arc = Arc::new(ordinal);
+        let x_scale = self.config.x_scale.clone().unwrap();
+        let y_scale = self.config.y_scale.clone().unwrap();
+        let x_rng = (x_scale.range_min(), x_scale.range_max());
+        let y_rng = (y_scale.range_min(), y_scale.range_max());
+
+        // Bandwidth (for the categorical axis)
+        let cat_bw = if is_vertical {
+            match &self.config.x_scale {
+                Some(AxisScale::Band(b)) => b.bandwidth(),
+                _ => (x_rng.1 - x_rng.0).abs(),
+            }
+        } else {
+            match &self.config.y_scale {
+                Some(AxisScale::Band(b)) => b.bandwidth(),
+                _ => (y_rng.1 - y_rng.0).abs(),
+            }
+        };
+
+        // Center position
+        {
+            let x_acc = x_acc.clone();
+            let y_acc = y_acc.clone();
+            let ordinal = ordinal_arc.clone();
+            let xs = x_scale.clone();
+            let ys = y_scale.clone();
+
+            composed_chart.visualization.attr("center", move |d: &T| {
+                if is_vertical {
+                    // X = category band centre, Y = midpoint(baseline, value)
+                    let cat_label = accessor_to_string(&x_acc, d);
+                    let cat_idx = ordinal.category_index(&cat_label).unwrap_or(0);
+                    let x_px = xs.scale_value(cat_idx as f32);
+                    let y_val = accessor_to_f32(&y_acc, d);
+                    let y_top_px = ys.scale_value(y_val);
+                    let y_base_px = ys.scale_value(0.0);
+                    let y_mid_px = (y_top_px + y_base_px) / 2.0;
+
+                    let ndc_x = range_to_ndc(x_px, x_rng.0, x_rng.1, ndc.left, ndc.right);
+                    let ndc_y = range_to_ndc(y_mid_px, y_rng.0, y_rng.1, ndc.bottom, ndc.top);
+                    [ndc_x, ndc_y]
+                } else {
+                    // X = midpoint(baseline, value), Y = category band centre
+                    let cat_label = accessor_to_string(&x_acc, d);
+                    let cat_idx = ordinal.category_index(&cat_label).unwrap_or(0);
+                    let y_px = ys.scale_value(cat_idx as f32);
+                    let x_val = accessor_to_f32(&y_acc, d);
+                    let x_end_px = xs.scale_value(x_val);
+                    let x_base_px = xs.scale_value(0.0);
+                    let x_mid_px = (x_end_px + x_base_px) / 2.0;
+
+                    let ndc_x = range_to_ndc(x_mid_px, x_rng.0, x_rng.1, ndc.left, ndc.right);
+                    let ndc_y = range_to_ndc(y_px, y_rng.0, y_rng.1, ndc.bottom, ndc.top);
+                    [ndc_x, ndc_y]
+                }
+            });
+        }
+
+        // Size (width, height)
+        {
+            let y_acc = y_acc.clone();
+            let xs = x_scale.clone();
+            let ys = y_scale.clone();
+
+            composed_chart.visualization.attr("size", move |d: &T| {
+                let y_val = accessor_to_f32(&y_acc, d);
+
+                if is_vertical {
+                    let y_top = ys.scale_value(y_val);
+                    let y_base = ys.scale_value(0.0);
+                    let bar_h_px = (y_top - y_base).abs();
+                    let ndc_w = cat_bw / (x_rng.1 - x_rng.0).abs() * (ndc.right - ndc.left).abs();
+                    let ndc_h = bar_h_px / (y_rng.1 - y_rng.0).abs() * (ndc.top - ndc.bottom).abs();
+                    [ndc_w, ndc_h]
+                } else {
+                    let x_end = xs.scale_value(y_val);
+                    let x_base = xs.scale_value(0.0);
+                    let bar_w_px = (x_end - x_base).abs();
+                    let ndc_w = bar_w_px / (x_rng.1 - x_rng.0).abs() * (ndc.right - ndc.left).abs();
+                    let ndc_h = cat_bw / (y_rng.1 - y_rng.0).abs() * (ndc.top - ndc.bottom).abs();
+                    [ndc_w, ndc_h]
+                }
+            });
+        }
 
         // Prepare the GPU render pipeline at build time so that
         // `render_to_png()` / `render_to_texture_view()` work without

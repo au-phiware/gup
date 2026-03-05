@@ -524,6 +524,26 @@ impl AxisScale {
         }
     }
 
+    /// Return the range minimum (output start) value.
+    pub fn range_min(&self) -> f32 {
+        match self {
+            AxisScale::Linear(s) => s.range_min,
+            AxisScale::Log(s) => s.range_min,
+            AxisScale::Band(s) => s.range_start,
+            AxisScale::Point(s) => s.range_start,
+        }
+    }
+
+    /// Return the range maximum (output end) value.
+    pub fn range_max(&self) -> f32 {
+        match self {
+            AxisScale::Linear(s) => s.range_max,
+            AxisScale::Log(s) => s.range_max,
+            AxisScale::Band(s) => s.range_end,
+            AxisScale::Point(s) => s.range_end,
+        }
+    }
+
     /// Map a data-domain value to the output range.
     ///
     /// For linear scales this is a simple affine interpolation.

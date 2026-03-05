@@ -622,10 +622,10 @@ pub struct NdcBounds {
 
 /// Utility function to apply accessor functions to a selection.
 ///
-/// Pre-computes the data domain by evaluating the x/y accessor functions
-/// across all data items.  If `x_scale` / `y_scale` are set in `config`
-/// those domains are used instead.  The data values are then linearly
-/// mapped into the chart's NDC plotting area described by `ndc`.
+/// When `x_scale` / `y_scale` are set in `config`, uses
+/// [`AxisScale::scale_value`] to map each accessor value through the
+/// scale, then converts the scale's output range to NDC using `ndc`.
+/// Otherwise the data domain is auto-computed and linearly mapped to NDC.
 ///
 /// Colour and size accessors are wired through directly; when absent,
 /// sensible defaults (steel-blue fill, radius 0.012 NDC) are used.
@@ -645,45 +645,85 @@ where
 {
     // ── Position mapping ────────────────────────────────────────────────
     if let (Some(x_acc), Some(y_acc)) = (x_accessor, y_accessor) {
-        // Determine data domain — prefer explicit scales, fall back to
-        // auto-computing from the data.
-        let (x_min, x_max) = if let Some(scale) = &config.x_scale {
-            (scale.domain_min(), scale.domain_max())
-        } else {
-            auto_domain(selection.data(), &x_acc)
-        };
-        let (y_min, y_max) = if let Some(scale) = &config.y_scale {
-            (scale.domain_min(), scale.domain_max())
-        } else {
-            auto_domain(selection.data(), &y_acc)
-        };
-
         let x_acc = std::sync::Arc::new(x_acc);
         let y_acc = std::sync::Arc::new(y_acc);
 
-        selection.attr("center", move |data: &T| {
-            let x_val = x_acc.apply(data).as_f32();
-            let y_val = y_acc.apply(data).as_f32();
+        match (&config.x_scale, &config.y_scale) {
+            // ── Scales present: map through scale_value → range → NDC ──
+            (Some(xs), Some(ys)) => {
+                let xs = xs.clone();
+                let ys = ys.clone();
+                let x_rng_lo = xs.range_min();
+                let x_rng_hi = xs.range_max();
+                let y_rng_lo = ys.range_min();
+                let y_rng_hi = ys.range_max();
 
-            let x_span = x_max - x_min;
-            let y_span = y_max - y_min;
+                selection.attr("center", move |data: &T| {
+                    let x_val = x_acc.apply(data).as_f32();
+                    let y_val = y_acc.apply(data).as_f32();
 
-            let tx = if x_span.abs() < f32::EPSILON {
-                0.5
-            } else {
-                (x_val - x_min) / x_span
-            };
-            let ty = if y_span.abs() < f32::EPSILON {
-                0.5
-            } else {
-                (y_val - y_min) / y_span
-            };
+                    let x_scaled = xs.scale_value(x_val);
+                    let y_scaled = ys.scale_value(y_val);
 
-            let ndc_x = ndc.left + tx * (ndc.right - ndc.left);
-            let ndc_y = ndc.bottom + ty * (ndc.top - ndc.bottom);
+                    let x_span = x_rng_hi - x_rng_lo;
+                    let y_span = y_rng_hi - y_rng_lo;
 
-            [ndc_x, ndc_y]
-        });
+                    let tx = if x_span.abs() < f32::EPSILON {
+                        0.5
+                    } else {
+                        (x_scaled - x_rng_lo) / x_span
+                    };
+                    let ty = if y_span.abs() < f32::EPSILON {
+                        0.5
+                    } else {
+                        (y_scaled - y_rng_lo) / y_span
+                    };
+
+                    let ndc_x = ndc.left + tx * (ndc.right - ndc.left);
+                    let ndc_y = ndc.bottom + ty * (ndc.top - ndc.bottom);
+
+                    [ndc_x, ndc_y]
+                });
+            }
+
+            // ── No scales: auto-compute domain from data ────────────────
+            _ => {
+                let (x_min, x_max) = config
+                    .x_scale
+                    .as_ref()
+                    .map(|s| (s.domain_min(), s.domain_max()))
+                    .unwrap_or_else(|| auto_domain(selection.data(), &x_acc));
+                let (y_min, y_max) = config
+                    .y_scale
+                    .as_ref()
+                    .map(|s| (s.domain_min(), s.domain_max()))
+                    .unwrap_or_else(|| auto_domain(selection.data(), &y_acc));
+
+                selection.attr("center", move |data: &T| {
+                    let x_val = x_acc.apply(data).as_f32();
+                    let y_val = y_acc.apply(data).as_f32();
+
+                    let x_span = x_max - x_min;
+                    let y_span = y_max - y_min;
+
+                    let tx = if x_span.abs() < f32::EPSILON {
+                        0.5
+                    } else {
+                        (x_val - x_min) / x_span
+                    };
+                    let ty = if y_span.abs() < f32::EPSILON {
+                        0.5
+                    } else {
+                        (y_val - y_min) / y_span
+                    };
+
+                    let ndc_x = ndc.left + tx * (ndc.right - ndc.left);
+                    let ndc_y = ndc.bottom + ty * (ndc.top - ndc.bottom);
+
+                    [ndc_x, ndc_y]
+                });
+            }
+        }
     }
 
     // ── Colour mapping ──────────────────────────────────────────────────
@@ -731,6 +771,19 @@ fn auto_domain<T>(data: &[T], accessor: &AccessorFunction<T>) -> (f32, f32) {
         let pad = span * 0.05;
         (lo - pad, hi + pad)
     }
+}
+
+/// Linearly map a value from one range to another.
+///
+/// Given `px` in the range `[rng_lo, rng_hi]`, returns the corresponding
+/// value in `[ndc_lo, ndc_hi]`.  When the input span is near-zero the
+/// midpoint of the output range is returned.
+pub(crate) fn range_to_ndc(px: f32, rng_lo: f32, rng_hi: f32, ndc_lo: f32, ndc_hi: f32) -> f32 {
+    let rng_span = rng_hi - rng_lo;
+    if rng_span.abs() < f32::EPSILON {
+        return (ndc_lo + ndc_hi) / 2.0;
+    }
+    ndc_lo + (px - rng_lo) / rng_span * (ndc_hi - ndc_lo)
 }
 
 /// Build a mapper that transforms [`BoxPlotAttributes`] from data space into
