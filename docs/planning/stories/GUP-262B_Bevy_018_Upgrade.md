@@ -1,7 +1,7 @@
 # GUP-262B: Bevy 0.18 Upgrade
 
-**Initiative**: Ecosystem Integration **Status**: 🚧 In Progress **Created**:
-2025-03-04
+**Initiative**: Ecosystem Integration **Status**: ✅ Complete **Created**:
+2025-03-04 **Completed**: 2025-07-18
 
 ## Overview
 
@@ -21,15 +21,15 @@ to the latest Bevy features and bug fixes alongside Gup charts.
 
 ## Acceptance Criteria
 
-- [ ] `gup-bevy` depends on `bevy = "0.18"` and `wgpu = "27"`.
-- [ ] All existing tests pass with the new Bevy version.
-- [ ] The `bevy_scatter` example compiles and runs.
-- [ ] Version compatibility table in `docs/BEVY_INTEGRATION.md` is updated.
+- [x] `gup-bevy` depends on `bevy = "0.18"` and `wgpu = "27"`.
+- [x] All existing tests pass with the new Bevy version.
+- [x] The `bevy_scatter` example compiles and runs.
+- [x] Version compatibility table in `docs/BEVY_INTEGRATION.md` is updated.
 
 ## Dependencies
 
 - GUP-262 ✅
-- Main `gup` crate wgpu 27 upgrade (prerequisite, not yet planned)
+- Main `gup` crate wgpu 27 upgrade ✅ (performed as part of this story)
 
 ## Testing Strategy
 
@@ -45,6 +45,49 @@ to the latest Bevy features and bug fixes alongside Gup charts.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria satisfied
-- [ ] Tests pass
-- [ ] Documentation updated
+- [x] All Acceptance Criteria satisfied
+- [x] Tests pass
+- [x] Documentation updated
+
+## Implementation Summary
+
+### What was implemented
+
+1. **wgpu 26 → 27 upgrade** across the entire workspace (main `gup` crate,
+   `gup-bevy`, examples, tests, benchmarks)
+2. **Bevy 0.17 → 0.18 upgrade** for the `gup-bevy` crate
+3. **Bevy 0.18 render-world entity model adaptation** — replaced
+   `commands.entity(entity).insert(...)` with `commands.spawn(...)` plus a
+   per-frame cleanup system for stale extracted entities
+
+### wgpu 26 → 27 API changes addressed
+
+- `PollType::Wait` changed from a unit variant to a struct variant with
+  `submission_index: Option<SubmissionIndex>` and `timeout: Option<Duration>`
+- `PollType::WaitForSubmissionIndex` removed — replaced by
+  `PollType::Wait { submission_index: Some(...), timeout: None }`
+- `DeviceDescriptor` gained a required `experimental_features` field
+
+### Bevy 0.17 → 0.18 API changes addressed
+
+- Render-world entity model changed: main-world entity IDs no longer
+  auto-exist in the render world. Added `cleanup_extracted_gup_charts` system
+  and switched to `commands.spawn(...)` in the extract schedule.
+
+### Key files changed
+
+- `Cargo.toml` — wgpu 26→27
+- `gup-bevy/Cargo.toml` — bevy 0.17→0.18, wgpu 26→27
+- `gup-bevy/src/render_node.rs` — extract system rewrite for Bevy 0.18
+- `gup-bevy/src/plugin.rs` — register cleanup system
+- `gup-bevy/src/context.rs`, `gup-bevy/src/plugin.rs` — comment updates
+- `docs/BEVY_INTEGRATION.md` — version compatibility table
+- `gup-bevy/README.md` — version table
+- 50+ source files across `src/`, `tests/`, `benches/`, `examples/` — PollType
+  and DeviceDescriptor API adaptations
+
+### Test results
+
+- 13 gup-bevy integration tests pass
+- 2 doc-tests pass
+- `bevy_scatter` example runs and displays window
