@@ -14,34 +14,40 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-//! # Scatter Plot Window - Visual Scatter Plot Example
+//! # Scatter Plot Window — GupApp Example
 //!
 //! This example builds on `01_hello_chart` by displaying the scatter plot
-//! in a window with GPU-accelerated rendering.
+//! in a window with GPU-accelerated rendering.  It uses [`GupApp`] to
+//! eliminate all winit boilerplate — compare with `hello_world.rs` for the
+//! same pattern.
+//!
+//! ## When to use `GupApp` vs manual `ApplicationHandler`
+//!
+//! Use **`GupApp`** when your example or application is a straightforward
+//! single-window chart that only needs rendering and the built-in keyboard
+//! shortcuts (Escape/Q to quit, F/F11 for fullscreen, S for screenshot).
+//!
+//! Use the **manual `ApplicationHandler`** approach when you need:
+//! - Multiple windows (see `windowed_demo.rs`)
+//! - Custom keyboard/mouse event handling (see `treemap_window.rs`)
+//! - Fine-grained control over the event loop (see `surface_events_demo.rs`)
 //!
 //! ## What You'll Learn
-//! - How to create a windowed application with Gup
-//! - How to render a scatter plot to a window
-//! - Basic event handling for interactive visualizations
+//! - How to implement [`AppRenderer`] for your chart type
+//! - How to launch a windowed application in a few lines with `GupApp`
 //!
 //! Run with: `cargo run --example 02_scatter_window`
 //!
-//! Controls:
-//! - ESC or Q: Quit the application
-//! - Close button: Close the window
+//! Controls (built-in):
+//! - ESC or Q: Quit
+//! - F / F11: Toggle fullscreen
+//! - S: Save screenshot (PNG)
 
+use gup::CircleAttributes;
+use gup::app::{AppRenderer, GupApp};
 use gup::mark::{Circle, Mark};
 use gup::shader_function::{Vec2, Vec4};
-use gup::{CircleAttributes, GupContext, PhysicalSize, SurfaceId};
-use std::sync::Arc;
 use wgpu::Color;
-use winit::{
-    application::ApplicationHandler,
-    event::{ElementState, KeyEvent, WindowEvent},
-    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
-    keyboard::{KeyCode, PhysicalKey},
-    window::{Window, WindowAttributes, WindowId},
-};
 
 // ========================================
 // Step 1: Define your data structure
@@ -438,153 +444,21 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 }
 "#;
 
+impl AppRenderer for ScatterRenderer {
+    fn render(&mut self, frame: &mut gup::RenderFrame) {
+        ScatterRenderer::render(self, frame);
+    }
+}
+
 // ========================================
-// Step 6: Application handler
+// Step 6: Launch with GupApp (≤ 5 lines)
 // ========================================
-struct ScatterApp {
-    window: Option<Arc<Window>>,
-    context: Option<Arc<GupContext>>,
-    surface_id: Option<SurfaceId>,
-    renderer: Option<ScatterRenderer>,
-}
 
-impl ScatterApp {
-    fn new() -> Self {
-        Self {
-            window: None,
-            context: None,
-            surface_id: None,
-            renderer: None,
-        }
-    }
-
-    async fn initialize(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // Create window
-        let window_attrs = WindowAttributes::default()
-            .with_title("Gup Scatter Plot - Press ESC to quit")
-            .with_inner_size(winit::dpi::LogicalSize::new(800, 600));
-        let window = Arc::new(event_loop.create_window(window_attrs)?);
-
-        // Create GPU context with surface
-        let context = GupContext::with_surface(Arc::clone(&window)).await?;
-        let surface_id = context.primary_surface_id();
-
-        // Create renderer with sample data
-        let data = create_sample_data();
-        let renderer = ScatterRenderer::new(&data);
-
-        self.window = Some(window);
-        self.context = Some(context);
-        self.surface_id = surface_id;
-        self.renderer = Some(renderer);
-
-        println!("Scatter Plot Window Ready!");
-        println!("Displaying {} data points", data.len());
-        println!("Press ESC or Q to quit");
-
-        Ok(())
-    }
-
-    fn render(&mut self) {
-        if let Some(context) = self.context.take() {
-            let mut ctx = match Arc::try_unwrap(context) {
-                Ok(c) => c,
-                Err(arc) => {
-                    self.context = Some(arc);
-                    return;
-                }
-            };
-
-            match ctx.begin_frame() {
-                Ok(mut frame) => {
-                    if let Some(renderer) = &mut self.renderer {
-                        renderer.render(&mut frame);
-                    }
-                    let _ = frame.finish();
-                }
-                Err(e) => eprintln!("Render error: {e}"),
-            }
-
-            self.context = Some(Arc::new(ctx));
-        }
-    }
-}
-
-impl ApplicationHandler for ScatterApp {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        pollster::block_on(async {
-            if let Err(e) = self.initialize(event_loop).await {
-                eprintln!("Failed to initialize: {e}");
-                event_loop.exit();
-            }
-        });
-    }
-
-    fn window_event(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        _window_id: WindowId,
-        event: WindowEvent,
-    ) {
-        match event {
-            WindowEvent::CloseRequested => {
-                println!("Goodbye!");
-                event_loop.exit();
-            }
-            WindowEvent::Resized(size) => {
-                if let (Some(surface_id), Some(ctx)) = (self.surface_id, self.context.take())
-                    && let Ok(mut c) = Arc::try_unwrap(ctx)
-                {
-                    let _ =
-                        c.resize_surface(surface_id, PhysicalSize::new(size.width, size.height));
-                    self.context = Some(Arc::new(c));
-                }
-            }
-            WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        state: ElementState::Pressed,
-                        physical_key: PhysicalKey::Code(key),
-                        ..
-                    },
-                ..
-            } if key == KeyCode::Escape || key == KeyCode::KeyQ => {
-                println!("Goodbye!");
-                event_loop.exit();
-            }
-            WindowEvent::RedrawRequested => {
-                self.render();
-            }
-            _ => {}
-        }
-    }
-
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        if let Some(window) = &self.window {
-            window.request_redraw();
-        }
-    }
-}
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("=== Gup Scatter Plot Window Demo ===");
-    println!();
-    println!("This example shows how to:");
-    println!("  1. Create a windowed application");
-    println!("  2. Render GPU-accelerated circles");
-    println!("  3. Handle window events");
-    println!();
-
-    let event_loop = EventLoop::new()?;
-    event_loop.set_control_flow(ControlFlow::Poll);
-
-    let mut app = ScatterApp::new();
-    event_loop.run_app(&mut app)?;
-
-    Ok(())
+fn main() -> Result<(), gup::GupError> {
+    let data = create_sample_data();
+    GupApp::new(ScatterRenderer::new(&data))
+        .title("Gup Scatter Plot")
+        .run()
 }
 
 #[cfg(test)]
