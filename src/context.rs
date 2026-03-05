@@ -2791,6 +2791,13 @@ impl<'a> RenderFrame<'a> {
         self.surface_texture.is_some()
     }
 
+    /// Return the surface size (width × height in physical pixels) for this
+    /// frame, or `None` when rendering to a headless target.
+    pub fn surface_size(&self) -> Option<PhysicalSize<u32>> {
+        self.surface_id
+            .and_then(|id| self.context.surface_size(id))
+    }
+
     /// Encode a texture-to-buffer copy for the current surface frame.
     ///
     /// Call this **after** all render passes are complete but **before**
