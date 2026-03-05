@@ -3,14 +3,17 @@
 
 //! GPU compute engine for force-directed graph layout.
 //!
-//! The engine compiles four WGSL compute shaders at construction time and
-//! orchestrates an async iteration loop that dispatches them in sequence:
+//! The engine compiles WGSL compute shaders at construction time and
+//! orchestrates an async iteration loop that dispatches them in sequence.
 //!
-//! 1. **Repulsion pass** — O(n²) pairwise Coulomb-like repulsion.
-//! 2. **Spring pass** — Hooke-law attraction along edges.
-//! 3. **Integration pass** — Euler integration with gravity and damping.
-//! 4. **Convergence pass** — Parallel reduction of max displacement.
+//! Two repulsion strategies are available:
+//!
+//! * **Exact** (theta = 0) — O(n²) pairwise Coulomb-like repulsion.
+//! * **Barnes-Hut** (theta > 0) — O(n log n) quadtree approximation.
+//!
+//! Both share the same spring, integration, and convergence passes.
 
+use super::quadtree::build_quadtree;
 use super::types::*;
 use crate::error::GupResult;
 use crate::render::RenderContext;
@@ -22,6 +25,9 @@ const WORKGROUP_SIZE: u32 = 256;
 
 /// WGSL source for all force-layout compute shaders.
 const FORCE_LAYOUT_SHADER: &str = include_str!("force_layout.wgsl");
+
+/// WGSL source for the Barnes-Hut tree-traversal repulsion shader.
+const BARNES_HUT_SHADER: &str = include_str!("barnes_hut.wgsl");
 
 /// GPU-accelerated graph layout engine.
 ///
@@ -48,6 +54,7 @@ const FORCE_LAYOUT_SHADER: &str = include_str!("force_layout.wgsl");
 pub struct LayoutEngine {
     device: Device,
     queue: Queue,
+    // Exact-mode pipelines (shared with BH for spring/integrate/convergence).
     repulsion_pipeline: ComputePipeline,
     spring_pipeline: ComputePipeline,
     integrate_pipeline: ComputePipeline,
@@ -55,6 +62,9 @@ pub struct LayoutEngine {
     clear_forces_pipeline: ComputePipeline,
     clear_convergence_pipeline: ComputePipeline,
     bind_group_layout: BindGroupLayout,
+    // Barnes-Hut pipelines & layouts.
+    bh_repulsion_pipeline: ComputePipeline,
+    bh_tree_bind_group_layout: BindGroupLayout,
 }
 
 impl std::fmt::Debug for LayoutEngine {
@@ -166,6 +176,43 @@ impl LayoutEngine {
         let clear_convergence_pipeline =
             make_pipeline("clear_convergence_pass", "clear_convergence_pipeline");
 
+        // ---- Barnes-Hut pipeline (separate shader module + pipeline layout) ----
+
+        let bh_shader_module = device.create_shader_module(ShaderModuleDescriptor {
+            label: Some("barnes_hut_shader"),
+            source: ShaderSource::Wgsl(BARNES_HUT_SHADER.into()),
+        });
+
+        let bh_tree_bind_group_layout =
+            device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                label: Some("bh_tree_bind_group_layout"),
+                entries: &[BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
+
+        let bh_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+            label: Some("bh_pipeline_layout"),
+            bind_group_layouts: &[&bind_group_layout, &bh_tree_bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+        let bh_repulsion_pipeline = device.create_compute_pipeline(&ComputePipelineDescriptor {
+            label: Some("bh_repulsion_pipeline"),
+            layout: Some(&bh_pipeline_layout),
+            module: &bh_shader_module,
+            entry_point: Some("bh_repulsion_pass"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+
         // We clone device/queue handles so the engine is self-contained.
         Ok(Self {
             device: device.clone(),
@@ -177,6 +224,8 @@ impl LayoutEngine {
             clear_forces_pipeline,
             clear_convergence_pipeline,
             bind_group_layout,
+            bh_repulsion_pipeline,
+            bh_tree_bind_group_layout,
         })
     }
 
@@ -305,7 +354,7 @@ impl LayoutEngine {
             mapped_at_creation: false,
         });
 
-        // Bind group ---------------------------------------------------------
+        // Bind group (group 0 — shared by all passes) -------------------------
 
         let bind_group = self.device.create_bind_group(&BindGroupDescriptor {
             label: Some("force_layout_bind_group"),
@@ -334,125 +383,39 @@ impl LayoutEngine {
             ],
         });
 
-        // Iteration loop -----------------------------------------------------
-        //
-        // Batches of iterations are recorded into a single command encoder
-        // and submitted together.  A convergence readback is only performed
-        // at the end of each batch (every `convergence_check_interval`
-        // iterations), avoiding per-iteration CPU↔GPU round-trips.
-
+        // Dispatch constants.
         let node_workgroups = (node_count as u32).div_ceil(WORKGROUP_SIZE);
         let edge_workgroups = (edge_count as u32).div_ceil(WORKGROUP_SIZE);
         let has_edges = !edges.is_empty();
 
-        let mut iterations_performed: u32 = 0;
-        let mut converged = false;
-        let interval = config.convergence_check_interval.max(1);
-        // Limit batch size to avoid exceeding command buffer limits on some
-        // drivers.  5 iterations × 5 passes = 25 compute passes is safe.
-        let max_batch = interval.min(5);
+        let use_barnes_hut = config.approximation_theta > 0.0;
 
-        let mut iter = 0u32;
-        while iter < config.iterations {
-            // How many iterations to batch before the next submission
-            let batch_end = (iter + max_batch).min(config.iterations);
-            let check_convergence = batch_end >= iter + interval
-                || batch_end == config.iterations
-                || batch_end.is_multiple_of(interval);
-
-            let mut encoder = self
-                .device
-                .create_command_encoder(&CommandEncoderDescriptor {
-                    label: Some("force_layout_batch_encoder"),
-                });
-
-            for _ in iter..batch_end {
-                // Clear forces (GPU-side)
-                {
-                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                        label: Some("clear_forces"),
-                        timestamp_writes: None,
-                    });
-                    pass.set_pipeline(&self.clear_forces_pipeline);
-                    pass.set_bind_group(0, &bind_group, &[]);
-                    pass.dispatch_workgroups(node_workgroups, 1, 1);
-                }
-
-                // Repulsion
-                {
-                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                        label: Some("repulsion"),
-                        timestamp_writes: None,
-                    });
-                    pass.set_pipeline(&self.repulsion_pipeline);
-                    pass.set_bind_group(0, &bind_group, &[]);
-                    pass.dispatch_workgroups(node_workgroups, 1, 1);
-                }
-
-                // Spring forces
-                if has_edges {
-                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                        label: Some("spring"),
-                        timestamp_writes: None,
-                    });
-                    pass.set_pipeline(&self.spring_pipeline);
-                    pass.set_bind_group(0, &bind_group, &[]);
-                    pass.dispatch_workgroups(edge_workgroups, 1, 1);
-                }
-
-                // Integration
-                {
-                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                        label: Some("integrate"),
-                        timestamp_writes: None,
-                    });
-                    pass.set_pipeline(&self.integrate_pipeline);
-                    pass.set_bind_group(0, &bind_group, &[]);
-                    pass.dispatch_workgroups(node_workgroups, 1, 1);
-                }
-            }
-
-            iterations_performed = batch_end;
-
-            // Convergence check (only at convergence intervals, not every batch)
-            if check_convergence {
-                // Clear convergence atomic
-                {
-                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                        label: Some("clear_convergence"),
-                        timestamp_writes: None,
-                    });
-                    pass.set_pipeline(&self.clear_convergence_pipeline);
-                    pass.set_bind_group(0, &bind_group, &[]);
-                    pass.dispatch_workgroups(1, 1, 1);
-                }
-
-                // Compute max displacement
-                {
-                    let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                        label: Some("convergence"),
-                        timestamp_writes: None,
-                    });
-                    pass.set_pipeline(&self.convergence_pipeline);
-                    pass.set_bind_group(0, &bind_group, &[]);
-                    pass.dispatch_workgroups(node_workgroups, 1, 1);
-                }
-
-                encoder.copy_buffer_to_buffer(&convergence_buffer, 0, &staging_buffer, 0, 4);
-            }
-
-            self.queue.submit(std::iter::once(encoder.finish()));
-
-            if check_convergence {
-                let max_disp = self.read_convergence(&staging_buffer).await?;
-                if max_disp < config.convergence_threshold {
-                    converged = true;
-                    break;
-                }
-            }
-
-            iter = batch_end;
-        }
+        let (iterations_performed, converged) = if use_barnes_hut {
+            self.run_barnes_hut_loop(
+                config,
+                &gpu_nodes,
+                &node_buffer,
+                &bind_group,
+                &convergence_buffer,
+                &staging_buffer,
+                node_count,
+                node_workgroups,
+                edge_workgroups,
+                has_edges,
+            )
+            .await?
+        } else {
+            self.run_exact_loop(
+                config,
+                &bind_group,
+                &convergence_buffer,
+                &staging_buffer,
+                node_workgroups,
+                edge_workgroups,
+                has_edges,
+            )
+            .await?
+        };
 
         // Read final positions -----------------------------------------------
 
@@ -510,6 +473,320 @@ impl LayoutEngine {
             iterations_performed,
             converged,
         })
+    }
+
+    /// Exact O(n²) iteration loop with batched dispatch.
+    #[allow(clippy::too_many_arguments)]
+    async fn run_exact_loop(
+        &self,
+        config: &ForceDirected,
+        bind_group: &BindGroup,
+        convergence_buffer: &Buffer,
+        staging_buffer: &Buffer,
+        node_workgroups: u32,
+        edge_workgroups: u32,
+        has_edges: bool,
+    ) -> GupResult<(u32, bool)> {
+        let mut iterations_performed: u32 = 0;
+        let mut converged = false;
+        let interval = config.convergence_check_interval.max(1);
+        let max_batch = interval.min(5);
+
+        let mut iter = 0u32;
+        while iter < config.iterations {
+            let batch_end = (iter + max_batch).min(config.iterations);
+            let check_convergence = batch_end >= iter + interval
+                || batch_end == config.iterations
+                || batch_end.is_multiple_of(interval);
+
+            let mut encoder = self
+                .device
+                .create_command_encoder(&CommandEncoderDescriptor {
+                    label: Some("force_layout_batch_encoder"),
+                });
+
+            for _ in iter..batch_end {
+                self.encode_clear_forces(&mut encoder, bind_group, node_workgroups);
+                self.encode_exact_repulsion(&mut encoder, bind_group, node_workgroups);
+                self.encode_spring_integrate(
+                    &mut encoder,
+                    bind_group,
+                    node_workgroups,
+                    edge_workgroups,
+                    has_edges,
+                );
+            }
+
+            iterations_performed = batch_end;
+
+            if check_convergence {
+                self.encode_convergence_check(
+                    &mut encoder,
+                    bind_group,
+                    convergence_buffer,
+                    staging_buffer,
+                    node_workgroups,
+                );
+            }
+
+            self.queue.submit(std::iter::once(encoder.finish()));
+
+            if check_convergence {
+                let max_disp = self.read_convergence(staging_buffer).await?;
+                if max_disp < config.convergence_threshold {
+                    converged = true;
+                    break;
+                }
+            }
+
+            iter = batch_end;
+        }
+
+        Ok((iterations_performed, converged))
+    }
+
+    /// Barnes-Hut O(n log n) iteration loop.
+    ///
+    /// Each iteration reads back node positions, builds a quadtree on the
+    /// CPU, uploads it, and dispatches the tree-traversal repulsion shader.
+    #[allow(clippy::too_many_arguments)]
+    async fn run_barnes_hut_loop(
+        &self,
+        config: &ForceDirected,
+        initial_gpu_nodes: &[GpuNode],
+        node_buffer: &Buffer,
+        bind_group: &BindGroup,
+        convergence_buffer: &Buffer,
+        staging_buffer: &Buffer,
+        node_count: usize,
+        node_workgroups: u32,
+        edge_workgroups: u32,
+        has_edges: bool,
+    ) -> GupResult<(u32, bool)> {
+        let node_buf_size = (node_count * std::mem::size_of::<GpuNode>()) as u64;
+
+        // Staging buffer for per-iteration position readback.
+        let pos_staging = self.device.create_buffer(&BufferDescriptor {
+            label: Some("bh_pos_staging"),
+            size: node_buf_size,
+            usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        // Current positions on CPU (start with initial positions).
+        let mut cpu_positions: Vec<(f32, f32)> = initial_gpu_nodes
+            .iter()
+            .map(|n| (n.pos_x, n.pos_y))
+            .collect();
+
+        let mut iterations_performed: u32 = 0;
+        let mut converged = false;
+        let interval = config.convergence_check_interval.max(1);
+
+        for iter in 0..config.iterations {
+            // 1. Build quadtree from current CPU positions.
+            let tree_cells = build_quadtree(&cpu_positions);
+            let tree_buffer = self
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("bh_tree"),
+                    contents: bytemuck::cast_slice(&tree_cells),
+                    usage: BufferUsages::STORAGE,
+                });
+
+            // 2. Create a bind group for the tree (group 1).
+            let tree_bind_group = self.device.create_bind_group(&BindGroupDescriptor {
+                label: Some("bh_tree_bind_group"),
+                layout: &self.bh_tree_bind_group_layout,
+                entries: &[BindGroupEntry {
+                    binding: 0,
+                    resource: tree_buffer.as_entire_binding(),
+                }],
+            });
+
+            // 3. Encode compute passes for one iteration.
+            let mut encoder = self
+                .device
+                .create_command_encoder(&CommandEncoderDescriptor {
+                    label: Some("bh_iteration_encoder"),
+                });
+
+            self.encode_clear_forces(&mut encoder, bind_group, node_workgroups);
+
+            // BH repulsion (uses both group 0 and group 1).
+            {
+                let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                    label: Some("bh_repulsion"),
+                    timestamp_writes: None,
+                });
+                pass.set_pipeline(&self.bh_repulsion_pipeline);
+                pass.set_bind_group(0, bind_group, &[]);
+                pass.set_bind_group(1, &tree_bind_group, &[]);
+                pass.dispatch_workgroups(node_workgroups, 1, 1);
+            }
+
+            self.encode_spring_integrate(
+                &mut encoder,
+                bind_group,
+                node_workgroups,
+                edge_workgroups,
+                has_edges,
+            );
+
+            iterations_performed = iter + 1;
+
+            // 4. Decide whether to check convergence.
+            let check_convergence =
+                (iterations_performed % interval == 0) || iterations_performed == config.iterations;
+
+            if check_convergence {
+                self.encode_convergence_check(
+                    &mut encoder,
+                    bind_group,
+                    convergence_buffer,
+                    staging_buffer,
+                    node_workgroups,
+                );
+            }
+
+            // 5. Copy node positions to staging for next iteration's tree build.
+            let need_readback = check_convergence || (iter + 1 < config.iterations);
+            if need_readback {
+                encoder.copy_buffer_to_buffer(node_buffer, 0, &pos_staging, 0, node_buf_size);
+            }
+
+            self.queue.submit(std::iter::once(encoder.finish()));
+
+            // 6. Read back convergence and/or positions.
+            if check_convergence {
+                let max_disp = self.read_convergence(staging_buffer).await?;
+                if max_disp < config.convergence_threshold {
+                    converged = true;
+                    break;
+                }
+            }
+
+            if need_readback && !converged {
+                cpu_positions = self.read_node_positions(&pos_staging, node_count).await?;
+            }
+        }
+
+        Ok((iterations_performed, converged))
+    }
+
+    // ----- Encoder helpers (shared by both loops) ---------------------------
+
+    fn encode_clear_forces(
+        &self,
+        encoder: &mut CommandEncoder,
+        bind_group: &BindGroup,
+        node_workgroups: u32,
+    ) {
+        let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+            label: Some("clear_forces"),
+            timestamp_writes: None,
+        });
+        pass.set_pipeline(&self.clear_forces_pipeline);
+        pass.set_bind_group(0, bind_group, &[]);
+        pass.dispatch_workgroups(node_workgroups, 1, 1);
+    }
+
+    fn encode_exact_repulsion(
+        &self,
+        encoder: &mut CommandEncoder,
+        bind_group: &BindGroup,
+        node_workgroups: u32,
+    ) {
+        let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+            label: Some("repulsion"),
+            timestamp_writes: None,
+        });
+        pass.set_pipeline(&self.repulsion_pipeline);
+        pass.set_bind_group(0, bind_group, &[]);
+        pass.dispatch_workgroups(node_workgroups, 1, 1);
+    }
+
+    fn encode_spring_integrate(
+        &self,
+        encoder: &mut CommandEncoder,
+        bind_group: &BindGroup,
+        node_workgroups: u32,
+        edge_workgroups: u32,
+        has_edges: bool,
+    ) {
+        if has_edges {
+            let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("spring"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(&self.spring_pipeline);
+            pass.set_bind_group(0, bind_group, &[]);
+            pass.dispatch_workgroups(edge_workgroups, 1, 1);
+        }
+
+        let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+            label: Some("integrate"),
+            timestamp_writes: None,
+        });
+        pass.set_pipeline(&self.integrate_pipeline);
+        pass.set_bind_group(0, bind_group, &[]);
+        pass.dispatch_workgroups(node_workgroups, 1, 1);
+    }
+
+    fn encode_convergence_check(
+        &self,
+        encoder: &mut CommandEncoder,
+        bind_group: &BindGroup,
+        convergence_buffer: &Buffer,
+        staging_buffer: &Buffer,
+        node_workgroups: u32,
+    ) {
+        {
+            let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("clear_convergence"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(&self.clear_convergence_pipeline);
+            pass.set_bind_group(0, bind_group, &[]);
+            pass.dispatch_workgroups(1, 1, 1);
+        }
+        {
+            let mut pass = encoder.begin_compute_pass(&ComputePassDescriptor {
+                label: Some("convergence"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(&self.convergence_pipeline);
+            pass.set_bind_group(0, bind_group, &[]);
+            pass.dispatch_workgroups(node_workgroups, 1, 1);
+        }
+        encoder.copy_buffer_to_buffer(convergence_buffer, 0, staging_buffer, 0, 4);
+    }
+
+    /// Read back node positions from a staging buffer.
+    async fn read_node_positions(
+        &self,
+        staging: &Buffer,
+        node_count: usize,
+    ) -> GupResult<Vec<(f32, f32)>> {
+        let slice = staging.slice(..);
+        let (sender, receiver) = futures_channel::oneshot::channel::<()>();
+        slice.map_async(MapMode::Read, move |result| {
+            result.expect("Failed to map position staging buffer");
+            let _ = sender.send(());
+        });
+        let _ = self.device.poll(PollType::Wait);
+        let _ = receiver.await;
+
+        let data = slice.get_mapped_range();
+        let gpu_nodes: &[GpuNode] = bytemuck::cast_slice(&data);
+        let positions: Vec<(f32, f32)> = gpu_nodes[..node_count]
+            .iter()
+            .map(|n| (n.pos_x, n.pos_y))
+            .collect();
+        drop(data);
+        staging.unmap();
+
+        Ok(positions)
     }
 
     /// Read back the convergence scalar from the staging buffer.

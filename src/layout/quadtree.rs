@@ -127,20 +127,14 @@ fn insert(
 
         // Re-insert the existing body into the appropriate child.
         let old_body = leaf_body[cell_idx].take().unwrap();
-        let old_x = cells[cell_idx].com_x * mass - bx * 0.0; // recompute from original
-        // Actually, we stored the original position as com when mass was 1.
-        // After the COM update above, we need to recover the old position.
-        // old_com = (old_pos * 1 + bx) / 2 => old_pos = 2*old_com - bx
-        // But it's cleaner to just save it. Let me re-derive:
+        // Recover the original body position from the updated COM.
         //   Before update: com = old_pos, mass = 1
         //   After update:  com = (old_pos * 1 + bx) / 2, mass = 2
-        //   So old_pos = com * 2 - bx
+        //   So: old_pos = com * new_mass - bx
         let com_x = cells[cell_idx].com_x;
         let com_y = cells[cell_idx].com_y;
         let old_x = com_x * new_mass - bx;
         let old_y = com_y * new_mass - by;
-        // When mass was 1, old_pos = com_x * 2 - bx. But new_mass = 2.0 here since we went from 1→2.
-        // old_x = com_x * 2 - bx  (correct since new_mass = mass + 1 = 2)
 
         let child_half = half * 0.5;
         let q_old = quadrant(cx, cy, old_x, old_y);
