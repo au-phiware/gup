@@ -798,7 +798,7 @@ integration, pipeline caching.
   ✅.
 - [GUP-363](GUP-363_Fix_AccessorFunction_Clone.md) ✅ — Fix
   AccessorFunction::clone() which silently loses the closure. Deps: GUP-362 ✅.
-- [GUP-364](GUP-364_Composite_Line_Area_Scale_Integration.md) 📋 — Integrate
+- [GUP-364](GUP-364_Composite_Line_Area_Scale_Integration.md) 🚧 — Integrate
   scale transformations into line/area builders to remove composite build_layer
   overrides. Deps: GUP-362 ✅.
 - [GUP-365](GUP-365_Composite_Layer_Ordering_Control.md) 📋 — Allow explicit
