@@ -1118,6 +1118,12 @@ API reference generation, tutorials, and example gallery.
   rendering when `SurfaceCapabilities::usages` does not include `COPY_SRC`, so
   screenshots work on all GPU backends. Deps: GUP-317 ✅.
 
+## Follow-ups from GUP-318
+
+- [GUP-376](GUP-376_GupApp_Event_Callbacks.md) 📋 — Add optional `.on_key()`
+  and `.on_mouse()` callbacks to `GupApp` so examples with simple custom event
+  handling can also use the shell. Deps: GUP-318 ✅.
+
 ## Follow-ups from GUP-315
 
 - [GUP-374](GUP-374_Duplicate_Story_ID_Cleanup.md) 📋 — Renumber the duplicate
