@@ -1165,6 +1165,9 @@ API reference generation, tutorials, and example gallery.
 - [GUP-380](GUP-380_Remaining_Builders_Prepare_Render_Bound.md) ✅ — Call
   `prepare_render_bound()` in BoxPlot, Density, and Violin builders so that
   `render_to_png()` produces visible data marks. Deps: GUP-289 ✅, GUP-379 ✅.
+- [GUP-381](GUP-381_Extract_BoxPlot_NDC_Helper.md) 📋 — Extract shared NDC
+  transformation helper for BoxPlot builders to reduce duplication between
+  BoxPlotBuilder and ViolinPlotBuilder. Deps: GUP-380 ✅.
 
 ## Follow-ups from GUP-265
 
