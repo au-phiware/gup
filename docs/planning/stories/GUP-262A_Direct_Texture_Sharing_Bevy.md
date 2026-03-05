@@ -1,6 +1,6 @@
 # GUP-262A: Direct Texture Sharing for Bevy
 
-**Initiative**: Ecosystem Integration **Status**: 📋 Planned **Created**:
+**Initiative**: Ecosystem Integration **Status**: 🚧 In Progress **Created**:
 2025-03-04
 
 ## Overview
