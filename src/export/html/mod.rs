@@ -14,6 +14,36 @@
 //! * **Open Graph `<meta>` tags** with a PNG thumbnail so the page previews
 //!   correctly when shared on social media.
 //!
+//! # Data embedding
+//!
+//! When the chart's data type `T` implements [`serde::Serialize`], the
+//! exporter can embed the full dataset in the JSON block alongside the
+//! configuration.  This uses the [`ChartBundle`] format, which wraps a
+//! [`ChartSnapshot`] with an optional `data` array:
+//!
+//! ```json
+//! {
+//!   "config": { "title": "…", "width": 800, … },
+//!   "data": [ { "x": 1.0, "y": 2.0 }, … ]
+//! }
+//! ```
+//!
+//! Use [`HtmlExporter::render_with_data`] / [`HtmlExporter::export_with_data`]
+//! (or the convenience [`ComposedChart::export_html_with_data`](crate::chart_builder::ComposedChart::export_html_with_data)) to enable data
+//! embedding.  The data-free methods ([`HtmlExporter::render`] /
+//! [`HtmlExporter::export`]) continue to work as before and produce a plain
+//! [`ChartSnapshot`] JSON block.
+//!
+//! ## Size considerations
+//!
+//! Embedding data increases the HTML file size proportionally to the
+//! dataset.  Each data point is serialised as a JSON object, so a 10 000-row
+//! dataset with a handful of fields might add several hundred kilobytes.
+//! For very large datasets, consider:
+//!
+//! * Downsampling or aggregating before export.
+//! * Using the config-only export and loading data separately at runtime.
+//!
 //! # Quick Start
 //!
 //! ```rust,no_run
