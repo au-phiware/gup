@@ -551,17 +551,34 @@ impl super::LayoutEngine {
         });
 
         // ---- Prefix sum ----
-        let prefix_buffer = self.compute_prefix_sum(device, queue, pipelines, &sums)?;
+        // Pad with one extra 0 so the prefix sum has n+1 elements.
+        // This allows range_sum(lo, hi) to safely read prefix_sums[n].
+        let mut padded_sums = sums.clone();
+        padded_sums.push(0.0);
+        let prefix_buffer = self.compute_prefix_sum(device, queue, pipelines, &padded_sums)?;
 
         // ---- Output cells buffer ----
+        // Pre-fill with sentinel depth = u32::MAX so we can distinguish
+        // cells that were actually computed from uninitialised ones.
         let cell_size = std::mem::size_of::<TreemapCell>() as u64;
-        let cells_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        let sentinel_cells: Vec<TreemapCell> = (0..n)
+            .map(|_| TreemapCell {
+                x: 0.0,
+                y: 0.0,
+                width: 0.0,
+                height: 0.0,
+                depth: u32::MAX,
+                value: 0.0,
+                node_index: 0,
+                _pad: 0,
+            })
+            .collect();
+        let cells_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("treemap_cells"),
-            size: cell_size * n as u64,
+            contents: bytemuck::cast_slice(&sentinel_cells),
             usage: wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
         });
 
         // ---- Dispatch layout per depth level ----
@@ -676,10 +693,14 @@ impl super::LayoutEngine {
         drop(data);
         staging.unmap();
 
-        // Apply max_depth filter — keep only cells within the depth limit
-        // and that were actually laid out (non-zero area or root).
+        // Apply max_depth filter — keep only cells that were actually
+        // computed (depth != u32::MAX sentinel) and within the depth limit.
         if options.max_depth.is_some() {
-            cells.retain(|c| c.depth <= effective_max_depth);
+            cells.retain(|c| c.depth != u32::MAX && c.depth <= effective_max_depth);
+        } else {
+            // Even without max_depth, filter out sentinel cells (shouldn't
+            // happen in normal operation, but defensive).
+            cells.retain(|c| c.depth != u32::MAX);
         }
 
         Ok(TreemapResult { cells })
@@ -2020,5 +2041,327 @@ mod tests {
         };
         assert!((cell.center_x() - 25.0).abs() < f32::EPSILON);
         assert!((cell.center_y() - 40.0).abs() < f32::EPSILON);
+    }
+
+    // ----- GPU-vs-CPU comparison tests -----
+
+    /// Compare GPU and CPU layout results, asserting that each cell matches
+    /// within the given relative error tolerance.
+    fn assert_gpu_cpu_match(gpu_cells: &[TreemapCell], cpu_cells: &[TreemapCell], tol: f32) {
+        assert_eq!(
+            gpu_cells.len(),
+            cpu_cells.len(),
+            "GPU produced {} cells but CPU produced {}",
+            gpu_cells.len(),
+            cpu_cells.len()
+        );
+
+        for cpu_cell in cpu_cells {
+            let gpu_cell = gpu_cells
+                .iter()
+                .find(|c| c.node_index == cpu_cell.node_index)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "GPU output missing cell for node_index {}",
+                        cpu_cell.node_index
+                    )
+                });
+
+            let area_cpu = cpu_cell.width * cpu_cell.height;
+            let area_gpu = gpu_cell.width * gpu_cell.height;
+            let area_ref = area_cpu.max(1e-10);
+            let area_err = (area_gpu - area_cpu).abs() / area_ref;
+
+            assert!(
+                area_err <= tol,
+                "Area mismatch for node {}: CPU={:.4} GPU={:.4} err={:.6} > {:.6}\n\
+                 CPU: ({:.4}, {:.4}, {:.4}, {:.4})\n\
+                 GPU: ({:.4}, {:.4}, {:.4}, {:.4})",
+                cpu_cell.node_index,
+                area_cpu,
+                area_gpu,
+                area_err,
+                tol,
+                cpu_cell.x,
+                cpu_cell.y,
+                cpu_cell.width,
+                cpu_cell.height,
+                gpu_cell.x,
+                gpu_cell.y,
+                gpu_cell.width,
+                gpu_cell.height,
+            );
+
+            // Also check position within tolerance.
+            let size_ref = (cpu_cell.width + cpu_cell.height).max(1e-10);
+            let x_err = (gpu_cell.x - cpu_cell.x).abs() / size_ref;
+            let y_err = (gpu_cell.y - cpu_cell.y).abs() / size_ref;
+            assert!(
+                x_err <= tol && y_err <= tol,
+                "Position mismatch for node {}: x_err={:.6} y_err={:.6} > {:.6}\n\
+                 CPU: ({:.4}, {:.4}) GPU: ({:.4}, {:.4})",
+                cpu_cell.node_index,
+                x_err,
+                y_err,
+                tol,
+                cpu_cell.x,
+                cpu_cell.y,
+                gpu_cell.x,
+                gpu_cell.y,
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_gpu_slice_dice_matches_cpu_flat_tree() {
+        let ctx = match RenderContext::new().await {
+            Ok(ctx) => ctx,
+            Err(_) => {
+                eprintln!("Skipping GPU test: no GPU available");
+                return;
+            }
+        };
+        let engine = crate::layout::LayoutEngine::new(&ctx).unwrap();
+
+        let (nodes, values) = flat_tree_with_values(&[6.0, 3.0, 2.0, 1.0]);
+        let vp = viewport();
+        let options = TreemapOptions {
+            algorithm: TreemapAlgorithm::SliceDice,
+            max_depth: None,
+            padding: 0.0,
+        };
+
+        // GPU result.
+        let gpu_result = engine
+            .treemap_layout(&nodes, &values, vp, &options)
+            .await
+            .unwrap();
+        let gpu_cells = gpu_result.cells();
+
+        // CPU reference.
+        let cpu_cells = cpu_treemap_layout(&nodes, &values, vp, &options);
+
+        assert_gpu_cpu_match(gpu_cells, &cpu_cells, 0.0001);
+
+        // Also run structural checks.
+        check_area_proportionality(gpu_cells, &values, 0, &nodes);
+        check_no_overlap(gpu_cells, &nodes, 0);
+        check_containment(gpu_cells, &nodes);
+    }
+
+    #[tokio::test]
+    async fn test_gpu_binary_matches_cpu_flat_tree() {
+        let ctx = match RenderContext::new().await {
+            Ok(ctx) => ctx,
+            Err(_) => {
+                eprintln!("Skipping GPU test: no GPU available");
+                return;
+            }
+        };
+        let engine = crate::layout::LayoutEngine::new(&ctx).unwrap();
+
+        let (nodes, values) = flat_tree_with_values(&[6.0, 3.0, 2.0, 1.0]);
+        let vp = viewport();
+        let options = TreemapOptions {
+            algorithm: TreemapAlgorithm::Binary,
+            max_depth: None,
+            padding: 0.0,
+        };
+
+        let gpu_result = engine
+            .treemap_layout(&nodes, &values, vp, &options)
+            .await
+            .unwrap();
+        let gpu_cells = gpu_result.cells();
+
+        let cpu_cells = cpu_treemap_layout(&nodes, &values, vp, &options);
+
+        assert_gpu_cpu_match(gpu_cells, &cpu_cells, 0.0001);
+        check_area_proportionality(gpu_cells, &values, 0, &nodes);
+        check_no_overlap(gpu_cells, &nodes, 0);
+        check_containment(gpu_cells, &nodes);
+    }
+
+    #[tokio::test]
+    async fn test_gpu_slice_dice_three_level_tree() {
+        let ctx = match RenderContext::new().await {
+            Ok(ctx) => ctx,
+            Err(_) => return,
+        };
+        let engine = crate::layout::LayoutEngine::new(&ctx).unwrap();
+
+        let (nodes, values) = three_level_tree();
+        let vp = viewport();
+        let options = TreemapOptions {
+            algorithm: TreemapAlgorithm::SliceDice,
+            max_depth: None,
+            padding: 0.0,
+        };
+
+        let gpu_result = engine
+            .treemap_layout(&nodes, &values, vp, &options)
+            .await
+            .unwrap();
+        let gpu_cells = gpu_result.cells();
+
+        let cpu_cells = cpu_treemap_layout(&nodes, &values, vp, &options);
+
+        assert_gpu_cpu_match(gpu_cells, &cpu_cells, 0.0001);
+        check_containment(gpu_cells, &nodes);
+    }
+
+    #[tokio::test]
+    async fn test_gpu_binary_three_level_tree() {
+        let ctx = match RenderContext::new().await {
+            Ok(ctx) => ctx,
+            Err(_) => return,
+        };
+        let engine = crate::layout::LayoutEngine::new(&ctx).unwrap();
+
+        let (nodes, values) = three_level_tree();
+        let vp = viewport();
+        let options = TreemapOptions {
+            algorithm: TreemapAlgorithm::Binary,
+            max_depth: None,
+            padding: 0.0,
+        };
+
+        let gpu_result = engine
+            .treemap_layout(&nodes, &values, vp, &options)
+            .await
+            .unwrap();
+        let gpu_cells = gpu_result.cells();
+
+        let cpu_cells = cpu_treemap_layout(&nodes, &values, vp, &options);
+
+        assert_gpu_cpu_match(gpu_cells, &cpu_cells, 0.0001);
+        check_containment(gpu_cells, &nodes);
+    }
+
+    #[tokio::test]
+    async fn test_gpu_slice_dice_with_padding() {
+        let ctx = match RenderContext::new().await {
+            Ok(ctx) => ctx,
+            Err(_) => return,
+        };
+        let engine = crate::layout::LayoutEngine::new(&ctx).unwrap();
+
+        let (nodes, values) = three_level_tree();
+        let vp = viewport();
+        let options = TreemapOptions {
+            algorithm: TreemapAlgorithm::SliceDice,
+            max_depth: None,
+            padding: 2.0,
+        };
+
+        let gpu_result = engine
+            .treemap_layout(&nodes, &values, vp, &options)
+            .await
+            .unwrap();
+        let gpu_cells = gpu_result.cells();
+
+        let cpu_cells = cpu_treemap_layout(&nodes, &values, vp, &options);
+
+        assert_gpu_cpu_match(gpu_cells, &cpu_cells, 0.0001);
+        check_containment(gpu_cells, &nodes);
+    }
+
+    #[tokio::test]
+    async fn test_gpu_slice_dice_max_depth() {
+        let ctx = match RenderContext::new().await {
+            Ok(ctx) => ctx,
+            Err(_) => return,
+        };
+        let engine = crate::layout::LayoutEngine::new(&ctx).unwrap();
+
+        let (nodes, values) = three_level_tree();
+        let vp = viewport();
+        let options = TreemapOptions {
+            algorithm: TreemapAlgorithm::SliceDice,
+            max_depth: Some(1),
+            padding: 0.0,
+        };
+
+        let gpu_result = engine
+            .treemap_layout(&nodes, &values, vp, &options)
+            .await
+            .unwrap();
+        let gpu_cells = gpu_result.cells();
+
+        // With max_depth=1 we should get root + 2 children = 3 cells.
+        assert_eq!(gpu_cells.len(), 3, "Expected 3 cells, got {}", gpu_cells.len());
+        for c in gpu_cells {
+            assert!(c.depth <= 1, "Cell at depth {} exceeds max_depth=1", c.depth);
+        }
+
+        let cpu_cells = cpu_treemap_layout(&nodes, &values, vp, &options);
+        assert_gpu_cpu_match(gpu_cells, &cpu_cells, 0.0001);
+    }
+
+    #[tokio::test]
+    async fn test_gpu_slice_dice_large_flat_tree() {
+        let ctx = match RenderContext::new().await {
+            Ok(ctx) => ctx,
+            Err(_) => return,
+        };
+        let engine = crate::layout::LayoutEngine::new(&ctx).unwrap();
+
+        // 1000-node flat tree (tests multi-workgroup prefix sum).
+        let (nodes, values) = flat_tree(1000);
+        let vp = LayoutRect {
+            x: 0.0,
+            y: 0.0,
+            width: 800.0,
+            height: 600.0,
+        };
+        let options = TreemapOptions {
+            algorithm: TreemapAlgorithm::SliceDice,
+            max_depth: None,
+            padding: 0.0,
+        };
+
+        let gpu_result = engine
+            .treemap_layout(&nodes, &values, vp, &options)
+            .await
+            .unwrap();
+        let gpu_cells = gpu_result.cells();
+
+        let cpu_cells = cpu_treemap_layout(&nodes, &values, vp, &options);
+
+        assert_gpu_cpu_match(gpu_cells, &cpu_cells, 0.0001);
+        check_area_proportionality(gpu_cells, &values, 0, &nodes);
+    }
+
+    #[tokio::test]
+    async fn test_gpu_binary_large_flat_tree() {
+        let ctx = match RenderContext::new().await {
+            Ok(ctx) => ctx,
+            Err(_) => return,
+        };
+        let engine = crate::layout::LayoutEngine::new(&ctx).unwrap();
+
+        let (nodes, values) = flat_tree(1000);
+        let vp = LayoutRect {
+            x: 0.0,
+            y: 0.0,
+            width: 800.0,
+            height: 600.0,
+        };
+        let options = TreemapOptions {
+            algorithm: TreemapAlgorithm::Binary,
+            max_depth: None,
+            padding: 0.0,
+        };
+
+        let gpu_result = engine
+            .treemap_layout(&nodes, &values, vp, &options)
+            .await
+            .unwrap();
+        let gpu_cells = gpu_result.cells();
+
+        let cpu_cells = cpu_treemap_layout(&nodes, &values, vp, &options);
+
+        assert_gpu_cpu_match(gpu_cells, &cpu_cells, 0.0001);
+        check_area_proportionality(gpu_cells, &values, 0, &nodes);
     }
 }

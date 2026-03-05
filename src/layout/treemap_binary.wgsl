@@ -67,8 +67,11 @@ fn find_split(lo: u32, hi: u32) -> u32 {
     let total = range_sum(lo, hi);
     let half = total * 0.5;
 
+    // Default: 1 child in left (matches CPU which uses split_idx=1 as
+    // fallback). Start evaluating from 2 children in left (k=lo+2),
+    // matching the CPU algorithm's skip of the first element.
     var best_split = lo + 1u;
-    var best_diff = abs(range_sum(lo, lo + 1u) - half);
+    var best_diff = 1e38;
 
     for (var k = lo + 2u; k < hi; k++) {
         let left_sum = range_sum(lo, k);
@@ -78,6 +81,9 @@ fn find_split(lo: u32, hi: u32) -> u32 {
             best_split = k;
         }
     }
+
+    // Clamp: at least 1 in each group.
+    best_split = clamp(best_split, lo + 1u, hi - 1u);
 
     return best_split;
 }
