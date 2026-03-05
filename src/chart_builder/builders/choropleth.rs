@@ -70,6 +70,176 @@ pub struct ChoroplethVertex {
 }
 
 // ---------------------------------------------------------------------------
+// GPU-side recolouring vertex
+// ---------------------------------------------------------------------------
+
+/// Per-vertex data for GPU-side recolouring (position + region index).
+///
+/// Unlike [`ChoroplethVertex`] which bakes the colour into each vertex, this
+/// variant stores only the region index. The fragment shader reads the actual
+/// colour from a storage buffer ([`RegionColorBuffer`]) using this index.
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C)]
+pub struct IndexedChoroplethVertex {
+    /// Longitude, latitude in degrees (projected in vertex shader).
+    pub position: [f32; 2],
+    /// Index into the [`RegionColorBuffer`] colour array.
+    pub region_index: u32,
+}
+
+// ---------------------------------------------------------------------------
+// RegionColorBuffer
+// ---------------------------------------------------------------------------
+
+/// A CPU-side colour buffer for per-region RGBA colours, indexed by feature
+/// index.
+///
+/// This is the core data structure for GPU-side choropleth recolouring.
+/// Instead of baking colours into every vertex, the colours are stored in a
+/// flat array that mirrors a GPU storage buffer. The fragment shader reads
+/// the colour for each fragment by indexing into this buffer using the
+/// per-vertex `region_index`.
+///
+/// # Usage
+///
+/// ```rust,ignore
+/// let buffer = RegionColorBuffer::new(region_count, no_data_color);
+/// buffer.set_color(0, [1.0, 0.0, 0.0, 1.0]); // Region 0 → red
+///
+/// // Recolour from new data without re-tessellation:
+/// buffer.update_from_data(&data, &regions, &color_scale);
+///
+/// // On the GPU side, call buffer.as_bytes() to write to the storage buffer.
+/// ```
+#[derive(Debug, Clone)]
+pub struct RegionColorBuffer {
+    /// Per-region RGBA colours, indexed by feature index.
+    colors: Vec<[f32; 4]>,
+    /// Fallback colour for regions with no data.
+    no_data_color: [f32; 4],
+}
+
+impl RegionColorBuffer {
+    /// Create a new buffer with `count` regions, all initialised to
+    /// `no_data_color`.
+    pub fn new(count: usize, no_data_color: [f32; 4]) -> Self {
+        Self {
+            colors: vec![no_data_color; count],
+            no_data_color,
+        }
+    }
+
+    /// Create a buffer from existing region records (copies each region's
+    /// current colour).
+    pub fn from_regions(regions: &[RegionRecord], no_data_color: [f32; 4]) -> Self {
+        Self {
+            colors: regions.iter().map(|r| r.color).collect(),
+            no_data_color,
+        }
+    }
+
+    /// Number of regions in the buffer.
+    pub fn len(&self) -> usize {
+        self.colors.len()
+    }
+
+    /// Returns `true` if the buffer contains no regions.
+    pub fn is_empty(&self) -> bool {
+        self.colors.is_empty()
+    }
+
+    /// Get the colour for a region by index.
+    pub fn color(&self, index: usize) -> Option<&[f32; 4]> {
+        self.colors.get(index)
+    }
+
+    /// Set the colour for a single region by index.
+    pub fn set_color(&mut self, index: usize, color: [f32; 4]) {
+        if index < self.colors.len() {
+            self.colors[index] = color;
+        }
+    }
+
+    /// Get the no-data fallback colour.
+    pub fn no_data_color(&self) -> [f32; 4] {
+        self.no_data_color
+    }
+
+    /// Recompute all region colours from a new data map and colour scale.
+    ///
+    /// This is the main method for dynamic recolouring: pass new data values
+    /// and the region records (for ID lookup) and the buffer is updated
+    /// in-place. No geometry is re-tessellated.
+    pub fn update_from_data(
+        &mut self,
+        data: &HashMap<String, f64>,
+        regions: &[RegionRecord],
+        color_scale: &ColorScale,
+    ) {
+        let (domain_min, domain_max) = if data.is_empty() {
+            (0.0_f64, 1.0_f64)
+        } else {
+            let mut min_val = f64::INFINITY;
+            let mut max_val = f64::NEG_INFINITY;
+            for &v in data.values() {
+                if v < min_val {
+                    min_val = v;
+                }
+                if v > max_val {
+                    max_val = v;
+                }
+            }
+            (min_val, max_val)
+        };
+
+        for region in regions {
+            let color = region
+                .id
+                .as_ref()
+                .and_then(|id| data.get(id))
+                .map(|&v| sample_color_scale(color_scale, v, domain_min, domain_max))
+                .unwrap_or(self.no_data_color);
+            if region.feature_index < self.colors.len() {
+                self.colors[region.feature_index] = color;
+            }
+        }
+    }
+
+    /// Linearly interpolate between the current buffer and a target buffer.
+    ///
+    /// `t` should be in `[0.0, 1.0]` where 0.0 returns the current colours
+    /// and 1.0 returns the target colours. This enables smooth animated
+    /// colour transitions between datasets.
+    pub fn interpolate(&self, target: &RegionColorBuffer, t: f32) -> RegionColorBuffer {
+        let t = t.clamp(0.0, 1.0);
+        let count = self.colors.len().min(target.colors.len());
+        let mut result = RegionColorBuffer::new(count, self.no_data_color);
+        for i in 0..count {
+            let [r0, g0, b0, a0] = self.colors[i];
+            let [r1, g1, b1, a1] = target.colors[i];
+            result.colors[i] = [
+                r0 + (r1 - r0) * t,
+                g0 + (g1 - g0) * t,
+                b0 + (b1 - b0) * t,
+                a0 + (a1 - a0) * t,
+            ];
+        }
+        result
+    }
+
+    /// Return the colour data as a byte slice suitable for
+    /// `queue.write_buffer()`.
+    pub fn as_bytes(&self) -> &[u8] {
+        bytemuck::cast_slice(&self.colors)
+    }
+
+    /// Return a reference to the raw colour array.
+    pub fn colors(&self) -> &[[f32; 4]] {
+        &self.colors
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Region record produced by the data join
 // ---------------------------------------------------------------------------
 
@@ -125,6 +295,87 @@ pub struct ChoroplethChart {
     pub stroke_color: [f32; 4],
     /// Stroke opacity.
     pub stroke_opacity: f32,
+    // -- GPU-side recolouring (opt-in) ------------------------------------
+    /// When GPU-side recolouring is enabled, fill vertices with a region
+    /// index instead of a baked colour. The fragment shader reads the actual
+    /// colour from the [`RegionColorBuffer`].
+    pub indexed_fill_vertices: Option<Vec<IndexedChoroplethVertex>>,
+    /// Per-region colour buffer for GPU-side recolouring.
+    ///
+    /// Present only when `.gpu_recolor(true)` was called on the builder.
+    pub region_color_buffer: Option<RegionColorBuffer>,
+}
+
+impl ChoroplethChart {
+    /// Update region colours from a new data mapping without
+    /// re-tessellating geometry.
+    ///
+    /// This only works when GPU-side recolouring is enabled (i.e. the chart
+    /// was built with `.gpu_recolor(true)`). Returns an error if recolouring
+    /// is not enabled.
+    ///
+    /// After calling this method, use
+    /// [`region_color_buffer`](Self::region_color_buffer) to obtain the
+    /// updated byte data for `queue.write_buffer()`.
+    pub fn update_colors<I, K>(&mut self, new_data: I) -> GupResult<()>
+    where
+        I: IntoIterator<Item = (K, f64)>,
+        K: Into<String>,
+    {
+        let buffer = self.region_color_buffer.as_mut().ok_or_else(|| {
+            GupError::validation_error(
+                "ChoroplethChart::update_colors requires GPU-side recolouring \
+                 (build with .gpu_recolor(true))",
+            )
+        })?;
+
+        let data: HashMap<String, f64> = new_data.into_iter().map(|(k, v)| (k.into(), v)).collect();
+        buffer.update_from_data(&data, &self.regions, &self.color_scale);
+
+        // Also update the domain bounds from the new data.
+        if !data.is_empty() {
+            let mut min_val = f64::INFINITY;
+            let mut max_val = f64::NEG_INFINITY;
+            for &v in data.values() {
+                if v < min_val {
+                    min_val = v;
+                }
+                if v > max_val {
+                    max_val = v;
+                }
+            }
+            self.domain_min = min_val;
+            self.domain_max = max_val;
+        }
+
+        // Update per-region value records.
+        for region in &mut self.regions {
+            region.value = region.id.as_ref().and_then(|id| data.get(id)).copied();
+            region.color = buffer
+                .color(region.feature_index)
+                .copied()
+                .unwrap_or(buffer.no_data_color());
+        }
+
+        Ok(())
+    }
+
+    /// Produce an interpolated [`RegionColorBuffer`] between the current
+    /// colours and a target colour set.
+    ///
+    /// This is useful for animating colour transitions between datasets.
+    /// `t` should be in `[0.0, 1.0]`.
+    ///
+    /// Returns `None` if GPU-side recolouring is not enabled.
+    pub fn interpolate_colors(
+        &self,
+        target: &RegionColorBuffer,
+        t: f32,
+    ) -> Option<RegionColorBuffer> {
+        self.region_color_buffer
+            .as_ref()
+            .map(|buf| buf.interpolate(target, t))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -150,6 +401,7 @@ pub struct ChoroplethChartBuilder {
     legend_position: LegendPosition,
     zoom_enabled: bool,
     simplification_tolerance: f32,
+    gpu_recolor: bool,
 }
 
 impl std::fmt::Debug for ChoroplethChartBuilder {
@@ -166,6 +418,7 @@ impl std::fmt::Debug for ChoroplethChartBuilder {
             .field("show_legend", &self.show_legend)
             .field("legend_position", &self.legend_position)
             .field("zoom_enabled", &self.zoom_enabled)
+            .field("gpu_recolor", &self.gpu_recolor)
             .finish()
     }
 }
@@ -192,6 +445,7 @@ impl ChoroplethChartBuilder {
             legend_position: LegendPosition::default(),
             zoom_enabled: true,
             simplification_tolerance: 0.0,
+            gpu_recolor: false,
         }
     }
 
@@ -326,6 +580,22 @@ impl ChoroplethChartBuilder {
         self
     }
 
+    /// Enable GPU-side recolouring (default: `false`).
+    ///
+    /// When enabled, the chart additionally produces
+    /// [`IndexedChoroplethVertex`] data (with per-vertex region indices) and
+    /// a [`RegionColorBuffer`]. The fragment shader can then read region
+    /// colours from a storage buffer, allowing dynamic recolouring via
+    /// [`ChoroplethChart::update_colors`] without re-tessellating geometry.
+    ///
+    /// The existing CPU-side per-vertex coloured geometry
+    /// ([`ChoroplethVertex`]) is **always** produced regardless of this
+    /// setting, so the caller can choose which rendering path to use.
+    pub fn gpu_recolor(mut self, enabled: bool) -> Self {
+        self.gpu_recolor = enabled;
+        self
+    }
+
     // -- Build -------------------------------------------------------------
 
     /// Resolve the builder into a renderable [`ChoroplethChart`].
@@ -403,6 +673,7 @@ impl ChoroplethChartBuilder {
         let mut fill_vertices: Vec<ChoroplethVertex> = Vec::new();
         let mut fill_indices: Vec<u32> = Vec::new();
         let mut stroke_vertices: Vec<ChoroplethVertex> = Vec::new();
+        let mut indexed_fill_vertices: Vec<IndexedChoroplethVertex> = Vec::new();
 
         for (region_idx, feature) in source.features.iter().enumerate() {
             let fill_color = regions[region_idx].color;
@@ -424,6 +695,13 @@ impl ChoroplethChartBuilder {
                         color: fill_color,
                     });
                     fill_indices.push(base + i as u32);
+
+                    if self.gpu_recolor {
+                        indexed_fill_vertices.push(IndexedChoroplethVertex {
+                            position: *v,
+                            region_index: region_idx as u32,
+                        });
+                    }
                 }
 
                 // Stroke generation (line list).
@@ -446,6 +724,14 @@ impl ChoroplethChartBuilder {
             }
         }
 
+        // Build the GPU recolouring data structures if enabled.
+        let (indexed_opt, color_buffer_opt) = if self.gpu_recolor {
+            let color_buffer = RegionColorBuffer::from_regions(&regions, self.no_data_color);
+            (Some(indexed_fill_vertices), Some(color_buffer))
+        } else {
+            (None, None)
+        };
+
         Ok(ChoroplethChart {
             fill_vertices,
             fill_indices,
@@ -461,6 +747,8 @@ impl ChoroplethChartBuilder {
             no_data_color: self.no_data_color,
             stroke_color: self.stroke_color,
             stroke_opacity: self.stroke_opacity,
+            indexed_fill_vertices: indexed_opt,
+            region_color_buffer: color_buffer_opt,
         })
     }
 }
