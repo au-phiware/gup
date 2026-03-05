@@ -755,6 +755,11 @@ integration, pipeline caching.
 - [GUP-288](GUP-288_Choropleth_Tooltip_Hover_Interaction.md) 📋 — Choropleth
   tooltip and hover highlighting via GPU hit-testing. Deps: GUP-275 ✅, GUP-012
   ✅, GUP-014 ✅.
+- [GUP-366](GUP-366_Choropleth_GPU_Render_Pipeline_Integration.md) 📋 —
+  Wire IndexedChoroplethVertex, RegionColorBuffer, and recolour shaders into a
+  live wgpu render pipeline. Deps: GUP-287 ✅.
+- [GUP-367](GUP-367_Choropleth_Module_Refactoring.md) 💡 — Split choropleth.rs
+  (~1 750 lines) into focused sub-modules for maintainability. Deps: GUP-287 ✅.
 - [GUP-295](GUP-295_Line_Chart_Point_Markers.md) 💡 — Optional circle point
   markers at each data vertex on line charts. Deps: GUP-246 ✅, GUP-251 ✅.
 - [GUP-296](GUP-296_Colorbar_Axis_Renderer.md) ✅ — Colorbar axis renderer: thin
