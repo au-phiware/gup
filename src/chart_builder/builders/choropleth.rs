@@ -56,6 +56,25 @@ pub enum LegendPosition {
 }
 
 // ---------------------------------------------------------------------------
+// GPU-side recolouring WGSL shaders
+// ---------------------------------------------------------------------------
+
+/// Vertex shader source for GPU-side choropleth recolouring.
+///
+/// This shader reads per-vertex `(lonlat, region_index)` and looks up
+/// the fill colour from a `storage` buffer of `vec4<f32>` region colours
+/// bound at `@group(0) @binding(1)`.
+pub const RECOLOR_VERTEX_SHADER: &str =
+    include_str!("../../mark/shaders/choropleth_recolor.vert.wgsl");
+
+/// Fragment shader source for GPU-side choropleth recolouring.
+///
+/// Identical in structure to the standard `geo_path` fragment shader —
+/// selects fill or stroke colour based on `edge_flag`.
+pub const RECOLOR_FRAGMENT_SHADER: &str =
+    include_str!("../../mark/shaders/choropleth_recolor.frag.wgsl");
+
+// ---------------------------------------------------------------------------
 // Choropleth vertex
 // ---------------------------------------------------------------------------
 
@@ -1702,5 +1721,26 @@ mod tests {
         assert!(result.is_some());
         let buf = result.unwrap();
         assert_eq!(buf.len(), 3);
+    }
+
+    #[test]
+    fn test_recolor_shaders_are_non_empty() {
+        assert!(!RECOLOR_VERTEX_SHADER.is_empty());
+        assert!(!RECOLOR_FRAGMENT_SHADER.is_empty());
+        assert!(RECOLOR_VERTEX_SHADER.contains("region_colors"));
+        assert!(RECOLOR_VERTEX_SHADER.contains("vs_main"));
+        assert!(RECOLOR_FRAGMENT_SHADER.contains("fs_main"));
+    }
+
+    #[test]
+    fn test_indexed_vertex_layout_is_pod() {
+        // Verify bytemuck compatibility.
+        let v = IndexedChoroplethVertex {
+            position: [1.0, 2.0],
+            region_index: 42,
+        };
+        let bytes: &[u8] = bytemuck::bytes_of(&v);
+        // 2 × f32 + 1 × u32 = 12 bytes.
+        assert_eq!(bytes.len(), 12);
     }
 }
