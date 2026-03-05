@@ -1001,4 +1001,130 @@ mod tests {
             AccessorValue::String("B".to_string())
         );
     }
+
+    // ── GUP-362: range_to_ndc tests ─────────────────────────────────────
+
+    #[test]
+    fn test_range_to_ndc_identity() {
+        // When input range matches output range, should be identity.
+        let v = range_to_ndc(0.5, 0.0, 1.0, 0.0, 1.0);
+        assert!((v - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_range_to_ndc_scaling() {
+        // Map pixel range [0, 800] to NDC [-1, 1].
+        let v = range_to_ndc(400.0, 0.0, 800.0, -1.0, 1.0);
+        assert!(v.abs() < 1e-6, "midpoint should map to 0, got {v}");
+
+        let left = range_to_ndc(0.0, 0.0, 800.0, -1.0, 1.0);
+        assert!((left - (-1.0)).abs() < 1e-6);
+
+        let right = range_to_ndc(800.0, 0.0, 800.0, -1.0, 1.0);
+        assert!((right - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_range_to_ndc_inverted_range() {
+        // Inverted input range (like y-axis: range_min=600, range_max=0).
+        let v = range_to_ndc(300.0, 600.0, 0.0, -1.0, 1.0);
+        assert!(v.abs() < 1e-6, "midpoint should map to 0, got {v}");
+    }
+
+    #[test]
+    fn test_range_to_ndc_zero_span() {
+        // When span is zero, return midpoint of output range.
+        let v = range_to_ndc(5.0, 5.0, 5.0, -1.0, 1.0);
+        assert!(v.abs() < 1e-6, "zero-span should give midpoint, got {v}");
+    }
+
+    // ── GUP-362: apply_accessors_to_selection with scale_value ──────────
+
+    #[tokio::test]
+    async fn test_apply_accessors_with_linear_scales() {
+        use crate::chart_builder::AxisScale;
+        use crate::shader_function::LinearScale;
+
+        let ctx = std::sync::Arc::new(crate::RenderContext::new().await.unwrap());
+        let data = vec![
+            TestData {
+                x: 0.0,
+                y: 0.0,
+                value: 0.0,
+                category: "".into(),
+            },
+            TestData {
+                x: 50.0,
+                y: 50.0,
+                value: 0.0,
+                category: "".into(),
+            },
+            TestData {
+                x: 100.0,
+                y: 100.0,
+                value: 0.0,
+                category: "".into(),
+            },
+        ];
+
+        let mut sel =
+            crate::selection::Selection::<TestData, crate::Circle>::new(data, ctx.clone()).unwrap();
+
+        // Scales that map domain [0,100] to pixel range [0,800] and
+        // [600,0] (inverted y).
+        let mut cfg = crate::chart_builder::ChartConfig::default();
+        cfg.x_scale = Some(AxisScale::Linear(LinearScale::new(0.0, 100.0, 0.0, 800.0)));
+        cfg.y_scale = Some(AxisScale::Linear(LinearScale::new(0.0, 100.0, 600.0, 0.0)));
+
+        let ndc = NdcBounds {
+            left: -1.0,
+            right: 1.0,
+            top: 1.0,
+            bottom: -1.0,
+        };
+
+        apply_accessors_to_selection(
+            &mut sel,
+            Some(AccessorFunction::new(|d: &TestData| {
+                AccessorValue::Float(d.x)
+            })),
+            Some(AccessorFunction::new(|d: &TestData| {
+                AccessorValue::Float(d.y)
+            })),
+            None,
+            None,
+            &cfg,
+            ndc,
+        )
+        .unwrap();
+
+        // The selection now has attr bindings. We can verify the
+        // pipeline builds successfully (bindings are evaluated lazily
+        // during prepare_render_bound).
+        sel.prepare_render_bound(ctx.device(), ctx.queue(), None, None)
+            .unwrap();
+    }
+
+    #[test]
+    fn test_auto_domain_padding() {
+        let data = vec![
+            TestData {
+                x: 10.0,
+                y: 0.0,
+                value: 0.0,
+                category: "".into(),
+            },
+            TestData {
+                x: 20.0,
+                y: 0.0,
+                value: 0.0,
+                category: "".into(),
+            },
+        ];
+        let acc = AccessorFunction::new(|d: &TestData| AccessorValue::Float(d.x));
+        let (lo, hi) = auto_domain(&data, &acc);
+        // Span is 10; 5% padding each side ⇒ (9.5, 20.5).
+        assert!((lo - 9.5).abs() < 1e-4, "lo = {lo}");
+        assert!((hi - 20.5).abs() < 1e-4, "hi = {hi}");
+    }
 }
