@@ -1128,3 +1128,10 @@ API reference generation, tutorials, and example gallery.
 
 - [GUP-374](GUP-374_Duplicate_Story_ID_Cleanup.md) 📋 — Renumber the duplicate
   GUP-315 (Graph Node Label Rendering) to a unique ID. No deps.
+
+## Follow-ups from GUP-351
+
+- [GUP-377](GUP-377_Fix_wgsl_function_Crate_Path_Resolution.md) 📋 — Fix
+  `#[wgsl_function]` proc macro to use `::gup::` instead of `crate::` in
+  generated code, enabling use from doctests and external crates. Deps: GUP-351
+  ✅.
