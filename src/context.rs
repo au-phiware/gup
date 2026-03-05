@@ -552,6 +552,8 @@ pub struct SurfaceConfigBuilder {
     pub view_formats: Vec<TextureFormat>,
     /// Frame latency hint (1-3 frames, None = default 2)
     pub desired_maximum_frame_latency: Option<u32>,
+    /// Additional texture usages to merge with `RENDER_ATTACHMENT` (None = default)
+    pub usage: Option<TextureUsages>,
 }
 
 impl Default for SurfaceConfigBuilder {
@@ -564,6 +566,7 @@ impl Default for SurfaceConfigBuilder {
             format: None,
             view_formats: Vec::new(),
             desired_maximum_frame_latency: None,
+            usage: None,
         }
     }
 }
@@ -626,6 +629,21 @@ impl SurfaceConfigBuilder {
     /// - 3: Maximum throughput (heavy rendering)
     pub fn with_frame_latency(mut self, frames: u32) -> Self {
         self.desired_maximum_frame_latency = Some(frames.clamp(1, 3));
+        self
+    }
+
+    /// Add extra texture usages to merge with [`TextureUsages::RENDER_ATTACHMENT`].
+    ///
+    /// For example, [`TextureUsages::COPY_SRC`] is needed for screenshots or
+    /// any framebuffer readback.
+    ///
+    /// ```
+    /// # use gup::context::SurfaceConfigBuilder;
+    /// let config = SurfaceConfigBuilder::new()
+    ///     .with_usage(wgpu::TextureUsages::COPY_SRC);
+    /// ```
+    pub fn with_usage(mut self, usage: TextureUsages) -> Self {
+        self.usage = Some(usage);
         self
     }
 }
@@ -1238,6 +1256,30 @@ impl GupContext {
         Ok(context)
     }
 
+    /// Initialize with a window/surface and custom configuration.
+    ///
+    /// Use this when you need to set extra texture usages (e.g.
+    /// [`TextureUsages::COPY_SRC`] for screenshots) or other surface
+    /// configuration overrides.
+    pub async fn with_surface_config<W>(
+        window: Arc<W>,
+        config: SurfaceConfigBuilder,
+    ) -> GupResult<Arc<Self>>
+    where
+        W: raw_window_handle::HasWindowHandle
+            + raw_window_handle::HasDisplayHandle
+            + Send
+            + Sync
+            + 'static,
+    {
+        let mut context = Self::new().await?;
+        let id = SurfaceId::new();
+        Arc::get_mut(&mut context)
+            .ok_or_else(|| GupError::resource_error("Context already shared".to_string()))?
+            .add_surface_with_config(id, window, config)?;
+        Ok(context)
+    }
+
     /// Headless initialization for server-side rendering.
     pub async fn headless() -> GupResult<Arc<Self>> {
         Self::new().await
@@ -1572,7 +1614,8 @@ impl GupContext {
         }
 
         let surface_config = SurfaceConfiguration {
-            usage: TextureUsages::RENDER_ATTACHMENT,
+            usage: TextureUsages::RENDER_ATTACHMENT
+                | config.usage.unwrap_or(TextureUsages::empty()),
             format,
             width: config.width,
             height: config.height,
@@ -2629,6 +2672,22 @@ pub struct RenderFrame<'a> {
     surface_id: Option<SurfaceId>,
 }
 
+/// Handle for a captured frame's staging buffer.
+///
+/// Returned by [`RenderFrame::capture_texture_copy`].  After calling
+/// [`RenderFrame::finish`] (which submits the GPU commands, including the
+/// texture-to-buffer copy), map this buffer to read back pixel data.
+pub struct CapturedFrame {
+    /// Staging buffer containing the copied pixel data.
+    pub buffer: Buffer,
+    /// Image width in pixels.
+    pub width: u32,
+    /// Image height in pixels.
+    pub height: u32,
+    /// Bytes per row (padded to wgpu alignment requirements).
+    pub padded_bytes_per_row: u32,
+}
+
 impl<'a> RenderFrame<'a> {
     /// Create a render pass targeting the render target.
     pub fn render_pass(&mut self, clear_color: Option<Color>) -> RenderPass<'_> {
@@ -2730,6 +2789,66 @@ impl<'a> RenderFrame<'a> {
     /// Check if this frame is rendering to a surface.
     pub fn is_surface_rendering(&self) -> bool {
         self.surface_texture.is_some()
+    }
+
+    /// Encode a texture-to-buffer copy for the current surface frame.
+    ///
+    /// Call this **after** all render passes are complete but **before**
+    /// [`finish`](Self::finish).  The copy command is appended to the
+    /// frame's command encoder and will be submitted together with the
+    /// rendering commands.
+    ///
+    /// Returns a [`CapturedFrame`] whose staging buffer can be mapped
+    /// after `finish()` submits the work to the GPU.
+    ///
+    /// The surface texture must have been created with
+    /// [`TextureUsages::COPY_SRC`]; otherwise this method returns an error.
+    pub fn capture_texture_copy(&mut self, width: u32, height: u32) -> GupResult<CapturedFrame> {
+        let texture = self
+            .surface_texture
+            .as_ref()
+            .ok_or_else(|| GupError::RenderError {
+                message: "Cannot capture: frame has no surface texture".to_string(),
+            })?;
+
+        let padded_bytes_per_row = crate::export::png::padded_bytes_per_row(width);
+        let buffer_size = u64::from(padded_bytes_per_row) * u64::from(height);
+
+        let staging_buffer = self.context.device.create_buffer(&BufferDescriptor {
+            label: Some("screenshot_staging_buffer"),
+            size: buffer_size,
+            usage: BufferUsages::COPY_DST | BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        self.command_encoder.copy_texture_to_buffer(
+            TexelCopyTextureInfo {
+                texture: &texture.texture,
+                mip_level: 0,
+                origin: Origin3d::ZERO,
+                aspect: TextureAspect::All,
+            },
+            TexelCopyBufferInfo {
+                buffer: &staging_buffer,
+                layout: TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded_bytes_per_row),
+                    rows_per_image: Some(height),
+                },
+            },
+            Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+
+        Ok(CapturedFrame {
+            buffer: staging_buffer,
+            width,
+            height,
+            padded_bytes_per_row,
+        })
     }
 
     /// Finish the render frame and present if rendering to surface.
