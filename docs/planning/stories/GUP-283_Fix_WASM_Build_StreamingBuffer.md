@@ -96,3 +96,65 @@ The root cause was `Selection.stream_source` being typed as
 - `wasm-pack build --target web` succeeds (✨ Done)
 - `wasm-pack test` blocked by pre-existing `tokio::runtime::Runtime::new()` in
   integration tests (not a `StreamingBuffer` issue)
+
+## Retrospective
+
+**Completed**: 2025-07-18
+
+### Key Technical Learnings
+
+#### wgpu WASM Buffer Internals
+
+- **Challenge**: `wgpu::Buffer` on WASM wraps `WebBuffer` which contains
+  `RefCell<WebBufferMapState>` — this makes it `!Sync`. Any type containing
+  `wgpu::Buffer` cannot satisfy `Send + Sync` bounds on WASM.
+- **Solution**: Use `#[cfg(target_arch = "wasm32")]` to conditionally relax
+  `Send + Sync` bounds wherever GPU resource types are type-erased via
+  `Box<dyn Any + Send + Sync>`.
+- **Pattern**: The codebase already had this pattern for
+  `transition_end_callback` in `Selection`. Apply the same `#[cfg]` split to
+  any new type-erased field that may contain wgpu resources.
+
+#### WASM Documentation Enforcement
+
+- **Challenge**: The `#[deny(missing_docs)]` lint only surfaces for
+  `#[cfg(target_arch = "wasm32")]` items when actually targeting WASM, so
+  missing docs on WASM-only types go unnoticed during normal development.
+- **Solution**: Fixed 5 missing doc items across `lib.rs`, `atspi.rs`,
+  `platform.rs`, and `web_overlay.rs`.
+- **Pattern**: Periodically run `wasm-pack build` in CI or locally to catch
+  WASM-only lint issues early.
+
+### Architectural Decisions
+
+#### cfg-Split vs MaybeSend/MaybeSync for Type Erasure
+
+- **Decision**: Used `#[cfg]` split on struct fields and method bounds rather
+  than converting to `MaybeSend`/`MaybeSync` traits.
+- **Reasoning**: `Box<dyn Any + MaybeSend + MaybeSync>` is not valid Rust —
+  `MaybeSend`/`MaybeSync` are not supertraits of standard library traits, so
+  they cannot be used as additional trait bounds on `dyn Any`. The `#[cfg]`
+  approach is the only viable pattern for type-erased `Any` boxing.
+- **Trade-off**: Some code duplication between native and WASM variants, but
+  the duplication is minimal (just the method signatures differ, not the
+  bodies).
+- **Future**: If more type-erased fields with `Send + Sync` bounds are added,
+  consider a macro to reduce duplication.
+
+### Development Workflow Insights
+
+- The fix was straightforward once the root cause was identified via the
+  compiler error message. The key insight was recognising the existing
+  `transition_end_callback` pattern as the template.
+- `wasm-pack build` takes ~60s on a warm cache, which is fast enough for
+  iterative development.
+- Pre-existing `gup-macros` clippy warnings are noisy but do not affect the
+  main crate.
+
+### Follow-up Stories
+
+1. **GUP-285: Fix WASM Integration Test Compilation** — The `wasm-pack test`
+   command fails because `tests/html_export_integration.rs` uses
+   `tokio::runtime::Runtime::new()` which is not available on
+   `wasm32-unknown-unknown`. These tests need `#[cfg(not(target_arch = "wasm32"))]`
+   guards or a WASM-compatible runtime (e.g. `wasm-bindgen-test`).

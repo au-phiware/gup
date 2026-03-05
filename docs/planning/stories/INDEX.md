@@ -1136,6 +1136,12 @@ API reference generation, tutorials, and example gallery.
   streaming to the gup-tauri example for real-time chart updates. Deps: GUP-264
   ✅.
 
+## Follow-ups from GUP-283
+
+- [GUP-285B](GUP-285_Fix_WASM_Integration_Test_Compilation.md) 📋 — Fix
+  `wasm-pack test` compilation failure caused by `tokio::runtime::Runtime::new()`
+  in integration tests. Deps: GUP-283 ✅.
+
 ## Follow-ups from GUP-265
 
 - [GUP-317](GUP-317_Full_Content_Screenshot.md) ✅ — Add `COPY_SRC` to surface
