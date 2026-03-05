@@ -251,3 +251,108 @@ async fn test_offscreen_readback_cleared_texture() {
     );
     assert_eq!(first_pixel[3], 255, "Expected full alpha");
 }
+
+// ---------------------------------------------------------------------------
+// Data mark rendering tests (GUP-268A)
+// ---------------------------------------------------------------------------
+
+/// Test that data marks appear in exported PNG when the Selection is prepared.
+#[tokio::test]
+async fn test_data_marks_appear_in_export() {
+    let context = Arc::new(gup::RenderContext::new().await.unwrap());
+
+    let data = sample_data();
+    let mut selection =
+        gup::selection::Selection::<TestPoint, gup::Circle>::new(data.clone(), context.clone())
+            .unwrap();
+
+    // Prepare the selection with circle instances at known positions.
+    // The chart uses x_scale [0,6] → [-1,1] and y_scale [0,60] → [-1,1].
+    selection
+        .prepare_render(
+            context.device(),
+            context.queue(),
+            |d: &TestPoint| gup::mark::circle::CircleInstance {
+                center: [
+                    d.x / 6.0 * 2.0 - 1.0,  // map x to clip space
+                    d.y / 60.0 * 2.0 - 1.0,  // map y to clip space
+                ],
+                radius: 0.05,
+                _pad0: 0.0,
+                fill_color: [1.0, 0.0, 0.0, 1.0], // Red circles
+                stroke_width: 0.0,
+                _pad1: [0.0; 3],
+                stroke_color: [0.0, 0.0, 0.0, 0.0],
+            },
+            None,
+            None,
+        )
+        .unwrap();
+
+    let config = ChartConfig {
+        width: 200.0,
+        height: 200.0,
+        margins: Margins {
+            top: 0.0,
+            right: 0.0,
+            bottom: 0.0,
+            left: 0.0,
+        },
+        background_color: Some([1.0, 1.0, 1.0, 1.0]),
+        show_axes: false,
+        show_grid: false,
+        ..ChartConfig::default()
+    };
+
+    let mut chart = ComposedChart::new(selection, config);
+
+    let rgba = chart.render_to_rgba(200, 200).unwrap();
+    assert_eq!(rgba.len(), 200 * 200 * 4);
+
+    // Count non-white pixels. With 5 red circles drawn on a white
+    // background, there should be many non-white pixels.
+    let non_white = rgba
+        .chunks_exact(4)
+        .filter(|px| px[0] != 255 || px[1] != 255 || px[2] != 255)
+        .count();
+
+    assert!(
+        non_white > 50,
+        "Expected data marks to produce non-white pixels, but only found {non_white}"
+    );
+}
+
+/// Test that export without prepare_render still succeeds (no marks drawn).
+#[tokio::test]
+async fn test_export_without_prepare_renders_no_marks() {
+    let context = Arc::new(gup::RenderContext::new().await.unwrap());
+
+    let data = sample_data();
+    let selection =
+        gup::selection::Selection::<TestPoint, gup::Circle>::new(data, context.clone()).unwrap();
+
+    let config = ChartConfig {
+        width: 100.0,
+        height: 100.0,
+        margins: Margins {
+            top: 0.0,
+            right: 0.0,
+            bottom: 0.0,
+            left: 0.0,
+        },
+        background_color: Some([1.0, 1.0, 1.0, 1.0]),
+        show_axes: false,
+        show_grid: false,
+        ..ChartConfig::default()
+    };
+
+    let mut chart = ComposedChart::new(selection, config);
+
+    // Should succeed even without prepare_render — just no marks rendered.
+    let rgba = chart.render_to_rgba(100, 100).unwrap();
+    assert_eq!(rgba.len(), 100 * 100 * 4);
+
+    // All pixels should be white (background clear colour).
+    let all_white = rgba.chunks_exact(4).all(|px| px[0] == 255 && px[1] == 255 && px[2] == 255);
+    assert!(all_white, "Expected all-white output when selection is not prepared");
+}
