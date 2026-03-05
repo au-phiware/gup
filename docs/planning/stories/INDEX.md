@@ -942,7 +942,7 @@ layouts, and 3D visualization.
 - [GUP-312](GUP-312_Full_GPU_Quadtree_Construction.md) 📋 — Full GPU quadtree
   construction using Morton codes and parallel sorting, eliminating
   per-iteration CPU↔GPU readback. Deps: GUP-310 ✅.
-- [GUP-313](GUP-313_Adaptive_Barnes_Hut_Theta_Tuning.md) 🚧 — Adaptive
+- [GUP-313](GUP-313_Adaptive_Barnes_Hut_Theta_Tuning.md) ✅ — Adaptive
   per-region theta tuning based on local graph density for improved layout
   quality in clustered graphs. Deps: GUP-310 ✅.
 - [GUP-314](GUP-314_Shared_Device_Layout_Engine.md) 📋 — Allow LayoutEngine to
