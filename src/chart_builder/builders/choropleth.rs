@@ -56,6 +56,27 @@ pub enum LegendPosition {
 }
 
 // ---------------------------------------------------------------------------
+// Hover highlight style
+// ---------------------------------------------------------------------------
+
+/// Visual highlight style applied to the hovered choropleth region.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum HoverHighlight {
+    /// Brighten the fill colour by a factor (e.g. `0.3` = +30% brightness).
+    Brighten(f32),
+    /// Reduce opacity of *non-hovered* regions by a factor (e.g. `0.4`).
+    Dim(f32),
+    /// No visual highlighting.
+    None,
+}
+
+impl Default for HoverHighlight {
+    fn default() -> Self {
+        Self::Brighten(0.3)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // GPU-side recolouring WGSL shaders
 // ---------------------------------------------------------------------------
 
@@ -284,7 +305,6 @@ pub struct RegionRecord {
 /// Produced by [`ChoroplethChartBuilder::build`]. The chart holds
 /// pre-tessellated, per-vertex coloured geometry for the fill and stroke
 /// layers.
-#[derive(Debug, Clone)]
 pub struct ChoroplethChart {
     /// Tessellated fill triangles with per-vertex colours.
     pub fill_vertices: Vec<ChoroplethVertex>,
@@ -323,6 +343,44 @@ pub struct ChoroplethChart {
     ///
     /// Present only when `.gpu_recolor(true)` was called on the builder.
     pub region_color_buffer: Option<RegionColorBuffer>,
+
+    // -- Hover / tooltip interaction --------------------------------------
+    /// Whether the tooltip is enabled.
+    pub tooltip_enabled: bool,
+    /// How the hovered region is visually highlighted.
+    pub highlight_style: HoverHighlight,
+    /// Projected polygon exterior rings per region for CPU-side hit-testing.
+    ///
+    /// `region_polygons[region_idx]` is a list of exterior rings (one per
+    /// polygon in that feature). Each ring is a list of `[x, y]` positions
+    /// in the same coordinate space as the fill vertices.
+    pub region_polygons: Vec<Vec<Vec<[f32; 2]>>>,
+
+    /// Custom tooltip formatter closure.
+    ///
+    /// When `Some`, called with a [`RegionRecord`] reference to produce the
+    /// tooltip text. When `None`, a default format is used
+    /// (`"<name>: <value>"`).
+    #[cfg(not(target_arch = "wasm32"))]
+    tooltip_formatter: Option<Box<dyn Fn(&RegionRecord) -> String + Send + Sync>>,
+    /// Custom tooltip formatter closure.
+    #[cfg(target_arch = "wasm32")]
+    tooltip_formatter: Option<Box<dyn Fn(&RegionRecord) -> String>>,
+}
+
+impl std::fmt::Debug for ChoroplethChart {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ChoroplethChart")
+            .field("fill_vertices", &self.fill_vertices.len())
+            .field("fill_indices", &self.fill_indices.len())
+            .field("stroke_vertices", &self.stroke_vertices.len())
+            .field("regions", &self.regions.len())
+            .field("tooltip_enabled", &self.tooltip_enabled)
+            .field("highlight_style", &self.highlight_style)
+            .field("has_tooltip_formatter", &self.tooltip_formatter.is_some())
+            .field("region_polygons", &self.region_polygons.len())
+            .finish()
+    }
 }
 
 impl ChoroplethChart {
@@ -395,6 +453,88 @@ impl ChoroplethChart {
             .as_ref()
             .map(|buf| buf.interpolate(target, t))
     }
+
+    // -- Hover / tooltip interaction --------------------------------------
+
+    /// Find which region (if any) contains the given point.
+    ///
+    /// Uses CPU-side ray-casting point-in-polygon on the projected polygon
+    /// rings stored during build. Returns the index into [`regions`](Self::regions).
+    pub fn region_at_point(&self, x: f32, y: f32) -> Option<usize> {
+        for (region_idx, rings) in self.region_polygons.iter().enumerate() {
+            for ring in rings {
+                if point_in_ring(x, y, ring) {
+                    return Some(region_idx);
+                }
+            }
+        }
+        None
+    }
+
+    /// Get the formatted tooltip content for a region.
+    ///
+    /// Returns `None` if the tooltip is disabled or the region index is out
+    /// of bounds. When a custom formatter was set via
+    /// [`ChoroplethChartBuilder::tooltip_format`], it is used; otherwise the
+    /// default format `"<name>: <value>"` is produced.
+    pub fn tooltip_content(&self, region_index: usize) -> Option<String> {
+        if !self.tooltip_enabled {
+            return None;
+        }
+        let region = self.regions.get(region_index)?;
+
+        if let Some(fmt) = &self.tooltip_formatter {
+            Some(fmt(region))
+        } else {
+            // Default format: "RegionID: value" or just "RegionID" if no data.
+            let name = region.id.as_deref().unwrap_or("Unknown");
+            match region.value {
+                Some(v) => Some(format!("{name}: {v}")),
+                None => Some(format!("{name}: no data")),
+            }
+        }
+    }
+
+    /// Compute the highlighted colour for a region given the current hover
+    /// state.
+    ///
+    /// `is_hovered` indicates whether this region is the one under the
+    /// pointer. The transformation depends on [`highlight_style`](Self::highlight_style):
+    ///
+    /// - [`HoverHighlight::Brighten`] — adds a brightness offset to the
+    ///   hovered region.
+    /// - [`HoverHighlight::Dim`] — reduces alpha of non-hovered regions.
+    /// - [`HoverHighlight::None`] — returns the base colour unchanged.
+    pub fn highlighted_color(&self, region_index: usize, is_hovered: bool) -> [f32; 4] {
+        let base = self
+            .regions
+            .get(region_index)
+            .map(|r| r.color)
+            .unwrap_or(self.no_data_color);
+
+        match self.highlight_style {
+            HoverHighlight::Brighten(amount) => {
+                if is_hovered {
+                    [
+                        (base[0] + amount).min(1.0),
+                        (base[1] + amount).min(1.0),
+                        (base[2] + amount).min(1.0),
+                        base[3],
+                    ]
+                } else {
+                    base
+                }
+            }
+            HoverHighlight::Dim(factor) => {
+                if is_hovered {
+                    base
+                } else {
+                    [base[0], base[1], base[2], base[3] * factor]
+                }
+            }
+            HoverHighlight::None => base,
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -421,6 +561,13 @@ pub struct ChoroplethChartBuilder {
     zoom_enabled: bool,
     simplification_tolerance: f32,
     gpu_recolor: bool,
+    // -- Hover / tooltip interaction --------------------------------------
+    tooltip_enabled: bool,
+    #[cfg(not(target_arch = "wasm32"))]
+    tooltip_formatter: Option<Box<dyn Fn(&RegionRecord) -> String + Send + Sync>>,
+    #[cfg(target_arch = "wasm32")]
+    tooltip_formatter: Option<Box<dyn Fn(&RegionRecord) -> String>>,
+    highlight_style: HoverHighlight,
 }
 
 impl std::fmt::Debug for ChoroplethChartBuilder {
@@ -438,6 +585,9 @@ impl std::fmt::Debug for ChoroplethChartBuilder {
             .field("legend_position", &self.legend_position)
             .field("zoom_enabled", &self.zoom_enabled)
             .field("gpu_recolor", &self.gpu_recolor)
+            .field("tooltip_enabled", &self.tooltip_enabled)
+            .field("has_tooltip_formatter", &self.tooltip_formatter.is_some())
+            .field("highlight_style", &self.highlight_style)
             .finish()
     }
 }
@@ -465,6 +615,9 @@ impl ChoroplethChartBuilder {
             zoom_enabled: true,
             simplification_tolerance: 0.0,
             gpu_recolor: false,
+            tooltip_enabled: false,
+            tooltip_formatter: None,
+            highlight_style: HoverHighlight::default(),
         }
     }
 
@@ -615,6 +768,63 @@ impl ChoroplethChartBuilder {
         self
     }
 
+    // -- Hover / tooltip interaction --------------------------------------
+
+    /// Enable or disable the tooltip (default: `false`).
+    ///
+    /// When enabled, [`ChoroplethChart::tooltip_content`] will return
+    /// formatted text for a given region.
+    pub fn tooltip(mut self, enabled: bool) -> Self {
+        self.tooltip_enabled = enabled;
+        self
+    }
+
+    /// Set a custom tooltip format closure.
+    ///
+    /// The closure receives a [`RegionRecord`] reference and should return
+    /// the full tooltip string. Implicitly enables the tooltip.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// builder.tooltip_format(|region| {
+    ///     let name = region.id.as_deref().unwrap_or("??");
+    ///     let pop = region.value.map(|v| format!("{:.0}", v)).unwrap_or_default();
+    ///     format!("{name}\nPopulation: {pop}")
+    /// })
+    /// ```
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn tooltip_format<F>(mut self, formatter: F) -> Self
+    where
+        F: Fn(&RegionRecord) -> String + Send + Sync + 'static,
+    {
+        self.tooltip_formatter = Some(Box::new(formatter));
+        self.tooltip_enabled = true;
+        self
+    }
+
+    /// Set a custom tooltip format closure.
+    ///
+    /// See the non-wasm documentation for details.
+    #[cfg(target_arch = "wasm32")]
+    pub fn tooltip_format<F>(mut self, formatter: F) -> Self
+    where
+        F: Fn(&RegionRecord) -> String + 'static,
+    {
+        self.tooltip_formatter = Some(Box::new(formatter));
+        self.tooltip_enabled = true;
+        self
+    }
+
+    /// Set the hover highlight style (default: [`HoverHighlight::Brighten(0.3)`]).
+    ///
+    /// Controls how the hovered region is visually distinguished. Use
+    /// [`HoverHighlight::None`] to disable highlighting.
+    pub fn highlight_style(mut self, style: HoverHighlight) -> Self {
+        self.highlight_style = style;
+        self
+    }
+
     // -- Build -------------------------------------------------------------
 
     /// Resolve the builder into a renderable [`ChoroplethChart`].
@@ -693,10 +903,14 @@ impl ChoroplethChartBuilder {
         let mut fill_indices: Vec<u32> = Vec::new();
         let mut stroke_vertices: Vec<ChoroplethVertex> = Vec::new();
         let mut indexed_fill_vertices: Vec<IndexedChoroplethVertex> = Vec::new();
+        let mut region_polygons: Vec<Vec<Vec<[f32; 2]>>> =
+            Vec::with_capacity(source.features.len());
 
         for (region_idx, feature) in source.features.iter().enumerate() {
             let fill_color = regions[region_idx].color;
             let stroke_color = self.stroke_color;
+            let mut rings_for_region: Vec<Vec<[f32; 2]>> =
+                Vec::with_capacity(feature.polygons.len());
 
             for polygon in &feature.polygons {
                 let exterior = if tolerance > 0.0 {
@@ -704,6 +918,13 @@ impl ChoroplethChartBuilder {
                 } else {
                     polygon.exterior.clone()
                 };
+
+                // Store projected exterior ring for hit-testing.
+                let ring_f32: Vec<[f32; 2]> = exterior
+                    .iter()
+                    .map(|p| [p[0] as f32, p[1] as f32])
+                    .collect();
+                rings_for_region.push(ring_f32);
 
                 // Fill tessellation (ear-clipping).
                 let tri_verts = earclip_tessellate(&exterior);
@@ -741,6 +962,8 @@ impl ChoroplethChartBuilder {
                     });
                 }
             }
+
+            region_polygons.push(rings_for_region);
         }
 
         // Build the GPU recolouring data structures if enabled.
@@ -768,6 +991,10 @@ impl ChoroplethChartBuilder {
             stroke_opacity: self.stroke_opacity,
             indexed_fill_vertices: indexed_opt,
             region_color_buffer: color_buffer_opt,
+            tooltip_enabled: self.tooltip_enabled,
+            highlight_style: self.highlight_style,
+            region_polygons,
+            tooltip_formatter: self.tooltip_formatter,
         })
     }
 }
@@ -844,6 +1071,31 @@ pub fn sample_color_scale(
 // ---------------------------------------------------------------------------
 // Geometry helpers (reused from geo_path module)
 // ---------------------------------------------------------------------------
+
+/// Ray-casting point-in-polygon test for a closed ring of `[f32; 2]` points.
+///
+/// Returns `true` if the point `(px, py)` lies inside the polygon defined
+/// by `ring`. The algorithm counts the number of times a ray from the point
+/// to +∞ along the x-axis crosses an edge of the polygon (odd = inside).
+fn point_in_ring(px: f32, py: f32, ring: &[[f32; 2]]) -> bool {
+    if ring.len() < 3 {
+        return false;
+    }
+    let mut inside = false;
+    let n = ring.len();
+    let mut j = n - 1;
+    for i in 0..n {
+        let (xi, yi) = (ring[i][0], ring[i][1]);
+        let (xj, yj) = (ring[j][0], ring[j][1]);
+
+        // Does the edge from j→i straddle the horizontal ray from (px, py)?
+        if ((yi > py) != (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi) {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
+}
 
 /// Ramer–Douglas–Peucker ring simplification.
 fn simplify_ring(ring: &[[f64; 2]], tolerance: f64) -> Vec<[f64; 2]> {
