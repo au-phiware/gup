@@ -2311,9 +2311,18 @@ mod tests {
         let gpu_cells = gpu_result.cells();
 
         // With max_depth=1 we should get root + 2 children = 3 cells.
-        assert_eq!(gpu_cells.len(), 3, "Expected 3 cells, got {}", gpu_cells.len());
+        assert_eq!(
+            gpu_cells.len(),
+            3,
+            "Expected 3 cells, got {}",
+            gpu_cells.len()
+        );
         for c in gpu_cells {
-            assert!(c.depth <= 1, "Cell at depth {} exceeds max_depth=1", c.depth);
+            assert!(
+                c.depth <= 1,
+                "Cell at depth {} exceeds max_depth=1",
+                c.depth
+            );
         }
 
         let cpu_cells = cpu_treemap_layout(&nodes, &values, vp, &options);
