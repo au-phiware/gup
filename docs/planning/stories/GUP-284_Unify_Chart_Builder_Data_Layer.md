@@ -97,3 +97,102 @@ that `ComposedChart::render()`, `render_to_png()`, and
 - 3 new tests added (render-ready selection, draw count, visual PNG regression)
 - All 3056 library tests pass
 - All examples compile and run correctly
+
+## Retrospective
+
+**Completed**: 2025-07-19
+
+### Key Technical Learnings
+
+#### Accessor Function Ownership and Arc Wrapping
+
+- **Challenge**: `AccessorFunction<T>` contains a `Box<dyn Fn>` which is not
+  `Clone`. The attr binding closures passed to `Selection::attr()` needed to
+  capture the accessor functions, but they were borrowed references.
+- **Solution**: Wrap `AccessorFunction<T>` in `Arc` before capturing in closures.
+  Since the inner `Box<dyn Fn>` already has `Send + Sync` bounds on non-WASM, the
+  `Arc` wrapper is `Send + Sync` and satisfies the `MaybeSend + MaybeSync` bounds
+  required by `Selection::attr()`.
+- **Pattern**: When closures need to share non-Clone function objects across
+  attribute bindings, `Arc`-wrapping is the idiomatic Rust pattern.
+
+#### Build-Time vs Render-Time Pipeline Preparation
+
+- **Challenge**: Adding `M: MarkInstanceBuilder` bounds to `render_to_png()`,
+  `render_to_texture_view()`, and all their transitive callers (HTML export, PDF
+  export, etc.) would have been extremely invasive.
+- **Solution**: Call `prepare_render_bound()` at build time in
+  `ScatterPlotBuilder::build_with_data()`. The GPU context is available at build
+  time, so the Selection is render-ready before any rendering method is called.
+  This avoids adding trait bounds to any existing public API.
+- **Pattern**: Prepare GPU resources as early as possible (at build time) rather
+  than lazily at render time, when doing so avoids propagating restrictive trait
+  bounds through the API surface.
+
+#### NDC Coordinate Mapping with Chart Margins
+
+- **Challenge**: Data positions need to be mapped from data-domain values to NDC
+  coordinates within the chart area, which is affected by axis margins. Axes are
+  added after the Selection is created but before accessors are applied.
+- **Solution**: Restructure `build_with_data()` to add axes first
+  (`.with_default_axes()`), then compute the exact chart area including axis
+  margins, then apply accessor bindings with the correct NDC bounds.
+- **Pattern**: Order operations so that layout-affecting configuration (axes,
+  margins) is complete before computing spatial mappings for data.
+
+### Architectural Decisions
+
+#### Prepare at Build-Time Rather Than Render-Time
+
+- **Decision**: Call `prepare_render_bound()` in `build_with_data()` instead of
+  in `render()` or `render_to_png()`.
+- **Reasoning**: Avoids adding `M: MarkInstanceBuilder` trait bounds to the
+  entire rendering API surface, which would have been a breaking change.
+- **Trade-off**: The Selection cannot be cheaply re-configured after building
+  (attr bindings are baked into GPU instances). Re-binding requires a new
+  `prepare_render_bound()` call.
+- **Future**: A `refresh_data()` method on `ComposedChart` could re-evaluate
+  bindings and re-upload instances for dynamic data scenarios.
+
+#### Auto-Domain with 5% Padding
+
+- **Decision**: When no explicit `x_scale`/`y_scale` is set, auto-compute the
+  data domain from all data items and add 5% padding on each side.
+- **Reasoning**: Prevents data marks from sitting exactly on the axis lines,
+  which looks visually wrong. The 5% padding mirrors standard charting library
+  behaviour.
+- **Trade-off**: Very sparse datasets (1-2 points) get relatively large padding.
+  Single-value datasets get a ±1 range.
+- **Future**: Could add a `domain_padding(f32)` method to the builder for user
+  control.
+
+### Development Workflow Insights
+
+- The core change was surprisingly small (~260 lines changed across 6 files) for
+  the impact it has. The main complexity was understanding the existing
+  architecture: how `AccessorFunction` works, how `Selection::attr()` stores
+  bindings, how `prepare_render_bound()` evaluates them, and how the render pass
+  draws instances.
+- The existing `render_to_rgba()` and `render_to_texture_view()` methods already
+  had the code to draw data marks (`self.visualization.render(&mut render_pass)`
+  guarded by `is_render_ready()`). The only missing piece was calling
+  `prepare_render_bound()` and providing real accessor bindings instead of
+  placeholders.
+- Visual verification via the `export_png` example and the PNG regression test
+  was essential — the test initially failed with exactly 10 non-white pixels
+  (at the threshold boundary) because the default circle radius was very small
+  at the test resolution. Increasing the resolution and using `point_size()`
+  fixed this.
+
+### Follow-up Stories
+
+1. **GUP-286: Line Chart Builder Data-Mark Rendering** — The line chart builder
+   (`LineChartBuilder`) needs similar treatment to connect line marks to the
+   render pipeline. The `Line` mark uses a different vertex layout (line strips
+   vs instanced quads) and may need a different mapping strategy for connected
+   line segments.
+
+2. **GUP-287: Dynamic Data Refresh for ComposedChart** — After build-time
+   pipeline preparation, there is no easy way to update data and re-render. A
+   `refresh_data()` method should re-evaluate attr bindings and re-upload GPU
+   instances without rebuilding the entire chart.

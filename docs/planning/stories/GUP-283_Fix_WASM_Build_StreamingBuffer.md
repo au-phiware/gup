@@ -112,8 +112,8 @@ The root cause was `Selection.stream_source` being typed as
   `Send + Sync` bounds wherever GPU resource types are type-erased via
   `Box<dyn Any + Send + Sync>`.
 - **Pattern**: The codebase already had this pattern for
-  `transition_end_callback` in `Selection`. Apply the same `#[cfg]` split to
-  any new type-erased field that may contain wgpu resources.
+  `transition_end_callback` in `Selection`. Apply the same `#[cfg]` split to any
+  new type-erased field that may contain wgpu resources.
 
 #### WASM Documentation Enforcement
 
@@ -135,9 +135,8 @@ The root cause was `Selection.stream_source` being typed as
   `MaybeSend`/`MaybeSync` are not supertraits of standard library traits, so
   they cannot be used as additional trait bounds on `dyn Any`. The `#[cfg]`
   approach is the only viable pattern for type-erased `Any` boxing.
-- **Trade-off**: Some code duplication between native and WASM variants, but
-  the duplication is minimal (just the method signatures differ, not the
-  bodies).
+- **Trade-off**: Some code duplication between native and WASM variants, but the
+  duplication is minimal (just the method signatures differ, not the bodies).
 - **Future**: If more type-erased fields with `Send + Sync` bounds are added,
   consider a macro to reduce duplication.
 
@@ -148,13 +147,14 @@ The root cause was `Selection.stream_source` being typed as
   `transition_end_callback` pattern as the template.
 - `wasm-pack build` takes ~60s on a warm cache, which is fast enough for
   iterative development.
-- Pre-existing `gup-macros` clippy warnings are noisy but do not affect the
-  main crate.
+- Pre-existing `gup-macros` clippy warnings are noisy but do not affect the main
+  crate.
 
 ### Follow-up Stories
 
 1. **GUP-285: Fix WASM Integration Test Compilation** — The `wasm-pack test`
    command fails because `tests/html_export_integration.rs` uses
    `tokio::runtime::Runtime::new()` which is not available on
-   `wasm32-unknown-unknown`. These tests need `#[cfg(not(target_arch = "wasm32"))]`
-   guards or a WASM-compatible runtime (e.g. `wasm-bindgen-test`).
+   `wasm32-unknown-unknown`. These tests need
+   `#[cfg(not(target_arch = "wasm32"))]` guards or a WASM-compatible runtime
+   (e.g. `wasm-bindgen-test`).

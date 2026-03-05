@@ -1142,6 +1142,15 @@ API reference generation, tutorials, and example gallery.
   `wasm-pack test` compilation failure caused by
   `tokio::runtime::Runtime::new()` in integration tests. Deps: GUP-283 ✅.
 
+## Follow-ups from GUP-284
+
+- [GUP-286](GUP-286_Line_Chart_Data_Mark_Rendering.md) 📋 — Wire line-mark
+  rendering into `LineChartBuilder` so that `render_to_png()` produces visible
+  line segments. Deps: GUP-284 ✅.
+- [GUP-287](GUP-287_Dynamic_Data_Refresh.md) 📋 — Add a `refresh_data()` method
+  to `ComposedChart` for updating data and re-rendering without rebuilding. Deps:
+  GUP-284 ✅.
+
 ## Follow-ups from GUP-265
 
 - [GUP-317](GUP-317_Full_Content_Screenshot.md) ✅ — Add `COPY_SRC` to surface

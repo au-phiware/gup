@@ -7,11 +7,11 @@
 
 ## Context
 
-After GUP-283 fixed the `wasm-pack build` failure, `wasm-pack test --headless
---chrome` still fails because `tests/html_export_integration.rs` uses
-`tokio::runtime::Runtime::new()`, which is not available on the
-`wasm32-unknown-unknown` target. The tokio runtime requires OS thread
-primitives that do not exist in WASM.
+After GUP-283 fixed the `wasm-pack build` failure,
+`wasm-pack test --headless --chrome` still fails because
+`tests/html_export_integration.rs` uses `tokio::runtime::Runtime::new()`, which
+is not available on the `wasm32-unknown-unknown` target. The tokio runtime
+requires OS thread primitives that do not exist in WASM.
 
 ## User Story
 
