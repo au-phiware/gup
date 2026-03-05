@@ -489,6 +489,64 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             render_frame(state, &instances)
         })
     }
+
+    /// Render a chart from a [`ChartBundle`] or [`ChartSnapshot`] JSON string.
+    ///
+    /// This is the primary entry point for the HTML export round-trip.  The
+    /// JavaScript bootstrap reads the embedded `#gup-chart-data` JSON block
+    /// and passes it to this function, which parses the configuration and
+    /// data, then renders a scatter plot onto the specified canvas.
+    ///
+    /// The function accepts two JSON formats:
+    ///
+    /// * **`ChartBundle`** — `{"config": {…}, "data": [{…}, …]}` — uses the
+    ///   embedded data array as scatter points.
+    /// * **`ChartSnapshot`** — `{"title": "…", "width": 800, …}` — falls
+    ///   back to a placeholder when no data is present.
+    ///
+    /// # Arguments
+    ///
+    /// * `canvas_id` — DOM `id` of the target `<canvas>` element.
+    /// * `bundle_json` — JSON string in either `ChartBundle` or
+    ///   `ChartSnapshot` format.
+    ///
+    /// # Errors
+    ///
+    /// Returns a JavaScript error if the JSON cannot be parsed or the
+    /// canvas / WebGPU is unavailable.
+    #[wasm_bindgen]
+    pub async fn render_from_bundle(canvas_id: &str, bundle_json: &str) -> Result<(), JsValue> {
+        use crate::export::html::{ChartBundle, ChartSnapshot};
+
+        // Try ChartBundle first, then fall back to ChartSnapshot.
+        let data_json = if let Ok(bundle) =
+            serde_json::from_str::<ChartBundle>(bundle_json)
+        {
+            // Extract scatter data from the bundle's data array.
+            if let Some(data) = &bundle.data {
+                serde_json::to_string(data)
+                    .map_err(|e| JsValue::from_str(&format!("Failed to re-serialise data: {e}")))?
+            } else {
+                // Config-only bundle: no data to render.
+                return Err(JsValue::from_str(
+                    "ChartBundle has no data array — nothing to render",
+                ));
+            }
+        } else if serde_json::from_str::<ChartSnapshot>(bundle_json).is_ok() {
+            // ChartSnapshot without data.
+            return Err(JsValue::from_str(
+                "ChartSnapshot has no data — use render_scatter with explicit data instead",
+            ));
+        } else {
+            return Err(JsValue::from_str(&format!(
+                "Failed to parse JSON as ChartBundle or ChartSnapshot: {}",
+                &bundle_json[..bundle_json.len().min(200)]
+            )));
+        };
+
+        // Delegate to render_scatter.
+        render_scatter(canvas_id, &data_json).await
+    }
 }
 
 // Re-export the public API at crate level (only on WASM).
@@ -512,6 +570,47 @@ pub struct ScatterPoint {
     pub x: f32,
     /// Y-coordinate value.
     pub y: f32,
+}
+
+/// Parse a JSON string as a [`ChartBundle`] or [`ChartSnapshot`].
+///
+/// This function implements the same parsing logic used by the WASM
+/// [`render_from_bundle`] function, making it possible to test the
+/// round-trip pipeline on native targets without a browser.
+///
+/// # Returns
+///
+/// A tuple of `(Option<ChartSnapshot>, Option<Vec<serde_json::Value>>)`
+/// representing the config snapshot and optional data array.
+///
+/// # Errors
+///
+/// Returns an error if the JSON cannot be parsed as either format.
+pub fn parse_bundle_json(
+    json: &str,
+) -> Result<
+    (
+        crate::export::html::ChartSnapshot,
+        Option<Vec<serde_json::Value>>,
+    ),
+    String,
+> {
+    use crate::export::html::{ChartBundle, ChartSnapshot};
+
+    // Try ChartBundle first.
+    if let Ok(bundle) = serde_json::from_str::<ChartBundle>(json) {
+        return Ok((bundle.config, bundle.data));
+    }
+
+    // Fall back to ChartSnapshot.
+    if let Ok(snapshot) = serde_json::from_str::<ChartSnapshot>(json) {
+        return Ok((snapshot, None));
+    }
+
+    Err(format!(
+        "Failed to parse JSON as ChartBundle or ChartSnapshot: {}",
+        &json[..json.len().min(200)]
+    ))
 }
 
 #[cfg(test)]
@@ -565,5 +664,76 @@ mod tests {
         let points: Vec<ScatterPoint> = serde_json::from_str(json).unwrap();
         assert!((points[0].x - 1_000_000.0).abs() < 1.0);
         assert!((points[0].y - (-1_000_000.0)).abs() < 1.0);
+    }
+
+    // -- parse_bundle_json tests -------------------------------------------
+
+    #[test]
+    fn test_parse_bundle_json_with_chart_bundle() {
+        let json = r#"{
+            "config": {
+                "title": "Test",
+                "subtitle": null,
+                "width": 800.0,
+                "height": 600.0,
+                "margins": {"top": 60.0, "right": 40.0, "bottom": 60.0, "left": 60.0},
+                "background_color": null,
+                "show_axes": true,
+                "show_grid": true
+            },
+            "data": [{"x": 1.0, "y": 2.0}, {"x": 3.0, "y": 4.0}]
+        }"#;
+
+        let (snapshot, data) = parse_bundle_json(json).unwrap();
+        assert_eq!(snapshot.title.as_deref(), Some("Test"));
+        assert_eq!(snapshot.width, 800.0);
+        assert!(data.is_some());
+        assert_eq!(data.unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_parse_bundle_json_with_chart_snapshot() {
+        let json = r#"{
+            "title": "Snapshot Only",
+            "subtitle": null,
+            "width": 640.0,
+            "height": 480.0,
+            "margins": {"top": 10.0, "right": 10.0, "bottom": 10.0, "left": 10.0},
+            "background_color": null,
+            "show_axes": false,
+            "show_grid": false
+        }"#;
+
+        let (snapshot, data) = parse_bundle_json(json).unwrap();
+        assert_eq!(snapshot.title.as_deref(), Some("Snapshot Only"));
+        assert_eq!(snapshot.width, 640.0);
+        assert!(data.is_none());
+    }
+
+    #[test]
+    fn test_parse_bundle_json_invalid() {
+        let json = r#"{"not": "valid"}"#;
+        let result = parse_bundle_json(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_bundle_json_config_only_bundle() {
+        let json = r#"{
+            "config": {
+                "title": "Config Only",
+                "subtitle": null,
+                "width": 400.0,
+                "height": 300.0,
+                "margins": {"top": 0.0, "right": 0.0, "bottom": 0.0, "left": 0.0},
+                "background_color": null,
+                "show_axes": false,
+                "show_grid": false
+            }
+        }"#;
+
+        let (snapshot, data) = parse_bundle_json(json).unwrap();
+        assert_eq!(snapshot.title.as_deref(), Some("Config Only"));
+        assert!(data.is_none());
     }
 }
