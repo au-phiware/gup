@@ -73,11 +73,11 @@ grid but no visible data marks.
 
 ### Changes Made
 
-| File | Change |
-| --- | --- |
+| File                                    | Change                                                                                                                                                                                                                                                                               |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `src/chart_builder/builders/boxplot.rs` | Added NDC transformation mapper and `prepare_render()` call. Computes chart area NDC bounds and data domain, maps all BoxPlotAttributes (positions, statistical values, width, outliers) from data space to clip space. Cloned `context` before `Selection::new`. Added 2 new tests. |
-| `src/chart_builder/builders/density.rs` | Added NDC bounds computation, `apply_accessors_to_selection()`, and `prepare_render_bound()` call. Imported `NdcBounds` and `apply_accessors_to_selection`. Restructured accessor validation for ownership compatibility. Added 2 new tests. |
-| `src/chart_builder/builders/violin.rs` | Added NDC transformation mapper and `prepare_render()` call (same pattern as boxplot). Imported `BoxPlotInstance`. Added 2 new tests. |
+| `src/chart_builder/builders/density.rs` | Added NDC bounds computation, `apply_accessors_to_selection()`, and `prepare_render_bound()` call. Imported `NdcBounds` and `apply_accessors_to_selection`. Restructured accessor validation for ownership compatibility. Added 2 new tests.                                         |
+| `src/chart_builder/builders/violin.rs`  | Added NDC transformation mapper and `prepare_render()` call (same pattern as boxplot). Imported `BoxPlotInstance`. Added 2 new tests.                                                                                                                                                |
 
 ### Test Results
 
@@ -120,23 +120,23 @@ grid but no visible data marks.
   transform all BoxPlotAttributes values (position, statistical values, width,
   outliers) from data space to NDC space in the mapper closure before creating
   BoxPlotInstance.
-- **Pattern**: Any builder that pre-computes mark data must also transform
-  that data into NDC coordinates. The transformation requires: (1) chart area
-  NDC bounds from `calculate_chart_area()`, (2) data domain computed from the
-  mark attributes, (3) per-field linear mapping from data range to NDC range.
+- **Pattern**: Any builder that pre-computes mark data must also transform that
+  data into NDC coordinates. The transformation requires: (1) chart area NDC
+  bounds from `calculate_chart_area()`, (2) data domain computed from the mark
+  attributes, (3) per-field linear mapping from data range to NDC range.
 
 #### Density Builder Ownership Restructuring
 
-- **Challenge**: The density builder borrowed `x_accessor` and `y_accessor`
-  via `as_ref()` for sample extraction, then needed to move them into
+- **Challenge**: The density builder borrowed `x_accessor` and `y_accessor` via
+  `as_ref()` for sample extraction, then needed to move them into
   `apply_accessors_to_selection()`. The original code used separate local
   references that blocked the move.
 - **Solution**: Restructured to validate accessor presence upfront with early
   returns, then use `as_ref().unwrap()` for sample extraction (safe after
   validation), leaving the `Option` values intact for the later move into
   `apply_accessors_to_selection()`.
-- **Pattern**: When a consumed `self` method needs to both borrow and later
-  move a field, validate first, borrow temporarily, then move.
+- **Pattern**: When a consumed `self` method needs to both borrow and later move
+  a field, validate first, borrow temporarily, then move.
 
 ### Architectural Decisions
 
@@ -144,16 +144,17 @@ grid but no visible data marks.
 
 - **Decision**: Used `prepare_render()` with a mapper for boxplot/violin, and
   `apply_accessors_to_selection()` + `prepare_render_bound()` for density.
-- **Reasoning**: Boxplot and violin builders create `Selection<BoxPlotAttributes,
-  BoxPlot>` where the data type IS the mark attributes. A mapper that converts
-  `BoxPlotAttributes → BoxPlotInstance` with NDC transformation is the natural
-  fit. The density builder uses `Selection<T, Rectangle>` where `T` is the
-  user's generic type — accessor bindings are the established pattern for this.
+- **Reasoning**: Boxplot and violin builders create
+  `Selection<BoxPlotAttributes, BoxPlot>` where the data type IS the mark
+  attributes. A mapper that converts `BoxPlotAttributes → BoxPlotInstance` with
+  NDC transformation is the natural fit. The density builder uses
+  `Selection<T, Rectangle>` where `T` is the user's generic type — accessor
+  bindings are the established pattern for this.
 - **Trade-off**: Two different patterns across builders adds complexity, but
   each pattern matches its data model naturally.
 - **Future**: A shared `finalize_boxplot_chart()` helper could extract the
-  common NDC transformation + `prepare_render` pattern used by both boxplot
-  and violin builders.
+  common NDC transformation + `prepare_render` pattern used by both boxplot and
+  violin builders.
 
 ### Development Workflow Insights
 
@@ -161,9 +162,9 @@ grid but no visible data marks.
   boxplot/violin builders required significantly more work than expected due to
   the NDC transformation requirement. The density builder WAS mechanical (same
   pattern as bar), but boxplot/violin needed a different approach entirely.
-- The visual regression test pattern (render to RGBA, count non-white pixels
-  in center region) caught the NDC issue immediately — the initial
-  implementation passed `is_render_ready()` but produced 0 visible pixels.
+- The visual regression test pattern (render to RGBA, count non-white pixels in
+  center region) caught the NDC issue immediately — the initial implementation
+  passed `is_render_ready()` but produced 0 visible pixels.
 - Running `--test-threads=1` is essential; the GPU tests reliably pass with
   serial execution.
 

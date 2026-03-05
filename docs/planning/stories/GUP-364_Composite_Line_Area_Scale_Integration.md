@@ -7,8 +7,8 @@
 ## Context
 
 GUP-362 removed the override-by-append workaround for scatter and bar layers in
-the composite builder's `build_layer()`, since `apply_accessors_to_selection` now
-correctly integrates with scales. However, line and area layers still use
+the composite builder's `build_layer()`, since `apply_accessors_to_selection`
+now correctly integrates with scales. However, line and area layers still use
 override-by-append to remap segment start/end positions through the composite's
 unified scales. This asymmetry can be eliminated by integrating scale
 transformations into the line/area builder's segment creation.
@@ -33,8 +33,8 @@ transformations into the line/area builder's segment creation.
 
 ## Technical Tasks
 
-- [ ] Refactor line builder to map segment start/end positions through
-      config scales during build.
+- [ ] Refactor line builder to map segment start/end positions through config
+      scales during build.
 - [ ] Refactor area builder similarly.
 - [ ] Remove line/area overrides from composite `build_layer()`.
 - [ ] Add standalone line and area render tests.
@@ -47,7 +47,8 @@ transformations into the line/area builder's segment creation.
 
 ## Testing Strategy
 
-- Standalone line/area rendering tests (headless render, check for visible marks).
+- Standalone line/area rendering tests (headless render, check for visible
+  marks).
 - Composite charts with line/area layers (existing integration tests).
 
 ## Risk Assessment

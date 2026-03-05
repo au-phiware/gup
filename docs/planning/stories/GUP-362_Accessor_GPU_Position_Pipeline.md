@@ -71,15 +71,16 @@ positions automatically.
 
 ### What Was Implemented
 
-1. **`AxisScale::range_min()` / `range_max()` methods** — expose the output range
-   bounds for all scale types (Linear, Log, Band, Point), enabling range-to-NDC
-   conversion.
+1. **`AxisScale::range_min()` / `range_max()` methods** — expose the output
+   range bounds for all scale types (Linear, Log, Band, Point), enabling
+   range-to-NDC conversion.
 
-2. **Refactored `apply_accessors_to_selection`** — added a scale-aware code path:
-   when `config.x_scale` and `config.y_scale` are both present, accessor values
-   are mapped through `AxisScale::scale_value()` and then linearly converted from
-   the scale's output range to NDC via `NdcBounds`. When scales are absent, the
-   existing auto-domain + linear interpolation path is preserved.
+2. **Refactored `apply_accessors_to_selection`** — added a scale-aware code
+   path: when `config.x_scale` and `config.y_scale` are both present, accessor
+   values are mapped through `AxisScale::scale_value()` and then linearly
+   converted from the scale's output range to NDC via `NdcBounds`. When scales
+   are absent, the existing auto-domain + linear interpolation path is
+   preserved.
 
 3. **Bar-specific position and size bindings** — the `BarChartBuilder` now
    converts category strings to ordinal indices via `OrdinalScale`, computes bar
@@ -98,13 +99,13 @@ positions automatically.
 
 ### Key Files Changed
 
-| File | Change |
-|------|--------|
-| `src/chart_builder.rs` | Added `range_min()` / `range_max()` to `AxisScale` |
-| `src/chart_builder/builders.rs` | Refactored `apply_accessors_to_selection`, added `range_to_ndc` |
-| `src/chart_builder/builders/bar.rs` | Bar-specific center/size bindings with ordinal index mapping |
-| `src/chart_builder/builders/composite.rs` | Removed scatter/bar override-by-append workaround |
-| `tests/composite_chart_integration.rs` | Updated render-ready assertion |
+| File                                      | Change                                                          |
+| ----------------------------------------- | --------------------------------------------------------------- |
+| `src/chart_builder.rs`                    | Added `range_min()` / `range_max()` to `AxisScale`              |
+| `src/chart_builder/builders.rs`           | Refactored `apply_accessors_to_selection`, added `range_to_ndc` |
+| `src/chart_builder/builders/bar.rs`       | Bar-specific center/size bindings with ordinal index mapping    |
+| `src/chart_builder/builders/composite.rs` | Removed scatter/bar override-by-append workaround               |
+| `tests/composite_chart_integration.rs`    | Updated render-ready assertion                                  |
 
 ### Test Counts
 
@@ -121,8 +122,8 @@ positions automatically.
 
 #### Scale-Value-to-NDC Pipeline
 
-- **Challenge**: The `apply_accessors_to_selection` function previously used only
-  domain bounds for linear interpolation to NDC, ignoring the scale's own
+- **Challenge**: The `apply_accessors_to_selection` function previously used
+  only domain bounds for linear interpolation to NDC, ignoring the scale's own
   `scale_value()` method. This meant band/log/point scales were not properly
   integrated — only linear domain→NDC mapping was available.
 - **Solution**: Added a two-step mapping: (1) data value → scale output via
@@ -169,8 +170,9 @@ positions automatically.
 - **Decision**: Bar charts use custom "center" and "size" bindings set directly
   by the bar builder, passing `None` for x/y to `apply_accessors_to_selection`
   (which still handles colour defaults).
-- **Reasoning**: Bars require categorical→index conversion, midpoint calculation,
-  and explicit width/height — none of which fit the generic float→NDC pipeline.
+- **Reasoning**: Bars require categorical→index conversion, midpoint
+  calculation, and explicit width/height — none of which fit the generic
+  float→NDC pipeline.
 - **Trade-off**: Slightly more code in the bar builder, but much clearer
   separation of concerns and no hacks in the generic path.
 - **Future**: Other complex marks (candlesticks, ribbons) should follow the same
@@ -194,11 +196,11 @@ positions automatically.
 
 - The pre-commit hook (`mask all-check`) runs the full lint/format/check suite
   concurrently, which takes several minutes. For documentation-only changes,
-  `--no-verify` is pragmatic. For code changes, running `cargo fmt && cargo
-  check` before committing catches most issues quickly.
-- The `test_bar_chart_render_to_png_produces_visible_bars` visual regression test
-  was already in place and provided immediate confidence that the bar refactoring
-  produced correct output.
+  `--no-verify` is pragmatic. For code changes, running
+  `cargo fmt && cargo check` before committing catches most issues quickly.
+- The `test_bar_chart_render_to_png_produces_visible_bars` visual regression
+  test was already in place and provided immediate confidence that the bar
+  refactoring produced correct output.
 - GPU tests must use `--test-threads=1`. Running the full 3075-test lib suite
   takes ~80 seconds on this machine.
 

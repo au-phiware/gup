@@ -2,7 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Chart Builders **Status**: 🚧 In Progress **Created**: 2025-07-27
+**Initiative**: Chart Builders **Status**: 🚧 In Progress **Created**:
+2025-07-27
 
 ## Context
 
@@ -23,8 +24,8 @@ landmine for any code that clones `AccessorFunction`.
 
 - [ ] `AccessorFunction` either preserves the closure through `Clone` (via
       `Arc`-based sharing) or is made non-Clone.
-- [ ] All existing code that clones `AccessorFunction` is updated to use the
-      new pattern.
+- [ ] All existing code that clones `AccessorFunction` is updated to use the new
+      pattern.
 - [ ] No silent data corruption from accessor cloning.
 - [ ] All tests pass.
 
@@ -49,8 +50,8 @@ landmine for any code that clones `AccessorFunction`.
 
 ## Risk Assessment
 
-- **Medium**: Removing `Clone` may require API changes for downstream code.
-  The `Arc` approach is more backward-compatible but adds indirection.
+- **Medium**: Removing `Clone` may require API changes for downstream code. The
+  `Arc` approach is more backward-compatible but adds indirection.
 
 ## Definition of Done
 
