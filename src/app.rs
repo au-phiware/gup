@@ -37,7 +37,6 @@
 
 use std::sync::Arc;
 
-use wgpu::Color;
 use winit::{
     application::ApplicationHandler,
     event::{ElementState, KeyEvent, WindowEvent},
@@ -47,7 +46,7 @@ use winit::{
 };
 
 use crate::RenderFrame;
-use crate::context::{GupContext, PhysicalSize, SurfaceId};
+use crate::context::{CapturedFrame, GupContext, PhysicalSize, SurfaceConfigBuilder, SurfaceId};
 use crate::error::{GupError, GupResult};
 use crate::export::png as png_export;
 
@@ -160,6 +159,7 @@ impl GupApp {
             context: None,
             surface_id: None,
             screenshot_counter: 0,
+            screenshot_requested: false,
         };
 
         event_loop
@@ -190,6 +190,7 @@ struct GupAppRunner {
     context: Option<Arc<GupContext>>,
     surface_id: Option<SurfaceId>,
     screenshot_counter: u32,
+    screenshot_requested: bool,
 }
 
 impl GupAppRunner {
@@ -205,7 +206,11 @@ impl GupAppRunner {
 
         let window = Arc::new(event_loop.create_window(window_attrs)?);
 
-        let context = pollster::block_on(GupContext::with_surface(Arc::clone(&window)))?;
+        let config = SurfaceConfigBuilder::new()
+            .with_size(self.width, self.height)
+            .with_usage(wgpu::TextureUsages::COPY_SRC);
+        let context =
+            pollster::block_on(GupContext::with_surface_config(Arc::clone(&window), config))?;
         let surface_id = context.primary_surface_id();
 
         self.window = Some(window);
@@ -231,8 +236,36 @@ impl GupAppRunner {
         match ctx.begin_frame() {
             Ok(mut frame) => {
                 self.renderer.render(&mut frame);
+
+                // If a screenshot was requested, encode a texture-to-buffer
+                // copy on the same command encoder *before* finish() submits
+                // the work.
+                let captured = if self.screenshot_requested {
+                    self.screenshot_requested = false;
+                    if let Some(window) = &self.window {
+                        let inner_size = window.inner_size();
+                        match frame.capture_texture_copy(inner_size.width, inner_size.height) {
+                            Ok(cap) => Some(cap),
+                            Err(e) => {
+                                eprintln!("gup: screenshot capture failed: {e}");
+                                None
+                            }
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
                 if let Err(e) = frame.finish() {
                     eprintln!("gup: frame finish error: {e}");
+                }
+
+                // The GPU commands (including the copy) have been submitted.
+                // Now map the staging buffer and save the PNG.
+                if let Some(captured) = captured {
+                    self.save_captured_frame(&ctx, captured);
                 }
             }
             Err(e) => {
@@ -278,61 +311,43 @@ impl GupAppRunner {
         }
     }
 
-    /// Capture a screenshot to a PNG file in the working directory.
-    fn take_screenshot(&mut self) {
-        let Some(window) = &self.window else {
-            return;
-        };
-        let Some(context) = self.context.take() else {
-            return;
-        };
+    /// Save a captured frame's pixel data to a PNG file.
+    fn save_captured_frame(&mut self, ctx: &GupContext, captured: CapturedFrame) {
+        let buffer_slice = captured.buffer.slice(..);
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = sender.send(result);
+        });
 
-        let inner_size = window.inner_size();
-        let width = inner_size.width;
-        let height = inner_size.height;
+        // Block until the GPU finishes the copy.
+        let _ = ctx.device.poll(wgpu::PollType::Wait);
 
-        let ctx = match Arc::try_unwrap(context) {
-            Ok(c) => c,
-            Err(arc) => {
-                self.context = Some(arc);
-                eprintln!("gup: screenshot failed — context is shared");
+        match receiver.recv() {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                eprintln!("gup: screenshot buffer mapping failed: {e:?}");
                 return;
             }
-        };
-
-        // Render to an off-screen texture so we can read it back.
-        let target = png_export::OffscreenTarget::new(&ctx.device, width, height);
-
-        // Create command encoder and render pass on the off-screen texture.
-        let mut encoder = ctx
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("screenshot_encoder"),
-            });
-        {
-            let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("screenshot_render_pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: target.view(),
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(Color::WHITE),
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                ..Default::default()
-            });
-
-            // We cannot easily re-render user content through the AppRenderer
-            // trait (it expects a RenderFrame). Instead we capture a blank
-            // frame. Full chart-content screenshots require COPY_SRC on the
-            // surface texture; this is tracked as a follow-up improvement.
-            drop(render_pass);
+            Err(_) => {
+                eprintln!("gup: screenshot buffer mapping callback dropped");
+                return;
+            }
         }
-        ctx.queue.submit(std::iter::once(encoder.finish()));
 
-        match target.readback_as_png(&ctx.device, &ctx.queue) {
+        let mapped = buffer_slice.get_mapped_range();
+        let mut pixels = png_export::strip_row_padding(
+            &mapped,
+            captured.width,
+            captured.height,
+            captured.padded_bytes_per_row,
+        );
+        drop(mapped);
+        captured.buffer.unmap();
+
+        // Convert from BGRA (wgpu default surface format) to RGBA (PNG).
+        png_export::bgra_to_rgba(&mut pixels);
+
+        match png_export::encode_png(&pixels, captured.width, captured.height) {
             Ok(png_bytes) => {
                 self.screenshot_counter += 1;
                 let filename = format!("gup_screenshot_{:03}.png", self.screenshot_counter);
@@ -342,11 +357,9 @@ impl GupAppRunner {
                 }
             }
             Err(e) => {
-                eprintln!("gup: screenshot capture failed: {e}");
+                eprintln!("gup: screenshot encoding failed: {e}");
             }
         }
-
-        self.context = Some(Arc::new(ctx));
     }
 
     /// Handle a key press when shortcuts are enabled.
@@ -359,7 +372,7 @@ impl GupAppRunner {
                 self.toggle_fullscreen();
             }
             KeyCode::KeyS => {
-                self.take_screenshot();
+                self.screenshot_requested = true;
             }
             _ => {}
         }
