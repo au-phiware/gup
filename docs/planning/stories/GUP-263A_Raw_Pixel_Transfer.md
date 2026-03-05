@@ -122,3 +122,72 @@ duplicated infrastructure.
 - All 3030+ unit tests pass
 - 241 doc tests pass
 - All examples compile (main, gup-egui, gup-bevy)
+
+## Retrospective
+
+**Completed**: 2026-03-05
+
+### Key Technical Learnings
+
+#### PNG Encoding Is Surprisingly Expensive
+
+- **Challenge**: The original assumption was that the PNG encode/decode
+  round-trip added "~1–2ms" of overhead. Benchmarking revealed the actual
+  overhead was much higher — 8.6ms at 800×600 and 44.7ms at 1920×1080.
+- **Solution**: Eliminating the round-trip by returning raw RGBA pixels
+  directly, which costs only the `Vec<u8>` clone time (~66µs at 800×600).
+- **Pattern**: Always benchmark before estimating overhead. Lossless PNG
+  encoding with the `image` crate involves significant compression work that
+  scales with pixel count.
+
+#### Layered Rendering API Design
+
+- **Challenge**: The codebase had three rendering paths (`render_to_png`,
+  `render_to_texture_view`, and now `render_to_rgba`) with shared rendering
+  logic. The question was where to place the new method in the abstraction
+  hierarchy.
+- **Solution**: `render_to_rgba` became the foundation for `render_to_png`,
+  while `render_to_texture_view` remains separate (it never does CPU readback).
+  This gives a clean 3-tier API: GPU-only rendering (texture view), CPU
+  readback (RGBA), and encoded output (PNG).
+- **Pattern**: Structure rendering APIs from most-direct to most-processed.
+  Each higher-level method composes the lower one.
+
+### Architectural Decisions
+
+#### Keeping render_to_texture_view Separate
+
+- **Decision**: Did not refactor `render_to_texture_view` to share code with
+  `render_to_rgba`, even though their rendering logic is identical.
+- **Reasoning**: `render_to_texture_view` is the zero-copy path that renders
+  directly to a caller-supplied texture view. Merging with `render_to_rgba`
+  would require creating an unnecessary `OffscreenTarget` for the Bevy path.
+  The code duplication is minimal (just the render pass setup) and the two
+  methods serve fundamentally different purposes.
+- **Trade-off**: Some duplicated render pass setup code vs. cleaner separation
+  of concerns.
+- **Future**: If more rendering targets are added, consider extracting the
+  shared render pass setup into a private helper.
+
+#### Removing image Crate from gup-egui
+
+- **Decision**: Removed the `image` crate dependency from `gup-egui` entirely.
+- **Reasoning**: The `image` crate was only used for PNG decoding in the
+  `rerender` method. With raw RGBA transfer, there's no need for any image
+  format handling in the egui integration.
+- **Trade-off**: None — strictly a dependency reduction.
+- **Future**: If gup-egui ever needs image loading (e.g. for background images),
+  the dependency can be re-added.
+
+### Development Workflow Insights
+
+- This was a clean, focused refactor with a very clear scope. The existing
+  `OffscreenTarget::readback_pixels` method already existed and did exactly
+  what was needed — the story was essentially about wiring it through the
+  public API and updating consumers.
+- The benchmark results were more dramatic than expected, validating the story's
+  value. The 100× improvement at common resolutions makes a real difference for
+  interactive egui applications.
+- Bevy's primary render path already uses `render_to_texture_view` (zero-copy),
+  so the main beneficiary is gup-egui. The `render_to_rgba` method on
+  `GupChart` is still valuable for Bevy users who need CPU-side pixel access.
