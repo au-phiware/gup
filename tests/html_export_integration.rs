@@ -515,3 +515,112 @@ fn html_export_convenience_with_data() {
     // Clean up.
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// -----------------------------------------------------------------------
+// GUP-269B: WASM round-trip tests
+// -----------------------------------------------------------------------
+
+/// Simulate what the WASM module does: extract JSON from exported HTML,
+/// parse it as ChartBundle, then verify the data can be used for rendering.
+#[test]
+fn html_export_wasm_round_trip() {
+    let exporter = HtmlExporter::new(WasmStrategy::Url("gup.wasm".into()));
+    let html = export_chart_html_with_data(&exporter);
+
+    // 1. Extract JSON from the HTML (mirrors the JS bootstrap reading #gup-chart-data).
+    let json_str = extract_json_from_html(&html);
+
+    // 2. Parse with the same logic used by the WASM render_from_bundle function.
+    let (snapshot, data) = gup::wasm_api::parse_bundle_json(json_str)
+        .expect("WASM round-trip: JSON should parse as ChartBundle");
+
+    // 3. Verify config snapshot.
+    assert_eq!(snapshot.title.as_deref(), Some("Data Test"));
+    assert_eq!(snapshot.width, 800.0);
+    assert_eq!(snapshot.height, 600.0);
+    assert!(snapshot.show_grid);
+
+    // 4. Verify data array.
+    let data = data.expect("WASM round-trip: data should be present");
+    assert_eq!(data.len(), 3, "should have 3 data points");
+
+    // 5. Verify individual data points can be deserialised.
+    let points: Vec<SerPt> = data
+        .iter()
+        .map(|v| serde_json::from_value(v.clone()).unwrap())
+        .collect();
+    assert_eq!(points[0].x, 1.0);
+    assert_eq!(points[0].label, "A");
+    assert_eq!(points[2].y, 30.0);
+    assert_eq!(points[2].label, "C");
+}
+
+/// Verify the config-only export round-trip (no data).
+#[test]
+fn html_export_wasm_round_trip_config_only() {
+    let exporter = HtmlExporter::new(WasmStrategy::Url("gup.wasm".into()));
+    let html = export_chart_html(&exporter);
+    let json_str = extract_json_from_html(&html);
+
+    let (snapshot, data) = gup::wasm_api::parse_bundle_json(json_str)
+        .expect("WASM round-trip: JSON should parse as ChartSnapshot");
+
+    assert_eq!(snapshot.title.as_deref(), Some("Integration Test"));
+    assert!(data.is_none(), "config-only export should have no data");
+}
+
+/// Verify the JS bootstrap reads chart data.
+#[test]
+fn html_export_js_reads_chart_data() {
+    let exporter = HtmlExporter::new(WasmStrategy::Url("gup.wasm".into()));
+    let html = export_chart_html_with_data(&exporter);
+
+    // The JS should contain the chart data reading logic.
+    assert!(
+        html.contains("__GUP_CHART_DATA__"),
+        "JS should store chart data as a global"
+    );
+    assert!(
+        html.contains("gup-chart-data"),
+        "JS should read the chart data element"
+    );
+}
+
+/// Verify auto-discovery with WasmStrategy::Auto.
+#[test]
+fn html_export_auto_strategy() {
+    // Create a temporary wasm-pack layout.
+    let dir = std::env::temp_dir().join("gup_html_auto_test");
+    let pkg = dir.join("pkg");
+    std::fs::create_dir_all(&pkg).unwrap();
+    let wasm_path = pkg.join("gup_bg.wasm");
+    std::fs::write(&wasm_path, b"\x00asm\x01\x00\x00\x00").unwrap();
+
+    let exporter = HtmlExporter::new(WasmStrategy::Auto(Some(dir.clone())));
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let html = rt.block_on(async {
+        let ctx = Arc::new(gup::RenderContext::new().await.unwrap());
+        let sel = gup::selection::Selection::<Pt, gup::Circle>::new(vec![], ctx).unwrap();
+        let config = ChartConfig::default();
+        let mut chart = ComposedChart::new(sel, config).with_default_axes();
+        exporter.render(&mut chart).unwrap()
+    });
+
+    // Auto strategy should produce inline (Base64) output.
+    assert!(
+        html.contains("atob("),
+        "Auto strategy should use inline Base64 encoding"
+    );
+    assert!(
+        html.contains("__GUP_CHART_DATA__"),
+        "Auto strategy should read chart data"
+    );
+    // Should NOT use fetch().
+    assert!(
+        !html.contains("fetch("),
+        "Auto strategy should not use fetch()"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
