@@ -68,6 +68,7 @@
 
 mod engine;
 mod graph_builder;
+pub(crate) mod quadtree;
 pub mod treemap;
 mod types;
 
