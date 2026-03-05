@@ -48,6 +48,7 @@ use super::accessor::{AccessorValue, FieldAccessor};
 use crate::error::GupResult;
 use crate::grid::{Color, GridConfiguration, GridLineConfig};
 use crate::label::LabelFormatter;
+use crate::mark::boxplot::{BoxPlotAttributes, BoxPlotInstance, BoxPlotOrientation};
 use crate::selection::Selection;
 use crate::{MaybeSend, MaybeSync};
 use std::marker::PhantomData;
@@ -729,6 +730,114 @@ fn auto_domain<T>(data: &[T], accessor: &AccessorFunction<T>) -> (f32, f32) {
     } else {
         let pad = span * 0.05;
         (lo - pad, hi + pad)
+    }
+}
+
+/// Build a mapper that transforms [`BoxPlotAttributes`] from data space into
+/// NDC-space [`BoxPlotInstance`] values.
+///
+/// The returned closure computes per-attribute position, statistical values
+/// (whisker_min … whisker_max), width, and outlier coordinates in normalised
+/// device coordinates.  Both [`BoxPlotBuilder`](boxplot::BoxPlotBuilder) and
+/// [`ViolinPlotBuilder`](violin::ViolinPlotBuilder) delegate to this helper
+/// so the mapping logic is defined in exactly one place.
+///
+/// The data domain is derived from `attrs` with 5 % padding on each axis so
+/// marks are not clipped at the chart edges.
+pub fn boxplot_ndc_mapper(
+    attrs: &[BoxPlotAttributes],
+    ndc: NdcBounds,
+) -> impl Fn(&BoxPlotAttributes) -> BoxPlotInstance + use<> {
+    // ── Determine data domain from all attributes ────────────────────────
+    let (mut x_min, mut x_max) = (f32::INFINITY, f32::NEG_INFINITY);
+    let (mut y_min, mut y_max) = (f32::INFINITY, f32::NEG_INFINITY);
+    for a in attrs {
+        let half_w = a.width * 0.5;
+        match a.orientation {
+            BoxPlotOrientation::Vertical => {
+                x_min = x_min.min(a.position.x - half_w);
+                x_max = x_max.max(a.position.x + half_w);
+                y_min = y_min.min(a.min);
+                y_max = y_max.max(a.max);
+                for &o in &a.outliers {
+                    y_min = y_min.min(o);
+                    y_max = y_max.max(o);
+                }
+            }
+            BoxPlotOrientation::Horizontal => {
+                y_min = y_min.min(a.position.y - half_w);
+                y_max = y_max.max(a.position.y + half_w);
+                x_min = x_min.min(a.min);
+                x_max = x_max.max(a.max);
+                for &o in &a.outliers {
+                    x_min = x_min.min(o);
+                    x_max = x_max.max(o);
+                }
+            }
+        }
+    }
+    // Add 5 % padding so marks are not clipped at the edges.
+    let x_pad = (x_max - x_min).abs() * 0.05;
+    let y_pad = (y_max - y_min).abs() * 0.05;
+    x_min -= x_pad;
+    x_max += x_pad;
+    y_min -= y_pad;
+    y_max += y_pad;
+
+    let x_span = x_max - x_min;
+    let y_span = y_max - y_min;
+
+    // ── Return a closure that maps one set of attributes to NDC ──────────
+    move |attrs: &BoxPlotAttributes| {
+        let map_x = |v: f32| {
+            let t = if x_span.abs() < f32::EPSILON {
+                0.5
+            } else {
+                (v - x_min) / x_span
+            };
+            ndc.left + t * (ndc.right - ndc.left)
+        };
+        let map_y = |v: f32| {
+            let t = if y_span.abs() < f32::EPSILON {
+                0.5
+            } else {
+                (v - y_min) / y_span
+            };
+            ndc.bottom + t * (ndc.top - ndc.bottom)
+        };
+
+        let mut inst = BoxPlotInstance::from(attrs);
+        match attrs.orientation {
+            BoxPlotOrientation::Vertical => {
+                inst.position = [map_x(attrs.position.x), 0.0];
+                inst.whisker_min = map_y(attrs.min);
+                inst.q1 = map_y(attrs.q1);
+                inst.median = map_y(attrs.median);
+                inst.q3 = map_y(attrs.q3);
+                inst.whisker_max = map_y(attrs.max);
+                inst.width = (attrs.width / x_span) * (ndc.right - ndc.left);
+            }
+            BoxPlotOrientation::Horizontal => {
+                inst.position = [0.0, map_y(attrs.position.y)];
+                inst.whisker_min = map_x(attrs.min);
+                inst.q1 = map_x(attrs.q1);
+                inst.median = map_x(attrs.median);
+                inst.q3 = map_x(attrs.q3);
+                inst.whisker_max = map_x(attrs.max);
+                inst.width = (attrs.width / y_span) * (ndc.top - ndc.bottom);
+            }
+        }
+        // Transform outlier values to NDC.
+        for i in 0..attrs.outliers.len().min(32) {
+            let vec_idx = i / 4;
+            let comp_idx = i % 4;
+            let val = attrs.outliers[i];
+            inst.outliers[vec_idx][comp_idx] = match attrs.orientation {
+                BoxPlotOrientation::Vertical => map_y(val),
+                BoxPlotOrientation::Horizontal => map_x(val),
+            };
+        }
+        inst
     }
 }
 
