@@ -1083,7 +1083,7 @@ API reference generation, tutorials, and example gallery.
 - [GUP-282B](GUP-282B_Gallery_Config_Sync.md) 📋 — Validation script that checks
   gallery_config.toml against INDEX.md and Cargo.toml for drift. Deps: GUP-282
   ✅.
-- [GUP-351](GUP-351_Tutorial_Snippet_Compilation_Tests.md) 📋 — Automated test
+- [GUP-351](GUP-351_Tutorial_Snippet_Compilation_Tests.md) 🚧 — Automated test
   harness that extracts Rust code blocks from tutorial Markdown and verifies
   they compile, preventing snippet drift. Deps: GUP-281 ✅.
 - [GUP-352](GUP-352_Interactive_Tutorial_Examples.md) 📋 — Dedicated windowed
@@ -1120,8 +1120,8 @@ API reference generation, tutorials, and example gallery.
 
 ## Follow-ups from GUP-318
 
-- [GUP-376](GUP-376_GupApp_Event_Callbacks.md) 📋 — Add optional `.on_key()`
-  and `.on_mouse()` callbacks to `GupApp` so examples with simple custom event
+- [GUP-376](GUP-376_GupApp_Event_Callbacks.md) 📋 — Add optional `.on_key()` and
+  `.on_mouse()` callbacks to `GupApp` so examples with simple custom event
   handling can also use the shell. Deps: GUP-318 ✅.
 
 ## Follow-ups from GUP-315
