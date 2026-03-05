@@ -2603,34 +2603,39 @@ where
     // -----------------------------------------------------------------
 
     /// Render this chart to an off-screen GPU texture at the given pixel
-    /// dimensions and return the result as PNG-encoded bytes.
+    /// dimensions and return tightly-packed RGBA pixel data.
     ///
     /// The method creates a temporary off-screen render target, prepares
-    /// and issues all draw commands (axes, ticks, grid lines), reads the
-    /// pixel data back through a staging buffer, and encodes it as a
-    /// lossless PNG with RGBA colour.
+    /// and issues all draw commands (axes, ticks, grid lines), and reads
+    /// the pixel data back through a staging buffer. The returned buffer
+    /// contains exactly `width × height × 4` bytes in RGBA order with no
+    /// row padding.
+    ///
+    /// This is the fastest readback path — no PNG encoding or decoding
+    /// takes place. Use [`render_to_png`](Self::render_to_png) if you
+    /// need PNG-encoded output.
     ///
     /// The chart's [`Selection`] must have been created with a
     /// [`RenderContext`] (i.e. `context()` returns `Some`).
     ///
     /// # Errors
     ///
-    /// Returns an error if no GPU context is available, or if the GPU
-    /// readback or PNG encoding fails.
+    /// Returns an error if no GPU context is available or if the GPU
+    /// readback fails.
     ///
     /// # Example
     ///
     /// ```rust,ignore
-    /// let png_bytes = chart.render_to_png(800, 600)?;
-    /// std::fs::write("chart.png", &png_bytes)?;
+    /// let rgba = chart.render_to_rgba(800, 600)?;
+    /// assert_eq!(rgba.len(), 800 * 600 * 4);
     /// ```
-    pub fn render_to_png(&mut self, width: u32, height: u32) -> GupResult<Vec<u8>> {
+    pub fn render_to_rgba(&mut self, width: u32, height: u32) -> GupResult<Vec<u8>> {
         let context =
             self.visualization
                 .context()
                 .cloned()
                 .ok_or_else(|| GupError::RenderError {
-                    message: "Cannot export PNG: chart has no GPU RenderContext".to_string(),
+                    message: "Cannot render to RGBA: chart has no GPU RenderContext".to_string(),
                 })?;
 
         let device = context.device();
@@ -2645,12 +2650,12 @@ where
 
         // 3. Create command encoder and render pass.
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("png_export_render_encoder"),
+            label: Some("rgba_export_render_encoder"),
         });
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("png_export_render_pass"),
+                label: Some("rgba_export_render_pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: target.view(),
                     resolve_target: None,
@@ -2679,8 +2684,34 @@ where
         // 5. Submit rendering commands.
         queue.submit(std::iter::once(encoder.finish()));
 
-        // 6. Read back the rendered pixels and encode as PNG.
-        target.readback_as_png(device, queue)
+        // 6. Read back the rendered pixels as tightly-packed RGBA.
+        target.readback_pixels(device, queue)
+    }
+
+    /// Render this chart to an off-screen GPU texture at the given pixel
+    /// dimensions and return the result as PNG-encoded bytes.
+    ///
+    /// Internally calls [`render_to_rgba`](Self::render_to_rgba) to obtain
+    /// the raw pixels, then encodes them as a lossless PNG with RGBA
+    /// colour.
+    ///
+    /// The chart's [`Selection`] must have been created with a
+    /// [`RenderContext`] (i.e. `context()` returns `Some`).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no GPU context is available, or if the GPU
+    /// readback or PNG encoding fails.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let png_bytes = chart.render_to_png(800, 600)?;
+    /// std::fs::write("chart.png", &png_bytes)?;
+    /// ```
+    pub fn render_to_png(&mut self, width: u32, height: u32) -> GupResult<Vec<u8>> {
+        let pixels = self.render_to_rgba(width, height)?;
+        crate::export::png::encode_png(&pixels, width, height)
     }
 
     /// Render the chart directly into the provided [`TextureView`].

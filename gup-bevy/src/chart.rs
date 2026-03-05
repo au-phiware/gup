@@ -17,6 +17,9 @@ pub trait DynChart: Send + Sync + 'static {
     /// Prepare GPU resources and record draw commands.
     fn render(&mut self, context: &mut RenderContext) -> GupResult<()>;
 
+    /// Render the chart to tightly-packed RGBA pixels at the given dimensions.
+    fn render_to_rgba(&mut self, width: u32, height: u32) -> GupResult<Vec<u8>>;
+
     /// Render the chart to PNG bytes at the given pixel dimensions.
     fn render_to_png(&mut self, width: u32, height: u32) -> GupResult<Vec<u8>>;
 
@@ -40,6 +43,10 @@ where
 {
     fn render(&mut self, context: &mut RenderContext) -> GupResult<()> {
         ComposedChart::render(self, context)
+    }
+
+    fn render_to_rgba(&mut self, width: u32, height: u32) -> GupResult<Vec<u8>> {
+        ComposedChart::render_to_rgba(self, width, height)
     }
 
     fn render_to_png(&mut self, width: u32, height: u32) -> GupResult<Vec<u8>> {
@@ -151,5 +158,11 @@ impl GupChart {
     /// Render the chart to PNG bytes at the configured dimensions.
     pub fn render_to_png(&mut self) -> GupResult<Vec<u8>> {
         self.chart.render_to_png(self.width, self.height)
+    }
+
+    /// Render the chart to tightly-packed RGBA pixels at the configured
+    /// dimensions.
+    pub fn render_to_rgba(&mut self) -> GupResult<Vec<u8>> {
+        self.chart.render_to_rgba(self.width, self.height)
     }
 }

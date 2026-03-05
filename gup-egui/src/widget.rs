@@ -23,6 +23,9 @@ pub trait DynChart: Send + Sync + 'static {
     /// Prepare GPU resources and record draw commands.
     fn render(&mut self, context: &mut RenderContext) -> GupResult<()>;
 
+    /// Render the chart to tightly-packed RGBA pixels at the given dimensions.
+    fn render_to_rgba(&mut self, width: u32, height: u32) -> GupResult<Vec<u8>>;
+
     /// Render the chart to PNG bytes at the given pixel dimensions.
     fn render_to_png(&mut self, width: u32, height: u32) -> GupResult<Vec<u8>>;
 }
@@ -34,6 +37,10 @@ where
 {
     fn render(&mut self, context: &mut RenderContext) -> GupResult<()> {
         ComposedChart::render(self, context)
+    }
+
+    fn render_to_rgba(&mut self, width: u32, height: u32) -> GupResult<Vec<u8>> {
+        ComposedChart::render_to_rgba(self, width, height)
     }
 
     fn render_to_png(&mut self, width: u32, height: u32) -> GupResult<Vec<u8>> {
@@ -184,30 +191,18 @@ impl GupWidget {
 
     /// Perform the off-screen render and upload the result to egui.
     fn rerender(&mut self, ui: &mut egui::Ui, width: u32, height: u32) {
-        // Render the chart to PNG bytes.
-        let png_bytes = match self.chart.render_to_png(width, height) {
-            Ok(bytes) => bytes,
+        // Render the chart to raw RGBA pixels (no PNG encode/decode).
+        let pixels = match self.chart.render_to_rgba(width, height) {
+            Ok(px) => px,
             Err(e) => {
                 log::warn!("GupWidget render failed: {e}");
                 return;
             }
         };
 
-        // Decode the PNG into RGBA pixels.
-        let decoded = match image::load_from_memory_with_format(&png_bytes, image::ImageFormat::Png)
-        {
-            Ok(img) => img.to_rgba8(),
-            Err(e) => {
-                log::warn!("Failed to decode chart PNG: {e}");
-                return;
-            }
-        };
-
-        let (w, h) = decoded.dimensions();
-        let pixels = decoded.into_raw();
-
         // Build an egui ColorImage from the pixel data.
-        let color_image = ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &pixels);
+        let color_image =
+            ColorImage::from_rgba_unmultiplied([width as usize, height as usize], &pixels);
 
         // Upload (or replace) the egui texture.
         match &mut self.texture_handle {
