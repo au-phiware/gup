@@ -323,13 +323,13 @@ impl App {
             })
             .collect();
 
-        // Build edge data
+        // Build edge data (positions are indexed by node id for our graph)
         let edge_data: Vec<EdgeData> = self
             .edges
             .iter()
             .filter_map(|e| {
-                let src = self.positions.iter().find(|p| p.id == e.source)?;
-                let tgt = self.positions.iter().find(|p| p.id == e.target)?;
+                let src = self.positions.get(e.source as usize)?;
+                let tgt = self.positions.get(e.target as usize)?;
                 let (x1, y1) = Self::world_to_normalised(src.x, src.y, &bounds);
                 let (x2, y2) = Self::world_to_normalised(tgt.x, tgt.y, &bounds);
                 Some(EdgeData { x1, y1, x2, y2 })
