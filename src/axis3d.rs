@@ -30,6 +30,25 @@
 use crate::mark::line3d::Line3DInstance;
 
 // ---------------------------------------------------------------------------
+// Tick labels
+// ---------------------------------------------------------------------------
+
+/// A positioned text label for a 3D axis tick.
+///
+/// This struct provides the world-space position and text content for a
+/// tick label. It can be fed to a billboard text renderer or projected to
+/// screen-space for use with the existing `Text` mark.
+#[derive(Debug, Clone)]
+pub struct TickLabel3D {
+    /// World-space position of the label.
+    pub position: [f32; 3],
+    /// Label text (e.g. `"0.5"`, `"-1.0"`).
+    pub text: String,
+    /// Which axis this label belongs to (0 = X, 1 = Y, 2 = Z).
+    pub axis_index: u8,
+}
+
+// ---------------------------------------------------------------------------
 // Axis3D
 // ---------------------------------------------------------------------------
 
@@ -197,6 +216,54 @@ impl Axis3D {
     /// Read-only access to the configuration.
     pub fn config(&self) -> &Axis3DConfig {
         &self.config
+    }
+
+    /// Generate [`TickLabel3D`]s for all tick positions.
+    ///
+    /// Each label contains the world-space position and a formatted numeric
+    /// string. These can be projected to screen-space and rendered with the
+    /// `Text` mark, or displayed as billboard text overlays.
+    ///
+    /// Returns an empty `Vec` when `tick_count` is zero.
+    pub fn generate_tick_labels(&self) -> Vec<TickLabel3D> {
+        let c = &self.config;
+        let o = c.origin;
+
+        if c.tick_count == 0 {
+            return Vec::new();
+        }
+
+        let axis_dirs: [[f32; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+        let step = c.length / c.tick_count as f32;
+
+        let mut labels = Vec::with_capacity(3 * 2 * c.tick_count as usize);
+
+        for (axis_index, dir) in axis_dirs.iter().enumerate() {
+            // Choose a perpendicular offset direction so labels sit beside
+            // the tick marks rather than on top of them.
+            let perps = perpendicular_pair(dir);
+            let offset_dir = perps[0];
+            let offset_amount = c.tick_size * 1.5;
+
+            for i in 1..=c.tick_count {
+                let t = step * i as f32;
+                for sign in [-1.0_f32, 1.0] {
+                    let value = t * sign;
+                    let position = [
+                        o[0] + dir[0] * value + offset_dir[0] * offset_amount,
+                        o[1] + dir[1] * value + offset_dir[1] * offset_amount,
+                        o[2] + dir[2] * value + offset_dir[2] * offset_amount,
+                    ];
+                    labels.push(TickLabel3D {
+                        position,
+                        text: format!("{value:.1}"),
+                        axis_index: axis_index as u8,
+                    });
+                }
+            }
+        }
+
+        labels
     }
 }
 
@@ -542,5 +609,69 @@ mod tests {
             let dot12 = p1[0] * p2[0] + p1[1] * p2[1] + p1[2] * p2[2];
             assert!(dot12.abs() < 1e-6, "p1,p2 not perpendicular for {dir:?}");
         }
+    }
+
+    // -- Tick label tests --
+
+    #[test]
+    fn tick_labels_count_matches_ticks() {
+        let config = Axis3DConfig {
+            tick_count: 3,
+            ..Default::default()
+        };
+        let axis = Axis3D::new(config);
+        let labels = axis.generate_tick_labels();
+
+        // 3 axes × 3 ticks × 2 sides = 18 labels.
+        assert_eq!(labels.len(), 18);
+    }
+
+    #[test]
+    fn tick_labels_zero_count_returns_empty() {
+        let config = Axis3DConfig {
+            tick_count: 0,
+            ..Default::default()
+        };
+        let axis = Axis3D::new(config);
+        assert!(axis.generate_tick_labels().is_empty());
+    }
+
+    #[test]
+    fn tick_labels_contain_formatted_values() {
+        let config = Axis3DConfig {
+            length: 2.0,
+            tick_count: 2,
+            ..Default::default()
+        };
+        let axis = Axis3D::new(config);
+        let labels = axis.generate_tick_labels();
+
+        // Collect texts for the X axis (axis_index == 0).
+        let x_texts: Vec<&str> = labels
+            .iter()
+            .filter(|l| l.axis_index == 0)
+            .map(|l| l.text.as_str())
+            .collect();
+
+        // tick_count=2, length=2 → step=1.0 → values -1.0, 1.0, -2.0, 2.0
+        assert!(x_texts.contains(&"-1.0"));
+        assert!(x_texts.contains(&"1.0"));
+        assert!(x_texts.contains(&"-2.0"));
+        assert!(x_texts.contains(&"2.0"));
+    }
+
+    #[test]
+    fn tick_labels_have_correct_axis_index() {
+        let axis = Axis3D::new(Axis3DConfig::default());
+        let labels = axis.generate_tick_labels();
+
+        let x_count = labels.iter().filter(|l| l.axis_index == 0).count();
+        let y_count = labels.iter().filter(|l| l.axis_index == 1).count();
+        let z_count = labels.iter().filter(|l| l.axis_index == 2).count();
+
+        // Each axis: 4 ticks × 2 sides = 8 labels.
+        assert_eq!(x_count, 8);
+        assert_eq!(y_count, 8);
+        assert_eq!(z_count, 8);
     }
 }
