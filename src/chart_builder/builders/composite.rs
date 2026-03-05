@@ -1003,35 +1003,11 @@ where
 {
     match kind {
         LayerKind::Scatter(mut builder) => {
-            // Capture accessors for the NDC position binding.
-            let x_acc = builder.x_accessor.clone();
-            let y_acc = builder.y_accessor.clone();
-            let color_acc = builder.color_accessor.clone();
-            let xs = x_scale.clone();
-            let ys = y_scale.clone();
-
             builder.config.show_axes = false;
             builder.config.x_scale = Some(x_scale.clone());
             builder.config.y_scale = Some(y_scale.clone());
             let composed = builder.build_with_data(data, context)?;
-            let mut sel = composed.visualization;
-
-            // Override the placeholder position binding with a
-            // properly scaled one.
-            if let (Some(xa), Some(ya)) = (x_acc, y_acc) {
-                sel.attr("center", move |d: &T| {
-                    let x_ndc = xs.scale_value(xa.apply(d).as_f32());
-                    let y_ndc = ys.scale_value(ya.apply(d).as_f32());
-                    [x_ndc, y_ndc]
-                });
-                sel.attr("radius", |_d: &T| 0.03f32);
-            }
-            if let Some(ca) = color_acc {
-                sel.attr("fill_color", move |d: &T| match ca.apply(d) {
-                    crate::chart_builder::accessor::AccessorValue::Color(c) => c,
-                    _ => [0.122, 0.467, 0.706, 0.7],
-                });
-            }
+            let sel = composed.visualization;
 
             Ok(BuiltLayer::Scatter(sel))
         }
@@ -1066,25 +1042,11 @@ where
             Ok(BuiltLayer::Line(sel))
         }
         LayerKind::Bar(mut builder) => {
-            let x_acc = builder.x_accessor.clone();
-            let y_acc = builder.y_accessor.clone();
-            let xs = x_scale.clone();
-            let ys = y_scale.clone();
-
             builder.config.show_axes = false;
             builder.config.x_scale = Some(x_scale.clone());
             builder.config.y_scale = Some(y_scale.clone());
             let composed = builder.build_with_data(data, context)?;
-            let mut sel = composed.visualization;
-
-            // Override placeholder position binding for bars.
-            if let (Some(xa), Some(ya)) = (x_acc, y_acc) {
-                sel.attr("position", move |d: &T| {
-                    let x_ndc = xs.scale_value(xa.apply(d).as_f32());
-                    let y_ndc = ys.scale_value(ya.apply(d).as_f32());
-                    [x_ndc, y_ndc]
-                });
-            }
+            let sel = composed.visualization;
 
             Ok(BuiltLayer::Bar(sel))
         }
