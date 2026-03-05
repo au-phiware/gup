@@ -2683,6 +2683,86 @@ where
         target.readback_as_png(device, queue)
     }
 
+    /// Render the chart directly into the provided [`TextureView`].
+    ///
+    /// This is the zero-copy rendering path: all draw commands target the
+    /// supplied view and are submitted to the GPU queue.  No readback or
+    /// encoding takes place — the rendered pixels stay on the GPU.
+    ///
+    /// `surface_format` must match the format of the target texture so that
+    /// render pipelines are created with a compatible colour target.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let view = my_texture.create_view(&Default::default());
+    /// chart.render_to_texture_view(
+    ///     &view,
+    ///     wgpu::TextureFormat::Bgra8UnormSrgb,
+    ///     800,
+    ///     600,
+    /// )?;
+    /// ```
+    pub fn render_to_texture_view(
+        &mut self,
+        view: &wgpu::TextureView,
+        surface_format: wgpu::TextureFormat,
+        _width: u32,
+        _height: u32,
+    ) -> GupResult<()> {
+        let context =
+            self.visualization
+                .context()
+                .cloned()
+                .ok_or_else(|| GupError::RenderError {
+                    message: "Cannot render to texture: chart has no GPU RenderContext".to_string(),
+                })?;
+
+        let device = context.device();
+        let queue = context.queue();
+
+        // 1. Prepare GPU buffers for drawing.
+        self.prepare_draw_commands(device, queue, surface_format);
+
+        // 2. Create command encoder and render pass targeting the caller's view.
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("gup_texture_render_encoder"),
+        });
+
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("gup_texture_render_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 1.0,
+                            g: 1.0,
+                            b: 1.0,
+                            a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            // 3. Issue all draw commands.
+            self.draw_grid_lines(&mut render_pass);
+            self.draw_axis_lines(&mut render_pass);
+            self.draw_ticks(&mut render_pass);
+        }
+
+        // 4. Submit rendering commands.
+        queue.submit(std::iter::once(encoder.finish()));
+
+        Ok(())
+    }
+
     /// Render this chart to PNG at a logical size scaled by the given
     /// factor.
     ///
