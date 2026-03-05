@@ -2,7 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Advanced Scale **Status**: 🚧 In Progress **Created**: 2025-07-20
+**Initiative**: Advanced Scale **Status**: 🚧 In Progress **Created**:
+2025-07-20
 
 ## Context
 
