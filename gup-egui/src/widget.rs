@@ -128,6 +128,15 @@ struct SharedDeviceState {
     egui_texture_id: Option<egui::TextureId>,
 }
 
+impl Drop for SharedDeviceState {
+    fn drop(&mut self) {
+        // Free the texture from egui's renderer to avoid a resource leak.
+        if let Some(id) = self.egui_texture_id.take() {
+            self.render_state.renderer.write().free_texture(&id);
+        }
+    }
+}
+
 /// An offscreen texture on the shared device.
 struct OffscreenTexture {
     /// The GPU texture (Rgba8UnormSrgb format, RENDER_ATTACHMENT | TEXTURE_BINDING).
