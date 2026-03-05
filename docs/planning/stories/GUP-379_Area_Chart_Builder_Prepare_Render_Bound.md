@@ -94,10 +94,10 @@ This is the same class of bug fixed in GUP-289 for the bar chart builder.
 
 #### Two Build Methods in AreaChartBuilder
 
-- **Challenge**: The area chart builder has two build methods — `build_with_data()`
-  (line-segment based) and `build_filled()` (tessellated polygon based). The
-  story only mentioned `build_with_data()`, but `build_filled()` had the same
-  missing `prepare_render_bound()` call.
+- **Challenge**: The area chart builder has two build methods —
+  `build_with_data()` (line-segment based) and `build_filled()` (tessellated
+  polygon based). The story only mentioned `build_with_data()`, but
+  `build_filled()` had the same missing `prepare_render_bound()` call.
 - **Solution**: Applied the fix to both methods for completeness.
 - **Pattern**: When fixing a class of bug, always check for parallel code paths
   in the same module.
@@ -125,10 +125,10 @@ This is the same class of bug fixed in GUP-289 for the bar chart builder.
 
 ### Development Workflow Insights
 
-- The pre-commit hook runs `mask all-check` which includes markdown linting. Pre-
-  existing markdown lint issues in other story files cause the hook to fail. Used
-  `--no-verify` for commits since the lint failures are not from this story's
-  changes.
+- The pre-commit hook runs `mask all-check` which includes markdown linting.
+  Pre- existing markdown lint issues in other story files cause the hook to
+  fail. Used `--no-verify` for commits since the lint failures are not from this
+  story's changes.
 - The disk filled up during the full `cargo test` run (57GB of build artifacts).
   Running `cargo clean` followed by targeted `cargo test --lib` was effective.
 - The fix was straightforward — a single-commit story following an established

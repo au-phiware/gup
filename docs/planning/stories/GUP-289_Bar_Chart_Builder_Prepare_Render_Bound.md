@@ -59,8 +59,8 @@ chart produces axes and grid but no visible data bars.
 
 ### Key Changes
 
-| File                              | Change                                                                                                                                                                                |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| File                                | Change                                                                                                                                                                                                   |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/chart_builder/builders/bar.rs` | Added `prepare_render_bound()` call after `apply_accessors_to_selection()`. Cloned `context` before passing to `Selection::new` so it remains available for the pipeline preparation. Added 2 new tests. |
 
 ### Test Summary
@@ -93,9 +93,9 @@ chart produces axes and grid but no visible data bars.
 
 #### Context Ownership in Builder Pipelines
 
-- **Challenge**: `Selection::new(data, context)` consumed the `Arc<RenderContext>`
-  by move, but `prepare_render_bound()` needs `context.device()` and
-  `context.queue()` afterward.
+- **Challenge**: `Selection::new(data, context)` consumed the
+  `Arc<RenderContext>` by move, but `prepare_render_bound()` needs
+  `context.device()` and `context.queue()` afterward.
 - **Solution**: Clone `context` before passing to `Selection::new`, matching the
   pattern already used by scatter and line builders.
 - **Pattern**: Always `context.clone()` when the context is needed after
@@ -107,8 +107,8 @@ chart produces axes and grid but no visible data bars.
 
 - **Decision**: All chart builders follow the same post-processing sequence:
   `apply_accessors_to_selection` then `prepare_render_bound`.
-- **Reasoning**: Consistency across builders prevents the exact class of bug this
-  story fixes (missing render readiness).
+- **Reasoning**: Consistency across builders prevents the exact class of bug
+  this story fixes (missing render readiness).
 - **Trade-off**: Slightly more code duplication across builders, but each is
   explicit and self-contained.
 - **Future**: A shared `finalize_chart()` helper could extract this common
@@ -128,5 +128,5 @@ chart produces axes and grid but no visible data bars.
 ### Follow-up Stories
 
 1. **GUP-379: Area Chart Builder prepare_render_bound** — The area chart builder
-   (added in GUP-287) is missing the `prepare_render_bound()` call.
-   Should be fixed using the same pattern applied in GUP-289.
+   (added in GUP-287) is missing the `prepare_render_bound()` call. Should be
+   fixed using the same pattern applied in GUP-289.
