@@ -74,22 +74,23 @@ changes.
   storage from `Box<dyn Fn(&T) -> AccessorValue>` to
   `Arc<dyn Fn(&T) -> AccessorValue>`. Updated `new()`, `from_field()`, and
   `Clone` impl to use `Arc::new` and `Arc::clone`.
-- **`src/chart_builder/builders/area.rs`**: Added `Clone` impl for
-  `Baseline<T>` enum. Fixed `AreaChartBuilder::clone()` to properly clone the
-  baseline instead of resetting to `Baseline::default()`.
+- **`src/chart_builder/builders/area.rs`**: Added `Clone` impl for `Baseline<T>`
+  enum. Fixed `AreaChartBuilder::clone()` to properly clone the baseline instead
+  of resetting to `Baseline::default()`.
 
 ### Clone Sites Audited
 
-| Location | Status |
-|---|---|
-| `BarChartBuilder::clone()` (5 accessor fields) | ✅ Works via Arc |
-| `AreaChartBuilder::clone()` (4 accessor fields + baseline) | ✅ Fixed |
-| `examples/basic/03_line_chart.rs` (x/y accessor clones) | ✅ Works via Arc |
+| Location                                                         | Status           |
+| ---------------------------------------------------------------- | ---------------- |
+| `BarChartBuilder::clone()` (5 accessor fields)                   | ✅ Works via Arc |
+| `AreaChartBuilder::clone()` (4 accessor fields + baseline)       | ✅ Fixed         |
+| `examples/basic/03_line_chart.rs` (x/y accessor clones)          | ✅ Works via Arc |
 | `examples/intermediate/categorical_bar.rs` (x/y accessor clones) | ✅ Works via Arc |
 
 ### Tests Added
 
 5 new unit tests:
+
 - `test_accessor_function_clone_preserves_field_name`
 - `test_accessor_function_clone_preserves_closure`
 - `test_accessor_function_clone_preserves_string_closure`
@@ -113,8 +114,8 @@ changes.
   `Clone`. The original workaround was to re-create a field-based accessor on
   clone, silently losing the closure.
 - **Solution**: Replace `Box<dyn Fn>` with `Arc<dyn Fn>`. Arc is reference-
-  counted and cloneable, so `Arc::clone` gives a new handle to the same
-  closure at negligible cost.
+  counted and cloneable, so `Arc::clone` gives a new handle to the same closure
+  at negligible cost.
 - **Pattern**: Whenever a type needs to be Clone but contains a trait object
   closure (`dyn Fn`), `Arc` is the standard Rust solution. This is a common
   pattern in async runtimes, callbacks, and event handlers.
@@ -144,8 +145,8 @@ changes.
   but closures are cloned infrequently and the cost is negligible compared to
   GPU operations.
 - **Future**: This enables any future code to freely clone accessors without
-  concern. It also aligns with how `AccessorFunction` is used (shared
-  read-only reference to a function).
+  concern. It also aligns with how `AccessorFunction` is used (shared read-only
+  reference to a function).
 
 ### Development Workflow Insights
 
