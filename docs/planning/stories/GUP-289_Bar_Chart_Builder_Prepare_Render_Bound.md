@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Core GPU Primitives **Status**: 🚧 In Progress **Created**:
-2025-07-20
+**Initiative**: Core GPU Primitives **Status**: ✅ Complete **Created**:
+2025-07-20 **Completed**: 2025-07-20
 
 ## Context
 
@@ -20,17 +20,18 @@ chart produces axes and grid but no visible data bars.
 
 ## Acceptance Criteria
 
-- [ ] `BarChartBuilder::build_with_data()` calls `prepare_render_bound()` at
+- [x] `BarChartBuilder::build_with_data()` calls `prepare_render_bound()` at
       build time so the Selection is render-ready.
-- [ ] `render_to_png()` on a bar chart shows visible rectangles in the data
+- [x] `render_to_png()` on a bar chart shows visible rectangles in the data
       area.
-- [ ] At least one test validates visible bar pixels in the data region.
+- [x] At least one test validates visible bar pixels in the data region.
 
 ## Technical Tasks
 
-- [ ] Call `prepare_render_bound()` at the end of
-      `BarChartBuilder::build_with_data()` (after `apply_accessors_to_selection`).
-- [ ] Add a visual regression test for bar chart PNG export.
+- [x] Call `prepare_render_bound()` at the end of
+      `BarChartBuilder::build_with_data()` (after
+      `apply_accessors_to_selection`).
+- [x] Add a visual regression test for bar chart PNG export.
 
 ## Dependencies
 
@@ -50,6 +51,22 @@ chart produces axes and grid but no visible data bars.
 
 ## Definition of Done
 
-- [ ] Bar chart builder produces visible data marks via `render_to_png()`.
-- [ ] All tests pass: `cargo test -- --test-threads=1`.
-- [ ] `mask all-fix` exits cleanly.
+- [x] Bar chart builder produces visible data marks via `render_to_png()`.
+- [x] All tests pass: `cargo test -- --test-threads=1`.
+- [x] `mask all-fix` exits cleanly.
+
+## Implementation Summary
+
+### Key Changes
+
+| File                              | Change                                                                                                                                                                                |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/chart_builder/builders/bar.rs` | Added `prepare_render_bound()` call after `apply_accessors_to_selection()`. Cloned `context` before passing to `Selection::new` so it remains available for the pipeline preparation. Added 2 new tests. |
+
+### Test Summary
+
+- 22 bar chart tests pass (20 pre-existing + 2 new)
+- `test_bar_chart_is_render_ready_after_build`: verifies `is_render_ready()` and
+  `has_data_mark_data()` after build
+- `test_bar_chart_render_to_png_produces_visible_bars`: renders to RGBA and
+  checks for non-white pixels in the data region

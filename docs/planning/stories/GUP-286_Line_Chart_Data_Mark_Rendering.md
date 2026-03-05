@@ -69,8 +69,8 @@ chart-area coordinates and preparing the GPU pipeline at build time.
 
 ### Key Changes
 
-| File                              | Change                                                                                                                                                                               |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| File                                 | Change                                                                                                                                                                                                                                                                  |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/chart_builder/builders/line.rs` | Rewrote `build_with_data()`: compute data domain with 5% padding, create ComposedChart with axes first, compute NdcBounds, bind start/end/color/width attrs with NDC mapping, call `prepare_render_bound()`. Added `auto_domain_from_iter()` helper. Added 2 new tests. |
 
 ### Test Summary
@@ -97,8 +97,8 @@ chart-area coordinates and preparing the GPU pipeline at build time.
   reused directly.
 - **Solution**: Compute the data domain and NdcBounds inline, then bind separate
   "start" and "end" attr closures that each perform the domain→NDC linear
-  mapping. The mapping logic is identical to the scatter chart's "center" mapping
-  but applied independently to each endpoint.
+  mapping. The mapping logic is identical to the scatter chart's "center"
+  mapping but applied independently to each endpoint.
 - **Pattern**: When a mark type has different attribute names than the shared
   helper expects, inline the mapping rather than over-generalising the helper.
   Keep the shared helper focused on the most common case (Circle).
@@ -117,8 +117,8 @@ chart-area coordinates and preparing the GPU pipeline at build time.
 
 #### Build-Time Order: Axes Before NdcBounds
 
-- **Challenge**: The chart area depends on axis margins. If NdcBounds is computed
-  before axes are added, the data marks will be mis-positioned.
+- **Challenge**: The chart area depends on axis margins. If NdcBounds is
+  computed before axes are added, the data marks will be mis-positioned.
 - **Solution**: Follow the same order established by GUP-284's scatter builder:
   (1) create ComposedChart with `.with_default_axes()`, (2) compute chart area,
   (3) compute NdcBounds, (4) bind attrs, (5) `prepare_render_bound()`.
@@ -133,14 +133,15 @@ chart-area coordinates and preparing the GPU pipeline at build time.
   `LineChartBuilder::build_with_data()` rather than extending the shared
   `apply_accessors_to_selection()` to handle line marks.
 - **Reasoning**: The line builder pre-computes segment endpoints from raw data
-  before creating the Selection, so the mapping operates on `LineSegment.start_pos`
-  and `LineSegment.end_pos` rather than accessor functions. Forcing this into the
-  shared helper would require a different function signature.
-- **Trade-off**: Slight duplication of the domain→NDC mapping formula. Acceptable
-  because the formula is simple (4 lines) and the alternative would add
-  complexity to the shared helper's API.
-- **Future**: If more mark types need the same pattern, a `map_to_ndc(value,
-  min, max, ndc_lo, ndc_hi)` utility could be extracted.
+  before creating the Selection, so the mapping operates on
+  `LineSegment.start_pos` and `LineSegment.end_pos` rather than accessor
+  functions. Forcing this into the shared helper would require a different
+  function signature.
+- **Trade-off**: Slight duplication of the domain→NDC mapping formula.
+  Acceptable because the formula is simple (4 lines) and the alternative would
+  add complexity to the shared helper's API.
+- **Future**: If more mark types need the same pattern, a
+  `map_to_ndc(value, min, max, ndc_lo, ndc_hi)` utility could be extracted.
 
 #### auto_domain_from_iter as a Private Helper
 
@@ -151,30 +152,29 @@ chart-area coordinates and preparing the GPU pipeline at build time.
   `f32` values. A simple iterator-based helper avoids creating synthetic
   AccessorFunction wrappers.
 - **Trade-off**: Two domain-padding functions exist in different modules.
-- **Future**: Could unify into a single `auto_domain_from_iter()` that both call.
+- **Future**: Could unify into a single `auto_domain_from_iter()` that both
+  call.
 
 ### Development Workflow Insights
 
 - The change was remarkably small (~25 net lines of production code changed in
   `build_with_data()` plus a 20-line helper function) for the impact: all line
   chart builder outputs now render visible data marks.
-- The pattern established by GUP-284 (axes first → chart area → NdcBounds →
-  attr bindings → prepare_render_bound) transferred cleanly to the line mark
-  case, validating the architectural approach.
+- The pattern established by GUP-284 (axes first → chart area → NdcBounds → attr
+  bindings → prepare_render_bound) transferred cleanly to the line mark case,
+  validating the architectural approach.
 - Visual verification via PNG export was essential. The test uses a 400×300
   render resolution and checks for >50 non-white pixels in the data region
   center, matching the scatter chart's test strategy.
 - All 22 pre-existing line chart tests continued to pass without modification,
-  confirming backward compatibility. The segment data (start_pos/end_pos in
-  data space) is unchanged; only the GPU attr bindings now perform the NDC
-  mapping.
+  confirming backward compatibility. The segment data (start_pos/end_pos in data
+  space) is unchanged; only the GPU attr bindings now perform the NDC mapping.
 
 ### Follow-up Stories
 
-1. **GUP-288: Area Chart Builder Data-Mark Rendering** — The
-   `AreaChartBuilder` has the same gap: no NDC mapping, no
-   `prepare_render_bound()`. It uses `Selection<AreaSegment<T>, Line>` and
-   needs the same treatment applied here.
+1. **GUP-288: Area Chart Builder Data-Mark Rendering** — The `AreaChartBuilder`
+   has the same gap: no NDC mapping, no `prepare_render_bound()`. It uses
+   `Selection<AreaSegment<T>, Line>` and needs the same treatment applied here.
 
 2. **GUP-289: Bar Chart Builder prepare_render_bound** — The `BarChartBuilder`
    computes NdcBounds and calls `apply_accessors_to_selection()` but does not
