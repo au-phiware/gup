@@ -1026,7 +1026,7 @@ PNG, HTML), and platform targets.
 - [GUP-268](GUP-268_PNG_Export.md) ✅ — Off-screen GPU render-to-texture with
   staging-buffer readback and PNG encoding via the image crate, supporting HiDPI
   scale factors. Deps: GUP-004 ✅, GUP-035 ✅, GUP-018 ✅.
-- [GUP-268A](GUP-268A_Data_Mark_PNG_Export.md) 📋 — Wire Selection data mark
+- [GUP-268A](GUP-268A_Data_Mark_PNG_Export.md) 🚧 — Wire Selection data mark
   rendering (circles, rectangles, lines) through the PNG export path so exported
   images include the full visualization, not just axes and grid. Deps: GUP-268
   ✅.
