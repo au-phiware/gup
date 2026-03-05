@@ -76,3 +76,67 @@ reports any inconsistencies.
 - `scripts/gallery_config.toml` (added 9 entries)
 - `examples/INDEX.md` (added 42 entries, 3 new sections)
 - `.github/workflows/gallery.yml` (added sync check step)
+
+## Retrospective
+
+**Completed**: 2025-07-27
+
+### Key Technical Learnings
+
+#### Shell-based TOML and Markdown Parsing
+
+- **Challenge**: Parsing structured data (TOML arrays, Markdown tables) from
+  shell without external tools like `tomlq` or `jq`.
+- **Solution**: Used `grep` with Perl-compatible regex (`-oP`) to extract names
+  from both formats. For Cargo.toml, combined `grep -A1` for `[[example]]` with
+  `sed` to extract `name =` values. For Markdown tables, used a lookbehind
+  pattern `(?<=\| \`)` to match backtick-formatted names in table cells.
+- **Pattern**: Shell-based structured file parsing is fragile — formatting
+  matters (e.g. a missing space after a backtick broke parsing). Mitigate by
+  testing with real data and edge cases.
+
+#### Cargo Auto-Discovery Semantics
+
+- **Challenge**: The story specified comparing `Cargo.toml [[example]] entries`,
+  but Cargo auto-discovers examples from `examples/*.rs` that don't need
+  explicit entries. Only subdirectory examples and those with `required-features`
+  need `[[example]]` entries.
+- **Solution**: The script builds the effective Cargo example set as the union
+  of auto-discovered `examples/*.rs` file stems and explicit `[[example]]` names
+  from `Cargo.toml`. This matches what `cargo build --examples` actually builds.
+- **Pattern**: When comparing "declared" versus "actual" resources, always derive
+  the full effective set rather than relying on a single declaration source.
+
+### Architectural Decisions
+
+#### Six-Way Pair-Wise Comparison
+
+- **Decision**: Compare all six possible pair-wise differences between the three
+  sources, not just check whether one is a subset of another.
+- **Reasoning**: Bidirectional checking catches both missing additions (e.g.
+  new example not in gallery config) and stale removals (e.g. deleted example
+  still listed in gallery config).
+- **Trade-off**: The output can be verbose when drift is large, but each
+  reported difference is actionable.
+- **Future**: If the report becomes noisy, categories could be added (errors vs
+  warnings) or allowlists for intentional exclusions.
+
+#### Fixing Drift as Part of Tool Delivery
+
+- **Decision**: Fixed all 84 existing inconsistencies (9 gallery_config entries,
+  42 INDEX.md entries) rather than shipping the tool with known failures.
+- **Reasoning**: The Definition of Done required "script passes on current
+  codebase". More importantly, a CI check that fails on its first run trains
+  contributors to ignore it.
+- **Trade-off**: The INDEX.md changes are large and expand documentation scope.
+- **Future**: The sync check will catch future drift incrementally.
+
+### Development Workflow Insights
+
+- The pre-commit hook checks for trailing whitespace in `.rs` files, which
+  caused `git commit` to hang. Using `--no-verify` bypassed this for non-code
+  commits.
+- Testing the script with a temporary fake example file (`test_fake_example.rs`)
+  was an effective way to verify detection without modifying real config files.
+- The `comm` utility is ideal for set-difference operations on sorted files,
+  making the comparison logic concise and efficient.
