@@ -25,10 +25,9 @@ so that `scripts/generate_gallery.sh` can produce actual PNG thumbnails.
 
 ## Acceptance Criteria
 
-- [x] All examples classified as `skip = false` in
-      `scripts/gallery_config.toml` check
-      `gup::export::gallery::screenshot_request()` at an appropriate point in
-      their execution. (18 renderable examples after audit; 44 console-only,
+- [x] All examples classified as `skip = false` in `scripts/gallery_config.toml`
+      check `gup::export::gallery::screenshot_request()` at an appropriate point
+      in their execution. (18 renderable examples after audit; 44 console-only,
       windowed-only, WASM-only, or feature-gated examples reclassified as skip.)
 - [x] When `GUP_SCREENSHOT_PATH` is set, each example renders one frame
       offscreen, writes a PNG to the specified path, and exits with code 0.
@@ -97,8 +96,8 @@ so that `scripts/generate_gallery.sh` can produce actual PNG thumbnails.
    early.
 
 3. **Gallery script fix**: Fixed a pre-existing awk parser bug in
-   `scripts/generate_gallery.sh` where the `[[examples]]` section detection
-   rule reset state before the emit rule could fire.
+   `scripts/generate_gallery.sh` where the `[[examples]]` section detection rule
+   reset state before the emit rule could fire.
 
 4. **Gallery regeneration**: Regenerated `docs/gallery/index.html` and verified
    all 18 thumbnails are valid PNGs.
@@ -134,3 +133,88 @@ so that `scripts/generate_gallery.sh` can produce actual PNG thumbnails.
 - All cargo tests pass: 391+ passed, 0 failed
 - All 18 gallery thumbnails generated successfully (7.2–7.5 KB each)
 - Normal example execution unaffected (no regression)
+
+## Retrospective
+
+**Completed**: 2025-07-27
+
+### Key Technical Learnings
+
+#### Example Classification Is More Nuanced Than Expected
+
+- **Challenge**: The story assumed 62 "renderable" examples, but many were
+  console-only demos that print statistics, validate APIs, or generate non-PNG
+  output (DOT, JSON, SVG/HTML files). Only 18 of 62 actually use `ComposedChart`
+  and can produce PNG screenshots.
+- **Solution**: Audited all 62 examples by checking for `ComposedChart`,
+  `build_with_data`, `winit`, and GPU rendering patterns. Reclassified 44
+  examples as `skip=true` with documented reasons.
+- **Pattern**: When planning gallery/screenshot stories, first audit the example
+  landscape to determine how many are actually renderable. The example count in
+  the config is not a reliable indicator.
+
+#### Builder API Returns ComposedChart, Not Selection
+
+- **Challenge**: Many examples assign `build_with_data()` results to variables
+  named `selection`, making it appear they return `Selection`. In fact, all
+  builder types (`line()`, `bar()`, `scatter()`, `area()`, `heatmap()`,
+  `boxplot()`, `violin()`, `density_plot()`) return `ComposedChart` which
+  supports `export_png`.
+- **Solution**: Verified builder output types via `type Output` declarations in
+  the builder trait implementations.
+- **Pattern**: Check the `type Output` on `ChartBuilder` implementations to
+  determine what capabilities are available on builder results.
+
+#### Pre-existing Awk Parser Bug in Gallery Script
+
+- **Challenge**: `generate_gallery.sh` had a bug where the `[[examples]]`
+  section-start awk rule reset state BEFORE the emit rule could fire, so only
+  the last entry in the config was ever parsed.
+- **Solution**: Moved the emit logic into the section-start rule (emit previous
+  entry, then reset), matching the pattern already used correctly in
+  `generate_gallery_html.sh`.
+- **Pattern**: When awk has multiple rules that match the same line, execution
+  order matters. Combine dependent logic into a single rule block rather than
+  splitting across rules.
+
+### Architectural Decisions
+
+#### Reclassify Rather Than Force-Fit Screenshots
+
+- **Decision**: Reclassified 44 examples as `skip=true` rather than trying to
+  add artificial screenshot support to console-only examples.
+- **Reasoning**: Producing a meaningful thumbnail from an example that only
+  prints statistics would require creating an entirely new chart that doesn't
+  reflect what the example actually does. This would be misleading.
+- **Trade-off**: Gallery shows fewer thumbnails (18 vs 62) but each thumbnail
+  accurately represents the example's visual output.
+- **Future**: As more examples gain `ComposedChart` support (e.g., windowed
+  examples migrated to `GupApp`), they can be reclassified back to `skip=false`.
+
+#### Screenshot After Context Init, Not At Top of Main
+
+- **Decision**: Insert screenshot check immediately after `RenderContext::new()`
+  and data creation, not at the very top of `main()`.
+- **Reasoning**: The screenshot needs a GPU context and data to build the chart.
+  Checking too early (before context init) would require restructuring the
+  example to separate context init from the rest of the logic.
+- **Trade-off**: Slight code duplication (chart builder config repeated in
+  screenshot block and normal flow) but maintains readability.
+
+### Development Workflow Insights
+
+- The mechanical nature of this story (19 similar edits) benefited from
+  batch-analysing the example landscape first, then applying a consistent
+  pattern. The pre-analysis phase (categorising 62 examples) took longer than
+  the actual edits.
+- `mask all-fix` caught minor formatting differences in the screenshot blocks
+  (rustfmt preferences for closure formatting).
+- Running `generate_gallery.sh` end-to-end was the most valuable validation — it
+  caught the pdf_export feature-gate issue that individual checks missed.
+
+### Follow-up Stories
+
+1. **GUP-318: Migrate Examples to GupApp** — When windowed examples are migrated
+   to the headless-capable `GupApp` framework, they can be reclassified as
+   `skip=false` and wired for gallery screenshots. This would increase the
+   renderable count significantly.
