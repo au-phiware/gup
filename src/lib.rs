@@ -388,8 +388,8 @@ pub use chart_builder::builders::heatmap::{
 pub use chart_builder::builders::violin::{HalfSide, ViolinOrientation, ViolinPlotBuilder};
 pub use chart_builder::{
     AreaChartBuilder, AxisLabelConfig, BarChartBuilder, ChartBuilder, ChartConfig, ChoroplethChart,
-    ChoroplethChartBuilder, ComposedChart, HeatmapBuilder, LabelCapableBuilder, LabeledChart,
-    LineChartBuilder, ScatterPlotBuilder, TitleAlignment, TitleConfig, plot,
+    ChoroplethChartBuilder, ComposedChart, HeatmapBuilder, HoverHighlight, LabelCapableBuilder,
+    LabeledChart, LineChartBuilder, ScatterPlotBuilder, TitleAlignment, TitleConfig, plot,
 };
 
 /// Create a new [`DensityPlotBuilder`] (convenience shorthand).
