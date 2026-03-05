@@ -441,6 +441,80 @@ impl PdfRenderer {
                 }
                 ops.push(Op::RestoreGraphicsState);
             }
+            SvgElement::Polygon {
+                points,
+                fill,
+                stroke,
+                stroke_width,
+            } => {
+                // Parse "x1,y1 x2,y2 ..." into PDF path operations.
+                let coords: Vec<(f32, f32)> = points
+                    .split_whitespace()
+                    .filter_map(|pair| {
+                        let mut parts = pair.split(',');
+                        let x = parts.next()?.parse::<f32>().ok()?;
+                        let y = parts.next()?.parse::<f32>().ok()?;
+                        Some((x, y))
+                    })
+                    .collect();
+
+                if coords.is_empty() {
+                    return;
+                }
+
+                let has_fill = fill != "none" && fill != "transparent";
+                let has_stroke = stroke.as_deref().is_some_and(|s| s != "none");
+
+                if has_fill {
+                    ops.push(Op::SetFillColor {
+                        col: parse_css_color(fill),
+                    });
+                }
+                if has_stroke {
+                    if let Some(s) = stroke {
+                        ops.push(Op::SetOutlineColor {
+                            col: parse_css_color(s),
+                        });
+                    }
+                    if let Some(w) = stroke_width {
+                        ops.push(Op::SetOutlineThickness { pt: Pt(w * scale) });
+                    }
+                }
+
+                let paint_mode = match (has_fill, has_stroke) {
+                    (true, true) => PaintMode::FillStroke,
+                    (true, false) => PaintMode::Fill,
+                    (false, true) => PaintMode::Stroke,
+                    (false, false) => return,
+                };
+
+                let line_points: Vec<printpdf::LinePoint> = coords
+                    .iter()
+                    .map(|&(px, py)| {
+                        let pdf_x = offset_x + px * scale;
+                        let pdf_y = page_h - (offset_y + py * scale);
+                        printpdf::LinePoint {
+                            p: Point {
+                                x: Pt(pdf_x),
+                                y: Pt(pdf_y),
+                            },
+                            bezier: false,
+                        }
+                    })
+                    .collect();
+
+                let line = printpdf::Line {
+                    points: line_points,
+                    is_closed: true,
+                };
+                ops.push(Op::DrawPolygon {
+                    polygon: printpdf::Polygon {
+                        rings: vec![line],
+                        mode: paint_mode,
+                        winding_order: WindingOrder::NonZero,
+                    },
+                });
+            }
         }
     }
 
