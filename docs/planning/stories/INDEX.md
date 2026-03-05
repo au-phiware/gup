@@ -933,7 +933,7 @@ layouts, and 3D visualization.
 - [GUP-259](GUP-259_GPU_Force_Directed_Graph_Layout.md) ✅ — GPU compute shader
   force-directed layout (repulsion, spring, gravity, convergence detection)
   targeting 100K nodes in ≤5 seconds. Deps: GUP-003 ✅, GUP-004 ✅, GUP-077 ✅.
-- [GUP-310](GUP-310_Barnes_Hut_GPU_Repulsion.md) 📋 — Barnes-Hut GPU repulsion
+- [GUP-310](GUP-310_Barnes_Hut_GPU_Repulsion.md) 🚧 — Barnes-Hut GPU repulsion
   approximation to reduce O(n²) to O(n log n), enabling 100K-node ≤5s target.
   Deps: GUP-259 ✅.
 - [GUP-311](GUP-311_Interactive_Graph_Rendering.md) 📋 — Interactive
