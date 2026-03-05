@@ -2,7 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Documentation **Status**: 🚧 In Progress **Created**: 2025-07-26
+**Initiative**: Documentation **Status**: ✅ Complete **Created**: 2025-07-26
 
 ## Context
 
@@ -22,13 +22,13 @@ reports any inconsistencies.
 
 ## Acceptance Criteria
 
-- [ ] A script (`scripts/check_gallery_sync.sh` or equivalent) compares examples
+- [x] A script (`scripts/check_gallery_sync.sh` or equivalent) compares examples
       listed in `gallery_config.toml`, `examples/INDEX.md`, and `Cargo.toml`
       `[[example]]` entries.
-- [ ] The script reports examples present in one source but missing from
+- [x] The script reports examples present in one source but missing from
       another.
-- [ ] The script is integrated into the gallery CI workflow.
-- [ ] The script exits non-zero if any drift is detected.
+- [x] The script is integrated into the gallery CI workflow.
+- [x] The script exits non-zero if any drift is detected.
 
 ## Dependencies
 
@@ -48,6 +48,31 @@ reports any inconsistencies.
 
 ## Definition of Done
 
-- [ ] Sync check script passes on current codebase
-- [ ] Script integrated into gallery CI workflow
-- [ ] Story status updated to ✅ Complete
+- [x] Sync check script passes on current codebase
+- [x] Script integrated into gallery CI workflow
+- [x] Story status updated to ✅ Complete
+
+## Implementation Summary
+
+**Completed**: 2025-07-27
+
+### What Was Implemented
+
+1. **`scripts/check_gallery_sync.sh`** — Bash script that compares example names
+   across three sources: `gallery_config.toml`, `examples/INDEX.md`, and Cargo
+   examples (explicit `[[example]]` entries plus auto-discovered `examples/*.rs`
+   files). Reports all six pair-wise differences and exits non-zero on drift.
+
+2. **CI integration** — Added a "Check gallery config sync" step to
+   `.github/workflows/gallery.yml`, running before thumbnail generation.
+
+3. **Fixed existing drift** — Added 9 missing examples to `gallery_config.toml`
+   (5 filesystem examples + 4 tutorial examples) and added 42 missing examples
+   to `examples/INDEX.md` with 3 new sections (Export, Intermediate, Tutorials).
+
+### Key Files Changed
+
+- `scripts/check_gallery_sync.sh` (new, 109 lines)
+- `scripts/gallery_config.toml` (added 9 entries)
+- `examples/INDEX.md` (added 42 entries, 3 new sections)
+- `.github/workflows/gallery.yml` (added sync check step)
