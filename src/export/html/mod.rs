@@ -86,12 +86,27 @@ use std::path::{Path, PathBuf};
 /// * [`Url`](WasmStrategy::Url) — Emits a `fetch(url)` call that loads the
 ///   WASM module from the given URL at runtime.  Produces a much smaller
 ///   HTML file but requires the `.wasm` to be hosted somewhere accessible.
+///
+/// * [`Auto`](WasmStrategy::Auto) — Automatically discovers the `.wasm`
+///   artifact from the `wasm-pack` output directory (`pkg/`), then inlines
+///   it just like [`Inline`](WasmStrategy::Inline).  Searches the current
+///   directory by default, or a custom workspace root if specified.
+///
+///   The discovery algorithm looks for files matching `*_bg.wasm` inside a
+///   `pkg/` subdirectory, which is the standard layout produced by
+///   `wasm-pack build`.  If no file is found, an error is returned with
+///   guidance on falling back to an explicit path.
 #[derive(Debug, Clone)]
 pub enum WasmStrategy {
     /// Base64-encode the WASM binary at the given path into the HTML.
     Inline(PathBuf),
     /// Reference the WASM module at this URL.
     Url(String),
+    /// Auto-discover the WASM artifact from the `wasm-pack` output.
+    ///
+    /// Optionally specify a workspace root directory.  When `None`, the
+    /// current working directory is used.
+    Auto(Option<PathBuf>),
 }
 
 /// Builder for producing a self-contained HTML file from a Gup chart.
@@ -421,6 +436,101 @@ impl HtmlExporter {
                 Ok(template::inline_wasm_script(&wasm_b64))
             }
             WasmStrategy::Url(url) => Ok(template::url_wasm_script(url)),
+            WasmStrategy::Auto(root) => {
+                let wasm_path = discover_wasm_artifact(root.as_deref())?;
+                let wasm_bytes = std::fs::read(&wasm_path).map_err(|e| GupError::FileError {
+                    path: wasm_path.display().to_string(),
+                    error: e.to_string(),
+                })?;
+
+                use base64::Engine as _;
+                let wasm_b64 = base64::engine::general_purpose::STANDARD.encode(&wasm_bytes);
+
+                Ok(template::inline_wasm_script(&wasm_b64))
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Auto-discovery
+// ---------------------------------------------------------------------------
+
+/// Search for a `wasm-pack` output artifact.
+///
+/// Looks for `*_bg.wasm` inside the `pkg/` subdirectory of `root`.  When
+/// `root` is `None`, the current working directory is used.
+///
+/// # Errors
+///
+/// Returns [`GupError::FileError`] if:
+///
+/// * The `pkg/` directory does not exist.
+/// * No `*_bg.wasm` file is found inside it.
+/// * Multiple `*_bg.wasm` files are found (ambiguous).
+pub fn discover_wasm_artifact(root: Option<&Path>) -> GupResult<PathBuf> {
+    let base = match root {
+        Some(r) => r.to_path_buf(),
+        None => std::env::current_dir().map_err(|e| GupError::FileError {
+            path: ".".into(),
+            error: format!("Failed to determine current directory: {e}"),
+        })?,
+    };
+
+    let pkg_dir = base.join("pkg");
+    if !pkg_dir.is_dir() {
+        return Err(GupError::FileError {
+            path: pkg_dir.display().to_string(),
+            error: "pkg/ directory not found. Run `wasm-pack build` first, \
+                    or use WasmStrategy::Inline(path) to specify the WASM file explicitly."
+                .into(),
+        });
+    }
+
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    let entries = std::fs::read_dir(&pkg_dir).map_err(|e| GupError::FileError {
+        path: pkg_dir.display().to_string(),
+        error: format!("Failed to read pkg/ directory: {e}"),
+    })?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| GupError::FileError {
+            path: pkg_dir.display().to_string(),
+            error: format!("Failed to read directory entry: {e}"),
+        })?;
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+        if name_str.ends_with("_bg.wasm") {
+            candidates.push(entry.path());
+        }
+    }
+
+    match candidates.len() {
+        0 => Err(GupError::FileError {
+            path: pkg_dir.display().to_string(),
+            error: "No *_bg.wasm file found in pkg/. Run `wasm-pack build` first, \
+                    or use WasmStrategy::Inline(path) to specify the WASM file explicitly."
+                .into(),
+        }),
+        1 => Ok(candidates.into_iter().next().unwrap()),
+        n => {
+            let names: Vec<String> = candidates
+                .iter()
+                .map(|p| {
+                    p.file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .into_owned()
+                })
+                .collect();
+            Err(GupError::FileError {
+                path: pkg_dir.display().to_string(),
+                error: format!(
+                    "Found {n} *_bg.wasm files ({}) — ambiguous. \
+                     Use WasmStrategy::Inline(path) to specify which one.",
+                    names.join(", ")
+                ),
+            })
         }
     }
 }
@@ -448,6 +558,13 @@ mod tests {
     }
 
     #[test]
+    fn wasm_strategy_auto_debug() {
+        let strategy = WasmStrategy::Auto(None);
+        let dbg = format!("{strategy:?}");
+        assert!(dbg.contains("Auto"));
+    }
+
+    #[test]
     fn html_exporter_builder() {
         let exporter = HtmlExporter::new(WasmStrategy::Url("gup.wasm".into()))
             .with_title("Test Chart")
@@ -469,5 +586,102 @@ mod tests {
         // Verify data URI prefix for PNG.
         let data_uri = format!("data:image/png;base64,{encoded}");
         assert!(data_uri.starts_with("data:image/png;base64,"));
+    }
+
+    // -- Auto-discovery tests -----------------------------------------------
+
+    #[test]
+    fn discover_wasm_artifact_finds_single_file() {
+        let dir = std::env::temp_dir().join("gup_wasm_discover_single");
+        let pkg = dir.join("pkg");
+        std::fs::create_dir_all(&pkg).unwrap();
+        let wasm_path = pkg.join("gup_bg.wasm");
+        std::fs::write(&wasm_path, b"\x00asm\x01\x00\x00\x00").unwrap();
+
+        let result = discover_wasm_artifact(Some(&dir));
+        assert!(result.is_ok(), "should find the single WASM file");
+        assert_eq!(result.unwrap(), wasm_path);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn discover_wasm_artifact_errors_when_pkg_missing() {
+        let dir = std::env::temp_dir().join("gup_wasm_discover_nopkg");
+        // Make sure it doesn't exist.
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let result = discover_wasm_artifact(Some(&dir));
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("not found"),
+            "should mention pkg/ not found: {err_msg}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn discover_wasm_artifact_errors_when_no_wasm_file() {
+        let dir = std::env::temp_dir().join("gup_wasm_discover_empty");
+        let pkg = dir.join("pkg");
+        std::fs::create_dir_all(&pkg).unwrap();
+        // Create a non-matching file.
+        std::fs::write(pkg.join("readme.txt"), b"hello").unwrap();
+
+        let result = discover_wasm_artifact(Some(&dir));
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("No *_bg.wasm"),
+            "should mention no WASM found: {err_msg}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn discover_wasm_artifact_errors_when_ambiguous() {
+        let dir = std::env::temp_dir().join("gup_wasm_discover_ambig");
+        let pkg = dir.join("pkg");
+        std::fs::create_dir_all(&pkg).unwrap();
+        std::fs::write(pkg.join("foo_bg.wasm"), b"\x00asm").unwrap();
+        std::fs::write(pkg.join("bar_bg.wasm"), b"\x00asm").unwrap();
+
+        let result = discover_wasm_artifact(Some(&dir));
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.contains("ambiguous"),
+            "should mention ambiguity: {err_msg}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn discover_wasm_artifact_ignores_non_bg_wasm() {
+        let dir = std::env::temp_dir().join("gup_wasm_discover_nonbg");
+        let pkg = dir.join("pkg");
+        std::fs::create_dir_all(&pkg).unwrap();
+        // Only the _bg.wasm file should match; plain .wasm should not.
+        std::fs::write(pkg.join("gup_bg.wasm"), b"\x00asm\x01\x00\x00\x00").unwrap();
+        std::fs::write(pkg.join("gup.wasm"), b"\x00asm").unwrap();
+
+        let result = discover_wasm_artifact(Some(&dir));
+        assert!(result.is_ok());
+        let found = result.unwrap();
+        assert!(
+            found
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .contains("_bg.wasm"),
+            "should pick the _bg.wasm file"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
