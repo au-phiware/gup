@@ -13,6 +13,8 @@
 //! cargo run --example treemap              # 1 000 nodes, colour by depth
 //! cargo run --example treemap -- --nodes 100000
 //! cargo run --example treemap -- --color value
+//! cargo run --example treemap -- --algo slicedice  # GPU compute
+//! cargo run --example treemap -- --algo binary     # GPU compute
 //! ```
 
 use gup::layout::{LayoutEngine, LayoutRect, TreeNode, TreemapAlgorithm, TreemapOptions};
@@ -140,6 +142,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let mut node_count: u32 = 1_000;
     let mut color_mode = ColorMode::Depth;
+    let mut algorithm = TreemapAlgorithm::Squarified;
 
     let mut i = 1;
     while i < args.len() {
@@ -159,19 +162,37 @@ fn main() {
                     };
                 }
             }
+            "--algo" => {
+                i += 1;
+                if i < args.len() {
+                    algorithm = match args[i].as_str() {
+                        "binary" => TreemapAlgorithm::Binary,
+                        "strip" => TreemapAlgorithm::Strip,
+                        "slicedice" | "slice-dice" => TreemapAlgorithm::SliceDice,
+                        _ => TreemapAlgorithm::Squarified,
+                    };
+                }
+            }
             _ => {}
         }
         i += 1;
     }
 
+    let algo_name = match algorithm {
+        TreemapAlgorithm::Squarified => "squarified",
+        TreemapAlgorithm::Binary => "binary (GPU)",
+        TreemapAlgorithm::Strip => "strip",
+        TreemapAlgorithm::SliceDice => "slice-dice (GPU)",
+    };
     println!(
-        "Treemap example: {} nodes, color by {}",
+        "Treemap example: {} nodes, color by {}, algorithm: {}",
         node_count,
         if color_mode == ColorMode::Depth {
             "depth"
         } else {
             "value"
-        }
+        },
+        algo_name,
     );
 
     // Generate the tree.
@@ -195,7 +216,7 @@ fn main() {
         height: 600.0,
     };
     let options = TreemapOptions {
-        algorithm: TreemapAlgorithm::Squarified,
+        algorithm,
         max_depth: None,
         padding: 1.0,
     };
@@ -207,6 +228,9 @@ fn main() {
 
     let cells = result.cells();
     println!("Layout produced {} cells", cells.len());
+    if result.gpu_buffer().is_some() {
+        println!("GPU-resident cells buffer available (zero-copy path)");
+    }
 
     // Compute colour for each cell.
     let max_depth = cells.iter().map(|c| c.depth).max().unwrap_or(0);
