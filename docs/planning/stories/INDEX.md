@@ -945,6 +945,11 @@ layouts, and 3D visualization.
 - [GUP-313](GUP-313_Adaptive_Barnes_Hut_Theta_Tuning.md) 💡 — Adaptive
   per-region theta tuning based on local graph density for improved layout
   quality in clustered graphs. Deps: GUP-310 ✅.
+- [GUP-314](GUP-314_Shared_Device_Layout_Engine.md) 📋 — Allow LayoutEngine to
+  share the same wgpu Device as the rendering context, avoiding dual GPU context
+  overhead. Deps: GUP-311 ✅.
+- [GUP-315](GUP-315_Graph_Node_Label_Rendering.md) 📋 — Add SDF text labels to
+  graph nodes in the interactive graph example. Deps: GUP-311 ✅.
 - [GUP-260](GUP-260_GPU_Treemap_Layout.md) ✅ — GPU compute shader treemap
   layout with four algorithm variants (Squarified, Binary, Strip, SliceDice)
   outputting Rectangle-compatible cells. Deps: GUP-003 ✅, GUP-004 ✅, GUP-067
