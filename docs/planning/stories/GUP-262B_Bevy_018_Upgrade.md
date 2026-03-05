@@ -1,6 +1,6 @@
 # GUP-262B: Bevy 0.18 Upgrade
 
-**Initiative**: Ecosystem Integration **Status**: 📋 Planned **Created**:
+**Initiative**: Ecosystem Integration **Status**: 🚧 In Progress **Created**:
 2025-03-04
 
 ## Overview

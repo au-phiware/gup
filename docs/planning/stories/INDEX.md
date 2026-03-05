@@ -993,7 +993,7 @@ PNG, HTML), and platform targets.
 - [GUP-262A](GUP-262A_Direct_Texture_Sharing_Bevy.md) ✅ — Eliminate
   render-to-PNG round-trip by rendering charts directly to shared GPU textures.
   Deps: GUP-262 ✅.
-- [GUP-262B](GUP-262B_Bevy_018_Upgrade.md) 📋 — Upgrade gup-bevy to Bevy 0.18
+- [GUP-262B](GUP-262B_Bevy_018_Upgrade.md) 🚧 — Upgrade gup-bevy to Bevy 0.18
   when the main gup crate upgrades to wgpu 27. Deps: GUP-262 ✅.
 - [GUP-262C](GUP-262C_Bevy_Direct_GpuImage_Rendering.md) 💡 — Render-graph node
   for direct GpuImage rendering, eliminating the intermediate GPU copy. Deps:
