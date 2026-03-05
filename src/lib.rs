@@ -117,6 +117,7 @@ pub mod accessibility;
 pub mod app;
 pub mod async_mixable;
 pub mod axis;
+pub mod axis3d;
 pub mod axis_performance;
 pub mod axis_system;
 pub mod brush;
