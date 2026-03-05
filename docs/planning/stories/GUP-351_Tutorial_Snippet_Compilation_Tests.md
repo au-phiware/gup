@@ -2,7 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Documentation **Status**: 🚧 In Progress **Created**: 2025-07-15
+**Initiative**: Documentation **Status**: ✅ Complete **Created**: 2025-07-15
 
 ## Context
 
@@ -20,21 +20,21 @@ experience for new developers.
 
 ## Acceptance Criteria
 
-- [ ] A test harness extracts fenced Rust code blocks from tutorial Markdown
+- [x] A test harness extracts fenced Rust code blocks from tutorial Markdown
       files and verifies they compile (or are explicitly marked as pseudocode).
-- [ ] The test harness runs as part of `cargo test` or a dedicated `mask` task.
-- [ ] Code blocks marked with ` ```rust,ignore ` or ` ```rust,no_run ` are
+- [x] The test harness runs as part of `cargo test` or a dedicated `mask` task.
+- [x] Code blocks marked with ` ```rust,ignore ` or ` ```rust,no_run ` are
       skipped.
-- [ ] At least the "Full Example" blocks from each tutorial pass the harness.
-- [ ] CI fails if a tutorial snippet stops compiling after an API change.
+- [x] At least the "Full Example" blocks from each tutorial pass the harness.
+- [x] CI fails if a tutorial snippet stops compiling after an API change.
 
 ## Technical Tasks
 
-- [ ] Evaluate `skeptic`, `doc-comment`, or a custom `tests/doc_snippets/`
+- [x] Evaluate `skeptic`, `doc-comment`, or a custom `tests/doc_snippets/`
       approach for extracting and compiling Markdown code blocks.
-- [ ] Implement the chosen approach.
-- [ ] Add a `mask` task (e.g. `mask test-tutorials`) for convenience.
-- [ ] Verify all six tutorials pass the harness.
+- [x] Implement the chosen approach.
+- [x] Add a `mask` task (e.g. `mask test-tutorials`) for convenience.
+- [x] Verify all six tutorials pass the harness.
 
 ## Dependencies
 
@@ -49,8 +49,8 @@ experience for new developers.
 
 ## Success Metrics
 
-- [ ] All tutorial "Full Example" blocks compile via the test harness.
-- [ ] At least one intentional breakage is detected during development.
+- [x] All tutorial "Full Example" blocks compile via the test harness.
+- [x] At least one intentional breakage is detected during development.
 
 ## Risk Assessment
 
@@ -60,6 +60,37 @@ experience for new developers.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied
-- [ ] All tests pass
-- [ ] Story status updated to ✅ Complete
+- [x] All Acceptance Criteria are satisfied
+- [x] All tests pass
+- [x] Story status updated to ✅ Complete
+
+## Implementation Summary
+
+### Approach Chosen
+
+Used Rust's built-in `#[cfg(doctest)]` with `#[doc = include_str!(...)]` — the
+modern, zero-dependency approach. Each tutorial Markdown file is included as a
+doc comment on a dummy struct in `src/lib.rs`. Rustdoc extracts fenced code
+blocks and compiles them as doctests. Tutorial 3 (Custom Shader Functions) is
+tested via a separate integration test due to proc-macro `crate::` path
+limitations.
+
+### Key Files Changed
+
+| File                                           | Change                                                |
+| ---------------------------------------------- | ----------------------------------------------------- |
+| `src/lib.rs`                                   | Added `#[cfg(doctest)]` module, proc-macro re-exports |
+| `docs/tutorials/01_getting_started.md`         | Marked partial blocks `ignore`, full `no_run`         |
+| `docs/tutorials/02_data_binding.md`            | Marked partial blocks `ignore`, full `no_run`         |
+| `docs/tutorials/03_custom_shader_functions.md` | Marked all blocks `ignore` (proc-macro limitation)    |
+| `docs/tutorials/04_interactions.md`            | Marked partial blocks `ignore`, full `no_run`         |
+| `docs/tutorials/05_streaming_data.md`          | Marked partial blocks `ignore`, full `no_run`         |
+| `docs/tutorials/06_custom_marks.md`            | Marked partial blocks `ignore`, full `no_run`         |
+| `tests/tutorial_snippet_tests.rs`              | Integration test for Tutorial 3 Full Example          |
+| `maskfile.md`                                  | Added `mask test-tutorials` task                      |
+
+### Test Counts
+
+- 5 doctest compilation checks (tutorials 1, 2, 4, 5, 6)
+- 1 integration test (tutorial 3)
+- 61 ignored blocks (partial snippets marked `rust,ignore`)
