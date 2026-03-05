@@ -52,8 +52,8 @@ const BARNES_HUT_SHADER: &str = include_str!("barnes_hut.wgsl");
 /// # }
 /// ```
 pub struct LayoutEngine {
-    device: Device,
-    queue: Queue,
+    pub(crate) device: Device,
+    pub(crate) queue: Queue,
     // Exact-mode pipelines (shared with BH for spring/integrate/convergence).
     repulsion_pipeline: ComputePipeline,
     spring_pipeline: ComputePipeline,
@@ -65,6 +65,8 @@ pub struct LayoutEngine {
     // Barnes-Hut pipelines & layouts.
     bh_repulsion_pipeline: ComputePipeline,
     bh_tree_bind_group_layout: BindGroupLayout,
+    // Treemap compute pipelines.
+    treemap_pipelines: super::treemap::TreemapPipelines,
 }
 
 impl std::fmt::Debug for LayoutEngine {
@@ -213,6 +215,9 @@ impl LayoutEngine {
             cache: None,
         });
 
+        // ---- Treemap pipelines ----
+        let treemap_pipelines = super::treemap::TreemapPipelines::new(&device);
+
         // We clone device/queue handles so the engine is self-contained.
         Ok(Self {
             device: device.clone(),
@@ -226,7 +231,13 @@ impl LayoutEngine {
             bind_group_layout,
             bh_repulsion_pipeline,
             bh_tree_bind_group_layout,
+            treemap_pipelines,
         })
+    }
+
+    /// Return a reference to the treemap compute pipelines.
+    pub(crate) fn treemap_pipelines(&self) -> &super::treemap::TreemapPipelines {
+        &self.treemap_pipelines
     }
 
     /// Run force-directed layout and return final node positions.
@@ -636,8 +647,8 @@ impl LayoutEngine {
             iterations_performed = iter + 1;
 
             // 4. Decide whether to check convergence.
-            let check_convergence =
-                (iterations_performed % interval == 0) || iterations_performed == config.iterations;
+            let check_convergence = iterations_performed.is_multiple_of(interval)
+                || iterations_performed == config.iterations;
 
             if check_convergence {
                 self.encode_convergence_check(

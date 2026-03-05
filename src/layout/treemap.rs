@@ -34,12 +34,16 @@
 use crate::error::{GupError, GupResult};
 
 /// Workgroup size for compute shaders (must match WGSL constants).
-#[allow(dead_code)]
 const WORKGROUP_SIZE: u32 = 256;
 
-/// WGSL source for treemap compute shaders (reserved for future GPU migration).
-#[allow(dead_code)]
-const TREEMAP_SHADER: &str = include_str!("treemap_layout.wgsl");
+/// WGSL source for the Blelloch prefix-sum compute shader.
+const PREFIX_SUM_SHADER: &str = include_str!("treemap_prefix_sum.wgsl");
+
+/// WGSL source for the slice-and-dice layout compute shader.
+const SLICE_DICE_SHADER: &str = include_str!("treemap_slice_dice.wgsl");
+
+/// WGSL source for the binary layout compute shader.
+const BINARY_SHADER: &str = include_str!("treemap_binary.wgsl");
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -191,7 +195,7 @@ struct GpuTreeNode {
     depth: u32,
 }
 
-/// GPU-side treemap parameters.
+/// GPU-side treemap parameters (48 bytes, matches WGSL `Params`).
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct GpuTreemapParams {
@@ -203,22 +207,256 @@ struct GpuTreemapParams {
     max_depth: u32, // u32::MAX means unlimited
     algorithm: u32, // 0=Squarified, 1=Binary, 2=Strip, 3=SliceDice
     padding: f32,
+    current_depth: u32,
+    _pad1: u32,
+    _pad2: u32,
+    _pad3: u32,
 }
 
 // Compile-time assertions.
 const _: () = assert!(std::mem::size_of::<GpuTreeNode>() == 16);
-const _: () = assert!(std::mem::size_of::<GpuTreemapParams>() == 32);
+const _: () = assert!(std::mem::size_of::<GpuTreemapParams>() == 48);
 
 // ---------------------------------------------------------------------------
 // LayoutEngine extension — treemap_layout
 // ---------------------------------------------------------------------------
 
+/// GPU compute pipelines for treemap layout.
+pub(crate) struct TreemapPipelines {
+    // Prefix sum pipelines.
+    prefix_scan_pipeline: wgpu::ComputePipeline,
+    prefix_scan_blocks_pipeline: wgpu::ComputePipeline,
+    prefix_add_blocks_pipeline: wgpu::ComputePipeline,
+    prefix_scan_layout: wgpu::BindGroupLayout,
+    prefix_block_layout: wgpu::BindGroupLayout,
+    // Layout pipelines.
+    slice_dice_pipeline: wgpu::ComputePipeline,
+    binary_pipeline: wgpu::ComputePipeline,
+    layout_bind_group_layout: wgpu::BindGroupLayout,
+}
+
+impl TreemapPipelines {
+    /// Compile all treemap compute shaders.
+    pub(crate) fn new(device: &wgpu::Device) -> Self {
+        // ---- Prefix sum shader ----
+        let prefix_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("treemap_prefix_sum"),
+            source: wgpu::ShaderSource::Wgsl(PREFIX_SUM_SHADER.into()),
+        });
+
+        // Group 0: input(ro), output(rw), block_sums(rw), params(uniform)
+        let prefix_scan_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("prefix_scan_bind_group_layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
+            });
+
+        // Group 1: block_sums_rw(rw), block_params(uniform)
+        let prefix_block_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("prefix_block_bind_group_layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
+            });
+
+        let prefix_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("prefix_sum_pipeline_layout"),
+                bind_group_layouts: &[&prefix_scan_layout, &prefix_block_layout],
+                push_constant_ranges: &[],
+            });
+
+        let make_prefix_pipeline = |entry: &str, label: &str| {
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some(label),
+                layout: Some(&prefix_pipeline_layout),
+                module: &prefix_module,
+                entry_point: Some(entry),
+                compilation_options: Default::default(),
+                cache: None,
+            })
+        };
+
+        let prefix_scan_pipeline = make_prefix_pipeline("workgroup_scan", "prefix_scan_pipeline");
+        let prefix_scan_blocks_pipeline =
+            make_prefix_pipeline("scan_block_sums", "prefix_scan_blocks_pipeline");
+        let prefix_add_blocks_pipeline =
+            make_prefix_pipeline("add_block_sums", "prefix_add_blocks_pipeline");
+
+        // ---- Layout shaders ----
+        // Group 0: nodes(ro), values(ro), prefix_sums(ro), cells(rw), params(uniform)
+        let layout_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("treemap_layout_bind_group_layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 4,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
+            });
+
+        let layout_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("treemap_layout_pipeline_layout"),
+                bind_group_layouts: &[&layout_bind_group_layout],
+                push_constant_ranges: &[],
+            });
+
+        let sd_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("treemap_slice_dice"),
+            source: wgpu::ShaderSource::Wgsl(SLICE_DICE_SHADER.into()),
+        });
+        let slice_dice_pipeline =
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("slice_dice_pipeline"),
+                layout: Some(&layout_pipeline_layout),
+                module: &sd_module,
+                entry_point: Some("slice_dice_layout"),
+                compilation_options: Default::default(),
+                cache: None,
+            });
+
+        let bin_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("treemap_binary"),
+            source: wgpu::ShaderSource::Wgsl(BINARY_SHADER.into()),
+        });
+        let binary_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("binary_pipeline"),
+            layout: Some(&layout_pipeline_layout),
+            module: &bin_module,
+            entry_point: Some("binary_layout"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+
+        Self {
+            prefix_scan_pipeline,
+            prefix_scan_blocks_pipeline,
+            prefix_add_blocks_pipeline,
+            prefix_scan_layout,
+            prefix_block_layout,
+            slice_dice_pipeline,
+            binary_pipeline,
+            layout_bind_group_layout,
+        }
+    }
+}
+
 impl super::LayoutEngine {
-    /// Compute a treemap layout on the GPU.
+    /// Compute a treemap layout.
     ///
-    /// The layout assigns axis-aligned rectangles to every node in the
-    /// hierarchy such that each cell's area is proportional to its `value`.
-    /// Cells are fully contained within their parent's bounding rectangle.
+    /// For `SliceDice` and `Binary` algorithms the layout runs on the GPU
+    /// via WGSL compute shaders.  `Squarified` and `Strip` use the CPU
+    /// implementation (they have cross-sibling dependencies that limit
+    /// GPU parallelism).
     ///
     /// # Arguments
     ///
@@ -252,11 +490,339 @@ impl super::LayoutEngine {
             });
         }
 
-        // Run the CPU-side layout (all four algorithms are CPU-implemented
-        // with the GPU dispatch infrastructure ready for future migration).
-        let cells = cpu_treemap_layout(nodes, values, viewport, options);
+        match options.algorithm {
+            TreemapAlgorithm::SliceDice | TreemapAlgorithm::Binary => {
+                self.gpu_treemap_layout(nodes, values, viewport, options)
+                    .await
+            }
+            _ => {
+                // Squarified and Strip use CPU implementation.
+                let cells = cpu_treemap_layout(nodes, values, viewport, options);
+                Ok(TreemapResult { cells })
+            }
+        }
+    }
+
+    /// GPU-accelerated treemap layout for SliceDice and Binary algorithms.
+    async fn gpu_treemap_layout(
+        &self,
+        nodes: &[TreeNode],
+        values: &[f32],
+        viewport: LayoutRect,
+        options: &TreemapOptions,
+    ) -> GupResult<TreemapResult> {
+        use wgpu::util::DeviceExt;
+
+        let device = &self.device;
+        let queue = &self.queue;
+        let n = nodes.len();
+
+        // Lazily initialise treemap pipelines.
+        let pipelines = self.treemap_pipelines();
+
+        // ---- CPU preprocessing (O(n), fast) ----
+        let depths = compute_depths(nodes);
+        let sums = compute_subtree_sums(nodes, values);
+        let max_depth = depths.iter().copied().max().unwrap_or(0);
+
+        // Prepare GPU-side node data.
+        let gpu_nodes: Vec<GpuTreeNode> = nodes
+            .iter()
+            .enumerate()
+            .map(|(i, node)| GpuTreeNode {
+                parent: node.parent.unwrap_or(u32::MAX),
+                child_start: node.child_start,
+                child_count: node.child_count,
+                depth: depths[i],
+            })
+            .collect();
+
+        // ---- Upload buffers ----
+        let node_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("treemap_nodes"),
+            contents: bytemuck::cast_slice(&gpu_nodes),
+            usage: wgpu::BufferUsages::STORAGE,
+        });
+
+        let values_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("treemap_values"),
+            contents: bytemuck::cast_slice(&sums),
+            usage: wgpu::BufferUsages::STORAGE,
+        });
+
+        // ---- Prefix sum ----
+        let prefix_buffer = self.compute_prefix_sum(device, queue, pipelines, &sums)?;
+
+        // ---- Output cells buffer ----
+        let cell_size = std::mem::size_of::<TreemapCell>() as u64;
+        let cells_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("treemap_cells"),
+            size: cell_size * n as u64,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        // ---- Dispatch layout per depth level ----
+        let algo_u32 = match options.algorithm {
+            TreemapAlgorithm::Binary => 1u32,
+            TreemapAlgorithm::SliceDice => 3u32,
+            _ => unreachable!(),
+        };
+
+        let pipeline = match options.algorithm {
+            TreemapAlgorithm::SliceDice => &pipelines.slice_dice_pipeline,
+            TreemapAlgorithm::Binary => &pipelines.binary_pipeline,
+            _ => unreachable!(),
+        };
+
+        let effective_max_depth = options.max_depth.unwrap_or(max_depth);
+        let workgroups = (n as u32 + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
+
+        for depth in 0..=effective_max_depth.min(max_depth) {
+            let params = GpuTreemapParams {
+                viewport_x: viewport.x,
+                viewport_y: viewport.y,
+                viewport_w: viewport.width,
+                viewport_h: viewport.height,
+                node_count: n as u32,
+                max_depth: options.max_depth.unwrap_or(u32::MAX),
+                algorithm: algo_u32,
+                padding: options.padding,
+                current_depth: depth,
+                _pad1: 0,
+                _pad2: 0,
+                _pad3: 0,
+            };
+
+            let params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("treemap_params"),
+                contents: bytemuck::bytes_of(&params),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
+
+            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("treemap_layout_bind_group"),
+                layout: &pipelines.layout_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: node_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: values_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: prefix_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: cells_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: params_buffer.as_entire_binding(),
+                    },
+                ],
+            });
+
+            let mut encoder =
+                device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            {
+                let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("treemap_layout_pass"),
+                    timestamp_writes: None,
+                });
+                pass.set_pipeline(pipeline);
+                pass.set_bind_group(0, &bind_group, &[]);
+                pass.dispatch_workgroups(workgroups, 1, 1);
+            }
+            queue.submit(std::iter::once(encoder.finish()));
+        }
+
+        // ---- Read back results ----
+        let staging = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("treemap_staging"),
+            size: cell_size * n as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        let mut encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        encoder.copy_buffer_to_buffer(&cells_buffer, 0, &staging, 0, cell_size * n as u64);
+        queue.submit(std::iter::once(encoder.finish()));
+
+        let (tx, rx) = std::sync::mpsc::channel::<Result<(), wgpu::BufferAsyncError>>();
+        staging.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+            let _ = tx.send(r);
+        });
+        let _ = device.poll(wgpu::PollType::Wait);
+        rx.recv()
+            .map_err(|e| GupError::GpuResourceCreationError {
+                resource_type: "treemap staging buffer".to_string(),
+                reason: format!("GPU readback channel error: {e}"),
+            })?
+            .map_err(|e| GupError::GpuResourceCreationError {
+                resource_type: "treemap staging buffer".to_string(),
+                reason: format!("GPU buffer map failed: {e}"),
+            })?;
+
+        let data = staging.slice(..).get_mapped_range();
+        let mut cells: Vec<TreemapCell> = bytemuck::cast_slice(&data).to_vec();
+        drop(data);
+        staging.unmap();
+
+        // Apply max_depth filter — keep only cells within the depth limit
+        // and that were actually laid out (non-zero area or root).
+        if options.max_depth.is_some() {
+            cells.retain(|c| c.depth <= effective_max_depth);
+        }
 
         Ok(TreemapResult { cells })
+    }
+
+    /// Run a multi-workgroup Blelloch exclusive prefix sum on `values`.
+    ///
+    /// Returns a GPU buffer of the same length containing exclusive prefix
+    /// sums: `output[i] = sum(values[0..i])`.
+    fn compute_prefix_sum(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        pipelines: &TreemapPipelines,
+        values: &[f32],
+    ) -> GupResult<wgpu::Buffer> {
+        use wgpu::util::DeviceExt;
+
+        let n = values.len() as u32;
+        let num_blocks = (n + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
+
+        let input_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("prefix_input"),
+            contents: bytemuck::cast_slice(values),
+            usage: wgpu::BufferUsages::STORAGE,
+        });
+
+        let output_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("prefix_output"),
+            size: (n as u64) * 4,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        let block_sums_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("prefix_block_sums"),
+            size: (num_blocks.max(1) as u64) * 4,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        let params_data: [u32; 4] = [n, 0, 0, 0];
+        let params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("prefix_params"),
+            contents: bytemuck::cast_slice(&params_data),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+
+        // Bind group 0: input, output, block_sums, params.
+        let scan_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("prefix_scan_bind_group"),
+            layout: &pipelines.prefix_scan_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: input_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: output_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: block_sums_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: params_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        // Bind group 1: block_sums_rw, block_params (for scan_block_sums).
+        let block_params_data: [u32; 4] = [num_blocks, 0, 0, 0];
+        let block_params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("prefix_block_params"),
+            contents: bytemuck::cast_slice(&block_params_data),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+
+        let block_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("prefix_block_bind_group"),
+            layout: &pipelines.prefix_block_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: block_sums_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: block_params_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        // Pass 1: per-workgroup scan.
+        let mut encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        {
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("prefix_scan_pass"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(&pipelines.prefix_scan_pipeline);
+            pass.set_bind_group(0, &scan_bind_group, &[]);
+            pass.set_bind_group(1, &block_bind_group, &[]);
+            pass.dispatch_workgroups(num_blocks, 1, 1);
+        }
+        queue.submit(std::iter::once(encoder.finish()));
+
+        if num_blocks > 1 {
+            // Pass 2: scan block sums.
+            let mut encoder =
+                device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            {
+                let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("prefix_scan_blocks_pass"),
+                    timestamp_writes: None,
+                });
+                pass.set_pipeline(&pipelines.prefix_scan_blocks_pipeline);
+                pass.set_bind_group(0, &scan_bind_group, &[]);
+                pass.set_bind_group(1, &block_bind_group, &[]);
+                pass.dispatch_workgroups(1, 1, 1);
+            }
+            queue.submit(std::iter::once(encoder.finish()));
+
+            // Pass 3: add scanned block sums back.
+            let mut encoder =
+                device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            {
+                let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("prefix_add_blocks_pass"),
+                    timestamp_writes: None,
+                });
+                pass.set_pipeline(&pipelines.prefix_add_blocks_pipeline);
+                pass.set_bind_group(0, &scan_bind_group, &[]);
+                pass.set_bind_group(1, &block_bind_group, &[]);
+                pass.dispatch_workgroups(num_blocks, 1, 1);
+            }
+            queue.submit(std::iter::once(encoder.finish()));
+        }
+
+        Ok(output_buffer)
     }
 }
 
