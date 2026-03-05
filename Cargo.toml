@@ -288,6 +288,23 @@ path = "examples/intermediate/multi_series_line.rs"
 name = "categorical_bar"
 path = "examples/intermediate/categorical_bar.rs"
 
+# Tutorial Examples — one per tutorial for exact code-to-window match
+[[example]]
+name = "tutorial01_scatter"
+path = "examples/tutorials/tutorial01_scatter.rs"
+
+[[example]]
+name = "tutorial04_interactions"
+path = "examples/tutorials/tutorial04_interactions.rs"
+
+[[example]]
+name = "tutorial05_streaming"
+path = "examples/tutorials/tutorial05_streaming.rs"
+
+[[example]]
+name = "tutorial06_custom_marks"
+path = "examples/tutorials/tutorial06_custom_marks.rs"
+
 # Showcase Examples
 [[example]]
 name = "business_dashboard"
