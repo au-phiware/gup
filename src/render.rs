@@ -23,6 +23,13 @@ pub struct RenderContext {
     surface: Option<Surface<'static>>,
     /// Surface configuration
     surface_config: Option<SurfaceConfiguration>,
+    /// Override texture format for headless / embedded rendering.
+    ///
+    /// When set, [`surface_format()`](Self::surface_format) returns this
+    /// value instead of the surface configuration's format.  This is used by
+    /// integrations like `gup-egui` that render into a texture whose format
+    /// differs from the host's surface format.
+    headless_format: Option<TextureFormat>,
     /// Current viewport dimensions
     viewport: Viewport,
     /// Command encoder pool for efficient reuse
@@ -244,6 +251,7 @@ impl RenderContext {
             queue,
             surface: None,
             surface_config: None,
+            headless_format: None,
             viewport: Viewport::default(),
             encoder_pool: CommandEncoderPool::new(),
             resource_manager: ResourceManager::new(),
@@ -312,6 +320,7 @@ impl RenderContext {
             queue,
             surface: None,
             surface_config: None,
+            headless_format: None,
             viewport,
             encoder_pool: CommandEncoderPool::new(),
             resource_manager: ResourceManager::new(),
@@ -465,10 +474,26 @@ impl RenderContext {
 
     /// Get surface format for pipeline creation
     pub fn surface_format(&self) -> TextureFormat {
+        // Honour the headless format override when set (e.g. gup-egui).
+        if let Some(fmt) = self.headless_format {
+            return fmt;
+        }
         self.surface_config
             .as_ref()
             .map(|c| c.format)
             .unwrap_or(TextureFormat::Bgra8UnormSrgb)
+    }
+
+    /// Override the default surface format used for pipeline creation.
+    ///
+    /// This is useful for headless or embedded rendering (e.g. `gup-egui`)
+    /// where the chart renders into a texture format that differs from the
+    /// host's window surface format.
+    ///
+    /// After calling this, all charts built with this context will compile
+    /// pipelines for the specified format.
+    pub fn set_headless_format(&mut self, format: TextureFormat) {
+        self.headless_format = Some(format);
     }
 
     /// Check if global alpha buffer exists (for testing)

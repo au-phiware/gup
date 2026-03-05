@@ -39,6 +39,10 @@ impl GupEguiContext {
     /// Extracts the `device` and `queue` from the
     /// [`RenderState`](eframe::egui_wgpu::RenderState) and wraps them in a
     /// Gup [`RenderContext`]. No second GPU adapter is created.
+    ///
+    /// The render context's surface format is set to `Rgba8UnormSrgb` so
+    /// that chart pipelines produce output compatible with egui's texture
+    /// registration API.
     pub fn from_render_state(render_state: &eframe::egui_wgpu::RenderState) -> Self {
         // wgpu 27: Device, Queue, Adapter are internally reference-counted,
         // so cloning is a cheap Arc bump — not a new GPU resource.
@@ -54,7 +58,15 @@ impl GupEguiContext {
             ..Default::default()
         });
 
-        let render_context = Arc::new(RenderContext::from_wgpu(instance, adapter, device, queue));
+        let mut render_context = RenderContext::from_wgpu(instance, adapter, device, queue);
+
+        // Configure the render context to compile pipelines for
+        // Rgba8UnormSrgb — the format of the offscreen texture the chart
+        // renders into.  This ensures mark pipelines, axis pipelines, etc.
+        // all match the render target.
+        render_context.set_headless_format(wgpu::TextureFormat::Rgba8UnormSrgb);
+
+        let render_context = Arc::new(render_context);
 
         Self { render_context }
     }
