@@ -4,9 +4,12 @@
 //! # egui Scatter Plot Demo
 //!
 //! Demonstrates embedding a live-updating Gup scatter plot inside an egui
-//! application.  The plot shows an animated sine wave that updates every
-//! second.  Hover and click interactions are forwarded from egui into Gup's
-//! event system.
+//! application using the **zero-copy shared-device** path.  The chart
+//! renders on egui's own wgpu device — no second GPU adapter, no CPU pixel
+//! readback.
+//!
+//! The plot shows an animated sine wave that updates every second.  Hover and
+//! click interactions are forwarded from egui into Gup's event system.
 //!
 //! ## Running
 //!
@@ -16,18 +19,20 @@
 //!
 //! ## Integration Steps
 //!
-//! 1. Build a `ComposedChart` using Gup's chart-builder API.
-//! 2. Wrap it in a [`GupWidget`] (which implements `egui::Widget` for
-//!    `&mut GupWidget`).
-//! 3. Call `ui.add(&mut widget)` inside any egui panel.
-//! 4. Call `widget.mark_dirty()` whenever the chart data changes.
+//! 1. Obtain `wgpu_render_state` from the eframe [`CreationContext`].
+//! 2. Create a [`GupEguiContext`] to share the GPU device/queue with Gup.
+//! 3. Build a `ComposedChart` using Gup's chart-builder API, passing the
+//!    shared [`RenderContext`].
+//! 4. Wrap it in a [`GupWidget`] via [`GupWidget::with_render_state`].
+//! 5. Call `ui.add(&mut widget)` inside any egui panel.
+//! 6. Call `widget.mark_dirty()` whenever the chart data changes.
 
 use eframe::egui;
 use gup::chart_builder::ChartBuilder;
 use gup::chart_builder::accessor::AccessorValue;
 use gup::chart_builder::builders::{AccessorFunction, scatter};
 use gup::render::RenderContext;
-use gup_egui::GupWidget;
+use gup_egui::{GupEguiContext, GupWidget};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -51,6 +56,8 @@ struct DataPoint {
 struct ChartApp {
     /// The Gup chart widget (owns the chart and its texture).
     widget: GupWidget,
+    /// Shared GPU context for building replacement charts on the same device.
+    shared_context: Arc<RenderContext>,
     /// Wall-clock time used to animate the sine wave.
     start: Instant,
     /// The last second at which data was refreshed.
@@ -58,13 +65,23 @@ struct ChartApp {
 }
 
 impl ChartApp {
-    fn new() -> Self {
-        // Build the initial scatter chart.
-        let chart = build_scatter_chart(0.0);
-        let widget = GupWidget::new(chart);
+    fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        // Use the shared-device path when the wgpu backend is available.
+        let render_state = cc
+            .wgpu_render_state
+            .as_ref()
+            .expect("wgpu backend required for this example");
+
+        let egui_ctx = GupEguiContext::from_render_state(render_state);
+        let shared_context = egui_ctx.render_context().clone();
+
+        // Build the initial scatter chart on the shared device.
+        let chart = build_scatter_chart(0.0, shared_context.clone());
+        let widget = GupWidget::with_render_state(chart, render_state.clone());
 
         Self {
             widget,
+            shared_context,
             start: Instant::now(),
             last_update_sec: 0,
         }
@@ -80,7 +97,7 @@ impl eframe::App for ChartApp {
 
             // Replace the chart with fresh data.
             let t = self.start.elapsed().as_secs_f32();
-            let chart = build_scatter_chart(t);
+            let chart = build_scatter_chart(t, self.shared_context.clone());
             self.widget.set_chart(chart);
         }
 
@@ -90,6 +107,14 @@ impl eframe::App for ChartApp {
             ui.separator();
             ui.label(format!("Elapsed: {elapsed} s"));
             ui.label(format!("Dirty: {}", self.widget.is_dirty()));
+            ui.label(format!(
+                "Render path: {}",
+                if self.widget.is_shared_device() {
+                    "shared device (zero-copy)"
+                } else {
+                    "pixel buffer (fallback)"
+                }
+            ));
 
             ui.separator();
             ui.label("Hover or click the chart to see interaction events.");
@@ -128,6 +153,7 @@ impl eframe::App for ChartApp {
 /// Build a scatter chart whose data is a sine wave offset by `time`.
 fn build_scatter_chart(
     time: f32,
+    context: Arc<RenderContext>,
 ) -> gup::chart_builder::ComposedChart<DataPoint, gup::mark::Circle> {
     // Generate 60 data points along a sine wave.
     let data: Vec<DataPoint> = (0..60)
@@ -137,10 +163,6 @@ fn build_scatter_chart(
             DataPoint { x, y }
         })
         .collect();
-
-    // Create a headless RenderContext (GPU device for off-screen rendering).
-    let context =
-        Arc::new(pollster::block_on(RenderContext::new()).expect("Failed to create RenderContext"));
 
     // Build the scatter plot using Gup's chart-builder API.
     let x_acc = AccessorFunction::new(|d: &DataPoint| AccessorValue::Float(d.x));
@@ -170,6 +192,6 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "Gup × egui — Animated Scatter Plot",
         options,
-        Box::new(|_cc| Ok(Box::new(ChartApp::new()))),
+        Box::new(|cc| Ok(Box::new(ChartApp::new(cc)))),
     )
 }
