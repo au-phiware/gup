@@ -24,7 +24,7 @@ pub mod gallery;
 #[cfg(feature = "pdf")]
 pub mod pdf;
 
-pub use html::{ChartSnapshot, HtmlExporter, SnapshotMargins, WasmStrategy};
+pub use html::{ChartBundle, ChartSnapshot, HtmlExporter, SnapshotMargins, WasmStrategy};
 pub use svg::write_svg_to_file;
 pub use svg::{SvgElement, SvgExportOptions, SvgRenderer};
 

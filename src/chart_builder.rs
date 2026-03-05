@@ -2889,6 +2889,30 @@ where
         exporter.export(self, path)
     }
 
+    /// Export this chart as a self-contained HTML file with embedded data.
+    ///
+    /// Like [`export_html`](Self::export_html), but also serialises the
+    /// chart's data items into the JSON block so the WASM module can
+    /// reconstruct the complete chart without a separate data source.
+    ///
+    /// Requires `T: Serialize`.  If your data type does not implement
+    /// `Serialize`, use [`export_html`](Self::export_html) instead.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// chart.export_html_with_data("chart.html")?;
+    /// ```
+    pub fn export_html_with_data(&mut self, path: impl AsRef<std::path::Path>) -> GupResult<()>
+    where
+        T: serde::Serialize,
+    {
+        let exporter = crate::export::html::HtmlExporter::new(
+            crate::export::html::WasmStrategy::Url("gup.wasm".to_string()),
+        );
+        exporter.export_with_data(self, path)
+    }
+
     // -----------------------------------------------------------------
     // PDF export
     // -----------------------------------------------------------------

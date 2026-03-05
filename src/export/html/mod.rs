@@ -39,7 +39,7 @@
 mod snapshot;
 mod template;
 
-pub use snapshot::{ChartSnapshot, SnapshotMargins};
+pub use snapshot::{ChartBundle, ChartSnapshot, SnapshotMargins};
 
 use crate::error::{GupError, GupResult};
 use std::path::{Path, PathBuf};
@@ -227,6 +227,148 @@ impl HtmlExporter {
         M: crate::selection::Mark,
     {
         let html = self.render(chart)?;
+        let path = path.as_ref();
+        std::fs::write(path, html.as_bytes()).map_err(|e| GupError::FileError {
+            path: path.display().to_string(),
+            error: e.to_string(),
+        })
+    }
+
+    /// Render the chart as a complete HTML document with data embedded.
+    ///
+    /// Like [`render`](Self::render), but also serialises the chart's
+    /// [`Selection`](crate::selection::Selection) data items into the JSON
+    /// block as a [`ChartBundle`].  The resulting HTML is fully
+    /// self-contained — the WASM module can reconstruct the entire chart
+    /// (configuration **and** data) from the embedded JSON alone.
+    ///
+    /// The JSON block uses the [`ChartBundle`] format:
+    ///
+    /// ```json
+    /// {
+    ///   "config": { /* ChartSnapshot fields */ },
+    ///   "data": [ /* serialised T instances */ ]
+    /// }
+    /// ```
+    ///
+    /// # Type bounds
+    ///
+    /// This method requires `T: Serialize`.  If your data type does not
+    /// implement `Serialize`, use [`render`](Self::render) instead — it
+    /// embeds only the config snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if SVG rendering, PNG rendering, WASM file
+    /// reading, or JSON serialisation fails.
+    pub fn render_with_data<T, M>(
+        &self,
+        chart: &mut crate::chart_builder::ComposedChart<T, M>,
+    ) -> GupResult<String>
+    where
+        T: Clone
+            + crate::MaybeSend
+            + crate::MaybeSync
+            + std::fmt::Debug
+            + serde::Serialize
+            + 'static,
+        M: crate::selection::Mark,
+    {
+        // 1. Build SVG fallback.
+        let svg_options = crate::export::svg::SvgExportOptions::new(
+            chart.config.width as u32,
+            chart.config.height as u32,
+        );
+        let svg_fallback = chart.render_to_svg(&svg_options)?;
+
+        // 2. Render PNG thumbnail for OG tags.
+        let png_bytes =
+            chart.render_to_png(chart.config.width as u32, chart.config.height as u32)?;
+
+        // 3. Serialise chart config + data as a ChartBundle.
+        let snapshot = ChartSnapshot::from_config(&chart.config);
+        let data_values: Vec<serde_json::Value> = chart
+            .visualization
+            .data()
+            .iter()
+            .map(serde_json::to_value)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| GupError::InvalidDataFormat {
+                message: format!("Failed to serialise data item: {e}"),
+            })?;
+
+        let bundle = ChartBundle::with_data(snapshot, data_values);
+        let chart_json =
+            serde_json::to_string_pretty(&bundle).map_err(|e| GupError::InvalidDataFormat {
+                message: format!("Failed to serialise chart bundle: {e}"),
+            })?;
+
+        // 4. Resolve WASM strategy.
+        let wasm_script = self.wasm_bootstrap_script()?;
+
+        // 5. Derive page title from config or explicit override.
+        let page_title = self
+            .page_title
+            .clone()
+            .or_else(|| chart.config.title_config.as_ref().map(|t| t.text.clone()))
+            .unwrap_or_else(|| "Gup Chart".to_string());
+
+        let description = self
+            .description
+            .clone()
+            .or_else(|| {
+                chart
+                    .config
+                    .title_config
+                    .as_ref()
+                    .and_then(|t| t.subtitle.clone())
+            })
+            .unwrap_or_default();
+
+        // 6. Base64-encode the PNG thumbnail.
+        use base64::Engine as _;
+        let png_b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
+        let png_data_uri = format!("data:image/png;base64,{png_b64}");
+
+        // 7. Assemble HTML.
+        let html = template::render_html(
+            &page_title,
+            &description,
+            self.author.as_deref().unwrap_or_default(),
+            &png_data_uri,
+            &svg_fallback,
+            &chart_json,
+            &wasm_script,
+            chart.config.width as u32,
+            chart.config.height as u32,
+        );
+
+        Ok(html)
+    }
+
+    /// Render the chart to HTML with data and write the result to a file.
+    ///
+    /// Convenience wrapper around [`render_with_data`](Self::render_with_data).
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`GupError::FileError`] if the file cannot be written,
+    /// or propagates any error from [`render_with_data`](Self::render_with_data).
+    pub fn export_with_data<T, M>(
+        &self,
+        chart: &mut crate::chart_builder::ComposedChart<T, M>,
+        path: impl AsRef<Path>,
+    ) -> GupResult<()>
+    where
+        T: Clone
+            + crate::MaybeSend
+            + crate::MaybeSync
+            + std::fmt::Debug
+            + serde::Serialize
+            + 'static,
+        M: crate::selection::Mark,
+    {
+        let html = self.render_with_data(chart)?;
         let path = path.as_ref();
         std::fs::write(path, html.as_bytes()).map_err(|e| GupError::FileError {
             path: path.display().to_string(),
