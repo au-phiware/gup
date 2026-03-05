@@ -28,13 +28,16 @@
 //! See the `egui_chart` example for a full live-updating scatter plot demo.
 
 mod bridge;
+mod context;
 mod widget;
 
 /// Convenience re-exports for common usage.
 pub mod prelude {
     pub use crate::bridge::translate_response;
+    pub use crate::context::GupEguiContext;
     pub use crate::widget::{DynChart, GupWidget};
 }
 
 pub use bridge::translate_response;
+pub use context::GupEguiContext;
 pub use widget::{DynChart, GupWidget};

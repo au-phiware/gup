@@ -28,6 +28,19 @@ pub trait DynChart: Send + Sync + 'static {
 
     /// Render the chart to PNG bytes at the given pixel dimensions.
     fn render_to_png(&mut self, width: u32, height: u32) -> GupResult<Vec<u8>>;
+
+    /// Render the chart directly into the provided [`wgpu::TextureView`].
+    ///
+    /// This is the zero-copy path: all draw commands target the supplied view
+    /// and are submitted to the GPU queue. No readback or encoding takes
+    /// place — the rendered pixels stay on the GPU.
+    fn render_to_texture_view(
+        &mut self,
+        view: &wgpu::TextureView,
+        surface_format: wgpu::TextureFormat,
+        width: u32,
+        height: u32,
+    ) -> GupResult<()>;
 }
 
 impl<T, M> DynChart for ComposedChart<T, M>
@@ -46,6 +59,16 @@ where
     fn render_to_png(&mut self, width: u32, height: u32) -> GupResult<Vec<u8>> {
         ComposedChart::render_to_png(self, width, height)
     }
+
+    fn render_to_texture_view(
+        &mut self,
+        view: &wgpu::TextureView,
+        surface_format: wgpu::TextureFormat,
+        width: u32,
+        height: u32,
+    ) -> GupResult<()> {
+        ComposedChart::render_to_texture_view(self, view, surface_format, width, height)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -54,21 +77,30 @@ where
 
 /// A stateful egui widget that renders a Gup chart inside any egui panel.
 ///
-/// The chart is rendered off-screen to a GPU texture via Gup's rendering
-/// pipeline, then uploaded to egui's texture manager as a
-/// [`ColorImage`](egui::ColorImage). Re-renders only happen when the chart
-/// data or panel size has changed.
+/// Supports two rendering paths:
+///
+/// - **Pixel-buffer (fallback)** — created via [`GupWidget::new`]. The chart
+///   renders to its own GPU device and the pixels are read back to the CPU,
+///   then uploaded to egui as a [`ColorImage`].
+/// - **Shared device (zero-copy)** — created via
+///   [`GupWidget::with_render_state`]. The chart renders on egui's GPU
+///   device; the resulting texture is registered directly with egui's
+///   renderer, eliminating CPU readback.
 ///
 /// # Usage
 ///
 /// ```rust,ignore
-/// // Create once, store in your app state:
+/// // Pixel-buffer fallback:
 /// let mut widget = GupWidget::new(my_chart);
 ///
-/// // Each frame, inside an egui panel:
-/// ui.add(&mut widget);
+/// // Zero-copy shared device (preferred when using wgpu backend):
+/// let render_state = cc.wgpu_render_state.as_ref().unwrap();
+/// let egui_ctx = GupEguiContext::from_render_state(render_state);
+/// let chart = scatter().build_with_data(data, egui_ctx.render_context().clone())?;
+/// let mut widget = GupWidget::with_render_state(chart, render_state.clone());
 ///
-/// // When data changes:
+/// // Either way, usage is the same:
+/// ui.add(&mut widget);
 /// widget.mark_dirty();
 /// ```
 pub struct GupWidget {
@@ -78,14 +110,90 @@ pub struct GupWidget {
     dirty: bool,
     /// The last rendered size (width, height) in physical pixels.
     last_size: Option<[u32; 2]>,
-    /// Cached egui texture handle from the previous render.
+    /// Cached egui texture handle from the previous render (pixel-buffer path).
     texture_handle: Option<TextureHandle>,
     /// Translated interaction events from the most recent frame.
     pending_events: Vec<gup::interaction::InteractionEvent>,
+    /// Shared-device state (Some when using the zero-copy path).
+    shared_state: Option<SharedDeviceState>,
+}
+
+/// State for the zero-copy shared-device rendering path.
+struct SharedDeviceState {
+    /// The egui_wgpu render state (provides device/queue and renderer).
+    render_state: eframe::egui_wgpu::RenderState,
+    /// The offscreen texture the chart renders into.
+    offscreen_texture: Option<OffscreenTexture>,
+    /// The egui texture ID registered for the offscreen texture.
+    egui_texture_id: Option<egui::TextureId>,
+}
+
+/// An offscreen texture on the shared device.
+struct OffscreenTexture {
+    /// The GPU texture (Rgba8UnormSrgb format, RENDER_ATTACHMENT | TEXTURE_BINDING).
+    #[allow(dead_code)]
+    texture: wgpu::Texture,
+    /// View in Rgba8UnormSrgb format for chart rendering.
+    render_view: wgpu::TextureView,
+    /// View in Rgba8Unorm format for egui sampling.
+    sample_view: wgpu::TextureView,
+    /// Width in pixels.
+    width: u32,
+    /// Height in pixels.
+    height: u32,
+}
+
+/// The texture format the chart renders into (sRGB for correct gamma).
+const CHART_TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
+
+/// The texture format egui samples from (linear — egui expects gamma-space
+/// bytes without hardware sRGB decode).
+const EGUI_SAMPLE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+
+impl OffscreenTexture {
+    fn new(device: &wgpu::Device, width: u32, height: u32) -> Self {
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("gup_egui_offscreen"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: CHART_TEXTURE_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            // Allow creating a Rgba8Unorm view for egui sampling.
+            view_formats: &[EGUI_SAMPLE_FORMAT],
+        });
+
+        let render_view = texture.create_view(&wgpu::TextureViewDescriptor {
+            format: Some(CHART_TEXTURE_FORMAT),
+            ..Default::default()
+        });
+
+        let sample_view = texture.create_view(&wgpu::TextureViewDescriptor {
+            label: Some("gup_egui_sample_view"),
+            format: Some(EGUI_SAMPLE_FORMAT),
+            ..Default::default()
+        });
+
+        Self {
+            texture,
+            render_view,
+            sample_view,
+            width,
+            height,
+        }
+    }
 }
 
 impl GupWidget {
     /// Create a new `GupWidget` wrapping any chart that implements [`DynChart`].
+    ///
+    /// Uses the **pixel-buffer fallback** path: the chart creates its own GPU
+    /// device and pixels are read back to the CPU each frame.
     ///
     /// The widget starts in the dirty state so the first frame triggers a
     /// render.
@@ -96,7 +204,48 @@ impl GupWidget {
             last_size: None,
             texture_handle: None,
             pending_events: Vec::new(),
+            shared_state: None,
         }
+    }
+
+    /// Create a new `GupWidget` using the **zero-copy shared-device** path.
+    ///
+    /// The chart must have been built with a [`RenderContext`] created from the
+    /// same render state (see [`GupEguiContext::from_render_state`]).
+    ///
+    /// The chart texture is registered directly with egui's renderer — no CPU
+    /// readback, no second GPU device.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let render_state = cc.wgpu_render_state.as_ref().unwrap();
+    /// let egui_ctx = GupEguiContext::from_render_state(render_state);
+    /// let chart = scatter()
+    ///     .build_with_data(data, egui_ctx.render_context().clone())?;
+    /// let widget = GupWidget::with_render_state(chart, render_state.clone());
+    /// ```
+    pub fn with_render_state(
+        chart: impl DynChart,
+        render_state: eframe::egui_wgpu::RenderState,
+    ) -> Self {
+        Self {
+            chart: Box::new(chart),
+            dirty: true,
+            last_size: None,
+            texture_handle: None,
+            pending_events: Vec::new(),
+            shared_state: Some(SharedDeviceState {
+                render_state,
+                offscreen_texture: None,
+                egui_texture_id: None,
+            }),
+        }
+    }
+
+    /// Returns `true` when using the zero-copy shared-device path.
+    pub fn is_shared_device(&self) -> bool {
+        self.shared_state.is_some()
     }
 
     /// Mark the chart as needing a re-render on the next frame.
@@ -163,15 +312,20 @@ impl GupWidget {
 
         // Re-render if dirty or size changed.
         if self.dirty || size_changed {
-            self.rerender(ui, phys_width, phys_height);
+            if self.shared_state.is_some() {
+                self.rerender_shared(phys_width, phys_height);
+            } else {
+                self.rerender_pixel_buffer(ui, phys_width, phys_height);
+            }
             self.last_size = Some([phys_width, phys_height]);
             self.dirty = false;
         }
 
         // Display the texture (or a placeholder).
         let size = egui::vec2(available.x, available.y);
-        let response = if let Some(handle) = &self.texture_handle {
-            let image = egui::Image::new(handle).fit_to_exact_size(size);
+        let response = if let Some(tex_id) = self.egui_texture_id() {
+            let image = egui::Image::new(egui::load::SizedTexture::new(tex_id, size))
+                .fit_to_exact_size(size);
             ui.add(image)
         } else {
             // No texture yet — draw a placeholder rectangle.
@@ -189,8 +343,20 @@ impl GupWidget {
         response
     }
 
-    /// Perform the off-screen render and upload the result to egui.
-    fn rerender(&mut self, ui: &mut egui::Ui, width: u32, height: u32) {
+    /// Return the egui texture id from whichever path is active.
+    fn egui_texture_id(&self) -> Option<egui::TextureId> {
+        if let Some(state) = &self.shared_state {
+            state.egui_texture_id
+        } else {
+            self.texture_handle.as_ref().map(TextureHandle::id)
+        }
+    }
+
+    // ----- Pixel-buffer fallback path ----------------------------------------
+
+    /// Perform the off-screen render and upload the result to egui as a
+    /// [`ColorImage`] (CPU readback).
+    fn rerender_pixel_buffer(&mut self, ui: &mut egui::Ui, width: u32, height: u32) {
         // Render the chart to raw RGBA pixels (no PNG encode/decode).
         let pixels = match self.chart.render_to_rgba(width, height) {
             Ok(px) => px,
@@ -216,6 +382,66 @@ impl GupWidget {
                 self.texture_handle = Some(handle);
             }
         }
+    }
+
+    // ----- Shared-device zero-copy path --------------------------------------
+
+    /// Render the chart into a shared offscreen texture and register it with
+    /// egui's renderer (no CPU readback).
+    fn rerender_shared(&mut self, width: u32, height: u32) {
+        let state = self.shared_state.as_mut().expect("shared_state is Some");
+        let device = &state.render_state.device;
+
+        // (Re)create the offscreen texture when dimensions change.
+        let need_new_texture = state
+            .offscreen_texture
+            .as_ref()
+            .map_or(true, |t| t.width != width || t.height != height);
+
+        if need_new_texture {
+            let offscreen = OffscreenTexture::new(device, width, height);
+
+            // Register (or update) the texture with egui's renderer.
+            let mut renderer = state.render_state.renderer.write();
+            match state.egui_texture_id {
+                Some(id) => {
+                    renderer.update_egui_texture_from_wgpu_texture(
+                        device,
+                        &offscreen.sample_view,
+                        wgpu::FilterMode::Linear,
+                        id,
+                    );
+                }
+                None => {
+                    let id = renderer.register_native_texture(
+                        device,
+                        &offscreen.sample_view,
+                        wgpu::FilterMode::Linear,
+                    );
+                    state.egui_texture_id = Some(id);
+                }
+            }
+
+            state.offscreen_texture = Some(offscreen);
+        }
+
+        // Render the chart into the offscreen texture.
+        let offscreen = state.offscreen_texture.as_ref().unwrap();
+        if let Err(e) = self.chart.render_to_texture_view(
+            &offscreen.render_view,
+            CHART_TEXTURE_FORMAT,
+            width,
+            height,
+        ) {
+            log::warn!("GupWidget shared render failed: {e}");
+            return;
+        }
+
+        // When the texture was not recreated but only re-rendered, we still
+        // need to update the egui bind group so it picks up the new content.
+        // For textures that keep the same wgpu::TextureView, the bind group
+        // is unchanged, so no extra update is necessary — the GPU writes are
+        // visible on the next frame automatically.
     }
 }
 
