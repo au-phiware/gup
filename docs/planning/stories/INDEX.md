@@ -1046,6 +1046,12 @@ PNG, HTML), and platform targets.
   build auto-discovery and JavaScript↔WASM data passing so the exported HTML
   renders interactively without manual setup. Deps: GUP-269 ✅, GUP-172 ✅,
   GUP-269A ✅.
+- [GUP-269C](GUP-269C_ES_Module_WASM_Loading_Strategy.md) 📋 — Add ES module
+  dynamic import loading strategy for wasm-bindgen modules, enabling direct
+  JS→WASM function calls in exported HTML. Deps: GUP-269B ✅.
+- [GUP-269D](GUP-269D_WASM_Auto_Render_On_Page_Load.md) 📋 — Auto-detect
+  chart data in the DOM and render on WASM module load, making exported HTML
+  fully interactive without additional JS. Deps: GUP-269B ✅.
 
 ## Mobile
 

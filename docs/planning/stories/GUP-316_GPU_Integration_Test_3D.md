@@ -78,11 +78,11 @@ mark types:
 
 ### Key Files Changed
 
-| File | Change |
-|------|--------|
-| `tests/three_d_integration.rs` | **New** — 878-line integration test file |
-| `docs/planning/stories/GUP-316_GPU_Integration_Test_3D.md` | Updated status |
-| `docs/planning/stories/INDEX.md` | Updated status |
+| File                                                       | Change                                   |
+| ---------------------------------------------------------- | ---------------------------------------- |
+| `tests/three_d_integration.rs`                             | **New** — 878-line integration test file |
+| `docs/planning/stories/GUP-316_GPU_Integration_Test_3D.md` | Updated status                           |
+| `docs/planning/stories/INDEX.md`                           | Updated status                           |
 
 ### Test Infrastructure
 
@@ -92,8 +92,8 @@ mark types:
   render-target texture + `readback_pixels()` for GPU→CPU pixel transfer
 - **Depth buffer**: Uses `gup::depth::DepthBuffer` for correct 3D occlusion
 - **Non-zero pixel assertion**: Custom `assert_non_zero_pixels()` helper scans
-  RGBA data for any channel > 10 (avoiding false positives from near-black
-  clear colour)
+  RGBA data for any channel > 10 (avoiding false positives from near-black clear
+  colour)
 
 ### Test Counts
 
@@ -109,62 +109,61 @@ mark types:
 #### Headless GPU Rendering Without GupContext
 
 - **Challenge**: The story suggested using `GupContext::headless()` but
-  integration tests that exercise the raw wgpu pipeline don't need the
-  full `GupContext` abstraction — they just need a device and queue.
+  integration tests that exercise the raw wgpu pipeline don't need the full
+  `GupContext` abstraction — they just need a device and queue.
 - **Solution**: Created a minimal `headless_context()` helper that directly
   requests an adapter and device via `wgpu::Instance`. This is faster to
   initialise and avoids coupling tests to the higher-level context API.
 - **Pattern**: For low-level GPU pipeline tests, use raw wgpu device/queue.
-  Reserve `GupContext::headless()` for tests that exercise the context's
-  own APIs (surface management, buffer pools, etc.).
+  Reserve `GupContext::headless()` for tests that exercise the context's own
+  APIs (surface management, buffer pools, etc.).
 
 #### Lit vs Unlit Bind Group Layouts
 
-- **Challenge**: Line3D is unlit (no light uniform in its fragment shader),
-  but Sphere3D and Box3D both need camera + light uniforms. Using a single
+- **Challenge**: Line3D is unlit (no light uniform in its fragment shader), but
+  Sphere3D and Box3D both need camera + light uniforms. Using a single
   bind-group layout for all three would cause a validation error on Line3D
   because its shader doesn't declare a light binding.
 - **Solution**: Parameterised the `uniform_bgl()` and
   `create_uniform_bind_group()` helpers with a `lit: bool` flag that
   conditionally adds the light binding.
-- **Pattern**: When testing multiple shader variants, make bind-group
-  layout creation configurable rather than one-size-fits-all.
+- **Pattern**: When testing multiple shader variants, make bind-group layout
+  creation configurable rather than one-size-fits-all.
 
 #### OffscreenTarget for Pixel Readback
 
-- **Challenge**: Needed to verify that the render pass actually drew
-  something without visual inspection.
-- **Solution**: Leveraged the existing `gup::export::png::OffscreenTarget`
-  which handles texture creation with `RENDER_ATTACHMENT | COPY_SRC`,
-  staging buffer allocation, row-padding alignment, and BGRA→RGBA
-  conversion. This avoided re-implementing readback logic.
-- **Pattern**: Reuse the export module's offscreen infrastructure for
-  GPU integration tests — it's already battle-tested.
+- **Challenge**: Needed to verify that the render pass actually drew something
+  without visual inspection.
+- **Solution**: Leveraged the existing `gup::export::png::OffscreenTarget` which
+  handles texture creation with `RENDER_ATTACHMENT | COPY_SRC`, staging buffer
+  allocation, row-padding alignment, and BGRA→RGBA conversion. This avoided
+  re-implementing readback logic.
+- **Pattern**: Reuse the export module's offscreen infrastructure for GPU
+  integration tests — it's already battle-tested.
 
 ### Architectural Decisions
 
 #### Direct Pipeline Construction vs Selection API
 
-- **Decision**: Tests construct wgpu pipelines directly (shader modules,
-  bind groups, vertex buffers, render pass) rather than going through the
+- **Decision**: Tests construct wgpu pipelines directly (shader modules, bind
+  groups, vertex buffers, render pass) rather than going through the
   Selection/Mark rendering API.
 - **Reasoning**: The goal is to test the WGSL shaders and bind-group
-  compatibility at the lowest possible level. If a shader has a
-  type mismatch or a bind-group layout is wrong, the test should fail
-  at pipeline creation, not be masked by higher-level error handling.
-- **Trade-off**: Tests are more verbose (~880 lines) but provide
-  precise failure localisation.
+  compatibility at the lowest possible level. If a shader has a type mismatch or
+  a bind-group layout is wrong, the test should fail at pipeline creation, not
+  be masked by higher-level error handling.
+- **Trade-off**: Tests are more verbose (~880 lines) but provide precise failure
+  localisation.
 - **Future**: Higher-level rendering tests via the Selection API could
   complement these low-level tests but belong in a separate story.
 
 ### Development Workflow Insights
 
-- The story was straightforward — all 4 tests passed on first run after
-  fixing a minor API mismatch (`panic_on_timeout()` → `unwrap()` for
-  `device.poll()` return type in wgpu v26).
-- The `mask all-fix` command touched many pre-existing files with
-  formatting changes. These were committed separately to keep the
-  integration test commit clean.
-- Performance assertion (100K instances < 16ms) passed comfortably,
-  confirming the 3D pipeline is well within the 60 FPS budget even
-  at high instance counts.
+- The story was straightforward — all 4 tests passed on first run after fixing a
+  minor API mismatch (`panic_on_timeout()` → `unwrap()` for `device.poll()`
+  return type in wgpu v26).
+- The `mask all-fix` command touched many pre-existing files with formatting
+  changes. These were committed separately to keep the integration test commit
+  clean.
+- Performance assertion (100K instances < 16ms) passed comfortably, confirming
+  the 3D pipeline is well within the 60 FPS budget even at high instance counts.

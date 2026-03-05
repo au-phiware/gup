@@ -13,15 +13,15 @@ with many charts.
 
 GUP-262A renders each chart individually: each `render_to_texture_view` call
 creates its own command encoder, render pass, and `queue.submit()`. With N
-charts this means N separate GPU submissions per frame. Batching these into
-a single encoder with N render passes (or fewer submissions) reduces driver
+charts this means N separate GPU submissions per frame. Batching these into a
+single encoder with N render passes (or fewer submissions) reduces driver
 overhead.
 
 ## User Story
 
-As a developer building a multi-chart dashboard in Bevy, I want all charts
-to render in a single batched GPU submission so that the per-frame overhead
-scales sublinearly with chart count.
+As a developer building a multi-chart dashboard in Bevy, I want all charts to
+render in a single batched GPU submission so that the per-frame overhead scales
+sublinearly with chart count.
 
 ## Acceptance Criteria
 
@@ -35,8 +35,8 @@ scales sublinearly with chart count.
 
 1. Modify `gup_render_system` to collect all dirty charts before rendering.
 2. Create a single `CommandEncoder` shared across all charts.
-3. For each chart, begin a new render pass on the shared encoder targeting
-   that chart's `ChartTextureTarget`.
+3. For each chart, begin a new render pass on the shared encoder targeting that
+   chart's `ChartTextureTarget`.
 4. Submit the single encoder once.
 5. Benchmark against the per-chart submission baseline.
 
@@ -54,8 +54,8 @@ scales sublinearly with chart count.
 
 - **Low**: wgpu supports multiple render passes per command encoder. The main
   risk is that `prepare_draw_commands` modifies chart state that prevents
-  sharing a single encoder across multiple charts, but each chart's buffers
-  are independent.
+  sharing a single encoder across multiple charts, but each chart's buffers are
+  independent.
 
 ## Definition of Done
 

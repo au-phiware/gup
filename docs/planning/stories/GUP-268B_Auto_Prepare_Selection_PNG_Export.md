@@ -6,11 +6,11 @@
 
 ## Context
 
-GUP-268A wired Selection data mark rendering through the PNG export path. However,
-the caller must manually call `prepare_render` (with a mapper closure) or set up
-attribute bindings and call `prepare_render_bound` before calling `render_to_png`.
-If the caller forgets this step, the export succeeds but produces an image with
-no data marks — only axes and grid.
+GUP-268A wired Selection data mark rendering through the PNG export path.
+However, the caller must manually call `prepare_render` (with a mapper closure)
+or set up attribute bindings and call `prepare_render_bound` before calling
+`render_to_png`. If the caller forgets this step, the export succeeds but
+produces an image with no data marks — only axes and grid.
 
 This story adds a convenience API that auto-prepares the Selection as part of
 the export call, reducing the chance of user error and simplifying the export
@@ -44,7 +44,8 @@ workflow.
 
 ### Prerequisite Stories
 
-- GUP-268A: Data Mark PNG Export ✅ — provides the core mark rendering in export.
+- GUP-268A: Data Mark PNG Export ✅ — provides the core mark rendering in
+  export.
 
 ## Testing Strategy
 

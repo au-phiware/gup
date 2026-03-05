@@ -75,11 +75,11 @@ alongside axes, ticks, and grid lines.
 
 ### Key Changes
 
-| File | Change |
-| --- | --- |
-| `src/chart_builder.rs` | Added `visualization.render()` calls to `render_to_rgba` and `render_to_texture_view` render passes |
-| `examples/export_png.rs` | Added `prepare_render` with clip-space mapping so data marks are visible |
-| `tests/png_export_integration.rs` | Added 2 integration tests: marks-appear and graceful-no-marks |
+| File                              | Change                                                                                              |
+| --------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `src/chart_builder.rs`            | Added `visualization.render()` calls to `render_to_rgba` and `render_to_texture_view` render passes |
+| `examples/export_png.rs`          | Added `prepare_render` with clip-space mapping so data marks are visible                            |
+| `tests/png_export_integration.rs` | Added 2 integration tests: marks-appear and graceful-no-marks                                       |
 
 ### Pipeline Compatibility
 
@@ -105,9 +105,9 @@ The Selection's render pipeline already targets `Bgra8UnormSrgb` (hardcoded in
 - **Challenge**: The story anticipated needing to handle format compatibility
   between the Selection's render pipeline and the off-screen texture format.
 - **Solution**: Both already use `Bgra8UnormSrgb` — the Selection pipeline
-  hardcodes this format in `MarkInfoImpl::create_render_pipeline_impl` (line
-  522 of `mark.rs`), and `OffscreenTarget::new` creates its texture with the
-  same format.
+  hardcodes this format in `MarkInfoImpl::create_render_pipeline_impl` (line 522
+  of `mark.rs`), and `OffscreenTarget::new` creates its texture with the same
+  format.
 - **Pattern**: When the same format constant is used in both the pipeline and
   render target, no conversion or special handling is needed. This is by design
   in wgpu — the surface format is standardised.
@@ -135,8 +135,8 @@ The Selection's render pipeline already targets `Bgra8UnormSrgb` (hardcoded in
   map data items to GPU instances, which is the caller's responsibility. Adding
   `M: MarkInstanceBuilder` bounds would be a breaking API change.
 - **Trade-off**: Users must remember to prepare the selection before exporting.
-  If they forget, the export succeeds but shows no data marks (white
-  background only).
+  If they forget, the export succeeds but shows no data marks (white background
+  only).
 - **Future**: A convenience method like `export_png_with_mapper` could
   auto-prepare as a one-shot, or the `ComposedChart` builder could store the
   mapper for reuse.
@@ -145,8 +145,8 @@ The Selection's render pipeline already targets `Bgra8UnormSrgb` (hardcoded in
 
 - The implementation was remarkably small — just 4 lines of code in
   `render_to_rgba` and 4 lines in `render_to_texture_view` — because the
-  Selection rendering API was already well-designed with a clean
-  prepare/render split.
+  Selection rendering API was already well-designed with a clean prepare/render
+  split.
 - Visual inspection of the exported PNG was the most valuable validation step.
   The integration test catches regressions, but eyeballing the scatter plot
   confirmed correct positioning and styling.
@@ -155,11 +155,11 @@ The Selection's render pipeline already targets `Bgra8UnormSrgb` (hardcoded in
 
 ### Follow-up Stories
 
-1. **GUP-268B: Auto-Prepare Selection in PNG Export** — Add a convenience
-   method on `ComposedChart` that accepts a mapper closure and prepares the
-   Selection as part of the export call, so callers don't need to manage the
-   prepare step separately. This would also support `prepare_render_bound`
-   for charts built with attribute bindings.
+1. **GUP-268B: Auto-Prepare Selection in PNG Export** — Add a convenience method
+   on `ComposedChart` that accepts a mapper closure and prepares the Selection
+   as part of the export call, so callers don't need to manage the prepare step
+   separately. This would also support `prepare_render_bound` for charts built
+   with attribute bindings.
 2. **GUP-268C: Text Label Rendering in PNG Export** — The current PNG export
    renders data marks, axes, ticks, and grid lines, but does not render text
    labels (axis labels, title, tick labels). Wiring the text rendering pipeline

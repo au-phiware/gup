@@ -72,19 +72,19 @@ Render World (ExtractSchedule + Queue):
 
 ### Key Files Changed
 
-| File | Change |
-| ---- | ------ |
-| `src/chart_builder.rs` | Added `render_to_texture_view` method to `ComposedChart` |
-| `gup-bevy/src/chart.rs` | Extended `DynChart` trait with `render_to_texture_view` |
-| `gup-bevy/src/texture_target.rs` | New — `ChartTextureTarget` offscreen texture manager |
-| `gup-bevy/src/render_node.rs` | New — render-world extract + GPU copy systems |
-| `gup-bevy/src/render_system.rs` | Replaced PNG render with texture render |
-| `gup-bevy/src/plugin.rs` | Added render-world system registration |
-| `gup-bevy/src/lib.rs` | Updated exports |
-| `gup-bevy/Cargo.toml` | Removed `image` and `png` dependencies |
-| `gup-bevy/examples/bevy_scatter.rs` | Uses shared `GupRenderContext` device |
-| `gup-bevy/README.md` | Architecture documentation |
-| `gup-bevy/tests/integration.rs` | 5 new tests (13 total) |
+| File                                | Change                                                   |
+| ----------------------------------- | -------------------------------------------------------- |
+| `src/chart_builder.rs`              | Added `render_to_texture_view` method to `ComposedChart` |
+| `gup-bevy/src/chart.rs`             | Extended `DynChart` trait with `render_to_texture_view`  |
+| `gup-bevy/src/texture_target.rs`    | New — `ChartTextureTarget` offscreen texture manager     |
+| `gup-bevy/src/render_node.rs`       | New — render-world extract + GPU copy systems            |
+| `gup-bevy/src/render_system.rs`     | Replaced PNG render with texture render                  |
+| `gup-bevy/src/plugin.rs`            | Added render-world system registration                   |
+| `gup-bevy/src/lib.rs`               | Updated exports                                          |
+| `gup-bevy/Cargo.toml`               | Removed `image` and `png` dependencies                   |
+| `gup-bevy/examples/bevy_scatter.rs` | Uses shared `GupRenderContext` device                    |
+| `gup-bevy/README.md`                | Architecture documentation                               |
+| `gup-bevy/tests/integration.rs`     | 5 new tests (13 total)                                   |
 
 ### Test Counts
 
@@ -115,9 +115,9 @@ Render World (ExtractSchedule + Queue):
   device. Textures created on one device cannot be used in render passes or
   copies targeting textures on a different device — wgpu panics with "does not
   exist" errors.
-- **Solution**: The `bevy_scatter` example (and any user code) must build
-  charts using `GupRenderContext::render_context()` so every GPU resource lives
-  on Bevy's shared device.
+- **Solution**: The `bevy_scatter` example (and any user code) must build charts
+  using `GupRenderContext::render_context()` so every GPU resource lives on
+  Bevy's shared device.
 - **Pattern**: In Bevy integrations, always propagate the shared
   `Device`/`Queue` through the chart-builder API. Never create a second adapter
   for chart rendering.
@@ -128,9 +128,8 @@ Render World (ExtractSchedule + Queue):
   to the GPU. For texture-sharing we never need CPU data — the chart writes
   directly to the GPU texture.
 - **Solution**: `Image::new_uninit()` (Bevy 0.17) creates an `Image` with
-  `data: None`. Bevy's `GpuImage::prepare_asset` creates the GPU texture
-  without uploading anything. The texture is then ready for
-  `copy_texture_to_texture`.
+  `data: None`. Bevy's `GpuImage::prepare_asset` creates the GPU texture without
+  uploading anything. The texture is then ready for `copy_texture_to_texture`.
 - **Pattern**: Use `new_uninit` + `COPY_DST` usage for render targets that are
   only ever written to by the GPU.
 
@@ -141,10 +140,9 @@ Render World (ExtractSchedule + Queue):
 - **Decision**: Render to a `ChartTextureTarget` then `copy_texture_to_texture`
   into the `GpuImage`, rather than rendering directly into the GpuImage texture.
 - **Reasoning**: Direct rendering into the GpuImage requires either (a) access
-  to the GpuImage from the main world (impossible) or (b) extracting the
-  entire chart's GPU resources (buffers, pipelines) to the render world (very
-  complex). The copy approach requires only a single GPU blit per chart per
-  frame.
+  to the GpuImage from the main world (impossible) or (b) extracting the entire
+  chart's GPU resources (buffers, pipelines) to the render world (very complex).
+  The copy approach requires only a single GPU blit per chart per frame.
 - **Trade-off**: One extra GPU copy per chart per frame (sub-millisecond for
   800×600). The simplicity gain is substantial.
 - **Future**: If profiling shows the extra copy is a bottleneck, a render-graph
@@ -153,14 +151,14 @@ Render World (ExtractSchedule + Queue):
 
 #### Removing image/png Dependencies
 
-- **Decision**: Removed the `image` crate and Bevy's `png` feature from
-  gup-bevy dependencies.
+- **Decision**: Removed the `image` crate and Bevy's `png` feature from gup-bevy
+  dependencies.
 - **Reasoning**: The PNG path is no longer used in the render system. The
   `render_to_png` method still exists on `DynChart`/`GupChart` for screenshot
   exports, but it uses the main `gup` crate's PNG infrastructure directly.
 - **Trade-off**: If users relied on Bevy's PNG feature transitively through
-  gup-bevy, they would need to enable it themselves. Unlikely since gup-bevy
-  is a niche integration crate.
+  gup-bevy, they would need to enable it themselves. Unlikely since gup-bevy is
+  a niche integration crate.
 - **Future**: Could re-add as an optional feature if users request it.
 
 ### Development Workflow Insights

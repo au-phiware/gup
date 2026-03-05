@@ -9,17 +9,17 @@
 GUP-268 delivered PNG export with axes, ticks, and grid lines. GUP-268A added
 data mark rendering. However, the exported PNG still lacks text labels — axis
 labels, chart titles, tick value labels, and subtitles are not rendered. These
-text elements rely on Gup's SDF-based text rendering pipeline, which is
-separate from the axis geometry and Selection pipelines.
+text elements rely on Gup's SDF-based text rendering pipeline, which is separate
+from the axis geometry and Selection pipelines.
 
-This story wires the text rendering pipeline through the PNG export path so
-that exported images are fully self-contained with all visual elements.
+This story wires the text rendering pipeline through the PNG export path so that
+exported images are fully self-contained with all visual elements.
 
 ## User Story
 
 > "As a visualisation developer, I want PNG exports to include text labels
-> (titles, axis labels, tick labels) so that the exported chart is complete
-> and readable without additional context."
+> (titles, axis labels, tick labels) so that the exported chart is complete and
+> readable without additional context."
 
 ## Acceptance Criteria
 
@@ -44,8 +44,8 @@ that exported images are fully self-contained with all visual elements.
 
 ## Testing Strategy
 
-- Integration test: Export a chart with a title and axis labels, decode the
-  PNG, and verify non-white pixels at expected text positions.
+- Integration test: Export a chart with a title and axis labels, decode the PNG,
+  and verify non-white pixels at expected text positions.
 - Visual validation: Run the export example and inspect text rendering.
 
 ## Definition of Done

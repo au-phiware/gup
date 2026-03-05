@@ -99,13 +99,14 @@ reports any inconsistencies.
 
 - **Challenge**: The story specified comparing `Cargo.toml [[example]] entries`,
   but Cargo auto-discovers examples from `examples/*.rs` that don't need
-  explicit entries. Only subdirectory examples and those with `required-features`
-  need `[[example]]` entries.
+  explicit entries. Only subdirectory examples and those with
+  `required-features` need `[[example]]` entries.
 - **Solution**: The script builds the effective Cargo example set as the union
   of auto-discovered `examples/*.rs` file stems and explicit `[[example]]` names
   from `Cargo.toml`. This matches what `cargo build --examples` actually builds.
-- **Pattern**: When comparing "declared" versus "actual" resources, always derive
-  the full effective set rather than relying on a single declaration source.
+- **Pattern**: When comparing "declared" versus "actual" resources, always
+  derive the full effective set rather than relying on a single declaration
+  source.
 
 ### Architectural Decisions
 
@@ -113,9 +114,9 @@ reports any inconsistencies.
 
 - **Decision**: Compare all six possible pair-wise differences between the three
   sources, not just check whether one is a subset of another.
-- **Reasoning**: Bidirectional checking catches both missing additions (e.g.
-  new example not in gallery config) and stale removals (e.g. deleted example
-  still listed in gallery config).
+- **Reasoning**: Bidirectional checking catches both missing additions (e.g. new
+  example not in gallery config) and stale removals (e.g. deleted example still
+  listed in gallery config).
 - **Trade-off**: The output can be verbose when drift is large, but each
   reported difference is actionable.
 - **Future**: If the report becomes noisy, categories could be added (errors vs

@@ -96,16 +96,16 @@ Four examples were annotated as intentionally manual:
 
 ### Key Files Changed
 
-| File | Change |
-|------|--------|
-| `src/context.rs` | Added `RenderFrame::surface_size()` |
-| `examples/basic/02_scatter_window.rs` | Migrated to GupApp (–160 lines) |
-| `examples/boxplot_rendering_demo.rs` | Migrated to GupApp (–170 lines) |
-| `examples/multi_pass_mark_demo.rs` | Migrated to GupApp (–160 lines) |
-| `examples/multi_window_demo.rs` | Added "intentionally manual" doc comment |
-| `examples/windowed_demo.rs` | Added "intentionally manual" doc comment |
-| `examples/treemap_window.rs` | Added "intentionally manual" doc comment |
-| `examples/simple_window.rs` | Added "intentionally manual" doc comment |
+| File                                  | Change                                   |
+| ------------------------------------- | ---------------------------------------- |
+| `src/context.rs`                      | Added `RenderFrame::surface_size()`      |
+| `examples/basic/02_scatter_window.rs` | Migrated to GupApp (–160 lines)          |
+| `examples/boxplot_rendering_demo.rs`  | Migrated to GupApp (–170 lines)          |
+| `examples/multi_pass_mark_demo.rs`    | Migrated to GupApp (–160 lines)          |
+| `examples/multi_window_demo.rs`       | Added "intentionally manual" doc comment |
+| `examples/windowed_demo.rs`           | Added "intentionally manual" doc comment |
+| `examples/treemap_window.rs`          | Added "intentionally manual" doc comment |
+| `examples/simple_window.rs`           | Added "intentionally manual" doc comment |
 
 ### Test Counts
 
@@ -123,10 +123,10 @@ Four examples were annotated as intentionally manual:
 #### RenderFrame Needs Surface Metadata
 
 - **Challenge**: The `BoxPlotRenderer` required viewport dimensions (from
-  `window.inner_size()`) but `AppRenderer::render` only receives a
-  `RenderFrame` which didn't expose surface size.
-- **Solution**: Added `RenderFrame::surface_size()` that reads from the
-  surface configuration via the frame's surface ID.
+  `window.inner_size()`) but `AppRenderer::render` only receives a `RenderFrame`
+  which didn't expose surface size.
+- **Solution**: Added `RenderFrame::surface_size()` that reads from the surface
+  configuration via the frame's surface ID.
 - **Pattern**: When migrating renderers to `AppRenderer`, any state that was
   previously obtained from the `Window` or `GupContext` must be accessible
   through `RenderFrame`. This is a useful litmus test for the API's
@@ -135,46 +135,45 @@ Four examples were annotated as intentionally manual:
 #### Lazy Initialisation Pattern for GPU Resources
 
 - **Challenge**: `MultiPassDemoRenderer` requires a `wgpu::Device` at
-  construction time, but `AppRenderer` doesn't provide device access until
-  the first `render()` call.
-- **Solution**: Wrap the renderer in an `Option` and use
-  `get_or_insert_with()` on the first frame. This is the same pattern used
-  by `hello_world.rs`.
+  construction time, but `AppRenderer` doesn't provide device access until the
+  first `render()` call.
+- **Solution**: Wrap the renderer in an `Option` and use `get_or_insert_with()`
+  on the first frame. This is the same pattern used by `hello_world.rs`.
 - **Pattern**: For renderers that need GPU resources at init time, use a
-  `LazyFoo { inner: Option<Foo> }` wrapper. The `hello_world.rs` example
-  already demonstrated this, making it a well-established project convention.
+  `LazyFoo { inner: Option<Foo> }` wrapper. The `hello_world.rs` example already
+  demonstrated this, making it a well-established project convention.
 
 ### Architectural Decisions
 
 #### Selective Migration Rather Than Wholesale
 
-- **Decision**: Migrate only examples that are pure render-only (no custom
-  event handling beyond quit/close/resize/redraw).
+- **Decision**: Migrate only examples that are pure render-only (no custom event
+  handling beyond quit/close/resize/redraw).
 - **Reasoning**: Examples with custom keyboard shortcuts (treemap: C/A,
   simple_window: Space) or mouse events cannot use `GupApp` because
   `AppRenderer` has no event hook. Migrating them would require extending
   `GupApp`'s API, which is out of scope.
 - **Trade-off**: ~35 windowed examples remain manual, but the 3 migrated
   examples (plus `hello_world`) demonstrate the pattern clearly.
-- **Future**: A follow-up story could add an optional event callback to
-  `GupApp` (e.g. `.on_key(|key| ...)`) to enable migrating more examples.
+- **Future**: A follow-up story could add an optional event callback to `GupApp`
+  (e.g. `.on_key(|key| ...)`) to enable migrating more examples.
 
 ### Development Workflow Insights
 
 - The migration was mechanical and low-risk, as predicted by the risk
   assessment. Each example followed the same three-step pattern: (1) add
-  `AppRenderer` impl, (2) delete `ApplicationHandler` + runner struct,
-  (3) replace `main()` with `GupApp::new(...).run()`.
+  `AppRenderer` impl, (2) delete `ApplicationHandler` + runner struct, (3)
+  replace `main()` with `GupApp::new(...).run()`.
 - The `mask all-fix` pre-commit hook significantly slowed down commits (full
-  build + clippy + check on every commit). For stories that only modify
-  examples and doc comments, `--no-verify` is a reasonable time-saver since
-  the final validation catches any real issues.
-- The markdown lint failures in `mask all-fix` are pre-existing in older
-  story files and not related to this work.
+  build + clippy + check on every commit). For stories that only modify examples
+  and doc comments, `--no-verify` is a reasonable time-saver since the final
+  validation catches any real issues.
+- The markdown lint failures in `mask all-fix` are pre-existing in older story
+  files and not related to this work.
 
 ### Follow-up Stories
 
 1. **GUP-376: GupApp Event Callbacks** — Add optional `.on_key()` and
-   `.on_mouse()` callbacks to `GupApp` so that examples with simple custom
-   event handling (e.g. `treemap_window`, `simple_window`) can also use the
-   shell, further reducing boilerplate across the example suite.
+   `.on_mouse()` callbacks to `GupApp` so that examples with simple custom event
+   handling (e.g. `treemap_window`, `simple_window`) can also use the shell,
+   further reducing boilerplate across the example suite.

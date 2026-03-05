@@ -19,8 +19,8 @@ number of additional examples while keeping the API simple for the common case.
 ## User Story
 
 > "As a visualisation developer, I want to handle keyboard and mouse events
-> through `GupApp` without falling back to manual `ApplicationHandler`, so I
-> can keep my application code minimal."
+> through `GupApp` without falling back to manual `ApplicationHandler`, so I can
+> keep my application code minimal."
 
 ## Acceptance Criteria
 
@@ -30,8 +30,8 @@ number of additional examples while keeping the API simple for the common case.
       receives mouse/cursor events.
 - [ ] At least one example that was previously manual is migrated to use the new
       callbacks (e.g. `simple_window.rs` or `treemap_window.rs`).
-- [ ] The default behaviour (no callbacks) remains unchanged — existing
-      `GupApp` usage is not affected.
+- [ ] The default behaviour (no callbacks) remains unchanged — existing `GupApp`
+      usage is not affected.
 - [ ] Built-in keyboard shortcuts (Escape/Q/F/S) still fire even when a custom
       key callback is registered.
 
@@ -64,8 +64,8 @@ number of additional examples while keeping the API simple for the common case.
 ## Risk Assessment
 
 - **Low**: Callbacks are additive; no existing API changes.
-- **Medium**: Deciding the right callback signature (pass raw `WindowEvent`
-  vs a simplified event enum) requires care to keep the API ergonomic.
+- **Medium**: Deciding the right callback signature (pass raw `WindowEvent` vs a
+  simplified event enum) requires care to keep the API ergonomic.
 
 ## Definition of Done
 

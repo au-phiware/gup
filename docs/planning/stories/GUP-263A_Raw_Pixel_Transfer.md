@@ -91,7 +91,7 @@ duplicated infrastructure.
   without any PNG encoding. Uses `OffscreenTarget::readback_pixels` for the GPU
   readback.
 - **Refactored `render_to_png`**: Now a thin wrapper that calls `render_to_rgba`
-  + `encode_png`, eliminating duplicated rendering logic.
+  - `encode_png`, eliminating duplicated rendering logic.
 - **Updated `DynChart` traits**: Both `gup-egui` and `gup-bevy` `DynChart`
   traits expose `render_to_rgba` alongside existing methods.
 - **Eliminated PNG round-trip in gup-egui**: `GupWidget::rerender` now calls
@@ -108,14 +108,14 @@ duplicated infrastructure.
 
 ### Key Files Changed
 
-| File                         | Change                                    |
-| ---------------------------- | ----------------------------------------- |
-| `src/chart_builder.rs`       | Added `render_to_rgba`, refactored PNG    |
-| `gup-egui/src/widget.rs`    | Updated `DynChart`, `rerender` method     |
-| `gup-egui/Cargo.toml`       | Removed `image` dependency                |
-| `gup-bevy/src/chart.rs`     | Updated `DynChart`, added `render_to_rgba`|
-| `benches/raw_pixel_transfer.rs` | New benchmark                          |
-| `Cargo.toml`                | Registered benchmark                      |
+| File                            | Change                                     |
+| ------------------------------- | ------------------------------------------ |
+| `src/chart_builder.rs`          | Added `render_to_rgba`, refactored PNG     |
+| `gup-egui/src/widget.rs`        | Updated `DynChart`, `rerender` method      |
+| `gup-egui/Cargo.toml`           | Removed `image` dependency                 |
+| `gup-bevy/src/chart.rs`         | Updated `DynChart`, added `render_to_rgba` |
+| `benches/raw_pixel_transfer.rs` | New benchmark                              |
+| `Cargo.toml`                    | Registered benchmark                       |
 
 ### Test Results
 
@@ -148,10 +148,10 @@ duplicated infrastructure.
   hierarchy.
 - **Solution**: `render_to_rgba` became the foundation for `render_to_png`,
   while `render_to_texture_view` remains separate (it never does CPU readback).
-  This gives a clean 3-tier API: GPU-only rendering (texture view), CPU
-  readback (RGBA), and encoded output (PNG).
-- **Pattern**: Structure rendering APIs from most-direct to most-processed.
-  Each higher-level method composes the lower one.
+  This gives a clean 3-tier API: GPU-only rendering (texture view), CPU readback
+  (RGBA), and encoded output (PNG).
+- **Pattern**: Structure rendering APIs from most-direct to most-processed. Each
+  higher-level method composes the lower one.
 
 ### Architectural Decisions
 
@@ -161,9 +161,9 @@ duplicated infrastructure.
   `render_to_rgba`, even though their rendering logic is identical.
 - **Reasoning**: `render_to_texture_view` is the zero-copy path that renders
   directly to a caller-supplied texture view. Merging with `render_to_rgba`
-  would require creating an unnecessary `OffscreenTarget` for the Bevy path.
-  The code duplication is minimal (just the render pass setup) and the two
-  methods serve fundamentally different purposes.
+  would require creating an unnecessary `OffscreenTarget` for the Bevy path. The
+  code duplication is minimal (just the render pass setup) and the two methods
+  serve fundamentally different purposes.
 - **Trade-off**: Some duplicated render pass setup code vs. cleaner separation
   of concerns.
 - **Future**: If more rendering targets are added, consider extracting the
@@ -182,12 +182,12 @@ duplicated infrastructure.
 ### Development Workflow Insights
 
 - This was a clean, focused refactor with a very clear scope. The existing
-  `OffscreenTarget::readback_pixels` method already existed and did exactly
-  what was needed — the story was essentially about wiring it through the
-  public API and updating consumers.
+  `OffscreenTarget::readback_pixels` method already existed and did exactly what
+  was needed — the story was essentially about wiring it through the public API
+  and updating consumers.
 - The benchmark results were more dramatic than expected, validating the story's
   value. The 100× improvement at common resolutions makes a real difference for
   interactive egui applications.
 - Bevy's primary render path already uses `render_to_texture_view` (zero-copy),
-  so the main beneficiary is gup-egui. The `render_to_rgba` method on
-  `GupChart` is still valuable for Bevy users who need CPU-side pixel access.
+  so the main beneficiary is gup-egui. The `render_to_rgba` method on `GupChart`
+  is still valuable for Bevy users who need CPU-side pixel access.
