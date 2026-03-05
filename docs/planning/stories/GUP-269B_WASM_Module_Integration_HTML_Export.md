@@ -2,7 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Ecosystem Integration **Status**: 🚧 In Progress **Created**:
+**Initiative**: Ecosystem Integration **Status**: ✅ Complete **Created**:
 2025-07-18
 
 ## Context
@@ -28,26 +28,26 @@ interactive export.
 
 ## Acceptance Criteria
 
-- [ ] `WasmStrategy::Inline` (without a path argument) auto-discovers the
+- [x] `WasmStrategy::Inline` (without a path argument) auto-discovers the
       `.wasm` artifact from the `wasm-pack` output directory, or a new
       `WasmStrategy::Auto` variant is introduced.
-- [ ] The JavaScript bootstrap passes the `#gup-chart-data` JSON to the WASM
+- [x] The JavaScript bootstrap passes the `#gup-chart-data` JSON to the WASM
       module's init function.
-- [ ] The Gup WASM entry point parses the JSON into a `ChartSnapshot` (or
+- [x] The Gup WASM entry point parses the JSON into a `ChartSnapshot` (or
       `ChartBundle`) and renders the chart onto the canvas.
-- [ ] An integration test verifies the round-trip: export HTML → extract JSON →
+- [x] An integration test verifies the round-trip: export HTML → extract JSON →
       parse in Rust (simulating what the WASM module would do).
-- [ ] Documentation covers the auto-discovery mechanism and fallback paths.
+- [x] Documentation covers the auto-discovery mechanism and fallback paths.
 
 ## Technical Tasks
 
-- [ ] Implement auto-discovery of `pkg/*.wasm` files or accept a workspace root.
-- [ ] Update the JavaScript bootstrap template to read the JSON block and pass
+- [x] Implement auto-discovery of `pkg/*.wasm` files or accept a workspace root.
+- [x] Update the JavaScript bootstrap template to read the JSON block and pass
       it to the WASM instance.
-- [ ] Implement or extend the WASM entry point (`#[wasm_bindgen(start)]`) to
+- [x] Implement or extend the WASM entry point (`#[wasm_bindgen(start)]`) to
       accept chart data from JavaScript.
-- [ ] Write integration tests.
-- [ ] Update the `html_export` example to demonstrate auto-discovery.
+- [x] Write integration tests.
+- [x] Update the `html_export` example to demonstrate auto-discovery.
 
 ## Dependencies
 
@@ -74,9 +74,55 @@ interactive export.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Story status updated to ✅ Complete
+- [x] All Acceptance Criteria are satisfied
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Story status updated to ✅ Complete
 - [ ] Retrospective added
+
+## Implementation Summary
+
+**Completed**: 2025-07-19
+
+### What Was Implemented
+
+1. **`WasmStrategy::Auto(Option<PathBuf>)`** — New enum variant that
+   auto-discovers the `*_bg.wasm` artifact from the `wasm-pack` output
+   directory (`pkg/`). Searches from the current directory or a specified
+   workspace root.
+
+2. **`discover_wasm_artifact()` public function** — Reusable discovery
+   logic with comprehensive error messages for missing `pkg/`, no WASM
+   files, or ambiguous matches (multiple `*_bg.wasm` files).
+
+3. **Updated JavaScript bootstrap templates** — Both inline and URL
+   strategies now read the `#gup-chart-data` JSON block and store it as
+   `window.__GUP_CHART_DATA__` before WASM instantiation.
+
+4. **`render_from_bundle` WASM API** — New `#[wasm_bindgen]` export that
+   accepts a canvas ID and JSON string, parses it as `ChartBundle` or
+   `ChartSnapshot`, extracts data, and renders via `render_scatter`.
+
+5. **`parse_bundle_json` native helper** — Same parsing logic available
+   on native targets for testing the round-trip pipeline without a browser.
+
+6. **Module documentation** — Comprehensive docs covering WASM strategies,
+   auto-discovery mechanism, JS↔WASM data passing, and fallback paths.
+
+### Key Files Changed
+
+| File | Change |
+|------|--------|
+| `src/export/html/mod.rs` | `WasmStrategy::Auto`, `discover_wasm_artifact()`, docs |
+| `src/export/html/template.rs` | JS templates read chart data JSON |
+| `src/export/mod.rs` | Re-export `discover_wasm_artifact` |
+| `src/wasm_api.rs` | `render_from_bundle`, `parse_bundle_json` |
+| `tests/html_export_integration.rs` | 4 new integration tests |
+| `examples/html_export.rs` | Auto strategy example (commented) |
+
+### Test Counts
+
+- **Unit tests**: 10 new (5 auto-discovery, 2 JS template, 4 parse_bundle_json, -1 dedup)
+- **Integration tests**: 4 new (WASM round-trip, config-only round-trip, JS reads chart data, Auto strategy)
+- **Total new tests**: 14
