@@ -939,6 +939,12 @@ layouts, and 3D visualization.
 - [GUP-311](GUP-311_Interactive_Graph_Rendering.md) 📋 — Interactive
   force-directed graph rendering with real-time animation, node dragging, and
   zoom. Deps: GUP-259 ✅.
+- [GUP-312](GUP-312_Full_GPU_Quadtree_Construction.md) 📋 — Full GPU quadtree
+  construction using Morton codes and parallel sorting, eliminating per-iteration
+  CPU↔GPU readback. Deps: GUP-310 ✅.
+- [GUP-313](GUP-313_Adaptive_Barnes_Hut_Theta_Tuning.md) 💡 — Adaptive
+  per-region theta tuning based on local graph density for improved layout
+  quality in clustered graphs. Deps: GUP-310 ✅.
 - [GUP-260](GUP-260_GPU_Treemap_Layout.md) ✅ — GPU compute shader treemap
   layout with four algorithm variants (Squarified, Binary, Strip, SliceDice)
   outputting Rectangle-compatible cells. Deps: GUP-003 ✅, GUP-004 ✅, GUP-067
