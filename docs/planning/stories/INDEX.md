@@ -954,7 +954,7 @@ layouts, and 3D visualization.
   layout with four algorithm variants (Squarified, Binary, Strip, SliceDice)
   outputting Rectangle-compatible cells. Deps: GUP-003 ✅, GUP-004 ✅, GUP-067
   ✅.
-- [GUP-312](GUP-312_GPU_Compute_Treemap.md) 📋 — Migrate SliceDice and Binary
+- [GUP-312](GUP-312_GPU_Compute_Treemap.md) 🚧 — Migrate SliceDice and Binary
   treemap algorithms to WGSL compute shaders for GPU-accelerated layout. Deps:
   GUP-260 ✅.
 - [GUP-313](GUP-313_Interactive_Treemap_Drill_Down.md) 📋 — Click-to-zoom
