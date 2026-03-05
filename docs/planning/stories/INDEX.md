@@ -967,7 +967,7 @@ layouts, and 3D visualization.
 - [GUP-372](GUP-372_TreemapResult_Direct_Bind.md) 📋 — Wire GPU-resident
   TreemapResult buffer directly to Rectangle mark instance binding. Deps:
   GUP-312 ✅, GUP-011 ✅.
-- [GUP-314](GUP-314_Windowed_Treemap_Rendering.md) 📋 — Windowed treemap
+- [GUP-314](GUP-314_Windowed_Treemap_Rendering.md) 🚧 — Windowed treemap
   rendering example with Rectangle marks and real-time colour switching. Deps:
   GUP-260 ✅, GUP-067 ✅.
 - [GUP-261](GUP-261_3D_Visualization_Support.md) ✅ — Depth buffer,
