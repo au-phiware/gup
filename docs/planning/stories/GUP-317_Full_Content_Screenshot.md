@@ -100,8 +100,8 @@ actual rendered chart content.
 
 3. **`RenderFrame::capture_texture_copy` method** — Encodes a
    `copy_texture_to_buffer` command on the frame's internal command encoder,
-   returning a `CapturedFrame` staging buffer handle with dimensions and
-   padding metadata.
+   returning a `CapturedFrame` staging buffer handle with dimensions and padding
+   metadata.
 
 4. **`CapturedFrame` struct** — Public struct holding the staging buffer, width,
    height, and padded row bytes, enabling callers to map the buffer after
@@ -114,12 +114,100 @@ actual rendered chart content.
 
 ### Key Files Changed
 
-| File | Change |
-|------|--------|
-| `src/context.rs` | Added `SurfaceConfigBuilder.usage`, `with_surface_config`, `CapturedFrame`, `capture_texture_copy`, and 6 new tests |
-| `src/app.rs` | Rewrote `GupAppRunner` to use `with_surface_config` with `COPY_SRC`, deferred screenshot capture, `save_captured_frame` |
+| File             | Change                                                                                                                  |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `src/context.rs` | Added `SurfaceConfigBuilder.usage`, `with_surface_config`, `CapturedFrame`, `capture_texture_copy`, and 6 new tests     |
+| `src/app.rs`     | Rewrote `GupAppRunner` to use `with_surface_config` with `COPY_SRC`, deferred screenshot capture, `save_captured_frame` |
 
 ### Test Counts
 
 - 6 new tests added (4 unit tests for `SurfaceConfigBuilder`, 2 GPU tests)
 - All 3042+ existing tests continue to pass
+
+## Retrospective
+
+**Completed**: 2025-03-05
+
+### Key Technical Learnings
+
+#### Surface Texture Copy Requires COPY_SRC at Configuration Time
+
+- **Challenge**: wgpu surface textures are configured once with a
+  `SurfaceConfiguration` that includes a fixed `TextureUsages` bitfield. Adding
+  `COPY_SRC` after the fact is not possible — it must be set when the surface is
+  first configured.
+- **Solution**: Extended `SurfaceConfigBuilder` with an optional `usage` field
+  and added `GupContext::with_surface_config` so that callers can request
+  `COPY_SRC` at context creation time.
+- **Pattern**: When GPU features require specific texture usages, expose them
+  through configuration builders rather than trying to reconfigure at runtime.
+
+#### Deferred Screenshot via Flag
+
+- **Challenge**: The original `take_screenshot` approach created a separate
+  off-screen render target and render pass, which meant only a blank frame could
+  be captured (the user's renderer targets the surface, not an arbitrary
+  texture).
+- **Solution**: Changed to a deferred flag (`screenshot_requested`) that is
+  consumed during the normal `render_frame()` call. After the renderer draws to
+  the surface texture, `capture_texture_copy` appends a `copy_texture_to_buffer`
+  command to the same command encoder. After `finish()` submits everything, the
+  staging buffer is mapped and saved.
+- **Pattern**: For GPU operations that need the result of a render pass, inject
+  commands on the same encoder rather than creating a separate pipeline.
+
+#### TextureUsages Does Not Implement Default
+
+- **Challenge**: `wgpu::TextureUsages` is a bitflags type that does not
+  implement `Default`, so `Option::unwrap_or_default()` cannot be used.
+- **Solution**: Used `unwrap_or(TextureUsages::empty())` instead.
+- **Pattern**: Check bitflags types for `Default` before assuming standard
+  option unwrap patterns will work.
+
+### Architectural Decisions
+
+#### Separate CapturedFrame Struct vs Returning Raw Buffer
+
+- **Decision**: Introduced a public `CapturedFrame` struct with buffer, width,
+  height, and padded row bytes.
+- **Reasoning**: The caller needs all four pieces of information to correctly
+  map and decode the buffer. Bundling them together is more ergonomic and
+  prevents mismatched width/height errors.
+- **Trade-off**: One more public type in the API, but it's small and focused.
+- **Future**: This struct could be extended with format metadata if non-BGRA
+  surface formats are ever supported.
+
+#### with_surface_config Constructor Rather Than Modifying init_surface
+
+- **Decision**: Added a new `with_surface_config` constructor instead of
+  modifying the existing `with_surface` or `init_surface` methods.
+- **Reasoning**: Keeps the simple `with_surface` path unchanged for callers that
+  don't need custom configuration. The new method delegates to the existing
+  `add_surface_with_config` which already handles all the capability
+  negotiation.
+- **Trade-off**: Two constructors to maintain, but the surface config path is
+  strictly additive.
+- **Future**: If more surface configuration use cases emerge, the simple
+  `with_surface` could be implemented in terms of `with_surface_config` with a
+  default builder.
+
+### Development Workflow Insights
+
+- The story was well-scoped — the acceptance criteria mapped directly to
+  discrete code changes in three files.
+- Visual testing of the `S` key shortcut was impractical in CI/headless because
+  no keyboard injection tool (wtype, ydotool) was available in the environment.
+  The automated tests verified the individual components (builder, capture
+  failure paths), while the wired-up integration was confirmed by running the
+  `hello_world` example and verifying the window rendered correctly.
+- The existing `export::png` module (from GUP-265) provided all the pixel
+  readback utilities needed — `strip_row_padding`, `bgra_to_rgba`, `encode_png`.
+  No new PNG logic was required.
+
+### Follow-up Stories
+
+1. **GUP-375: COPY_SRC Surface Capability Fallback** — When
+   `SurfaceCapabilities::usages` does not include `COPY_SRC`, the screenshot
+   mechanism should fall back to rendering to an intermediate offscreen texture
+   (with `COPY_SRC`) instead of failing. This is a robustness improvement for
+   platforms or drivers with limited surface capabilities.

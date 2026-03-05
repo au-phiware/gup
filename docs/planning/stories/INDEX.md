@@ -1112,6 +1112,12 @@ API reference generation, tutorials, and example gallery.
   windowed examples to GupApp, reducing boilerplate and demonstrating the shell.
   Deps: GUP-265 ✅.
 
+## Follow-ups from GUP-317
+
+- [GUP-375](GUP-375_COPY_SRC_Surface_Fallback.md) 📋 — Fall back to offscreen
+  rendering when `SurfaceCapabilities::usages` does not include `COPY_SRC`, so
+  screenshots work on all GPU backends. Deps: GUP-317 ✅.
+
 ## Follow-ups from GUP-315
 
 - [GUP-374](GUP-374_Duplicate_Story_ID_Cleanup.md) 📋 — Renumber the duplicate
