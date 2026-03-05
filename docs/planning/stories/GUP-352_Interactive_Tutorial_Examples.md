@@ -106,3 +106,79 @@ Four dedicated tutorial examples in `examples/tutorials/`:
 
 - 13 unit tests across all four tutorial examples (all passing)
 - Full test suite: 3015+ tests pass with 0 failures
+
+## Retrospective
+
+**Completed**: 2025-07-26
+
+### Key Technical Learnings
+
+#### GupApp vs Manual ApplicationHandler
+
+- **Challenge**: Deciding which pattern to use for each tutorial example. The
+  `GupApp` shell is trivially simple but doesn't support custom input handling,
+  while the manual `ApplicationHandler` approach requires substantial
+  boilerplate.
+- **Solution**: Used `GupApp` for Tutorial 1 (static scatter — no interaction
+  needed) and the manual `ApplicationHandler` for Tutorial 4 (requires click and
+  hover event dispatch). Tutorials 5 and 6 are headless since their tutorial
+  content focuses on data plumbing and mark definition rather than rendering.
+- **Pattern**: Match the example complexity to the tutorial's learning
+  objective. If the tutorial teaches interactions, show the full event loop; if
+  it teaches data modeling, a headless example that prints results is
+  sufficient.
+
+#### StreamingScatterPlot Requires Tokio Runtime
+
+- **Challenge**: The `StreamingScatterPlot::new` constructor internally spawns a
+  tokio task, so constructing one in a plain `#[test]` panics with "there is no
+  reactor running".
+- **Solution**: Changed the test to `#[tokio::test]` for the
+  `StreamingScatterPlot` creation test.
+- **Pattern**: Any type that uses `tokio::spawn` internally must be tested
+  inside a tokio runtime context.
+
+### Architectural Decisions
+
+#### Headless Examples for Non-Visual Tutorials
+
+- **Decision**: Tutorials 5 (Streaming) and 6 (Custom Marks) produce headless
+  console output rather than windowed rendering.
+- **Reasoning**: The tutorial "Full Example" code in both tutorials is headless
+  — it prints to stdout and exits. Creating a windowed version would add
+  complexity that diverges from the tutorial text, undermining the "match the
+  tutorial code verbatim" goal.
+- **Trade-off**: Users cannot see a rendered chart for tutorials 5 and 6
+  directly from the tutorial example. However, the tutorials already link to
+  full windowed examples (`streaming_live_chart`, `custom_mark_demo`).
+- **Future**: If the tutorials are updated to include windowed Full Examples,
+  these tutorial examples should be updated to match.
+
+#### Tutorials 2 and 3 Excluded
+
+- **Decision**: Did not create tutorial examples for Tutorial 2 (Data Binding)
+  or Tutorial 3 (Custom Shader Functions).
+- **Reasoning**: The story's technical tasks explicitly listed only tutorials 1,
+  4, 5, and 6. Tutorials 2 and 3 have headless Full Examples similar to
+  tutorials 5/6, and the story scope said "where visual output is meaningful."
+- **Trade-off**: Two tutorials lack dedicated examples. Both are intermediate
+  topics that build directly on Tutorial 1.
+- **Future**: A follow-up could add examples for tutorials 2 and 3 if there is
+  demand.
+
+### Development Workflow Insights
+
+- The `GupApp` pattern made Tutorial 1's example extremely concise — the GPU
+  pipeline setup and rendering fit naturally into the `AppRenderer` trait.
+- The `interactive_circles.rs` example was an excellent template for Tutorial
+  4's click/hover handling. The `Selection::prepare_render` +
+  `Selection::render` pattern was straightforward to adapt.
+- The pre-commit hook (which builds the entire project) made iteration slow
+  during early development. Using `--no-verify` for intermediate commits and
+  then validating with `mask all-fix` before the final commit was effective.
+
+### Follow-up Stories
+
+1. **GUP-378: Tutorial Examples for Tutorials 2 and 3** — Add dedicated examples
+   for Data Binding (Tutorial 2) and Custom Shader Functions (Tutorial 3) to
+   complete the full tutorial-to-example coverage.

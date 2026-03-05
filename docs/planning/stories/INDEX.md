@@ -1090,6 +1090,12 @@ API reference generation, tutorials, and example gallery.
   examples for each tutorial that render exactly the chart described, providing
   a smoother learning experience. Deps: GUP-281 ✅, GUP-103 ✅.
 
+## Follow-ups from GUP-352
+
+- [GUP-378](GUP-378_Tutorial_Examples_2_and_3.md) 📋 — Add dedicated examples
+  for Tutorial 2 (Data Binding) and Tutorial 3 (Custom Shader Functions) to
+  complete full tutorial-to-example coverage. Deps: GUP-352 ✅, GUP-281 ✅.
+
 ## Follow-ups from GUP-264
 
 - [GUP-283](GUP-283_Fix_WASM_Build_StreamingBuffer.md) 📋 — Fix
