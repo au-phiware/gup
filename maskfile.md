@@ -27,6 +27,14 @@ Run tests (single-threaded to avoid GPU resource conflicts)
 cargo test -- --test-threads=1
 ```
 
+## test-tutorials
+
+Compile-check tutorial code snippets (doctests + integration tests)
+
+```bash
+cargo test --doc -p gup -- tutorial_doctests && cargo test --test tutorial_snippet_tests -- --test-threads=1
+```
+
 ## lint
 
 Run linters
