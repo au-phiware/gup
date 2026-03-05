@@ -161,8 +161,8 @@ async fn composite_prepare_render_succeeds() {
         .expect("build");
 
     let result = chart.prepare_render(
-        &ctx.device(),
-        &ctx.queue(),
+        ctx.device(),
+        ctx.queue(),
         wgpu::TextureFormat::Bgra8UnormSrgb,
     );
     assert!(result.is_ok(), "prepare_render failed: {:?}", result.err());
@@ -183,8 +183,8 @@ async fn composite_all_layers_render_ready_after_prepare() {
 
     chart
         .prepare_render(
-            &ctx.device(),
-            &ctx.queue(),
+            ctx.device(),
+            ctx.queue(),
             wgpu::TextureFormat::Bgra8UnormSrgb,
         )
         .expect("prepare");
@@ -208,8 +208,8 @@ async fn composite_dual_axis_prepare_render_succeeds() {
         .expect("build");
 
     let result = chart.prepare_render(
-        &ctx.device(),
-        &ctx.queue(),
+        ctx.device(),
+        ctx.queue(),
         wgpu::TextureFormat::Bgra8UnormSrgb,
     );
     assert!(result.is_ok(), "prepare_render failed: {:?}", result.err());
@@ -248,7 +248,10 @@ fn fit_data() -> Vec<FitPt> {
     vec![
         FitPt { x: 1.0, y_hat: 2.5 },
         FitPt { x: 3.0, y_hat: 6.5 },
-        FitPt { x: 5.0, y_hat: 10.5 },
+        FitPt {
+            x: 5.0,
+            y_hat: 10.5,
+        },
     ]
 }
 
@@ -282,7 +285,10 @@ async fn composite_mixed_data_domain_unification() {
 
     let wide_fit = vec![
         FitPt { x: 0.0, y_hat: 0.5 },
-        FitPt { x: 10.0, y_hat: 20.5 },
+        FitPt {
+            x: 10.0,
+            y_hat: 20.5,
+        },
     ];
 
     let chart = composite::<Pt>()
@@ -333,8 +339,8 @@ async fn composite_mixed_data_prepare_render_succeeds() {
         .expect("build");
 
     let result = chart.prepare_render(
-        &ctx.device(),
-        &ctx.queue(),
+        ctx.device(),
+        ctx.queue(),
         wgpu::TextureFormat::Bgra8UnormSrgb,
     );
     assert!(result.is_ok(), "prepare_render failed: {:?}", result.err());

@@ -4,8 +4,7 @@
 
 **Initiative**: Performance  
 **Status**: ✅ Complete  
-**Completed**: 2025-07-18
-**Created**: 2026-03-03
+**Completed**: 2025-07-18 **Created**: 2026-03-03
 
 ## Context
 
@@ -77,7 +76,7 @@ an alternative backend selected via a feature flag or runtime heuristic.
 ### What Was Implemented
 
 - **WGSL compute shader** (`src/shaders/heatmap_binning.compute.wgsl`): Parallel
-  2D binning kernel using workgroup size 256.  All five aggregation modes run in
+  2D binning kernel using workgroup size 256. All five aggregation modes run in
   a single dispatch:
   - **Count**: `atomicAdd` on u32 counters.
   - **Sum**: Compare-and-swap (CAS) loop on bitcast f32→u32.
@@ -86,8 +85,8 @@ an alternative backend selected via a feature flag or runtime heuristic.
 - **`GpuBinner` struct** (`src/chart_builder/builders/heatmap/gpu_binning.rs`):
   Caches the compute pipeline; exposes `bin()` for repeated use. Handles buffer
   upload, dispatch, staging readback, and async map-read.
-- **`gpu_bin_data()` convenience function**: Transparent GPU→CPU fallback when no
-  `RenderContext` is available or pipeline creation/dispatch fails.
+- **`gpu_bin_data()` convenience function**: Transparent GPU→CPU fallback when
+  no `RenderContext` is available or pipeline creation/dispatch fails.
 - **`.gpu_binning(true)` builder option**: Wired into `HeatmapBuilder` with a
   boolean toggle (default `false`).
 - **Public exports**: `gup::{GpuBinner, gpu_bin_data}` accessible from crate
@@ -95,12 +94,12 @@ an alternative backend selected via a feature flag or runtime heuristic.
 
 ### Key Files Changed
 
-| File | Change |
-|------|--------|
-| `src/shaders/heatmap_binning.compute.wgsl` | New — WGSL compute shader |
-| `src/chart_builder/builders/heatmap/gpu_binning.rs` | New — GpuBinner, tests |
-| `src/chart_builder/builders/heatmap/mod.rs` | Wire gpu_binning module & builder option |
-| `src/lib.rs` | Re-export GpuBinner, gpu_bin_data |
+| File                                                | Change                                   |
+| --------------------------------------------------- | ---------------------------------------- |
+| `src/shaders/heatmap_binning.compute.wgsl`          | New — WGSL compute shader                |
+| `src/chart_builder/builders/heatmap/gpu_binning.rs` | New — GpuBinner, tests                   |
+| `src/chart_builder/builders/heatmap/mod.rs`         | Wire gpu_binning module & builder option |
+| `src/lib.rs`                                        | Re-export GpuBinner, gpu_bin_data        |
 
 ### Test Coverage
 
@@ -125,13 +124,13 @@ an alternative backend selected via a feature flag or runtime heuristic.
 
 #### Float Atomics in WGSL
 
-- **Challenge**: WGSL has no `atomicAdd` for `f32`.  Sum, Min, and Max
+- **Challenge**: WGSL has no `atomicAdd` for `f32`. Sum, Min, and Max
   aggregation all need atomic float updates.
 - **Solution**: Compare-and-swap (CAS) loops using `atomicCompareExchangeWeak`
-  with `bitcast<u32>(f32)` representation.  For Min, the loop exits early when
+  with `bitcast<u32>(f32)` representation. For Min, the loop exits early when
   the current minimum is already ≤ the new value; similarly for Max.
 - **Pattern**: CAS loops on bitcast floats are the standard WGSL pattern for any
-  atomic float operation.  Keep the loop body minimal (one CAS + one branch) to
+  atomic float operation. Keep the loop body minimal (one CAS + one branch) to
   reduce contention.
 
 #### Zero-Size Buffer Edge Case
@@ -149,7 +148,7 @@ an alternative backend selected via a feature flag or runtime heuristic.
   "empty cell" from "cell with value 0.0" is impossible without the count
   buffer.
 - **Solution**: Always read back the count buffer regardless of aggregation
-  mode.  The overhead is O(n_cells) which is negligible compared to the input
+  mode. The overhead is O(n_cells) which is negligible compared to the input
   buffer uploads.
 - **Pattern**: When GPU output can be ambiguous (zero-initialised buffer vs
   genuine zero result), maintain a separate "occupancy" channel.
@@ -160,8 +159,8 @@ an alternative backend selected via a feature flag or runtime heuristic.
 
 - **Decision**: Compute all four accumulators (count, sum, min, max) in every
   dispatch, even though only one or two are needed for a given `AggregateFunc`.
-- **Reasoning**: Simplicity — one shader, one dispatch, one set of buffers.
-  The extra atomic writes are cheap relative to the data upload/readback cost.
+- **Reasoning**: Simplicity — one shader, one dispatch, one set of buffers. The
+  extra atomic writes are cheap relative to the data upload/readback cost.
 - **Trade-off**: Slightly more GPU memory (4 × n_cells × 4 bytes) and some
   wasted atomic ops.
 - **Future**: If profiling shows contention on the CAS loops is a bottleneck,
@@ -172,7 +171,7 @@ an alternative backend selected via a feature flag or runtime heuristic.
 - **Decision**: `gpu_bin_data()` silently falls back to CPU when GPU is
   unavailable or fails.
 - **Reasoning**: Matches the project's existing fallback patterns (see
-  `src/error/fallback.rs`).  Callers who want explicit GPU-only errors can use
+  `src/error/fallback.rs`). Callers who want explicit GPU-only errors can use
   `GpuBinner::bin()` directly.
 - **Trade-off**: Silent fallback may hide GPU issues during development.
 - **Future**: Consider adding a logging/tracing call on fallback so developers
@@ -181,7 +180,7 @@ an alternative backend selected via a feature flag or runtime heuristic.
 ### Development Workflow Insights
 
 - The existing project patterns for compute shaders (histogram, force layout,
-  spatial index) provided excellent templates.  The buffer inspector's readback
+  spatial index) provided excellent templates. The buffer inspector's readback
   pattern (`map_async` → `poll(Wait)` → `get_mapped_range`) was reused almost
   verbatim.
 - `--test-threads=1` remains essential for GPU tests — without it, parallel
@@ -189,18 +188,18 @@ an alternative backend selected via a feature flag or runtime heuristic.
 - The `include_str!` path for WGSL files is relative to the Rust source file,
   not the crate root — needed `../../../shaders/` for a file four directories
   deep.
-- Clippy's `too_many_arguments` lint fires on functions that mirror the
-  existing `BinGrid::from_data` signature.  `#[allow(clippy::too_many_arguments)]`
-  is appropriate when the API intentionally mirrors an existing function.
+- Clippy's `too_many_arguments` lint fires on functions that mirror the existing
+  `BinGrid::from_data` signature. `#[allow(clippy::too_many_arguments)]` is
+  appropriate when the API intentionally mirrors an existing function.
 
 ### Follow-up Stories
 
 1. **GUP-358: GPU Binning Performance Benchmarks** — Formal `criterion`
-   benchmarks comparing GPU vs CPU binning at 1M, 10M, and 100M record
-   scales across different grid sizes.  Validate the 50ms target on CI
-   hardware and document results in the performance guide.
+   benchmarks comparing GPU vs CPU binning at 1M, 10M, and 100M record scales
+   across different grid sizes. Validate the 50ms target on CI hardware and
+   document results in the performance guide.
 
 2. **GUP-359: Streaming GPU Binning** — Extend `GpuBinner` to support
    incremental/streaming updates where new records are appended without
-   re-uploading the entire dataset.  This would enable real-time heatmap
-   updates from `StreamingDataSource`.
+   re-uploading the entire dataset. This would enable real-time heatmap updates
+   from `StreamingDataSource`.

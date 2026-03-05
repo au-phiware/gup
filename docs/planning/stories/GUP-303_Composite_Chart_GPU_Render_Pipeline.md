@@ -117,8 +117,9 @@ rendering side.
 #### Enum-Based Layer Dispatch for GPU Rendering
 
 - **Challenge**: The `BuiltLayer` enum holds four different `Selection<T, M>`
-  types (Circle, Line, Rectangle, Line-for-area). Each needs `prepare_render_bound`
-  and `render` called, but the Selection type parameter differs per variant.
+  types (Circle, Line, Rectangle, Line-for-area). Each needs
+  `prepare_render_bound` and `render` called, but the Selection type parameter
+  differs per variant.
 - **Solution**: Added `prepare()`, `draw()` and `is_render_ready()` methods on
   `BuiltLayer` that match on the variant and delegate to the inner Selection.
   This keeps the enum-over-trait-objects pattern consistent with the project's
@@ -130,14 +131,14 @@ rendering side.
 #### Accessor-to-NDC Coordinate Pipeline
 
 - **Challenge**: The chart builders produce selections with data-space positions
-  (e.g. x=5.0 means "5 in data units"), but the GPU mark shaders render in
-  NDC (-1 to 1). The existing `apply_accessors_to_selection` function uses
+  (e.g. x=5.0 means "5 in data units"), but the GPU mark shaders render in NDC
+  (-1 to 1). The existing `apply_accessors_to_selection` function uses
   placeholder closures returning `[0.0, 0.0]` for positions.
 - **Solution**: In `build_layer()`, after the inner builder creates its
   selection, we append additional `attr()` bindings that apply the composite's
   unified scales to map data coordinates to NDC. Because `build_instance`
-  processes bindings in order and last-write-wins, the new bindings override
-  the placeholders.
+  processes bindings in order and last-write-wins, the new bindings override the
+  placeholders.
 - **Pattern**: "Override-by-append" for attr bindings — a clean way to inject
   coordinate transformations without modifying the inner builder's code.
 
@@ -150,8 +151,8 @@ rendering side.
   `render_pass.set_pipeline()` before drawing. wgpu handles pipeline switches
   within a single render pass transparently. No special coordination needed.
 - **Pattern**: wgpu render passes support arbitrary pipeline switches. The
-  single-render-pass constraint means only one `begin_render_pass` per
-  command encoder, not one pipeline per pass.
+  single-render-pass constraint means only one `begin_render_pass` per command
+  encoder, not one pipeline per pass.
 
 ### Architectural Decisions
 
@@ -184,16 +185,16 @@ rendering side.
 ### Development Workflow Insights
 
 - The project has a very large number of test binaries (~100+), so running
-  `cargo test -- --test-threads=1` with a filter can be slow as it checks
-  every binary. Using `--test <name>` to target a specific integration test
-  file is much faster for iterative development.
+  `cargo test -- --test-threads=1` with a filter can be slow as it checks every
+  binary. Using `--test <name>` to target a specific integration test file is
+  much faster for iterative development.
 - The `chart_builder.rs` unit test module (`mod tests`) doesn't appear in the
   test listing, possibly due to a compile issue in that 5000+ line file. The
   integration test file `tests/composite_chart_integration.rs` is the reliable
   way to test chart builder functionality.
 - The windowed examples can't be visually validated when the desktop session is
-  locked, but the screen-grabber agent confirmed the window was created with
-  the correct title and was running on the expected workspace.
+  locked, but the screen-grabber agent confirmed the window was created with the
+  correct title and was running on the expected workspace.
 
 ### Follow-up Stories
 

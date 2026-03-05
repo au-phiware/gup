@@ -70,8 +70,7 @@ update the storage buffer (a small flat array) when colours change.
 
 - **`RegionColorBuffer`** — CPU-side per-region RGBA colour array with methods
   for creation (`new`, `from_regions`), mutation (`set_color`,
-  `update_from_data`), animation (`interpolate`), and GPU upload
-  (`as_bytes`).
+  `update_from_data`), animation (`interpolate`), and GPU upload (`as_bytes`).
 - **`IndexedChoroplethVertex`** — Lightweight vertex type (position +
   `region_index: u32`) for GPU-side colour lookup, replacing the per-vertex
   `color: [f32; 4]` when GPU recolouring is active.
@@ -93,16 +92,17 @@ update the storage buffer (a small flat array) when colours change.
 
 ### Key Files Changed
 
-| File | Change |
-| --- | --- |
-| `src/chart_builder/builders/choropleth.rs` | +600 lines: RegionColorBuffer, IndexedChoroplethVertex, update_colors, interpolate_colors, gpu_recolor builder method, shader constants, 19 new tests |
-| `src/mark/shaders/choropleth_recolor.vert.wgsl` | New vertex shader for storage-buffer colour lookup |
-| `src/mark/shaders/choropleth_recolor.frag.wgsl` | New fragment shader (fill/stroke selection) |
-| `examples/choropleth_gpu_recolor.rs` | New example demonstrating GPU recolouring |
+| File                                            | Change                                                                                                                                                |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/chart_builder/builders/choropleth.rs`      | +600 lines: RegionColorBuffer, IndexedChoroplethVertex, update_colors, interpolate_colors, gpu_recolor builder method, shader constants, 19 new tests |
+| `src/mark/shaders/choropleth_recolor.vert.wgsl` | New vertex shader for storage-buffer colour lookup                                                                                                    |
+| `src/mark/shaders/choropleth_recolor.frag.wgsl` | New fragment shader (fill/stroke selection)                                                                                                           |
+| `examples/choropleth_gpu_recolor.rs`            | New example demonstrating GPU recolouring                                                                                                             |
 
 ### Test Counts
 
-- **40 unit tests** in `chart_builder::builders::choropleth::tests` (21 original + 19 new)
+- **40 unit tests** in `chart_builder::builders::choropleth::tests` (21
+  original + 19 new)
 - **2 982 total lib tests** pass under `cargo test -- --test-threads=1`
 
 ## Retrospective
@@ -127,9 +127,9 @@ update the storage buffer (a small flat array) when colours change.
 
 #### Storage Buffer Design for Region Colours
 
-- **Challenge**: The colour buffer needs to be GPU-writable (`queue.write_buffer`
-  compatible) while also being easy to manipulate on the CPU side for
-  interpolation and per-region updates.
+- **Challenge**: The colour buffer needs to be GPU-writable
+  (`queue.write_buffer` compatible) while also being easy to manipulate on the
+  CPU side for interpolation and per-region updates.
 - **Solution**: `RegionColorBuffer` wraps a `Vec<[f32; 4]>` which is
   `bytemuck`-castable to `&[u8]` via `as_bytes()`. This gives zero-copy GPU
   upload while maintaining ergonomic CPU-side access.
@@ -158,9 +158,8 @@ update the storage buffer (a small flat array) when colours change.
   unnecessary memory allocation for the common case.
 - **Trade-off**: Users must know to enable `gpu_recolor` to get dynamic
   recolouring. The error message from `update_colors()` guides them.
-- **Future**: When an interactive renderer is fully wired (GUP-288), the
-  builder could auto-enable `gpu_recolor` when hover/animation features are
-  requested.
+- **Future**: When an interactive renderer is fully wired (GUP-288), the builder
+  could auto-enable `gpu_recolor` when hover/animation features are requested.
 
 #### Vertex Shader Colour Lookup (Not Fragment Shader)
 
@@ -193,10 +192,10 @@ update the storage buffer (a small flat array) when colours change.
 ### Follow-up Stories
 
 1. **GUP-366: Choropleth GPU Render Pipeline Integration** — Wire the
-   `IndexedChoroplethVertex`, `RegionColorBuffer`, and recolour shaders into
-   a live wgpu render pipeline. Create bind group layouts, pipeline layouts,
-   and a render method that uses the storage buffer path. This story provides
-   the data structures; GUP-366 provides the GPU execution path.
+   `IndexedChoroplethVertex`, `RegionColorBuffer`, and recolour shaders into a
+   live wgpu render pipeline. Create bind group layouts, pipeline layouts, and a
+   render method that uses the storage buffer path. This story provides the data
+   structures; GUP-366 provides the GPU execution path.
 
 2. **GUP-367: Choropleth Module Refactoring** — Split
    `src/chart_builder/builders/choropleth.rs` (~1 750 lines) into sub-modules

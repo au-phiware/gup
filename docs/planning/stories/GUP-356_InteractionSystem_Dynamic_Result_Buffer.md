@@ -17,8 +17,8 @@ data space.
 ## User Story
 
 > "As a visualization developer selecting large regions from million-point
-> datasets, I want the GPU query to return all matching marks regardless of
-> the result count, so that brush selection is accurate at any scale."
+> datasets, I want the GPU query to return all matching marks regardless of the
+> result count, so that brush selection is accurate at any scale."
 
 ## Acceptance Criteria
 
@@ -31,14 +31,13 @@ data space.
 
 ## Technical Tasks
 
-- [ ] Detect result overflow in `download_results` (e.g. via an atomic
-      counter written by the compute shader).
-- [ ] Re-allocate a larger result buffer and re-dispatch the query on
-      overflow.
-- [ ] Add a configurable `max_result_capacity` upper bound to prevent
-      unbounded GPU memory growth.
-- [ ] Add tests with 500K and 1M mark region queries covering >20% of the
-      data space.
+- [ ] Detect result overflow in `download_results` (e.g. via an atomic counter
+      written by the compute shader).
+- [ ] Re-allocate a larger result buffer and re-dispatch the query on overflow.
+- [ ] Add a configurable `max_result_capacity` upper bound to prevent unbounded
+      GPU memory growth.
+- [ ] Add tests with 500K and 1M mark region queries covering >20% of the data
+      space.
 
 ## Dependencies
 
@@ -49,8 +48,8 @@ data space.
 
 ## Testing Strategy
 
-- Integration test: 1M marks, 25% region query, verify result count matches
-  CPU path.
+- Integration test: 1M marks, 25% region query, verify result count matches CPU
+  path.
 - Performance test: Ensure no regression for small result sets.
 
 ## Risk Assessment

@@ -281,16 +281,10 @@ impl LabelFormatter for NumericFormatter {
 /// assert_eq!(fmt.format_value(0.5), "50%");
 /// assert_eq!(fmt.format_value(1.0), "100%");
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PercentFormatter {
     /// Number of decimal places to show after multiplying by 100.
     pub precision: usize,
-}
-
-impl Default for PercentFormatter {
-    fn default() -> Self {
-        Self { precision: 0 }
-    }
 }
 
 impl PercentFormatter {

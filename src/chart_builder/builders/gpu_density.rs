@@ -298,7 +298,7 @@ impl GpuDensityCompute {
         // ── Readback via staging buffer ──────────────────────────────
         let texel_size = 4u64; // R32Float
         let unpadded_row = cols as u64 * texel_size;
-        let padded_row = ((unpadded_row + 255) / 256) * 256;
+        let padded_row = unpadded_row.div_ceil(256) * 256;
         let staging_size = padded_row * rows as u64;
 
         let staging = self.device.create_buffer(&BufferDescriptor {
@@ -654,15 +654,15 @@ pub fn gpu_density_2d(
     threshold: usize,
     context: Option<&RenderContext>,
 ) -> KDEResult2D {
-    if samples.len() >= threshold {
-        if let Some(ctx) = context {
-            match GpuDensityCompute::new(ctx) {
-                Ok(gpu) => match gpu.compute_kde(samples, config) {
-                    Ok(result) => return result,
-                    Err(_) => { /* fall through to CPU */ }
-                },
+    if samples.len() >= threshold
+        && let Some(ctx) = context
+    {
+        match GpuDensityCompute::new(ctx) {
+            Ok(gpu) => match gpu.compute_kde(samples, config) {
+                Ok(result) => return result,
                 Err(_) => { /* fall through to CPU */ }
-            }
+            },
+            Err(_) => { /* fall through to CPU */ }
         }
     }
 
@@ -936,7 +936,7 @@ mod tests {
             ..Default::default()
         };
 
-        let result = gpu_density_2d(&samples, &config, 200, None);
+        let _result = gpu_density_2d(&samples, &config, 200, None);
     }
 
     #[test]
@@ -951,7 +951,7 @@ mod tests {
             ..Default::default()
         };
 
-        let result = gpu_density_2d(&samples, &config, 100, Some(&ctx));
+        let _result = gpu_density_2d(&samples, &config, 100, Some(&ctx));
     }
 
     // ── Helpers ──────────────────────────────────────────────────────

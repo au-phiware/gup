@@ -2,9 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Chart Builders
-**Status**: 💡 New
-**Created**: 2025-07-18
+**Initiative**: Chart Builders **Status**: 💡 New **Created**: 2025-07-18
 
 ## Context
 
@@ -43,8 +41,8 @@ navigability as more choropleth features land (GUP-288, GUP-289).
 ## Testing Strategy
 
 - All existing choropleth tests must pass without changes.
-- Compile check that all downstream code (examples, other modules) continues
-  to build.
+- Compile check that all downstream code (examples, other modules) continues to
+  build.
 
 ## Definition of Done
 

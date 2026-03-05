@@ -27,8 +27,8 @@ this wastes memory and prevents buffer sharing.
 ## Technical Tasks
 
 1. Add `LayoutEngine::from_gup_context(ctx: &GupContext)` constructor
-2. Refactor `LayoutEngine::new()` to accept a trait or enum covering both context
-   types
+2. Refactor `LayoutEngine::new()` to accept a trait or enum covering both
+   context types
 3. Update `interactive_graph.rs` to use the shared context
 4. Verify all layout integration tests still pass
 

@@ -86,20 +86,20 @@ rendering pipeline.
 
 ### Key Files Changed
 
-| File | Change |
-| --- | --- |
-| `src/chart_builder/colorbar.rs` | **New** — `ColorbarRenderer`, `ColorbarConfig`, `ColorbarGeometry`, `ColorbarOrientation` |
-| `src/chart_builder.rs` | Added `show_colorbar` to `ChartConfig`, `GradientStripPipeline` (TriangleList), colorbar integration in `ComposedChart` (`prepare_draw_commands`, `prepare_tick_pipeline`, `queue_chart_text`, `draw_colorbar_gradient`) |
-| `src/chart_builder/builders/heatmap/mod.rs` | Propagate `show_colorbar` from `HeatmapBuilder` to `ChartConfig` during `build_with_data` |
-| `examples/heatmap_chart.rs` | Added `.colorbar(true)` and colorbar status output |
+| File                                        | Change                                                                                                                                                                                                                   |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/chart_builder/colorbar.rs`             | **New** — `ColorbarRenderer`, `ColorbarConfig`, `ColorbarGeometry`, `ColorbarOrientation`                                                                                                                                |
+| `src/chart_builder.rs`                      | Added `show_colorbar` to `ChartConfig`, `GradientStripPipeline` (TriangleList), colorbar integration in `ComposedChart` (`prepare_draw_commands`, `prepare_tick_pipeline`, `queue_chart_text`, `draw_colorbar_gradient`) |
+| `src/chart_builder/builders/heatmap/mod.rs` | Propagate `show_colorbar` from `HeatmapBuilder` to `ChartConfig` during `build_with_data`                                                                                                                                |
+| `examples/heatmap_chart.rs`                 | Added `.colorbar(true)` and colorbar status output                                                                                                                                                                       |
 
 ### Architecture
 
 - `ColorbarRenderer` is a standalone component that takes a `ColorScale` and
   produces `ColorbarGeometry` (gradient triangles, tick instances, outline
   lines, labels).
-- CPU-side gradient sampling via linear interpolation over `ColorGradientStorage`
-  stops, matching the GPU shader's behaviour.
+- CPU-side gradient sampling via linear interpolation over
+  `ColorGradientStorage` stops, matching the GPU shader's behaviour.
 - `GradientStripPipeline` uses TriangleList topology with the same `basic.wgsl`
   shader as axis lines, but draws filled quads instead of line segments.
 - Colorbar outline and ticks are merged into existing axis-line and tick buffers
@@ -163,11 +163,11 @@ rendering pipeline.
 
 - **Decision**: `ColorbarRenderer` is a standalone struct that can be used
   independently of `ComposedChart`.
-- **Reasoning**: This makes the colorbar reusable by any chart type that
-  exposes a `ColorScale`, not just heatmaps. The renderer generates pure
-  geometry data without any GPU resource dependencies.
-- **Trade-off**: Slightly more integration code in `ComposedChart` to wire
-  the renderer's output into the rendering pipeline.
+- **Reasoning**: This makes the colorbar reusable by any chart type that exposes
+  a `ColorScale`, not just heatmaps. The renderer generates pure geometry data
+  without any GPU resource dependencies.
+- **Trade-off**: Slightly more integration code in `ComposedChart` to wire the
+  renderer's output into the rendering pipeline.
 - **Future**: Could be extended with a horizontal orientation for charts that
   place the colorbar below the plot area.
 
@@ -175,13 +175,13 @@ rendering pipeline.
 
 - **Decision**: Added `show_colorbar` to `ChartConfig` (in addition to the
   existing `HeatmapBuilder` field) so any chart type can enable it.
-- **Reasoning**: Keeps the colorbar composable — scatter plots, line charts,
-  and any future chart type with a colour dimension can enable the colorbar
-  via `ChartConfig::with_colorbar(true).with_color_scale(...)`.
+- **Reasoning**: Keeps the colorbar composable — scatter plots, line charts, and
+  any future chart type with a colour dimension can enable the colorbar via
+  `ChartConfig::with_colorbar(true).with_color_scale(...)`.
 - **Trade-off**: Two places where `show_colorbar` exists (HeatmapBuilder
   propagates its field to ChartConfig during build).
-- **Future**: The HeatmapBuilder default of `show_colorbar: true` may need to
-  be reconciled with `ChartConfig`'s default of `false`.
+- **Future**: The HeatmapBuilder default of `show_colorbar: true` may need to be
+  reconciled with `ChartConfig`'s default of `false`.
 
 ### Development Workflow Insights
 
@@ -191,13 +191,13 @@ rendering pipeline.
 - The pre-commit hook (`mask all-check`) takes several minutes. Using
   `--no-verify` for intermediate commits and running `mask all-fix` as a final
   validation step kept the workflow efficient.
-- The async `RenderContext::new()` requirement for integration tests that need
-  a `Selection` pushed the tests to use `#[tokio::test]`, even though the
-  colorbar geometry generation itself is CPU-only.
+- The async `RenderContext::new()` requirement for integration tests that need a
+  `Selection` pushed the tests to use `#[tokio::test]`, even though the colorbar
+  geometry generation itself is CPU-only.
 
 ### Follow-up Stories
 
 1. **GUP-357: Horizontal Colorbar Orientation** — Implement the horizontal
-   colorbar layout for charts that prefer the legend below the plot area.
-   The `ColorbarOrientation::Horizontal` variant is already defined in the
-   config but not yet implemented in the geometry generation path.
+   colorbar layout for charts that prefer the legend below the plot area. The
+   `ColorbarOrientation::Horizontal` variant is already defined in the config
+   but not yet implemented in the geometry generation path.

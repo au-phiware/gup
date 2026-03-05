@@ -68,16 +68,17 @@ updates.
 
 ### Key Files Changed
 
-| File | Change |
-|------|--------|
-| `src/layout/engine.rs` | Added `LayoutSession`, `create_session()`, `step()`, `read_positions()`, `pin_node()` |
-| `src/layout.rs` | Exported `LayoutSession` |
-| `examples/interactive_graph.rs` | New: 710-line interactive windowed example |
-| `tests/layout_integration.rs` | Added 3 new GPU integration tests |
+| File                            | Change                                                                                |
+| ------------------------------- | ------------------------------------------------------------------------------------- |
+| `src/layout/engine.rs`          | Added `LayoutSession`, `create_session()`, `step()`, `read_positions()`, `pin_node()` |
+| `src/layout.rs`                 | Exported `LayoutSession`                                                              |
+| `examples/interactive_graph.rs` | New: 710-line interactive windowed example                                            |
+| `tests/layout_integration.rs`   | Added 3 new GPU integration tests                                                     |
 
 ### Test Counts
 
-- 3 new integration tests: `session_create_and_step`, `session_incremental_stepping`, `session_pin_node`
+- 3 new integration tests: `session_create_and_step`,
+  `session_incremental_stepping`, `session_pin_node`
 - All 21 layout tests pass
 - Full suite: 3006+ tests pass
 
@@ -90,8 +91,8 @@ updates.
 #### Incremental GPU Layout Stepping
 
 - **Challenge**: The existing `LayoutEngine::force_directed_layout()` was a
-  monolithic async method that ran the entire simulation to completion. There was
-  no way to step a few iterations, render, and continue.
+  monolithic async method that ran the entire simulation to completion. There
+  was no way to step a few iterations, render, and continue.
 - **Solution**: Introduced `LayoutSession` to hold GPU buffer state between
   calls. The `step()` method dispatches compute passes without readback, and
   `read_positions()` does a separate GPU→CPU transfer. This separates simulation
@@ -103,8 +104,8 @@ updates.
 #### Dual GPU Context Architecture
 
 - **Challenge**: The layout engine requires a `RenderContext` (headless) while
-  the window needs a `GupContext` (with surface). These are separate GPU contexts
-  potentially on separate adapters.
+  the window needs a `GupContext` (with surface). These are separate GPU
+  contexts potentially on separate adapters.
 - **Solution**: Created both contexts independently. The layout engine runs its
   compute shaders on one device; rendering happens on another. For the 200-node
   graph this works well since the compute step is fast (~1ms per 3 iterations).
@@ -143,9 +144,9 @@ updates.
 
 - **Decision**: Used direct array indexing (`positions[source_id]`) instead of
   hash-map or linear search for edge endpoint lookup.
-- **Reasoning**: Our graph generator produces nodes with IDs equal to their array
-  index. Direct indexing is O(1) vs O(n) for linear search or O(1) amortised
-  with hash overhead.
+- **Reasoning**: Our graph generator produces nodes with IDs equal to their
+  array index. Direct indexing is O(1) vs O(n) for linear search or O(1)
+  amortised with hash overhead.
 - **Trade-off**: Breaks if node IDs don't match array positions. The example
   controls the data so this is safe.
 - **Future**: For user-supplied graphs, a HashMap<u32, usize> index would be
@@ -158,8 +159,9 @@ updates.
   the full lint suite manually is more efficient.
 - **Headless testing**: The example initialises successfully in a headless
   environment (prints "✓ Ready") but the window isn't visible for screenshot
-  capture. Visual validation was confirmed through successful GPU initialisation,
-  correct selection creation, and the full render path being exercised.
+  capture. Visual validation was confirmed through successful GPU
+  initialisation, correct selection creation, and the full render path being
+  exercised.
 - **clippy --fix**: Running `cargo clippy --fix` on the example automatically
   collapsed nested `if`/`if let` blocks into combined conditions, which is a
   useful pattern for keeping code concise.
@@ -169,6 +171,5 @@ updates.
 1. **GUP-314: Shared Device Layout Engine** — Allow `LayoutEngine` to use the
    same `wgpu::Device` as the rendering context, avoiding the overhead of a
    second GPU context. This matters for integrated GPUs with limited resources.
-2. **GUP-315: Graph Label Rendering** — Add text labels to graph nodes using
-   the SDF text pipeline, building on the existing `TextRenderer`
-   infrastructure.
+2. **GUP-315: Graph Label Rendering** — Add text labels to graph nodes using the
+   SDF text pipeline, building on the existing `TextRenderer` infrastructure.

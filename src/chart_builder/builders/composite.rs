@@ -1319,16 +1319,24 @@ mod tests {
     #[test]
     fn layer_with_data_adds_erased_layer() {
         let builder = composite::<Pt>()
-            .layer(ScatterPlotBuilder::<Pt>::new().x(
-                AccessorFunction::new(|d: &Pt| AccessorValue::Float(d.x)),
-            ).y(
-                AccessorFunction::new(|d: &Pt| AccessorValue::Float(d.y)),
-            ))
+            .layer(
+                ScatterPlotBuilder::<Pt>::new()
+                    .x(AccessorFunction::new(|d: &Pt| AccessorValue::Float(d.x)))
+                    .y(AccessorFunction::new(|d: &Pt| AccessorValue::Float(d.y))),
+            )
             .layer_with_data(
                 LineChartBuilder::<FitPt>::new()
                     .x(AccessorFunction::new(|d: &FitPt| AccessorValue::Float(d.x)))
-                    .y(AccessorFunction::new(|d: &FitPt| AccessorValue::Float(d.y_hat))),
-                vec![FitPt { x: 1.0, y_hat: 2.0 }, FitPt { x: 5.0, y_hat: 10.0 }],
+                    .y(AccessorFunction::new(|d: &FitPt| {
+                        AccessorValue::Float(d.y_hat)
+                    })),
+                vec![
+                    FitPt { x: 1.0, y_hat: 2.0 },
+                    FitPt {
+                        x: 5.0,
+                        y_hat: 10.0,
+                    },
+                ],
             );
         assert_eq!(builder.layer_count(), 2);
     }
@@ -1340,7 +1348,9 @@ mod tests {
             .layer_with_data_y2(
                 LineChartBuilder::<FitPt>::new()
                     .x(AccessorFunction::new(|d: &FitPt| AccessorValue::Float(d.x)))
-                    .y(AccessorFunction::new(|d: &FitPt| AccessorValue::Float(d.y_hat))),
+                    .y(AccessorFunction::new(|d: &FitPt| {
+                        AccessorValue::Float(d.y_hat)
+                    })),
                 vec![FitPt { x: 1.0, y_hat: 2.0 }],
             );
         assert_eq!(builder.layer_count(), 2);
@@ -1350,12 +1360,17 @@ mod tests {
     fn erased_layer_spec_domain_computation() {
         let fit_data = vec![
             FitPt { x: 0.0, y_hat: 5.0 },
-            FitPt { x: 10.0, y_hat: 25.0 },
+            FitPt {
+                x: 10.0,
+                y_hat: 25.0,
+            },
         ];
 
         let kind = LineChartBuilder::<FitPt>::new()
             .x(AccessorFunction::new(|d: &FitPt| AccessorValue::Float(d.x)))
-            .y(AccessorFunction::new(|d: &FitPt| AccessorValue::Float(d.y_hat)))
+            .y(AccessorFunction::new(|d: &FitPt| {
+                AccessorValue::Float(d.y_hat)
+            }))
             .into_layer();
 
         let x_dom = kind.x_domain(&fit_data);
@@ -1369,11 +1384,16 @@ mod tests {
     fn typed_layer_spec_caches_domain() {
         let data = vec![
             FitPt { x: 2.0, y_hat: 8.0 },
-            FitPt { x: 6.0, y_hat: 12.0 },
+            FitPt {
+                x: 6.0,
+                y_hat: 12.0,
+            },
         ];
         let kind = ScatterPlotBuilder::<FitPt>::new()
             .x(AccessorFunction::new(|d: &FitPt| AccessorValue::Float(d.x)))
-            .y(AccessorFunction::new(|d: &FitPt| AccessorValue::Float(d.y_hat)))
+            .y(AccessorFunction::new(|d: &FitPt| {
+                AccessorValue::Float(d.y_hat)
+            }))
             .into_layer();
 
         let spec = TypedLayerSpec {

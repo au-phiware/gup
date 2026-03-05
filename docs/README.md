@@ -122,14 +122,14 @@ optimization tips, and cross-platform considerations.
 
 Kotlin/Java library for embedding Gup charts in Android applications.
 `GupSurfaceView` handles the `SurfaceHolder.Callback` lifecycle and
-`MotionEvent` touch forwarding via JNI to the `gup-android` Rust crate.
-See the [Android example](../examples/android/README.md) for build steps.
+`MotionEvent` touch forwarding via JNI to the `gup-android` Rust crate. See the
+[Android example](../examples/android/README.md) for build steps.
 
 ### [🍎 iOS Integration](../pkg/ios/GupSwift/)
 
 Swift package for embedding Gup charts in UIKit/SwiftUI applications.
-`GupChartView` handles `CAMetalLayer` lifecycle and UITouch forwarding via
-C ABI to the `gup-ios` Rust crate.
+`GupChartView` handles `CAMetalLayer` lifecycle and UITouch forwarding via C ABI
+to the `gup-ios` Rust crate.
 
 ## Accessibility
 

@@ -184,10 +184,10 @@ impl App {
 
                     {
                         let mut rp = frame.render_pass(Some(bg));
-                        if let Some(chart) = &self.chart {
-                            if let Err(e) = chart.draw(&mut rp) {
-                                eprintln!("Draw error: {e}");
-                            }
+                        if let Some(chart) = &self.chart
+                            && let Err(e) = chart.draw(&mut rp)
+                        {
+                            eprintln!("Draw error: {e}");
                         }
                     }
 
@@ -239,14 +239,8 @@ impl ApplicationHandler for App {
             let observations = generate_observations(100, 42);
             let fit_line = compute_regression(&observations);
 
-            println!(
-                "  Observations: {} points",
-                observations.len()
-            );
-            println!(
-                "  Fit line:     {} endpoints",
-                fit_line.len()
-            );
+            println!("  Observations: {} points", observations.len());
+            println!("  Fit line:     {} endpoints", fit_line.len());
 
             // ── Scatter layer: Observation ──────────────────────────
             let scatter_layer = ScatterPlotBuilder::<Observation>::new()

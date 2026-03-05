@@ -414,17 +414,14 @@ impl crate::selection::AccessibleMark for FilledPolygon {
 
         let mut parts = vec![format!("Polygon triangle {} of {}", index + 1, total)];
         for &(name, value) in attrs {
-            match (name, value) {
-                ("color", AttrValue::Vec4(c)) => {
-                    parts.push(format!(
-                        "colour rgba({:.0}%, {:.0}%, {:.0}%, {:.2})",
-                        c[0] * 100.0,
-                        c[1] * 100.0,
-                        c[2] * 100.0,
-                        c[3]
-                    ));
-                }
-                _ => {}
+            if let ("color", AttrValue::Vec4(c)) = (name, value) {
+                parts.push(format!(
+                    "colour rgba({:.0}%, {:.0}%, {:.0}%, {:.2})",
+                    c[0] * 100.0,
+                    c[1] * 100.0,
+                    c[2] * 100.0,
+                    c[3]
+                ));
             }
         }
         parts.join(", ")

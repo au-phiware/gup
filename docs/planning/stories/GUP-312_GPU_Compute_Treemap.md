@@ -128,15 +128,15 @@ The GPU treemap layout uses a level-by-level dispatch pattern:
   input with one extra zero to produce n+1 prefix sums, enabling safe
   `range_sum(lo, hi)` boundary access.
 - **Pattern**: When a GPU algorithm needs prefix sums of a subrange of a global
-  array, compute a single global exclusive prefix sum and derive subrange sums as
-  `prefix[hi] - prefix[lo]`. This avoids per-parent workgroup coordination.
+  array, compute a single global exclusive prefix sum and derive subrange sums
+  as `prefix[hi] - prefix[lo]`. This avoids per-parent workgroup coordination.
 
 #### Binary Split Algorithm Matching CPU Semantics
 
 - **Challenge**: The CPU binary layout's `find_split` skips evaluation of the
   1-child-in-left split (k=0 is skipped), using it only as a default fallback.
-  The GPU version initially evaluated this split, producing correct but different
-  results.
+  The GPU version initially evaluated this split, producing correct but
+  different results.
 - **Solution**: Start the GPU's `find_split` loop at `lo + 2` (matching the
   CPU's skip of k=0) and use `1e38` as the initial best_diff rather than
   evaluating the first split. Added `clamp()` to ensure neither group is empty.
@@ -163,12 +163,12 @@ The GPU treemap layout uses a level-by-level dispatch pattern:
 - **Decision**: Dispatch one compute pass per tree depth level (top-down), not a
   single monolithic dispatch.
 - **Reasoning**: WGSL has no global barrier between workgroups within a single
-  dispatch. Parent cells must be written before children can read them. Level-by-
-  level dispatch with queue.submit() between levels ensures ordering.
+  dispatch. Parent cells must be written before children can read them.
+  Level-by- level dispatch with queue.submit() between levels ensures ordering.
 - **Trade-off**: D+1 command encoder submissions (D = max tree depth) instead of
   1. For typical trees (depth 5-10), this is negligible. For very deep trees
-  (depth > 100), this could become a bottleneck due to CPU-GPU synchronisation
-  overhead.
+     (depth > 100), this could become a bottleneck due to CPU-GPU
+     synchronisation overhead.
 - **Future**: Could be optimised with indirect dispatch or persistent threads
   pattern if deep trees become a use case.
 
@@ -207,8 +207,8 @@ The GPU treemap layout uses a level-by-level dispatch pattern:
   first compiled on a real device.
 - **wgpu v26 API**: `PollType::Wait` (not `Maintain::Wait`) for synchronous GPU
   polling. The API has changed from earlier versions.
-- **Cross-module field access**: Rust's privacy rules mean that `impl
-  super::LayoutEngine` in a sibling module cannot access private fields.
+- **Cross-module field access**: Rust's privacy rules mean that
+  `impl super::LayoutEngine` in a sibling module cannot access private fields.
   Solution: `pub(crate)` on `device` and `queue` fields.
 - **GPU test flakiness**: One test run showed 1 failure out of 3015; a
   subsequent run showed 0 failures. GPU resource contention with

@@ -58,7 +58,6 @@ interpolated instance data in-place.
 ## Risk Assessment
 
 - **Medium**: Compute shader dispatch adds complexity to the render pipeline.
-  Need to ensure proper synchronisation between compute output and vertex
-  input.
-- **Low**: The CPU fallback path means this is purely an optimisation — if
-  the compute path has issues, the system degrades gracefully.
+  Need to ensure proper synchronisation between compute output and vertex input.
+- **Low**: The CPU fallback path means this is purely an optimisation — if the
+  compute path has issues, the system degrades gracefully.

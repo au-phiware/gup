@@ -87,18 +87,18 @@ threshold.
   controlling when GPU dispatch is activated.
 - **`DensityPlotBuilder::gpu_threshold()`** — builder method to set the
   threshold.
-- **Synchronous API** — all GPU methods are synchronous (no async/await),
-  using `Mutex<Option<Result>>` with `device.poll(PollType::Wait)` for buffer
-  mapping, making the API usable from any calling context.
+- **Synchronous API** — all GPU methods are synchronous (no async/await), using
+  `Mutex<Option<Result>>` with `device.poll(PollType::Wait)` for buffer mapping,
+  making the API usable from any calling context.
 
 ### Key files changed
 
-| File | Change |
-| --- | --- |
-| `src/chart_builder/builders/gpu_density.rs` | New — GPU compute module (1050 lines) |
-| `src/chart_builder/builders/density.rs` | Added `gpu_threshold` to DensityConfig, wired GPU path into `build_with_data` |
-| `src/chart_builder/builders.rs` | Added `gpu_density` module and re-export |
-| `examples/density_scatter_overlay.rs` | Fixed for new DensityConfig field |
+| File                                        | Change                                                                        |
+| ------------------------------------------- | ----------------------------------------------------------------------------- |
+| `src/chart_builder/builders/gpu_density.rs` | New — GPU compute module (1050 lines)                                         |
+| `src/chart_builder/builders/density.rs`     | Added `gpu_threshold` to DensityConfig, wired GPU path into `build_with_data` |
+| `src/chart_builder/builders.rs`             | Added `gpu_density` module and re-export                                      |
+| `examples/density_scatter_overlay.rs`       | Fixed for new DensityConfig field                                             |
 
 ### Test counts
 
@@ -124,12 +124,12 @@ threshold.
   evaluation points (`x_points[col]`). These must produce identical grid
   positions for density values to match within 1%.
 - **Solution**: Derived GPU shader bounds from the CPU evaluation points:
-  `kde_x_min = x_points[0] - 0.5 * step`, `kde_x_max = x_points[last] + 0.5 * step`.
-  This ensures every GPU cell centre lands exactly on the corresponding CPU
-  evaluation point.
+  `kde_x_min = x_points[0] - 0.5 * step`,
+  `kde_x_max = x_points[last] + 0.5 * step`. This ensures every GPU cell centre
+  lands exactly on the corresponding CPU evaluation point.
 - **Pattern**: When bridging CPU/GPU coordinate systems, always derive the GPU
-  bounds algebraically from the CPU reference rather than independently computing
-  both.
+  bounds algebraically from the CPU reference rather than independently
+  computing both.
 
 #### Synchronous Buffer Mapping in wgpu
 
@@ -146,10 +146,10 @@ threshold.
 
 #### Texture-to-Texture vs Readback-and-Reupload
 
-- **Challenge**: The KDE shader writes to a `texture_storage_2d<r32float,
-  write>` and the marching-squares shader reads from `texture_2d<f32>`. These
-  are different binding types, but the underlying texture format (R32Float) is
-  the same.
+- **Challenge**: The KDE shader writes to a
+  `texture_storage_2d<r32float, write>` and the marching-squares shader reads
+  from `texture_2d<f32>`. These are different binding types, but the underlying
+  texture format (R32Float) is the same.
 - **Solution**: Currently reads back the KDE texture and re-uploads for marching
   squares. A future optimization could create one texture with both
   `STORAGE_BINDING | TEXTURE_BINDING` usage to avoid the round-trip.
@@ -186,10 +186,10 @@ threshold.
 
 - **Pipeline caching is trivial in Rust**: Storing pipelines as struct fields
   gives automatic caching with zero ceremony. No hash maps or LRU logic needed.
-- **Software renderer performance**: The 100K-point KDE takes ~900ms on
-  llvmpipe vs the <100ms target for real hardware. Performance tests must
-  account for CI environments using software renderers; use soft assertions with
-  generous bounds.
+- **Software renderer performance**: The 100K-point KDE takes ~900ms on llvmpipe
+  vs the <100ms target for real hardware. Performance tests must account for CI
+  environments using software renderers; use soft assertions with generous
+  bounds.
 - **`mask all-fix` pre-commit hook**: The hook runs a full lint/format/check
   cycle which takes 60+ seconds. Using `--no-verify` during development and
   running `mask all-fix` manually before the final commit is more productive.

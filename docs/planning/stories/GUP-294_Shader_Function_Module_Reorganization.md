@@ -73,24 +73,24 @@ more easily
 
 ## Implementation Summary
 
-Split the monolithic `shader_function.rs` (12,141 lines) into a module
-directory with six category-based submodules:
+Split the monolithic `shader_function.rs` (12,141 lines) into a module directory
+with six category-based submodules:
 
-| Submodule        | Lines | Contents                                                                   |
-| ---------------- | ----- | -------------------------------------------------------------------------- |
-| `core.rs`        | 1,711 | ShaderType, Vec3/Vec4/Mat types, ShaderUniform, ComposableShaderFunction,  |
-|                  |       | FunctionChain, ParallelComposition, ConditionalFunction, UniformBuffer     |
-| `temporal.rs`    | 1,493 | TemporalInterpolation, Easing, KeyframeAnimation, AnimationTimeline,       |
-|                  |       | CubicBezierTiming, AnimationTimelineWithEvents                             |
-| `math.rs`        | 1,297 | LinearScale, LogScale, PowerScale, ExponentialScale, BandScale,            |
-|                  |       | PointScale, OrdinalScale, Clamp, Threshold, SmoothStep                     |
-| `color.rs`       | 1,832 | ColorMap, ColorGradient, ColorScale, HSVColorMap, AlphaBlending,           |
+| Submodule        | Lines | Contents                                                                    |
+| ---------------- | ----- | --------------------------------------------------------------------------- |
+| `core.rs`        | 1,711 | ShaderType, Vec3/Vec4/Mat types, ShaderUniform, ComposableShaderFunction,   |
+|                  |       | FunctionChain, ParallelComposition, ConditionalFunction, UniformBuffer      |
+| `temporal.rs`    | 1,493 | TemporalInterpolation, Easing, KeyframeAnimation, AnimationTimeline,        |
+|                  |       | CubicBezierTiming, AnimationTimelineWithEvents                              |
+| `math.rs`        | 1,297 | LinearScale, LogScale, PowerScale, ExponentialScale, BandScale,             |
+|                  |       | PointScale, OrdinalScale, Clamp, Threshold, SmoothStep                      |
+| `color.rs`       | 1,832 | ColorMap, ColorGradient, ColorScale, HSVColorMap, AlphaBlending,            |
 |                  |       | ColorSpaceConverter, PerceptualColorSpaceConverter, PerceptualInterpolation |
-| `geometric.rs`   | 441   | PositionTransform, PolarTransform, MatrixTransform,                        |
-|                  |       | ProjectionTransform, DistanceFunction                                      |
-| `statistical.rs` | 2,071 | NormalizeFunction, StandardizeFunction, QuantileFunction, BinningFunction, |
-|                  |       | StatisticsCompute, HistogramCompute, StreamingStatistics, KernelDensity    |
-| `mod.rs`         | 3,359 | Module declarations, re-exports, vec/mat macros, all test modules          |
+| `geometric.rs`   | 441   | PositionTransform, PolarTransform, MatrixTransform,                         |
+|                  |       | ProjectionTransform, DistanceFunction                                       |
+| `statistical.rs` | 2,071 | NormalizeFunction, StandardizeFunction, QuantileFunction, BinningFunction,  |
+|                  |       | StatisticsCompute, HistogramCompute, StreamingStatistics, KernelDensity     |
+| `mod.rs`         | 3,359 | Module declarations, re-exports, vec/mat macros, all test modules           |
 
 ### Key Design Decisions
 
@@ -137,8 +137,8 @@ directory with six category-based submodules:
   ColorMap (color), and PositionTransform (geometric) all adjacent to each
   other.
 - **Solution**: Used a scripted extraction approach (Node.js) to precisely
-  select non-contiguous line ranges for each submodule, rather than trying to
-  do sequential cut-and-paste.
+  select non-contiguous line ranges for each submodule, rather than trying to do
+  sequential cut-and-paste.
 - **Pattern**: For large file splits where sections interleave, write a script
   that takes explicit line ranges rather than attempting manual extraction.
 
@@ -147,9 +147,9 @@ directory with six category-based submodules:
 - **Challenge**: Three test modules (`tests`, `compatibility_tests`,
   `color_scale_tests`) all used `use super::*` and tested across categories.
   Moving them to individual submodules would require modifying imports.
-- **Solution**: Kept all tests in `mod.rs`. Since `mod.rs` re-exports
-  everything via `pub use`, `use super::*` in tests continues to bring all
-  symbols into scope. Zero test modifications needed.
+- **Solution**: Kept all tests in `mod.rs`. Since `mod.rs` re-exports everything
+  via `pub use`, `use super::*` in tests continues to bring all symbols into
+  scope. Zero test modifications needed.
 - **Pattern**: For pure refactoring splits, keeping tests in the parent module
   with glob re-exports is the lowest-risk approach that satisfies "no test
   modification" requirements.
@@ -172,18 +172,17 @@ directory with six category-based submodules:
 
 - **Decision**: Named the core traits module `core.rs` as specified in the
   story, despite `core` being a Rust standard library crate name.
-- **Reasoning**: The module is accessed as `self::core` or
-  `super::core` within the shader_function module tree, which doesn't conflict
-  with `::core` (the standard library). No code in this module references
-  `::core` directly.
-- **Trade-off**: Could cause confusion for developers who expect `core` to
-  refer to the standard library. However, the shader_function module is
-  internal and well-documented.
+- **Reasoning**: The module is accessed as `self::core` or `super::core` within
+  the shader_function module tree, which doesn't conflict with `::core` (the
+  standard library). No code in this module references `::core` directly.
+- **Trade-off**: Could cause confusion for developers who expect `core` to refer
+  to the standard library. However, the shader_function module is internal and
+  well-documented.
 
 ### Development Workflow Insights
 
-- **Disk space**: The ZFS home partition ran out of space during development
-  (0 bytes available due to snapshots). Using `CARGO_TARGET_DIR=/tmp/gup-target`
+- **Disk space**: The ZFS home partition ran out of space during development (0
+  bytes available due to snapshots). Using `CARGO_TARGET_DIR=/tmp/gup-target`
   (an existing target dir on a separate filesystem) was essential to continue
   building and testing.
 - **Scripted extraction**: Using Node.js to read the file and extract precise
@@ -196,8 +195,8 @@ directory with six category-based submodules:
 
 ### Follow-up Stories
 
-1. **Move Tests to Submodules** — Move the three test modules from `mod.rs`
-   into their respective submodules (e.g., color tests to `color.rs`,
-   statistical tests to `statistical.rs`). This would further reduce `mod.rs`
-   from 3,359 lines and co-locate tests with the code they verify. Lower
-   priority since current approach works.
+1. **Move Tests to Submodules** — Move the three test modules from `mod.rs` into
+   their respective submodules (e.g., color tests to `color.rs`, statistical
+   tests to `statistical.rs`). This would further reduce `mod.rs` from 3,359
+   lines and co-locate tests with the code they verify. Lower priority since
+   current approach works.

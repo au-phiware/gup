@@ -17,8 +17,8 @@ re-dispatches only the new range would reduce per-frame cost to O(delta).
 ## User Story
 
 > "As a developer building a real-time monitoring dashboard, I want the GPU
-> heatmap to update incrementally as new data arrives so that frame latency stays
-> constant regardless of total dataset size."
+> heatmap to update incrementally as new data arrives so that frame latency
+> stays constant regardless of total dataset size."
 
 ## Acceptance Criteria
 

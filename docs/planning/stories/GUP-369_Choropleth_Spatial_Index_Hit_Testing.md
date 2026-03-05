@@ -6,13 +6,12 @@
 
 ## Context
 
-GUP-288 implemented CPU-side point-in-polygon hit-testing for choropleth
-regions using a linear scan over all region polygons. For typical world maps
-(~200 regions) this is fast, but highly granular datasets (county-level, zip
-codes, census tracts with 500–3000+ regions) may see noticeable latency on
-hover. A spatial index — such as a bounding-box pre-filter, grid index, or
-R-tree — would reduce hit-testing time from O(n × edges) to approximately
-O(log n).
+GUP-288 implemented CPU-side point-in-polygon hit-testing for choropleth regions
+using a linear scan over all region polygons. For typical world maps (~200
+regions) this is fast, but highly granular datasets (county-level, zip codes,
+census tracts with 500–3000+ regions) may see noticeable latency on hover. A
+spatial index — such as a bounding-box pre-filter, grid index, or R-tree — would
+reduce hit-testing time from O(n × edges) to approximately O(log n).
 
 ## User Story
 
@@ -24,7 +23,8 @@ O(log n).
 
 - [ ] `region_at_point()` uses a spatial index for candidate filtering.
 - [ ] Hit-testing performance is sub-millisecond for 3000+ region choropleths.
-- [ ] The spatial index is built automatically during `ChoroplethChartBuilder::build()`.
+- [ ] The spatial index is built automatically during
+      `ChoroplethChartBuilder::build()`.
 - [ ] Correctness is identical to the current linear-scan implementation.
 
 ## Technical Tasks

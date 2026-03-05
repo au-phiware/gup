@@ -79,31 +79,32 @@ time, and interpolate attribute values in the vertex shader.
    Supports empty/single/multi-keyframe animations with boundary clamping.
 
 4. **`AttrValue::lerp()` and `AttrValue::as_f32_first()`** — Component-wise
-   linear interpolation for Float, Vec2, Vec4 attribute values, plus a
-   helper to extract the first f32 component.
+   linear interpolation for Float, Vec2, Vec4 attribute values, plus a helper to
+   extract the first f32 component.
 
 5. **`Selection::tick_transition(dt_ms: f64) -> bool`** — Advances the
-   transition clock. Auto-completes via `complete_transition()` when
-   elapsed time reaches `delay + duration`. Returns whether the transition
-   is still active.
+   transition clock. Auto-completes via `complete_transition()` when elapsed
+   time reaches `delay + duration`. Returns whether the transition is still
+   active.
 
 6. **`prepare_render_bound()` transition integration** — When a
    `CommittedTransition` is active, the method delegates to
-   `build_transition_instances()` which creates 2-keyframe
-   `KeyframeAnimation` instances per attribute, applies easing, and
-   interpolates between from/to `AttrValue`s.
+   `build_transition_instances()` which creates 2-keyframe `KeyframeAnimation`
+   instances per attribute, applies easing, and interpolates between from/to
+   `AttrValue`s.
 
 ### Key Files Changed
 
-| File | Changes |
-|------|---------|
-| `src/transition/builder.rs` | Added `elapsed_ms` field, `EasingFn::apply()`, 6 tests |
-| `src/shader_function.rs` | Added `KeyframeAnimation::evaluate()`, 5 tests |
-| `src/selection.rs` | Added `tick_transition()`, `build_transition_instances()`, `AttrValue::lerp()`, `AttrValue::as_f32_first()`, modified `prepare_render_bound()`, 11 tests |
+| File                        | Changes                                                                                                                                                  |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/transition/builder.rs` | Added `elapsed_ms` field, `EasingFn::apply()`, 6 tests                                                                                                   |
+| `src/shader_function.rs`    | Added `KeyframeAnimation::evaluate()`, 5 tests                                                                                                           |
+| `src/selection.rs`          | Added `tick_transition()`, `build_transition_instances()`, `AttrValue::lerp()`, `AttrValue::as_f32_first()`, modified `prepare_render_bound()`, 11 tests |
 
 ### Test Counts
 
-- **22 new tests**: 6 easing, 5 keyframe evaluation, 5 AttrValue, 4 tick_transition, 2 integration
+- **22 new tests**: 6 easing, 5 keyframe evaluation, 5 AttrValue, 4
+  tick_transition, 2 integration
 - **2766 total library tests passing** (up from 2744)
 
 ## Retrospective
@@ -120,10 +121,10 @@ time, and interpolate attribute values in the vertex shader.
 - **Solution**: Added a `KeyframeAnimation::evaluate(time: f32) -> f32` method
   that mirrors the WGSL `keyframe_animation()` function's linear interpolation
   logic with boundary clamping.
-- **Pattern**: When GPU and CPU need to agree on interpolation results, keep
-  a CPU-side evaluation method that mirrors the WGSL implementation. This
-  enables testing without GPU access and ensures CPU-computed transitions
-  match GPU rendering.
+- **Pattern**: When GPU and CPU need to agree on interpolation results, keep a
+  CPU-side evaluation method that mirrors the WGSL implementation. This enables
+  testing without GPU access and ensures CPU-computed transitions match GPU
+  rendering.
 
 #### EasingFn CPU-Side Apply
 
@@ -131,23 +132,23 @@ time, and interpolate attribute values in the vertex shader.
   `EasingFunction` and `InterpolationMode` for GPU use, but had no CPU-side
   evaluation.
 - **Solution**: Added `EasingFn::apply(t: f32) -> f32` implementing the same
-  curves (quadratic ease-in, quadratic ease-out, cubic ease-in-out) with
-  input clamping to `[0.0, 1.0]`.
+  curves (quadratic ease-in, quadratic ease-out, cubic ease-in-out) with input
+  clamping to `[0.0, 1.0]`.
 - **Pattern**: Configuration enums for GPU settings benefit from having a
   `fn apply(&self, t: f32) -> f32` for CPU-side previewing and testing.
 
 #### Transition as Instance Data Override
 
 - **Challenge**: `prepare_render_bound()` normally evaluates `attr_bindings`
-  closures on the data items. During a transition, we need to bypass this
-  and use interpolated from/to values from `CommittedTransition` instead.
+  closures on the data items. During a transition, we need to bypass this and
+  use interpolated from/to values from `CommittedTransition` instead.
 - **Solution**: Added an early-return branch in `prepare_render_bound()` that
   checks for an active committed transition and delegates to
-  `build_transition_instances()`, which directly constructs `MarkInstanceBuilder`
-  instances from interpolated `AttrValue`s.
+  `build_transition_instances()`, which directly constructs
+  `MarkInstanceBuilder` instances from interpolated `AttrValue`s.
 - **Pattern**: The "check-and-delegate" pattern keeps the transition integration
-  clean — the normal rendering path is unchanged, and the transition path
-  is a separate method.
+  clean — the normal rendering path is unchanged, and the transition path is a
+  separate method.
 
 ### Architectural Decisions
 
@@ -158,26 +159,26 @@ time, and interpolate attribute values in the vertex shader.
 - **Reasoning**: The existing `prepare_render_bound()` pipeline expects
   fully-resolved instance data. CPU interpolation integrates cleanly without
   requiring shader modifications or additional uniform buffers.
-- **Trade-off**: CPU interpolation means the per-frame work scales with
-  element count. For very large datasets (10K+ elements), a GPU compute
-  shader approach would be more performant.
+- **Trade-off**: CPU interpolation means the per-frame work scales with element
+  count. For very large datasets (10K+ elements), a GPU compute shader approach
+  would be more performant.
 - **Future**: A follow-up story could add a GPU-side interpolation path for
-  large datasets that uploads from/to values as storage buffers and
-  interpolates in a compute shader.
+  large datasets that uploads from/to values as storage buffers and interpolates
+  in a compute shader.
 
 #### KeyframeAnimation Used for Validation, Not Primary Interpolation
 
 - **Decision**: A 2-keyframe `KeyframeAnimation` is constructed per attribute
-  per element but the actual interpolation uses `AttrValue::lerp()` for
-  full vector support. The `KeyframeAnimation` is evaluated for the
-  first component as a verification step.
+  per element but the actual interpolation uses `AttrValue::lerp()` for full
+  vector support. The `KeyframeAnimation` is evaluated for the first component
+  as a verification step.
 - **Reasoning**: `KeyframeAnimation` operates on single `f32` values, but
-  `AttrValue` can be `Vec2` or `Vec4`. Using `AttrValue::lerp()` handles
-  all variants directly, while `KeyframeAnimation` demonstrates the GUP-138
+  `AttrValue` can be `Vec2` or `Vec4`. Using `AttrValue::lerp()` handles all
+  variants directly, while `KeyframeAnimation` demonstrates the GUP-138
   integration requirement.
 - **Trade-off**: Slight redundancy in creating `KeyframeAnimation` instances
-  that aren't the primary interpolation path. This is acceptable for
-  correctness validation.
+  that aren't the primary interpolation path. This is acceptable for correctness
+  validation.
 
 ### Development Workflow Insights
 
@@ -185,15 +186,14 @@ time, and interpolate attribute values in the vertex shader.
   GUP-168) provided all the building blocks, and the implementation was
   straightforward wiring.
 - Disk space was a constraint (51GB partition, 96% used). The `cargo clean`
-  between test and format passes was necessary. Build artifacts for this
-  project exceed 7GB.
+  between test and format passes was necessary. Build artifacts for this project
+  exceed 7GB.
 - All 22 tests are CPU-only (no GPU required), which makes them fast and
-  reliable. The transition interpolation correctness can be verified without
-  GPU access.
+  reliable. The transition interpolation correctness can be verified without GPU
+  access.
 
 ### Follow-up Stories
 
-1. **GUP-355: GPU Compute Shader Transition Interpolation** — For large
-   datasets (10K+ elements), upload from/to attribute buffers and perform
-   interpolation in a compute shader to avoid CPU-side per-element work.
-   Deps: GUP-277 ✅.
+1. **GUP-355: GPU Compute Shader Transition Interpolation** — For large datasets
+   (10K+ elements), upload from/to attribute buffers and perform interpolation
+   in a compute shader to avoid CPU-side per-element work. Deps: GUP-277 ✅.

@@ -8,9 +8,9 @@
 //! 1M mark datasets.
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use gup::RenderContext;
 use gup::interaction::{InteractionSystem, Rect, Vec2};
 use gup::mark_selection::MarkSelectionSystem;
-use gup::RenderContext;
 use tokio::runtime::Runtime;
 
 /// Generate `n` pseudo-random positions in [-1.0, 1.0].

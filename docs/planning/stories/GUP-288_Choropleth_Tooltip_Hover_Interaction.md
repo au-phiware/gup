@@ -69,18 +69,19 @@ the builder can configure tooltip content and hover styling.
   build.
 - **Tooltip content** — `ChoroplethChart::tooltip_content(region_index)` with
   default format (`"<name>: <value>"`) and custom formatter support.
-- **Hover colour computation** — `ChoroplethChart::highlighted_color(region_index, is_hovered)`
-  applies the configured highlight style.
+- **Hover colour computation** —
+  `ChoroplethChart::highlighted_color(region_index, is_hovered)` applies the
+  configured highlight style.
 - **Region polygon storage** — `region_polygons: Vec<Vec<Vec<[f32; 2]>>>`
   captured during tessellation for efficient hit-testing.
 - **Crate-level export** — `HoverHighlight` added to `pub use` in `lib.rs`.
 
 ### Key Files Changed
 
-| File | Change |
-|------|--------|
+| File                                       | Change                                                      |
+| ------------------------------------------ | ----------------------------------------------------------- |
 | `src/chart_builder/builders/choropleth.rs` | All tooltip/hover/hit-test types, methods, and 18 new tests |
-| `src/lib.rs` | Export `HoverHighlight` from crate root |
+| `src/lib.rs`                               | Export `HoverHighlight` from crate root                     |
 
 ### Test Counts
 
@@ -103,8 +104,8 @@ the builder can configure tooltip content and hover styling.
   projected exterior polygon rings already available from the tessellation step.
   The `point_in_ring()` function uses the standard edge-crossing algorithm.
 - **Pattern**: For irregular polygon hit-testing, store the polygon outlines
-  during the build phase and use ray-casting at query time. This is O(edges)
-  per region and works well for the typical ~200 regions in a choropleth.
+  during the build phase and use ray-casting at query time. This is O(edges) per
+  region and works well for the typical ~200 regions in a choropleth.
 
 #### Tooltip Formatter Closure Ergonomics
 
@@ -129,9 +130,9 @@ the builder can configure tooltip content and hover styling.
   for the typical ~200 region count.
 - **Trade-off**: Slightly higher latency than GPU-side for very large region
   counts, but much simpler implementation and no shader changes needed.
-- **Future**: If performance becomes an issue with very dense choropleths
-  (1000+ regions), a spatial index (e.g. bounding box pre-filter or grid)
-  could be added without changing the API.
+- **Future**: If performance becomes an issue with very dense choropleths (1000+
+  regions), a spatial index (e.g. bounding box pre-filter or grid) could be
+  added without changing the API.
 
 #### Storing Region Polygons in ChoroplethChart
 
@@ -142,16 +143,16 @@ the builder can configure tooltip content and hover styling.
   capability without requiring access to the original GeoJSON source.
 - **Trade-off**: Slightly increased memory usage per chart (~few KB for typical
   world maps).
-- **Future**: This enables future features like region boundary highlighting
-  and selection without re-parsing GeoJSON.
+- **Future**: This enables future features like region boundary highlighting and
+  selection without re-parsing GeoJSON.
 
 ### Development Workflow Insights
 
 - The implementation was straightforward due to the well-structured builder
   pattern already in place. Adding new builder methods followed the established
   fluent API pattern exactly.
-- The synthetic GeoJSON test fixture (`synthetic_geojson()`) was very useful
-  for testing — it provides three simple rectangular regions that make hit-test
+- The synthetic GeoJSON test fixture (`synthetic_geojson()`) was very useful for
+  testing — it provides three simple rectangular regions that make hit-test
   verification trivial.
 - The `mask all-fix` pre-commit hook is thorough but slow (~2 min). Using
   `--no-verify` for intermediate commits and running `mask all-fix` at
@@ -159,12 +160,12 @@ the builder can configure tooltip content and hover styling.
 
 ### Follow-up Stories
 
-1. **GUP-368: Choropleth Outline Highlight Style** — Add an `Outline` variant
-   to `HoverHighlight` that draws a thicker border around the hovered region.
+1. **GUP-368: Choropleth Outline Highlight Style** — Add an `Outline` variant to
+   `HoverHighlight` that draws a thicker border around the hovered region.
    Currently only `Brighten` and `Dim` are implemented; an outline style
    requires generating additional stroke geometry at render time.
 
 2. **GUP-369: Choropleth Spatial Index for Hit-Testing** — Add a bounding-box
-   pre-filter or grid spatial index to `region_at_point()` for choropleths
-   with 500+ regions. Current O(n × edges) linear scan is fine for world maps
-   but may become a bottleneck for highly granular regional data.
+   pre-filter or grid spatial index to `region_at_point()` for choropleths with
+   500+ regions. Current O(n × edges) linear scan is fine for world maps but may
+   become a bottleneck for highly granular regional data.

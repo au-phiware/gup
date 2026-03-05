@@ -71,7 +71,8 @@ outlines, enabling correct filled rendering.
 2. **WGSL shaders** (`src/mark/shaders/filled_polygon.{vert,frag}.wgsl`):
    - Vertex shader: barycentric weight computation from unit triangle → instance
      vertex positions/colours → viewport transform
-   - Fragment shader: direct colour output (GPU rasteriser handles interpolation)
+   - Fragment shader: direct colour output (GPU rasteriser handles
+     interpolation)
 
 3. **AreaChartBuilder integration** (`src/chart_builder/builders/area.rs`):
    - `build_filled()` method on `AreaChartBuilder<T>` returning
@@ -87,15 +88,15 @@ outlines, enabling correct filled rendering.
 
 ### Key Files Changed
 
-| File | Change |
-|------|--------|
-| `src/mark/filled_polygon.rs` | **New** — mark type + tessellation |
-| `src/mark/shaders/filled_polygon.vert.wgsl` | **New** — vertex shader |
-| `src/mark/shaders/filled_polygon.frag.wgsl` | **New** — fragment shader |
-| `src/mark.rs` | Register module, update docs |
-| `src/lib.rs` | Export public types |
-| `src/chart_builder/builders/area.rs` | `build_filled()` + helpers |
-| `src/export/svg/element.rs` | `Polygon` variant |
+| File                                        | Change                             |
+| ------------------------------------------- | ---------------------------------- |
+| `src/mark/filled_polygon.rs`                | **New** — mark type + tessellation |
+| `src/mark/shaders/filled_polygon.vert.wgsl` | **New** — vertex shader            |
+| `src/mark/shaders/filled_polygon.frag.wgsl` | **New** — fragment shader          |
+| `src/mark.rs`                               | Register module, update docs       |
+| `src/lib.rs`                                | Export public types                |
+| `src/chart_builder/builders/area.rs`        | `build_filled()` + helpers         |
+| `src/export/svg/element.rs`                 | `Polygon` variant                  |
 
 ### Test Counts
 
@@ -124,14 +125,14 @@ outlines, enabling correct filled rendering.
 
 #### CPU vs GPU Tessellation Trade-off
 
-- **Challenge**: The story called for "GPU tessellation" building on GUP-132, but
-  GUP-132's `GpuPathTessellator` generates stroke geometry from path commands,
-  not fill geometry from polygon outlines.
+- **Challenge**: The story called for "GPU tessellation" building on GUP-132,
+  but GUP-132's `GpuPathTessellator` generates stroke geometry from path
+  commands, not fill geometry from polygon outlines.
 - **Solution**: Used CPU-side ear-clipping tessellation (adapted from the proven
   `earclip_tessellate` in `geo_path.rs` but using f32 instead of f64). This is
   well-understood, deterministic, and handles concave polygons correctly.
-- **Pattern**: GPU tessellation shines for dynamic paths that change every frame.
-  For polygon fills that are computed once and rendered many times, CPU
+- **Pattern**: GPU tessellation shines for dynamic paths that change every
+  frame. For polygon fills that are computed once and rendered many times, CPU
   tessellation followed by GPU instanced rendering is simpler and equally
   performant.
 
@@ -193,7 +194,7 @@ outlines, enabling correct filled rendering.
    per-frame dynamic polygon updates without CPU round-trips for very large
    polygons (>100K vertices).
 
-2. **GUP-361: ColorScale CPU Sampling API** — Add a `ColorScale::sample(t) ->
-   [f32; 4]` method for CPU-side colour lookups. Currently the `ColorScale` is
-   GPU-only; several builders (area, choropleth, density) would benefit from a
-   unified CPU sampling path.
+2. **GUP-361: ColorScale CPU Sampling API** — Add a
+   `ColorScale::sample(t) -> [f32; 4]` method for CPU-side colour lookups.
+   Currently the `ColorScale` is GPU-only; several builders (area, choropleth,
+   density) would benefit from a unified CPU sampling path.

@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Interaction & Spatial Index **Status**: ✅ Complete
-**Created**: 2025-07-25 **Completed**: 2026-03-05
+**Initiative**: Interaction & Spatial Index **Status**: ✅ Complete **Created**:
+2025-07-25 **Completed**: 2026-03-05
 
 ## Context
 
@@ -66,17 +66,17 @@ ensure correct z-order.
 
 ### Key Files Changed
 
-| File                           | Change                                 |
-| ------------------------------ | -------------------------------------- |
-| `src/brush.rs`                 | Added `BrushOverlayRenderer` + 5 tests |
-| `src/lib.rs`                   | Re-exported `BrushOverlayRenderer`     |
-| `examples/brush_selection.rs`  | Integrated overlay renderer            |
+| File                          | Change                                 |
+| ----------------------------- | -------------------------------------- |
+| `src/brush.rs`                | Added `BrushOverlayRenderer` + 5 tests |
+| `src/lib.rs`                  | Re-exported `BrushOverlayRenderer`     |
+| `examples/brush_selection.rs` | Integrated overlay renderer            |
 
 ### Test Counts
 
-- 5 new GPU tests (`overlay_renderer_creation`, `overlay_visible_when_brush_shown`,
-  `overlay_hidden_when_brush_hidden`, `overlay_hidden_for_default_brush_mark`,
-  `overlay_reuses_cached_pipeline`)
+- 5 new GPU tests (`overlay_renderer_creation`,
+  `overlay_visible_when_brush_shown`, `overlay_hidden_when_brush_hidden`,
+  `overlay_hidden_for_default_brush_mark`, `overlay_reuses_cached_pipeline`)
 - 31 total brush module tests — all passing
 
 ## Dependencies
@@ -119,9 +119,9 @@ ensure correct z-order.
   pipeline, but the pipeline's bind group 0 expects **two** bindings — a storage
   buffer for instance data (binding 0) and a uniform buffer for viewport
   dimensions (binding 1) — not just the storage buffer alone.
-- **Solution**: Inspected `MarkInfoImpl::create_bind_group_layout` and found that
-  marks with custom shaders (`has_custom_shaders() == true`) always include a
-  viewport dimensions uniform at binding 1.  Added the matching
+- **Solution**: Inspected `MarkInfoImpl::create_bind_group_layout` and found
+  that marks with custom shaders (`has_custom_shaders() == true`) always include
+  a viewport dimensions uniform at binding 1. Added the matching
   `ViewportUniforms` buffer to the overlay's bind group.
 - **Pattern**: When reusing a pipeline from `PipelineCache`, always match the
   full bind group layout exactly — the pipeline layout is determined at creation
@@ -129,8 +129,8 @@ ensure correct z-order.
 
 #### wgpu v26 API Changes
 
-- **Challenge**: The `Adapter::request_device` method signature changed in
-  wgpu v26 — it no longer takes a second `Option<&Path>` trace parameter.
+- **Challenge**: The `Adapter::request_device` method signature changed in wgpu
+  v26 — it no longer takes a second `Option<&Path>` trace parameter.
 - **Solution**: Removed the extra `None` argument to match the v26 API.
 - **Pattern**: Always check method signatures against the actual dependency
   version rather than relying on memory.
@@ -144,8 +144,8 @@ ensure correct z-order.
 - **Reasoning**: `Selection` is designed for binding collections of data to mark
   instances with shader function pipelines. The brush overlay is always exactly
   one instance with known, fixed attributes — no data binding, no shader
-  functions. A dedicated type is simpler, has zero allocation overhead, and makes
-  the API clearer.
+  functions. A dedicated type is simpler, has zero allocation overhead, and
+  makes the API clearer.
 - **Trade-off**: Small amount of duplicated buffer management code between
   `BrushOverlayRenderer` and `SelectionRenderState`.
 - **Future**: If more single-instance overlays are needed (e.g., crosshair,
@@ -156,19 +156,19 @@ ensure correct z-order.
 
 - **Decision**: Set the viewport transform (group 1 uniform) to identity since
   brush coordinates are already in clip space.
-- **Reasoning**: The `BrushBehavior` stores drag positions in whatever coordinate
-  space the caller provides. In the `brush_selection` example, positions are
-  converted to clip space before being passed in. An identity viewport transform
-  preserves these coordinates.
+- **Reasoning**: The `BrushBehavior` stores drag positions in whatever
+  coordinate space the caller provides. In the `brush_selection` example,
+  positions are converted to clip space before being passed in. An identity
+  viewport transform preserves these coordinates.
 - **Trade-off**: The overlay doesn't respond to zoom/pan — this is intentional
   since the brush rectangle should always track screen-space cursor position.
-- **Future**: If brush needs to work with zoomed views, the caller can apply
-  the inverse viewport transform before passing positions to `BrushBehavior`.
+- **Future**: If brush needs to work with zoomed views, the caller can apply the
+  inverse viewport transform before passing positions to `BrushBehavior`.
 
 ### Development Workflow Insights
 
-- The ZFS pool being nearly full (`96% capacity`) caused disk space issues during
-  compilation and pre-commit hooks. Symlinking `target/` to `/tmp` on a
+- The ZFS pool being nearly full (`96% capacity`) caused disk space issues
+  during compilation and pre-commit hooks. Symlinking `target/` to `/tmp` on a
   different ZFS pool was an effective workaround.
 - The `mask all-fix` markdown lint warnings are all pre-existing in other story
   files; the Rust formatting and lint checks passed cleanly for the changed

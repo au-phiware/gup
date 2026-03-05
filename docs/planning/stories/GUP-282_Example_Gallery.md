@@ -221,18 +221,18 @@ integration is handled by those companion stories.
    so unchanged examples are not re-rendered.
 
 4. **Gallery HTML generator** (`scripts/generate_gallery_html.sh`): Shell script
-   that reads the TOML config and generates `docs/gallery/index.html` with
-   16 category sections, placeholder cards for skipped/pending examples, and
+   that reads the TOML config and generates `docs/gallery/index.html` with 16
+   category sections, placeholder cards for skipped/pending examples, and
    lazy-loaded thumbnail images.
 
 5. **Gallery CSS** (`docs/gallery/gallery.css`): Responsive grid layout with
-   dark mode support, category navigation pills, hover effects, and
-   placeholder styling for skipped examples.
+   dark mode support, category navigation pills, hover effects, and placeholder
+   styling for skipped examples.
 
 6. **CI workflow** (`.github/workflows/gallery.yml`): GitHub Actions workflow
    that builds in release mode, generates thumbnails, generates the HTML page,
-   validates links, and deploys to GitHub Pages with caching for both
-   `target/` and thumbnails.
+   validates links, and deploys to GitHub Pages with caching for both `target/`
+   and thumbnails.
 
 7. **Link validation** (`scripts/check_gallery_links.sh`): CI-integrated script
    that validates all 99 source-file links in the gallery HTML against local
@@ -243,20 +243,20 @@ integration is handled by those companion stories.
 
 ### Key Files Changed
 
-| File | Change |
-|------|--------|
-| `src/export/gallery.rs` | New: screenshot request helper (3 tests) |
-| `src/export/mod.rs` | Added `gallery` module |
-| `scripts/gallery_config.toml` | New: 99 example classifications |
-| `scripts/generate_gallery.sh` | New: thumbnail generation script |
-| `scripts/generate_gallery_html.sh` | New: HTML page generator |
-| `scripts/check_gallery_links.sh` | New: link validation script |
-| `docs/gallery/gallery.css` | New: responsive gallery stylesheet |
-| `docs/gallery/index.html` | New: generated gallery page (1123 lines) |
-| `.github/workflows/gallery.yml` | New: CI workflow for gallery deployment |
-| `examples/INDEX.md` | Added gallery link |
-| `docs/README.md` | Added Visual Gallery to Quick Navigation |
-| `.gitignore` | Ignore generated PNG thumbnails |
+| File                               | Change                                   |
+| ---------------------------------- | ---------------------------------------- |
+| `src/export/gallery.rs`            | New: screenshot request helper (3 tests) |
+| `src/export/mod.rs`                | Added `gallery` module                   |
+| `scripts/gallery_config.toml`      | New: 99 example classifications          |
+| `scripts/generate_gallery.sh`      | New: thumbnail generation script         |
+| `scripts/generate_gallery_html.sh` | New: HTML page generator                 |
+| `scripts/check_gallery_links.sh`   | New: link validation script              |
+| `docs/gallery/gallery.css`         | New: responsive gallery stylesheet       |
+| `docs/gallery/index.html`          | New: generated gallery page (1123 lines) |
+| `.github/workflows/gallery.yml`    | New: CI workflow for gallery deployment  |
+| `examples/INDEX.md`                | Added gallery link                       |
+| `docs/README.md`                   | Added Visual Gallery to Quick Navigation |
+| `.gitignore`                       | Ignore generated PNG thumbnails          |
 
 ### Test Counts
 
@@ -285,8 +285,8 @@ integration is handled by those companion stories.
 - **Challenge**: Many examples use `winit::EventLoop` and block forever. Adding
   `--headless-screenshot` CLI flags to 60+ examples is impractical.
 - **Solution**: An environment variable convention (`GUP_SCREENSHOT_PATH`) with
-  a library helper function. Examples opt in with a single `if let` check.
-  The generation script sets the env var externally.
+  a library helper function. Examples opt in with a single `if let` check. The
+  generation script sets the env var externally.
 - **Pattern**: Environment variables are superior to CLI flags for cross-cutting
   concerns that need to be added incrementally across many entry points. The
   library helper centralises the parsing logic.
@@ -312,8 +312,8 @@ integration is handled by those companion stories.
 - **Reasoning**: Shell-based Markdown table parsing is fragile and hard to
   maintain. TOML is structured, supports skip reasons, and is easy to extend
   with new fields (e.g. CI-skip, hardware-required).
-- **Trade-off**: Two sources of truth for example metadata (INDEX.md and config).
-  Risk of drift if new examples are added to one but not the other.
+- **Trade-off**: Two sources of truth for example metadata (INDEX.md and
+  config). Risk of drift if new examples are added to one but not the other.
 - **Future**: Consider a script that generates gallery_config.toml from
   INDEX.md, or vice versa, to keep them synchronised.
 
@@ -334,8 +334,8 @@ integration is handled by those companion stories.
 - **Decision**: Use `actions/upload-pages-artifact` + `actions/deploy-pages`
   instead of `peaceiris/actions-gh-pages`.
 - **Reasoning**: The official GitHub Actions are better maintained and integrate
-  with the newer Pages deployment model (environments, OIDC tokens). No need
-  for a personal access token.
+  with the newer Pages deployment model (environments, OIDC tokens). No need for
+  a personal access token.
 - **Trade-off**: Requires `pages: write` and `id-token: write` permissions,
   which are more explicit but less familiar to some contributors.
 - **Future**: The same deployment pipeline can serve GUP-280 (API Reference) and
@@ -354,8 +354,8 @@ integration is handled by those companion stories.
 
 - **The `unsafe` env var API**: Rust 2024 edition makes `std::env::set_var` and
   `remove_var` unsafe. This is correct (they are not thread-safe) but requires
-  boilerplate in tests. The `--test-threads=1` requirement for GPU tests
-  already serialises execution, making the safety concern moot in practice.
+  boilerplate in tests. The `--test-threads=1` requirement for GPU tests already
+  serialises execution, making the safety concern moot in practice.
 
 ### Follow-up Stories
 

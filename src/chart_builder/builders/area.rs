@@ -1795,17 +1795,37 @@ mod tests {
         use crate::label::LabelFormatter;
 
         let data = vec![
-            TimePoint { time: 0.0, value: 10.0, series: "A".to_string() },
-            TimePoint { time: 0.0, value: 20.0, series: "B".to_string() },
-            TimePoint { time: 1.0, value: 30.0, series: "A".to_string() },
-            TimePoint { time: 1.0, value: 10.0, series: "B".to_string() },
+            TimePoint {
+                time: 0.0,
+                value: 10.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 0.0,
+                value: 20.0,
+                series: "B".to_string(),
+            },
+            TimePoint {
+                time: 1.0,
+                value: 30.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 1.0,
+                value: 10.0,
+                series: "B".to_string(),
+            },
         ];
 
         let context = Arc::new(RenderContext::new().await.unwrap());
 
         let chart = area()
-            .x(AccessorFunction::new(|d: &TimePoint| AccessorValue::Float(d.time)))
-            .y(AccessorFunction::new(|d: &TimePoint| AccessorValue::Float(d.value)))
+            .x(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.time)
+            }))
+            .y(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.value)
+            }))
             .color(AccessorFunction::new(|d: &TimePoint| {
                 AccessorValue::Categorical(d.series.clone())
             }))
@@ -1814,7 +1834,10 @@ mod tests {
             .unwrap();
 
         // The config should have the PercentFormatter auto-applied
-        let fmt = chart.config.y_label_formatter.as_ref()
+        let fmt = chart
+            .config
+            .y_label_formatter
+            .as_ref()
             .expect("normalized mode should auto-set y_label_formatter");
         assert_eq!(fmt.format_value(0.0), "0%");
         assert_eq!(fmt.format_value(0.5), "50%");
@@ -1824,15 +1847,27 @@ mod tests {
     #[tokio::test]
     async fn test_area_non_normalized_has_no_auto_formatter() {
         let data = vec![
-            TimePoint { time: 0.0, value: 10.0, series: "A".to_string() },
-            TimePoint { time: 1.0, value: 15.0, series: "A".to_string() },
+            TimePoint {
+                time: 0.0,
+                value: 10.0,
+                series: "A".to_string(),
+            },
+            TimePoint {
+                time: 1.0,
+                value: 15.0,
+                series: "A".to_string(),
+            },
         ];
 
         let context = Arc::new(RenderContext::new().await.unwrap());
 
         let chart = area()
-            .x(AccessorFunction::new(|d: &TimePoint| AccessorValue::Float(d.time)))
-            .y(AccessorFunction::new(|d: &TimePoint| AccessorValue::Float(d.value)))
+            .x(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.time)
+            }))
+            .y(AccessorFunction::new(|d: &TimePoint| {
+                AccessorValue::Float(d.value)
+            }))
             .build_with_data(data, context)
             .unwrap();
 

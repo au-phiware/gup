@@ -88,7 +88,8 @@ approximation).
 - 8 quadtree unit tests (2 new: `effective_theta_set_to_base`,
   `adaptive_theta_varies_by_density`)
 - 25 layout integration tests (4 new: `adaptive_theta_builder_defaults`,
-  `adaptive_theta_builder_set`, `adaptive_theta_layout_produces_finite_positions`,
+  `adaptive_theta_builder_set`,
+  `adaptive_theta_layout_produces_finite_positions`,
   `adaptive_theta_clustered_graph`)
 - All 234 project tests pass
 
@@ -105,10 +106,10 @@ approximation).
   interpretations.
 - **Solution**: Per-cell adaptive theta. The Barnes-Hut opening criterion is
   inherently a cell-level decision ("is this cell small/far enough to
-  approximate?"), so storing effective theta on the cell is semantically correct.
-  Dense cells contain many bodies packed into a small area, so using a smaller
-  theta forces the shader to open them more often, yielding more accurate forces
-  in those regions.
+  approximate?"), so storing effective theta on the cell is semantically
+  correct. Dense cells contain many bodies packed into a small area, so using a
+  smaller theta forces the shader to open them more often, yielding more
+  accurate forces in those regions.
 - **Pattern**: When choosing where to attach adaptive parameters, follow the
   semantic level where the decision is made (cell-level criterion → cell-level
   parameter).
@@ -116,8 +117,8 @@ approximation).
 #### BHCell Struct Alignment: 32→36 Bytes
 
 - **Challenge**: Adding `effective_theta: f32` to `BHCell` changes it from a
-  nice 32-byte (8×4) struct to 36 bytes (9×4). This could cause alignment
-  issues between Rust `#[repr(C)]` and WGSL struct layout.
+  nice 32-byte (8×4) struct to 36 bytes (9×4). This could cause alignment issues
+  between Rust `#[repr(C)]` and WGSL struct layout.
 - **Solution**: Both Rust `#[repr(C)]` and WGSL use natural alignment (4 bytes
   for `f32`/`i32`). A 36-byte struct with alignment 4 is valid in both; the
   array stride is 36 with no padding needed. Verified at compile time with

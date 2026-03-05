@@ -14,15 +14,15 @@ builder chain.
 
 For complex composites with many layers, users may want to adjust the rendering
 order after construction — for example, moving a reference line behind scatter
-points, or promoting a highlight layer to the top. A z-index or explicit ordering
-API would provide this control without requiring the user to restructure their
-builder chain.
+points, or promoting a highlight layer to the top. A z-index or explicit
+ordering API would provide this control without requiring the user to
+restructure their builder chain.
 
 ## User Story
 
 > "As a visualization developer, I want to control the rendering order of layers
-> in a composite chart so that I can ensure visual priority without restructuring
-> my builder calls."
+> in a composite chart so that I can ensure visual priority without
+> restructuring my builder calls."
 
 ## Acceptance Criteria
 

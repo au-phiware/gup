@@ -173,12 +173,11 @@ impl App {
             contents: bytemuck::cast_slice(&sphere_indices),
             usage: wgpu::BufferUsages::INDEX,
         });
-        let sphere_instance_buffer =
-            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("sphere_instances"),
-                contents: bytemuck::cast_slice(&sphere_instances),
-                usage: wgpu::BufferUsages::STORAGE,
-            });
+        let sphere_instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("sphere_instances"),
+            contents: bytemuck::cast_slice(&sphere_instances),
+            usage: wgpu::BufferUsages::STORAGE,
+        });
 
         // Sphere bind group layouts
         let sphere_instance_bgl =
@@ -388,12 +387,11 @@ impl App {
             source: wgpu::ShaderSource::Wgsl(Line3D::FRAGMENT_SHADER.unwrap().into()),
         });
 
-        let line_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("line_pl"),
-                bind_group_layouts: &[&line_instance_bgl, &line_uniform_bgl],
-                push_constant_ranges: &[],
-            });
+        let line_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("line_pl"),
+            bind_group_layouts: &[&line_instance_bgl, &line_uniform_bgl],
+            push_constant_ranges: &[],
+        });
 
         let line_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("line_pipeline"),
@@ -487,11 +485,8 @@ impl App {
         let elapsed = self.start_time.elapsed().as_secs_f32();
         let angle = elapsed * 0.4;
         let eye_dist = 5.0;
-        let eye = gup::shader_function::Vec3::new(
-            eye_dist * angle.cos(),
-            2.0,
-            eye_dist * angle.sin(),
-        );
+        let eye =
+            gup::shader_function::Vec3::new(eye_dist * angle.cos(), 2.0, eye_dist * angle.sin());
 
         let size = self.window.as_ref().unwrap().inner_size();
         let aspect = size.width as f32 / size.height.max(1) as f32;
@@ -540,11 +535,7 @@ impl App {
                         gpu.sphere_index_buffer.slice(..),
                         wgpu::IndexFormat::Uint32,
                     );
-                    pass.draw_indexed(
-                        0..gpu.num_sphere_indices,
-                        0,
-                        0..gpu.num_sphere_instances,
-                    );
+                    pass.draw_indexed(0..gpu.num_sphere_indices, 0, 0..gpu.num_sphere_instances);
                 }
 
                 frame.finish()?;

@@ -614,7 +614,7 @@ impl super::LayoutEngine {
         };
 
         let effective_max_depth = options.max_depth.unwrap_or(max_depth);
-        let workgroups = (n as u32 + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
+        let workgroups = (n as u32).div_ceil(WORKGROUP_SIZE);
 
         for depth in 0..=effective_max_depth.min(max_depth) {
             let params = GpuTreemapParams {
@@ -742,7 +742,7 @@ impl super::LayoutEngine {
         use wgpu::util::DeviceExt;
 
         let n = values.len() as u32;
-        let num_blocks = (n + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
+        let num_blocks = n.div_ceil(WORKGROUP_SIZE);
 
         let input_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("prefix_input"),

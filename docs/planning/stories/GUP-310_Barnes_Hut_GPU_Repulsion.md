@@ -2,8 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Advanced Scale **Status**: ✅ Complete **Created**:
-2025-07-19
+**Initiative**: Advanced Scale **Status**: ✅ Complete **Created**: 2025-07-19
 
 ## Context
 
@@ -62,31 +61,30 @@ mass → traverse tree for each node.
   from 2D node positions, producing a flat `Vec<BHCell>` for GPU upload. Handles
   coincident bodies via MAX_DEPTH=20 limit.
 - **Barnes-Hut WGSL Shader** (`barnes_hut.wgsl`) — Stack-based iterative tree
-  traversal compute shader. Uses the theta criterion
-  (cell_width / distance < theta) to decide between centre-of-mass
-  approximation and cell opening.
+  traversal compute shader. Uses the theta criterion (cell_width / distance <
+  theta) to decide between centre-of-mass approximation and cell opening.
 - **`ForceDirected::approximation_theta(f32)`** — New builder method with
-  default 0.5. When theta > 0, the engine uses Barnes-Hut; when theta = 0,
-  it falls back to exact O(n²) pairwise repulsion.
+  default 0.5. When theta > 0, the engine uses Barnes-Hut; when theta = 0, it
+  falls back to exact O(n²) pairwise repulsion.
 - **Dual iteration loops** — `run_exact_loop()` (batched O(n²)) and
   `run_barnes_hut_loop()` (per-iteration tree rebuild with O(n log n) GPU
   traversal), with shared encoder helpers.
-- **BH pipeline infrastructure** — Separate shader module, pipeline layout
-  with two bind groups (group 0: shared buffers, group 1: tree buffer),
-  and per-iteration bind group creation for the tree.
+- **BH pipeline infrastructure** — Separate shader module, pipeline layout with
+  two bind groups (group 0: shared buffers, group 1: tree buffer), and
+  per-iteration bind group creation for the tree.
 
 ### Key Files Changed
 
-| File | Description |
-| --- | --- |
-| `src/layout/types.rs` | `approximation_theta` field, `BHCell` struct, `theta` in `GpuSimParams` |
-| `src/layout/quadtree.rs` | CPU quadtree builder (new file) |
-| `src/layout/barnes_hut.wgsl` | BH traversal compute shader (new file) |
-| `src/layout/engine.rs` | Dual iteration loops, BH pipeline, encoder helpers |
-| `src/layout/force_layout.wgsl` | `_pad` → `theta` in SimParams |
-| `src/layout.rs` | Module registration for `quadtree` |
-| `tests/layout_integration.rs` | 6 new BH-specific tests |
-| `benches/force_layout_benchmarks.rs` | Exact vs BH benchmark variants |
+| File                                 | Description                                                             |
+| ------------------------------------ | ----------------------------------------------------------------------- |
+| `src/layout/types.rs`                | `approximation_theta` field, `BHCell` struct, `theta` in `GpuSimParams` |
+| `src/layout/quadtree.rs`             | CPU quadtree builder (new file)                                         |
+| `src/layout/barnes_hut.wgsl`         | BH traversal compute shader (new file)                                  |
+| `src/layout/engine.rs`               | Dual iteration loops, BH pipeline, encoder helpers                      |
+| `src/layout/force_layout.wgsl`       | `_pad` → `theta` in SimParams                                           |
+| `src/layout.rs`                      | Module registration for `quadtree`                                      |
+| `tests/layout_integration.rs`        | 6 new BH-specific tests                                                 |
+| `benches/force_layout_benchmarks.rs` | Exact vs BH benchmark variants                                          |
 
 ### Test Counts
 
@@ -96,15 +94,15 @@ mass → traverse tree for each node.
 
 ### Performance Results
 
-| Graph Size | Mode | Iterations | Wall Time | Hardware |
-| --- | --- | --- | --- | --- |
-| 1K nodes | BH (θ=0.5) | 50 | ~0.28s | Integrated GPU |
-| 10K nodes | BH (θ=0.5) | 200 | ~2.03s | Integrated GPU |
-| 100K nodes | BH (θ=0.5) | 30 | **~4.76s** | Integrated GPU |
-| 100K nodes | Exact (θ=0) | 30 | ~20s | Integrated GPU |
+| Graph Size | Mode        | Iterations | Wall Time  | Hardware       |
+| ---------- | ----------- | ---------- | ---------- | -------------- |
+| 1K nodes   | BH (θ=0.5)  | 50         | ~0.28s     | Integrated GPU |
+| 10K nodes  | BH (θ=0.5)  | 200        | ~2.03s     | Integrated GPU |
+| 100K nodes | BH (θ=0.5)  | 30         | **~4.76s** | Integrated GPU |
+| 100K nodes | Exact (θ=0) | 30         | ~20s       | Integrated GPU |
 
-The Barnes-Hut approximation achieves a **~4× speedup** at 100K nodes,
-bringing the layout time under the ≤5 second target on integrated GPU.
+The Barnes-Hut approximation achieves a **~4× speedup** at 100K nodes, bringing
+the layout time under the ≤5 second target on integrated GPU.
 
 ## Retrospective
 
@@ -118,22 +116,23 @@ bringing the layout time under the ≤5 second target on integrated GPU.
   requires parallel insertion with atomics, which is hard to get right in WGSL
   where only integer atomics are available (no atomic float operations for
   centre-of-mass accumulation).
-- **Solution**: Build the quadtree on CPU (fast, O(n log n)) and upload the
-  flat `Vec<BHCell>` to GPU each iteration. The GPU performs the embarrassingly
+- **Solution**: Build the quadtree on CPU (fast, O(n log n)) and upload the flat
+  `Vec<BHCell>` to GPU each iteration. The GPU performs the embarrassingly
   parallel tree traversal for force computation.
 - **Pattern**: For tree/graph data structures that change each frame, a
-  CPU-build + GPU-traverse hybrid can be simpler and nearly as fast as a
-  full GPU approach. The CPU build adds ~5–10ms for 100K nodes, negligible
-  compared to the repulsion compute savings.
+  CPU-build + GPU-traverse hybrid can be simpler and nearly as fast as a full
+  GPU approach. The CPU build adds ~5–10ms for 100K nodes, negligible compared
+  to the repulsion compute savings.
 
 #### Recovering Old Body Position from Updated COM
 
 - **Challenge**: When splitting a leaf cell that already had its centre of mass
-  updated (mass went from 1 to 2), we need to recover the original body
-  position to re-insert it into the correct child quadrant.
+  updated (mass went from 1 to 2), we need to recover the original body position
+  to re-insert it into the correct child quadrant.
 - **Solution**: Use the formula `old_pos = com * new_mass - new_body_pos` which
-  inverts the incremental COM update. This works because `new_com = (old_pos * 1
-  + new_pos) / 2`, so `old_pos = new_com * 2 - new_pos`.
+  inverts the incremental COM update. This works because `new_com = (old_pos \*
+  1
+  - new_pos) / 2`, so `old_pos = new_com \* 2 - new_pos`.
 - **Pattern**: When maintaining running aggregates (COM, mean, etc.) and needing
   to undo or decompose them, keep the math invertible. An alternative is to
   store the original body position alongside the COM, but the algebraic recovery
@@ -195,11 +194,11 @@ bringing the layout time under the ≤5 second target on integrated GPU.
 
 #### Stack-Based Iterative Tree Traversal in WGSL
 
-- **Decision**: Used a fixed-size stack array (`array<i32, 64>`) in the
-  compute shader for iterative tree traversal instead of recursive calls.
+- **Decision**: Used a fixed-size stack array (`array<i32, 64>`) in the compute
+  shader for iterative tree traversal instead of recursive calls.
 - **Reasoning**: WGSL does not support recursion. A depth of 64 is more than
-  sufficient for any reasonable quadtree (MAX_DEPTH=20 on CPU, and each
-  internal node has at most 4 children).
+  sufficient for any reasonable quadtree (MAX_DEPTH=20 on CPU, and each internal
+  node has at most 4 children).
 - **Trade-off**: The fixed stack size wastes a small amount of per-thread
   memory, but WGSL local arrays are register-allocated.
 
@@ -209,21 +208,21 @@ bringing the layout time under the ≤5 second target on integrated GPU.
   tests passed with the new default theta=0.5, confirming BH produces
   qualitatively correct layouts.
 - Decomposing the engine iteration loop into `run_exact_loop()` and
-  `run_barnes_hut_loop()` with shared `encode_*` helpers kept the code clean
-  and avoided massive duplication.
+  `run_barnes_hut_loop()` with shared `encode_*` helpers kept the code clean and
+  avoided massive duplication.
 - The `--test-threads=1` requirement was critical as usual for GPU tests.
-- Testing with small graphs (2–8 nodes) first was essential for verifying
-  the BH shader produced correct forces before scaling up.
-- The force_directed_graph example served as an excellent end-to-end
-  validation tool with its timing output.
+- Testing with small graphs (2–8 nodes) first was essential for verifying the BH
+  shader produced correct forces before scaling up.
+- The force_directed_graph example served as an excellent end-to-end validation
+  tool with its timing output.
 
 ### Follow-up Stories
 
 1. **GUP-312: Full GPU Quadtree Construction** — Implement Morton-code-based
-   parallel quadtree construction entirely on GPU using compute shaders, eliminating
-   the per-iteration CPU→GPU readback. This would further improve Barnes-Hut
-   performance for very large graphs (500K+ nodes) where the CPU tree build and
-   data transfer become significant.
+   parallel quadtree construction entirely on GPU using compute shaders,
+   eliminating the per-iteration CPU→GPU readback. This would further improve
+   Barnes-Hut performance for very large graphs (500K+ nodes) where the CPU tree
+   build and data transfer become significant.
 
 2. **GUP-313: Adaptive Barnes-Hut Theta Tuning** — Automatically adjust the
    theta parameter based on graph density and convergence rate. Dense clusters

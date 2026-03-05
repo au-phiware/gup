@@ -8,8 +8,8 @@
 
 GUP-311 renders graph nodes as coloured circles but lacks text labels. Adding
 node labels would make graph visualisations far more informative, especially for
-social networks, dependency graphs, and knowledge graphs. The project already has
-an SDF text rendering pipeline (`TextRenderer`, `FontAtlas`) that could be
+social networks, dependency graphs, and knowledge graphs. The project already
+has an SDF text rendering pipeline (`TextRenderer`, `FontAtlas`) that could be
 integrated.
 
 ## User Story

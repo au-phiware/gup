@@ -4,8 +4,7 @@
 
 **Initiative**: Selection API  
 **Status**: ✅ Complete  
-**Completed**: 2025-07-26
-**Created**: 2025-07-25
+**Completed**: 2025-07-26 **Created**: 2025-07-25
 
 ## Context
 
@@ -65,8 +64,8 @@ infrastructure.
 
 ### What Was Implemented
 
-- **`DelayFn<T>` type** — Type-erased closure `(usize, &T) -> u64` for
-  computing per-element delays, with `Send + Sync` on native targets.
+- **`DelayFn<T>` type** — Type-erased closure `(usize, &T) -> u64` for computing
+  per-element delays, with `Send + Sync` on native targets.
 - **`ElementTransition.delay_ms`** — Optional `u64` field storing the
   per-element delay computed by the delay function.
 - **`TransitionBuilder::delay_fn()`** — Fluent API method accepting a closure
@@ -83,11 +82,11 @@ infrastructure.
 
 ### Key Files Changed
 
-| File | Change |
-|------|--------|
-| `src/transition/builder.rs` | `DelayFn`, `delay_fn()`, `delay_ms` field, `CommittedTransition` helpers, 8 new tests |
-| `src/selection.rs` | Per-element `eased_t` in `build_transition_instances`, staggered `tick_transition`, 3 new tests |
-| `examples/data_transition_scatter.rs` | Staggered entry demo section |
+| File                                  | Change                                                                                          |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `src/transition/builder.rs`           | `DelayFn`, `delay_fn()`, `delay_ms` field, `CommittedTransition` helpers, 8 new tests           |
+| `src/selection.rs`                    | Per-element `eased_t` in `build_transition_instances`, staggered `tick_transition`, 3 new tests |
+| `examples/data_transition_scatter.rs` | Staggered entry demo section                                                                    |
 
 ### Test Counts
 
@@ -130,7 +129,7 @@ infrastructure.
 #### Additive Delay Semantics
 
 - **Decision**: When both `.delay()` and `.delay_fn()` are specified, the global
-  delay is *added* to each per-element delay rather than the per-element delay
+  delay is _added_ to each per-element delay rather than the per-element delay
   replacing the global one.
 - **Reasoning**: Additive semantics are more intuitive and composable — a global
   delay shifts the entire stagger pattern forward in time. This matches CSS

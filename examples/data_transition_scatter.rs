@@ -252,14 +252,8 @@ fn main() {
     if let Some(ct) = staggered {
         println!("Staggered transition committed:");
         println!("  Duration: {} ms", ct.config.duration_ms);
-        println!(
-            "  Max effective delay: {} ms",
-            ct.max_effective_delay()
-        );
-        println!(
-            "  Total time: {} ms",
-            ct.total_ms()
-        );
+        println!("  Max effective delay: {} ms", ct.max_effective_delay());
+        println!("  Total time: {} ms", ct.total_ms());
         println!("  Enter elements: {}", ct.enter_count);
 
         for (i, el) in ct.elements.iter().enumerate() {
@@ -278,10 +272,7 @@ fn main() {
         let mut t = 0.0;
         while t <= total {
             let still_active = stagger_sel.tick_transition(if t == 0.0 { 0.0 } else { step });
-            println!(
-                "  t={:.0}ms — active: {}",
-                t, still_active
-            );
+            println!("  t={:.0}ms — active: {}", t, still_active);
             t += step;
         }
     }

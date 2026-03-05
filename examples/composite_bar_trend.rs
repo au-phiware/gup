@@ -142,10 +142,10 @@ impl App {
 
                     {
                         let mut rp = frame.render_pass(Some(bg));
-                        if let Some(chart) = &self.chart {
-                            if let Err(e) = chart.draw(&mut rp) {
-                                eprintln!("Draw error: {e}");
-                            }
+                        if let Some(chart) = &self.chart
+                            && let Err(e) = chart.draw(&mut rp)
+                        {
+                            eprintln!("Draw error: {e}");
                         }
                     }
 

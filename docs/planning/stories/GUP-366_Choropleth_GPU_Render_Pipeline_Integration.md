@@ -2,9 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Chart Builders
-**Status**: 📋 Planned
-**Created**: 2025-07-18
+**Initiative**: Chart Builders **Status**: 📋 Planned **Created**: 2025-07-18
 
 ## Context
 
@@ -34,8 +32,8 @@ storage-buffer colour lookup path rather than per-vertex colours.
       the pipeline.
 - [ ] Calling `update_colors()` followed by `queue.write_buffer()` dynamically
       recolours the rendered choropleth without re-creating any GPU resources.
-- [ ] A visual example renders a choropleth and dynamically switches between
-      two datasets.
+- [ ] A visual example renders a choropleth and dynamically switches between two
+      datasets.
 
 ## Dependencies
 

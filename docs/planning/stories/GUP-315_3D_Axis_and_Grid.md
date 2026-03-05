@@ -76,11 +76,11 @@ adds the higher-level axis/grid layout logic.
 
 ### Key files changed
 
-| File | Change |
-|------|--------|
-| `src/axis3d.rs` | New — Axis3D, Grid3D, TickLabel3D structs |
-| `src/lib.rs` | Added `pub mod axis3d` declaration |
-| `examples/scatter_3d_with_axes.rs` | New — interactive 3D scatter + axes demo |
+| File                               | Change                                    |
+| ---------------------------------- | ----------------------------------------- |
+| `src/axis3d.rs`                    | New — Axis3D, Grid3D, TickLabel3D structs |
+| `src/lib.rs`                       | Added `pub mod axis3d` declaration        |
+| `examples/scatter_3d_with_axes.rs` | New — interactive 3D scatter + axes demo  |
 
 ### Test counts
 
@@ -97,8 +97,8 @@ adds the higher-level axis/grid layout logic.
 #### Line3D Pipeline Integration
 
 - **Challenge**: Setting up a second render pipeline (Line3D) alongside the
-  existing Sphere3D pipeline in a single render pass, sharing the camera
-  uniform buffer.
+  existing Sphere3D pipeline in a single render pass, sharing the camera uniform
+  buffer.
 - **Solution**: The Line3D shader uses a simpler bind group layout (no light
   uniform at group 1 binding 1), so a separate pipeline layout is needed. Both
   pipelines share the same camera buffer via their respective bind groups.
@@ -123,8 +123,8 @@ adds the higher-level axis/grid layout logic.
 - **Decision**: Generate axis/grid `Line3DInstance` data on the CPU and upload
   once, rather than using a compute shader.
 - **Reasoning**: Axis and grid geometry is static (or changes only on
-  configuration change), so GPU compute would add complexity for no benefit.
-  CPU generation is trivial and the data is small (tens of instances).
+  configuration change), so GPU compute would add complexity for no benefit. CPU
+  generation is trivial and the data is small (tens of instances).
 - **Trade-off**: If axes needed to update every frame (e.g. dynamic range), GPU
   generation would be more efficient.
 - **Future**: Dynamic axis ranges (e.g. auto-scaling to data bounds) could be

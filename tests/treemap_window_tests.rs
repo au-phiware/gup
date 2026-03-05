@@ -178,7 +178,7 @@ async fn treemap_layout_produces_cells_for_all_algorithms() {
         let result = engine
             .treemap_layout(&nodes, &values, viewport, &options)
             .await
-            .expect(&format!("treemap layout failed for {algo:?}"));
+            .unwrap_or_else(|_| panic!("treemap layout failed for {algo:?}"));
         let cells = result.cells();
         assert!(
             !cells.is_empty(),

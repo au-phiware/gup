@@ -7,23 +7,24 @@
 ## Context
 
 The `apply_accessors_to_selection` function in the chart builder pipeline
-currently uses placeholder closures for position mapping — returning `[0.0, 0.0]`
-for all data points. GUP-303 worked around this by appending override attr
-bindings in `build_layer()`, but the proper fix is to connect the accessor
-functions directly to GPU-side scale transformations. This would enable
+currently uses placeholder closures for position mapping — returning
+`[0.0, 0.0]` for all data points. GUP-303 worked around this by appending
+override attr bindings in `build_layer()`, but the proper fix is to connect the
+accessor functions directly to GPU-side scale transformations. This would enable
 scatter/bar charts built outside the composite builder to render data-driven
 positions automatically.
 
 ## User Story
 
-> "As a chart builder user, I want the x/y accessors I provide to ScatterPlotBuilder
-> and BarChartBuilder to produce correctly positioned marks on screen without needing
-> manual attr binding overrides."
+> "As a chart builder user, I want the x/y accessors I provide to
+> ScatterPlotBuilder and BarChartBuilder to produce correctly positioned marks
+> on screen without needing manual attr binding overrides."
 
 ## Acceptance Criteria
 
-- [ ] `apply_accessors_to_selection` evaluates the accessor functions against each
-      data item and passes the resulting values to the position attr binding.
+- [ ] `apply_accessors_to_selection` evaluates the accessor functions against
+      each data item and passes the resulting values to the position attr
+      binding.
 - [ ] The x_scale and y_scale from ChartConfig are applied to map data positions
       to NDC.
 - [ ] ScatterPlotBuilder produces visible scatter points when built standalone
@@ -55,8 +56,8 @@ positions automatically.
 
 ## Risk Assessment
 
-- **Low**: The accessor and scale infrastructure already exist; this is primarily
-  a wiring task connecting existing components.
+- **Low**: The accessor and scale infrastructure already exist; this is
+  primarily a wiring task connecting existing components.
 
 ## Definition of Done
 

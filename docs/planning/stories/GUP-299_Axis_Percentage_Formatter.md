@@ -60,17 +60,18 @@ the builder is not consumed during rendering.
    `with_x_label_formatter()` / `with_y_label_formatter()`.
 
 3. **`ConfigurableBuilder` trait extension**: Added `x_tick_format()` and
-   `y_tick_format()` methods to the `ConfigurableBuilder` trait, implemented
-   for all 9 chart builders.
+   `y_tick_format()` methods to the `ConfigurableBuilder` trait, implemented for
+   all 9 chart builders.
 
 4. **Axis rendering integration**: All 4 `generate_label_data` call sites in
    `ComposedChart` now pass through the configured formatter via the helper
    `ChartConfig::label_formatter_for(position)`.
 
-5. **Auto-percentage for normalised mode**: Both `AreaChartBuilder::build_with_data`
-   and `build_filled` automatically set the y-axis formatter to
-   `PercentFormatter::new()` when `stack_mode == StackMode::Normalized` and no
-   custom formatter was explicitly set.
+5. **Auto-percentage for normalised mode**: Both
+   `AreaChartBuilder::build_with_data` and `build_filled` automatically set the
+   y-axis formatter to `PercentFormatter::new()` when
+   `stack_mode == StackMode::Normalized` and no custom formatter was explicitly
+   set.
 
 ### Key Files Changed
 
@@ -78,7 +79,8 @@ the builder is not consumed during rendering.
 - `src/chart_builder.rs` — `ChartConfig` fields, helper, render integration
 - `src/chart_builder/builders.rs` — `ConfigurableBuilder` trait extension
 - `src/chart_builder/builders/area.rs` — auto-percent logic + 6 new tests
-- `src/chart_builder/builders/{bar,boxplot,composite,density,heatmap/mod,line,scatter,violin}.rs` — trait implementations
+- `src/chart_builder/builders/{bar,boxplot,composite,density,heatmap/mod,line,scatter,violin}.rs`
+  — trait implementations
 - `src/chart_builder/builders/scatter.rs` — cross-builder formatter test
 - `src/chart_builder/builders/line.rs` — cross-builder formatter test
 
@@ -104,8 +106,8 @@ the builder is not consumed during rendering.
 - **Solution**: Used `Option<Arc<dyn LabelFormatter>>` instead of
   `Option<Box<dyn LabelFormatter>>`. `Arc` implements `Clone` via reference
   counting, which works naturally with derive macros.
-- **Pattern**: When a struct derives `Clone` and needs to hold trait objects, use
-  `Arc<dyn Trait>` instead of `Box<dyn Trait>`. This also enables zero-cost
+- **Pattern**: When a struct derives `Clone` and needs to hold trait objects,
+  use `Arc<dyn Trait>` instead of `Box<dyn Trait>`. This also enables zero-cost
   sharing of formatters across cloned configs.
 
 #### Centralising Formatter Lookup
@@ -113,8 +115,8 @@ the builder is not consumed during rendering.
 - **Challenge**: There were 4 separate `generate_label_data` call sites in
   `ComposedChart` that all needed the formatter plumbed through.
 - **Solution**: Added a `ChartConfig::label_formatter_for(position)` helper that
-  maps `AxisPosition` → `Option<&dyn LabelFormatter>`, keeping each call site
-  to a single-line change.
+  maps `AxisPosition` → `Option<&dyn LabelFormatter>`, keeping each call site to
+  a single-line change.
 - **Pattern**: When a configuration value needs to be routed to multiple
   consumers based on context (e.g. axis position), add a lookup helper on the
   config struct rather than duplicating the match logic.
@@ -151,9 +153,10 @@ the builder is not consumed during rendering.
 
 - The story was very well-scoped — all 5 acceptance criteria mapped cleanly to
   discrete implementation steps.
-- The existing `LabelFormatter` trait and `NumericFormatter::percentage()` method
-  provided good prior art. `PercentFormatter` was purpose-built for axis labels
-  with simpler semantics (always multiply by 100, integer precision by default).
+- The existing `LabelFormatter` trait and `NumericFormatter::percentage()`
+  method provided good prior art. `PercentFormatter` was purpose-built for axis
+  labels with simpler semantics (always multiply by 100, integer precision by
+  default).
 - Running `mask all-fix` revealed no new warnings in the gup lib — only
   pre-existing markdown lint issues in other story files and pre-existing dead
   code warnings in `gup-macros`.

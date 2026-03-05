@@ -22,18 +22,17 @@ placed below the plot area.
 ## Acceptance Criteria
 
 - [ ] `ColorbarRenderer::generate_geometry` supports
-      `ColorbarOrientation::Horizontal`, placing the strip below the chart
-      area.
+      `ColorbarOrientation::Horizontal`, placing the strip below the chart area.
 - [ ] Tick marks and labels are placed along the bottom of the horizontal strip
       using `AxisPosition::Bottom`.
-- [ ] The heatmap builder (or any chart builder) can switch orientation via
-      a `.colorbar_orientation(Horizontal)` method.
+- [ ] The heatmap builder (or any chart builder) can switch orientation via a
+      `.colorbar_orientation(Horizontal)` method.
 - [ ] Unit tests validate horizontal geometry dimensions and label positions.
 
 ## Technical Tasks
 
-- [ ] Extend `ColorbarRenderer::generate_gradient_strip` and
-      `generate_outline` to handle horizontal layout.
+- [ ] Extend `ColorbarRenderer::generate_gradient_strip` and `generate_outline`
+      to handle horizontal layout.
 - [ ] Use `AxisPosition::Bottom` for tick and label generation in horizontal
       mode.
 - [ ] Add builder method to `HeatmapBuilder` and/or `ColorbarConfig`.

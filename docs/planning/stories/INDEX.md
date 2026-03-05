@@ -976,9 +976,8 @@ layouts, and 3D visualization.
   GUP-010 ✅, GUP-131 ✅.
 - [GUP-315](GUP-315_3D_Axis_and_Grid.md) ✅ — 3D axis lines, tick marks, and
   ground-plane grid using Line3D marks and the Camera uniform. Deps: GUP-261 ✅.
-- [GUP-373](GUP-373_Billboard_Text_Labels_3D_Axes.md) 📋 — Billboard text
-  labels for 3D axis tick values using TextRenderer. Deps: GUP-315 ✅,
-  GUP-261 ✅.
+- [GUP-373](GUP-373_Billboard_Text_Labels_3D_Axes.md) 📋 — Billboard text labels
+  for 3D axis tick values using TextRenderer. Deps: GUP-315 ✅, GUP-261 ✅.
 - [GUP-316](GUP-316_GPU_Integration_Test_3D.md) 🚧 — GPU integration tests for
   3D marks: headless rendering of Sphere3D/Box3D/Line3D with pixel readback
   verification. Deps: GUP-261 ✅.

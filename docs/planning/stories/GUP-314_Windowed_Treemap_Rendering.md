@@ -71,11 +71,11 @@ layout → GPU rendering, and serve as a visual regression baseline.
 
 ### Key files changed
 
-| File                              | Change                                   |
-| --------------------------------- | ---------------------------------------- |
-| `examples/treemap_window.rs`      | New windowed treemap example (605 lines) |
-| `tests/treemap_window_tests.rs`   | New GPU smoke tests (3 tests)            |
-| `docs/planning/stories/INDEX.md`  | Status update                            |
+| File                             | Change                                   |
+| -------------------------------- | ---------------------------------------- |
+| `examples/treemap_window.rs`     | New windowed treemap example (605 lines) |
+| `tests/treemap_window_tests.rs`  | New GPU smoke tests (3 tests)            |
+| `docs/planning/stories/INDEX.md` | Status update                            |
 
 ### Test counts
 
@@ -93,8 +93,9 @@ layout → GPU rendering, and serve as a visual regression baseline.
 - **Challenge**: Treemap layout produces cells in pixel coordinates (top-left
   origin, positive-Y down) but Rectangle marks expect clip-space coordinates
   (centre-based, [-1,1] range, positive-Y up).
-- **Solution**: Simple linear mapping: `cx = (center_x / viewport_width) * 2 -
-  1` and `cy = -(center_y / viewport_height) * 2 - 1` (note Y flip).
+- **Solution**: Simple linear mapping:
+  `cx = (center_x / viewport_width) * 2 - 1` and
+  `cy = -(center_y / viewport_height) * 2 - 1` (note Y flip).
 - **Pattern**: When wiring layout outputs to mark instances, always document the
   coordinate system transformation explicitly.
 
@@ -112,8 +113,8 @@ layout → GPU rendering, and serve as a visual regression baseline.
 #### Dual GPU Context Pattern
 
 - **Challenge**: The layout engine (`LayoutEngine::new()`) requires a
-  `RenderContext`, while windowed rendering uses `GupContext`. These are separate
-  GPU contexts with separate devices.
+  `RenderContext`, while windowed rendering uses `GupContext`. These are
+  separate GPU contexts with separate devices.
 - **Solution**: Created two contexts — one headless `RenderContext` for layout,
   one `GupContext` with surface for rendering. This wastes GPU memory on
   integrated GPUs.
@@ -125,8 +126,8 @@ layout → GPU rendering, and serve as a visual regression baseline.
 
 #### Lazy Re-Layout on Demand
 
-- **Decision**: Treemap layout is re-run only when `needs_layout` is set (resize,
-  algorithm change, colour mode change), not every frame.
+- **Decision**: Treemap layout is re-run only when `needs_layout` is set
+  (resize, algorithm change, colour mode change), not every frame.
 - **Reasoning**: Layout is expensive (GPU compute + readback). For a static
   treemap, re-running it 60× per second is wasteful.
 - **Trade-off**: Slightly more state management vs significantly better
@@ -148,8 +149,8 @@ layout → GPU rendering, and serve as a visual regression baseline.
 ### Development Workflow Insights
 
 - The existing `interactive_graph.rs` example was an excellent template —
-  following its patterns for GupContext lifecycle, Selection rendering, and event
-  handling made implementation straightforward.
+  following its patterns for GupContext lifecycle, Selection rendering, and
+  event handling made implementation straightforward.
 - The treemap CLI example (`treemap.rs`) already had the tree generation and
   colour mapping logic. Reusing those functions (with minor adaptation) kept the
   windowed example focused on rendering concerns.

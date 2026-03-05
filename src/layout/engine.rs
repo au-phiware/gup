@@ -216,7 +216,7 @@ impl LayoutEngine {
         });
 
         // ---- Treemap pipelines ----
-        let treemap_pipelines = super::treemap::TreemapPipelines::new(&device);
+        let treemap_pipelines = super::treemap::TreemapPipelines::new(device);
 
         // We clone device/queue handles so the engine is self-contained.
         Ok(Self {

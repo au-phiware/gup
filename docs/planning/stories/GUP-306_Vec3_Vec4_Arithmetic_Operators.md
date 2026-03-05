@@ -49,11 +49,11 @@ vector types.
 ### What was implemented
 
 - **Vec3**: `Add`, `Sub`, `Mul`, `Div` (component-wise), `Mul<f32>`,
-  `Mul<Vec3> for f32`, `Div<f32>` (scalar), `From<[f32; 3]>`, `From<Vec3> for
-  [f32; 3]>` — all operations preserve `_padding = 0.0`
+  `Mul<Vec3> for f32`, `Div<f32>` (scalar), `From<[f32; 3]>`,
+  `From<Vec3> for [f32; 3]>` — all operations preserve `_padding = 0.0`
 - **Vec4**: `Add`, `Sub`, `Mul`, `Div` (component-wise), `Mul<f32>`,
-  `Mul<Vec4> for f32`, `Div<f32>` (scalar), `From<[f32; 4]>`, `From<Vec4> for
-  [f32; 4]>`
+  `Mul<Vec4> for f32`, `Div<f32>` (scalar), `From<[f32; 4]>`,
+  `From<Vec4> for [f32; 4]>`
 
 ### Key files changed
 

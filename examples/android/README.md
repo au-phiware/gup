@@ -5,13 +5,13 @@ GPU-accelerated live line chart with simulated streaming data.
 
 ## Prerequisites
 
-| Tool             | Version         | Notes                                      |
-| ---------------- | --------------- | ------------------------------------------ |
-| Android SDK      | API 34          | `sdkmanager "platforms;android-34"`        |
-| Android NDK      | r27c            | `sdkmanager "ndk;27.2.12479018"`          |
-| Rust toolchain   | nightly/stable  | With `aarch64-linux-android` target        |
-| `cargo-ndk`      | ≥ 3.5           | `cargo install cargo-ndk`                  |
-| JDK              | 17+             | Required by AGP 8.x                        |
+| Tool           | Version        | Notes                               |
+| -------------- | -------------- | ----------------------------------- |
+| Android SDK    | API 34         | `sdkmanager "platforms;android-34"` |
+| Android NDK    | r27c           | `sdkmanager "ndk;27.2.12479018"`    |
+| Rust toolchain | nightly/stable | With `aarch64-linux-android` target |
+| `cargo-ndk`    | ≥ 3.5          | `cargo install cargo-ndk`           |
+| JDK            | 17+            | Required by AGP 8.x                 |
 
 ## Build Steps
 
@@ -85,9 +85,8 @@ ChartActivity (Kotlin)
 
 ## NDK Version
 
-This project is tested with NDK **r27c** (`27.2.12479018`). Other versions
-may work but are not guaranteed. Pin the NDK version in your
-`local.properties`:
+This project is tested with NDK **r27c** (`27.2.12479018`). Other versions may
+work but are not guaranteed. Pin the NDK version in your `local.properties`:
 
 ```properties
 ndk.dir=/path/to/android-ndk-r27c

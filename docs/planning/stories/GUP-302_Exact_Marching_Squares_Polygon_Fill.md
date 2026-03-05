@@ -68,8 +68,8 @@ smooth contour fills even at grid resolutions as low as 4×4.
 
 - **`BandState` enum**: Classifies each cell corner as Below, Inside, or Above
   relative to a band `[low, high)`.
-- **`cell_band_polygons()`**: Per-cell entry point that returns zero or more band
-  polygons, handling both normal and saddle configurations.
+- **`cell_band_polygons()`**: Per-cell entry point that returns zero or more
+  band polygons, handling both normal and saddle configurations.
 - **`boundary_walk_quad()`**: Walks the 4 cell edges collecting band polygon
   vertices in winding order for non-saddle cells.
 - **`triangle_band_polygon()`**: Handles triangle sub-cells produced by saddle
@@ -101,8 +101,8 @@ smooth contour fills even at grid resolutions as low as 4×4.
 
 #### Boundary-Walking Algorithm for Band Polygons
 
-- **Challenge**: Standard marching squares extracts iso-contour *lines* at a
-  single threshold. Filled contour bands require the polygon *area* between two
+- **Challenge**: Standard marching squares extracts iso-contour _lines_ at a
+  single threshold. Filled contour bands require the polygon _area_ between two
   thresholds, which is a fundamentally different geometric operation.
 - **Solution**: Classify each cell corner as Below/Inside/Above relative to the
   band, then walk the cell boundary collecting vertices: cell corners that are
@@ -129,9 +129,9 @@ smooth contour fills even at grid resolutions as low as 4×4.
 
 #### Top-Boundary Nudge for Inclusive Last Band
 
-- **Challenge**: The original `filled_contour_bands` used `[low, high)` half-open
-  intervals with `high = max_val` for the last band, causing cells at exactly
-  `max_val` to be classified as Above and excluded from all bands.
+- **Challenge**: The original `filled_contour_bands` used `[low, high)`
+  half-open intervals with `high = max_val` for the last band, causing cells at
+  exactly `max_val` to be classified as Above and excluded from all bands.
 - **Solution**: Nudge the top boundary to `max_val + epsilon` so the last band
   includes peak-density cells. Store the original `max_val` in the `ContourBand`
   struct so downstream consumers see the correct threshold.
@@ -165,8 +165,8 @@ smooth contour fills even at grid resolutions as low as 4×4.
 - **Trade-off**: No option to toggle between the old cell-average and new exact
   mode. If a user relied on the blocky cell-level behaviour, they would need to
   adapt.
-- **Future**: If performance profiling shows the exact mode is too slow for
-  very large grids, a fallback to the simpler approach could be added via a
+- **Future**: If performance profiling shows the exact mode is too slow for very
+  large grids, a fallback to the simpler approach could be added via a
   `DensityConfig` flag.
 
 ### Development Workflow Insights
@@ -178,13 +178,13 @@ smooth contour fills even at grid resolutions as low as 4×4.
   correctness check — it caught boundary accounting bugs that per-case vertex
   count tests missed.
 - The existing `density_scatter_overlay` example served as an integration
-  validation, confirming the new implementation works end-to-end with the
-  KDE pipeline.
+  validation, confirming the new implementation works end-to-end with the KDE
+  pipeline.
 
 ### Follow-up Stories
 
 No new stories identified. The GPU compute shader path
-(`density_marching_squares.compute.wgsl`) only extracts contour *lines*, not
+(`density_marching_squares.compute.wgsl`) only extracts contour _lines_, not
 filled bands, so it does not need a parallel update for this change. If GPU-side
 filled band extraction is needed in the future, GUP-301's infrastructure would
 support it.

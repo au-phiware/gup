@@ -31,7 +31,8 @@ consistency between CPU and GPU colour mapping.
 
 ### Prerequisite Stories
 
-- GUP-298: Filled Polygon Mark ✅ — identified the need via `sample_gradient_cpu`
+- GUP-298: Filled Polygon Mark ✅ — identified the need via
+  `sample_gradient_cpu`
 
 ## Testing Strategy
 

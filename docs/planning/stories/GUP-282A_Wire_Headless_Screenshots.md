@@ -25,8 +25,9 @@ so that `scripts/generate_gallery.sh` can produce actual PNG thumbnails.
 ## Acceptance Criteria
 
 - [ ] All 62 examples classified as `skip = false` in
-      `scripts/gallery_config.toml` check `gup::export::gallery::screenshot_request()`
-      at an appropriate point in their execution.
+      `scripts/gallery_config.toml` check
+      `gup::export::gallery::screenshot_request()` at an appropriate point in
+      their execution.
 - [ ] When `GUP_SCREENSHOT_PATH` is set, each example renders one frame
       offscreen, writes a PNG to the specified path, and exits with code 0.
 - [ ] When the variable is not set, examples behave exactly as before (no
@@ -38,13 +39,7 @@ so that `scripts/generate_gallery.sh` can produce actual PNG thumbnails.
 ## Technical Tasks
 
 - [ ] For each renderable example, add a check near the top of `main()`:
-      ```rust
-      if let Some(req) = gup::export::gallery::screenshot_request() {
-          // build chart / context...
-          chart.export_png(&req.path, req.width, req.height)?;
-          return Ok(());
-      }
-      ```
+      `rust     if let Some(req) = gup::export::gallery::screenshot_request() {         // build chart / context...         chart.export_png(&req.path, req.width, req.height)?;         return Ok(());     }     `
 - [ ] For examples that use `ComposedChart` (6 examples): the integration is
       straightforward — call `export_png` on the chart.
 - [ ] For console-only examples that were misclassified: move them to
@@ -56,8 +51,8 @@ so that `scripts/generate_gallery.sh` can produce actual PNG thumbnails.
 
 ### Prerequisite Stories
 
-- GUP-282: Example Gallery ✅ — provides the gallery infrastructure, config,
-  and `screenshot_request()` helper.
+- GUP-282: Example Gallery ✅ — provides the gallery infrastructure, config, and
+  `screenshot_request()` helper.
 - GUP-268: PNG Export ✅ — provides `export_png` / `render_to_png`.
 
 ## Testing Strategy
@@ -70,8 +65,8 @@ so that `scripts/generate_gallery.sh` can produce actual PNG thumbnails.
 ## Risk Assessment
 
 - **Medium**: Some examples may not produce meaningful visual output in headless
-  mode (e.g. animation examples that need multiple frames). Mark these as CI-skip
-  if the first frame is blank.
+  mode (e.g. animation examples that need multiple frames). Mark these as
+  CI-skip if the first frame is blank.
 - **Low**: Time cost — modifying 62 examples is mechanical but time-consuming.
 
 ## Definition of Done

@@ -17,14 +17,14 @@ reports any inconsistencies.
 ## User Story
 
 > "As a contributor adding a new example, I want CI to warn me if I forgot to
-> add it to the gallery config so that the gallery always reflects the full
-> set of examples."
+> add it to the gallery config so that the gallery always reflects the full set
+> of examples."
 
 ## Acceptance Criteria
 
-- [ ] A script (`scripts/check_gallery_sync.sh` or equivalent) compares
-      examples listed in `gallery_config.toml`, `examples/INDEX.md`, and
-      `Cargo.toml` `[[example]]` entries.
+- [ ] A script (`scripts/check_gallery_sync.sh` or equivalent) compares examples
+      listed in `gallery_config.toml`, `examples/INDEX.md`, and `Cargo.toml`
+      `[[example]]` entries.
 - [ ] The script reports examples present in one source but missing from
       another.
 - [ ] The script is integrated into the gallery CI workflow.

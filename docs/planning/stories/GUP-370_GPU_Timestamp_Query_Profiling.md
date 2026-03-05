@@ -8,9 +8,10 @@
 
 GUP-312 implemented GPU compute shaders for treemap layout but verified
 performance through wall-clock timing rather than GPU-side timestamp queries.
-wgpu supports timestamp queries that provide nanosecond-precision GPU-side timing
-for compute and render passes. Adding this instrumentation would enable precise
-performance measurement, regression detection, and comparison across GPU vendors.
+wgpu supports timestamp queries that provide nanosecond-precision GPU-side
+timing for compute and render passes. Adding this instrumentation would enable
+precise performance measurement, regression detection, and comparison across GPU
+vendors.
 
 ## User Story
 
@@ -22,7 +23,8 @@ performance measurement, regression detection, and comparison across GPU vendors
 
 - [ ] Timestamp queries before and after each treemap compute dispatch.
 - [ ] Results readable via `TimestampQuerySet` readback.
-- [ ] Performance report includes per-pass timing (prefix sum, layout per depth).
+- [ ] Performance report includes per-pass timing (prefix sum, layout per
+      depth).
 - [ ] Instrumentation has < 1% overhead when enabled.
 - [ ] Feature-gated so it can be disabled in production builds.
 

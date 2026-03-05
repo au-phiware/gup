@@ -16,8 +16,8 @@ region.
 ## User Story
 
 > "As a visualization developer, I want to highlight the hovered choropleth
-> region with a visible outline, so that users can clearly see which region
-> they are interacting with without altering the fill colour."
+> region with a visible outline, so that users can clearly see which region they
+> are interacting with without altering the fill colour."
 
 ## Acceptance Criteria
 

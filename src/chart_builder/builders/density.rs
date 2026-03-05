@@ -1751,7 +1751,7 @@ mod tests {
         // All triangle x-coordinates should be in [0.25, 0.75] ± ε.
         for &(x, _y) in &mid_band.triangles {
             assert!(
-                x >= 0.25 - 1e-4 && x <= 0.75 + 1e-4,
+                (0.25 - 1e-4..=0.75 + 1e-4).contains(&x),
                 "vertex x={x} outside expected [0.25, 0.75]"
             );
         }
