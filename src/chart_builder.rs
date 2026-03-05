@@ -2679,6 +2679,12 @@ where
             self.draw_grid_lines(&mut render_pass);
             self.draw_axis_lines(&mut render_pass);
             self.draw_ticks(&mut render_pass);
+
+            // 5. Draw data marks (circles, rects, lines, etc.) from the
+            //    Selection's GPU pipeline — if it has been prepared.
+            if self.visualization.is_render_ready() {
+                let _ = self.visualization.render(&mut render_pass);
+            }
         }
 
         // 5. Submit rendering commands.
@@ -2786,6 +2792,11 @@ where
             self.draw_grid_lines(&mut render_pass);
             self.draw_axis_lines(&mut render_pass);
             self.draw_ticks(&mut render_pass);
+
+            // 4. Draw data marks from the Selection's GPU pipeline.
+            if self.visualization.is_render_ready() {
+                let _ = self.visualization.render(&mut render_pass);
+            }
         }
 
         // 4. Submit rendering commands.

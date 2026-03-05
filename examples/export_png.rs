@@ -16,6 +16,7 @@
 //! ```
 
 use gup::chart_builder::{ChartConfig, ComposedChart, Margins, TitleAlignment, TitleConfig};
+use gup::mark::circle::CircleInstance;
 use gup::prelude::*;
 use std::sync::Arc;
 
@@ -84,8 +85,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     rt.block_on(async {
         let context = Arc::new(gup::RenderContext::new().await?);
 
-        let selection =
-            gup::selection::Selection::<DataPoint, gup::Circle>::new(data.clone(), context)?;
+        let mut selection = gup::selection::Selection::<DataPoint, gup::Circle>::new(
+            data.clone(),
+            context.clone(),
+        )?;
+
+        // Prepare GPU buffers so data marks appear in the exported PNG.
+        // Map data coordinates to clip space using the same linear scales
+        // configured on the chart axes.
+        selection.prepare_render(
+            context.device(),
+            context.queue(),
+            |d: &DataPoint| {
+                let cx = (d.x - x_min) / (x_max - x_min) * 2.0 - 1.0;
+                let cy = (d.y - y_min) / (y_max - y_min) * 2.0 - 1.0;
+                CircleInstance {
+                    center: [cx, cy],
+                    radius: 0.02,
+                    _pad0: 0.0,
+                    fill_color: [0.22, 0.46, 0.82, 1.0], // Steel blue
+                    stroke_width: 0.005,
+                    _pad1: [0.0; 3],
+                    stroke_color: [0.1, 0.1, 0.1, 1.0],
+                }
+            },
+            None,
+            None,
+        )?;
 
         let mut chart = ComposedChart::new(selection, config.clone()).with_default_axes();
 
