@@ -1144,7 +1144,7 @@ API reference generation, tutorials, and example gallery.
 
 ## Follow-ups from GUP-284
 
-- [GUP-286](GUP-286_Line_Chart_Data_Mark_Rendering.md) 🚧 — Wire line-mark
+- [GUP-286](GUP-286_Line_Chart_Data_Mark_Rendering.md) ✅ — Wire line-mark
   rendering into `LineChartBuilder` so that `render_to_png()` produces visible
   line segments. Deps: GUP-284 ✅.
 - [GUP-287](GUP-287_Dynamic_Data_Refresh.md) 📋 — Add a `refresh_data()` method
