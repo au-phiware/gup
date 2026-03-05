@@ -14,6 +14,10 @@
 //! * The chart definition serialised as JSON.
 //! * A WASM bootstrap script (URL-based by default).
 //!
+//! When the data type implements `Serialize`, the export can also embed
+//! the chart's data points in the JSON block (as a `ChartBundle`),
+//! making the file fully self-contained.
+//!
 //! Run with:
 //!
 //! ```sh
@@ -26,8 +30,7 @@ use gup::prelude::*;
 use std::sync::Arc;
 
 /// A data point for the scatter plot.
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct DataPoint {
     x: f32,
     y: f32,
@@ -122,6 +125,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let meta_custom = std::fs::metadata(output_custom)?;
         println!("Wrote {output_custom} ({} bytes)", meta_custom.len());
 
+        // --- Export with embedded data (self-contained) ---
+        let output_data = "chart_with_data.html";
+        chart.export_html_with_data(output_data)?;
+        let meta_data = std::fs::metadata(output_data)?;
+        println!("Wrote {output_data} ({} bytes)", meta_data.len());
+
+        // Verify the data-embedded output contains a ChartBundle.
+        let data_html = std::fs::read_to_string(output_data)?;
+        let has_data = data_html.contains(r#""data""#) && data_html.contains(r#""config""#);
+        println!("\nData embedding:");
+        println!("  ChartBundle:  {has_data}");
+
         // Verify the output contains expected markers.
         let html = std::fs::read_to_string(output_url)?;
         let has_doctype = html.starts_with("<!DOCTYPE html>");
@@ -140,7 +155,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok::<(), Box<dyn std::error::Error>>(())
     })?;
 
-    println!("\nDone! Check chart.html and chart_custom.html");
+    println!("\nDone! Check chart.html, chart_custom.html, and chart_with_data.html");
 
     Ok(())
 }
