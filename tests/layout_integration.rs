@@ -356,3 +356,243 @@ async fn layout_1k_random_graph_positions_finite() {
     }
     assert!(result.iterations_performed <= 50);
 }
+
+// ---------------------------------------------------------------------------
+// Barnes-Hut specific tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn approximation_theta_default() {
+    let fd = ForceDirected::new();
+    assert!(
+        (fd.approximation_theta - 0.5).abs() < f32::EPSILON,
+        "default theta should be 0.5, got {}",
+        fd.approximation_theta
+    );
+}
+
+#[test]
+fn approximation_theta_builder() {
+    let fd = ForceDirected::new().approximation_theta(0.8);
+    assert!(
+        (fd.approximation_theta - 0.8).abs() < f32::EPSILON,
+        "theta should be 0.8, got {}",
+        fd.approximation_theta
+    );
+}
+
+#[test]
+fn approximation_theta_clamped_to_zero() {
+    let fd = ForceDirected::new().approximation_theta(-1.0);
+    assert!(
+        fd.approximation_theta >= 0.0,
+        "theta must not be negative, got {}",
+        fd.approximation_theta
+    );
+}
+
+#[tokio::test]
+async fn theta_zero_falls_back_to_exact() {
+    let Some(ctx) = gpu_context().await else {
+        return;
+    };
+    let engine = LayoutEngine::new(&ctx).unwrap();
+
+    let nodes = vec![
+        LayoutNode {
+            id: 0,
+            x: -50.0,
+            y: 0.0,
+        },
+        LayoutNode {
+            id: 1,
+            x: 50.0,
+            y: 0.0,
+        },
+    ];
+    let edges = vec![LayoutEdge {
+        source: 0,
+        target: 1,
+    }];
+
+    // theta=0 should use exact pairwise repulsion (original code path).
+    let config = ForceDirected::new()
+        .approximation_theta(0.0)
+        .iterations(20)
+        .convergence_check_interval(10);
+    let result = engine
+        .force_directed_layout(&nodes, &edges, &config)
+        .await
+        .unwrap();
+
+    assert_eq!(result.positions.len(), 2);
+    for pos in &result.positions {
+        assert!(pos.x.is_finite());
+        assert!(pos.y.is_finite());
+    }
+}
+
+#[tokio::test]
+async fn barnes_hut_vs_exact_small_graph() {
+    // For a small graph, Barnes-Hut and exact repulsion should produce
+    // qualitatively similar layouts.
+    let Some(ctx) = gpu_context().await else {
+        return;
+    };
+    let engine = LayoutEngine::new(&ctx).unwrap();
+
+    let nodes: Vec<LayoutNode> = (0..8)
+        .map(|i| LayoutNode {
+            id: i,
+            x: 0.0,
+            y: 0.0,
+        })
+        .collect();
+    let edges = vec![
+        LayoutEdge {
+            source: 0,
+            target: 1,
+        },
+        LayoutEdge {
+            source: 1,
+            target: 2,
+        },
+        LayoutEdge {
+            source: 2,
+            target: 3,
+        },
+        LayoutEdge {
+            source: 3,
+            target: 4,
+        },
+        LayoutEdge {
+            source: 4,
+            target: 5,
+        },
+        LayoutEdge {
+            source: 5,
+            target: 6,
+        },
+        LayoutEdge {
+            source: 6,
+            target: 7,
+        },
+        LayoutEdge {
+            source: 7,
+            target: 0,
+        },
+    ];
+
+    let base = ForceDirected::new()
+        .iterations(100)
+        .convergence_check_interval(50);
+
+    let exact_config = base.clone().approximation_theta(0.0);
+    let bh_config = base.clone().approximation_theta(0.5);
+
+    let exact_result = engine
+        .force_directed_layout(&nodes, &edges, &exact_config)
+        .await
+        .unwrap();
+    let bh_result = engine
+        .force_directed_layout(&nodes, &edges, &bh_config)
+        .await
+        .unwrap();
+
+    assert_eq!(exact_result.positions.len(), bh_result.positions.len());
+
+    // Both should produce finite positions within a reasonable bounding box.
+    for (e, b) in exact_result
+        .positions
+        .iter()
+        .zip(bh_result.positions.iter())
+    {
+        assert!(e.x.is_finite() && e.y.is_finite(), "exact not finite");
+        assert!(b.x.is_finite() && b.y.is_finite(), "BH not finite");
+        assert!(e.x.abs() < 4096.0 && e.y.abs() < 4096.0, "exact OOB");
+        assert!(b.x.abs() < 4096.0 && b.y.abs() < 4096.0, "BH OOB");
+    }
+
+    // Both layouts should spread nodes out (not all at origin).
+    let exact_spread: f32 = exact_result
+        .positions
+        .iter()
+        .map(|p| p.x * p.x + p.y * p.y)
+        .sum::<f32>()
+        .sqrt();
+    let bh_spread: f32 = bh_result
+        .positions
+        .iter()
+        .map(|p| p.x * p.x + p.y * p.y)
+        .sum::<f32>()
+        .sqrt();
+
+    assert!(
+        exact_spread > 1.0,
+        "exact layout too collapsed: spread={exact_spread}"
+    );
+    assert!(
+        bh_spread > 1.0,
+        "BH layout too collapsed: spread={bh_spread}"
+    );
+}
+
+#[tokio::test]
+async fn barnes_hut_1k_graph_positions_finite() {
+    let Some(ctx) = gpu_context().await else {
+        return;
+    };
+    let engine = LayoutEngine::new(&ctx).unwrap();
+
+    let node_count = 1000;
+    let nodes: Vec<LayoutNode> = (0..node_count)
+        .map(|i| LayoutNode {
+            id: i as u32,
+            x: 0.0,
+            y: 0.0,
+        })
+        .collect();
+
+    let mut edges = Vec::new();
+    let mut seed: u64 = 42;
+    for i in 0..node_count {
+        for _ in 0..3 {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let j = (seed >> 33) as usize % node_count;
+            if i != j {
+                edges.push(LayoutEdge {
+                    source: i as u32,
+                    target: j as u32,
+                });
+            }
+        }
+    }
+
+    let config = ForceDirected::new()
+        .approximation_theta(0.5)
+        .iterations(50)
+        .convergence_check_interval(25);
+
+    let result = engine
+        .force_directed_layout(&nodes, &edges, &config)
+        .await
+        .unwrap();
+
+    assert_eq!(result.positions.len(), node_count);
+    for pos in &result.positions {
+        assert!(pos.x.is_finite(), "Node {} x is not finite", pos.id);
+        assert!(pos.y.is_finite(), "Node {} y is not finite", pos.id);
+        assert!(
+            pos.x.abs() < 4096.0,
+            "Node {} x={} exceeds bounding box",
+            pos.id,
+            pos.x
+        );
+        assert!(
+            pos.y.abs() < 4096.0,
+            "Node {} y={} exceeds bounding box",
+            pos.id,
+            pos.y
+        );
+    }
+}
