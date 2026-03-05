@@ -54,6 +54,9 @@ jobs:
       - name: Build (release)
         run: cargo build --release --examples
 
+      - name: Check gallery config sync
+        run: bash scripts/check_gallery_sync.sh
+
       - name: Generate thumbnails
         run: bash scripts/generate_gallery.sh
 
