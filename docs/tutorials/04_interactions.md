@@ -25,7 +25,7 @@ provides convenience methods for the most common patterns.
 
 The core type is `InteractionEvent`:
 
-```rust
+```rust,ignore
 pub struct InteractionEvent {
     pub interaction_type: String,
     pub screen_position: Vec2,
@@ -44,7 +44,7 @@ and a reference to the data element that was interacted with.
 
 Use `.on_click()` on a selection to run code when an element is clicked:
 
-```rust
+```rust,ignore
 use gup::prelude::*;
 
 #[derive(Debug, Clone)]
@@ -73,7 +73,7 @@ shaders, so it scales to millions of elements.
 
 Use `.on_hover()` to respond when the pointer enters an element:
 
-```rust
+```rust,ignore
 selection.on_hover(|event, city| {
     println!(
         "Hovering over {} at screen ({:.0}, {:.0})",
@@ -88,7 +88,7 @@ selection.on_hover(|event, city| {
 
 For tooltip display, combine hover detection with Gup's `HoverRevealState`:
 
-```rust
+```rust,ignore
 use gup::prelude::*;
 
 // Configure the tooltip
@@ -107,7 +107,7 @@ let mut hover_state = HoverRevealState::new(tooltip_config);
 In your render loop, update the hover state each frame with the current mouse
 position and delta time:
 
-```rust
+```rust,ignore
 // Each frame:
 hover_state.update(&clipped_text_registry, mouse_x, mouse_y, dt);
 
@@ -123,7 +123,7 @@ if let Some(tooltip) = hover_state.active_tooltip() {
 
 Use `.on_drag()` for drag-based interactions:
 
-```rust
+```rust,ignore
 selection.on_drag(|event, city| {
     println!(
         "Dragging {} to ({:.2}, {:.2})",
@@ -139,7 +139,7 @@ selection.on_drag(|event, city| {
 For events beyond the convenience methods, use `.on()` with an event type
 string:
 
-```rust
+```rust,ignore
 selection.on("mouseenter", |event, city| {
     println!("Mouse entered {}", city.name);
     event.stop_propagation(); // Prevent the event from bubbling
@@ -154,7 +154,7 @@ Common event type strings: `"click"`, `"mouseenter"`, `"mouseleave"`,
 Brush selection lets users drag a rectangle to select multiple elements. Use
 `BrushBehavior`:
 
-```rust
+```rust,ignore
 use gup::prelude::*;
 
 let mut brush = BrushBehavior::new()
@@ -163,7 +163,7 @@ let mut brush = BrushBehavior::new()
 
 Wire the brush to pointer events in your event loop:
 
-```rust
+```rust,ignore
 // On mouse down:
 brush.on_pointer_down(Vec2::new(mouse_x, mouse_y));
 
@@ -185,7 +185,7 @@ brush.on_pointer_up(
 The `mark_selection_system` provides hit testing against your marks. Set it up
 with the positions of your data points:
 
-```rust
+```rust,ignore
 let mut mark_system = MarkSelectionSystem::new(data.len());
 mark_system.set_positions(positions);
 ```
@@ -198,7 +198,7 @@ selected elements.
 `ZoomBehavior` provides smooth zoom and pan with inertia. Create one and
 configure its constraints:
 
-```rust
+```rust,ignore
 use gup::prelude::*;
 
 let mut zoom = ZoomBehavior::new()
@@ -208,7 +208,7 @@ let mut zoom = ZoomBehavior::new()
 
 Wire input events to the zoom behaviour:
 
-```rust
+```rust,ignore
 // Mouse wheel → zoom
 zoom.on_wheel(wheel_delta_y, mouse_x, mouse_y);
 
@@ -221,7 +221,7 @@ zoom.on_drag_end();
 Each frame, call `tick()` to advance the inertia simulation, then read the GPU
 transform:
 
-```rust
+```rust,ignore
 // In your render loop:
 zoom.tick();
 
@@ -232,13 +232,13 @@ let transform = zoom.gpu_transform();
 Upload the transform to your shader as a uniform so the GPU applies zoom/pan to
 all rendered marks:
 
-```rust
+```rust,ignore
 queue.write_buffer(&viewport_buffer, 0, bytemuck::bytes_of(&transform));
 ```
 
 ### Querying Zoom State
 
-```rust
+```rust,ignore
 if zoom.is_dragging() {
     // User is actively panning
 }
@@ -250,7 +250,7 @@ let current_scale = zoom.scale(); // e.g. 2.5 = zoomed in 2.5×
 
 ### Resetting
 
-```rust
+```rust,ignore
 zoom.reset(); // Return to default scale and position
 ```
 
@@ -259,7 +259,7 @@ zoom.reset(); // Return to default scale and position
 All interaction patterns compose naturally. A single selection can have click,
 hover, drag, and zoom handlers simultaneously:
 
-```rust
+```rust,ignore
 selection
     .attr("center", |d: &City| [d.x, d.y])
     .attr("radius", |_d: &City| 0.03)
@@ -276,7 +276,7 @@ per-element handlers.
 
 ## Full Example
 
-```rust
+```rust,no_run
 use gup::prelude::*;
 use std::sync::Arc;
 

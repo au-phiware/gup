@@ -41,7 +41,7 @@ tokio = { version = "1", features = ["full"] }
 Every Gup chart starts with a Rust struct that represents one data point. The
 struct needs `Debug` and `Clone`:
 
-```rust
+```rust,ignore
 #[derive(Debug, Clone)]
 struct Point {
     x: f32,
@@ -51,7 +51,7 @@ struct Point {
 
 Then create a `Vec` of your data:
 
-```rust
+```rust,ignore
 let data = vec![
     Point { x: 1.0, y: 2.0 },
     Point { x: 2.0, y: 4.0 },
@@ -66,7 +66,7 @@ let data = vec![
 Gup renders on the GPU. The `RenderContext` is the bridge between your Rust code
 and the graphics hardware:
 
-```rust
+```rust,ignore
 use gup::prelude::*;
 use std::sync::Arc;
 
@@ -81,7 +81,7 @@ your `main` function with `#[tokio::main]` so you can `await` it.
 Accessors tell Gup how to extract values from your data struct. An
 `AccessorFunction` wraps a closure that maps `&T` → `AccessorValue`:
 
-```rust
+```rust,ignore
 let x_accessor = AccessorFunction::new(
     |point: &Point| AccessorValue::Float(point.x),
 );
@@ -99,7 +99,7 @@ let y_accessor = AccessorFunction::new(
 The `scatter()` function returns a `ScatterPlotBuilder`. Chain configuration
 methods to set the x accessor, y accessor, title, point size, and fill colour:
 
-```rust
+```rust,ignore
 let chart = scatter()
     .x(x_accessor)
     .y(y_accessor)
@@ -110,14 +110,14 @@ let chart = scatter()
 
 Finally, build the chart with your data and GPU context:
 
-```rust
+```rust,ignore
 let selection = chart.build_with_data(data, context)?;
 ```
 
 The returned `selection` is a GPU-backed `Selection` ready for rendering. You
 can query it to confirm everything worked:
 
-```rust
+```rust,ignore
 println!("Created a scatter plot with {} points", selection.len());
 ```
 
@@ -125,7 +125,7 @@ println!("Created a scatter plot with {} points", selection.len());
 
 Here is the complete program. Save it as `src/main.rs`:
 
-```rust
+```rust,no_run
 use gup::prelude::*;
 use std::sync::Arc;
 
@@ -192,7 +192,7 @@ Congratulations — you have created your first GPU-accelerated chart! The
 
 Gup ships builders for several chart types. They all follow the same pattern:
 
-```rust
+```rust,ignore
 // Line chart
 let chart = line()
     .x(x_accessor)
@@ -214,7 +214,7 @@ let chart = area()
 
 You can also use the `plot()` entry point for a more declarative style:
 
-```rust
+```rust,ignore
 let builder = plot()
     .data(data)
     .scatter(x_field, y_field);

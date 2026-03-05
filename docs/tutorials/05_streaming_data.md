@@ -33,7 +33,7 @@ capacity buffer on the GPU. You can use either or both together.
 
 The `StreamingDataSource<T>` trait has five methods:
 
-```rust
+```rust,ignore
 use gup::prelude::*;
 use async_trait::async_trait;
 
@@ -60,7 +60,7 @@ pub trait StreamingDataSource<T>: MaybeSend + MaybeSync {
 
 Here is a synthetic data source that generates random points:
 
-```rust
+```rust,ignore
 use gup::async_mixable::streaming::{Point2D, StreamStats, StreamingDataSource};
 use gup::error::GupResult;
 use async_trait::async_trait;
@@ -125,7 +125,7 @@ impl StreamingDataSource<Point2D> for SyntheticSource {
 
 ### Wire to `StreamingScatterPlot`
 
-```rust
+```rust,ignore
 use gup::async_mixable::streaming::StreamingScatterPlot;
 
 let source = SyntheticSource::new(5000);
@@ -142,7 +142,7 @@ stream produces more, the oldest points are evicted.
 
 For GPU-backed streaming with fine-grained control, use `DataStream`:
 
-```rust
+```rust,ignore
 use gup::streaming::{DataStream, StreamMode, BackpressureStrategy};
 
 let stream = DataStream::<[f32; 2]>::builder()
@@ -171,7 +171,7 @@ let stream = DataStream::<[f32; 2]>::builder()
 
 ### Push Data and Flush to GPU
 
-```rust
+```rust,ignore
 // Push individual items
 stream.push([0.5, 0.3]);
 
@@ -187,7 +187,7 @@ println!("{} bytes uploaded to GPU", bytes_written);
 
 ### Subscribe to Updates
 
-```rust
+```rust,ignore
 let handle = stream.subscribe(|update| {
     println!("Stream update: {} new items", update.count);
 });
@@ -198,7 +198,7 @@ let handle = stream.subscribe(|update| {
 Connect the stream to a `Selection` so it automatically feeds data into the
 rendering pipeline:
 
-```rust
+```rust,ignore
 let mut selection = Selection::<[f32; 2], Circle>::from_data(vec![]);
 selection.stream(stream);
 ```
@@ -208,7 +208,7 @@ buffers are updated and the chart re-renders with the new data.
 
 ## Full Example
 
-```rust
+```rust,no_run
 use gup::async_mixable::streaming::{Point2D, StreamingDataSource, StreamingScatterPlot};
 use gup::error::GupResult;
 use async_trait::async_trait;

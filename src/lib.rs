@@ -418,11 +418,20 @@ pub fn choropleth() -> ChoroplethChartBuilder {
     ChoroplethChartBuilder::new()
 }
 
-// Note: Procedural macros from gup_macros must be imported directly due to Rust limitations
-// Available macros:
-// - `use gup_macros::wgsl_function;` - WGSL shader function generation (write WGSL syntax)
-// - `use gup_macros::shader_fn;`     - Rust-to-WGSL transpiled shader function generation
-// - `use gup_macros::Mixable;` - Automatic Mixable trait derivation
+// Re-export procedural macros from gup_macros for convenience.
+//
+// NOTE: `wgsl_function` cannot be re-exported at the crate root because `gup`
+// already defines a `macro_rules! wgsl_function` in `shader_function::macros`.
+// It is available through `gup::proc_macros::wgsl_function` instead.
+pub use gup_macros::{Mark, Mixable, shader_fn};
+
+/// Re-exported procedural macros from `gup_macros`.
+///
+/// The `wgsl_function` attribute macro lives here to avoid a name collision
+/// with the `macro_rules!` helper of the same name at the crate root.
+pub mod proc_macros {
+    pub use gup_macros::wgsl_function;
+}
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -440,4 +449,33 @@ mod tests {
     fn test_library_loads() {
         // Basic smoke test to ensure the library loads correctly
     }
+}
+
+// ---------------------------------------------------------------------------
+// Tutorial snippet compilation tests (GUP-351).
+//
+// Each tutorial Markdown file is included as a doc comment on a dummy struct.
+// Rustdoc extracts fenced Rust code blocks and compiles them as doctests.
+// Blocks marked `rust,ignore` are skipped; blocks marked `rust,no_run` are
+// compiled but not executed (they require a GPU).
+// ---------------------------------------------------------------------------
+#[cfg(doctest)]
+mod tutorial_doctests {
+    #[doc = include_str!("../docs/tutorials/01_getting_started.md")]
+    struct Tutorial01GettingStarted;
+
+    #[doc = include_str!("../docs/tutorials/02_data_binding.md")]
+    struct Tutorial02DataBinding;
+
+    #[doc = include_str!("../docs/tutorials/03_custom_shader_functions.md")]
+    struct Tutorial03CustomShaderFunctions;
+
+    #[doc = include_str!("../docs/tutorials/04_interactions.md")]
+    struct Tutorial04Interactions;
+
+    #[doc = include_str!("../docs/tutorials/05_streaming_data.md")]
+    struct Tutorial05StreamingData;
+
+    #[doc = include_str!("../docs/tutorials/06_custom_marks.md")]
+    struct Tutorial06CustomMarks;
 }

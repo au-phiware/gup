@@ -38,7 +38,7 @@ Use the `#[wgsl_function]` procedural macro from `gup_macros` to annotate a Rust
 function. The macro transpiles the function body to WGSL and generates a struct
 that implements `ComposableShaderFunction`:
 
-```rust
+```rust,ignore
 use gup_macros::wgsl_function;
 
 #[wgsl_function]
@@ -57,7 +57,7 @@ This generates:
 
 Create an instance by passing the uniform values:
 
-```rust
+```rust,ignore
 let scale_fn = MyLinearScale::new(2.0, 1.0); // scale=2.0, offset=1.0
 ```
 
@@ -66,7 +66,7 @@ let scale_fn = MyLinearScale::new(2.0, 1.0); // scale=2.0, offset=1.0
 Use `attr_shader` instead of `attr`. The second argument is an extractor closure
 that pulls the raw value from your data; the third is the shader function:
 
-```rust
+```rust,ignore
 use gup::prelude::*;
 
 #[derive(Debug, Clone)]
@@ -92,7 +92,7 @@ buffer. The GPU applies `value * 2.0 + (-1.0)` to every data point in parallel.
 Shader functions are not limited to scalars. You can transform 2D positions,
 colours, and more:
 
-```rust
+```rust,ignore
 use gup::shader_function::Vec2;
 
 #[wgsl_function]
@@ -123,7 +123,7 @@ transpiler reference see [Technical Approach](../TECHNICAL_APPROACH.md).
 
 You can inspect the generated WGSL at any time:
 
-```rust
+```rust,ignore
 let wgsl_code = MyLinearScale::wgsl_function();
 println!("{}", wgsl_code);
 
@@ -134,7 +134,7 @@ assert_eq!(MyLinearScale::function_name(), "my_linear_scale");
 Write a test to verify your shader function compiles and produces the expected
 WGSL:
 
-```rust
+```rust,ignore
 #[test]
 fn test_my_scale_generates_valid_wgsl() {
     let wgsl = MyLinearScale::wgsl_function();
@@ -159,7 +159,7 @@ cargo test test_my_scale -- --test-threads=1
 Shader function uniforms can be updated without rebuilding the pipeline. Use
 `update_shader_uniforms` on the selection:
 
-```rust
+```rust,ignore
 let new_scale = MyLinearScale::new(3.0, 0.5);
 selection.update_shader_uniforms("radius", new_scale, &queue)?;
 ```
@@ -172,7 +172,7 @@ no re-upload of vertex data.
 Gup ships many pre-built shader functions in `gup::prelude`. Here are the most
 common:
 
-```rust
+```rust,ignore
 // Linear mapping from [domain_min, domain_max] to [range_min, range_max]
 let scale = LinearScale::new(0.0, 100.0, -1.0, 1.0);
 
@@ -185,7 +185,7 @@ let gradient = ColorGradient::new(
 
 These work as drop-in arguments to `attr_shader`:
 
-```rust
+```rust,ignore
 selection
     .attr_shader("center", |d: &MyData| [d.x, d.y], scale)
     .attr_shader("fill_color", |d: &MyData| d.value, gradient);
@@ -193,9 +193,9 @@ selection
 
 ## Full Example
 
-```rust
+```rust,ignore
 use gup::prelude::*;
-use gup_macros::wgsl_function;
+use gup::proc_macros::wgsl_function;
 use std::sync::Arc;
 
 #[wgsl_function]

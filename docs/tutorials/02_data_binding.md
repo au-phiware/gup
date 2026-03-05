@@ -21,7 +21,7 @@ chart builder concepts introduced there by going one level deeper into the
 
 At the heart of Gup's rendering pipeline is `Selection<T, M>`:
 
-```rust
+```rust,ignore
 pub struct Selection<T, M: Mark> { /* … */ }
 ```
 
@@ -49,7 +49,7 @@ at compile time rather than at render time.
 
 Let's work with a richer data type than Tutorial 1's `Point`:
 
-```rust
+```rust,ignore
 use gup::prelude::*;
 
 #[derive(Debug, Clone)]
@@ -63,7 +63,7 @@ struct SalesRecord {
 
 Create some sample data:
 
-```rust
+```rust,ignore
 let data = vec![
     SalesRecord { product: "Widget A".into(), revenue: 120.0, profit_margin: 0.35, category: 0 },
     SalesRecord { product: "Widget B".into(), revenue: 280.0, profit_margin: 0.22, category: 0 },
@@ -77,7 +77,7 @@ let data = vec![
 
 Create a `Selection` that binds your data to the `Circle` mark:
 
-```rust
+```rust,ignore
 let mut selection = Selection::<SalesRecord, Circle>::from_data(data);
 ```
 
@@ -90,7 +90,7 @@ and expensive work is deferred to render time.
 The `.attr()` method maps a named attribute to a closure that extracts a value
 from each data record. The closure's return type must implement `IntoAttrValue`:
 
-```rust
+```rust,ignore
 selection
     .attr("center", |d: &SalesRecord| {
         // Map revenue and profit to screen coordinates [-1, 1]
@@ -127,7 +127,7 @@ Any type that implements `IntoAttrValue` works as a return type:
 When multiple attributes depend on the same computation, use `attr_parallel()`
 to compute them in a single pass over your data:
 
-```rust
+```rust,ignore
 selection.attr_parallel(
     |d: &SalesRecord| {
         let x = d.revenue / 500.0 * 2.0 - 1.0;
@@ -152,7 +152,7 @@ This avoids redundant work when the same raw data feeds multiple attributes.
 Gup supports updating the selection's data without recreating the entire
 pipeline. Call `set_data()` with a new `Vec<T>`:
 
-```rust
+```rust,ignore
 // New quarter's data arrives
 let updated_data = vec![
     SalesRecord { product: "Widget A".into(), revenue: 150.0, profit_margin: 0.40, category: 0 },
@@ -174,7 +174,7 @@ of the join/update pattern: existing bindings are replayed on fresh data.
 When you are ready to send the selection to the GPU, call `prepare_render_bound`
 and then `render`:
 
-```rust
+```rust,ignore
 selection.prepare_render_bound(device, queue, None, None)?;
 selection.render(&mut render_pass)?;
 ```
@@ -185,7 +185,7 @@ geometry in a single draw call.
 
 ## Full Example
 
-```rust
+```rust,no_run
 use gup::prelude::*;
 use std::sync::Arc;
 

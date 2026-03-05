@@ -32,7 +32,7 @@ Every visual element in Gup — circles, rectangles, lines, box plots — is a
 
 The `Mark` trait captures this:
 
-```rust
+```rust,ignore
 pub trait Mark: Clone + MaybeSend + MaybeSync + 'static {
     type Vertex: bytemuck::Pod + bytemuck::Zeroable;
     type AttributeValue: MaybeSend + MaybeSync + 'static;
@@ -56,7 +56,7 @@ boilerplate for you.
 
 ### Step 1: Define the Mark Struct
 
-```rust
+```rust,ignore
 use gup::shader_function::{Vec2, Vec4};
 
 #[derive(Debug, Clone, gup_macros::Mark)]
@@ -95,7 +95,7 @@ The macro generates:
 
 ### Step 2: Use It with a Selection
 
-```rust
+```rust,ignore
 use gup::prelude::*;
 
 #[derive(Debug, Clone)]
@@ -117,7 +117,7 @@ selection
 
 Use `MarkValidator` to check your mark at test time:
 
-```rust
+```rust,ignore
 #[test]
 fn test_diamond_mark_is_valid() {
     use gup::mark::validation::assert_mark_valid;
@@ -134,7 +134,7 @@ implement `Mark` directly.
 
 The vertex type must be `#[repr(C)]`, `Pod`, and `Zeroable`:
 
-```rust
+```rust,ignore
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct HexagonVertex {
@@ -144,7 +144,7 @@ pub struct HexagonVertex {
 
 ### Step 2: Define the Attribute Type
 
-```rust
+```rust,ignore
 use gup::shader_function::{Vec2, Vec4};
 
 #[derive(Debug, Clone)]
@@ -157,7 +157,7 @@ pub struct HexagonAttributes {
 
 ### Step 3: Implement `Mark`
 
-```rust
+```rust,ignore
 use gup::mark::Mark;
 
 #[derive(Debug, Clone)]
@@ -214,7 +214,7 @@ impl Mark for Hexagon {
 
 For custom rendering, provide WGSL vertex and fragment shaders:
 
-```rust
+```rust,ignore
 impl Mark for Hexagon {
     const VERTEX_SHADER: Option<&'static str> = Some(r#"
         struct VertexOutput {
@@ -250,7 +250,7 @@ impl Mark for Hexagon {
 
 ### Step 5: Register with `MarkRegistry`
 
-```rust
+```rust,ignore
 use gup::mark::MarkRegistry;
 
 let mut registry = MarkRegistry::new();
@@ -265,7 +265,7 @@ The registry caches GPU render pipelines per mark type, so pipeline creation
 
 ### Step 6: Validate and Profile
 
-```rust
+```rust,ignore
 use gup::mark::validation::{MarkValidator, MarkProfiler, assert_mark_valid};
 
 // Quick validation
@@ -302,13 +302,13 @@ Gup ships these marks out of the box:
 
 ## Full Derive Example
 
-```rust
+```rust,no_run
 use gup::prelude::*;
 use gup::mark::validation::assert_mark_valid;
 use gup::shader_function::{Vec2, Vec4};
 use std::sync::Arc;
 
-#[derive(Debug, Clone, gup_macros::Mark)]
+#[derive(Debug, Clone, gup::Mark)]
 #[mark(primitive = "triangle")]
 pub struct Arrow {
     #[mark(position)]
