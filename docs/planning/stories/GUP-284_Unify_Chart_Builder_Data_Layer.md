@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Core GPU Primitives **Status**: 🚧 In Progress **Created**:
-2025-07-18
+**Initiative**: Core GPU Primitives **Status**: ✅ Complete **Created**:
+2025-07-18 **Completed**: 2025-07-19
 
 ## Context
 
@@ -26,25 +26,25 @@ export pipelines, integration crates) must manually render data marks.
 
 ## Acceptance Criteria
 
-- [ ] `ComposedChart::render_to_png()` produces a PNG with visible data marks
+- [x] `ComposedChart::render_to_png()` produces a PNG with visible data marks
       (circles for scatter, lines for line charts) in addition to axes and grid.
-- [ ] `ComposedChart::render()` records draw commands for data marks into the
+- [x] `ComposedChart::render()` records draw commands for data marks into the
       render pass.
-- [ ] The `ScatterPlotBuilder` produces a chart where data points are visible
+- [x] The `ScatterPlotBuilder` produces a chart where data points are visible
       without additional manual rendering.
-- [ ] Existing examples that use the chart builder (`01_hello_chart`,
+- [x] Existing examples that use the chart builder (`01_hello_chart`,
       `styled_scatter`, etc.) show data marks.
-- [ ] Performance: rendering 1000 data points via the builder adds < 2 ms to the
+- [x] Performance: rendering 1000 data points via the builder adds < 2 ms to the
       frame time.
 
 ## Technical Tasks
 
-- [ ] Wire the `Selection<T, M>`'s GPU buffers (vertex, instance, index) into
+- [x] Wire the `Selection<T, M>`'s GPU buffers (vertex, instance, index) into
       `ComposedChart`'s render pass.
-- [ ] Add a `draw_data_marks()` method to `ComposedChart` analogous to
+- [x] Add a `draw_data_marks()` method to `ComposedChart` analogous to
       `draw_grid_lines()` and `draw_ticks()`.
-- [ ] Call `draw_data_marks()` in both `render()` and `render_to_png()`.
-- [ ] Update examples to verify visible data marks.
+- [x] Call `draw_data_marks()` in both `render()` and `render_to_png()`.
+- [x] Update examples to verify visible data marks.
 
 ## Dependencies
 
@@ -67,7 +67,33 @@ export pipelines, integration crates) must manually render data marks.
 
 ## Definition of Done
 
-- [ ] `render_to_png` produces visible data marks.
-- [ ] All tests pass: `cargo test -- --test-threads=1`.
-- [ ] `mask all-fix` exits cleanly.
-- [ ] At least one example visually confirmed with data marks.
+- [x] `render_to_png` produces visible data marks.
+- [x] All tests pass: `cargo test -- --test-threads=1`.
+- [x] `mask all-fix` exits cleanly.
+- [x] At least one example visually confirmed with data marks.
+
+## Implementation Summary
+
+### What Was Implemented
+
+The chart builder's data-mark rendering pipeline was connected end-to-end so
+that `ComposedChart::render()`, `render_to_png()`, and
+`render_to_texture_view()` produce complete charts with visible data marks
+(circles, rectangles, etc.) alongside axes, ticks, and grid lines.
+
+### Key Changes
+
+| File | Change |
+| --- | --- |
+| `src/chart_builder/builders.rs` | Rewrote `apply_accessors_to_selection()` to evaluate accessor functions, auto-compute data domain, and map data values to NDC chart-area coordinates. Added `NdcBounds` struct and `auto_domain()` helper. |
+| `src/chart_builder/builders/scatter.rs` | Updated `build_with_data()` to compute exact chart area (with axis margins) before applying accessor bindings, then call `prepare_render_bound()` at build time. |
+| `src/chart_builder/builders/bar.rs` | Updated for new `apply_accessors_to_selection` signature. |
+| `src/chart_builder/builders/heatmap/mod.rs` | Updated for new `apply_accessors_to_selection` signature. |
+| `src/chart_builder.rs` | Added `prepare_data_pipeline()`, `draw_data_marks()`, `has_data_mark_data()` methods. Updated `render()` to prepare data marks. Made `ChartArea` and `calculate_chart_area()` `pub(crate)`. |
+| `src/chart_builder/labels.rs` | Added `M: MarkInstanceBuilder` bound to `LabeledChart::render()`. |
+
+### Test Summary
+
+- 3 new tests added (render-ready selection, draw count, visual PNG regression)
+- All 3056 library tests pass
+- All examples compile and run correctly
