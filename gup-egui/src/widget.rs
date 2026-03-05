@@ -317,7 +317,7 @@ impl GupWidget {
         // Check if the size changed.
         let size_changed = self
             .last_size
-            .map_or(true, |s| s[0] != phys_width || s[1] != phys_height);
+            .is_none_or(|s| s[0] != phys_width || s[1] != phys_height);
 
         // Re-render if dirty or size changed.
         if self.dirty || size_changed {
@@ -405,7 +405,7 @@ impl GupWidget {
         let need_new_texture = state
             .offscreen_texture
             .as_ref()
-            .map_or(true, |t| t.width != width || t.height != height);
+            .is_none_or(|t| t.width != width || t.height != height);
 
         if need_new_texture {
             let offscreen = OffscreenTexture::new(device, width, height);
@@ -443,7 +443,6 @@ impl GupWidget {
             height,
         ) {
             log::warn!("GupWidget shared render failed: {e}");
-            return;
         }
 
         // When the texture was not recreated but only re-rendered, we still
