@@ -3,6 +3,12 @@
 
 //! Windowed treemap rendering example (GUP-314).
 //!
+//! This example implements [`ApplicationHandler`] manually because it uses
+//! **custom keyboard shortcuts** (`C` to cycle colour, `A` to cycle
+//! algorithm) that go beyond what [`GupApp`](gup::app::GupApp) provides.
+//! See `hello_world.rs` or `02_scatter_window.rs` for the simpler `GupApp`
+//! pattern.
+//!
 //! Renders a synthetic hierarchy as a treemap in a real GPU window using
 //! Rectangle marks.  Cells are coloured by depth or by value, switchable
 //! at runtime.  The treemap re-layouts on window resize.

@@ -16,6 +16,11 @@
 
 //! Real windowed example demonstrating multi-surface management.
 //!
+//! This example implements [`ApplicationHandler`] manually because it manages
+//! **multiple windows** — a use case that [`GupApp`](gup::app::GupApp)
+//! deliberately does not cover.  See `hello_world.rs` or `02_scatter_window.rs`
+//! for the simpler `GupApp` pattern.
+//!
 //! This example creates actual windows and demonstrates:
 //! - Creating multiple real windows with surfaces
 //! - Rendering different colors to each window

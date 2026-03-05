@@ -16,6 +16,11 @@
 
 //! Demonstration of multi-window surface management capabilities.
 //!
+//! This example implements [`ApplicationHandler`] manually because it manages
+//! **multiple windows** — a use case that [`GupApp`](gup::app::GupApp)
+//! deliberately does not cover.  See `hello_world.rs` or `02_scatter_window.rs`
+//! for the simpler `GupApp` pattern.
+//!
 //! This example shows how to:
 //! - Create and manage multiple surfaces in a single GupContext
 //! - Handle window resize events and surface updates

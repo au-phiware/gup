@@ -16,6 +16,11 @@
 
 //! Simple windowed example demonstrating basic surface rendering.
 //!
+//! This example implements [`ApplicationHandler`] manually because it uses a
+//! **custom keyboard shortcut** (Space to cycle colours) that goes beyond
+//! what [`GupApp`](gup::app::GupApp) provides.  See `hello_world.rs` or
+//! `02_scatter_window.rs` for the simpler `GupApp` pattern.
+//!
 //! This example creates a single window that cycles through different colors
 //! to demonstrate the basic surface management and rendering capabilities.
 
