@@ -936,12 +936,12 @@ layouts, and 3D visualization.
 - [GUP-310](GUP-310_Barnes_Hut_GPU_Repulsion.md) ✅ — Barnes-Hut GPU repulsion
   approximation to reduce O(n²) to O(n log n), enabling 100K-node ≤5s target.
   Deps: GUP-259 ✅.
-- [GUP-311](GUP-311_Interactive_Graph_Rendering.md) 🚧 — Interactive
+- [GUP-311](GUP-311_Interactive_Graph_Rendering.md) ✅ — Interactive
   force-directed graph rendering with real-time animation, node dragging, and
   zoom. Deps: GUP-259 ✅.
 - [GUP-312](GUP-312_Full_GPU_Quadtree_Construction.md) 📋 — Full GPU quadtree
-  construction using Morton codes and parallel sorting, eliminating per-iteration
-  CPU↔GPU readback. Deps: GUP-310 ✅.
+  construction using Morton codes and parallel sorting, eliminating
+  per-iteration CPU↔GPU readback. Deps: GUP-310 ✅.
 - [GUP-313](GUP-313_Adaptive_Barnes_Hut_Theta_Tuning.md) 💡 — Adaptive
   per-region theta tuning based on local graph density for improved layout
   quality in clustered graphs. Deps: GUP-310 ✅.
