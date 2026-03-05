@@ -167,6 +167,8 @@ impl Default for LayoutRect {
 #[derive(Debug, Clone)]
 pub struct TreemapResult {
     cells: Vec<TreemapCell>,
+    /// GPU-resident cells buffer, if the layout was computed on GPU.
+    gpu_buffer: Option<std::sync::Arc<wgpu::Buffer>>,
 }
 
 impl TreemapResult {
@@ -178,6 +180,17 @@ impl TreemapResult {
     /// Consume the result and return the cells vector.
     pub fn into_cells(self) -> Vec<TreemapCell> {
         self.cells
+    }
+
+    /// Return a reference to the GPU-resident cells buffer, if available.
+    ///
+    /// When the layout was computed on GPU (SliceDice or Binary), the cells
+    /// buffer remains GPU-resident and can be bound directly to a Rectangle
+    /// mark's instance buffer without CPU readback.
+    ///
+    /// The buffer layout matches `TreemapCell` (32 bytes per cell).
+    pub fn gpu_buffer(&self) -> Option<&wgpu::Buffer> {
+        self.gpu_buffer.as_deref()
     }
 }
 
@@ -478,7 +491,10 @@ impl super::LayoutEngine {
         options: &TreemapOptions,
     ) -> GupResult<TreemapResult> {
         if nodes.is_empty() {
-            return Ok(TreemapResult { cells: vec![] });
+            return Ok(TreemapResult {
+                cells: vec![],
+                gpu_buffer: None,
+            });
         }
         if nodes.len() != values.len() {
             return Err(GupError::DataValidationError {
@@ -498,7 +514,10 @@ impl super::LayoutEngine {
             _ => {
                 // Squarified and Strip use CPU implementation.
                 let cells = cpu_treemap_layout(nodes, values, viewport, options);
-                Ok(TreemapResult { cells })
+                Ok(TreemapResult {
+                    cells,
+                    gpu_buffer: None,
+                })
             }
         }
     }
@@ -703,7 +722,10 @@ impl super::LayoutEngine {
             cells.retain(|c| c.depth != u32::MAX);
         }
 
-        Ok(TreemapResult { cells })
+        Ok(TreemapResult {
+            cells,
+            gpu_buffer: Some(std::sync::Arc::new(cells_buffer)),
+        })
     }
 
     /// Run a multi-workgroup Blelloch exclusive prefix sum on `values`.
@@ -2363,5 +2385,71 @@ mod tests {
 
         assert_gpu_cpu_match(gpu_cells, &cpu_cells, 0.0001);
         check_area_proportionality(gpu_cells, &values, 0, &nodes);
+    }
+
+    #[tokio::test]
+    async fn test_gpu_buffer_available_for_gpu_algorithms() {
+        let ctx = match RenderContext::new().await {
+            Ok(ctx) => ctx,
+            Err(_) => return,
+        };
+        let engine = crate::layout::LayoutEngine::new(&ctx).unwrap();
+
+        let (nodes, values) = flat_tree_with_values(&[4.0, 3.0, 2.0, 1.0]);
+        let vp = viewport();
+
+        // SliceDice should have gpu_buffer.
+        let sd_result = engine
+            .treemap_layout(
+                &nodes,
+                &values,
+                vp,
+                &TreemapOptions {
+                    algorithm: TreemapAlgorithm::SliceDice,
+                    ..TreemapOptions::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert!(
+            sd_result.gpu_buffer().is_some(),
+            "SliceDice should return a GPU buffer"
+        );
+
+        // Binary should have gpu_buffer.
+        let bin_result = engine
+            .treemap_layout(
+                &nodes,
+                &values,
+                vp,
+                &TreemapOptions {
+                    algorithm: TreemapAlgorithm::Binary,
+                    ..TreemapOptions::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert!(
+            bin_result.gpu_buffer().is_some(),
+            "Binary should return a GPU buffer"
+        );
+
+        // Squarified (CPU) should NOT have gpu_buffer.
+        let sq_result = engine
+            .treemap_layout(
+                &nodes,
+                &values,
+                vp,
+                &TreemapOptions {
+                    algorithm: TreemapAlgorithm::Squarified,
+                    ..TreemapOptions::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert!(
+            sq_result.gpu_buffer().is_none(),
+            "Squarified should not return a GPU buffer"
+        );
     }
 }
