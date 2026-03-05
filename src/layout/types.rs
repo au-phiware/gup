@@ -87,13 +87,39 @@ pub(crate) struct GpuSimParams {
     pub damping: f32,
     pub node_count: u32,
     pub edge_count: u32,
-    pub _pad: u32,
+    pub theta: f32,
 }
 
 // Compile-time size assertions to catch layout mismatches.
 const _: () = assert!(std::mem::size_of::<GpuNode>() == 16);
 const _: () = assert!(std::mem::size_of::<GpuEdge>() == 8);
 const _: () = assert!(std::mem::size_of::<GpuSimParams>() == 32);
+
+/// A cell in the Barnes-Hut quadtree, laid out for GPU consumption.
+///
+/// Layout: 32 bytes, matches WGSL `BHCell`.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub(crate) struct BHCell {
+    /// Centre-of-mass X coordinate.
+    pub com_x: f32,
+    /// Centre-of-mass Y coordinate.
+    pub com_y: f32,
+    /// Total mass (body count) contained in this cell.
+    pub mass: f32,
+    /// Half-width of this cell's bounding square.
+    pub half_width: f32,
+    /// Index of child cell in NW quadrant (`-1` = empty).
+    pub child0: i32,
+    /// Index of child cell in NE quadrant (`-1` = empty).
+    pub child1: i32,
+    /// Index of child cell in SW quadrant (`-1` = empty).
+    pub child2: i32,
+    /// Index of child cell in SE quadrant (`-1` = empty).
+    pub child3: i32,
+}
+
+const _: () = assert!(std::mem::size_of::<BHCell>() == 32);
 
 /// Configuration builder for force-directed graph layout.
 ///
@@ -133,6 +159,13 @@ pub struct ForceDirected {
     pub convergence_threshold: f32,
     /// Check convergence every N iterations (default 10).
     pub convergence_check_interval: u32,
+    /// Barnes-Hut opening angle (theta) for repulsion approximation.
+    ///
+    /// When `theta > 0`, a quadtree-based Barnes-Hut approximation is used
+    /// for repulsion, reducing per-iteration complexity from O(n²) to
+    /// O(n log n).  A typical value is `0.5`.  Setting `theta = 0` disables
+    /// the approximation and falls back to exact pairwise computation.
+    pub approximation_theta: f32,
 }
 
 impl Default for ForceDirected {
@@ -146,6 +179,7 @@ impl Default for ForceDirected {
             iterations: 300,
             convergence_threshold: 0.5,
             convergence_check_interval: 10,
+            approximation_theta: 0.5,
         }
     }
 }
@@ -207,6 +241,19 @@ impl ForceDirected {
     /// every iteration can stall the pipeline for very large graphs.
     pub fn convergence_check_interval(mut self, interval: u32) -> Self {
         self.convergence_check_interval = interval.max(1);
+        self
+    }
+
+    /// Set the Barnes-Hut opening angle (theta) for repulsion approximation.
+    ///
+    /// When `theta > 0`, a quadtree is built each iteration and far-field
+    /// repulsion is approximated using centres of mass, reducing complexity
+    /// from O(n²) to O(n log n).  A typical value is `0.5`.
+    ///
+    /// Setting `theta = 0` disables the approximation and uses exact
+    /// pairwise computation.
+    pub fn approximation_theta(mut self, theta: f32) -> Self {
+        self.approximation_theta = theta.max(0.0);
         self
     }
 }

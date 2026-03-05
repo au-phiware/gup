@@ -30,7 +30,7 @@ struct SimParams {
     damping:            f32,
     node_count:         u32,
     edge_count:         u32,
-    _pad:               u32,
+    theta:              f32,
 }
 
 // ---------------------------------------------------------------------------

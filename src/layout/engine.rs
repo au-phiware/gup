@@ -243,7 +243,7 @@ impl LayoutEngine {
             damping: config.damping,
             node_count: node_count as u32,
             edge_count: edges.len() as u32,
-            _pad: 0,
+            theta: config.approximation_theta,
         };
 
         // Create GPU buffers ------------------------------------------------
