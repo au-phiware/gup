@@ -1162,7 +1162,7 @@ API reference generation, tutorials, and example gallery.
 - [GUP-379](GUP-379_Area_Chart_Builder_Prepare_Render_Bound.md) ✅ — Call
   `prepare_render_bound()` in `AreaChartBuilder` so that `render_to_png()`
   produces visible filled-area segments. Deps: GUP-287 ✅, GUP-289 ✅.
-- [GUP-380](GUP-380_Remaining_Builders_Prepare_Render_Bound.md) 📋 — Call
+- [GUP-380](GUP-380_Remaining_Builders_Prepare_Render_Bound.md) 🚧 — Call
   `prepare_render_bound()` in BoxPlot, Density, and Violin builders so that
   `render_to_png()` produces visible data marks. Deps: GUP-289 ✅, GUP-379 ✅.
 

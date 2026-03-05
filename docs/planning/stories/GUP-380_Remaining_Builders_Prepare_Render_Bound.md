@@ -2,7 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Core GPU Primitives **Status**: 📋 Planned **Created**:
+**Initiative**: Core GPU Primitives **Status**: 🚧 In Progress **Created**:
 2025-07-21
 
 ## Context
