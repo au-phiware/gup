@@ -178,14 +178,14 @@ async fn composite_all_layers_render_ready_after_prepare() {
         .build_with_data(sample_data(), ctx.clone())
         .expect("build");
 
-    // Some layers may already be render-ready from their inner build
-    // (e.g. scatter layers that call prepare_render_bound during
-    // build_with_data). Line layers need coordinate overrides applied
-    // during prepare_render, so they start not-ready.
-    let before = chart.layer_draw_count();
-    assert!(
-        before < chart.additional_layer_count(),
-        "Expected at least one layer to need prepare_render"
+    // All layers should be render-ready immediately after build because
+    // each inner builder (scatter, line, etc.) calls prepare_render_bound
+    // during build_with_data. No post-build prepare_render is needed to
+    // make individual layers ready.
+    assert_eq!(
+        chart.layer_draw_count(),
+        chart.additional_layer_count(),
+        "All layers should be render-ready after build"
     );
 
     chart
@@ -196,7 +196,7 @@ async fn composite_all_layers_render_ready_after_prepare() {
         )
         .expect("prepare");
 
-    // After prepare, all layers should be ready.
+    // After prepare, all layers should still be ready.
     assert_eq!(
         chart.layer_draw_count(),
         chart.additional_layer_count(),

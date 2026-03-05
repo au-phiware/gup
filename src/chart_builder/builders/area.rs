@@ -27,7 +27,8 @@
 //! forming the closed outline.
 
 use super::{
-    AccessorFunction, ConfigurableBuilder, GridCapableBuilder, validate_required_accessors,
+    AccessorFunction, ConfigurableBuilder, GridCapableBuilder, NdcBounds,
+    validate_required_accessors,
 };
 use crate::RenderContext;
 use crate::chart_builder::accessor::AccessorValue;
@@ -1201,8 +1202,6 @@ where
         // ── Create Selection<AreaSegment<T>, Line> ──────────────────
         let mut selection = Selection::<AreaSegment<T>, Line>::new(segments, context.clone())?;
 
-        selection.attr("start", |seg: &AreaSegment<T>| seg.start_pos);
-        selection.attr("end", |seg: &AreaSegment<T>| seg.end_pos);
         selection.attr("color", |seg: &AreaSegment<T>| seg.color);
         selection.attr("width", |seg: &AreaSegment<T>| seg.width);
 
@@ -1210,11 +1209,168 @@ where
         // Automatically apply percentage formatting for normalised stacking
         // when no custom y formatter was explicitly set.
         let mut config = self.config;
+        let x_scale_opt = config.x_scale.clone();
+        let y_scale_opt = config.y_scale.clone();
+
         if self.stack_mode == StackMode::Normalized && config.y_label_formatter.is_none() {
             config.y_label_formatter =
                 Some(std::sync::Arc::new(crate::label::PercentFormatter::new()));
         }
         let mut composed_chart = ComposedChart::new(selection, config).with_default_axes();
+
+        // ── Compute chart area → NDC bounds ─────────────────────────
+        let chart_area = composed_chart.calculate_chart_area();
+        let w = composed_chart.config.width;
+        let h = composed_chart.config.height;
+        let ndc = NdcBounds {
+            left: (chart_area.x / w) * 2.0 - 1.0,
+            right: ((chart_area.x + chart_area.width) / w) * 2.0 - 1.0,
+            top: 1.0 - (chart_area.y / h) * 2.0,
+            bottom: 1.0 - ((chart_area.y + chart_area.height) / h) * 2.0,
+        };
+
+        // ── Attr bindings with data→NDC mapping ─────────────────────
+        // When explicit scales are present, map through scale_value()
+        // then normalise from the scale's output range to NDC — this
+        // handles linear, log, band and point scales uniformly and
+        // matches the pattern used by scatter/bar/line builders.
+        // Without scales, fall back to linear domain→NDC interpolation.
+        if let (Some(xs), Some(ys)) = (x_scale_opt.clone(), y_scale_opt.clone()) {
+            let x_rng_lo = xs.range_min();
+            let x_rng_hi = xs.range_max();
+            let y_rng_lo = ys.range_min();
+            let y_rng_hi = ys.range_max();
+
+            let xs2 = xs.clone();
+            let ys2 = ys.clone();
+
+            composed_chart
+                .visualization
+                .attr("start", move |seg: &AreaSegment<T>| {
+                    let x_scaled = xs.scale_value(seg.start_pos[0]);
+                    let y_scaled = ys.scale_value(seg.start_pos[1]);
+
+                    let x_span = x_rng_hi - x_rng_lo;
+                    let y_span = y_rng_hi - y_rng_lo;
+
+                    let tx = if x_span.abs() < f32::EPSILON {
+                        0.5
+                    } else {
+                        (x_scaled - x_rng_lo) / x_span
+                    };
+                    let ty = if y_span.abs() < f32::EPSILON {
+                        0.5
+                    } else {
+                        (y_scaled - y_rng_lo) / y_span
+                    };
+
+                    [
+                        ndc.left + tx * (ndc.right - ndc.left),
+                        ndc.bottom + ty * (ndc.top - ndc.bottom),
+                    ]
+                });
+
+            let x_rng_lo2 = xs2.range_min();
+            let x_rng_hi2 = xs2.range_max();
+            let y_rng_lo2 = ys2.range_min();
+            let y_rng_hi2 = ys2.range_max();
+
+            composed_chart
+                .visualization
+                .attr("end", move |seg: &AreaSegment<T>| {
+                    let x_scaled = xs2.scale_value(seg.end_pos[0]);
+                    let y_scaled = ys2.scale_value(seg.end_pos[1]);
+
+                    let x_span = x_rng_hi2 - x_rng_lo2;
+                    let y_span = y_rng_hi2 - y_rng_lo2;
+
+                    let tx = if x_span.abs() < f32::EPSILON {
+                        0.5
+                    } else {
+                        (x_scaled - x_rng_lo2) / x_span
+                    };
+                    let ty = if y_span.abs() < f32::EPSILON {
+                        0.5
+                    } else {
+                        (y_scaled - y_rng_lo2) / y_span
+                    };
+
+                    [
+                        ndc.left + tx * (ndc.right - ndc.left),
+                        ndc.bottom + ty * (ndc.top - ndc.bottom),
+                    ]
+                });
+        } else {
+            // No explicit scales — compute domain from segment positions
+            // and linearly map to NDC.
+            let (x_min, x_max, y_min, y_max) = {
+                let segs = composed_chart.visualization.data();
+                let mut x_lo = f32::INFINITY;
+                let mut x_hi = f32::NEG_INFINITY;
+                let mut y_lo = f32::INFINITY;
+                let mut y_hi = f32::NEG_INFINITY;
+                for seg in segs {
+                    for pos in [seg.start_pos, seg.end_pos] {
+                        x_lo = x_lo.min(pos[0]);
+                        x_hi = x_hi.max(pos[0]);
+                        y_lo = y_lo.min(pos[1]);
+                        y_hi = y_hi.max(pos[1]);
+                    }
+                }
+                let pad_range = |lo: f32, hi: f32| -> (f32, f32) {
+                    let span = hi - lo;
+                    if span.abs() < f32::EPSILON {
+                        (lo - 1.0, hi + 1.0)
+                    } else {
+                        let pad = span * 0.05;
+                        (lo - pad, hi + pad)
+                    }
+                };
+                let (xl, xh) = pad_range(x_lo, x_hi);
+                let (yl, yh) = pad_range(y_lo, y_hi);
+                (xl, xh, yl, yh)
+            };
+
+            let x_span = x_max - x_min;
+            let y_span = y_max - y_min;
+
+            composed_chart
+                .visualization
+                .attr("start", move |seg: &AreaSegment<T>| {
+                    let tx = if x_span.abs() < f32::EPSILON {
+                        0.5
+                    } else {
+                        (seg.start_pos[0] - x_min) / x_span
+                    };
+                    let ty = if y_span.abs() < f32::EPSILON {
+                        0.5
+                    } else {
+                        (seg.start_pos[1] - y_min) / y_span
+                    };
+                    [
+                        ndc.left + tx * (ndc.right - ndc.left),
+                        ndc.bottom + ty * (ndc.top - ndc.bottom),
+                    ]
+                });
+            composed_chart
+                .visualization
+                .attr("end", move |seg: &AreaSegment<T>| {
+                    let tx = if x_span.abs() < f32::EPSILON {
+                        0.5
+                    } else {
+                        (seg.end_pos[0] - x_min) / x_span
+                    };
+                    let ty = if y_span.abs() < f32::EPSILON {
+                        0.5
+                    } else {
+                        (seg.end_pos[1] - y_min) / y_span
+                    };
+                    [
+                        ndc.left + tx * (ndc.right - ndc.left),
+                        ndc.bottom + ty * (ndc.top - ndc.bottom),
+                    ]
+                });
+        }
 
         // Prepare the GPU render pipeline at build time so that
         // `render_to_png()` / `render_to_texture_view()` work without

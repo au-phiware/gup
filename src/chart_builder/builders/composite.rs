@@ -986,11 +986,10 @@ where
 
 /// Build a single layer variant, injecting unified scales.
 ///
-/// After the inner builder produces a selection, additional `attr`
-/// bindings are appended to map data-space coordinates to NDC using
-/// the composite's unified scales.  Because `build_instance` processes
-/// bindings in order and last-write-wins, these override any earlier
-/// placeholder bindings.
+/// Each inner builder receives the composite's unified x/y scales via
+/// its config.  The builder's own `build_with_data` maps segment
+/// positions through those scales to NDC, so no post-build attribute
+/// overrides are needed.
 fn build_layer<T>(
     kind: LayerKind<T>,
     data: Vec<T>,
@@ -1015,29 +1014,8 @@ where
             builder.config.show_axes = false;
             builder.config.x_scale = Some(x_scale.clone());
             builder.config.y_scale = Some(y_scale.clone());
-
             let composed = builder.build_with_data(data, context)?;
-            let mut sel = composed.visualization;
-
-            // The line builder stores positions in data coords.
-            // Override the start/end bindings to map through the
-            // unified scales so lines render in NDC.
-            let xs = x_scale.clone();
-            let ys = y_scale.clone();
-            sel.attr("start", move |seg: &LineSegment<T>| {
-                [
-                    xs.scale_value(seg.start_pos[0]),
-                    ys.scale_value(seg.start_pos[1]),
-                ]
-            });
-            let xs2 = x_scale.clone();
-            let ys2 = y_scale.clone();
-            sel.attr("end", move |seg: &LineSegment<T>| {
-                [
-                    xs2.scale_value(seg.end_pos[0]),
-                    ys2.scale_value(seg.end_pos[1]),
-                ]
-            });
+            let sel = composed.visualization;
 
             Ok(BuiltLayer::Line(sel))
         }
@@ -1055,25 +1033,7 @@ where
             builder.config.x_scale = Some(x_scale.clone());
             builder.config.y_scale = Some(y_scale.clone());
             let composed = builder.build_with_data(data, context)?;
-            let mut sel = composed.visualization;
-
-            // Area segments share the same structure as line segments.
-            let xs = x_scale.clone();
-            let ys = y_scale.clone();
-            sel.attr("start", move |seg: &AreaSegment<T>| {
-                [
-                    xs.scale_value(seg.start_pos[0]),
-                    ys.scale_value(seg.start_pos[1]),
-                ]
-            });
-            let xs2 = x_scale.clone();
-            let ys2 = y_scale.clone();
-            sel.attr("end", move |seg: &AreaSegment<T>| {
-                [
-                    xs2.scale_value(seg.end_pos[0]),
-                    ys2.scale_value(seg.end_pos[1]),
-                ]
-            });
+            let sel = composed.visualization;
 
             Ok(BuiltLayer::Area(sel))
         }
