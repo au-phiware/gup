@@ -87,3 +87,76 @@ adds the higher-level axis/grid layout logic.
 - 15 unit tests (axis geometry, colours, origin, ticks, grid lines, edge cases,
   tick labels)
 - 1 doc test
+
+## Retrospective
+
+**Completed**: 2025-07-22
+
+### Key Technical Learnings
+
+#### Line3D Pipeline Integration
+
+- **Challenge**: Setting up a second render pipeline (Line3D) alongside the
+  existing Sphere3D pipeline in a single render pass, sharing the camera
+  uniform buffer.
+- **Solution**: The Line3D shader uses a simpler bind group layout (no light
+  uniform at group 1 binding 1), so a separate pipeline layout is needed. Both
+  pipelines share the same camera buffer via their respective bind groups.
+- **Pattern**: When multiple 3D mark types share a scene, each gets its own
+  pipeline but they share uniform buffers. Draw calls are sequenced within one
+  render pass.
+
+#### Perpendicular Tick Mark Generation
+
+- **Challenge**: Generating tick marks perpendicular to arbitrary axis
+  directions in 3D space.
+- **Solution**: Used cross-product with a non-parallel reference vector to find
+  a perpendicular pair. For axes aligned with X, the reference swaps to Y to
+  avoid degenerate cross products.
+- **Pattern**: `perpendicular_pair()` is a reusable helper for any scenario
+  needing an orthonormal frame from a single direction vector.
+
+### Architectural Decisions
+
+#### Data Generation vs GPU Generation
+
+- **Decision**: Generate axis/grid `Line3DInstance` data on the CPU and upload
+  once, rather than using a compute shader.
+- **Reasoning**: Axis and grid geometry is static (or changes only on
+  configuration change), so GPU compute would add complexity for no benefit.
+  CPU generation is trivial and the data is small (tens of instances).
+- **Trade-off**: If axes needed to update every frame (e.g. dynamic range), GPU
+  generation would be more efficient.
+- **Future**: Dynamic axis ranges (e.g. auto-scaling to data bounds) could be
+  added by regenerating instances when the data range changes.
+
+#### TickLabel3D as Data-Only Struct
+
+- **Decision**: Provide `TickLabel3D` as a data struct with world-space position
+  and text, rather than integrating directly with the `TextRenderer`.
+- **Reasoning**: The story's risk assessment noted that 3D text projection
+  (billboard text or screen-space overlay) is a separate concern. Providing the
+  data decouples axis logic from text rendering specifics.
+- **Trade-off**: Users must handle text rendering themselves. A future story
+  could provide a convenience method that projects labels and feeds them to
+  `TextRenderer`.
+- **Future**: Enables GUP-373 (Billboard Text Labels) to consume this data.
+
+### Development Workflow Insights
+
+- The existing `scatter_3d` example was an excellent template — following its
+  pattern for pipeline setup, bind groups, and the orbit camera made the new
+  example straightforward.
+- Duplicate story ID (GUP-315) existed for both "Graph Node Label Rendering" and
+  "3D Axis and Grid". The 3D Axis and Grid variant was implemented here. The
+  duplicate should be renumbered.
+- Running the example produced 1000+ FPS, confirming that 45 additional line
+  instances have negligible performance impact alongside 800 sphere instances.
+
+### Follow-up Stories
+
+1. **GUP-373: Billboard Text Labels for 3D Axes** — Integrate `TextRenderer`
+   with `TickLabel3D` data to render axis value labels as camera-facing text in
+   3D scenes. Would consume the `generate_tick_labels()` API from this story.
+2. **GUP-374: Duplicate Story ID Cleanup** — Renumber the second GUP-315 (Graph
+   Node Label Rendering) to avoid ID collisions in the story index.
