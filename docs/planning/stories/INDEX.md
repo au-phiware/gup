@@ -779,12 +779,13 @@ integration, pipeline caching.
 - [GUP-303](GUP-303_Composite_Chart_GPU_Render_Pipeline.md) ✅ — Wire
   CompositeChart through a single wgpu render pass so all layer selections draw
   to the same surface in declaration order. Deps: GUP-251 ✅.
-- [GUP-304](GUP-304_Per_Layer_Data_Support.md) 🚧 — Allow each layer in a
+- [GUP-304](GUP-304_Per_Layer_Data_Support.md) ✅ — Allow each layer in a
   composite chart to carry its own data set (different T per layer) via
   type-erased layer support. Deps: GUP-251 ✅, GUP-303 ✅.
 - [GUP-362](GUP-362_Accessor_GPU_Position_Pipeline.md) 📋 — Connect chart
   builder accessor functions to GPU-side scale transformations so scatter/bar
-  charts render data-driven positions without manual overrides. Deps: GUP-303 ✅.
+  charts render data-driven positions without manual overrides. Deps: GUP-303
+  ✅.
 
 ## Performance & Profiling
 
