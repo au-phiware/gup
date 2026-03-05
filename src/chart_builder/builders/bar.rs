@@ -608,7 +608,7 @@ where
         }
 
         // --- create selection with Rectangle mark ---
-        let selection = Selection::<T, Rectangle>::new(data, context)?;
+        let selection = Selection::<T, Rectangle>::new(data, context.clone())?;
 
         let mut composed_chart =
             ComposedChart::new(selection, self.config.clone()).with_default_axes();
@@ -631,6 +631,16 @@ where
             None,
             &self.config,
             ndc,
+        )?;
+
+        // Prepare the GPU render pipeline at build time so that
+        // `render_to_png()` / `render_to_texture_view()` work without
+        // requiring a `MarkInstanceBuilder` bound at call-site.
+        composed_chart.visualization.prepare_render_bound(
+            context.device(),
+            context.queue(),
+            None,
+            None,
         )?;
 
         Ok(composed_chart)
@@ -1047,5 +1057,96 @@ mod tests {
         assert!(builder.config.show_grid);
         assert!(builder.config.grid_config.show_horizontal);
         assert!(!builder.config.grid_config.show_vertical);
+    }
+
+    // -- Visual regression tests (GUP-289) --
+
+    #[tokio::test]
+    async fn test_bar_chart_is_render_ready_after_build() {
+        let data = vec![
+            CategoryData {
+                category: "A".to_string(),
+                count: 10.0,
+            },
+            CategoryData {
+                category: "B".to_string(),
+                count: 20.0,
+            },
+            CategoryData {
+                category: "C".to_string(),
+                count: 15.0,
+            },
+        ];
+
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let chart = bar()
+            .x(AccessorFunction::new(|d: &CategoryData| {
+                AccessorValue::String(d.category.clone())
+            }))
+            .y(AccessorFunction::new(|d: &CategoryData| {
+                AccessorValue::Float(d.count)
+            }))
+            .build_with_data(data, context)
+            .unwrap();
+
+        assert!(
+            chart.has_data_mark_data(),
+            "Bar chart should report data-mark data present"
+        );
+        assert!(
+            chart.visualization.is_render_ready(),
+            "Bar chart selection should be render-ready after build"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_bar_chart_render_to_png_produces_visible_bars() {
+        let data = vec![
+            CategoryData {
+                category: "A".to_string(),
+                count: 30.0,
+            },
+            CategoryData {
+                category: "B".to_string(),
+                count: 60.0,
+            },
+            CategoryData {
+                category: "C".to_string(),
+                count: 45.0,
+            },
+        ];
+
+        let context = Arc::new(RenderContext::new().await.unwrap());
+        let mut chart = bar()
+            .x(AccessorFunction::new(|d: &CategoryData| {
+                AccessorValue::String(d.category.clone())
+            }))
+            .y(AccessorFunction::new(|d: &CategoryData| {
+                AccessorValue::Float(d.count)
+            }))
+            .build_with_data(data, context)
+            .unwrap();
+
+        let rgba = chart.render_to_rgba(400, 300).unwrap();
+        assert_eq!(rgba.len(), 400 * 300 * 4);
+
+        // Count non-white pixels in the data region (centre of image,
+        // away from axes/labels).
+        let mut non_white = 0u32;
+        for y in 60..240 {
+            for x in 80..320 {
+                let idx = (y * 400 + x) as usize * 4;
+                let r = rgba[idx];
+                let g = rgba[idx + 1];
+                let b = rgba[idx + 2];
+                if r != 255 || g != 255 || b != 255 {
+                    non_white += 1;
+                }
+            }
+        }
+        assert!(
+            non_white > 50,
+            "Expected visible bar rectangles in the data region, but found only {non_white} non-white pixels"
+        );
     }
 }
