@@ -52,12 +52,12 @@ The screenshots in these tutorials are captured from the examples shipped with
 Gup. To regenerate them, run the corresponding example and take a screenshot of
 the window:
 
-| Screenshot                           | Example command                            |
-| ------------------------------------ | ------------------------------------------ |
-| `assets/tutorial01_scatter.png`      | `cargo run --example 01_hello_chart`       |
-| `assets/tutorial04_interactions.png` | `cargo run --example interactive_circles`  |
-| `assets/tutorial05_streaming.png`    | `cargo run --example streaming_live_chart` |
-| `assets/tutorial06_custom_mark.png`  | `cargo run --example custom_mark_demo`     |
+| Screenshot                           | Example command                               |
+| ------------------------------------ | --------------------------------------------- |
+| `assets/tutorial01_scatter.png`      | `cargo run --example tutorial01_scatter`      |
+| `assets/tutorial04_interactions.png` | `cargo run --example tutorial04_interactions` |
+| `assets/tutorial05_streaming.png`    | `cargo run --example tutorial05_streaming`    |
+| `assets/tutorial06_custom_mark.png`  | `cargo run --example tutorial06_custom_marks` |
 
 ## Further Reading
 

@@ -367,6 +367,8 @@ async fn main() -> GupResult<()> {
   reference for the mark system.
 - **[Mark System docs](../mark-system/README.md)** — detailed API reference for
   `MarkRegistry` and `MarkRenderer`.
+- **[`tutorial06_custom_marks` example](../../examples/tutorials/tutorial06_custom_marks.rs)**
+  — run exactly this tutorial's custom mark example.
 - **[`custom_mark_demo` example](../../examples/custom_mark_demo.rs)** —
   runnable example with Diamond, Arrow, and Hexagon marks.
 - **[Tutorial 1: Getting Started](01_getting_started.md)** — back to basics if

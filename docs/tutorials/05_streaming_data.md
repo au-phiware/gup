@@ -285,6 +285,8 @@ async fn main() -> GupResult<()> {
 
 - **[Tutorial 6: Custom Marks](06_custom_marks.md)** — implement a new mark type
   from scratch.
+- **[`tutorial05_streaming` example](../../examples/tutorials/tutorial05_streaming.rs)**
+  — run exactly this tutorial's streaming chart.
 - **[`streaming_live_chart` example](../../examples/streaming_live_chart.rs)** —
   full windowed streaming chart with GPU rendering.
 - **[`async_streaming_demo` example](../../examples/async_streaming_demo.rs)** —

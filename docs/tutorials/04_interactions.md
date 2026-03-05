@@ -334,6 +334,8 @@ async fn main() -> GupResult<()> {
 
 - **[Tutorial 5: Streaming Data](05_streaming_data.md)** — connect live data
   sources to your charts.
+- **[`tutorial04_interactions` example](../../examples/tutorials/tutorial04_interactions.rs)**
+  — run exactly this tutorial's interactive chart in a window.
 - **[`interactive_circles` example](../../examples/interactive_circles.rs)** —
   full windowed example with click and hover handlers.
 - **[`zoom_pan` example](../../examples/zoom_pan.rs)** — complete zoom/pan

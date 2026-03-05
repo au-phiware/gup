@@ -227,6 +227,8 @@ let builder = plot()
 
 - **[Tutorial 2: Data Binding](02_data_binding.md)** — learn how
   `Selection<T, M>` works under the hood and bind complex data structures.
+- **[`tutorial01_scatter` example](../../examples/tutorials/tutorial01_scatter.rs)**
+  — run exactly this tutorial's chart in a window.
 - **[`02_scatter_window` example](../../examples/basic/02_scatter_window.rs)** —
   display a scatter chart in an interactive window.
 - **[Grid System guide](../GRID_SYSTEM.md)** — add grid lines and axes to your
