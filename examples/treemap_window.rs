@@ -534,9 +534,10 @@ impl ApplicationHandler for App {
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         // Only request continuous redraws when layout is pending.
         if self.needs_layout
-            && let Some(w) = &self.window {
-                w.request_redraw();
-            }
+            && let Some(w) = &self.window
+        {
+            w.request_redraw();
+        }
     }
 }
 
