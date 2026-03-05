@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Chart Builders **Status**: 🚧 In Progress **Created**:
-2025-07-27
+**Initiative**: Chart Builders **Status**: ✅ Complete **Created**: 2025-07-27
+**Completed**: 2025-07-27
 
 ## Context
 
@@ -22,19 +22,19 @@ landmine for any code that clones `AccessorFunction`.
 
 ## Acceptance Criteria
 
-- [ ] `AccessorFunction` either preserves the closure through `Clone` (via
+- [x] `AccessorFunction` either preserves the closure through `Clone` (via
       `Arc`-based sharing) or is made non-Clone.
-- [ ] All existing code that clones `AccessorFunction` is updated to use the new
+- [x] All existing code that clones `AccessorFunction` is updated to use the new
       pattern.
-- [ ] No silent data corruption from accessor cloning.
-- [ ] All tests pass.
+- [x] No silent data corruption from accessor cloning.
+- [x] All tests pass.
 
 ## Technical Tasks
 
-- [ ] Audit all uses of `AccessorFunction::clone()` in the codebase.
-- [ ] Choose approach: `Arc`-based closure sharing or remove `Clone`.
-- [ ] Implement the chosen approach.
-- [ ] Update downstream code that depends on `Clone`.
+- [x] Audit all uses of `AccessorFunction::clone()` in the codebase.
+- [x] Choose approach: `Arc`-based closure sharing or remove `Clone`.
+- [x] Implement the chosen approach.
+- [x] Update downstream code that depends on `Clone`.
 
 ## Dependencies
 
@@ -55,7 +55,48 @@ landmine for any code that clones `AccessorFunction`.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied.
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
+- [x] All Acceptance Criteria are satisfied.
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+
+## Implementation Summary
+
+### Approach
+
+Chose the `Arc`-based closure sharing approach over removing `Clone`. This is
+fully backward-compatible — all existing code continues to work with zero
+changes.
+
+### Key Changes
+
+- **`src/chart_builder/builders.rs`**: Changed `AccessorFunction<T>` internal
+  storage from `Box<dyn Fn(&T) -> AccessorValue>` to
+  `Arc<dyn Fn(&T) -> AccessorValue>`. Updated `new()`, `from_field()`, and
+  `Clone` impl to use `Arc::new` and `Arc::clone`.
+- **`src/chart_builder/builders/area.rs`**: Added `Clone` impl for
+  `Baseline<T>` enum. Fixed `AreaChartBuilder::clone()` to properly clone the
+  baseline instead of resetting to `Baseline::default()`.
+
+### Clone Sites Audited
+
+| Location | Status |
+|---|---|
+| `BarChartBuilder::clone()` (5 accessor fields) | ✅ Works via Arc |
+| `AreaChartBuilder::clone()` (4 accessor fields + baseline) | ✅ Fixed |
+| `examples/basic/03_line_chart.rs` (x/y accessor clones) | ✅ Works via Arc |
+| `examples/intermediate/categorical_bar.rs` (x/y accessor clones) | ✅ Works via Arc |
+
+### Tests Added
+
+5 new unit tests:
+- `test_accessor_function_clone_preserves_field_name`
+- `test_accessor_function_clone_preserves_closure`
+- `test_accessor_function_clone_preserves_string_closure`
+- `test_accessor_function_clone_none_field_name`
+- `test_option_accessor_function_clone`
+
+### Test Results
+
+- 3079 lib tests passed, 0 failed
+- All examples compile

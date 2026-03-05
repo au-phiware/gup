@@ -796,7 +796,7 @@ integration, pipeline caching.
   builder accessor functions to GPU-side scale transformations so scatter/bar
   charts render data-driven positions without manual overrides. Deps: GUP-303
   ✅.
-- [GUP-363](GUP-363_Fix_AccessorFunction_Clone.md) 🚧 — Fix
+- [GUP-363](GUP-363_Fix_AccessorFunction_Clone.md) ✅ — Fix
   AccessorFunction::clone() which silently loses the closure. Deps: GUP-362 ✅.
 - [GUP-364](GUP-364_Composite_Line_Area_Scale_Integration.md) 📋 — Integrate
   scale transformations into line/area builders to remove composite build_layer
