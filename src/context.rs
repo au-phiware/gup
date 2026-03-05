@@ -3711,4 +3711,59 @@ mod tests {
         assert_eq!(SurfaceFocus::Focused, SurfaceFocus::Focused);
         assert_ne!(SurfaceFocus::Focused, SurfaceFocus::Unfocused);
     }
+
+    // --- SurfaceConfigBuilder usage field ---
+
+    #[test]
+    fn test_surface_config_builder_default_usage_is_none() {
+        let builder = SurfaceConfigBuilder::new();
+        assert!(builder.usage.is_none());
+    }
+
+    #[test]
+    fn test_surface_config_builder_with_usage() {
+        let builder = SurfaceConfigBuilder::new().with_usage(TextureUsages::COPY_SRC);
+        assert_eq!(builder.usage, Some(TextureUsages::COPY_SRC));
+    }
+
+    #[test]
+    fn test_surface_config_builder_with_combined_usage() {
+        let builder = SurfaceConfigBuilder::new()
+            .with_usage(TextureUsages::COPY_SRC | TextureUsages::TEXTURE_BINDING);
+        let expected = TextureUsages::COPY_SRC | TextureUsages::TEXTURE_BINDING;
+        assert_eq!(builder.usage, Some(expected));
+    }
+
+    #[test]
+    fn test_surface_config_builder_usage_chaining() {
+        let builder = SurfaceConfigBuilder::new()
+            .with_size(1920, 1080)
+            .with_usage(TextureUsages::COPY_SRC)
+            .with_frame_latency(1);
+        assert_eq!(builder.width, 1920);
+        assert_eq!(builder.height, 1080);
+        assert_eq!(builder.usage, Some(TextureUsages::COPY_SRC));
+        assert_eq!(builder.desired_maximum_frame_latency, Some(1));
+    }
+
+    // --- Headless frame capture ---
+
+    #[tokio::test]
+    async fn test_headless_begin_frame_has_no_surface_texture() {
+        let context = GupContext::headless().await.unwrap();
+        let mut ctx = Arc::try_unwrap(context).unwrap();
+        let frame = ctx.begin_frame().unwrap();
+        // Headless context has no surface texture, so capture should fail.
+        assert!(!frame.is_surface_rendering());
+    }
+
+    #[tokio::test]
+    async fn test_capture_texture_copy_fails_without_surface() {
+        let context = GupContext::headless().await.unwrap();
+        let mut ctx = Arc::try_unwrap(context).unwrap();
+        let mut frame = ctx.begin_frame().unwrap();
+        let result = frame.capture_texture_copy(800, 600);
+        assert!(result.is_err());
+        let _ = frame.finish();
+    }
 }
