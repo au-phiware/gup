@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Core GPU Primitives **Status**: 🚧 In Progress **Created**:
-2025-07-20
+**Initiative**: Core GPU Primitives **Status**: ✅ Complete **Created**:
+2025-07-20 **Completed**: 2025-07-21
 
 ## Context
 
@@ -24,20 +24,20 @@ This is the same class of bug fixed in GUP-289 for the bar chart builder.
 
 ## Acceptance Criteria
 
-- [ ] `AreaChartBuilder::build_with_data()` calls `prepare_render_bound()` at
+- [x] `AreaChartBuilder::build_with_data()` calls `prepare_render_bound()` at
       build time so the Selection is render-ready.
-- [ ] `render_to_png()` on an area chart shows visible filled segments in the
+- [x] `render_to_png()` on an area chart shows visible filled segments in the
       data area.
-- [ ] At least one test validates visible area pixels in the data region.
+- [x] At least one test validates visible area pixels in the data region.
 
 ## Technical Tasks
 
-- [ ] Clone `context` before passing to `Selection::new` in
+- [x] Clone `context` before passing to `Selection::new` in
       `AreaChartBuilder::build_with_data()`.
-- [ ] Call `prepare_render_bound()` at the end of
+- [x] Call `prepare_render_bound()` at the end of
       `AreaChartBuilder::build_with_data()` (after
       `apply_accessors_to_selection`).
-- [ ] Add a visual regression test for area chart PNG export.
+- [x] Add a visual regression test for area chart PNG export.
 
 ## Dependencies
 
@@ -63,6 +63,25 @@ This is the same class of bug fixed in GUP-289 for the bar chart builder.
 
 ## Definition of Done
 
-- [ ] Area chart builder produces visible data marks via `render_to_png()`.
-- [ ] All tests pass: `cargo test -- --test-threads=1`.
-- [ ] `mask all-fix` exits cleanly.
+- [x] Area chart builder produces visible data marks via `render_to_png()`.
+- [x] All tests pass: `cargo test -- --test-threads=1`.
+- [x] `mask all-fix` exits cleanly.
+
+## Implementation Summary
+
+### Changes Made
+
+- **`src/chart_builder/builders/area.rs`**: Added `prepare_render_bound()` call
+  at the end of both `build_with_data()` (line-segment based area chart) and
+  `build_filled()` (tessellated polygon area chart). Cloned `context` before
+  passing to `Selection::new` so `device()`/`queue()` remain accessible for the
+  `prepare_render_bound()` call.
+- Added `test_area_chart_render_to_png_produces_visible_area` visual regression
+  test that validates non-white pixels appear in the data region when rendering
+  an area chart via `render_to_rgba()`.
+
+### Test Results
+
+- 3061 library tests pass, 0 failures
+- 38 area chart tests pass including the new visual regression test
+- All examples compile
