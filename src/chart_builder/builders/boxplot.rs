@@ -12,7 +12,7 @@ use crate::chart_builder::{ChartBuilder, ChartBuilderError, ChartConfig, Compose
 use crate::error::GupResult;
 use crate::grid::{GridConfiguration, GridLineConfig};
 use crate::label::LabelFormatter;
-use crate::mark::boxplot::{BoxPlot, BoxPlotAttributes, BoxPlotOrientation};
+use crate::mark::boxplot::{BoxPlot, BoxPlotAttributes, BoxPlotInstance, BoxPlotOrientation};
 use crate::selection::Selection;
 use crate::shader_function::Vec2;
 use crate::{MaybeSend, MaybeSync};
@@ -349,19 +349,121 @@ where
         let boxplot_data = self.compute_boxplot_attributes(&data)?;
 
         // Create selection with BoxPlot marks
-        let selection = Selection::<BoxPlotAttributes, BoxPlot>::new(boxplot_data, context)?;
-
-        // Apply basic accessors if provided
-        // Note: For box plots, most attributes are computed from statistical data
-        // Color accessor can still be applied if provided
-        if let Some(ref color_accessor) = self.color_accessor {
-            // Would need to map color accessor to box plot attributes
-            // For now, this is a placeholder for future enhancement
-            let _ = color_accessor;
-        }
+        let selection =
+            Selection::<BoxPlotAttributes, BoxPlot>::new(boxplot_data, context.clone())?;
 
         // Create composed chart with axes based on configuration
-        let composed_chart = ComposedChart::new(selection, self.config).with_default_axes();
+        let mut composed_chart = ComposedChart::new(selection, self.config).with_default_axes();
+
+        // Compute the NDC chart area so box plot values can be mapped
+        // from data space into clip-space coordinates.
+        let chart_area = composed_chart.calculate_chart_area();
+        let w = composed_chart.config.width;
+        let h = composed_chart.config.height;
+        let ndc_left = (chart_area.x / w) * 2.0 - 1.0;
+        let ndc_right = ((chart_area.x + chart_area.width) / w) * 2.0 - 1.0;
+        let ndc_top = 1.0 - (chart_area.y / h) * 2.0;
+        let ndc_bottom = 1.0 - ((chart_area.y + chart_area.height) / h) * 2.0;
+
+        // Determine data domain from all box plot attributes.
+        let bp_data = composed_chart.visualization.data();
+        let (mut x_min, mut x_max) = (f32::INFINITY, f32::NEG_INFINITY);
+        let (mut y_min, mut y_max) = (f32::INFINITY, f32::NEG_INFINITY);
+        for attrs in bp_data {
+            let half_w = attrs.width * 0.5;
+            match attrs.orientation {
+                BoxPlotOrientation::Vertical => {
+                    x_min = x_min.min(attrs.position.x - half_w);
+                    x_max = x_max.max(attrs.position.x + half_w);
+                    y_min = y_min.min(attrs.min);
+                    y_max = y_max.max(attrs.max);
+                    for &o in &attrs.outliers {
+                        y_min = y_min.min(o);
+                        y_max = y_max.max(o);
+                    }
+                }
+                BoxPlotOrientation::Horizontal => {
+                    y_min = y_min.min(attrs.position.y - half_w);
+                    y_max = y_max.max(attrs.position.y + half_w);
+                    x_min = x_min.min(attrs.min);
+                    x_max = x_max.max(attrs.max);
+                    for &o in &attrs.outliers {
+                        x_min = x_min.min(o);
+                        x_max = x_max.max(o);
+                    }
+                }
+            }
+        }
+        // Add 5% padding so marks are not clipped at the edges.
+        let x_pad = (x_max - x_min).abs() * 0.05;
+        let y_pad = (y_max - y_min).abs() * 0.05;
+        x_min -= x_pad;
+        x_max += x_pad;
+        y_min -= y_pad;
+        y_max += y_pad;
+
+        let x_span = x_max - x_min;
+        let y_span = y_max - y_min;
+
+        // Prepare the GPU render pipeline at build time, transforming
+        // data-space attributes into NDC coordinates.
+        composed_chart.visualization.prepare_render(
+            context.device(),
+            context.queue(),
+            move |attrs: &BoxPlotAttributes| {
+                let map_x = |v: f32| {
+                    let t = if x_span.abs() < f32::EPSILON {
+                        0.5
+                    } else {
+                        (v - x_min) / x_span
+                    };
+                    ndc_left + t * (ndc_right - ndc_left)
+                };
+                let map_y = |v: f32| {
+                    let t = if y_span.abs() < f32::EPSILON {
+                        0.5
+                    } else {
+                        (v - y_min) / y_span
+                    };
+                    ndc_bottom + t * (ndc_top - ndc_bottom)
+                };
+
+                let mut inst = BoxPlotInstance::from(attrs);
+                match attrs.orientation {
+                    BoxPlotOrientation::Vertical => {
+                        inst.position = [map_x(attrs.position.x), 0.0];
+                        inst.whisker_min = map_y(attrs.min);
+                        inst.q1 = map_y(attrs.q1);
+                        inst.median = map_y(attrs.median);
+                        inst.q3 = map_y(attrs.q3);
+                        inst.whisker_max = map_y(attrs.max);
+                        inst.width = (attrs.width / x_span) * (ndc_right - ndc_left);
+                    }
+                    BoxPlotOrientation::Horizontal => {
+                        inst.position = [0.0, map_y(attrs.position.y)];
+                        inst.whisker_min = map_x(attrs.min);
+                        inst.q1 = map_x(attrs.q1);
+                        inst.median = map_x(attrs.median);
+                        inst.q3 = map_x(attrs.q3);
+                        inst.whisker_max = map_x(attrs.max);
+                        inst.width = (attrs.width / y_span) * (ndc_top - ndc_bottom);
+                    }
+                }
+                // Transform outlier values to NDC.
+                for i in 0..attrs.outliers.len().min(32) {
+                    let vec_idx = i / 4;
+                    let comp_idx = i % 4;
+                    let val = attrs.outliers[i];
+                    inst.outliers[vec_idx][comp_idx] = match attrs.orientation {
+                        BoxPlotOrientation::Vertical => map_y(val),
+                        BoxPlotOrientation::Horizontal => map_x(val),
+                    };
+                }
+                inst
+            },
+            None,
+            None,
+        )?;
 
         Ok(composed_chart)
     }
@@ -736,5 +838,68 @@ mod tests {
         assert!(v_builder.config.show_grid);
         assert!(!v_builder.config.grid_config.show_horizontal);
         assert!(v_builder.config.grid_config.show_vertical);
+    }
+
+    #[tokio::test]
+    async fn test_boxplot_is_render_ready_after_build() {
+        let data = vec![TestData {
+            category: "A".to_string(),
+            values: vec![10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0],
+            single_value: 25.0,
+        }];
+
+        let context = Arc::new(RenderContext::new().await.unwrap());
+
+        let chart = boxplot()
+            .y(AccessorFunction::new(|d: &TestData| {
+                AccessorValue::FloatArray(d.values.clone())
+            }))
+            .build_with_data(data, context)
+            .unwrap();
+
+        assert!(
+            chart.visualization.is_render_ready(),
+            "BoxPlot selection should be render-ready after build"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_boxplot_render_to_png_produces_visible_marks() {
+        let data = vec![TestData {
+            category: "A".to_string(),
+            values: vec![10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0],
+            single_value: 25.0,
+        }];
+
+        let context = Arc::new(RenderContext::new().await.unwrap());
+
+        let mut chart = boxplot()
+            .y(AccessorFunction::new(|d: &TestData| {
+                AccessorValue::FloatArray(d.values.clone())
+            }))
+            .build_with_data(data, context)
+            .unwrap();
+
+        let rgba = chart.render_to_rgba(400, 300).unwrap();
+        assert_eq!(rgba.len(), 400 * 300 * 4);
+
+        // Count non-white pixels in the data region (centre of image,
+        // away from axes/labels).
+        let mut non_white = 0u32;
+        for y in 60..240 {
+            for x in 80..320 {
+                let idx = (y * 400 + x) as usize * 4;
+                let r = rgba[idx];
+                let g = rgba[idx + 1];
+                let b = rgba[idx + 2];
+                if r != 255 || g != 255 || b != 255 {
+                    non_white += 1;
+                }
+            }
+        }
+        assert!(
+            non_white > 50,
+            "Expected visible box plot marks in the data region, but found only {non_white} non-white pixels"
+        );
     }
 }

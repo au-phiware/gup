@@ -51,7 +51,10 @@
 //!     .levels(12);
 //! ```
 
-use super::{AccessorFunction, ConfigurableBuilder, GridCapableBuilder};
+use super::{
+    AccessorFunction, ConfigurableBuilder, GridCapableBuilder, NdcBounds,
+    apply_accessors_to_selection,
+};
 use crate::chart_builder::{ChartBuilder, ChartBuilderError, ChartConfig, ComposedChart};
 use crate::error::GupResult;
 use crate::grid::{GridConfiguration, GridLineConfig};
@@ -948,25 +951,26 @@ where
             return Err(ChartBuilderError::EmptyData.into());
         }
 
-        // Extract (x, y) samples from data using accessors.
-        let x_acc = self
-            .x_accessor
-            .as_ref()
-            .ok_or_else(|| ChartBuilderError::MissingAccessor {
+        // Validate that required accessors are present.
+        if self.x_accessor.is_none() {
+            return Err(ChartBuilderError::MissingAccessor {
                 attribute: "x".to_string(),
-            })?;
-        let y_acc = self
-            .y_accessor
-            .as_ref()
-            .ok_or_else(|| ChartBuilderError::MissingAccessor {
+            }
+            .into());
+        }
+        if self.y_accessor.is_none() {
+            return Err(ChartBuilderError::MissingAccessor {
                 attribute: "y".to_string(),
-            })?;
+            }
+            .into());
+        }
 
+        // Extract (x, y) samples from data using accessors.
         let samples: Vec<(f32, f32)> = data
             .iter()
             .map(|d| {
-                let xv = x_acc.apply(d).as_f32();
-                let yv = y_acc.apply(d).as_f32();
+                let xv = self.x_accessor.as_ref().unwrap().apply(d).as_f32();
+                let yv = self.y_accessor.as_ref().unwrap().apply(d).as_f32();
                 (xv, yv)
             })
             .collect();
@@ -994,8 +998,41 @@ where
 
         // Build the selection (Rectangle marks for filled regions or
         // placeholder marks for contour lines).
-        let selection = Selection::<T, Rectangle>::new(data, context)?;
-        let composed_chart = ComposedChart::new(selection, chart_config).with_default_axes();
+        let selection = Selection::<T, Rectangle>::new(data, context.clone())?;
+        let mut composed_chart =
+            ComposedChart::new(selection, chart_config.clone()).with_default_axes();
+
+        // Compute NDC bounds for the chart area, then set up attribute
+        // bindings so that `prepare_render_bound` can build GPU instances.
+        let chart_area = composed_chart.calculate_chart_area();
+        let w = composed_chart.config.width;
+        let h = composed_chart.config.height;
+        let ndc = NdcBounds {
+            left: (chart_area.x / w) * 2.0 - 1.0,
+            right: ((chart_area.x + chart_area.width) / w) * 2.0 - 1.0,
+            top: 1.0 - (chart_area.y / h) * 2.0,
+            bottom: 1.0 - ((chart_area.y + chart_area.height) / h) * 2.0,
+        };
+
+        apply_accessors_to_selection(
+            &mut composed_chart.visualization,
+            self.x_accessor,
+            self.y_accessor,
+            None,
+            None,
+            &chart_config,
+            ndc,
+        )?;
+
+        // Prepare the GPU render pipeline at build time so that
+        // `render_to_png()` / `render_to_texture_view()` work without
+        // requiring a `MarkInstanceBuilder` bound at call-site.
+        composed_chart.visualization.prepare_render_bound(
+            context.device(),
+            context.queue(),
+            None,
+            None,
+        )?;
 
         Ok(composed_chart)
     }
@@ -2049,5 +2086,76 @@ mod tests {
         // Map to (0, 1).
         let bits = (*state >> 33) as f32;
         (bits + 1.0) / (2.0f32.powi(31) + 1.0)
+    }
+
+    #[tokio::test]
+    async fn test_density_plot_is_render_ready_after_build() {
+        let data: Vec<TestPoint> = (0..50)
+            .map(|i| TestPoint {
+                x: (i as f32) * 0.1,
+                y: (i as f32) * 0.2,
+            })
+            .collect();
+
+        let context = Arc::new(RenderContext::new().await.unwrap());
+
+        let chart = density_plot()
+            .x(AccessorFunction::new(|d: &TestPoint| {
+                AccessorValue::Float(d.x)
+            }))
+            .y(AccessorFunction::new(|d: &TestPoint| {
+                AccessorValue::Float(d.y)
+            }))
+            .build_with_data(data, context)
+            .unwrap();
+
+        assert!(
+            chart.visualization.is_render_ready(),
+            "DensityPlot selection should be render-ready after build"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_density_plot_render_to_png_produces_visible_marks() {
+        let data: Vec<TestPoint> = (0..50)
+            .map(|i| TestPoint {
+                x: (i as f32) * 0.1,
+                y: (i as f32) * 0.2,
+            })
+            .collect();
+
+        let context = Arc::new(RenderContext::new().await.unwrap());
+
+        let mut chart = density_plot()
+            .x(AccessorFunction::new(|d: &TestPoint| {
+                AccessorValue::Float(d.x)
+            }))
+            .y(AccessorFunction::new(|d: &TestPoint| {
+                AccessorValue::Float(d.y)
+            }))
+            .build_with_data(data, context)
+            .unwrap();
+
+        let rgba = chart.render_to_rgba(400, 300).unwrap();
+        assert_eq!(rgba.len(), 400 * 300 * 4);
+
+        // Count non-white pixels in the data region (centre of image,
+        // away from axes/labels).
+        let mut non_white = 0u32;
+        for y in 60..240 {
+            for x in 80..320 {
+                let idx = (y * 400 + x) as usize * 4;
+                let r = rgba[idx];
+                let g = rgba[idx + 1];
+                let b = rgba[idx + 2];
+                if r != 255 || g != 255 || b != 255 {
+                    non_white += 1;
+                }
+            }
+        }
+        assert!(
+            non_white > 50,
+            "Expected visible density plot marks in the data region, but found only {non_white} non-white pixels"
+        );
     }
 }
