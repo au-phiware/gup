@@ -1151,6 +1151,15 @@ API reference generation, tutorials, and example gallery.
   to `ComposedChart` for updating data and re-rendering without rebuilding.
   Deps: GUP-284 ✅.
 
+## Follow-ups from GUP-286
+
+- [GUP-288](GUP-288_Area_Chart_Data_Mark_Rendering.md) 📋 — Wire area-mark
+  rendering into `AreaChartBuilder` so that `render_to_png()` produces visible
+  filled-area segments. Deps: GUP-286 ✅.
+- [GUP-289](GUP-289_Bar_Chart_Builder_Prepare_Render_Bound.md) 📋 — Call
+  `prepare_render_bound()` in `BarChartBuilder` so that `render_to_png()`
+  produces visible bar rectangles. Deps: GUP-284 ✅.
+
 ## Follow-ups from GUP-265
 
 - [GUP-317](GUP-317_Full_Content_Screenshot.md) ✅ — Add `COPY_SRC` to surface
