@@ -2,7 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Core Infrastructure **Status**: 📋 Planned **Created**:
+**Initiative**: Core Infrastructure **Status**: 🚧 In Progress **Created**:
 2025-07-18
 
 ## Context
