@@ -68,13 +68,26 @@ fn bench_force_layout(c: &mut Criterion) {
     // 1K-node benchmark (fast, for CI)
     {
         let (nodes, edges) = generate_random_graph(1_000, 3);
-        let config = ForceDirected::new()
+
+        let exact_config = ForceDirected::new()
+            .approximation_theta(0.0)
+            .iterations(100)
+            .convergence_check_interval(50);
+        let bh_config = ForceDirected::new()
+            .approximation_theta(0.5)
             .iterations(100)
             .convergence_check_interval(50);
 
-        c.bench_function("force_layout_1k", |b| {
+        c.bench_function("force_layout_1k_exact", |b| {
             b.iter(|| {
-                rt.block_on(engine.force_directed_layout(&nodes, &edges, &config))
+                rt.block_on(engine.force_directed_layout(&nodes, &edges, &exact_config))
+                    .unwrap();
+            });
+        });
+
+        c.bench_function("force_layout_1k_bh", |b| {
+            b.iter(|| {
+                rt.block_on(engine.force_directed_layout(&nodes, &edges, &bh_config))
                     .unwrap();
             });
         });
@@ -83,13 +96,26 @@ fn bench_force_layout(c: &mut Criterion) {
     // 10K-node benchmark
     {
         let (nodes, edges) = generate_random_graph(10_000, 3);
-        let config = ForceDirected::new()
+
+        let exact_config = ForceDirected::new()
+            .approximation_theta(0.0)
+            .iterations(50)
+            .convergence_check_interval(25);
+        let bh_config = ForceDirected::new()
+            .approximation_theta(0.5)
             .iterations(50)
             .convergence_check_interval(25);
 
-        c.bench_function("force_layout_10k", |b| {
+        c.bench_function("force_layout_10k_exact", |b| {
             b.iter(|| {
-                rt.block_on(engine.force_directed_layout(&nodes, &edges, &config))
+                rt.block_on(engine.force_directed_layout(&nodes, &edges, &exact_config))
+                    .unwrap();
+            });
+        });
+
+        c.bench_function("force_layout_10k_bh", |b| {
+            b.iter(|| {
+                rt.block_on(engine.force_directed_layout(&nodes, &edges, &bh_config))
                     .unwrap();
             });
         });
@@ -98,7 +124,13 @@ fn bench_force_layout(c: &mut Criterion) {
     // 100K-node benchmark (the performance target)
     {
         let (nodes, edges) = generate_random_graph(100_000, 3);
-        let config = ForceDirected::new()
+
+        let exact_config = ForceDirected::new()
+            .approximation_theta(0.0)
+            .iterations(30)
+            .convergence_check_interval(5);
+        let bh_config = ForceDirected::new()
+            .approximation_theta(0.5)
             .iterations(30)
             .convergence_check_interval(5);
 
@@ -106,9 +138,16 @@ fn bench_force_layout(c: &mut Criterion) {
         group.sample_size(10);
         group.measurement_time(std::time::Duration::from_secs(60));
 
-        group.bench_function("100k_30iter", |b| {
+        group.bench_function("100k_30iter_exact", |b| {
             b.iter(|| {
-                rt.block_on(engine.force_directed_layout(&nodes, &edges, &config))
+                rt.block_on(engine.force_directed_layout(&nodes, &edges, &exact_config))
+                    .unwrap();
+            });
+        });
+
+        group.bench_function("100k_30iter_bh", |b| {
+            b.iter(|| {
+                rt.block_on(engine.force_directed_layout(&nodes, &edges, &bh_config))
                     .unwrap();
             });
         });
