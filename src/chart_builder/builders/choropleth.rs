@@ -1995,4 +1995,303 @@ mod tests {
         // 2 × f32 + 1 × u32 = 12 bytes.
         assert_eq!(bytes.len(), 12);
     }
+
+    // -----------------------------------------------------------------------
+    // Point-in-ring / hit-testing tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_point_in_ring_inside() {
+        // Unit square [0,0] → [10,10].
+        let ring = vec![
+            [0.0_f32, 0.0],
+            [10.0, 0.0],
+            [10.0, 10.0],
+            [0.0, 10.0],
+            [0.0, 0.0],
+        ];
+        assert!(point_in_ring(5.0, 5.0, &ring));
+        assert!(point_in_ring(1.0, 1.0, &ring));
+        assert!(point_in_ring(9.0, 9.0, &ring));
+    }
+
+    #[test]
+    fn test_point_in_ring_outside() {
+        let ring = vec![
+            [0.0_f32, 0.0],
+            [10.0, 0.0],
+            [10.0, 10.0],
+            [0.0, 10.0],
+            [0.0, 0.0],
+        ];
+        assert!(!point_in_ring(-1.0, 5.0, &ring));
+        assert!(!point_in_ring(11.0, 5.0, &ring));
+        assert!(!point_in_ring(5.0, -1.0, &ring));
+        assert!(!point_in_ring(5.0, 11.0, &ring));
+    }
+
+    #[test]
+    fn test_point_in_ring_triangle() {
+        let ring = vec![[0.0_f32, 0.0], [10.0, 0.0], [5.0, 10.0], [0.0, 0.0]];
+        assert!(point_in_ring(5.0, 3.0, &ring));
+        assert!(!point_in_ring(0.5, 9.0, &ring)); // outside, near top-left
+    }
+
+    #[test]
+    fn test_point_in_ring_degenerate() {
+        // Fewer than 3 points → always false.
+        assert!(!point_in_ring(0.0, 0.0, &[]));
+        assert!(!point_in_ring(0.0, 0.0, &[[0.0, 0.0]]));
+        assert!(!point_in_ring(0.0, 0.0, &[[0.0, 0.0], [1.0, 1.0]]));
+    }
+
+    // -----------------------------------------------------------------------
+    // region_at_point tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_region_at_point_finds_correct_region() {
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 10.0), ("BBB", 50.0), ("CCC", 90.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .build()
+            .unwrap();
+
+        // Point inside region AAA (0..10, 0..10).
+        assert_eq!(chart.region_at_point(5.0, 5.0), Some(0));
+        // Point inside region BBB (10..20, 0..10).
+        assert_eq!(chart.region_at_point(15.0, 5.0), Some(1));
+        // Point inside region CCC (20..30, 0..10).
+        assert_eq!(chart.region_at_point(25.0, 5.0), Some(2));
+    }
+
+    #[test]
+    fn test_region_at_point_returns_none_outside() {
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 10.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .build()
+            .unwrap();
+
+        assert!(chart.region_at_point(-5.0, 5.0).is_none());
+        assert!(chart.region_at_point(35.0, 5.0).is_none());
+        assert!(chart.region_at_point(5.0, -5.0).is_none());
+        assert!(chart.region_at_point(5.0, 15.0).is_none());
+    }
+
+    // -----------------------------------------------------------------------
+    // Tooltip tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_tooltip_disabled_by_default() {
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 10.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .build()
+            .unwrap();
+
+        assert!(!chart.tooltip_enabled);
+        assert!(chart.tooltip_content(0).is_none());
+    }
+
+    #[test]
+    fn test_tooltip_enabled() {
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 10.0), ("BBB", 50.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .tooltip(true)
+            .build()
+            .unwrap();
+
+        assert!(chart.tooltip_enabled);
+        let content = chart.tooltip_content(0).unwrap();
+        assert!(content.contains("AAA"));
+        assert!(content.contains("10"));
+    }
+
+    #[test]
+    fn test_tooltip_no_data_region() {
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 10.0)]) // BBB and CCC have no data
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .tooltip(true)
+            .build()
+            .unwrap();
+
+        let content = chart.tooltip_content(1).unwrap();
+        assert!(content.contains("BBB"));
+        assert!(content.contains("no data"));
+    }
+
+    #[test]
+    fn test_tooltip_format_custom() {
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 42.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .tooltip_format(|region| format!("Custom: {}", region.id.as_deref().unwrap_or("?")))
+            .build()
+            .unwrap();
+
+        // tooltip_format implicitly enables tooltip.
+        assert!(chart.tooltip_enabled);
+        let content = chart.tooltip_content(0).unwrap();
+        assert_eq!(content, "Custom: AAA");
+    }
+
+    #[test]
+    fn test_tooltip_out_of_bounds() {
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 10.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .tooltip(true)
+            .build()
+            .unwrap();
+
+        assert!(chart.tooltip_content(999).is_none());
+    }
+
+    // -----------------------------------------------------------------------
+    // Hover highlight tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_highlight_brighten_hovered() {
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 10.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .highlight_style(HoverHighlight::Brighten(0.2))
+            .build()
+            .unwrap();
+
+        let base = chart.regions[0].color;
+        let highlighted = chart.highlighted_color(0, true);
+
+        // RGB channels should be brighter (or clamped to 1.0).
+        assert!(highlighted[0] >= base[0]);
+        assert!(highlighted[1] >= base[1]);
+        assert!(highlighted[2] >= base[2]);
+        // Alpha unchanged.
+        assert!((highlighted[3] - base[3]).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_highlight_brighten_not_hovered() {
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 10.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .highlight_style(HoverHighlight::Brighten(0.2))
+            .build()
+            .unwrap();
+
+        let base = chart.regions[0].color;
+        let color = chart.highlighted_color(0, false);
+
+        // Non-hovered should be unchanged.
+        assert_eq!(color, base);
+    }
+
+    #[test]
+    fn test_highlight_dim_non_hovered() {
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 10.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .highlight_style(HoverHighlight::Dim(0.4))
+            .build()
+            .unwrap();
+
+        let base = chart.regions[0].color;
+        let dimmed = chart.highlighted_color(0, false);
+
+        // Alpha should be reduced.
+        assert!((dimmed[3] - base[3] * 0.4).abs() < f32::EPSILON);
+        // RGB unchanged.
+        assert_eq!(dimmed[0], base[0]);
+    }
+
+    #[test]
+    fn test_highlight_dim_hovered() {
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 10.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .highlight_style(HoverHighlight::Dim(0.4))
+            .build()
+            .unwrap();
+
+        let base = chart.regions[0].color;
+        let color = chart.highlighted_color(0, true);
+
+        // Hovered region should be unchanged.
+        assert_eq!(color, base);
+    }
+
+    #[test]
+    fn test_highlight_none() {
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 10.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .highlight_style(HoverHighlight::None)
+            .build()
+            .unwrap();
+
+        let base = chart.regions[0].color;
+        assert_eq!(chart.highlighted_color(0, true), base);
+        assert_eq!(chart.highlighted_color(0, false), base);
+    }
+
+    #[test]
+    fn test_default_highlight_is_brighten() {
+        let builder = ChoroplethChartBuilder::new();
+        match builder.highlight_style {
+            HoverHighlight::Brighten(v) => assert!((v - 0.3).abs() < f32::EPSILON),
+            _ => panic!("Expected default HoverHighlight::Brighten(0.3)"),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Region polygon storage tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_region_polygons_stored_during_build() {
+        let source = synthetic_geojson();
+        let chart = ChoroplethChartBuilder::new()
+            .boundaries(source)
+            .data(vec![("AAA", 10.0)])
+            .color_scale(ColorScale::viridis(0.0, 100.0))
+            .build()
+            .unwrap();
+
+        // Three regions → three polygon entries.
+        assert_eq!(chart.region_polygons.len(), 3);
+        // Each region has exactly one polygon (from our synthetic data).
+        for rings in &chart.region_polygons {
+            assert_eq!(rings.len(), 1);
+            assert!(!rings[0].is_empty());
+        }
+    }
 }
