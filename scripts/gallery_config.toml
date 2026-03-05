@@ -76,7 +76,8 @@ name = "boxplot"
 source = "examples/boxplot.rs"
 description = "Basic box plot rendering"
 category = "Charts & Marks"
-skip = false
+skip = true
+skip_reason = "Console-only (statistical computation, no GPU rendering)"
 
 [[examples]]
 name = "boxplot_rendering_demo"
@@ -120,14 +121,16 @@ name = "integration_showcase"
 source = "examples/integration_showcase.rs"
 description = "Full integration showcase of multiple chart types"
 category = "Charts & Marks"
-skip = false
+skip = true
+skip_reason = "Console-only (Mixable trait demo, no GPU rendering)"
 
 [[examples]]
 name = "custom_mark_demo"
 source = "examples/custom_mark_demo.rs"
 description = "Implementing a custom mark type"
 category = "Charts & Marks"
-skip = false
+skip = true
+skip_reason = "Console-only (mark validation, no GPU rendering)"
 
 [[examples]]
 name = "multi_pass_mark_demo"
@@ -177,35 +180,40 @@ name = "treemap"
 source = "examples/treemap.rs"
 description = "Treemap layout rendering"
 category = "Charts & Marks"
-skip = false
+skip = true
+skip_reason = "Console-only (layout computation, no GPU rendering)"
 
 [[examples]]
 name = "choropleth_world_population"
 source = "examples/choropleth_world_population.rs"
 description = "Choropleth world population map"
 category = "Charts & Marks"
-skip = false
+skip = true
+skip_reason = "Console-only (chart data structure, no GPU rendering)"
 
 [[examples]]
 name = "color_scale_heatmap"
 source = "examples/color_scale_heatmap.rs"
 description = "Colour scale heatmap"
 category = "Charts & Marks"
-skip = false
+skip = true
+skip_reason = "Console-only (WGSL generation, no GPU rendering)"
 
 [[examples]]
 name = "composite_bar_trend"
 source = "examples/composite_bar_trend.rs"
 description = "Composite bar and trend chart"
 category = "Charts & Marks"
-skip = false
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
 
 [[examples]]
 name = "composite_scatter_regression"
 source = "examples/composite_scatter_regression.rs"
 description = "Scatter plot with regression line"
 category = "Charts & Marks"
-skip = false
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
 
 [[examples]]
 name = "density_scatter_overlay"
@@ -219,21 +227,24 @@ name = "geo_world_map"
 source = "examples/geo_world_map.rs"
 description = "World map geographic rendering"
 category = "Charts & Marks"
-skip = false
+skip = true
+skip_reason = "Console-only (mesh generation, no GPU rendering)"
 
 [[examples]]
 name = "geographic_projection"
 source = "examples/geographic_projection.rs"
 description = "Geographic projection demo"
 category = "Charts & Marks"
-skip = false
+skip = true
+skip_reason = "Console-only (shader function demo, no GPU rendering)"
 
 [[examples]]
 name = "force_directed_graph"
 source = "examples/force_directed_graph.rs"
 description = "Force-directed graph layout"
 category = "Charts & Marks"
-skip = false
+skip = true
+skip_reason = "Console-only (layout computation, no GPU rendering)"
 
 [[examples]]
 name = "scatter_3d"
@@ -292,7 +303,8 @@ name = "grid_scatter_demo"
 source = "examples/grid_scatter_demo.rs"
 description = "Grid with scatter plot overlay"
 category = "Axis & Grid"
-skip = false
+skip = true
+skip_reason = "Console-only (grid configuration demo, no GPU rendering)"
 
 [[examples]]
 name = "label_formatting_demo"
@@ -403,14 +415,16 @@ name = "interaction_debug_visualizer"
 source = "examples/interaction_debug_visualizer.rs"
 description = "Debug visualiser for interaction pipeline"
 category = "Interaction & Selection"
-skip = false
+skip = true
+skip_reason = "Console-only (JSON output, no GPU rendering)"
 
 [[examples]]
 name = "attr_binding_demo"
 source = "examples/attr_binding_demo.rs"
 description = "Attribute binding pipeline demo"
 category = "Interaction & Selection"
-skip = false
+skip = true
+skip_reason = "Console-only (binding pipeline demo, no GPU rendering)"
 
 [[examples]]
 name = "brush_selection"
@@ -453,56 +467,64 @@ name = "advanced_temporal_animation"
 source = "examples/advanced_temporal_animation.rs"
 description = "Temporal animation system demo"
 category = "Animation & Streaming"
-skip = false
+skip = true
+skip_reason = "Console-only (animation system demo, no GPU rendering)"
 
 [[examples]]
 name = "animation_events"
 source = "examples/animation_events.rs"
 description = "Animation event system"
 category = "Animation & Streaming"
-skip = false
+skip = true
+skip_reason = "Console-only (event system demo, no GPU rendering)"
 
 [[examples]]
 name = "spline_animation_curves"
 source = "examples/spline_animation_curves.rs"
 description = "Spline-interpolated animation curves"
 category = "Animation & Streaming"
-skip = false
+skip = true
+skip_reason = "Console-only (curve computation, no GPU rendering)"
 
 [[examples]]
 name = "keyframe_animation_storage"
 source = "examples/keyframe_animation_storage.rs"
 description = "Storage buffer keyframe animation"
 category = "Animation & Streaming"
-skip = false
+skip = true
+skip_reason = "Console-only (keyframe storage demo, no GPU rendering)"
 
 [[examples]]
 name = "async_streaming_demo"
 source = "examples/async_streaming_demo.rs"
 description = "Async data streaming to GPU"
 category = "Animation & Streaming"
-skip = false
+skip = true
+skip_reason = "Console-only (streaming pipeline demo, no GPU rendering)"
 
 [[examples]]
 name = "data_transition_scatter"
 source = "examples/data_transition_scatter.rs"
 description = "Data transition scatter animation"
 category = "Animation & Streaming"
-skip = false
+skip = true
+skip_reason = "Console-only (transition computation, no GPU rendering)"
 
 [[examples]]
 name = "streaming_live_chart"
 source = "examples/streaming_live_chart.rs"
 description = "Streaming live data chart"
 category = "Animation & Streaming"
-skip = false
+skip = true
+skip_reason = "Console-only (streaming demo, no GPU rendering)"
 
 [[examples]]
 name = "streaming_lod_scatter"
 source = "examples/streaming_lod_scatter.rs"
 description = "Streaming LOD scatter plot"
 category = "Animation & Streaming"
-skip = false
+skip = true
+skip_reason = "Console-only (LOD streaming demo, no GPU rendering)"
 
 # ---------------------------------------------------------------------------
 # Patterns
@@ -513,28 +535,32 @@ name = "pattern_rendering_demo"
 source = "examples/pattern_rendering_demo.rs"
 description = "Procedural pattern rendering"
 category = "Patterns"
-skip = false
+skip = true
+skip_reason = "Console-only (pattern info, no GPU rendering)"
 
 [[examples]]
 name = "pattern_pipeline_demo"
 source = "examples/pattern_pipeline_demo.rs"
 description = "Pattern pipeline integration"
 category = "Patterns"
-skip = false
+skip = true
+skip_reason = "Console-only (WGSL pipeline output, no GPU rendering)"
 
 [[examples]]
 name = "multi_mark_pattern_showcase"
 source = "examples/multi_mark_pattern_showcase.rs"
 description = "Patterns across multiple mark types"
 category = "Patterns"
-skip = false
+skip = true
+skip_reason = "Console-only (pattern showcase, no GPU rendering)"
 
 [[examples]]
 name = "texture_vs_procedural_patterns"
 source = "examples/texture_vs_procedural_patterns.rs"
 description = "Texture vs procedural pattern comparison"
 category = "Patterns"
-skip = false
+skip = true
+skip_reason = "Console-only (pattern comparison, no GPU rendering)"
 
 # ---------------------------------------------------------------------------
 # Blend Modes
@@ -545,7 +571,8 @@ name = "blend_modes_showcase"
 source = "examples/blend_modes_showcase.rs"
 description = "GPU blend mode showcase"
 category = "Blend Modes"
-skip = false
+skip = true
+skip_reason = "Console-only (blend mode demo, no GPU rendering)"
 
 [[examples]]
 name = "visual_blend_demo"
@@ -564,14 +591,16 @@ name = "parallel_composition_demo"
 source = "examples/parallel_composition_demo.rs"
 description = "Parallel composition of visualisations"
 category = "Composition"
-skip = false
+skip = true
+skip_reason = "Console-only (composition API demo, no GPU rendering)"
 
 [[examples]]
 name = "composition_error_recovery_showcase"
 source = "examples/composition_error_recovery_showcase.rs"
 description = "Error recovery in composition chains"
 category = "Composition"
-skip = false
+skip = true
+skip_reason = "Console-only (error recovery demo, no GPU rendering)"
 
 # ---------------------------------------------------------------------------
 # Performance & Profiling
@@ -582,14 +611,16 @@ name = "performance_trend_demo"
 source = "examples/performance_trend_demo.rs"
 description = "Performance trend visualisation"
 category = "Performance & Profiling"
-skip = false
+skip = true
+skip_reason = "Console-only (generates HTML/SVG files, not a chart)"
 
 [[examples]]
 name = "baseline_recommendation_demo"
 source = "examples/baseline_recommendation_demo.rs"
 description = "Automated baseline recommendation demo"
 category = "Performance & Profiling"
-skip = false
+skip = true
+skip_reason = "Console-only (performance analysis, no GPU rendering)"
 
 [[examples]]
 name = "surface_performance_demo"
@@ -616,7 +647,8 @@ name = "web_accessibility_demo"
 source = "examples/web_accessibility_demo.rs"
 description = "Web accessibility DOM overlay demo"
 category = "Accessibility"
-skip = false
+skip = true
+skip_reason = "Web-only (requires WASM/browser)"
 
 # ---------------------------------------------------------------------------
 # Debug & Development
@@ -627,56 +659,64 @@ name = "gpu_debug_demo"
 source = "examples/gpu_debug_demo.rs"
 description = "GPU debug tools demo"
 category = "Debug & Development"
-skip = false
+skip = true
+skip_reason = "Console-only (debug tools demo, no GPU rendering)"
 
 [[examples]]
 name = "gpu_debug_visualization_demo"
 source = "examples/gpu_debug_visualization_demo.rs"
 description = "GPU hit test debug visualiser"
 category = "Debug & Development"
-skip = false
+skip = true
+skip_reason = "Console-only (debug visualiser config, no GPU rendering)"
 
 [[examples]]
 name = "buffer_demo"
 source = "examples/buffer_demo.rs"
 description = "GPU buffer pool management demo"
 category = "Debug & Development"
-skip = false
+skip = true
+skip_reason = "Console-only (buffer management demo, no GPU rendering)"
 
 [[examples]]
 name = "buffer_validation_demo"
 source = "examples/buffer_validation_demo.rs"
 description = "Buffer validation and debugging"
 category = "Debug & Development"
-skip = false
+skip = true
+skip_reason = "Console-only (buffer validation demo, no GPU rendering)"
 
 [[examples]]
 name = "resource_graph_demo"
 source = "examples/resource_graph_demo.rs"
 description = "GPU resource dependency graph"
 category = "Debug & Development"
-skip = false
+skip = true
+skip_reason = "Console-only (generates DOT/JSON, no GPU rendering)"
 
 [[examples]]
 name = "context_demo"
 source = "examples/context_demo.rs"
 description = "Render context lifecycle demo"
 category = "Debug & Development"
-skip = false
+skip = true
+skip_reason = "Console-only (context lifecycle demo, no GPU rendering)"
 
 [[examples]]
 name = "adaptive_lod_debug"
 source = "examples/adaptive_lod_debug.rs"
 description = "Adaptive LOD debug visualisation"
 category = "Debug & Development"
-skip = false
+skip = true
+skip_reason = "Console-only (LOD debug output, no GPU rendering)"
 
 [[examples]]
 name = "lod_pyramid_debug"
 source = "examples/lod_pyramid_debug.rs"
 description = "LOD pyramid debug visualisation"
 category = "Debug & Development"
-skip = false
+skip = true
+skip_reason = "Console-only (LOD pyramid debug, no GPU rendering)"
 
 # ---------------------------------------------------------------------------
 # Window & Surface
@@ -719,7 +759,8 @@ name = "position_sync_demo"
 source = "examples/position_sync_demo.rs"
 description = "Visualisation position synchronisation"
 category = "Window & Surface"
-skip = false
+skip = true
+skip_reason = "Console-only (position sync demo, no GPU rendering)"
 
 [[examples]]
 name = "web_dashboard_demo"
@@ -738,7 +779,8 @@ name = "shader_pipeline_demo"
 source = "examples/shader_pipeline_demo.rs"
 description = "ComposableShaderPipeline usage"
 category = "Shader Development"
-skip = false
+skip = true
+skip_reason = "Console-only (shader pipeline demo, no GPU rendering)"
 
 # ---------------------------------------------------------------------------
 # Export
@@ -814,4 +856,5 @@ name = "ordinal_scale"
 source = "examples/ordinal_scale.rs"
 description = "Ordinal scale demonstration"
 category = "Charts & Marks"
-skip = false
+skip = true
+skip_reason = "Console-only (scale computation, no GPU rendering)"
