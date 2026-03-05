@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Ecosystem Integration **Status**: 🚧 In Progress **Created**:
-2025-07-18
+**Initiative**: Ecosystem Integration **Status**: ✅ Complete **Created**:
+2025-07-18 **Completed**: 2025-07-19
 
 ## Context
 
@@ -27,25 +27,25 @@ external data source.
 
 ## Acceptance Criteria
 
-- [ ] When `T: Serialize`, the `HtmlExporter` includes the `Selection`'s data
+- [x] When `T: Serialize`, the `HtmlExporter` includes the `Selection`'s data
       items in the embedded JSON block.
-- [ ] A `ChartBundle<T>` (or extended `ChartSnapshot`) struct pairs the config
+- [x] A `ChartBundle<T>` (or extended `ChartSnapshot`) struct pairs the config
       snapshot with a `Vec<serde_json::Value>` (or `Vec<T>`) of data points.
-- [ ] Round-trip test: serialise a `ChartBundle` to JSON, deserialise it, and
+- [x] Round-trip test: serialise a `ChartBundle` to JSON, deserialise it, and
       verify the data matches the original.
-- [ ] When `T` does not implement `Serialize`, the export still works but the
+- [x] When `T` does not implement `Serialize`, the export still works but the
       JSON block contains only the config snapshot (backward compatible).
-- [ ] Documentation explains the data embedding and any size implications.
+- [x] Documentation explains the data embedding and any size implications.
 
 ## Technical Tasks
 
-- [ ] Design `ChartBundle<T>` or extend `ChartSnapshot` with an optional
+- [x] Design `ChartBundle<T>` or extend `ChartSnapshot` with an optional
       `data: Option<serde_json::Value>` field.
-- [ ] Conditionally serialise data when `T: Serialize` (may require a separate
+- [x] Conditionally serialise data when `T: Serialize` (may require a separate
       code path or trait bound on the export method).
-- [ ] Update `HtmlExporter::render` to populate the data field.
-- [ ] Write unit tests for data round-trip.
-- [ ] Update the `html_export` example to demonstrate data embedding.
+- [x] Update `HtmlExporter::render` to populate the data field.
+- [x] Write unit tests for data round-trip.
+- [x] Update the `html_export` example to demonstrate data embedding.
 
 ## Dependencies
 
@@ -74,9 +74,44 @@ external data source.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Story status updated to ✅ Complete
-- [ ] Retrospective added
+- [x] All Acceptance Criteria are satisfied
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Story status updated to ✅ Complete
+- [x] Retrospective added
+
+## Implementation Summary
+
+### What was implemented
+
+- **`ChartBundle` struct** (`src/export/html/snapshot.rs`): Pairs a
+  `ChartSnapshot` config with an optional `Vec<serde_json::Value>` data array.
+  Uses `#[serde(skip_serializing_if)]` to omit the `data` key when absent.
+- **`HtmlExporter::render_with_data`** (`src/export/html/mod.rs`): New method
+  with `T: Serialize` bound that serialises Selection data items into a
+  `ChartBundle` JSON block.
+- **`HtmlExporter::export_with_data`**: File-writing convenience wrapper.
+- **`ComposedChart::export_html_with_data`** (`src/chart_builder.rs`):
+  Convenience method on `ComposedChart` with `T: Serialize` bound.
+- **Full backward compatibility**: Existing `render`/`export`/`export_html`
+  methods unchanged; they produce plain `ChartSnapshot` JSON.
+- **Module documentation** updated with data embedding explanation and size
+  guidance.
+
+### Key files changed
+
+| File                                    | Change                                    |
+| --------------------------------------- | ----------------------------------------- |
+| `src/export/html/snapshot.rs`           | Added `ChartBundle` struct + 3 unit tests |
+| `src/export/html/mod.rs`               | Added `render_with_data`, `export_with_data`, updated docs |
+| `src/export/mod.rs`                     | Re-exported `ChartBundle`                 |
+| `src/chart_builder.rs`                  | Added `export_html_with_data` convenience method |
+| `tests/html_export_integration.rs`      | 5 new integration tests for data embedding |
+| `examples/html_export.rs`              | Added `Serialize` derive, data export demo |
+
+### Test counts
+
+- **3 new unit tests**: `bundle_round_trip_with_data`, `bundle_config_only_omits_data`, `bundle_backward_compat_from_snapshot_json`
+- **5 new integration tests**: `html_export_with_data_contains_bundle`, `html_export_with_data_round_trip`, `html_export_without_data_has_no_data_field`, `html_export_with_data_file_write`, `html_export_convenience_with_data`
+- **Total**: 8 new tests; all 3,218+ project tests pass
