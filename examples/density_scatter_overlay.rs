@@ -107,12 +107,8 @@ async fn main() -> gup::error::GupResult<()> {
     if let Some(req) = gup::export::gallery::screenshot_request() {
         let data = generate_bivariate_normal(1_000, 42);
         let mut chart = density_plot()
-            .x(AccessorFunction::new(|d: &Point| {
-                AccessorValue::Float(d.x)
-            }))
-            .y(AccessorFunction::new(|d: &Point| {
-                AccessorValue::Float(d.y)
-            }))
+            .x(AccessorFunction::new(|d: &Point| AccessorValue::Float(d.x)))
+            .y(AccessorFunction::new(|d: &Point| AccessorValue::Float(d.y)))
             .bandwidth(0.4)
             .levels(10)
             .fill(true)
