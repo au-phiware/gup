@@ -1128,7 +1128,7 @@ API reference generation, tutorials, and example gallery.
 - [GUP-283](GUP-283_Fix_WASM_Build_StreamingBuffer.md) ✅ — Fix
   `wasm-pack build` failure caused by `StreamingBuffer<T>` requiring
   `Send + Sync` bounds not satisfied on WASM. No deps.
-- [GUP-284](GUP-284_Unify_Chart_Builder_Data_Layer.md) 📋 — Wire data-mark
+- [GUP-284](GUP-284_Unify_Chart_Builder_Data_Layer.md) 🚧 — Wire data-mark
   rendering (circles, lines, bars) into `ComposedChart::render()` and
   `render_to_png()` so chart builders produce complete visualisations. Deps:
   GUP-018 ✅, GUP-011 ✅.
