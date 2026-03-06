@@ -133,6 +133,12 @@ trait ErasedLayerSpec: std::fmt::Debug {
     /// Which y-axis this layer is assigned to.
     fn erased_y_axis(&self) -> YAxisAssignment;
 
+    /// Optional z-index for render ordering.
+    fn erased_z_index(&self) -> Option<i32>;
+
+    /// Set the z-index for render ordering.
+    fn set_erased_z_index(&mut self, z: i32);
+
     /// Consume this specification and produce a type-erased built layer,
     /// injecting the unified scales determined by the composite.
     fn build_erased(
@@ -152,6 +158,7 @@ where
     kind: LayerKind<T2>,
     data: Vec<T2>,
     y_axis: YAxisAssignment,
+    z_index: Option<i32>,
     cached_x_domain: Option<(f32, f32)>,
     cached_y_domain: Option<(f32, f32)>,
 }
@@ -165,6 +172,7 @@ where
             .field("kind", &self.kind)
             .field("data_len", &self.data.len())
             .field("y_axis", &self.y_axis)
+            .field("z_index", &self.z_index)
             .field("cached_x_domain", &self.cached_x_domain)
             .field("cached_y_domain", &self.cached_y_domain)
             .finish()
@@ -185,6 +193,14 @@ where
 
     fn erased_y_axis(&self) -> YAxisAssignment {
         self.y_axis
+    }
+
+    fn erased_z_index(&self) -> Option<i32> {
+        self.z_index
+    }
+
+    fn set_erased_z_index(&mut self, z: i32) {
+        self.z_index = Some(z);
     }
 
     fn build_erased(
@@ -264,11 +280,12 @@ impl<T> IntoChartLayer<T> for AreaChartBuilder<T> {
 
 // ── Internal layer record ───────────────────────────────────────────────
 
-/// A layer together with its y-axis assignment.
+/// A layer together with its y-axis assignment and optional z-index.
 #[derive(Debug, Clone)]
 struct CompositeLayer<T> {
     kind: LayerKind<T>,
     y_axis: YAxisAssignment,
+    z_index: Option<i32>,
 }
 
 /// A layer entry in the composite builder — either sharing the
@@ -401,6 +418,64 @@ fn pad_domain(domain: (f32, f32)) -> (f32, f32) {
     (lo, hi)
 }
 
+/// Compute the render order for a set of layers.
+///
+/// If `explicit_order` is provided it is validated and used directly.
+/// Otherwise, if any layer has a z-index, a stable sort by z-index is
+/// performed (layers without a z-index are treated as `i32::MAX` so
+/// they sort to the end).  When no ordering information exists, plain
+/// declaration order (0, 1, 2, …) is returned.
+fn compute_render_order(
+    layer_count: usize,
+    explicit_order: Option<&[usize]>,
+    z_indices: &[Option<i32>],
+) -> GupResult<Vec<usize>> {
+    if let Some(order) = explicit_order {
+        // Validate: must be a permutation of 0..layer_count.
+        if order.len() != layer_count {
+            return Err(ChartBuilderError::ConfigurationError {
+                message: format!(
+                    "layer_order length ({}) does not match layer count ({layer_count})",
+                    order.len(),
+                ),
+            }
+            .into());
+        }
+        let mut seen = vec![false; layer_count];
+        for &idx in order {
+            if idx >= layer_count {
+                return Err(ChartBuilderError::ConfigurationError {
+                    message: format!(
+                        "layer_order contains out-of-range index {idx} \
+                         (layer count is {layer_count})",
+                    ),
+                }
+                .into());
+            }
+            if seen[idx] {
+                return Err(ChartBuilderError::ConfigurationError {
+                    message: format!("layer_order contains duplicate index {idx}"),
+                }
+                .into());
+            }
+            seen[idx] = true;
+        }
+        return Ok(order.to_vec());
+    }
+
+    // Check if any layer has a z-index.
+    let has_z = z_indices.iter().any(|z| z.is_some());
+    if has_z {
+        // Stable sort by z-index; layers without z-index go to the end.
+        let mut indices: Vec<usize> = (0..layer_count).collect();
+        indices.sort_by_key(|&i| z_indices[i].unwrap_or(i32::MAX));
+        return Ok(indices);
+    }
+
+    // Default: declaration order.
+    Ok((0..layer_count).collect())
+}
+
 // ── CompositeChartBuilder ───────────────────────────────────────────────
 
 /// Builder for multi-layer composite charts.
@@ -420,6 +495,8 @@ fn pad_domain(domain: (f32, f32)) -> (f32, f32) {
 pub struct CompositeChartBuilder<T> {
     layers: Vec<AnyCompositeLayer<T>>,
     config: ChartConfig,
+    /// Explicit render order — indices into `layers`.
+    layer_order: Option<Vec<usize>>,
     _phantom: PhantomData<T>,
 }
 
@@ -429,6 +506,7 @@ impl<T> CompositeChartBuilder<T> {
         Self {
             layers: Vec::new(),
             config: ChartConfig::default(),
+            layer_order: None,
             _phantom: PhantomData,
         }
     }
@@ -438,6 +516,7 @@ impl<T> CompositeChartBuilder<T> {
         self.layers.push(AnyCompositeLayer::Typed(CompositeLayer {
             kind: builder.into_layer(),
             y_axis: YAxisAssignment::Primary,
+            z_index: None,
         }));
         self
     }
@@ -447,6 +526,7 @@ impl<T> CompositeChartBuilder<T> {
         self.layers.push(AnyCompositeLayer::Typed(CompositeLayer {
             kind: builder.into_layer(),
             y_axis: YAxisAssignment::Secondary,
+            z_index: None,
         }));
         self
     }
@@ -500,6 +580,7 @@ impl<T> CompositeChartBuilder<T> {
                 kind,
                 data,
                 y_axis: YAxisAssignment::Primary,
+                z_index: None,
                 cached_x_domain,
                 cached_y_domain,
             })));
@@ -523,9 +604,80 @@ impl<T> CompositeChartBuilder<T> {
                 kind,
                 data,
                 y_axis: YAxisAssignment::Secondary,
+                z_index: None,
                 cached_x_domain,
                 cached_y_domain,
             })));
+        self
+    }
+
+    /// Set the z-index on the most recently added layer.
+    ///
+    /// Layers with lower z-index values are rendered first (behind),
+    /// while higher values are rendered last (on top).  When no z-index
+    /// is set, declaration order is used.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called before any layer has been added.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::chart_builder::builders::composite::composite;
+    /// use gup::chart_builder::builders::{scatter, line};
+    ///
+    /// #[derive(Debug, Clone)]
+    /// struct P { x: f32, y: f32 }
+    ///
+    /// let builder = composite::<P>()
+    ///     .layer(scatter::<P>()).z_index(10)   // drawn second
+    ///     .layer(line::<P>()).z_index(5);      // drawn first (behind)
+    /// ```
+    pub fn z_index(mut self, z: i32) -> Self {
+        let last = self
+            .layers
+            .last_mut()
+            .expect("z_index called before adding a layer");
+        match last {
+            AnyCompositeLayer::Typed(cl) => cl.z_index = Some(z),
+            AnyCompositeLayer::Erased(spec) => spec.set_erased_z_index(z),
+        }
+        self
+    }
+
+    /// Set an explicit render order for layers.
+    ///
+    /// `order` contains layer indices (0-based, in declaration order).
+    /// Layers are rendered in the order given: the first index in the
+    /// slice is drawn first (at the bottom) and the last is drawn on
+    /// top.
+    ///
+    /// When `layer_order` is specified it takes precedence over any
+    /// per-layer z-index values.
+    ///
+    /// # Panics
+    ///
+    /// Panics at build time if `order` contains out-of-range indices or
+    /// does not include every layer exactly once.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use gup::chart_builder::builders::composite::composite;
+    /// use gup::chart_builder::builders::{scatter, line, BarChartBuilder};
+    ///
+    /// #[derive(Debug, Clone)]
+    /// struct P { x: f32, y: f32 }
+    ///
+    /// let builder = composite::<P>()
+    ///     .layer(scatter::<P>())       // index 0
+    ///     .layer(line::<P>())          // index 1
+    ///     .layer(BarChartBuilder::new()) // index 2
+    ///     .layer_order(&[2, 0, 1]);    // bar first, then scatter, then line
+    /// ```
+    pub fn layer_order(mut self, order: &[usize]) -> Self {
+        self.layer_order = Some(order.to_vec());
         self
     }
 
@@ -734,6 +886,10 @@ where
     /// All built layers rendered after the primary, in declaration order.
     /// Includes both same-type and type-erased foreign-data layers.
     additional_layers: Vec<AnyBuiltLayer<T>>,
+    /// Render order — indices into `additional_layers`.
+    /// Layers are drawn in this order: first element is drawn at the
+    /// bottom, last element on top.
+    render_order: Vec<usize>,
     /// Whether a secondary (right) y-axis is in use.
     has_secondary_y: bool,
 }
@@ -760,6 +916,14 @@ where
     /// Whether the secondary y-axis is in use.
     pub fn has_secondary_y_axis(&self) -> bool {
         self.has_secondary_y
+    }
+
+    /// Return the current render order as a slice of layer indices.
+    ///
+    /// Layers are drawn in this order during [`draw()`](Self::draw):
+    /// the first index is drawn at the bottom, the last on top.
+    pub fn render_order(&self) -> &[usize] {
+        &self.render_order
     }
 
     /// Prepare all GPU resources required for rendering.
@@ -790,7 +954,8 @@ where
     ///
     /// Draw order:
     /// 1. Grid lines (behind everything)
-    /// 2. Data layers in declaration order (first added = bottom)
+    /// 2. Data layers in render order (z-index / explicit order /
+    ///    declaration order)
     /// 3. Axis lines and tick marks (on top)
     ///
     /// # Errors
@@ -800,9 +965,9 @@ where
         // 1. Grid lines (behind data).
         self.primary.draw_grid_lines(render_pass);
 
-        // 2. Data layers in declaration order.
-        for layer in &self.additional_layers {
-            layer.draw(render_pass)?;
+        // 2. Data layers in render order.
+        for &idx in &self.render_order {
+            self.additional_layers[idx].draw(render_pass)?;
         }
 
         // 3. Axis infrastructure on top.
@@ -903,12 +1068,15 @@ where
             AxisScale::Linear(LinearScale::new(sy_lo, sy_hi, -1.0, 1.0))
         });
 
-        // ── 3. Build each layer's selection ─────────────────────────
+        // ── 3. Collect z-index values and build each layer ──────────
+        let layer_count = self.layers.len();
+        let mut z_indices: Vec<Option<i32>> = Vec::with_capacity(layer_count);
         let mut built_layers: Vec<AnyBuiltLayer<T>> = Vec::new();
 
         for layer in self.layers {
             match layer {
                 AnyCompositeLayer::Typed(cl) => {
+                    z_indices.push(cl.z_index);
                     let effective_y_scale = match cl.y_axis {
                         YAxisAssignment::Primary => &y_scale,
                         YAxisAssignment::Secondary => y2_scale.as_ref().unwrap_or(&y_scale),
@@ -925,6 +1093,7 @@ where
                     built_layers.push(AnyBuiltLayer::Typed(built));
                 }
                 AnyCompositeLayer::Erased(spec) => {
+                    z_indices.push(spec.erased_z_index());
                     let effective_y_scale = match spec.erased_y_axis() {
                         YAxisAssignment::Primary => &y_scale,
                         YAxisAssignment::Secondary => y2_scale.as_ref().unwrap_or(&y_scale),
@@ -938,7 +1107,11 @@ where
             }
         }
 
-        // ── 4. Assemble CompositeChart ──────────────────────────────
+        // ── 4. Compute render order ─────────────────────────────────
+        let render_order =
+            compute_render_order(layer_count, self.layer_order.as_deref(), &z_indices)?;
+
+        // ── 5. Assemble CompositeChart ──────────────────────────────
         // Build a config for the shared chart frame.
         let mut config = self.config;
         config.x_scale = Some(x_scale.clone());
@@ -977,6 +1150,7 @@ where
         Ok(CompositeChart {
             primary: primary_chart,
             additional_layers: built_layers,
+            render_order,
             has_secondary_y: has_secondary,
         })
     }
@@ -1324,6 +1498,7 @@ mod tests {
             kind,
             data,
             y_axis: YAxisAssignment::Primary,
+            z_index: None,
         };
 
         assert_eq!(spec.erased_x_domain(), Some((2.0, 6.0)));
