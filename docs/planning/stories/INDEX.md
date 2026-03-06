@@ -804,6 +804,9 @@ integration, pipeline caching.
 - [GUP-365](GUP-365_Composite_Layer_Ordering_Control.md) 📋 — Allow explicit
   control of composite layer rendering order via z-index or reordering API.
   Deps: GUP-304 ✅.
+- [GUP-382](GUP-382_Extract_Shared_Segment_NDC_Mapping.md) 💡 — Extract
+  shared segment-to-NDC mapping helper to reduce duplication between line
+  and area builders. Deps: GUP-364 ✅.
 
 ## Performance & Profiling
 
