@@ -2,7 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Chart Builders **Status**: 🚧 In Progress **Created**:
+**Initiative**: Chart Builders **Status**: ✅ Complete **Created**:
 2025-07-27
 
 ## Context
@@ -22,23 +22,23 @@ transformations into the line/area builder's segment creation.
 
 ## Acceptance Criteria
 
-- [ ] Line builder produces correctly scaled segment positions when given
+- [x] Line builder produces correctly scaled segment positions when given
       explicit x_scale/y_scale in config.
-- [ ] Area builder produces correctly scaled segment positions when given
+- [x] Area builder produces correctly scaled segment positions when given
       explicit x_scale/y_scale in config.
-- [ ] The override-by-append for line and area in composite `build_layer()` is
+- [x] The override-by-append for line and area in composite `build_layer()` is
       removed.
-- [ ] Standalone line and area charts render correctly.
-- [ ] Composite charts with line/area layers continue to render correctly.
-- [ ] All existing tests pass.
+- [x] Standalone line and area charts render correctly.
+- [x] Composite charts with line/area layers continue to render correctly.
+- [x] All existing tests pass.
 
 ## Technical Tasks
 
-- [ ] Refactor line builder to map segment start/end positions through config
+- [x] Refactor line builder to map segment start/end positions through config
       scales during build.
-- [ ] Refactor area builder similarly.
-- [ ] Remove line/area overrides from composite `build_layer()`.
-- [ ] Add standalone line and area render tests.
+- [x] Refactor area builder similarly.
+- [x] Remove line/area overrides from composite `build_layer()`.
+- [x] Add standalone line and area render tests.
 
 ## Dependencies
 
@@ -59,7 +59,34 @@ transformations into the line/area builder's segment creation.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied.
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
+- [x] All Acceptance Criteria are satisfied.
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+
+## Implementation Summary
+
+### What Was Implemented
+
+Integrated `AxisScale::scale_value()` → range → NDC mapping into the
+line and area builders so that composite `build_layer()` no longer needs
+override-by-append for any layer type. All four layer types (scatter,
+line, bar, area) now follow the same uniform pattern: inject unified
+scales into the builder's config, call `build_with_data()`, and use the
+resulting visualization directly.
+
+### Key Files Changed
+
+| File | Change |
+| --- | --- |
+| `src/chart_builder/builders/line.rs` | Added scale-aware NDC mapping path; clones scales before config is moved |
+| `src/chart_builder/builders/area.rs` | Added full NDC mapping (previously absent); computes domain from segments or uses explicit scales |
+| `src/chart_builder/builders/composite.rs` | Removed all override-by-append logic for line/area layers; uniform 4-arm match |
+| `tests/composite_chart_integration.rs` | Updated test to reflect layers are render-ready after build |
+
+### Test Counts
+
+- 2 new render tests (line with explicit scales, area with explicit scales)
+- All 3081 existing lib tests pass
+- All 15 composite integration tests pass
+- All examples compile
