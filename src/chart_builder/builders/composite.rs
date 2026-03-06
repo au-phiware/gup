@@ -1532,4 +1532,136 @@ mod tests {
             .layer_with_y2(BarChartBuilder::<Pt>::new());
         assert_eq!(builder.layer_count(), 3);
     }
+
+    // ── Layer ordering tests (GUP-365, no GPU) ─────────────────────
+
+    #[test]
+    fn compute_render_order_default_declaration_order() {
+        let order = compute_render_order(4, None, &[None, None, None, None]).unwrap();
+        assert_eq!(order, vec![0, 1, 2, 3]);
+    }
+
+    #[test]
+    fn compute_render_order_z_index_sorts_layers() {
+        // z-index 10, 5, 20 → expected order: 1, 0, 2
+        let z = [Some(10), Some(5), Some(20)];
+        let order = compute_render_order(3, None, &z).unwrap();
+        assert_eq!(order, vec![1, 0, 2]);
+    }
+
+    #[test]
+    fn compute_render_order_z_index_stable_sort() {
+        // Layers with equal z-index preserve declaration order.
+        let z = [Some(1), Some(1), Some(1)];
+        let order = compute_render_order(3, None, &z).unwrap();
+        assert_eq!(order, vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn compute_render_order_z_index_partial() {
+        // Only some layers have z-index; unset layers sort to the end.
+        let z = [None, Some(1), None];
+        let order = compute_render_order(3, None, &z).unwrap();
+        assert_eq!(order, vec![1, 0, 2]);
+    }
+
+    #[test]
+    fn compute_render_order_z_index_negative() {
+        // Negative z-index values are allowed.
+        let z = [Some(0), Some(-5), Some(10)];
+        let order = compute_render_order(3, None, &z).unwrap();
+        assert_eq!(order, vec![1, 0, 2]);
+    }
+
+    #[test]
+    fn compute_render_order_explicit_order() {
+        let order = compute_render_order(3, Some(&[2, 0, 1]), &[None, None, None]).unwrap();
+        assert_eq!(order, vec![2, 0, 1]);
+    }
+
+    #[test]
+    fn compute_render_order_explicit_overrides_z_index() {
+        // Explicit layer_order wins over z-index.
+        let z = [Some(100), Some(1), Some(50)];
+        let order = compute_render_order(3, Some(&[1, 2, 0]), &z).unwrap();
+        assert_eq!(order, vec![1, 2, 0]);
+    }
+
+    #[test]
+    fn compute_render_order_explicit_wrong_length() {
+        let result = compute_render_order(3, Some(&[0, 1]), &[None, None, None]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn compute_render_order_explicit_out_of_range() {
+        let result = compute_render_order(3, Some(&[0, 1, 5]), &[None, None, None]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn compute_render_order_explicit_duplicate() {
+        let result = compute_render_order(3, Some(&[0, 1, 1]), &[None, None, None]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn z_index_builder_method_sets_on_typed_layer() {
+        let builder = composite::<Pt>()
+            .layer(ScatterPlotBuilder::<Pt>::new())
+            .z_index(10)
+            .layer(LineChartBuilder::<Pt>::new())
+            .z_index(5);
+
+        assert_eq!(builder.layer_count(), 2);
+        // Verify z-indices were set by inspecting the layer entries.
+        match &builder.layers[0] {
+            AnyCompositeLayer::Typed(cl) => assert_eq!(cl.z_index, Some(10)),
+            _ => panic!("expected Typed layer"),
+        }
+        match &builder.layers[1] {
+            AnyCompositeLayer::Typed(cl) => assert_eq!(cl.z_index, Some(5)),
+            _ => panic!("expected Typed layer"),
+        }
+    }
+
+    #[test]
+    fn z_index_builder_method_sets_on_erased_layer() {
+        let builder = composite::<Pt>()
+            .layer_with_data(
+                ScatterPlotBuilder::<FitPt>::new()
+                    .x(AccessorFunction::new(|d: &FitPt| AccessorValue::Float(d.x)))
+                    .y(AccessorFunction::new(|d: &FitPt| {
+                        AccessorValue::Float(d.y_hat)
+                    })),
+                vec![FitPt { x: 1.0, y_hat: 2.0 }],
+            )
+            .z_index(42);
+
+        assert_eq!(builder.layer_count(), 1);
+        match &builder.layers[0] {
+            AnyCompositeLayer::Erased(spec) => assert_eq!(spec.erased_z_index(), Some(42)),
+            _ => panic!("expected Erased layer"),
+        }
+    }
+
+    #[test]
+    fn layer_order_builder_method_stores_order() {
+        let builder = composite::<Pt>()
+            .layer(ScatterPlotBuilder::<Pt>::new())
+            .layer(LineChartBuilder::<Pt>::new())
+            .layer(BarChartBuilder::<Pt>::new())
+            .layer_order(&[2, 0, 1]);
+
+        assert_eq!(builder.layer_order, Some(vec![2, 0, 1]));
+    }
+
+    #[test]
+    fn default_no_layer_order_stored() {
+        let builder = composite::<Pt>()
+            .layer(ScatterPlotBuilder::<Pt>::new())
+            .layer(LineChartBuilder::<Pt>::new());
+
+        assert!(builder.layer_order.is_none());
+    }
 }
