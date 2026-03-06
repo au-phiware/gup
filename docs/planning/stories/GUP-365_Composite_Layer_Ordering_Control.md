@@ -109,3 +109,77 @@ Two complementary ordering mechanisms:
 - 13 new unit tests for layer ordering
 - All 3095 lib tests pass
 - 5 doctests pass (including new z_index and layer_order examples)
+
+## Retrospective
+
+**Completed**: 2026-03-06
+
+### Key Technical Learnings
+
+#### Dual Ordering API Design (z-index + explicit order)
+
+- **Challenge**: The story left the API design open — z-index vs explicit
+  ordering vs both. Need to decide which approach gives the best user experience
+  without over-engineering.
+- **Solution**: Implemented both as complementary mechanisms. `z_index()` is
+  natural for per-layer priority (set-and-forget), while `layer_order()` is
+  precise for cases where the user wants exact control. `layer_order` takes
+  precedence when both are used.
+- **Pattern**: When two approaches serve different use cases, implement both with
+  a clear precedence rule rather than forcing users into one paradigm.
+
+#### Chainable z-index on Last-Added Layer
+
+- **Challenge**: Adding z-index per-layer without combinatorial explosion of
+  methods (e.g., `layer_with_z()`, `layer_with_z_y2()`, `layer_with_data_z()`,
+  etc.).
+- **Solution**: `z_index()` operates on the most recently added layer, so it
+  chains naturally after any `layer*()` call:
+  `.layer(scatter).z_index(10).layer(line).z_index(5)`.
+- **Pattern**: When extending a builder with cross-cutting concerns, a "modify
+  last item" method avoids method combinatorics. The trade-off is that calling
+  `z_index()` before any layer panics, which is documented.
+
+#### Index Vector vs Physical Reordering
+
+- **Challenge**: Whether to physically reorder the `additional_layers` vec or
+  use an indirection vector for rendering.
+- **Solution**: Used a `render_order: Vec<usize>` indirection vector as
+  suggested in the risk assessment. Layers stay in declaration order for
+  consistent indexing; only the draw loop uses the sorted order.
+- **Pattern**: Indirection vectors are preferable when the original order has
+  semantic meaning (e.g., indices used in `layer_order()` refer to declaration
+  positions).
+
+### Architectural Decisions
+
+#### Both z-index and layer_order Rather Than One
+
+- **Decision**: Implement both ordering mechanisms.
+- **Reasoning**: z-index is intuitive for CSS/game-dev users; explicit ordering
+  is more direct and verifiable. Both are cheap to implement given the
+  indirection vector approach.
+- **Trade-off**: Two ways to do the same thing; documented that layer_order wins.
+- **Future**: If animation or dynamic layer visibility is added, z-index
+  is more natural for runtime changes.
+
+#### Type-Erased z-index via Trait Methods
+
+- **Decision**: Added `erased_z_index()` and `set_erased_z_index()` to the
+  `ErasedLayerSpec` trait so z-index works on foreign-data layers.
+- **Reasoning**: Without this, `z_index()` would silently not work on layers
+  added via `layer_with_data()`.
+- **Trade-off**: Slightly larger trait surface, but consistent behavior.
+- **Future**: Any new per-layer metadata can follow this pattern.
+
+### Development Workflow Insights
+
+- The implementation was straightforward as predicted by the risk assessment —
+  adding an indirection vector was a minimal change.
+- Disk space constraints required using `CARGO_TARGET_DIR=/tmp/gup-target`
+  to avoid filling the home partition during compilation.
+- The `compute_render_order` function was extracted as a pure helper, making it
+  trivially testable without GPU resources — 10 of the 13 new tests run
+  without any GPU involvement.
+- Doc-tests for the new API methods compile-check the examples in the
+  docstrings, catching the API surface early.
