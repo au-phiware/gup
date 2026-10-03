@@ -27,6 +27,7 @@ use syn::{Data, DeriveInput, Error, Fields, Result, Type};
 pub fn derive_wgsl_struct_impl(input: DeriveInput) -> Result<TokenStream> {
     let name = &input.ident;
     let name_str = name.to_string();
+    let krate = crate::crate_path::from_derive_attrs(&input.attrs)?;
 
     // Verify #[repr(C)] attribute is present
     let has_repr_c = input.attrs.iter().any(|attr| {
@@ -94,10 +95,10 @@ pub fn derive_wgsl_struct_impl(input: DeriveInput) -> Result<TokenStream> {
 
         // Add to size and alignment calculations
         size_calculation = quote! {
-            #size_calculation + std::mem::size_of::<#field_type>()
+            #size_calculation + ::core::mem::size_of::<#field_type>()
         };
         alignment_calculation = quote! {
-            std::cmp::max(#alignment_calculation, std::mem::align_of::<#field_type>())
+            ::core::cmp::max(#alignment_calculation, ::core::mem::align_of::<#field_type>())
         };
     }
 
@@ -106,7 +107,7 @@ pub fn derive_wgsl_struct_impl(input: DeriveInput) -> Result<TokenStream> {
 
     // Generate the trait implementation
     let generated = quote! {
-        impl gup::shader_function::WgslStructType for #name {
+        impl #krate::shader_function::WgslStructType for #name {
             fn wgsl_struct_definition() -> &'static str {
                 #wgsl_definition
             }
@@ -117,7 +118,7 @@ pub fn derive_wgsl_struct_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         // Also implement ShaderType for completeness
-        impl gup::shader_function::ShaderType for #name {
+        impl #krate::shader_function::ShaderType for #name {
             fn wgsl_type_name() -> &'static str {
                 #name_str
             }
@@ -209,5 +210,43 @@ fn rust_type_to_wgsl(ty: &Type) -> Result<String> {
             ty,
             "This type is not supported in WgslStruct. Supported types: f32, i32, u32, bool, Vec2, Vec3, Vec4, Mat2/3/4, arrays, and custom WgslStruct types.",
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use syn::parse_quote;
+
+    #[test]
+    fn uses_absolute_gup_paths_by_default() {
+        let input: DeriveInput = parse_quote! {
+            #[repr(C)]
+            struct Material { roughness: f32 }
+        };
+        let code = derive_wgsl_struct_impl(input).unwrap().to_string();
+        assert!(
+            code.contains("impl :: gup :: shader_function :: WgslStructType for Material"),
+            "{code}"
+        );
+        assert!(
+            code.contains("impl :: gup :: shader_function :: ShaderType for Material"),
+            "{code}"
+        );
+        assert!(!code.contains(" std ::"), "{code}");
+    }
+
+    #[test]
+    fn honours_gup_crate_override() {
+        let input: DeriveInput = parse_quote! {
+            #[repr(C)]
+            #[gup(crate = "reexport::gup")]
+            struct Material { roughness: f32 }
+        };
+        let code = derive_wgsl_struct_impl(input).unwrap().to_string();
+        assert!(
+            code.contains("impl reexport :: gup :: shader_function :: WgslStructType"),
+            "{code}"
+        );
     }
 }

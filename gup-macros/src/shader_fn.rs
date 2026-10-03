@@ -23,7 +23,7 @@ use crate::wgsl_keywords::{validate_function_name, validate_param_name};
 /// Parse a `syn::ItemFn` and transpile its body to WGSL, producing a
 /// [`WgslFunctionInfo`] that can be rendered to tokens identically to
 /// `#[wgsl_function]`.
-pub fn expand_shader_fn(function: ItemFn) -> Result<TokenStream> {
+pub fn expand_shader_fn(function: ItemFn, crate_path: syn::Path) -> Result<TokenStream> {
     // --- Validate function signature (same constraints as #[wgsl_function]) ---
     let function_name = function.sig.ident.to_string();
 
@@ -190,6 +190,7 @@ pub fn expand_shader_fn(function: ItemFn) -> Result<TokenStream> {
         uniform_params,
         wgsl_body,
         custom_types,
+        crate_path,
     };
 
     let mut tokens = TokenStream::new();
@@ -300,7 +301,8 @@ mod tests {
     /// Helper: parse a function and expand it, returning the token stream string.
     fn expand(input: proc_macro2::TokenStream) -> std::result::Result<String, String> {
         let func: ItemFn = syn::parse2(input).map_err(|e| e.to_string())?;
-        let tokens = expand_shader_fn(func).map_err(|e| e.to_string())?;
+        let tokens = expand_shader_fn(func, crate::crate_path::default_crate_path())
+            .map_err(|e| e.to_string())?;
         Ok(tokens.to_string())
     }
 
@@ -598,6 +600,37 @@ mod tests {
         assert!(
             tokens.contains("MyPoint"),
             "Should reference custom output type, got: {tokens}"
+        );
+    }
+
+    #[test]
+    fn generated_code_uses_absolute_gup_paths() {
+        let tokens = expand(quote! {
+            fn scale(value: f32, k: f32) -> f32 {
+                value * k
+            }
+        })
+        .unwrap();
+        assert!(!tokens.contains("crate ::"), "{tokens}");
+        assert!(
+            tokens.contains(":: gup :: shader_function :: ComposableShaderFunction"),
+            "{tokens}"
+        );
+    }
+
+    #[test]
+    fn generated_code_honours_crate_override() {
+        let func: ItemFn = syn::parse_quote! {
+            fn scale(value: f32, k: f32) -> f32 {
+                value * k
+            }
+        };
+        let tokens = expand_shader_fn(func, syn::parse_quote!(reexported::gup))
+            .unwrap()
+            .to_string();
+        assert!(
+            tokens.contains("reexported :: gup :: shader_function :: ComposableShaderFunction"),
+            "{tokens}"
         );
     }
 

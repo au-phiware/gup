@@ -49,6 +49,11 @@ impl MarkPrimitive {
 /// Generate the Mark trait implementation for a derive-annotated struct.
 pub fn derive_mark_impl(input: DeriveInput) -> Result<TokenStream> {
     let name = &input.ident;
+    let krate = crate::crate_path::from_derive_attrs(&input.attrs)?;
+    let crate::crate_path::BytemuckDerives {
+        derives: bytemuck_derives,
+        attr: bytemuck_attr,
+    } = crate::crate_path::bytemuck_derives(&krate);
 
     // Validate we have a struct with named fields
     let fields = match &input.data {
@@ -132,7 +137,8 @@ pub fn derive_mark_impl(input: DeriveInput) -> Result<TokenStream> {
     }
 
     // Generate optional instance struct from field annotations
-    let instance_output = generate_instance_struct(name, fields)?;
+    let instance_output =
+        generate_instance_struct(name, fields, &bytemuck_derives, &bytemuck_attr)?;
 
     let expanded = quote! {
         /// Auto-generated GPU vertex type for mark rendering.
@@ -140,13 +146,14 @@ pub fn derive_mark_impl(input: DeriveInput) -> Result<TokenStream> {
         /// Each vertex represents a corner of the base geometry.
         /// Instance-specific data is handled via storage buffers.
         #[repr(C)]
-        #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+        #[derive(Debug, Clone, Copy, #bytemuck_derives)]
+        #bytemuck_attr
         pub struct #vertex_name {
             /// Local position within the base geometry
             pub position: [f32; 2],
         }
 
-        impl ::gup::mark::Mark for #name {
+        impl #krate::mark::Mark for #name {
             type Vertex = #vertex_name;
             type AttributeValue = #name;
 
@@ -168,14 +175,14 @@ pub fn derive_mark_impl(input: DeriveInput) -> Result<TokenStream> {
 
             fn get_attribute_type(
                 attribute_name: &str,
-            ) -> ::gup::error::GupResult<&'static str> {
+            ) -> #krate::error::GupResult<&'static str> {
                 match attribute_name {
                     #(#attr_type_arms)*
                     // Fall back to common defaults
                     "position" => Ok("vec2<f32>"),
                     "color" => Ok("vec4<f32>"),
                     "size" | "radius" => Ok("f32"),
-                    _ => Err(::gup::error::GupError::validation_error(
+                    _ => Err(#krate::error::GupError::validation_error(
                         format!("Unknown attribute for {}: {}", stringify!(#name), attribute_name),
                     )),
                 }
@@ -393,6 +400,8 @@ fn parse_field_mark_role(field: &syn::Field) -> Result<Option<String>> {
 fn generate_instance_struct(
     name: &syn::Ident,
     fields: &syn::punctuated::Punctuated<syn::Field, syn::Token![,]>,
+    bytemuck_derives: &TokenStream,
+    bytemuck_attr: &TokenStream,
 ) -> Result<TokenStream> {
     // Collect fields that have #[mark(role)] annotations
     let mut annotated: Vec<AnnotatedField> = Vec::new();
@@ -501,7 +510,8 @@ fn generate_instance_struct(
         /// padding inserted automatically. Fields correspond to
         /// `#[mark(...)]`-annotated fields on [`#name`].
         #[repr(C)]
-        #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+        #[derive(Debug, Clone, Copy, #bytemuck_derives)]
+        #bytemuck_attr
         pub struct #instance_name {
             #(#struct_field_tokens)*
         }
@@ -520,4 +530,59 @@ fn generate_instance_struct(
             }
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use syn::parse_quote;
+
+    fn expand(input: DeriveInput) -> String {
+        derive_mark_impl(input).unwrap().to_string()
+    }
+
+    #[test]
+    fn uses_absolute_gup_paths_by_default() {
+        let code = expand(parse_quote! {
+            struct Dot {
+                #[mark(position)]
+                center: Vec2,
+                #[mark(size)]
+                radius: f32,
+            }
+        });
+        assert!(!code.contains("crate ::"), "{code}");
+        assert!(
+            code.contains("impl :: gup :: mark :: Mark for Dot"),
+            "{code}"
+        );
+        assert!(code.contains(":: gup :: error :: GupResult"), "{code}");
+        // Both the vertex and instance structs derive bytemuck via the re-export.
+        assert_eq!(
+            code.matches(":: gup :: __private :: bytemuck :: Pod")
+                .count(),
+            2,
+            "{code}"
+        );
+        assert!(!code.contains("Copy , bytemuck :: Pod"), "{code}");
+    }
+
+    #[test]
+    fn honours_gup_crate_override() {
+        let code = expand(parse_quote! {
+            #[gup(crate = "my_reexport::gup")]
+            struct Dot {
+                center: Vec2,
+            }
+        });
+        assert!(
+            code.contains("impl my_reexport :: gup :: mark :: Mark for Dot"),
+            "{code}"
+        );
+        assert!(
+            code.contains("my_reexport :: gup :: __private :: bytemuck :: Zeroable"),
+            "{code}"
+        );
+        assert!(!code.contains("impl :: gup"), "{code}");
+    }
 }

@@ -182,10 +182,14 @@ pub mod zoom;
 
 /// Hidden module for procedural macro support.
 ///
-/// This module re-exports types that the `#[derive(Mark)]` macro needs
-/// to reference in generated code. Do not use directly.
+/// This module re-exports types and crates that procedural macros need to
+/// reference in generated code. Do not use directly.
 #[doc(hidden)]
 pub mod __private {
+    /// Re-exported so macro-generated `Pod`/`Zeroable` derives work in crates
+    /// that do not depend on `bytemuck` directly.
+    pub use bytemuck;
+
     pub use crate::error::GupError;
     pub use crate::mark::Mark;
     pub use crate::shader_pipeline::ComposableShaderPipeline;

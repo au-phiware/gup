@@ -8,7 +8,7 @@
 //! approach introduces no measurable overhead.
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use gup::shader_function::{self, ComposableShaderFunction};
+use gup::shader_function::ComposableShaderFunction;
 use gup_macros::{shader_fn, wgsl_function};
 use std::hint::black_box;
 

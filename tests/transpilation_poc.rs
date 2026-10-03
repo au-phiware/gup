@@ -12,7 +12,7 @@
 //! - **Graphics operations**: lighting, coordinate transforms, blending
 //! - **Mathematical computations**: iterative algorithms, trigonometry, statistics
 
-use gup::shader_function::{self, ComposableShaderFunction};
+use gup::shader_function::ComposableShaderFunction;
 use gup_macros::{shader_fn, wgsl_function};
 
 // ---------------------------------------------------------------------------
