@@ -34,7 +34,7 @@ side. This story delivers that builder as part of the Chart Builders initiative
 > KDE from my data and renders smooth mirrored density curves — optionally with
 > embedded box plots — so that I can communicate full distributional shape
 > without writing low-level path or shader code."
-
+>
 > "As a data analyst comparing multiple groups, I want multi-category violin
 > plots laid out side by side, with an optional half-violin variant for pairwise
 > split comparison, so that I can visually contrast distributions across groups

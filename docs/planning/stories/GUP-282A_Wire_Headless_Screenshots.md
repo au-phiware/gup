@@ -40,7 +40,15 @@ so that `scripts/generate_gallery.sh` can produce actual PNG thumbnails.
 ## Technical Tasks
 
 - [x] For each renderable example, add a check near the top of `main()`:
-      `rust     if let Some(req) = gup::export::gallery::screenshot_request() {         // build chart / context...         chart.export_png(&req.path, req.width, req.height)?;         return Ok(());     }     `
+
+  ```rust
+  if let Some(req) = gup::export::gallery::screenshot_request() {
+      // build chart / context...
+      chart.export_png(&req.path, req.width, req.height)?;
+      return Ok(());
+  }
+  ```
+
 - [x] For examples that use `ComposedChart` (19 examples): the integration is
       straightforward — call `export_png` on the chart.
 - [x] For console-only examples that were misclassified: move them to

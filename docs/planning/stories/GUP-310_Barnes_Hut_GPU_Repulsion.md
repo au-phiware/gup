@@ -130,9 +130,8 @@ the layout time under the ≤5 second target on integrated GPU.
   updated (mass went from 1 to 2), we need to recover the original body position
   to re-insert it into the correct child quadrant.
 - **Solution**: Use the formula `old_pos = com * new_mass - new_body_pos` which
-  inverts the incremental COM update. This works because `new_com = (old_pos \*
-  1
-  - new_pos) / 2`, so `old_pos = new_com \* 2 - new_pos`.
+  inverts the incremental COM update. This works because
+  `new_com = (old_pos * 1 - new_pos) / 2`, so `old_pos = new_com * 2 - new_pos`.
 - **Pattern**: When maintaining running aggregates (COM, mean, etc.) and needing
   to undo or decompose them, keep the math invertible. An alternative is to
   store the original body position alongside the COM, but the algebraic recovery

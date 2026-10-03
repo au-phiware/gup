@@ -12,3 +12,6 @@ performance_report.*
 # Node.js dependencies for benchmark scripts
 scripts/node_modules/
 docs/gallery/thumbs/*.png
+
+# Agent git worktrees (separate checkouts)
+.claude/worktrees/

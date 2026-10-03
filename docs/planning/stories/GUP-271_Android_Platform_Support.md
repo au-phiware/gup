@@ -39,7 +39,7 @@ conventions to keep the mobile platform layer coherent and maintainable.
 > "As an Android app developer, I want to embed a Gup visualization in my Kotlin
 > or Java application so that I can display GPU-accelerated live charts without
 > leaving the Android SDK ecosystem."
-
+>
 > "As a Gup library maintainer, I want the Android surface lifecycle to be
 > correctly handled so that chart surfaces survive Activity pause/resume cycles
 > without GPU validation errors or resource leaks."

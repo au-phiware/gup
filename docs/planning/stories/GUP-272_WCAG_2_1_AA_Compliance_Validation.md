@@ -36,11 +36,11 @@ Statement and a consumer-facing accessibility testing guide.
 > "As a visualization developer, I want a published WCAG 2.1 AA Conformance
 > Statement backed by a systematic audit so that I can confidently rely on Gup
 > in products that must meet accessibility regulations."
-
+>
 > "As an end user of a Gup-powered application, I want the data visualizations I
 > encounter to meet WCAG 2.1 AA so that I can perceive, navigate, and understand
 > the data using assistive technologies."
-
+>
 > "As a Gup maintainer, I want automated accessibility checks in CI so that
 > newly introduced features cannot silently regress compliance."
 

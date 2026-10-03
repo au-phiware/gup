@@ -33,7 +33,7 @@ integration is handled by those companion stories.
 > "As a new user, I want to browse rendered screenshots of every example in a
 > visual gallery so that I can quickly find a chart that matches my use case and
 > jump to its source code."
-
+>
 > "As a contributor, I want the CI pipeline to regenerate gallery thumbnails on
 > every merge to main so that the gallery always reflects the current state of
 > the codebase and visual regressions are immediately visible."

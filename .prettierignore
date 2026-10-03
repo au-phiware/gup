@@ -21,3 +21,5 @@ Cargo.lock
 # OS files
 .DS_Store
 Thumbs.db
+# Agent git worktrees (separate checkouts)
+.claude/worktrees/

@@ -1168,9 +1168,10 @@ API reference generation, tutorials, and example gallery.
 
 ## Follow-ups from GUP-286
 
-- [GUP-288](GUP-288_Area_Chart_Data_Mark_Rendering.md) 📋 — Wire area-mark
-  rendering into `AreaChartBuilder` so that `render_to_png()` produces visible
-  filled-area segments. Deps: GUP-286 ✅.
+- [GUP-288](GUP-288_Area_Chart_Data_Mark_Rendering.md) ✅ — Superseded by
+  GUP-379/GUP-364, which delivered scale-aware NDC mapping and
+  `prepare_render_bound()` for `AreaChartBuilder` before this story was started.
+  Deps: GUP-286 ✅.
 - [GUP-289](GUP-289_Bar_Chart_Builder_Prepare_Render_Bound.md) ✅ — Call
   `prepare_render_bound()` in `BarChartBuilder` so that `render_to_png()`
   produces visible bar rectangles. Deps: GUP-284 ✅.
@@ -1205,10 +1206,14 @@ API reference generation, tutorials, and example gallery.
   `.on_mouse()` callbacks to `GupApp` so examples with simple custom event
   handling can also use the shell. Deps: GUP-318 ✅.
 
-## Follow-ups from GUP-315
+## Project Maintenance
 
-- [GUP-374](GUP-374_Duplicate_Story_ID_Cleanup.md) 📋 — Renumber the duplicate
-  GUP-315 (Graph Node Label Rendering) to a unique ID. No deps.
+- [GUP-374](GUP-374_Duplicate_Story_ID_Cleanup.md) 📋 — Renumber all 34
+  duplicated story IDs (41 files) found across the backlog, including the
+  original GUP-315 collision, and remove the ad-hoc GUP-285B alias. No deps.
+- [GUP-383](GUP-383_Duplicate_Story_ID_Guard.md) 📋 — Add a `check_story_ids.sh`
+  script and `mask check-story-ids` task that fails when two story files share a
+  GUP ID, preventing recurrence of the GUP-374 cleanup.
 
 ## Follow-ups from GUP-351
 

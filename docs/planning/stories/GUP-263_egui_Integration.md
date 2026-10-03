@@ -39,7 +39,7 @@ can reuse directly.
 > "As a Rust developer building a desktop application with egui, I want to embed
 > a live-updating Gup chart in an egui panel so that I can display
 > GPU-accelerated visualizations without abandoning my existing egui UI."
-
+>
 > "As a Gup library author, I want a clean example showing Gup embedded inside
 > egui so that new users understand how to integrate Gup with the most popular
 > Rust GUI framework."
