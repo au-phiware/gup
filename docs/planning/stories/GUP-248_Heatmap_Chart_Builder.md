@@ -39,7 +39,7 @@ main chart — is required so that viewers can read off the encoded values.
 > `.heatmap(x("hour"), y("weekday"), fill("count"))` on a flat dataset so that I
 > can produce a GPU-rendered time-of-day activity grid with correct color
 > scaling and a readable colorbar legend — without writing any GPU code."
-
+>
 > "As a performance-sensitive developer, I want the heatmap renderer to sustain
 > 60 FPS at 1 M cells so that I can embed large heatmaps in real-time
 > dashboards."

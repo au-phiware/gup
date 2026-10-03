@@ -39,7 +39,7 @@ Barnes-Hut is required to hit the 100K / 5-second target.
 > "As a visualization developer, I want a GPU-accelerated force-directed layout
 > engine so that I can lay out graphs with 100K+ nodes in interactive time
 > without saturating the CPU."
-
+>
 > "As a chart builder user, I want to call
 > `chart.graph_layout(ForceDirected::new())` so that I can declaratively
 > configure and apply force-directed layout within the existing ChartBuilder

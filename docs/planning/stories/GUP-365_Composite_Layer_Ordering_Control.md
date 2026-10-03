@@ -125,8 +125,8 @@ Two complementary ordering mechanisms:
   natural for per-layer priority (set-and-forget), while `layer_order()` is
   precise for cases where the user wants exact control. `layer_order` takes
   precedence when both are used.
-- **Pattern**: When two approaches serve different use cases, implement both with
-  a clear precedence rule rather than forcing users into one paradigm.
+- **Pattern**: When two approaches serve different use cases, implement both
+  with a clear precedence rule rather than forcing users into one paradigm.
 
 #### Chainable z-index on Last-Added Layer
 
@@ -159,9 +159,10 @@ Two complementary ordering mechanisms:
 - **Reasoning**: z-index is intuitive for CSS/game-dev users; explicit ordering
   is more direct and verifiable. Both are cheap to implement given the
   indirection vector approach.
-- **Trade-off**: Two ways to do the same thing; documented that layer_order wins.
-- **Future**: If animation or dynamic layer visibility is added, z-index
-  is more natural for runtime changes.
+- **Trade-off**: Two ways to do the same thing; documented that layer_order
+  wins.
+- **Future**: If animation or dynamic layer visibility is added, z-index is more
+  natural for runtime changes.
 
 #### Type-Erased z-index via Trait Methods
 
@@ -176,10 +177,10 @@ Two complementary ordering mechanisms:
 
 - The implementation was straightforward as predicted by the risk assessment —
   adding an indirection vector was a minimal change.
-- Disk space constraints required using `CARGO_TARGET_DIR=/tmp/gup-target`
-  to avoid filling the home partition during compilation.
+- Disk space constraints required using `CARGO_TARGET_DIR=/tmp/gup-target` to
+  avoid filling the home partition during compilation.
 - The `compute_render_order` function was extracted as a pure helper, making it
-  trivially testable without GPU resources — 10 of the 13 new tests run
-  without any GPU involvement.
+  trivially testable without GPU resources — 10 of the 13 new tests run without
+  any GPU involvement.
 - Doc-tests for the new API methods compile-check the examples in the
   docstrings, catching the API surface early.

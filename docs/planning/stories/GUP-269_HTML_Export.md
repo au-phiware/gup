@@ -35,7 +35,7 @@ embedding strategies are supported: inlining the WASM as a Base64 data URI
 > "As a visualization developer, I want to export a Gup chart as a standalone
 > HTML file so that I can share an interactive chart with colleagues or
 > stakeholders who have only a web browser."
-
+>
 > "As an end user receiving a shared chart, I want to open an HTML file in my
 > browser and see the interactive chart — or a clear static fallback if WebGPU
 > is unavailable — so that I can explore the data without installing anything."

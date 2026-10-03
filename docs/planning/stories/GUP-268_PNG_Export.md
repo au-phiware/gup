@@ -63,7 +63,7 @@ intended physical size.
 > "As a visualisation developer, I want to export a Gup chart as a PNG file at
 > an arbitrary resolution so that I can embed pixel-perfect chart images in
 > reports, documentation, and web pages without loss of GPU-rendered effects."
-
+>
 > "As a visualisation developer, I want to specify a scale factor for HiDPI
 > export so that charts rendered for print or Retina displays are sharp at their
 > intended display size."

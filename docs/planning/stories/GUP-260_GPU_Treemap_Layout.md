@@ -35,7 +35,7 @@ rectangles.
 > `LayoutEngine::treemap_layout(nodes, values, viewport)` and bind the result
 > directly to a `Rectangle` mark selection so that I can render real-time
 > treemaps of 100 K-node hierarchies without CPU layout bottlenecks."
-
+>
 > "As an end user viewing a live dashboard, I want the treemap to redraw
 > smoothly when the underlying data changes so that I can explore hierarchy
 > dynamics without lag."

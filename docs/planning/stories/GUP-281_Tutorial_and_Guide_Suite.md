@@ -40,7 +40,7 @@ screenshots captured from the examples suite.
 > through the most important use-cases so that I can become productive with both
 > the high-level chart builder API and the low-level `Selection` API without
 > having to reverse-engineer the examples or read source code."
-
+>
 > "As an experienced Gup user, I want self-contained guides for advanced topics
 > — custom shader functions, custom mark types, and streaming data — so that I
 > can tackle those tasks confidently without missing important constraints."

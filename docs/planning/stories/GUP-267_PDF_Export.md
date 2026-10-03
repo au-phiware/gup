@@ -33,7 +33,7 @@ page without orchestrating multiple single-page PDFs externally.
 > "As a data analyst, I want to export one or more Gup charts to a PDF file so
 > that I can include them in printed reports and academic papers with full
 > vector quality."
-
+>
 > "As a Rust application developer, I want a programmatic multi-page PDF export
 > API so that I can generate report documents containing several charts without
 > shell-level PDF tooling."
@@ -73,14 +73,25 @@ page without orchestrating multiple single-page PDFs externally.
 - [x] A `PdfDocument` builder allows multiple charts to be appended, each on its
       own page, before writing the final file
 - [x] The API compiles without ergonomic friction:
-      `rust     let mut doc = PdfDocument::new(PdfOptions::a4());     doc.add_chart(&chart_a)?;     doc.add_chart(&chart_b)?;     doc.write("report.pdf")?;     `
+
+  ```rust
+  let mut doc = PdfDocument::new(PdfOptions::a4());
+  doc.add_chart(&chart_a)?;
+  doc.add_chart(&chart_b)?;
+  doc.write("report.pdf")?;
+  ```
+
 - [x] Page count in the written file matches the number of `add_chart` calls
 
 ### AC5: Single-Chart Convenience Method
 
 - [x] The chart builder exposes a `export_pdf` convenience method so that the
       common single-chart case requires minimal boilerplate:
-      `rust     chart.export_pdf("report.pdf", PdfOptions::a4())?;     `
+
+  ```rust
+  chart.export_pdf("report.pdf", PdfOptions::a4())?;
+  ```
+
 - [x] The method returns a `Result<(), GupError>` and propagates I/O and
       serialisation errors cleanly
 

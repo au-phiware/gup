@@ -37,7 +37,7 @@ well-formed SVG document to a file or in-memory string.
 > `chart.export_svg("output.svg")?` so that I can produce a
 > resolution-independent, editable SVG file from any Gup chart without
 > additional tooling."
-
+>
 > "As a data journalist or analyst, I want SVG output that embeds cleanly in
 > HTML and opens correctly in vector editors so that I can publish and refine
 > visualizations outside of Gup."

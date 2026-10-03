@@ -37,7 +37,7 @@ embedded in a native Swift app.
 > "As a mobile application developer, I want to embed a Gup chart in my UIKit or
 > SwiftUI app so that I can display GPU-accelerated data visualisations on
 > iPhone and iPad with native touch interaction."
-
+>
 > "As a visualisation developer targeting iOS, I want touch events on a Gup
 > chart to be translated to the same `InteractionEvent` type used on desktop so
 > that I can write interaction logic once and have it work across platforms."
