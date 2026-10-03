@@ -20,6 +20,7 @@ use proc_macro::TokenStream;
 use quote::{ToTokens, quote};
 use syn::{Data, DeriveInput, Fields, parse_macro_input};
 
+mod crate_path;
 mod mark_derive;
 mod mark_type_id;
 mod mixable_derive;
@@ -39,7 +40,7 @@ use wgsl_function::WgslFunctionInfo;
 /// # Example
 ///
 /// ```rust,ignore
-/// use gup::*;
+/// use gup::proc_macros::wgsl_function;
 ///
 /// #[wgsl_function]
 /// fn linear_scale(value: f32, scale: f32) -> f32 {
@@ -52,9 +53,27 @@ use wgsl_function::WgslFunctionInfo;
 /// - A `LinearScaleUniforms` struct for GPU uniforms
 /// - An implementation of `ComposableShaderFunction` for `LinearScale`
 /// - WGSL code that can be compiled and run on the GPU
+///
+/// # Crate Path
+///
+/// Generated code refers to the library through absolute `::gup::` paths, so
+/// no glob imports are required at the call site. Crates that re-export the
+/// library under a different name can override the path:
+///
+/// ```rust,ignore
+/// #[wgsl_function(crate = "my_crate::reexported_gup")]
+/// fn double(value: f32) -> f32 {
+///     return value * 2.0;
+/// }
+/// ```
 #[proc_macro_attribute]
-pub fn wgsl_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(item as WgslFunctionInfo);
+pub fn wgsl_function(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let crate_path = match crate_path::parse_attribute_args(attr.into(), "wgsl_function") {
+        Ok(path) => path,
+        Err(err) => return err.to_compile_error().into(),
+    };
+    let mut input = parse_macro_input!(item as WgslFunctionInfo);
+    input.crate_path = crate_path;
     let mut tokens = proc_macro2::TokenStream::new();
     input.to_tokens(&mut tokens);
     TokenStream::from(tokens)
@@ -77,7 +96,7 @@ pub fn wgsl_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Example
 ///
 /// ```rust,ignore
-/// use gup::*;
+/// use gup::shader_fn;
 ///
 /// #[shader_fn]
 /// fn linear_scale(value: f32, domain_min: f32, domain_max: f32,
@@ -92,10 +111,17 @@ pub fn wgsl_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// - A `LinearScaleUniforms` struct for GPU uniforms
 /// - An implementation of `ComposableShaderFunction` for `LinearScale`
 /// - Transpiled WGSL code from the Rust function body
+///
+/// Like `#[wgsl_function]`, generated code uses absolute `::gup::` paths and
+/// accepts a `crate = "path::to::gup"` argument for re-exporting crates.
 #[proc_macro_attribute]
-pub fn shader_fn(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn shader_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let crate_path = match crate_path::parse_attribute_args(attr.into(), "shader_fn") {
+        Ok(path) => path,
+        Err(err) => return err.to_compile_error().into(),
+    };
     let function = parse_macro_input!(item as syn::ItemFn);
-    match shader_fn::expand_shader_fn(function) {
+    match shader_fn::expand_shader_fn(function, crate_path) {
         Ok(tokens) => TokenStream::from(tokens),
         Err(err) => err.to_compile_error().into(),
     }
@@ -122,12 +148,19 @@ pub fn shader_fn(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// - `ShaderType` trait implementation with correct WGSL type name
 /// - WGSL struct definition with proper field types
 /// - Memory layout calculations for GPU compatibility
-#[proc_macro_derive(ShaderType)]
+///
+/// Generated code uses absolute `::gup::` paths; use `#[gup(crate = "path::to::gup")]`
+/// to override the path when the library is re-exported under another name.
+#[proc_macro_derive(ShaderType, attributes(gup))]
 pub fn derive_shader_type(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
     let name = &input.ident;
     let name_str = name.to_string();
+    let krate = match crate_path::from_derive_attrs(&input.attrs) {
+        Ok(path) => path,
+        Err(err) => return err.to_compile_error().into(),
+    };
 
     // For now, only support structs with named fields
     let fields = match &input.data {
@@ -182,17 +215,17 @@ pub fn derive_shader_type(input: TokenStream) -> TokenStream {
 
         // Add to size and alignment calculations
         size_calculation = quote! {
-            #size_calculation + <#field_type as ShaderType>::size_bytes()
+            #size_calculation + <#field_type as #krate::shader_function::ShaderType>::size_bytes()
         };
         max_alignment = quote! {
-            std::cmp::max(#max_alignment, <#field_type as ShaderType>::alignment())
+            ::core::cmp::max(#max_alignment, <#field_type as #krate::shader_function::ShaderType>::alignment())
         };
     }
 
     wgsl_definition.push('}');
 
     let generated = quote! {
-        impl ShaderType for #name {
+        impl #krate::shader_function::ShaderType for #name {
             fn wgsl_type_name() -> &'static str {
                 #name_str
             }
@@ -248,7 +281,7 @@ pub fn derive_shader_type(input: TokenStream) -> TokenStream {
 /// - Proper vertex data extraction from the `points` field
 /// - Uniform binding setup for the `color` field
 /// - Validation methods to ensure data integrity
-#[proc_macro_derive(Mixable, attributes(mixable))]
+#[proc_macro_derive(Mixable, attributes(mixable, gup))]
 pub fn derive_mixable(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
@@ -298,7 +331,7 @@ pub fn derive_mixable(input: TokenStream) -> TokenStream {
 /// - `WgslStructType` trait implementation with WGSL struct definition
 /// - `ShaderType` trait implementation for full integration
 /// - Proper size and alignment calculations
-#[proc_macro_derive(WgslStruct)]
+#[proc_macro_derive(WgslStruct, attributes(gup))]
 pub fn derive_wgsl_struct(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
@@ -355,7 +388,7 @@ pub fn derive_wgsl_struct(input: TokenStream) -> TokenStream {
 /// // 1 = Rectangle
 /// // 2 = Line
 /// ```
-#[proc_macro_derive(MarkTypeId, attributes(mark_type_id))]
+#[proc_macro_derive(MarkTypeId, attributes(mark_type_id, gup))]
 pub fn derive_mark_type_id(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
@@ -440,7 +473,7 @@ pub fn derive_mark_type_id(input: TokenStream) -> TokenStream {
 ///   - `#[repr(C)]` with `bytemuck::Pod` + `bytemuck::Zeroable`
 ///   - WGSL-compatible alignment padding
 ///   - `From<&Foo>` and `From<Foo>` conversions
-#[proc_macro_derive(Mark, attributes(mark))]
+#[proc_macro_derive(Mark, attributes(mark, gup))]
 pub fn derive_mark(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 

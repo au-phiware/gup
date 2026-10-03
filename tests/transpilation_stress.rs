@@ -7,7 +7,7 @@
 //! edge-case, and high-complexity shader functions that push the
 //! boundaries of what the system supports.
 
-use gup::shader_function::{self, ComposableShaderFunction};
+use gup::shader_function::ComposableShaderFunction;
 use gup_macros::shader_fn;
 
 // ---------------------------------------------------------------------------

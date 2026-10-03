@@ -182,10 +182,14 @@ pub mod zoom;
 
 /// Hidden module for procedural macro support.
 ///
-/// This module re-exports types that the `#[derive(Mark)]` macro needs
-/// to reference in generated code. Do not use directly.
+/// This module re-exports types and crates that procedural macros need to
+/// reference in generated code. Do not use directly.
 #[doc(hidden)]
 pub mod __private {
+    /// Re-exported so macro-generated `Pod`/`Zeroable` derives work in crates
+    /// that do not depend on `bytemuck` directly.
+    pub use bytemuck;
+
     pub use crate::error::GupError;
     pub use crate::mark::Mark;
     pub use crate::shader_pipeline::ComposableShaderPipeline;
@@ -431,6 +435,39 @@ pub use gup_macros::{Mark, Mixable, shader_fn};
 ///
 /// The `wgsl_function` attribute macro lives here to avoid a name collision
 /// with the `macro_rules!` helper of the same name at the crate root.
+///
+/// Generated code refers to this library through absolute `::gup::` paths, so
+/// no glob import is needed at the call site:
+///
+/// ```
+/// use gup::proc_macros::wgsl_function;
+/// use gup::shader_function::ComposableShaderFunction;
+///
+/// #[wgsl_function]
+/// fn double(value: f32, factor: f32) -> f32 {
+///     return value * factor;
+/// }
+///
+/// assert_eq!(Double::function_name(), "double");
+/// assert_eq!(Double::new(2.0).create_uniforms().unwrap().factor, 2.0);
+/// ```
+///
+/// Crates that re-export `gup` under another name can point the macro at the
+/// re-export with `crate = "..."`:
+///
+/// ```
+/// mod engine {
+///     pub use gup as plotting;
+/// }
+///
+/// #[gup::proc_macros::wgsl_function(crate = "engine::plotting")]
+/// fn halve(value: f32) -> f32 {
+///     return value * 0.5;
+/// }
+///
+/// use gup::shader_function::ComposableShaderFunction;
+/// assert_eq!(Halve::function_name(), "halve");
+/// ```
 pub mod proc_macros {
     pub use gup_macros::wgsl_function;
 }

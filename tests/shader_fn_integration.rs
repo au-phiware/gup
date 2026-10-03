@@ -7,7 +7,7 @@
 //! `ComposableShaderFunction` and interoperate with existing
 //! `#[wgsl_function]` functions in the same `ShaderPipeline`.
 
-use gup::shader_function::{self, ComposableShaderFunction, ShaderType, ShaderUniform};
+use gup::shader_function::{ComposableShaderFunction, ShaderType, ShaderUniform};
 use gup_macros::{shader_fn, wgsl_function};
 
 // ---------------------------------------------------------------------------

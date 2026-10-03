@@ -51,6 +51,9 @@ pub struct WgslFunctionInfo {
     pub wgsl_body: String,
     /// Custom types that may have WgslStruct definitions
     pub custom_types: Vec<Type>,
+    /// Path used to reference the `gup` crate in generated code
+    /// (defaults to `::gup`; overridable with `crate = "..."`)
+    pub crate_path: syn::Path,
 }
 
 /// Information about a uniform parameter
@@ -146,6 +149,7 @@ impl Parse for WgslFunctionInfo {
             uniform_params,
             wgsl_body,
             custom_types,
+            crate_path: crate::crate_path::default_crate_path(),
         })
     }
 }
@@ -838,6 +842,11 @@ impl ToTokens for WgslFunctionInfo {
         let function_name = &self.function_name;
         let wgsl_body = &self.wgsl_body;
         let custom_types = &self.custom_types;
+        let krate = &self.crate_path;
+        let crate::crate_path::BytemuckDerives {
+            derives: bytemuck_derives,
+            attr: bytemuck_attr,
+        } = crate::crate_path::bytemuck_derives(krate);
 
         // Generate uniform struct fields
         let uniform_fields = self.uniform_params.iter().map(|param| {
@@ -909,7 +918,7 @@ impl ToTokens for WgslFunctionInfo {
         let (uniform_struct, shader_uniform_impl) = if self.uniform_params.is_empty() {
             let impl_uniform = quote! {
                 // Implement ShaderUniform for unit type
-                impl crate::shader_function::ShaderUniform for #uniforms_name {
+                impl #krate::shader_function::ShaderUniform for #uniforms_name {
                     fn wgsl_struct_definition() -> String {
                         "struct ".to_string() + stringify!(#uniforms_name) + " {}"
                     }
@@ -922,7 +931,8 @@ impl ToTokens for WgslFunctionInfo {
             let struct_def = quote! {
                 // Unit type for functions with no uniforms
                 #[repr(C)]
-                #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+                #[derive(Copy, Clone, Debug, #bytemuck_derives)]
+                #bytemuck_attr
                 pub struct #uniforms_name;
             };
             (struct_def, impl_uniform)
@@ -959,7 +969,7 @@ impl ToTokens for WgslFunctionInfo {
 
             let impl_uniform = quote! {
                 // Implement ShaderUniform for the generated uniforms
-                impl crate::shader_function::ShaderUniform for #uniforms_name {
+                impl #krate::shader_function::ShaderUniform for #uniforms_name {
                     fn wgsl_struct_definition() -> String {
                         format!(
                             "struct {} {{\n{}\n}}",
@@ -976,7 +986,8 @@ impl ToTokens for WgslFunctionInfo {
 
             let struct_def = quote! {
                 #[repr(C)]
-                #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+                #[derive(Copy, Clone, Debug, #bytemuck_derives)]
+                #bytemuck_attr
                 pub struct #uniforms_name {
                     #(#uniform_fields),*
                 }
@@ -993,7 +1004,7 @@ impl ToTokens for WgslFunctionInfo {
                     }
                 }
 
-                impl Default for #struct_name {
+                impl ::core::default::Default for #struct_name {
                     fn default() -> Self {
                         Self::new()
                     }
@@ -1039,7 +1050,7 @@ impl ToTokens for WgslFunctionInfo {
             // Generate constructor
             #constructor
 
-            impl crate::shader_function::ComposableShaderFunction for #struct_name {
+            impl #krate::shader_function::ComposableShaderFunction for #struct_name {
                 type Input = #input_type;
                 type Output = #output_type;
                 type Uniforms = #uniforms_name;
@@ -1054,7 +1065,7 @@ impl ToTokens for WgslFunctionInfo {
 
                     // Add definitions for each custom type if available
                     #(
-                        if let Some(def) = <#custom_types as crate::shader_function::ShaderType>::wgsl_type_definition() {
+                        if let Some(def) = <#custom_types as #krate::shader_function::ShaderType>::wgsl_type_definition() {
                             definitions.push(def.to_string());
                         }
                     )*
@@ -1497,7 +1508,63 @@ mod tests {
         assert!(generated_code.contains("struct Identity"));
         assert!(generated_code.contains("struct IdentityUniforms"));
         assert!(generated_code.contains("fn new () -> Self"));
-        assert!(generated_code.contains("impl Default for Identity"));
+        assert!(generated_code.contains("impl :: core :: default :: Default for Identity"));
+    }
+
+    // --- Crate path resolution tests (GUP-377) ---
+
+    fn generate(input: proc_macro2::TokenStream, crate_path: Option<syn::Path>) -> String {
+        let mut parsed: WgslFunctionInfo = parse2(input).unwrap();
+        if let Some(path) = crate_path {
+            parsed.crate_path = path;
+        }
+        let mut tokens = proc_macro2::TokenStream::new();
+        parsed.to_tokens(&mut tokens);
+        tokens.to_string()
+    }
+
+    #[test]
+    fn test_generated_code_has_no_crate_relative_paths() {
+        for input in [
+            quote! { fn identity(value: f32) -> f32 { return value; } },
+            quote! { fn scale(value: f32, k: f32) -> f32 { return value * k; } },
+            quote! { fn custom(value: MyStruct, k: f32) -> f32 { return value.x * k; } },
+        ] {
+            let code = generate(input, None);
+            assert!(
+                !code.contains("crate ::"),
+                "generated code must not use crate-relative paths: {code}"
+            );
+            assert!(
+                !code.contains("Debug , bytemuck :: Pod"),
+                "bytemuck must be referenced through the gup re-export: {code}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_generated_code_uses_absolute_gup_paths_by_default() {
+        let code = generate(
+            quote! { fn custom(value: MyStruct, k: f32) -> f32 { return value.x * k; } },
+            None,
+        );
+        assert!(code.contains(":: gup :: shader_function :: ShaderUniform for CustomUniforms"));
+        assert!(code.contains(":: gup :: shader_function :: ComposableShaderFunction for Custom"));
+        assert!(code.contains("< MyStruct as :: gup :: shader_function :: ShaderType >"));
+        assert!(code.contains(":: gup :: __private :: bytemuck :: Pod"));
+        assert!(code.contains("bytemuck (crate = \":: gup :: __private :: bytemuck\")"));
+    }
+
+    #[test]
+    fn test_generated_code_honours_crate_override() {
+        let code = generate(
+            quote! { fn identity(value: f32) -> f32 { return value; } },
+            Some(parse_quote!(my_reexport::gup)),
+        );
+        assert!(code.contains("my_reexport :: gup :: shader_function :: ShaderUniform"));
+        assert!(code.contains("my_reexport :: gup :: shader_function :: ComposableShaderFunction"));
+        assert!(code.contains("my_reexport :: gup :: __private :: bytemuck :: Zeroable"));
+        assert!(!code.contains("impl :: gup"), "{code}");
     }
 
     // --- WGSL reserved keyword detection tests ---

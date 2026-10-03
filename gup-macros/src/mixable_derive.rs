@@ -91,16 +91,17 @@ pub fn generate_mixable_impl(input: &DeriveInput) -> Result<TokenStream> {
     let field_analysis = analyze_fields(input)?;
 
     // Generate the appropriate render implementation
-    let render_impl = generate_render_implementation(&config, &field_analysis)?;
+    let krate = crate::crate_path::from_derive_attrs(&input.attrs)?;
+    let render_impl = generate_render_implementation(&config, &field_analysis, &krate)?;
 
     // Determine the output type
     let output_type = config.output_type.unwrap_or_else(|| parse_quote! { () });
 
     let expanded = quote! {
-        impl #impl_generics ::gup::Mixable for #name #ty_generics #where_clause {
+        impl #impl_generics #krate::Mixable for #name #ty_generics #where_clause {
             type Output = #output_type;
 
-            fn render(&mut self, context: &mut ::gup::RenderContext) -> ::gup::GupResult<()> {
+            fn render(&mut self, context: &mut #krate::RenderContext) -> #krate::GupResult<()> {
                 #render_impl
             }
 
@@ -297,12 +298,13 @@ fn infer_vertex_format(field_type: &Type) -> Result<VertexFormat> {
 fn generate_render_implementation(
     config: &MixableConfig,
     analysis: &FieldAnalysis,
+    krate: &syn::Path,
 ) -> Result<TokenStream> {
     match &config.render_type {
         Some(RenderType::Points) => generate_points_render(analysis),
         Some(RenderType::Lines) => generate_lines_render(analysis),
         Some(RenderType::Triangles) => generate_triangles_render(analysis),
-        Some(RenderType::Custom(custom_type)) => generate_custom_render(custom_type),
+        Some(RenderType::Custom(custom_type)) => generate_custom_render(custom_type, krate),
         None => generate_default_render(),
     }
 }
@@ -464,10 +466,10 @@ fn generate_triangles_render(analysis: &FieldAnalysis) -> Result<TokenStream> {
 }
 
 /// Generate custom rendering implementation.
-fn generate_custom_render(custom_type: &str) -> Result<TokenStream> {
+fn generate_custom_render(custom_type: &str, krate: &syn::Path) -> Result<TokenStream> {
     let error_msg = format!("Custom render type '{custom_type}' not implemented");
     Ok(quote! {
-        return Err(::gup::GupError::render_error(#error_msg.to_string()));
+        return Err(#krate::GupError::render_error(#error_msg.to_string()));
     })
 }
 

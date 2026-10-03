@@ -23,6 +23,7 @@ use syn::{DeriveInput, Lit, Meta, Result};
 /// Generate the MarkTypeId implementation for a mark type.
 pub fn derive_mark_type_id_impl(input: DeriveInput) -> Result<TokenStream> {
     let name = &input.ident;
+    let krate = crate::crate_path::from_derive_attrs(&input.attrs)?;
 
     // Look for #[mark_type_id = N] attribute
     let mark_type_id = extract_mark_type_id(&input)?;
@@ -48,7 +49,7 @@ pub fn derive_mark_type_id_impl(input: DeriveInput) -> Result<TokenStream> {
             pub const MARK_TYPE_ID: u32 = #mark_type_id;
         }
 
-        impl crate::mark::MarkTypeIdProvider for #name {
+        impl #krate::mark::MarkTypeIdProvider for #name {
             fn mark_type_id() -> u32 {
                 Self::MARK_TYPE_ID
             }
@@ -83,4 +84,38 @@ fn extract_mark_type_id(input: &DeriveInput) -> Result<u32> {
         "MarkTypeId derive requires a #[mark_type_id = N] attribute. \
          Example: #[derive(MarkTypeId)] #[mark_type_id = 0]",
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use syn::parse_quote;
+
+    #[test]
+    fn uses_absolute_gup_path_by_default() {
+        let input: DeriveInput = parse_quote! {
+            #[mark_type_id = 7]
+            struct Star;
+        };
+        let code = derive_mark_type_id_impl(input).unwrap().to_string();
+        assert!(!code.contains("crate ::"), "{code}");
+        assert!(
+            code.contains("impl :: gup :: mark :: MarkTypeIdProvider for Star"),
+            "{code}"
+        );
+    }
+
+    #[test]
+    fn honours_gup_crate_override() {
+        let input: DeriveInput = parse_quote! {
+            #[mark_type_id = 7]
+            #[gup(crate = "crate")]
+            struct Star;
+        };
+        let code = derive_mark_type_id_impl(input).unwrap().to_string();
+        assert!(
+            code.contains("impl crate :: mark :: MarkTypeIdProvider for Star"),
+            "{code}"
+        );
+    }
 }
