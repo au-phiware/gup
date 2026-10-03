@@ -807,6 +807,13 @@ integration, pipeline caching.
 - [GUP-382](GUP-382_Extract_Shared_Segment_NDC_Mapping.md) ✅ — Extract shared
   segment-to-NDC mapping helper to reduce duplication between line and area
   builders. Deps: GUP-364 ✅.
+- [GUP-384](GUP-384_Area_Builder_Stroke_Width_NDC_Conversion.md) 📋 — Convert
+  area segment stroke width from pixels to NDC (currently ~75% of the viewport
+  wide) and share the conversion with the line builder. Deps: GUP-379 ✅,
+  GUP-382 ✅.
+- [GUP-385](GUP-385_Shared_Point_NDC_Mapping_For_Accessors.md) 💡 — Reuse the
+  shared data→NDC position mapper in `apply_accessors_to_selection()` for
+  scatter/bar `center` bindings. Deps: GUP-362 ✅, GUP-382 ✅.
 
 ## Performance & Profiling
 
