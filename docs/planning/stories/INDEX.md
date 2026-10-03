@@ -1209,3 +1209,12 @@ API reference generation, tutorials, and example gallery.
   `#[wgsl_function]` proc macro to use `::gup::` instead of `crate::` in
   generated code, enabling use from doctests and external crates. Deps: GUP-351
   ✅.
+
+## Follow-ups from GUP-377
+
+- [GUP-386](GUP-386_Qualified_Type_Paths_In_Shader_Macros.md) 📋 — Accept
+  qualified type paths (e.g. `gup::shader_function::Vec3`) in
+  `#[wgsl_function]`, `#[shader_fn]` and the derives. Deps: GUP-377 ✅.
+- [GUP-387](GUP-387_Fix_PreExisting_Markdown_Lint_Violations.md) 📋 — Fix the
+  pre-existing `mdl`/`prettier` violations that make the pre-commit hook fail on
+  every commit. No deps.
