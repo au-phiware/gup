@@ -43,13 +43,13 @@ pub use line::*;
 pub use scatter::*;
 pub use violin::*;
 
-use super::ChartBuilderError;
 use super::accessor::{AccessorValue, FieldAccessor};
+use super::{AxisScale, ChartBuilderError};
 use crate::error::GupResult;
 use crate::grid::{Color, GridConfiguration, GridLineConfig};
 use crate::label::LabelFormatter;
 use crate::mark::boxplot::{BoxPlotAttributes, BoxPlotInstance, BoxPlotOrientation};
-use crate::selection::Selection;
+use crate::selection::{Mark, Selection};
 use crate::{MaybeSend, MaybeSync};
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -643,7 +643,7 @@ pub fn apply_accessors_to_selection<T, M>(
 ) -> GupResult<()>
 where
     T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
-    M: crate::selection::Mark,
+    M: Mark,
     M::AttributeValue: Default + Clone,
 {
     // ── Position mapping ────────────────────────────────────────────────
@@ -894,6 +894,146 @@ pub fn boxplot_ndc_mapper(
             };
         }
         inst
+    }
+}
+
+/// A data item representing a straight segment between two positions in
+/// data space.
+///
+/// Implemented by segment-based chart data types (line and area segments)
+/// so that [`SegmentNdcMapper::bind_positions`] can wire their `start` and
+/// `end` attributes generically.
+pub trait SegmentEndpoints {
+    /// Start position `[x, y]` in data-space coordinates.
+    fn start_pos(&self) -> [f32; 2];
+    /// End position `[x, y]` in data-space coordinates.
+    fn end_pos(&self) -> [f32; 2];
+}
+
+/// Per-axis data → unit-interval mapping used by [`SegmentNdcMapper`].
+#[derive(Debug, Clone)]
+enum AxisUnitMapping {
+    /// Map through [`AxisScale::scale_value`], then normalise from the
+    /// scale's output range `[lo, hi]`.
+    Scaled { scale: AxisScale, lo: f32, hi: f32 },
+    /// Linearly normalise the raw value from the data domain `[lo, hi]`.
+    Linear { lo: f32, hi: f32 },
+}
+
+impl AxisUnitMapping {
+    /// Map `value` onto the unit interval (values outside the domain
+    /// extrapolate). A near-zero span maps everything to the midpoint.
+    fn to_unit(&self, value: f32) -> f32 {
+        let (v, lo, hi) = match self {
+            AxisUnitMapping::Scaled { scale, lo, hi } => (scale.scale_value(value), *lo, *hi),
+            AxisUnitMapping::Linear { lo, hi } => (value, *lo, *hi),
+        };
+        let span = hi - lo;
+        if span.abs() < f32::EPSILON {
+            0.5
+        } else {
+            (v - lo) / span
+        }
+    }
+}
+
+/// Maps segment endpoint positions from data space into NDC.
+///
+/// Encapsulates the two mapping paths shared by segment-based builders:
+///
+/// - **Scaled**: when both x and y [`AxisScale`]s are present, each
+///   coordinate goes through [`AxisScale::scale_value`] and is then
+///   normalised from the scale's output range to the chart's [`NdcBounds`].
+///   This handles linear, log, band and point scales uniformly.
+/// - **Linear**: otherwise, each coordinate is linearly interpolated from a
+///   caller-supplied data domain to the chart's [`NdcBounds`].
+///
+/// Use [`SegmentNdcMapper::bind_positions`] to attach the `start` / `end`
+/// attribute bindings to a selection of [`SegmentEndpoints`] items.
+#[derive(Debug, Clone)]
+pub struct SegmentNdcMapper {
+    x: AxisUnitMapping,
+    y: AxisUnitMapping,
+    ndc: NdcBounds,
+}
+
+impl SegmentNdcMapper {
+    /// Map through explicit scales: `scale_value()` → output range → NDC.
+    pub fn scaled(x_scale: AxisScale, y_scale: AxisScale, ndc: NdcBounds) -> Self {
+        let (x_lo, x_hi) = (x_scale.range_min(), x_scale.range_max());
+        let (y_lo, y_hi) = (y_scale.range_min(), y_scale.range_max());
+        Self {
+            x: AxisUnitMapping::Scaled {
+                scale: x_scale,
+                lo: x_lo,
+                hi: x_hi,
+            },
+            y: AxisUnitMapping::Scaled {
+                scale: y_scale,
+                lo: y_lo,
+                hi: y_hi,
+            },
+            ndc,
+        }
+    }
+
+    /// Linearly map data-space positions from the given `(min, max)`
+    /// domains to NDC.
+    pub fn linear(x_domain: (f32, f32), y_domain: (f32, f32), ndc: NdcBounds) -> Self {
+        Self {
+            x: AxisUnitMapping::Linear {
+                lo: x_domain.0,
+                hi: x_domain.1,
+            },
+            y: AxisUnitMapping::Linear {
+                lo: y_domain.0,
+                hi: y_domain.1,
+            },
+            ndc,
+        }
+    }
+
+    /// Choose the mapping path: [`scaled`](Self::scaled) when both scales
+    /// are present, otherwise [`linear`](Self::linear) using the
+    /// `(x_domain, y_domain)` returned by `fallback_domain`.
+    ///
+    /// `fallback_domain` is only invoked on the linear path, so callers
+    /// can defer domain computation until it is actually needed.
+    pub fn from_scales_or_else(
+        x_scale: Option<AxisScale>,
+        y_scale: Option<AxisScale>,
+        ndc: NdcBounds,
+        fallback_domain: impl FnOnce() -> ((f32, f32), (f32, f32)),
+    ) -> Self {
+        match (x_scale, y_scale) {
+            (Some(xs), Some(ys)) => Self::scaled(xs, ys, ndc),
+            _ => {
+                let (x_domain, y_domain) = fallback_domain();
+                Self::linear(x_domain, y_domain, ndc)
+            }
+        }
+    }
+
+    /// Map a single data-space position `[x, y]` to NDC `[x, y]`.
+    pub fn map(&self, pos: [f32; 2]) -> [f32; 2] {
+        let tx = self.x.to_unit(pos[0]);
+        let ty = self.y.to_unit(pos[1]);
+        [
+            self.ndc.left + tx * (self.ndc.right - self.ndc.left),
+            self.ndc.bottom + ty * (self.ndc.top - self.ndc.bottom),
+        ]
+    }
+
+    /// Bind the `start` and `end` attributes of `selection` to the NDC
+    /// mapping of each item's [`SegmentEndpoints`].
+    pub fn bind_positions<S, M>(self, selection: &mut Selection<S, M>)
+    where
+        S: SegmentEndpoints + 'static,
+        M: Mark,
+    {
+        let start_mapper = self.clone();
+        selection.attr("start", move |seg: &S| start_mapper.map(seg.start_pos()));
+        selection.attr("end", move |seg: &S| self.map(seg.end_pos()));
     }
 }
 
@@ -1206,5 +1346,128 @@ mod tests {
         // Span is 10; 5% padding each side ⇒ (9.5, 20.5).
         assert!((lo - 9.5).abs() < 1e-4, "lo = {lo}");
         assert!((hi - 20.5).abs() < 1e-4, "hi = {hi}");
+    }
+
+    // ── SegmentNdcMapper ────────────────────────────────────────────────
+
+    const FULL_NDC: NdcBounds = NdcBounds {
+        left: -1.0,
+        right: 1.0,
+        top: 1.0,
+        bottom: -1.0,
+    };
+
+    fn assert_pos_eq(actual: [f32; 2], expected: [f32; 2]) {
+        assert!(
+            (actual[0] - expected[0]).abs() < 1e-5 && (actual[1] - expected[1]).abs() < 1e-5,
+            "expected {expected:?}, got {actual:?}"
+        );
+    }
+
+    #[derive(Debug, Clone)]
+    struct TestSegment {
+        start: [f32; 2],
+        end: [f32; 2],
+    }
+
+    impl SegmentEndpoints for TestSegment {
+        fn start_pos(&self) -> [f32; 2] {
+            self.start
+        }
+
+        fn end_pos(&self) -> [f32; 2] {
+            self.end
+        }
+    }
+
+    #[test]
+    fn test_segment_ndc_mapper_linear_maps_domain_corners() {
+        let mapper = SegmentNdcMapper::linear((0.0, 10.0), (0.0, 20.0), FULL_NDC);
+        assert_pos_eq(mapper.map([0.0, 0.0]), [-1.0, -1.0]);
+        assert_pos_eq(mapper.map([10.0, 20.0]), [1.0, 1.0]);
+        assert_pos_eq(mapper.map([5.0, 10.0]), [0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_segment_ndc_mapper_linear_respects_chart_area_bounds() {
+        let ndc = NdcBounds {
+            left: -0.8,
+            right: 0.6,
+            top: 0.9,
+            bottom: -0.7,
+        };
+        let mapper = SegmentNdcMapper::linear((0.0, 1.0), (0.0, 1.0), ndc);
+        assert_pos_eq(mapper.map([0.0, 0.0]), [-0.8, -0.7]);
+        assert_pos_eq(mapper.map([1.0, 1.0]), [0.6, 0.9]);
+    }
+
+    #[test]
+    fn test_segment_ndc_mapper_degenerate_span_maps_to_midpoint() {
+        let mapper = SegmentNdcMapper::linear((3.0, 3.0), (7.0, 7.0), FULL_NDC);
+        assert_pos_eq(mapper.map([3.0, 7.0]), [0.0, 0.0]);
+        assert_pos_eq(mapper.map([100.0, -100.0]), [0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_segment_ndc_mapper_scaled_handles_inverted_pixel_range() {
+        use crate::shader_function::LinearScale;
+        // Pixel-space scales with an inverted y range, as configured by
+        // chart builders: data y = 0 must land at the bottom of the chart.
+        let xs = AxisScale::Linear(LinearScale::new(0.0, 100.0, 0.0, 800.0));
+        let ys = AxisScale::Linear(LinearScale::new(0.0, 100.0, 600.0, 0.0));
+        let mapper = SegmentNdcMapper::scaled(xs, ys, FULL_NDC);
+        assert_pos_eq(mapper.map([0.0, 0.0]), [-1.0, -1.0]);
+        assert_pos_eq(mapper.map([100.0, 100.0]), [1.0, 1.0]);
+        assert_pos_eq(mapper.map([25.0, 75.0]), [-0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_segment_ndc_mapper_scaled_applies_log_scale() {
+        use crate::shader_function::{LinearScale, LogScale};
+        let xs = AxisScale::Linear(LinearScale::new(0.0, 1.0, 0.0, 1.0));
+        let ys = AxisScale::Log(LogScale::new(10.0).domain(1.0, 100.0).range(0.0, 1.0));
+        let mapper = SegmentNdcMapper::scaled(xs, ys, FULL_NDC);
+        // log10(10) is halfway between log10(1) and log10(100).
+        assert_pos_eq(mapper.map([0.5, 10.0]), [0.0, 0.0]);
+        assert_pos_eq(mapper.map([1.0, 100.0]), [1.0, 1.0]);
+    }
+
+    #[test]
+    fn test_segment_ndc_mapper_from_scales_or_else_selects_path() {
+        use crate::shader_function::LinearScale;
+        let xs = AxisScale::Linear(LinearScale::new(0.0, 100.0, 0.0, 800.0));
+        let ys = AxisScale::Linear(LinearScale::new(0.0, 100.0, 600.0, 0.0));
+
+        // Both scales present: the fallback domain must not be computed.
+        let mapper =
+            SegmentNdcMapper::from_scales_or_else(Some(xs.clone()), Some(ys), FULL_NDC, || {
+                panic!("fallback domain should not be evaluated when both scales are set")
+            });
+        assert_pos_eq(mapper.map([50.0, 50.0]), [0.0, 0.0]);
+
+        // Only one scale present: falls back to the linear domain path.
+        let mut called = false;
+        let mapper = SegmentNdcMapper::from_scales_or_else(Some(xs), None, FULL_NDC, || {
+            called = true;
+            ((0.0, 2.0), (0.0, 4.0))
+        });
+        assert!(called, "fallback domain should be evaluated");
+        assert_pos_eq(mapper.map([2.0, 4.0]), [1.0, 1.0]);
+    }
+
+    #[test]
+    fn test_segment_ndc_mapper_bind_positions_binds_start_and_end() {
+        let segments = vec![TestSegment {
+            start: [0.0, 0.0],
+            end: [1.0, 1.0],
+        }];
+        let mut sel =
+            crate::selection::Selection::<TestSegment, crate::mark::line::Line>::from_data(
+                segments,
+            );
+        SegmentNdcMapper::linear((0.0, 1.0), (0.0, 1.0), FULL_NDC).bind_positions(&mut sel);
+        let bound = sel.bound_attributes();
+        assert!(bound.contains(&"start"), "bound = {bound:?}");
+        assert!(bound.contains(&"end"), "bound = {bound:?}");
     }
 }
