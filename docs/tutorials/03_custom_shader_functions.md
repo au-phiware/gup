@@ -193,7 +193,7 @@ selection
 
 ## Full Example
 
-```rust,ignore
+```rust,no_run
 use gup::prelude::*;
 use gup::proc_macros::wgsl_function;
 use std::sync::Arc;

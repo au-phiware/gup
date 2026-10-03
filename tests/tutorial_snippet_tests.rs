@@ -3,15 +3,15 @@
 
 //! Tutorial snippet compilation tests (GUP-351).
 //!
-//! This integration test verifies that tutorial "Full Example" code blocks
-//! compile correctly.  Most tutorials are tested as doctests via the
-//! `#[cfg(doctest)]` module in `src/lib.rs`.  Tutorial 3 (Custom Shader
-//! Functions) uses the `#[wgsl_function]` proc macro whose generated code
-//! references `crate::` paths, making it incompatible with the merged-doctest
-//! context.  We therefore test it here as a regular integration test.
+//! Tutorial "Full Example" code blocks are compiled as doctests via the
+//! `#[cfg(doctest)]` module in `src/lib.rs` (Tutorial 3 included since
+//! GUP-377 made `#[wgsl_function]` emit absolute `::gup::` paths).  Those
+//! doctests are `no_run` because they need a GPU, so this integration test
+//! additionally *executes* the GPU-free part of Tutorial 3 using the same
+//! imports as the tutorial (`gup::prelude::*`, not `gup::*`).
 
-use gup::*;
-use gup_macros::wgsl_function;
+use gup::prelude::*;
+use gup::proc_macros::wgsl_function;
 
 // ---- Tutorial 3: Full Example (adapted) ----------------------------------
 
