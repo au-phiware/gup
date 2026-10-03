@@ -1205,7 +1205,7 @@ API reference generation, tutorials, and example gallery.
 
 ## Follow-ups from GUP-351
 
-- [GUP-377](GUP-377_Fix_wgsl_function_Crate_Path_Resolution.md) 📋 — Fix
+- [GUP-377](GUP-377_Fix_wgsl_function_Crate_Path_Resolution.md) 🚧 — Fix
   `#[wgsl_function]` proc macro to use `::gup::` instead of `crate::` in
   generated code, enabling use from doctests and external crates. Deps: GUP-351
   ✅.

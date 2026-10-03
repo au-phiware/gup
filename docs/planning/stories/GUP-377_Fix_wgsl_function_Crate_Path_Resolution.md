@@ -2,7 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Developer Experience **Status**: 📋 Planned **Created**:
+**Initiative**: Developer Experience **Status**: 🚧 In Progress **Created**:
 2025-07-26
 
 ## Context
