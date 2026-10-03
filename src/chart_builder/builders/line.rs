@@ -16,8 +16,8 @@
 //! consider disabling `sort_by_x` if data is already ordered.
 
 use super::{
-    AccessorFunction, ConfigurableBuilder, GridCapableBuilder, NdcBounds,
-    validate_required_accessors,
+    AccessorFunction, ConfigurableBuilder, GridCapableBuilder, NdcBounds, SegmentEndpoints,
+    SegmentNdcMapper, validate_required_accessors,
 };
 use crate::RenderContext;
 use crate::chart_builder::accessor::AccessorValue;
@@ -68,6 +68,16 @@ pub struct LineSegment<T> {
     pub color: [f32; 4],
     /// Segment width in pixels.
     pub width: f32,
+}
+
+impl<T> SegmentEndpoints for LineSegment<T> {
+    fn start_pos(&self) -> [f32; 2] {
+        self.start_pos
+    }
+
+    fn end_pos(&self) -> [f32; 2] {
+        self.end_pos
+    }
 }
 
 // ── Line interpolation ──────────────────────────────────────────────────
@@ -619,112 +629,11 @@ where
         // handles linear, log, band and point scales uniformly and
         // matches the pattern used by scatter/bar builders (GUP-362).
         // Without scales, fall back to linear domain→NDC interpolation.
-        if let (Some(xs), Some(ys)) = (x_scale_opt.clone(), y_scale_opt.clone()) {
-            let x_rng_lo = xs.range_min();
-            let x_rng_hi = xs.range_max();
-            let y_rng_lo = ys.range_min();
-            let y_rng_hi = ys.range_max();
+        SegmentNdcMapper::from_scales_or_else(x_scale_opt, y_scale_opt, ndc, || {
+            ((x_min, x_max), (y_min, y_max))
+        })
+        .bind_positions(&mut composed_chart.visualization);
 
-            let xs2 = xs.clone();
-            let ys2 = ys.clone();
-
-            composed_chart
-                .visualization
-                .attr("start", move |seg: &LineSegment<T>| {
-                    let x_scaled = xs.scale_value(seg.start_pos[0]);
-                    let y_scaled = ys.scale_value(seg.start_pos[1]);
-
-                    let x_span = x_rng_hi - x_rng_lo;
-                    let y_span = y_rng_hi - y_rng_lo;
-
-                    let tx = if x_span.abs() < f32::EPSILON {
-                        0.5
-                    } else {
-                        (x_scaled - x_rng_lo) / x_span
-                    };
-                    let ty = if y_span.abs() < f32::EPSILON {
-                        0.5
-                    } else {
-                        (y_scaled - y_rng_lo) / y_span
-                    };
-
-                    [
-                        ndc.left + tx * (ndc.right - ndc.left),
-                        ndc.bottom + ty * (ndc.top - ndc.bottom),
-                    ]
-                });
-
-            let x_rng_lo2 = xs2.range_min();
-            let x_rng_hi2 = xs2.range_max();
-            let y_rng_lo2 = ys2.range_min();
-            let y_rng_hi2 = ys2.range_max();
-
-            composed_chart
-                .visualization
-                .attr("end", move |seg: &LineSegment<T>| {
-                    let x_scaled = xs2.scale_value(seg.end_pos[0]);
-                    let y_scaled = ys2.scale_value(seg.end_pos[1]);
-
-                    let x_span = x_rng_hi2 - x_rng_lo2;
-                    let y_span = y_rng_hi2 - y_rng_lo2;
-
-                    let tx = if x_span.abs() < f32::EPSILON {
-                        0.5
-                    } else {
-                        (x_scaled - x_rng_lo2) / x_span
-                    };
-                    let ty = if y_span.abs() < f32::EPSILON {
-                        0.5
-                    } else {
-                        (y_scaled - y_rng_lo2) / y_span
-                    };
-
-                    [
-                        ndc.left + tx * (ndc.right - ndc.left),
-                        ndc.bottom + ty * (ndc.top - ndc.bottom),
-                    ]
-                });
-        } else {
-            let x_span = x_max - x_min;
-            let y_span = y_max - y_min;
-
-            composed_chart
-                .visualization
-                .attr("start", move |seg: &LineSegment<T>| {
-                    let tx = if x_span.abs() < f32::EPSILON {
-                        0.5
-                    } else {
-                        (seg.start_pos[0] - x_min) / x_span
-                    };
-                    let ty = if y_span.abs() < f32::EPSILON {
-                        0.5
-                    } else {
-                        (seg.start_pos[1] - y_min) / y_span
-                    };
-                    [
-                        ndc.left + tx * (ndc.right - ndc.left),
-                        ndc.bottom + ty * (ndc.top - ndc.bottom),
-                    ]
-                });
-            composed_chart
-                .visualization
-                .attr("end", move |seg: &LineSegment<T>| {
-                    let tx = if x_span.abs() < f32::EPSILON {
-                        0.5
-                    } else {
-                        (seg.end_pos[0] - x_min) / x_span
-                    };
-                    let ty = if y_span.abs() < f32::EPSILON {
-                        0.5
-                    } else {
-                        (seg.end_pos[1] - y_min) / y_span
-                    };
-                    [
-                        ndc.left + tx * (ndc.right - ndc.left),
-                        ndc.bottom + ty * (ndc.top - ndc.bottom),
-                    ]
-                });
-        }
         composed_chart
             .visualization
             .attr("color", |seg: &LineSegment<T>| seg.color);
