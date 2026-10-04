@@ -2,24 +2,16 @@
 # Copyright (C) 2026 Corin Lawson
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Dogfood regression run: builds every task binary against the parent gup
-# checkout as an external crate and writes outputs to /tmp/gup-dogfood/.
-# Windowed tasks run in DOGFOOD_AUTO mode (scripted input + screenshot).
-set -u
+# Dogfood suite: build every task binary against the parent gup checkout
+# as an external crate, then run the suite runner. It executes each task,
+# checks the PNG/SVG it produced, and reports PASS / XFAIL / FAIL / XPASS
+# per check. Outputs and per-task logs go to /tmp/gup-dogfood/.
+#
+# Windowed tasks run in DOGFOOD_AUTO mode (scripted input + screenshot) and
+# need a display. On a headless machine use `xvfb-run -a ./run_all.sh`, or
+# skip them with `DOGFOOD_SKIP_WINDOWED=1 ./run_all.sh`.
+# Run a subset with `DOGFOOD_ONLY=t1_timeseries,t2_bars ./run_all.sh`.
+set -euo pipefail
 cd "$(dirname "$0")"
-mkdir -p /tmp/gup-dogfood
-cargo build --release --bins || exit 1
-B=target/release
-run() { echo "== $*"; "$@" 2>&1 | grep -v -E '^\s*$|wgpu_hal|vkCreate' | tail -5; echo "   exit=${PIPESTATUS[0]}"; }
-run $B/gen_data
-run $B/t0_smoke
-run $B/t1_timeseries
-run $B/t2_bars
-run $B/t3_scatter_png
-run env RAW_MACRO=1 $B/t6_wgsl   # expected: panic (duplicate uniforms struct)
-run $B/t6_wgsl
-run $B/t5_stream                 # expected: blank PNGs (stream never render-ready)
-DOGFOOD_AUTO=1 run $B/t3_scatter_window
-DOGFOOD_AUTO=1 run $B/t4_linked
-DOGFOOD_AUTO=1 run $B/t5_live
-ls -1 /tmp/gup-dogfood/*.png
+cargo build --release --bins
+exec target/release/dogfood_check

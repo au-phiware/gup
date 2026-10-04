@@ -38,17 +38,30 @@ fn load(path: &str) -> Result<(Vec<String>, Vec<Row>), Box<dyn std::error::Error
     for rec in rdr.records() {
         let rec = rec?;
         let date = NaiveDate::parse_from_str(&rec[0], "%Y-%m-%d")?;
-        let t = date.and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp_millis() as f32;
+        let t = date
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc()
+            .timestamp_millis() as f32;
         for (i, tk) in tickers.iter().enumerate() {
             let price = rec.get(i + 1).and_then(|s| s.parse().ok());
-            out.push(Row { t, ticker: tk.clone(), price });
+            out.push(Row {
+                t,
+                ticker: tk.clone(),
+                price,
+            });
         }
     }
     Ok((tickers, out))
 }
 
 fn css([r, g, b, a]: [f32; 4]) -> String {
-    format!("rgba({},{},{},{a})", (r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8)
+    format!(
+        "rgba({},{},{},{a})",
+        (r * 255.0) as u8,
+        (g * 255.0) as u8,
+        (b * 255.0) as u8
+    )
 }
 
 #[tokio::main]
@@ -58,7 +71,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let context = Arc::new(RenderContext::new().await?);
 
     // Domains by hand.
-    let (x0, x1) = rows.iter().fold((f32::MAX, f32::MIN), |(a, b), r| (a.min(r.t), b.max(r.t)));
+    let (x0, x1) = rows
+        .iter()
+        .fold((f32::MAX, f32::MIN), |(a, b), r| (a.min(r.t), b.max(r.t)));
     let y1 = rows.iter().filter_map(|r| r.price).fold(0.0f32, f32::max) * 1.05;
     let (w, h) = (1000u32, 500u32);
 
@@ -105,7 +120,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         for r in rows.iter().filter(|r| &r.ticker == tk) {
             match r.price {
                 Some(p) => {
-                    d.push_str(&format!("{}{:.1} {:.1} ", if pen_up { "M" } else { "L" }, sx(r.t), sy(p)));
+                    d.push_str(&format!(
+                        "{}{:.1} {:.1} ",
+                        if pen_up { "M" } else { "L" },
+                        sx(r.t),
+                        sy(p)
+                    ));
                     pen_up = false;
                 }
                 None => pen_up = true,
@@ -142,9 +162,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let svg = chart.export_svg_with_marks(&SvgExportOptions::new(w, h), &marks)?;
     std::fs::write("/tmp/gup-dogfood/t1.svg", svg)?;
+    // ImageMagick 7 ships `magick`; ImageMagick 6 (e.g. Ubuntu 24.04) only `convert`.
+    let args = ["/tmp/gup-dogfood/t1.svg", "/tmp/gup-dogfood/t1_svg.png"];
     let ok = std::process::Command::new("magick")
-        .args(["/tmp/gup-dogfood/t1.svg", "/tmp/gup-dogfood/t1_svg.png"])
-        .status()?;
-    println!("wrote t1.png, t1.svg, t1_svg.png (magick ok={})", ok.success());
+        .args(args)
+        .status()
+        .or_else(|_| std::process::Command::new("convert").args(args).status())?;
+    println!(
+        "wrote t1.png, t1.svg, t1_svg.png (rasterise ok={})",
+        ok.success()
+    );
     Ok(())
 }

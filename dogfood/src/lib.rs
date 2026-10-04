@@ -1,8 +1,15 @@
 // Copyright (C) 2026 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Shared helpers for the gup dogfood binaries. Everything here is code a
-//! user had to write because gup does not (publicly) provide it.
+//! Shared helpers for the gup dogfood binaries. Everything at this level is
+//! code a user had to write because gup does not (publicly) provide it.
+//!
+//! The suite itself (task intents, expected outputs, known gaps) lives in
+//! [`suite`] and uses only the gup-independent [`pixels`] measurements, so
+//! the task binaries can be re-pointed at a new API without touching it.
+
+pub mod pixels;
+pub mod suite;
 
 use gup::chart_builder::ComposedChart;
 use gup::mark::Mark;
@@ -124,7 +131,11 @@ pub struct ChartTexture {
 
 impl Default for ChartTexture {
     fn default() -> Self {
-        Self { tex: None, dirty: true, last_render: Default::default() }
+        Self {
+            tex: None,
+            dirty: true,
+            last_render: Default::default(),
+        }
     }
 }
 
@@ -142,7 +153,8 @@ impl ChartTexture {
         if self.dirty || self.tex.is_none() {
             let t0 = std::time::Instant::now();
             let rgba = chart.render_to_rgba(w, h).expect("render_to_rgba");
-            let img = eframe::egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &rgba);
+            let img =
+                eframe::egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &rgba);
             match &mut self.tex {
                 Some(t) => t.set(img, Default::default()),
                 None => {
@@ -153,7 +165,10 @@ impl ChartTexture {
             self.last_render = t0.elapsed();
         }
         if let Some(t) = &self.tex {
-            ui.put(rect, eframe::egui::Image::new(t).fit_to_exact_size(rect.size()));
+            ui.put(
+                rect,
+                eframe::egui::Image::new(t).fit_to_exact_size(rect.size()),
+            );
         }
     }
 }
