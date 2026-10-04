@@ -148,8 +148,6 @@ fn new_widget_uses_pixel_buffer_path() {
 /// device path).
 #[test]
 fn render_to_texture_view_rgba8_srgb() {
-    use gup_egui::DynChart;
-
     let ctx =
         Arc::new(pollster::block_on(RenderContext::new()).expect("Failed to create RenderContext"));
     let device = ctx.device();
@@ -188,8 +186,6 @@ fn render_to_texture_view_rgba8_srgb() {
 /// Verify that both render paths produce non-empty output.
 #[test]
 fn both_paths_produce_output() {
-    use gup_egui::DynChart;
-
     let ctx =
         Arc::new(pollster::block_on(RenderContext::new()).expect("Failed to create RenderContext"));
 

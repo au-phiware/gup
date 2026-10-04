@@ -39,7 +39,7 @@ pub trait DynChart: Send + Sync + 'static {
 impl<T, M> DynChart for ComposedChart<T, M>
 where
     T: Clone + Send + Sync + std::fmt::Debug + 'static,
-    M: gup::mark::Mark,
+    M: gup::selection::MarkInstanceBuilder,
 {
     fn render(&mut self, context: &mut RenderContext) -> GupResult<()> {
         ComposedChart::render(self, context)
