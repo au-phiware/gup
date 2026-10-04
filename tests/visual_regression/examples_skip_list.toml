@@ -1,0 +1,198 @@
+# Examples the smoke test (tests/examples_smoke.rs) does not run headless.
+#
+# Almost every entry is a windowed example: it opens a winit window
+# (EventLoop / ApplicationHandler, or the GupApp shell) and has no
+# GUP_SCREENSHOT_PATH headless path, so it cannot run in CI without a display.
+# The other entries never exit by design (e.g. an HTTP server).
+#
+# This list is expected to SHRINK over time as examples move to GupApp /
+# headless-capable shells (GUP-375, GUP-376) or to the RFC-001 WindowTarget
+# with GUP_SCREENSHOT_PATH support (RFC-001 S0b). The smoke test fails if:
+#   - an entry names an example that no longer exists (remove it);
+#   - a windowed example without a headless path is missing from this list;
+#   - an example that supports GUP_SCREENSHOT_PATH is listed here.
+#
+# Windowed examples can still be exercised locally, with a display, via
+#   GUP_SMOKE_WINDOWED=1 mask smoke-examples
+# which runs each for a few seconds and fails on a panic or non-zero exit.
+# Known windowed failures are tracked in expected_failures.toml.
+
+[[skip]]
+name = "02_scatter_window"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "atlas_viewer"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "axis_showcase"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "axis_tick_integration_visual_demo"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "boxplot_rendering_demo"
+reason = "GupApp window shell has no GUP_SCREENSHOT_PATH mode (GUP-375/GUP-376)"
+
+[[skip]]
+name = "brush_selection"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "chart_hover_reveal_demo"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "composite_bar_trend"
+reason = "Windowed-only; panics on the first frame (tracked: expected_failures.toml examples/composite_*)"
+
+[[skip]]
+name = "composite_layer_order"
+reason = "Windowed-only; panics on the first frame (tracked: expected_failures.toml examples/composite_*)"
+
+[[skip]]
+name = "composite_mixed_data"
+reason = "Windowed-only; panics on the first frame (tracked: expected_failures.toml examples/composite_*)"
+
+[[skip]]
+name = "composite_scatter_regression"
+reason = "Windowed-only; panics on the first frame (tracked: expected_failures.toml examples/composite_*)"
+
+[[skip]]
+name = "debug_text_positioning"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "gpu_selection_demo"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "grid_visual_demo"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "hello_world"
+reason = "GupApp window shell has no GUP_SCREENSHOT_PATH mode (GUP-375/GUP-376)"
+
+[[skip]]
+name = "hover_reveal_demo"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "interactive_circles"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "interactive_graph"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "interactive_selection_demo"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "label_formatting_demo"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "linked_views"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "msdf_debug"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "multi_font_chart_demo"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "multi_font_demo"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "multi_pass_mark_demo"
+reason = "GupApp window shell has no GUP_SCREENSHOT_PATH mode (GUP-375/GUP-376)"
+
+[[skip]]
+name = "multi_window_demo"
+reason = "Opens several winit windows; no headless path"
+
+[[skip]]
+name = "observable_plot_visual_showcase"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "scale_axis_integration_demo"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "scatter_3d"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "scatter_3d_with_axes"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "scatter_plot_demo"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "simple_window"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "surface_events_demo"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "surface_performance_demo"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "text_clipping_demo"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "text_rendering_demo"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "tick_generation_visual_demo"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "treemap_window"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "tutorial01_scatter"
+reason = "GupApp window shell has no GUP_SCREENSHOT_PATH mode (GUP-375/GUP-376)"
+
+[[skip]]
+name = "tutorial04_interactions"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "visual_blend_demo"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "windowed_demo"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "zoom_pan"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "z_sort_demo"
+reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
+
+[[skip]]
+name = "web_dashboard_demo"
+reason = "Runs an HTTP server loop forever by design (requires --features web-dashboard)"

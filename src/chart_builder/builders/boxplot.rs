@@ -776,44 +776,4 @@ mod tests {
             "BoxPlot selection should be render-ready after build"
         );
     }
-
-    #[tokio::test]
-    async fn test_boxplot_render_to_png_produces_visible_marks() {
-        let data = vec![TestData {
-            category: "A".to_string(),
-            values: vec![10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0],
-            single_value: 25.0,
-        }];
-
-        let context = Arc::new(RenderContext::new().await.unwrap());
-
-        let mut chart = boxplot()
-            .y(AccessorFunction::new(|d: &TestData| {
-                AccessorValue::FloatArray(d.values.clone())
-            }))
-            .build_with_data(data, context)
-            .unwrap();
-
-        let rgba = chart.render_to_rgba(400, 300).unwrap();
-        assert_eq!(rgba.len(), 400 * 300 * 4);
-
-        // Count non-white pixels in the data region (centre of image,
-        // away from axes/labels).
-        let mut non_white = 0u32;
-        for y in 60..240 {
-            for x in 80..320 {
-                let idx = (y * 400 + x) as usize * 4;
-                let r = rgba[idx];
-                let g = rgba[idx + 1];
-                let b = rgba[idx + 2];
-                if r != 255 || g != 255 || b != 255 {
-                    non_white += 1;
-                }
-            }
-        }
-        assert!(
-            non_white > 50,
-            "Expected visible box plot marks in the data region, but found only {non_white} non-white pixels"
-        );
-    }
 }

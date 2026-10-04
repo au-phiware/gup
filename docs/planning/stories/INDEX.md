@@ -16,7 +16,7 @@ parked GUP-391 and GUP-393 (old-path work the RFC supersedes) and trimmed
 GUP-392 to the subset (font, palette, tick precision, theme values) that
 survives into `gup-core`.
 
-- [GUP-388](GUP-388_Visual_Regression_Harness.md) 📋 — Golden-image regression
+- [GUP-388](GUP-388_Visual_Regression_Harness.md) ✅ — Golden-image regression
   tests for all ten chart builders plus a headless examples smoke test, built on
   a target-agnostic (RGBA image + layout metadata) assertion API so the same
   harness serves `gup-core` from RFC-001 S0 onward.
@@ -35,7 +35,7 @@ survives into `gup-core`.
 - [GUP-392](GUP-392_Correct_Visual_Defaults.md) 📋 — Trimmed to what survives
   RFC-001: a single Okabe-Ito palette data source, Inter as the default font
   (with OFL licence), tick-label precision derived from the tick step, and muted
-  default theme colours. Deps: GUP-388 📋.
+  default theme colours. Deps: GUP-388 ✅.
 - [GUP-393](GUP-393_Mark_Fidelity_Fixes.md) ⏸ — Parked: superseded by RFC-001
   S0/S3 (old mark-rendering path frozen); its verified evidence (circle aspect
   ratio, AA, the `composite_*` panic, scissor clipping) is preserved as input
@@ -46,7 +46,7 @@ survives into `gup-core`.
 - [GUP-397](GUP-397_Dogfood_Checks_On_Shared_Visual_Assertions.md) 📋 — Replace
   the dogfood suite's local pixel measurements with GUP-388's shared
   visual-assertion module and layout metadata, without loosening any tracked
-  gap. Deps: GUP-394 ✅, GUP-388 📋.
+  gap. Deps: GUP-394 ✅, GUP-388 ✅.
 
 ## RFC-001 Migration
 
@@ -72,7 +72,7 @@ naga_oil go/no-go gate (GUP-395) is resolved.
   emitter, typed X/Y/RADIUS/FILL channels, Linear/Log/Sequential scales with CPU
   mirrors, and a `Scene` → `ImageTarget` → PNG path with title and tick labels;
   ends with the naga_oil go/no-go decision appended to RFC-001. Deps: GUP-389
-  📋, GUP-390 📋, GUP-388 📋 (soft).
+  📋, GUP-390 📋, GUP-388 ✅ (soft).
 - [GUP-396](GUP-396_Gup_Core_Vertical_Slice_Window_Performance.md) 📋 — RFC-001
   step S0b: adds `WindowTarget` and a minimal `gup::show()` to GUP-395's scene,
   proving window/PNG visual parity (ΔE < 2) and a 100K-point zoom at ≥60 fps

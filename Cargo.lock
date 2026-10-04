@@ -3092,6 +3092,7 @@ dependencies = [
  "futures-channel",
  "futures-intrusive",
  "gup-macros",
+ "gup-visual-regression",
  "image 0.24.9",
  "log",
  "lru 0.12.5",
@@ -3109,6 +3110,7 @@ dependencies = [
  "tokio",
  "tokio-test",
  "tokio-util",
+ "toml_edit 0.23.10+spec-1.0.0",
  "ttf-parser 0.21.1",
  "unicode-normalization",
  "uuid",
@@ -3169,6 +3171,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "gup-visual-regression"
+version = "0.1.0"
+dependencies = [
+ "png 0.17.16",
+ "toml_edit 0.23.10+spec-1.0.0",
 ]
 
 [[package]]

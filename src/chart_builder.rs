@@ -3413,6 +3413,10 @@ where
     }
 }
 
+/// Chart-builder adapter for the visual regression harness (test-only).
+#[cfg(test)]
+pub(crate) mod visual_regression;
+
 // TODO: Re-enable tests when Selection type is implemented
 /*
 #[cfg(test)]

@@ -27,6 +27,30 @@ Run tests (single-threaded to avoid GPU resource conflicts)
 cargo test -- --test-threads=1
 ```
 
+## visual-regression
+
+Run the chart-builder golden-image tests (set `GUP_BLESS=1` to re-bless; see
+`tests/golden/README.md`)
+
+```bash
+cargo test --lib visual_regression -- --test-threads=1
+```
+
+## smoke-examples
+
+Build every example and run the headless ones (see `tests/examples_smoke.rs` for
+the `GUP_SMOKE_*` knobs)
+
+Examples are built without debug info, stripped, into a separate target
+directory: with debug info the 109 example binaries take about 17 GB.
+
+```bash
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target}/smoke"
+export CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_DEV_STRIP=true CARGO_INCREMENTAL=0
+cargo build --examples --all-features
+cargo test --all-features --test examples_smoke -- --include-ignored --test-threads=1
+```
+
 ## test-tutorials
 
 Compile-check tutorial code snippets (doctests + integration tests)

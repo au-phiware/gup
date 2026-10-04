@@ -2114,48 +2114,4 @@ mod tests {
             "DensityPlot selection should be render-ready after build"
         );
     }
-
-    #[tokio::test]
-    async fn test_density_plot_render_to_png_produces_visible_marks() {
-        let data: Vec<TestPoint> = (0..50)
-            .map(|i| TestPoint {
-                x: (i as f32) * 0.1,
-                y: (i as f32) * 0.2,
-            })
-            .collect();
-
-        let context = Arc::new(RenderContext::new().await.unwrap());
-
-        let mut chart = density_plot()
-            .x(AccessorFunction::new(|d: &TestPoint| {
-                AccessorValue::Float(d.x)
-            }))
-            .y(AccessorFunction::new(|d: &TestPoint| {
-                AccessorValue::Float(d.y)
-            }))
-            .build_with_data(data, context)
-            .unwrap();
-
-        let rgba = chart.render_to_rgba(400, 300).unwrap();
-        assert_eq!(rgba.len(), 400 * 300 * 4);
-
-        // Count non-white pixels in the data region (centre of image,
-        // away from axes/labels).
-        let mut non_white = 0u32;
-        for y in 60..240 {
-            for x in 80..320 {
-                let idx = (y * 400 + x) as usize * 4;
-                let r = rgba[idx];
-                let g = rgba[idx + 1];
-                let b = rgba[idx + 2];
-                if r != 255 || g != 255 || b != 255 {
-                    non_white += 1;
-                }
-            }
-        }
-        assert!(
-            non_white > 50,
-            "Expected visible density plot marks in the data region, but found only {non_white} non-white pixels"
-        );
-    }
 }

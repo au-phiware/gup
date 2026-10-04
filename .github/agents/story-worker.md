@@ -107,9 +107,30 @@ Before marking the story complete, perform comprehensive checks:
    colours as specified. Prefer adding or updating a golden-image test so the
    check persists. Ticking an AC without having looked at the output is not
    acceptable.
+   - **Visual regression harness** (`crates/gup-visual-regression`, GUP-388):
+     run `mask visual-regression`. Each chart-builder case checks not-blank,
+     marks present, text present, marks confined to the plot rect, configured
+     colours present, and the golden image. The checks take an `RgbaImage` plus
+     `LayoutMetadata`, so new render paths (e.g. `gup-core`) add their own small
+     adapter and reuse them.
+   - **Intentional visual change**: re-run with `GUP_BLESS=1`, open every
+     changed PNG under `tests/golden/`, commit them with the change, and
+     describe the rendered result in the story's Definition-of-Done evidence.
+     See `tests/golden/README.md`.
+   - **Known-broken output** is tracked in
+     `tests/visual_regression/expected_failures.toml`. If your fix makes a
+     tracked check pass (XPASS), remove its entry in the same commit. Never
+     loosen a tolerance, an adapter's layout metadata, or a case to make a check
+     pass; add a tracked entry that links the story or RFC step that will fix
+     it.
 7. **Run, don't just compile, touched examples**: every example that exercises
    code you changed must run without panicking (headless for a few frames is
-   enough).
+   enough). `mask smoke-examples` builds all examples and runs every headless
+   one. Windowed examples are listed in
+   `tests/visual_regression/examples_skip_list.toml`. With a display,
+   `GUP_SMOKE_WINDOWED=1 GUP_SMOKE_FILTER=<name> mask smoke-examples` runs them
+   for a few seconds and fails on a panic. If you give an example a headless
+   path, remove it from the skip list.
 8. **Windowed examples**: if headless capture is not possible, run the example
    in the background, capture a screenshot with the `screen-grabber` agent, then
    read the screenshot to verify it visually.

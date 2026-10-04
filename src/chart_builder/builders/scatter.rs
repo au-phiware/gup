@@ -748,65 +748,6 @@ mod tests {
     // ── GUP-362: Standalone scatter render tests ────────────────────────
 
     #[tokio::test]
-    async fn test_standalone_scatter_renders_visible_points() {
-        let data = vec![
-            TestPoint {
-                x_val: 10.0,
-                y_val: 20.0,
-                size: 5.0,
-                category: "A".to_string(),
-            },
-            TestPoint {
-                x_val: 30.0,
-                y_val: 40.0,
-                size: 10.0,
-                category: "B".to_string(),
-            },
-            TestPoint {
-                x_val: 50.0,
-                y_val: 10.0,
-                size: 8.0,
-                category: "C".to_string(),
-            },
-        ];
-
-        let context = Arc::new(RenderContext::new().await.unwrap());
-
-        let mut chart = scatter()
-            .x(AccessorFunction::new(|d: &TestPoint| {
-                AccessorValue::Float(d.x_val)
-            }))
-            .y(AccessorFunction::new(|d: &TestPoint| {
-                AccessorValue::Float(d.y_val)
-            }))
-            .width(400.0)
-            .height(300.0)
-            .build_with_data(data, context)
-            .expect("standalone scatter build");
-
-        let rgba = chart.render_to_rgba(400, 300).unwrap();
-        assert_eq!(rgba.len(), 400 * 300 * 4);
-
-        // Count non-white pixels in the data region (centre of image).
-        let mut non_white = 0u32;
-        for y_px in 40..260 {
-            for x_px in 60..340 {
-                let idx = (y_px * 400 + x_px) as usize * 4;
-                let r = rgba[idx];
-                let g = rgba[idx + 1];
-                let b = rgba[idx + 2];
-                if r != 255 || g != 255 || b != 255 {
-                    non_white += 1;
-                }
-            }
-        }
-        assert!(
-            non_white > 20,
-            "Expected visible scatter points, found only {non_white} non-white pixels"
-        );
-    }
-
-    #[tokio::test]
     async fn test_standalone_scatter_with_explicit_scales() {
         use crate::shader_function::LinearScale;
 
