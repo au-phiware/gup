@@ -16,7 +16,7 @@ parked GUP-391 and GUP-393 (old-path work the RFC supersedes) and trimmed
 GUP-392 to the subset (font, palette, tick precision, theme values) that
 survives into `gup-core`.
 
-- [GUP-388](GUP-388_Visual_Regression_Harness.md) 📋 — Golden-image regression
+- [GUP-388](GUP-388_Visual_Regression_Harness.md) 🚧 — Golden-image regression
   tests for all ten chart builders plus a headless examples smoke test, built on
   a target-agnostic (RGBA image + layout metadata) assertion API so the same
   harness serves `gup-core` from RFC-001 S0 onward.

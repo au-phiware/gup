@@ -2,7 +2,7 @@
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-10 **Status**: 📋 Planned **Created**:
+**Initiative**: Strategic Review 2026-10 **Status**: 🚧 In Progress **Created**:
 2026-10-04
 
 ## Context
