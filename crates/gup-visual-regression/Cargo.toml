@@ -1,0 +1,16 @@
+[package]
+name = "gup-visual-regression"
+version = "0.1.0"
+authors = ["Corin Lawson <corin@phiware.com.au>"]
+edition = "2024"
+description = "Target-agnostic visual regression harness: golden images, perceptual diff and structural checks over plain RGBA images"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/au-phiware/gup"
+publish = false
+
+# Deliberately has no dependency on `gup` (or any future `gup-core`): every
+# check takes an `RgbaImage` plus `LayoutMetadata`, so any renderer can be
+# validated by supplying those two values from an adapter of its own.
+[dependencies]
+png = "0.17"
+toml_edit = { version = "0.23", default-features = false, features = ["parse"] }

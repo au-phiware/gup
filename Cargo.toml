@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "gup-macros", "gup-bevy", "gup-egui", "gup-ios", "gup-android"]
+members = [".", "gup-macros", "gup-bevy", "gup-egui", "gup-ios", "gup-android", "crates/gup-visual-regression"]
 
 [package]
 name = "gup"
@@ -102,6 +102,10 @@ tokio-test = "0.4"
 
 [dev-dependencies]
 futures-channel = "0.3"
+# Visual regression harness (golden images + structural checks) and the
+# TOML parser used by the examples smoke test's skip list.
+gup-visual-regression = { path = "crates/gup-visual-regression" }
+toml_edit = { version = "0.23", default-features = false, features = ["parse"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
