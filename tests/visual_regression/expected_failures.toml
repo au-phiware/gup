@@ -119,3 +119,31 @@ case = "chart_builders/choropleth"
 check = "render"
 reason = "ChoroplethChart has no raster render path; build() resolves CPU geometry only"
 tracking = "GUP-366..369 (parked) -> RFC-001 T5"
+
+# ---------------------------------------------------------------------------
+# Examples (tests/examples_smoke.rs; verified 2026-10-04)
+# ---------------------------------------------------------------------------
+
+[[expected]]
+case = "examples/density_scatter_overlay"
+check = "not_blank"
+reason = "screenshot is one solid fill (#8ebddb): same full-canvas density Rectangle bug as chart_builders/density"
+tracking = "RFC-001 S14 (old builder deleted) / T5 port"
+
+[[expected]]
+case = "examples/gpu_debug_demo"
+check = "render"
+reason = "exits 1: ValidationError 'Failed to write CSV row: cannot serialize tuple container inside struct when writing headers from structs'"
+tracking = "GUP-390 (moves debug code behind a feature / into gup-debug)"
+
+[[expected]]
+case = "examples/pattern_pipeline_demo"
+check = "render"
+reason = "panics at src/accessibility/platform.rs:212 'Cannot start a runtime from within a runtime' (block_on inside the tokio main runtime)"
+tracking = "RFC-001 S14 (old accessibility wiring replaced) / follow-up if the example survives"
+
+[[expected]]
+case = "examples/composite_*"
+check = "render"
+reason = "windowed: panics on the first frame with 'BindGroup[Id(0,1)] does not exist' (composite_layer_order: 'RenderPipeline[Id(2,1)] does not exist'); the chart is built on a RenderContext device and drawn with a separate GupContext device. Verify with GUP_SMOKE_WINDOWED=1 GUP_SMOKE_FILTER=composite"
+tracking = "RFC-001 S1 (one Context) and S11 (composite on Plot)"
