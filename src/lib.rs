@@ -159,7 +159,6 @@ pub mod renderer;
 pub mod scale;
 pub mod selection;
 pub mod selection_mask;
-pub mod shader_ast;
 pub mod shader_function;
 pub mod shader_pipeline;
 pub mod spatial_index;
@@ -429,7 +428,7 @@ pub fn choropleth() -> ChoroplethChartBuilder {
 // NOTE: `wgsl_function` cannot be re-exported at the crate root because `gup`
 // already defines a `macro_rules! wgsl_function` in `shader_function::macros`.
 // It is available through `gup::proc_macros::wgsl_function` instead.
-pub use gup_macros::{Mark, Mixable, shader_fn};
+pub use gup_macros::{Mark, Mixable};
 
 /// Re-exported procedural macros from `gup_macros`.
 ///

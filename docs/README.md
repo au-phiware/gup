@@ -88,12 +88,6 @@ MarkRenderer, and a performance optimization guide.
 
 Guide for building custom mark types and extending the mark system.
 
-### [🔀 Transpilation Validation Report](./transpilation-validation-report.md)
-
-Analysis of the Rust-to-WGSL transpilation system: approach comparison,
-technical validation results, performance benchmarks, developer experience
-assessment, and implementation recommendation.
-
 ### [🔍 Existing Solutions Analysis](./existing-solutions-analysis.md)
 
 Comprehensive analysis of existing Rust-to-GPU compilation solutions: rust-gpu

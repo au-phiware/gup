@@ -78,27 +78,6 @@ fn wgsl_function_honours_crate_override() {
     assert_eq!(f.create_uniforms().expect("uniforms").factor, 3.0);
 }
 
-// ---- #[shader_fn] ----------------------------------------------------------
-
-#[::gup::shader_fn]
-fn clamp_unit(value: f32, lo: f32, hi: f32) -> f32 {
-    value.clamp(lo, hi)
-}
-
-#[::gup::shader_fn(crate = "crate::engine::core_lib")]
-fn halve(value: f32) -> f32 {
-    value * 0.5
-}
-
-#[test]
-fn shader_fn_resolves_without_glob_import() {
-    let f = ClampUnit::new(0.0, 1.0);
-    assert_eq!(ClampUnit::function_name(), "clamp_unit");
-    assert!(f.generate_wgsl().contains("fn clamp_unit"));
-    assert_eq!(Halve::function_name(), "halve");
-    assert!(Halve::new().generate_wgsl().contains("fn halve"));
-}
-
 // ---- #[derive(WgslStruct)] with #[wgsl_function] custom types ---------------
 
 #[derive(::gup_macros::WgslStruct, Clone, Copy, Debug, ::bytemuck::Pod, ::bytemuck::Zeroable)]

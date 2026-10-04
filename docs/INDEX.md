@@ -39,8 +39,6 @@ Quick access to all documents in `docs/`. For stories and planning, see
 - [CUSTOM_MARK_GUIDE.md](CUSTOM_MARK_GUIDE.md) — How to create custom mark types
 - [MIGRATION_FROM_OBSERVABLE_PLOT.md](MIGRATION_FROM_OBSERVABLE_PLOT.md) —
   Migrating from Observable Plot to Gup
-- [SHADER_FN_MIGRATION_GUIDE.md](SHADER_FN_MIGRATION_GUIDE.md) — Migrating to
-  the ShaderFn system
 - [TYPE_CONSTRUCTION_GUIDE.md](TYPE_CONSTRUCTION_GUIDE.md) — Using the type
   construction macros
 - [EVENT_FORWARDING.md](EVENT_FORWARDING.md) — Interaction and event forwarding
@@ -105,8 +103,6 @@ Quick access to all documents in `docs/`. For stories and planning, see
   solutions deep-dive
 - [graphics-programming.md](graphics-programming.md) — Graphics programming
   reference notes
-- [transpilation-validation-report.md](transpilation-validation-report.md) —
-  Rust→WGSL transpiler validation report
 - [research/rust_to_wgsl_research.md](research/rust_to_wgsl_research.md) —
   Rust-to-WGSL transpilation research
 - [research/technical_feasibility_assessment.md](research/technical_feasibility_assessment.md)

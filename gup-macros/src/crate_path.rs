@@ -154,7 +154,7 @@ mod tests {
 
     #[test]
     fn attribute_args_bare_path() {
-        let path = parse_attribute_args(quote!(crate = ::other::gup), "shader_fn").unwrap();
+        let path = parse_attribute_args(quote!(crate = ::other::gup), "wgsl_struct").unwrap();
         assert_eq!(path_str(&path), ":: other :: gup");
     }
 

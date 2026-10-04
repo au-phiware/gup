@@ -135,7 +135,8 @@ pub struct InliningConfig {
     pub inline_threshold: usize,
     /// Maximum number of call sites before skipping inline
     pub call_count_threshold: usize,
-    /// Enable AST-based inlining (more accurate but slower)
+    /// Skip inlining functions that contain control flow (`if`, `for`,
+    /// `while`, `loop`)
     pub use_ast_analysis: bool,
 }
 
@@ -158,15 +159,6 @@ pub struct OptimizationConfig {
     pub enable_constant_folding: bool,
     /// Enable dead code elimination
     pub enable_dead_code_elimination: bool,
-    /// Use AST-based optimization passes instead of string-based ones.
-    ///
-    /// When enabled (the default), `optimize_shader()` parses the WGSL source
-    /// into an AST, runs dead-code elimination, constant folding, and function
-    /// inlining on the AST, then regenerates WGSL text.  Falls back to
-    /// string-based optimizations automatically if AST parsing fails.
-    ///
-    /// Set to `false` to use the legacy string-based optimization path.
-    pub use_ast_analysis: bool,
     /// Inlining configuration
     pub inlining: InliningConfig,
 }
@@ -177,7 +169,6 @@ impl Default for OptimizationConfig {
             enable_inlining: true,
             enable_constant_folding: true,
             enable_dead_code_elimination: true,
-            use_ast_analysis: true,
             inlining: InliningConfig::default(),
         }
     }
@@ -1365,32 +1356,12 @@ impl ComposableShaderPipeline {
         self.update_cache(device)
     }
 
-    /// Optimize shader source by removing unused code and performing optimizations.
-    ///
-    /// When `OptimizationConfig.use_ast_analysis` is true, parses the shader
-    /// into an AST and runs AST-based optimization passes.  Falls back to
-    /// string-based optimizations if AST parsing fails.
+    /// Optimize shader source by removing unused uniforms, marking small
+    /// functions for inlining and folding constants, as enabled by the
+    /// pipeline's [`OptimizationConfig`].
     pub fn optimize_shader(&self, shader_source: &str) -> String {
-        if self.optimization_config.use_ast_analysis {
-            if let Some(optimized) = self.optimize_shader_ast(shader_source) {
-                return optimized;
-            }
-            // AST parsing failed — fall back to string-based optimizations.
-            log::debug!("AST optimization failed, falling back to string-based optimizations");
-        }
-
-        self.optimize_shader_string(shader_source)
-    }
-
-    /// String-based optimization pipeline (the original implementation).
-    ///
-    /// Retained as a fallback when AST parsing fails. Prefer AST-based
-    /// optimization via `OptimizationConfig { use_ast_analysis: true, .. }`.
-    #[allow(deprecated)]
-    fn optimize_shader_string(&self, shader_source: &str) -> String {
         let mut optimized = shader_source.to_string();
 
-        // Apply optimizations based on configuration
         if self.optimization_config.enable_dead_code_elimination {
             optimized = self.remove_unused_uniforms(&optimized);
         }
@@ -1405,44 +1376,6 @@ impl ComposableShaderPipeline {
         }
 
         optimized
-    }
-
-    /// AST-based optimization pipeline.
-    ///
-    /// Returns `None` if the source cannot be parsed, allowing the caller
-    /// to fall back to the string-based path.
-    fn optimize_shader_ast(&self, shader_source: &str) -> Option<String> {
-        use crate::shader_ast::{
-            AstOptimizationConfig, generate_wgsl_minimal, optimize, parse_wgsl,
-        };
-
-        let mut module = match parse_wgsl(shader_source) {
-            Ok(m) => m,
-            Err(e) => {
-                log::debug!("AST parse error: {}", e.message);
-                return None;
-            }
-        };
-
-        let ast_config = AstOptimizationConfig {
-            enable_dead_code_elimination: self.optimization_config.enable_dead_code_elimination,
-            enable_constant_folding: self.optimization_config.enable_constant_folding,
-            enable_function_inlining: self.optimization_config.enable_inlining,
-            inline_max_statements: self.optimization_config.inlining.inline_threshold,
-            inline_max_call_sites: self.optimization_config.inlining.call_count_threshold,
-        };
-
-        let results = optimize(&mut module, &ast_config);
-
-        if log::log_enabled!(log::Level::Debug) {
-            for r in &results {
-                if r.changed {
-                    log::debug!("AST optimization: {}", r.description);
-                }
-            }
-        }
-
-        Some(generate_wgsl_minimal(&module))
     }
 
     /// Get profiling report if profiling is enabled.
@@ -1482,10 +1415,6 @@ impl ComposableShaderPipeline {
     }
 
     /// Remove unused uniform declarations from shader source.
-    #[deprecated(
-        since = "0.1.0",
-        note = "Use AST-based optimization via `OptimizationConfig { use_ast_analysis: true, .. }` instead"
-    )]
     fn remove_unused_uniforms(&self, shader: &str) -> String {
         let mut lines: Vec<&str> = shader.lines().collect();
         let mut used_uniforms = std::collections::HashSet::new();
@@ -1559,10 +1488,6 @@ impl ComposableShaderPipeline {
     /// - Considers function size and call count
     /// - Performs basic control flow analysis
     /// - Tracks inlining decisions for profiling
-    #[deprecated(
-        since = "0.1.0",
-        note = "Use AST-based optimization via `OptimizationConfig { use_ast_analysis: true, .. }` instead"
-    )]
     fn inline_small_functions_advanced(&self, shader: &str) -> String {
         let config = &self.optimization_config.inlining;
         let mut optimized = shader.to_string();
@@ -1630,10 +1555,6 @@ impl ComposableShaderPipeline {
     }
 
     /// Perform constant folding optimizations.
-    #[deprecated(
-        since = "0.1.0",
-        note = "Use AST-based optimization via `OptimizationConfig { use_ast_analysis: true, .. }` instead"
-    )]
     fn fold_constants(&self, shader: &str) -> String {
         let mut optimized = shader.to_string();
 
@@ -1669,10 +1590,6 @@ impl ComposableShaderPipeline {
     /// When a `let x = <literal>;` is used exactly once, substitute the
     /// literal at the use site and remove the binding.  This is conservative
     /// and only handles simple scalar/vec literals to avoid correctness issues.
-    #[deprecated(
-        since = "0.1.0",
-        note = "Use AST-based optimization via `OptimizationConfig { use_ast_analysis: true, .. }` instead"
-    )]
     pub fn propagate_constants(&self, shader: &str) -> String {
         let lines: Vec<&str> = shader.lines().collect();
         let mut constants: Vec<(String, String)> = Vec::new();
@@ -1958,7 +1875,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(deprecated)]
     fn test_constant_folding() {
         let pipeline = ComposableShaderPipeline::new();
         let test_code = "let result = value * 1.0 + 0.0;";
@@ -2026,7 +1942,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(deprecated)]
     fn test_removed_unused_uniforms() {
         let pipeline = ComposableShaderPipeline::new();
         let shader_with_unused = r#"
@@ -2044,253 +1959,10 @@ fn main() {
     }
 
     // -----------------------------------------------------------------------
-    // AST integration tests
-    // -----------------------------------------------------------------------
-
-    /// Helper: create a pipeline configured for AST-based optimization.
-    ///
-    /// Since `use_ast_analysis` is now `true` by default, this is equivalent
-    /// to `ComposableShaderPipeline::new()` but kept for readability in AST-
-    /// specific tests.
-    fn ast_pipeline() -> ComposableShaderPipeline {
-        ComposableShaderPipeline::new()
-    }
-
-    #[test]
-    fn test_ast_optimize_shader_basic() {
-        let pipeline = ast_pipeline();
-
-        // A simple WGSL snippet the AST parser can handle.
-        let src = r#"fn helper(x: f32) -> f32 {
-    return x + 0.0;
-}
-
-@vertex
-fn vs_main() -> f32 {
-    return helper(1.0);
-}
-"#;
-
-        let optimized = pipeline.optimize_shader(src);
-
-        // The AST optimizer should have folded `x + 0.0` -> `x`
-        // and potentially inlined `helper`.
-        assert!(
-            optimized.contains("vs_main"),
-            "entry point must be preserved"
-        );
-        // Should not contain the un-folded `+ 0.0`
-        assert!(
-            !optimized.contains("+ 0.0"),
-            "constant folding should remove identity addition"
-        );
-    }
-
-    #[test]
-    fn test_ast_optimize_shader_dead_code() {
-        let pipeline = ast_pipeline();
-
-        let src = r#"fn unused(x: f32) -> f32 {
-    return x;
-}
-
-fn used(x: f32) -> f32 {
-    return x;
-}
-
-@vertex
-fn vs_main() -> f32 {
-    return used(42.0);
-}
-"#;
-
-        let optimized = pipeline.optimize_shader(src);
-
-        // `unused` should be removed by dead-code elimination.
-        assert!(optimized.contains("vs_main"));
-        // After DCE + inlining, `unused` should not appear.
-        assert!(
-            !optimized.contains("fn unused"),
-            "dead function should be eliminated"
-        );
-    }
-
-    #[test]
-    fn test_ast_optimize_shader_fallback_on_parse_error() {
-        let pipeline = ast_pipeline();
-
-        // Deliberately unparseable WGSL.
-        let bad_src = "@@@ this is not valid WGSL @@@";
-
-        let optimized = pipeline.optimize_shader(bad_src);
-
-        // Should have fallen back to string-based optimization and not
-        // panicked. The string-based path just returns the source mostly
-        // as-is (it only does simple replacements).
-        assert!(
-            optimized.contains("not valid WGSL"),
-            "fallback must preserve source text"
-        );
-    }
-
-    #[test]
-    fn test_ast_output_no_larger_than_string_based() {
-        // Use a pipeline configured for string-only optimization.
-        let mut string_pipeline = ComposableShaderPipeline::new();
-        let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
-        string_pipeline.add_function(scale);
-        string_pipeline.map_attribute("color", "linear_scale");
-        let string_optimized = string_pipeline.generate_optimized_vertex_shader();
-
-        // Now with AST optimization.
-        let config = OptimizationConfig {
-            use_ast_analysis: true,
-            ..Default::default()
-        };
-        let mut ast_pipeline = ComposableShaderPipeline::new().with_optimization_config(config);
-        let scale2 = LinearScale::new(0.0, 100.0, 0.0, 1.0);
-        ast_pipeline.add_function(scale2);
-        ast_pipeline.map_attribute("color", "linear_scale");
-        let ast_optimized = ast_pipeline.generate_optimized_vertex_shader();
-
-        // The AST output should be at least as small as the string output.
-        // We compare non-whitespace character counts to ignore formatting diffs.
-        let string_chars: usize = string_optimized
-            .chars()
-            .filter(|c| !c.is_whitespace())
-            .count();
-        let ast_chars: usize = ast_optimized.chars().filter(|c| !c.is_whitespace()).count();
-
-        assert!(
-            ast_chars <= string_chars,
-            "AST output ({ast_chars} chars) should be <= string output ({string_chars} chars)"
-        );
-    }
-
-    #[test]
-    fn test_ast_is_default() {
-        // The default config now enables AST-based optimization.
-        let pipeline = ComposableShaderPipeline::new();
-        assert!(pipeline.optimization_config().use_ast_analysis);
-    }
-
-    #[test]
-    fn test_string_based_opt_in() {
-        // Opting out of AST analysis falls back to string-based optimizations.
-        let config = OptimizationConfig {
-            use_ast_analysis: false,
-            ..Default::default()
-        };
-        let pipeline = ComposableShaderPipeline::new().with_optimization_config(config);
-        assert!(!pipeline.optimization_config().use_ast_analysis);
-
-        let src = "let x = 1.0 * y;";
-        let optimized = pipeline.optimize_shader(src);
-        assert!(optimized.contains("let x = y;"));
-    }
-
-    #[test]
-    fn test_ast_constant_folding_literals() {
-        let pipeline = ast_pipeline();
-
-        let src = r#"@vertex
-fn vs_main() -> f32 {
-    return 2.0 + 3.0;
-}
-"#;
-
-        let optimized = pipeline.optimize_shader(src);
-        // Should fold 2.0 + 3.0 into 5.0
-        assert!(
-            optimized.contains("5.0"),
-            "literal arithmetic should be folded"
-        );
-    }
-
-    #[test]
-    fn test_ast_function_inlining() {
-        let pipeline = ast_pipeline();
-
-        let src = r#"fn identity(x: f32) -> f32 {
-    return x;
-}
-
-@vertex
-fn vs_main() -> f32 {
-    return identity(42.0);
-}
-"#;
-
-        let optimized = pipeline.optimize_shader(src);
-        // After inlining `identity` and DCE, the body should just return 42.0.
-        assert!(optimized.contains("42.0"));
-        // The helper should be removed (inlined + DCE).
-        assert!(
-            !optimized.contains("fn identity"),
-            "inlined function should be eliminated by DCE"
-        );
-    }
-
-    #[test]
-    fn test_ast_roundtrip_generated_vertex_shader() {
-        use crate::shader_ast::parse_wgsl;
-
-        // Build a pipeline with functions and attribute mappings.
-        let mut pipeline = ComposableShaderPipeline::new();
-        let scale = LinearScale::new(0.0, 100.0, 0.0, 1.0);
-        let color = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 1.0, 1.0]);
-        pipeline.add_function(scale);
-        pipeline.add_function(color);
-        pipeline.map_attribute("size", "linear_scale");
-        pipeline.map_attribute("color", "color_map");
-
-        let vertex_shader = pipeline.generate_vertex_shader();
-
-        // The AST parser must handle the generated vertex shader.
-        let module =
-            parse_wgsl(&vertex_shader).expect("AST parser should handle generated vertex shader");
-        assert!(
-            module.functions.iter().any(|f| f.name == "vs_main"),
-            "parsed module must contain vs_main entry point"
-        );
-    }
-
-    #[test]
-    fn test_ast_roundtrip_generated_fragment_shader() {
-        use crate::shader_ast::{Attribute, parse_wgsl};
-
-        let mut pipeline = ComposableShaderPipeline::new();
-        let color = ColorMap::new(vec4![0.0, 0.0, 0.0, 1.0], vec4![1.0, 1.0, 1.0, 1.0]);
-        pipeline.add_function(color);
-        pipeline.map_attribute("color", "color_map");
-
-        let fragment_shader = pipeline.generate_fragment_shader();
-
-        // The AST parser must handle the generated fragment shader.
-        let module = parse_wgsl(&fragment_shader)
-            .expect("AST parser should handle generated fragment shader");
-        let fs_main = module
-            .functions
-            .iter()
-            .find(|f| f.name == "fs_main")
-            .expect("parsed module must contain fs_main entry point");
-
-        // Verify @location(0) on the return type is preserved.
-        assert!(
-            fs_main
-                .return_attributes
-                .iter()
-                .any(|a| matches!(a, Attribute::Location(0))),
-            "fs_main return type must have @location(0) attribute"
-        );
-    }
-
-    // -----------------------------------------------------------------------
     // Enhanced WGSL optimization tests (AC4)
     // -----------------------------------------------------------------------
 
     #[test]
-    #[allow(deprecated)]
     fn test_fold_subtraction_identity() {
         let pipeline = ComposableShaderPipeline::new();
         let result = pipeline.fold_constants("let x = y - 0.0;");
@@ -2298,7 +1970,6 @@ fn vs_main() -> f32 {
     }
 
     #[test]
-    #[allow(deprecated)]
     fn test_fold_division_identity() {
         let pipeline = ComposableShaderPipeline::new();
         let result = pipeline.fold_constants("let x = y / 1.0;");
@@ -2306,7 +1977,6 @@ fn vs_main() -> f32 {
     }
 
     #[test]
-    #[allow(deprecated)]
     fn test_fold_vec4_zero() {
         let pipeline = ComposableShaderPipeline::new();
         let result = pipeline.fold_constants("let c = vec4<f32>(0.0, 0.0, 0.0, 0.0);");
@@ -2314,7 +1984,6 @@ fn vs_main() -> f32 {
     }
 
     #[test]
-    #[allow(deprecated)]
     fn test_fold_vec4_one() {
         let pipeline = ComposableShaderPipeline::new();
         let result = pipeline.fold_constants("let c = vec4<f32>(1.0, 1.0, 1.0, 1.0);");
@@ -2322,7 +1991,6 @@ fn vs_main() -> f32 {
     }
 
     #[test]
-    #[allow(deprecated)]
     fn test_constant_propagation_single_use() {
         let pipeline = ComposableShaderPipeline::new();
         let shader = "let k = 42.0;\nlet result = k + 1.0;\n";
@@ -2336,7 +2004,6 @@ fn vs_main() -> f32 {
     }
 
     #[test]
-    #[allow(deprecated)]
     fn test_constant_propagation_multiple_use() {
         let pipeline = ComposableShaderPipeline::new();
         let shader = "let k = 42.0;\nlet a = k + 1.0;\nlet b = k + 2.0;\n";

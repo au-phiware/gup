@@ -171,10 +171,6 @@ name = "grid_performance_benchmarks"
 harness = false
 
 [[bench]]
-name = "transpilation_benchmarks"
-harness = false
-
-[[bench]]
 name = "sdf_generation_benchmarks"
 harness = false
 
