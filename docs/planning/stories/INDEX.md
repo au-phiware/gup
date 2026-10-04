@@ -20,7 +20,7 @@ survives into `gup-core`.
   tests for all ten chart builders plus a headless examples smoke test, built on
   a target-agnostic (RGBA image + layout metadata) assertion API so the same
   harness serves `gup-core` from RFC-001 S0 onward.
-- [GUP-389](GUP-389_Delete_Unwired_Dead_Subsystems.md) 📋 — Delete the shader
+- [GUP-389](GUP-389_Delete_Unwired_Dead_Subsystems.md) 🚧 — Delete the shader
   transpiler, Mixable ecosystem, MarkRenderer, and the broken `plot_api`/
   `FieldAccessor`/`BoundChartBuilder` path (~37k LOC), each justified by a
   caller-check grep. Prerequisite for RFC-001 step S0.
