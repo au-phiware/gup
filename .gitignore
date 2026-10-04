@@ -1,5 +1,7 @@
 /result
 /target
+# Detached dogfood crate has its own target directory
+/dogfood/target
 /.direnv/
 mprocs.log
 *.local.*

@@ -1,0 +1,87 @@
+# Dogfood suite — builds the detached dogfood/ crate against this checkout of
+# gup (as an external user would) and runs its six realistic tasks with pixel
+# checks. See dogfood/README.md.
+#
+# Results: PASS and XFAIL (tracked known gap) are fine; FAIL (untracked
+# failure) and XPASS (a tracked gap now passes: update dogfood/src/suite.rs)
+# fail the job. The rendered PNGs and per-task logs are uploaded as an
+# artifact either way.
+
+name: Dogfood
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: dogfood-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dogfood:
+    name: Dogfood suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      # lavapipe (software Vulkan) gives wgpu an adapter on a GPU-less
+      # runner; Xvfb provides the display for the three windowed tasks;
+      # ImageMagick rasterises task 1's SVG workaround.
+      - name: Install software GPU, X server and ImageMagick
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            mesa-vulkan-drivers libvulkan1 libegl1 libgl1 \
+            xvfb xauth libxkbcommon-x11-0 libx11-xcb1 libxcursor1 libxi6 libxrandr2 \
+            imagemagick libmagickcore-6.q16-7-extra librsvg2-bin fonts-dejavu-core
+
+      - name: Cache Cargo registry and dogfood build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            dogfood/target
+          key: dogfood-${{ runner.os }}-${{ hashFiles('dogfood/Cargo.lock', 'Cargo.lock') }}
+          restore-keys: |
+            dogfood-${{ runner.os }}-
+
+      - name: Check formatting
+        working-directory: dogfood
+        run: cargo fmt -- --check
+
+      - name: Build task binaries (release)
+        working-directory: dogfood
+        run: cargo build --release --bins
+
+      - name: Unit-test the suite and pixel checks
+        working-directory: dogfood
+        run: cargo test --release --lib --bin dogfood_check
+
+      - name: Run dogfood suite
+        working-directory: dogfood
+        run: xvfb-run -a -s "-screen 0 1920x1080x24" target/release/dogfood_check
+
+      - name: Upload outputs and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dogfood-outputs-${{ github.sha }}
+          path: |
+            /tmp/gup-dogfood/*.png
+            /tmp/gup-dogfood/*.svg
+            /tmp/gup-dogfood/logs/
+          retention-days: 14

@@ -40,9 +40,13 @@ survives into `gup-core`.
   S0/S3 (old mark-rendering path frozen); its verified evidence (circle aspect
   ratio, AA, the `composite_*` panic, scissor clipping) is preserved as input
   for `gup-core`'s own mark rendering. Absorbs GUP-384, also parked.
-- [GUP-394](GUP-394_Dogfood_Suite_In_CI.md) 📋 — Promote the external dogfood
+- [GUP-394](GUP-394_Dogfood_Suite_In_CI.md) ✅ — Promote the external dogfood
   crate's six realistic-usage tasks into `dogfood/` and run them in CI with
   pixel assertions and tracked expected failures. Deps: GUP-377 ✅.
+- [GUP-397](GUP-397_Dogfood_Checks_On_Shared_Visual_Assertions.md) 📋 — Replace
+  the dogfood suite's local pixel measurements with GUP-388's shared
+  visual-assertion module and layout metadata, without loosening any tracked
+  gap. Deps: GUP-394 ✅, GUP-388 📋.
 
 ## RFC-001 Migration
 

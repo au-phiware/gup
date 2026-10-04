@@ -1,0 +1,19 @@
+[package]
+name = "gup-dogfood"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Detached from the gup workspace: this crate consumes gup exactly like an
+# external user would (path dependency, no access to private items).
+[workspace]
+
+[dependencies]
+gup = { path = ".." }
+tokio = { version = "1", features = ["full"] }
+csv = "1.3"
+chrono = "0.4"
+env_logger = "0.10"
+eframe = { version = "0.33", features = ["wgpu"] }
+image = "0.24"
+pollster = "0.3"
