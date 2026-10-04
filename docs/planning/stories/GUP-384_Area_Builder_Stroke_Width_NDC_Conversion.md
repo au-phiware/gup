@@ -2,7 +2,16 @@
 
 ## Story Overview
 
-**Initiative**: Chart Builders **Status**: 📋 Planned **Created**: 2026-10-04
+**Initiative**: Chart Builders **Status**: ⏸ Parked **Created**: 2026-10-04
+
+**Parked 2026-10-04**: folded into [GUP-393](GUP-393_Mark_Fidelity_Fixes.md)
+(Mark Fidelity Fixes) per the
+[October 2026 strategic review](../STRATEGIC_REVIEW_2026-10.md#backlog-triage)'s
+"Fold into T4a" decision. GUP-393 is itself now parked — superseded by
+[RFC-001](../rfcs/RFC-001_Core_Architecture.md) steps S0/S3, with the old `gup`
+path frozen ahead of the S14 flip — and this story's root-cause analysis is
+preserved there as input for `gup-core`'s mark rendering work. Do not implement
+this story independently.
 
 ## Context
 

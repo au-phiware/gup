@@ -1,6 +1,10 @@
 # GUP-262C: Bevy Render-Graph Node for Direct GpuImage Rendering
 
-**Initiative**: Ecosystem Integration **Status**: 💡 New **Created**: 2025-07-25
+**Initiative**: Ecosystem Integration **Status**: ⏸ Parked **Created**:
+2025-07-25
+
+**Parked 2026-10-04**: pending strategic review tracks T2/T3/T5. See
+[STRATEGIC_REVIEW_2026-10.md](../STRATEGIC_REVIEW_2026-10.md#backlog-triage).
 
 ## Overview
 

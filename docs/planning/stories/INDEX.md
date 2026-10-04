@@ -1,7 +1,48 @@
 # Stories
 
 > Stories are the unit of work. Dependencies, not phases, determine order.
-> Status: ✅ Complete · 🚧 In Progress · 📋 Planned · 💡 New
+> Status: ✅ Complete · 🚧 In Progress · 📋 Planned · 💡 New · ⏸ Parked
+
+## Strategic Review 2026-10
+
+Wave-1 stories from the
+[October 2026 strategic review](../STRATEGIC_REVIEW_2026-10.md): guardrails
+(visual regression, dogfood-in-CI), pruning unwired subsystems and the public
+API surface, and visual quick-wins that survive the T2/T3 core redesign.
+**Revised 2026-10-04**: [RFC-001](../rfcs/RFC-001_Core_Architecture.md) (Core
+Architecture) is accepted; the new core is built in `crates/gup-core` and the
+old `gup` path is frozen for feature work ahead of the RFC-001 S14 flip. This
+parked GUP-391 and GUP-393 (old-path work the RFC supersedes) and trimmed
+GUP-392 to the subset (font, palette, tick precision, theme values) that
+survives into `gup-core`.
+
+- [GUP-388](GUP-388_Visual_Regression_Harness.md) 📋 — Golden-image regression
+  tests for all ten chart builders plus a headless examples smoke test, built on
+  a target-agnostic (RGBA image + layout metadata) assertion API so the same
+  harness serves `gup-core` from RFC-001 S0 onward.
+- [GUP-389](GUP-389_Delete_Unwired_Dead_Subsystems.md) 📋 — Delete the shader
+  transpiler, Mixable ecosystem, MarkRenderer, and the broken `plot_api`/
+  `FieldAccessor`/`BoundChartBuilder` path (~37k LOC), each justified by a
+  caller-check grep. Prerequisite for RFC-001 step S0.
+- [GUP-390](GUP-390_Quarantine_Culling_LOD_And_Integration_Crates.md) 📋 — Move
+  GPU culling/LOD into an experimental crate, feature-gate debug/performance
+  code, and exclude the non-compiling `gup-egui`/`gup-bevy` and parked
+  `gup-ios`/`gup-android`/`gup-tauri` from the default workspace and CI.
+  Prerequisite for RFC-001 step S0.
+- [GUP-391](GUP-391_Curated_Prelude_And_Public_Surface_Purge.md) ⏸ — Parked:
+  superseded by RFC-001 S7/S14 — `gup-core`'s prelude is designed fresh rather
+  than curating the frozen old-path exports.
+- [GUP-392](GUP-392_Correct_Visual_Defaults.md) 📋 — Trimmed to what survives
+  RFC-001: a single Okabe-Ito palette data source, Inter as the default font
+  (with OFL licence), tick-label precision derived from the tick step, and muted
+  default theme colours. Deps: GUP-388 📋.
+- [GUP-393](GUP-393_Mark_Fidelity_Fixes.md) ⏸ — Parked: superseded by RFC-001
+  S0/S3 (old mark-rendering path frozen); its verified evidence (circle aspect
+  ratio, AA, the `composite_*` panic, scissor clipping) is preserved as input
+  for `gup-core`'s own mark rendering. Absorbs GUP-384, also parked.
+- [GUP-394](GUP-394_Dogfood_Suite_In_CI.md) 📋 — Promote the external dogfood
+  crate's six realistic-usage tasks into `dogfood/` and run them in CI with
+  pixel assertions and tracked expected failures. Deps: GUP-377 ✅.
 
 ## GPU Rendering Pipeline
 
@@ -173,14 +214,14 @@ data, and parallel output.
 - [GUP-278](GUP-278_Staggered_Transition_Delays.md) ✅ — Per-element delay
   offsets via `.delay_fn()` for cascading/staggered animation effects. Deps:
   GUP-276 ✅.
-- [GUP-355](GUP-355_GPU_Compute_Shader_Transition_Interpolation.md) 💡 — GPU
+- [GUP-355](GUP-355_GPU_Compute_Shader_Transition_Interpolation.md) ⏸ — GPU
   compute shader path for transition interpolation at scale (10K+ elements).
   Deps: GUP-277 ✅.
-- [GUP-356](GUP-356_InteractionSystem_Dynamic_Result_Buffer.md) 💡 — Dynamically
+- [GUP-356](GUP-356_InteractionSystem_Dynamic_Result_Buffer.md) ⏸ — Dynamically
   grow the InteractionSystem result buffer when query results exceed
   max_results, enabling accurate GPU region queries on 1M+ mark datasets. Deps:
   GUP-286 ✅, GUP-012 ✅.
-- [GUP-357](GUP-357_Horizontal_Colorbar_Orientation.md) 💡 — Horizontal colorbar
+- [GUP-357](GUP-357_Horizontal_Colorbar_Orientation.md) ⏸ — Horizontal colorbar
   layout for wide charts with limited right margin. Deps: GUP-296 ✅.
 
 ## Shader Function System
@@ -305,7 +346,7 @@ integration, and Rust→WGSL transpilation.
 - [GUP-220](GUP-220_Mixed_Chain_Attribute_Deduplication.md) ✅ — GUP-218
   introduced name-based WGSL struct deduplication: when multiple attr_shader()
   bindings….
-- [GUP-361](GUP-361_ColorScale_CPU_Sampling_API.md) 💡 — Add
+- [GUP-361](GUP-361_ColorScale_CPU_Sampling_API.md) ⏸ — Add
   `ColorScale::sample(t)` method for CPU-side colour lookups, eliminating ad-hoc
   gradient sampling in chart builders. Deps: GUP-298 ✅.
 
@@ -356,7 +397,7 @@ derive macros, and custom mark kit.
 - [GUP-286](GUP-286_Spherical_Polygon_Simplification.md) 📋 — Spherical-aware
   polygon simplification using great-circle distance for polar-region accuracy.
   Deps: GUP-274 ✅.
-- [GUP-360](GUP-360_GPU_Fill_Tessellation.md) 💡 — GPU compute shader for
+- [GUP-360](GUP-360_GPU_Fill_Tessellation.md) ⏸ — GPU compute shader for
   polygon fill tessellation, enabling per-frame dynamic polygon updates for very
   large polygons (>100K vertices). Deps: GUP-132 ✅, GUP-298 ✅.
 
@@ -718,10 +759,10 @@ integration, pipeline caching.
 - [GUP-245](GUP-245_Bar_Chart_Builder.md) ✅ — BarChartBuilder with
   vertical/horizontal, grouped, and stacked variants using instanced Rectangle
   marks and OrdinalScale. Deps: GUP-018 ✅, GUP-067 ✅, GUP-093 ✅, GUP-254 ✅.
-- [GUP-285](GUP-285_Legend_Rendering_System.md) 💡 — LegendRenderer reading
+- [GUP-285](GUP-285_Legend_Rendering_System.md) ⏸ — LegendRenderer reading
   series labels/colours from ComposedChart for multi-series charts. Deps:
   GUP-245 ✅, GUP-018 ✅.
-- [GUP-286](GUP-286_Per_Bar_Instance_Buffer_Fill.md) 💡 — Per-bar
+- [GUP-286](GUP-286_Per_Bar_Instance_Buffer_Fill.md) ⏸ — Per-bar
   RectangleAttributes computation from scales and BarRecord for visible bar
   rendering. Deps: GUP-245 ✅, GUP-067 ✅.
 - [GUP-246](GUP-246_Line_Chart_Builder.md) ✅ — LineChartBuilder with
@@ -755,17 +796,17 @@ integration, pipeline caching.
 - [GUP-288](GUP-288_Choropleth_Tooltip_Hover_Interaction.md) ✅ — Choropleth
   tooltip and hover highlighting via GPU hit-testing. Deps: GUP-275 ✅, GUP-012
   ✅, GUP-014 ✅.
-- [GUP-366](GUP-366_Choropleth_GPU_Render_Pipeline_Integration.md) 📋 — Wire
+- [GUP-366](GUP-366_Choropleth_GPU_Render_Pipeline_Integration.md) ⏸ — Wire
   IndexedChoroplethVertex, RegionColorBuffer, and recolour shaders into a live
   wgpu render pipeline. Deps: GUP-287 ✅.
-- [GUP-367](GUP-367_Choropleth_Module_Refactoring.md) 💡 — Split choropleth.rs
+- [GUP-367](GUP-367_Choropleth_Module_Refactoring.md) ⏸ — Split choropleth.rs
   (~1 750 lines) into focused sub-modules for maintainability. Deps: GUP-287 ✅.
-- [GUP-368](GUP-368_Choropleth_Outline_Highlight_Style.md) 💡 — Add Outline
+- [GUP-368](GUP-368_Choropleth_Outline_Highlight_Style.md) ⏸ — Add Outline
   variant to HoverHighlight for border-based hover feedback. Deps: GUP-288 ✅.
-- [GUP-369](GUP-369_Choropleth_Spatial_Index_Hit_Testing.md) 💡 — Spatial index
+- [GUP-369](GUP-369_Choropleth_Spatial_Index_Hit_Testing.md) ⏸ — Spatial index
   pre-filter for sub-ms hit-testing on 3000+ region choropleths. Deps: GUP-288
   ✅.
-- [GUP-295](GUP-295_Line_Chart_Point_Markers.md) 💡 — Optional circle point
+- [GUP-295](GUP-295_Line_Chart_Point_Markers.md) ⏸ — Optional circle point
   markers at each data vertex on line charts. Deps: GUP-246 ✅, GUP-251 ✅.
 - [GUP-296](GUP-296_Colorbar_Axis_Renderer.md) ✅ — Colorbar axis renderer: thin
   gradient-filled rectangle with tick marks and labels for colour-scale legends.
@@ -776,7 +817,7 @@ integration, pipeline caching.
 - [GUP-299](GUP-299_Axis_Percentage_Formatter.md) ✅ — Pluggable axis tick
   formatters with automatic percentage formatting for normalised stacked charts.
   Deps: GUP-247 ✅.
-- [GUP-300](GUP-300_Violin_Mark_Renderer.md) 💡 — Dedicated ViolinMark with GPU
+- [GUP-300](GUP-300_Violin_Mark_Renderer.md) ⏸ — Dedicated ViolinMark with GPU
   shaders for filled density polygon rendering with gradient fill, stroke
   outline, and anti-aliasing. Deps: GUP-249 ✅, GUP-132 ✅.
 - [GUP-301](GUP-301_GPU_Density_Compute_Pipeline.md) ✅ — Wire 2D KDE and
@@ -807,11 +848,9 @@ integration, pipeline caching.
 - [GUP-382](GUP-382_Extract_Shared_Segment_NDC_Mapping.md) ✅ — Extract shared
   segment-to-NDC mapping helper to reduce duplication between line and area
   builders. Deps: GUP-364 ✅.
-- [GUP-384](GUP-384_Area_Builder_Stroke_Width_NDC_Conversion.md) 📋 — Convert
-  area segment stroke width from pixels to NDC (currently ~75% of the viewport
-  wide) and share the conversion with the line builder. Deps: GUP-379 ✅,
-  GUP-382 ✅.
-- [GUP-385](GUP-385_Shared_Point_NDC_Mapping_For_Accessors.md) 💡 — Reuse the
+- [GUP-384](GUP-384_Area_Builder_Stroke_Width_NDC_Conversion.md) ⏸ — Folded
+  into [GUP-393](GUP-393_Mark_Fidelity_Fixes.md); implement GUP-393 instead.
+- [GUP-385](GUP-385_Shared_Point_NDC_Mapping_For_Accessors.md) ⏸ — Reuse the
   shared data→NDC position mapper in `apply_accessors_to_selection()` for
   scatter/bar `center` bindings. Deps: GUP-362 ✅, GUP-382 ✅.
 
@@ -867,7 +906,7 @@ validation.
   builder API (capacity, mode, backpressure) with Selection::stream()
   integration on top of GUP-015's low-level primitives. Deps: GUP-002 ✅,
   GUP-015 ✅.
-- [GUP-307](GUP-307_Streaming_Render_Pipeline_Integration.md) 💡 — Auto-flush
+- [GUP-307](GUP-307_Streaming_Render_Pipeline_Integration.md) ⏸ — Auto-flush
   and render pipeline integration for DataStream-attached Selections. Deps:
   GUP-244 ✅.
 - [GUP-034](GUP-034_GPU_Memory_Profiling_Tools.md) ✅ — During GUP-002
@@ -975,8 +1014,9 @@ layouts, and 3D visualization.
 - [GUP-313](GUP-313_Interactive_Treemap_Drill_Down.md) 📋 — Click-to-zoom
   treemap drill-down using TreemapCell node indices. Deps: GUP-260 ✅, GUP-012
   ✅.
-- [GUP-370](GUP-370_GPU_Timestamp_Query_Profiling.md) 📋 — GPU timestamp query
-  instrumentation for treemap compute passes. Deps: GUP-312 ✅, GUP-015 ✅.
+- [GUP-370](GUP-370_GPU_Timestamp_Query_Profiling.md) 📋 — Rescoped: instrument
+  treemap compute passes with the existing `GpuTimer` (GUP-292), instead of
+  building a new timing type. Deps: GUP-312 ✅, GUP-292 ✅.
 - [GUP-371](GUP-371_Squarified_GPU_Treemap_Hybrid.md) 💡 — Hybrid GPU/CPU
   Squarified treemap layout for large trees. Deps: GUP-312 ✅, GUP-260 ✅.
 - [GUP-372](GUP-372_TreemapResult_Direct_Bind.md) 📋 — Wire GPU-resident
@@ -1010,13 +1050,13 @@ PNG, HTML), and platform targets.
   Deps: GUP-262 ✅.
 - [GUP-262B](GUP-262B_Bevy_018_Upgrade.md) ✅ — Upgrade gup-bevy to Bevy 0.18
   when the main gup crate upgrades to wgpu 27. Deps: GUP-262 ✅.
-- [GUP-262C](GUP-262C_Bevy_Direct_GpuImage_Rendering.md) 💡 — Render-graph node
+- [GUP-262C](GUP-262C_Bevy_Direct_GpuImage_Rendering.md) ⏸ — Render-graph node
   for direct GpuImage rendering, eliminating the intermediate GPU copy. Deps:
   GUP-262A ✅.
-- [GUP-262D](GUP-262D_Multi_Chart_Batched_Rendering.md) 💡 — Batch multiple
+- [GUP-262D](GUP-262D_Multi_Chart_Batched_Rendering.md) ⏸ — Batch multiple
   chart renders into a single GPU submission for dashboard use cases. Deps:
   GUP-262A ✅.
-- [GUP-262E](GUP-262E_SyncToRenderWorld_Migration.md) 💡 — Migrate gup-bevy
+- [GUP-262E](GUP-262E_SyncToRenderWorld_Migration.md) ⏸ — Migrate gup-bevy
   extract system from spawn+cleanup to Bevy 0.18's SyncToRenderWorld for
   persistent render-world entity mapping. Deps: GUP-262B ✅.
 - [GUP-263](GUP-263_egui_Integration.md) ✅ — GupWidget implementing
@@ -1028,10 +1068,10 @@ PNG, HTML), and platform targets.
 - [GUP-263B](GUP-263B_Shared_wgpu_Device_egui.md) ✅ — Shared wgpu device
   between egui and Gup for zero-copy texture transfer when gup upgrades to
   wgpu 27. Deps: GUP-263 ✅.
-- [GUP-263C](GUP-263C_Frame_Time_Benchmark_egui.md) 💡 — Frame-time benchmark
+- [GUP-263C](GUP-263C_Frame_Time_Benchmark_egui.md) ⏸ — Frame-time benchmark
   comparing pixel-buffer fallback vs zero-copy shared-device paths in gup-egui.
   Deps: GUP-263B ✅.
-- [GUP-263D](GUP-263D_Pipeline_Format_Validation.md) 💡 — Debug-mode assertions
+- [GUP-263D](GUP-263D_Pipeline_Format_Validation.md) ⏸ — Debug-mode assertions
   that verify pipeline format matches render target format at draw time. Deps:
   GUP-263B ✅.
 - [GUP-264](GUP-264_Tauri_Integration.md) ✅ — gup-tauri example running Gup
@@ -1054,10 +1094,10 @@ PNG, HTML), and platform targets.
   rendering (circles, rectangles, lines) through the PNG export path so exported
   images include the full visualization, not just axes and grid. Deps: GUP-268
   ✅.
-- [GUP-268B](GUP-268B_Auto_Prepare_Selection_PNG_Export.md) 💡 — Add convenience
+- [GUP-268B](GUP-268B_Auto_Prepare_Selection_PNG_Export.md) ⏸ — Add convenience
   API that auto-prepares the Selection as part of the PNG export call, reducing
   manual `prepare_render` boilerplate. Deps: GUP-268A ✅.
-- [GUP-268C](GUP-268C_Text_Label_PNG_Export.md) 💡 — Wire the SDF text rendering
+- [GUP-268C](GUP-268C_Text_Label_PNG_Export.md) ⏸ — Wire the SDF text rendering
   pipeline through the PNG export path so exported images include titles, axis
   labels, and tick labels. Deps: GUP-268A ✅.
 - [GUP-269](GUP-269_HTML_Export.md) ✅ — HtmlExporter generating a single-file
@@ -1070,10 +1110,10 @@ PNG, HTML), and platform targets.
   build auto-discovery and JavaScript↔WASM data passing so the exported HTML
   renders interactively without manual setup. Deps: GUP-269 ✅, GUP-172 ✅,
   GUP-269A ✅.
-- [GUP-269C](GUP-269C_ES_Module_WASM_Loading_Strategy.md) 📋 — Add ES module
+- [GUP-269C](GUP-269C_ES_Module_WASM_Loading_Strategy.md) ⏸ — Add ES module
   dynamic import loading strategy for wasm-bindgen modules, enabling direct
   JS→WASM function calls in exported HTML. Deps: GUP-269B ✅.
-- [GUP-269D](GUP-269D_WASM_Auto_Render_On_Page_Load.md) 📋 — Auto-detect chart
+- [GUP-269D](GUP-269D_WASM_Auto_Render_On_Page_Load.md) ⏸ — Auto-detect chart
   data in the DOM and render on WASM module load, making exported HTML fully
   interactive without additional JS. Deps: GUP-269B ✅.
 
@@ -1089,15 +1129,15 @@ iOS and Android platform support for GPU-accelerated Gup charts.
   lifecycle, JNI NDK wrapper, MotionEvent→InteractionEvent bridge, and APK
   example for Kotlin/Java embedding. Deps: GUP-004 ✅, GUP-039 ✅, GUP-182 ✅,
   GUP-013 📋, GUP-270 ✅.
-- [GUP-272](GUP-272_iOS_Chart_Rendering_Integration.md) 📋 — Wire chart builder
+- [GUP-272](GUP-272_iOS_Chart_Rendering_Integration.md) ⏸ — Wire chart builder
   output into `gup_render_frame()` for actual data visualisation on iOS. Deps:
   GUP-270 ✅, GUP-013 📋, GUP-018 ✅.
-- [GUP-273](GUP-273_cbindgen_FFI_Integration.md) 📋 — Auto-generate C headers
+- [GUP-273](GUP-273_cbindgen_FFI_Integration.md) ⏸ — Auto-generate C headers
   from gup-ios (and gup-android) using cbindgen. Deps: GUP-270 ✅.
 - [GUP-274](GUP-274_iOS_Real_Device_Testing.md) 📋 — Document real-device
   testing workflow, performance baselines, and Simulator-vs-device caveats.
   Deps: GUP-270 ✅, GUP-272 📋.
-- [GUP-353](GUP-353_Android_Chart_Rendering_Integration.md) 📋 — Wire chart
+- [GUP-353](GUP-353_Android_Chart_Rendering_Integration.md) ⏸ — Wire chart
   builder output into `gup_render_frame()` for actual data visualisation on
   Android. Deps: GUP-271 ✅, GUP-018 ✅, GUP-013 📋.
 - [GUP-354](GUP-354_Android_Real_Device_Testing.md) 📋 — Document Android
@@ -1162,7 +1202,7 @@ API reference generation, tutorials, and example gallery.
 - [GUP-286](GUP-286_Line_Chart_Data_Mark_Rendering.md) ✅ — Wire line-mark
   rendering into `LineChartBuilder` so that `render_to_png()` produces visible
   line segments. Deps: GUP-284 ✅.
-- [GUP-287](GUP-287_Dynamic_Data_Refresh.md) 📋 — Add a `refresh_data()` method
+- [GUP-287](GUP-287_Dynamic_Data_Refresh.md) ⏸ — Add a `refresh_data()` method
   to `ComposedChart` for updating data and re-rendering without rebuilding.
   Deps: GUP-284 ✅.
 
@@ -1227,6 +1267,6 @@ API reference generation, tutorials, and example gallery.
 - [GUP-386](GUP-386_Qualified_Type_Paths_In_Shader_Macros.md) 📋 — Accept
   qualified type paths (e.g. `gup::shader_function::Vec3`) in
   `#[wgsl_function]`, `#[shader_fn]` and the derives. Deps: GUP-377 ✅.
-- [GUP-387](GUP-387_Fix_PreExisting_Markdown_Lint_Violations.md) 📋 — Fix the
-  pre-existing `mdl`/`prettier` violations that make the pre-commit hook fail on
-  every commit. No deps.
+- [GUP-387](GUP-387_Fix_PreExisting_Markdown_Lint_Violations.md) ✅ (Superseded)
+  — Resolved by the 2026-10-04 backlog-hygiene merge; verified `mdl`/`prettier`
+  both exit 0 on `main`. No deps.

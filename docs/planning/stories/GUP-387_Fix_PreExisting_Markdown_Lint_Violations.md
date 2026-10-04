@@ -2,8 +2,14 @@
 
 ## Story Overview
 
-**Initiative**: Developer Experience **Status**: 📋 Planned **Created**:
-2026-10-04
+**Initiative**: Developer Experience **Status**: ✅ Complete (Superseded)
+**Created**: 2026-10-04 **Closed**: 2026-10-04
+
+**Closed as superseded**: resolved by the 2026-10-04 merge of the
+backlog-hygiene branch, which ran `prettier --write` and fixed the outstanding
+`mdl` violations across `docs/`. Verified on `main` on 2026-10-04:
+`mdl --git-recurse .` and `prettier --check "**/*.md"` both exit 0. See
+[STRATEGIC_REVIEW_2026-10.md](../STRATEGIC_REVIEW_2026-10.md#backlog-triage).
 
 ## Context
 
@@ -29,19 +35,20 @@ checks as well. GUP-377 had to do this for every commit.
 
 ## Acceptance Criteria
 
-- [ ] `mdl --git-recurse .` exits 0 on `main`.
-- [ ] `prettier --check "**/*.md"` exits 0 on `main`.
-- [ ] `mask all-check` passes on a clean checkout.
-- [ ] Story-worker guidance notes that `mask all-fix` must be run before
-      committing story documents, so violations do not come back.
+- [x] `mdl --git-recurse .` exits 0 on `main`.
+- [x] `prettier --check "**/*.md"` exits 0 on `main`.
+- [x] `mask all-check` passes on a clean checkout.
+- [x] Story-worker guidance notes that `mask all-fix` must be run before
+      committing story documents, so violations do not come back (already
+      present in `.github/agents/story-worker.md`).
 
 ## Technical Tasks
 
-- [ ] Run `prettier --write` across `docs/`.
-- [ ] Fix MD028 by joining blockquote paragraphs or removing the blank line
+- [x] Run `prettier --write` across `docs/`.
+- [x] Fix MD028 by joining blockquote paragraphs or removing the blank line
       between consecutive quotes.
-- [ ] Fix MD013 and MD038 by hand where prettier cannot.
-- [ ] If a rule conflicts with prettier, consider excluding it in `.mdl.style`
+- [x] Fix MD013 and MD038 by hand where prettier cannot.
+- [x] If a rule conflicts with prettier, consider excluding it in `.mdl.style`
       and give the reason in a comment.
 
 ## Dependencies
@@ -56,7 +63,16 @@ checks as well. GUP-377 had to do this for every commit.
 
 ## Success Metrics
 
-- [ ] No `--no-verify` commits needed for docs-only changes.
+- [x] No `--no-verify` commits needed for docs-only changes.
+
+## Retrospective
+
+Closed without separate implementation: the 2026-10-04 backlog-hygiene branch
+(merged the same day, ahead of this story being picked up) ran
+`prettier --write` across `docs/` and fixed the pre-existing `mdl` violations as
+part of its own cleanup. Re-verified independently while triaging the October
+2026 strategic review: `mdl --git-recurse .` and `prettier --check "**/*.md"`
+both exit 0 on `main`. No further work needed.
 
 ## Risk Assessment
 
@@ -66,6 +82,6 @@ checks as well. GUP-377 had to do this for every commit.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied
-- [ ] `mask all-check` passes
-- [ ] Story status updated to ✅ Complete
+- [x] All Acceptance Criteria are satisfied
+- [x] `mask all-check` passes
+- [x] Story status updated to ✅ Complete (Superseded)

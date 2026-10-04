@@ -48,11 +48,17 @@ ls docs/planning/stories | grep -oE '^GUP-[0-9]+_' | sort | uniq -d
 grep -oE '^- \[GUP-[0-9A-Z]+\]' docs/planning/stories/INDEX.md | sort | uniq -d
 ```
 
-Current max story ID: **GUP-382**. `GUP-383` is reserved by the companion guard
-story, so proposed new IDs below start at **GUP-384**. These numbers are
-illustrative — re-run the `ls ... | sort -t- -k2 -n | tail -1` command
-immediately before executing the renumbering, since other stories may have been
-created in the interim, and shift the proposed numbers up accordingly.
+**New IDs are not pre-allocated by this story.** An earlier revision proposed a
+concrete numbering starting at GUP-384, but GUP-384 through GUP-387 were
+allocated to other stories before this renumbering was picked up (and more IDs
+have been allocated since, for the October 2026 strategic-review wave-1
+stories), which would have made the hard-coded table wrong the moment any of
+those stories landed. Instead: **at implementation time**, re-run
+`ls docs/planning/stories | grep -oP 'GUP-\d+' | sort -t- -k2 -n | tail -1` to
+find the then-current max ID, and allocate new IDs sequentially from `max + 1`
+for every row below marked "renumber" in table order (top to bottom). The
+table's job is to record which file in each collision group keeps its ID and
+which must be renumbered — not which specific number each gets.
 
 "Keep" marks the file that retains its current ID. The rule applied: if the
 group has exactly one `✅ Complete` entry, keep it (completed stories are the
@@ -64,81 +70,81 @@ whichever file appears first in INDEX.md document order and renumber the rest.
 | Old ID  | File                                                    | Status          | Keep / New ID                        |
 | ------- | ------------------------------------------------------- | --------------- | ------------------------------------ |
 | GUP-013 | `GUP-013_Event_Handling_System.md`                      | ✅              | **Keep**                             |
-| GUP-013 | `GUP-013_GPU_Shader_Position_Precision_Fix.md`          | ✅              | GUP-384                              |
+| GUP-013 | `GUP-013_GPU_Shader_Position_Precision_Fix.md`          | ✅              | renumber                             |
 | GUP-014 | `GUP-014_Interaction_Performance_Optimization.md`       | ✅              | **Keep**                             |
-| GUP-014 | `GUP-014_Performance_Validation.md`                     | ✅              | GUP-385                              |
+| GUP-014 | `GUP-014_Performance_Validation.md`                     | ✅              | renumber                             |
 | GUP-015 | `GUP-015_GPU_Debugging_Tools.md`                        | ✅              | **Keep**                             |
-| GUP-015 | `GUP-015_Real_Time_Data_Streaming.md`                   | ✅              | GUP-386                              |
+| GUP-015 | `GUP-015_Real_Time_Data_Streaming.md`                   | ✅              | renumber                             |
 | GUP-053 | `GUP-053_Advanced_Shader_Function_Library.md`           | ✅              | **Keep**                             |
-| GUP-053 | `GUP-053_Shader_Pipeline_Performance_Optimization.md`   | ✅              | GUP-387                              |
+| GUP-053 | `GUP-053_Shader_Pipeline_Performance_Optimization.md`   | ✅              | renumber                             |
 | GUP-054 | `GUP-054_Existing_Solutions_Analysis.md`                | ✅              | **Keep**                             |
-| GUP-054 | `GUP-054_Shader_Function_Performance_Optimization.md`   | ✅              | GUP-388                              |
-| GUP-054 | `GUP-054_Shader_Function_Type_Safety_Enhancement.md`    | ✅              | GUP-389                              |
+| GUP-054 | `GUP-054_Shader_Function_Performance_Optimization.md`   | ✅              | renumber                             |
+| GUP-054 | `GUP-054_Shader_Function_Type_Safety_Enhancement.md`    | ✅              | renumber                             |
 | GUP-065 | `GUP-065_Documentation_Macro_First_API.md`              | ✅              | **Keep**                             |
-| GUP-065 | `GUP-065_Procedural_Macro_Performance_Optimization.md`¹ | ✅              | GUP-390                              |
+| GUP-065 | `GUP-065_Procedural_Macro_Performance_Optimization.md`¹ | ✅              | renumber                             |
 | GUP-076 | `GUP-076_GPU_Occlusion_Culling.md`                      | ✅              | **Keep**                             |
-| GUP-076 | `GUP-076_Spatial_Index_Bind_Group_Layout_Fix.md`        | ✅              | GUP-391                              |
+| GUP-076 | `GUP-076_Spatial_Index_Bind_Group_Layout_Fix.md`        | ✅              | renumber                             |
 | GUP-077 | `GUP-077_Compute_Shader_Instance_Filtering.md`          | ✅              | **Keep**                             |
-| GUP-077 | `GUP-077_Performance_Benchmarking_Suite.md`             | ✅              | GUP-392                              |
+| GUP-077 | `GUP-077_Performance_Benchmarking_Suite.md`             | ✅              | renumber                             |
 | GUP-086 | `GUP-086_Observable_Plot_Migration_Guide.md`            | ✅              | **Keep**                             |
-| GUP-086 | `GUP-086_Web_Profiling_Dashboard.md`                    | ✅              | GUP-393                              |
+| GUP-086 | `GUP-086_Web_Profiling_Dashboard.md`                    | ✅              | renumber                             |
 | GUP-096 | `GUP-096_Grid_Performance_Benchmarking.md`              | ✅              | **Keep** (real story)                |
 | GUP-096 | `GUP-096_performance_report.md`²                        | n/a             | not a story — rename, don't renumber |
 | GUP-140 | `GUP-140_Selection_API_Parallel_Output.md`              | ✅              | **Keep**                             |
-| GUP-140 | `GUP-140_Storage_Buffer_Keyframes.md`                   | ✅              | GUP-394                              |
+| GUP-140 | `GUP-140_Storage_Buffer_Keyframes.md`                   | ✅              | renumber                             |
 | GUP-147 | `GUP-147_Box_Plot_Visualization.md`                     | ✅              | **Keep**                             |
-| GUP-147 | `GUP-147_GPU_Memory_Bandwidth_Profiling.md`             | ✅              | GUP-395                              |
+| GUP-147 | `GUP-147_GPU_Memory_Bandwidth_Profiling.md`             | ✅              | renumber                             |
 | GUP-148 | `GUP-148_Fix_Statistics_Shader_Bug.md`                  | ✅              | **Keep**                             |
-| GUP-148 | `GUP-148_Profiling_Data_Export_Visualization.md`        | ✅              | GUP-396                              |
+| GUP-148 | `GUP-148_Profiling_Data_Export_Visualization.md`        | ✅              | renumber                             |
 | GUP-149 | `GUP-149_Automatic_Device_Loss_Detection.md`            | ✅              | **Keep**                             |
-| GUP-149 | `GUP-149_Box_Plot_GPU_Rendering.md`                     | ✅              | GUP-397                              |
+| GUP-149 | `GUP-149_Box_Plot_GPU_Rendering.md`                     | ✅              | renumber                             |
 | GUP-150 | `GUP-150_Recovery_Metrics_and_Analytics.md`             | ✅              | **Keep**                             |
-| GUP-150 | `GUP-150_Statistical_Mark_Builder_API.md`               | ✅              | GUP-398                              |
+| GUP-150 | `GUP-150_Statistical_Mark_Builder_API.md`               | ✅              | renumber                             |
 | GUP-151 | `GUP-151_Multi_Category_Box_Plots.md`                   | ✅              | **Keep**                             |
-| GUP-151 | `GUP-151_Surface_Configuration_Caching.md`              | ✅              | GUP-399                              |
+| GUP-151 | `GUP-151_Surface_Configuration_Caching.md`              | ✅              | renumber                             |
 | GUP-233 | `GUP-233_Fix_Flaky_Registry_Scalability_Test.md`        | ✅              | **Keep**                             |
-| GUP-233 | `GUP-233_Winit_Touch_Event_Integration.md`              | ✅              | GUP-400                              |
+| GUP-233 | `GUP-233_Winit_Touch_Event_Integration.md`              | ✅              | renumber                             |
 | GUP-234 | `GUP-234_Adaptive_Build_Coverage_Budget.md`             | ✅              | **Keep**                             |
-| GUP-234 | `GUP-234_Touch_Lasso_Selection.md`                      | ✅              | GUP-401                              |
+| GUP-234 | `GUP-234_Touch_Lasso_Selection.md`                      | ✅              | renumber                             |
 | GUP-272 | `GUP-272_WCAG_2_1_AA_Compliance_Validation.md`          | ✅              | **Keep**                             |
-| GUP-272 | `GUP-272_iOS_Chart_Rendering_Integration.md`            | 📋              | GUP-402                              |
+| GUP-272 | `GUP-272_iOS_Chart_Rendering_Integration.md`            | 📋              | renumber                             |
 | GUP-273 | `GUP-273_Geographic_Projection_Shader_System.md`        | ✅              | **Keep**                             |
-| GUP-273 | `GUP-273_cbindgen_FFI_Integration.md`                   | 📋              | GUP-403                              |
+| GUP-273 | `GUP-273_cbindgen_FFI_Integration.md`                   | 📋              | renumber                             |
 | GUP-274 | `GUP-274_Map_Mark_Rendering.md`                         | ✅              | **Keep**                             |
-| GUP-274 | `GUP-274_iOS_Real_Device_Testing.md`                    | 📋              | GUP-404                              |
+| GUP-274 | `GUP-274_iOS_Real_Device_Testing.md`                    | 📋              | renumber                             |
 | GUP-277 | `GUP-277_GPU_Render_Loop_Transition_Integration.md`     | ✅              | **Keep**                             |
-| GUP-277 | `GUP-277_Zoom_Pan_Interactions.md`                      | ✅              | GUP-405                              |
+| GUP-277 | `GUP-277_Zoom_Pan_Interactions.md`                      | ✅              | renumber                             |
 | GUP-278 | `GUP-278_Staggered_Transition_Delays.md`                | ✅              | **Keep**                             |
-| GUP-278 | `GUP-278_Brush_Mark_Rectangular_Selection.md`           | ✅              | GUP-406                              |
+| GUP-278 | `GUP-278_Brush_Mark_Rectangular_Selection.md`           | ✅              | renumber                             |
 | GUP-283 | `GUP-283_Event_Coalescing.md`                           | ✅              | **Keep**                             |
-| GUP-283 | `GUP-283_Fix_WASM_Build_StreamingBuffer.md`             | ✅              | GUP-407                              |
+| GUP-283 | `GUP-283_Fix_WASM_Build_StreamingBuffer.md`             | ✅              | renumber                             |
 | GUP-284 | `GUP-284_Unified_Vec2_Type.md`                          | ✅              | **Keep**                             |
-| GUP-284 | `GUP-284_Unify_Chart_Builder_Data_Layer.md`             | ✅              | GUP-408                              |
+| GUP-284 | `GUP-284_Unify_Chart_Builder_Data_Layer.md`             | ✅              | renumber                             |
 | GUP-285 | `GUP-285_BrushMark_GPU_Overlay_Rendering.md`            | ✅              | **Keep**                             |
-| GUP-285 | `GUP-285_High_Resolution_GeoJSON_Streaming.md`          | 📋              | GUP-409                              |
-| GUP-285 | `GUP-285_Legend_Rendering_System.md`                    | 💡              | GUP-410                              |
-| GUP-285 | `GUP-285_Tauri_Streaming_Updates.md`                    | 📋              | GUP-411                              |
-| GUP-285 | `GUP-285_Fix_WASM_Integration_Test_Compilation.md`³     | 📋              | GUP-412                              |
+| GUP-285 | `GUP-285_High_Resolution_GeoJSON_Streaming.md`          | 📋              | renumber                             |
+| GUP-285 | `GUP-285_Legend_Rendering_System.md`                    | 💡              | renumber                             |
+| GUP-285 | `GUP-285_Tauri_Streaming_Updates.md`                    | 📋              | renumber                             |
+| GUP-285 | `GUP-285_Fix_WASM_Integration_Test_Compilation.md`³     | 📋              | renumber                             |
 | GUP-286 | `GUP-286_GPU_Accelerated_Brush_Region_Query.md`         | ✅              | **Keep**                             |
-| GUP-286 | `GUP-286_Line_Chart_Data_Mark_Rendering.md`             | ✅              | GUP-413                              |
-| GUP-286 | `GUP-286_Per_Bar_Instance_Buffer_Fill.md`               | 💡              | GUP-414                              |
-| GUP-286 | `GUP-286_Spherical_Polygon_Simplification.md`           | 📋              | GUP-415                              |
+| GUP-286 | `GUP-286_Line_Chart_Data_Mark_Rendering.md`             | ✅              | renumber                             |
+| GUP-286 | `GUP-286_Per_Bar_Instance_Buffer_Fill.md`               | 💡              | renumber                             |
+| GUP-286 | `GUP-286_Spherical_Polygon_Simplification.md`           | 📋              | renumber                             |
 | GUP-287 | `GUP-287_LinkedSelection_Wrapper_Type.md`               | ✅              | **Keep**                             |
-| GUP-287 | `GUP-287_GPU_Side_Choropleth_Recolouring.md`            | ✅              | GUP-416                              |
-| GUP-287 | `GUP-287_Dynamic_Data_Refresh.md`                       | 📋              | GUP-417                              |
+| GUP-287 | `GUP-287_GPU_Side_Choropleth_Recolouring.md`            | ✅              | renumber                             |
+| GUP-287 | `GUP-287_Dynamic_Data_Refresh.md`                       | 📋              | renumber                             |
 | GUP-288 | `GUP-288_GPU_Selection_Mask_Buffer.md`                  | ✅              | **Keep**                             |
-| GUP-288 | `GUP-288_Choropleth_Tooltip_Hover_Interaction.md`       | ✅              | GUP-418                              |
-| GUP-288 | `GUP-288_Area_Chart_Data_Mark_Rendering.md`⁴            | ✅ (superseded) | GUP-419, or delete                   |
+| GUP-288 | `GUP-288_Choropleth_Tooltip_Hover_Interaction.md`       | ✅              | renumber                             |
+| GUP-288 | `GUP-288_Area_Chart_Data_Mark_Rendering.md`⁴            | ✅ (superseded) | renumber, or delete                  |
 | GUP-289 | `GUP-289_LinkedSelection_GPU_Integration.md`            | ✅              | **Keep**                             |
-| GUP-289 | `GUP-289_Bar_Chart_Builder_Prepare_Render_Bound.md`     | ✅              | GUP-420                              |
+| GUP-289 | `GUP-289_Bar_Chart_Builder_Prepare_Render_Bound.md`     | ✅              | renumber                             |
 | GUP-312 | `GUP-312_GPU_Compute_Treemap.md`                        | ✅              | **Keep**                             |
-| GUP-312 | `GUP-312_Full_GPU_Quadtree_Construction.md`             | 📋              | GUP-421                              |
+| GUP-312 | `GUP-312_Full_GPU_Quadtree_Construction.md`             | 📋              | renumber                             |
 | GUP-313 | `GUP-313_Adaptive_Barnes_Hut_Theta_Tuning.md`           | ✅              | **Keep**                             |
-| GUP-313 | `GUP-313_Interactive_Treemap_Drill_Down.md`             | 📋              | GUP-422                              |
+| GUP-313 | `GUP-313_Interactive_Treemap_Drill_Down.md`             | 📋              | renumber                             |
 | GUP-314 | `GUP-314_Windowed_Treemap_Rendering.md`                 | ✅              | **Keep**                             |
-| GUP-314 | `GUP-314_Shared_Device_Layout_Engine.md`                | 📋              | GUP-423                              |
+| GUP-314 | `GUP-314_Shared_Device_Layout_Engine.md`                | 📋              | renumber                             |
 | GUP-315 | `GUP-315_3D_Axis_and_Grid.md`                           | ✅              | **Keep**                             |
-| GUP-315 | `GUP-315_Graph_Node_Label_Rendering.md`                 | 📋              | GUP-424                              |
+| GUP-315 | `GUP-315_Graph_Node_Label_Rendering.md`                 | 📋              | renumber                             |
 
 ¹ Not referenced in INDEX.md at all — an orphan. Renumbering must also add a
 missing INDEX.md entry for it (see Technical Tasks).
@@ -160,8 +166,9 @@ exactly what GUP-383 exists to prevent).
 has no retrospective or commit history tied to its ID; **deleting** the file and
 its INDEX.md entry (replacing it with a one-line "superseded, see
 GUP-379/GUP-364" mention under the GUP-379 entry) is simpler than renumbering it
-and loses nothing. Renumbering to GUP-419 remains a valid fallback if the
-maintainer prefers to keep a historical record of every planned story.
+and loses nothing. Renumbering it (allocating a new ID at implementation time,
+per the inventory note above) remains a valid fallback if the maintainer prefers
+to keep a historical record of every planned story.
 
 ## Acceptance Criteria
 
@@ -194,7 +201,8 @@ maintainer prefers to keep a historical record of every planned story.
       describing what happened at the time — an inline note is added clarifying
       the renumbering (retrospectives should not be silently rewritten to imply
       the new ID existed at the time; add a parenthetical, e.g. "GUP-285
-      (renumbered to GUP-412)").
+      (renumbered to GUP-NNN during GUP-374 cleanup)" using the ID actually
+      allocated at implementation time).
 - [ ] Git commit messages that reference an old ID are **not** rewritten (git
       history is immutable). Where a renamed story's own document would benefit
       from disambiguation against historical commit messages, add an "Formerly
@@ -214,11 +222,13 @@ maintainer prefers to keep a historical record of every planned story.
 
 ## Technical Tasks
 
-- [ ] Re-verify the duplicate inventory above is still accurate (max ID may have
-      advanced past GUP-382 since this story was written).
+- [ ] Re-verify the duplicate inventory above is still accurate and re-run
+      `ls docs/planning/stories | grep -oP 'GUP-\d+' | sort -t- -k2 -n | tail -1`
+      to find the current max ID before allocating any new numbers (the max has
+      advanced past GUP-382 since this story was written, and will keep moving
+      as other stories are created).
 - [ ] Decide the disposition of GUP-288 (Area Chart Data Mark Rendering):
-      delete, or renumber to GUP-419. Record the decision in this story before
-      starting.
+      delete, or renumber. Record the decision in this story before starting.
 - [ ] For each row marked with a new ID: rename the file, update its `#`
       heading, update its own cross-references to other stories if any shifted.
 - [ ] Add a "Formerly numbered: GUP-NNN" line to each renamed file (per AC3).

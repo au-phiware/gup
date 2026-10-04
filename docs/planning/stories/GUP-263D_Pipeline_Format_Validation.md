@@ -2,7 +2,11 @@
 
 ## Story Overview
 
-**Initiative**: Developer Experience **Status**: 💡 New **Created**: 2025-07-22
+**Initiative**: Developer Experience **Status**: ⏸ Parked **Created**:
+2025-07-22
+
+**Parked 2026-10-04**: pending strategic review tracks T2/T3/T5. See
+[STRATEGIC_REVIEW_2026-10.md](../STRATEGIC_REVIEW_2026-10.md#backlog-triage).
 
 ## Context
 

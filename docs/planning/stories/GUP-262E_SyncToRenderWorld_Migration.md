@@ -1,6 +1,10 @@
 # GUP-262E: Migrate gup-bevy to SyncToRenderWorld
 
-**Initiative**: Ecosystem Integration **Status**: 💡 New **Created**: 2025-07-18
+**Initiative**: Ecosystem Integration **Status**: ⏸ Parked **Created**:
+2025-07-18
+
+**Parked 2026-10-04**: pending strategic review tracks T2/T3/T5. See
+[STRATEGIC_REVIEW_2026-10.md](../STRATEGIC_REVIEW_2026-10.md#backlog-triage).
 
 ## Overview
 
