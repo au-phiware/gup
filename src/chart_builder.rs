@@ -45,17 +45,11 @@ pub mod accessor;
 pub mod builders;
 pub mod colorbar;
 pub mod labels;
-pub mod optimized_accessor;
-pub mod pipeline_cache;
-pub mod shader_specialization;
 
 pub use accessor::*;
 pub use builders::*;
 pub use colorbar::*;
 pub use labels::*;
-pub use optimized_accessor::*;
-pub use pipeline_cache::*;
-pub use shader_specialization::*;
 
 use crate::RenderContext;
 use crate::axis::{
