@@ -61,8 +61,12 @@ a public module that dogfood can depend on by path.
 
 ## Technical Tasks
 
-- [ ] Decide where GUP-388's assertions live so an external crate can use them,
-      and record the decision.
+- [x] Decide where GUP-388's assertions live so an external crate can use them,
+      and record the decision. _Settled by GUP-388_: they live in
+      `crates/gup-visual-regression`, which has no `gup` dependency and no
+      workspace inheritance, so dogfood can depend on it by path. See the
+      GUP-388 retrospective section "How GUP-397 should consume this harness"
+      for the API mapping and the missing `measure` module.
 - [ ] Port each `Measure` variant in `suite.rs` to the shared assertions.
 - [ ] Move `pixels.rs`'s synthetic-image unit tests into the shared module if
       they add coverage.

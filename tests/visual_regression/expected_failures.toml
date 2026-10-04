@@ -134,7 +134,7 @@ tracking = "RFC-001 S14 (old builder deleted) / T5 port"
 case = "examples/gpu_debug_demo"
 check = "render"
 reason = "exits 1: ValidationError 'Failed to write CSV row: cannot serialize tuple container inside struct when writing headers from structs'"
-tracking = "GUP-390 (moves debug code behind a feature / into gup-debug)"
+tracking = "T7 gup-debug split (csv cannot write headers for array fields of a generic Serialize struct; GUP-390 only feature-gates this code)"
 
 [[expected]]
 case = "examples/pattern_pipeline_demo"

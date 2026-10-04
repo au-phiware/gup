@@ -295,7 +295,7 @@ output from RFC-001 step S0 onward, without a rewrite.
 - [x] At least 2-3 golden images attached or described (actually looked at) in
       the completion evidence.
 - [x] Story status updated to ✅ Complete in story file and INDEX.md.
-- [ ] Retrospective added to story document.
+- [x] Retrospective added to story document.
 
 ## Implementation Summary
 
@@ -388,3 +388,196 @@ structural checks and the tracked list are what flag broken output.
   well outside the plot rect (tracked: `marks_confined`).
 - `density.png`: one uniform light-blue fill over the entire canvas (tracked:
   `not_blank`, `marks_confined`).
+
+## Retrospective
+
+**Completed**: 2026-10-05
+
+### Key Technical Learnings
+
+#### Golden images record current output, not correct output
+
+- **Challenge**: Most builders render broken output today: no text at all, an
+  ignored or double-encoded fill colour, the area fan, solid-fill density. A
+  golden-only harness would either bless the breakage as "correct" or fail
+  everywhere.
+- **Solution**: Goldens are explicitly baselines of current output, and their
+  only job is to catch change. Correctness comes from the structural checks,
+  which run independently of the golden. Every broken case gets a tracked
+  `expected_failures.toml` entry naming the check, the observed symptom and the
+  owning story. Reconciliation is strict: an XPASS fails the test, so a fix
+  forces the entry to be removed.
+- **Pattern**: Separate "did it change?" (perceptual diff) from "is it right?"
+  (structural checks). Never let a golden stand in for correctness.
+
+#### Text checks must not be satisfiable by marks
+
+- **Challenge**: A naive "non-background pixels in the title region" check
+  passes when an overflowing mark (the area fan, the density fill) covers the
+  title band. This is exactly the review's "non-white pixel" failure mode again.
+- **Solution**: `text_present` is a glyph-coverage test. It counts pixels that
+  match the configured text colour (or a blend of it with the background) in a
+  sparse, glyph-like pattern. Guides (axis lines, tick marks) are subtracted
+  from text regions, so tick marks alone do not count as tick labels.
+- **Pattern**: Every structural check needs a negative unit test where a
+  _different_ kind of content fills the region.
+  `guides_alone_do_not_satisfy_text_regions` and the synthetic-image tests in
+  `checks.rs` are those tests.
+
+#### Example binaries dominate disk use
+
+- **Challenge**: With debug info, the 109 example binaries take about 160 MB
+  each (about 17 GB in total). On the shared ZFS pool this filled the disk for
+  every worker.
+- **Solution**: Build them with `CARGO_PROFILE_DEV_DEBUG=0`,
+  `CARGO_PROFILE_DEV_STRIP=true` and `CARGO_INCREMENTAL=0` into `target/smoke`:
+  about 29 MB each, 1.3 GB in total. `mask smoke-examples` and the CI job use
+  the same settings. Reusing that target dir for the full test suite also
+  avoided a second debug build.
+- **Pattern**: Any job that links every example must strip and drop debug info.
+  Panic messages remain readable without debug info.
+
+#### Examples write into their working directory
+
+- **Challenge**: The first smoke run dirtied tracked files
+  (`resource_graph.dot`, `resource_graph.json`) because examples ran with the
+  repo root as cwd.
+- **Solution**: Examples now run in a scratch cwd under the artefact dir.
+- **Pattern**: Never run untrusted or legacy binaries from the repo root. Check
+  `git status` after a smoke run.
+
+#### Backend variance is smaller than feared
+
+- **Challenge**: The goldens were blessed on a hardware GPU, but CI runs
+  lavapipe.
+- **Solution**: All 13 builder cases pass under forced lavapipe
+  (`VK_ICD_FILENAMES=.../lvp_icd.x86_64.json LIBGL_ALWAYS_SOFTWARE=1`) with the
+  default tolerance (per-pixel ΔE > 3.0, at most 0.25% of pixels differing). The
+  lavapipe renders were not byte-identical to the hardware renders, which
+  confirms a different backend produced them.
+- **Pattern**: Check a new golden suite under the CI backend locally before
+  trusting the CI job. Running the existing test binary directly with
+  `VK_ICD_FILENAMES` set costs no rebuild.
+
+### Architectural Decisions
+
+#### A separate workspace crate with no `gup` dependency
+
+- **Decision**: The harness is `crates/gup-visual-regression`
+  (`publish = false`; dependencies `png` and `toml_edit` only; no
+  `workspace = true` inheritance). It is not a module inside `gup`.
+- **Reasoning**: This makes AC1's target-agnostic requirement structural rather
+  than a matter of discipline. The same crate serves the old builders,
+  `gup-core` from RFC-001 S0a, and the detached dogfood crate.
+- **Trade-off**: One more workspace member, and `LayoutMetadata` must be derived
+  by each adapter instead of being read from chart internals.
+- **Future**: RFC-001 S0a's AC5 can build its PNG test on this crate directly
+  through a `gup-core` adapter.
+
+#### The adapter lives in the `gup` lib as `#[cfg(test)] pub(crate)`
+
+- **Decision**: `src/chart_builder/visual_regression.rs` and `builder_cases.rs`
+  live inside the lib's unit tests rather than in a `tests/` integration binary.
+- **Reasoning**: The adapter needs crate-private layout internals (chart area,
+  tick geometry), and the review's build-footprint guidance asks for fewer test
+  binaries. It is deleted wholesale at RFC-001 S14 along with the old path.
+- **Trade-off**: The builder goldens run as part of the 3,000-test lib binary
+  (filter: `cargo test --lib visual_regression`).
+
+#### Smoke test runs built binaries, not `cargo run`
+
+- **Decision**: One test binary enumerates example targets via `cargo metadata`
+  and executes `target/<profile>/examples/<name>` directly. The run itself is
+  `#[ignore]`d. The skip-list consistency test always runs.
+- **Reasoning**: `cargo run` per example would serialise on the build lock and
+  rebuild-check 109 times. Keeping the run ignored stops plain `cargo test` from
+  requiring every example binary.
+- **Trade-off**: Running the smoke test requires building the examples first
+  (`mask smoke-examples` does both).
+
+#### Time limits instead of frame counts
+
+- **Decision**: The configurable knob is a per-example timeout
+  (`GUP_SMOKE_TIMEOUT_SECS`), plus `GUP_SMOKE_WINDOW_SECS` for opt-in windowed
+  runs. AC4 asked for a frame count `N`.
+- **Reasoning**: `screenshot_request()` examples render exactly one offscreen
+  frame by design, and no other examples expose a frame-count hook.
+- **Future**: Revisit if RFC-001's `WindowTarget` gains a headless N-frame mode.
+
+### How GUP-397 should consume this harness
+
+- **Dependency**: In `dogfood/Cargo.toml`, add
+  `gup-visual-regression = { path = "../crates/gup-visual-regression" }`. The
+  crate has no `workspace = true` fields and no `gup` dependency, so the
+  detached dogfood workspace can use it by path without joining the parent
+  workspace or touching `pub(crate)` items. Only `png` and `toml_edit` enter
+  `dogfood/Cargo.lock`.
+- **Inputs**: Load renders with `RgbaImage::load_png` (or `from_png` for bytes)
+  instead of the `image` crate's type. Convert the manifest's fractional
+  `Region`s once with `PxRect::from_edges(fx0 * w, fy0 * h, ...)`. Where the
+  task knows its layout, build `LayoutMetadata::new(plot_rect)` with
+  `.with_text(role, rect, text_colour)`, `.with_guide(rect)`,
+  `.with_expected_color(label, colour)` and `.with_background(colour)`.
+- **Pass/fail checks**: `checks::check_text_present`, `check_color_present`,
+  `check_not_blank`, `check_marks_present` and `check_marks_confined`
+  (`Tolerances` controls thresholds) replace `count_ink`, `count_near` and
+  `non_background_fraction` where the manifest only asks a yes/no question.
+- **Missing pieces to add in GUP-397**:
+  - The harness has no public _measurement_ API. Its pixel classifiers
+    (`is_ink`, `is_glyph`) are private and the checks return
+    `Result<(), CheckFailure>`. Dogfood's manifest needs counts. Add a `measure`
+    module of pure counting functions (`count_ink`, `count_near`, `coverage`,
+    `count_hue`, `count_grey`, `count_runs`, `count_saturated`) and re-implement
+    the `check_*` functions on top of it, so there is one definition of "ink"
+    and "matches colour".
+  - Port dogfood's `background()` estimate as `measure::background()` for images
+    without a known background.
+  - Unify colour tolerance on ΔE (CIEDE2000, `Rgba8::delta_e`). Dogfood's
+    per-channel `u8` tolerances must be re-derived from fresh renders, never
+    loosened. GUP-397's AC2 already forbids a gap flipping to PASS.
+- **Gap tracking**: Keep dogfood's own `Gap`/XFAIL manifest. The harness's
+  `ExpectedFailures` is keyed by `(case, Check)` and can serve dogfood only if
+  its checks become named `Check` values. That is optional, not required.
+
+### Development Workflow Insights
+
+- The worktree-isolation guard refuses shell lines that combine `export`, `$PWD`
+  or heredoc text containing "git" with other commands. Small scripts in `/tmp`
+  that take the worktree path as an argument (`gup388_smoke.sh`,
+  `gup388_test.sh`) avoided it reliably.
+- Long pre-commit hooks (clippy over all targets) were run in the background
+  while disk was monitored. Two API-limit interruptions were survived by
+  re-orienting from `git status` and `git log main..HEAD`.
+- Merging `main` (GUP-394) mid-story was conflict-free: both stories touched
+  `maskfile.md` and `INDEX.md`, but in disjoint hunks.
+- The skip list has 45 entries, not the story's estimated 38. The estimate
+  missed examples using the `GupApp` shell and the never-exiting
+  `web_dashboard_demo` server.
+
+### Remaining gaps (tracked, no new stories)
+
+No follow-up stories were written. Every gap has an owner, and none is a quick
+fix:
+
+- **No text in PNG output** (`chart_builders/*` `text_present`): RFC-001 S0a.
+- **Colour policy** (double sRGB encoding, ignored fills): RFC-001 S3/S10.
+- **Area fan, density/heatmap blank or overflowing, choropleth with no raster
+  path**: replaced at RFC-001 S14 / T5 ports. Choropleth is parked
+  (GUP-366..369).
+- **`composite_*` first-frame panics**: RFC-001 S1 (one `Context`) and S11.
+- **`gpu_debug_demo`**: `csv` cannot write headers for array fields in the
+  generic `dump_buffer_csv<T: Serialize>`. A real fix needs a flattening
+  serializer, and `has_headers(false)` would silently drop headers. Owner: T7
+  gup-debug split. GUP-390 only feature-gates this code.
+- **`pattern_pipeline_demo`**: `LinuxAccessibility::initialize`
+  (`src/accessibility/platform.rs:212`) builds a tokio runtime and calls
+  `block_on` from inside the example's `#[tokio::main]` runtime. Old-path
+  accessibility is redesigned in RFC-001 open question 14 (T5) and feature-gated
+  in T7.
+- **`render_to_svg()` passes an empty mark slice** (noted in Context): this is
+  old-path export, replaced by RFC-001's export targets. It was not covered by
+  this harness because AC2 targets PNG.
+- **Windowed examples (skip list)**: shrinks via GUP-375/GUP-376 and RFC-001
+  S0b's `WindowTarget`.
+- **CI workflow**: `.github/workflows/visual-regression.yml` has not yet been
+  observed running on GitHub. Watch its first run after merge.
