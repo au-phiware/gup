@@ -30,6 +30,9 @@ Before touching any code, build a mental model of the project:
    commands, story management rules).
 4. Read `docs/planning/stories/INDEX.md` to understand the story landscape and
    dependencies.
+5. Read `docs/planning/STRATEGIC_REVIEW_2026-10.md` (or its successor) for the
+   current direction, tracks and parked work. Where it conflicts with older
+   docs, the strategic review wins.
 
 ---
 
@@ -61,6 +64,10 @@ Work iteratively in small, focused increments. For each increment:
 - Avoid references to D3 and Observable Plot in code files.
 - Prefer editing existing files over creating new ones.
 - Keep changes minimal and focused — don't over-engineer.
+- **Fix the class, not the instance.** When you fix a bug or wire something up
+  in one place (one builder, one mark, one export path), search for every
+  sibling with the same problem and fix them in this story. Only split out a
+  follow-up if the siblings are genuinely large.
 
 ### 2b. Test
 
@@ -92,9 +99,20 @@ Before marking the story complete, perform comprehensive checks:
    verify each one is satisfied. Check the boxes as you verify them.
 5. **Definition of Done review**: Walk through the Definition of Done checklist
    and verify each item.
-6. **Run relevant examples**: If the story involves visual output, run the
-   relevant example in the background, capture a screenshot with the
-   `screen-grabber` agent, then read the screenshot to verify it visually.
+6. **Verify what a user sees.** For anything that affects rendered output,
+   render a PNG (headless via
+   `GUP_SCREENSHOT_PATH=/tmp/<name>.png cargo run --example <name>`, or
+   `render_to_png()` in a test) and **read the image**. Confirm it is correct,
+   not merely non-blank: titles/labels present, geometry inside the plot area,
+   colours as specified. Prefer adding or updating a golden-image test so the
+   check persists. Ticking an AC without having looked at the output is not
+   acceptable.
+7. **Run, don't just compile, touched examples**: every example that exercises
+   code you changed must run without panicking (headless for a few frames is
+   enough).
+8. **Windowed examples**: if headless capture is not possible, run the example
+   in the background, capture a screenshot with the `screen-grabber` agent, then
+   read the screenshot to verify it visually.
 
    ```bash
    # Launch the example and grab its PID
@@ -117,7 +135,8 @@ Before marking the story complete, perform comprehensive checks:
 ## Phase 4: Complete the Story
 
 1. Update the story document:
-   - Set status to `✅ Complete` with today's date.
+   - Set status to `✅ Complete` with today's date. Get dates from `date -I`;
+     never guess or copy a date from another document.
    - Add an **Implementation Summary** section (if not already present) listing
      what was implemented, key files changed, and test counts.
 2. Update `docs/planning/stories/INDEX.md`:
@@ -169,6 +188,12 @@ If during implementation you discovered areas that need dedicated stories:
 
 For any follow-up stories identified:
 
+0. **Check before writing.** Search `INDEX.md` and the code for existing
+   coverage, and check the strategic review's parked list. Do not write
+   follow-ups that extend parked areas; note them in the retro instead. If the
+   fix is under ~30 minutes, do it in this story rather than writing a
+   follow-up. Allocate IDs from the highest existing number (re-check right
+   before writing; other agents may be working concurrently).
 1. Create full story files in `docs/planning/stories/` following the existing
    format (Overview, Context, User Story, Acceptance Criteria, Technical Tasks,
    Dependencies, Testing Strategy, Success Metrics, Risk Assessment, Definition
@@ -211,9 +236,14 @@ State your recommendation clearly with reasoning.
 
 - **No D3/Observable Plot references** in code files.
 - **GPU tests**: Always use `--test-threads=1`.
-- **Quality gate**: `mask all-fix` must pass before every commit.
+- **Quality gate**: `mask all-fix` must pass before every commit. **Never use
+  `git commit --no-verify`.** If the pre-commit hook fails for reasons outside
+  your story, stop and report it in your final output rather than bypassing it.
 - **Small commits**: Commit after each logical increment, not one big commit.
-- **wgpu version**: Do not downgrade wgpu. The project requires v26.
+- **wgpu version**: Do not downgrade wgpu.
+- **Breaking changes are allowed** (pre-alpha). Prefer deleting or replacing a
+  wrong API over keeping it for backward compatibility. Never leave silent no-op
+  methods or placeholder return values; delete them or return an error.
 - **Existing patterns**: Follow the conventions below — especially around error
   handling, enum-over-trait-objects, configuration structs, and the single
   render pass pattern.
@@ -253,25 +283,15 @@ object safety rules. Consider:
 2. Use enum-based approach for known variants
 3. Use associated types instead of generic parameters
 
-### Fluent APIs with Backward Compatibility
+### Fluent APIs
 
-When extending APIs, maintain backward compatibility while providing new
-convenience methods:
+Keep the public surface small and unambiguous:
 
-```rust
-// Existing API continues to work
-let composed = chart1.mix(chart2);
-
-// New convenience methods added via extension traits
-let overlay = chart1.overlay(chart2);
-let beside = chart1.beside_with_config(chart2, config);
-```
-
-Guidelines:
-
-- Use extension traits for new convenience methods
-- Keep core trait minimal and stable
-- Provide both simple defaults and configurable variants
+- One obvious way to do each task; don't add a parallel API next to an existing
+  one — replace it.
+- Typed values over strings and bare `f32`s (units, channels, enums).
+- New public items go through the curated prelude deliberately; internals stay
+  `pub(crate)`.
 
 ### Configuration Structs with Defaults
 
@@ -328,9 +348,9 @@ composition.render(&mut context)?;
 
 ### Architecture Principles
 
-- **Composition over inheritance**: The `Mixable` trait enables universal
-  composability where any two Mixable types can be composed, and compositions
-  are themselves Mixable.
+- **Composition over inheritance**: charts and layers compose through a single
+  object-safe chart abstraction (see the strategic review, track T2). `Mixable`
+  is scheduled for removal; do not build new work on it.
 - **Type system as documentation**: Well-designed types serve as documentation
   and prevent errors. Use dedicated config structs instead of multiple primitive
   parameters.
@@ -347,7 +367,8 @@ composition.render(&mut context)?;
   encoder.
 - **Pipeline caching**: Cache pipelines by hash key; pipeline creation is
   expensive.
-- **String-based WGSL injection**: Used for mark-shader integration.
+- **String-based WGSL injection**: Legacy mark-shader integration, to be
+  replaced by module composition (strategic review, track T3). Don't extend it.
 - **Workgroup size 256**: Standard for compute shaders; grid spatial indexing
   for hit testing.
 

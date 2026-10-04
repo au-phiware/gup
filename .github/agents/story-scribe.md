@@ -31,16 +31,23 @@ Before writing anything, build context:
 
 1. Read `docs/README.md` and `docs/IMPLEMENTATION_STRATEGY.md` for project
    vision and architecture.
-2. Read `docs/planning/stories/INDEX.md` — understand what stories exist, which
+2. Read `docs/planning/STRATEGIC_REVIEW_2026-10.md` (or its successor) for the
+   current direction and the list of parked work. Do not write stories that
+   extend parked areas unless explicitly asked.
+3. Read `docs/planning/stories/INDEX.md` — understand what stories exist, which
    are complete, which are planned, and what the current dependency landscape
    looks like.
-3. Identify the **next available GUP number**:
+4. Identify the **next available GUP number**:
    - Find the highest existing GUP-NNN in `docs/planning/stories/` using:
      ```bash
      ls docs/planning/stories/ | grep -oP 'GUP-\d+' | sort -t- -k2 -n | tail -1
      ```
-   - The new story gets the next sequential number.
-4. Search for related stories that might be prerequisites or that this story
+   - The new story gets the next sequential number. Re-check immediately before
+     creating the file; other agents may be allocating IDs concurrently.
+5. **Check for existing coverage.** Search the index and the code for stories or
+   implementations that already deliver this intent. If covered, report that
+   instead of writing a duplicate.
+6. Search for related stories that might be prerequisites or that this story
    enables. Read their summaries or Acceptance Criteria if needed.
 
 ---
@@ -82,7 +89,7 @@ words).
 ## Story Overview
 
 **Initiative**: <Initiative name, or omit if standalone> **Status**: 📋 Planned
-**Created**: YYYY-MM-DD
+**Created**: YYYY-MM-DD (from `date -I`; never guess)
 
 ## Context
 
@@ -157,6 +164,7 @@ Describe how the work will be tested:
 - [ ] All tests pass: `cargo test -- --test-threads=1`
 - [ ] Lint and format clean: `mask all-fix`
 - [ ] All examples compile: `cargo check --examples`
+- [ ] Rendered output verified by eye (golden image or PNG read), if visual
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
 ```
@@ -166,6 +174,17 @@ Describe how the work will be tested:
 **Scope**: A story should be completable in a focused coding session (hours to a
 day or two of work). If it feels larger, split it. If it feels trivial, consider
 whether it merits a story at all or can be absorbed into another.
+
+**Scope the class, not the instance**: if the problem exists in several siblings
+(all chart builders, all marks, all export paths), the story covers all of them.
+Chains of one-builder-at-a-time stories are an anti-pattern.
+
+**User-visible ACs**: any story that affects rendered output must include an AC
+verified by looking at the output (a golden-image test or a PNG the implementer
+reads), e.g. "the PNG shows the title and tick labels, and all marks lie inside
+the plot area". "Produces non-white pixels" is not sufficient. Any story that
+changes public API must include an AC exercised from an external crate or
+doctest.
 
 **Acceptance Criteria**: Each AC must be independently verifiable. Avoid vague
 criteria like "works correctly" — instead write "returns the correct result for
