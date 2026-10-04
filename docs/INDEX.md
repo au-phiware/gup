@@ -79,8 +79,6 @@ Quick access to all documents in `docs/`. For stories and planning, see
 - [CROSS_PLATFORM_AXIS_PERFORMANCE.md](CROSS_PLATFORM_AXIS_PERFORMANCE.md) —
   Axis performance across platforms
 - [WASM_PERFORMANCE.md](WASM_PERFORMANCE.md) — WebAssembly performance guide
-- [ERROR_HANDLING_OPTIMIZATION.md](ERROR_HANDLING_OPTIMIZATION.md) — Error
-  handling performance optimizations
 - [VISUAL_REGRESSION_TESTING.md](VISUAL_REGRESSION_TESTING.md) — Visual
   regression testing setup
 

@@ -1,31 +1,10 @@
 // Copyright (C) 2024 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Comprehensive error handling and resilience framework for Gup.
-//!
-//! This module provides a robust error handling system with automatic recovery
-//! mechanisms, fallback strategies, and detailed error reporting to ensure
-//! reliable operation across different platforms and scenarios.
+//! Error types for Gup: [`GupError`], [`GupResult`], and their categories.
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-
-// Re-export commonly used types
-pub use cache::*;
-pub use error_context::*;
-pub use fallback::*;
-pub use lazy_context::*;
-pub use recovery::*;
-pub use reporting::*;
-pub use resource::*;
-
-pub mod cache;
-pub mod error_context;
-pub mod fallback;
-pub mod lazy_context;
-pub mod recovery;
-pub mod reporting;
-pub mod resource;
 
 /// Main error type for Gup operations with comprehensive error categories.
 #[derive(Debug, Clone, Error, Serialize, Deserialize)]
@@ -196,13 +175,6 @@ pub enum GupError {
         message: String,
     },
 
-    /// Legacy composition error.
-    #[error("Composition error: {message}")]
-    CompositionError {
-        /// Error message.
-        message: String,
-    },
-
     /// Legacy resource error.
     #[error("Resource error: {message}")]
     ResourceError {
@@ -243,30 +215,6 @@ pub enum GupError {
     ShaderError {
         /// Error message.
         message: String,
-    },
-
-    // Fallback and recovery errors
-    /// A fallback of the same type is already active.
-    #[error("Fallback already active: {fallback_type}")]
-    FallbackAlreadyActive {
-        /// Type of fallback that is already active.
-        fallback_type: String,
-    },
-
-    /// An attempted recovery operation failed.
-    #[error("Recovery failed: {strategy} - {reason}")]
-    RecoveryFailed {
-        /// Name of the recovery strategy that failed.
-        strategy: String,
-        /// Reason the recovery failed.
-        reason: String,
-    },
-
-    /// No fallback strategy is available for the error.
-    #[error("No fallback available for error: {original_error}")]
-    NoFallbackAvailable {
-        /// Description of the original error.
-        original_error: String,
     },
 }
 
@@ -354,15 +302,11 @@ impl GupError {
                 ErrorCategory::Configuration
             }
 
-            Self::RenderError { .. } | Self::CompositionError { .. } => ErrorCategory::Rendering,
+            Self::RenderError { .. } => ErrorCategory::Rendering,
 
             Self::BufferError { .. } => ErrorCategory::BufferManagement,
 
             Self::InvalidOperation { .. } => ErrorCategory::InvalidOperation,
-
-            Self::FallbackAlreadyActive { .. }
-            | Self::RecoveryFailed { .. }
-            | Self::NoFallbackAvailable { .. } => ErrorCategory::Recovery,
         }
     }
 
@@ -445,54 +389,12 @@ impl GupError {
                 ErrorCategory::Configuration
             }
 
-            Self::RenderError { .. } | Self::CompositionError { .. } => ErrorCategory::Rendering,
+            Self::RenderError { .. } => ErrorCategory::Rendering,
 
             Self::BufferError { .. } => ErrorCategory::BufferManagement,
 
             Self::InvalidOperation { .. } => ErrorCategory::InvalidOperation,
-
-            Self::FallbackAlreadyActive { .. }
-            | Self::RecoveryFailed { .. }
-            | Self::NoFallbackAvailable { .. } => ErrorCategory::Recovery,
         }
-    }
-
-    /// Whether this error needs full context creation with system information.
-    ///
-    /// Returns `true` for critical errors that benefit from detailed diagnostics,
-    /// `false` for frequent, low-priority errors where context creation overhead
-    /// is not justified.
-    pub const fn needs_full_context(&self) -> bool {
-        match self {
-            // Critical errors need full context
-            Self::GpuInitializationError { .. }
-            | Self::SystemResourceUnavailable { .. }
-            | Self::WebGpuNotAvailable { .. }
-            | Self::GpuMemoryExhausted { .. }
-            | Self::ShaderCompilationError { .. } => true,
-
-            // Frequent, low-priority errors don't need full context
-            Self::PerformanceTargetMissed { .. }
-            | Self::DataValidationError { .. }
-            | Self::InvalidDataFormat { .. } => false,
-
-            // Medium priority errors - context may be useful
-            _ => true,
-        }
-    }
-
-    /// Whether this error is likely to occur frequently in hot paths.
-    ///
-    /// This helps determine if the error should use lazy context creation
-    /// or other performance optimizations.
-    pub const fn is_hot_path_error(&self) -> bool {
-        matches!(
-            self,
-            Self::PerformanceTargetMissed { .. }
-                | Self::DataValidationError { .. }
-                | Self::InvalidDataFormat { .. }
-                | Self::BufferSizeMismatch { .. }
-        )
     }
 }
 
@@ -521,8 +423,6 @@ pub enum ErrorCategory {
     BufferManagement,
     /// Invalid operation or usage errors.
     InvalidOperation,
-    /// Recovery and fallback mechanism errors.
-    Recovery,
 }
 
 impl std::fmt::Display for ErrorCategory {
@@ -539,7 +439,6 @@ impl std::fmt::Display for ErrorCategory {
             Self::Rendering => write!(f, "Rendering"),
             Self::BufferManagement => write!(f, "Buffer Management"),
             Self::InvalidOperation => write!(f, "Invalid Operation"),
-            Self::Recovery => write!(f, "Recovery"),
         }
     }
 }
@@ -581,16 +480,17 @@ impl From<serde_json::Error> for GupError {
 
 /// Backward compatibility constructors for legacy error types.
 impl GupError {
-    /// Create a legacy render error.
-    pub fn render_error(message: impl Into<String>) -> Self {
-        Self::RenderError {
+    /// Create a new configuration error.
+    pub fn configuration_error(parameter: impl Into<String>, message: impl Into<String>) -> Self {
+        Self::ConfigurationError {
+            parameter: parameter.into(),
             message: message.into(),
         }
     }
 
-    /// Create a legacy composition error.
-    pub fn composition_error(message: impl Into<String>) -> Self {
-        Self::CompositionError {
+    /// Create a legacy render error.
+    pub fn render_error(message: impl Into<String>) -> Self {
+        Self::RenderError {
             message: message.into(),
         }
     }
@@ -674,9 +574,6 @@ mod tests {
     fn test_backward_compatibility() {
         let legacy_error = GupError::render_error("Legacy render failure");
         assert_eq!(legacy_error.category(), ErrorCategory::Rendering);
-
-        let composition_error = GupError::composition_error("Composition failed");
-        assert_eq!(composition_error.category(), ErrorCategory::Rendering);
     }
 
     #[test]
