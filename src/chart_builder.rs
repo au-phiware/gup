@@ -32,11 +32,11 @@
 //!     SalesPoint { revenue: 200.0, profit: 45.0, region: "South".to_string() },
 //! ];
 //!
-//! // Observable Plot-style API
-//! let chart = gup::plot()
-//!     .data(sales_data)
-//!     .scatter(x("revenue"), y("profit"))
-//!     .color(color("region"));
+//! let chart = scatter()
+//!     .x(|d: &SalesPoint| AccessorValue::Float(d.revenue))
+//!     .y(|d: &SalesPoint| AccessorValue::Float(d.profit))
+//!     .title("Revenue vs profit");
+//! # let _ = (chart, sales_data);
 //! # Ok(())
 //! # }
 //! ```
@@ -47,7 +47,6 @@ pub mod colorbar;
 pub mod labels;
 pub mod optimized_accessor;
 pub mod pipeline_cache;
-pub mod plot_api;
 pub mod shader_specialization;
 
 pub use accessor::*;
@@ -56,7 +55,6 @@ pub use colorbar::*;
 pub use labels::*;
 pub use optimized_accessor::*;
 pub use pipeline_cache::*;
-pub use plot_api::*;
 pub use shader_specialization::*;
 
 use crate::RenderContext;
@@ -75,7 +73,6 @@ use crate::shader_function::{BandScale, ColorScale, LinearScale, LogScale, Point
 use crate::text::TextStyle;
 use crate::text::hover_reveal::{ClippedTextRegistry, HoverRevealState, TooltipConfig};
 use crate::{MaybeSend, MaybeSync};
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 /// Rich axis geometry output containing line vertices and instanced tick data.
@@ -298,90 +295,6 @@ pub trait ChartBuilder<T>: Sized {
     /// This method transforms the high-level chart configuration into
     /// GPU-accelerated Selection primitives.
     fn build_with_data(self, data: Vec<T>, context: Arc<RenderContext>) -> GupResult<Self::Output>;
-
-    /// Convenience method to build and render in one step.
-    fn render_with_data(self, data: Vec<T>, context: Arc<RenderContext>) -> GupResult<Self::Output>
-    where
-        Self::Output: crate::Mixable,
-    {
-        let output = self.build_with_data(data, context)?;
-        // The render method is called during the mixable render process
-        Ok(output)
-    }
-}
-
-/// A chart builder that has been bound to specific data.
-///
-/// This intermediate type enables method chaining while preserving type
-/// information about the data and chart configuration.
-pub struct BoundChartBuilder<B, T>
-where
-    B: ChartBuilder<T>,
-{
-    pub(crate) builder: B,
-    pub(crate) data: Vec<T>,
-    pub(crate) context: Arc<RenderContext>,
-    pub(crate) _phantom: PhantomData<T>,
-}
-
-impl<B, T> BoundChartBuilder<B, T>
-where
-    B: ChartBuilder<T>,
-{
-    /// Create a new bound chart builder.
-    pub fn new(builder: B, data: Vec<T>, context: Arc<RenderContext>) -> Self {
-        Self {
-            builder,
-            data,
-            context,
-            _phantom: PhantomData,
-        }
-    }
-
-    /// Build the chart using the bound data and context.
-    pub fn build(self) -> GupResult<B::Output> {
-        self.builder.build_with_data(self.data, self.context)
-    }
-
-    /// Build and render the chart in one step.
-    pub fn render(self) -> GupResult<B::Output>
-    where
-        B::Output: crate::Mixable,
-    {
-        self.builder.render_with_data(self.data, self.context)
-    }
-
-    // Convert this builder to a low-level Selection for advanced customization.
-    //
-    // This enables seamless transition from high-level builder APIs to
-    // low-level Selection operations when needed.
-    //
-    // TODO: Disabled until Selection type is fully implemented
-    /*
-    pub fn into_selection<M>(self) -> GupResult<Selection<T, M>>
-    where
-        T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
-        M: crate::selection::Mark,
-        M::AttributeValue: Default + Clone,
-    {
-        Selection::new(self.data, self.context)
-    }
-    */
-
-    /// Access the underlying data for inspection.
-    pub fn data(&self) -> &[T] {
-        &self.data
-    }
-
-    /// Get the number of data points.
-    pub fn len(&self) -> usize {
-        self.data.len()
-    }
-
-    /// Check if the dataset is empty.
-    pub fn is_empty(&self) -> bool {
-        self.data.is_empty()
-    }
 }
 
 /// Horizontal alignment for chart title text.
@@ -3495,48 +3408,6 @@ mod tests {
         assert!(error_str.contains("color"));
         assert!(error_str.contains("Color"));
         assert!(error_str.contains("f32"));
-    }
-
-    #[tokio::test]
-    async fn test_bound_chart_builder_data_access() {
-        let data = vec![
-            TestData {
-                x: 1.0,
-                y: 2.0,
-                value: 10.0,
-                category: "A".to_string(),
-            },
-            TestData {
-                x: 3.0,
-                y: 4.0,
-                value: 20.0,
-                category: "B".to_string(),
-            },
-        ];
-
-        let context = Arc::new(RenderContext::new().await.unwrap());
-
-        // Create a mock builder for testing
-        struct MockBuilder;
-        impl ChartBuilder<TestData> for MockBuilder {
-            type Output = ();
-
-            fn build_with_data(
-                self,
-                _data: Vec<TestData>,
-                _context: Arc<RenderContext>,
-            ) -> GupResult<Self::Output> {
-                Ok(())
-            }
-        }
-
-        let bound_builder = BoundChartBuilder::new(MockBuilder, data.clone(), context);
-
-        assert_eq!(bound_builder.len(), 2);
-        assert!(!bound_builder.is_empty());
-        assert_eq!(bound_builder.data().len(), 2);
-        assert_eq!(bound_builder.data()[0].x, 1.0);
-        assert_eq!(bound_builder.data()[1].category, "B");
     }
 
     #[test]

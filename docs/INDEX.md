@@ -37,8 +37,6 @@ Quick access to all documents in `docs/`. For stories and planning, see
 ## Developer Guides
 
 - [CUSTOM_MARK_GUIDE.md](CUSTOM_MARK_GUIDE.md) — How to create custom mark types
-- [MIGRATION_FROM_OBSERVABLE_PLOT.md](MIGRATION_FROM_OBSERVABLE_PLOT.md) —
-  Migrating from Observable Plot to Gup
 - [TYPE_CONSTRUCTION_GUIDE.md](TYPE_CONSTRUCTION_GUIDE.md) — Using the type
   construction macros
 - [EVENT_FORWARDING.md](EVENT_FORWARDING.md) — Interaction and event forwarding

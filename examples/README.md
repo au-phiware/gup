@@ -55,7 +55,6 @@ Deep dives into specific library capabilities:
 
 | Example                               | Description                     |
 | ------------------------------------- | ------------------------------- |
-| `observable_plot_showcase`            | Full Observable Plot-style API  |
 | `observable_plot_visual_showcase`     | Visual Observable Plot examples |
 | `label_formatting_demo`               | Advanced label formatting       |
 | `axis_showcase`                       | Axis configuration options      |

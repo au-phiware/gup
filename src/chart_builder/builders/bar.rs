@@ -797,7 +797,7 @@ pub fn bar<T>() -> BarChartBuilder<T> {
 mod tests {
     use super::*;
     use crate::RenderContext;
-    use crate::chart_builder::accessor::{AccessorValue, x, y};
+    use crate::chart_builder::accessor::AccessorValue;
     use crate::chart_builder::builders::AccessorFunction;
     use crate::shader_function::BandScale;
 
@@ -1106,8 +1106,8 @@ mod tests {
 
         let context = Arc::new(RenderContext::new().await.unwrap());
         let result = bar()
-            .x(x("category"))
-            .y(y("count"))
+            .x(|d: &CategoryData| AccessorValue::String(d.category.clone()))
+            .y(|d: &CategoryData| AccessorValue::Float(d.count))
             .build_with_data(data, context);
         assert!(result.is_ok());
     }

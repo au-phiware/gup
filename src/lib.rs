@@ -395,7 +395,7 @@ pub use chart_builder::builders::violin::{HalfSide, ViolinOrientation, ViolinPlo
 pub use chart_builder::{
     AreaChartBuilder, AxisLabelConfig, BarChartBuilder, ChartBuilder, ChartConfig, ChoroplethChart,
     ChoroplethChartBuilder, ComposedChart, HeatmapBuilder, HoverHighlight, LabelCapableBuilder,
-    LabeledChart, LineChartBuilder, ScatterPlotBuilder, TitleAlignment, TitleConfig, plot,
+    LabeledChart, LineChartBuilder, ScatterPlotBuilder, TitleAlignment, TitleConfig,
 };
 
 /// Create a new [`DensityPlotBuilder`] (convenience shorthand).

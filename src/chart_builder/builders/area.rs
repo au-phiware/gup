@@ -1298,7 +1298,7 @@ pub fn area<T>() -> AreaChartBuilder<T> {
 mod tests {
     use super::*;
     use crate::RenderContext;
-    use crate::chart_builder::accessor::{AccessorValue, x, y};
+    use crate::chart_builder::accessor::AccessorValue;
 
     #[derive(Debug, Clone)]
     struct TimePoint {
@@ -1806,13 +1806,15 @@ mod tests {
         let context = Arc::new(RenderContext::new().await.unwrap());
 
         // Missing Y accessor should fail.
-        let builder = area().x(x("time"));
+        let builder = area().x(|d: &TimePoint| AccessorValue::Float(d.time));
         let result = builder.build_with_data(data.clone(), context.clone());
         assert!(result.is_err());
 
         // Empty data should fail.
         let empty_data: Vec<TimePoint> = vec![];
-        let builder = area().x(x("time")).y(y("value"));
+        let builder = area()
+            .x(|d: &TimePoint| AccessorValue::Float(d.time))
+            .y(|d: &TimePoint| AccessorValue::Float(d.value));
         let result = builder.build_with_data(empty_data, context);
         assert!(result.is_err());
     }
@@ -1834,7 +1836,9 @@ mod tests {
 
         let context = Arc::new(RenderContext::new().await.unwrap());
 
-        let builder = area().x(x("time")).y(y("value"));
+        let builder = area()
+            .x(|d: &TimePoint| AccessorValue::Float(d.time))
+            .y(|d: &TimePoint| AccessorValue::Float(d.value));
         let result = builder.build_with_data(data, context);
         assert!(result.is_ok());
     }

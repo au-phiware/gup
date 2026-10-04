@@ -1,79 +1,12 @@
 // Copyright (C) 2024 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Accessor function system for Observable Plot-style field mapping.
-//!
-//! This module provides type-safe field accessors that bridge between
-//! high-level Observable Plot syntax and GPU shader functions.
+//! Accessor types and values used by the chart builders to extract data
+//! from user records.
 
 use crate::{MaybeSend, MaybeSync};
 use std::collections::HashMap;
 use std::marker::PhantomData;
-
-/// Observable Plot-style accessor function for field-based data mapping.
-///
-/// Enables syntax like `x("revenue")` and `y("profit")` while maintaining
-/// type safety and GPU shader compatibility.
-#[derive(Debug, Clone)]
-pub struct FieldAccessor {
-    field_name: String,
-}
-
-impl FieldAccessor {
-    /// Create a new field accessor.
-    pub fn new(field_name: &str) -> Self {
-        Self {
-            field_name: field_name.to_string(),
-        }
-    }
-
-    /// Get the field name.
-    pub fn field_name(&self) -> &str {
-        &self.field_name
-    }
-}
-
-/// Observable Plot-style accessor functions for common chart attributes.
-///
-/// Create an X-axis accessor for the specified field.
-pub fn x(field: &str) -> FieldAccessor {
-    FieldAccessor::new(field)
-}
-
-/// Create a Y-axis accessor for the specified field.
-pub fn y(field: &str) -> FieldAccessor {
-    FieldAccessor::new(field)
-}
-
-/// Create a color accessor for the specified field.
-pub fn color(field: &str) -> FieldAccessor {
-    FieldAccessor::new(field)
-}
-
-/// Create a size accessor for the specified field.
-pub fn size(field: &str) -> FieldAccessor {
-    FieldAccessor::new(field)
-}
-
-/// Create a fill color accessor for the specified field.
-pub fn fill(field: &str) -> FieldAccessor {
-    FieldAccessor::new(field)
-}
-
-/// Create a stroke color accessor for the specified field.
-pub fn stroke(field: &str) -> FieldAccessor {
-    FieldAccessor::new(field)
-}
-
-/// Create a stroke width accessor for the specified field.
-pub fn stroke_width(field: &str) -> FieldAccessor {
-    FieldAccessor::new(field)
-}
-
-/// Create an opacity accessor for the specified field.
-pub fn opacity(field: &str) -> FieldAccessor {
-    FieldAccessor::new(field)
-}
 
 /// Type-safe accessor function that extracts values from data structures.
 ///
@@ -428,21 +361,6 @@ mod tests {
         y: f32,
         name: String,
         active: bool,
-    }
-
-    #[test]
-    fn test_field_accessors() {
-        let x_accessor = x("revenue");
-        assert_eq!(x_accessor.field_name(), "revenue");
-
-        let y_accessor = y("profit");
-        assert_eq!(y_accessor.field_name(), "profit");
-
-        let color_accessor = color("region");
-        assert_eq!(color_accessor.field_name(), "region");
-
-        let size_accessor = size("employees");
-        assert_eq!(size_accessor.field_name(), "employees");
     }
 
     #[test]

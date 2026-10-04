@@ -38,7 +38,6 @@ Run any example with: `cargo run --example <name>`
 | `boxplot_rendering_demo`          | Box plot rendering pipeline demo                  |
 | `boxplot_builder_demo`            | Box plot chart builder API                        |
 | `multi_category_boxplot`          | Multi-category box plots                          |
-| `observable_plot_showcase`        | Chart builder API showcase                        |
 | `observable_plot_visual_showcase` | Visual showcase of chart builder API              |
 | `integration_showcase`            | Full integration showcase of multiple chart types |
 | `custom_mark_demo`                | Implementing a custom mark type                   |

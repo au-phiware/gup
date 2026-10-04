@@ -13,7 +13,7 @@ pub use crate::error::{GupError, GupResult};
 // Chart builder API (Observable Plot style)
 pub use crate::chart_builder::{
     AxisScale, ChartBuilder, ChartConfig,
-    accessor::{AccessorValue, ConstantAccessor, FieldAccessor, color, size, x, y},
+    accessor::{AccessorValue, ConstantAccessor},
     builders::{
         AccessorFunction, AreaChartBuilder, BarChartBuilder, ConfigurableBuilder,
         GridCapableBuilder, HeatmapBuilder, LineChartBuilder, LineInterpolation, LineSegment,
@@ -27,7 +27,6 @@ pub use crate::chart_builder::{
         heatmap::{AggregateFunc, HeatmapCell},
         line, scatter,
     },
-    plot_api::{BoundPlotBuilder, PlotBuilder, plot},
 };
 
 // Selection API (low-level)
