@@ -1126,7 +1126,7 @@ impl MarkRegistry {
         &mut self,
         device: &Device,
         blend_config: &advanced_rendering::MarkBlendConfig,
-        context_blend: Option<crate::mixable::BlendMode>,
+        context_blend: Option<crate::render::BlendMode>,
     ) -> GupResult<Arc<RenderPipeline>> {
         // For marks that use default alpha blending and no override, use regular pipeline
         let resolved = blend_config.resolve_blend_state(context_blend);

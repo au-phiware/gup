@@ -208,9 +208,8 @@ GPU-based hit testing. The interaction system uses compute shaders to identify
 which mark instance was clicked or hovered based on the mark's type ID and
 geometry.
 
-### Composition System
+### Blending
 
-Marks participate in the `Mixable` composition system. Multiple mark-based
-visualizations can be overlaid, placed side-by-side, or blended using the
-`MarkBlendConfig` system which resolves blend states through a priority chain
-(mark-level → context-level → default alpha blending).
+Mark blend states are configured with `MarkBlendConfig`, which resolves blend
+states through a priority chain (mark-level → context-level → default alpha
+blending).

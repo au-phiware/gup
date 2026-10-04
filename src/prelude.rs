@@ -52,9 +52,6 @@ pub use crate::mark::advanced_rendering::{
     UploadStats,
 };
 
-// Mixable trait for composition
-pub use crate::mixable::Mixable;
-
 // Shader functions
 pub use crate::shader_function::{
     // Alpha blending (GUP-053)
@@ -224,15 +221,6 @@ pub use crate::layout::{
     ForceDirected, GraphChartBuilder, GraphLayout, LayoutEdge, LayoutEngine, LayoutNode,
     LayoutRect, LayoutResult, NodePosition, TreeNode, TreemapAlgorithm, TreemapCell,
     TreemapOptions, TreemapResult,
-};
-
-// Integration and plugin system
-pub use crate::integration::{
-    ExternalRenderer, ExternalVisualizationBuilder, ExternalVisualizationWrapper, wrap_point_data,
-    wrap_with_custom_render,
-};
-pub use crate::plugins::{
-    MixablePlugin, MixablePluginRegistry, PluginMetadata, global_registry, try_make_mixable,
 };
 
 // SVG export

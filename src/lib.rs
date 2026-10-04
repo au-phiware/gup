@@ -100,7 +100,6 @@
 //! | [`grid`] | GPU-accelerated grid line rendering |
 //! | [`interaction`] | GPU hit-testing, event handling, gesture recognition |
 //! | [`mark`] | Mark trait, registry, built-in marks (circle, rect, line, …) |
-//! | [`mixable`] | Composable visualisation trait and helpers |
 //! | [`scale`] | Scale types (linear, log, ordinal, …) |
 //! | [`selection`] | [`Selection<T, M>`](Selection) — data-binding core |
 //! | [`shader_function`] | Composable GPU shader functions |
@@ -115,7 +114,6 @@ extern crate self as gup;
 
 pub mod accessibility;
 pub mod app;
-pub mod async_mixable;
 pub mod axis;
 pub mod axis3d;
 pub mod axis_performance;
@@ -131,12 +129,10 @@ pub mod depth;
 pub mod error;
 pub mod event;
 #[doc(hidden)]
-pub mod examples;
 pub mod export;
 pub mod gpu_timer;
 pub mod grid;
 #[doc(hidden)]
-pub mod integration;
 pub mod interaction;
 pub mod label;
 pub mod layout;
@@ -146,13 +142,11 @@ pub mod lod;
 pub mod mark;
 pub mod mark_selection;
 pub mod math;
-pub mod mixable;
 pub mod performance;
 pub mod performance_export;
 pub mod performance_targets;
 pub mod pipeline_cache;
 pub mod platform;
-pub mod plugins;
 pub mod prelude;
 pub mod render;
 pub mod renderer;
@@ -247,19 +241,6 @@ pub use accessibility::{
     NavigationMode, NodeId, Pattern, PatternLibrary, SonificationEngine, SonificationMapping,
     Trend,
 };
-// Export async components selectively to avoid conflicts
-pub use async_mixable::{
-    AsyncComposedVisualization, AsyncMixable, AsyncMixableExt, AsyncRenderStrategy, RenderProgress,
-    SyncAdapter, TimeoutComposition,
-    progressive::{
-        ProgressiveConfig, ProgressiveDataLoader, ProgressiveVisualization, QualityLevel,
-    },
-    streaming::{Point2D, StreamStats, StreamingDataSource, StreamingScatterPlot},
-    utils::{
-        AsyncCompositionBuilder, AsyncPerformanceMonitor, ComponentStats, MultiAsyncComposition,
-        compose,
-    },
-};
 pub use axis::*;
 pub use axis_system::{
     AxisLayout, AxisMappings, AxisMargins, AxisSystem, ChartArea, ScaleConfiguration,
@@ -268,9 +249,7 @@ pub use buffer::*;
 pub use context::*;
 pub use debug::*;
 pub use error::*;
-pub use examples::*;
 pub use grid::*;
-pub use integration::*;
 pub use label::*;
 pub use scale::*;
 // Export interaction system components (excluding ambiguous types)
@@ -286,8 +265,6 @@ pub use event::{
     ViewportTransform,
 };
 // Export zoom/pan behaviour
-pub use mixable::*;
-pub use plugins::*;
 pub use render::*;
 pub use shader_function::*;
 pub use shader_pipeline::*;
@@ -428,7 +405,7 @@ pub fn choropleth() -> ChoroplethChartBuilder {
 // NOTE: `wgsl_function` cannot be re-exported at the crate root because `gup`
 // already defines a `macro_rules! wgsl_function` in `shader_function::macros`.
 // It is available through `gup::proc_macros::wgsl_function` instead.
-pub use gup_macros::{Mark, Mixable};
+pub use gup_macros::Mark;
 
 /// Re-exported procedural macros from `gup_macros`.
 ///

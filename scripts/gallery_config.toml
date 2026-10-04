@@ -117,14 +117,6 @@ skip = true
 skip_reason = "Windowed-only (requires EventLoop)"
 
 [[examples]]
-name = "integration_showcase"
-source = "examples/integration_showcase.rs"
-description = "Full integration showcase of multiple chart types"
-category = "Charts & Marks"
-skip = true
-skip_reason = "Console-only (Mixable trait demo, no GPU rendering)"
-
-[[examples]]
 name = "custom_mark_demo"
 source = "examples/custom_mark_demo.rs"
 description = "Implementing a custom mark type"
@@ -535,14 +527,6 @@ skip = true
 skip_reason = "Console-only (keyframe storage demo, no GPU rendering)"
 
 [[examples]]
-name = "async_streaming_demo"
-source = "examples/async_streaming_demo.rs"
-description = "Async data streaming to GPU"
-category = "Animation & Streaming"
-skip = true
-skip_reason = "Console-only (streaming pipeline demo, no GPU rendering)"
-
-[[examples]]
 name = "data_transition_scatter"
 source = "examples/data_transition_scatter.rs"
 description = "Data transition scatter animation"
@@ -607,14 +591,6 @@ skip_reason = "Console-only (pattern comparison, no GPU rendering)"
 # ---------------------------------------------------------------------------
 
 [[examples]]
-name = "blend_modes_showcase"
-source = "examples/blend_modes_showcase.rs"
-description = "GPU blend mode showcase"
-category = "Blend Modes"
-skip = true
-skip_reason = "Console-only (blend mode demo, no GPU rendering)"
-
-[[examples]]
 name = "visual_blend_demo"
 source = "examples/visual_blend_demo.rs"
 description = "Visual blend mode demonstration"
@@ -633,14 +609,6 @@ description = "Parallel composition of visualisations"
 category = "Composition"
 skip = true
 skip_reason = "Console-only (composition API demo, no GPU rendering)"
-
-[[examples]]
-name = "composition_error_recovery_showcase"
-source = "examples/composition_error_recovery_showcase.rs"
-description = "Error recovery in composition chains"
-category = "Composition"
-skip = true
-skip_reason = "Console-only (error recovery demo, no GPU rendering)"
 
 # ---------------------------------------------------------------------------
 # Performance & Profiling

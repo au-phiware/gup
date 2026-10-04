@@ -13,7 +13,7 @@ use gup::mark::{
     Circle, DynamicAttributeMap, DynamicAttributeValue, MarkBlendConfig, MarkRegistry,
     MultiPassConfig, RenderPassConfig, RenderStateManager,
 };
-use gup::mixable::BlendMode;
+use gup::render::BlendMode;
 use std::sync::Arc;
 
 /// Helper to create a headless GPU context.

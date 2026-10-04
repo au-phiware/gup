@@ -118,7 +118,6 @@ Key benchmark groups:
 | `spatial_index_benchmarks`    | Index build and query performance               |
 | `mark_performance_benchmarks` | Mark rendering at various scales                |
 | `buffer_benchmarks`           | GPU buffer upload throughput                    |
-| `composition_benchmarks`      | Mixable composition overhead                    |
 
 ### Performance Regression Tests
 

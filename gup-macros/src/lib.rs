@@ -23,7 +23,6 @@ use syn::{Data, DeriveInput, Fields, parse_macro_input};
 mod crate_path;
 mod mark_derive;
 mod mark_type_id;
-mod mixable_derive;
 mod wgsl_function;
 mod wgsl_keywords;
 mod wgsl_struct;
@@ -195,50 +194,6 @@ pub fn derive_shader_type(input: TokenStream) -> TokenStream {
     };
 
     generated.into()
-}
-
-/// Derive macro for automatically implementing the `Mixable` trait.
-///
-/// This macro generates a `Mixable` implementation for custom structs,
-/// enabling them to be used in Gup's composition system with minimal boilerplate.
-///
-/// # Attributes
-///
-/// - `#[mixable(render_type = "points")]` - Specify the rendering type (points, lines, triangles)
-/// - `#[mixable(vertex_data)]` - Mark a field as containing vertex data for GPU rendering
-/// - `#[mixable(uniform_data)]` - Mark a field as containing uniform data
-/// - `#[mixable(texture_data)]` - Mark a field as containing texture data
-/// - `#[mixable(binding = N)]` - Specify the binding index for uniform/texture fields
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// use gup_macros::Mixable;
-///
-/// #[derive(Mixable)]
-/// #[mixable(render_type = "points")]
-/// struct ScatterPlot {
-///     #[mixable(vertex_data)]
-///     points: Vec<[f32; 2]>,
-///
-///     #[mixable(uniform_data, binding = 0)]
-///     color: [f32; 4],
-/// }
-/// ```
-///
-/// This generates:
-/// - A `Mixable` trait implementation with point-based rendering
-/// - Proper vertex data extraction from the `points` field
-/// - Uniform binding setup for the `color` field
-/// - Validation methods to ensure data integrity
-#[proc_macro_derive(Mixable, attributes(mixable, gup))]
-pub fn derive_mixable(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-
-    match mixable_derive::generate_mixable_impl(&input) {
-        Ok(tokens) => tokens.into(),
-        Err(error) => error.to_compile_error().into(),
-    }
 }
 
 /// Derive macro for automatically implementing the `WgslStructType` trait.

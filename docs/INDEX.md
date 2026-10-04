@@ -27,7 +27,6 @@ Quick access to all documents in `docs/`. For stories and planning, see
   reference
 - [mark-system/performance.md](mark-system/performance.md) — Mark system
   performance guide
-- [BLEND_MODES.md](BLEND_MODES.md) — GPU blend mode implementation reference
 - [GRID_SYSTEM.md](GRID_SYSTEM.md) — Axis and grid system architecture
 - [text-rendering-architecture.md](text-rendering-architecture.md) — SDF text
   rendering pipeline design

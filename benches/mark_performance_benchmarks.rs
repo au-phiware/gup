@@ -14,7 +14,7 @@ use gup::mark::performance_opt::{
     MarkPerformanceMetrics, PipelineCacheKey, SizeClass, SortedBatch, count_pipeline_switches,
     sort_batches_by_state,
 };
-use gup::mixable::BlendMode;
+use gup::render::BlendMode;
 use std::any::TypeId;
 use std::hint::black_box;
 

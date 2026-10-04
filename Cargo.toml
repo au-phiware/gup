@@ -107,10 +107,6 @@ futures-channel = "0.3"
 wasm-bindgen-test = "0.3"
 
 [[bench]]
-name = "mixable_benchmarks"
-harness = false
-
-[[bench]]
 name = "buffer_benchmarks"
 harness = false
 
@@ -230,10 +226,6 @@ name = "custom_mark_demo"
 path = "examples/custom_mark_demo.rs"
 
 [[example]]
-name = "blend_modes_showcase"
-path = "examples/blend_modes_showcase.rs"
-
-[[example]]
 name = "visual_blend_demo"
 path = "examples/visual_blend_demo.rs"
 
@@ -249,10 +241,6 @@ path = "examples/gpu_debug_demo.rs"
 name = "web_dashboard_demo"
 path = "examples/web_dashboard_demo.rs"
 required-features = ["web-dashboard"]
-
-[[example]]
-name = "async_streaming_demo"
-path = "examples/async_streaming_demo.rs"
 
 # Basic examples - learning path
 [[example]]
