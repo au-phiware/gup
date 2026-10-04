@@ -40,9 +40,44 @@ survives into `gup-core`.
   S0/S3 (old mark-rendering path frozen); its verified evidence (circle aspect
   ratio, AA, the `composite_*` panic, scissor clipping) is preserved as input
   for `gup-core`'s own mark rendering. Absorbs GUP-384, also parked.
-- [GUP-394](GUP-394_Dogfood_Suite_In_CI.md) 📋 — Promote the external dogfood
+- [GUP-394](GUP-394_Dogfood_Suite_In_CI.md) ✅ — Promote the external dogfood
   crate's six realistic-usage tasks into `dogfood/` and run them in CI with
   pixel assertions and tracked expected failures. Deps: GUP-377 ✅.
+- [GUP-397](GUP-397_Dogfood_Checks_On_Shared_Visual_Assertions.md) 📋 — Replace
+  the dogfood suite's local pixel measurements with GUP-388's shared
+  visual-assertion module and layout metadata, without loosening any tracked
+  gap. Deps: GUP-394 ✅, GUP-388 📋.
+
+## RFC-001 Migration
+
+**Old-path LOC remaining: 32629 (measured 2026-10-04)**. Measured as the
+non-blank, non-comment-only, non-`#[cfg(test)]`-block line count of the old
+render path (`src/selection.rs`, `src/mark/`, `src/shader_function/`,
+`src/shader_pipeline.rs`, `src/chart_builder*`, `src/context.rs`,
+`src/render.rs`). Re-measure with `mask old-path-loc`
+(`scripts/old_path_loc.pl`) after each RFC-001 story. This metric exists per
+[RFC-001](../rfcs/RFC-001_Core_Architecture.md)'s Orchestrator review point 1
+("parallel-system risk"): it must trend to 0 as S14 (the flip and delete) lands,
+or the old and new paths will ossify side by side the way four scale systems and
+three composition systems did before.
+
+Stories implementing
+[RFC-001: Core Architecture](../rfcs/RFC-001_Core_Architecture.md) (accepted
+2026-10-04). S1–S14 are not yet written as stories; they follow once the S0
+naga_oil go/no-go gate (GUP-395) is resolved.
+
+- [GUP-395](GUP-395_Gup_Core_Vertical_Slice_Headless.md) 📋 — RFC-001 step S0a:
+  a new `crates/gup-core` workspace member with `Context`, a single-chunk GPU
+  column store, a Circle WGSL module composed via naga_oil with a typed glue
+  emitter, typed X/Y/RADIUS/FILL channels, Linear/Log/Sequential scales with CPU
+  mirrors, and a `Scene` → `ImageTarget` → PNG path with title and tick labels;
+  ends with the naga_oil go/no-go decision appended to RFC-001. Deps: GUP-389
+  📋, GUP-390 📋, GUP-388 📋 (soft).
+- [GUP-396](GUP-396_Gup_Core_Vertical_Slice_Window_Performance.md) 📋 — RFC-001
+  step S0b: adds `WindowTarget` and a minimal `gup::show()` to GUP-395's scene,
+  proving window/PNG visual parity (ΔE < 2) and a 100K-point zoom at ≥60 fps
+  with a buffer-write counter proving 0 column bytes written during zoom. Deps:
+  GUP-395 📋.
 
 ## GPU Rendering Pipeline
 

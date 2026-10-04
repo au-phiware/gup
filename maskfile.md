@@ -90,7 +90,7 @@ Format all code
 ```bash
 shopt -qs globstar
 concurrently --group --names rs,nix,md \
-   'git grep -lz --untracked "[[:space:]]\+$" -- "*.rs" | xargs -0 -r sed -i "/[[:space:]]\+$/s///" && cargo fmt --all' \
+   'git grep -lz --untracked "[[:space:]]\+$" -- "*.rs" | xargs -0 -r sed -i "/[[:space:]]\+$/s///" && cargo fmt --all && cargo fmt --manifest-path dogfood/Cargo.toml' \
    'nixfmt flake.nix' \
    'prettier --cache --log-level warn --write "**/*.md"'
 ```
@@ -103,7 +103,7 @@ Check if code is formatted
 shopt -qs globstar
 concurrently --group --names '\s,rs,nix,md' \
    '! git --no-pager grep --untracked --name-only --full-name "[[:space:]]\+$" -- "*.rs"' \
-   'cargo fmt --all -- --check' \
+   'cargo fmt --all -- --check && cargo fmt --manifest-path dogfood/Cargo.toml -- --check' \
    'nixfmt --check flake.nix' \
    'prettier --cache --log-level warn --check "**/*.md"'
 ```
@@ -115,7 +115,7 @@ Run Rust check, linters and formatters' checks.
 ```bash
 shopt -qs globstar
 concurrently --group --names rs,nix,md \
-   'git grep -lz --untracked "[[:space:]]\+$" -- "*.rs" | xargs -0 -r sed -i "/[[:space:]]\+$/s///" && cargo fmt --all && cargo clippy --allow-no-vcs --fix --all-targets --all-features -- -D warnings && cargo check' \
+   'git grep -lz --untracked "[[:space:]]\+$" -- "*.rs" | xargs -0 -r sed -i "/[[:space:]]\+$/s///" && cargo fmt --all && cargo fmt --manifest-path dogfood/Cargo.toml && cargo clippy --allow-no-vcs --fix --all-targets --all-features -- -D warnings && cargo check' \
    'nixfmt flake.nix && statix fix flake.nix' \
    'prettier --cache --log-level warn --write "**/*.md" && mdl --git-recurse .'
 ```
@@ -128,10 +128,21 @@ Run Rust check, linters and formatters' checks.
 shopt -qs globstar
 concurrently --group --names '\s,rs,nix,md,marks' \
    '! git --no-pager grep --untracked --name-only --full-name "[[:space:]]\+$" -- "*.rs"' \
-   'mask check && cargo fmt --all -- --check && cargo clippy --allow-no-vcs --fix --all-targets --all-features -- -D warnings' \
+   'mask check && cargo fmt --all -- --check && cargo fmt --manifest-path dogfood/Cargo.toml -- --check && cargo clippy --allow-no-vcs --fix --all-targets --all-features -- -D warnings' \
    'nixfmt --check flake.nix && statix check flake.nix' \
    'prettier --cache --log-level warn --check "**/*.md" && mdl --git-recurse .' \
    'mask validate-marks'
+```
+
+## dogfood
+
+Build the detached `dogfood/` crate against this checkout and run its
+realistic-usage tasks with pixel checks (see `dogfood/README.md`). Windowed
+tasks need a display: use `xvfb-run -a mask dogfood` when headless, or set
+`DOGFOOD_SKIP_WINDOWED=1`.
+
+```bash
+./dogfood/run_all.sh
 ```
 
 ## clean
@@ -229,6 +240,14 @@ Show dependency tree
 
 ```bash
 cargo tree
+```
+
+## old-path-loc
+
+Count non-test LOC remaining in the frozen old render path (RFC-001 metric)
+
+```bash
+scripts/old_path_loc.pl | tail -1
 ```
 
 ## validate-marks
