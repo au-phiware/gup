@@ -1,7 +1,6 @@
 # Strategic Review — October 2026
 
-**Status**: Proposal, awaiting owner decisions (see
-[Decisions](#decisions-needed)) **Date**: 2026-10-04
+**Status**: Approved — see [Decisions](#decisions) **Date**: 2026-10-04
 
 ## Summary
 
@@ -97,9 +96,8 @@ T3 Core RFC + spike ────────▶ T2 One Context / Scene / RenderT
 3. **Dogfood suite in CI**: promote the audit's external crate (6 realistic
    tasks; source saved at `/tmp/gup-dogfood-src`) to `dogfood/`, run by CI.
    Integration crates (`gup-egui`, `gup-bevy`, …) must compile in CI.
-4. **Process changes** to `story-worker.md` / `story-scribe.md` (the
-   `.claude/agents` and `.github/agents` copies are identical duplicates and
-   should become one file plus a symlink):
+4. **Process changes** to `.github/agents/story-worker.md` and `story-scribe.md`
+   (`.claude/agents` is a symlink). **Applied 2026-10-04.**
    - Fix the _class_ of problem: audit all siblings before closing a story.
    - Definition of done includes "renders correctly" evidence (a golden image or
      attached PNG the agent has actually looked at) for anything visual.
@@ -219,25 +217,27 @@ They stay in the index marked ⏸ Parked and are re-evaluated after T5.
 | **Rescope**                             | GUP-370 → "instrument treemap with existing `GpuTimer` (GUP-292)"                                                                                                                                                                       |
 | **Keep**                                | GUP-386, GUP-375, GUP-376 (small, survive the redesign), GUP-312–315 / 371–373 (re-evaluate after T3 RFC)                                                                                                                               |
 
-## Decisions needed
+## Decisions
 
-1. **Prune**: approve deleting ~40k LOC of unwired subsystems? Alternative: move
-   the transpiler and GPU culling/LOD into an `experimental/` crate rather than
-   deleting them.
-2. **Breaking API reset**: approve breaking changes with no deprecation period
-   (pre-alpha, no external users known)?
-3. **Integrations during the rebuild**: keep `gup-egui`, `gup-bevy`, `gup-ios`,
-   `gup-android` and `gup-tauri` compiling throughout (slower), or exclude them
-   from the workspace until T2 lands (faster, then re-wire)?
-4. **Design defaults**: default font (Inter vs Source Sans 3) and categorical
-   palette (Tableau 10 vs Okabe-Ito, which is colour-blind safe).
-5. **Process changes**: approve the T0 edits to the story-worker and
-   story-scribe instructions.
-6. **Docs**: once approved, `IMPLEMENTATION_STRATEGY.md` and
-   `TECHNICAL_APPROACH.md` should be revised so they describe the architecture
-   that actually exists or is being built, not an aspirational one.
+Recorded 2026-10-04 by the project owner:
 
-## Proposed first wave (after approval)
+1. **Prune**: delete the unwired subsystems outright (git history keeps them),
+   **except** GPU culling/LOD, which moves to an experimental crate for T3/T7 to
+   draw from.
+2. **Breaking API reset**: approved. No deprecation period (pre-alpha; the owner
+   asked for bold moves).
+3. **Integrations**: park `gup-egui`, `gup-bevy`, `gup-ios`, `gup-android` and
+   `gup-tauri` (exclude from workspace/CI) until T2 lands, then re-wire onto the
+   single render path.
+4. **Design defaults**: **Inter** as the default UI font; **Okabe-Ito** as the
+   default categorical palette.
+5. **Process changes**: approved and applied (story-worker, story-scribe,
+   maskfile whitespace checks restricted to git-tracked files).
+6. **Docs**: `IMPLEMENTATION_STRATEGY.md` and `TECHNICAL_APPROACH.md` to be
+   revised once the T3 RFC is accepted, so they describe the architecture being
+   built.
+
+## First wave
 
 Run in parallel in isolated worktrees, merged in order:
 
