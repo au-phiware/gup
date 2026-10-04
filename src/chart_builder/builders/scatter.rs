@@ -47,7 +47,7 @@ use std::sync::Arc;
 ///     SalesPoint { revenue: 200.0, profit: 45.0, region: "South".to_string() },
 /// ];
 ///
-/// // Observable Plot-style API  
+/// // Observable Plot-style API
 /// let chart = scatter()
 ///     .x(AccessorFunction::new(|d: &SalesPoint| AccessorValue::Float(d.revenue)))
 ///     .y(AccessorFunction::new(|d: &SalesPoint| AccessorValue::Float(d.profit)))

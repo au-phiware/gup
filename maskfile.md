@@ -66,7 +66,7 @@ Format all code
 ```bash
 shopt -qs globstar
 concurrently --group --names rs,nix,md \
-   'sed -i "/[[:space:]]\+$/s///" **/*.rs && cargo fmt --all' \
+   'git grep -lz --untracked "[[:space:]]\+$" -- "*.rs" | xargs -0 -r sed -i "/[[:space:]]\+$/s///" && cargo fmt --all' \
    'nixfmt flake.nix' \
    'prettier --cache --log-level warn --write "**/*.md"'
 ```
@@ -78,7 +78,7 @@ Check if code is formatted
 ```bash
 shopt -qs globstar
 concurrently --group --names '\s,rs,nix,md' \
-   '! git --no-pager grep --untracked --name-only --full-name "[[:space:]]\+$" **/*.rs' \
+   '! git --no-pager grep --untracked --name-only --full-name "[[:space:]]\+$" -- "*.rs"' \
    'cargo fmt --all -- --check' \
    'nixfmt --check flake.nix' \
    'prettier --cache --log-level warn --check "**/*.md"'
@@ -91,7 +91,7 @@ Run Rust check, linters and formatters' checks.
 ```bash
 shopt -qs globstar
 concurrently --group --names rs,nix,md \
-   'sed -i "/[[:space:]]\+$/s///" **/*.rs && cargo fmt --all && cargo clippy --allow-no-vcs --fix --all-targets --all-features -- -D warnings && cargo check' \
+   'git grep -lz --untracked "[[:space:]]\+$" -- "*.rs" | xargs -0 -r sed -i "/[[:space:]]\+$/s///" && cargo fmt --all && cargo clippy --allow-no-vcs --fix --all-targets --all-features -- -D warnings && cargo check' \
    'nixfmt flake.nix && statix fix flake.nix' \
    'prettier --cache --log-level warn --write "**/*.md" && mdl --git-recurse .'
 ```
@@ -103,7 +103,7 @@ Run Rust check, linters and formatters' checks.
 ```bash
 shopt -qs globstar
 concurrently --group --names '\s,rs,nix,md,marks' \
-   '! git --no-pager grep --untracked --name-only --full-name "[[:space:]]\+$" **/*.rs' \
+   '! git --no-pager grep --untracked --name-only --full-name "[[:space:]]\+$" -- "*.rs"' \
    'mask check && cargo fmt --all -- --check && cargo clippy --allow-no-vcs --fix --all-targets --all-features -- -D warnings' \
    'nixfmt --check flake.nix && statix check flake.nix' \
    'prettier --cache --log-level warn --check "**/*.md" && mdl --git-recurse .' \

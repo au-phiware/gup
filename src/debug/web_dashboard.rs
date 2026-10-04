@@ -6,7 +6,7 @@
 //! This module provides an embedded web server that serves an interactive dashboard
 //! for visualizing GPU profiling data. The dashboard includes:
 //! - Real-time memory usage charts
-//! - Performance timeline visualization  
+//! - Performance timeline visualization
 //! - Buffer allocation tables
 //! - Historical session comparison
 //!
@@ -187,14 +187,14 @@ const DASHBOARD_HTML: &str = r#"
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #0f172a;
             color: #e2e8f0;
             padding: 20px;
         }
-        
+
         .header {
             text-align: center;
             padding: 20px;
@@ -202,78 +202,78 @@ const DASHBOARD_HTML: &str = r#"
             border-radius: 12px;
             margin-bottom: 30px;
         }
-        
+
         h1 {
             font-size: 2.5em;
             font-weight: 700;
             margin-bottom: 10px;
         }
-        
+
         .subtitle {
             opacity: 0.9;
             font-size: 1.1em;
         }
-        
+
         .dashboard {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
             gap: 20px;
             margin-bottom: 20px;
         }
-        
+
         .card {
             background: #1e293b;
             border-radius: 12px;
             padding: 20px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
-        
+
         .card-title {
             font-size: 1.5em;
             font-weight: 600;
             margin-bottom: 15px;
             color: #60a5fa;
         }
-        
+
         .stat-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
             gap: 15px;
             margin: 20px 0;
         }
-        
+
         .stat {
             background: #0f172a;
             padding: 15px;
             border-radius: 8px;
             border-left: 4px solid #60a5fa;
         }
-        
+
         .stat-label {
             font-size: 0.9em;
             opacity: 0.7;
             margin-bottom: 5px;
         }
-        
+
         .stat-value {
             font-size: 1.8em;
             font-weight: 700;
             color: #60a5fa;
         }
-        
+
         .chart-container {
             position: relative;
             height: 300px;
             margin-top: 20px;
         }
-        
+
         .controls {
             display: flex;
             gap: 10px;
             margin-bottom: 20px;
             flex-wrap: wrap;
         }
-        
+
         button {
             background: #60a5fa;
             color: white;
@@ -285,43 +285,43 @@ const DASHBOARD_HTML: &str = r#"
             transition: all 0.2s;
             font-weight: 500;
         }
-        
+
         button:hover {
             background: #3b82f6;
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(96, 165, 250, 0.4);
         }
-        
+
         button:active {
             transform: translateY(0);
         }
-        
+
         .table-container {
             overflow-x: auto;
             margin-top: 20px;
         }
-        
+
         table {
             width: 100%;
             border-collapse: collapse;
         }
-        
+
         th, td {
             padding: 12px;
             text-align: left;
             border-bottom: 1px solid #334155;
         }
-        
+
         th {
             background: #0f172a;
             font-weight: 600;
             color: #60a5fa;
         }
-        
+
         tr:hover {
             background: #334155;
         }
-        
+
         .alert {
             background: #dc2626;
             color: white;
@@ -329,7 +329,7 @@ const DASHBOARD_HTML: &str = r#"
             border-radius: 8px;
             margin-bottom: 20px;
         }
-        
+
         .status {
             display: inline-block;
             padding: 4px 12px;
@@ -337,7 +337,7 @@ const DASHBOARD_HTML: &str = r#"
             font-size: 0.85em;
             font-weight: 600;
         }
-        
+
         .status-ok { background: #10b981; }
         .status-warning { background: #f59e0b; }
         .status-error { background: #ef4444; }
@@ -348,16 +348,16 @@ const DASHBOARD_HTML: &str = r#"
         <h1>🚀 Gup GPU Profiling Dashboard</h1>
         <p class="subtitle">Real-time GPU Memory and Performance Monitoring</p>
     </div>
-    
+
     <div class="controls">
         <button onclick="updateData()">🔄 Refresh Data</button>
         <button onclick="exportData()">📥 Export JSON</button>
         <button onclick="checkLeaks()">🔍 Check for Leaks</button>
         <button onclick="toggleAutoRefresh()">⏱️ Auto-Refresh: <span id="auto-status">OFF</span></button>
     </div>
-    
+
     <div id="alerts"></div>
-    
+
     <div class="dashboard">
         <div class="card">
             <div class="card-title">📊 Memory Overview</div>
@@ -383,7 +383,7 @@ const DASHBOARD_HTML: &str = r#"
                 <canvas id="memoryChart"></canvas>
             </div>
         </div>
-        
+
         <div class="card">
             <div class="card-title">📈 Buffer Usage Breakdown</div>
             <div class="chart-container">
@@ -391,7 +391,7 @@ const DASHBOARD_HTML: &str = r#"
             </div>
         </div>
     </div>
-    
+
     <div class="card">
         <div class="card-title">🔢 Active Allocations</div>
         <div class="table-container">
@@ -416,7 +416,7 @@ const DASHBOARD_HTML: &str = r#"
         let memoryChart = null;
         let usageChart = null;
         let autoRefreshInterval = null;
-        
+
         // Initialize charts
         const memoryCtx = document.getElementById('memoryChart').getContext('2d');
         memoryChart = new Chart(memoryCtx, {
@@ -451,7 +451,7 @@ const DASHBOARD_HTML: &str = r#"
                 }
             }
         });
-        
+
         const usageCtx = document.getElementById('usageChart').getContext('2d');
         usageChart = new Chart(usageCtx, {
             type: 'doughnut',
@@ -480,20 +480,20 @@ const DASHBOARD_HTML: &str = r#"
                 }
             }
         });
-        
+
         // Update data from API
         async function updateData() {
             try {
                 const response = await fetch('/api/memory');
                 const data = await response.json();
-                
+
                 // Update stats
-                document.getElementById('total-memory').textContent = 
+                document.getElementById('total-memory').textContent =
                     (data.total_memory_active / 1024 / 1024).toFixed(2) + ' MB';
                 document.getElementById('buffer-count').textContent = data.active_allocations;
                 document.getElementById('memory-trend').textContent = 'N/A';
                 document.getElementById('leak-count').textContent = data.detected_leaks.length;
-                
+
                 // Update memory history chart (simplified - just show current value)
                 const now = new Date();
                 if (memoryChart.data.labels.length > 20) {
@@ -503,34 +503,34 @@ const DASHBOARD_HTML: &str = r#"
                 memoryChart.data.labels.push(now.toLocaleTimeString());
                 memoryChart.data.datasets[0].data.push(data.total_memory_active / 1024 / 1024);
                 memoryChart.update();
-                
+
                 // Update usage breakdown chart
                 if (data.usage_breakdown) {
                     const labels = Object.keys(data.usage_breakdown);
                     const values = Object.values(data.usage_breakdown).map(v => v / 1024 / 1024);
-                    
+
                     usageChart.data.labels = labels;
                     usageChart.data.datasets[0].data = values;
                     usageChart.update();
                 }
-                
+
                 // Update allocations table
                 updateAllocationsTable(data.largest_allocations || []);
-                
+
             } catch (error) {
                 console.error('Failed to fetch data:', error);
                 showAlert('Failed to fetch profiling data: ' + error.message);
             }
         }
-        
+
         function updateAllocationsTable(allocations) {
             const tbody = document.getElementById('allocations-body');
-            
+
             if (allocations.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; opacity: 0.5;">No active allocations</td></tr>';
                 return;
             }
-            
+
             tbody.innerHTML = allocations.map(alloc => `
                 <tr>
                     <td><code>${alloc.id || 'N/A'}</code></td>
@@ -541,14 +541,14 @@ const DASHBOARD_HTML: &str = r#"
                 </tr>
             `).join('');
         }
-        
+
         async function checkLeaks() {
             try {
                 const response = await fetch('/api/leaks');
                 const leaks = await response.json();
-                
+
                 document.getElementById('leak-count').textContent = leaks.length;
-                
+
                 if (leaks.length > 0) {
                     showAlert(`⚠️ Detected ${leaks.length} potential memory leaks!`);
                 } else {
@@ -558,7 +558,7 @@ const DASHBOARD_HTML: &str = r#"
                 showAlert('Failed to check for leaks: ' + error.message);
             }
         }
-        
+
         async function exportData() {
             try {
                 const response = await fetch('/api/export');
@@ -573,7 +573,7 @@ const DASHBOARD_HTML: &str = r#"
                 showAlert('Failed to export data: ' + error.message);
             }
         }
-        
+
         function toggleAutoRefresh() {
             if (autoRefreshInterval) {
                 clearInterval(autoRefreshInterval);
@@ -585,7 +585,7 @@ const DASHBOARD_HTML: &str = r#"
                 updateData();
             }
         }
-        
+
         function showAlert(message, type = 'error') {
             const alertsDiv = document.getElementById('alerts');
             const alert = document.createElement('div');
@@ -597,19 +597,19 @@ const DASHBOARD_HTML: &str = r#"
             alertsDiv.appendChild(alert);
             setTimeout(() => alert.remove(), 5000);
         }
-        
+
         function formatBytes(bytes) {
             if (bytes < 1024) return bytes + ' B';
             if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
             return (bytes / 1024 / 1024).toFixed(2) + ' MB';
         }
-        
+
         function formatDuration(seconds) {
             if (seconds < 60) return seconds.toFixed(1) + 's';
             if (seconds < 3600) return (seconds / 60).toFixed(1) + 'm';
             return (seconds / 3600).toFixed(1) + 'h';
         }
-        
+
         // Initial data load
         updateData();
     </script>

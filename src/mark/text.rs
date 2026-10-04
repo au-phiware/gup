@@ -150,17 +150,17 @@ fn vs_main(
 ) -> VertexOutput {{
     let instance = instances[instance_index];
     var output: VertexOutput;
-    
+
     // Calculate glyph position
     let glyph_pos = instance.position + instance.glyph_offset + vertex_pos * instance.glyph_size;
     output.position = projection * vec4<f32>(glyph_pos, 0.0, 1.0);
-    
+
     // Interpolate texture coordinates
     let u = mix(instance.tex_coords.x, instance.tex_coords.z, vertex_tex.x);
     let v = mix(instance.tex_coords.y, instance.tex_coords.w, vertex_tex.y);
     output.tex_coords = vec2<f32>(u, v);
     output.color = instance.color;
-    
+
     return output;
 }}
 
@@ -195,14 +195,14 @@ struct FragmentInput {{
 fn fs_main(input: FragmentInput) -> @location(0) vec4<f32> {{
     // Sample SDF value from font atlas
     let sdf_value = textureSample(font_texture, font_sampler, input.tex_coords).r;
-    
+
     // SDF rendering parameters
     let smoothing = 0.05;  // Adjust for edge smoothness
     let threshold = 0.5;   // Distance field threshold
-    
+
     // Calculate alpha from SDF value
     let alpha = smoothstep(threshold - smoothing, threshold + smoothing, sdf_value);
-    
+
     // Return colored text with SDF anti-aliasing
     return vec4<f32>(input.color.rgb, input.color.a * alpha);
 }}

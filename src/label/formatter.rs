@@ -665,7 +665,7 @@ mod tests {
 
         let formatter = NumericFormatter::new(0)
             .with_thousands_separator(false)
-            .with_scientific_threshold(1e10); // Disable scientific notation for this test  
+            .with_scientific_threshold(1e10); // Disable scientific notation for this test
         // Even without thousands separator, still uses SI units
         assert_eq!(formatter.format_value(1234567.0), "1.23M");
     }

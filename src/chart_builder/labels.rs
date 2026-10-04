@@ -61,7 +61,7 @@ pub trait LabelCapableBuilder<T>: ChartBuilder<T> {
 pub struct AxisLabelConfig {
     /// X-axis label formatter
     pub x_formatter: Option<Box<dyn LabelFormatter>>,
-    /// Y-axis label formatter  
+    /// Y-axis label formatter
     pub y_formatter: Option<Box<dyn LabelFormatter>>,
     /// X-axis label constraints
     pub x_constraints: LabelConstraints,

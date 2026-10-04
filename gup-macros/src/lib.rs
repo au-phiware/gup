@@ -270,7 +270,7 @@ pub fn derive_shader_type(input: TokenStream) -> TokenStream {
 /// struct ScatterPlot {
 ///     #[mixable(vertex_data)]
 ///     points: Vec<[f32; 2]>,
-///     
+///
 ///     #[mixable(uniform_data, binding = 0)]
 ///     color: [f32; 4],
 /// }

@@ -40,17 +40,17 @@ use wgpu::{Device, Queue, RenderPass};
 /// async fn example() -> Result<(), Box<dyn std::error::Error>> {
 ///     let context = Arc::new(GupContext::headless().await?);
 ///     let device = &context.device;
-///     
+///
 ///     let mut renderer = MarkRenderer::new(device);
-///     
+///
 ///     // Upload vertex data
 ///     let vertices = Circle::generate_vertices();
 ///     renderer.upload_vertices(device, &context.queue, &vertices)?;
-///     
+///
 ///     // Render in a render pass
 ///     // let mut render_pass = ...;
 ///     // renderer.render_marks::<Circle>(&mut render_pass, &pipeline, &bind_group, 100)?;
-///     
+///
 ///     Ok(())
 /// }
 /// ```

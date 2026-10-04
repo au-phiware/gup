@@ -368,14 +368,14 @@ fn vs_main(
     instance: InstanceInput,
 ) -> VertexOutput {
     var output: VertexOutput;
-    
+
     // Transform vertex position to instance bounds
     let world_pos = instance.center + vertex.position * instance.half_size;
-    
+
     // Convert to clip space (assuming normalized device coordinates)
     output.position = vec4<f32>(world_pos, 0.0, 1.0);
     output.color = instance.color;
-    
+
     return output;
 }
 

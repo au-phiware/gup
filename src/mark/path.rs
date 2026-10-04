@@ -222,18 +222,18 @@ fn vs_main(
 ) -> VertexOutput {{
     let instance = instances[instance_index];
     var output: VertexOutput;
-    
+
     // Transform path vertex to world space
     let world_pos_4d = instance.transform * vec4<f32>(position, 0.0, 1.0);
     let world_pos_2d = world_pos_4d.xy;
-    
+
     output.position = world_pos_4d;
     output.world_position = world_pos_2d;
     output.tex_coords = tex_coords;
     output.fill_color = instance.fill_color;
     output.stroke_color = instance.stroke_color;
     output.stroke_width = instance.stroke_width;
-    
+
     return output;
 }}
 

@@ -239,12 +239,12 @@ fn vs_main(
 ) -> VertexOutput {{
     let instance = instances[instance_index];
     var output: VertexOutput;
-    
+
     // Apply composite transform
     let world_pos = instance.transform * vec4<f32>(position, 0.0, 1.0);
     output.position = world_pos;
     output.mark_type = instance.mark_type;
-    
+
     return output;
 }}
 
@@ -272,7 +272,7 @@ struct FragmentInput {{
 fn fs_main(input: FragmentInput) -> @location(0) vec4<f32> {{
     // Dispatch to appropriate mark renderer based on mark_type
     // 0 = Circle, 1 = Rectangle, 2 = Line, 3 = Path
-    
+
     // For now, return a default color
     // TODO: Implement proper sub-mark rendering
     return vec4<f32>(1.0, 0.0, 1.0, 1.0);
