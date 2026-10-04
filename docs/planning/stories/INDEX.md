@@ -47,15 +47,11 @@ survives into `gup-core`.
 ## RFC-001 Migration
 
 **Old-path LOC remaining: 32629 (measured 2026-10-04)**. Measured as the
-non-blank, non-comment-only, non-`#[cfg(test)]`-block line count of
-`src/selection.rs`, `src/mark/`, `src/shader_function/`,
-`src/shader_pipeline.rs`, `src/chart_builder.rs` + `src/chart_builder/`,
-`src/context.rs`, and `src/render.rs`. Command: for each file, strip every
-`#[cfg(test)]` attribute together with its brace-matched following item (handles
-both `#[cfg(test)] mod tests { … }` and multiple scattered test blocks per
-file), then count remaining lines that are neither blank nor `//`-comment-only;
-sum across all files (a small Perl script was used for this, since neither
-`tokei` nor `cloc` was available in this environment). This metric exists per
+non-blank, non-comment-only, non-`#[cfg(test)]`-block line count of the old
+render path (`src/selection.rs`, `src/mark/`, `src/shader_function/`,
+`src/shader_pipeline.rs`, `src/chart_builder*`, `src/context.rs`,
+`src/render.rs`). Re-measure with `mask old-path-loc`
+(`scripts/old_path_loc.pl`) after each RFC-001 story. This metric exists per
 [RFC-001](../rfcs/RFC-001_Core_Architecture.md)'s Orchestrator review point 1
 ("parallel-system risk"): it must trend to 0 as S14 (the flip and delete) lands,
 or the old and new paths will ossify side by side the way four scale systems and

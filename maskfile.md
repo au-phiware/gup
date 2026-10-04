@@ -207,6 +207,14 @@ Show dependency tree
 cargo tree
 ```
 
+## old-path-loc
+
+Count non-test LOC remaining in the frozen old render path (RFC-001 metric)
+
+```bash
+scripts/old_path_loc.pl | tail -1
+```
+
 ## validate-marks
 
 Validate all built-in mark types (CI gate)
