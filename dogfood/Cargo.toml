@@ -17,5 +17,3 @@ env_logger = "0.10"
 eframe = { version = "0.33", features = ["wgpu"] }
 image = "0.24"
 pollster = "0.3"
-# Required only because #[wgsl_function] expands to bare `bytemuck::` paths (GUP-377).
-bytemuck = { version = "1.23", features = ["derive"] }

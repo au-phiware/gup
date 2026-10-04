@@ -23,23 +23,11 @@ async fn main() -> GupResult<()> {
         .y(AccessorFunction::new(|p: &P| AccessorValue::Float(p.y)))
         .title("Smoke test")
         .show_axes(true)
-        .build_with_data(data.clone(), ctx.clone())?;
+        .build_with_data(data, ctx)?;
     chart.export_png("/tmp/gup-dogfood/t0_smoke_builder.png", 800, 500)?;
-
-    // Same chart via plot() + field names (README style).
-    let r = plot()
-        .with_context(ctx.clone())
-        .data(data)
-        .scatter(x("x"), y("y"))
-        .title("plot() api")
-        .build_async()
-        .await;
-    match r {
-        Ok(mut c) => {
-            c.export_png("/tmp/gup-dogfood/t0_smoke_plot.png", 800, 500)?;
-            println!("plot() ok");
-        }
-        Err(e) => println!("plot() error: {e}"),
-    }
+    // The audit also tried the README-style `plot().scatter(x("x"), y("y"))`
+    // route: it "succeeded" but drew all 20 points on one spot (field
+    // accessors evaluated to 0.0). That API is being deleted (GUP-389), so
+    // the suite no longer exercises it.
     Ok(())
 }

@@ -1607,7 +1607,6 @@ dependencies = [
 name = "gup-dogfood"
 version = "0.1.0"
 dependencies = [
- "bytemuck",
  "chrono",
  "csv",
  "eframe",

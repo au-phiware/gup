@@ -6,8 +6,9 @@
 
 use gup::prelude::*;
 use gup::proc_macros::wgsl_function;
-#[allow(unused_imports)]
-use gup::*; // GUP-377 workaround: makes `crate::shader_function` resolve
+// The audit needed `use gup::*;` here and a direct `bytemuck` dependency
+// because the macro expanded to `crate::`/bare `bytemuck::` paths. Both
+// workarounds were removed after GUP-377 made the expansion use `::gup`.
 use std::sync::Arc;
 
 /// Map a normalised value to a radius with a soft-knee curve.
