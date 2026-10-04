@@ -312,3 +312,124 @@ story was implemented in an isolated worktree without pushing. The local
 software-rendering run is the closest equivalent. The first CI run should be
 checked, especially the ImageMagick SVG rasterisation used by task 1's
 workaround and lavapipe under `xvfb-run`.
+
+## Retrospective
+
+**Completed**: 2026-10-04
+
+### Key Technical Learnings
+
+#### Hue survives the colour bug; exact RGB does not
+
+- **Challenge**: Every configured colour renders lighter than specified (double
+  gamma encoding). A naive "configured colour present" check would fail
+  everywhere, and no check could tell "rendered in colour" from "rendered grey".
+- **Solution**: Two measures. `Hue` counts pixels sharing the configured hue
+  family. It passes today, and catches categorical-colour-renders-grey and blank
+  output. `Colour` checks the exact RGB and is a tracked `DOUBLE_GAMMA` gap.
+  Once the gamma bug is fixed, the `Colour` checks `XPASS` and force the gap
+  entry to be removed.
+- **Pattern**: Split each visual expectation into a "works at all" check and an
+  "exactly right" check, so known bugs are tracked without masking regressions.
+- **Caveat**: Hue is only approximately preserved. Task 6's configured
+  `[1.0, 0.3, 0.0]` (hue 18°) renders near 36°, so the "works at all" check uses
+  the orange family rather than the exact hue.
+
+#### Thresholds must come from looking at the image
+
+- **Challenge**: The first full run had 3 FAILs, all from my thresholds. Sparse
+  charts cover only 0.4–0.8% of pixels, and a 1% "not blank" floor was wrong for
+  them.
+- **Solution**: I re-derived thresholds from the measured values (blank is 0%,
+  so a 0.2–0.3% floor still catches blank output), kept a 2–4x margin, and
+  re-ran under forced lavapipe to check they hold on the CI adapter.
+- **Pattern**: Print the measured value next to the threshold in every check
+  line. It made calibration and review straightforward.
+
+#### Windowed egui tasks run fine under Xvfb
+
+- Under Xvfb, Mesa warns "No DRI3 support detected - required for presentation",
+  but eframe still presents via the software path, and
+  `ViewportCommand::Screenshot` works. No compositor or GPU is needed, so
+  `xvfb-run` plus `mesa-vulkan-drivers` is enough for CI.
+- Forcing software rendering locally needs both `VK_ICD_FILENAMES=<lvp_icd>` and
+  `LIBGL_ALWAYS_SOFTWARE=1`. Otherwise wgpu can still pick the hardware GL
+  backend.
+
+### Architectural Decisions
+
+#### Manifest separate from task binaries
+
+- **Decision**: Task intent, expected outputs, checks and gaps live in
+  `suite.rs`, which never calls Gup. The binaries are the only API consumers.
+- **Reasoning**: The old API is frozen and RFC-001 replaces it. RFC-001 S10's
+  exit criterion is "dogfood tasks 1–3 pass". The bar must not move when the
+  binaries are rewritten.
+- **Trade-off**: Regions are hard-coded fractions of today's layout. A layout
+  change (e.g. margins computed from label sizes, T4b) will need regions
+  re-derived. GUP-397 should replace them with layout metadata.
+
+#### Rust runner instead of a shell script
+
+- **Decision**: `dogfood_check` is a Rust binary in the crate, reusing `image`
+  for decoding. `run_all.sh` just builds and execs it.
+- **Reasoning**: Pixel checks need image decoding, and the classification logic
+  deserves unit tests. A shell script with ImageMagick calls would be harder to
+  test and to keep honest.
+- **Trade-off**: The runner shares the crate's heavy build (eframe + gup
+  release). That cost is paid once anyway.
+
+#### XPASS fails the build
+
+- **Decision**: A tracked gap that starts passing fails the run.
+- **Reasoning**: The story requires that "a silent fix isn't lost". Without
+  this, gap entries go stale and later hide regressions of the fixed behaviour.
+- **Trade-off**: A story that fixes a gap must also edit `suite.rs`. This is
+  intended, since it documents the fix.
+
+#### Hook formats dogfood but does not compile it
+
+- **Decision**: `cargo fmt --manifest-path dogfood/Cargo.toml -- --check` was
+  added to `all-check`. Building and running are left to CI and `mask dogfood`.
+- **Reasoning**: Building dogfood (eframe + release gup) would add minutes to
+  every commit for every agent.
+- **Consequence**: Stories that change Gup's public API (GUP-389 deletes
+  `plot_api`, `FieldAccessor` and possibly moves `AccessorValue`) will not be
+  stopped by the pre-commit hook if they break dogfood. CI or `mask dogfood`
+  catches it. Wave-1 stories touching the public API should run `mask dogfood`
+  before merging.
+
+### Development Workflow Insights
+
+- **Copy first, commit first.** The verbatim copy was committed before any edit,
+  so the history shows exactly what the audit wrote and what changed since.
+- **Hook exit codes.** A backgrounded commit followed by a log command reported
+  success even though the hook had failed (prettier on an untracked README; the
+  hook globs untracked `*.md`). Run the commit as a command of its own, and run
+  `prettier --write` on new Markdown before committing anything.
+- **Load**: With several agents compiling at once (load average ~30), each
+  pre-commit run took about 10 minutes. Writing docs while hooks ran kept the
+  work moving.
+- GUP-388 had not landed. If it lands before GUP-397, reuse it.
+
+### Follow-up Stories
+
+1. **GUP-397: Dogfood Checks on Shared Visual Assertions**: replace
+   `dogfood/src/pixels.rs` with GUP-388's target-agnostic assertion module once
+   it exists, and use layout metadata instead of hard-coded regions.
+
+Not filed as stories, because they belong to the frozen old path or are covered
+by RFC-001 steps. They are tracked as named gaps in `suite.rs`:
+
+- No text in PNG/texture output (RFC-001 S2/S3).
+- Grid configured but not drawn in PNG/texture output, while SVG has it. This
+  was observed here and is not called out in the strategic review (RFC-001 S3/S7
+  guides).
+- SVG export without data marks (RFC-001 S3).
+- `#[wgsl_function]` duplicate uniforms struct (RFC-001 S5). Tutorial 3 still
+  leads users straight into this panic.
+- `DataStream` selections never becoming render-ready (RFC-001 S12).
+- Bar `group_by`/`stack_by`/String colour, and legends (T5).
+- A raw `Selection` inside `ComposedChart` drawing in whole-canvas clip space
+  (RFC-001 S7 Layout). `examples/export_png.rs` shows it: the x=1 point sits
+  left of the y axis.
