@@ -51,20 +51,6 @@ Render pipelines are expensive to create (~15ms) but cheap to share. The
 renderers and compositions to share the same pipeline without lifetime
 complications.
 
-### 4. Comprehensive Buffer Management
-
-The `MarkRenderer` manages three GPU buffer types that automatically resize as
-needed:
-
-| Buffer   | Type     | Purpose                                | Default Size |
-| -------- | -------- | -------------------------------------- | ------------ |
-| Vertex   | Vertex   | Base geometry (e.g., unit quad)        | 4 KB         |
-| Instance | Instance | Per-instance data (position, color)    | 8 KB         |
-| Index    | Storage  | Triangle indices for indexed rendering | 2 KB         |
-
-Buffers use a 1.5× growth factor when resizing, balancing memory usage with
-allocation frequency.
-
 ## Component Architecture
 
 ### Core Type Hierarchy
@@ -86,15 +72,6 @@ Mark trait (generic: Vertex, AttributeValue)
 │   ├── get_pipeline::<M>()
 │   ├── get_pipeline_with_blend::<M>()
 │   └── create_multi_pass_pipelines::<M>()
-│
-├── MarkRenderer
-│   ├── vertex_buffer: GpuBuffer<u8>
-│   ├── instance_buffer: GpuBuffer<u8>
-│   ├── index_buffer: Option<GpuBuffer<u32>>
-│   ├── upload_vertices() / upload_instances() / upload_indices()
-│   ├── render_marks::<M>()
-│   ├── render_marks_multi_pass::<M>()
-│   └── render_marks_with_patterns::<M>()
 │
 └── Built-in Implementations
     ├── Circle      (SDF circle, instanced quads)
@@ -148,20 +125,9 @@ single `HashMap<TypeId, Box<dyn MarkInfo>>` while preserving type safety through
 
 ### Render Loop
 
-```text
-1. Upload phase (CPU → GPU):
-   ├─ renderer.upload_vertices(device, queue, &vertices)
-   ├─ renderer.upload_instances(device, queue, &instances)
-   └─ renderer.upload_indices(device, queue, &indices)
-
-2. Draw phase (GPU):
-   └─ renderer.render_marks::<M>(render_pass, pipeline, bind_group, count)
-       ├─ Set pipeline
-       ├─ Set bind group at slot 0
-       ├─ Set vertex buffer at slot 0
-       ├─ If indexed: set index buffer, draw_indexed()
-       └─ If non-indexed: draw()
-```
+`Selection<T, M>` owns the GPU instance buffer for a mark. It uploads instance
+data when data or attributes change and records draw calls into the caller's
+render pass, sharing pipelines through an optional `PipelineCache`.
 
 ### Bind Group Layout
 

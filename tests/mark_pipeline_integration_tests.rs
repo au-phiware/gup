@@ -23,10 +23,7 @@
 use gup::buffer::{BufferType, GpuBuffer};
 use gup::context::GupContext;
 use gup::error::GupResult;
-use gup::mark::{
-    Circle, CircleAttributes, Mark, MarkInfo, MarkInfoImpl, MarkRegistry, MarkRenderer,
-};
-use gup::{Vec2, Vec4, vec2, vec4};
+use gup::mark::{Circle, MarkInfo, MarkInfoImpl, MarkRegistry};
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
@@ -81,93 +78,6 @@ async fn test_bind_group_creation() -> GupResult<()> {
     // Bind group should be created successfully
     // Cannot verify much about the bind group structure without internal access
     drop(bind_group); // Just verify it was created without error
-
-    Ok(())
-}
-
-/// Test complete rendering workflow from mark to GPU.
-#[tokio::test]
-async fn test_complete_rendering_workflow() -> GupResult<()> {
-    let context = create_test_context().await?;
-    let device = &context.device;
-    let queue = &context.queue;
-
-    // Set up mark registry and renderer
-    let mut registry = MarkRegistry::new();
-    registry.register::<Circle>();
-
-    let mut renderer = MarkRenderer::new(device);
-
-    // Create pipeline
-    let _pipeline = registry.get_pipeline::<Circle>(device)?;
-
-    // Create bind group with instance buffer
-    let instance_buffer = GpuBuffer::<u8>::new(device, BufferType::Instance, 10);
-    let viewport = gup::ViewportUniforms {
-        width: 64.0,
-        height: 64.0,
-    };
-    let viewport_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("test_viewport_uniform"),
-        contents: bytemuck::bytes_of(&viewport),
-        usage: wgpu::BufferUsages::UNIFORM,
-    });
-    let _bind_group =
-        registry.create_bind_group::<Circle>(device, instance_buffer.buffer(), &[&viewport_buf])?;
-
-    // Upload vertex data
-    let vertices = Circle::generate_vertices();
-    renderer.upload_vertices(device, queue, &vertices)?;
-
-    // Upload test instance data
-    #[repr(C)]
-    #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-    struct CircleInstanceData {
-        center: [f32; 2],
-        radius: f32,
-        fill_color: [f32; 4],
-        stroke_width: f32,
-        stroke_color: [f32; 4],
-        _padding: [f32; 2], // Ensure proper alignment
-    }
-
-    let test_instances = vec![
-        CircleInstanceData {
-            center: [10.0, 20.0],
-            radius: 5.0,
-            fill_color: [1.0, 0.0, 0.0, 1.0],
-            stroke_width: 1.0,
-            stroke_color: [0.0, 0.0, 0.0, 1.0],
-            _padding: [0.0; 2],
-        },
-        CircleInstanceData {
-            center: [30.0, 40.0],
-            radius: 8.0,
-            fill_color: [0.0, 1.0, 0.0, 1.0],
-            stroke_width: 2.0,
-            stroke_color: [0.0, 0.0, 1.0, 1.0],
-            _padding: [0.0; 2],
-        },
-    ];
-
-    renderer.upload_instances(device, queue, &test_instances)?;
-
-    // Upload index data if needed
-    if let Some(indices) = Circle::generate_indices() {
-        renderer.upload_indices(device, queue, &indices)?;
-    }
-
-    // Verify all data was uploaded correctly
-    assert!(renderer.vertex_len() > 0);
-    assert!(renderer.instance_len() > 0);
-    if Circle::index_count().is_some() {
-        assert!(renderer.index_len().unwrap_or(0) > 0);
-    }
-
-    // Note: Actual render pass creation would require a surface/texture target
-    // For this integration test, we verify that all components are created successfully
-    // and data is uploaded properly. Full rendering would be tested in examples or
-    // interactive tests with actual graphics output.
 
     Ok(())
 }
@@ -236,90 +146,6 @@ async fn test_multiple_mark_types() -> GupResult<()> {
     Ok(())
 }
 
-/// Test mark renderer buffer management.
-#[tokio::test]
-async fn test_mark_renderer_buffer_management() -> GupResult<()> {
-    let context = create_test_context().await?;
-    let device = &context.device;
-    let queue = &context.queue;
-
-    let mut renderer = MarkRenderer::new(device);
-
-    // Test initial state
-    assert_eq!(renderer.vertex_len(), 0);
-    assert_eq!(renderer.instance_len(), 0);
-    assert_eq!(renderer.index_len(), Some(0));
-
-    // Upload test data
-    let vertices = Circle::generate_vertices();
-    renderer.upload_vertices(device, queue, &vertices)?;
-
-    // Verify vertex data uploaded
-    assert_eq!(
-        renderer.vertex_len(),
-        vertices.len() * std::mem::size_of::<gup::mark::CircleVertex>()
-    );
-
-    // Test instance data
-    let test_attributes = [CircleAttributes {
-        center: vec2![10.0, 20.0],
-        radius: 5.0,
-        fill_color: vec4![1.0, 0.0, 0.0, 1.0],
-        stroke_width: 1.0,
-        stroke_color: vec4![0.0, 0.0, 0.0, 1.0],
-    }];
-
-    // Convert to GPU-compatible format
-    #[repr(C)]
-    #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-    struct CircleInstance {
-        center: [f32; 2],
-        radius: f32,
-        fill_color: [f32; 4],
-        stroke_width: f32,
-        stroke_color: [f32; 4],
-        _padding: [f32; 2],
-    }
-
-    let gpu_instances: Vec<CircleInstance> = test_attributes
-        .iter()
-        .map(|attr| CircleInstance {
-            center: [attr.center.x, attr.center.y],
-            radius: attr.radius,
-            fill_color: [
-                attr.fill_color.x,
-                attr.fill_color.y,
-                attr.fill_color.z,
-                attr.fill_color.w,
-            ],
-            stroke_width: attr.stroke_width,
-            stroke_color: [
-                attr.stroke_color.x,
-                attr.stroke_color.y,
-                attr.stroke_color.z,
-                attr.stroke_color.w,
-            ],
-            _padding: [0.0; 2],
-        })
-        .collect();
-
-    renderer.upload_instances(device, queue, &gpu_instances)?;
-
-    // Verify instance data uploaded
-    assert_eq!(
-        renderer.instance_len(),
-        gpu_instances.len() * std::mem::size_of::<CircleInstance>()
-    );
-
-    // Test clearing
-    renderer.clear();
-    assert_eq!(renderer.vertex_len(), 0);
-    assert_eq!(renderer.instance_len(), 0);
-    assert_eq!(renderer.index_len(), Some(0));
-
-    Ok(())
-}
-
 /// Test bind group layout creation for marks with custom shaders.
 #[tokio::test]
 async fn test_custom_shader_bind_group_layout() -> GupResult<()> {
@@ -347,43 +173,6 @@ async fn test_custom_shader_bind_group_layout() -> GupResult<()> {
             drop(layout); // Just verify creation succeeded
         }
     }
-
-    Ok(())
-}
-
-/// Test automatic buffer resizing during upload operations.
-#[tokio::test]
-async fn test_buffer_auto_resize() -> GupResult<()> {
-    let context = create_test_context().await?;
-    let device = &context.device;
-    let queue = &context.queue;
-
-    // Create renderer with small initial capacity
-    let mut renderer = MarkRenderer::with_capacity(device, 64, 128, Some(32));
-
-    let initial_vertex_capacity = renderer.vertex_capacity();
-    let initial_instance_capacity = renderer.instance_capacity();
-
-    // Upload data larger than initial capacity
-    let large_vertex_data: Vec<[f32; 2]> = (0..100).map(|i| [i as f32, (i * 2) as f32]).collect();
-    renderer.upload_vertices(device, queue, &large_vertex_data)?;
-
-    // Buffer should have auto-resized
-    assert!(renderer.vertex_capacity() > initial_vertex_capacity);
-    assert_eq!(
-        renderer.vertex_len(),
-        large_vertex_data.len() * std::mem::size_of::<[f32; 2]>()
-    );
-
-    // Test instance buffer resize
-    let large_instance_data: Vec<[f32; 4]> = (0..50).map(|i| [i as f32; 4]).collect();
-    renderer.upload_instances(device, queue, &large_instance_data)?;
-
-    assert!(renderer.instance_capacity() > initial_instance_capacity);
-    assert_eq!(
-        renderer.instance_len(),
-        large_instance_data.len() * std::mem::size_of::<[f32; 4]>()
-    );
 
     Ok(())
 }

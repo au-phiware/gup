@@ -10,8 +10,8 @@ use gup::context::GupContext;
 use gup::error::GupResult;
 use gup::mark::advanced_rendering::{MarkViewport, MultiPassRenderer};
 use gup::mark::{
-    Circle, DynamicAttributeMap, DynamicAttributeValue, Mark, MarkBlendConfig, MarkRegistry,
-    MarkRenderer, MultiPassConfig, RenderPassConfig, RenderStateManager,
+    Circle, DynamicAttributeMap, DynamicAttributeValue, MarkBlendConfig, MarkRegistry,
+    MultiPassConfig, RenderPassConfig, RenderStateManager,
 };
 use gup::mixable::BlendMode;
 use std::sync::Arc;
@@ -158,32 +158,6 @@ async fn test_blend_aware_pipeline_custom_no_override() -> GupResult<()> {
         Some(BlendMode::Additive),
     )?;
     assert!(Arc::strong_count(&pipeline) >= 1);
-
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// MarkRenderer Multi-Pass Integration (GPU tests)
-// ---------------------------------------------------------------------------
-
-#[tokio::test]
-async fn test_renderer_buffer_upload_for_multi_pass() -> GupResult<()> {
-    let context = create_test_context().await?;
-    let device = &context.device;
-    let queue = &context.queue;
-
-    let mut renderer = MarkRenderer::new(device);
-
-    // Upload circle vertices
-    let vertices = Circle::generate_vertices();
-    renderer.upload_vertices(device, queue, &vertices)?;
-
-    let indices = Circle::generate_indices().unwrap();
-    renderer.upload_indices(device, queue, &indices)?;
-
-    // Verify data is uploaded
-    assert!(renderer.vertex_len() > 0);
-    assert_eq!(renderer.index_len(), Some(indices.len()));
 
     Ok(())
 }

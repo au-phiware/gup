@@ -77,8 +77,6 @@ Quick access to all documents in `docs/`. For stories and planning, see
   configuration
 - [CI_BENCHMARK_INTEGRATION.md](CI_BENCHMARK_INTEGRATION.md) — CI benchmark
   integration guide
-- [GPU_TIMESTAMP_INTEGRATION.md](GPU_TIMESTAMP_INTEGRATION.md) — GPU timestamp
-  query integration
 - [CROSS_PLATFORM_AXIS_PERFORMANCE.md](CROSS_PLATFORM_AXIS_PERFORMANCE.md) —
   Axis performance across platforms
 - [WASM_PERFORMANCE.md](WASM_PERFORMANCE.md) — WebAssembly performance guide

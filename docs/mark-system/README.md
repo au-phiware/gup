@@ -7,7 +7,7 @@ high-performance GPU operations through a carefully designed trait hierarchy.
 ## Quick Start
 
 ```rust
-use gup::mark::{Circle, Mark, MarkRegistry, MarkRenderer};
+use gup::mark::{Circle, MarkRegistry};
 use gup::GupContext;
 use std::sync::Arc;
 
@@ -19,12 +19,7 @@ async fn render_circles() -> Result<(), Box<dyn std::error::Error>> {
     let mut registry = MarkRegistry::new();
     registry.register::<Circle>();
 
-    // 3. Create renderer and upload geometry
-    let mut renderer = MarkRenderer::new(&context.device);
-    let vertices = Circle::generate_vertices();
-    renderer.upload_vertices(&context.device, &context.queue, &vertices)?;
-
-    // 4. Get cached render pipeline
+    // 3. Get cached render pipeline
     let pipeline = registry.get_pipeline::<Circle>(&context.device)?;
 
     Ok(())
@@ -63,8 +58,6 @@ For creating custom marks, see the
 ┌─────────────────────────────────────────────────────┐
 │                   User Code                         │
 │  registry.register::<Circle>();                     │
-│  renderer.upload_vertices(...);                     │
-│  renderer.render_marks::<Circle>(...);              │
 └───────────────┬─────────────────────────────────────┘
                 │
 ┌───────────────▼─────────────────────────────────────┐
@@ -72,13 +65,6 @@ For creating custom marks, see the
 │  • Type-safe mark registration                      │
 │  • Pipeline caching (Arc<RenderPipeline>)            │
 │  • Bind group creation                              │
-└───────────────┬─────────────────────────────────────┘
-                │
-┌───────────────▼─────────────────────────────────────┐
-│              MarkRenderer                           │
-│  • Vertex/instance/index buffer management          │
-│  • Indexed and non-indexed draw calls               │
-│  • Multi-pass and pattern rendering                 │
 └───────────────┬─────────────────────────────────────┘
                 │
 ┌───────────────▼─────────────────────────────────────┐

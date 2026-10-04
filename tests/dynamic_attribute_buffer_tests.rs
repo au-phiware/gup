@@ -8,13 +8,12 @@
 //! - Dirty-only upload behaviour
 //! - Per-instance data in storage buffers
 //! - Static data in uniform buffers
-//! - Integration with MarkRenderer
 //! - Performance of attribute updates + GPU upload
 
 use gup::context::GupContext;
 use gup::error::GupResult;
 use gup::mark::advanced_rendering::DynamicAttributeBufferManager;
-use gup::mark::{Circle, DynamicAttributeMap, DynamicAttributeValue, Mark, MarkRenderer};
+use gup::mark::{DynamicAttributeMap, DynamicAttributeValue};
 use std::sync::Arc;
 
 /// Helper to create a headless GPU context.
@@ -514,43 +513,6 @@ async fn test_bandwidth_savings_with_dirty_only() -> GupResult<()> {
         savings_pct > 50.0,
         "Dirty-only should save >50% bandwidth, got {savings_pct:.1}%"
     );
-
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// MarkRenderer integration
-// ---------------------------------------------------------------------------
-
-#[tokio::test]
-async fn test_mark_renderer_upload_and_render_setup() -> GupResult<()> {
-    let context = create_test_context().await?;
-    let device = &context.device;
-    let queue = &context.queue;
-
-    let mut renderer = MarkRenderer::new(device);
-    let mut manager = DynamicAttributeBufferManager::new();
-    let mut attrs = DynamicAttributeMap::new();
-
-    // Upload mark geometry
-    let vertices = Circle::generate_vertices();
-    renderer.upload_vertices(device, queue, &vertices)?;
-
-    // Set dynamic attributes
-    attrs.set("opacity", DynamicAttributeValue::from_scalar(0.8));
-    attrs.set(
-        "colors",
-        DynamicAttributeValue::from_instances(vec![[1.0, 0.0, 0.0, 1.0]; 5]),
-    );
-
-    // Upload dynamic attributes to GPU
-    let uploaded = manager.upload_dirty(device, queue, &mut attrs)?;
-    assert!(uploaded);
-
-    // Verify bind group can be created
-    let layout = manager.create_bind_group_layout(device);
-    let bind_group = manager.create_bind_group(device, &layout);
-    assert!(bind_group.is_some());
 
     Ok(())
 }

@@ -10,7 +10,7 @@
 use gup::accessibility::{Color, Pattern, PatternRenderer, PatternUniforms};
 use gup::context::GupContext;
 use gup::error::GupResult;
-use gup::mark::{Circle, Mark, MarkInfo, MarkInfoImpl, MarkRenderer};
+use gup::mark::{Circle, MarkInfo, MarkInfoImpl};
 use std::sync::Arc;
 
 /// Helper function to create test context for GPU operations.
@@ -83,76 +83,6 @@ async fn test_pattern_mode_toggle() -> GupResult<()> {
     let _pattern_pipeline = mark_info.create_render_pipeline_with_patterns(device)?;
 
     // Both should be created successfully without conflicts
-    Ok(())
-}
-
-/// Test complete rendering workflow with patterns.
-#[tokio::test]
-async fn test_complete_pattern_rendering_workflow() -> GupResult<()> {
-    let context = create_test_context().await?;
-    let device = &context.device;
-    let queue = &context.queue;
-
-    // Create pattern renderer
-    let pattern = Pattern::Dots { spacing: 8.0 };
-    let uniforms = PatternUniforms::from_pattern(&pattern, Color::BLACK, Color::WHITE);
-    let pattern_renderer = PatternRenderer::new(device, uniforms);
-
-    // Create mark renderer
-    let mut mark_renderer = MarkRenderer::new(device);
-
-    // Upload vertex data
-    let vertices = Circle::generate_vertices();
-    mark_renderer.upload_vertices(device, queue, &vertices)?;
-
-    // Upload test instance data
-    #[repr(C)]
-    #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-    struct CircleInstanceData {
-        center: [f32; 2],
-        radius: f32,
-        fill_color: [f32; 4],
-        stroke_width: f32,
-        stroke_color: [f32; 4],
-        _padding: [f32; 2],
-    }
-
-    let test_instances = vec![
-        CircleInstanceData {
-            center: [10.0, 20.0],
-            radius: 5.0,
-            fill_color: [1.0, 0.0, 0.0, 1.0],
-            stroke_width: 1.0,
-            stroke_color: [0.0, 0.0, 0.0, 1.0],
-            _padding: [0.0; 2],
-        },
-        CircleInstanceData {
-            center: [30.0, 40.0],
-            radius: 8.0,
-            fill_color: [0.0, 1.0, 0.0, 1.0],
-            stroke_width: 2.0,
-            stroke_color: [0.0, 0.0, 1.0, 1.0],
-            _padding: [0.0; 2],
-        },
-    ];
-
-    mark_renderer.upload_instances(device, queue, &test_instances)?;
-
-    // Upload index data if needed
-    if let Some(indices) = Circle::generate_indices() {
-        mark_renderer.upload_indices(device, queue, &indices)?;
-    }
-
-    // Verify all data was uploaded correctly
-    assert!(mark_renderer.vertex_len() > 0);
-    assert!(mark_renderer.instance_len() > 0);
-    if Circle::index_count().is_some() {
-        assert!(mark_renderer.index_len().unwrap_or(0) > 0);
-    }
-
-    // Verify pattern bind group is accessible
-    let _pattern_bind_group = pattern_renderer.bind_group();
-
     Ok(())
 }
 
