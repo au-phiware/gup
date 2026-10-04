@@ -55,7 +55,11 @@ async fn main() -> GupResult<()> {
     let data: Vec<Reading> = (0..400)
         .map(|i| {
             let (gx, gy) = ((i % 20) as f32 / 19.0, (i / 20) as f32 / 19.0);
-            Reading { x: gx * 1.8 - 0.9, y: gy * 1.8 - 0.9, v: gx }
+            Reading {
+                x: gx * 1.8 - 0.9,
+                y: gy * 1.8 - 0.9,
+                v: gx,
+            }
         })
         .collect();
 
@@ -65,20 +69,30 @@ async fn main() -> GupResult<()> {
     let mut sel = Selection::<Reading, Circle>::new(data, context.clone())?;
     sel.attr("center", |d: &Reading| [d.x, d.y])
         .attr("fill_color", |d: &Reading| [d.v, 0.3, 1.0 - d.v, 1.0])
-        .attr("stroke_width", |_: &Reading| 0.0f32)
-        ;
+        .attr("stroke_width", |_: &Reading| 0.0f32);
     if std::env::var("BUILTIN").is_ok() {
-        sel.attr_shader("radius", |d: &Reading| d.v, LinearScale::new(0.0, 1.0, 0.005, 0.04));
+        sel.attr_shader(
+            "radius",
+            |d: &Reading| d.v,
+            LinearScale::new(0.0, 1.0, 0.005, 0.04),
+        );
     } else if std::env::var("RAW_MACRO").is_ok() {
         // Panics at prepare time: duplicate uniforms struct in the shader.
         sel.attr_shader("radius", |d: &Reading| d.v, KneeRadius::new(0.005, 0.04));
     } else {
-        sel.attr_shader("radius", |d: &Reading| d.v, KneeFixed(KneeRadius::new(0.005, 0.04)));
+        sel.attr_shader(
+            "radius",
+            |d: &Reading| d.v,
+            KneeFixed(KneeRadius::new(0.005, 0.04)),
+        );
     }
     sel.prepare_render_bound(context.device(), context.queue(), None, None)?;
 
     // Render it via a ComposedChart so we can use export_png.
-    let config = gup::chart_builder::ChartConfig { show_axes: false, ..Default::default() };
+    let config = gup::chart_builder::ChartConfig {
+        show_axes: false,
+        ..Default::default()
+    };
     let mut chart = gup::chart_builder::ComposedChart::new(sel, config);
     chart.export_png("/tmp/gup-dogfood/t6_wgsl.png", 600, 600)?;
     println!("wrote /tmp/gup-dogfood/t6_wgsl.png");

@@ -43,13 +43,22 @@ fn load() -> Result<Vec<Sale>, Box<dyn std::error::Error>> {
     let mut out = Vec::new();
     for rec in rdr.records() {
         let rec = rec?;
-        out.push(Sale { region: rec[0].into(), quarter: rec[1].into(), sales: rec[2].parse()? });
+        out.push(Sale {
+            region: rec[0].into(),
+            quarter: rec[1].into(),
+            sales: rec[2].parse()?,
+        });
     }
     Ok(out)
 }
 
 fn css([r, g, b, a]: [f32; 4]) -> String {
-    format!("rgba({},{},{},{a})", (r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8)
+    format!(
+        "rgba({},{},{},{a})",
+        (r * 255.0) as u8,
+        (g * 255.0) as u8,
+        (b * 255.0) as u8
+    )
 }
 
 fn text(x: f32, y: f32, s: String, anchor: &str) -> SvgElement {
@@ -98,7 +107,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let region = || AccessorFunction::new(|d: &Sale| AccessorValue::String(d.region.clone()));
     for (name, stacked) in [("grouped", false), ("stacked", true)] {
         let b = bar().x(quarter()).y(sales()).color(region()).gap(0.15);
-        let b = if stacked { b.stack_by(region()) } else { b.group_by(region()) };
+        let b = if stacked {
+            b.stack_by(region())
+        } else {
+            b.group_by(region())
+        };
         let mut chart = b
             .title(format!("Sales by quarter and region ({name})"))
             .width(w as f32)
@@ -107,20 +120,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .horizontal_grid()
             .build_with_data(data.clone(), ctx.clone())?;
         chart.export_png(format!("/tmp/gup-dogfood/t2_{name}.png"), w, h)?;
-        chart.export_svg(format!("/tmp/gup-dogfood/t2_{name}.svg"), &SvgExportOptions::new(w, h))?;
+        chart.export_svg(
+            format!("/tmp/gup-dogfood/t2_{name}.svg"),
+            &SvgExportOptions::new(w, h),
+        )?;
     }
 
     // ---- Part B: workaround ------------------------------------------------
     let get = |q: &str, r: &str| {
-        data.iter().find(|d| d.quarter == q && d.region == r).map(|d| d.sales).unwrap_or(0.0)
+        data.iter()
+            .find(|d| d.quarter == q && d.region == r)
+            .map(|d| d.sales)
+            .unwrap_or(0.0)
     };
     // Grouped: one band per (quarter, region); key encodes both.
     let grouped: Vec<Bar> = QUARTERS
         .iter()
-        .flat_map(|q| {
-            REGIONS.iter().enumerate().map(move |(i, r)| (q, i, r))
+        .flat_map(|q| REGIONS.iter().enumerate().map(move |(i, r)| (q, i, r)))
+        .map(|(q, i, r)| Bar {
+            key: format!("{q} {}", &r[..1]),
+            value: get(q, r),
+            color: PALETTE[i],
         })
-        .map(|(q, i, r)| Bar { key: format!("{q} {}", &r[..1]), value: get(q, r), color: PALETTE[i] })
         .collect();
     // Stacked: overlapping cumulative bars, tallest first so smaller ones paint on top.
     let mut stacked = Vec::new();
@@ -129,7 +150,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut layers = Vec::new();
         for (i, r) in REGIONS.iter().enumerate() {
             cum += get(q, r);
-            layers.push(Bar { key: q.into(), value: cum, color: PALETTE[i] });
+            layers.push(Bar {
+                key: q.into(),
+                value: cum,
+                color: PALETTE[i],
+            });
         }
         layers.reverse();
         stacked.extend(layers);
@@ -137,9 +162,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for (name, rows, gap) in [("grouped_wa", grouped, 0.1), ("stacked_wa", stacked, 0.3)] {
         let mut chart = bar()
-            .x(AccessorFunction::new(|b: &Bar| AccessorValue::String(b.key.clone())))
-            .y(AccessorFunction::new(|b: &Bar| AccessorValue::Float(b.value)))
-            .color(AccessorFunction::new(|b: &Bar| AccessorValue::Color(b.color)))
+            .x(AccessorFunction::new(|b: &Bar| {
+                AccessorValue::String(b.key.clone())
+            }))
+            .y(AccessorFunction::new(|b: &Bar| {
+                AccessorValue::Float(b.value)
+            }))
+            .color(AccessorFunction::new(|b: &Bar| {
+                AccessorValue::Color(b.color)
+            }))
             .gap(gap)
             .title("Sales by quarter and region")
             .width(w as f32)
@@ -188,7 +219,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let prev: f32 = *prev_by_key.get(&r.key).unwrap_or(&0.0);
             let label = format!("{:.0}", r.value - prev);
             prev_by_key.insert(r.key.clone(), r.value);
-            marks.push(text(cx, y + if name == "stacked_wa" { 14.0 } else { -3.0 }, label, "middle"));
+            marks.push(text(
+                cx,
+                y + if name == "stacked_wa" { 14.0 } else { -3.0 },
+                label,
+                "middle",
+            ));
         }
         let svg = chart.export_svg_with_marks(&SvgExportOptions::new(w, h), &marks)?;
         std::fs::write(format!("/tmp/gup-dogfood/t2_{name}.svg"), svg)?;

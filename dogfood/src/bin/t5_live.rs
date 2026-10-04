@@ -47,13 +47,25 @@ struct App {
 
 impl App {
     fn rand(&mut self) -> f32 {
-        self.rng = self.rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        self.rng = self
+            .rng
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((self.rng >> 40) as f32 / (1u64 << 24) as f32) - 0.5
     }
 
     fn new() -> Self {
         let g = Arc::new(pollster::block_on(gup::RenderContext::new()).expect("gpu"));
-        let pts: Vec<S> = (0..20).map(|i| S { t: i as f32, v: if std::env::var("FLAT").is_ok() { 0.0 } else { (i as f32 * 0.7).sin() * 3.0 } }).collect();
+        let pts: Vec<S> = (0..20)
+            .map(|i| S {
+                t: i as f32,
+                v: if std::env::var("FLAT").is_ok() {
+                    0.0
+                } else {
+                    (i as f32 * 0.7).sin() * 3.0
+                },
+            })
+            .collect();
         let line_chart = line()
             .x(AccessorFunction::new(|s: &S| AccessorValue::Float(s.t)))
             .y(AccessorFunction::new(|s: &S| AccessorValue::Float(s.v)))
@@ -68,7 +80,10 @@ impl App {
             .expect("line");
         if std::env::var("DUMP").is_ok() {
             for s in line_chart.visualization.data().iter().take(3) {
-                println!("builder seg start={:?} end={:?} width={}", s.start_pos, s.end_pos, s.width);
+                println!(
+                    "builder seg start={:?} end={:?} width={}",
+                    s.start_pos, s.end_pos, s.width
+                );
             }
         }
         let line = line_chart;
@@ -81,14 +96,19 @@ impl App {
             let a = (r >> 40) as f32 / (1u64 << 24) as f32;
             r = r.wrapping_mul(6364136223846793005).wrapping_add(1);
             let b = (r >> 40) as f32 / (1u64 << 24) as f32;
-            big_data.push(S { t: a * X_MAX, v: (b - 0.5) * 20.0 });
+            big_data.push(S {
+                t: a * X_MAX,
+                v: (b - 0.5) * 20.0,
+            });
         }
         let mut big_chart = scatter()
             .x(AccessorFunction::new(|s: &S| AccessorValue::Float(s.t)))
             .y(AccessorFunction::new(|s: &S| AccessorValue::Float(s.v)))
             .x_scale(LinearScale::new(0.0, X_MAX, -1.0, 1.0))
             .y_scale(LinearScale::new(-10.0, 10.0, -1.0, 1.0))
-            .color(AccessorFunction::new(|_: &S| AccessorValue::Color([0.12, 0.47, 0.71, 0.2])))
+            .color(AccessorFunction::new(|_: &S| {
+                AccessorValue::Color([0.12, 0.47, 0.71, 0.2])
+            }))
             .size(AccessorFunction::new(|_: &S| AccessorValue::Float(0.15)))
             .width(W)
             .height(H)
@@ -117,7 +137,10 @@ impl App {
     fn tick(&mut self) {
         // --- line: append one point -> one new LineSegment ---------------
         let prev = self.pts.last().unwrap().clone();
-        let next = S { t: prev.t + 1.0, v: (prev.v + 2.0 * self.rand()).clamp(-10.0, 10.0) };
+        let next = S {
+            t: prev.t + 1.0,
+            v: (prev.v + 2.0 * self.rand()).clamp(-10.0, 10.0),
+        };
         self.pts.push(next.clone());
         let t0 = Instant::now();
         {
@@ -132,7 +155,9 @@ impl App {
             });
             c.visualization.set_data(segs);
             let ctx = c.visualization.context().cloned().unwrap();
-            c.visualization.prepare_render_bound(ctx.device(), ctx.queue(), None, None).unwrap();
+            c.visualization
+                .prepare_render_bound(ctx.device(), ctx.queue(), None, None)
+                .unwrap();
         }
         let line_cost = t0.elapsed();
         self.line_w.dirty = true;
@@ -140,14 +165,19 @@ impl App {
         // --- big scatter: append 50 points ----------------------------------
         for _ in 0..50 {
             let (a, b) = (self.rand() + 0.5, self.rand());
-            self.big_data.push(S { t: a * X_MAX, v: b * 20.0 });
+            self.big_data.push(S {
+                t: a * X_MAX,
+                v: b * 20.0,
+            });
         }
         let t1 = Instant::now();
         {
             let c = &mut self.big;
             c.visualization.set_data(self.big_data.clone());
             let ctx = c.visualization.context().cloned().unwrap();
-            c.visualization.prepare_render_bound(ctx.device(), ctx.queue(), None, None).unwrap();
+            c.visualization
+                .prepare_render_bound(ctx.device(), ctx.queue(), None, None)
+                .unwrap();
         }
         self.timings.push((line_cost, t1.elapsed()));
         self.big_w.dirty = true;
@@ -182,8 +212,19 @@ impl eframe::App for App {
             }
             if save_screenshot(ctx, "/tmp/gup-dogfood/t5_live.png") {
                 let n = self.timings.len() as u32;
-                let (sl, sb) = self.timings.iter().fold((Duration::ZERO, Duration::ZERO), |a, t| (a.0 + t.0, a.1 + t.1));
-                println!("ticks={n} avg line update={:?} avg 100k-scatter update={:?}; last render_to_rgba+upload line={:?} scatter={:?}", sl / n, sb / n, self.line_w.last_render, self.big_w.last_render);
+                let (sl, sb) = self
+                    .timings
+                    .iter()
+                    .fold((Duration::ZERO, Duration::ZERO), |a, t| {
+                        (a.0 + t.0, a.1 + t.1)
+                    });
+                println!(
+                    "ticks={n} avg line update={:?} avg 100k-scatter update={:?}; last render_to_rgba+upload line={:?} scatter={:?}",
+                    sl / n,
+                    sb / n,
+                    self.line_w.last_render,
+                    self.big_w.last_render
+                );
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
         }
@@ -197,5 +238,9 @@ fn main() -> eframe::Result {
         viewport: egui::ViewportBuilder::default().with_inner_size([W + 20.0, 2.0 * H + 60.0]),
         ..Default::default()
     };
-    eframe::run_native("gup dogfood t5", options, Box::new(|_cc| Ok(Box::new(App::new()))))
+    eframe::run_native(
+        "gup dogfood t5",
+        options,
+        Box::new(|_cc| Ok(Box::new(App::new()))),
+    )
 }

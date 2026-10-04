@@ -33,18 +33,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build(ctx.device())?;
     let mut sel = Selection::<CircleInstance, Circle>::new(vec![], ctx.clone())?;
     sel.stream(stream);
-    let config = gup::chart_builder::ChartConfig { show_axes: false, ..Default::default() };
+    let config = gup::chart_builder::ChartConfig {
+        show_axes: false,
+        ..Default::default()
+    };
     let mut chart = gup::chart_builder::ComposedChart::new(sel, config);
 
     for batch in 0..3 {
         {
-            let s = chart.visualization.stream_mut::<CircleInstance>().ok_or("no stream")?;
+            let s = chart
+                .visualization
+                .stream_mut::<CircleInstance>()
+                .ok_or("no stream")?;
             s.push_batch((batch * 50..(batch + 1) * 50).map(inst).collect());
             let n = s.flush(ctx.device(), ctx.queue());
             println!("batch {batch}: flushed {n} bytes, stream len {}", s.len());
         }
-        let r = chart.visualization.prepare_render_bound(ctx.device(), ctx.queue(), None, None);
-        println!("  prepare_render_bound: {:?}; render ready: {}", r.map(|_| ()), chart.visualization.is_render_ready());
+        let r = chart
+            .visualization
+            .prepare_render_bound(ctx.device(), ctx.queue(), None, None);
+        println!(
+            "  prepare_render_bound: {:?}; render ready: {}",
+            r.map(|_| ()),
+            chart.visualization.is_render_ready()
+        );
         chart.export_png(format!("/tmp/gup-dogfood/t5_stream_{batch}.png"), 400, 300)?;
     }
     Ok(())

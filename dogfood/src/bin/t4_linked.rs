@@ -55,10 +55,20 @@ fn make_view(
     let (x0, x1) = ext(data.iter().map(fx));
     let (y0, y1) = ext(data.iter().map(|p| p.spend));
     let b = scatter()
-        .x(AccessorFunction::new(move |p: &Pt| AccessorValue::Float(fx(p))))
-        .y(AccessorFunction::new(|p: &Pt| AccessorValue::Float(p.spend)))
-        .size(AccessorFunction::new(|p: &Pt| AccessorValue::Float(0.06 * p.weight)));
-    let b = if log_x { b.x_scale(LogScale::base10(x0, x1, -1.0, 1.0)) } else { b.x_scale(LinearScale::new(x0, x1, -1.0, 1.0)) };
+        .x(AccessorFunction::new(move |p: &Pt| {
+            AccessorValue::Float(fx(p))
+        }))
+        .y(AccessorFunction::new(|p: &Pt| {
+            AccessorValue::Float(p.spend)
+        }))
+        .size(AccessorFunction::new(|p: &Pt| {
+            AccessorValue::Float(0.06 * p.weight)
+        }));
+    let b = if log_x {
+        b.x_scale(LogScale::base10(x0, x1, -1.0, 1.0))
+    } else {
+        b.x_scale(LinearScale::new(x0, x1, -1.0, 1.0))
+    };
     let mut chart = b
         .y_scale(LinearScale::new(y0, y1, -1.0, 1.0))
         .width(W)
@@ -90,12 +100,20 @@ fn make_view(
             (ux, (p.spend - y0) / (y1 - y0))
         })
         .collect();
-    View { tex: ChartTexture::default(), chart, frac, unit }
+    View {
+        tex: ChartTexture::default(),
+        chart,
+        frac,
+        unit,
+    }
 }
 
 fn prepare(chart: &mut Chart) {
     let c = chart.visualization.context().cloned().unwrap();
-    chart.visualization.prepare_render_bound(c.device(), c.queue(), None, None).expect("prepare");
+    chart
+        .visualization
+        .prepare_render_bound(c.device(), c.queue(), None, None)
+        .expect("prepare");
 }
 
 impl App {
@@ -160,15 +178,27 @@ impl eframe::App for App {
                     if let (Some((a, _)), Some(p)) = (self.brush, resp.interact_pointer_pos()) {
                         self.brush = Some((a, p));
                         let r = egui::Rect::from_two_pos(a, p);
-                        let (ux0, uy1) = self.left.frac.unit_unclamped(r.min.x - rect.min.x, r.min.y - rect.min.y, W, H);
-                        let (ux1, uy0) = self.left.frac.unit_unclamped(r.max.x - rect.min.x, r.max.y - rect.min.y, W, H);
+                        let (ux0, uy1) = self.left.frac.unit_unclamped(
+                            r.min.x - rect.min.x,
+                            r.min.y - rect.min.y,
+                            W,
+                            H,
+                        );
+                        let (ux1, uy0) = self.left.frac.unit_unclamped(
+                            r.max.x - rect.min.x,
+                            r.max.y - rect.min.y,
+                            W,
+                            H,
+                        );
                         let t0 = Instant::now();
                         let ids: Vec<u32> = self
                             .left
                             .unit
                             .iter()
                             .enumerate()
-                            .filter(|(_, (x, y))| (ux0..=ux1).contains(x) && (uy0..=uy1).contains(y))
+                            .filter(|(_, (x, y))| {
+                                (ux0..=ux1).contains(x) && (uy0..=uy1).contains(y)
+                            })
                             .map(|(i, _)| i as u32)
                             .collect();
                         let n = ids.len();
@@ -184,7 +214,10 @@ impl eframe::App for App {
                         egui::StrokeKind::Middle,
                     );
                 }
-                let r2 = egui::Rect::from_min_size(rect.right_top() + egui::vec2(10.0, 0.0), egui::vec2(W, H));
+                let r2 = egui::Rect::from_min_size(
+                    rect.right_top() + egui::vec2(10.0, 0.0),
+                    egui::vec2(W, H),
+                );
                 self.right.tex.show(ui, r2, &mut self.right.chart);
             });
         });
@@ -197,7 +230,8 @@ impl eframe::App for App {
             prepare(&mut self.right.chart);
             self.left.tex.dirty = true;
             self.right.tex.dirty = true;
-            self.status.push_str(&format!(" | re-prepare {:?}", t0.elapsed()));
+            self.status
+                .push_str(&format!(" | re-prepare {:?}", t0.elapsed()));
         }
         if self.auto {
             if self.frame == 20 {
@@ -218,5 +252,9 @@ fn main() -> eframe::Result {
         viewport: egui::ViewportBuilder::default().with_inner_size([2.0 * W + 40.0, H + 60.0]),
         ..Default::default()
     };
-    eframe::run_native("gup dogfood t4", options, Box::new(|_cc| Ok(Box::new(App::new()))))
+    eframe::run_native(
+        "gup dogfood t4",
+        options,
+        Box::new(|_cc| Ok(Box::new(App::new()))),
+    )
 }

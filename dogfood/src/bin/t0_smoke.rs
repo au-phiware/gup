@@ -16,7 +16,12 @@ struct P {
 async fn main() -> GupResult<()> {
     env_logger::init();
     let ctx = Arc::new(RenderContext::new().await?);
-    let data: Vec<P> = (0..20).map(|i| P { x: i as f32, y: (i * i) as f32 }).collect();
+    let data: Vec<P> = (0..20)
+        .map(|i| P {
+            x: i as f32,
+            y: (i * i) as f32,
+        })
+        .collect();
 
     let mut chart = scatter()
         .x(AccessorFunction::new(|p: &P| AccessorValue::Float(p.x)))

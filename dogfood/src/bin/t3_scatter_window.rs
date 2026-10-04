@@ -32,14 +32,29 @@ struct App {
     auto: bool,
 }
 
-fn build(data: Vec<Pt>, ctx: Arc<gup::RenderContext>) -> (ComposedChart<Pt, gup::Circle>, [f32; 4]) {
-    let (xmin, xmax) = data.iter().fold((f32::MAX, f32::MIN), |(a, b), p| (a.min(p.income), b.max(p.income)));
-    let (ymin, ymax) = data.iter().fold((f32::MAX, f32::MIN), |(a, b), p| (a.min(p.spend), b.max(p.spend)));
+fn build(
+    data: Vec<Pt>,
+    ctx: Arc<gup::RenderContext>,
+) -> (ComposedChart<Pt, gup::Circle>, [f32; 4]) {
+    let (xmin, xmax) = data.iter().fold((f32::MAX, f32::MIN), |(a, b), p| {
+        (a.min(p.income), b.max(p.income))
+    });
+    let (ymin, ymax) = data.iter().fold((f32::MAX, f32::MIN), |(a, b), p| {
+        (a.min(p.spend), b.max(p.spend))
+    });
     let mut chart = scatter()
-        .x(AccessorFunction::new(|p: &Pt| AccessorValue::Float(p.income)))
-        .y(AccessorFunction::new(|p: &Pt| AccessorValue::Float(p.spend)))
-        .color(AccessorFunction::new(|p: &Pt| AccessorValue::Color(rgba(seg_index(&p.segment), 0.35))))
-        .size(AccessorFunction::new(|p: &Pt| AccessorValue::Float(0.04 * p.weight)))
+        .x(AccessorFunction::new(|p: &Pt| {
+            AccessorValue::Float(p.income)
+        }))
+        .y(AccessorFunction::new(|p: &Pt| {
+            AccessorValue::Float(p.spend)
+        }))
+        .color(AccessorFunction::new(|p: &Pt| {
+            AccessorValue::Color(rgba(seg_index(&p.segment), 0.35))
+        }))
+        .size(AccessorFunction::new(|p: &Pt| {
+            AccessorValue::Float(0.04 * p.weight)
+        }))
         .x_scale(LogScale::base10(xmin, xmax, -1.0, 1.0))
         .y_scale(LinearScale::new(ymin, ymax, -1.0, 1.0))
         .width(W)
@@ -49,7 +64,10 @@ fn build(data: Vec<Pt>, ctx: Arc<gup::RenderContext>) -> (ComposedChart<Pt, gup:
         .expect("chart");
     chart.visualization.attr("stroke_width", |_: &Pt| 0.0f32);
     let c = chart.visualization.context().cloned().unwrap();
-    chart.visualization.prepare_render_bound(c.device(), c.queue(), None, None).expect("prepare");
+    chart
+        .visualization
+        .prepare_render_bound(c.device(), c.queue(), None, None)
+        .expect("prepare");
     (chart, [xmin, xmax, ymin, ymax])
 }
 
@@ -62,9 +80,22 @@ impl App {
         let (lx0, lx1) = (xmin.log10(), xmax.log10());
         let unit = data
             .iter()
-            .map(|p| ((p.income.log10() - lx0) / (lx1 - lx0), (p.spend - ymin) / (ymax - ymin)))
+            .map(|p| {
+                (
+                    (p.income.log10() - lx0) / (lx1 - lx0),
+                    (p.spend - ymin) / (ymax - ymin),
+                )
+            })
             .collect();
-        Self { chart, tex: ChartTexture::default(), data, unit, frac, frame: 0, auto: std::env::var("DOGFOOD_AUTO").is_ok() }
+        Self {
+            chart,
+            tex: ChartTexture::default(),
+            data,
+            unit,
+            frac,
+            frame: 0,
+            auto: std::env::var("DOGFOOD_AUTO").is_ok(),
+        }
     }
 
     fn nearest(&self, ux: f32, uy: f32, max_d: f32) -> Option<usize> {
@@ -84,7 +115,8 @@ impl App {
 impl eframe::App for App {
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
         if self.auto && self.frame >= 3 {
-            raw.events.push(egui::Event::PointerMoved(egui::pos2(520.0, 380.0)));
+            raw.events
+                .push(egui::Event::PointerMoved(egui::pos2(520.0, 380.0)));
         }
     }
 
@@ -147,5 +179,9 @@ fn main() -> eframe::Result {
         viewport: egui::ViewportBuilder::default().with_inner_size([W, H + 40.0]),
         ..Default::default()
     };
-    eframe::run_native("gup dogfood t3", options, Box::new(|_cc| Ok(Box::new(App::new()))))
+    eframe::run_native(
+        "gup dogfood t3",
+        options,
+        Box::new(|_cc| Ok(Box::new(App::new()))),
+    )
 }

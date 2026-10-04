@@ -10,7 +10,10 @@ use std::io::{BufWriter, Write};
 struct Lcg(u64);
 impl Lcg {
     fn next(&mut self) -> f64 {
-        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        self.0 = self
+            .0
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((self.0 >> 11) as f64) / ((1u64 << 53) as f64)
     }
     fn normal(&mut self) -> f64 {
@@ -34,7 +37,11 @@ fn main() -> std::io::Result<()> {
         for (i, price) in p.iter_mut().enumerate() {
             *price *= 1.0 + 0.0004 + 0.018 * rng.normal();
             let missing = (day * 7 + i as i64 * 13) % 211 == 0;
-            cells.push(if missing { String::new() } else { format!("{price:.2}") });
+            cells.push(if missing {
+                String::new()
+            } else {
+                format!("{price:.2}")
+            });
         }
         writeln!(w, "{},{}", d.format("%Y-%m-%d"), cells.join(","))?;
     }

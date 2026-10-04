@@ -56,8 +56,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("loaded {} rows in {:?}", data.len(), t0.elapsed());
     let ctx = Arc::new(RenderContext::new().await?);
 
-    let (xmin, xmax) = data.iter().fold((f32::MAX, f32::MIN), |(a, b), p| (a.min(p.income), b.max(p.income)));
-    let (ymin, ymax) = data.iter().fold((f32::MAX, f32::MIN), |(a, b), p| (a.min(p.spend), b.max(p.spend)));
+    let (xmin, xmax) = data.iter().fold((f32::MAX, f32::MIN), |(a, b), p| {
+        (a.min(p.income), b.max(p.income))
+    });
+    let (ymin, ymax) = data.iter().fold((f32::MAX, f32::MIN), |(a, b), p| {
+        (a.min(p.spend), b.max(p.spend))
+    });
 
     let t1 = Instant::now();
     let mut chart = scatter()
@@ -83,12 +87,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     chart.visualization.attr("stroke_width", |_: &Pt| 0.0f32);
     {
         let ctx = chart.visualization.context().cloned().unwrap();
-        chart.visualization.prepare_render_bound(ctx.device(), ctx.queue(), None, None)?;
+        chart
+            .visualization
+            .prepare_render_bound(ctx.device(), ctx.queue(), None, None)?;
     }
 
     let t2 = Instant::now();
     chart.export_png("/tmp/gup-dogfood/t3_scatter.png", 1000, 700)?;
     println!("exported in {:?}", t2.elapsed());
-    chart.export_svg("/tmp/gup-dogfood/t3_scatter.svg", &gup::export::svg::SvgExportOptions::new(1000, 700))?;
+    chart.export_svg(
+        "/tmp/gup-dogfood/t3_scatter.svg",
+        &gup::export::svg::SvgExportOptions::new(1000, 700),
+    )?;
     Ok(())
 }
