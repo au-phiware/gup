@@ -75,7 +75,7 @@ a public module that dogfood can depend on by path.
 ### Prerequisite Stories
 
 - GUP-394: Dogfood Suite in Repo and CI ✅
-- GUP-388: Visual Regression Harness 📋
+- GUP-388: Visual Regression Harness ✅
 
 ### Enables Stories
 

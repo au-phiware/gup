@@ -244,7 +244,7 @@ to deprecate.
   `gup-bevy` from the default workspace, which currently supplies `naga_oil`/
   `naga`/`encase` to `Cargo.lock` only transitively; this story makes `gup-core`
   depend on them directly instead.
-- GUP-388: Visual Regression Harness 📋 (soft dependency) — preferred for AC5's
+- GUP-388: Visual Regression Harness ✅ (soft dependency) — preferred for AC5's
   by-eye PNG verification; if not yet landed, AC5 is satisfied by directly
   reading the generated PNG and recording the finding.
 

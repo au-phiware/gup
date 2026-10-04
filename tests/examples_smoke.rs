@@ -16,7 +16,9 @@
 //!   must write a non-blank PNG; console examples must exit zero. Each result
 //!   is reconciled with `tests/visual_regression/expected_failures.toml`.
 //!
-//! Run the full smoke test with `mask smoke-examples`, or:
+//! Run the full smoke test with `mask smoke-examples` (which builds the
+//! examples stripped and without debug info into `target/smoke`; with debug
+//! info they take about 17 GB), or:
 //!
 //! ```text
 //! cargo build --examples --all-features

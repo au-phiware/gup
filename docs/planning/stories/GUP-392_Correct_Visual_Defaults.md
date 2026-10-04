@@ -147,7 +147,7 @@ Verified against `main` on 2026-10-04:
 
 ### Prerequisite Stories
 
-- GUP-388 (Visual regression harness) 📋 — needed to bless the new golden images
+- GUP-388 (Visual regression harness) ✅ — needed to bless the new golden images
   these intentional visual changes produce.
 
 ### Enables Stories
