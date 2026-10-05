@@ -164,11 +164,12 @@ concurrently --group --names '\s,rs,nix,md,marks,gallery,hook' \
 ## pre-commit
 
 The git pre-commit hook (installed by `flake.nix`): checks proportional to the
-staged files. A docs-only commit runs only the cheap repo-wide checks
-(whitespace, nix, markdown, gallery sync). A commit inside workspace crates runs
-rustfmt on those crates, and strict clippy on them and on every member that
-depends on them. Anything workspace-level or unrecognised runs `mask all-check`.
-The rules and their reasons are in `scripts/pre_commit.sh`; preview them with
+staged files. Every commit gets the trailing-whitespace and gallery sync checks,
+and prettier and mdl on the changed Markdown files; a docs-only commit gets
+nothing else. A commit inside workspace crates also runs rustfmt on those
+crates, and strict clippy on them and on every member that depends on them.
+Anything workspace-level or unrecognised runs `mask all-check`. The rules and
+their reasons are in `scripts/pre_commit.sh`; preview them with
 `scripts/pre_commit.sh --plan [PATH...]`.
 
 The scoping is local only. CI never scopes, so anything the hook skipped is

@@ -29,9 +29,10 @@
 #   dogfood
 #          dogfood/** (a detached crate): its rustfmt check.
 #
-# Always run, whatever the class (they are cheap and repo-wide): trailing
-# whitespace in .rs files, nixfmt and statix, prettier and mdl, and the
-# gallery sync check.
+# Outside full mode, these always run: the trailing-whitespace check on every
+# .rs file and the gallery sync check (both repo-wide and cheap), and
+# prettier and mdl on the changed Markdown files. nixfmt and statix need not:
+# a flake.nix change forces full mode.
 #
 # This is a local-hook optimisation only. CI never scopes: every workflow runs
 # its full checks on every push. Like the rest of the hook, the checks read
@@ -219,14 +220,22 @@ if [[ $mode == full ]]; then
   exec mask all-check
 fi
 
-shopt -qs globstar
 checks=(
   'git --no-pager grep --untracked --name-only --full-name "[[:space:]]\+$" -- "*.rs"; test $? -eq 1'
-  'nixfmt --check flake.nix && statix check flake.nix'
-  'prettier --cache --log-level warn --check "**/*.md" && mdl --git-recurse .'
   './scripts/check_gallery_sync.sh'
 )
-names='\s,nix,md,gallery'
+names='\s,gallery'
+
+# Markdown checks on the changed Markdown files (a markdown config change is
+# outside every crate, so it already forced the full, repo-wide check).
+md=()
+for p in "${paths[@]}"; do
+  [[ $p == *.md && -f $p ]] && md+=("$(printf '%q' "$p")")
+done
+if [[ ${#md[@]} -gt 0 ]]; then
+  checks+=("prettier --log-level warn --check ${md[*]} && mdl ${md[*]}")
+  names+=',md'
+fi
 
 if [[ $mode == scoped ]]; then
   rust=()
