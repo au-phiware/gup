@@ -238,7 +238,7 @@ performance-report code behind a `debug` feature or into `gup-debug`."
 - [x] Lint and format clean: `mask all-fix`.
 - [x] All examples compile: `cargo check --examples`.
 - [x] Story status updated to ✅ Complete in story file and INDEX.md.
-- [ ] Retrospective added to story document, including the feature-flag vs.
+- [x] Retrospective added to story document, including the feature-flag vs.
       separate-crate decision for debug/performance code and the before/after CI
       footprint if measured.
 
@@ -322,3 +322,165 @@ and `gup-tauri` READMEs, `docs/LOD_SYSTEM.md`, `docs/mark-system/*`,
   `gup-ios`, `gup-android`, `gup-egui` and `gup-bevy`.
 - `mask old-path-loc`: 32051 → 28882.
 - No rendered output changed: no golden image was re-blessed.
+
+## Retrospective
+
+**Completed**: 2026-10-05
+
+### Key Technical Learnings
+
+#### `"."` in `[workspace] members` silently defeats `exclude`
+
+- **Challenge**: After adding the five parked crates to `exclude`, every one of
+  them still failed with "current package believes it's in a workspace when it's
+  not". A minimal workspace in `/tmp` with the same `exclude` worked.
+- **Solution**: Cargo decides "explicitly a member" by a path-prefix test
+  against each `members` entry, and `root/.` is a prefix of every subdirectory,
+  so the explicit-member rule overrides `exclude`. Removing `"."` fixed it. The
+  root package is a member implicitly whenever the root manifest has a
+  `[package]`.
+- **Pattern**: Never list `"."` in `members`. Test exclusion with
+  `cargo metadata --no-deps` run from inside the excluded crate; it fails in
+  milliseconds if the crate is still claimed.
+
+#### Moving a module tree is cheapest when its paths are kept
+
+- **Challenge**: About 13k lines across 16 files refer to each other through
+  `super::`, `crate::mark::...` and `crate::lod::...`.
+- **Solution**: Keeping the `mark/`, `lod/` and `renderer/` layout in the new
+  crate meant only `crate::` paths to `gup` types needed rewriting. One perl
+  pass over a closed list of prefixes (`error`, `context`, `buffer`,
+  `streaming`, `test_utils`, `render`, `mark::{Mark, Circle, ...}`) plus
+  `gup::lod` → `gup_culling_lod::lod` in docs, tests and benches. The crate
+  compiled on the first `cargo check`, and its 200 tests passed unchanged.
+- **Pattern**: When quarantining code, preserve module paths and rewrite only
+  the boundary. Flattening or renaming can come later, when someone ports it.
+
+#### `required-features` beats `#[cfg]` in test files
+
+- **Challenge**: 7 examples and 8 integration tests use the gated modules.
+- **Solution**: `required-features = ["debug"]` on each target. Default builds
+  skip them silently, `--all-features` builds (clippy, the smoke test,
+  visual-regression CI) still cover them, and `cargo test --test X` without the
+  feature fails loudly instead of running zero tests.
+- **Pattern**: Gate whole targets in the manifest; reserve `#[cfg]` for code
+  inside the library.
+
+#### The clippy gate is weaker than everyone thinks
+
+- **Challenge**: `cargo clippy --no-deps -p gup-culling-lod -- -D warnings`
+  failed, and the plain `cargo clippy -- -D warnings` on `gup` failed with 106
+  errors, yet the pre-commit hook passed.
+- **Solution**: The hook's `clippy --fix ... -- -D warnings` downgrades
+  non-fixable lints to warnings and exits 0 (99 warnings on `main`). Fixed the
+  two lints in the moved code; wrote GUP-398 for the rest.
+- **Pattern**: When a gate "passes", check that it can fail. Use
+  `cargo clippy --no-deps -p <crate>` to lint one crate whose dependencies have
+  lint debt.
+
+### Architectural Decisions
+
+#### Feature flag, not a `gup-debug` crate, for debug/performance code
+
+- **Decision**: A `debug` Cargo feature (off by default) gates `debug`,
+  `performance`, `performance_export` and `performance_targets`.
+- **Reasoning**: `GupContext` owns an optional `PerformanceProfiler`, and the
+  debug modules use `gup` types throughout. A `gup-debug` crate would depend on
+  `gup` while `gup` depends on it for the profiler hook: a cycle, or a redesign
+  of the hook. RFC-001's new `Context` replaces `GupContext`, so that redesign
+  would be wasted. The feature delivers the review's goal (out of the default
+  build and API) in about 40 lines.
+- **Trade-off**: The code stays in `src/`, so it still counts towards the
+  crate's size on disk and can still be reached with `--all-features`.
+- **Future**: A `gup-debug` crate (strategic review T7) is natural once
+  `gup-core` exposes a profiling hook that does not need `gup` internals.
+
+#### The experimental crate is a non-default member, not excluded
+
+- **Decision**: `crates/gup-culling-lod` is a workspace member that is not in
+  `default-members`. It is inside `--workspace`, which the story's Success
+  Metric said to avoid.
+- **Reasoning**: The orchestrator asked for it to stay buildable on its own with
+  a `cargo check -p` CI step. `-p` requires membership, and an excluded crate
+  gets its own lockfile, so it would drift from `gup`'s dependency versions. No
+  CI job used `--workspace`, so including it there costs nothing by default.
+  Plain `cargo build`/`cargo test` still skip it.
+- **Trade-off**: `cargo test --workspace` runs its 200 GPU tests too, and it is
+  public within the workspace, so someone could depend on it. The README says
+  not to.
+- **Future**: RFC-001 T3/T7 work ports pieces into `gup-core` and deletes them
+  here. When the crate is empty, delete it.
+
+#### Parked crates are outside the workspace, not just non-default
+
+- **Decision**: The five integrations are in `exclude`, not merely left out of
+  `default-members`.
+- **Reasoning**: Decision 3 says "exclude from workspace/CI", RFC-001 S13 says
+  "back into the workspace", and the story names `--workspace` as the surface to
+  clear. Exclusion also drops 190 packages from `Cargo.lock`, so
+  `cargo metadata`, fetch and `--workspace` stop resolving bevy and egui.
+- **Trade-off**: `cargo check -p gup-egui` no longer works. The replacement is
+  `CARGO_TARGET_DIR=target cargo check --manifest-path gup-egui/Cargo.toml`,
+  which resolves its own (gitignored) lockfile. `naga_oil` also left the lock:
+  GUP-395 must add it to `gup-core` directly (RFC-001 dependency note 5 expected
+  this).
+- **Future**: S13 moves `gup-egui` and `gup-bevy` back into `members`.
+
+#### Smoke test covers the quarantined examples
+
+- **Decision**: `tests/examples_smoke.rs` reads examples from both `gup` and
+  `gup-culling-lod`, and `mask smoke-examples` and CI build both with `-p`.
+- **Reasoning**: All three moved examples were headless, so they were smoke
+  tested before the move. Dropping that coverage would let the quarantined code
+  rot in exactly the way the orchestrator wanted to avoid.
+
+### Development Workflow Insights
+
+- **Disk: put heavy builds on a different pool.** The main pool went from 7 GB
+  free to 0 during the story. Two causes: `clippy -p gup-culling-lod` linted
+  `gup` as a dependency with a new fingerprint, and the editor's rust-analyzer
+  re-checked the workspace after every `Cargo.toml` edit. The 15-minute ZFS
+  snapshots hold every superseded incremental session, so cache churn consumes
+  pool space even though cargo deletes the files. `/tmp` is a separate pool
+  (`turing`, 21 GB free), and all heavy builds after that point (tests, smoke,
+  clippy, and the hook itself via an exported `CARGO_TARGET_DIR`) ran there with
+  no further pressure on the main pool. Space returned at the 12:00 snapshot
+  rotation. Check `zfs list -o avail` and `df /tmp` before choosing a target
+  directory.
+- **`git stash` drops staged renames from the index.** `git stash pop` restored
+  the working tree but left the `git mv` renames as unstaged deletes plus staged
+  adds; `git add -A <paths>` put them back. Avoid stash while a large move is
+  staged; compare against `HEAD` with `git show HEAD:<file>` instead.
+- **zsh array subscripts**: `"$tests[[test]]..."` in zsh is an array subscript,
+  not a string concatenation. Use `${tests}`.
+- **`cargo check` time** (the `gup` lib on this machine, `touch src/lib.rs` then
+  re-check, median of 2–3 runs, main target): incremental 2.8 s → 2.0 s;
+  non-incremental (`CARGO_INCREMENTAL=0`) 8.2 s → 5.5 s, about 30% faster. About
+  25.8k lines left the default lib (13.0k culling/LOD, 12.8k debug/performance).
+- **CI footprint**: no default workflow built the parked crates before, so the
+  per-PR saving is that iOS and Android CI no longer trigger on
+  `src/platform/**` or their crates' paths (macOS runner plus simulator, and NDK
+  plus emulator). Visual regression gains `cargo check` and `cargo test` for
+  `gup-culling-lod` (about 10 s of checking and 10 s of tests locally, plus
+  compile time). `Cargo.lock` is 2,458 lines shorter.
+- **Not done: a scheduled "parked crates still compile" job** (Risk Assessment).
+  The owner parked these crates precisely so they do not have to keep compiling
+  while RFC-001 replaces `ComposedChart`/`DynChart`. A job that turns red as
+  soon as S7 lands would be noise. S13 rewrites them anyway.
+- **Unverified**: the `android-ci.yml` change runs `cargo ndk ... build` from
+  `working-directory: gup-android` with `CARGO_TARGET_DIR` set. There is no NDK
+  here, and the workflow is manual-dispatch only, so the first manual run is the
+  test.
+
+### Follow-up Stories
+
+1. **GUP-398: Honest Clippy Gate**: make `mask all-check` fail on lints (strict
+   clippy without `--fix`, all workspace members including `gup-culling-lod` and
+   `gup-core`) and fix or narrowly allow the existing debt.
+
+Notes, no new story:
+
+- **GUP-395** should add `naga_oil` (0.20, naga 27) to `gup-core` as a direct
+  dependency; it is no longer in `Cargo.lock`.
+- The root README's "Project Structure" tree (`src/core/`, `src/gpu/`, ...) is
+  stale and predates this story. RFC-001 S14 rewrites the docs.

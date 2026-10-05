@@ -48,6 +48,11 @@ survives into `gup-core`.
   the dogfood suite's local pixel measurements with GUP-388's shared
   visual-assertion module and layout metadata, without loosening any tracked
   gap. Deps: GUP-394 ✅, GUP-388 ✅.
+- [GUP-398](GUP-398_Honest_Clippy_Gate.md) 📋 — The hook runs
+  `clippy --fix -- -D warnings`, which exits 0 while printing 99 lint warnings;
+  without `--fix` the `gup` lib and its unit tests have 106 errors. Make the
+  gate strict across all workspace members (incl. `gup-culling-lod` and the
+  coming `gup-core`) and fix or narrowly allow the existing debt. From GUP-390.
 
 ## RFC-001 Migration
 
