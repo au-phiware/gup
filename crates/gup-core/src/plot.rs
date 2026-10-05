@@ -137,6 +137,11 @@ impl Plot {
         self
     }
 
+    /// The title, if set.
+    pub fn title_text(&self) -> Option<&str> {
+        self.title.as_deref()
+    }
+
     /// Use `scale` for the x axis and return a handle to encode with.
     pub fn x<S: PositionScale>(&mut self, scale: S) -> ScaleRef<S> {
         let handle = ScaleRef::new(scale);
@@ -466,7 +471,7 @@ mod tests {
         .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
         .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1));
         let first = plot.resolve(&cx, 300.0, 200.0).unwrap();
-        let target = ImageTarget::new(&cx, 300, 200).unwrap();
+        let mut target = ImageTarget::new(&cx, 300, 200).unwrap();
         let image = target.render_blocking(&cx, &first.scene).unwrap();
         let before = cx.pipelines().stats;
         let uploads = cx.upload_stats();

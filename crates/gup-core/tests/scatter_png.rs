@@ -6,6 +6,9 @@
 //! and checked by the GUP-388 visual regression harness using layout
 //! metadata from gup-core's own layout.
 
+mod common;
+
+use common::scatter::{self, HEIGHT, WIDTH};
 use gup_core::prelude::*;
 use gup_core::{Layout, scene::TextRole};
 use gup_visual_regression::golden::default_artifact_dir;
@@ -15,60 +18,12 @@ use gup_visual_regression::{
 };
 use std::path::Path;
 
-#[derive(Clone, Debug)]
-struct Country {
-    gdp_per_capita: f64,
-    population: f64,
-    life_expectancy: f64,
-}
-
-/// Deterministic, plausible-looking data (no RNG crate needed).
-fn countries() -> Vec<Country> {
-    let mut seed = 0x2545_f491_4f6c_dd1du64;
-    let mut next = move || {
-        seed ^= seed << 13;
-        seed ^= seed >> 7;
-        seed ^= seed << 17;
-        (seed >> 11) as f64 / (1u64 << 53) as f64
-    };
-    (0..120)
-        .map(|_| {
-            let wealth = next();
-            Country {
-                gdp_per_capita: 500.0 + wealth * wealth * 58_000.0,
-                population: 10f64.powf(5.2 + next() * 3.8),
-                life_expectancy: 52.0 + wealth * 26.0 + next() * 6.0,
-            }
-        })
-        .collect()
-}
-
-const WIDTH: u32 = 720;
-const HEIGHT: u32 = 450;
-const TITLE: &str = "Wealth, population and life expectancy";
-
 fn render() -> (image::RgbaImage, Layout, Sequential) {
     let cx = Context::new_blocking().expect("headless GPU context");
-    let mut plot = Plot::new();
-    let (x, y) = (plot.x(Linear::new()), plot.y(Log::new()));
-    let heat = Sequential::viridis();
-    plot.title(TITLE)
-        .add(Selection::<Country, Circle>::new(countries()))
-        .attr(Circle::X, x.encode(|c: &Country| c.gdp_per_capita))
-        .attr(Circle::Y, y.encode(|c: &Country| c.population))
-        .attr(Circle::FILL, heat.encode(|c: &Country| c.life_expectancy))
-        .attr(Circle::RADIUS, Px(4.5));
-    let (image, layout) = plot
+    let (image, layout) = scatter::plot()
         .render_resolved(&cx, WIDTH, HEIGHT)
         .expect("render scatter");
-    // The fill domain the plot fitted, for the expected-colour check.
-    let ext = countries()
-        .iter()
-        .map(|c| c.life_expectancy)
-        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| {
-            (lo.min(v), hi.max(v))
-        });
-    (image, layout, Sequential::viridis().domain(ext.0, ext.1))
+    (image, layout, scatter::fill())
 }
 
 fn rgba8(c: Color) -> Rgba8 {

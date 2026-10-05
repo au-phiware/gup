@@ -24,6 +24,13 @@ futures-channel = "0.3"
 image = { version = "0.24", default-features = false, features = ["png"] }
 fontdue = "0.9"
 thiserror = "2.0"
+# `WindowTarget` and `show` (feature `window`, on by default).
+winit = { version = "0.30", optional = true }
+
+[features]
+default = ["window"]
+# A winit window target and a minimal `show()`.
+window = ["dep:winit"]
 
 [dev-dependencies]
 gup-visual-regression = { path = "../gup-visual-regression" }

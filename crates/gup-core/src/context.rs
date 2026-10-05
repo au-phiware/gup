@@ -145,9 +145,9 @@ impl UploadCounters {
 
 struct Inner {
     id: ContextId,
-    // Kept alive for the device's lifetime when Gup created it; S0b's
-    // `WindowTarget` creates surfaces from the instance.
-    #[allow(dead_code)]
+    /// Set when Gup created the device; `WindowTarget` creates surfaces
+    /// from it.
+    #[cfg_attr(not(feature = "window"), allow(dead_code))]
     instance: Option<wgpu::Instance>,
     adapter: Option<wgpu::Adapter>,
     device: wgpu::Device,
@@ -269,6 +269,15 @@ impl Context {
     /// The adapter, when this context created its own device.
     pub fn adapter_info(&self) -> Option<wgpu::AdapterInfo> {
         self.inner.adapter.as_ref().map(wgpu::Adapter::get_info)
+    }
+
+    /// The instance and adapter, when this context created its own device.
+    #[cfg(feature = "window")]
+    pub(crate) fn instance_and_adapter(&self) -> Option<(&wgpu::Instance, &wgpu::Adapter)> {
+        self.inner
+            .instance
+            .as_ref()
+            .zip(self.inner.adapter.as_ref())
     }
 
     /// The device's limits and features.

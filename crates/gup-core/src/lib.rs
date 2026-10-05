@@ -39,8 +39,12 @@ pub mod scale;
 pub mod scene;
 mod selection;
 mod shader;
+#[cfg(all(feature = "window", not(target_arch = "wasm32")))]
+mod show;
 pub mod target;
 mod text;
+#[cfg(feature = "window")]
+mod window;
 
 pub use channel::{Channel, ChannelDesc, Color, ConstValue, GpuType, Mark, Px, Role, Visual};
 pub use context::{Caps, Context, ContextId, Upload, UploadStats, WriteCount};
@@ -51,12 +55,16 @@ pub use encoding::{
 pub use error::{Error, Result};
 pub use marks::Circle;
 pub use plot::{Layout, PlacedText, Plot, Resolved};
-pub use render::{PipelineStats, TargetDesc};
+pub use render::{PipelineStats, Prepared, Renderer, TargetDesc};
 pub use scale::{Linear, Log, PositionScale, ScaleRef, Sequential, Ticks};
 pub use scene::Scene;
 pub use selection::Selection;
 pub use shader::WgslModule;
-pub use target::ImageTarget;
+#[cfg(all(feature = "window", not(target_arch = "wasm32")))]
+pub use show::show;
+pub use target::{Frame, ImageTarget, RenderTarget};
+#[cfg(feature = "window")]
+pub use window::WindowTarget;
 
 /// The names most programs need.
 pub mod prelude {

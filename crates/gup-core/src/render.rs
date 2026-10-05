@@ -10,6 +10,7 @@ use crate::error::{Error, Result};
 use crate::scene::{ItemKind, Rule, Scene};
 use crate::shader::glue::Glue;
 use crate::shader::{RULE_SHADER, StructLayout, TEXT_SHADER, VIEW, struct_layout};
+use crate::target::RenderTarget;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -560,184 +561,350 @@ enum Draw {
     Instanced {
         pipeline: wgpu::RenderPipeline,
         buffer: wgpu::Buffer,
+        /// Bytes of `buffer` in use (it is pooled and may be larger).
+        bytes: u64,
         count: u32,
         atlas: Option<wgpu::BindGroup>,
     },
 }
 
-/// Record the whole scene into **one** render pass on `encoder`.
-pub(crate) fn encode_scene(
-    cx: &Context,
-    scene: &Scene,
-    desc: &TargetDesc,
-    view: &wgpu::TextureView,
-    encoder: &mut wgpu::CommandEncoder,
-) -> Result<()> {
-    let device = cx.device();
-    let dpr = desc.width as f32 / scene.width;
+/// A scissor rectangle in physical pixels.
+type Scissor = [u32; 4];
 
-    // Prepare everything that needs locks or allocation before the pass.
-    let view_bgl = cx.pipelines().view_bgl(device);
-    let view_buffer = cx.buffer_with_data(
-        Upload::Uniform,
-        "gup view",
-        wgpu::BufferUsages::UNIFORM,
-        bytemuck::bytes_of(&ViewUniform {
-            size: [scene.width, scene.height],
-            dpr,
-            padding: 0.0,
-        }),
-    );
-    let view_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("gup view"),
-        layout: &view_bgl,
-        entries: &[wgpu::BindGroupEntry {
-            binding: 0,
-            resource: view_buffer.as_entire_binding(),
-        }],
-    });
-
-    let mut draws = Vec::new();
-    for item in &scene.items {
-        let scissor = item.clip.map(|c| scene.clips[c.0]);
-        let draw = match &item.kind {
-            ItemKind::Marks(batch) => {
-                if batch.gpu.context != cx.id() {
-                    return Err(Error::config(
-                        "scene",
-                        "a mark batch was prepared on a different Context; resolve the chart \
-                         again with this context",
-                    ));
-                }
-                let pipeline = cx.pipelines().mark_pipeline(cx, &batch.gpu.program, desc);
-                Some(Draw::Marks {
-                    pipeline,
-                    layer: Arc::clone(&batch.gpu),
-                })
-            }
-            ItemKind::Rules(rules) => {
-                let instances: Vec<RuleInstance> = rules.iter().map(rule_instance).collect();
-                instanced(cx, PipelineKind::Rule, desc, &instances, None)?
-            }
-            ItemKind::Text(runs) => {
-                let mut text = cx.text();
-                let mut glyphs = Vec::new();
-                for run in runs {
-                    let color = run.style.color.to_array();
-                    glyphs.extend(text.layout(run).into_iter().map(|g| GlyphInstance {
-                        rect: g.rect,
-                        uv: g.uv,
-                        color,
-                    }));
-                }
-                let atlas_view = text.atlas_view(cx);
-                drop(text);
-                let text_bgl = cx.pipelines().text_bgl(device);
-                let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-                    label: Some("gup glyph sampler"),
-                    ..Default::default()
-                });
-                let atlas = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("gup glyph atlas"),
-                    layout: &text_bgl,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::TextureView(&atlas_view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&sampler),
-                        },
-                    ],
-                });
-                instanced(cx, PipelineKind::Text, desc, &glyphs, Some(atlas))?
-            }
-        };
-        if let Some(draw) = draw {
-            draws.push((scissor, draw));
-        }
-    }
-
-    let bg = premultiplied_clear(scene.background);
-    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("gup scene"),
-        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view,
-            depth_slice: None,
-            resolve_target: None,
-            ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(bg),
-                store: wgpu::StoreOp::Store,
-            },
-        })],
-        depth_stencil_attachment: None,
-        timestamp_writes: None,
-        occlusion_query_set: None,
-    });
-    pass.set_bind_group(0, &view_bind_group, &[]);
-    for (clip, draw) in &draws {
-        match clip {
-            Some(rect) => {
-                let x0 = (rect.left() * dpr).floor().clamp(0.0, desc.width as f32) as u32;
-                let y0 = (rect.top() * dpr).floor().clamp(0.0, desc.height as f32) as u32;
-                let x1 = (rect.right() * dpr).ceil().clamp(0.0, desc.width as f32) as u32;
-                let y1 = (rect.bottom() * dpr).ceil().clamp(0.0, desc.height as f32) as u32;
-                pass.set_scissor_rect(x0, y0, x1.saturating_sub(x0), y1.saturating_sub(y0));
-            }
-            None => pass.set_scissor_rect(0, 0, desc.width, desc.height),
-        }
-        match draw {
-            Draw::Marks { pipeline, layer } => {
-                pass.set_pipeline(pipeline);
-                pass.set_bind_group(1, &layer.enc_bind_group, &[]);
-                pass.set_bind_group(2, &layer.chunk_bind_group, &[0]);
-                for (slot, range) in layer.column_ranges.iter().enumerate() {
-                    pass.set_vertex_buffer(slot as u32, layer.columns.slice(range.clone()));
-                }
-                pass.draw(0..layer.vertices_per_instance, 0..layer.instances);
-            }
-            Draw::Instanced {
-                pipeline,
-                buffer,
-                count,
-                atlas,
-            } => {
-                pass.set_pipeline(pipeline);
-                if let Some(atlas) = atlas {
-                    pass.set_bind_group(1, atlas, &[]);
-                }
-                pass.set_vertex_buffer(0, buffer.slice(..));
-                pass.draw(0..6, 0..*count);
-            }
-        }
-    }
-    Ok(())
+/// Per-renderer GPU state reused across frames: the view uniform, the
+/// glyph-atlas bind group and the guide instance buffers. Pipelines,
+/// programs and the atlas itself live in the [`Context`].
+struct RendererGpu {
+    context: ContextId,
+    view_buffer: wgpu::Buffer,
+    view_bind_group: wgpu::BindGroup,
+    glyph_sampler: wgpu::Sampler,
+    atlas: Option<(wgpu::TextureView, wgpu::BindGroup)>,
+    /// Grow-only guide vertex buffers, one per guide draw, reused across
+    /// frames.
+    instances: Vec<wgpu::Buffer>,
 }
 
-fn instanced<I: bytemuck::Pod>(
-    cx: &Context,
-    kind: PipelineKind,
-    desc: &TargetDesc,
-    instances: &[I],
-    atlas: Option<wgpu::BindGroup>,
-) -> Result<Option<Draw>> {
-    if instances.is_empty() {
-        return Ok(None);
+/// Turns a [`Scene`] into GPU draws (RFC-001 §7).
+///
+/// [`prepare`](Self::prepare) does everything that allocates or takes a
+/// lock; [`Prepared::draw`] only records commands into a render pass, so
+/// the same draw serves every target: Gup-owned ones through
+/// [`render`](Self::render), and a host's pass (egui, bevy) directly. A
+/// `Renderer` reuses its view uniform and guide buffers from frame to
+/// frame, so steady-state frames write only uniforms and guide instances.
+#[derive(Default)]
+pub struct Renderer {
+    gpu: Option<RendererGpu>,
+}
+
+impl std::fmt::Debug for Renderer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Renderer")
+            .field("context", &self.gpu.as_ref().map(|g| g.context))
+            .finish_non_exhaustive()
     }
-    let pipeline = cx.pipelines().guide_pipeline(cx, kind, desc)?;
-    let buffer = cx.buffer_with_data(
-        Upload::Instances,
-        "gup guide instances",
-        wgpu::BufferUsages::VERTEX,
-        bytemuck::cast_slice(instances),
-    );
-    Ok(Some(Draw::Instanced {
-        pipeline,
-        buffer,
-        count: instances.len() as u32,
-        atlas,
-    }))
+}
+
+/// A scene ready to record into a render pass.
+pub struct Prepared {
+    view_bind_group: wgpu::BindGroup,
+    draws: Vec<(Scissor, Draw)>,
+    clear: wgpu::Color,
+}
+
+impl std::fmt::Debug for Prepared {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Prepared")
+            .field("draws", &self.draws.len())
+            .finish_non_exhaustive()
+    }
+}
+
+impl Renderer {
+    /// A renderer with no GPU state yet.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn gpu(&mut self, cx: &Context) -> &mut RendererGpu {
+        if self.gpu.as_ref().is_none_or(|g| g.context != cx.id()) {
+            let device = cx.device();
+            let view_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("gup view"),
+                size: std::mem::size_of::<ViewUniform>() as u64,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            let view_bgl = cx.pipelines().view_bgl(device);
+            let view_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("gup view"),
+                layout: &view_bgl,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: view_buffer.as_entire_binding(),
+                }],
+            });
+            let glyph_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+                label: Some("gup glyph sampler"),
+                ..Default::default()
+            });
+            self.gpu = Some(RendererGpu {
+                context: cx.id(),
+                view_buffer,
+                view_bind_group,
+                glyph_sampler,
+                atlas: None,
+                instances: Vec::new(),
+            });
+        }
+        self.gpu.as_mut().expect("created above")
+    }
+
+    /// Prepare `scene` for a target described by `desc`: write the view
+    /// uniform, fetch (or create) pipelines, upload guide instances and
+    /// new glyphs.
+    pub fn prepare(&mut self, cx: &Context, scene: &Scene, desc: &TargetDesc) -> Result<Prepared> {
+        let dpr = desc.width as f32 / scene.width;
+        let gpu = self.gpu(cx);
+        cx.write_buffer(
+            Upload::Uniform,
+            &gpu.view_buffer,
+            0,
+            bytemuck::bytes_of(&ViewUniform {
+                size: [scene.width, scene.height],
+                dpr,
+                padding: 0.0,
+            }),
+        );
+
+        let full = [0, 0, desc.width, desc.height];
+        let mut draws = Vec::new();
+        let mut next_instances = 0;
+        for item in &scene.items {
+            let scissor = item
+                .clip
+                .map_or(full, |c| scissor(scene.clips[c.0], dpr, desc));
+            let draw = match &item.kind {
+                ItemKind::Marks(batch) => {
+                    if batch.gpu.context != cx.id() {
+                        return Err(Error::config(
+                            "scene",
+                            "a mark batch was prepared on a different Context; resolve the \
+                             chart again with this context",
+                        ));
+                    }
+                    let pipeline = cx.pipelines().mark_pipeline(cx, &batch.gpu.program, desc);
+                    Some(Draw::Marks {
+                        pipeline,
+                        layer: Arc::clone(&batch.gpu),
+                    })
+                }
+                ItemKind::Rules(rules) => {
+                    let instances: Vec<RuleInstance> = rules.iter().map(rule_instance).collect();
+                    gpu.instanced(
+                        cx,
+                        &mut next_instances,
+                        PipelineKind::Rule,
+                        desc,
+                        &instances,
+                        None,
+                    )?
+                }
+                ItemKind::Text(runs) => {
+                    let mut text = cx.text();
+                    let mut glyphs = Vec::new();
+                    for run in runs {
+                        let color = run.style.color.to_array();
+                        glyphs.extend(text.layout(run).into_iter().map(|g| GlyphInstance {
+                            rect: g.rect,
+                            uv: g.uv,
+                            color,
+                        }));
+                    }
+                    let atlas_view = text.atlas_view(cx);
+                    drop(text);
+                    let atlas = gpu.atlas_bind_group(cx, atlas_view);
+                    gpu.instanced(
+                        cx,
+                        &mut next_instances,
+                        PipelineKind::Text,
+                        desc,
+                        &glyphs,
+                        Some(atlas),
+                    )?
+                }
+            };
+            if let Some(draw) = draw {
+                draws.push((scissor, draw));
+            }
+        }
+        Ok(Prepared {
+            view_bind_group: gpu.view_bind_group.clone(),
+            draws,
+            clear: premultiplied_clear(scene.background),
+        })
+    }
+
+    /// Draw `scene` into `target` in one render pass and present it: the
+    /// one render path every Gup-owned target ([`ImageTarget`],
+    /// `WindowTarget`) shares.
+    ///
+    /// [`ImageTarget`]: crate::ImageTarget
+    pub fn render(
+        &mut self,
+        cx: &Context,
+        scene: &Scene,
+        target: &mut dyn RenderTarget,
+    ) -> Result<()> {
+        let desc = target.desc();
+        let frame = target.acquire(cx)?;
+        let prepared = self.prepare(cx, scene, &desc)?;
+        let mut encoder = cx
+            .device()
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("gup scene"),
+            });
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("gup scene"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: frame.view(),
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(prepared.clear_color()),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            prepared.draw(&mut pass);
+        }
+        target.present(cx, frame, encoder.finish())
+    }
+}
+
+impl RendererGpu {
+    /// The atlas bind group, rebuilt only when the atlas view changes.
+    fn atlas_bind_group(&mut self, cx: &Context, view: wgpu::TextureView) -> wgpu::BindGroup {
+        if let Some((v, bg)) = &self.atlas
+            && *v == view
+        {
+            return bg.clone();
+        }
+        let text_bgl = cx.pipelines().text_bgl(cx.device());
+        let bg = cx.device().create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("gup glyph atlas"),
+            layout: &text_bgl,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.glyph_sampler),
+                },
+            ],
+        });
+        self.atlas = Some((view, bg.clone()));
+        bg
+    }
+
+    /// Write `instances` into the next pooled buffer (growing it if
+    /// needed) and record an instanced guide draw.
+    fn instanced<I: bytemuck::Pod>(
+        &mut self,
+        cx: &Context,
+        next: &mut usize,
+        kind: PipelineKind,
+        desc: &TargetDesc,
+        instances: &[I],
+        atlas: Option<wgpu::BindGroup>,
+    ) -> Result<Option<Draw>> {
+        if instances.is_empty() {
+            return Ok(None);
+        }
+        let pipeline = cx.pipelines().guide_pipeline(cx, kind, desc)?;
+        let bytes: &[u8] = bytemuck::cast_slice(instances);
+        let size = bytes.len() as u64;
+        if self.instances.get(*next).is_none_or(|b| b.size() < size) {
+            let buffer = cx.device().create_buffer(&wgpu::BufferDescriptor {
+                label: Some("gup guide instances"),
+                size: size.next_power_of_two().max(256),
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            if *next < self.instances.len() {
+                self.instances[*next] = buffer;
+            } else {
+                self.instances.push(buffer);
+            }
+        }
+        let buffer = self.instances[*next].clone();
+        *next += 1;
+        cx.write_buffer(Upload::Instances, &buffer, 0, bytes);
+        Ok(Some(Draw::Instanced {
+            pipeline,
+            buffer,
+            bytes: size,
+            count: instances.len() as u32,
+            atlas,
+        }))
+    }
+}
+
+impl Prepared {
+    /// The scene's background, premultiplied, for a pass that clears.
+    pub fn clear_color(&self) -> wgpu::Color {
+        self.clear
+    }
+
+    /// Record every draw into `pass`. Allocates nothing, takes no locks
+    /// and never submits, so it can run inside a host's pass.
+    pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
+        pass.set_bind_group(0, &self.view_bind_group, &[]);
+        for ([x, y, w, h], draw) in &self.draws {
+            pass.set_scissor_rect(*x, *y, *w, *h);
+            match draw {
+                Draw::Marks { pipeline, layer } => {
+                    pass.set_pipeline(pipeline);
+                    pass.set_bind_group(1, &layer.enc_bind_group, &[]);
+                    pass.set_bind_group(2, &layer.chunk_bind_group, &[0]);
+                    for (slot, range) in layer.column_ranges.iter().enumerate() {
+                        pass.set_vertex_buffer(slot as u32, layer.columns.slice(range.clone()));
+                    }
+                    pass.draw(0..layer.vertices_per_instance, 0..layer.instances);
+                }
+                Draw::Instanced {
+                    pipeline,
+                    buffer,
+                    bytes,
+                    count,
+                    atlas,
+                } => {
+                    pass.set_pipeline(pipeline);
+                    if let Some(atlas) = atlas {
+                        pass.set_bind_group(1, atlas, &[]);
+                    }
+                    pass.set_vertex_buffer(0, buffer.slice(..*bytes));
+                    pass.draw(0..6, 0..*count);
+                }
+            }
+        }
+    }
+}
+
+/// A logical-pixel clip rectangle as a physical-pixel scissor.
+fn scissor(rect: crate::geom::Rect, dpr: f32, desc: &TargetDesc) -> Scissor {
+    let x0 = (rect.left() * dpr).floor().clamp(0.0, desc.width as f32) as u32;
+    let y0 = (rect.top() * dpr).floor().clamp(0.0, desc.height as f32) as u32;
+    let x1 = (rect.right() * dpr).ceil().clamp(0.0, desc.width as f32) as u32;
+    let y1 = (rect.bottom() * dpr).ceil().clamp(0.0, desc.height as f32) as u32;
+    [x0, y0, x1.saturating_sub(x0), y1.saturating_sub(y0)]
 }
 
 fn rule_instance(r: &Rule) -> RuleInstance {
