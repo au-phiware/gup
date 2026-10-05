@@ -23,13 +23,9 @@
           config.allowUnfree = true;
         };
 
-        rustToolchain = pkgs.rust-bin.stable.latest.default.override {
-          extensions = [
-            "rust-src"
-            "rust-analyzer"
-          ];
-          targets = [ "wasm32-unknown-unknown" ];
-        };
+        # rust-toolchain.toml pins the version, components and targets; CI
+        # installs the same file, so local and CI toolchains cannot drift.
+        rustToolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
         chromium-webgpu = pkgs.writeShellScriptBin "chromium-webgpu" ''
           exec chromium --enable-features=WebGPU,Vulkan --enable-unsafe-webgpu --disable-dawn-features=disallow_unsafe_apis "$@"
@@ -106,9 +102,15 @@
           shellHook = ''
             export RUST_BACKTRACE=1
 
-            # Set up Mesa drivers
+            # Set up Mesa drivers. GUP_SOFTWARE_GPU=1 selects lavapipe
+            # (software Vulkan) instead: CI runners have no GPU, and the
+            # same switch reproduces CI locally.
             export LIBGL_DRIVERS_PATH="${pkgs.mesa}/lib/dri"
-            export VK_ICD_FILENAMES="${pkgs.mesa}/share/vulkan/icd.d/radeon_icd.x86_64.json:${pkgs.mesa}/share/vulkan/icd.d/intel_icd.x86_64.json"
+            if [[ -n "''${GUP_SOFTWARE_GPU:-}" ]]; then
+              export VK_ICD_FILENAMES="${pkgs.mesa}/share/vulkan/icd.d/lvp_icd.x86_64.json"
+            else
+              export VK_ICD_FILENAMES="${pkgs.mesa}/share/vulkan/icd.d/radeon_icd.x86_64.json:${pkgs.mesa}/share/vulkan/icd.d/intel_icd.x86_64.json"
+            fi
 
             # Set up git hooks if not already done
             if [[ ! -e .git/hooks/pre-commit ]]; then

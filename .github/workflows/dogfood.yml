@@ -32,10 +32,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
+      # rust-toolchain.toml pins the toolchain (GUP-403); rustup reads it, so
+      # CI lints with the same clippy as the Nix dev shell.
+      - name: Install Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
 
       # lavapipe (software Vulkan) gives wgpu an adapter on a GPU-less
       # runner; Xvfb provides the display for the three windowed tasks;

@@ -33,10 +33,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-ios-sim
+      # rust-toolchain.toml pins the toolchain (GUP-403); rustup reads it.
+      - name: Install Rust (rust-toolchain.toml)
+        run: |
+          rustup toolchain install
+          rustup target add aarch64-apple-ios-sim
 
       - name: Cache Cargo
         uses: actions/cache@v4
@@ -133,8 +134,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      # rust-toolchain.toml pins the toolchain (GUP-403); rustup reads it.
+      - name: Install Rust (rust-toolchain.toml)
+        run: rustup toolchain install
 
       - name: Cargo test (default features)
         run: cargo test -- --test-threads=1

@@ -38,10 +38,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android,armv7-linux-androideabi
+      # rust-toolchain.toml pins the toolchain (GUP-403); rustup reads it.
+      - name: Install Rust (rust-toolchain.toml)
+        run: |
+          rustup toolchain install
+          rustup target add aarch64-linux-android armv7-linux-androideabi
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk
@@ -175,8 +176,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      # rust-toolchain.toml pins the toolchain (GUP-403); rustup reads it.
+      - name: Install Rust (rust-toolchain.toml)
+        run: rustup toolchain install
 
       - name: Cargo test (default features)
         run: cargo test -- --test-threads=1
