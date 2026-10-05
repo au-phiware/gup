@@ -62,16 +62,18 @@ pub trait ShaderFn: Clone + Send + Sync + 'static {
         Ok(())
     }
 
-    /// Encode a field of each row through this function:
-    /// `scale.encode(|r: &Row| r.value)`.
-    fn encode<T, D, A>(self, accessor: A) -> Encoded<A, Self>
+    /// Encode a field of each row through (a clone of) this function:
+    /// `scale.encode(|r: &Row| r.value)`. Taking `&self` keeps shared
+    /// handles such as [`ScaleRef`](crate::ScaleRef) usable for later
+    /// domain changes (zoom, pan).
+    fn encode<T, D, A>(&self, accessor: A) -> Encoded<A, Self>
     where
         A: Fn(&T) -> D,
         D: ColumnValue,
     {
         Encoded {
             accessor,
-            func: self,
+            func: self.clone(),
         }
     }
 }

@@ -407,3 +407,67 @@ impl Plot {
             .collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::encoding::ShaderFn;
+    use crate::marks::Circle;
+    use crate::scale::{Linear, Log};
+    use crate::scene::ItemKind;
+
+    fn batch_buffer(r: &Resolved) -> wgpu::Buffer {
+        r.scene
+            .items
+            .iter()
+            .find_map(|i| match &i.kind {
+                ItemKind::Marks(b) => Some(b.gpu.columns.clone()),
+                _ => None,
+            })
+            .unwrap()
+    }
+
+    /// Changing a domain re-resolves with new uniforms only: the glue is
+    /// not recomposed, the pipeline is a cache hit and the column chunk is
+    /// the same buffer (no column bytes re-uploaded).
+    #[test]
+    fn rescale_reuses_program_pipeline_and_columns() {
+        let cx = Context::new_blocking().unwrap();
+        let mut plot = Plot::new();
+        let (x, y) = (plot.x(Linear::new()), plot.y(Log::new()));
+        plot.add(Selection::<(f64, f64), Circle>::new(vec![
+            (1.0, 1.0),
+            (5.0, 100.0),
+        ]))
+        .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+        .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1));
+        let first = plot.resolve(&cx, 300.0, 200.0).unwrap();
+        let target = ImageTarget::new(&cx, 300, 200).unwrap();
+        target.render_blocking(&cx, &first.scene).unwrap();
+        let before = cx.pipelines().stats;
+
+        *x.write() = Linear::new().domain(2.0, 3.0);
+        let second = plot.resolve(&cx, 300.0, 200.0).unwrap();
+        target.render_blocking(&cx, &second.scene).unwrap();
+        let after = cx.pipelines().stats;
+
+        assert_eq!(before.programs_composed, 1);
+        assert_eq!(after.programs_composed, 1, "glue recomposed");
+        assert_eq!(after.pipelines_created, before.pipelines_created);
+        assert!(after.pipeline_hits > before.pipeline_hits);
+        assert_eq!(batch_buffer(&first), batch_buffer(&second));
+        assert_ne!(first.layout.x_ticks, second.layout.x_ticks);
+    }
+
+    #[test]
+    fn resolve_errors_name_what_is_missing() {
+        let cx = Context::new_blocking().unwrap();
+        let err = Plot::new().resolve(&cx, 300.0, 200.0).unwrap_err();
+        assert!(err.to_string().contains("plot.x(..)"), "{err}");
+        let mut plot = Plot::new();
+        plot.x(Linear::new());
+        plot.y(Log::new());
+        let err = plot.resolve(&cx, 300.0, 200.0).unwrap_err();
+        assert!(err.to_string().contains("0 layers"), "{err}");
+    }
+}
