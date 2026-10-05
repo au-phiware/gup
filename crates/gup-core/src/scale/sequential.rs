@@ -128,24 +128,36 @@ impl CpuMirror for Sequential {
     /// 8-bit LUT between texel centres, as hardware filtering does.
     fn eval(&self, x: f64) -> Color {
         let (d0, inv) = self.norm();
-        let mut t = ((x - d0) * inv).clamp(0.0, 1.0);
-        if self.reverse {
-            t = 1.0 - t;
-        }
-        let pos = t * (self.lut.len() - 1) as f64;
-        let i0 = (pos.floor() as usize).min(self.lut.len() - 2);
-        let f = pos - i0 as f64;
-        let c = |k: usize| {
-            let a = f64::from(self.lut[i0][k]) / 255.0;
-            let b = f64::from(self.lut[i0 + 1][k]) / 255.0;
-            (a + (b - a) * f) as f32
-        };
-        Color {
-            r: c(0),
-            g: c(1),
-            b: c(2),
-            a: c(3),
-        }
+        let t = ((x - d0) * inv).clamp(0.0, 1.0);
+        sample_lut(&self.lut, if self.reverse { 1.0 - t } else { t })
+    }
+}
+
+impl Sequential {
+    /// The palette LUT (shared, not copied) and whether it runs backwards:
+    /// what a colour legend for this scale draws.
+    pub(crate) fn palette(&self) -> (Arc<[[u8; 4]]>, bool) {
+        (Arc::clone(&self.lut), self.reverse)
+    }
+}
+
+/// `lut` at `t` in `0..=1`, linearly interpolated between texel centres
+/// as the GPU's filtering sampler does (the CPU mirror of
+/// `gup::color::sequential::map` after normalising).
+pub(crate) fn sample_lut(lut: &[[u8; 4]], t: f64) -> Color {
+    let pos = t.clamp(0.0, 1.0) * (lut.len() - 1) as f64;
+    let i0 = (pos.floor() as usize).min(lut.len() - 2);
+    let f = pos - i0 as f64;
+    let c = |k: usize| {
+        let a = f64::from(lut[i0][k]) / 255.0;
+        let b = f64::from(lut[i0 + 1][k]) / 255.0;
+        (a + (b - a) * f) as f32
+    };
+    Color {
+        r: c(0),
+        g: c(1),
+        b: c(2),
+        a: c(3),
     }
 }
 

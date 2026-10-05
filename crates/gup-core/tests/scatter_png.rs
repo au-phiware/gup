@@ -9,14 +9,10 @@
 mod common;
 
 use common::scatter::{self, HEIGHT, WIDTH};
+use common::vr::{harness, metadata};
 use gup_core::prelude::*;
 use gup_core::{Layout, scene::TextRole};
-use gup_visual_regression::golden::default_artifact_dir;
-use gup_visual_regression::{
-    ExpectedFailures, GoldenStore, Harness, LayoutMetadata, PxRect, Rgba8, RgbaImage,
-    TextRole as VrTextRole,
-};
-use std::path::Path;
+use gup_visual_regression::RgbaImage;
 
 fn render() -> (image::RgbaImage, Layout, Sequential) {
     let cx = Context::new_blocking().expect("headless GPU context");
@@ -24,55 +20,6 @@ fn render() -> (image::RgbaImage, Layout, Sequential) {
         .render_resolved(&cx, WIDTH, HEIGHT)
         .expect("render scatter");
     (image, layout, scatter::fill())
-}
-
-fn rgba8(c: Color) -> Rgba8 {
-    let [r, g, b, _] = c.to_rgba8();
-    Rgba8::rgb(r, g, b)
-}
-
-fn rect(r: gup_core::geom::Rect) -> PxRect {
-    PxRect::new(r.x, r.y, r.width, r.height)
-}
-
-/// The gup-core adapter: everything comes from gup-core's own `Layout`.
-fn metadata(layout: &Layout, fill: &Sequential) -> LayoutMetadata {
-    let mut meta = LayoutMetadata::new(rect(layout.plot)).with_background(Rgba8::WHITE);
-    for t in &layout.texts {
-        let role = match t.run.role {
-            TextRole::Title => VrTextRole::Title,
-            TextRole::TickLabel => VrTextRole::TickLabel,
-        };
-        meta = meta.with_text(
-            role,
-            t.run.text.to_string(),
-            rect(t.bounds),
-            rgba8(t.run.style.color),
-        );
-    }
-    for g in &layout.guides {
-        // Pad by half a pixel for the edge pixels of snapped hairlines.
-        meta = meta.with_guide(rect(*g).inflate(0.5));
-    }
-    // The extremes of the sequential palette: the darkest and brightest
-    // points are drawn with exactly these colours at their centres.
-    meta.with_expected_color(
-        "fill at domain min (viridis start)",
-        rgba8(fill.eval(f64::MIN)),
-    )
-    .with_expected_color(
-        "fill at domain max (viridis end)",
-        rgba8(fill.eval(f64::MAX)),
-    )
-}
-
-fn harness() -> Harness {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let golden = GoldenStore::new(root.join("tests/golden"), default_artifact_dir(&root));
-    let expected =
-        ExpectedFailures::load(root.join("tests/visual_regression/expected_failures.toml"))
-            .expect("expected-failure list parses");
-    Harness::new(golden, expected)
 }
 
 #[test]

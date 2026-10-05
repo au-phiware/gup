@@ -78,6 +78,12 @@ pub(crate) static BUILTIN_MODULES: &[&WgslModule] = &[
 /// Hand-authored top-level shader for guide rules.
 pub(crate) const RULE_SHADER: &str = include_str!("../shaders/rule.wgsl");
 
+/// Hand-authored top-level shader for flat rectangles.
+pub(crate) const RECT_SHADER: &str = include_str!("../shaders/rect.wgsl");
+
+/// Hand-authored top-level shader for colour-legend gradient bars.
+pub(crate) const GRADIENT_SHADER: &str = include_str!("../shaders/gradient.wgsl");
+
 /// A composed top-level shader and how long composition took.
 pub(crate) struct Composed {
     pub module: naga::Module,
@@ -237,8 +243,14 @@ mod tests {
     #[test]
     fn guide_shaders_compose() {
         let mut lib = ShaderLibrary::new();
-        let composed = lib.compose("rule", RULE_SHADER, &[&VIEW]).unwrap();
-        assert_eq!(composed.module.entry_points.len(), 2);
+        for (name, source, imports) in [
+            ("rule", RULE_SHADER, &[&VIEW][..]),
+            ("rect", RECT_SHADER, &[&VIEW]),
+            ("gradient", GRADIENT_SHADER, &[&VIEW, &COLOR_SEQUENTIAL]),
+        ] {
+            let composed = lib.compose(name, source, imports).unwrap();
+            assert_eq!(composed.module.entry_points.len(), 2, "{name}");
+        }
     }
 
     #[test]

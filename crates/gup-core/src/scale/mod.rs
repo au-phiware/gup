@@ -10,7 +10,7 @@
 
 mod linear;
 mod log;
-mod sequential;
+pub(crate) mod sequential;
 
 #[cfg(test)]
 mod conformance;

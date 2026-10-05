@@ -7,9 +7,12 @@
 use crate::channel::Color;
 use crate::context::{Context, ContextId, Upload};
 use crate::error::{Error, Result};
-use crate::scene::{ItemKind, Rule, Scene, TextRun};
+use crate::scene::{GradientDirection, ItemKind, Rule, Scene, TextRun};
 use crate::shader::glue::Glue;
-use crate::shader::{RULE_SHADER, StructLayout, VIEW, struct_layout};
+use crate::shader::{
+    COLOR_SEQUENTIAL, GRADIENT_SHADER, RECT_SHADER, RULE_SHADER, StructLayout, VIEW, WgslModule,
+    struct_layout,
+};
 use crate::target::RenderTarget;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -95,6 +98,8 @@ impl std::fmt::Debug for LayerGpu {
 enum PipelineKind {
     Mark(String),
     Rule,
+    Rect,
+    Gradient,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -124,6 +129,7 @@ pub struct PipelineStats {
 #[derive(Default)]
 pub(crate) struct PipelineCache {
     view_bgl: Option<wgpu::BindGroupLayout>,
+    lut_bgl: Option<wgpu::BindGroupLayout>,
     programs: HashMap<String, Arc<GlueProgram>>,
     pipelines: HashMap<PipelineKey, wgpu::RenderPipeline>,
     pub stats: PipelineStats,
@@ -302,16 +308,33 @@ impl PipelineCache {
                 &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32, 3 => Float32x4],
                 std::mem::size_of::<RuleInstance>(),
             ),
+            PipelineKind::Rect => (
+                "gup rects",
+                RECT_SHADER,
+                &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32x4],
+                std::mem::size_of::<RectInstance>(),
+            ),
+            PipelineKind::Gradient => (
+                "gup gradient",
+                GRADIENT_SHADER,
+                &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Uint32, 3 => Uint32],
+                std::mem::size_of::<GradientInstance>(),
+            ),
             PipelineKind::Mark(_) => unreachable!("mark pipelines come from glue programs"),
         };
-        let composed = cx.shaders().compose(label, source, &[&VIEW])?;
+        let lut_bgl = self.lut_bgl(device);
+        let (imports, groups): (&[&WgslModule], Vec<&wgpu::BindGroupLayout>) = match kind {
+            PipelineKind::Gradient => (&[&VIEW, &COLOR_SEQUENTIAL], vec![&view_bgl, &lut_bgl]),
+            _ => (&[&VIEW], vec![&view_bgl]),
+        };
+        let composed = cx.shaders().compose(label, source, imports)?;
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(label),
             source: wgpu::ShaderSource::Naga(Cow::Owned(composed.module)),
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some(label),
-            bind_group_layouts: &[&view_bgl],
+            bind_group_layouts: &groups,
             push_constant_ranges: &[],
         });
         let buffers = [wgpu::VertexBufferLayout {
@@ -323,6 +346,18 @@ impl PipelineCache {
         self.stats.pipelines_created += 1;
         self.pipelines.insert(key, pipeline.clone());
         Ok(pipeline)
+    }
+
+    /// Group 1 of the gradient pipeline: a palette LUT and its sampler.
+    fn lut_bgl(&mut self, device: &wgpu::Device) -> wgpu::BindGroupLayout {
+        self.lut_bgl
+            .get_or_insert_with(|| {
+                device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("gup gradient lut"),
+                    entries: &lut_entries(0),
+                })
+            })
+            .clone()
     }
 }
 
@@ -401,46 +436,9 @@ impl LayerUniforms<'_> {
             wgpu::BufferUsages::UNIFORM,
             &chunk_bytes,
         );
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("gup lut sampler"),
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            ..Default::default()
-        });
-        let lut_views: Vec<wgpu::TextureView> = self
-            .luts
-            .iter()
-            .map(|lut| {
-                let size = wgpu::Extent3d {
-                    width: lut.len() as u32,
-                    height: 1,
-                    depth_or_array_layers: 1,
-                };
-                let texture = device.create_texture(&wgpu::TextureDescriptor {
-                    label: Some("gup palette lut"),
-                    size,
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    // Not *Srgb: the LUT holds sRGB-encoded values and
-                    // must not be linearised by the sampler.
-                    format: wgpu::TextureFormat::Rgba8Unorm,
-                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                    view_formats: &[],
-                });
-                cx.write_texture(
-                    texture.as_image_copy(),
-                    bytemuck::cast_slice(lut),
-                    wgpu::TexelCopyBufferLayout {
-                        offset: 0,
-                        bytes_per_row: Some(size.width * 4),
-                        rows_per_image: None,
-                    },
-                    size,
-                );
-                texture.create_view(&Default::default())
-            })
-            .collect();
+        let sampler = lut_sampler(device);
+        let lut_views: Vec<wgpu::TextureView> =
+            self.luts.iter().map(|lut| lut_view(cx, lut)).collect();
         let mut entries = vec![wgpu::BindGroupEntry {
             binding: 0,
             resource: enc.as_entire_binding(),
@@ -487,6 +485,47 @@ impl LayerUniforms<'_> {
     }
 }
 
+/// The linear-filtering sampler palette LUTs are read with.
+fn lut_sampler(device: &wgpu::Device) -> wgpu::Sampler {
+    device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("gup lut sampler"),
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        ..Default::default()
+    })
+}
+
+/// A palette LUT as a 1-row texture (uploaded, counted).
+fn lut_view(cx: &Context, lut: &[[u8; 4]]) -> wgpu::TextureView {
+    let size = wgpu::Extent3d {
+        width: lut.len() as u32,
+        height: 1,
+        depth_or_array_layers: 1,
+    };
+    let texture = cx.device().create_texture(&wgpu::TextureDescriptor {
+        label: Some("gup palette lut"),
+        size,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        // Not *Srgb: the LUT holds sRGB-encoded values and must not be
+        // linearised by the sampler.
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    cx.write_texture(
+        texture.as_image_copy(),
+        bytemuck::cast_slice(lut),
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(size.width * 4),
+            rows_per_image: None,
+        },
+        size,
+    );
+    texture.create_view(&Default::default())
+}
 impl LayerGpu {
     /// Whether this GPU state can take new uniform values from `program`
     /// without being rebuilt: same context, program and column chunk.
@@ -519,6 +558,23 @@ struct RuleInstance {
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct RectInstance {
+    lo: [f32; 2],
+    hi: [f32; 2],
+    color: [f32; 4],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct GradientInstance {
+    lo: [f32; 2],
+    hi: [f32; 2],
+    vertical: u32,
+    reverse: u32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct ViewUniform {
     size: [f32; 2],
     dpr: f32,
@@ -537,9 +593,21 @@ enum Draw {
         /// Bytes of `buffer` in use (it is pooled and may be larger).
         bytes: u64,
         count: u32,
+        /// Bind group 1, if the pipeline has one (a gradient's LUT).
+        group1: Option<wgpu::BindGroup>,
     },
     /// Glyph quads, drawn by `gup-text` (it binds its atlas at group 0).
     Text(gup_text::GlyphBatch),
+}
+
+impl Draw {
+    /// Attach bind group 1 to an instanced draw.
+    fn with_group1(mut self, group: wgpu::BindGroup) -> Self {
+        if let Draw::Instanced { group1, .. } = &mut self {
+            *group1 = Some(group);
+        }
+        self
+    }
 }
 
 /// A scissor rectangle in physical pixels.
@@ -559,6 +627,9 @@ struct RendererGpu {
     /// Grow-only guide vertex buffers, one per guide draw, reused across
     /// frames.
     instances: Vec<wgpu::Buffer>,
+    /// Gradient LUT bind groups by palette (pointer identity of the
+    /// scale's shared LUT), so a legend uploads its palette once.
+    luts: Vec<(Arc<[[u8; 4]]>, wgpu::BindGroup)>,
 }
 
 /// Turns a [`Scene`] into GPU draws (RFC-001 §7).
@@ -628,6 +699,7 @@ impl Renderer {
                 glyphs: gup_text::Glyphs::new(1.0),
                 glyph_buffers: Vec::new(),
                 instances: Vec::new(),
+                luts: Vec::new(),
             });
         }
         self.gpu.as_mut().expect("created above")
@@ -699,6 +771,40 @@ impl Renderer {
                         desc,
                         &instances,
                     )?
+                }
+                ItemKind::Rects(rects) => {
+                    let instances: Vec<RectInstance> = rects
+                        .iter()
+                        .map(|r| RectInstance {
+                            lo: [r.rect.left(), r.rect.top()],
+                            hi: [r.rect.right(), r.rect.bottom()],
+                            color: r.color.to_array(),
+                        })
+                        .collect();
+                    gpu.instanced(
+                        cx,
+                        &mut next_instances,
+                        PipelineKind::Rect,
+                        desc,
+                        &instances,
+                    )?
+                }
+                ItemKind::Gradient(bar) => {
+                    let instance = GradientInstance {
+                        lo: [bar.rect.left(), bar.rect.top()],
+                        hi: [bar.rect.right(), bar.rect.bottom()],
+                        vertical: u32::from(bar.direction == GradientDirection::Vertical),
+                        reverse: u32::from(bar.reverse),
+                    };
+                    let lut = gpu.lut_bind_group(cx, &bar.lut);
+                    gpu.instanced(
+                        cx,
+                        &mut next_instances,
+                        PipelineKind::Gradient,
+                        desc,
+                        &[instance],
+                    )?
+                    .map(|draw| draw.with_group1(lut))
                 }
                 ItemKind::Text(runs) => gpu.text(cx, &mut next_glyphs, runs, dpr, desc)?,
             };
@@ -786,6 +892,33 @@ impl RendererGpu {
             .map(Draw::Text))
     }
 
+    /// The bind group of `lut` for the gradient pipeline, uploading the
+    /// palette the first time this renderer sees it.
+    fn lut_bind_group(&mut self, cx: &Context, lut: &Arc<[[u8; 4]]>) -> wgpu::BindGroup {
+        if let Some((_, group)) = self.luts.iter().find(|(l, _)| Arc::ptr_eq(l, lut)) {
+            return group.clone();
+        }
+        let device = cx.device();
+        let layout = cx.pipelines().lut_bgl(device);
+        let view = lut_view(cx, lut);
+        let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("gup gradient lut"),
+            layout: &layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&lut_sampler(device)),
+                },
+            ],
+        });
+        self.luts.push((Arc::clone(lut), group.clone()));
+        group
+    }
+
     /// Write `instances` into the next pooled buffer (growing it if
     /// needed) and record an instanced guide draw.
     fn instanced<I: bytemuck::Pod>(
@@ -823,6 +956,7 @@ impl RendererGpu {
             buffer,
             bytes: size,
             count: instances.len() as u32,
+            group1: None,
         }))
     }
 }
@@ -854,9 +988,13 @@ impl Prepared {
                     buffer,
                     bytes,
                     count,
+                    group1,
                 } => {
                     pass.set_pipeline(pipeline);
                     pass.set_bind_group(0, &self.view_bind_group, &[]);
+                    if let Some(group) = group1 {
+                        pass.set_bind_group(1, group, &[]);
+                    }
                     pass.set_vertex_buffer(0, buffer.slice(..*bytes));
                     pass.draw(0..6, 0..*count);
                 }
