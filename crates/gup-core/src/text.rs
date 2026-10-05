@@ -54,7 +54,8 @@ pub(crate) struct TextSystem {
     glyphs: HashMap<(char, u32), AtlasGlyph>,
     cursor: (u32, u32),
     row_height: u32,
-    dirty: bool,
+    /// Atlas rows `start..end` changed since the last upload.
+    dirty: Option<(u32, u32)>,
     texture: Option<(wgpu::Texture, wgpu::TextureView)>,
 }
 
@@ -68,7 +69,8 @@ impl TextSystem {
             glyphs: HashMap::new(),
             cursor: (ATLAS_PAD, ATLAS_PAD),
             row_height: 0,
-            dirty: true,
+            // wgpu zero-initialises textures, so nothing is dirty yet.
+            dirty: None,
             texture: None,
         }
     }
@@ -195,7 +197,8 @@ impl TextSystem {
         }
         self.cursor.0 += w + ATLAS_PAD;
         self.row_height = self.row_height.max(h);
-        self.dirty = true;
+        let (start, end) = self.dirty.unwrap_or((y0, y0 + h));
+        self.dirty = Some((start.min(y0), end.max(y0 + h)));
         let g = AtlasGlyph {
             rect: [x0, y0, w, h],
         };
@@ -223,18 +226,31 @@ impl TextSystem {
             let view = texture.create_view(&Default::default());
             (texture, view)
         });
-        if self.dirty {
+        // Upload only the rows new glyphs landed in.
+        if let Some((start, end)) = self.dirty.take() {
             cx.write_texture(
-                texture.as_image_copy(),
-                &self.pixels,
+                wgpu::TexelCopyTextureInfo {
+                    texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d {
+                        x: 0,
+                        y: start,
+                        z: 0,
+                    },
+                    aspect: wgpu::TextureAspect::All,
+                },
+                &self.pixels[(start * ATLAS_SIZE) as usize..(end * ATLAS_SIZE) as usize],
                 wgpu::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(ATLAS_SIZE),
                     rows_per_image: None,
                 },
-                texture.size(),
+                wgpu::Extent3d {
+                    width: ATLAS_SIZE,
+                    height: end - start,
+                    depth_or_array_layers: 1,
+                },
             );
-            self.dirty = false;
         }
         view.clone()
     }

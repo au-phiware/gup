@@ -15,6 +15,11 @@
 //!   --radius PX                        circle radius (default 3)
 //!   --size WxH                         windowed at this physical size
 //!                                      (default: borderless fullscreen)
+//!   --uncapped                         draw frames back to back instead of
+//!                                      on each redraw request (winit paces
+//!                                      those to the compositor; use with
+//!                                      --present mailbox to measure without
+//!                                      vsync)
 //! ```
 //!
 //! Each frame runs the same path as `gup_core::show`: `Plot::resolve`
@@ -33,7 +38,7 @@ use std::time::{Duration, Instant};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 use winit::event::WindowEvent;
-use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Fullscreen, Window, WindowId};
 
 #[derive(Debug)]
@@ -44,6 +49,7 @@ struct Options {
     points: usize,
     radius: f32,
     size: Option<(u32, u32)>,
+    uncapped: bool,
 }
 
 fn options() -> Options {
@@ -54,6 +60,7 @@ fn options() -> Options {
         points: 100_000,
         radius: 3.0,
         size: None,
+        uncapped: false,
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut it = args.iter();
@@ -72,6 +79,7 @@ fn options() -> Options {
             "--warmup" => o.warmup = value().parse().expect("--warmup N"),
             "--points" => o.points = value().parse().expect("--points N"),
             "--radius" => o.radius = value().parse().expect("--radius PX"),
+            "--uncapped" => o.uncapped = true,
             "--size" => {
                 let (w, h) = value().split_once('x').expect("--size WxH");
                 o.size = Some((w.parse().expect("width"), h.parse().expect("height")));
@@ -122,6 +130,7 @@ struct Bench {
     uploads_during: Option<UploadStats>,
     gpu_ms: Vec<f64>,
     error: Option<String>,
+    finished: bool,
 }
 
 impl Bench {
@@ -323,7 +332,7 @@ impl Bench {
         let gpu = self.gpu.as_ref().unwrap();
         let (w, h) = gpu.target.size();
         println!(
-            "run: {} points, radius {} px, {}x{} physical (dpr {}), present {:?}, \
+            "run: {} points, radius {} px, {}x{} physical (dpr {}), present {:?}{}, \
              {} warm-up + {} measured frames, {} build",
             o.points,
             o.radius,
@@ -331,6 +340,11 @@ impl Bench {
             h,
             gpu.target.dpr(),
             o.present,
+            if o.uncapped {
+                " uncapped"
+            } else {
+                " paced by redraw requests"
+            },
             o.warmup,
             o.frames,
             if cfg!(debug_assertions) {
@@ -382,7 +396,7 @@ impl Bench {
         let over = |limit: f64| t.iter().filter(|f| ms(f.interval) > limit).count();
         println!(
             "fps: median {:.1}, p95 {:.1} (from the median and p95 frame interval); \
-             frames over 16.7 ms: {}, over 25 ms: {} of {}",
+             frames over 16.7 ms: {}, over 25 ms (a missed 60 Hz refresh): {} of {}",
             1e3 / med,
             1e3 / p95,
             over(1e3 / 60.0),
@@ -409,6 +423,28 @@ impl Bench {
             "GPU writes since start: columns {} B in {} writes (the one upload)",
             all.columns.bytes, all.columns.writes
         );
+    }
+}
+
+impl Bench {
+    /// Draw one frame; report and exit when done. Whether to go on.
+    fn step(&mut self, event_loop: &ActiveEventLoop) -> bool {
+        if self.finished {
+            return false;
+        }
+        match self.redraw() {
+            Ok(false) => return true,
+            Ok(true) => {
+                if let Err(e) = self.read_gpu_times() {
+                    self.error = Some(e.to_string());
+                }
+                self.report();
+            }
+            Err(e) => self.error = Some(e.to_string()),
+        }
+        self.finished = true;
+        event_loop.exit();
+        false
     }
 }
 
@@ -440,21 +476,21 @@ impl ApplicationHandler for Bench {
                     gpu.target.resize(&gpu.cx, size.width, size.height);
                 }
             }
-            WindowEvent::RedrawRequested => match self.redraw() {
-                Ok(true) => {
-                    if let Err(e) = self.read_gpu_times() {
-                        self.error = Some(e.to_string());
-                    }
-                    self.report();
-                    event_loop.exit();
+            WindowEvent::RedrawRequested if !self.o.uncapped => {
+                if self.step(event_loop) {
+                    self.gpu.as_ref().unwrap().target.window().request_redraw();
                 }
-                Ok(false) => self.gpu.as_ref().unwrap().target.window().request_redraw(),
-                Err(e) => {
-                    self.error = Some(e.to_string());
-                    event_loop.exit();
-                }
-            },
+            }
             _ => {}
+        }
+    }
+
+    /// `--uncapped`: render as fast as possible, outside winit's
+    /// frame-callback throttling of `RedrawRequested`.
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        if self.o.uncapped && self.gpu.is_some() && !self.finished {
+            event_loop.set_control_flow(ControlFlow::Poll);
+            self.step(event_loop);
         }
     }
 
@@ -489,6 +525,7 @@ fn main() {
         uploads_during: None,
         gpu_ms: Vec::new(),
         error: None,
+        finished: false,
     };
     let event_loop = EventLoop::new().expect("event loop");
     event_loop.run_app(&mut bench).expect("run");
