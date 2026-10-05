@@ -3,6 +3,11 @@
 Bevy integration for the [Gup](https://github.com/au-phiware/gup)
 GPU-accelerated data visualization library.
 
+> **Parked (GUP-390).** This crate is excluded from the Gup workspace and CI
+> until RFC-001 step S13 re-wires it onto `gup-core`. Build it with
+> `CARGO_TARGET_DIR=target cargo check --manifest-path gup-bevy/Cargo.toml` from
+> the repository root. See the root README, "Parked integration crates".
+
 ## Version Compatibility
 
 | gup-bevy | Bevy | wgpu |

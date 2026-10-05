@@ -17,3 +17,16 @@ docs/gallery/thumbs/*.png
 
 # Agent git worktrees (separate checkouts)
 .claude/worktrees/
+# Parked integration crates (GUP-390) are excluded from the workspace, so
+# building one by hand creates its own lockfile (and its own target directory
+# unless CARGO_TARGET_DIR is set).
+/gup-egui/Cargo.lock
+/gup-egui/target
+/gup-bevy/Cargo.lock
+/gup-bevy/target
+/gup-ios/Cargo.lock
+/gup-ios/target
+/gup-android/Cargo.lock
+/gup-android/target
+/examples/gup-tauri/src-tauri/Cargo.lock
+/examples/gup-tauri/src-tauri/target

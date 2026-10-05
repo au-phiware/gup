@@ -1,5 +1,9 @@
 # gup-tauri
 
+> **Parked (GUP-390).** This app is excluded from the Gup workspace and CI until
+> the integrations are re-wired onto `gup-core` (strategic review T7). See the
+> root README, "Parked integration crates".
+
 A self-contained Tauri 2.x desktop application that embeds a Gup WebGPU scatter
 plot inside a native WebView. The Rust backend generates data and feeds it to
 the chart over Tauri's typed IPC bridge.

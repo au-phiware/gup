@@ -243,6 +243,59 @@ gup/
 └── docs/          # Comprehensive documentation and guides
 ```
 
+## Workspace Crates
+
+A plain `cargo build` or `cargo test` at the repository root builds only the
+`gup` crate (`default-members = ["."]`). The other workspace members are built
+with `-p`:
+
+| Crate                          | Status                                                                  |
+| ------------------------------ | ----------------------------------------------------------------------- |
+| `gup-macros`                   | Proc macros used by `gup` (`#[derive(Mark)]`, `#[wgsl_function]`).      |
+| `crates/gup-visual-regression` | Golden-image and structural check harness (`mask visual-regression`).   |
+| `crates/gup-culling-lod`       | **Experimental, unwired.** GPU culling and LOD code moved out of `gup`. |
+
+`crates/gup-culling-lod` holds the compute instance filter, occlusion culler,
+radix sort, batch renderer, LOD pyramid and adaptive renderer. No chart builder
+calls this code, but the RFC-001 core is expected to draw from it for GPU chunk
+culling and LOD (strategic review T3/T7), so it was quarantined rather than
+deleted. CI keeps it compiling and its tests passing. See its
+[README](crates/gup-culling-lod/README.md).
+
+### Parked integration crates
+
+These crates are excluded from the workspace (`[workspace] exclude`), so
+`cargo build --workspace`, `cargo test --workspace` and CI skip them:
+
+| Crate                          | Re-wired at                     |
+| ------------------------------ | ------------------------------- |
+| `gup-egui`                     | RFC-001 S13                     |
+| `gup-bevy`                     | RFC-001 S13                     |
+| `gup-ios`                      | Strategic review T7 (after S13) |
+| `gup-android`                  | Strategic review T7 (after S13) |
+| `examples/gup-tauri/src-tauri` | Strategic review T7 (after S13) |
+
+They are parked, not deleted
+([strategic review](docs/planning/STRATEGIC_REVIEW_2026-10.md#decisions),
+Decision 3). `gup-egui` and `gup-bevy` do compile against `main`, but they are
+built on `ComposedChart`, `DynChart` and the context types that
+[RFC-001](docs/planning/rfcs/RFC-001_Core_Architecture.md) replaces. Keeping
+them compiling through every RFC-001 step would be churn for code that S13
+rewrites anyway. The iOS and Android workflows run only on manual dispatch.
+
+To work on one of them, build it from its own manifest. It gets its own
+lockfile; sharing the root target directory avoids rebuilding everything:
+
+```bash
+CARGO_TARGET_DIR=target cargo check --manifest-path gup-egui/Cargo.toml
+CARGO_TARGET_DIR=target cargo check --manifest-path gup-bevy/Cargo.toml
+CARGO_TARGET_DIR=target cargo check --manifest-path gup-ios/Cargo.toml
+CARGO_TARGET_DIR=target cargo check --manifest-path gup-android/Cargo.toml
+```
+
+`cargo check -p gup-egui` no longer works from the root, because the crate is
+not a workspace member.
+
 ## License
 
 This project is licensed under the GNU General Public License v3.0 or later

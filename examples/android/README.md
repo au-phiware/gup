@@ -24,9 +24,10 @@ rustup target add aarch64-linux-android armv7-linux-androideabi
 ### 2. Build native libraries
 
 ```bash
-# From the repository root:
-cargo ndk -t arm64-v8a -t armeabi-v7a -o examples/android/app/src/main/jniLibs \
-    build --release -p gup-android
+# From the repository root (gup-android is parked outside the workspace, GUP-390):
+CARGO_TARGET_DIR=target cargo ndk -t arm64-v8a -t armeabi-v7a \
+    -o examples/android/app/src/main/jniLibs \
+    build --release --manifest-path gup-android/Cargo.toml
 ```
 
 This produces:

@@ -352,6 +352,6 @@ Xcode).
 
 ```bash
 echo "Building gup-ios for aarch64-apple-ios-sim..."
-cargo build -p gup-ios --target aarch64-apple-ios-sim --release
+CARGO_TARGET_DIR=target cargo build --manifest-path gup-ios/Cargo.toml --target aarch64-apple-ios-sim --release
 echo "Library at target/aarch64-apple-ios-sim/release/libgup_ios.a"
 ```

@@ -1,5 +1,17 @@
 [workspace]
-members = [".", "gup-macros", "gup-bevy", "gup-egui", "gup-ios", "gup-android", "crates/gup-visual-regression", "crates/gup-culling-lod"]
+members = ["gup-macros", "crates/gup-visual-regression", "crates/gup-culling-lod"]
+# The root package `gup` is a member implicitly; listing "." here would stop
+# `exclude` from working (Cargo treats it as a prefix of every subdirectory).
+# A plain `cargo build` / `cargo test` at the root builds only `gup`. The other
+# members are built with `-p`: the quarantined `crates/gup-culling-lod` (GUP-390)
+# is checked and tested in CI by the visual-regression workflow.
+default-members = ["."]
+# Parked integrations (strategic review 2026-10, Decision 3; GUP-390). They are
+# out of the workspace, `--workspace` builds and CI until they are re-wired onto
+# `gup-core`: egui and bevy at RFC-001 S13, the mobile shims and Tauri app in
+# strategic review T7. Build one by hand with
+# `cargo check --manifest-path gup-egui/Cargo.toml` (see README.md).
+exclude = ["gup-egui", "gup-bevy", "gup-ios", "gup-android", "examples/gup-tauri/src-tauri"]
 
 [package]
 name = "gup"

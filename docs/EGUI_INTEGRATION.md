@@ -126,7 +126,7 @@ See `gup-egui/examples/egui_chart.rs` for a full application that:
 Run it with:
 
 ```bash
-cargo run -p gup-egui --example egui_chart
+cargo run --manifest-path gup-egui/Cargo.toml --example egui_chart
 ```
 
 ## Architecture

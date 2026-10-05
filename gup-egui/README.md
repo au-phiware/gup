@@ -3,6 +3,11 @@
 egui integration for the [Gup](https://github.com/au-phiware/gup)
 GPU-accelerated data visualization library.
 
+> **Parked (GUP-390).** This crate is excluded from the Gup workspace and CI
+> until RFC-001 step S13 re-wires it onto `gup-core`. Build it with
+> `CARGO_TARGET_DIR=target cargo check --manifest-path gup-egui/Cargo.toml` from
+> the repository root. See the root README, "Parked integration crates".
+
 ## Features
 
 - **`GupWidget`** — stateful egui widget that renders any Gup chart inside an
@@ -34,7 +39,7 @@ widget.mark_dirty();
 ## Example
 
 ```bash
-cargo run -p gup-egui --example egui_chart
+cargo run --manifest-path gup-egui/Cargo.toml --example egui_chart
 ```
 
 See [docs/EGUI_INTEGRATION.md](../docs/EGUI_INTEGRATION.md) for a comprehensive

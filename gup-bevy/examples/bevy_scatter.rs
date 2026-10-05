@@ -6,7 +6,7 @@
 //! Demonstrates embedding a Gup scatter plot inside a Bevy application.
 //! The plot shows an animated sine wave that updates every frame.
 //!
-//! Run with: `cargo run -p gup-bevy --example bevy_scatter`
+//! Run with: `cargo run --manifest-path gup-bevy/Cargo.toml --example bevy_scatter`
 
 use bevy::prelude::*;
 use gup::chart_builder::ChartBuilder;

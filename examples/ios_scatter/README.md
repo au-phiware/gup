@@ -21,13 +21,13 @@ From the repository root, build the `gup-ios` static library for the iOS
 Simulator:
 
 ```bash
-cargo build -p gup-ios --target aarch64-apple-ios-sim --release
+CARGO_TARGET_DIR=target cargo build --manifest-path gup-ios/Cargo.toml --target aarch64-apple-ios-sim --release
 ```
 
 For a real device:
 
 ```bash
-cargo build -p gup-ios --target aarch64-apple-ios --release
+CARGO_TARGET_DIR=target cargo build --manifest-path gup-ios/Cargo.toml --target aarch64-apple-ios --release
 ```
 
 The resulting `libgup_ios.a` is at:

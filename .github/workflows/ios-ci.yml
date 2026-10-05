@@ -1,29 +1,14 @@
 # iOS CI — build the gup-ios crate and Swift package for the iOS Simulator.
 #
-# This workflow is intentionally **not** run on every PR because booting an
-# iOS Simulator is slow (~2 min).  It triggers on:
-#   1. Commits whose message contains `[ci ios]`.
-#   2. Manual dispatch via the Actions UI.
-#   3. Pushes that touch iOS-related paths.
+# PARKED (GUP-390; strategic review 2026-10, Decision 3): gup-ios is excluded
+# from the workspace until the mobile integrations are re-wired onto gup-core
+# (strategic review T7, after RFC-001 S13 does egui and bevy), so this workflow runs only on manual dispatch. The host-portable part of the
+# `gup` ios-shim feature is still compiled on every PR by the visual-regression
+# workflow (`cargo build --examples --all-features`).
 
 name: iOS CI
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "gup-ios/**"
-      - "src/platform/**"
-      - "pkg/ios/**"
-      - "examples/ios_scatter/**"
-      - ".github/workflows/ios-ci.yml"
-  pull_request:
-    paths:
-      - "gup-ios/**"
-      - "src/platform/**"
-      - "pkg/ios/**"
-      - "examples/ios_scatter/**"
-      - ".github/workflows/ios-ci.yml"
   workflow_dispatch:
 
 # Cancel in-progress runs for the same branch.
@@ -34,6 +19,9 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # gup-ios is outside the workspace; keep its build output where the upload
+  # step expects it.
+  CARGO_TARGET_DIR: ${{ github.workspace }}/target
 
 jobs:
   # ------------------------------------------------------------------ #
@@ -64,7 +52,9 @@ jobs:
         run: cargo check --features ios-shim
 
       - name: Build gup-ios for iOS Simulator
-        run: cargo build -p gup-ios --target aarch64-apple-ios-sim --release
+        run: >-
+          cargo build --manifest-path gup-ios/Cargo.toml
+          --target aarch64-apple-ios-sim --release
 
       - name: Upload static library
         uses: actions/upload-artifact@v4
