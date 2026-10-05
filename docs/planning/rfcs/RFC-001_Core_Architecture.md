@@ -1479,3 +1479,136 @@ thiserror. It replaced gup-core's temporary text module.
 - **S7 (layout, guides):** the tick-density rule from the S0b review needs
   stable label widths. With proportional digits a label's width changes with its
   value. GUP-405's `tnum` fixes that.
+
+## S3 findings (2026-10-06, GUP-401)
+
+[GUP-401](../stories/GUP-401_RFC_001_S3_Scene_Renderer_RenderTarget.md)
+completed §7's target family. Same machine as S0a/S0b (Intel HD Graphics 630,
+Mesa 26.0.0 Vulkan, rustc 1.93.1) unless noted.
+
+- **Targets.** `RenderTarget` is implemented by `ImageTarget`, `WindowTarget`
+  and the new `TextureTarget` (a host-owned texture; Gup clears, draws, resolves
+  and submits). Hosts that own the pass use `Renderer::prepare` and
+  `Prepared::draw`. `Frame::color_attachment` builds the pass attachment
+  (multisampled view plus resolve target), so the one `Renderer::render` call
+  site and `zoom_bench` share it.
+- **Equivalence.** `tests/targets.rs` draws the reference scatter through
+  `ImageTarget`, `TextureTarget` and a host's own pass. The three are
+  byte-identical at 1 and at 4 samples. The window frame (4×) is still
+  byte-identical to the 4× `ImageTarget` and the golden (ΔE 0 on 324,000 px).
+- **Gup never submits in draw-in-pass mode, provably.** Every gup-core submit
+  goes through `Context::submit`, counted by `Context::submissions`.
+  `every_submit_is_counted` enforces this the way `every_gpu_write_is_counted`
+  does for uploads. The draw-in-pass test asserts the count does not move.
+- **`TargetDesc` has `dpr`** and passes it to the glyph rasteriser. A dpr-2
+  render rasterises the title at twice the size, not upscaled. Pipelines are
+  keyed by `(kind, format, samples)`; dpr and size are uniforms only (tested).
+  Pick variants (S9) use one sample; this is documented on `TargetDesc`.
+- **MSAA 4× is the default** on Gup-owned targets (`TargetOptions`,
+  `WindowTarget::set_samples`). It matters only for geometric edges. On a fan of
+  1.5 px diagonal rules, 1× has 0 partially covered pixels (hard stair steps)
+  and 4× has 597. On a rect at fractional coordinates the counts are 0 and 71.
+  Circles antialias analytically, so 1× and 4× differ by at most 2/255 on their
+  edges. Goldens: `tests/golden/gup_core/msaa_{1x,4x}.png`.
+- **Rects and gradients.** `ItemKind::Rects` draws flat rectangles.
+  `ItemKind::Gradient` draws a legend bar through the same
+  `gup::color::sequential::map` and the scale's own LUT (an `Arc`, not a copy).
+  `GradientBar::color_at` and the scale's CPU mirror share one LUT sampler.
+  Golden: `gup_core/scene_items.png`, a tinted plot background under the marks
+  and a viridis legend whose ends match the fill's domain extremes within ΔE 2.
+- **`SvgTarget` (guides only).** It writes rules (`<line>`, square caps), rects,
+  gradients (`<linearGradient>`, 64 stops), text (`<text>`) and `<clipPath>`. A
+  scene with marks is an error that names `Scene::guides()`. Text is measured
+  with the same `gup_text::Font` (`Font::baseline_origin`, now shared with the
+  glyph walk) and snapped to whole pixels as on the GPU. Without the snap, 151
+  pixels fell outside the PNG's text boxes; with it, all fall within 1 px. The
+  SVG rasterised by resvg (with only Inter loaded) passes the GUP-388 structural
+  checks against gup-core's own layout. Outside text it matches the GPU PNG to
+  ΔE ≤ 0.77, and each label's ink is within ×0.96–×1.02 of the PNG's.
+- **Font decision: referenced, not embedded.** SVG text uses
+  `font-family="Inter, sans-serif"`, and `text-anchor` keeps fallback faces
+  centred and right-aligned. Embedding the full face would add ~550 KB of base64
+  to every file. A subset (24 KB gz, below) makes embedding reasonable; that is
+  GUP-407.
+
+### WASM size (§12 risk 10)
+
+`mask wasm-size` builds three harnesses in `crates/gup-core/wasm-size` for
+`wasm32-unknown-unknown`. They use the release profile (the workspace has no
+custom one), then `wasm-bindgen --target web` without name or producers
+sections, then `gzip -9`. Each harness is its own workspace, so gup-core's
+features (wgpu `naga-ir`) cannot leak into the baselines:
+
+| Build                                                               | Raw      | gzip -9       |
+| ------------------------------------------------------------------- | -------- | ------------- |
+| bare wgpu: instanced discs, uniform, offscreen pass, async readback | 111.8 KB | 41.7 KB       |
+| the same, its shader composed through naga_oil (`--features`)       | 3,297 KB | 938.5 KB      |
+| gup-core: reference scatter → `ImageTarget` (async) + `SvgTarget`   | 3,996 KB | 1,241.9 KB    |
+| _bundled Inter, for reference_                                      | 411.6 KB | 198.3 KB      |
+| **naga_oil-attributable (row 2 − row 1)**                           |          | **+896.7 KB** |
+
+- **The budget (≤ +400 KB gz) is exceeded by 2.2×.** This needs a decision on
+  the §6 fallback (GUP-406). `wasm-opt -Oz` (binaryen 129) shrinks raw size by
+  14–15% but leaves gzip unchanged or slightly larger, so it is no way out.
+- **Method.** Row 2 differs from row 1 only in passing the same shader through
+  naga_oil (a library module plus a top-level shader, with codespan error
+  reporting, as gup-core does) and giving wgpu a `ShaderSource::Naga`. The delta
+  is everything that path brings: naga's WGSL front end, validator, compactor
+  and WGSL back end (wgpu's WebGPU backend writes WGSL for the browser), plus
+  naga_oil and its preprocessor. twiggy over the build with names splits the raw
+  code as follows:
+  - naga: 825 KB, plus 237 KB of `arrayvec` monomorphisations;
+  - the regex family (regex-automata, regex-syntax, aho-corasick): 570 KB;
+  - naga_oil: 136 KB;
+  - data-encoding: 73 KB;
+  - codespan-reporting: 47 KB;
+  - `.rodata` (Unicode tables and more): ~600 KB.
+- **The rest of gup-core is small.** Row 3 − row 2 = 303 KB gz, of which Inter
+  is ~198 KB and gup-core, gup-text, fontdue and encase ~105 KB.
+- **One cheap win was taken.** naga_oil's default `glsl` feature put naga's GLSL
+  front and back ends into gup-core, which composes WGSL only.
+  `default-features = false` cut the scatter from 1,431.6 to 1,241.2 KB gz.
+- **Inter subset.** Basic Latin, Latin-1, dashes, quotes, arrows, math symbols,
+  µ and €, keeping `kern`, `tnum` and `lnum` (pyftsubset), is 47.6 KB raw and
+  23.8 KB gz, against 198.3 KB gz for the full face. That saves ~175 KB gz
+  (GUP-407).
+
+### gup-core in a browser
+
+The scatter harness runs in headless Chromium through WebGPU
+(`mask wasm-browser`): `Context::new`, MSAA, the async `ImageTarget` readback
+and `SvgTarget`. It found two bugs that no native test could:
+
+1. **`std::time::Instant::now` panics on wasm32-unknown-unknown.** The pipeline
+   and compose timings now use `web-time`.
+2. **The uniform layout differed in the browser.** wgpu hands browsers naga's
+   WGSL output, which drops the glue's `@align(16)` attributes. Chrome
+   (`uniform_buffer_standard_layout`) accepted the natural offsets, so the
+   shader read the circle radius from the y scale's parameters and flooded the
+   plot. Padding members cannot fix this: naga, like WGSL, requires
+   `roundUp(16, size)` bytes after a struct member. **New authoring rule:**
+   every uniform `Params` struct spans a multiple of 16 bytes, padded in WGSL
+   and in its encase twin. The emitter asserts it and pads scalar constants with
+   `u32`s. A unit test re-parses naga's WGSL output and requires every struct to
+   lay out as composed.
+
+### Proposed adjustments to S4 and later
+
+- **Decision needed (GUP-406):** on wasm, skip naga entirely. Concatenate
+  namespaced library modules and the glue (§6 fallback, with the qualification
+  rewrite noted in S0a finding 8) and pass `ShaderSource::Wgsl`. Read uniform
+  offsets from encase sizes under the 16-byte rule rather than from naga's
+  layouter. Native keeps naga_oil (errors mapped to source, validation). This
+  removes ~897 KB gz.
+- **S5 (`ShaderFn` v2, `#[wgsl_function]`):** enforce the 16-byte `Params` rule
+  at macro expansion, alongside the no-trailing-digit identifier rule.
+- **S4/S5 (`MarkBatch::vector()`):** `SvgTarget` already writes every guide
+  kind. Mark export plugs into the `ItemKind::Marks` arm, which errors today.
+- **S7 (layout):** a long title overflows a narrow chart (the 320 px browser
+  render clips "…expectancy"). Layout should wrap, shrink or ellipsise it.
+  Legends need a layout slot; the S3 test makes room by resolving the plot
+  narrower than the scene.
+- **S8 (`GupApp`, wasm entry):** start from the `wasm-size/scatter` harness. It
+  is the first gup-core code proven in a browser.
+- **S13 (hosts):** use `TextureTarget` for egui images and `Prepared::draw` for
+  paint callbacks. Pass the host attachment's sample count in `TargetDesc`.

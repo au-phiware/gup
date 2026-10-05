@@ -123,12 +123,27 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
 - [GUP-405](GUP-405_Gup_Text_OpenType_Shaping.md) 📋 — Shape `gup-text` runs
   with rustybuzz: Inter's GPOS kerning and `tnum` tabular figures for tick
   labels. Deps: GUP-400 ✅.
-- [GUP-401](GUP-401_RFC_001_S3_Scene_Renderer_RenderTarget.md) 🚧 — RFC-001 step
+- [GUP-401](GUP-401_RFC_001_S3_Scene_Renderer_RenderTarget.md) ✅ — RFC-001 step
   S3: turns GUP-395's `ImageTarget`/`encode_scene` into the general
   `RenderTarget`/`Renderer` trait family (adds `TextureTarget` and
   draw-in-pass), adds MSAA, `Rects`/`Gradient` scene items and a guides-only
   `SvgTarget`, and measures `gup-core`'s WASM binary-size cost against the ≤
   +400 KB gz budget (RFC-001 §12 risk 10). Deps: GUP-399 ✅, GUP-400 ✅.
+  Outcome:
+  - Image, texture and draw-in-pass output is byte-identical at 1× and 4×, and
+    draw-in-pass never submits (counted).
+  - MSAA 4× is the default.
+  - The SVG raster matches the PNG outside text to ΔE ≤ 0.77.
+  - naga_oil costs +897 KB gz, over budget (GUP-406).
+  - The first browser run found and fixed two wasm-only bugs.
+- [GUP-406](GUP-406_WGSL_Only_Shader_Path_On_Wasm.md) 📋 — On wasm32, compose
+  WGSL by namespaced concatenation and drop naga and naga_oil from the browser
+  build (−897 KB gz). Deps: GUP-401 ✅.
+- [GUP-407](GUP-407_Subset_Inter_And_SVG_Font_Embedding.md) 📋 — Subset the
+  bundled Inter (198 → 24 KB gz) and let `SvgTarget` embed it. Deps: GUP-401 ✅,
+  GUP-405 📋 (soft).
+- [GUP-408](GUP-408_Browser_Smoke_Test_In_CI.md) 📋 — Run `mask wasm-browser`
+  (gup-core in headless Chromium) in CI. Deps: GUP-401 ✅.
 
 ## GPU Rendering Pipeline
 
