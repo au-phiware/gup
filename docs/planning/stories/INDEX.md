@@ -80,7 +80,7 @@ resolved: **go** (RFC-001 "S0a findings", GUP-395).
   ends with the naga_oil go/no-go decision appended to RFC-001. Deps: GUP-389
   ✅, GUP-390 ✅, GUP-388 ✅ (soft). Outcome: go on naga_oil (2.75 ms compose +
   create in release); golden `tests/golden/gup_core/scatter.png`.
-- [GUP-396](GUP-396_Gup_Core_Vertical_Slice_Window_Performance.md) 📋 — RFC-001
+- [GUP-396](GUP-396_Gup_Core_Vertical_Slice_Window_Performance.md) 🚧 — RFC-001
   step S0b: adds `WindowTarget` and a minimal `gup::show()` to GUP-395's scene,
   proving window/PNG visual parity (ΔE < 2) and a 100K-point zoom at ≥60 fps
   with a buffer-write counter proving 0 column bytes written during zoom. Deps:
