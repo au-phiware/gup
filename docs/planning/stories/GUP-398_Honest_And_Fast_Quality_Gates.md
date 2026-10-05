@@ -2,11 +2,11 @@
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-10 (T0 guardrails) **Status**: 📋 Planned
-**Created**: 2026-10-05 **Revised**: 2026-10-05 (scope widened from "Honest
-Clippy Gate" to cover every hook/CI check's failure behaviour and the hook's
-speed, per story-scribe request — no implementation has started, so this is an
-in-place rewrite, not a new story)
+**Initiative**: Strategic Review 2026-10 (T0 guardrails) **Status**: 🚧 In
+Progress **Created**: 2026-10-05 **Revised**: 2026-10-05 (scope widened from
+"Honest Clippy Gate" to cover every hook/CI check's failure behaviour and the
+hook's speed, per story-scribe request — no implementation has started, so this
+is an in-place rewrite, not a new story)
 
 ## Context
 
