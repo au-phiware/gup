@@ -26,6 +26,8 @@ futures-channel = "0.3"
 image = { version = "0.24", default-features = false, features = ["png"] }
 gup-text = { path = "../gup-text" }
 thiserror = "2.0"
+# `Instant` that works in browsers (std's panics on wasm32-unknown-unknown).
+web-time = "1.1"
 # `WindowTarget` and `show` (feature `window`, on by default).
 winit = { version = "0.30", optional = true }
 

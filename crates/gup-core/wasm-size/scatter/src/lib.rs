@@ -24,6 +24,7 @@ fn js(e: gup_core::Error) -> JsValue {
 /// Render the scatter; returns straight-alpha RGBA pixels.
 #[wasm_bindgen]
 pub async fn render_scatter(width: u32, height: u32) -> Result<Vec<u8>, JsValue> {
+    std::panic::set_hook(Box::new(|info| web_error(&info.to_string())));
     let cx = Context::new().await.map_err(js)?;
     let rows: Vec<Row> = (1..=200)
         .map(|i| {
@@ -59,4 +60,6 @@ pub async fn render_scatter(width: u32, height: u32) -> Result<Vec<u8>, JsValue>
 extern "C" {
     #[wasm_bindgen(js_namespace = console, js_name = log)]
     fn web_log(n: usize);
+    #[wasm_bindgen(js_namespace = console, js_name = error)]
+    fn web_error(message: &str);
 }

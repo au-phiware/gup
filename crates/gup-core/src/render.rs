@@ -17,7 +17,9 @@ use crate::target::RenderTarget;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+// `std::time::Instant::now` panics on wasm32-unknown-unknown.
+use web_time::Instant;
 
 /// Everything about a target that pipelines and layout depend on
 /// (RFC-001 §7).

@@ -17,7 +17,9 @@ use naga_oil::compose::{
     ComposableModuleDescriptor, Composer, ComposerError, NagaModuleDescriptor, ShaderLanguage,
     ShaderType,
 };
-use std::time::{Duration, Instant};
+use std::time::Duration;
+// `std::time::Instant::now` panics on wasm32-unknown-unknown.
+use web_time::Instant;
 
 /// A WGSL library module: an import path, its source and the modules it
 /// imports (which must be added to the composer first).

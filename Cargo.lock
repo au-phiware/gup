@@ -1779,6 +1779,7 @@ dependencies = [
  "resvg",
  "thiserror 2.0.18",
  "trybuild",
+ "web-time",
  "wgpu",
  "winit",
 ]
