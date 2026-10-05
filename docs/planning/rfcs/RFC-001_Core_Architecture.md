@@ -1241,11 +1241,13 @@ measured by `TIMESTAMP_QUERY` (resolved once after the run).
 | `Fifo` (vsync), redraw-paced    |                  16.661 / 16.887 |      60.0 / 59.2 |       0 |              0.754 / 0.806 |              3.039 / 5.564 |
 | `Fifo`, radius 4.5              |                  16.654 / 16.861 |      60.0 / 59.3 |       0 |              0.768 / 0.894 |              3.058 / 7.477 |
 | `Mailbox`, uncapped (no vsync)  |                    4.074 / 6.917 |    245.5 / 144.6 |       0 |              0.647 / 0.783 |              2.674 / 5.854 |
+| same, second run                |                    4.327 / 5.477 |    231.1 / 182.6 |       0 |              0.646 / 0.797 |              2.922 / 4.498 |
 | `Mailbox`, uncapped, radius 4.5 |                    4.615 / 6.520 |    216.7 / 153.4 |       0 |              0.674 / 0.825 |              3.061 / 5.559 |
 
-- **The target is met with about 2.5× headroom at p95.** Under vsync the median
-  is the panel's refresh (16.66 ms), and no frame missed a refresh. Without
-  vsync the same loop runs at a median of 245 fps.
+- **The target is met with at least 2.4× headroom at p95** (145 fps uncapped).
+  Under vsync the median is the panel's refresh (16.66 ms), and no frame missed
+  a refresh. Without vsync the same loop runs at a median of 231–245 fps over
+  two runs. The p95 varies more, between 145 and 183 fps.
 - **It is GPU-bound, and the CPU is idle.** Uncapped, 3.4 ms of the 4.1 ms
   median frame is spent in `acquire`, waiting for a swapchain image. CPU work
   (resolve with ticks and text, prepare, encode, submit) is 0.65 ms. The GPU

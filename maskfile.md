@@ -36,6 +36,17 @@ Run the chart-builder golden-image tests (set `GUP_BLESS=1` to re-bless; see
 cargo test --lib visual_regression -- --test-threads=1
 ```
 
+## gup-core-window
+
+The gup-core checks that need a display (GUP-396): window/PNG ΔE parity, then
+the 100K-point zoom benchmark with vsync and uncapped (release build)
+
+```bash
+cargo test -p gup-core --test window_parity -- --ignored --nocapture
+cargo run -p gup-core --release --example zoom_bench -- --present fifo
+cargo run -p gup-core --release --example zoom_bench -- --present mailbox --uncapped
+```
+
 ## smoke-examples
 
 Build every example and run the headless ones (see `tests/examples_smoke.rs` for

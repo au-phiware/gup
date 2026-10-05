@@ -56,7 +56,7 @@ survives into `gup-core`.
 
 ## RFC-001 Migration
 
-**Old-path LOC remaining: 28882 (re-measured 2026-10-05 after GUP-395:
+**Old-path LOC remaining: 28882 (re-measured 2026-10-05 after GUP-396:
 unchanged, old path frozen)**. Measured as the non-blank, non-comment-only,
 non-`#[cfg(test)]`-block line count of the old render path (`src/selection.rs`,
 `src/mark/`, `src/shader_function/`, `src/shader_pipeline.rs`,
@@ -69,8 +69,9 @@ scale systems and three composition systems did before.
 
 Stories implementing
 [RFC-001: Core Architecture](../rfcs/RFC-001_Core_Architecture.md) (accepted
-2026-10-04). S1–S14 are not yet written as stories. The S0 naga_oil gate is
-resolved: **go** (RFC-001 "S0a findings", GUP-395).
+2026-10-04). S1–S14 are not yet written as stories. S0 is complete: the naga_oil
+gate is **go** (RFC-001 "S0a findings", GUP-395), and the window parity and zoom
+criteria hold (RFC-001 "S0b findings", GUP-396).
 
 - [GUP-395](GUP-395_Gup_Core_Vertical_Slice_Headless.md) ✅ — RFC-001 step S0a:
   a new `crates/gup-core` workspace member with `Context`, a single-chunk GPU
@@ -80,11 +81,15 @@ resolved: **go** (RFC-001 "S0a findings", GUP-395).
   ends with the naga_oil go/no-go decision appended to RFC-001. Deps: GUP-389
   ✅, GUP-390 ✅, GUP-388 ✅ (soft). Outcome: go on naga_oil (2.75 ms compose +
   create in release); golden `tests/golden/gup_core/scatter.png`.
-- [GUP-396](GUP-396_Gup_Core_Vertical_Slice_Window_Performance.md) 🚧 — RFC-001
+- [GUP-396](GUP-396_Gup_Core_Vertical_Slice_Window_Performance.md) ✅ — RFC-001
   step S0b: adds `WindowTarget` and a minimal `gup::show()` to GUP-395's scene,
   proving window/PNG visual parity (ΔE < 2) and a 100K-point zoom at ≥60 fps
   with a buffer-write counter proving 0 column bytes written during zoom. Deps:
-  GUP-395 ✅.
+  GUP-395 ✅. Outcome: S0 complete. The window is byte-identical to the PNG (ΔE
+  0). 100K points zoom at 60.0 fps under vsync (231–245 fps uncapped, GPU-bound)
+  on an HD 630, with 0 column bytes written over 600 frames. Adds
+  `RenderTarget`/`Renderer`/`Prepared` and upload counters (RFC-001 "S0b
+  findings").
 
 ## GPU Rendering Pipeline
 
