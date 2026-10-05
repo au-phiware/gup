@@ -43,6 +43,7 @@ impl std::fmt::Debug for WindowTarget {
             .field("view_format", &self.view_format())
             .field("size", &(self.config.width, self.config.height))
             .field("present_mode", &self.config.present_mode)
+            .field("samples", &self.samples)
             .finish_non_exhaustive()
     }
 }
