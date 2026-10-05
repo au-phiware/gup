@@ -8,7 +8,7 @@
 //! cache and the glyph atlas. It is cheap to clone (`Arc<Inner>`), so charts,
 //! targets and hosts can all hold one.
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::render::PipelineCache;
 use crate::shader::ShaderLibrary;
 use crate::text::TextSystem;
@@ -438,12 +438,13 @@ impl Context {
 
     /// Block until all submitted GPU work has finished (native), so that
     /// mapping callbacks have run.
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn wait_idle(&self) -> Result<()> {
         self.inner
             .device
             .poll(wgpu::PollType::wait_indefinitely())
             .map(|_| ())
-            .map_err(|e| Error::Readback(e.to_string()))
+            .map_err(|e| crate::error::Error::Readback(e.to_string()))
     }
 
     /// The pipeline cache. Take it before [`shaders`](Self::shaders).

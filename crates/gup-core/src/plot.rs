@@ -18,7 +18,9 @@ use crate::scene::{
     Z_TITLE,
 };
 use crate::selection::{Layer, Selection};
+#[cfg(not(target_arch = "wasm32"))]
 use crate::target::{ImageTarget, save_png};
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
 /// Fixed S0a styling (a `Theme` is RFC-001 S7 / GUP-392).
