@@ -223,9 +223,41 @@ path = "examples/visual_blend_demo.rs"
 name = "shader_pipeline_demo"
 path = "examples/shader_pipeline_demo.rs"
 
+# Debug, profiling and performance-report examples (GUP-390: `debug` feature).
 [[example]]
 name = "gpu_debug_demo"
 path = "examples/gpu_debug_demo.rs"
+required-features = ["debug"]
+
+[[example]]
+name = "gpu_debug_visualization_demo"
+path = "examples/gpu_debug_visualization_demo.rs"
+required-features = ["debug"]
+
+[[example]]
+name = "interaction_debug_visualizer"
+path = "examples/interaction_debug_visualizer.rs"
+required-features = ["debug"]
+
+[[example]]
+name = "buffer_validation_demo"
+path = "examples/buffer_validation_demo.rs"
+required-features = ["debug"]
+
+[[example]]
+name = "resource_graph_demo"
+path = "examples/resource_graph_demo.rs"
+required-features = ["debug"]
+
+[[example]]
+name = "performance_trend_demo"
+path = "examples/performance_trend_demo.rs"
+required-features = ["debug"]
+
+[[example]]
+name = "baseline_recommendation_demo"
+path = "examples/baseline_recommendation_demo.rs"
+required-features = ["debug"]
 
 [[example]]
 name = "web_dashboard_demo"
@@ -301,6 +333,47 @@ name = "pdf_export"
 path = "examples/pdf_export.rs"
 required-features = ["pdf"]
 
+# Debug, profiling and performance-report tests (GUP-390: `debug` feature).
+[[test]]
+name = "baseline_recommendation_tests"
+path = "tests/baseline_recommendation_tests.rs"
+required-features = ["debug"]
+
+[[test]]
+name = "buffer_validation_integration"
+path = "tests/buffer_validation_integration.rs"
+required-features = ["debug"]
+
+[[test]]
+name = "interaction_visualizer_tests"
+path = "tests/interaction_visualizer_tests.rs"
+required-features = ["debug"]
+
+[[test]]
+name = "performance_ci_tests"
+path = "tests/performance_ci_tests.rs"
+required-features = ["debug"]
+
+[[test]]
+name = "performance_export_tests"
+path = "tests/performance_export_tests.rs"
+required-features = ["debug"]
+
+[[test]]
+name = "performance_trend_visualization_tests"
+path = "tests/performance_trend_visualization_tests.rs"
+required-features = ["debug"]
+
+[[test]]
+name = "performance_validation_tests"
+path = "tests/performance_validation_tests.rs"
+required-features = ["debug"]
+
+[[test]]
+name = "timestamp_query_integration_test"
+path = "tests/timestamp_query_integration_test.rs"
+required-features = ["debug"]
+
 [[bin]]
 name = "validate_marks"
 path = "src/bin/validate_marks.rs"
@@ -311,7 +384,12 @@ path = "src/bin/wasm_bench_native.rs"
 
 [features]
 default = []
-web-dashboard = ["tiny_http"]
+## GPU debugging, profiling and performance-report tooling: the `debug`,
+## `performance`, `performance_export` and `performance_targets` modules and
+## `GupContext`'s performance profiler. Off by default (GUP-390).
+debug = []
+## Live performance web dashboard (`debug::web_dashboard` server).
+web-dashboard = ["debug", "tiny_http"]
 ## Feature gate for GPU benchmarks that require a GPU device.
 gpu-bench = []
 ## Include `#[wasm_bindgen(start)]` entry point.

@@ -22,6 +22,7 @@
 
 use crate::buffer::{BufferPool, BufferType, GpuBuffer};
 use crate::error::{GupError, GupResult};
+#[cfg(feature = "debug")]
 use crate::performance::PerformanceProfiler;
 use crate::{MaybeSend, MaybeSync};
 use std::collections::HashMap;
@@ -1171,6 +1172,7 @@ pub struct GupContext {
     frame_start_time: Option<Instant>,
 
     /// Advanced performance profiler (optional)
+    #[cfg(feature = "debug")]
     performance_profiler: Option<PerformanceProfiler>,
 
     /// Surface event handlers
@@ -1208,8 +1210,8 @@ pub struct GupContext {
 // Manual Debug implementation to handle non-Debug trait objects
 impl std::fmt::Debug for GupContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("GupContext")
-            .field("device", &self.device)
+        let mut s = f.debug_struct("GupContext");
+        s.field("device", &self.device)
             .field("queue", &self.queue)
             .field("surfaces", &self.surfaces)
             .field("primary_surface_id", &self.primary_surface_id)
@@ -1217,7 +1219,6 @@ impl std::fmt::Debug for GupContext {
             .field("texture_pool", &self.texture_pool)
             .field("frame_stats", &self.frame_stats)
             .field("frame_start_time", &self.frame_start_time)
-            .field("performance_profiler", &self.performance_profiler)
             .field(
                 "event_handlers",
                 &format!("{} handlers", self.event_handlers.len()),
@@ -1229,8 +1230,10 @@ impl std::fmt::Debug for GupContext {
             .field("context_state", &self.context_state)
             .field("recovery_callback", &self.recovery_callback.is_some())
             .field("last_recovery_attempt", &self.last_recovery_attempt)
-            .field("recovery_metrics", &self.recovery_metrics)
-            .finish()
+            .field("recovery_metrics", &self.recovery_metrics);
+        #[cfg(feature = "debug")]
+        s.field("performance_profiler", &self.performance_profiler);
+        s.finish()
     }
 }
 
@@ -1309,6 +1312,7 @@ impl GupContext {
             texture_pool,
             frame_stats: FrameStats::default(),
             frame_start_time: None,
+            #[cfg(feature = "debug")]
             performance_profiler: None,
             event_handlers: Vec::new(),
             background_throttling_enabled: false,
@@ -1381,6 +1385,7 @@ impl GupContext {
             texture_pool,
             frame_stats: FrameStats::default(),
             frame_start_time: None,
+            #[cfg(feature = "debug")]
             performance_profiler: None,
             event_handlers: Vec::new(),
             background_throttling_enabled: false,
@@ -2146,45 +2151,6 @@ impl GupContext {
         self.frame_stats = FrameStats::default();
     }
 
-    /// Enable advanced performance profiling.
-    ///
-    /// This enables detailed frame statistics, GPU timestamps (if supported),
-    /// and performance regression detection.
-    pub fn enable_profiling(
-        &mut self,
-        config: crate::performance::ProfilingConfig,
-    ) -> GupResult<()> {
-        if self.performance_profiler.is_some() {
-            return Err(GupError::invalid_operation(
-                "Profiling already enabled".to_string(),
-            ));
-        }
-
-        let profiler = PerformanceProfiler::new(&self.device, config)?;
-        self.performance_profiler = Some(profiler);
-        Ok(())
-    }
-
-    /// Disable advanced performance profiling.
-    pub fn disable_profiling(&mut self) {
-        self.performance_profiler = None;
-    }
-
-    /// Check if advanced profiling is enabled.
-    pub fn is_profiling_enabled(&self) -> bool {
-        self.performance_profiler.is_some()
-    }
-
-    /// Get the performance profiler (if enabled).
-    pub fn profiler(&self) -> Option<&PerformanceProfiler> {
-        self.performance_profiler.as_ref()
-    }
-
-    /// Get mutable access to the performance profiler (if enabled).
-    pub fn profiler_mut(&mut self) -> Option<&mut PerformanceProfiler> {
-        self.performance_profiler.as_mut()
-    }
-
     /// Get the current context state.
     pub fn state(&self) -> ContextState {
         self.context_state
@@ -2870,6 +2836,50 @@ impl<'a> RenderFrame<'a> {
 
         self.context.finish_frame();
         Ok(())
+    }
+}
+
+/// Advanced performance profiling (requires the `debug` feature).
+#[cfg(feature = "debug")]
+#[cfg_attr(docsrs, doc(cfg(feature = "debug")))]
+impl GupContext {
+    /// Enable advanced performance profiling.
+    ///
+    /// This enables detailed frame statistics, GPU timestamps (if supported),
+    /// and performance regression detection.
+    pub fn enable_profiling(
+        &mut self,
+        config: crate::performance::ProfilingConfig,
+    ) -> GupResult<()> {
+        if self.performance_profiler.is_some() {
+            return Err(GupError::invalid_operation(
+                "Profiling already enabled".to_string(),
+            ));
+        }
+
+        let profiler = PerformanceProfiler::new(&self.device, config)?;
+        self.performance_profiler = Some(profiler);
+        Ok(())
+    }
+
+    /// Disable advanced performance profiling.
+    pub fn disable_profiling(&mut self) {
+        self.performance_profiler = None;
+    }
+
+    /// Check if advanced profiling is enabled.
+    pub fn is_profiling_enabled(&self) -> bool {
+        self.performance_profiler.is_some()
+    }
+
+    /// Get the performance profiler (if enabled).
+    pub fn profiler(&self) -> Option<&PerformanceProfiler> {
+        self.performance_profiler.as_ref()
+    }
+
+    /// Get mutable access to the performance profiler (if enabled).
+    pub fn profiler_mut(&mut self) -> Option<&mut PerformanceProfiler> {
+        self.performance_profiler.as_mut()
     }
 }
 

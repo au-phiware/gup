@@ -42,10 +42,10 @@ Runs comprehensive benchmarks on commits to `main` branch.
 
 ```bash
 # Run the performance test suite
-cargo test --test performance_ci_tests -- --test-threads=1
+cargo test --features debug --test performance_ci_tests -- --test-threads=1
 
 # Update baselines after confirming changes are intentional
-UPDATE_BASELINES=1 cargo test --test performance_ci_tests -- --test-threads=1
+UPDATE_BASELINES=1 cargo test --features debug --test performance_ci_tests -- --test-threads=1
 ```
 
 ### Creating New Performance Tests
@@ -84,7 +84,8 @@ When performance changes are intentional (e.g., optimizations), update
 baselines:
 
 1. Review the performance report to confirm changes are expected
-2. Run locally: `UPDATE_BASELINES=1 cargo test --test performance_ci_tests`
+2. Run locally:
+   `UPDATE_BASELINES=1 cargo test --features debug --test performance_ci_tests`
 3. Commit the updated baseline files
 4. Include rationale in commit message
 

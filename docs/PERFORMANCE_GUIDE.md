@@ -127,7 +127,7 @@ Threshold-based tests in `tests/interaction_performance_tests.rs` and
 Run with:
 
 ```bash
-cargo test --test performance_validation_tests -- --test-threads=1
+cargo test --features debug --test performance_validation_tests -- --test-threads=1
 cargo test --test interaction_performance_tests -- --test-threads=1
 ```
 
@@ -155,6 +155,10 @@ Performance testing integrates with CI via:
 ```
 
 ## Profiling
+
+The profiling, bottleneck-analysis and debug APIs in this section are behind the
+`debug` Cargo feature (off by default; GUP-390). Enable it with
+`gup = { ..., features = ["debug"] }` or `cargo run --features debug`.
 
 ### GPU Profiling
 

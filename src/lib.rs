@@ -124,6 +124,8 @@ pub mod camera;
 pub mod chart_builder;
 pub mod color_descriptor;
 pub mod context;
+#[cfg(feature = "debug")]
+#[cfg_attr(docsrs, doc(cfg(feature = "debug")))]
 pub mod debug;
 pub mod depth;
 pub mod error;
@@ -141,8 +143,14 @@ pub mod linked_selection;
 pub mod mark;
 pub mod mark_selection;
 pub mod math;
+#[cfg(feature = "debug")]
+#[cfg_attr(docsrs, doc(cfg(feature = "debug")))]
 pub mod performance;
+#[cfg(feature = "debug")]
+#[cfg_attr(docsrs, doc(cfg(feature = "debug")))]
 pub mod performance_export;
+#[cfg(feature = "debug")]
+#[cfg_attr(docsrs, doc(cfg(feature = "debug")))]
 pub mod performance_targets;
 pub mod pipeline_cache;
 pub mod platform;
@@ -245,6 +253,7 @@ pub use axis_system::{
 };
 pub use buffer::*;
 pub use context::*;
+#[cfg(feature = "debug")]
 pub use debug::*;
 pub use error::*;
 pub use grid::*;

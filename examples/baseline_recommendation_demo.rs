@@ -8,7 +8,7 @@
 //! 2. Get automated recommendations for baseline updates
 //! 3. Generate reports for CI/CD integration
 //!
-//! Run with: `cargo run --example baseline_recommendation_demo`
+//! Run with: `cargo run --features debug --example baseline_recommendation_demo`
 
 use gup::GupResult;
 use gup::debug::baseline_recommendation::{

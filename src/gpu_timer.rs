@@ -7,8 +7,7 @@
 //! slots (begin/end) and the buffers required to resolve and read back the
 //! results.  It is designed for lightweight, per-dispatch timing during
 //! auto-tune calibration — not general-purpose profiling (see
-//! [`performance::TimestampQueryManager`](crate::performance::TimestampQueryManager)
-//! for that).
+//! `performance::TimestampQueryManager`, behind the `debug` feature, for that).
 //!
 //! # Feature detection
 //!

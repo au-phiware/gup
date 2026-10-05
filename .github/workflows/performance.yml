@@ -101,7 +101,7 @@ jobs:
 
       - name: Run performance CI test suite
         run: |
-          nix develop --command bash -c "cargo test --test performance_ci_tests -- --test-threads=1 --nocapture"
+          nix develop --command bash -c "cargo test --features debug --test performance_ci_tests -- --test-threads=1 --nocapture"
 
       - name: Run perf_alert.sh
         id: perf_alert

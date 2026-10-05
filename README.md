@@ -262,6 +262,21 @@ culling and LOD (strategic review T3/T7), so it was quarantined rather than
 deleted. CI keeps it compiling and its tests passing. See its
 [README](crates/gup-culling-lod/README.md).
 
+### The `debug` feature
+
+GPU debugging, profiling and performance-report tooling (`gup::debug`,
+`gup::performance`, `gup::performance_export`, `gup::performance_targets` and
+`GupContext`'s performance profiler) is behind the `debug` Cargo feature, which
+is off by default. The examples and tests that use it declare
+`required-features = ["debug"]`, so a default `cargo test` skips them:
+
+```bash
+cargo test --features debug -- --test-threads=1
+cargo run --features debug --example gpu_debug_demo
+```
+
+`web-dashboard` implies `debug`.
+
 ### Parked integration crates
 
 These crates are excluded from the workspace (`[workspace] exclude`), so
