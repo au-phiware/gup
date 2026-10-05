@@ -1,0 +1,17 @@
+error[E0271]: type mismatch resolving `<Sequential as ShaderFn>::Out == Px`
+  --> tests/compile_fail/wrong_value_type.rs:13:30
+   |
+13 |     sel.attr(Circle::RADIUS, Sequential::viridis().encode(|r: &Row| r.temp));
+   |         ----                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Px`, found `Color`
+   |         |
+   |         required by a bound introduced by this call
+   |
+   = note: required for `Encoded<{closure@$DIR/tests/compile_fail/wrong_value_type.rs:13:59: 13:68}, gup_core::Sequential>` to implement `IntoEncoding<Row, Px, ColumnMarker<f64>>`
+note: required by a bound in `gup_core::Selection::<T, M>::attr`
+  --> src/selection.rs
+   |
+   |     pub fn attr<V: Visual, E, K>(&mut self, channel: Channel<M, V>, encoding: E) -> &mut Self
+   |            ---- required by a bound in this associated function
+   |     where
+   |         E: IntoEncoding<T, V, K>,
+   |            ^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Selection::<T, M>::attr`

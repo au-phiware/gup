@@ -1,0 +1,11 @@
+error[E0599]: no variant or associated item named `RADUIS` found for enum `gup_core::Circle` in the current scope
+  --> tests/compile_fail/unknown_channel.rs:11:22
+   |
+11 |     sel.attr(Circle::RADUIS, Px(3.0));
+   |                      ^^^^^^ variant or associated item not found in `gup_core::Circle`
+   |
+help: there is an associated constant `RADIUS` with a similar name
+   |
+11 -     sel.attr(Circle::RADUIS, Px(3.0));
+11 +     sel.attr(Circle::RADIUS, Px(3.0));
+   |

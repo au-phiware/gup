@@ -134,8 +134,7 @@ pub struct ColumnMarker<D>(PhantomData<fn() -> D>);
 #[diagnostic::on_unimplemented(
     message = "`{Self}` cannot drive a channel of visual type `{V}`",
     label = "this encoding does not produce `{V}` for rows of type `{T}`",
-    note = "a channel `Channel<M, {V}>` accepts a constant `{V}` or `f.encode(|row: &{T}| …)` where `f: ShaderFn<Out = {V}>`",
-    note = "check the scale's output type: position scales produce `Px`, colour scales produce `Color`"
+    note = "a `{V}` channel accepts a constant of type `{V}` (such as `Px(3.0)`) or `f.encode(|row: &{T}| …)` where `f: ShaderFn<Out = {V}>`"
 )]
 pub trait IntoEncoding<T, V: Visual, K> {
     /// Convert into a type-erased encoding.
