@@ -1748,8 +1748,8 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "encase",
- "fontdue",
  "futures-channel",
+ "gup-text",
  "gup-visual-regression",
  "image",
  "naga",

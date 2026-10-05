@@ -51,6 +51,11 @@ pub enum Error {
     /// Encoding an image failed.
     #[error("image encoding failed: {0}")]
     Image(#[from] image::ImageError),
+
+    /// Laying out or drawing text failed (for example, the glyph atlas is
+    /// full).
+    #[error(transparent)]
+    Text(#[from] gup_text::Error),
 }
 
 impl Error {

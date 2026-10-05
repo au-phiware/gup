@@ -7,9 +7,9 @@
 use crate::channel::Color;
 use crate::context::{Context, ContextId, Upload};
 use crate::error::{Error, Result};
-use crate::scene::{ItemKind, Rule, Scene};
+use crate::scene::{ItemKind, Rule, Scene, TextRun};
 use crate::shader::glue::Glue;
-use crate::shader::{RULE_SHADER, StructLayout, TEXT_SHADER, VIEW, struct_layout};
+use crate::shader::{RULE_SHADER, StructLayout, VIEW, struct_layout};
 use crate::target::RenderTarget;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -83,7 +83,6 @@ impl std::fmt::Debug for LayerGpu {
 enum PipelineKind {
     Mark(String),
     Rule,
-    Text,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -113,7 +112,6 @@ pub struct PipelineStats {
 #[derive(Default)]
 pub(crate) struct PipelineCache {
     view_bgl: Option<wgpu::BindGroupLayout>,
-    text_bgl: Option<wgpu::BindGroupLayout>,
     programs: HashMap<String, Arc<GlueProgram>>,
     pipelines: HashMap<PipelineKey, wgpu::RenderPipeline>,
     pub stats: PipelineStats,
@@ -164,17 +162,6 @@ impl PipelineCache {
                 device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some("gup view"),
                     entries: &[uniform_entry(0, false)],
-                })
-            })
-            .clone()
-    }
-
-    fn text_bgl(&mut self, device: &wgpu::Device) -> wgpu::BindGroupLayout {
-        self.text_bgl
-            .get_or_insert_with(|| {
-                device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("gup glyph atlas"),
-                    entries: &texture_entries(0, false),
                 })
             })
             .clone()
@@ -306,12 +293,6 @@ impl PipelineCache {
                 &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32, 3 => Float32x4],
                 std::mem::size_of::<RuleInstance>(),
             ),
-            PipelineKind::Text => (
-                "gup text",
-                TEXT_SHADER,
-                &wgpu::vertex_attr_array![0 => Float32x4, 1 => Float32x4, 2 => Float32x4],
-                std::mem::size_of::<GlyphInstance>(),
-            ),
             PipelineKind::Mark(_) => unreachable!("mark pipelines come from glue programs"),
         };
         let composed = cx.shaders().compose(label, source, &[&VIEW])?;
@@ -319,20 +300,11 @@ impl PipelineCache {
             label: Some(label),
             source: wgpu::ShaderSource::Naga(Cow::Owned(composed.module)),
         });
-        let layout = if matches!(kind, PipelineKind::Text) {
-            let text_bgl = self.text_bgl(device);
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some(label),
-                bind_group_layouts: &[&view_bgl, &text_bgl],
-                push_constant_ranges: &[],
-            })
-        } else {
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some(label),
-                bind_group_layouts: &[&view_bgl],
-                push_constant_ranges: &[],
-            })
-        };
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some(label),
+            bind_group_layouts: &[&view_bgl],
+            push_constant_ranges: &[],
+        });
         let buffers = [wgpu::VertexBufferLayout {
             array_stride: stride as u64,
             step_mode: wgpu::VertexStepMode::Instance,
@@ -538,14 +510,6 @@ struct RuleInstance {
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct GlyphInstance {
-    rect: [f32; 4],
-    uv: [f32; 4],
-    color: [f32; 4],
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct ViewUniform {
     size: [f32; 2],
     dpr: f32,
@@ -564,22 +528,25 @@ enum Draw {
         /// Bytes of `buffer` in use (it is pooled and may be larger).
         bytes: u64,
         count: u32,
-        atlas: Option<wgpu::BindGroup>,
     },
+    /// Glyph quads, drawn by `gup-text` (it binds its atlas at group 0).
+    Text(gup_text::GlyphBatch),
 }
 
 /// A scissor rectangle in physical pixels.
 type Scissor = [u32; 4];
 
-/// Per-renderer GPU state reused across frames: the view uniform, the
-/// glyph-atlas bind group and the guide instance buffers. Pipelines,
-/// programs and the atlas itself live in the [`Context`].
+/// Per-renderer GPU state reused across frames: the view uniform and the
+/// guide and glyph instance buffers. Pipelines, programs and the text
+/// system (font and glyph atlas) live in the [`Context`].
 struct RendererGpu {
     context: ContextId,
     view_buffer: wgpu::Buffer,
     view_bind_group: wgpu::BindGroup,
-    glyph_sampler: wgpu::Sampler,
-    atlas: Option<(wgpu::TextureView, wgpu::BindGroup)>,
+    /// Scratch glyph quads, reused across text items and frames.
+    glyphs: gup_text::Glyphs,
+    /// Grow-only glyph instance buffers, one per text draw.
+    glyph_buffers: Vec<gup_text::GlyphBuffer>,
     /// Grow-only guide vertex buffers, one per guide draw, reused across
     /// frames.
     instances: Vec<wgpu::Buffer>,
@@ -645,16 +612,12 @@ impl Renderer {
                     resource: view_buffer.as_entire_binding(),
                 }],
             });
-            let glyph_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-                label: Some("gup glyph sampler"),
-                ..Default::default()
-            });
             self.gpu = Some(RendererGpu {
                 context: cx.id(),
                 view_buffer,
                 view_bind_group,
-                glyph_sampler,
-                atlas: None,
+                glyphs: gup_text::Glyphs::new(1.0),
+                glyph_buffers: Vec::new(),
                 instances: Vec::new(),
             });
         }
@@ -681,6 +644,7 @@ impl Renderer {
         let full = [0, 0, desc.width, desc.height];
         let mut draws = Vec::new();
         let mut next_instances = 0;
+        let mut next_glyphs = 0;
         for item in &scene.items {
             let scissor = item
                 .clip
@@ -708,32 +672,9 @@ impl Renderer {
                         PipelineKind::Rule,
                         desc,
                         &instances,
-                        None,
                     )?
                 }
-                ItemKind::Text(runs) => {
-                    let mut text = cx.text();
-                    let mut glyphs = Vec::new();
-                    for run in runs {
-                        let color = run.style.color.to_array();
-                        glyphs.extend(text.layout(run).into_iter().map(|g| GlyphInstance {
-                            rect: g.rect,
-                            uv: g.uv,
-                            color,
-                        }));
-                    }
-                    let atlas_view = text.atlas_view(cx);
-                    drop(text);
-                    let atlas = gpu.atlas_bind_group(cx, atlas_view);
-                    gpu.instanced(
-                        cx,
-                        &mut next_instances,
-                        PipelineKind::Text,
-                        desc,
-                        &glyphs,
-                        Some(atlas),
-                    )?
-                }
+                ItemKind::Text(runs) => gpu.text(cx, &mut next_glyphs, runs, dpr, desc)?,
             };
             if let Some(draw) = draw {
                 draws.push((scissor, draw));
@@ -788,30 +729,40 @@ impl Renderer {
 }
 
 impl RendererGpu {
-    /// The atlas bind group, rebuilt only when the atlas view changes.
-    fn atlas_bind_group(&mut self, cx: &Context, view: wgpu::TextureView) -> wgpu::BindGroup {
-        if let Some((v, bg)) = &self.atlas
-            && *v == view
-        {
-            return bg.clone();
+    /// Lay out `runs` and prepare their glyph draw in the next pooled glyph
+    /// buffer. Holds only the `text` lock (RFC-001 S1 lock order); the
+    /// returned batch draws without it.
+    fn text(
+        &mut self,
+        cx: &Context,
+        next: &mut usize,
+        runs: &[TextRun],
+        dpr: f32,
+        desc: &TargetDesc,
+    ) -> Result<Option<Draw>> {
+        if *next == self.glyph_buffers.len() {
+            self.glyph_buffers.push(gup_text::GlyphBuffer::new());
         }
-        let text_bgl = cx.pipelines().text_bgl(cx.device());
-        let bg = cx.device().create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("gup glyph atlas"),
-            layout: &text_bgl,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&self.glyph_sampler),
-                },
-            ],
-        });
-        self.atlas = Some((view, bg.clone()));
-        bg
+        let buffer = &mut self.glyph_buffers[*next];
+        *next += 1;
+        self.glyphs.clear(dpr);
+        let mut text = cx.text();
+        for run in runs {
+            text.layout(
+                &run.layout_run(),
+                run.style.color.to_array(),
+                &mut self.glyphs,
+            )?;
+        }
+        let target = gup_text::DrawTarget {
+            format: desc.format,
+            samples: desc.samples,
+            width: desc.width,
+            height: desc.height,
+        };
+        Ok(text
+            .prepare(&cx.text_uploads(), buffer, &self.glyphs, &target)
+            .map(Draw::Text))
     }
 
     /// Write `instances` into the next pooled buffer (growing it if
@@ -823,7 +774,6 @@ impl RendererGpu {
         kind: PipelineKind,
         desc: &TargetDesc,
         instances: &[I],
-        atlas: Option<wgpu::BindGroup>,
     ) -> Result<Option<Draw>> {
         if instances.is_empty() {
             return Ok(None);
@@ -852,7 +802,6 @@ impl RendererGpu {
             buffer,
             bytes: size,
             count: instances.len() as u32,
-            atlas,
         }))
     }
 }
@@ -866,12 +815,12 @@ impl Prepared {
     /// Record every draw into `pass`. Allocates nothing, takes no locks
     /// and never submits, so it can run inside a host's pass.
     pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
-        pass.set_bind_group(0, &self.view_bind_group, &[]);
         for ([x, y, w, h], draw) in &self.draws {
             pass.set_scissor_rect(*x, *y, *w, *h);
             match draw {
                 Draw::Marks { pipeline, layer } => {
                     pass.set_pipeline(pipeline);
+                    pass.set_bind_group(0, &self.view_bind_group, &[]);
                     pass.set_bind_group(1, &layer.enc_bind_group, &[]);
                     pass.set_bind_group(2, &layer.chunk_bind_group, &[0]);
                     for (slot, range) in layer.column_ranges.iter().enumerate() {
@@ -884,15 +833,14 @@ impl Prepared {
                     buffer,
                     bytes,
                     count,
-                    atlas,
                 } => {
                     pass.set_pipeline(pipeline);
-                    if let Some(atlas) = atlas {
-                        pass.set_bind_group(1, atlas, &[]);
-                    }
+                    pass.set_bind_group(0, &self.view_bind_group, &[]);
                     pass.set_vertex_buffer(0, buffer.slice(..*bytes));
                     pass.draw(0..6, 0..*count);
                 }
+                // Binds its atlas at group 0, so the others rebind the view.
+                Draw::Text(batch) => batch.draw(pass),
             }
         }
     }

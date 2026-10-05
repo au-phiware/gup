@@ -349,7 +349,7 @@ impl Plot {
                 .chain(&title)
                 .map(|run| PlacedText {
                     run: run.clone(),
-                    bounds: text.ink_bounds(run),
+                    bounds: text.ink_bounds(&run.layout_run()).into(),
                 })
                 .collect()
         };

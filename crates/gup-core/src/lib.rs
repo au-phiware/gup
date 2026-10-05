@@ -56,7 +56,6 @@ mod shader;
 #[cfg(all(feature = "window", not(target_arch = "wasm32")))]
 mod show;
 pub mod target;
-mod text;
 #[cfg(feature = "window")]
 mod window;
 

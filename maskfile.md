@@ -267,6 +267,7 @@ cargo test -p gup-visual-regression
 cargo test --lib visual_regression -- --test-threads=1
 cargo check -p gup-culling-lod --all-targets --all-features
 cargo test -p gup-culling-lod -- --test-threads=1
+cargo test -p gup-text -- --test-threads=1
 cargo test -p gup-core --lib --test scatter_png -- --test-threads=1
 cargo test -p gup-core --doc
 cargo test -p gup-core --test compile_fail

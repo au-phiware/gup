@@ -5,13 +5,14 @@
 //!
 //! A [`Context`] owns (or wraps) a `wgpu::Device` and `wgpu::Queue` together
 //! with every device-scoped cache: the naga_oil shader library, the pipeline
-//! cache and the glyph atlas. It is cheap to clone (`Arc<Inner>`), so charts,
-//! targets and hosts can all hold one.
+//! cache and the text system (font and glyph atlas, from `gup-text`). It
+//! is cheap to clone (`Arc<Inner>`), so charts, targets and hosts can all
+//! hold one.
 
 use crate::error::Result;
 use crate::render::PipelineCache;
 use crate::shader::ShaderLibrary;
-use crate::text::TextSystem;
+use gup_text::TextSystem;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -160,7 +161,9 @@ struct Inner {
     /// The naga_oil composer and library modules. Taken alone, or while
     /// `pipelines` is held.
     shaders: Mutex<ShaderLibrary>,
-    /// The glyph atlas. Never held together with `pipelines` or `shaders`.
+    /// The font and glyph atlas (`gup-text`). Never held together with
+    /// `pipelines` or `shaders`: runs are laid out and prepared while
+    /// holding it, and their batches draw without it.
     text: Mutex<TextSystem>,
     uploads: UploadCounters,
 }
@@ -323,6 +326,7 @@ impl Context {
         queue: wgpu::Queue,
     ) -> Self {
         let caps = Caps::of(&device);
+        let text = TextSystem::new(&device);
         Self {
             inner: Arc::new(Inner {
                 id: ContextId::next(),
@@ -333,7 +337,7 @@ impl Context {
                 caps,
                 shaders: Mutex::new(ShaderLibrary::new()),
                 pipelines: Mutex::new(PipelineCache::default()),
-                text: Mutex::new(TextSystem::new()),
+                text: Mutex::new(text),
                 uploads: UploadCounters::default(),
             }),
         }
@@ -436,6 +440,12 @@ impl Context {
         self.inner.queue.write_texture(texture, data, layout, size);
     }
 
+    /// This context as `gup-text`'s [`Uploader`](gup_text::Uploader), so
+    /// glyph instances and atlas texels are counted too.
+    pub(crate) fn text_uploads(&self) -> TextUploads<'_> {
+        TextUploads(self)
+    }
+
     /// Block until all submitted GPU work has finished (native), so that
     /// mapping callbacks have run.
     #[cfg(not(target_arch = "wasm32"))]
@@ -461,6 +471,27 @@ impl Context {
     /// The text system: never together with the other two.
     pub(crate) fn text(&self) -> Ordered<'_, TextSystem> {
         Ordered::new(LockRank::Text, &self.inner.text)
+    }
+}
+
+/// Routes `gup-text`'s GPU writes through a [`Context`]'s counters:
+/// glyph instances as [`Upload::Instances`], atlas texels as
+/// [`Upload::Texture`].
+pub(crate) struct TextUploads<'a>(&'a Context);
+
+impl gup_text::Uploader for TextUploads<'_> {
+    fn write_buffer(&self, buffer: &wgpu::Buffer, offset: u64, data: &[u8]) {
+        self.0.write_buffer(Upload::Instances, buffer, offset, data);
+    }
+
+    fn write_texture(
+        &self,
+        texture: wgpu::TexelCopyTextureInfo<'_>,
+        data: &[u8],
+        layout: wgpu::TexelCopyBufferLayout,
+        size: wgpu::Extent3d,
+    ) {
+        self.0.write_texture(texture, data, layout, size);
     }
 }
 

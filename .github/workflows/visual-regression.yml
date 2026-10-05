@@ -1,4 +1,7 @@
-# Visual regression (GUP-388): harness unit tests, chart-builder golden
+# Visual regression (GUP-388): harness unit tests, chart-builder golden      - name: gup-core (RFC-001 core)
+        run: |
+          cargo test -p gup-text -- --test-threads=1
+          cargo test -p gup-text -- --test-threads=1
 # images with structural checks, the examples smoke test, and the quarantined
 # gup-culling-lod crate (GUP-390).
 #
@@ -74,9 +77,11 @@ jobs:
       # headless scatter golden image and a trybuild compile-fail suite. The
       # .stderr snapshots are rustc's exact wording, so they match only the
       # toolchain pinned in rust-toolchain.toml; re-bless them with
-      # TRYBUILD=overwrite when the pin moves.
+      # TRYBUILD=overwrite when the pin moves. gup-text (RFC-001 S2) is
+      # gup-core's leaf text crate; its tests draw glyphs on the GPU.
       - name: gup-core (RFC-001 core)
         run: |
+          cargo test -p gup-text -- --test-threads=1
           cargo test -p gup-core --lib --test scatter_png -- --test-threads=1
           cargo test -p gup-core --doc
           cargo test -p gup-core --test compile_fail

@@ -86,3 +86,9 @@ impl Rect {
         )
     }
 }
+
+impl From<gup_text::Bounds> for Rect {
+    fn from(b: gup_text::Bounds) -> Self {
+        Self::new(b.x, b.y, b.width, b.height)
+    }
+}

@@ -77,8 +77,6 @@ pub(crate) static BUILTIN_MODULES: &[&WgslModule] = &[
 
 /// Hand-authored top-level shader for guide rules.
 pub(crate) const RULE_SHADER: &str = include_str!("../shaders/rule.wgsl");
-/// Hand-authored top-level shader for text glyph quads.
-pub(crate) const TEXT_SHADER: &str = include_str!("../shaders/text.wgsl");
 
 /// A composed top-level shader and how long composition took.
 pub(crate) struct Composed {
@@ -239,10 +237,8 @@ mod tests {
     #[test]
     fn guide_shaders_compose() {
         let mut lib = ShaderLibrary::new();
-        for (label, src) in [("rule", RULE_SHADER), ("text", TEXT_SHADER)] {
-            let composed = lib.compose(label, src, &[&VIEW]).unwrap();
-            assert_eq!(composed.module.entry_points.len(), 2, "{label}");
-        }
+        let composed = lib.compose("rule", RULE_SHADER, &[&VIEW]).unwrap();
+        assert_eq!(composed.module.entry_points.len(), 2);
     }
 
     #[test]

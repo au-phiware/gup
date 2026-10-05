@@ -22,7 +22,7 @@ bytemuck = { version = "1.23", features = ["derive"] }
 pollster = "0.3"
 futures-channel = "0.3"
 image = { version = "0.24", default-features = false, features = ["png"] }
-fontdue = "0.9"
+gup-text = { path = "../gup-text" }
 thiserror = "2.0"
 # `WindowTarget` and `show` (feature `window`, on by default).
 winit = { version = "0.30", optional = true }

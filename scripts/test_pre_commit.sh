@@ -30,9 +30,13 @@ expect 'mode=docs' COPYING
 
 # Docs a crate compiles (doctests, fonts) are that crate's sources.
 expect 'clippy=[gup gup-culling-lod]' docs/tutorials/01_getting_started.md
-expect 'clippy=[gup gup-core gup-culling-lod]' assets/fonts/default.ttf
+expect 'clippy=[gup gup-culling-lod]' assets/fonts/default.ttf
+expect 'clippy=[gup gup-core gup-culling-lod gup-text]' \
+  crates/gup-text/fonts/Inter-Regular.ttf
 
 # A leaf crate is checked alone; a dependency drags in its dependents.
+expect 'fmt=[gup-text] clippy=[gup gup-core gup-culling-lod gup-text]' \
+  crates/gup-text/src/lib.rs
 expect 'clippy=[gup-culling-lod]' crates/gup-culling-lod/src/lib.rs
 expect 'fmt=[gup-core] clippy=[gup gup-core gup-culling-lod]' \
   crates/gup-core/src/lib.rs

@@ -141,45 +141,8 @@ impl Rule {
     }
 }
 
-/// Horizontal anchor of a text run.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum HAlign {
-    /// `at` is the left edge.
-    Start,
-    /// `at` is the centre.
-    Middle,
-    /// `at` is the right edge.
-    End,
-}
-
-/// Vertical anchor of a text run.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum VAlign {
-    /// `at` is the cap-height line.
-    Top,
-    /// `at` is halfway up the capitals.
-    Middle,
-    /// `at` is the baseline.
-    Baseline,
-    /// `at` is the descender line.
-    Bottom,
-}
-
-/// Where a run's `at` point sits on its text.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct Anchor {
-    /// Horizontal.
-    pub h: HAlign,
-    /// Vertical.
-    pub v: VAlign,
-}
-
-impl Anchor {
-    /// An anchor.
-    pub const fn new(h: HAlign, v: VAlign) -> Self {
-        Self { h, v }
-    }
-}
+// Text anchors come from `gup-text`, which lays the runs out.
+pub use gup_text::{Anchor, HAlign, VAlign};
 
 /// Font size and colour.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -212,4 +175,16 @@ pub struct TextRun {
     pub style: TextStyle,
     /// What the text is.
     pub role: TextRole,
+}
+
+impl TextRun {
+    /// The run as `gup-text` measures and lays it out.
+    pub(crate) fn layout_run(&self) -> gup_text::Run<'_> {
+        gup_text::Run {
+            text: &self.text,
+            size: self.style.size.0,
+            at: [self.at.x, self.at.y],
+            anchor: self.anchor,
+        }
+    }
 }
