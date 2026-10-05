@@ -387,6 +387,12 @@ impl Context {
         self.inner.uploads.snapshot()
     }
 
+    /// Pipeline-cache counters: programs composed, pipelines created and
+    /// cache hits, with the latest compose and create timings.
+    pub fn pipeline_stats(&self) -> crate::render::PipelineStats {
+        self.pipelines().stats
+    }
+
     /// How many times `gup-core` has submitted command buffers to this
     /// context's queue. Draw-in-pass hosts can check that
     /// [`Renderer::prepare`](crate::Renderer::prepare) and
