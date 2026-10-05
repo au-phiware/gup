@@ -1332,3 +1332,91 @@ measured label width (with a minimum gap), not a fixed target count. **Input for
 S7** (`Layout` resolve and guide emitters): add an AC that no two tick labels on
 an axis are closer than one em, verified at 400, 720 and 1920 px widths through
 the GUP-388 harness's text regions.
+
+## S1 findings (2026-10-05, GUP-399)
+
+[GUP-399](../stories/GUP-399_RFC_001_S1_One_Context.md) made `gup_core::Context`
+the one place the old and new paths get a device.
+
+- **`Context::shared()`** is a process default behind a `OnceLock`.
+  - It is created with `new_blocking` on the first call. Concurrent first calls
+    are serialised, so they make one device.
+  - Later calls are an `Arc` clone.
+  - If creation fails, the error is returned and the next call tries again.
+- **`RenderContext` and `GupContext` are now shims over it.**
+  - `RenderContext::new`/`with_viewport`, `GupContext::new`/`headless`/
+    `with_options` and `VisualTestUtils::new` take the instance, adapter, device
+    and queue from the shared context when it meets the requested `GupOptions`.
+  - Otherwise (low power, other backends, features or limits it lacks) they get
+    a dedicated `gup_core::Context::with_options`.
+  - Pools, multi-surface and recovery are unchanged. `attempt_recovery` still
+    requests its own device until S14 deletes it.
+  - The root crate depends on `gup-core` (not re-exported). This adds 8 crates
+    (gup-core, naga_oil, encase and five helpers) and the `naga-ir` feature on
+    the shared wgpu.
+- **Backend default: primary, with GL as an explicit fallback.**
+  - `ContextOptions::default()` asks for `Backends::PRIMARY` on native and
+    `BROWSER_WEBGPU | GL` on wasm.
+  - GL is tried only when the requested backends have no adapter and
+    `WGPU_BACKEND` is unset.
+  - On machines with Vulkan, Metal or DX12, no GL/EGL instance exists, so the
+    S0b `eglTerminate` teardown crash (S0b finding 4) cannot happen. It is also
+    what the old path already requested.
+  - `ContextOptions` gained `backends`, `power_preference`, `required_features`
+    and `required_limits`. `TIMESTAMP_QUERY` is optional by default, as the old
+    `GupContext` did.
+- **Limits.** The device starts from the WebGPU defaults where the adapter
+  supports them (downlevel otherwise), then takes the adapter's buffer sizes and
+  texture resolution. The old path asked for `Limits::default()`; S0a asked for
+  downlevel defaults, which would have lowered the old path's uniform-binding
+  and storage-buffer limits.
+- **Lock order is checked, not just documented.**
+  - Debug builds record which `Context` locks each thread holds and panic on any
+    nesting other than `shaders` inside `pipelines`.
+  - The whole gup-core suite runs under the check without a violation.
+  - `parking_lot`'s deadlock detector was not used: it is a feature flag that
+    would change the `parking_lot` wgpu itself uses.
+- **`wgpu::Device ==` is not an identity check.**
+  - It compares wgpu-core ids, and every `Instance` has its own id space.
+  - Devices from two instances are both `Id(0,1)` and compare equal, so a naive
+    "same device" assertion would have passed before S1.
+  - `tests/one_device.rs` asks wgpu instead, with a bind group made on one
+    device from a layout made on the other. Across instances this panics with
+    "BindGroupLayout[Id(0,1)] does not exist", the `composite_*` panic.
+  - A low-power `GupContext` with its own device is the negative control.
+- **The `composite_*` panic is fixed by S1 alone**, but the output is not.
+  - All four examples now run windowed without panicking, and their
+    expected-failure entry is removed.
+  - Their screenshots still show the S11 bugs: bars and areas overflow the plot
+    rect, scatter points are black ellipses, and there is no text.
+  - `composite_scatter_regression`'s trend line zig-zags because one-`T` layers
+    share one data vector. That is S11's mixed-`T` layers.
+- **gup-core builds for wasm32 again.** It had not since S0a, because
+  `Layer: Send + Sync` and wgpu's web types are `!Sync`.
+  - `Layer` is now bounded by `wgpu::WasmNotSendSync`, which is §2's "MaybeSend
+    on wasm".
+  - Enabling wgpu's `fragile-send-sync-non-atomic-wasm` instead was tried and
+    rejected. Through feature unification it made the old path's surfaces
+    require `Send + Sync` on wasm, and that broke the root wasm build.
+- **One wgpu.** `Cargo.lock` resolves one wgpu 27.0.1, wgpu-core 27.0.3,
+  wgpu-hal 27.0.4, wgpu-types 27.0.1 and naga 27.0.3. Before S1 the root and
+  gup-core built wgpu with different feature sets into one target directory, and
+  29 root doctests failed with "multiple different versions of crate
+  `wgpu_types`". After S1 they pass (216 passed, 0 failed).
+- **Old-path LOC**: 28882 → 28876 (−6). The `render.rs` device request (−23)
+  outweighs the `core_context`/`core_handles` shim in `context.rs` (+17).
+
+### Proposed adjustments to S2–S3 and later
+
+- **S2 (`gup-text`):** give any new `Context`-held lock a rank in the debug
+  check (`LockRank`), and keep `text` exclusive. Glyph runs should be laid out
+  while holding `text` only, then drawn without it.
+- **S3:** the WASM size measurement can run now that gup-core builds for wasm32.
+  `ImageTarget`'s readback is native-only (`wait_idle`); the web path needs an
+  async readback.
+- **S8 (`GupApp`/`show`):** `src/wasm_api.rs` still creates its own device,
+  because WebGL adapters need a `compatible_surface`. `Context` needs a way to
+  request an adapter for a surface (or `from_wgpu_full`) before the wasm entry
+  point can share it.
+- **S13 (hosts):** never use `Device ==` to decide whether a host device is
+  Gup's. Compare `ContextId`s, or wrap the host device once with `from_wgpu`.
