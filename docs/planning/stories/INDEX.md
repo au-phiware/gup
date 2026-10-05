@@ -54,7 +54,7 @@ survives into `gup-core`.
   check and CI job actually fails on a seeded violation, and make the local hook
   proportional (skip/scope by changed files) while CI stays the full, unscoped
   gate. From GUP-390.
-- [GUP-403](GUP-403_Make_CI_Green_And_Keep_It_Green.md) 🚧 — All five
+- [GUP-403](GUP-403_Make_CI_Green_And_Keep_It_Green.md) ✅ — All five
   push-to-main workflows were red (Gallery had never passed). Fix each root
   cause, pin the Rust toolchain in `rust-toolchain.toml` for the flake and every
   workflow, put the gallery sync check in the hook, and add `mask ci` to

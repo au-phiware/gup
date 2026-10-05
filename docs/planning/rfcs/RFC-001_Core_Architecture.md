@@ -1187,9 +1187,9 @@ fn fs_main(v: circle::Varyings) -> @location(0) vec4<f32> {
   clipping and the non-sRGB target are already in place. MSAA, rects and
   gradients are still to do. Measure the WASM size cost of naga_oil (risk 10)
   here as planned.
-- **S5/S6:** fold in assumptions 1–7. Pin the trybuild snapshots to the dev
-  shell's rustc: CI runs the compile-fail suite on 1.93.1 so `stable` wording
-  changes don't break it.
+- **S5/S6:** fold in assumptions 1–7. The trybuild snapshots match the toolchain
+  pinned in `rust-toolchain.toml`, which the dev shell and every CI workflow use
+  (GUP-403); re-bless them when that pin moves.
 
 ## S0b findings (2026-10-05, GUP-396)
 
