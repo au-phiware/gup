@@ -280,35 +280,14 @@ impl RenderContext {
         }
     }
 
-    /// Create a new render context with specific viewport
+    /// Create a new render context with specific viewport.
+    ///
+    /// The device is the process-wide `gup_core::Context::shared()` device
+    /// (RFC-001 S1), the same one [`GupContext::new`](crate::context::GupContext::new)
+    /// uses, so resources built here can be drawn through a `GupContext`.
     pub async fn with_viewport(viewport: Viewport) -> GupResult<Self> {
-        let instance = Instance::new(&InstanceDescriptor {
-            backends: Backends::PRIMARY,
-            ..Default::default()
-        });
-
-        let adapter = instance
-            .request_adapter(&RequestAdapterOptions {
-                power_preference: PowerPreference::HighPerformance,
-                compatible_surface: None,
-                force_fallback_adapter: false,
-            })
-            .await
-            .map_err(|e| {
-                GupError::webgpu_error(format!("Failed to find suitable GPU adapter: {e}"))
-            })?;
-
-        let (device, queue) = adapter
-            .request_device(&DeviceDescriptor {
-                label: Some("gup_device"),
-                required_features: Features::empty(),
-                required_limits: Limits::default(),
-                memory_hints: MemoryHints::Performance,
-                trace: Default::default(),
-                experimental_features: Default::default(),
-            })
-            .await
-            .map_err(|e| GupError::webgpu_error(format!("Failed to create device: {e}")))?;
+        let core = crate::context::core_context(&crate::context::GupOptions::default()).await?;
+        let (instance, adapter, device, queue) = crate::context::core_handles(&core)?;
 
         // Create global alpha bind group layout
         let global_alpha_bind_group_layout =

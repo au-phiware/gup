@@ -26,37 +26,11 @@ pub struct VisualTestUtils {
 }
 
 impl VisualTestUtils {
-    /// Create a new visual test utilities instance
+    /// Create a new visual test utilities instance, on the same device as
+    /// `RenderContext` and `GupContext` (`gup_core::Context::shared()`).
     pub async fn new() -> GupResult<Self> {
-        let instance = Instance::new(&InstanceDescriptor {
-            backends: Backends::PRIMARY,
-            ..Default::default()
-        });
-
-        let adapter = instance
-            .request_adapter(&RequestAdapterOptions {
-                power_preference: PowerPreference::HighPerformance,
-                compatible_surface: None,
-                force_fallback_adapter: false,
-            })
-            .await
-            .map_err(|e| GupError::WebGpuError {
-                message: format!("Failed to find suitable GPU adapter: {e}"),
-            })?;
-
-        let (device, queue) = adapter
-            .request_device(&DeviceDescriptor {
-                label: Some("visual_test_device"),
-                required_features: Features::empty(),
-                required_limits: Limits::default(),
-                memory_hints: MemoryHints::Performance,
-                trace: Default::default(),
-                experimental_features: Default::default(),
-            })
-            .await
-            .map_err(|e| GupError::WebGpuError {
-                message: format!("Failed to create device: {e}"),
-            })?;
+        let core = crate::context::core_context(&crate::context::GupOptions::default()).await?;
+        let (_, _, device, queue) = crate::context::core_handles(&core)?;
 
         Ok(Self {
             device,

@@ -1708,6 +1708,7 @@ dependencies = [
  "futures",
  "futures-channel",
  "futures-intrusive",
+ "gup-core",
  "gup-macros",
  "gup-visual-regression",
  "image",

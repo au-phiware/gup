@@ -789,6 +789,68 @@ impl Default for GupOptions {
     }
 }
 
+impl GupOptions {
+    /// Whether `cx`'s device is what these options would have requested:
+    /// the default adapter preference, a backend they allow, and every
+    /// required feature and limit.
+    fn is_met_by(&self, cx: &gup_core::Context) -> bool {
+        let caps = cx.caps();
+        self.power_preference == gup_core::ContextOptions::default().power_preference
+            && cx
+                .adapter_info()
+                .is_some_and(|info| self.backends.contains(info.backend.into()))
+            && caps.features.contains(self.required_features)
+            && self.required_limits.check_limits(&caps.limits)
+    }
+}
+
+/// The `gup_core::Context` an old-path context takes its device and queue
+/// from (RFC-001 S1), so that `RenderContext`, `GupContext` and `gup-core`
+/// draw with one device.
+///
+/// On native, options that the process-wide
+/// [`gup_core::Context::shared`] device meets use it. Anything else (low
+/// power, other backends, features or limits it lacks) gets a dedicated
+/// `gup_core::Context` built from the options. On wasm there is no
+/// blocking shared default, so each call creates a context.
+pub(crate) async fn core_context(options: &GupOptions) -> GupResult<gup_core::Context> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let shared = gup_core::Context::shared().map_err(|e| {
+            GupError::webgpu_error(format!("Failed to create the shared GPU context: {e}"))
+        })?;
+        if options.is_met_by(&shared) {
+            return Ok(shared);
+        }
+    }
+    gup_core::Context::with_options(gup_core::ContextOptions {
+        backends: options.backends,
+        power_preference: options.power_preference,
+        required_features: options.required_features,
+        optional_features: Features::TIMESTAMP_QUERY,
+        required_limits: Some(options.required_limits.clone()),
+    })
+    .await
+    .map_err(|e| GupError::webgpu_error(format!("Failed to create GPU context: {e}")))
+}
+
+/// The instance, adapter, device and queue of a `gup_core::Context` that
+/// created its own device (every context [`core_context`] returns).
+pub(crate) fn core_handles(
+    cx: &gup_core::Context,
+) -> GupResult<(Instance, Adapter, Device, Queue)> {
+    let instance = cx.instance().cloned();
+    let adapter = cx.adapter().cloned();
+    instance
+        .zip(adapter)
+        .map(|(instance, adapter)| (instance, adapter, cx.device().clone(), cx.queue().clone()))
+        .ok_or_else(|| {
+            GupError::webgpu_error(
+                "gup_core::Context wraps a host device and has no instance or adapter".to_string(),
+            )
+        })
+}
+
 /// Performance statistics for frame rendering.
 #[derive(Debug, Default, Clone)]
 pub struct FrameStats {
@@ -1329,46 +1391,16 @@ impl GupContext {
     }
 
     /// Custom initialization with advanced options.
+    ///
+    /// The device comes from `gup_core` (see [`core_context`]): the
+    /// process-wide shared device when it meets `options`, otherwise a
+    /// dedicated one. Either way `TIMESTAMP_QUERY` is enabled when the
+    /// adapter supports it, for the auto-tune system's GPU timing.
     pub async fn with_options(options: GupOptions) -> GupResult<Arc<Self>> {
-        let instance = Instance::new(&InstanceDescriptor {
-            backends: options.backends,
-            ..Default::default()
-        });
+        let (instance, adapter, device, queue) = core_handles(&core_context(&options).await?)?;
 
-        let adapter = instance
-            .request_adapter(&RequestAdapterOptions {
-                power_preference: options.power_preference,
-                compatible_surface: None,
-                force_fallback_adapter: false,
-            })
-            .await
-            .map_err(|e| {
-                GupError::webgpu_error(format!("Failed to find suitable GPU adapter: {e}"))
-            })?;
-
-        // Clone the options to store them for recovery
-        let stored_options = options.clone();
-
-        // Opportunistically enable TIMESTAMP_QUERY when the adapter
-        // supports it.  This allows the auto-tune system to use precise
-        // GPU-side timing without requiring the caller to explicitly
-        // request the feature.
-        let mut features = options.required_features;
-        if adapter.features().contains(Features::TIMESTAMP_QUERY) {
-            features |= Features::TIMESTAMP_QUERY;
-        }
-
-        let (device, queue) = adapter
-            .request_device(&DeviceDescriptor {
-                label: Some("gup_device"),
-                required_features: features,
-                required_limits: options.required_limits,
-                memory_hints: MemoryHints::Performance,
-                trace: Default::default(),
-                experimental_features: Default::default(),
-            })
-            .await
-            .map_err(|e| GupError::webgpu_error(format!("Failed to create device: {e}")))?;
+        // Keep the options for recovery
+        let stored_options = options;
 
         let device = Arc::new(device);
         let queue = Arc::new(queue);
