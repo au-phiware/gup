@@ -28,6 +28,10 @@ categories = ["graphics", "visualization", "wasm"]
 [lib]
 name = "gup"
 crate-type = ["cdylib", "rlib"]
+# The lib has no #[bench] functions; benchmarks are the Criterion targets in
+# benches/. Excluding the lib's libtest bench harness lets
+# `cargo bench -- --save-baseline <name>` pass Criterion flags to every target.
+bench = false
 
 [dependencies]
 wgpu = { version = "27.0", features = ["wgsl"] }
@@ -193,6 +197,14 @@ required-features = ["gpu-bench"]
 
 [[bench]]
 name = "raw_pixel_transfer"
+harness = false
+
+[[bench]]
+name = "error_handling_benchmarks"
+harness = false
+
+[[bench]]
+name = "texture_vs_procedural_patterns"
 harness = false
 
 [[example]]

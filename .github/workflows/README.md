@@ -33,8 +33,18 @@ Runs comprehensive benchmarks on commits to `main` branch.
 #### Features
 
 - **Comprehensive Benchmarking**: Runs all Criterion benchmarks
-- **Long-term Storage**: Keeps benchmark results for 90 days
-- **Trend Analysis**: Maintains historical benchmark data
+- **Long-term Storage**: Keeps benchmark results and a trend data point
+  (`scripts/perf_trend.sh record`) as a 90-day artifact
+
+## Toolchain and GPU (all workflows)
+
+- The Rust toolchain is pinned in `rust-toolchain.toml`. Workflows install it
+  with `rustup toolchain install` or run in the Nix dev shell, which reads the
+  same file. Never use a floating `stable` toolchain in a workflow.
+- The runners have no GPU. Workflows install Mesa's lavapipe (software Vulkan),
+  or set `GUP_SOFTWARE_GPU=1` for the Nix dev shell.
+- `mask ci` (or `mask ci <workflow>`) runs the push-to-main workflows locally on
+  lavapipe.
 
 ## Usage
 

@@ -15,6 +15,9 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # The runners have no GPU. This makes the Nix dev shell point Vulkan at
+  # Mesa's lavapipe (software Vulkan) so GPU tests get an adapter.
+  GUP_SOFTWARE_GPU: "1"
 
 jobs:
   # ── Threshold-based performance regression tests (runs on every PR) ──
@@ -564,11 +567,21 @@ jobs:
         run: |
           nix develop --command bash -c "cargo bench --all-features -- --save-baseline main"
 
+      # Record a trend data point (.benchmark-history/, uploaded below).
+      - name: Record performance trend data
+        run: nix develop --command bash -c "./scripts/perf_trend.sh record"
+
+      # Results and the trend point are kept as a 90-day artifact. (An earlier
+      # step committed them to a benchmark-history branch; it never succeeded:
+      # the token was read-only, .benchmark-history/ is git-ignored, and each
+      # run's branch would not fast-forward. GUP-403.)
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results-${{ github.sha }}
-          path: target/criterion/
+          path: |
+            target/criterion/
+            .benchmark-history/
           retention-days: 90
 
       # Save baselines per branch for PR comparisons
@@ -577,21 +590,3 @@ jobs:
         with:
           path: target/criterion
           key: criterion-baselines-main-${{ github.sha }}
-
-      # Record trend data point
-      - name: Record performance trend data
-        run: |
-          nix develop --command bash -c "./scripts/perf_trend.sh record" || true
-
-      - name: Store benchmark history
-        run: |
-          mkdir -p .benchmark-history
-          cp -r target/criterion .benchmark-history/${{ github.sha }}
-
-      - name: Commit benchmark history
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "chore: update benchmark history [${{ github.sha }}]"
-          file_pattern: .benchmark-history/
-          branch: benchmark-history
-          create_branch: true

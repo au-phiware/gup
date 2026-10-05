@@ -86,8 +86,9 @@ Failures on `a0560b9`:
 
 ### Related
 
-- GUP-398 📋 (Honest Clippy Gate): the local clippy gate. This story only fixes
-  the lints CI reports today.
+- GUP-398 📋 (Honest and Fast Quality Gates): a strict clippy gate and proof
+  that every hook check and CI job can fail. This story only makes today's jobs
+  pass at their root cause; it does not seed failures or rescope the hook.
 
 ## Testing Strategy
 
