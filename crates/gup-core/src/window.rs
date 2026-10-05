@@ -52,7 +52,7 @@ impl WindowTarget {
     /// adapter. Presents with `Fifo` (vsync) until
     /// [`set_present_mode`](Self::set_present_mode) says otherwise.
     pub fn new(cx: &Context, window: Arc<Window>) -> Result<Self> {
-        let (instance, adapter) = cx.instance_and_adapter().ok_or_else(|| {
+        let (instance, adapter) = cx.instance().zip(cx.adapter()).ok_or_else(|| {
             Error::config(
                 "window target",
                 "this Context wraps a host device (Context::from_wgpu) and has no wgpu \

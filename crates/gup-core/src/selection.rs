@@ -373,6 +373,31 @@ mod tests {
         );
     }
 
+    /// The one path that holds two `Context` locks: a pipeline-cache miss
+    /// (`pipelines`) composes its program (`shaders`). Under the debug
+    /// lock-order check this panics if the order is ever reversed, and it
+    /// completes rather than deadlocking when two threads miss at once.
+    #[test]
+    fn pipeline_cache_miss_composes_under_the_lock_order() {
+        let host = Context::shared().expect("shared context");
+        // A fresh composer and cache on the shared device, so this misses.
+        let cx = Context::from_wgpu(host.device().clone(), host.queue().clone());
+        let glue = reference().glue();
+        std::thread::scope(|s| {
+            for _ in 0..2 {
+                s.spawn(|| {
+                    let program = cx.pipelines().program(&cx, &glue).unwrap();
+                    // Other threads may compose guides meanwhile.
+                    drop(cx.shaders());
+                    drop(cx.text());
+                    program
+                });
+            }
+        });
+        let stats = cx.pipelines().stats;
+        assert_eq!(stats.programs_composed, 1, "{stats:?}");
+    }
+
     #[test]
     fn reference_glue_matches_fixture_and_composes() {
         let sel = reference();

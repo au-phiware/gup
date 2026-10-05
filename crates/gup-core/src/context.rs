@@ -145,16 +145,22 @@ impl UploadCounters {
 
 struct Inner {
     id: ContextId,
-    /// Set when Gup created the device; `WindowTarget` creates surfaces
-    /// from it.
-    #[cfg_attr(not(feature = "window"), allow(dead_code))]
+    /// Set when Gup created the device; surfaces are created from it.
     instance: Option<wgpu::Instance>,
     adapter: Option<wgpu::Adapter>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     caps: Caps,
-    shaders: Mutex<ShaderLibrary>,
+    // Lock order (RFC-001 S1): `pipelines` may be held while `shaders` is
+    // taken (a pipeline-cache miss composes its program), never the other
+    // way round, and `text` is never held together with either. Debug
+    // builds check this on every acquisition (`LockRank::check`).
+    /// Taken first: composed programs and pipelines.
     pipelines: Mutex<PipelineCache>,
+    /// The naga_oil composer and library modules. Taken alone, or while
+    /// `pipelines` is held.
+    shaders: Mutex<ShaderLibrary>,
+    /// The glyph atlas. Never held together with `pipelines` or `shaders`.
     text: Mutex<TextSystem>,
     uploads: UploadCounters,
 }
@@ -179,47 +185,85 @@ impl std::fmt::Debug for Context {
 }
 
 /// How [`Context::with_options`] creates its device.
-#[derive(Clone, Debug, Default)]
+///
+/// The defaults ask for the platform's primary backends (Vulkan, Metal,
+/// DX12; WebGPU or WebGL in a browser) and a high-performance adapter.
+/// `WGPU_BACKEND` and `WGPU_POWER_PREF` override `backends` and
+/// `power_preference`.
+#[derive(Clone, Debug)]
 pub struct ContextOptions {
+    /// Backends to look for an adapter on. If none of them has one, and
+    /// they were not chosen through `WGPU_BACKEND`, GL is tried as an
+    /// explicit fallback. GL is not in the native default: its EGL display
+    /// binds to the window system's connection as soon as any surface
+    /// exists, and dropping the instance after the event loop has exited
+    /// then crashes in `eglTerminate` (RFC-001 "S0b findings", item 4).
+    pub backends: wgpu::Backends,
+    /// Which adapter to prefer.
+    pub power_preference: wgpu::PowerPreference,
+    /// Features the device must have; creation fails without them.
+    pub required_features: wgpu::Features,
     /// Features to enable if the adapter has them, such as
-    /// `TIMESTAMP_QUERY` for GPU timing. Read [`Caps::features`] to see
-    /// which were enabled.
+    /// `TIMESTAMP_QUERY` for GPU timing (on by default). Read
+    /// [`Caps::features`] to see which were enabled.
     pub optional_features: wgpu::Features,
+    /// Limits the device must have on top of Gup's own: the WebGPU
+    /// defaults where the adapter supports them (downlevel defaults
+    /// otherwise), raised to the adapter's buffer sizes and texture
+    /// resolution. `None` asks for Gup's own only.
+    pub required_limits: Option<wgpu::Limits>,
+}
+
+impl Default for ContextOptions {
+    fn default() -> Self {
+        Self {
+            #[cfg(not(target_arch = "wasm32"))]
+            backends: wgpu::Backends::PRIMARY,
+            #[cfg(target_arch = "wasm32")]
+            backends: wgpu::Backends::BROWSER_WEBGPU | wgpu::Backends::GL,
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            required_features: wgpu::Features::empty(),
+            optional_features: wgpu::Features::TIMESTAMP_QUERY,
+            required_limits: None,
+        }
+    }
 }
 
 impl Context {
-    /// Create a context with its own instance, adapter and device.
+    /// Create a context with its own instance, adapter and device, with
+    /// [`ContextOptions::default`].
     ///
     /// The device is created with the adapter's own buffer-size limits
     /// (not the WebGPU defaults), so column chunks can be large on capable
     /// hardware (RFC-001 §2). Respects `WGPU_BACKEND` and friends.
+    ///
+    /// Every context preloads the shader library. Callers that just need
+    /// a device should use [`Context::shared`] instead.
     pub async fn new() -> Result<Self> {
         Self::with_options(ContextOptions::default()).await
     }
 
-    /// Like [`Context::new`], also enabling whichever of
-    /// [`ContextOptions::optional_features`] the adapter supports.
+    /// Like [`Context::new`], with the backends, adapter preference,
+    /// features and limits in `options`.
     pub async fn with_options(options: ContextOptions) -> Result<Self> {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::from_env()
-                    .unwrap_or(wgpu::PowerPreference::HighPerformance),
-                force_fallback_adapter: false,
-                compatible_surface: None,
-            })
-            .await?;
-        let adapter_limits = adapter.limits();
-        let required_limits = wgpu::Limits {
-            max_buffer_size: adapter_limits.max_buffer_size,
-            max_storage_buffer_binding_size: adapter_limits.max_storage_buffer_binding_size,
-            ..wgpu::Limits::downlevel_defaults()
-        }
-        .using_resolution(adapter_limits.clone());
+        let backends_from_env = wgpu::Backends::from_env().is_some();
+        let power_preference =
+            wgpu::PowerPreference::from_env().unwrap_or(options.power_preference);
+        let (instance, adapter) = match request_adapter(options.backends, power_preference).await {
+            Ok(found) => found,
+            Err(e) if backends_from_env || options.backends.contains(wgpu::Backends::GL) => {
+                return Err(e);
+            }
+            // The explicit GL fallback: only when the requested backends
+            // have no adapter at all.
+            Err(_) => request_adapter(wgpu::Backends::GL, power_preference).await?,
+        };
+        let required_limits = device_limits(&adapter.limits(), options.required_limits.as_ref());
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("gup-core device"),
-                required_features: options.optional_features & adapter.features(),
+                required_features: options.required_features
+                    | (options.optional_features & adapter.features()),
                 required_limits,
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
                 memory_hints: wgpu::MemoryHints::Performance,
@@ -233,6 +277,35 @@ impl Context {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn new_blocking() -> Result<Self> {
         pollster::block_on(Self::new())
+    }
+
+    /// The process-wide default context: created with
+    /// [`Context::new_blocking`] on first use, then cheaply cloned (native
+    /// only).
+    ///
+    /// Every `Context` preloads the naga_oil shader library, which costs
+    /// about 6.6 ms in a release build (RFC-001 "S0a findings") on top of
+    /// requesting an adapter and device. One-shot calls such as `save_png`
+    /// use this shared default so they don't pay that on every call, and
+    /// everything built on it shares one device, so its GPU resources can
+    /// be used together.
+    ///
+    /// If creation fails, the error is returned and the next call tries
+    /// again.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn shared() -> Result<Self> {
+        static SHARED: std::sync::OnceLock<Context> = std::sync::OnceLock::new();
+        static INIT: Mutex<()> = Mutex::new(());
+        if let Some(cx) = SHARED.get() {
+            return Ok(cx.clone());
+        }
+        // Serialise creation so that concurrent first calls make one device.
+        let _creating = lock(&INIT);
+        if let Some(cx) = SHARED.get() {
+            return Ok(cx.clone());
+        }
+        let cx = Self::new_blocking()?;
+        Ok(SHARED.get_or_init(|| cx).clone())
     }
 
     /// Wrap a device and queue the host already owns (egui, bevy, …).
@@ -286,13 +359,15 @@ impl Context {
         self.inner.adapter.as_ref().map(wgpu::Adapter::get_info)
     }
 
-    /// The instance and adapter, when this context created its own device.
-    #[cfg(feature = "window")]
-    pub(crate) fn instance_and_adapter(&self) -> Option<(&wgpu::Instance, &wgpu::Adapter)> {
-        self.inner
-            .instance
-            .as_ref()
-            .zip(self.inner.adapter.as_ref())
+    /// The instance, when this context created its own device. Surfaces
+    /// for this device must be created from it.
+    pub fn instance(&self) -> Option<&wgpu::Instance> {
+        self.inner.instance.as_ref()
+    }
+
+    /// The adapter, when this context created its own device.
+    pub fn adapter(&self) -> Option<&wgpu::Adapter> {
+        self.inner.adapter.as_ref()
     }
 
     /// The device's limits and features.
@@ -371,16 +446,64 @@ impl Context {
             .map_err(|e| Error::Readback(e.to_string()))
     }
 
-    pub(crate) fn shaders(&self) -> MutexGuard<'_, ShaderLibrary> {
-        lock(&self.inner.shaders)
+    /// The pipeline cache. Take it before [`shaders`](Self::shaders).
+    pub(crate) fn pipelines(&self) -> Ordered<'_, PipelineCache> {
+        Ordered::new(LockRank::Pipelines, &self.inner.pipelines)
     }
 
-    pub(crate) fn pipelines(&self) -> MutexGuard<'_, PipelineCache> {
-        lock(&self.inner.pipelines)
+    /// The shader library: alone, or while holding
+    /// [`pipelines`](Self::pipelines).
+    pub(crate) fn shaders(&self) -> Ordered<'_, ShaderLibrary> {
+        Ordered::new(LockRank::Shaders, &self.inner.shaders)
     }
 
-    pub(crate) fn text(&self) -> MutexGuard<'_, TextSystem> {
-        lock(&self.inner.text)
+    /// The text system: never together with the other two.
+    pub(crate) fn text(&self) -> Ordered<'_, TextSystem> {
+        Ordered::new(LockRank::Text, &self.inner.text)
+    }
+}
+
+/// Find an adapter on `backends` (`WGPU_BACKEND` overrides them).
+async fn request_adapter(
+    backends: wgpu::Backends,
+    power_preference: wgpu::PowerPreference,
+) -> Result<(wgpu::Instance, wgpu::Adapter)> {
+    let instance = wgpu::Instance::new(
+        &wgpu::InstanceDescriptor {
+            backends,
+            ..Default::default()
+        }
+        .with_env(),
+    );
+    let adapter = instance
+        .request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference,
+            force_fallback_adapter: false,
+            compatible_surface: None,
+        })
+        .await?;
+    Ok((instance, adapter))
+}
+
+/// The limits to create a device with on an adapter that has `adapter`
+/// limits: the WebGPU defaults where the adapter supports them (downlevel
+/// defaults otherwise, e.g. on GL), raised to the adapter's buffer sizes
+/// and texture resolution, then to anything in `required`.
+fn device_limits(adapter: &wgpu::Limits, required: Option<&wgpu::Limits>) -> wgpu::Limits {
+    let base = if wgpu::Limits::default().check_limits(adapter) {
+        wgpu::Limits::default()
+    } else {
+        wgpu::Limits::downlevel_defaults()
+    };
+    let limits = wgpu::Limits {
+        max_buffer_size: adapter.max_buffer_size,
+        max_storage_buffer_binding_size: adapter.max_storage_buffer_binding_size,
+        ..base
+    }
+    .using_resolution(adapter.clone());
+    match required {
+        Some(required) => limits.or_better_values_from(required),
+        None => limits,
     }
 }
 
@@ -388,6 +511,86 @@ impl Context {
 /// caches it guards stay structurally valid across a panic.
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// The cache locks a [`Context`] holds, as bits for the lock-order check.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum LockRank {
+    Pipelines = 1 << 0,
+    Shaders = 1 << 1,
+    Text = 1 << 2,
+}
+
+#[cfg(debug_assertions)]
+thread_local! {
+    /// The [`LockRank`] bits of the context locks this thread holds.
+    static HELD: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
+}
+
+impl LockRank {
+    /// Panic if taking `self` while holding the locks in `held` breaks the
+    /// lock order. The only nesting allowed is `shaders` inside
+    /// `pipelines`. (The bits are shared by every `Context` on the thread,
+    /// so nesting one context's locks inside another's is refused too.)
+    #[cfg_attr(not(debug_assertions), allow(dead_code))]
+    fn check(self, held: u8) {
+        let allowed = match self {
+            LockRank::Pipelines | LockRank::Text => 0,
+            LockRank::Shaders => LockRank::Pipelines as u8,
+        };
+        if held & !allowed != 0 {
+            let holding: Vec<LockRank> = [LockRank::Pipelines, LockRank::Shaders, LockRank::Text]
+                .into_iter()
+                .filter(|r| held & *r as u8 != 0)
+                .collect();
+            panic!(
+                "gup-core Context lock order violated: taking {self:?} while holding \
+                 {holding:?} (allowed: Pipelines then Shaders; Text alone)"
+            );
+        }
+    }
+}
+
+/// A [`MutexGuard`] that, in debug builds, checks the lock order when it
+/// is taken and records the lock as held by this thread until it drops.
+pub(crate) struct Ordered<'a, T> {
+    guard: MutexGuard<'a, T>,
+    #[cfg_attr(not(debug_assertions), allow(dead_code))]
+    rank: LockRank,
+}
+
+impl<'a, T> Ordered<'a, T> {
+    fn new(rank: LockRank, mutex: &'a Mutex<T>) -> Self {
+        #[cfg(debug_assertions)]
+        HELD.with(|held| {
+            rank.check(held.get());
+            held.set(held.get() | rank as u8);
+        });
+        Self {
+            guard: lock(mutex),
+            rank,
+        }
+    }
+}
+
+impl<T> Drop for Ordered<'_, T> {
+    fn drop(&mut self) {
+        #[cfg(debug_assertions)]
+        HELD.with(|held| held.set(held.get() & !(self.rank as u8)));
+    }
+}
+
+impl<T> std::ops::Deref for Ordered<'_, T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.guard
+    }
+}
+
+impl<T> std::ops::DerefMut for Ordered<'_, T> {
+    fn deref_mut(&mut self) -> &mut T {
+        &mut self.guard
+    }
 }
 
 #[cfg(test)]
@@ -442,6 +645,102 @@ mod tests {
         );
         assert_eq!(wrapped.caps().features, host.device().features());
         assert_eq!(round_trip(&wrapped), vec![1, 2, 3, 4, 5, 6, 7, 8]);
+    }
+
+    /// `shared()` makes one context per process and pays the device
+    /// request and library preload once: a later call is a clone.
+    #[test]
+    fn shared_is_one_context_created_once() {
+        let t = std::time::Instant::now();
+        let first = Context::shared().expect("shared context");
+        let first_call = t.elapsed();
+        let t = std::time::Instant::now();
+        let second = Context::shared().expect("shared context");
+        let second_call = t.elapsed();
+        assert_eq!(first.id(), second.id());
+        assert_eq!(first.device(), second.device());
+        assert!(first.adapter().is_some() && first.instance().is_some());
+
+        // Another test may have created the shared context already, so
+        // compare a warm call with what creating a context really costs.
+        let t = std::time::Instant::now();
+        let fresh = Context::new_blocking().expect("fresh context");
+        let creation = t.elapsed();
+        assert_ne!(fresh.id(), first.id());
+        assert!(
+            second_call * 10 < creation,
+            "shared() should be a clone after the first call: first {first_call:?}, \
+             second {second_call:?}, new_blocking {creation:?}"
+        );
+    }
+
+    /// The device is created with at least the WebGPU default limits
+    /// where the adapter has them, plus the adapter's buffer sizes.
+    #[test]
+    fn device_limits_cover_the_webgpu_defaults_and_adapter_buffers() {
+        let cx = Context::shared().expect("shared context");
+        let adapter = cx.adapter().unwrap().limits();
+        let limits = &cx.caps().limits;
+        if wgpu::Limits::default().check_limits(&adapter) {
+            assert!(wgpu::Limits::default().check_limits(limits), "{limits:?}");
+        }
+        assert_eq!(limits.max_buffer_size, adapter.max_buffer_size);
+        assert_eq!(
+            limits.max_texture_dimension_2d,
+            adapter.max_texture_dimension_2d
+        );
+        let required = wgpu::Limits {
+            max_bind_groups: 2,
+            max_texture_dimension_2d: limits.max_texture_dimension_2d + 1,
+            ..wgpu::Limits::downlevel_webgl2_defaults()
+        };
+        let raised = device_limits(&adapter, Some(&required));
+        assert_eq!(raised.max_bind_groups, limits.max_bind_groups);
+        assert_eq!(
+            raised.max_texture_dimension_2d,
+            limits.max_texture_dimension_2d + 1
+        );
+    }
+
+    /// The one nesting the lock order allows: a pipeline-cache miss
+    /// composes its program while holding the cache.
+    #[test]
+    fn lock_order_allows_shaders_inside_pipelines() {
+        let cx = Context::shared().expect("shared context");
+        let pipelines = cx.pipelines();
+        let shaders = cx.shaders();
+        drop((shaders, pipelines));
+        // Released locks can be taken again, in either order.
+        drop(cx.shaders());
+        drop(cx.text());
+        drop(cx.pipelines());
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "lock order violated: taking Pipelines while holding [Shaders]")]
+    fn lock_order_refuses_pipelines_inside_shaders() {
+        let cx = Context::shared().expect("shared context");
+        let _shaders = cx.shaders();
+        let _pipelines = cx.pipelines();
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "lock order violated: taking Text while holding [Pipelines]")]
+    fn lock_order_refuses_text_inside_pipelines() {
+        let cx = Context::shared().expect("shared context");
+        let _pipelines = cx.pipelines();
+        let _text = cx.text();
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "lock order violated: taking Shaders while holding [Text]")]
+    fn lock_order_refuses_shaders_inside_text() {
+        let cx = Context::shared().expect("shared context");
+        let _text = cx.text();
+        let _shaders = cx.shaders();
     }
 
     /// The upload counters are only proof if nothing bypasses them: no

@@ -32,7 +32,7 @@
 mod scatter;
 
 use gup_core::prelude::*;
-use gup_core::{ContextOptions, RenderTarget, Renderer, ScaleRef, UploadStats, WindowTarget};
+use gup_core::{RenderTarget, Renderer, ScaleRef, UploadStats, WindowTarget};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use winit::application::ApplicationHandler;
@@ -143,9 +143,8 @@ impl Bench {
             None => attributes.with_fullscreen(Some(Fullscreen::Borderless(None))),
         };
         let window = Arc::new(event_loop.create_window(attributes).expect("window"));
-        let cx = pollster::block_on(Context::with_options(ContextOptions {
-            optional_features: wgpu::Features::TIMESTAMP_QUERY,
-        }))?;
+        // The default options enable TIMESTAMP_QUERY where the adapter has it.
+        let cx = Context::new_blocking()?;
         let mut target = WindowTarget::new(&cx, window)?;
         target.set_present_mode(&cx, self.o.present)?;
         let timestamps = cx
