@@ -88,6 +88,10 @@
             nixfmt
             statix
 
+            # Headless X server: `mask ci dogfood` runs the windowed tasks
+            # under Xvfb, as the Dogfood workflow does.
+            xvfb-run
+
             # Node.js for Puppeteer benchmark capture scripts
             nodejs
 
@@ -106,8 +110,9 @@
             # (software Vulkan) instead: CI runners have no GPU, and the
             # same switch reproduces CI locally.
             export LIBGL_DRIVERS_PATH="${pkgs.mesa}/lib/dri"
+            export GUP_LAVAPIPE_ICD="${pkgs.mesa}/share/vulkan/icd.d/lvp_icd.x86_64.json"
             if [[ -n "''${GUP_SOFTWARE_GPU:-}" ]]; then
-              export VK_ICD_FILENAMES="${pkgs.mesa}/share/vulkan/icd.d/lvp_icd.x86_64.json"
+              export VK_ICD_FILENAMES="$GUP_LAVAPIPE_ICD"
             else
               export VK_ICD_FILENAMES="${pkgs.mesa}/share/vulkan/icd.d/radeon_icd.x86_64.json:${pkgs.mesa}/share/vulkan/icd.d/intel_icd.x86_64.json"
             fi

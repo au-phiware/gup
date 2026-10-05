@@ -190,3 +190,36 @@ pub fn save_screenshot(ctx: &eframe::egui::Context, path: &str) -> bool {
     }
     false
 }
+
+/// Rasterise an SVG document to a PNG file, rendering its text with gup's
+/// bundled font.
+///
+/// gup has no SVG-to-PNG path, so a user who wants the SVG export's axes and
+/// labels in a PNG must rasterise it themselves. This does it in-process with
+/// resvg and maps every generic family (`sans-serif`, `serif`, `monospace`)
+/// to the bundled font, so the output does not depend on the machine's
+/// ImageMagick build or installed fonts.
+pub fn rasterise_svg(svg: &str, png_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    use resvg::{tiny_skia, usvg};
+    const FONT: &[u8] = include_bytes!("../../assets/fonts/default.ttf");
+    let mut opt = usvg::Options::default();
+    let db = opt.fontdb_mut();
+    db.load_font_data(FONT.to_vec());
+    let family = db
+        .faces()
+        .next()
+        .and_then(|f| f.families.first())
+        .map(|(name, _)| name.clone())
+        .ok_or("bundled font has no family name")?;
+    db.set_sans_serif_family(family.clone());
+    db.set_serif_family(family.clone());
+    db.set_monospace_family(family.clone());
+    opt.font_family = family;
+    let tree = usvg::Tree::from_str(svg, &opt)?;
+    let size = tree.size().to_int_size();
+    let mut pixmap =
+        tiny_skia::Pixmap::new(size.width(), size.height()).ok_or("SVG has an empty canvas")?;
+    resvg::render(&tree, tiny_skia::Transform::default(), &mut pixmap.as_mut());
+    pixmap.save_png(png_path)?;
+    Ok(())
+}

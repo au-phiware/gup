@@ -14,4 +14,4 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 cargo build --release --bins
-exec target/release/dogfood_check
+exec "${CARGO_TARGET_DIR:-target}/release/dogfood_check"
