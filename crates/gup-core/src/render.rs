@@ -1,0 +1,723 @@
+// Copyright (C) 2024 Corin Lawson
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+//! Drawing a [`Scene`]: the per-context pipeline cache, prepared layer GPU
+//! state and the single render pass that draws marks, rules and text.
+
+use crate::channel::Color;
+use crate::context::{Context, ContextId};
+use crate::error::{Error, Result};
+use crate::scene::{ItemKind, Rule, Scene};
+use crate::shader::glue::Glue;
+use crate::shader::{RULE_SHADER, StructLayout, TEXT_SHADER, VIEW, struct_layout};
+use std::borrow::Cow;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use wgpu::util::DeviceExt;
+
+/// Everything about a target that pipelines depend on (RFC-001 §7).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct TargetDesc {
+    /// Colour format. Gup renders into non-sRGB views and blends in sRGB
+    /// space.
+    pub format: wgpu::TextureFormat,
+    /// Physical width.
+    pub width: u32,
+    /// Physical height.
+    pub height: u32,
+    /// MSAA sample count (S0a: always 1; analytic AA).
+    pub samples: u32,
+}
+
+/// Uniform alignment for dynamic offsets (WebGPU's maximum
+/// `min_uniform_buffer_offset_alignment`).
+const DYNAMIC_ALIGN: u64 = 256;
+
+/// A composed glue module and the layouts to bind it.
+pub(crate) struct GlueProgram {
+    pub glue: Glue,
+    pub module: naga::Module,
+    /// naga's layout of the `Encodings` uniform struct.
+    pub encodings: StructLayout,
+    /// naga's layout of the per-chunk `Chunk` uniform struct.
+    pub chunk: StructLayout,
+    pub enc_bgl: wgpu::BindGroupLayout,
+    pub chunk_bgl: wgpu::BindGroupLayout,
+    pub layout: wgpu::PipelineLayout,
+}
+
+impl std::fmt::Debug for GlueProgram {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GlueProgram")
+            .field("signature", &self.glue.signature)
+            .finish_non_exhaustive()
+    }
+}
+
+/// A data layer's GPU state, ready to draw.
+pub(crate) struct LayerGpu {
+    pub context: ContextId,
+    pub program: Arc<GlueProgram>,
+    pub enc_bind_group: wgpu::BindGroup,
+    pub chunk_bind_group: wgpu::BindGroup,
+    /// The column chunk and each vertex column's byte range in it.
+    pub columns: wgpu::Buffer,
+    pub column_ranges: Vec<std::ops::Range<u64>>,
+    pub instances: u32,
+    pub vertices_per_instance: u32,
+}
+
+impl std::fmt::Debug for LayerGpu {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LayerGpu")
+            .field("signature", &self.program.glue.signature)
+            .field("instances", &self.instances)
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum PipelineKind {
+    Mark(String),
+    Rule,
+    Text,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct PipelineKey {
+    kind: PipelineKind,
+    format: wgpu::TextureFormat,
+    samples: u32,
+}
+
+/// Counters and the most recent timings, for tests and the RFC record.
+#[derive(Copy, Clone, Debug, Default, PartialEq)]
+pub struct PipelineStats {
+    /// Glue modules composed (cache misses).
+    pub programs_composed: u32,
+    /// Render pipelines created (cache misses).
+    pub pipelines_created: u32,
+    /// Pipeline cache hits.
+    pub pipeline_hits: u32,
+    /// naga_oil compose time of the last composed glue module.
+    pub last_compose: Duration,
+    /// `create_render_pipeline` time of the last created mark pipeline.
+    pub last_create: Duration,
+}
+
+/// Per-context cache: glue programs by signature and pipelines by
+/// `(kind, format, samples)`. Uniform values are never part of a key.
+#[derive(Default)]
+pub(crate) struct PipelineCache {
+    view_bgl: Option<wgpu::BindGroupLayout>,
+    text_bgl: Option<wgpu::BindGroupLayout>,
+    programs: HashMap<String, Arc<GlueProgram>>,
+    pipelines: HashMap<PipelineKey, wgpu::RenderPipeline>,
+    pub stats: PipelineStats,
+}
+
+fn uniform_entry(binding: u32, dynamic: bool) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+        ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Uniform,
+            has_dynamic_offset: dynamic,
+            min_binding_size: None,
+        },
+        count: None,
+    }
+}
+
+fn texture_entries(binding: u32, filtering: bool) -> [wgpu::BindGroupLayoutEntry; 2] {
+    [
+        wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
+            },
+            count: None,
+        },
+        wgpu::BindGroupLayoutEntry {
+            binding: binding + 1,
+            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+            ty: wgpu::BindingType::Sampler(if filtering {
+                wgpu::SamplerBindingType::Filtering
+            } else {
+                wgpu::SamplerBindingType::NonFiltering
+            }),
+            count: None,
+        },
+    ]
+}
+
+impl PipelineCache {
+    fn view_bgl(&mut self, device: &wgpu::Device) -> wgpu::BindGroupLayout {
+        self.view_bgl
+            .get_or_insert_with(|| {
+                device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("gup view"),
+                    entries: &[uniform_entry(0, false)],
+                })
+            })
+            .clone()
+    }
+
+    fn text_bgl(&mut self, device: &wgpu::Device) -> wgpu::BindGroupLayout {
+        self.text_bgl
+            .get_or_insert_with(|| {
+                device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("gup glyph atlas"),
+                    entries: &texture_entries(0, false),
+                })
+            })
+            .clone()
+    }
+
+    /// The composed program for `glue`, composing it on first use.
+    pub(crate) fn program(&mut self, cx: &Context, glue: &Glue) -> Result<Arc<GlueProgram>> {
+        if let Some(p) = self.programs.get(&glue.signature) {
+            return Ok(Arc::clone(p));
+        }
+        let composed = cx
+            .shaders()
+            .compose(&glue.signature, &glue.source, &glue.modules)?;
+        let missing = |what: &str| Error::Compose {
+            module: glue.signature.clone(),
+            report: format!("generated glue has no `{what}` struct"),
+        };
+        let encodings =
+            struct_layout(&composed.module, "Encodings").ok_or_else(|| missing("Encodings"))?;
+        let chunk = struct_layout(&composed.module, "Chunk").ok_or_else(|| missing("Chunk"))?;
+
+        let device = cx.device();
+        let mut enc_entries = vec![uniform_entry(0, false)];
+        for lut in &glue.luts {
+            enc_entries.extend(texture_entries(lut.binding, true));
+        }
+        let enc_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("gup encodings"),
+            entries: &enc_entries,
+        });
+        let chunk_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("gup chunk"),
+            entries: &[uniform_entry(0, true)],
+        });
+        let view_bgl = self.view_bgl(device);
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("gup mark layout"),
+            bind_group_layouts: &[&view_bgl, &enc_bgl, &chunk_bgl],
+            push_constant_ranges: &[],
+        });
+        self.stats.programs_composed += 1;
+        self.stats.last_compose = composed.compose_time;
+        let program = Arc::new(GlueProgram {
+            glue: glue.clone(),
+            module: composed.module,
+            encodings,
+            chunk,
+            enc_bgl,
+            chunk_bgl,
+            layout,
+        });
+        self.programs
+            .insert(glue.signature.clone(), Arc::clone(&program));
+        Ok(program)
+    }
+
+    fn mark_pipeline(
+        &mut self,
+        cx: &Context,
+        program: &GlueProgram,
+        desc: &TargetDesc,
+    ) -> wgpu::RenderPipeline {
+        let key = PipelineKey {
+            kind: PipelineKind::Mark(program.glue.signature.clone()),
+            format: desc.format,
+            samples: desc.samples,
+        };
+        if let Some(p) = self.pipelines.get(&key) {
+            self.stats.pipeline_hits += 1;
+            return p.clone();
+        }
+        let start = Instant::now();
+        let module = cx
+            .device()
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some(&program.glue.signature),
+                source: wgpu::ShaderSource::Naga(Cow::Owned(program.module.clone())),
+            });
+        let attributes: Vec<wgpu::VertexAttribute> = (0..program.glue.columns.len())
+            .map(|loc| wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32,
+                offset: 0,
+                shader_location: loc as u32,
+            })
+            .collect();
+        let buffers: Vec<wgpu::VertexBufferLayout> = attributes
+            .iter()
+            .map(|a| wgpu::VertexBufferLayout {
+                array_stride: 4,
+                step_mode: wgpu::VertexStepMode::Instance,
+                attributes: std::slice::from_ref(a),
+            })
+            .collect();
+        let pipeline = create_pipeline(
+            cx.device(),
+            &program.glue.signature,
+            &program.layout,
+            &module,
+            &buffers,
+            desc,
+        );
+        self.stats.pipelines_created += 1;
+        self.stats.last_create = start.elapsed();
+        self.pipelines.insert(key, pipeline.clone());
+        pipeline
+    }
+
+    fn guide_pipeline(
+        &mut self,
+        cx: &Context,
+        kind: PipelineKind,
+        desc: &TargetDesc,
+    ) -> Result<wgpu::RenderPipeline> {
+        let key = PipelineKey {
+            kind: kind.clone(),
+            format: desc.format,
+            samples: desc.samples,
+        };
+        if let Some(p) = self.pipelines.get(&key) {
+            self.stats.pipeline_hits += 1;
+            return Ok(p.clone());
+        }
+        let device = cx.device();
+        let view_bgl = self.view_bgl(device);
+        let (label, source, attributes, stride): (_, _, &[wgpu::VertexAttribute], _) = match kind {
+            PipelineKind::Rule => (
+                "gup rules",
+                RULE_SHADER,
+                &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32, 3 => Float32x4],
+                std::mem::size_of::<RuleInstance>(),
+            ),
+            PipelineKind::Text => (
+                "gup text",
+                TEXT_SHADER,
+                &wgpu::vertex_attr_array![0 => Float32x4, 1 => Float32x4, 2 => Float32x4],
+                std::mem::size_of::<GlyphInstance>(),
+            ),
+            PipelineKind::Mark(_) => unreachable!("mark pipelines come from glue programs"),
+        };
+        let composed = cx.shaders().compose(label, source, &[&VIEW])?;
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some(label),
+            source: wgpu::ShaderSource::Naga(Cow::Owned(composed.module)),
+        });
+        let layout = if matches!(kind, PipelineKind::Text) {
+            let text_bgl = self.text_bgl(device);
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some(label),
+                bind_group_layouts: &[&view_bgl, &text_bgl],
+                push_constant_ranges: &[],
+            })
+        } else {
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some(label),
+                bind_group_layouts: &[&view_bgl],
+                push_constant_ranges: &[],
+            })
+        };
+        let buffers = [wgpu::VertexBufferLayout {
+            array_stride: stride as u64,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes,
+        }];
+        let pipeline = create_pipeline(device, label, &layout, &module, &buffers, desc);
+        self.stats.pipelines_created += 1;
+        self.pipelines.insert(key, pipeline.clone());
+        Ok(pipeline)
+    }
+}
+
+fn create_pipeline(
+    device: &wgpu::Device,
+    label: &str,
+    layout: &wgpu::PipelineLayout,
+    module: &wgpu::ShaderModule,
+    buffers: &[wgpu::VertexBufferLayout<'_>],
+    desc: &TargetDesc,
+) -> wgpu::RenderPipeline {
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some(label),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module,
+            entry_point: Some("vs_main"),
+            compilation_options: Default::default(),
+            buffers,
+        },
+        fragment: Some(wgpu::FragmentState {
+            module,
+            entry_point: Some("fs_main"),
+            compilation_options: Default::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: desc.format,
+                // Shaders output premultiplied sRGB-encoded colour.
+                blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState {
+            count: desc.samples,
+            ..Default::default()
+        },
+        multiview: None,
+        cache: None,
+    })
+}
+
+/// The program, uniform buffers and bind groups for one data layer.
+pub(crate) struct LayerUniforms<'a> {
+    pub program: Arc<GlueProgram>,
+    /// Bytes of the `Encodings` struct.
+    pub encodings: Vec<u8>,
+    /// Bytes of the `Chunk` struct.
+    pub chunk: Vec<u8>,
+    /// One LUT per `program.glue.luts` entry.
+    pub luts: Vec<&'a [[u8; 4]]>,
+}
+
+impl LayerUniforms<'_> {
+    /// Upload uniforms and LUTs and build the layer's bind groups.
+    pub(crate) fn build(
+        self,
+        cx: &Context,
+        columns: wgpu::Buffer,
+        column_ranges: Vec<std::ops::Range<u64>>,
+        instances: u32,
+        vertices_per_instance: u32,
+    ) -> LayerGpu {
+        let device = cx.device();
+        let enc = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("gup encodings"),
+            contents: &self.encodings,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        let mut chunk_bytes = self.chunk;
+        chunk_bytes.resize(DYNAMIC_ALIGN as usize, 0);
+        let chunk = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("gup chunk uniforms"),
+            contents: &chunk_bytes,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("gup lut sampler"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        let lut_views: Vec<wgpu::TextureView> = self
+            .luts
+            .iter()
+            .map(|lut| {
+                let texture = device.create_texture_with_data(
+                    cx.queue(),
+                    &wgpu::TextureDescriptor {
+                        label: Some("gup palette lut"),
+                        size: wgpu::Extent3d {
+                            width: lut.len() as u32,
+                            height: 1,
+                            depth_or_array_layers: 1,
+                        },
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        // Not *Srgb: the LUT holds sRGB-encoded values and
+                        // must not be linearised by the sampler.
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        usage: wgpu::TextureUsages::TEXTURE_BINDING,
+                        view_formats: &[],
+                    },
+                    wgpu::util::TextureDataOrder::LayerMajor,
+                    bytemuck::cast_slice(lut),
+                );
+                texture.create_view(&Default::default())
+            })
+            .collect();
+        let mut entries = vec![wgpu::BindGroupEntry {
+            binding: 0,
+            resource: enc.as_entire_binding(),
+        }];
+        for (lut, view) in self.program.glue.luts.iter().zip(&lut_views) {
+            entries.push(wgpu::BindGroupEntry {
+                binding: lut.binding,
+                resource: wgpu::BindingResource::TextureView(view),
+            });
+            entries.push(wgpu::BindGroupEntry {
+                binding: lut.binding + 1,
+                resource: wgpu::BindingResource::Sampler(&sampler),
+            });
+        }
+        let enc_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("gup encodings"),
+            layout: &self.program.enc_bgl,
+            entries: &entries,
+        });
+        let chunk_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("gup chunk"),
+            layout: &self.program.chunk_bgl,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                    buffer: &chunk,
+                    offset: 0,
+                    size: wgpu::BufferSize::new(u64::from(self.program.chunk.span)),
+                }),
+            }],
+        });
+        LayerGpu {
+            context: cx.id(),
+            program: self.program,
+            enc_bind_group,
+            chunk_bind_group,
+            columns,
+            column_ranges,
+            instances,
+            vertices_per_instance,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct RuleInstance {
+    p0: [f32; 2],
+    p1: [f32; 2],
+    width: f32,
+    color: [f32; 4],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct GlyphInstance {
+    rect: [f32; 4],
+    uv: [f32; 4],
+    color: [f32; 4],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct ViewUniform {
+    size: [f32; 2],
+    dpr: f32,
+    padding: f32,
+}
+
+/// One recorded draw.
+enum Draw {
+    Marks {
+        pipeline: wgpu::RenderPipeline,
+        layer: Arc<LayerGpu>,
+    },
+    Instanced {
+        pipeline: wgpu::RenderPipeline,
+        buffer: wgpu::Buffer,
+        count: u32,
+        atlas: Option<wgpu::BindGroup>,
+    },
+}
+
+/// Record the whole scene into **one** render pass on `encoder`.
+pub(crate) fn encode_scene(
+    cx: &Context,
+    scene: &Scene,
+    desc: &TargetDesc,
+    view: &wgpu::TextureView,
+    encoder: &mut wgpu::CommandEncoder,
+) -> Result<()> {
+    let device = cx.device();
+    let dpr = desc.width as f32 / scene.width;
+
+    // Prepare everything that needs locks or allocation before the pass.
+    let view_bgl = cx.pipelines().view_bgl(device);
+    let view_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("gup view"),
+        contents: bytemuck::bytes_of(&ViewUniform {
+            size: [scene.width, scene.height],
+            dpr,
+            padding: 0.0,
+        }),
+        usage: wgpu::BufferUsages::UNIFORM,
+    });
+    let view_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("gup view"),
+        layout: &view_bgl,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: view_buffer.as_entire_binding(),
+        }],
+    });
+
+    let mut draws = Vec::new();
+    for item in &scene.items {
+        let scissor = item.clip.map(|c| scene.clips[c.0]);
+        let draw = match &item.kind {
+            ItemKind::Marks(batch) => {
+                if batch.gpu.context != cx.id() {
+                    return Err(Error::config(
+                        "scene",
+                        "a mark batch was prepared on a different Context; resolve the chart \
+                         again with this context",
+                    ));
+                }
+                let pipeline = cx.pipelines().mark_pipeline(cx, &batch.gpu.program, desc);
+                Some(Draw::Marks {
+                    pipeline,
+                    layer: Arc::clone(&batch.gpu),
+                })
+            }
+            ItemKind::Rules(rules) => {
+                let instances: Vec<RuleInstance> = rules.iter().map(rule_instance).collect();
+                instanced(cx, PipelineKind::Rule, desc, &instances, None)?
+            }
+            ItemKind::Text(runs) => {
+                let mut text = cx.text();
+                let mut glyphs = Vec::new();
+                for run in runs {
+                    let color = run.style.color.to_array();
+                    glyphs.extend(text.layout(run).into_iter().map(|g| GlyphInstance {
+                        rect: g.rect,
+                        uv: g.uv,
+                        color,
+                    }));
+                }
+                let atlas_view = text.atlas_view(device, cx.queue());
+                drop(text);
+                let text_bgl = cx.pipelines().text_bgl(device);
+                let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+                    label: Some("gup glyph sampler"),
+                    ..Default::default()
+                });
+                let atlas = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("gup glyph atlas"),
+                    layout: &text_bgl,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(&atlas_view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(&sampler),
+                        },
+                    ],
+                });
+                instanced(cx, PipelineKind::Text, desc, &glyphs, Some(atlas))?
+            }
+        };
+        if let Some(draw) = draw {
+            draws.push((scissor, draw));
+        }
+    }
+
+    let bg = premultiplied_clear(scene.background);
+    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("gup scene"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view,
+            depth_slice: None,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(bg),
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        depth_stencil_attachment: None,
+        timestamp_writes: None,
+        occlusion_query_set: None,
+    });
+    pass.set_bind_group(0, &view_bind_group, &[]);
+    for (clip, draw) in &draws {
+        match clip {
+            Some(rect) => {
+                let x0 = (rect.left() * dpr).floor().clamp(0.0, desc.width as f32) as u32;
+                let y0 = (rect.top() * dpr).floor().clamp(0.0, desc.height as f32) as u32;
+                let x1 = (rect.right() * dpr).ceil().clamp(0.0, desc.width as f32) as u32;
+                let y1 = (rect.bottom() * dpr).ceil().clamp(0.0, desc.height as f32) as u32;
+                pass.set_scissor_rect(x0, y0, x1.saturating_sub(x0), y1.saturating_sub(y0));
+            }
+            None => pass.set_scissor_rect(0, 0, desc.width, desc.height),
+        }
+        match draw {
+            Draw::Marks { pipeline, layer } => {
+                pass.set_pipeline(pipeline);
+                pass.set_bind_group(1, &layer.enc_bind_group, &[]);
+                pass.set_bind_group(2, &layer.chunk_bind_group, &[0]);
+                for (slot, range) in layer.column_ranges.iter().enumerate() {
+                    pass.set_vertex_buffer(slot as u32, layer.columns.slice(range.clone()));
+                }
+                pass.draw(0..layer.vertices_per_instance, 0..layer.instances);
+            }
+            Draw::Instanced {
+                pipeline,
+                buffer,
+                count,
+                atlas,
+            } => {
+                pass.set_pipeline(pipeline);
+                if let Some(atlas) = atlas {
+                    pass.set_bind_group(1, atlas, &[]);
+                }
+                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.draw(0..6, 0..*count);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn instanced<I: bytemuck::Pod>(
+    cx: &Context,
+    kind: PipelineKind,
+    desc: &TargetDesc,
+    instances: &[I],
+    atlas: Option<wgpu::BindGroup>,
+) -> Result<Option<Draw>> {
+    if instances.is_empty() {
+        return Ok(None);
+    }
+    let pipeline = cx.pipelines().guide_pipeline(cx, kind, desc)?;
+    let buffer = cx
+        .device()
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("gup guide instances"),
+            contents: bytemuck::cast_slice(instances),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+    Ok(Some(Draw::Instanced {
+        pipeline,
+        buffer,
+        count: instances.len() as u32,
+        atlas,
+    }))
+}
+
+fn rule_instance(r: &Rule) -> RuleInstance {
+    RuleInstance {
+        p0: [r.p0.x, r.p0.y],
+        p1: [r.p1.x, r.p1.y],
+        width: r.width.0,
+        color: r.color.to_array(),
+    }
+}
+
+fn premultiplied_clear(c: Color) -> wgpu::Color {
+    let [r, g, b, a] = c.premultiplied().map(f64::from);
+    wgpu::Color { r, g, b, a }
+}

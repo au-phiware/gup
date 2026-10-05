@@ -1,5 +1,5 @@
 [workspace]
-members = ["gup-macros", "crates/gup-visual-regression", "crates/gup-culling-lod"]
+members = ["gup-macros", "crates/gup-visual-regression", "crates/gup-culling-lod", "crates/gup-core"]
 # The root package `gup` is a member implicitly; listing "." here would stop
 # `exclude` from working (Cargo treats it as a prefix of every subdirectory).
 # A plain `cargo build` / `cargo test` at the root builds only `gup`. The other

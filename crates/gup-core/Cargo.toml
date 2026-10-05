@@ -1,0 +1,30 @@
+[package]
+name = "gup-core"
+version = "0.1.0"
+authors = ["Corin Lawson <corin@phiware.com.au>"]
+edition = "2024"
+description = "Gup's new core (RFC-001): one Context, a GPU column store, typed channels, scales with CPU mirrors, naga_oil shader composition and a resolved Scene"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/au-phiware/gup"
+publish = false
+
+# RFC-001 §11: `gup-core` is a new crate that the old `gup` crate does not
+# re-export, and it must never depend on `gup` or reach into its modules.
+# Versions match those already resolved in Cargo.lock (RFC-001 appendix);
+# naga_oil, naga and encase are direct dependencies now that the parked
+# gup-bevy no longer brings them in (Orchestrator review point 5).
+[dependencies]
+wgpu = { version = "27.0", features = ["wgsl", "naga-ir"] }
+naga = { version = "27.0.3", features = ["wgsl-in", "wgsl-out"] }
+naga_oil = "0.20"
+encase = "0.12"
+bytemuck = { version = "1.23", features = ["derive"] }
+pollster = "0.3"
+futures-channel = "0.3"
+image = { version = "0.24", default-features = false, features = ["png"] }
+fontdue = "0.9"
+thiserror = "2.0"
+
+[dev-dependencies]
+gup-visual-regression = { path = "../gup-visual-regression" }
+trybuild = "1.0"

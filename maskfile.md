@@ -122,13 +122,14 @@ concurrently --group --names rs,nix,md \
 
 ## all-check
 
-Run Rust check, linters and formatters' checks.
+Run Rust check, linters and formatters' checks. `gup-core` is linted without
+`--fix` so its warnings fail the gate (workspace-wide fix: GUP-398).
 
 ```bash
 shopt -qs globstar
 concurrently --group --names '\s,rs,nix,md,marks' \
    '! git --no-pager grep --untracked --name-only --full-name "[[:space:]]\+$" -- "*.rs"' \
-   'mask check && cargo fmt --all -- --check && cargo fmt --manifest-path dogfood/Cargo.toml -- --check && cargo clippy --allow-no-vcs --fix --all-targets --all-features -- -D warnings' \
+   'mask check && cargo fmt --all -- --check && cargo fmt --manifest-path dogfood/Cargo.toml -- --check && cargo clippy --allow-no-vcs --fix --all-targets --all-features -- -D warnings && cargo clippy -p gup-core --all-targets -- -D warnings' \
    'nixfmt --check flake.nix && statix check flake.nix' \
    'prettier --cache --log-level warn --check "**/*.md" && mdl --git-recurse .' \
    'mask validate-marks'

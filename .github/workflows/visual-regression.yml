@@ -67,6 +67,15 @@ jobs:
           cargo check -p gup-culling-lod --all-targets --all-features
           cargo test -p gup-culling-lod -- --test-threads=1
 
+      # gup-core (RFC-001) is not a default member. It is linted without
+      # `--fix` so warnings fail the job (the workspace-wide gate is GUP-398),
+      # and its tests include the trybuild compile-fail suite and the
+      # headless scatter golden image.
+      - name: gup-core (RFC-001 core)
+        run: |
+          cargo clippy -p gup-core --all-targets -- -D warnings
+          cargo test -p gup-core -- --test-threads=1
+
       - name: Build examples
         run: cargo build --examples --all-features -p gup -p gup-culling-lod
 
