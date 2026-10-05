@@ -44,7 +44,7 @@
 //! [`ComputeInstanceFilter`]: super::compute_instance_filter::ComputeInstanceFilter
 //! [`OcclusionCuller`]: super::occlusion_culler::OcclusionCuller
 
-use crate::error::{GupError, GupResult};
+use gup::error::{GupError, GupResult};
 use std::sync::Arc;
 use wgpu::{
     BindGroup, Buffer, BufferDescriptor, BufferUsages, CommandEncoderDescriptor, Device, Queue,
@@ -347,9 +347,9 @@ impl UnifiedCullingPipeline {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::context::GupContext;
     use crate::mark::InstanceAttributes;
     use crate::mark::compute_instance_filter::ComputeInstanceFilter;
+    use gup::context::GupContext;
 
     fn create_instance_buffer(device: &Device, instances: &[InstanceAttributes]) -> Buffer {
         let data: &[u8] = bytemuck::cast_slice(instances);

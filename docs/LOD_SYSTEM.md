@@ -4,9 +4,14 @@ The Level-of-Detail (LOD) system enables rendering of billion-point datasets at
 interactive frame rates by maintaining a pyramid of progressively coarser
 representations and adaptively selecting the appropriate tier each frame.
 
+> **Quarantined (GUP-390).** This code lives in the experimental
+> `crates/gup-culling-lod` crate and is not wired into the `gup` render path or
+> chart builders. RFC-001 chunk culling is expected to draw from it; see
+> `crates/gup-culling-lod/README.md`.
+
 ## Architecture
 
-### LOD Pyramid (`gup::lod`)
+### LOD Pyramid (`gup_culling_lod::lod`)
 
 The `LodPyramid` stores multiple levels of a point dataset:
 
@@ -26,7 +31,7 @@ let pyramid = LodPyramidBuilder::new()
     .build_cpu(&device, &queue, &data)?;
 ```
 
-### Adaptive Renderer (`gup::renderer`)
+### Adaptive Renderer (`gup_culling_lod::renderer`)
 
 The `AdaptiveRenderer` orchestrates per-frame tier selection:
 
@@ -39,7 +44,7 @@ The `AdaptiveRenderer` orchestrates per-frame tier selection:
    that discards off-screen points and produces a compacted output buffer with
    an indirect draw argument buffer. No CPU readback occurs.
 
-### Viewport Culler (`gup::renderer::ViewportCuller`)
+### Viewport Culler (`gup_culling_lod::renderer::ViewportCuller`)
 
 A five-pass GPU compute pipeline:
 
@@ -73,7 +78,7 @@ LodPyramid
 ## Usage
 
 ```rust
-use gup::renderer::{AdaptiveRenderer, AdaptiveRendererConfig, AdaptiveViewport, ViewportCuller};
+use gup_culling_lod::renderer::{AdaptiveRenderer, AdaptiveRendererConfig, AdaptiveViewport, ViewportCuller};
 
 let config = AdaptiveRendererConfig {
     blend_frames: 8,

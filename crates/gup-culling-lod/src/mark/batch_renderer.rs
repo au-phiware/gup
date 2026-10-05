@@ -16,9 +16,9 @@
 //! - **LOD selection**: Distant/small marks use simplified geometry
 //! - **Statistics tracking**: Draw calls, instances, and cache metrics per frame
 
-use crate::buffer::{BufferType, GpuBuffer};
-use crate::error::{GupError, GupResult};
-use crate::mark::{Mark, MarkInfo, MarkInfoImpl};
+use gup::buffer::{BufferType, GpuBuffer};
+use gup::error::{GupError, GupResult};
+use gup::mark::{Mark, MarkInfo, MarkInfoImpl};
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -373,9 +373,9 @@ pub struct BatchFrameStats {
 }
 
 impl BatchFrameStats {
-    /// Convert to the comprehensive [`MarkPerformanceMetrics`](super::performance_opt::MarkPerformanceMetrics) format.
-    pub fn to_performance_metrics(&self) -> super::performance_opt::MarkPerformanceMetrics {
-        super::performance_opt::MarkPerformanceMetrics {
+    /// Convert to the comprehensive [`MarkPerformanceMetrics`](gup::mark::performance_opt::MarkPerformanceMetrics) format.
+    pub fn to_performance_metrics(&self) -> gup::mark::performance_opt::MarkPerformanceMetrics {
+        gup::mark::performance_opt::MarkPerformanceMetrics {
             vertex_processing_time: std::time::Duration::from_micros(self.buffer_upload_us),
             instance_batching_time: std::time::Duration::from_micros(self.batch_prepare_us),
             pipeline_transition_time: std::time::Duration::ZERO,
@@ -998,7 +998,7 @@ impl InstancedBatchRenderer {
         occlusion_culler: &super::occlusion_culler::OcclusionCuller,
     ) -> GupResult<super::occlusion_culler::OcclusionResult> {
         if instances.is_empty() {
-            return Err(crate::error::GupError::invalid_operation(
+            return Err(gup::error::GupError::invalid_operation(
                 "Cannot run occlusion culling on zero instances".to_string(),
             ));
         }
@@ -1038,8 +1038,8 @@ impl InstancedBatchRenderer {
     /// Use the returned order with `render_batches_sorted` for optimal
     /// rendering performance.
     pub fn sorted_batch_order(&self) -> Vec<usize> {
-        use super::performance_opt::{SortedBatch, sort_batches_by_state};
-        use crate::render::BlendMode;
+        use gup::mark::performance_opt::{SortedBatch, sort_batches_by_state};
+        use gup::render::BlendMode;
 
         let sorted_batches: Vec<SortedBatch> = self
             .batches
@@ -1061,8 +1061,8 @@ impl InstancedBatchRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mark::Circle;
-    use crate::mark::circle::{CircleAttributes, CircleInstance};
+    use gup::mark::Circle;
+    use gup::mark::circle::{CircleAttributes, CircleInstance};
 
     // ------------------------------------------------------------------
     // CullingManager unit tests (no GPU required)
@@ -1325,7 +1325,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_geometry_cache_multiple_types() -> GupResult<()> {
-        use crate::mark::Rectangle;
+        use gup::mark::Rectangle;
 
         let ctx = create_test_context().await?;
         let device = &ctx.device;
@@ -1388,8 +1388,8 @@ mod tests {
     // GPU integration tests (require headless context)
     // ------------------------------------------------------------------
 
-    async fn create_test_context() -> GupResult<std::sync::Arc<crate::context::GupContext>> {
-        crate::context::GupContext::headless().await
+    async fn create_test_context() -> GupResult<std::sync::Arc<gup::context::GupContext>> {
+        gup::context::GupContext::headless().await
     }
 
     #[tokio::test]
@@ -1522,8 +1522,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_rectangle_instancing() -> GupResult<()> {
-        use crate::mark::Rectangle;
-        use crate::mark::rectangle::{RectangleAttributes, RectangleInstance};
+        use gup::mark::Rectangle;
+        use gup::mark::rectangle::{RectangleAttributes, RectangleInstance};
 
         let ctx = create_test_context().await?;
         let device = &ctx.device;
@@ -1547,8 +1547,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_multi_mark_type_batching() -> GupResult<()> {
-        use crate::mark::Rectangle;
-        use crate::mark::rectangle::{RectangleAttributes, RectangleInstance};
+        use gup::mark::Rectangle;
+        use gup::mark::rectangle::{RectangleAttributes, RectangleInstance};
 
         let ctx = create_test_context().await?;
         let device = &ctx.device;
@@ -1576,7 +1576,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_pipeline_caching_multiple_types() -> GupResult<()> {
-        use crate::mark::Rectangle;
+        use gup::mark::Rectangle;
 
         let ctx = create_test_context().await?;
         let device = &ctx.device;
@@ -1685,7 +1685,7 @@ mod tests {
     async fn test_gpu_culling_path() {
         use crate::mark::compute_instance_filter::ComputeInstanceFilter;
 
-        let ctx = match crate::context::GupContext::headless().await {
+        let ctx = match gup::context::GupContext::headless().await {
             Ok(c) => c,
             Err(_) => return,
         };
@@ -1738,7 +1738,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cpu_fallback_when_no_filter() {
-        let ctx = match crate::context::GupContext::headless().await {
+        let ctx = match gup::context::GupContext::headless().await {
             Ok(c) => c,
             Err(_) => return,
         };
@@ -1778,7 +1778,7 @@ mod tests {
     async fn test_submit_with_occlusion_culling() {
         use crate::mark::occlusion_culler::OcclusionCuller;
 
-        let ctx = match crate::context::GupContext::headless().await {
+        let ctx = match gup::context::GupContext::headless().await {
             Ok(c) => c,
             Err(_) => return,
         };
@@ -1786,8 +1786,10 @@ mod tests {
         let queue = &ctx.queue;
 
         let culler = OcclusionCuller::new(device).unwrap();
-        let mut config = BatchRendererConfig::default();
-        config.enable_occlusion_culling = true;
+        let mut config = BatchRendererConfig {
+            enable_occlusion_culling: true,
+            ..Default::default()
+        };
         config.occlusion_params.conservative_margin = 0.0;
 
         let mut renderer = InstancedBatchRenderer::new(config);

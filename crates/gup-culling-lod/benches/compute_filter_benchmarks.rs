@@ -16,10 +16,12 @@
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use gup::context::GupContext;
-use gup::mark::batch_renderer::{
+use gup_culling_lod::mark::batch_renderer::{
     BatchRendererConfig, CullingManager, InstanceAttributes, Viewport2D,
 };
-use gup::mark::compute_instance_filter::{ComputeInstanceFilter, PooledComputeInstanceFilter};
+use gup_culling_lod::mark::compute_instance_filter::{
+    ComputeInstanceFilter, PooledComputeInstanceFilter,
+};
 use std::hint::black_box;
 use wgpu::{BufferDescriptor, BufferUsages};
 
@@ -307,7 +309,7 @@ fn bench_gpu_sort(c: &mut Criterion) {
 // ---------------------------------------------------------------------------
 
 fn bench_gpu_sort_only(c: &mut Criterion) {
-    use gup::mark::radix_sort::{RadixSorter, SortBuffers};
+    use gup_culling_lod::mark::radix_sort::{RadixSorter, SortBuffers};
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let ctx = match rt.block_on(GupContext::headless()) {

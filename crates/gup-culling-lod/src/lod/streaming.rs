@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Streaming LOD manager — incremental, memory-bounded LOD updates from a
-//! live [`DataStream<T>`](crate::streaming::DataStream).
+//! live [`DataStream<T>`](gup::streaming::DataStream).
 //!
 //! The [`StreamingLodManager`] accepts a data stream, routes each arriving
 //! point to the spatially correct pyramid cell at every LOD level, uploads
@@ -12,8 +12,8 @@
 //! # Quick Start
 //!
 //! ```no_run
-//! use gup::lod::{LodPyramidBuilder, VertexData, MemoryBudget};
-//! use gup::lod::streaming::{StreamingLodManager, SpatiallyKeyed};
+//! use gup_culling_lod::lod::{LodPyramidBuilder, VertexData, MemoryBudget};
+//! use gup_culling_lod::lod::streaming::{StreamingLodManager, SpatiallyKeyed};
 //! use gup::streaming::{DataStream, StreamMode, BackpressureStrategy};
 //! use gup::render::RenderContext;
 //!
@@ -57,10 +57,10 @@
 use std::collections::{HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
 
-use crate::buffer::{BufferType, GpuBuffer};
 use crate::lod::{LodLevelMetadata, LodPyramid, VertexData};
-use crate::streaming::DataStream;
-use crate::streaming::streaming_buffer::StreamUpdate;
+use gup::buffer::{BufferType, GpuBuffer};
+use gup::streaming::DataStream;
+use gup::streaming::streaming_buffer::StreamUpdate;
 
 // ---------------------------------------------------------------------------
 // SpatiallyKeyed
@@ -75,7 +75,7 @@ use crate::streaming::streaming_buffer::StreamUpdate;
 /// # Examples
 ///
 /// ```
-/// use gup::lod::streaming::SpatiallyKeyed;
+/// use gup_culling_lod::lod::streaming::SpatiallyKeyed;
 ///
 /// #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 /// #[repr(C)]
@@ -117,7 +117,7 @@ impl SpatiallyKeyed for VertexData {
 /// # Examples
 ///
 /// ```
-/// use gup::lod::MemoryBudget;
+/// use gup_culling_lod::lod::MemoryBudget;
 ///
 /// let budget = MemoryBudget::bytes(512 * 1024 * 1024); // 512 MiB
 /// assert_eq!(budget.as_bytes(), 512 * 1024 * 1024);
@@ -174,7 +174,7 @@ pub enum EvictionPolicy {
 /// # Examples
 ///
 /// ```
-/// use gup::lod::streaming::{ScatterPoint, SpatiallyKeyed};
+/// use gup_culling_lod::lod::streaming::{ScatterPoint, SpatiallyKeyed};
 ///
 /// let pt = ScatterPoint { x: 1.5, y: 3.7 };
 /// assert_eq!(pt.spatial_key(), (1.5, 3.7));
@@ -229,7 +229,7 @@ struct StreamingLevel {
 // ---------------------------------------------------------------------------
 
 /// Manages a live-updating, memory-bounded LOD pyramid fed by a
-/// [`DataStream<T>`](crate::streaming::DataStream).
+/// [`DataStream<T>`](gup::streaming::DataStream).
 ///
 /// See the [module-level documentation](self) for a full usage example.
 pub struct StreamingLodManager<T: bytemuck::Pod + bytemuck::Zeroable + SpatiallyKeyed> {
@@ -675,7 +675,7 @@ mod tests {
 
     #[tokio::test]
     async fn manager_construction() {
-        let guard = crate::test_utils::create_test_context().await.unwrap();
+        let guard = gup::test_utils::create_test_context().await.unwrap();
         let ctx = guard.context();
         let device = ctx.device();
         let queue = ctx.queue();
@@ -702,7 +702,7 @@ mod tests {
 
     #[tokio::test]
     async fn insert_single_point_touches_all_levels() {
-        let guard = crate::test_utils::create_test_context().await.unwrap();
+        let guard = gup::test_utils::create_test_context().await.unwrap();
         let ctx = guard.context();
         let device = ctx.device();
         let queue = ctx.queue();
@@ -746,7 +746,7 @@ mod tests {
 
     #[tokio::test]
     async fn batch_coalesces_writes_per_cell() {
-        let guard = crate::test_utils::create_test_context().await.unwrap();
+        let guard = gup::test_utils::create_test_context().await.unwrap();
         let ctx = guard.context();
         let device = ctx.device();
         let queue = ctx.queue();
@@ -782,7 +782,7 @@ mod tests {
 
     #[tokio::test]
     async fn distinct_quadrants_route_to_distinct_cells() {
-        let guard = crate::test_utils::create_test_context().await.unwrap();
+        let guard = gup::test_utils::create_test_context().await.unwrap();
         let ctx = guard.context();
         let device = ctx.device();
         let queue = ctx.queue();
@@ -820,7 +820,7 @@ mod tests {
 
     #[tokio::test]
     async fn all_points_share_root_cell() {
-        let guard = crate::test_utils::create_test_context().await.unwrap();
+        let guard = gup::test_utils::create_test_context().await.unwrap();
         let ctx = guard.context();
         let device = ctx.device();
         let queue = ctx.queue();
@@ -853,7 +853,7 @@ mod tests {
 
     #[tokio::test]
     async fn eviction_enforces_budget() {
-        let guard = crate::test_utils::create_test_context().await.unwrap();
+        let guard = gup::test_utils::create_test_context().await.unwrap();
         let ctx = guard.context();
         let device = ctx.device();
         let queue = ctx.queue();
@@ -907,7 +907,7 @@ mod tests {
 
     #[tokio::test]
     async fn poll_drains_stream_and_updates() {
-        let guard = crate::test_utils::create_test_context().await.unwrap();
+        let guard = gup::test_utils::create_test_context().await.unwrap();
         let ctx = guard.context();
         let device = ctx.device();
         let queue = ctx.queue();
@@ -941,7 +941,7 @@ mod tests {
 
     #[tokio::test]
     async fn eviction_removes_oldest_keeps_newest() {
-        let guard = crate::test_utils::create_test_context().await.unwrap();
+        let guard = gup::test_utils::create_test_context().await.unwrap();
         let ctx = guard.context();
         let device = ctx.device();
         let queue = ctx.queue();
@@ -1023,7 +1023,7 @@ mod tests {
 
     #[tokio::test]
     async fn poll_with_budget_evicts_automatically() {
-        let guard = crate::test_utils::create_test_context().await.unwrap();
+        let guard = gup::test_utils::create_test_context().await.unwrap();
         let ctx = guard.context();
         let device = ctx.device();
         let queue = ctx.queue();
@@ -1063,7 +1063,7 @@ mod tests {
 
     #[tokio::test]
     async fn integration_1000_iterations() {
-        let guard = crate::test_utils::create_test_context().await.unwrap();
+        let guard = gup::test_utils::create_test_context().await.unwrap();
         let ctx = guard.context();
         let device = ctx.device();
         let queue = ctx.queue();

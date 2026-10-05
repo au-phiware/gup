@@ -1,5 +1,6 @@
 # Visual regression (GUP-388): harness unit tests, chart-builder golden
-# images with structural checks, and the examples smoke test.
+# images with structural checks, the examples smoke test, and the quarantined
+# gup-culling-lod crate (GUP-390).
 #
 # GitHub runners have no GPU, so wgpu runs on Mesa's lavapipe (software
 # Vulkan). Golden images were blessed on a hardware GPU; if lavapipe output
@@ -58,8 +59,16 @@ jobs:
       - name: Chart-builder golden images
         run: cargo test --lib visual_regression -- --test-threads=1
 
+      # gup-culling-lod is quarantined (GUP-390): a workspace member but not a
+      # default member, so nothing else builds it. Keep every target compiling
+      # and its GPU tests passing so RFC-001 chunk culling can draw from it.
+      - name: Quarantined culling/LOD crate
+        run: |
+          cargo check -p gup-culling-lod --all-targets --all-features
+          cargo test -p gup-culling-lod -- --test-threads=1
+
       - name: Build examples
-        run: cargo build --examples --all-features
+        run: cargo build --examples --all-features -p gup -p gup-culling-lod
 
       - name: Examples smoke test (skip list + headless runs)
         run: >-

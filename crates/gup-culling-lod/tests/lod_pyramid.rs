@@ -6,8 +6,8 @@
 //! Exercises the full CPU build path at multiple dataset sizes and verifies
 //! that each level's point count is strictly less than the previous level's.
 
-use gup::lod::{LodPyramidBuilder, VertexData};
 use gup::test_utils::create_test_context;
+use gup_culling_lod::lod::{LodPyramidBuilder, VertexData};
 
 /// Generate a synthetic dataset of `n` points in a unit square.
 fn synthetic_data(n: usize) -> Vec<VertexData> {

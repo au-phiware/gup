@@ -138,7 +138,6 @@ pub mod label;
 pub mod layout;
 pub mod lighting;
 pub mod linked_selection;
-pub mod lod;
 pub mod mark;
 pub mod mark_selection;
 pub mod math;
@@ -149,7 +148,6 @@ pub mod pipeline_cache;
 pub mod platform;
 pub mod prelude;
 pub mod render;
-pub mod renderer;
 pub mod scale;
 pub mod selection;
 pub mod selection_mask;
@@ -299,28 +297,16 @@ pub use mark::advanced_rendering::{
     MarkViewport, MultiPassConfig, MultiPassRenderer, RenderPassConfig, RenderStateManager,
     RenderStateSnapshot, ScissorRect, UploadStats,
 };
-pub use mark::batch_renderer::{
-    BatchFrameStats, BatchRendererConfig, CullingManager, GeometryCache, InstanceAttributes,
-    InstancedBatchRenderer, LodLevel, RenderBatch, Viewport2D,
-};
 pub use mark::boxplot::{
     BoxPlot, BoxPlotAttributes, BoxPlotInstance, BoxPlotOrientation, BoxPlotVertex,
 };
 pub use mark::circle::{Circle, CircleAttributes, CircleInstance, CircleVertex};
-pub use mark::compute_instance_filter::{
-    ComputeInstanceFilter, FilterConfig, FilterResult, PooledComputeInstanceFilter,
-};
 pub use mark::filled_polygon::{
     FilledPolygon, FilledPolygonAttributes, FilledPolygonVertex, TriangleInstance,
     tessellate_polygon,
 };
 pub use mark::line::{Line, LineAttributes, LineInstance, LineStyle, LineVertex};
-pub use mark::occlusion_culler::{
-    OcclusionCuller, OcclusionGpuConfig, OcclusionParams, OcclusionResult, PooledOcclusionCuller,
-};
-pub use mark::radix_sort::{RadixSorter, SortBuffers, SortConfig};
 pub use mark::rectangle::{Rectangle, RectangleAttributes, RectangleInstance, RectangleVertex};
-pub use mark::unified_culling_pipeline::UnifiedCullingPipeline;
 pub use mark::{Mark, MarkInfo, MarkInfoImpl, MarkRegistry};
 
 // Export selection system

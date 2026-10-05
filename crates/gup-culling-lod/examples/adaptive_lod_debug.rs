@@ -15,9 +15,11 @@
 //! cargo run --example adaptive_lod_debug
 //! ```
 
-use gup::lod::{LodPyramidBuilder, VertexData};
 use gup::render::RenderContext;
-use gup::renderer::{AdaptiveRenderer, AdaptiveRendererConfig, AdaptiveViewport, ViewportCuller};
+use gup_culling_lod::lod::{LodPyramidBuilder, VertexData};
+use gup_culling_lod::renderer::{
+    AdaptiveRenderer, AdaptiveRendererConfig, AdaptiveViewport, ViewportCuller,
+};
 
 fn main() {
     env_logger::init();

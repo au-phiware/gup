@@ -337,6 +337,10 @@ between mark types in compositions.
 
 ## Batch Rendering Types
 
+> **Quarantined (GUP-390).** These types moved to the experimental
+> `crates/gup-culling-lod` crate (`gup_culling_lod::mark`). They are not wired
+> into the `gup` chart builders.
+
 ### InstancedBatchRenderer
 
 Groups mark instances by pipeline to minimize GPU state changes across draw

@@ -34,7 +34,7 @@
 //!
 //! [`CullingManager`]: super::CullingManager
 
-use crate::error::{GupError, GupResult};
+use gup::error::{GupError, GupResult};
 use std::sync::Arc;
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
@@ -1283,7 +1283,7 @@ impl PooledComputeInstanceFilter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::context::GupContext;
+    use gup::context::GupContext;
 
     /// Helper: create a storage buffer from a slice of InstanceAttributes.
     fn create_instance_buffer(device: &Device, instances: &[InstanceAttributes]) -> Buffer {

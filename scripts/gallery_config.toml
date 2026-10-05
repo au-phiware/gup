@@ -542,14 +542,6 @@ category = "Animation & Streaming"
 skip = true
 skip_reason = "Console-only (streaming demo, no GPU rendering)"
 
-[[examples]]
-name = "streaming_lod_scatter"
-source = "examples/streaming_lod_scatter.rs"
-description = "Streaming LOD scatter plot"
-category = "Animation & Streaming"
-skip = true
-skip_reason = "Console-only (LOD streaming demo, no GPU rendering)"
-
 # ---------------------------------------------------------------------------
 # Patterns
 # ---------------------------------------------------------------------------
@@ -709,22 +701,6 @@ description = "Render context lifecycle demo"
 category = "Debug & Development"
 skip = true
 skip_reason = "Console-only (context lifecycle demo, no GPU rendering)"
-
-[[examples]]
-name = "adaptive_lod_debug"
-source = "examples/adaptive_lod_debug.rs"
-description = "Adaptive LOD debug visualisation"
-category = "Debug & Development"
-skip = true
-skip_reason = "Console-only (LOD debug output, no GPU rendering)"
-
-[[examples]]
-name = "lod_pyramid_debug"
-source = "examples/lod_pyramid_debug.rs"
-description = "LOD pyramid debug visualisation"
-category = "Debug & Development"
-skip = true
-skip_reason = "Console-only (LOD pyramid debug, no GPU rendering)"
 
 # ---------------------------------------------------------------------------
 # Window & Surface

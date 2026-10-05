@@ -10,7 +10,9 @@
 //! in tight criterion loops (same issue as buffer_benchmarks.rs).
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use gup::mark::batch_renderer::{BatchRendererConfig, CullingManager, LodLevel, Viewport2D};
+use gup_culling_lod::mark::batch_renderer::{
+    BatchRendererConfig, CullingManager, LodLevel, Viewport2D,
+};
 use std::hint::black_box;
 
 // ---------------------------------------------------------------------------

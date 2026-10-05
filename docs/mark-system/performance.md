@@ -94,10 +94,14 @@ Remember WGSL alignment rules:
 
 ### 4. Viewport Culling
 
+> **Quarantined (GUP-390).** These types moved to the experimental
+> `crates/gup-culling-lod` crate (`gup_culling_lod::mark`). They are not wired
+> into the `gup` chart builders.
+
 Skip instances outside the visible area using the `CullingManager`:
 
 ```rust
-use gup::mark::{CullingManager, Viewport2D, LodLevel};
+use gup_culling_lod::mark::{CullingManager, Viewport2D, LodLevel};
 
 let viewport = Viewport2D {
     min_x: -1.0, max_x: 1.0,
@@ -123,7 +127,7 @@ for instance in &instances {
 For large datasets, use the GPU to filter instances before rendering:
 
 ```rust
-use gup::mark::{ComputeInstanceFilter, FilterConfig};
+use gup_culling_lod::mark::{ComputeInstanceFilter, FilterConfig};
 
 let filter = ComputeInstanceFilter::new(&device, FilterConfig {
     workgroup_size: 256,

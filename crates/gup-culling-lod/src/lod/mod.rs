@@ -21,8 +21,8 @@
 //! # Usage
 //!
 //! ```no_run
-//! use gup::lod::{LodPyramid, LodPyramidBuilder, VertexData, select_lod_level};
-//! use gup::mark::batch_renderer::Viewport2D;
+//! use gup_culling_lod::lod::{LodPyramid, LodPyramidBuilder, VertexData, select_lod_level};
+//! use gup_culling_lod::mark::batch_renderer::Viewport2D;
 //!
 //! // Build a pyramid from CPU data
 //! # async fn example() -> gup::error::GupResult<()> {
@@ -48,8 +48,8 @@ pub mod streaming;
 pub use selection::select_lod_level;
 pub use streaming::MemoryBudget;
 
-use crate::buffer::{BufferPool, BufferType, GpuBuffer};
-use crate::error::{GupError, GupResult};
+use gup::buffer::{BufferPool, BufferType, GpuBuffer};
+use gup::error::{GupError, GupResult};
 use wgpu::util::DeviceExt;
 
 /// A single point in the LOD pyramid.
@@ -885,7 +885,7 @@ mod tests {
 
     #[tokio::test]
     async fn build_cpu_small_dataset() {
-        let guard = crate::test_utils::create_test_context().await.unwrap();
+        let guard = gup::test_utils::create_test_context().await.unwrap();
         let ctx = guard.context();
         let device = ctx.device();
         let queue = ctx.queue();
@@ -916,7 +916,7 @@ mod tests {
 
     #[tokio::test]
     async fn build_cpu_empty_data_returns_error() {
-        let guard = crate::test_utils::create_test_context().await.unwrap();
+        let guard = gup::test_utils::create_test_context().await.unwrap();
         let ctx = guard.context();
         let result = LodPyramidBuilder::new().build_cpu(ctx.device(), ctx.queue(), &[]);
         assert!(result.is_err());
@@ -924,7 +924,7 @@ mod tests {
 
     #[tokio::test]
     async fn build_cpu_memory_budget() {
-        let guard = crate::test_utils::create_test_context().await.unwrap();
+        let guard = gup::test_utils::create_test_context().await.unwrap();
         let ctx = guard.context();
         let device = ctx.device();
         let queue = ctx.queue();

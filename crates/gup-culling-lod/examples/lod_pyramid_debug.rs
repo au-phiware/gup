@@ -13,9 +13,9 @@
 //! cargo run --example lod_pyramid_debug
 //! ```
 
-use gup::lod::{LodPyramidBuilder, VertexData, select_lod_level};
-use gup::mark::batch_renderer::Viewport2D;
 use gup::render::RenderContext;
+use gup_culling_lod::lod::{LodPyramidBuilder, VertexData, select_lod_level};
+use gup_culling_lod::mark::batch_renderer::Viewport2D;
 
 fn main() {
     env_logger::init();

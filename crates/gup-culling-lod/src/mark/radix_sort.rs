@@ -27,7 +27,7 @@
 //!
 //! [`ComputeInstanceFilter`]: super::compute_instance_filter::ComputeInstanceFilter
 
-use crate::error::{GupError, GupResult};
+use gup::error::{GupError, GupResult};
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, BindingType, Buffer, BufferBindingType, BufferDescriptor, BufferUsages,
@@ -849,8 +849,8 @@ pub async fn read_u32_buffer(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::context::GupContext;
     use crate::mark::batch_renderer::InstanceAttributes;
+    use gup::context::GupContext;
 
     use wgpu::PollType;
 

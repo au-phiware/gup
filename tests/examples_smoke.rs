@@ -21,7 +21,7 @@
 //! info they take about 17 GB), or:
 //!
 //! ```text
-//! cargo build --examples --all-features
+//! cargo build --examples --all-features -p gup -p gup-culling-lod
 //! cargo test --all-features --test examples_smoke -- --ignored --test-threads=1
 //! ```
 //!
@@ -69,7 +69,13 @@ fn root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
 }
 
-/// Example targets of the `gup` package, from `cargo metadata`.
+/// Workspace packages whose examples the smoke test covers.
+/// `gup-culling-lod` is not a default workspace member (GUP-390), so its
+/// examples are built explicitly with `-p gup-culling-lod`; covering them here
+/// keeps the quarantined culling/LOD code running, not just compiling.
+const PACKAGES: &[&str] = &["gup", "gup-culling-lod"];
+
+/// Example targets of the [`PACKAGES`], from `cargo metadata`.
 fn examples() -> Vec<Example> {
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
     let out = Command::new(cargo)
@@ -89,16 +95,20 @@ fn examples() -> Vec<Example> {
         String::from_utf8_lossy(&out.stderr)
     );
     let meta: serde_json::Value = serde_json::from_slice(&out.stdout).expect("metadata JSON");
-    let package = meta["packages"]
+    let packages: Vec<&serde_json::Value> = meta["packages"]
         .as_array()
         .expect("packages")
         .iter()
-        .find(|p| p["name"] == "gup")
-        .expect("gup package");
-    let mut examples: Vec<Example> = package["targets"]
-        .as_array()
-        .expect("targets")
+        .filter(|p| PACKAGES.iter().any(|name| p["name"] == *name))
+        .collect();
+    assert_eq!(
+        packages.len(),
+        PACKAGES.len(),
+        "expected workspace packages {PACKAGES:?} in cargo metadata"
+    );
+    let mut examples: Vec<Example> = packages
         .iter()
+        .flat_map(|p| p["targets"].as_array().expect("targets"))
         .filter(|t| {
             t["kind"]
                 .as_array()
@@ -347,7 +357,7 @@ fn examples_run_headless() {
                 ));
             } else {
                 problems.push(format!(
-                    "{}: binary {} missing; run `cargo build --examples --all-features` first",
+                    "{}: binary {} missing; run `cargo build --examples --all-features -p gup -p gup-culling-lod` first",
                     ex.name,
                     bin.display()
                 ));

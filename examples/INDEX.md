@@ -120,7 +120,6 @@ Run any example with: `cargo run --example <name>`
 | `keyframe_animation_storage`  | Storage buffer keyframe animation    |
 | `data_transition_scatter`     | Data transition scatter animation    |
 | `streaming_live_chart`        | Streaming live data chart            |
-| `streaming_lod_scatter`       | Streaming LOD scatter plot           |
 
 ---
 
@@ -172,16 +171,14 @@ Run any example with: `cargo run --example <name>`
 
 ## Debug & Development
 
-| Example                        | Description                      |
-| ------------------------------ | -------------------------------- |
-| `gpu_debug_demo`               | GPU debug tools demo             |
-| `gpu_debug_visualization_demo` | GPU hit test debug visualiser    |
-| `buffer_demo`                  | GPU buffer pool management demo  |
-| `buffer_validation_demo`       | Buffer validation and debugging  |
-| `resource_graph_demo`          | GPU resource dependency graph    |
-| `context_demo`                 | Render context lifecycle demo    |
-| `adaptive_lod_debug`           | Adaptive LOD debug visualisation |
-| `lod_pyramid_debug`            | LOD pyramid debug visualisation  |
+| Example                        | Description                     |
+| ------------------------------ | ------------------------------- |
+| `gpu_debug_demo`               | GPU debug tools demo            |
+| `gpu_debug_visualization_demo` | GPU hit test debug visualiser   |
+| `buffer_demo`                  | GPU buffer pool management demo |
+| `buffer_validation_demo`       | Buffer validation and debugging |
+| `resource_graph_demo`          | GPU resource dependency graph   |
+| `context_demo`                 | Render context lifecycle demo   |
 
 ---
 

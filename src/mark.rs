@@ -89,25 +89,20 @@
 //! - Custom mark guide: `docs/CUSTOM_MARK_GUIDE.md`
 
 pub mod advanced_rendering;
-pub mod batch_renderer;
 pub mod box3d;
 pub mod boxplot;
 pub mod circle;
 pub mod composite;
-pub mod compute_instance_filter;
 pub mod filled_polygon;
 pub mod geo_path;
 pub mod gpu_path_tessellator;
 pub mod line;
 pub mod line3d;
-pub mod occlusion_culler;
 pub mod path;
 pub mod performance_opt;
-pub mod radix_sort;
 pub mod rectangle;
 pub mod sphere3d;
 pub mod text;
-pub mod unified_culling_pipeline;
 pub mod validation;
 
 pub use advanced_rendering::{
@@ -115,17 +110,12 @@ pub use advanced_rendering::{
     MarkViewport, MultiPassConfig, MultiPassRenderer, RenderPassConfig, RenderStateManager,
     RenderStateSnapshot, ScissorRect, UploadStats,
 };
-pub use batch_renderer::{
-    BatchFrameStats, BatchRendererConfig, CullingManager, GeometryCache, InstanceAttributes,
-    InstancedBatchRenderer, LodLevel, RenderBatch, Viewport2D,
-};
 pub use box3d::{Box3D, Box3DAttributes, Box3DInstance, Box3DVertex};
 pub use boxplot::{BoxPlot, BoxPlotAttributes, BoxPlotInstance, BoxPlotOrientation, BoxPlotVertex};
 pub use circle::{Circle, CircleAttributes, CircleVertex};
 pub use composite::{
     CompositeMark, CompositeMarkAttributes, CompositeMarkVertex, SubMark, Transform,
 };
-pub use compute_instance_filter::{ComputeInstanceFilter, FilterConfig, FilterResult};
 pub use filled_polygon::{
     FilledPolygon, FilledPolygonAttributes, FilledPolygonVertex, TriangleInstance,
     tessellate_polygon,
@@ -137,9 +127,6 @@ pub use geo_path::{
 pub use gpu_path_tessellator::GpuPathTessellator;
 pub use line::{Line, LineAttributes, LineStyle, LineVertex};
 pub use line3d::{Line3D, Line3DAttributes, Line3DInstance, Line3DVertex};
-pub use occlusion_culler::{
-    OcclusionCuller, OcclusionGpuConfig, OcclusionParams, OcclusionResult, PooledOcclusionCuller,
-};
 pub use path::{Path, PathAttributes, PathCommand, PathVertex};
 pub use performance_opt::{
     EnhancedCacheStats, EnhancedPipelineCache, MarkBufferPool, MarkBufferPoolStats,
@@ -148,7 +135,6 @@ pub use performance_opt::{
 pub use rectangle::{Rectangle, RectangleAttributes, RectangleVertex};
 pub use sphere3d::{Sphere3D, Sphere3DAttributes, Sphere3DInstance, Sphere3DVertex};
 pub use text::{Text, TextMarkAttributes, TextVertex};
-pub use unified_culling_pipeline::UnifiedCullingPipeline;
 
 use crate::error::GupResult;
 use crate::shader_pipeline::ComposableShaderPipeline;

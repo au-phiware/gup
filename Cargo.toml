@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "gup-macros", "gup-bevy", "gup-egui", "gup-ios", "gup-android", "crates/gup-visual-regression"]
+members = [".", "gup-macros", "gup-bevy", "gup-egui", "gup-ios", "gup-android", "crates/gup-visual-regression", "crates/gup-culling-lod"]
 
 [package]
 name = "gup"
@@ -135,27 +135,11 @@ name = "spatial_index_benchmarks"
 harness = false
 
 [[bench]]
-name = "mark_batch_benchmarks"
-harness = false
-
-[[bench]]
 name = "axis_performance_benchmarks"
 harness = false
 
 [[bench]]
-name = "compute_filter_benchmarks"
-harness = false
-
-[[bench]]
 name = "selection_mask_benchmarks"
-harness = false
-
-[[bench]]
-name = "occlusion_culling_benchmarks"
-harness = false
-
-[[bench]]
-name = "unified_culling_benchmarks"
 harness = false
 
 [[bench]]
@@ -185,16 +169,6 @@ harness = false
 [[bench]]
 name = "streaming_builder"
 harness = false
-
-[[bench]]
-name = "lod_pyramid"
-harness = false
-required-features = ["gpu-bench"]
-
-[[bench]]
-name = "adaptive_renderer"
-harness = false
-required-features = ["gpu-bench"]
 
 [[bench]]
 name = "treemap_layout"
@@ -309,10 +283,6 @@ path = "examples/z_sort_demo.rs"
 [[example]]
 name = "force_directed_graph"
 path = "examples/force_directed_graph.rs"
-
-[[example]]
-name = "lod_pyramid_debug"
-path = "examples/lod_pyramid_debug.rs"
 
 [[example]]
 name = "pdf_export"

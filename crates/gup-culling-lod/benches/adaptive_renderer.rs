@@ -28,9 +28,11 @@
 //! ```
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use gup::lod::{LodPyramidBuilder, VertexData};
 use gup::render::RenderContext;
-use gup::renderer::{AdaptiveRenderer, AdaptiveRendererConfig, AdaptiveViewport, ViewportCuller};
+use gup_culling_lod::lod::{LodPyramidBuilder, VertexData};
+use gup_culling_lod::renderer::{
+    AdaptiveRenderer, AdaptiveRendererConfig, AdaptiveViewport, ViewportCuller,
+};
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;

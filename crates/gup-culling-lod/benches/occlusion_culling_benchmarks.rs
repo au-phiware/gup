@@ -12,8 +12,10 @@
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use gup::context::GupContext;
-use gup::mark::batch_renderer::{InstanceAttributes, Viewport2D};
-use gup::mark::occlusion_culler::{OcclusionCuller, OcclusionParams, PooledOcclusionCuller};
+use gup_culling_lod::mark::batch_renderer::{InstanceAttributes, Viewport2D};
+use gup_culling_lod::mark::occlusion_culler::{
+    OcclusionCuller, OcclusionParams, PooledOcclusionCuller,
+};
 use wgpu::{BufferDescriptor, BufferUsages};
 
 // ---------------------------------------------------------------------------
@@ -112,7 +114,7 @@ fn bench_occlusion_dispatch(c: &mut Criterion) {
                     &viewport,
                     &params,
                 ));
-                criterion::black_box(result.unwrap());
+                std::hint::black_box(result.unwrap());
             });
         });
     }
@@ -164,7 +166,7 @@ fn bench_pooled_occlusion_dispatch(c: &mut Criterion) {
                     &viewport,
                     &params,
                 ));
-                criterion::black_box(result.unwrap());
+                std::hint::black_box(result.unwrap());
             });
         });
     }
@@ -221,7 +223,7 @@ fn bench_culling_effectiveness(c: &mut Criterion) {
                         &viewport,
                         &params,
                     ));
-                    criterion::black_box(result.unwrap());
+                    std::hint::black_box(result.unwrap());
                 });
             },
         );
@@ -284,7 +286,7 @@ fn bench_mixed_size_dispatch(c: &mut Criterion) {
                         &viewport,
                         &params,
                     ));
-                    criterion::black_box(result.unwrap());
+                    std::hint::black_box(result.unwrap());
                 });
             },
         );

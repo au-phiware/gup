@@ -12,7 +12,7 @@
 //! 2. **Prefix sum** — compute output indices via parallel scan.
 //! 3. **Compact** — write visible points to a dense output buffer.
 
-use crate::error::{GupError, GupResult};
+use gup::error::{GupError, GupResult};
 use std::sync::Arc;
 use wgpu::*;
 

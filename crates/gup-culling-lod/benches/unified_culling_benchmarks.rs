@@ -8,10 +8,14 @@
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use gup::context::GupContext;
-use gup::mark::batch_renderer::{InstanceAttributes, Viewport2D};
-use gup::mark::compute_instance_filter::{ComputeInstanceFilter, PooledComputeInstanceFilter};
-use gup::mark::occlusion_culler::{OcclusionCuller, OcclusionParams, PooledOcclusionCuller};
-use gup::mark::unified_culling_pipeline::UnifiedCullingPipeline;
+use gup_culling_lod::mark::batch_renderer::{InstanceAttributes, Viewport2D};
+use gup_culling_lod::mark::compute_instance_filter::{
+    ComputeInstanceFilter, PooledComputeInstanceFilter,
+};
+use gup_culling_lod::mark::occlusion_culler::{
+    OcclusionCuller, OcclusionParams, PooledOcclusionCuller,
+};
+use gup_culling_lod::mark::unified_culling_pipeline::UnifiedCullingPipeline;
 use wgpu::{BufferDescriptor, BufferUsages};
 
 // ---------------------------------------------------------------------------

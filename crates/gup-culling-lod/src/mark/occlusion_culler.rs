@@ -13,9 +13,10 @@
 //!    order / instance index) to a coverage map via `atomicMax`. Small marks
 //!    write to level 0 directly; large marks write to the finest mip level
 //!    where their cell count fits within a 4096-cell budget.
-//! 1b. **Fill coverage down** — Coarse-level writes are propagated to their
-//!    2×2 children at the next finer level, repeated from coarsest to level 1,
-//!    so that level 0 is fully populated even for large marks.
+//!
+//!    **1b. Fill coverage down** — Coarse-level writes are propagated to
+//!    their 2×2 children at the next finer level, repeated from coarsest to
+//!    level 1, so that level 0 is fully populated even for large marks.
 //! 2. **Generate Hi-Z** — Successive mip levels store the *minimum* z of
 //!    their 2×2 children, so a cell value represents the shallowest
 //!    (earliest-drawn) mark in the region.
@@ -42,7 +43,7 @@
 //! // result.visibility_buffer[i] == 0 → occluded, 1 → visible
 //! ```
 
-use crate::error::{GupError, GupResult};
+use gup::error::{GupError, GupResult};
 use std::sync::Arc;
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
@@ -1095,8 +1096,8 @@ impl PooledOcclusionCuller {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::context::GupContext;
     use crate::mark::InstanceAttributes;
+    use gup::context::GupContext;
 
     /// Helper: create a storage buffer from a slice of InstanceAttributes.
     fn create_instance_buffer(device: &Device, instances: &[InstanceAttributes]) -> Buffer {

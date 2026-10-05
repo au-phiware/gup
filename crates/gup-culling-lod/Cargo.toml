@@ -1,0 +1,58 @@
+[package]
+name = "gup-culling-lod"
+version = "0.1.0"
+authors = ["Corin Lawson <corin@phiware.com.au>"]
+edition = "2024"
+description = "Experimental, unwired GPU culling and level-of-detail code for Gup (see README)"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/au-phiware/gup"
+readme = "README.md"
+publish = false
+
+# Quarantined from the `gup` crate by GUP-390 (strategic review 2026-10,
+# Decision 1). It is a workspace member so `cargo check -p gup-culling-lod`
+# works and CI keeps it compiling, but it is not a default member: a plain
+# `cargo build` / `cargo test` at the repository root does not build it.
+
+[dependencies]
+gup = { path = "../.." }
+wgpu = { version = "27.0", features = ["wgsl"] }
+bytemuck = { version = "1.23", features = ["derive"] }
+futures = "0.3"
+futures-channel = "0.3"
+log = "0.4"
+
+[dev-dependencies]
+env_logger = "0.10"
+tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "macros", "time"] }
+criterion = { version = "0.7", features = ["html_reports"] }
+
+[features]
+## Gate for benchmarks that need a GPU device.
+gpu-bench = []
+
+[[bench]]
+name = "mark_batch_benchmarks"
+harness = false
+
+[[bench]]
+name = "compute_filter_benchmarks"
+harness = false
+
+[[bench]]
+name = "occlusion_culling_benchmarks"
+harness = false
+
+[[bench]]
+name = "unified_culling_benchmarks"
+harness = false
+
+[[bench]]
+name = "lod_pyramid"
+harness = false
+required-features = ["gpu-bench"]
+
+[[bench]]
+name = "adaptive_renderer"
+harness = false
+required-features = ["gpu-bench"]

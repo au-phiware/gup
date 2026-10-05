@@ -47,7 +47,7 @@ directory: with debug info the 109 example binaries take about 17 GB.
 ```bash
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target}/smoke"
 export CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_DEV_STRIP=true CARGO_INCREMENTAL=0
-cargo build --examples --all-features
+cargo build --examples --all-features -p gup -p gup-culling-lod
 cargo test --all-features --test examples_smoke -- --include-ignored --test-threads=1
 ```
 

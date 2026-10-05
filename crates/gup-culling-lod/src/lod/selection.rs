@@ -50,8 +50,8 @@ pub const DEFAULT_MAX_DENSITY: f32 = 4.0;
 /// # Examples
 ///
 /// ```
-/// use gup::mark::batch_renderer::Viewport2D;
-/// use gup::lod::select_lod_level;
+/// use gup_culling_lod::mark::batch_renderer::Viewport2D;
+/// use gup_culling_lod::lod::select_lod_level;
 ///
 /// let vp = Viewport2D { pixel_width: 1920.0, pixel_height: 1080.0, ..Default::default() };
 /// let level = select_lod_level(&vp, 1_000_000, 5);

@@ -3144,6 +3144,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "gup-culling-lod"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "criterion",
+ "env_logger",
+ "futures",
+ "futures-channel",
+ "gup",
+ "log",
+ "tokio",
+ "wgpu",
+]
+
+[[package]]
 name = "gup-egui"
 version = "0.1.0"
 dependencies = [

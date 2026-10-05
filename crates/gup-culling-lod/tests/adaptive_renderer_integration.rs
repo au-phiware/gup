@@ -7,9 +7,9 @@
 //! running tier selection across different viewport configurations, and
 //! verifying blend transitions.
 
-use gup::lod::{LodPyramidBuilder, VertexData};
-use gup::renderer::{AdaptiveRenderer, AdaptiveRendererConfig, AdaptiveViewport};
 use gup::test_utils::create_test_context;
+use gup_culling_lod::lod::{LodPyramidBuilder, VertexData};
+use gup_culling_lod::renderer::{AdaptiveRenderer, AdaptiveRendererConfig, AdaptiveViewport};
 
 /// Generate a synthetic dataset of `n` points in a 100×100 data space.
 fn synthetic_data(n: usize) -> Vec<VertexData> {
@@ -206,7 +206,7 @@ async fn viewport_cull_all_visible() {
         .build_cpu(ctx.device(), ctx.queue(), &data)
         .unwrap();
 
-    let culler = gup::renderer::ViewportCuller::new(ctx.device()).unwrap();
+    let culler = gup_culling_lod::renderer::ViewportCuller::new(ctx.device()).unwrap();
 
     // Use bounds that contain all data points (0..100, 0..100).
     let result = culler
@@ -246,7 +246,7 @@ async fn viewport_cull_partial() {
         .build_cpu(ctx.device(), ctx.queue(), &data)
         .unwrap();
 
-    let culler = gup::renderer::ViewportCuller::new(ctx.device()).unwrap();
+    let culler = gup_culling_lod::renderer::ViewportCuller::new(ctx.device()).unwrap();
 
     // Use bounds that cover only the first quadrant (0..50, 0..50).
     let result = culler
@@ -286,7 +286,7 @@ async fn viewport_cull_none_visible() {
         .build_cpu(ctx.device(), ctx.queue(), &data)
         .unwrap();
 
-    let culler = gup::renderer::ViewportCuller::new(ctx.device()).unwrap();
+    let culler = gup_culling_lod::renderer::ViewportCuller::new(ctx.device()).unwrap();
 
     // Use bounds completely outside the data range.
     let result = culler
@@ -324,7 +324,7 @@ async fn viewport_cull_no_gpu_errors() {
         .build_cpu(ctx.device(), ctx.queue(), &data)
         .unwrap();
 
-    let culler = gup::renderer::ViewportCuller::new(ctx.device()).unwrap();
+    let culler = gup_culling_lod::renderer::ViewportCuller::new(ctx.device()).unwrap();
 
     // Run culling on each tier.
     for tier in 0..pyramid.level_count() {

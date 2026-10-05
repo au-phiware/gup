@@ -19,7 +19,7 @@
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use gup::RenderContext;
-use gup::lod::{LodPyramidBuilder, VertexData};
+use gup_culling_lod::lod::{LodPyramidBuilder, VertexData};
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
