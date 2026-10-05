@@ -81,6 +81,15 @@ Work iteratively in small, focused increments. For each increment:
 - Stage only the files relevant to this increment.
 - Write a concise commit message describing what was done and why.
 - Commit small, commit regularly — each commit should be a coherent unit.
+- **Checkpoint rule**: commit every time the code builds after finishing a
+  module, an AC, or about 30 minutes of work — whichever comes first. Never
+  leave a new crate or module untracked. Sessions can be cut off without warning
+  (usage limits), and uncommitted work is then at risk. If the code doesn't
+  build yet, stub or `#[cfg(any())]`-gate the unfinished part so it does, then
+  commit.
+- **Build output**: if the orchestrator gives you a `CARGO_TARGET_DIR`, export
+  it in every shell, including the one you commit from, so the pre-commit hook
+  uses it too.
 
 ### Repeat
 
