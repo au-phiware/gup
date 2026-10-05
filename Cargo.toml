@@ -349,6 +349,20 @@ name = "pdf_export"
 path = "examples/pdf_export.rs"
 required-features = ["pdf"]
 
+# Timing-budget tests (GUP-398). Their assertions are wall-clock budgets, too
+# noisy for shared CI runners in a plain `cargo test`, so `test = false` keeps
+# them out of it. The Performance workflow runs them by name
+# (`cargo test --test <name>`), which is where budgets are tracked.
+[[test]]
+name = "interaction_performance_tests"
+path = "tests/interaction_performance_tests.rs"
+test = false
+
+[[test]]
+name = "cross_platform_axis_performance_tests"
+path = "tests/cross_platform_axis_performance_tests.rs"
+test = false
+
 # Debug, profiling and performance-report tests (GUP-390: `debug` feature).
 [[test]]
 name = "baseline_recommendation_tests"
@@ -369,6 +383,9 @@ required-features = ["debug"]
 name = "performance_ci_tests"
 path = "tests/performance_ci_tests.rs"
 required-features = ["debug"]
+# Wall-clock budgets: run by name in the Performance workflow, not by a plain
+# `cargo test` (see the timing-budget note above).
+test = false
 
 [[test]]
 name = "performance_export_tests"

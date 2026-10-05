@@ -12,7 +12,7 @@ set -euo pipefail
 mapfile -t gated < <(
   cargo metadata --no-deps --format-version 1 |
     jq -r '.packages[] | select(.name == "gup") | .targets[]
-      | select(.kind == ["test"])
+      | select(.kind == ["test"] and .test)
       | select((.["required-features"] // []) | index("debug"))
       | .name'
 )

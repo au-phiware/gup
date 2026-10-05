@@ -133,7 +133,7 @@ jobs:
         continue-on-error: true
         run: |
           if [ -f performance_report.json ]; then
-            status=$(python3 -c "import json; d=json.load(open('performance_report.json')); print(d.get('status','pass'))" 2>/dev/null || echo "pass")
+            status=$(python3 -c "import json; d=json.load(open('performance_report.json')); print(d.get('status','fail'))" || echo "fail")
             echo "status=$status" >> $GITHUB_OUTPUT
             if [ "$status" = "fail" ]; then
               echo "⚠️ Performance regressions detected"
@@ -194,7 +194,7 @@ jobs:
             }
 
       - name: Fail on critical regressions
-        if: steps.regression_check.outcome == 'failure'
+        if: steps.perf_alert.outcome == 'failure' || steps.regression_check.outcome == 'failure'
         run: |
           echo "❌ Performance regressions detected. Review the performance report."
           exit 1
@@ -292,10 +292,12 @@ jobs:
       - name: Run axis performance tests
         if: runner.os != 'Windows'
         run: |
-          nix develop --command bash -c "cargo test --test cross_platform_axis_performance_tests -- --test-threads=1 --nocapture 2>&1 | tee axis_performance_output.txt"
+          nix develop --command bash -c "set -o pipefail; cargo test --test cross_platform_axis_performance_tests -- --test-threads=1 --nocapture 2>&1 | tee axis_performance_output.txt"
 
       - name: Run axis performance tests (Windows)
         if: runner.os == 'Windows'
+        # bash with pipefail, so a test failure is not hidden by `tee`.
+        shell: bash
         run: |
           cargo test --test cross_platform_axis_performance_tests -- --test-threads=1 --nocapture 2>&1 | tee axis_performance_output.txt
 
@@ -357,7 +359,7 @@ jobs:
 
       - name: Run native axis benchmarks (WASM module unit tests)
         run: |
-          nix develop --command bash -c "cargo test -p gup --lib wasm_bench_axis -- --test-threads=1 --nocapture 2>&1 | tee wasm_axis_test_output.txt"
+          nix develop --command bash -c "set -o pipefail; cargo test -p gup --lib wasm_bench_axis -- --test-threads=1 --nocapture 2>&1 | tee wasm_axis_test_output.txt"
 
       # ChromeDriver now matches Chromium version (GUP-240).
       # Note: headless Chrome tests require WebGPU support which may not

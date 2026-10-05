@@ -82,6 +82,8 @@ jobs:
 
       - name: Build Swift package
         working-directory: pkg/ios/GupSwift
+        # bash with pipefail, so a build failure is not hidden by `tee`.
+        shell: bash
         run: |
           swift build \
             -Xlinker -L${{ github.workspace }}/lib \
