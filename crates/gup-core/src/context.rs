@@ -166,6 +166,8 @@ struct Inner {
     /// holding it, and their batches draw without it.
     text: Mutex<TextSystem>,
     uploads: UploadCounters,
+    /// Command-buffer submissions made through [`Context::submit`].
+    submissions: AtomicU64,
 }
 
 /// Gup's GPU context: a device, its queue and the device-scoped caches.
@@ -339,6 +341,7 @@ impl Context {
                 pipelines: Mutex::new(PipelineCache::default()),
                 text: Mutex::new(text),
                 uploads: UploadCounters::default(),
+                submissions: AtomicU64::new(0),
             }),
         }
     }
@@ -382,6 +385,26 @@ impl Context {
     /// Everything this context has written to GPU memory so far, by kind.
     pub fn upload_stats(&self) -> UploadStats {
         self.inner.uploads.snapshot()
+    }
+
+    /// How many times `gup-core` has submitted command buffers to this
+    /// context's queue. Draw-in-pass hosts can check that
+    /// [`Renderer::prepare`](crate::Renderer::prepare) and
+    /// [`Prepared::draw`](crate::Prepared::draw) never submit on their
+    /// behalf (RFC-001 §2).
+    pub fn submissions(&self) -> u64 {
+        self.inner.submissions.load(Ordering::Relaxed)
+    }
+
+    /// Submit `commands` to the queue, counted in
+    /// [`submissions`](Self::submissions). The only way `gup-core` submits
+    /// (`tests::every_submit_is_counted` enforces it).
+    pub(crate) fn submit(
+        &self,
+        commands: impl IntoIterator<Item = wgpu::CommandBuffer>,
+    ) -> wgpu::SubmissionIndex {
+        self.inner.submissions.fetch_add(1, Ordering::Relaxed);
+        self.inner.queue.submit(commands)
     }
 
     /// Write `data` into `buffer` at `offset`, counted as `kind`. This,
@@ -648,7 +671,7 @@ mod tests {
         cx.write_buffer(Upload::Uniform, &src, 0, &payload);
         let mut enc = cx.device().create_command_encoder(&Default::default());
         enc.copy_buffer_to_buffer(&src, 0, &dst, 0, 8);
-        cx.queue().submit([enc.finish()]);
+        cx.submit([enc.finish()]);
         dst.slice(..).map_async(wgpu::MapMode::Read, |r| r.unwrap());
         cx.wait_idle().unwrap();
         let bytes = dst.slice(..).get_mapped_range().to_vec();
@@ -775,20 +798,9 @@ mod tests {
         let _shaders = cx.shaders();
     }
 
-    /// The upload counters are only proof if nothing bypasses them: no
-    /// source file but this one may write to GPU memory directly. (The
-    /// test-only compute harness in `scale/conformance.rs` is exempt; it
-    /// builds its own inputs and never runs in a chart.)
-    #[test]
-    fn every_gpu_write_is_counted() {
-        const DIRECT: [&str; 5] = [
-            "queue().write_buffer",
-            "write_texture(",
-            "create_buffer_init",
-            "create_texture_with_data",
-            "mapped_at_creation: true",
-        ];
-        const EXEMPT: [&str; 2] = ["context.rs", "conformance.rs"];
+    /// Lines of `gup-core`'s sources (outside `exempt` files) that contain
+    /// any of `patterns`, as `file:line: text`.
+    fn source_lines_containing(patterns: &[&str], exempt: &[&str]) -> Vec<String> {
         fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
             for entry in std::fs::read_dir(dir).unwrap() {
                 let path = entry.unwrap().path();
@@ -805,23 +817,57 @@ mod tests {
             &mut files,
         );
         assert!(files.len() > 10, "{files:?}");
-        let mut offenders = Vec::new();
+        let mut found = Vec::new();
         for file in files {
             let name = file.file_name().unwrap().to_string_lossy().into_owned();
-            if EXEMPT.contains(&name.as_str()) {
+            if exempt.contains(&name.as_str()) {
                 continue;
             }
             let text = std::fs::read_to_string(&file).unwrap();
             for (n, line) in text.lines().enumerate() {
-                if DIRECT.iter().any(|d| line.contains(d)) && !line.contains("cx.write_texture(") {
-                    offenders.push(format!("{}:{}: {}", file.display(), n + 1, line.trim()));
+                if patterns.iter().any(|p| line.contains(p)) {
+                    found.push(format!("{}:{}: {}", file.display(), n + 1, line.trim()));
                 }
             }
         }
+        found
+    }
+
+    /// The upload counters are only proof if nothing bypasses them: no
+    /// source file but this one may write to GPU memory directly. (The
+    /// test-only compute harness in `scale/conformance.rs` is exempt; it
+    /// builds its own inputs and never runs in a chart.)
+    #[test]
+    fn every_gpu_write_is_counted() {
+        const DIRECT: [&str; 5] = [
+            "queue().write_buffer",
+            "write_texture(",
+            "create_buffer_init",
+            "create_texture_with_data",
+            "mapped_at_creation: true",
+        ];
+        let offenders: Vec<String> =
+            source_lines_containing(&DIRECT, &["context.rs", "conformance.rs"])
+                .into_iter()
+                .filter(|line| !line.contains("cx.write_texture("))
+                .collect();
         assert!(
             offenders.is_empty(),
             "write through Context::write_buffer / buffer_with_data / write_texture so \
              the upload counters see it:\n{}",
+            offenders.join("\n")
+        );
+    }
+
+    /// Likewise for submissions: draw-in-pass relies on `gup-core` never
+    /// submitting except through [`Context::submit`].
+    #[test]
+    fn every_submit_is_counted() {
+        let offenders =
+            source_lines_containing(&["queue().submit", "queue.submit"], &["context.rs"]);
+        assert!(
+            offenders.is_empty(),
+            "submit through Context::submit so Context::submissions sees it:\n{}",
             offenders.join("\n")
         );
     }

@@ -503,6 +503,7 @@ mod timings {
             format: wgpu::TextureFormat::Rgba8Unorm,
             width: 640,
             height: 400,
+            dpr: 1.0,
             samples: 1,
         };
         let (mut preload, mut emit, mut compose, mut create, mut total) =

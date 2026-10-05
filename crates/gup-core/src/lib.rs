@@ -75,7 +75,7 @@ pub use selection::Selection;
 pub use shader::WgslModule;
 #[cfg(all(feature = "window", not(target_arch = "wasm32")))]
 pub use show::show;
-pub use target::{Frame, ImageTarget, RenderTarget};
+pub use target::{DEFAULT_SAMPLES, Frame, ImageTarget, RenderTarget, TargetOptions, TextureTarget};
 #[cfg(feature = "window")]
 pub use window::WindowTarget;
 

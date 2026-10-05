@@ -16,8 +16,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-/// Everything about a target that pipelines depend on (RFC-001 §7).
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+/// Everything about a target that pipelines and layout depend on
+/// (RFC-001 §7).
+///
+/// Pipelines are keyed by `(kind, format, samples)`; `width`, `height`
+/// and `dpr` only feed uniforms, scissors and glyph rasterisation, so they
+/// are never part of a key. Pick passes (RFC-001 S9) always use one
+/// sample, whatever the colour target's count.
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct TargetDesc {
     /// Colour format. Gup renders into non-sRGB views and blends in sRGB
     /// space.
@@ -26,7 +32,13 @@ pub struct TargetDesc {
     pub width: u32,
     /// Physical height.
     pub height: u32,
-    /// MSAA sample count (S0a: always 1; analytic AA).
+    /// Physical pixels per logical pixel. A scene `w` logical pixels wide
+    /// fills a target `w × dpr` physical pixels wide.
+    pub dpr: f32,
+    /// MSAA sample count of the pass's colour attachment: 4 by default on
+    /// Gup-owned targets, whatever the host's pass uses in draw-in-pass
+    /// mode. Points, lines and text antialias analytically at any count;
+    /// MSAA smooths the geometric edges of rects and diagonal rules.
     pub samples: u32,
 }
 
@@ -624,8 +636,25 @@ impl Renderer {
     /// Prepare `scene` for a target described by `desc`: write the view
     /// uniform, fetch (or create) pipelines, upload guide instances and
     /// new glyphs.
+    ///
+    /// This is the draw-in-pass entry point for hosts that own the render
+    /// pass (egui paint callbacks, a bevy render graph node): pass the
+    /// format and sample count of the host's colour attachment, then call
+    /// [`Prepared::draw`] inside the host's pass. Gup writes uniforms and
+    /// instances to the queue (flushed by the host's next submit) but
+    /// never submits on the host's behalf (RFC-001 §2).
     pub fn prepare(&mut self, cx: &Context, scene: &Scene, desc: &TargetDesc) -> Result<Prepared> {
-        let dpr = desc.width as f32 / scene.width;
+        if !(desc.dpr.is_finite() && desc.dpr > 0.0) || desc.samples == 0 {
+            return Err(Error::config(
+                "target",
+                format!(
+                    "dpr {} and samples {} must be positive (a single-sample target has \
+                     samples 1)",
+                    desc.dpr, desc.samples
+                ),
+            ));
+        }
+        let dpr = desc.dpr;
         let gpu = self.gpu(cx);
         cx.write_buffer(
             Upload::Uniform,
@@ -685,10 +714,13 @@ impl Renderer {
     }
 
     /// Draw `scene` into `target` in one render pass and present it: the
-    /// one render path every Gup-owned target ([`ImageTarget`],
-    /// `WindowTarget`) shares.
+    /// one render path every Gup-owned pass ([`ImageTarget`],
+    /// [`TextureTarget`], `WindowTarget`) shares. The pass clears to the
+    /// scene's background and, on a multisampled target, resolves into the
+    /// frame's texture.
     ///
     /// [`ImageTarget`]: crate::ImageTarget
+    /// [`TextureTarget`]: crate::TextureTarget
     pub fn render(
         &mut self,
         cx: &Context,
@@ -706,15 +738,7 @@ impl Renderer {
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("gup scene"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: frame.view(),
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(prepared.clear_color()),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
+                color_attachments: &[Some(frame.color_attachment(prepared.clear_color()))],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,

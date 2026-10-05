@@ -6,7 +6,7 @@
 use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::render::TargetDesc;
-use crate::target::{Frame, Readback, RenderTarget};
+use crate::target::{DEFAULT_SAMPLES, Frame, Readback, RenderTarget, check_samples, msaa_view};
 use std::sync::Arc;
 use winit::window::Window;
 
@@ -28,6 +28,9 @@ pub struct WindowTarget {
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
     present_modes: Vec<wgpu::PresentMode>,
+    /// MSAA sample count; the multisampled texture follows the surface size.
+    samples: u32,
+    msaa: Option<wgpu::TextureView>,
     can_capture: bool,
     capture_requested: bool,
     captured: Option<Readback>,
@@ -113,11 +116,20 @@ impl WindowTarget {
             },
         };
         surface.configure(cx.device(), &config);
+        // 4× MSAA where the device can, else analytic antialiasing only.
+        let samples = if check_samples(cx, view_format, DEFAULT_SAMPLES).is_ok() {
+            DEFAULT_SAMPLES
+        } else {
+            1
+        };
+        let msaa = msaa_view(cx, view_format, config.width, config.height, samples);
         Ok(Self {
             window,
             surface,
             config,
             present_modes: caps.present_modes,
+            samples,
+            msaa,
             can_capture,
             capture_requested: false,
             captured: None,
@@ -151,7 +163,38 @@ impl WindowTarget {
         }
         self.config.width = width;
         self.config.height = height;
+        self.configure(cx);
+    }
+
+    /// Configure the surface and size the multisampled texture to it.
+    fn configure(&mut self, cx: &Context) {
         self.surface.configure(cx.device(), &self.config);
+        self.msaa = msaa_view(
+            cx,
+            self.view_format(),
+            self.config.width,
+            self.config.height,
+            self.samples,
+        );
+    }
+
+    /// The MSAA sample count (4 by default where the device supports it).
+    pub fn samples(&self) -> u32 {
+        self.samples
+    }
+
+    /// Draw with `samples` samples per pixel (1 or 4).
+    pub fn set_samples(&mut self, cx: &Context, samples: u32) -> Result<()> {
+        check_samples(cx, self.view_format(), samples)?;
+        self.samples = samples;
+        self.msaa = msaa_view(
+            cx,
+            self.view_format(),
+            self.config.width,
+            self.config.height,
+            samples,
+        );
+        Ok(())
     }
 
     /// The present modes the surface supports.
@@ -205,7 +248,8 @@ impl RenderTarget for WindowTarget {
             format: self.view_format(),
             width: self.config.width,
             height: self.config.height,
-            samples: 1,
+            dpr: self.dpr(),
+            samples: self.samples,
         }
     }
 
@@ -217,7 +261,7 @@ impl RenderTarget for WindowTarget {
                 let size = self.window.inner_size();
                 self.config.width = size.width.max(1);
                 self.config.height = size.height.max(1);
-                self.surface.configure(cx.device(), &self.config);
+                self.configure(cx);
                 self.surface
                     .get_current_texture()
                     .map_err(|e| Error::config("window target", format!("no frame: {e}")))?
@@ -228,7 +272,12 @@ impl RenderTarget for WindowTarget {
             format: Some(self.view_format()),
             ..Default::default()
         });
-        Ok(Frame::new(texture.texture.clone(), view, Some(texture)))
+        Ok(Frame::new(
+            texture.texture.clone(),
+            view,
+            self.msaa.clone(),
+            Some(texture),
+        ))
     }
 
     fn present(&mut self, cx: &Context, frame: Frame, commands: wgpu::CommandBuffer) -> Result<()> {
@@ -242,7 +291,7 @@ impl RenderTarget for WindowTarget {
             self.captured = Some(Readback::encode(cx, frame.texture(), &mut encoder)?);
             buffers.push(encoder.finish());
         }
-        cx.queue().submit(buffers);
+        cx.submit(buffers);
         self.window.pre_present_notify();
         if let Some(surface) = frame.surface {
             surface.present();

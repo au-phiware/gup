@@ -7,9 +7,14 @@
 //!
 //! - [`ImageTarget`]: an offscreen texture read back to an
 //!   [`image::RgbaImage`];
+//! - [`TextureTarget`]: a texture the host owns (to show in egui, bevy or
+//!   its own UI);
 //! - `WindowTarget` (feature `window`): a winit window's surface.
 //!
-//! Texture and draw-in-pass targets are RFC-001 S3.
+//! Hosts that own the render pass itself skip targets altogether and use
+//! [`Renderer::prepare`] and [`Prepared::draw`](crate::Prepared::draw)
+//! (draw-in-pass). Gup-owned passes are multisampled (4× by default) and
+//! resolve into the frame's texture.
 
 use crate::context::Context;
 use crate::error::{Error, Result};
@@ -21,19 +26,128 @@ use std::path::Path;
 pub trait RenderTarget {
     /// What pipelines rendering to this target are keyed on.
     fn desc(&self) -> TargetDesc;
-    /// The texture to draw the next frame into.
+    /// The texture (and multisampled view) to draw the next frame into.
     fn acquire(&mut self, cx: &Context) -> Result<Frame>;
     /// Submit `commands` (which draw into `frame`) and show or keep the
     /// result.
     fn present(&mut self, cx: &Context, frame: Frame, commands: wgpu::CommandBuffer) -> Result<()>;
 }
 
+/// The MSAA sample count of Gup-owned targets (RFC-001 §7). WebGPU
+/// guarantees 1 and 4 for every renderable 8-bit format.
+pub const DEFAULT_SAMPLES: u32 = 4;
+
+/// Options of a target Gup draws into but whose size the caller chose
+/// ([`ImageTarget`], [`TextureTarget`]).
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct TargetOptions {
+    /// Physical pixels per logical pixel. A scene `w × h` logical pixels
+    /// in size fills the target when it is `w·dpr × h·dpr` physical
+    /// pixels; text is rasterised at `size × dpr`.
+    pub dpr: f32,
+    /// MSAA sample count: [`DEFAULT_SAMPLES`] (4) or 1.
+    pub samples: u32,
+}
+
+impl Default for TargetOptions {
+    fn default() -> Self {
+        Self {
+            dpr: 1.0,
+            samples: DEFAULT_SAMPLES,
+        }
+    }
+}
+
+impl TargetOptions {
+    /// Single-sampled (no MSAA): analytic antialiasing only.
+    pub fn single_sample(self) -> Self {
+        Self { samples: 1, ..self }
+    }
+
+    /// With `dpr` physical pixels per logical pixel.
+    pub fn with_dpr(self, dpr: f32) -> Self {
+        Self { dpr, ..self }
+    }
+
+    fn validate(&self, cx: &Context, format: wgpu::TextureFormat) -> Result<()> {
+        if !(self.dpr.is_finite() && self.dpr > 0.0) {
+            return Err(Error::config(
+                "target dpr",
+                format!("{} must be finite and positive", self.dpr),
+            ));
+        }
+        check_samples(cx, format, self.samples)
+    }
+}
+
+/// Whether `format` can be rendered with `samples` samples on `cx`.
+pub(crate) fn check_samples(cx: &Context, format: wgpu::TextureFormat, samples: u32) -> Result<()> {
+    if samples == 1 {
+        return Ok(());
+    }
+    // Without adapter-specific format features, wgpu allows only the
+    // WebGPU counts (1 and 4).
+    let adapter_specific = cx
+        .caps()
+        .features
+        .contains(wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES);
+    let supported = match cx.adapter() {
+        Some(adapter) => {
+            (samples == 4 || adapter_specific)
+                && adapter
+                    .get_texture_format_features(format)
+                    .flags
+                    .sample_count_supported(samples)
+        }
+        // A host's device (`Context::from_wgpu`): trust WebGPU's guarantee.
+        None => samples == 4,
+    };
+    if supported {
+        Ok(())
+    } else {
+        Err(Error::config(
+            "target samples",
+            format!("{format:?} cannot be multisampled {samples}× on this device; use 1 or 4"),
+        ))
+    }
+}
+
+/// A multisampled colour texture's view, or `None` for one sample.
+pub(crate) fn msaa_view(
+    cx: &Context,
+    format: wgpu::TextureFormat,
+    width: u32,
+    height: u32,
+    samples: u32,
+) -> Option<wgpu::TextureView> {
+    (samples > 1).then(|| {
+        cx.device()
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("gup msaa colour"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: samples,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            })
+            .create_view(&Default::default())
+    })
+}
+
 /// One frame of a [`RenderTarget`]: the texture and the (non-sRGB) view
-/// to render into.
+/// that end up holding the image, plus the multisampled view the pass
+/// draws into when the target has more than one sample.
 #[derive(Debug)]
 pub struct Frame {
     texture: wgpu::Texture,
     view: wgpu::TextureView,
+    msaa: Option<wgpu::TextureView>,
     /// Set for window frames; presenting consumes it.
     #[cfg_attr(not(feature = "window"), allow(dead_code))]
     pub(crate) surface: Option<wgpu::SurfaceTexture>,
@@ -43,16 +157,19 @@ impl Frame {
     pub(crate) fn new(
         texture: wgpu::Texture,
         view: wgpu::TextureView,
+        msaa: Option<wgpu::TextureView>,
         surface: Option<wgpu::SurfaceTexture>,
     ) -> Self {
         Self {
             texture,
             view,
+            msaa,
             surface,
         }
     }
 
-    /// The view to attach as the pass's colour target.
+    /// The single-sample view that holds the finished frame (the resolve
+    /// target when the frame is multisampled).
     pub fn view(&self) -> &wgpu::TextureView {
         &self.view
     }
@@ -60,6 +177,26 @@ impl Frame {
     /// The texture behind [`view`](Self::view).
     pub fn texture(&self) -> &wgpu::Texture {
         &self.texture
+    }
+
+    /// The pass's colour attachment: clear to `clear`, draw into the
+    /// multisampled view if there is one and resolve it into
+    /// [`view`](Self::view), else draw into `view` directly.
+    pub fn color_attachment(&self, clear: wgpu::Color) -> wgpu::RenderPassColorAttachment<'_> {
+        let (view, resolve_target, store) = match &self.msaa {
+            // The samples are only needed until they are resolved.
+            Some(msaa) => (msaa, Some(&self.view), wgpu::StoreOp::Discard),
+            None => (&self.view, None, wgpu::StoreOp::Store),
+        };
+        wgpu::RenderPassColorAttachment {
+            view,
+            depth_slice: None,
+            resolve_target,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(clear),
+                store,
+            },
+        }
     }
 }
 
@@ -166,19 +303,37 @@ impl Readback {
 ///
 /// Renders into an `Rgba8Unorm` (non-sRGB) texture: colours are
 /// sRGB-encoded and blended in sRGB space, as browsers, SVG and PDF do
-/// (RFC-001 §7). The readback un-premultiplies alpha.
+/// (RFC-001 §7). The pass is 4× multisampled by default and resolves into
+/// that texture. The readback un-premultiplies alpha.
+///
+/// Reading back is `async` on every platform; native code can use
+/// [`render_blocking`](Self::render_blocking). In a browser, await
+/// [`render`](Self::render) (or [`read`](Self::read)): the browser maps
+/// the buffer, so nothing blocks.
 #[derive(Debug)]
 pub struct ImageTarget {
     desc: TargetDesc,
     texture: wgpu::Texture,
     view: wgpu::TextureView,
+    msaa: Option<wgpu::TextureView>,
     /// The copy of the last presented frame.
     pending: Option<Readback>,
 }
 
 impl ImageTarget {
-    /// A `width × height` physical-pixel target.
+    /// A `width × height` physical-pixel target with the default
+    /// [`TargetOptions`] (dpr 1, 4× MSAA).
     pub fn new(cx: &Context, width: u32, height: u32) -> Result<Self> {
+        Self::with_options(cx, width, height, TargetOptions::default())
+    }
+
+    /// A `width × height` physical-pixel target with `options`.
+    pub fn with_options(
+        cx: &Context,
+        width: u32,
+        height: u32,
+        options: TargetOptions,
+    ) -> Result<Self> {
         let max = cx.caps().limits.max_texture_dimension_2d;
         if width == 0 || height == 0 || width > max || height > max {
             return Err(Error::config(
@@ -186,11 +341,14 @@ impl ImageTarget {
                 format!("{width}×{height} must be between 1 and {max} pixels on each side"),
             ));
         }
+        let format = wgpu::TextureFormat::Rgba8Unorm;
+        options.validate(cx, format)?;
         let desc = TargetDesc {
-            format: wgpu::TextureFormat::Rgba8Unorm,
+            format,
             width,
             height,
-            samples: 1,
+            dpr: options.dpr,
+            samples: options.samples,
         };
         let texture = cx.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("gup image target"),
@@ -202,7 +360,7 @@ impl ImageTarget {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: desc.format,
+            format,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
@@ -211,6 +369,7 @@ impl ImageTarget {
             desc,
             texture,
             view,
+            msaa: msaa_view(cx, format, width, height, options.samples),
             pending: None,
         })
     }
@@ -245,7 +404,12 @@ impl RenderTarget for ImageTarget {
     }
 
     fn acquire(&mut self, _cx: &Context) -> Result<Frame> {
-        Ok(Frame::new(self.texture.clone(), self.view.clone(), None))
+        Ok(Frame::new(
+            self.texture.clone(),
+            self.view.clone(),
+            self.msaa.clone(),
+            None,
+        ))
     }
 
     fn present(&mut self, cx: &Context, frame: Frame, commands: wgpu::CommandBuffer) -> Result<()> {
@@ -255,8 +419,114 @@ impl RenderTarget for ImageTarget {
                 label: Some("gup image readback"),
             });
         let readback = Readback::encode(cx, frame.texture(), &mut encoder)?;
-        cx.queue().submit([commands, encoder.finish()]);
+        cx.submit([commands, encoder.finish()]);
         self.pending = Some(readback);
+        Ok(())
+    }
+}
+
+/// A texture the host owns, as a [`RenderTarget`]: Gup clears it and
+/// draws a scene into it in its own pass and submission, and the host
+/// samples or composites the texture however it likes (an egui image, a
+/// bevy material, a UI layer).
+///
+/// The texture must be 2D, single-sampled and have `RENDER_ATTACHMENT`
+/// usage. Gup draws through a non-sRGB view of it (RFC-001 §7), so an
+/// sRGB texture must list its non-sRGB twin in `view_formats`
+/// (`Rgba8UnormSrgb` → `Rgba8Unorm`). With more than one sample, Gup
+/// draws into its own multisampled texture and resolves into the host's.
+///
+/// Hosts that want Gup's draws inside **their** pass use
+/// [`Renderer::prepare`] and [`Prepared::draw`](crate::Prepared::draw)
+/// instead; Gup then never submits.
+#[derive(Debug)]
+pub struct TextureTarget {
+    desc: TargetDesc,
+    texture: wgpu::Texture,
+    view: wgpu::TextureView,
+    msaa: Option<wgpu::TextureView>,
+}
+
+impl TextureTarget {
+    /// Draw into `texture` (which must come from `cx`'s device) with
+    /// `options`.
+    pub fn new(cx: &Context, texture: wgpu::Texture, options: TargetOptions) -> Result<Self> {
+        let problem = if !texture
+            .usage()
+            .contains(wgpu::TextureUsages::RENDER_ATTACHMENT)
+        {
+            Some(format!(
+                "needs RENDER_ATTACHMENT usage (it has {:?})",
+                texture.usage()
+            ))
+        } else if texture.dimension() != wgpu::TextureDimension::D2
+            || texture.depth_or_array_layers() != 1
+        {
+            Some("must be a single 2D layer".to_owned())
+        } else if texture.sample_count() != 1 {
+            Some(format!(
+                "is {}× multisampled; give Gup the single-sample texture to resolve into, or \
+                 draw in your own pass with Renderer::prepare and Prepared::draw",
+                texture.sample_count()
+            ))
+        } else {
+            None
+        };
+        if let Some(problem) = problem {
+            return Err(Error::config(
+                "texture target",
+                format!("the {:?} texture {problem}", texture.format()),
+            ));
+        }
+        let format = texture.format().remove_srgb_suffix();
+        options.validate(cx, format)?;
+        let (width, height) = (texture.width(), texture.height());
+        let view = texture.create_view(&wgpu::TextureViewDescriptor {
+            label: Some("gup texture target"),
+            format: Some(format),
+            ..Default::default()
+        });
+        Ok(Self {
+            desc: TargetDesc {
+                format,
+                width,
+                height,
+                dpr: options.dpr,
+                samples: options.samples,
+            },
+            msaa: msaa_view(cx, format, width, height, options.samples),
+            texture,
+            view,
+        })
+    }
+
+    /// The host's texture.
+    pub fn texture(&self) -> &wgpu::Texture {
+        &self.texture
+    }
+}
+
+impl RenderTarget for TextureTarget {
+    fn desc(&self) -> TargetDesc {
+        self.desc
+    }
+
+    fn acquire(&mut self, _cx: &Context) -> Result<Frame> {
+        Ok(Frame::new(
+            self.texture.clone(),
+            self.view.clone(),
+            self.msaa.clone(),
+            None,
+        ))
+    }
+
+    fn present(
+        &mut self,
+        cx: &Context,
+        _frame: Frame,
+        commands: wgpu::CommandBuffer,
+    ) -> Result<()> {
+        cx.submit([commands]);
         Ok(())
     }
 }

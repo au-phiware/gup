@@ -307,7 +307,7 @@ mod tests {
         });
         let mut enc = cx.device().create_command_encoder(&Default::default());
         enc.copy_buffer_to_buffer(&buffer, 0, &readback, 0, buffer.size());
-        cx.queue().submit([enc.finish()]);
+        cx.submit([enc.finish()]);
         readback
             .slice(..)
             .map_async(wgpu::MapMode::Read, |r| r.unwrap());

@@ -253,15 +253,7 @@ impl Bench {
             };
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("gup scene"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: frame.view(),
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(prepared.clear_color()),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
+                color_attachments: &[Some(frame.color_attachment(prepared.clear_color()))],
                 depth_stencil_attachment: None,
                 timestamp_writes,
                 occlusion_query_set: None,

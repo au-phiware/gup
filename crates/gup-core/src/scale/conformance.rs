@@ -183,7 +183,7 @@ fn dispatch<S: ShaderFn>(
         pass.dispatch_workgroups(inputs.len().div_ceil(256) as u32, 1, 1);
     }
     encoder.copy_buffer_to_buffer(&out, 0, &readback, 0, out_size);
-    cx.queue().submit([encoder.finish()]);
+    cx.submit([encoder.finish()]);
     readback
         .slice(..)
         .map_async(wgpu::MapMode::Read, |r| r.unwrap());
