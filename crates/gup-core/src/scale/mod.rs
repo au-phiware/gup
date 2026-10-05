@@ -12,6 +12,9 @@ mod linear;
 mod log;
 mod sequential;
 
+#[cfg(test)]
+mod conformance;
+
 pub use linear::{Linear, LinearParams};
 pub use log::{Log, LogParams};
 pub use sequential::{Sequential, SequentialParams};
