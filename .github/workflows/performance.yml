@@ -5,6 +5,9 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # Weekly: the Comprehensive Benchmarking job (too long to run per push).
+  schedule:
+    - cron: "0 3 * * 1"
   workflow_dispatch:
     inputs:
       enable_multi_platform:
@@ -43,8 +46,13 @@ jobs:
       - name: Run mask perf-check
         id: perf_check
         run: |
+          # The exit code used to be recorded but never checked, so this job
+          # could not fail (GUP-403).
+          set +e
           nix develop --command bash -c "mask perf-check" 2>&1 | tee perf_check_output.txt
-          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+          rc=${PIPESTATUS[0]}
+          echo "exit_code=$rc" >> $GITHUB_OUTPUT
+          exit $rc
 
       - name: Upload threshold test results
         if: always()
@@ -546,11 +554,17 @@ jobs:
           exit 1
 
   # ── Comprehensive benchmarking on main (saves baselines + records trends) ──
+  # Weekly and on manual dispatch, not per push (GUP-403): the suite has 316
+  # Criterion benchmarks, so at Criterion's default 3 s warm-up + 5 s
+  # measurement it needs over 40 minutes of measurement alone, plus the
+  # release build, on lavapipe: more than the old 45-minute timeout allowed.
   benchmark:
     name: Comprehensive Benchmarking
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    timeout-minutes: 180
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
 
     steps:
       - name: Checkout code

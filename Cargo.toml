@@ -389,10 +389,14 @@ required-features = ["debug"]
 [[bin]]
 name = "validate_marks"
 path = "src/bin/validate_marks.rs"
+# Tools, not benchmarks: keep their libtest harness out of `cargo bench`, which
+# would reject Criterion flags such as --save-baseline (see [lib]).
+bench = false
 
 [[bin]]
 name = "wasm_bench_native"
 path = "src/bin/wasm_bench_native.rs"
+bench = false
 
 [features]
 default = []

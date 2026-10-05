@@ -28,7 +28,8 @@ Runs on every PR and push to `main` to detect performance regressions.
 
 ### Benchmark Suite (`performance.yml` - benchmark job)
 
-Runs comprehensive benchmarks on commits to `main` branch.
+Runs comprehensive benchmarks on `main` weekly (Monday 03:00 UTC) and on manual
+dispatch. It is too long (316 Criterion benchmarks) to run on every push.
 
 #### Features
 
