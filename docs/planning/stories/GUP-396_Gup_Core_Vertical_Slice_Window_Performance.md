@@ -34,6 +34,21 @@ zero-byte-write claims are validated against the encodings that exist, and a
 note is left for whichever later story (S5, "full scale family") adds `Sqrt` to
 also re-check this benchmark with a size channel bound.
 
+**Inputs from GUP-395** (see RFC-001 "S0a findings"):
+
+- Zoom today means replacing the scale through its handle
+  (`*x.write() = Linear::new().domain(..)`). Add `PositionScale::set_domain`.
+- `ColumnStore::upload` is the only place column bytes are written, so the
+  zero-byte counter belongs there.
+- `Plot::resolve` re-creates the uniform buffers and bind groups on every call,
+  and lays out text again. That is fine for a PNG, but at 60 fps it should write
+  into the existing buffers with `queue.write_buffer`. A test already shows that
+  a rescale reuses the program, the pipeline and the column buffer.
+- `encode_scene` records the whole scene into one render pass on a caller's
+  encoder, so `WindowTarget` only needs to supply the surface view. Render into
+  a non-sRGB view (`Bgra8Unorm` on a `Bgra8UnormSrgb` surface) to match
+  `ImageTarget`'s `Rgba8Unorm` for the ΔE parity check.
+
 ## User Story
 
 > "As a Gup implementer validating RFC-001, I want the GUP-395 scatter scene to
