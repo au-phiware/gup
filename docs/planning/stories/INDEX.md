@@ -50,9 +50,9 @@ survives into `gup-core`.
 
 ## RFC-001 Migration
 
-**Old-path LOC remaining: 32629 (measured 2026-10-04)**. Measured as the
-non-blank, non-comment-only, non-`#[cfg(test)]`-block line count of the old
-render path (`src/selection.rs`, `src/mark/`, `src/shader_function/`,
+**Old-path LOC remaining: 32051 (measured 2026-10-05, after GUP-389)**. Measured
+as the non-blank, non-comment-only, non-`#[cfg(test)]`-block line count of the
+old render path (`src/selection.rs`, `src/mark/`, `src/shader_function/`,
 `src/shader_pipeline.rs`, `src/chart_builder*`, `src/context.rs`,
 `src/render.rs`). Re-measure with `mask old-path-loc`
 (`scripts/old_path_loc.pl`) after each RFC-001 story. This metric exists per

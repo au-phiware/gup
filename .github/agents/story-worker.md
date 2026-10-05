@@ -281,14 +281,14 @@ prefer enums over trait objects (`Box<dyn Trait>`).
 ```rust
 // ✅ Better - enum-based approach
 #[derive(Debug, Clone)]
-enum CustomCompositionBehavior {
-    CrossFade(CrossFadeComposition),
-    GridLayout(GridLayoutComposition),
+enum TickStrategy {
+    Linear(LinearTicks),
+    Log(LogTicks),
 }
 
 // ❌ Avoid - trait not object-safe due to generic methods
-trait CustomCompositionBehavior {
-    fn compose<A: Mixable, B: Mixable>(...) -> GupResult<()>;
+trait TickStrategy {
+    fn ticks<S: Scale>(&self, scale: &S) -> Vec<f64>;
 }
 ```
 
@@ -341,14 +341,14 @@ impl Default for SideBySideConfig {
 ### Error Handling
 
 Provide context-rich error messages that include component descriptions and
-specify which part of a composition failed:
+specify which part failed:
 
 ```rust
 // ✅ Better - includes context
-Err(GupError::CompositionError(format!(
-    "First component is invalid: {}",
-    self.first.description()
-)))
+Err(GupError::configuration_error(
+    "radius",
+    format!("layer {layer_index} (Circle): channel RADIUS has no encoding"),
+))
 
 // ❌ Not helpful
 Err(GupError::RenderError("Component invalid".to_string()))
@@ -356,22 +356,15 @@ Err(GupError::RenderError("Component invalid".to_string()))
 
 ### Lazy Evaluation
 
-Composition systems benefit from lazy evaluation — defer expensive operations
-until render time:
-
-```rust
-// ✅ Composition is cheap - just stores components
-let composition = chart1.mix(chart2).mix(chart3);
-
-// ✅ Expensive work happens only at render time
-composition.render(&mut context)?;
-```
+Defer expensive work (accessor evaluation, uploads, pipeline creation) until a
+chart is first resolved or rendered; building or configuring a chart should be
+cheap. See RFC-001 §8 (`Chart::resolve`).
 
 ### Architecture Principles
 
 - **Composition over inheritance**: charts and layers compose through a single
-  object-safe chart abstraction (see the strategic review, track T2). `Mixable`
-  is scheduled for removal; do not build new work on it.
+  object-safe chart abstraction (RFC-001 §8, `Chart` trait). `Mixable` was
+  deleted in GUP-389.
 - **Type system as documentation**: Well-designed types serve as documentation
   and prevent errors. Use dedicated config structs instead of multiple primitive
   parameters.
