@@ -157,13 +157,12 @@ impl RgbaImage {
     /// Iterate over `(x, y, colour)` for every pixel.
     pub fn pixels(&self) -> impl Iterator<Item = (u32, u32, Rgba8)> + '_ {
         let w = self.width;
-        self.data.chunks_exact(4).enumerate().map(move |(i, p)| {
-            (
-                i as u32 % w,
-                i as u32 / w,
-                Rgba8::new(p[0], p[1], p[2], p[3]),
-            )
-        })
+        self.data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .enumerate()
+            .map(move |(i, &[r, g, b, a])| (i as u32 % w, i as u32 / w, Rgba8::new(r, g, b, a)))
     }
 
     /// Decode a PNG (any 8-bit or 16-bit colour type) into RGBA8.
@@ -182,13 +181,17 @@ impl RgbaImage {
         let data = match info.color_type {
             png::ColorType::Rgba => buf,
             png::ColorType::Rgb => buf
-                .chunks_exact(3)
-                .flat_map(|p| [p[0], p[1], p[2], 255])
+                .as_chunks::<3>()
+                .0
+                .iter()
+                .flat_map(|&[r, g, b]| [r, g, b, 255])
                 .collect(),
             png::ColorType::Grayscale => buf.iter().flat_map(|&v| [v, v, v, 255]).collect(),
             png::ColorType::GrayscaleAlpha => buf
-                .chunks_exact(2)
-                .flat_map(|p| [p[0], p[0], p[0], p[1]])
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .flat_map(|&[v, a]| [v, v, v, a])
                 .collect(),
             png::ColorType::Indexed => {
                 return Err(ImageError::Decode(

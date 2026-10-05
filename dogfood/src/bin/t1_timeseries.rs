@@ -8,8 +8,8 @@
 //! * pick a time unit for f32 x values that DateTimeFormatter understands,
 //! * PNG export has no text (no title / ticks / legend), so we also export
 //!   SVG; SVG export has text but no data marks, so we hand-build the line
-//!   paths and the legend as SvgElements in pixel space and rasterise with
-//!   ImageMagick.
+//!   paths and the legend as SvgElements in pixel space and rasterise the
+//!   SVG ourselves (resvg, with gup's bundled font).
 
 use chrono::NaiveDate;
 use gup::export::svg::SvgExportOptions;
@@ -161,16 +161,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
     let svg = chart.export_svg_with_marks(&SvgExportOptions::new(w, h), &marks)?;
-    std::fs::write("/tmp/gup-dogfood/t1.svg", svg)?;
-    // ImageMagick 7 ships `magick`; ImageMagick 6 (e.g. Ubuntu 24.04) only `convert`.
-    let args = ["/tmp/gup-dogfood/t1.svg", "/tmp/gup-dogfood/t1_svg.png"];
-    let ok = std::process::Command::new("magick")
-        .args(args)
-        .status()
-        .or_else(|_| std::process::Command::new("convert").args(args).status())?;
-    println!(
-        "wrote t1.png, t1.svg, t1_svg.png (rasterise ok={})",
-        ok.success()
-    );
+    std::fs::write("/tmp/gup-dogfood/t1.svg", &svg)?;
+    gup_dogfood::rasterise_svg(&svg, "/tmp/gup-dogfood/t1_svg.png")?;
+    println!("wrote t1.png, t1.svg, t1_svg.png");
     Ok(())
 }

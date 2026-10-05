@@ -446,6 +446,8 @@ pub mod proc_macros {
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
+/// WebAssembly entry point (`wasm-start` feature): routes panics to the
+/// browser console and installs a console logger at `Warn` level.
 #[cfg(all(target_arch = "wasm32", feature = "wasm-start"))]
 #[wasm_bindgen(start)]
 pub fn main() {

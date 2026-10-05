@@ -1,0 +1,12 @@
+# The single source of truth for the Rust toolchain (GUP-403). The Nix dev
+# shell (flake.nix, via rust-overlay's fromRustupToolchainFile) and every CI
+# workflow (actions-rust-lang/setup-rust-toolchain, or the dev shell) read this
+# file, so local and CI rustc/clippy cannot drift apart. Move the pin
+# deliberately: bump `channel`, fix the new lints, and re-bless the gup-core
+# trybuild snapshots (`TRYBUILD=overwrite cargo test -p gup-core --test
+# compile_fail`) in the same commit.
+[toolchain]
+channel = "1.93.1"
+profile = "minimal"
+components = ["rustfmt", "clippy", "rust-src", "rust-analyzer"]
+targets = ["wasm32-unknown-unknown"]

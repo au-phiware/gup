@@ -102,9 +102,10 @@ from CSV, with a date axis, legend and title, exported to PNG.
   configured horizontal grid is not drawn _(tracked)_.
 - Workaround output `t1_svg.png`: Gup's SVG export has axes and text but no data
   marks _(see task 3)_. So the task hand-builds the line paths and legend as
-  `SvgElement`s in pixel space and rasterises them with ImageMagick (`magick` or
-  `convert`). The suite checks that this output has a title, date ticks and
-  series.
+  `SvgElement`s in pixel space and rasterises the SVG in-process with resvg and
+  Gup's bundled font (`rasterise_svg` in `src/lib.rs`), so the result does not
+  depend on the machine's ImageMagick or fonts. The suite checks that this
+  output has a title, date ticks and series.
 
 ### Task 2: `t2_bars`
 

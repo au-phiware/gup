@@ -559,7 +559,7 @@ fn t1() -> Task {
                 NO_GRID,
             ),
             // The workaround: gup's SVG export (axes + text) plus hand-built
-            // line paths and legend, rasterised with ImageMagick.
+            // line paths and legend, rasterised in-process with resvg.
             check(
                 svg,
                 "workaround SVG: title text present",
