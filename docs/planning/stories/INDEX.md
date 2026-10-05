@@ -91,7 +91,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   on an HD 630, with 0 column bytes written over 600 frames. Adds
   `RenderTarget`/`Renderer`/`Prepared` and upload counters (RFC-001 "S0b
   findings").
-- [GUP-399](GUP-399_RFC_001_S1_One_Context.md) 📋 — RFC-001 step S1: adds
+- [GUP-399](GUP-399_RFC_001_S1_One_Context.md) 🚧 — RFC-001 step S1: adds
   `Context::shared()` and documents the pipelines→shaders lock order on
   `gup-core`'s `Context`, then rewires the old path's `RenderContext` and
   `GupContext` to source their device/queue from it instead of each creating
