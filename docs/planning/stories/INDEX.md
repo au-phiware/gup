@@ -115,6 +115,9 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   dirty-rectangle bitmap atlas, and `GlyphBatch::draw` into the caller's pass.
   `gup-core`'s temporary text module is deleted and its golden re-blessed with
   Inter. MSDF is not ported; the decision is recorded. Deps: GUP-399 ✅.
+- [GUP-405](GUP-405_Gup_Text_OpenType_Shaping.md) 📋 — Shape `gup-text` runs
+  with rustybuzz: Inter's GPOS kerning and `tnum` tabular figures for tick
+  labels. Deps: GUP-400 ✅.
 - [GUP-401](GUP-401_RFC_001_S3_Scene_Renderer_RenderTarget.md) 📋 — RFC-001 step
   S3: turns GUP-395's `ImageTarget`/`encode_scene` into the general
   `RenderTarget`/`Renderer` trait family (adds `TextureTarget` and
