@@ -1,6 +1,8 @@
 struct ParamsX_naga_oil_mod_XM52XAOR2ONRWC3DFHI5GY2LOMVQXEX {
     k: f32,
     range_start: f32,
+    pad_a: u32,
+    pad_b: u32,
 }
 
 struct ParamsX_naga_oil_mod_XM52XAOR2ONRWC3DFHI5GY33HX {
@@ -14,6 +16,7 @@ struct ParamsX_naga_oil_mod_XM52XAOR2MNXWY33SHI5HGZLROVSW45DJMFWAX {
     lo: f32,
     inv_span: f32,
     reverse: u32,
+    padding: u32,
 }
 
 struct ViewX_naga_oil_mod_XM52XAOR2OZUWK5YX {
@@ -41,6 +44,9 @@ struct Encodings {
     x: ParamsX_naga_oil_mod_XM52XAOR2ONRWC3DFHI5GY2LOMVQXEX,
     y: ParamsX_naga_oil_mod_XM52XAOR2ONRWC3DFHI5GY33HX,
     radius: f32,
+    radius_pad_a: u32,
+    radius_pad_b: u32,
+    radius_pad_c: u32,
     fill: ParamsX_naga_oil_mod_XM52XAOR2MNXWY33SHI5HGZLROVSW45DJMFWAX,
 }
 

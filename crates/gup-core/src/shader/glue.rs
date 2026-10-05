@@ -138,6 +138,16 @@ impl Aliases {
     }
 }
 
+/// Size in bytes of a constant channel's WGSL type (the `GpuType`s
+/// channels use).
+fn const_size(wgsl_type: &str) -> u64 {
+    match wgsl_type {
+        "f32" | "u32" | "i32" => 4,
+        "vec2<f32>" => 8,
+        "vec4<f32>" => 16,
+        other => unreachable!("no constant channel has WGSL type {other}"),
+    }
+}
 /// Generate the glue module for `spec`.
 pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     let mut aliases = Aliases(Vec::new());
@@ -154,13 +164,23 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     for (i, ch) in spec.channels.iter().enumerate() {
         match ch.source {
             ChannelSource::Const => {
-                fields.push((ch.name, ch.wgsl_type.to_string()));
+                fields.push((ch.name, ch.wgsl_type.to_string(), const_size(ch.wgsl_type)));
                 exprs.push((ch.name, Expr::Uniform(ch.name)));
                 signature_parts.push(format!("{}: const {}", ch.name, ch.wgsl_type));
             }
             ChannelSource::Column(func) => {
                 let alias = aliases.get(func.module());
-                fields.push((ch.name, format!("{alias}::Params")));
+                let size = func.params_size();
+                // A struct member must be followed by roundUp(16, size) bytes
+                // before the next member, and padding members would break
+                // that, so the struct itself spans a multiple of 16.
+                assert!(
+                    size % 16 == 0,
+                    "{}::Params is {size} bytes; uniform Params structs must span a multiple \
+                     of 16 bytes (pad them in WGSL and in the encase struct)",
+                    func.module().import_path
+                );
+                fields.push((ch.name, format!("{alias}::Params"), size));
                 columns.push(i);
                 let mut args = vec![Expr::Column(ch.name)];
                 if func.input_format() == ColumnFormat::F32Relative {
@@ -206,10 +226,20 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     }
 
     let _ = writeln!(w, "\nstruct Encodings {{");
-    for (name, ty) in &fields {
-        // Uniform layout: struct-typed members need 16-byte alignment and
-        // 16 bytes before the next member; aligning every field is simplest.
-        let _ = writeln!(w, "    @align(16) {name}: {ty},");
+    for (name, ty, size) in &fields {
+        // Every field starts on a 16-byte boundary by construction: `Params`
+        // structs span multiples of 16 and scalar constants get `u32`
+        // padding. Not `@align(16)`: naga's WGSL writer (what wgpu hands a
+        // browser) drops layout attributes, and a browser with
+        // `uniform_buffer_standard_layout` then accepts the natural,
+        // unaligned offsets, so the shader and the uniform bytes disagree
+        // (GUP-401).
+        let _ = writeln!(w, "    {name}: {ty},");
+        for (k, pad) in ["a", "b", "c"].iter().enumerate() {
+            if (*size as usize).next_multiple_of(16) > *size as usize + 4 * k {
+                let _ = writeln!(w, "    {name}_pad_{pad}: u32,");
+            }
+        }
     }
     let _ = writeln!(w, "}}\n\nstruct Chunk {{\n    row_base: u32,");
     for &i in &relative {

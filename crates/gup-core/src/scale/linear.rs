@@ -69,6 +69,9 @@ impl Linear {
 pub struct LinearParams {
     k: f32,
     range_start: f32,
+    // To 16 bytes, as every uniform `Params` (see the WGSL module).
+    pad_a: u32,
+    pad_b: u32,
 }
 
 impl ShaderFn for Linear {
@@ -82,6 +85,8 @@ impl ShaderFn for Linear {
         LinearParams {
             k: self.k() as f32,
             range_start: self.range.0 as f32,
+            pad_a: 0,
+            pad_b: 0,
         }
     }
 

@@ -231,6 +231,9 @@ pub trait DynShaderFn: Send + Sync {
     fn input_format(&self) -> ColumnFormat;
     /// The std140 bytes of the current parameters.
     fn params_bytes(&self) -> Result<Vec<u8>>;
+    /// Size in bytes of the `Params` uniform struct (as WGSL lays it out;
+    /// `rust_params_match_wgsl_params` checks the two agree).
+    fn params_size(&self) -> u64;
     /// See [`ShaderFn::chunk_base`].
     fn chunk_base(&self, origin: f64) -> f32;
     /// See [`ShaderFn::resources`].
@@ -257,6 +260,10 @@ impl<S: ShaderFn> DynShaderFn for S {
 
     fn input_format(&self) -> ColumnFormat {
         ShaderFn::input_format(self)
+    }
+
+    fn params_size(&self) -> u64 {
+        <S::Params as encase::ShaderType>::min_size().get()
     }
 
     fn params_bytes(&self) -> Result<Vec<u8>> {

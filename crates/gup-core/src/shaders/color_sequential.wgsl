@@ -13,6 +13,8 @@ struct Params {
     inv_span: f32,
     // Non-zero to run the palette backwards.
     reverse: u32,
+    // Uniform `Params` structs span a multiple of 16 bytes (GUP-401).
+    padding: u32,
 }
 
 fn map(v: f32, p: Params, lut: texture_2d<f32>, smp: sampler) -> vec4<f32> {

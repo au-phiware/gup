@@ -7,10 +7,13 @@
 #import gup::color::sequential as sequential
 
 struct Encodings {
-    @align(16) x: linear::Params,
-    @align(16) y: log::Params,
-    @align(16) radius: f32,
-    @align(16) fill: sequential::Params,
+    x: linear::Params,
+    y: log::Params,
+    radius: f32,
+    radius_pad_a: u32,
+    radius_pad_b: u32,
+    radius_pad_c: u32,
+    fill: sequential::Params,
 }
 
 struct Chunk {

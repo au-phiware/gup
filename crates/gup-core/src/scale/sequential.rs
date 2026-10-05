@@ -83,6 +83,8 @@ pub struct SequentialParams {
     lo: f32,
     inv_span: f32,
     reverse: u32,
+    // To 16 bytes, as every uniform `Params` (see the WGSL module).
+    padding: u32,
 }
 
 impl ShaderFn for Sequential {
@@ -98,6 +100,7 @@ impl ShaderFn for Sequential {
             lo: d0 as f32,
             inv_span: inv as f32,
             reverse: u32::from(self.reverse),
+            padding: 0,
         }
     }
 

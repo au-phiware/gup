@@ -13,6 +13,10 @@ struct Params {
     k: f32,
     // Range start r0 (px).
     range_start: f32,
+    // Uniform `Params` structs span a multiple of 16 bytes, so they pack
+    // into the glue's `Encodings` without layout attributes (GUP-401).
+    pad_a: u32,
+    pad_b: u32,
 }
 
 fn map_rel(v: f32, base: f32, p: Params) -> f32 {

@@ -421,13 +421,37 @@ mod tests {
         // Every Encodings field starts on a 16-byte boundary, and each
         // Params struct (encase) fits naga's layout.
         let enc = struct_layout(&composed.module, "Encodings").unwrap();
-        assert!(enc.members.iter().all(|(_, o)| o % 16 == 0), "{enc:?}");
-        assert_eq!(enc.span, 64);
-        let chunk = struct_layout(&composed.module, "Chunk").unwrap();
-        assert_eq!(
-            chunk.members,
-            vec![("row_base".into(), 0), ("x_base".into(), 4)]
+        assert!(
+            enc.members
+                .iter()
+                .filter(|(name, _)| !name.contains("_pad_"))
+                .all(|(_, o)| o % 16 == 0),
+            "{enc:?}"
         );
+        assert_eq!(enc.span, 64);
+
+        // What a browser sees: wgpu's WebGPU backend hands it naga's WGSL
+        // output, which has no layout attributes. Parsed back, that WGSL
+        // must lay the uniforms out exactly as gup-core writes them
+        // (GUP-401: `@align(16)` was dropped, so the browser read the
+        // radius from the y scale's parameters).
+        let wgsl = to_wgsl(&composed.module).unwrap();
+        let reparsed = naga::front::wgsl::parse_str(&wgsl).unwrap();
+        let structs: Vec<String> = composed
+            .module
+            .types
+            .iter()
+            .filter(|(_, t)| matches!(t.inner, naga::TypeInner::Struct { .. }))
+            .filter_map(|(_, t)| t.name.clone())
+            .collect();
+        assert!(structs.len() >= 6, "{structs:?}");
+        for name in &structs {
+            assert_eq!(
+                struct_layout(&reparsed, name),
+                struct_layout(&composed.module, name),
+                "{name}: the written WGSL lays it out differently"
+            );
+        }
     }
 
     #[test]
