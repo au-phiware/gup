@@ -108,7 +108,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   primary, with GL as a fallback. The lock order is checked in debug builds.
   gup-core builds for wasm32. The 29 wgpu_types doctest failures are gone. The
   full root suite is verified on CI.
-- [GUP-400](GUP-400_RFC_001_S2_Extract_Gup_Text.md) 📋 — RFC-001 step S2:
+- [GUP-400](GUP-400_RFC_001_S2_Extract_Gup_Text.md) 🚧 — RFC-001 step S2:
   extracts a `gup-text` leaf crate (font, layout, msdf, atlas survive from
   `src/text/`) with one `TextSystem` per `Context`, a measuring API and
   glyph-run drawing into a pass, replacing `gup-core`'s temporary internal text
