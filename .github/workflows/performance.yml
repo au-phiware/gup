@@ -332,9 +332,6 @@ jobs:
       - name: Setup Nix development environment
         run: nix develop --command bash -c "echo 'Nix environment ready'"
 
-      - name: Add wasm32 target
-        run: nix develop --command bash -c "rustup target add wasm32-unknown-unknown"
-
       - name: Verify WASM library compilation
         run: nix develop --command bash -c "cargo build --target wasm32-unknown-unknown --lib"
 

@@ -29,9 +29,6 @@ jobs:
       - name: Setup Nix development environment
         run: nix develop --command bash -c "echo 'Nix environment ready'"
 
-      - name: Add wasm32 target
-        run: nix develop --command bash -c "rustup target add wasm32-unknown-unknown"
-
       - name: Check WASM library compilation
         run: nix develop --command bash -c "cargo build --target wasm32-unknown-unknown --lib"
 
@@ -49,12 +46,13 @@ jobs:
             && echo "✅ Axis benchmark function exported" \
             || (echo "❌ Missing axis benchmark export" && exit 1)
 
-      - name: Check WASM test compilation
-        run: >
-          nix develop --command bash -c
-          "cargo build --target wasm32-unknown-unknown --tests 2>&1
-          && echo '✅ WASM tests compile'
-          || echo '❌ WASM test compilation failed'"
+      # Known failure, tracked by GUP-285B: html_export_integration and
+      # event_handling_tests do not compile for wasm32. continue-on-error keeps
+      # the failure visible (an annotated step) without failing the workflow;
+      # drop it when GUP-285B lands.
+      - name: Check WASM test compilation (known failure, GUP-285B)
+        continue-on-error: true
+        run: nix develop --command bash -c "cargo build --target wasm32-unknown-unknown --tests"
 
       # NOTE: ChromeDriver now matches Chromium version (GUP-240).
       # Standard GitHub Actions runners lack GPU access so GPU-tier tests
