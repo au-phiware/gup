@@ -73,7 +73,8 @@ Work iteratively in small, focused increments. For each increment:
 
 - Write tests for what you just implemented.
 - Run: `cargo test -- --test-threads=1` (required for GPU tests).
-- Run: `mask all-fix` to resolve lint and formatting issues.
+- Run: `mask all-fix` to apply automatic fixes and then lint strictly (clippy
+  `-D warnings` on every workspace member and target).
 - Fix any failures before proceeding.
 
 ### 2c. Commit
@@ -102,7 +103,8 @@ Continue the loop until all Acceptance Criteria are met.
 Before marking the story complete, perform comprehensive checks:
 
 1. **All tests pass**: `cargo test -- --test-threads=1`
-2. **Lint and format clean**: `mask all-fix` exits cleanly.
+2. **Lint and format clean**: `mask all-fix` exits cleanly, and `mask all-check`
+   (the full, unscoped gate CI runs) passes.
 3. **All examples compile**: `cargo check --examples`
 4. **Acceptance Criteria review**: Go through every AC checkbox in the story and
    verify each one is satisfied. Check the boxes as you verify them.
@@ -269,6 +271,11 @@ State your recommendation clearly with reasoning.
 - **Quality gate**: `mask all-fix` must pass before every commit. **Never use
   `git commit --no-verify`.** If the pre-commit hook fails for reasons outside
   your story, stop and report it in your final output rather than bypassing it.
+  The hook (`mask pre-commit`) is proportional: it skips Rust checks for
+  docs-only commits and scopes them to the touched crates and their dependents
+  otherwise, so "the hook passed" does not mean the whole workspace is clean. CI
+  is the full gate: the Lint workflow runs `mask all-check` and the Tests
+  workflow runs every test, on every push, never scoped.
 - **Small commits**: Commit after each logical increment, not one big commit.
 - **wgpu version**: Do not downgrade wgpu.
 - **Breaking changes are allowed** (pre-alpha). Prefer deleting or replacing a

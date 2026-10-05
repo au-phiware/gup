@@ -6,10 +6,11 @@
 # pre-commit hook may skip or narrow checks for small changes, CI always runs
 # everything.
 #
-# Tests that assert a wall-clock budget are `#[ignore]`d with the reason
-# "wall-clock budget: ... (GUP-398)": shared runners are too noisy for them.
-# Never add a timing assertion to a functional test; the performance
-# workflow is where budgets are tracked.
+# Wall-clock budgets do not run here: shared runners are too noisy for them.
+# The three timing-budget test binaries the Performance workflow runs by name
+# are `test = false` in Cargo.toml, and other tests that assert a budget are
+# `#[ignore]`d with the reason "wall-clock budget: ... (GUP-398)". Never add
+# a timing assertion to a functional test.
 #
 # `mask ci tests` runs the same commands locally.
 

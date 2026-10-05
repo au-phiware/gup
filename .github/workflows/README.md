@@ -42,9 +42,24 @@ dispatch. It is too long (316 Criterion benchmarks) to run on every push.
 Runs `cargo test --workspace -- --test-threads=1` on lavapipe, then the lib and
 every `required-features = ["debug"]` integration test with `--features debug`
 (`scripts/test_debug_feature.sh`). It is the only workflow that runs the root
-crate's whole suite. Tests that assert a wall-clock budget are `#[ignore]`d with
-a "wall-clock budget ... (GUP-398)" reason; shared runners are too noisy for
-them. `mask ci tests` runs it locally.
+crate's whole suite. Wall-clock budgets stay out of it: the timing-budget
+binaries the Performance workflow runs by name are `test = false`, and other
+tests that assert a budget are `#[ignore]`d with a "wall-clock budget ...
+(GUP-398)" reason. `mask ci tests` runs it locally.
+
+### Lint (`lint.yml`)
+
+Runs `mask all-check`, the full local gate, in the Nix dev shell: strict clippy
+on every workspace member and target (default and all features), rustfmt,
+whitespace, nixfmt/statix, prettier/mdl, mark validation, gallery sync and the
+pre-commit hook's scoping tests. The local hook (`mask pre-commit`) scopes its
+checks to the staged files; this workflow never does. `mask ci lint` runs it
+locally.
+
+### No workflow scopes by changed files
+
+No workflow has a `paths:` filter, and none reads the pre-commit hook's scoping
+rules: a workflow that runs runs all of its checks, whatever changed.
 
 ## Toolchain and GPU (all workflows)
 
