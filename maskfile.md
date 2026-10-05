@@ -79,6 +79,42 @@ printf '%-26s %10d B raw %9d B gz\n' "(Inter, bundled)" \
 rm -rf "$out"
 ```
 
+## wasm-browser
+
+Run gup-core in a real browser (GUP-401): build the `wasm-size/scatter` harness,
+serve it, render the reference scatter in headless Chromium through WebGPU
+(MSAA, async readback) and fail unless the page reports `PASS`. Writes the
+browser's pixels to
+`$CARGO_TARGET_DIR/visual-regression/gup_core/browser_scatter.png`. Needs a GPU,
+`chromium`, `miniserve` and `wasm-bindgen` 0.2.113.
+
+```bash
+set -euo pipefail
+root=$(pwd)
+target="${CARGO_TARGET_DIR:-$root/target}"
+web=$(mktemp -d)
+(cd crates/gup-core/wasm-size/scatter &&
+  cargo build --quiet --release --target wasm32-unknown-unknown)
+wasm-bindgen --target web --out-dir "$web" --out-name scatter \
+  "$target/wasm32-unknown-unknown/release/gup_core_wasm_size_scatter.wasm"
+cp crates/gup-core/wasm-size/scatter/index.html "$web/"
+miniserve --port 8401 "$web" >/dev/null 2>&1 &
+server=$!
+trap 'kill $server; rm -rf "$web"' EXIT
+sleep 1
+log=$(timeout 60 chromium --headless=new --enable-features=WebGPU,Vulkan \
+  --enable-unsafe-webgpu --disable-dawn-features=disallow_unsafe_apis \
+  --enable-logging=stderr --v=0 --remote-debugging-port=9334 \
+  http://127.0.0.1:8401/index.html 2>&1 || true)
+mkdir -p "$target/visual-regression/gup_core"
+echo "$log" | grep -o 'GUPPNG data:image/png;base64,[A-Za-z0-9+/=]*' |
+  sed 's/.*base64,//' | base64 -d \
+  >"$target/visual-regression/gup_core/browser_scatter.png" || true
+result=$(echo "$log" | grep -o 'GUP \(PASS\|FAIL\)[^"]*' || echo "GUP FAIL no result")
+echo "$result"
+[[ $result == "GUP PASS"* ]]
+```
+
 ## smoke-examples
 
 Build every example and run the headless ones (see `tests/examples_smoke.rs` for

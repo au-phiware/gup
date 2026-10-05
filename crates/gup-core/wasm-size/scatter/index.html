@@ -1,0 +1,43 @@
+<!doctype html>
+<!-- Browser smoke test for gup-core (GUP-401): `mask wasm-browser` serves
+     this page with the wasm-bindgen output of this crate, and headless
+     Chromium logs the result to the console. -->
+<html>
+  <body>
+    <pre id="out">pending</pre>
+    <script type="module">
+      import init, { render_scatter } from "./scatter.js";
+      const out = document.getElementById("out");
+      const [w, h] = [320, 200];
+      try {
+        await init();
+        const px = await render_scatter(w, h);
+        let white = 0,
+          grey = 0,
+          coloured = 0;
+        for (let i = 0; i < px.length; i += 4) {
+          const [r, g, b] = [px[i], px[i + 1], px[i + 2]];
+          if (r === 255 && g === 255 && b === 255) white++;
+          else if (Math.abs(r - g) < 8 && Math.abs(g - b) < 8) grey++;
+          else coloured++;
+        }
+        // The scatter covers a fraction of the plot; a flooded plot (a
+        // uniform-layout bug) or an empty one fails.
+        const ok =
+          coloured > 0.05 * w * h && coloured < 0.4 * w * h && grey > 1000;
+        out.textContent = `${ok ? "PASS" : "FAIL"} white=${white} grey=${grey} coloured=${coloured}`;
+        console.log("GUP " + out.textContent);
+        const c = document.createElement("canvas");
+        [c.width, c.height] = [w, h];
+        c.getContext("2d").putImageData(
+          new ImageData(new Uint8ClampedArray(px), w, h),
+          0,
+          0
+        );
+        console.log("GUPPNG " + c.toDataURL("image/png"));
+      } catch (e) {
+        console.log("GUP FAIL " + e);
+      }
+    </script>
+  </body>
+</html>
