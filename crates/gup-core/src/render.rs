@@ -130,7 +130,8 @@ fn uniform_entry(binding: u32, dynamic: bool) -> wgpu::BindGroupLayoutEntry {
     }
 }
 
-fn texture_entries(binding: u32, filtering: bool) -> [wgpu::BindGroupLayoutEntry; 2] {
+/// A palette LUT texture and its filtering sampler at `binding`, `binding + 1`.
+fn lut_entries(binding: u32) -> [wgpu::BindGroupLayoutEntry; 2] {
     [
         wgpu::BindGroupLayoutEntry {
             binding,
@@ -145,11 +146,7 @@ fn texture_entries(binding: u32, filtering: bool) -> [wgpu::BindGroupLayoutEntry
         wgpu::BindGroupLayoutEntry {
             binding: binding + 1,
             visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-            ty: wgpu::BindingType::Sampler(if filtering {
-                wgpu::SamplerBindingType::Filtering
-            } else {
-                wgpu::SamplerBindingType::NonFiltering
-            }),
+            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
             count: None,
         },
     ]
@@ -186,7 +183,7 @@ impl PipelineCache {
         let device = cx.device();
         let mut enc_entries = vec![uniform_entry(0, false)];
         for lut in &glue.luts {
-            enc_entries.extend(texture_entries(lut.binding, true));
+            enc_entries.extend(lut_entries(lut.binding));
         }
         let enc_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("gup encodings"),
