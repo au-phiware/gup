@@ -69,15 +69,14 @@ jobs:
           cargo check -p gup-culling-lod --all-targets --all-features
           cargo test -p gup-culling-lod -- --test-threads=1
 
-      # gup-core (RFC-001) is not a default member. It is linted without
-      # `--fix` so warnings fail the job (the workspace-wide gate is GUP-398).
-      # Its tests include the headless scatter golden image and a trybuild
-      # compile-fail suite. The .stderr snapshots are rustc's exact wording,
-      # so they match only the toolchain pinned in rust-toolchain.toml;
-      # re-bless them with TRYBUILD=overwrite when the pin moves.
+      # gup-core (RFC-001) is not a default member; the Lint workflow lints
+      # it with the rest of the workspace (GUP-398). Its tests include the
+      # headless scatter golden image and a trybuild compile-fail suite. The
+      # .stderr snapshots are rustc's exact wording, so they match only the
+      # toolchain pinned in rust-toolchain.toml; re-bless them with
+      # TRYBUILD=overwrite when the pin moves.
       - name: gup-core (RFC-001 core)
         run: |
-          cargo clippy -p gup-core --all-targets -- -D warnings
           cargo test -p gup-core --lib --test scatter_png -- --test-threads=1
           cargo test -p gup-core --doc
           cargo test -p gup-core --test compile_fail

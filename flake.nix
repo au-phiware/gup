@@ -36,9 +36,11 @@
         # Copilot CLI). Include bashInteractive so it appears first
         # in PATH.
 
-        # rely on PATH (or devShell) to avoid store change issues
+        # rely on PATH (or devShell) to avoid store change issues.
+        # `mask pre-commit` scopes the checks to the staged files (GUP-398);
+        # `mask all-check` is the full gate, and CI runs it on every push.
         pre-commit = pkgs.writeScript "gup-pre-commit" ''
-          mask all-check
+          mask pre-commit
         '';
       in
       {
@@ -117,10 +119,13 @@
               export VK_ICD_FILENAMES="${pkgs.mesa}/share/vulkan/icd.d/radeon_icd.x86_64.json:${pkgs.mesa}/share/vulkan/icd.d/intel_icd.x86_64.json"
             fi
 
-            # Set up git hooks if not already done
-            if [[ ! -e .git/hooks/pre-commit ]]; then
-              echo "Setting up git pre-commit hooks..."
-              ln -s ${pre-commit} .git/hooks/pre-commit
+            # Install the pre-commit hook, and replace a symlink to an older
+            # version of it (a regular-file hook is the user's own: keep it).
+            hook="$(git rev-parse --git-path hooks/pre-commit 2>/dev/null || true)"
+            if [[ -n $hook && ( ! -e $hook || -L $hook ) && "$(readlink "$hook")" != "${pre-commit}" ]]; then
+              echo "Setting up git pre-commit hook..."
+              mkdir -p "$(dirname "$hook")"
+              ln -sfn ${pre-commit} "$hook"
             fi
 
             echo "🦀 Rust development environment loaded!"

@@ -1,0 +1,63 @@
+# Lint (GUP-398): `mask all-check`, the full local gate, on every push.
+#
+# The pre-commit hook (`mask pre-commit`) scopes its checks to the staged
+# files and can be bypassed, so this workflow is where formatting and lints
+# are enforced: strict clippy on every workspace member and target (default
+# and all features), rustfmt, trailing whitespace, nixfmt/statix,
+# prettier/mdl, mark validation, the gallery sync check and the hook's own
+# scoping tests. It never scopes by changed files.
+#
+# It runs in the Nix dev shell so the tools (and rust-toolchain.toml's
+# toolchain) are the ones the hook uses locally.
+
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  # validate_marks creates a device; the runners have no GPU, so the dev
+  # shell points Vulkan at Mesa's lavapipe.
+  GUP_SOFTWARE_GPU: "1"
+  WGPU_BACKEND: vulkan
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  all-check:
+    name: mask all-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v24
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Setup Nix development environment
+        run: nix develop --command bash -c "echo 'Nix environment ready'"
+
+      - name: Cache Cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: lint-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            lint-${{ runner.os }}-cargo-
+
+      - name: mask all-check
+        run: nix develop --command mask all-check

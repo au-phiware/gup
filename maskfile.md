@@ -10,13 +10,11 @@ cargo build
 
 ## check
 
-Check all without building
+Type-check every target of every workspace member without building. This only
+warns; the strict clippy runs in `all-check` are the gate.
 
 ```bash
-cargo check
-cargo check --tests
-cargo check --examples
-cargo check --benches
+cargo check --workspace --all-targets
 ```
 
 ## test
@@ -72,11 +70,12 @@ cargo test --doc -p gup -- tutorial_doctests && cargo test --test tutorial_snipp
 
 ## lint
 
-Run linters
+Apply clippy's automatic fixes, then lint strictly. `cargo clippy --fix` exits 0
+whatever it cannot fix, so only the strict runs after it can fail.
 
 ```bash
 concurrently --group --names clippy,statix,mdl \
-   'cargo clippy --allow-no-vcs --fix --all-targets --all-features -- -D warnings' \
+   'cargo clippy --allow-no-vcs --fix --workspace --all-targets --all-features && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings' \
    'statix fix flake.nix' \
    'mdl --git-recurse .'
 ```
@@ -85,11 +84,12 @@ The `mdl` tool has no automatic fixer.
 
 ## lint-check
 
-Run clippy linter without writing fixes
+Lint strictly without writing fixes: every workspace member and target, with
+default features and with all features
 
 ```bash
 concurrently --group --names clippy,statix,mdl \
-   'cargo clippy --all-targets --all-features -- -D warnings' \
+   'cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings' \
    'statix check flake.nix' \
    'mdl --git-recurse .'
 ```
@@ -113,7 +113,7 @@ Check if code is formatted
 ```bash
 shopt -qs globstar
 concurrently --group --names '\s,rs,nix,md' \
-   '! git --no-pager grep --untracked --name-only --full-name "[[:space:]]\+$" -- "*.rs"' \
+   'git --no-pager grep --untracked --name-only --full-name "[[:space:]]\+$" -- "*.rs"; test $? -eq 1' \
    'cargo fmt --all -- --check && cargo fmt --manifest-path dogfood/Cargo.toml -- --check' \
    'nixfmt --check flake.nix' \
    'prettier --cache --log-level warn --check "**/*.md"'
@@ -121,32 +121,62 @@ concurrently --group --names '\s,rs,nix,md' \
 
 ## all-fix
 
-Run Rust check, linters and formatters' checks.
+Apply every automatic fix (whitespace, rustfmt, clippy, nixfmt, statix,
+prettier), then run the strict checks. `cargo clippy --fix` exits 0 whatever it
+cannot fix, so only the strict clippy runs after it can fail.
 
 ```bash
 shopt -qs globstar
 concurrently --group --names rs,nix,md \
-   'git grep -lz --untracked "[[:space:]]\+$" -- "*.rs" | xargs -0 -r sed -i "/[[:space:]]\+$/s///" && cargo fmt --all && cargo fmt --manifest-path dogfood/Cargo.toml && cargo clippy --allow-no-vcs --fix --all-targets --all-features -- -D warnings && cargo check' \
+   'git grep -lz --untracked "[[:space:]]\+$" -- "*.rs" | xargs -0 -r sed -i "/[[:space:]]\+$/s///" && cargo fmt --all && cargo fmt --manifest-path dogfood/Cargo.toml && cargo clippy --allow-no-vcs --fix --workspace --all-targets --all-features && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings' \
    'nixfmt flake.nix && statix fix flake.nix' \
    'prettier --cache --log-level warn --write "**/*.md" && mdl --git-recurse .'
 ```
 
 ## all-check
 
-Run Rust check, linters and formatters' checks. `gup-core` is linted without
-`--fix` so its warnings fail the gate (workspace-wide fix: GUP-398). The gallery
-sync check keeps `scripts/gallery_config.toml` and `examples/INDEX.md` in step
-with the Cargo examples (the Gallery workflow fails on drift).
+The full, unscoped local gate (GUP-398). It never modifies files, and each of
+its checks has been seen to fail on a seeded violation (GUP-398 retrospective).
+Clippy covers every workspace member and target, with default features and with
+all features, under `-D warnings`; it type-checks too, so there is no separate
+`cargo check`. The gallery sync check keeps `scripts/gallery_config.toml` and
+`examples/INDEX.md` in step with the Cargo examples (the Gallery workflow fails
+on drift). `test_pre_commit.sh` tests the pre-commit hook's scoping rules.
+
+The whitespace check passes only when `git grep` finds nothing (exit 1): a
+`git grep` error must fail it, not pass it.
+
+The pre-commit hook runs `mask pre-commit`, which runs this task only when the
+staged change needs it. CI runs its own full checks on every push regardless.
 
 ```bash
 shopt -qs globstar
-concurrently --group --names '\s,rs,nix,md,marks,gallery' \
-   '! git --no-pager grep --untracked --name-only --full-name "[[:space:]]\+$" -- "*.rs"' \
-   'mask check && cargo fmt --all -- --check && cargo fmt --manifest-path dogfood/Cargo.toml -- --check && cargo clippy --allow-no-vcs --fix --all-targets --all-features -- -D warnings && cargo clippy -p gup-core --all-targets -- -D warnings' \
+concurrently --group --names '\s,rs,nix,md,marks,gallery,hook' \
+   'git --no-pager grep --untracked --name-only --full-name "[[:space:]]\+$" -- "*.rs"; test $? -eq 1' \
+   'cargo fmt --all -- --check && cargo fmt --manifest-path dogfood/Cargo.toml -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings' \
    'nixfmt --check flake.nix && statix check flake.nix' \
    'prettier --cache --log-level warn --check "**/*.md" && mdl --git-recurse .' \
    'mask validate-marks' \
-   './scripts/check_gallery_sync.sh'
+   './scripts/check_gallery_sync.sh' \
+   './scripts/test_pre_commit.sh'
+```
+
+## pre-commit
+
+The git pre-commit hook (installed by `flake.nix`): checks proportional to the
+staged files. A docs-only commit runs only the cheap repo-wide checks
+(whitespace, nix, markdown, gallery sync). A commit inside workspace crates runs
+rustfmt on those crates, and strict clippy on them and on every member that
+depends on them. Anything workspace-level or unrecognised runs `mask all-check`.
+The rules and their reasons are in `scripts/pre_commit.sh`; preview them with
+`scripts/pre_commit.sh --plan [PATH...]`.
+
+The scoping is local only. CI never scopes, so anything the hook skipped is
+still checked before it merges. Like `all-check`, the hook checks the working
+tree, not the index.
+
+```bash
+./scripts/pre_commit.sh
 ```
 
 ## dogfood
@@ -168,14 +198,15 @@ GitHub's runners have no GPU, so every subcommand forces Mesa's lavapipe, as the
 workflows do (`WGPU_BACKEND=vulkan` also keeps `gup-core`, which accepts every
 backend, off a hardware GL adapter). Each subcommand mirrors one file in
 `.github/workflows/`; change both together. Run this before pushing: the hook
-(`mask all-check`) is fast but does not render. Expect 30-60 minutes from cold;
-`mask ci <workflow>` runs one. Not covered: the weekly Comprehensive
-Benchmarking job (316 Criterion benchmarks; `--list` checks every bench target
-accepts Criterion's flags), the Gallery deploy, and the manual-dispatch mobile
-workflows.
+(`mask pre-commit`) is scoped to the change and does not render. Expect 30-60
+minutes from cold; `mask ci <workflow>` runs one. Not covered: the weekly
+Comprehensive Benchmarking job (316 Criterion benchmarks; `--list` checks every
+bench target accepts Criterion's flags), the Gallery deploy, and the
+manual-dispatch mobile workflows.
 
 ```bash
 set -euo pipefail
+mask ci lint
 mask ci gallery
 mask ci wasm
 mask ci visual-regression
@@ -183,6 +214,17 @@ mask ci tests
 mask ci dogfood
 mask ci performance
 echo "mask ci: all workflows passed locally"
+```
+
+### ci lint
+
+> Lint workflow: the full local gate, `mask all-check`
+
+```bash
+set -euo pipefail
+export VK_ICD_FILENAMES="${GUP_LAVAPIPE_ICD:-$LIBGL_DRIVERS_PATH/../../share/vulkan/icd.d/lvp_icd.x86_64.json}"
+export WGPU_BACKEND=vulkan
+mask all-check
 ```
 
 ### ci gallery
@@ -224,7 +266,6 @@ cargo test -p gup-visual-regression
 cargo test --lib visual_regression -- --test-threads=1
 cargo check -p gup-culling-lod --all-targets --all-features
 cargo test -p gup-culling-lod -- --test-threads=1
-cargo clippy -p gup-core --all-targets -- -D warnings
 cargo test -p gup-core --lib --test scatter_png -- --test-threads=1
 cargo test -p gup-core --doc
 cargo test -p gup-core --test compile_fail
