@@ -14,7 +14,7 @@ publish = false
 # naga_oil, naga and encase are direct dependencies now that the parked
 # gup-bevy no longer brings them in (Orchestrator review point 5).
 [dependencies]
-wgpu = { version = "27.0", features = ["wgsl", "naga-ir", "fragile-send-sync-non-atomic-wasm"] }
+wgpu = { version = "27.0", features = ["wgsl", "naga-ir"] }
 naga = { version = "27.0.3", features = ["wgsl-in", "wgsl-out"] }
 naga_oil = "0.20"
 encase = "0.12"

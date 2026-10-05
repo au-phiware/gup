@@ -137,7 +137,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
 
 /// A plot layer: the object-safe face of a [`Selection`] (internal; the
 /// public `Layer`/`Chart` traits are RFC-001 S7).
-pub(crate) trait Layer: Send + Sync {
+pub(crate) trait Layer: wgpu::WasmNotSendSync {
     /// Evaluate accessors and fit every data-driven domain to its column.
     fn fit_domains(&mut self) -> Result<()>;
     /// How far marks may extend past their position (e.g. a constant
