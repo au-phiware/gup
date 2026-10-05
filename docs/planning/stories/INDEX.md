@@ -72,7 +72,7 @@ Stories implementing
 2026-10-04). S1–S14 are not yet written as stories; they follow once the S0
 naga_oil go/no-go gate (GUP-395) is resolved.
 
-- [GUP-395](GUP-395_Gup_Core_Vertical_Slice_Headless.md) 📋 — RFC-001 step S0a:
+- [GUP-395](GUP-395_Gup_Core_Vertical_Slice_Headless.md) 🚧 — RFC-001 step S0a:
   a new `crates/gup-core` workspace member with `Context`, a single-chunk GPU
   column store, a Circle WGSL module composed via naga_oil with a typed glue
   emitter, typed X/Y/RADIUS/FILL channels, Linear/Log/Sequential scales with CPU
