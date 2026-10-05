@@ -15,9 +15,11 @@
 //!   [`CpuMirror`] — zooming changes uniforms only;
 //! - shader composition with naga_oil library modules plus a typed glue
 //!   emitter — no find-and-replace on authored WGSL;
-//! - a resolved [`Scene`] drawn by a target ([`ImageTarget`]).
+//! - a resolved [`Scene`] drawn by a [`Renderer`] into any
+//!   [`RenderTarget`] ([`ImageTarget`], [`TextureTarget`], a window, or a
+//!   host's own pass), or written as SVG by [`SvgTarget`] (guides only).
 //!
-//! This is the S0a vertical slice: one mark ([`Circle`]), three scales
+//! The data side is still the S0 vertical slice: one mark ([`Circle`]), three scales
 //! ([`Linear`], [`Log`], [`Sequential`]) and a headless PNG path. It is not
 //! re-exported by the `gup` crate until the RFC-001 S14 flip, and it never
 //! depends on `gup`.
@@ -55,6 +57,7 @@ mod selection;
 mod shader;
 #[cfg(all(feature = "window", not(target_arch = "wasm32")))]
 mod show;
+mod svg;
 pub mod target;
 #[cfg(feature = "window")]
 mod window;
@@ -75,6 +78,7 @@ pub use selection::Selection;
 pub use shader::WgslModule;
 #[cfg(all(feature = "window", not(target_arch = "wasm32")))]
 pub use show::show;
+pub use svg::{SvgTarget, VectorTarget};
 pub use target::{DEFAULT_SAMPLES, Frame, ImageTarget, RenderTarget, TargetOptions, TextureTarget};
 #[cfg(feature = "window")]
 pub use window::WindowTarget;

@@ -58,7 +58,7 @@ mod layout;
 mod system;
 
 pub use error::{Error, Result};
-pub use font::{Font, LineMetrics};
+pub use font::{Font, INTER_REGULAR, LineMetrics};
 pub use layout::{Anchor, Bounds, HAlign, Run, TextMetrics, VAlign};
 pub use system::{DrawTarget, GlyphBatch, GlyphBuffer, Glyphs, TextSystem, Uploader};
 /// The wgpu `gup-text` is built against.

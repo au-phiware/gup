@@ -142,12 +142,18 @@ impl Font {
         }
     }
 
-    /// Visit the glyphs of `run` laid out at `scale` physical pixels per
-    /// logical pixel, in physical pixels.
-    pub(crate) fn walk(&self, run: &Run<'_>, scale: f32, mut f: impl FnMut(PlacedGlyph)) {
-        let face = self.face();
-        let px = run.size * scale;
-        let m = self.measure(run.text, px);
+    /// Where `run`'s baseline starts, `[x, y]` in logical pixels: the pen
+    /// position of its first glyph, before rounding to whole pixels.
+    /// Vector targets place `<text>` here (or at the same `y` with a
+    /// matching `text-anchor`), so they agree with the GPU layout.
+    pub fn baseline_origin(&self, run: &Run<'_>) -> [f32; 2] {
+        self.origin(run, 1.0)
+    }
+
+    /// [`baseline_origin`](Self::baseline_origin) at `scale` physical
+    /// pixels per logical pixel, in physical pixels.
+    fn origin(&self, run: &Run<'_>, scale: f32) -> [f32; 2] {
+        let m = self.measure(run.text, run.size * scale);
         let [ax, ay] = run.at.map(|v| v * scale);
         let x = match run.anchor.h {
             HAlign::Start => ax,
@@ -160,6 +166,15 @@ impl Font {
             VAlign::Baseline => ay,
             VAlign::Bottom => ay - m.descent,
         };
+        [x, y]
+    }
+
+    /// Visit the glyphs of `run` laid out at `scale` physical pixels per
+    /// logical pixel, in physical pixels.
+    pub(crate) fn walk(&self, run: &Run<'_>, scale: f32, mut f: impl FnMut(PlacedGlyph)) {
+        let face = self.face();
+        let px = run.size * scale;
+        let [x, y] = self.origin(run, scale);
         // Whole pixels: bitmap glyphs are drawn 1:1.
         let (mut pen, baseline) = (x.round(), y.round());
         let mut prev = None;
@@ -218,6 +233,18 @@ mod tests {
         assert!((97.0..=101.0).contains(&right), "{end:?}");
         let mid = end.y + end.height / 2.0;
         assert!((mid - 50.0).abs() <= 1.0, "{end:?}");
+    }
+
+    #[test]
+    fn baseline_origin_is_where_the_glyphs_sit() {
+        let f = Font::inter();
+        let r = run("Hx", Anchor::new(HAlign::Middle, VAlign::Top));
+        let [x, y] = f.baseline_origin(&r);
+        let ink = f.ink_bounds(&r);
+        // The H sits on the baseline with its top on the anchor line.
+        assert!((ink.y + ink.height - y).abs() <= 1.0, "{ink:?} {y}");
+        assert!((x - ink.x).abs() <= 2.0, "{ink:?} {x}");
+        assert!((x + f.measure("Hx", 16.0).width / 2.0 - 100.0).abs() < 1e-3);
     }
 
     #[test]

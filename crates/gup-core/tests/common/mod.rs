@@ -3,5 +3,6 @@
 
 //! Code shared by the integration tests and examples.
 
+pub mod legend;
 pub mod scatter;
 pub mod vr;

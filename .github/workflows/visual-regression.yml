@@ -75,11 +75,14 @@ jobs:
       # .stderr snapshots are rustc's exact wording, so they match only the
       # toolchain pinned in rust-toolchain.toml; re-bless them with
       # TRYBUILD=overwrite when the pin moves. gup-text (RFC-001 S2) is
-      # gup-core's leaf text crate; its tests draw glyphs on the GPU.
+      # gup-core's leaf text crate; its tests draw glyphs on the GPU. The S3
+      # tests (GUP-401) draw one scene through every target, compare 1x and
+      # 4x MSAA, and rasterise the SVG target with resvg against the PNG.
       - name: gup-core (RFC-001 core)
         run: |
           cargo test -p gup-text -- --test-threads=1
-          cargo test -p gup-core --lib --test scatter_png -- --test-threads=1
+          cargo test -p gup-core --lib --test scatter_png --test targets \
+            --test scene_items --test msaa --test svg -- --test-threads=1
           cargo test -p gup-core --doc
           cargo test -p gup-core --test compile_fail
 

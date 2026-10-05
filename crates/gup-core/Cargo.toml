@@ -42,4 +42,7 @@ window = ["dep:winit"]
 
 [dev-dependencies]
 gup-visual-regression = { path = "../gup-visual-regression" }
+# Rasterises `SvgTarget` output for comparison with the GPU render (the
+# dogfood crate uses the same version).
+resvg = { version = "0.45", default-features = false, features = ["text"] }
 trybuild = "1.0"

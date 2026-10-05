@@ -7,8 +7,9 @@ use crate::error::{Error, Result};
 use std::sync::{Arc, OnceLock};
 
 /// Inter Regular 4.1, the bundled default face (SIL Open Font License
-/// 1.1, see `fonts/Inter-OFL.txt`).
-const INTER_REGULAR: &[u8] = include_bytes!("../fonts/Inter-Regular.ttf");
+/// 1.1, see `fonts/Inter-OFL.txt`), as TrueType bytes: for loading the
+/// same face into another rasteriser (an SVG renderer) or embedding it.
+pub const INTER_REGULAR: &[u8] = include_bytes!("../fonts/Inter-Regular.ttf");
 
 /// A parsed font face. Cheap to clone.
 #[derive(Clone)]

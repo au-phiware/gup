@@ -8,85 +8,22 @@
 
 mod common;
 
+use common::legend::{self, PLOT_BACKGROUND, legend_metadata};
 use common::scatter::{self, HEIGHT, WIDTH};
-use common::vr::{harness, metadata, rect, rgba8, role};
-use gup_core::geom::{Point, Rect};
+use common::vr::{harness, rgba8};
+use gup_core::ImageTarget;
+use gup_core::geom::Rect;
 use gup_core::prelude::*;
-use gup_core::scene::{
-    Anchor, GradientBar, GradientDirection, HAlign, Item, ItemKind, RectPrim, TextRole, TextRun,
-    TextStyle, VAlign, Z_GRID, Z_TITLE,
-};
-use gup_core::{ImageTarget, Layout, Scene};
-use gup_visual_regression::{LayoutMetadata, Rgba8, RgbaImage};
-
-/// Logical width left for the plot; the legend takes the rest.
-const PLOT_WIDTH: f32 = 650.0;
-const PLOT_BACKGROUND: Color = Color::hex(0xeef1f6);
-const LEGEND_SIZE: f32 = 12.0;
-
-/// The scatter, resolved narrower than the image, with a background rect
-/// under the plot and a legend bar (plus its two end labels) to its right.
-fn scene(cx: &Context) -> (Scene, Layout, Rect, Vec<TextRun>) {
-    let resolved = scatter::plot()
-        .resolve(cx, PLOT_WIDTH, HEIGHT as f32)
-        .unwrap();
-    let (mut scene, layout) = (resolved.scene, resolved.layout);
-    scene.width = WIDTH as f32;
-    scene.push(Item {
-        z: Z_GRID,
-        clip: None,
-        kind: ItemKind::Rects(vec![RectPrim {
-            rect: layout.plot,
-            color: PLOT_BACKGROUND,
-        }]),
-    });
-
-    let fill = scatter::fill();
-    let bar = Rect::from_edges(
-        PLOT_WIDTH + 6.0,
-        layout.plot.top(),
-        PLOT_WIDTH + 20.0,
-        layout.plot.bottom(),
-    );
-    scene.push(Item {
-        z: Z_TITLE,
-        clip: None,
-        kind: ItemKind::Gradient(GradientBar::sequential(
-            &fill,
-            bar,
-            GradientDirection::Vertical,
-        )),
-    });
-    let (lo, hi) = fill.current_domain().unwrap();
-    let label = |value: f64, y: f32, v: VAlign| TextRun {
-        text: format!("{value:.0}").into(),
-        at: Point::new(bar.right() + 4.0, y),
-        anchor: Anchor::new(HAlign::Start, v),
-        style: TextStyle {
-            size: Px(LEGEND_SIZE),
-            color: Color::hex(0x333333),
-        },
-        role: TextRole::Legend,
-    };
-    let labels = vec![
-        label(hi, bar.top(), VAlign::Top),
-        label(lo, bar.bottom(), VAlign::Baseline),
-    ];
-    scene.push(Item {
-        z: Z_TITLE,
-        clip: None,
-        kind: ItemKind::Text(labels.clone()),
-    });
-    (scene, layout, bar, labels)
-}
+use gup_core::scene::{GradientBar, GradientDirection};
+use gup_visual_regression::{Rgba8, RgbaImage};
 
 #[test]
 fn background_rect_and_gradient_legend() {
     let cx = Context::new_blocking().unwrap();
-    let (scene, layout, bar, labels) = scene(&cx);
+    let s = legend::scene(&cx);
     let image = ImageTarget::new(&cx, WIDTH, HEIGHT)
         .unwrap()
-        .render_blocking(&cx, &scene)
+        .render_blocking(&cx, &s.scene)
         .unwrap();
     let fill = scatter::fill();
     let px = |x: f32, y: f32| {
@@ -99,7 +36,7 @@ fn background_rect_and_gradient_legend() {
     };
 
     // The background is drawn under the plot, and only there.
-    let p = layout.plot;
+    let p = s.layout.plot;
     close(
         "plot background",
         px(p.left() + 2.0, p.top() + 2.0),
@@ -109,6 +46,7 @@ fn background_rect_and_gradient_legend() {
 
     // The legend's ends are the fill scale's domain extremes: viridis
     // start at the bottom (domain min), end at the top (domain max).
+    let bar = s.bar;
     let mid = bar.x + bar.width / 2.0;
     let (lo, hi) = fill.current_domain().unwrap();
     close(
@@ -129,24 +67,7 @@ fn background_rect_and_gradient_legend() {
 
     // The harness: legend bar and labels are declared, so nothing drawn
     // outside the plot is unaccounted for.
-    let font = gup_text::Font::inter();
-    let mut meta: LayoutMetadata = metadata(&layout, &fill)
-        .with_guide(rect(bar).inflate(0.5))
-        .with_expected_color("plot background", rgba8(PLOT_BACKGROUND));
-    for run in &labels {
-        let ink = font.ink_bounds(&gup_text::Run {
-            text: &run.text,
-            size: run.style.size.0,
-            at: [run.at.x, run.at.y],
-            anchor: run.anchor,
-        });
-        meta = meta.with_text(
-            role(run.role),
-            run.text.to_string(),
-            rect(Rect::new(ink.x, ink.y, ink.width, ink.height)),
-            rgba8(run.style.color),
-        );
-    }
+    let meta = legend_metadata(&s);
     let vr = RgbaImage::new(WIDTH, HEIGHT, image.into_raw()).unwrap();
     harness()
         .run("gup_core/scene_items", Ok((vr, meta)))
