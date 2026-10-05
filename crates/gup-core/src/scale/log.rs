@@ -165,15 +165,23 @@ impl PositionScale for Log {
     }
 }
 
-/// Plain decimals between 0.001 and 999 999, exponent form outside.
+/// Plain decimals from 0.001 to 999, SI suffixes (k, M, G, T) from 1000 up
+/// and exponent form below 0.001, so one axis never mixes notations.
 fn format_log_tick(v: f64) -> String {
-    if (1e-3..1e6).contains(&v) {
-        // Round away binary noise from powi (e.g. 0.30000000000000004).
-        let rounded = (v * 1e6).round() / 1e6;
-        format!("{rounded}")
-    } else {
-        format!("{v:e}")
+    // Round away binary noise from powi (e.g. 0.30000000000000004).
+    let clean = |x: f64| {
+        let scale = 10f64.powi(6 - x.abs().log10().floor() as i32);
+        format!("{}", (x * scale).round() / scale)
+    };
+    if v < 1e-3 {
+        return format!("{v:e}");
     }
+    for (div, suffix) in [(1e12, "T"), (1e9, "G"), (1e6, "M"), (1e3, "k")] {
+        if v >= div {
+            return format!("{}{suffix}", clean(v / div));
+        }
+    }
+    clean(v)
 }
 
 #[cfg(test)]
@@ -203,12 +211,16 @@ mod tests {
         let t = s.ticks(5);
         assert_eq!(
             t.labels,
-            vec!["1", "2", "5", "10", "20", "50", "100", "200", "500", "1000"]
+            vec!["1", "2", "5", "10", "20", "50", "100", "200", "500", "1k"]
         );
         let wide = Log::new().domain(1e-2, 1e8);
         assert_eq!(wide.ticks(5).values.len(), 11);
         assert_eq!(wide.ticks(5).labels[0], "0.01");
-        assert_eq!(wide.ticks(5).labels[10], "1e8");
+        assert_eq!(wide.ticks(5).labels[10], "100M");
+        let pop = Log::new().domain(1e5, 1e9).ticks(8).labels;
+        assert_eq!(pop[..4], ["100k", "200k", "500k", "1M"]);
+        assert_eq!(pop.last().unwrap(), "1G");
+        assert_eq!(format_log_tick(2e-5), "2e-5");
     }
 
     #[test]

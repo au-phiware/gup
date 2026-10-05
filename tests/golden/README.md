@@ -6,9 +6,10 @@ harness itself is the `gup-visual-regression` crate
 takes a plain `RgbaImage` plus `LayoutMetadata` (plot rect, text regions, guide
 regions, configured colours).
 
-| Directory         | Produced by                                                                                        |
-| ----------------- | -------------------------------------------------------------------------------------------------- |
-| `chart_builders/` | `src/chart_builder/visual_regression/builder_cases.rs` (one case per builder, plus scale variants) |
+| Directory         | Produced by                                                                                                      |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `chart_builders/` | `src/chart_builder/visual_regression/builder_cases.rs` (one case per builder, plus scale variants)               |
+| `gup_core/`       | `crates/gup-core/tests/scatter_png.rs` (RFC-001 core: headless scatter, layout metadata from `gup_core::Layout`) |
 
 ## What a case checks
 
